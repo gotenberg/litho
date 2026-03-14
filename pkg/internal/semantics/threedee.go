@@ -20,7 +20,7 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 		return nil, nil
 	}
 
-	annotsResolved, err := resolveObject(doc, annotsObj)
+	annotsResolved, err := document.ResolveObject(doc, annotsObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /Annots: %w", err)
 	}
@@ -34,7 +34,7 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 	modelIdx := 0
 
 	for _, annotRef := range annotsArr {
-		annotResolved, err := resolveObject(doc, annotRef)
+		annotResolved, err := document.ResolveObject(doc, annotRef)
 		if err != nil {
 			continue
 		}
@@ -49,7 +49,7 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 		if !ok {
 			continue
 		}
-		subtypeRes, _ := resolveObject(doc, subtypeObj)
+		subtypeRes, _ := document.ResolveObject(doc, subtypeObj)
 		subtypeName, ok := subtypeRes.(ast.PdfName)
 		if !ok || subtypeName != "3D" {
 			continue
@@ -61,7 +61,7 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 			continue
 		}
 
-		ddResolved, err := resolveObject(doc, ddObj)
+		ddResolved, err := document.ResolveObject(doc, ddObj)
 		if err != nil {
 			continue
 		}
@@ -83,9 +83,9 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 		// Extract a name from the annotation if available.
 		name := fmt.Sprintf("model_%d", modelIdx)
 		if nmObj, ok := annotDict["NM"]; ok {
-			nmRes, _ := resolveObject(doc, nmObj)
+			nmRes, _ := document.ResolveObject(doc, nmObj)
 			if nmStr, ok := nmRes.(ast.PdfString); ok {
-				decoded := decodePdfString(nmStr)
+				decoded := document.DecodePdfString(nmStr)
 				if decoded != "" {
 					name = decoded
 				}
@@ -130,7 +130,7 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 func determine3DSubtype(doc *document.Document, stream ast.PdfStream) string {
 	// Check /Subtype on the 3D stream dictionary.
 	if stObj, ok := stream.Dict["Subtype"]; ok {
-		stRes, _ := resolveObject(doc, stObj)
+		stRes, _ := document.ResolveObject(doc, stObj)
 		if name, ok := stRes.(ast.PdfName); ok {
 			switch name {
 			case "U3D":
@@ -143,7 +143,7 @@ func determine3DSubtype(doc *document.Document, stream ast.PdfStream) string {
 
 	// Check /Type as a fallback (some producers use /Type instead of /Subtype).
 	if typeObj, ok := stream.Dict["Type"]; ok {
-		typeRes, _ := resolveObject(doc, typeObj)
+		typeRes, _ := document.ResolveObject(doc, typeObj)
 		if name, ok := typeRes.(ast.PdfName); ok {
 			switch name {
 			case "U3D":

@@ -19,14 +19,6 @@ type Operation struct {
 	Operands []ast.PdfObject
 }
 
-// resolveObject is a helper to resolve indirect references.
-func resolveObject(doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ref)
-	}
-	return obj, nil
-}
-
 // parseOperations is the shared tokenization loop used by both ParseStreamData
 // and ParsePageContent. It reads tokens from the parser, collecting operands
 // and emitting operations when an operator keyword is encountered. Inline
@@ -97,7 +89,7 @@ func ParsePageContent(doc *document.Document, node ast.PdfObject) ([]Operation, 
 			return nil, nil // Empty page
 		}
 
-		contentsResolved, err := resolveObject(doc, contentsObj)
+		contentsResolved, err := document.ResolveObject(doc, contentsObj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve /Contents: %v", err)
 		}
@@ -107,7 +99,7 @@ func ParsePageContent(doc *document.Document, node ast.PdfObject) ([]Operation, 
 			streams = append(streams, c)
 		case ast.PdfArray:
 			for _, item := range c {
-				itemResolved, err := resolveObject(doc, item)
+				itemResolved, err := document.ResolveObject(doc, item)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve item in /Contents array: %v", err)
 				}

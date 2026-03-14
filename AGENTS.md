@@ -97,8 +97,8 @@ pkg/
 - NEVER duplicate core PDF operational logic (e.g., `resolveObject`, `decodePdfString`, `getFloat`) across internal domains.
 - PDF strings are often encrypted; decryption must be handled consistently through the crypto pipeline.
 - `resolveObject` must track visited nodes to prevent infinite loops from malicious circular references.
+- Rely on centralized, thread-safe methods provided by the `internal/core/document` package to ensure security and prevent stack overflows.
 
-Rely on centralized, thread-safe methods provided by the internal/core/document package to ensure security and prevent stack overflows.
 ### Formatting & Imports
 - Run `make fmt` to enforce formatting (gofmt, gofumpt, goimports, gci).
 - Import order enforced by gci: standard library, third-party, then `github.com/gotenberg/litho/...`.

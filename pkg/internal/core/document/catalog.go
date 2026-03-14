@@ -2,7 +2,6 @@ package document
 
 import (
 	"fmt"
-	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -37,27 +36,6 @@ func BuildPageMap(pages []*Page) map[ast.PdfIndirectRef]int {
 	return m
 }
 
-// decodePdfString converts a PDF string to a Go string, handling UTF-16BE if present.
-func decodePdfString(s ast.PdfString) string {
-	b := []byte(s)
-	if len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF {
-		u16s := make([]uint16, (len(b)-2)/2)
-		for i := range u16s {
-			u16s[i] = uint16(b[2+i*2])<<8 | uint16(b[2+i*2+1])
-		}
-		return string(utf16.Decode(u16s))
-	}
-	return string(b)
-}
-
-// resolveObject is a helper to resolve indirect references if needed.
-func resolveObject(doc *Document, obj ast.PdfObject) (ast.PdfObject, error) {
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ref)
-	}
-	return obj, nil
-}
-
 // GetCatalog retrieves the Document Catalog from the trailer.
 func GetCatalog(doc *Document) (*Catalog, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
@@ -65,7 +43,7 @@ func GetCatalog(doc *Document) (*Catalog, error) {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}
 
-	resolvedObj, err := resolveObject(doc, rootObj)
+	resolvedObj, err := ResolveObject(doc, rootObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve catalog: %v", err)
 	}
@@ -85,7 +63,7 @@ func GetPages(doc *Document, catalog *Catalog) ([]*Page, error) {
 		return nil, fmt.Errorf("catalog missing /Pages")
 	}
 
-	resolvedPages, err := resolveObject(doc, pagesObj)
+	resolvedPages, err := ResolveObject(doc, pagesObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve pages root: %v", err)
 	}
@@ -111,16 +89,16 @@ func GetPages(doc *Document, catalog *Catalog) ([]*Page, error) {
 		} else {
 			// Fallback: check if the page dict has a direct /DPart reference
 			if dpartObj, ok := page.Dict["DPart"]; ok {
-				dpartRes, _ := resolveObject(doc, dpartObj)
+				dpartRes, _ := ResolveObject(doc, dpartObj)
 				if dpartDict, ok := dpartRes.(ast.PdfDict); ok {
 					if dpmObj, ok := dpartDict["DPM"]; ok {
-						dpmRes, _ := resolveObject(doc, dpmObj)
+						dpmRes, _ := ResolveObject(doc, dpmObj)
 						if dpmDict, ok := dpmRes.(ast.PdfDict); ok {
 							dpm := make(map[string]string)
 							for k, v := range dpmDict {
-								vRes, _ := resolveObject(doc, v)
+								vRes, _ := ResolveObject(doc, v)
 								if str, ok := vRes.(ast.PdfString); ok {
-									dpm[string(k)] = decodePdfString(str)
+									dpm[string(k)] = DecodePdfString(str)
 								} else if name, ok := vRes.(ast.PdfName); ok {
 									dpm[string(k)] = string(name)
 								}
@@ -140,7 +118,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 	// Inherit or override Resources
 	currentResources := inheritedResources
 	if resObj, ok := node["Resources"]; ok {
-		resResolved, err := resolveObject(doc, resObj)
+		resResolved, err := ResolveObject(doc, resObj)
 		if err == nil {
 			if resDict, ok := resResolved.(ast.PdfDict); ok {
 				currentResources = resDict
@@ -151,7 +129,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 	// Inherit or override MediaBox
 	currentMediaBox := inheritedMediaBox
 	if mbObj, ok := node["MediaBox"]; ok {
-		mbResolved, err := resolveObject(doc, mbObj)
+		mbResolved, err := ResolveObject(doc, mbObj)
 		if err == nil {
 			if mbArr, ok := mbResolved.(ast.PdfArray); ok {
 				currentMediaBox = mbArr
@@ -164,7 +142,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 		return fmt.Errorf("node missing /Type")
 	}
 
-	typeResolved, err := resolveObject(doc, typeObj)
+	typeResolved, err := ResolveObject(doc, typeObj)
 	if err != nil {
 		return fmt.Errorf("failed to resolve node type: %v", err)
 	}
@@ -181,7 +159,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 			return fmt.Errorf("pages node missing /Kids")
 		}
 
-		kidsResolved, err := resolveObject(doc, kidsObj)
+		kidsResolved, err := ResolveObject(doc, kidsObj)
 		if err != nil {
 			return fmt.Errorf("failed to resolve /Kids array: %v", err)
 		}
@@ -196,7 +174,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 			if r, ok := kidObj.(ast.PdfIndirectRef); ok {
 				kidRef = r
 			}
-			kidResolved, err := resolveObject(doc, kidObj)
+			kidResolved, err := ResolveObject(doc, kidObj)
 			if err != nil {
 				return fmt.Errorf("failed to resolve kid: %v", err)
 			}

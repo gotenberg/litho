@@ -21,7 +21,7 @@ func DecodeImage(doc *document.Document, page *document.Page, name ast.PdfName) 
 		return nil, fmt.Errorf("page has no /XObject resources")
 	}
 
-	xobjResolved, err := resolveObject(doc, xobjObj)
+	xobjResolved, err := document.ResolveObject(doc, xobjObj)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func DecodeImage(doc *document.Document, page *document.Page, name ast.PdfName) 
 		return nil, fmt.Errorf("image %q not found in /XObject", name)
 	}
 
-	resolved, err := resolveObject(doc, obj)
+	resolved, err := document.ResolveObject(doc, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func DecodeImage(doc *document.Document, page *document.Page, name ast.PdfName) 
 	// Determine the filter.
 	filterName := ""
 	if filterObj, ok := stream.Dict["Filter"]; ok {
-		filterRes, _ := resolveObject(doc, filterObj)
+		filterRes, _ := document.ResolveObject(doc, filterObj)
 		if fn, ok := filterRes.(ast.PdfName); ok {
 			filterName = string(fn)
 		} else if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {

@@ -10,6 +10,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 )
 
+// CMap is a parsed ToUnicode character map that translates character codes
+// (as raw byte sequences) to their corresponding Unicode strings.
 type CMap struct {
 	Mapping map[string]string
 }

@@ -14,21 +14,13 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// resolveObject is a helper to resolve indirect references.
-func resolveObject(doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ref)
-	}
-	return obj, nil
-}
-
 // getInt is a helper to extract an integer from a dictionary safely.
 func getInt(doc *document.Document, dict ast.PdfDict, key ast.PdfName) (int, error) {
 	obj, ok := dict[key]
 	if !ok {
 		return 0, fmt.Errorf("missing key /%s", key)
 	}
-	res, err := resolveObject(doc, obj)
+	res, err := document.ResolveObject(doc, obj)
 	if err != nil {
 		return 0, err
 	}
@@ -44,7 +36,7 @@ func getName(doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string,
 	if !ok {
 		return "", fmt.Errorf("missing key /%s", key)
 	}
-	res, err := resolveObject(doc, obj)
+	res, err := document.ResolveObject(doc, obj)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +57,7 @@ func ExtractImages(doc *document.Document, page *document.Page, outputDir string
 		return nil, nil // No XObjects
 	}
 
-	xobjResolved, err := resolveObject(doc, xobjObj)
+	xobjResolved, err := document.ResolveObject(doc, xobjObj)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +70,7 @@ func ExtractImages(doc *document.Document, page *document.Page, outputDir string
 	var savedImages []models.ImageMeta
 
 	for name, obj := range xobjDict {
-		resolved, err := resolveObject(doc, obj)
+		resolved, err := document.ResolveObject(doc, obj)
 		if err != nil {
 			continue
 		}
@@ -112,7 +104,7 @@ func ExtractImages(doc *document.Document, page *document.Page, outputDir string
 		// Determine the filter
 		filterName := ""
 		if filterObj, ok := stream.Dict["Filter"]; ok {
-			filterRes, _ := resolveObject(doc, filterObj)
+			filterRes, _ := document.ResolveObject(doc, filterObj)
 			if fn, ok := filterRes.(ast.PdfName); ok {
 				filterName = string(fn)
 			} else if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {
@@ -204,7 +196,7 @@ func resolveColorSpace(doc *document.Document, dict ast.PdfDict) string {
 		return "DeviceRGB" // Sensible default when missing entirely
 	}
 
-	resolved, err := resolveObject(doc, csObj)
+	resolved, err := document.ResolveObject(doc, csObj)
 	if err != nil {
 		return "DeviceRGB"
 	}
@@ -218,7 +210,7 @@ func resolveColorSpace(doc *document.Document, dict ast.PdfDict) string {
 			return "DeviceRGB"
 		}
 		// The first element is the color space family name.
-		familyObj, err := resolveObject(doc, cs[0])
+		familyObj, err := document.ResolveObject(doc, cs[0])
 		if err != nil {
 			return "DeviceRGB"
 		}
@@ -235,14 +227,14 @@ func resolveColorSpace(doc *document.Document, dict ast.PdfDict) string {
 		case "Indexed":
 			// Second element of the array is the base color space.
 			if len(cs) >= 2 {
-				baseObj, err := resolveObject(doc, cs[1])
+				baseObj, err := document.ResolveObject(doc, cs[1])
 				if err == nil {
 					if baseName, ok := baseObj.(ast.PdfName); ok {
 						return string(baseName)
 					}
 					// Base could itself be an array (e.g. [/ICCBased ...]).
 					if baseArr, ok := baseObj.(ast.PdfArray); ok && len(baseArr) > 0 {
-						baseFamily, _ := resolveObject(doc, baseArr[0])
+						baseFamily, _ := document.ResolveObject(doc, baseArr[0])
 						if bf, ok := baseFamily.(ast.PdfName); ok {
 							switch bf {
 							case "ICCBased", "CalRGB":
@@ -272,7 +264,7 @@ func savePNG(path string, img image.Image) error {
 		return err
 	}
 	defer func() {
-		_ = f.Close()
+		_ = f.Close() //nolint:errcheck // Best-effort close after png.Encode owns the write result
 	}()
 	return png.Encode(f, img)
 }

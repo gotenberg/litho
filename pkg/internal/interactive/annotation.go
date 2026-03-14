@@ -15,7 +15,7 @@ func ExtractAnnotations(doc *document.Document, page *document.Page, pageMap map
 		return nil, nil // No annotations on this page
 	}
 
-	annotsResolved, err := resolveObject(doc, annotsObj)
+	annotsResolved, err := document.ResolveObject(doc, annotsObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /Annots: %v", err)
 	}
@@ -28,7 +28,7 @@ func ExtractAnnotations(doc *document.Document, page *document.Page, pageMap map
 	var annotations []models.Annotation
 
 	for _, annotRef := range annotsArr {
-		annotResolved, err := resolveObject(doc, annotRef)
+		annotResolved, err := document.ResolveObject(doc, annotRef)
 		if err != nil {
 			continue
 		}
@@ -42,7 +42,7 @@ func ExtractAnnotations(doc *document.Document, page *document.Page, pageMap map
 
 		// Extract Subtype
 		if subtypeObj, ok := annotDict["Subtype"]; ok {
-			subtypeRes, _ := resolveObject(doc, subtypeObj)
+			subtypeRes, _ := document.ResolveObject(doc, subtypeObj)
 			if subtypeName, ok := subtypeRes.(ast.PdfName); ok {
 				annot.Subtype = string(subtypeName)
 			}
@@ -54,30 +54,30 @@ func ExtractAnnotations(doc *document.Document, page *document.Page, pageMap map
 
 		// Extract Rect
 		if rectObj, ok := annotDict["Rect"]; ok {
-			rectRes, _ := resolveObject(doc, rectObj)
+			rectRes, _ := document.ResolveObject(doc, rectObj)
 			if rectArr, ok := rectRes.(ast.PdfArray); ok && len(rectArr) == 4 {
 				for i := range 4 {
-					annot.Rect[i] = getFloat(rectArr[i])
+					annot.Rect[i] = document.GetFloat(rectArr[i])
 				}
 			}
 		}
 
 		// Extract Contents (Text, Highlight, etc.)
 		if contentsObj, ok := annotDict["Contents"]; ok {
-			contentsRes, _ := resolveObject(doc, contentsObj)
+			contentsRes, _ := document.ResolveObject(doc, contentsObj)
 			if contentsStr, ok := contentsRes.(ast.PdfString); ok {
-				annot.Contents = decodePdfString(contentsStr)
+				annot.Contents = document.DecodePdfString(contentsStr)
 			}
 		}
 
 		// Extract QuadPoints (used by Redact, Highlight, Underline, etc.)
 		if qpObj, ok := annotDict["QuadPoints"]; ok {
-			qpRes, _ := resolveObject(doc, qpObj)
+			qpRes, _ := document.ResolveObject(doc, qpObj)
 			if qpArr, ok := qpRes.(ast.PdfArray); ok && len(qpArr) >= 8 {
 				for i := 0; i+7 < len(qpArr); i += 8 {
 					var quad [8]float64
 					for j := range 8 {
-						quad[j] = getFloat(qpArr[i+j])
+						quad[j] = document.GetFloat(qpArr[i+j])
 					}
 					annot.QuadPoints = append(annot.QuadPoints, quad)
 				}
@@ -88,22 +88,22 @@ func ExtractAnnotations(doc *document.Document, page *document.Page, pageMap map
 		if annot.Subtype == "Link" {
 			// Extract Action (/A)
 			if aObj, ok := annotDict["A"]; ok {
-				aRes, _ := resolveObject(doc, aObj)
+				aRes, _ := document.ResolveObject(doc, aObj)
 				if aDict, ok := aRes.(ast.PdfDict); ok {
 					if sObj, ok := aDict["S"]; ok {
-						sRes, _ := resolveObject(doc, sObj)
+						sRes, _ := document.ResolveObject(doc, sObj)
 						if sName, ok := sRes.(ast.PdfName); ok {
 							switch sName {
 							case "URI":
 								if uriObj, ok := aDict["URI"]; ok {
-									uriRes, _ := resolveObject(doc, uriObj)
+									uriRes, _ := document.ResolveObject(doc, uriObj)
 									if uriStr, ok := uriRes.(ast.PdfString); ok {
-										annot.URI = decodePdfString(uriStr)
+										annot.URI = document.DecodePdfString(uriStr)
 									}
 								}
 							case "GoTo":
 								if dObj, ok := aDict["D"]; ok {
-									dRes, _ := resolveObject(doc, dObj)
+									dRes, _ := document.ResolveObject(doc, dObj)
 									if dArr, ok := dRes.(ast.PdfArray); ok && len(dArr) > 0 {
 										if destRef, ok := dArr[0].(ast.PdfIndirectRef); ok {
 											if pageNum, exists := pageMap[destRef]; exists {
@@ -118,7 +118,7 @@ func ExtractAnnotations(doc *document.Document, page *document.Page, pageMap map
 				}
 			} else if destObj, ok := annotDict["Dest"]; ok {
 				// Sometimes Dest is directly on the Link annotation instead of inside an Action
-				destRes, _ := resolveObject(doc, destObj)
+				destRes, _ := document.ResolveObject(doc, destObj)
 				if destArr, ok := destRes.(ast.PdfArray); ok && len(destArr) > 0 {
 					if destRef, ok := destArr[0].(ast.PdfIndirectRef); ok {
 						if pageNum, exists := pageMap[destRef]; exists {
@@ -133,15 +133,4 @@ func ExtractAnnotations(doc *document.Document, page *document.Page, pageMap map
 	}
 
 	return annotations, nil
-}
-
-// getFloat is a helper to safely extract a float64 from a PdfObject.
-func getFloat(obj ast.PdfObject) float64 {
-	switch v := obj.(type) {
-	case ast.PdfReal:
-		return float64(v)
-	case ast.PdfInt:
-		return float64(v)
-	}
-	return 0
 }

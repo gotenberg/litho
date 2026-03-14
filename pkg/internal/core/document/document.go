@@ -184,18 +184,28 @@ func NewDocument(r io.ReaderAt, size int64) (*Document, error) {
 		var encDict ast.PdfDict
 		if ref, ok := encObj.(ast.PdfIndirectRef); ok {
 			// Resolving without Crypto is safe because Encrypt dict values are never encrypted
-			obj, _ := doc.Resolve(ref)
-			encDict, _ = obj.(ast.PdfDict)
+			obj, err := doc.Resolve(ref)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve /Encrypt reference: %w", err)
+			}
+			encDict, ok = obj.(ast.PdfDict)
+			if !ok {
+				return nil, fmt.Errorf("resolved /Encrypt is not a dictionary")
+			}
 		} else {
-			encDict, _ = encObj.(ast.PdfDict)
+			encDict, ok = encObj.(ast.PdfDict)
+			if !ok {
+				return nil, fmt.Errorf("/Encrypt is not a dictionary")
+			}
 		}
 
-		if encDict != nil {
-			doc.IsEncrypted = true
-			handler, _ := crypto.NewHandler(encDict, doc.Index.Trailer)
-			doc.Crypto = handler
-			doc.Authenticated = handler.Authenticated
+		doc.IsEncrypted = true
+		handler, err := crypto.NewHandler(encDict, doc.Index.Trailer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize crypto handler: %w", err)
 		}
+		doc.Crypto = handler
+		doc.Authenticated = handler.Authenticated
 	}
 
 	doc.initOCConfig()
@@ -364,7 +374,10 @@ func ExtractFromObjectStream(doc *Document, objStmNum int, targetIndex int) (ast
 		}
 
 		if i == targetIndex {
-			offset, _ := strconv.Atoi(tokOffset.Value)
+			offset, err := strconv.Atoi(tokOffset.Value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid offset in object stream %d: %w", objStmNum, err)
+			}
 			targetOffset = offset
 			break // We found our target offset, can stop reading pairs
 		}

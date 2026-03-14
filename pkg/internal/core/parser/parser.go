@@ -12,8 +12,14 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 )
 
+// DecryptFunc is a callback used to decrypt raw string or stream data during parsing.
 type DecryptFunc func([]byte) ([]byte, error)
 
+// Parser handles the parsing of PDF objects from a token stream.
+//
+// Note on UnreadByte: throughout this file, UnreadByte errors on ioat.Reader
+// are intentionally discarded. Every call is preceded by a successful ReadByte,
+// which guarantees bufPos > 0 and UnreadByte cannot fail.
 type Parser struct {
 	lex       *lexer.Lexer
 	tokens    []lexer.Token
@@ -21,6 +27,7 @@ type Parser struct {
 	decryptFn DecryptFunc
 }
 
+// NewParser creates a new Parser that reads PDF objects from the given lexer.
 func NewParser(lex *lexer.Lexer) *Parser {
 	return &Parser{lex: lex}
 }
@@ -175,9 +182,10 @@ func (p *Parser) parseIndirectObject() (ast.PdfObject, error) {
 	}
 
 	// Consume the endobj keyword if present. Tolerate missing endobj (Acrobat compat).
-	t, _ := p.Peek(0)
+	// Peek returns TokenEOF on error, so the type guard safely prevents Consume on failure.
+	t, _ := p.Peek(0) //nolint:errcheck // EOF is expected; type guard below handles it
 	if t.Type == lexer.TokenKeyword && t.Value == "endobj" {
-		_, _ = p.Consume()
+		_, _ = p.Consume() //nolint:errcheck // Token already validated by Peek
 	}
 
 	return obj, nil

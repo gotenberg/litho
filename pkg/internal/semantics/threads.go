@@ -20,17 +20,6 @@ type Thread struct {
 	Beads []Bead
 }
 
-// getFloat is a helper to safely extract a float64 from a PdfObject.
-func getFloat(obj ast.PdfObject) float64 {
-	switch v := obj.(type) {
-	case ast.PdfReal:
-		return float64(v)
-	case ast.PdfInt:
-		return float64(v)
-	}
-	return 0
-}
-
 // GetThreads extracts article threads from the document.
 func GetThreads(doc *document.Document) ([]Thread, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
@@ -91,16 +80,22 @@ func GetThreads(doc *document.Document) ([]Thread, error) {
 		// Info dictionary containing Title
 		if infoObj, ok := tDict["I"]; ok {
 			if ref, ok := infoObj.(ast.PdfIndirectRef); ok {
-				infoRes, _ := doc.Resolve(ref)
+				infoRes, err := doc.Resolve(ref)
+				if err != nil {
+					return nil, fmt.Errorf("failed to resolve thread /I: %w", err)
+				}
 				if infoDict, ok := infoRes.(ast.PdfDict); ok {
 					if titleObj, ok := infoDict["Title"]; ok {
 						if titleRef, ok := titleObj.(ast.PdfIndirectRef); ok {
-							titleRes, _ := doc.Resolve(titleRef)
+							titleRes, err := doc.Resolve(titleRef)
+							if err != nil {
+								return nil, fmt.Errorf("failed to resolve thread title: %w", err)
+							}
 							if titleStr, ok := titleRes.(ast.PdfString); ok {
-								thread.Title = decodePdfString(titleStr)
+								thread.Title = document.DecodePdfString(titleStr)
 							}
 						} else if titleStr, ok := titleObj.(ast.PdfString); ok {
-							thread.Title = decodePdfString(titleStr)
+							thread.Title = document.DecodePdfString(titleStr)
 						}
 					}
 				}
@@ -146,14 +141,17 @@ func GetThreads(doc *document.Document) ([]Thread, error) {
 				if rObj, ok := beadDict["R"]; ok {
 					var rArr ast.PdfArray
 					if ref, ok := rObj.(ast.PdfIndirectRef); ok {
-						res, _ := doc.Resolve(ref)
+						res, err := doc.Resolve(ref)
+						if err != nil {
+							return nil, fmt.Errorf("failed to resolve bead /R: %w", err)
+						}
 						rArr, _ = res.(ast.PdfArray)
 					} else if arr, ok := rObj.(ast.PdfArray); ok {
 						rArr = arr
 					}
 					if len(rArr) == 4 {
 						for i := range 4 {
-							bead.Rect[i] = getFloat(rArr[i])
+							bead.Rect[i] = document.GetFloat(rArr[i])
 						}
 					}
 				}

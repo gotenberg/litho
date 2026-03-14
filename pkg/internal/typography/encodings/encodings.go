@@ -1,5 +1,7 @@
 package encodings
 
+// WinAnsiEncoding maps byte values to Unicode runes according to the
+// Windows ANSI (CP1252) encoding used by many PDF fonts.
 var WinAnsiEncoding = map[byte]rune{
 	0x20: ' ', 0x21: '!', 0x22: '"', 0x23: '#', 0x24: '$', 0x25: '%', 0x26: '&', 0x27: '\'',
 	0x28: '(', 0x29: ')', 0x2A: '*', 0x2B: '+', 0x2C: ',', 0x2D: '-', 0x2E: '.', 0x2F: '/',
@@ -35,6 +37,8 @@ var WinAnsiEncoding = map[byte]rune{
 	0xFC: 0x00FC, 0xFD: 0x00FD, 0xFE: 0x00FE, 0xFF: 0x00FF,
 }
 
+// MacRomanEncoding maps byte values to Unicode runes according to the
+// Mac Roman encoding used by some PDF fonts on classic Mac OS.
 var MacRomanEncoding = map[byte]rune{
 	// 0x20 to 0x7E are standard ASCII like WinAnsi
 	0x20: ' ', 0x21: '!', 0x22: '"', 0x23: '#', 0x24: '$', 0x25: '%', 0x26: '&', 0x27: '\'',

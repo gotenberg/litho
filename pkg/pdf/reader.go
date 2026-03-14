@@ -22,16 +22,6 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// Exported errors for granular error handling by consumers.
-var (
-	ErrInvalidPassword       = errors.New("invalid PDF password")
-	ErrNotAPDF               = errors.New("not a valid PDF document (missing %PDF- header)")
-	ErrDamagedXRef           = errors.New("damaged or missing cross-reference table")
-	ErrUnsupportedEncryption = errors.New("unsupported encryption algorithm or revision")
-	ErrFontMissing           = errors.New("required font is missing or failed to decode")
-	ErrRequiresOCR           = errors.New("page contains no digital text and requires optical character recognition")
-)
-
 // Reader is the high-level API facade for the PDF parsing engine.
 type Reader struct {
 	doc *document.Document

@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 )
 
+// TokenType represents the category of a lexed PDF token.
 type TokenType int
 
 const (
@@ -43,11 +44,17 @@ func (t TokenType) String() string {
 	}
 }
 
+// Token is a lexed PDF token carrying its type and raw string value.
 type Token struct {
 	Type  TokenType
 	Value string
 }
 
+// Lexer tokenizes a PDF byte stream.
+//
+// Note on UnreadByte: throughout this file, UnreadByte errors are intentionally
+// discarded. Every call is preceded by a successful ReadByte on the same
+// ioat.Reader, which guarantees bufPos > 0 and UnreadByte cannot fail.
 type Lexer struct {
 	reader *ioat.Reader
 }
@@ -56,6 +63,7 @@ func (l *Lexer) GetReader() *ioat.Reader {
 	return l.reader
 }
 
+// NewLexer creates a new Lexer that tokenizes the PDF byte stream from r.
 func NewLexer(r *ioat.Reader) *Lexer {
 	return &Lexer{reader: r}
 }

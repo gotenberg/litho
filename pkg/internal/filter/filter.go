@@ -142,9 +142,8 @@ func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
 	order := lzw.MSB
 	litWidth := 8
 
-	// Go's compress/lzw uses EarlyChange=1 by default.
-	// If EarlyChange is 0, we still use the same decoder but note
-	// that some edge cases may differ; this handles the vast majority.
+	// TODO: When earlyChange is 0, Go's compress/lzw (which defaults to EarlyChange=1)
+	// may produce incorrect output. A custom decoder is needed for full correctness.
 	_ = earlyChange
 
 	r := lzw.NewReader(bytes.NewReader(data), order, litWidth)

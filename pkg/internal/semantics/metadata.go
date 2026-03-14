@@ -5,33 +5,11 @@ import (
 	"fmt"
 	"maps"
 	"strings"
-	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
-
-// decodePdfString converts a PDF string to a Go string, handling UTF-16BE if present.
-func decodePdfString(s ast.PdfString) string {
-	b := []byte(s)
-	if len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF {
-		u16s := make([]uint16, (len(b)-2)/2)
-		for i := range u16s {
-			u16s[i] = uint16(b[2+i*2])<<8 | uint16(b[2+i*2+1])
-		}
-		return string(utf16.Decode(u16s))
-	}
-	return string(b)
-}
-
-// resolveObject is a helper to resolve indirect references if needed.
-func resolveObject(doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ref)
-	}
-	return obj, nil
-}
 
 // xmpMeta is the top-level XMP wrapper element.
 type xmpMeta struct {
@@ -170,7 +148,7 @@ func getXMPMetadata(doc *document.Document) map[string]string {
 	if !ok {
 		return nil
 	}
-	catalogObj, err := resolveObject(doc, rootObj)
+	catalogObj, err := document.ResolveObject(doc, rootObj)
 	if err != nil {
 		return nil
 	}
@@ -182,7 +160,7 @@ func getXMPMetadata(doc *document.Document) map[string]string {
 	if !ok {
 		return nil
 	}
-	metaObj, err := resolveObject(doc, metaRef)
+	metaObj, err := document.ResolveObject(doc, metaRef)
 	if err != nil {
 		return nil
 	}
@@ -205,7 +183,7 @@ func getInfoMetadata(doc *document.Document) map[string]string {
 	if !ok {
 		return nil
 	}
-	infoResolved, err := resolveObject(doc, infoObj)
+	infoResolved, err := document.ResolveObject(doc, infoObj)
 	if err != nil {
 		return nil
 	}
@@ -218,9 +196,9 @@ func getInfoMetadata(doc *document.Document) map[string]string {
 	keys := []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate"}
 	for _, key := range keys {
 		if valObj, ok := infoDict[ast.PdfName(key)]; ok {
-			valResolved, _ := resolveObject(doc, valObj)
+			valResolved, _ := document.ResolveObject(doc, valObj)
 			if strVal, ok := valResolved.(ast.PdfString); ok {
-				metadata[key] = decodePdfString(strVal)
+				metadata[key] = document.DecodePdfString(strVal)
 			}
 		}
 	}

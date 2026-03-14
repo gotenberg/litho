@@ -99,8 +99,9 @@ func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) 
 		encMeta: encryptMeta,
 	}
 
-	// Attempt to authenticate with a blank password
-	_ = h.Authenticate("")
+	// Attempt to authenticate with a blank password. Error is intentionally
+	// discarded: if blank auth fails, the caller must provide a real password.
+	_ = h.Authenticate("") //nolint:errcheck
 
 	return h, nil
 }
@@ -191,13 +192,13 @@ func (h *Handler) Authenticate(password string) error {
 		copy(padded[len(pwBytes):], paddingString[:32-len(pwBytes)])
 	}
 
-	md := md5.New() //nolint:gosec // Required by PDF spec
+	md := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 	md.Write(padded)
 	ownerKey := md.Sum(nil)
 
 	if h.V >= 3 {
 		for range 50 {
-			md2 := md5.New() //nolint:gosec // Required by PDF spec
+			md2 := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			md2.Write(ownerKey)
 			ownerKey = md2.Sum(nil)
 		}
@@ -210,7 +211,7 @@ func (h *Handler) Authenticate(password string) error {
 	copy(decryptedO, h.oVal)
 
 	if h.V < 3 {
-		c, _ := rc4.NewCipher(encKey) //nolint:gosec // Required by PDF spec
+		c, _ := rc4.NewCipher(encKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 		c.XORKeyStream(decryptedO, decryptedO)
 	} else {
 		// 20-pass RC4 decryption loop, XORing the key with 19 - i (so from 19 down to 0)
@@ -219,7 +220,7 @@ func (h *Handler) Authenticate(password string) error {
 			for j := range keyLen {
 				tempKey[j] = encKey[j] ^ byte(i)
 			}
-			c, _ := rc4.NewCipher(tempKey) //nolint:gosec // Required by PDF spec
+			c, _ := rc4.NewCipher(tempKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			c.XORKeyStream(decryptedO, decryptedO)
 		}
 	}
@@ -239,7 +240,7 @@ func (h *Handler) Authenticate(password string) error {
 		}
 
 		// 1. Generate the encryption key (Algorithm 3.1)
-		mdC := md5.New() //nolint:gosec // Required by PDF spec
+		mdC := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 		mdC.Write(candPadded)
 		mdC.Write(h.oVal)
 		pBytes := []byte{byte(h.pVal), byte(h.pVal >> 8), byte(h.pVal >> 16), byte(h.pVal >> 24)} //nolint:gosec // Expected truncation
@@ -253,7 +254,7 @@ func (h *Handler) Authenticate(password string) error {
 		key := mdC.Sum(nil)
 		if h.V >= 3 {
 			for range 50 {
-				md2 := md5.New() //nolint:gosec // Required by PDF spec
+				md2 := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 				md2.Write(key[:h.Length/8])
 				key = md2.Sum(nil)
 			}
@@ -267,13 +268,13 @@ func (h *Handler) Authenticate(password string) error {
 			// ISO 32000-1 Algorithm 3.4 and 3.5 for V >= 3
 
 			// Step 1: Base hash
-			md3 := md5.New() //nolint:gosec // Required by PDF spec
+			md3 := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			md3.Write(paddingString)
 			md3.Write(h.id)
 			baseHash := md3.Sum(nil)
 
 			// Step 2: Initialize RC4 with EncryptionKey and encrypt the base hash
-			c, _ := rc4.NewCipher(candidateKey) //nolint:gosec // Required by PDF spec
+			c, _ := rc4.NewCipher(candidateKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			expectedU = make([]byte, 16)
 			c.XORKeyStream(expectedU, baseHash)
 
@@ -283,11 +284,11 @@ func (h *Handler) Authenticate(password string) error {
 				for j := range candidateKey {
 					tempKey[j] = candidateKey[j] ^ byte(i)
 				}
-				c, _ = rc4.NewCipher(tempKey) //nolint:gosec // Required by PDF spec
+				c, _ = rc4.NewCipher(tempKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 				c.XORKeyStream(expectedU, expectedU)
 			}
 		} else {
-			c, _ := rc4.NewCipher(candidateKey) //nolint:gosec // Required by PDF spec
+			c, _ := rc4.NewCipher(candidateKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			expectedU = make([]byte, 32)
 			c.XORKeyStream(expectedU, paddingString)
 		}
@@ -311,7 +312,7 @@ func (h *Handler) Authenticate(password string) error {
 
 // GetObjKey generates the specific encryption key for an object.
 func (h *Handler) GetObjKey(objNum, genNum int) []byte {
-	md := md5.New() //nolint:gosec // Required by PDF spec
+	md := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 	md.Write(h.EncryptionKey)
 	md.Write([]byte{byte(objNum), byte(objNum >> 8), byte(objNum >> 16)}) //nolint:gosec // Expected truncation
 	md.Write([]byte{byte(genNum), byte(genNum >> 8)})                     //nolint:gosec // Expected truncation
@@ -360,7 +361,7 @@ func (h *Handler) GetDecryptFunc(objNum, genNum int) func([]byte) ([]byte, error
 			return ciphertext, nil
 		}
 
-		c, err := rc4.NewCipher(key) //nolint:gosec // Required by PDF spec
+		c, err := rc4.NewCipher(key) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 		if err != nil {
 			return nil, err
 		}

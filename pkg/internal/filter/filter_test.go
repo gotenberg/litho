@@ -14,16 +14,16 @@ import (
 func zlibCompress(data []byte) []byte {
 	var buf bytes.Buffer
 	w := zlib.NewWriter(&buf)
-	_, _ = w.Write(data)
-	_ = w.Close()
+	_, _ = w.Write(data) //nolint:errcheck // In-memory buffer write cannot fail
+	_ = w.Close()        //nolint:errcheck // Flush to in-memory buffer cannot fail
 	return buf.Bytes()
 }
 
 func lzwCompress(data []byte) []byte {
 	var buf bytes.Buffer
 	w := lzw.NewWriter(&buf, lzw.MSB, 8)
-	_, _ = w.Write(data)
-	_ = w.Close()
+	_, _ = w.Write(data) //nolint:errcheck // In-memory buffer write cannot fail
+	_ = w.Close()        //nolint:errcheck // Flush to in-memory buffer cannot fail
 	return buf.Bytes()
 }
 

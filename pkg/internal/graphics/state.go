@@ -2,6 +2,7 @@ package graphics
 
 import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -120,17 +121,6 @@ func (m *Machine) Current() *State {
 	return &m.Stack[len(m.Stack)-1]
 }
 
-// getFloat is a helper to safely extract a float64 from a PdfObject.
-func getFloat(obj ast.PdfObject) float64 {
-	switch v := obj.(type) {
-	case ast.PdfReal:
-		return float64(v)
-	case ast.PdfInt:
-		return float64(v)
-	}
-	return 0
-}
-
 // Execute processes a sequence of content operations and updates the graphics state.
 func (m *Machine) Execute(ops []content.Operation) error {
 	for _, op := range ops {
@@ -154,12 +144,12 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "cm": // Concatenate matrix
 			if len(op.Operands) == 6 {
-				a := getFloat(op.Operands[0])
-				b := getFloat(op.Operands[1])
-				c := getFloat(op.Operands[2])
-				d := getFloat(op.Operands[3])
-				e := getFloat(op.Operands[4])
-				f := getFloat(op.Operands[5])
+				a := document.GetFloat(op.Operands[0])
+				b := document.GetFloat(op.Operands[1])
+				c := document.GetFloat(op.Operands[2])
+				d := document.GetFloat(op.Operands[3])
+				e := document.GetFloat(op.Operands[4])
+				f := document.GetFloat(op.Operands[5])
 
 				// New CTM = provided matrix x Current CTM
 				ctm := state.CTM
@@ -181,22 +171,22 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "Tc": // Set character spacing
 			if len(op.Operands) == 1 {
-				state.Text.Tc = getFloat(op.Operands[0])
+				state.Text.Tc = document.GetFloat(op.Operands[0])
 			}
 
 		case "Tw": // Set word spacing
 			if len(op.Operands) == 1 {
-				state.Text.Tw = getFloat(op.Operands[0])
+				state.Text.Tw = document.GetFloat(op.Operands[0])
 			}
 
 		case "Tz": // Set horizontal scaling
 			if len(op.Operands) == 1 {
-				state.Text.Tz = getFloat(op.Operands[0])
+				state.Text.Tz = document.GetFloat(op.Operands[0])
 			}
 
 		case "TL": // Set leading
 			if len(op.Operands) == 1 {
-				state.Text.Tl = getFloat(op.Operands[0])
+				state.Text.Tl = document.GetFloat(op.Operands[0])
 			}
 
 		case "Tf": // Set text font and size
@@ -204,24 +194,24 @@ func (m *Machine) Execute(ops []content.Operation) error {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					state.Text.Tf = string(name)
 				}
-				state.Text.Tfs = getFloat(op.Operands[1])
+				state.Text.Tfs = document.GetFloat(op.Operands[1])
 			}
 
 		case "Tm": // Set text matrix
 			if len(op.Operands) == 6 {
-				state.Text.Tm[0] = getFloat(op.Operands[0])
-				state.Text.Tm[1] = getFloat(op.Operands[1])
-				state.Text.Tm[2] = getFloat(op.Operands[2])
-				state.Text.Tm[3] = getFloat(op.Operands[3])
-				state.Text.Tm[4] = getFloat(op.Operands[4])
-				state.Text.Tm[5] = getFloat(op.Operands[5])
+				state.Text.Tm[0] = document.GetFloat(op.Operands[0])
+				state.Text.Tm[1] = document.GetFloat(op.Operands[1])
+				state.Text.Tm[2] = document.GetFloat(op.Operands[2])
+				state.Text.Tm[3] = document.GetFloat(op.Operands[3])
+				state.Text.Tm[4] = document.GetFloat(op.Operands[4])
+				state.Text.Tm[5] = document.GetFloat(op.Operands[5])
 				state.Text.Tlm = state.Text.Tm
 			}
 
 		case "Td": // Move text position
 			if len(op.Operands) == 2 {
-				tx := getFloat(op.Operands[0])
-				ty := getFloat(op.Operands[1])
+				tx := document.GetFloat(op.Operands[0])
+				ty := document.GetFloat(op.Operands[1])
 				tlm := state.Text.Tlm
 				state.Text.Tlm[4] = tx*tlm[0] + ty*tlm[2] + tlm[4]
 				state.Text.Tlm[5] = tx*tlm[1] + ty*tlm[3] + tlm[5]
@@ -230,8 +220,8 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "TD": // Move text position and set leading
 			if len(op.Operands) == 2 {
-				tx := getFloat(op.Operands[0])
-				ty := getFloat(op.Operands[1])
+				tx := document.GetFloat(op.Operands[0])
+				ty := document.GetFloat(op.Operands[1])
 				state.Text.Tl = -ty
 				tlm := state.Text.Tlm
 				state.Text.Tlm[4] = tx*tlm[0] + ty*tlm[2] + tlm[4]
@@ -256,8 +246,8 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "\"": // Set word/char spacing, move to next line, and show text
 			if len(op.Operands) == 3 {
-				state.Text.Tw = getFloat(op.Operands[0])
-				state.Text.Tc = getFloat(op.Operands[1])
+				state.Text.Tw = document.GetFloat(op.Operands[0])
+				state.Text.Tc = document.GetFloat(op.Operands[1])
 				tlm := state.Text.Tlm
 				ty := -state.Text.Tl
 				state.Text.Tlm[4] = ty*tlm[2] + tlm[4]
@@ -267,15 +257,15 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "Tr": // Set text rendering mode
 			if len(op.Operands) == 1 {
-				state.Text.Tmode = int(getFloat(op.Operands[0]))
+				state.Text.Tmode = int(document.GetFloat(op.Operands[0]))
 			}
 
 		case "rg": // Set RGB fill color
 			if len(op.Operands) == 3 {
 				state.FillColor = []float64{
-					getFloat(op.Operands[0]),
-					getFloat(op.Operands[1]),
-					getFloat(op.Operands[2]),
+					document.GetFloat(op.Operands[0]),
+					document.GetFloat(op.Operands[1]),
+					document.GetFloat(op.Operands[2]),
 				}
 				state.FillColorSpace = "DeviceRGB"
 			}
@@ -283,32 +273,32 @@ func (m *Machine) Execute(ops []content.Operation) error {
 		case "RG": // Set RGB stroke color
 			if len(op.Operands) == 3 {
 				state.StrokeColor = []float64{
-					getFloat(op.Operands[0]),
-					getFloat(op.Operands[1]),
-					getFloat(op.Operands[2]),
+					document.GetFloat(op.Operands[0]),
+					document.GetFloat(op.Operands[1]),
+					document.GetFloat(op.Operands[2]),
 				}
 				state.StrokeColorSpace = "DeviceRGB"
 			}
 
 		case "g": // Set Gray fill color
 			if len(op.Operands) == 1 {
-				state.FillColor = []float64{getFloat(op.Operands[0])}
+				state.FillColor = []float64{document.GetFloat(op.Operands[0])}
 				state.FillColorSpace = "DeviceGray"
 			}
 
 		case "G": // Set Gray stroke color
 			if len(op.Operands) == 1 {
-				state.StrokeColor = []float64{getFloat(op.Operands[0])}
+				state.StrokeColor = []float64{document.GetFloat(op.Operands[0])}
 				state.StrokeColorSpace = "DeviceGray"
 			}
 
 		case "k": // Set CMYK fill color
 			if len(op.Operands) == 4 {
 				state.FillColor = []float64{
-					getFloat(op.Operands[0]),
-					getFloat(op.Operands[1]),
-					getFloat(op.Operands[2]),
-					getFloat(op.Operands[3]),
+					document.GetFloat(op.Operands[0]),
+					document.GetFloat(op.Operands[1]),
+					document.GetFloat(op.Operands[2]),
+					document.GetFloat(op.Operands[3]),
 				}
 				state.FillColorSpace = "DeviceCMYK"
 			}
@@ -316,10 +306,10 @@ func (m *Machine) Execute(ops []content.Operation) error {
 		case "K": // Set CMYK stroke color
 			if len(op.Operands) == 4 {
 				state.StrokeColor = []float64{
-					getFloat(op.Operands[0]),
-					getFloat(op.Operands[1]),
-					getFloat(op.Operands[2]),
-					getFloat(op.Operands[3]),
+					document.GetFloat(op.Operands[0]),
+					document.GetFloat(op.Operands[1]),
+					document.GetFloat(op.Operands[2]),
+					document.GetFloat(op.Operands[3]),
 				}
 				state.StrokeColorSpace = "DeviceCMYK"
 			}
@@ -343,7 +333,7 @@ func (m *Machine) Execute(ops []content.Operation) error {
 			for _, operand := range op.Operands {
 				switch operand.(type) {
 				case ast.PdfReal, ast.PdfInt:
-					vals = append(vals, getFloat(operand))
+					vals = append(vals, document.GetFloat(operand))
 				}
 			}
 			if len(vals) > 0 {
@@ -355,7 +345,7 @@ func (m *Machine) Execute(ops []content.Operation) error {
 			for _, operand := range op.Operands {
 				switch operand.(type) {
 				case ast.PdfReal, ast.PdfInt:
-					vals = append(vals, getFloat(operand))
+					vals = append(vals, document.GetFloat(operand))
 				}
 			}
 			if len(vals) > 0 {
@@ -364,8 +354,8 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "m": // Move to
 			if len(op.Operands) == 2 {
-				x := getFloat(op.Operands[0])
-				y := getFloat(op.Operands[1])
+				x := document.GetFloat(op.Operands[0])
+				y := document.GetFloat(op.Operands[1])
 				// Transform point to absolute page coordinates
 				px := x*state.CTM[0] + y*state.CTM[2] + state.CTM[4]
 				py := x*state.CTM[1] + y*state.CTM[3] + state.CTM[5]
@@ -386,8 +376,8 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "l": // Line to
 			if len(op.Operands) == 2 {
-				x := getFloat(op.Operands[0])
-				y := getFloat(op.Operands[1])
+				x := document.GetFloat(op.Operands[0])
+				y := document.GetFloat(op.Operands[1])
 				px := x*state.CTM[0] + y*state.CTM[2] + state.CTM[4]
 				py := x*state.CTM[1] + y*state.CTM[3] + state.CTM[5]
 
@@ -407,10 +397,10 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "re": // Rectangle
 			if len(op.Operands) == 4 {
-				x := getFloat(op.Operands[0])
-				y := getFloat(op.Operands[1])
-				w := getFloat(op.Operands[2])
-				h := getFloat(op.Operands[3])
+				x := document.GetFloat(op.Operands[0])
+				y := document.GetFloat(op.Operands[1])
+				w := document.GetFloat(op.Operands[2])
+				h := document.GetFloat(op.Operands[3])
 
 				// Calculate 4 corners in user space
 				pts := []Point{
@@ -438,8 +428,8 @@ func (m *Machine) Execute(ops []content.Operation) error {
 		case "c", "v", "y": // Bezier curves
 			// simplistic bounding box updates using the control points
 			for i := 0; i < len(op.Operands); i += 2 {
-				x := getFloat(op.Operands[i])
-				y := getFloat(op.Operands[i+1])
+				x := document.GetFloat(op.Operands[i])
+				y := document.GetFloat(op.Operands[i+1])
 				px := x*state.CTM[0] + y*state.CTM[2] + state.CTM[4]
 				py := x*state.CTM[1] + y*state.CTM[3] + state.CTM[5]
 				if px < m.CurrentPath.MinX {
@@ -511,10 +501,8 @@ func (m *Machine) Execute(ops []content.Operation) error {
 								state.SkipExtraction = true
 							}
 						}
-					} else if ocDict, ok := op.Operands[1].(ast.PdfDict); ok {
-						// Rarely it's an inline dictionary
-						_ = ocDict
 					}
+					// TODO: Handle inline OC dictionaries (rare edge case).
 				}
 
 				if props, ok := op.Operands[1].(ast.PdfDict); ok {

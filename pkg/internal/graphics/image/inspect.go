@@ -15,7 +15,7 @@ func InspectImages(doc *document.Document, page *document.Page) []models.ImageMe
 		return nil
 	}
 
-	xobjResolved, err := resolveObject(doc, xobjObj)
+	xobjResolved, err := document.ResolveObject(doc, xobjObj)
 	if err != nil {
 		return nil
 	}
@@ -28,7 +28,7 @@ func InspectImages(doc *document.Document, page *document.Page) []models.ImageMe
 	var images []models.ImageMeta
 
 	for name, obj := range xobjDict {
-		resolved, err := resolveObject(doc, obj)
+		resolved, err := document.ResolveObject(doc, obj)
 		if err != nil {
 			continue
 		}

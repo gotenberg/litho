@@ -3,7 +3,6 @@ package signature
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -23,7 +22,7 @@ func ExtractSignatures(doc *document.Document) ([]models.Signature, error) {
 		return nil, nil // No forms/signatures
 	}
 
-	acroFormResolved, err := resolveObject(doc, acroFormObj)
+	acroFormResolved, err := document.ResolveObject(doc, acroFormObj)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +37,7 @@ func ExtractSignatures(doc *document.Document) ([]models.Signature, error) {
 		return nil, nil
 	}
 
-	fieldsResolved, err := resolveObject(doc, fieldsObj)
+	fieldsResolved, err := document.ResolveObject(doc, fieldsObj)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +55,7 @@ func ExtractSignatures(doc *document.Document) ([]models.Signature, error) {
 
 func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature) {
 	for _, fieldObj := range fields {
-		fieldResolved, err := resolveObject(doc, fieldObj)
+		fieldResolved, err := document.ResolveObject(doc, fieldObj)
 		if err != nil {
 			continue
 		}
@@ -69,9 +68,9 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 		// Extract partial name
 		partialName := ""
 		if tObj, ok := fieldDict["T"]; ok {
-			tRes, _ := resolveObject(doc, tObj)
+			tRes, _ := document.ResolveObject(doc, tObj)
 			if tStr, ok := tRes.(ast.PdfString); ok {
-				partialName = decodePdfString(tStr)
+				partialName = document.DecodePdfString(tStr)
 			}
 		}
 
@@ -86,16 +85,16 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 		// Field Type (/FT)
 		if ftObj, ok := fieldDict["FT"]; ok {
-			ftRes, _ := resolveObject(doc, ftObj)
+			ftRes, _ := document.ResolveObject(doc, ftObj)
 			if ftName, ok := ftRes.(ast.PdfName); ok && ftName == "Sig" {
 				if vObj, ok := fieldDict["V"]; ok {
-					vRes, _ := resolveObject(doc, vObj)
+					vRes, _ := document.ResolveObject(doc, vObj)
 					if vDict, ok := vRes.(ast.PdfDict); ok {
 						sig := models.Signature{FieldName: fullName}
 
 						// ByteRange
 						if brObj, ok := vDict["ByteRange"]; ok {
-							brRes, _ := resolveObject(doc, brObj)
+							brRes, _ := document.ResolveObject(doc, brObj)
 							if brArr, ok := brRes.(ast.PdfArray); ok && len(brArr) == 4 {
 								for i := range 4 {
 									if num, ok := brArr[i].(ast.PdfInt); ok {
@@ -107,7 +106,7 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 						// Contents (Hex string PKCS#7)
 						if cObj, ok := vDict["Contents"]; ok {
-							cRes, _ := resolveObject(doc, cObj)
+							cRes, _ := document.ResolveObject(doc, cObj)
 							if cStr, ok := cRes.(ast.PdfString); ok {
 								sig.Contents = string(cStr)
 							}
@@ -115,9 +114,9 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 						// /M signing time
 						if mObj, ok := vDict["M"]; ok {
-							mRes, _ := resolveObject(doc, mObj)
+							mRes, _ := document.ResolveObject(doc, mObj)
 							if mStr, ok := mRes.(ast.PdfString); ok {
-								sig.SigningTime = decodePdfString(mStr)
+								sig.SigningTime = document.DecodePdfString(mStr)
 							}
 						}
 
@@ -142,23 +141,10 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 		// Traverse Kids
 		if kidsObj, ok := fieldDict["Kids"]; ok {
-			kidsRes, _ := resolveObject(doc, kidsObj)
+			kidsRes, _ := document.ResolveObject(doc, kidsObj)
 			if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
 				extractSigsRecursive(doc, kidsArr, fullName, sigs)
 			}
 		}
 	}
-}
-
-// decodePdfString decodes a PDF string, handling UTF-16BE BOM if present.
-func decodePdfString(s ast.PdfString) string {
-	b := []byte(s)
-	if len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF {
-		u16s := make([]uint16, (len(b)-2)/2)
-		for i := range u16s {
-			u16s[i] = uint16(b[2+i*2])<<8 | uint16(b[2+i*2+1])
-		}
-		return string(utf16.Decode(u16s))
-	}
-	return string(b)
 }

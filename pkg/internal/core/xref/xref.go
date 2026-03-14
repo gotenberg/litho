@@ -10,6 +10,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
+// XRefEntry represents a single cross-reference entry describing the location
+// and status of a PDF object (byte offset, generation number, and entry type).
 type XRefEntry struct {
 	Offset      int64
 	Generation  int
@@ -19,6 +21,8 @@ type XRefEntry struct {
 	ObjStmIndex int // Only for Type 2
 }
 
+// Index is an aggregated cross-reference index containing a map of object
+// numbers to their XRefEntry values and the associated trailer dictionary.
 type Index struct {
 	Entries map[int]XRefEntry
 	Trailer ast.PdfDict
@@ -42,6 +46,9 @@ func decodeStreamData(stream ast.PdfStream) ([]byte, error) {
 	return data, nil
 }
 
+// ParseXRefStream parses a PDF 1.5+ compressed cross-reference stream and
+// populates indexMap with the decoded entries. It returns the byte offset of
+// the previous cross-reference section (from the /Prev key), or 0 if none.
 func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, error) {
 	wObj, ok := stream.Dict["W"]
 	if !ok {
@@ -141,6 +148,10 @@ func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, e
 	return prev, nil
 }
 
+// ParseXRefTable parses a traditional plain-text cross-reference table and its
+// trailer dictionary. It populates indexMap with the parsed entries and returns
+// the trailer dictionary, the byte offset of the previous xref section, and
+// any error encountered.
 func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, error) {
 	tok, err := lex.NextToken()
 	if err != nil {

@@ -20,7 +20,7 @@ func GetOutline(doc *document.Document) ([]models.Bookmark, error) {
 		return nil, nil // Document has no outline
 	}
 
-	outlinesResolved, err := resolveObject(doc, outlinesObj)
+	outlinesResolved, err := document.ResolveObject(doc, outlinesObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve outlines: %v", err)
 	}
@@ -49,7 +49,7 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 	currentObj := itemObj
 
 	for currentObj != nil {
-		resolved, err := resolveObject(doc, currentObj)
+		resolved, err := document.ResolveObject(doc, currentObj)
 		if err != nil {
 			break
 		}
@@ -62,15 +62,15 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 		var b models.Bookmark
 
 		if titleObj, ok := dict["Title"]; ok {
-			titleRes, _ := resolveObject(doc, titleObj)
+			titleRes, _ := document.ResolveObject(doc, titleObj)
 			if titleStr, ok := titleRes.(ast.PdfString); ok {
-				b.Title = decodePdfString(titleStr)
+				b.Title = document.DecodePdfString(titleStr)
 			}
 		}
 
 		// Resolve Dest array
 		if destObj, ok := dict["Dest"]; ok {
-			destRes, _ := resolveObject(doc, destObj)
+			destRes, _ := document.ResolveObject(doc, destObj)
 			if destArr, ok := destRes.(ast.PdfArray); ok && len(destArr) > 0 {
 				if pageRef, ok := destArr[0].(ast.PdfIndirectRef); ok {
 					if pageNum, exists := pageMap[pageRef]; exists {
@@ -80,13 +80,13 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 			}
 		} else if aObj, ok := dict["A"]; ok {
 			// Some bookmarks use an Action (/A) instead of an explicit /Dest
-			aRes, _ := resolveObject(doc, aObj)
+			aRes, _ := document.ResolveObject(doc, aObj)
 			if aDict, ok := aRes.(ast.PdfDict); ok {
 				if sObj, ok := aDict["S"]; ok {
-					sRes, _ := resolveObject(doc, sObj)
+					sRes, _ := document.ResolveObject(doc, sObj)
 					if sName, ok := sRes.(ast.PdfName); ok && sName == "GoTo" {
 						if dObj, ok := aDict["D"]; ok {
-							dRes, _ := resolveObject(doc, dObj)
+							dRes, _ := document.ResolveObject(doc, dObj)
 							if dArr, ok := dRes.(ast.PdfArray); ok && len(dArr) > 0 {
 								if pageRef, ok := dArr[0].(ast.PdfIndirectRef); ok {
 									if pageNum, exists := pageMap[pageRef]; exists {

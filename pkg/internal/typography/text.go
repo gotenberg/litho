@@ -338,13 +338,13 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 
 	// Pre-populate active OCs from resources /Properties
 	if propsObj, ok := resources["Properties"]; ok {
-		propsRes, _ := resolveObject(doc, propsObj)
+		propsRes, _ := document.ResolveObject(doc, propsObj)
 		if propsDict, ok := propsRes.(ast.PdfDict); ok {
 			for k, v := range propsDict {
-				vRes, _ := resolveObject(doc, v)
+				vRes, _ := document.ResolveObject(doc, v)
 				if dict, ok := vRes.(ast.PdfDict); ok {
 					if subtypeObj, ok := dict["Type"]; ok {
-						subtypeRes, _ := resolveObject(doc, subtypeObj)
+						subtypeRes, _ := document.ResolveObject(doc, subtypeObj)
 						if subtypeName, ok := subtypeRes.(ast.PdfName); ok && subtypeName == "OCG" {
 							// Determine visibility using Off -> On -> BaseState priority.
 							visible := true
@@ -392,7 +392,7 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 				}
 
 				// Handle UTF-16 BE encoding that might be present in ActualText
-				actualText := decodePdfString(ast.PdfString(machine.PendingActualText))
+				actualText := document.DecodePdfString(ast.PdfString(machine.PendingActualText))
 
 				for _, r := range actualText {
 					tm := state.Text.Tm
@@ -434,13 +434,13 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 
 			resolved := false
 			if resObj, ok := resources["Font"]; ok {
-				resResolved, err := resolveObject(doc, resObj)
+				resResolved, err := document.ResolveObject(doc, resObj)
 				if err != nil {
 					return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
 				}
 				if resDictRoot, ok := resResolved.(ast.PdfDict); ok {
 					if fontRefObj, ok := resDictRoot[fontName]; ok {
-						fontDictResolved, err := resolveObject(doc, fontRefObj)
+						fontDictResolved, err := document.ResolveObject(doc, fontRefObj)
 						if err != nil {
 							return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
 						}
@@ -532,13 +532,13 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 			if len(op.Operands) == 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					if xobjObj, ok := resources["XObject"]; ok {
-						xobjResolved, _ := resolveObject(doc, xobjObj)
+						xobjResolved, _ := document.ResolveObject(doc, xobjObj)
 						if xobjDict, ok := xobjResolved.(ast.PdfDict); ok {
 							if targetObj, ok := xobjDict[name]; ok {
-								targetResolved, _ := resolveObject(doc, targetObj)
+								targetResolved, _ := document.ResolveObject(doc, targetObj)
 								if stream, ok := targetResolved.(ast.PdfStream); ok {
 									if subtypeObj, ok := stream.Dict["Subtype"]; ok {
-										subtypeResolved, _ := resolveObject(doc, subtypeObj)
+										subtypeResolved, _ := document.ResolveObject(doc, subtypeObj)
 										if subtypeName, ok := subtypeResolved.(ast.PdfName); ok && subtypeName == "Form" {
 											// Parse the Form XObject stream
 											formOps, err := content.ParsePageContent(doc, stream)
@@ -546,7 +546,7 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 												// Determine resources
 												formRes := resources // inherit by default
 												if resObj, ok := stream.Dict["Resources"]; ok {
-													resResolved, _ := resolveObject(doc, resObj)
+													resResolved, _ := document.ResolveObject(doc, resObj)
 													if resDict, ok := resResolved.(ast.PdfDict); ok {
 														formRes = resDict
 													}
@@ -559,7 +559,10 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 
 												// If there is a Matrix in the Form XObject, apply it
 												if matrixObj, ok := stream.Dict["Matrix"]; ok {
-													matrixResolved, _ := resolveObject(doc, matrixObj)
+													matrixResolved, err := document.ResolveObject(doc, matrixObj)
+													if err != nil {
+														return err
+													}
 													if matrixArr, ok := matrixResolved.(ast.PdfArray); ok && len(matrixArr) == 6 {
 														_ = machine.Execute([]content.Operation{{ //nolint:errcheck
 															Operator: "cm",

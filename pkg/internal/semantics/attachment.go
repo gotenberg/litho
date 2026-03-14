@@ -22,7 +22,7 @@ func ExtractAttachments(doc *document.Document, outputDir string) ([]string, err
 		return nil, nil // No names dictionary
 	}
 
-	namesRes, err := resolveObject(doc, namesObj)
+	namesRes, err := document.ResolveObject(doc, namesObj)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func ExtractAttachments(doc *document.Document, outputDir string) ([]string, err
 }
 
 func extractNamesTree(doc *document.Document, nodeObj ast.PdfObject, outputDir string, savedFiles *[]string) error {
-	nodeRes, err := resolveObject(doc, nodeObj)
+	nodeRes, err := document.ResolveObject(doc, nodeObj)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func extractNamesTree(doc *document.Document, nodeObj ast.PdfObject, outputDir s
 
 	// Traverse Kids
 	if kidsObj, ok := nodeDict["Kids"]; ok {
-		kidsRes, _ := resolveObject(doc, kidsObj)
+		kidsRes, _ := document.ResolveObject(doc, kidsObj)
 		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
 			for _, kid := range kidsArr {
 				if err := extractNamesTree(doc, kid, outputDir, savedFiles); err != nil {
@@ -76,27 +76,27 @@ func extractNamesTree(doc *document.Document, nodeObj ast.PdfObject, outputDir s
 
 	// Process Names array (leaf node)
 	if namesObj, ok := nodeDict["Names"]; ok {
-		namesRes, _ := resolveObject(doc, namesObj)
+		namesRes, _ := document.ResolveObject(doc, namesObj)
 		if namesArr, ok := namesRes.(ast.PdfArray); ok {
 			// Names array alternates between name string and value object
 			for i := 1; i < len(namesArr); i += 2 {
 				valObj := namesArr[i]
-				valRes, _ := resolveObject(doc, valObj)
+				valRes, _ := document.ResolveObject(doc, valObj)
 
 				if fileSpecDict, ok := valRes.(ast.PdfDict); ok {
 					// We have a File Specification dictionary
 					if efObj, ok := fileSpecDict["EF"]; ok {
-						efRes, _ := resolveObject(doc, efObj)
+						efRes, _ := document.ResolveObject(doc, efObj)
 						if efDict, ok := efRes.(ast.PdfDict); ok {
 							if fObj, ok := efDict["F"]; ok {
-								fRes, _ := resolveObject(doc, fObj)
+								fRes, _ := document.ResolveObject(doc, fObj)
 								if stream, ok := fRes.(ast.PdfStream); ok {
 									// Extract filename from File Specification (/F or /UF)
 									filename := "attachment"
 									if nameObj, ok := fileSpecDict["F"]; ok {
-										nameRes, _ := resolveObject(doc, nameObj)
+										nameRes, _ := document.ResolveObject(doc, nameObj)
 										if nameStr, ok := nameRes.(ast.PdfString); ok {
-											filename = decodePdfString(nameStr)
+											filename = document.DecodePdfString(nameStr)
 										}
 									}
 

@@ -22,7 +22,7 @@ func extractXFAData(doc *document.Document, acroFormDict ast.PdfDict) (map[strin
 		return nil, nil
 	}
 
-	xfaResolved, err := resolveObject(doc, xfaObj)
+	xfaResolved, err := document.ResolveObject(doc, xfaObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /XFA: %w", err)
 	}
@@ -71,7 +71,7 @@ func assembleXFAArray(doc *document.Document, arr ast.PdfArray) ([]byte, error) 
 	for i := 0; i+1 < len(arr); i += 2 {
 		// arr[i] is the packet name (e.g., "preamble", "datasets", "template").
 		// arr[i+1] is the stream reference.
-		streamObj, err := resolveObject(doc, arr[i+1])
+		streamObj, err := document.ResolveObject(doc, arr[i+1])
 		if err != nil {
 			continue
 		}

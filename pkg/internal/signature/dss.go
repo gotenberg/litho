@@ -57,7 +57,7 @@ func extractDSS(doc *document.Document) (*dssData, error) {
 		return nil, nil
 	}
 
-	dssResolved, err := resolveObject(doc, dssObj)
+	dssResolved, err := document.ResolveObject(doc, dssObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /DSS: %w", err)
 	}
@@ -78,11 +78,11 @@ func extractDSS(doc *document.Document) (*dssData, error) {
 	// /VRI — dictionary keyed by uppercase hex SHA-1 of the signature value,
 	// each value is a dictionary with optional /Cert, /CRL, /OCSP arrays.
 	if vriObj, ok := dssDict["VRI"]; ok {
-		vriResolved, err := resolveObject(doc, vriObj)
+		vriResolved, err := document.ResolveObject(doc, vriObj)
 		if err == nil {
 			if vriDict, ok := vriResolved.(ast.PdfDict); ok {
 				for key, valObj := range vriDict {
-					entryResolved, err := resolveObject(doc, valObj)
+					entryResolved, err := document.ResolveObject(doc, valObj)
 					if err != nil {
 						continue
 					}
@@ -121,7 +121,7 @@ func resolveDSSStreamArray(doc *document.Document, dict ast.PdfDict, keys ...ast
 		return nil
 	}
 
-	arrResolved, err := resolveObject(doc, arrObj)
+	arrResolved, err := document.ResolveObject(doc, arrObj)
 	if err != nil {
 		return nil
 	}
@@ -133,7 +133,7 @@ func resolveDSSStreamArray(doc *document.Document, dict ast.PdfDict, keys ...ast
 
 	var results [][]byte
 	for _, streamRef := range arr {
-		streamResolved, err := resolveObject(doc, streamRef)
+		streamResolved, err := document.ResolveObject(doc, streamRef)
 		if err != nil {
 			continue
 		}
@@ -306,15 +306,6 @@ func parseOCSPResponse(der []byte) (ocspBasicResponse, error) {
 	}
 
 	return result, nil
-}
-
-// resolveObject dereferences an indirect reference via the document's xref table.
-// If obj is not an indirect reference it is returned as-is.
-func resolveObject(doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ref)
-	}
-	return obj, nil
 }
 
 // checkRevocation checks whether a certificate was revoked at the given time
