@@ -1,0 +1,445 @@
+package document
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/ioat"
+	"github.com/gotenberg/litho/pkg/internal/core/lexer"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/internal/filter"
+)
+
+// Document represents a parsed PDF document.
+// It holds a reference to the underlying data stream, the cross-reference index,
+// and a cache of resolved objects to avoid re-parsing.
+type Document struct {
+	r             io.ReaderAt
+	size          int64
+	Index         xref.Index
+	ObjectCache   map[int]ast.PdfObject
+	resolving     map[int]bool
+	Crypto        *crypto.Handler
+	OCConfig      *OCConfig
+	IsEncrypted   bool
+	Authenticated bool
+
+	// Linearization holds the linearization parameters if the document is
+	// linearized (fast web view). Nil for non-linearized documents.
+	Linearization *LinearizationParams
+
+	// HintTable holds the per-page offset entries decoded from the hint
+	// stream of a linearized PDF. Nil for non-linearized documents.
+	HintTable []PageOffsetEntry
+
+	// Rebuilt is true when the cross-reference table was reconstructed
+	// by scanning the file for object headers because the original xref
+	// data was damaged or missing.
+	Rebuilt bool
+}
+
+// OCConfig holds the state of Optional Content Groups (Layers)
+type OCConfig struct {
+	On        map[int]bool
+	Off       map[int]bool
+	BaseState string // "ON", "OFF", or "Unchanged"; defaults to "ON" per PDF spec
+}
+
+func findStartXRef(r io.ReaderAt, size int64) (int64, error) {
+	bufSize := min(size, int64(1024))
+
+	buf := make([]byte, bufSize)
+	_, err := r.ReadAt(buf, size-bufSize)
+	if err != nil {
+		return 0, err
+	}
+
+	idx := bytes.LastIndex(buf, []byte("startxref"))
+	if idx == -1 {
+		return 0, fmt.Errorf("startxref not found")
+	}
+
+	sub := buf[idx+len("startxref"):]
+	// bytes.Reader actually implements io.ReaderAt
+	br := bytes.NewReader(sub)
+	lex := lexer.NewLexer(ioat.NewReader(br, int64(len(sub)), 0))
+	tok, err := lex.NextToken()
+	if err != nil {
+		return 0, err
+	}
+	if tok.Type != lexer.TokenNumber {
+		return 0, fmt.Errorf("expected offset after startxref, got %v", tok.Value)
+	}
+
+	offset, err := strconv.ParseInt(tok.Value, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	return offset, nil
+}
+
+// parseXRefChain locates the startxref pointer and walks the chain of xref
+// tables/streams (via /Prev links) to populate d.Index.
+func (d *Document) parseXRefChain() error {
+	currentOffset, err := findStartXRef(d.r, d.size)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrDamagedXRef, err)
+	}
+
+	for currentOffset != 0 {
+		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
+		tok, err := lex.NextToken()
+		if err != nil {
+			return err
+		}
+
+		var prev int64
+		if tok.Type == lexer.TokenKeyword && tok.Value == "xref" {
+			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
+			trailerDict, p, err := xref.ParseXRefTable(lex, d.Index.Entries)
+			if err != nil {
+				return err
+			}
+			prev = p
+			if d.Index.Trailer == nil {
+				d.Index.Trailer = trailerDict
+			}
+		} else if tok.Type == lexer.TokenNumber {
+			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
+			p := parser.NewParser(lex)
+			obj, err := p.ParseObject()
+			if err != nil {
+				return err
+			}
+			stream, ok := obj.(ast.PdfStream)
+			if !ok {
+				return fmt.Errorf("expected xref stream, got %T", obj)
+			}
+			pVal, err := xref.ParseXRefStream(stream, d.Index.Entries)
+			if err != nil {
+				return err
+			}
+			prev = pVal
+			if d.Index.Trailer == nil {
+				d.Index.Trailer = stream.Dict
+			}
+		} else {
+			return fmt.Errorf("unexpected token at xref offset: %v", tok.Value)
+		}
+
+		currentOffset = prev
+	}
+
+	return nil
+}
+
+// NewDocument creates a new Document instance by parsing the XRef chains.
+func NewDocument(r io.ReaderAt, size int64) (*Document, error) {
+	// Validate PDF Header
+	headerBuf := make([]byte, 10)
+	_, err := r.ReadAt(headerBuf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file header: %w", err)
+	}
+	if !bytes.Contains(headerBuf, []byte("%PDF-")) {
+		return nil, ErrMissingHeader
+	}
+
+	doc := &Document{
+		r:           r,
+		size:        size,
+		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		ObjectCache: make(map[int]ast.PdfObject),
+		resolving:   make(map[int]bool),
+	}
+
+	// Probe for linearization before seeking to the end of the file.
+	linParams := probeLinearization(r, size)
+	if linParams != nil {
+		doc.Linearization = linParams
+		hintEntries, err := parseHintStream(r, size, linParams)
+		if err == nil && len(hintEntries) > 0 {
+			doc.HintTable = hintEntries
+		}
+	}
+
+	if err := doc.parseXRefChain(); err != nil {
+		// Fallback: brute-force rebuild by scanning for object headers.
+		doc.Index.Entries = make(map[int]xref.XRefEntry)
+		doc.Index.Trailer = nil
+		if rebuildErr := doc.rebuildXRef(); rebuildErr != nil {
+			return nil, fmt.Errorf("%w: %v (rebuild also failed: %v)", ErrDamagedXRef, err, rebuildErr)
+		}
+		doc.Rebuilt = true
+	}
+
+	// Initialize Crypto if Encrypt dictionary is present
+	if encObj, ok := doc.Index.Trailer["Encrypt"]; ok {
+		var encDict ast.PdfDict
+		if ref, ok := encObj.(ast.PdfIndirectRef); ok {
+			// Resolving without Crypto is safe because Encrypt dict values are never encrypted
+			obj, _ := doc.Resolve(ref)
+			encDict, _ = obj.(ast.PdfDict)
+		} else {
+			encDict, _ = encObj.(ast.PdfDict)
+		}
+
+		if encDict != nil {
+			doc.IsEncrypted = true
+			handler, _ := crypto.NewHandler(encDict, doc.Index.Trailer)
+			doc.Crypto = handler
+			doc.Authenticated = handler.Authenticated
+		}
+	}
+
+	doc.initOCConfig()
+
+	return doc, nil
+}
+
+// Authenticate attempts to authenticate an encrypted document with the given password.
+func (d *Document) Authenticate(password string) error {
+	if !d.IsEncrypted || d.Crypto == nil {
+		return nil
+	}
+	err := d.Crypto.Authenticate(password)
+	if err == nil {
+		d.Authenticated = true
+		// Clear object cache in case we cached encrypted items
+		// (though we shouldn't have been able to read them)
+		d.ObjectCache = make(map[int]ast.PdfObject)
+	}
+	return err
+}
+
+// resolveAny resolves obj if it is an indirect reference, otherwise returns it directly.
+// This is safe to call on any PdfObject (unlike Resolve which requires PdfIndirectRef).
+func (d *Document) resolveAny(obj ast.PdfObject) ast.PdfObject {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		res, err := d.Resolve(ref)
+		if err != nil {
+			return nil
+		}
+		return res
+	}
+	return obj
+}
+
+// initOCConfig extracts the Optional Content Properties to determine which layers are ON/OFF.
+func (d *Document) initOCConfig() {
+	d.OCConfig = &OCConfig{
+		On:  make(map[int]bool),
+		Off: make(map[int]bool),
+	}
+
+	rootObj, ok := d.Index.Trailer["Root"]
+	if !ok {
+		return
+	}
+	catalog, ok := d.resolveAny(rootObj).(ast.PdfDict)
+	if !ok {
+		return
+	}
+
+	ocpObj, ok := catalog["OCProperties"]
+	if !ok {
+		return
+	}
+	ocp, ok := d.resolveAny(ocpObj).(ast.PdfDict)
+	if !ok {
+		return
+	}
+
+	dObj, ok := ocp["D"]
+	if !ok {
+		return
+	}
+	dDict, ok := d.resolveAny(dObj).(ast.PdfDict)
+	if !ok {
+		return
+	}
+
+	// BaseState determines the default state before applying ON/OFF arrays
+	baseState := "ON"
+	if bsObj, ok := dDict["BaseState"]; ok {
+		if bsName, ok := bsObj.(ast.PdfName); ok {
+			baseState = string(bsName)
+		}
+	}
+
+	// Parse ON array
+	if onObj, ok := dDict["ON"]; ok {
+		if onArr, ok := d.resolveAny(onObj).(ast.PdfArray); ok {
+			for _, item := range onArr {
+				if ref, ok := item.(ast.PdfIndirectRef); ok {
+					d.OCConfig.On[ref.ObjectNum] = true
+				}
+			}
+		}
+	}
+
+	// Parse OFF array
+	if offObj, ok := dDict["OFF"]; ok {
+		if offArr, ok := d.resolveAny(offObj).(ast.PdfArray); ok {
+			for _, item := range offArr {
+				if ref, ok := item.(ast.PdfIndirectRef); ok {
+					d.OCConfig.Off[ref.ObjectNum] = true
+				}
+			}
+		}
+	}
+
+	d.OCConfig.BaseState = baseState
+}
+
+// IsLinearized reports whether the document has a linearization dictionary.
+func (d *Document) IsLinearized() bool {
+	return d.Linearization != nil
+}
+
+// ReadFileBytes reads a specific chunk of raw bytes directly from the underlying file.
+func (d *Document) ReadFileBytes(offset int64, length int64) ([]byte, error) {
+	buf := make([]byte, length)
+	_, err := d.r.ReadAt(buf, offset)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	return buf, nil
+}
+
+// ExtractFromObjectStream extracts an object from an Object Stream.
+func ExtractFromObjectStream(doc *Document, objStmNum int, targetIndex int) (ast.PdfObject, error) {
+	// 1. Resolve the Object Stream itself
+	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
+	obj, err := doc.Resolve(objStmRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve object stream %d: %v", objStmNum, err)
+	}
+
+	stream, ok := obj.(ast.PdfStream)
+	if !ok {
+		return nil, fmt.Errorf("object %d is not a stream", objStmNum)
+	}
+
+	// Decompress the stream using the filter package
+	decodedData, err := filter.DecodeStream(stream)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode object stream %d: %v", objStmNum, err)
+	}
+
+	// 2. Extract /N and /First
+	nObj, ok := stream.Dict["N"]
+	if !ok {
+		return nil, fmt.Errorf("object stream missing /N")
+	}
+	n := int(nObj.(ast.PdfInt))
+
+	firstObj, ok := stream.Dict["First"]
+	if !ok {
+		return nil, fmt.Errorf("object stream missing /First")
+	}
+	first := int(firstObj.(ast.PdfInt))
+
+	// 3. Loop N times to read the header integer pairs
+	reader := bytes.NewReader(decodedData)
+	lex := lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), 0))
+
+	targetOffset := -1
+	for i := range n {
+		// Read objNum
+		_, err := lex.NextToken()
+		if err != nil {
+			return nil, err
+		}
+		// Read offset
+		tokOffset, err := lex.NextToken()
+		if err != nil {
+			return nil, err
+		}
+
+		if i == targetIndex {
+			offset, _ := strconv.Atoi(tokOffset.Value)
+			targetOffset = offset
+			break // We found our target offset, can stop reading pairs
+		}
+	}
+
+	if targetOffset == -1 {
+		return nil, fmt.Errorf("target index %d out of bounds in object stream %d", targetIndex, objStmNum)
+	}
+
+	// 4. Calculate absolute position
+	absoluteOffset := int64(first + targetOffset)
+
+	// 5. Seek reader to absoluteOffset and parse
+	lex = lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), absoluteOffset))
+	p := parser.NewParser(lex)
+
+	return p.ParseObject()
+}
+
+// Resolve looks up an indirect reference in the document's cross-reference index
+// and parses the object from the underlying stream if it hasn't been cached yet.
+func (d *Document) Resolve(ref ast.PdfIndirectRef) (ast.PdfObject, error) {
+	// Check for circular reference
+	if d.resolving[ref.ObjectNum] {
+		return nil, fmt.Errorf("%w: object %d", ErrCircularRef, ref.ObjectNum)
+	}
+
+	// Check if the object is already in the cache
+	if obj, ok := d.ObjectCache[ref.ObjectNum]; ok {
+		return obj, nil
+	}
+
+	// Mark as resolving
+	d.resolving[ref.ObjectNum] = true
+	defer func() { delete(d.resolving, ref.ObjectNum) }()
+
+	// Look up the object in the xref table
+	entry, ok := d.Index.Entries[ref.ObjectNum]
+	if !ok {
+		return nil, fmt.Errorf("%w: object %d", ErrObjectNotFound, ref.ObjectNum)
+	}
+
+	if entry.Free {
+		return ast.PdfNull{}, nil
+	}
+
+	switch entry.Type {
+	case 1:
+		// Type 1: Normal object
+		// Create a new lexer and parser at the specific byte offset
+		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
+		p := parser.NewParser(lex)
+		if d.Crypto != nil {
+			p.WithDecryption(d.Crypto.GetDecryptFunc(ref.ObjectNum, ref.GenNum))
+		}
+
+		// ParseObject handles the '12 0 obj ... endobj' envelope and returns the inner object
+		obj, err := p.ParseObject()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse object %d at offset %d: %v", ref.ObjectNum, entry.Offset, err)
+		}
+
+		// Store in cache and return
+		d.ObjectCache[ref.ObjectNum] = obj
+		return obj, nil
+	case 2:
+		// Type 2: Compressed object in an Object Stream (PDF 1.5+)
+		obj, err := ExtractFromObjectStream(d, entry.ObjStmNum, entry.ObjStmIndex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)
+		}
+
+		// Store in cache and return
+		d.ObjectCache[ref.ObjectNum] = obj
+		return obj, nil
+	}
+	return nil, fmt.Errorf("unknown xref entry type: %d", entry.Type)
+}

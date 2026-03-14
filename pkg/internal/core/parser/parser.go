@@ -1,0 +1,542 @@
+package parser
+
+import (
+	"bytes"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/lexer"
+)
+
+type DecryptFunc func([]byte) ([]byte, error)
+
+type Parser struct {
+	lex       *lexer.Lexer
+	tokens    []lexer.Token
+	err       error
+	decryptFn DecryptFunc
+}
+
+func NewParser(lex *lexer.Lexer) *Parser {
+	return &Parser{lex: lex}
+}
+
+func (p *Parser) WithDecryption(fn DecryptFunc) *Parser {
+	p.decryptFn = fn
+	return p
+}
+
+func (p *Parser) Peek(n int) (lexer.Token, error) {
+	for len(p.tokens) <= n {
+		if p.err != nil {
+			return lexer.Token{Type: lexer.TokenEOF}, p.err
+		}
+		tok, err := p.lex.NextToken()
+		p.tokens = append(p.tokens, tok)
+		if err != nil && err != io.EOF {
+			p.err = err
+		}
+	}
+	return p.tokens[n], nil
+}
+
+func (p *Parser) Consume() (lexer.Token, error) {
+	tok, err := p.Peek(0)
+	if len(p.tokens) > 0 {
+		p.tokens = p.tokens[1:]
+	}
+	return tok, err
+}
+
+func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
+	tok, err := p.Consume()
+	if err != nil {
+		return lexer.Token{}, fmt.Errorf("expected token %v: %w", expectedType, err)
+	}
+	if tok.Type != expectedType {
+		return lexer.Token{}, fmt.Errorf("syntax error: expected token %v, got %v (%q)", expectedType, tok.Type, tok.Value)
+	}
+	return tok, nil
+}
+
+func (p *Parser) ParseObject() (ast.PdfObject, error) {
+	t0, err := p.Peek(0)
+	if err != nil && t0.Type == lexer.TokenError {
+		return nil, err
+	}
+	if t0.Type == lexer.TokenEOF {
+		return nil, io.EOF
+	}
+
+	// Check for indirect ref `12 0 R` or indirect obj `12 0 obj`
+	if t0.Type == lexer.TokenNumber {
+		t1, err := p.Peek(1)
+		if err != nil {
+			return nil, err
+		}
+		if t1.Type == lexer.TokenNumber {
+			t2, err := p.Peek(2)
+			if err != nil {
+				return nil, err
+			}
+			if t2.Type == lexer.TokenKeyword && t2.Value == "R" {
+				if _, err := p.Expect(lexer.TokenNumber); err != nil {
+					return nil, err
+				}
+				if _, err := p.Expect(lexer.TokenNumber); err != nil {
+					return nil, err
+				}
+				if _, err := p.Expect(lexer.TokenKeyword); err != nil {
+					return nil, err
+				}
+				objNum, _ := strconv.Atoi(t0.Value)
+				genNum, _ := strconv.Atoi(t1.Value)
+				return ast.PdfIndirectRef{ObjectNum: objNum, GenNum: genNum}, nil
+			}
+			if t2.Type == lexer.TokenKeyword && t2.Value == "obj" {
+				return p.parseIndirectObject()
+			}
+		}
+	}
+
+	t0, err = p.Consume()
+	if err != nil {
+		return nil, err
+	}
+
+	switch t0.Type {
+	case lexer.TokenEOF, lexer.TokenError:
+		return nil, fmt.Errorf("unexpected token type: %v", t0.Type)
+	case lexer.TokenKeyword:
+		switch t0.Value {
+		case "null":
+			return ast.PdfNull{}, nil
+		case "true":
+			return ast.PdfBool(true), nil
+		case "false":
+			return ast.PdfBool(false), nil
+		default:
+			return nil, fmt.Errorf("unexpected keyword: %s", t0.Value)
+		}
+	case lexer.TokenName:
+		if len(t0.Value) > 0 && t0.Value[0] == '/' {
+			return ast.PdfName(t0.Value[1:]), nil
+		}
+		return ast.PdfName(t0.Value), nil
+	case lexer.TokenNumber:
+		if strings.ContainsRune(t0.Value, '.') {
+			f, err := strconv.ParseFloat(t0.Value, 64)
+			if err != nil {
+				return nil, err
+			}
+			return ast.PdfReal(f), nil
+		}
+		i, err := strconv.ParseInt(t0.Value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return ast.PdfInt(i), nil
+	case lexer.TokenString:
+		return p.parseString(t0.Value)
+	case lexer.TokenHexString:
+		return p.parseHexString(t0.Value)
+	case lexer.TokenDelimiter:
+		switch t0.Value {
+		case "<<":
+			return p.parseDict()
+		case "[":
+			return p.parseArray()
+		default:
+			return nil, fmt.Errorf("unexpected delimiter: %s", t0.Value)
+		}
+	}
+
+	return nil, fmt.Errorf("unexpected token: %v", t0)
+}
+
+func (p *Parser) parseIndirectObject() (ast.PdfObject, error) {
+	if _, err := p.Expect(lexer.TokenNumber); err != nil {
+		return nil, err
+	}
+	if _, err := p.Expect(lexer.TokenNumber); err != nil {
+		return nil, err
+	}
+	if _, err := p.Expect(lexer.TokenKeyword); err != nil {
+		return nil, err
+	}
+
+	obj, err := p.ParseObject()
+	if err != nil {
+		return nil, err
+	}
+
+	// Consume the endobj keyword if present. Tolerate missing endobj (Acrobat compat).
+	t, _ := p.Peek(0)
+	if t.Type == lexer.TokenKeyword && t.Value == "endobj" {
+		_, _ = p.Consume()
+	}
+
+	return obj, nil
+}
+
+func (p *Parser) parseDict() (ast.PdfObject, error) {
+	dict := make(ast.PdfDict)
+	for {
+		t, err := p.Peek(0)
+		if err != nil && t.Type == lexer.TokenError {
+			return nil, err
+		}
+		// Tolerate EOF or endobj inside a dictionary: close gracefully.
+		if t.Type == lexer.TokenEOF {
+			break
+		}
+		if t.Type == lexer.TokenKeyword && t.Value == "endobj" {
+			break
+		}
+		if t.Type == lexer.TokenDelimiter && t.Value == ">>" {
+			if _, err := p.Expect(lexer.TokenDelimiter); err != nil {
+				return nil, err
+			}
+			break
+		}
+
+		keyObj, err := p.ParseObject()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := keyObj.(ast.PdfName)
+		if !ok {
+			// Skip non-name keys gracefully rather than failing.
+			continue
+		}
+
+		valObj, err := p.ParseObject()
+		if err != nil {
+			// Value missing: close the dict with what we have.
+			break
+		}
+		dict[key] = valObj
+	}
+
+	// Check if stream follows immediately
+	t, err := p.Peek(0)
+	if err != nil {
+		return nil, err
+	}
+	if t.Type == lexer.TokenKeyword && t.Value == "stream" {
+		if _, err := p.Expect(lexer.TokenKeyword); err != nil {
+			return nil, err
+		}
+
+		// Ensure we clear out the token buffer since we are reading directly from the reader next.
+		// A stream keyword cannot be followed by lookahead tokens because we need to read raw bytes.
+		// The peek(0) would have read "stream" into the token buffer, and Expect() removes it.
+		// If there are other tokens in p.tokens, it means we read past the stream data, which is bad!
+		if len(p.tokens) > 0 {
+			return nil, fmt.Errorf("parser read ahead too far before stream data")
+		}
+
+		reader := p.lex.GetReader()
+		b, err := reader.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		if b == '\r' {
+			b2, err := reader.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+			if b2 != '\n' {
+				_ = reader.UnreadByte()
+			}
+		} else if b != '\n' {
+			_ = reader.UnreadByte()
+		}
+
+		var streamData bytes.Buffer
+		endMarker := []byte("endstream")
+		matchLen := 0
+		for {
+			c, err := reader.ReadByte()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return nil, err
+			}
+			if c == endMarker[matchLen] {
+				matchLen++
+				if matchLen == len(endMarker) {
+					break
+				}
+			} else {
+				if matchLen > 0 {
+					streamData.Write(endMarker[:matchLen])
+					matchLen = 0
+					if c == endMarker[0] {
+						matchLen = 1
+					} else {
+						streamData.WriteByte(c)
+					}
+				} else {
+					streamData.WriteByte(c)
+				}
+			}
+		}
+
+		data := streamData.Bytes()
+		// Strip trailing newline before endstream if present
+		if len(data) > 0 && data[len(data)-1] == '\n' {
+			data = data[:len(data)-1]
+			if len(data) > 0 && data[len(data)-1] == '\r' {
+				data = data[:len(data)-1]
+			}
+		} else if len(data) > 0 && data[len(data)-1] == '\r' {
+			data = data[:len(data)-1]
+		}
+
+		if p.decryptFn != nil {
+			if dec, err := p.decryptFn(data); err == nil {
+				data = dec
+			}
+		}
+
+		return ast.PdfStream{Dict: dict, Data: data}, nil
+	}
+
+	return dict, nil
+}
+
+func (p *Parser) parseArray() (ast.PdfObject, error) {
+	var arr ast.PdfArray
+	for {
+		t, err := p.Peek(0)
+		if err != nil && t.Type == lexer.TokenError {
+			return nil, err
+		}
+		// Tolerate EOF or endobj inside an array: close gracefully.
+		if t.Type == lexer.TokenEOF {
+			break
+		}
+		if t.Type == lexer.TokenKeyword && t.Value == "endobj" {
+			break
+		}
+		if t.Type == lexer.TokenDelimiter && t.Value == "]" {
+			if _, err := p.Expect(lexer.TokenDelimiter); err != nil {
+				return nil, err
+			}
+			break
+		}
+
+		obj, err := p.ParseObject()
+		if err != nil {
+			// If we can't parse an element, close with what we have.
+			break
+		}
+		arr = append(arr, obj)
+	}
+	return arr, nil
+}
+
+func (p *Parser) parseString(val string) (ast.PdfString, error) {
+	if len(val) >= 2 && val[0] == '(' && val[len(val)-1] == ')' {
+		val = val[1 : len(val)-1]
+	}
+
+	var buf strings.Builder
+	for i := 0; i < len(val); i++ {
+		if val[i] == '\\' && i+1 < len(val) {
+			i++
+			switch val[i] {
+			case 'n':
+				buf.WriteByte('\n')
+			case 'r':
+				buf.WriteByte('\r')
+			case 't':
+				buf.WriteByte('\t')
+			case 'b':
+				buf.WriteByte('\b')
+			case 'f':
+				buf.WriteByte('\f')
+			case '(', ')', '\\':
+				buf.WriteByte(val[i])
+			default:
+				if val[i] >= '0' && val[i] <= '7' {
+					octal := string(val[i])
+					if i+1 < len(val) && val[i+1] >= '0' && val[i+1] <= '7' {
+						octal += string(val[i+1])
+						i++
+						if i+1 < len(val) && val[i+1] >= '0' && val[i+1] <= '7' {
+							octal += string(val[i+1])
+							i++
+						}
+					}
+					parsed, _ := strconv.ParseInt(octal, 8, 32)
+					buf.WriteByte(byte(parsed & 0xFF)) //nolint:gosec
+				} else {
+					buf.WriteByte(val[i])
+				}
+			}
+		} else {
+			buf.WriteByte(val[i])
+		}
+	}
+
+	b := []byte(buf.String())
+	if p.decryptFn != nil {
+		if dec, err := p.decryptFn(b); err == nil {
+			b = dec
+		}
+	}
+	return ast.PdfString(string(b)), nil
+}
+
+// SkipInlineImage reads past an inline image in a content stream.
+// Called after the BI operator has been consumed. It reads the dictionary
+// key/value pairs until the ID keyword, then scans forward through raw
+// binary image data until the EI terminator is found.
+func (p *Parser) SkipInlineImage() error {
+	// Phase 1: Consume inline image dictionary entries until the ID keyword.
+	// Entries are key/value pairs (e.g., /W 100 /H 50 /BPC 8 /CS /RGB).
+	for {
+		tok, err := p.Peek(0)
+		if err != nil && tok.Type == lexer.TokenError {
+			return fmt.Errorf("inline image dict: %w", err)
+		}
+		if tok.Type == lexer.TokenEOF {
+			return fmt.Errorf("unexpected EOF in inline image dictionary")
+		}
+		// ID marks the end of the dictionary and start of raw image data.
+		if tok.Type == lexer.TokenKeyword && tok.Value == "ID" {
+			if _, err := p.Consume(); err != nil {
+				return fmt.Errorf("failed to consume ID: %w", err)
+			}
+			break
+		}
+		// Consume the token (key or value). We don't need the data.
+		if _, err := p.Consume(); err != nil {
+			return fmt.Errorf("inline image dict entry: %w", err)
+		}
+	}
+
+	// Ensure no lookahead tokens remain before switching to raw byte reading.
+	if len(p.tokens) > 0 {
+		return fmt.Errorf("parser read ahead too far before inline image data")
+	}
+
+	// Phase 2: Skip the single whitespace byte that follows ID (per PDF spec).
+	reader := p.lex.GetReader()
+	if _, err := reader.ReadByte(); err != nil {
+		return fmt.Errorf("failed to read post-ID whitespace: %w", err)
+	}
+
+	// Phase 3: Scan forward for the EI terminator.
+	// Per the PDF spec, image data ends when we find a whitespace byte
+	// followed by "EI" followed by whitespace, a delimiter, or EOF.
+	// Raw bytes 'E' and 'I' can occur inside image data, so we must
+	// validate the trailing context to avoid false matches.
+	return scanToEI(reader)
+}
+
+// scanToEI scans forward through raw binary image data looking for the
+// EI end-of-inline-image marker. Uses a state machine: the marker must be
+// preceded by whitespace and followed by whitespace, a delimiter, or EOF.
+func scanToEI(reader io.Reader) error {
+	type readByteFunc interface {
+		ReadByte() (byte, error)
+		UnreadByte() error
+	}
+	r := reader.(readByteFunc)
+
+	// State machine: 0=scanning, 1=saw whitespace, 2=saw ws+E.
+	state := 0
+	for {
+		c, err := r.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				return fmt.Errorf("unexpected EOF scanning for EI in inline image")
+			}
+			return err
+		}
+
+		switch state {
+		case 0:
+			if isInlineWS(c) {
+				state = 1
+			}
+		case 1:
+			if c == 'E' {
+				state = 2
+			} else if isInlineWS(c) {
+				// Stay in state 1.
+			} else {
+				state = 0
+			}
+		case 2:
+			if c == 'I' {
+				// Verify the byte after EI is whitespace, delimiter, or EOF.
+				next, err := r.ReadByte()
+				if err != nil {
+					if err == io.EOF {
+						return nil // EI at end of stream is valid.
+					}
+					return err
+				}
+				if isInlineWS(next) || isInlineDelim(next) {
+					_ = r.UnreadByte()
+					return nil
+				}
+				// False match — continue scanning.
+				if isInlineWS(c) {
+					state = 1
+				} else {
+					state = 0
+				}
+			} else if isInlineWS(c) {
+				state = 1
+			} else {
+				state = 0
+			}
+		}
+	}
+}
+
+func isInlineWS(c byte) bool {
+	return c == 0x00 || c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D || c == 0x20
+}
+
+func isInlineDelim(c byte) bool {
+	return c == '(' || c == ')' || c == '<' || c == '>' ||
+		c == '[' || c == ']' || c == '{' || c == '}' ||
+		c == '/' || c == '%'
+}
+
+func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
+	if len(val) >= 2 && val[0] == '<' && val[len(val)-1] == '>' {
+		val = val[1 : len(val)-1]
+	}
+	val = strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, val)
+
+	if len(val)%2 != 0 {
+		val += "0"
+	}
+	decoded, err := hex.DecodeString(val)
+	if err != nil {
+		return "", err
+	}
+	if p.decryptFn != nil {
+		if dec, err := p.decryptFn(decoded); err == nil {
+			decoded = dec
+		}
+	}
+	return ast.PdfString(decoded), nil
+}
