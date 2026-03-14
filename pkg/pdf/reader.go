@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 	"github.com/gotenberg/litho/pkg/internal/interactive"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
+	"github.com/gotenberg/litho/pkg/internal/semantics/structure"
 	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
@@ -134,8 +135,8 @@ func (r *Reader) ExtractText(pageNum int) (string, error) {
 		return "", err
 	}
 
-	// Initialize the graphics state machine
-	machine := graphics.NewMachine([4]float64{0, 0, 0, 0}) // Standard unbounded cropbox
+	// Initialize the graphics state machine with the CropBox as the visible region.
+	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
 
 	// Extract and orchestrate the text using spatial heuristics
 	config := typography.ExtractionConfig{
@@ -221,7 +222,7 @@ func (r *Reader) ExtractTables(pageNum int) ([]models.Table, error) {
 	}
 
 	// Extract text elements via the graphics state machine.
-	machine := graphics.NewMachine([4]float64{0, 0, 0, 0})
+	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
 	elements, err := typography.ExtractElements(r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
@@ -295,7 +296,7 @@ func (r *Reader) DetectRedactions(pageNum int) ([]models.TextElement, error) {
 		return nil, err
 	}
 
-	machine := graphics.NewMachine([4]float64{0, 0, 0, 0})
+	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
 	elements, err := typography.ExtractElements(r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
@@ -406,6 +407,28 @@ func GeoDataToGeoJSON(geo *models.GeoData) string {
 	return semantics.GeoDataToGeoJSON(geo)
 }
 
+// ExtractMeasurements extracts 2D rectilinear measurement scales from the
+// given 1-based page number. It scans the page's /VP (Viewport) array and
+// Line/PolyLine annotations for /Measure dictionaries with /Subtype /RL,
+// returning scale axes that map PDF coordinates to real-world units.
+func (r *Reader) ExtractMeasurements(pageNum int) ([]models.Measurement, error) {
+	catalog, err := document.GetCatalog(r.doc)
+	if err != nil {
+		return nil, err
+	}
+
+	pages, err := document.GetPages(r.doc, catalog)
+	if err != nil {
+		return nil, err
+	}
+
+	if pageNum < 1 || pageNum > len(pages) {
+		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
+	}
+
+	return interactive.ExtractMeasurements(r.doc, pages[pageNum-1])
+}
+
 // Extract3DModels extracts 3D model streams (U3D or PRC) from /3D annotations
 // on the given 1-based page number. If outputDir is non-empty, the decoded
 // binary streams are saved to disk.
@@ -425,6 +448,20 @@ func (r *Reader) Extract3DModels(pageNum int, outputDir string) ([]models.Model3
 	}
 
 	return semantics.Extract3DModels(r.doc, pages[pageNum-1], outputDir)
+}
+
+// ExtractPronunciationLexicons extracts W3C PLS (Pronunciation Lexicon
+// Specification) XML documents from the catalog's /PronunciationLexicon
+// array (PDF 2.0). Returns nil if none are present.
+func (r *Reader) ExtractPronunciationLexicons() ([]models.PronunciationLexicon, error) {
+	return semantics.ExtractPronunciationLexicons(r.doc)
+}
+
+// ExtractFormulas walks the document structure tree and extracts MathML
+// from /Formula elements that carry an /AF entry with /AFRelationship
+// /Supplement and MIME type application/mathml+xml (PDF 2.0).
+func (r *Reader) ExtractFormulas() ([]models.FormulaElement, error) {
+	return structure.ExtractFormulas(r.doc)
 }
 
 // mediaBoxDimensions extracts page width and height from a MediaBox array
@@ -447,6 +484,14 @@ func mediaBoxDimensions(mb ast.PdfArray) (float64, float64) {
 		h = -h
 	}
 	return w, h
+}
+
+// boxToRect converts a PDF rectangle array [llx, lly, urx, ury] to [4]float64.
+func boxToRect(arr ast.PdfArray) [4]float64 {
+	if len(arr) < 4 {
+		return [4]float64{}
+	}
+	return [4]float64{astFloat(arr[0]), astFloat(arr[1]), astFloat(arr[2]), astFloat(arr[3])}
 }
 
 // astFloat extracts a float64 from a PdfObject (PdfInt or PdfReal).

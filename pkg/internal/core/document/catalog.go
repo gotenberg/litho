@@ -22,6 +22,10 @@ type Page struct {
 	Dict      ast.PdfDict
 	Resources ast.PdfDict
 	MediaBox  ast.PdfArray
+	CropBox   ast.PdfArray      // Inherited; defaults to MediaBox per PDF spec
+	BleedBox  ast.PdfArray      // Non-inherited; defaults to CropBox
+	TrimBox   ast.PdfArray      // Non-inherited; defaults to CropBox
+	ArtBox    ast.PdfArray      // Non-inherited; defaults to CropBox
 	DPM       map[string]string // Document Part Metadata
 }
 
@@ -76,7 +80,7 @@ func GetPages(doc *Document, catalog *Catalog) ([]*Page, error) {
 	var pages []*Page
 	// The root Pages node itself usually doesn't have a useful page reference for a single page,
 	// but we start the traversal here.
-	err = traversePageTree(doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, &pages)
+	err = traversePageTree(doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, &pages)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +118,7 @@ func GetPages(doc *Document, catalog *Catalog) ([]*Page, error) {
 	return pages, nil
 }
 
-func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox ast.PdfArray, pages *[]*Page) error {
+func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, pages *[]*Page) error {
 	// Inherit or override Resources
 	currentResources := inheritedResources
 	if resObj, ok := node["Resources"]; ok {
@@ -133,6 +137,17 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 		if err == nil {
 			if mbArr, ok := mbResolved.(ast.PdfArray); ok {
 				currentMediaBox = mbArr
+			}
+		}
+	}
+
+	// Inherit or override CropBox (inheritable per PDF spec)
+	currentCropBox := inheritedCropBox
+	if cbObj, ok := node["CropBox"]; ok {
+		cbResolved, err := ResolveObject(doc, cbObj)
+		if err == nil {
+			if cbArr, ok := cbResolved.(ast.PdfArray); ok {
+				currentCropBox = cbArr
 			}
 		}
 	}
@@ -184,19 +199,52 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 				return fmt.Errorf("kid is not a dictionary")
 			}
 
-			err = traversePageTree(doc, kidDict, kidRef, currentResources, currentMediaBox, pages)
+			err = traversePageTree(doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, pages)
 			if err != nil {
 				return err
 			}
 		}
 	case "Page":
+		// CropBox defaults to MediaBox per PDF spec §14.11.2
+		effectiveCropBox := currentCropBox
+		if effectiveCropBox == nil {
+			effectiveCropBox = currentMediaBox
+		}
+
+		// BleedBox, TrimBox, ArtBox are non-inheritable; default to CropBox.
+		bleedBox := resolveBoxArray(doc, node, "BleedBox", effectiveCropBox)
+		trimBox := resolveBoxArray(doc, node, "TrimBox", effectiveCropBox)
+		artBox := resolveBoxArray(doc, node, "ArtBox", effectiveCropBox)
+
 		*pages = append(*pages, &Page{
 			Ref:       nodeRef,
 			Dict:      node,
 			Resources: currentResources,
 			MediaBox:  currentMediaBox,
+			CropBox:   effectiveCropBox,
+			BleedBox:  bleedBox,
+			TrimBox:   trimBox,
+			ArtBox:    artBox,
 		})
 	}
 
 	return nil
+}
+
+// resolveBoxArray extracts a named rectangle array from a page dict,
+// falling back to the provided default if the key is absent.
+func resolveBoxArray(doc *Document, dict ast.PdfDict, key ast.PdfName, fallback ast.PdfArray) ast.PdfArray {
+	obj, ok := dict[key]
+	if !ok {
+		return fallback
+	}
+	resolved, err := ResolveObject(doc, obj)
+	if err != nil {
+		return fallback
+	}
+	arr, ok := resolved.(ast.PdfArray)
+	if !ok || len(arr) < 4 {
+		return fallback
+	}
+	return arr
 }

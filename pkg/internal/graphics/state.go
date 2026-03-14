@@ -40,6 +40,8 @@ type State struct {
 	StrokeColorSpace string // "DeviceGray", "DeviceRGB", "DeviceCMYK", or a named space
 	FillColor        []float64
 	FillColorSpace   string // "DeviceGray", "DeviceRGB", "DeviceCMYK", or a named space
+	FillPatternName  string // Pattern resource name when FillColorSpace is "Pattern"
+	FillPatternType  string // "Tiling" or "Shading" (resolved from /PatternType)
 	Text             TextState
 	SkipExtraction   bool        // Used for Optional Content Groups (Hidden Layers)
 	ClippingPath     BoundingBox // Simplified clipping to a bounding box for performance
@@ -47,12 +49,14 @@ type State struct {
 
 // MarkedContentState tracks the nested state of marked content blocks.
 type MarkedContentState struct {
-	ActualText string
-	HasText    bool
-	Tag        string
-	MCID       int
-	IsHiddenOC bool
-	IsArtifact bool // True when the block is tagged /Artifact
+	ActualText    string
+	HasText       bool
+	Tag           string
+	MCID          int
+	IsHiddenOC    bool
+	IsArtifact    bool   // True when the block is tagged /Artifact
+	Language      string // /Lang tag for TTS language override (BCP 47)
+	ExpansionText string // /E tag for abbreviation/acronym expansion
 }
 
 // Machine is the graphics state machine that processes content stream operations.
@@ -66,6 +70,8 @@ type Machine struct {
 	OCConfigOff       map[int]bool
 	ActiveOCs         map[string]bool
 	CurrentPath       BoundingBox // Tracks the current active path bounds
+	Doc               *document.Document
+	Resources         ast.PdfDict // Current page resources (for resolving Pattern names)
 }
 
 // NewMachine initializes a new graphics state machine with the default state.
@@ -318,6 +324,10 @@ func (m *Machine) Execute(ops []content.Operation) error {
 			if len(op.Operands) == 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					state.FillColorSpace = string(name)
+					if name != "Pattern" {
+						state.FillPatternName = ""
+						state.FillPatternType = ""
+					}
 				}
 			}
 
@@ -330,14 +340,22 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "sc", "scn": // Set fill color in current color space
 			var vals []float64
+			var patName string
 			for _, operand := range op.Operands {
-				switch operand.(type) {
+				switch v := operand.(type) {
 				case ast.PdfReal, ast.PdfInt:
 					vals = append(vals, document.GetFloat(operand))
+				case ast.PdfName:
+					patName = string(v)
 				}
 			}
-			if len(vals) > 0 {
+			if patName != "" && state.FillColorSpace == "Pattern" {
+				state.FillPatternName = patName
+				state.FillPatternType = m.resolvePatternType(patName)
+			} else if len(vals) > 0 {
 				state.FillColor = vals
+				state.FillPatternName = ""
+				state.FillPatternType = ""
 			}
 
 		case "SC", "SCN": // Set stroke color in current color space
@@ -528,6 +546,16 @@ func (m *Machine) Execute(ops []content.Operation) error {
 							mcState.HasText = true
 						}
 					}
+					if lang, ok := props["Lang"]; ok {
+						if str, isStr := lang.(ast.PdfString); isStr {
+							mcState.Language = string(str)
+						}
+					}
+					if expansion, ok := props["E"]; ok {
+						if str, isStr := expansion.(ast.PdfString); isStr {
+							mcState.ExpansionText = string(str)
+						}
+					}
 				}
 			}
 			m.MarkedContent = append(m.MarkedContent, mcState)
@@ -577,6 +605,75 @@ func (m *Machine) Execute(ops []content.Operation) error {
 		}
 	}
 	return nil
+}
+
+// resolvePatternType looks up a pattern name in the current resources and
+// returns "Tiling" (PatternType 1) or "Shading" (PatternType 2), or
+// "Pattern" if the type cannot be determined.
+func (m *Machine) resolvePatternType(name string) string {
+	if m.Resources == nil {
+		return "Pattern"
+	}
+
+	patObj, ok := m.Resources["Pattern"]
+	if !ok {
+		return "Pattern"
+	}
+
+	patRes, err := document.ResolveObject(m.Doc, patObj)
+	if err != nil {
+		return "Pattern"
+	}
+
+	patDict, ok := patRes.(ast.PdfDict)
+	if !ok {
+		return "Pattern"
+	}
+
+	entryObj, ok := patDict[ast.PdfName(name)]
+	if !ok {
+		return "Pattern"
+	}
+
+	entryRes, err := document.ResolveObject(m.Doc, entryObj)
+	if err != nil {
+		return "Pattern"
+	}
+
+	// Pattern can be a stream (Tiling) or dict (Shading).
+	switch v := entryRes.(type) {
+	case ast.PdfStream:
+		return classifyPattern(m.Doc, v.Dict)
+	case ast.PdfDict:
+		return classifyPattern(m.Doc, v)
+	}
+
+	return "Pattern"
+}
+
+// classifyPattern examines a pattern dictionary's /PatternType to determine
+// whether it is a Tiling pattern (1) or a Shading pattern (2).
+func classifyPattern(doc *document.Document, dict ast.PdfDict) string {
+	ptObj, ok := dict["PatternType"]
+	if !ok {
+		return "Pattern"
+	}
+
+	ptRes, err := document.ResolveObject(doc, ptObj)
+	if err != nil {
+		return "Pattern"
+	}
+
+	if ptInt, ok := ptRes.(ast.PdfInt); ok {
+		switch int(ptInt) {
+		case 1:
+			return "Tiling"
+		case 2:
+			return "Shading"
+		}
+	}
+
+	return "Pattern"
 }
 
 // evaluateOCMD evaluates an inline Optional Content Membership Dictionary and

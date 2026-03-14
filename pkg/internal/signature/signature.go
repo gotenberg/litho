@@ -120,6 +120,9 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 							}
 						}
 
+						// Extract MDP policy from /Reference array.
+						sig.MDPPolicy = extractMDPPolicy(doc, vDict)
+
 						// Calculate hash of the physical bytes defined by ByteRange
 						if sig.ByteRange[1] > 0 && sig.ByteRange[3] > 0 {
 							chunk1, err1 := doc.ReadFileBytes(sig.ByteRange[0], sig.ByteRange[1])

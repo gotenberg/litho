@@ -222,6 +222,9 @@ func VerifySignatures(doc *document.Document, roots *x509.CertPool) ([]models.Si
 		result.LTVEnabled = result.HasDSS && result.HasTimestamp &&
 			(result.RevocationOK || result.RevocationInfo != "")
 
+		// Evaluate MDP (Modification Detection and Prevention) policy.
+		evaluateMDP(doc, sig, &result)
+
 		results = append(results, result)
 	}
 

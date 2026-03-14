@@ -68,32 +68,18 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 			}
 		}
 
-		// Resolve Dest array
+		// Resolve Dest — may be a direct array or a named destination string/name.
 		if destObj, ok := dict["Dest"]; ok {
-			destRes, _ := document.ResolveObject(doc, destObj)
-			if destArr, ok := destRes.(ast.PdfArray); ok && len(destArr) > 0 {
-				if pageRef, ok := destArr[0].(ast.PdfIndirectRef); ok {
-					if pageNum, exists := pageMap[pageRef]; exists {
-						b.PageNumber = pageNum
-					}
-				}
-			}
+			b.PageNumber = resolveDestination(doc, destObj, pageMap)
 		} else if aObj, ok := dict["A"]; ok {
-			// Some bookmarks use an Action (/A) instead of an explicit /Dest
+			// Some bookmarks use an Action (/A) instead of an explicit /Dest.
 			aRes, _ := document.ResolveObject(doc, aObj)
 			if aDict, ok := aRes.(ast.PdfDict); ok {
 				if sObj, ok := aDict["S"]; ok {
 					sRes, _ := document.ResolveObject(doc, sObj)
 					if sName, ok := sRes.(ast.PdfName); ok && sName == "GoTo" {
 						if dObj, ok := aDict["D"]; ok {
-							dRes, _ := document.ResolveObject(doc, dObj)
-							if dArr, ok := dRes.(ast.PdfArray); ok && len(dArr) > 0 {
-								if pageRef, ok := dArr[0].(ast.PdfIndirectRef); ok {
-									if pageNum, exists := pageMap[pageRef]; exists {
-										b.PageNumber = pageNum
-									}
-								}
-							}
+							b.PageNumber = resolveDestination(doc, dObj, pageMap)
 						}
 					}
 				}
@@ -120,4 +106,47 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 	}
 
 	return bookmarks, nil
+}
+
+// resolveDestination resolves a destination object to a 1-based page number.
+// The destination may be a direct PdfArray, a PdfString (named destination),
+// or a PdfName (named destination). Named destinations are looked up via the
+// catalog's /Names -> /Dests tree or the legacy /Dests dictionary.
+func resolveDestination(doc *document.Document, destObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) int {
+	destRes, _ := document.ResolveObject(doc, destObj)
+
+	// Try as a direct destination array first.
+	if destArr, ok := destRes.(ast.PdfArray); ok {
+		return pageFromDestArray(destArr, pageMap)
+	}
+
+	// Named destination: look up in the name tree.
+	var name string
+	switch v := destRes.(type) {
+	case ast.PdfString:
+		name = document.DecodePdfString(v)
+	case ast.PdfName:
+		name = string(v)
+	default:
+		return 0
+	}
+
+	destArr, err := document.ResolveNamedDest(doc, name)
+	if err != nil || destArr == nil {
+		return 0
+	}
+	return pageFromDestArray(destArr, pageMap)
+}
+
+// pageFromDestArray extracts the 1-based page number from a destination array.
+func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int {
+	if len(arr) == 0 {
+		return 0
+	}
+	if pageRef, ok := arr[0].(ast.PdfIndirectRef); ok {
+		if pageNum, exists := pageMap[pageRef]; exists {
+			return pageNum
+		}
+	}
+	return 0
 }

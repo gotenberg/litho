@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -110,6 +111,17 @@ func (d *Document) parseXRefChain() error {
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = trailerDict
 			}
+
+			// Hybrid-Reference (PDF 1.5): the trailer may contain /XRefStm
+			// pointing to a compressed XRef stream whose entries override
+			// the legacy plain-text table entries.
+			if xRefStmObj, ok := trailerDict["XRefStm"]; ok {
+				if xRefStmOffset, ok := xRefStmObj.(ast.PdfInt); ok {
+					if err := d.parseHybridXRefStream(int64(xRefStmOffset)); err != nil {
+						return fmt.Errorf("hybrid /XRefStm: %w", err)
+					}
+				}
+			}
 		} else if tok.Type == lexer.TokenNumber {
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
 			p := parser.NewParser(lex)
@@ -135,6 +147,34 @@ func (d *Document) parseXRefChain() error {
 
 		currentOffset = prev
 	}
+
+	return nil
+}
+
+// parseHybridXRefStream parses a compressed XRef stream embedded in a hybrid-
+// reference PDF. Entries from the compressed stream override any corresponding
+// entries from the legacy plain-text table.
+func (d *Document) parseHybridXRefStream(offset int64) error {
+	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, offset))
+	p := parser.NewParser(lex)
+	obj, err := p.ParseObject()
+	if err != nil {
+		return err
+	}
+
+	stream, ok := obj.(ast.PdfStream)
+	if !ok {
+		return fmt.Errorf("expected xref stream at /XRefStm offset %d, got %T", offset, obj)
+	}
+
+	// Parse into a temporary map so entries override the legacy table.
+	hybridEntries := make(map[int]xref.XRefEntry)
+	if _, err := xref.ParseXRefStream(stream, hybridEntries); err != nil {
+		return err
+	}
+
+	// Merge: hybrid entries override legacy entries.
+	maps.Copy(d.Index.Entries, hybridEntries)
 
 	return nil
 }
@@ -311,6 +351,16 @@ func (d *Document) initOCConfig() {
 // IsLinearized reports whether the document has a linearization dictionary.
 func (d *Document) IsLinearized() bool {
 	return d.Linearization != nil
+}
+
+// FileSize returns the total size of the underlying PDF file in bytes.
+func (d *Document) FileSize() int64 {
+	return d.size
+}
+
+// RawReader returns the underlying io.ReaderAt for low-level byte access.
+func (d *Document) RawReader() io.ReaderAt {
+	return d.r
 }
 
 // ReadFileBytes reads a specific chunk of raw bytes directly from the underlying file.

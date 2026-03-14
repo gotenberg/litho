@@ -23,10 +23,17 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 	}
 
 	mcid := -1
+	var mcLang, mcExpansion string
 	for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
-		if machine.MarkedContent[i].MCID != -1 {
-			mcid = machine.MarkedContent[i].MCID
-			break
+		mc := &machine.MarkedContent[i]
+		if mcid == -1 && mc.MCID != -1 {
+			mcid = mc.MCID
+		}
+		if mcLang == "" && mc.Language != "" {
+			mcLang = mc.Language
+		}
+		if mcExpansion == "" && mc.ExpansionText != "" {
+			mcExpansion = mc.ExpansionText
 		}
 	}
 
@@ -88,18 +95,21 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		}
 
 		// 2. Color checks (e.g. white text on white background), interpreted per active color space.
-		switch state.FillColorSpace {
-		case "DeviceRGB":
-			if len(state.FillColor) == 3 && state.FillColor[0] == 1 && state.FillColor[1] == 1 && state.FillColor[2] == 1 {
-				isInvisible = true
-			}
-		case "DeviceCMYK":
-			if len(state.FillColor) == 4 && state.FillColor[0] == 0 && state.FillColor[1] == 0 && state.FillColor[2] == 0 && state.FillColor[3] == 0 {
-				isInvisible = true
-			}
-		default: // DeviceGray and any named space treated as single-channel gray
-			if len(state.FillColor) == 1 && state.FillColor[0] == 1 {
-				isInvisible = true
+		// Pattern color spaces are never "invisible" — they paint with a tiled or gradient fill.
+		if state.FillPatternType == "" {
+			switch state.FillColorSpace {
+			case "DeviceRGB":
+				if len(state.FillColor) == 3 && state.FillColor[0] == 1 && state.FillColor[1] == 1 && state.FillColor[2] == 1 {
+					isInvisible = true
+				}
+			case "DeviceCMYK":
+				if len(state.FillColor) == 4 && state.FillColor[0] == 0 && state.FillColor[1] == 0 && state.FillColor[2] == 0 && state.FillColor[3] == 0 {
+					isInvisible = true
+				}
+			default: // DeviceGray and any named space treated as single-channel gray
+				if len(state.FillColor) == 1 && state.FillColor[0] == 1 {
+					isInvisible = true
+				}
 			}
 		}
 
@@ -109,14 +119,17 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		}
 
 		*elements = append(*elements, models.TextElement{
-			Text:      char,
-			X:         x,
-			Y:         y,
-			FontSize:  fontSize,
-			MCID:      mcid,
-			Hidden:    isHidden,
-			Invisible: isInvisible,
-			Vertical:  font.WMode == 1,
+			Text:          char,
+			X:             x,
+			Y:             y,
+			FontSize:      fontSize,
+			MCID:          mcid,
+			Hidden:        isHidden,
+			Invisible:     isInvisible,
+			Vertical:      font.WMode == 1,
+			PatternType:   state.FillPatternType,
+			Language:      mcLang,
+			ExpansionText: mcExpansion,
 		})
 
 		// Advance text matrix using exact glyph metrics.
@@ -336,6 +349,10 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 func extractTextRecursive(doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement) error {
 	var currentFont *Font
 
+	// Make resources available to the machine for pattern resolution.
+	machine.Doc = doc
+	machine.Resources = resources
+
 	// Pre-populate active OCs from resources /Properties
 	if propsObj, ok := resources["Properties"]; ok {
 		propsRes, _ := document.ResolveObject(doc, propsObj)
@@ -384,10 +401,17 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 				}
 
 				mcid := -1
+				var mcLang2, mcExpansion2 string
 				for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
-					if machine.MarkedContent[i].MCID != -1 {
-						mcid = machine.MarkedContent[i].MCID
-						break
+					mc := &machine.MarkedContent[i]
+					if mcid == -1 && mc.MCID != -1 {
+						mcid = mc.MCID
+					}
+					if mcLang2 == "" && mc.Language != "" {
+						mcLang2 = mc.Language
+					}
+					if mcExpansion2 == "" && mc.ExpansionText != "" {
+						mcExpansion2 = mc.ExpansionText
 					}
 				}
 
@@ -403,11 +427,13 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 					y := tx*ctm[1] + ty*ctm[3] + ctm[5]
 
 					*elements = append(*elements, models.TextElement{
-						Text:     string(r),
-						X:        x,
-						Y:        y,
-						FontSize: fontSize,
-						MCID:     mcid,
+						Text:          string(r),
+						X:             x,
+						Y:             y,
+						FontSize:      fontSize,
+						MCID:          mcid,
+						Language:      mcLang2,
+						ExpansionText: mcExpansion2,
 					})
 
 					advance := 0.5 * fontSize
@@ -604,7 +630,46 @@ func ExtractElements(doc *document.Document, machine *graphics.Machine, page *do
 	if err := extractTextRecursive(doc, machine, page.Resources, ops, &elements); err != nil {
 		return nil, err
 	}
+
+	// Flag elements that fall outside the CropBox (the visible region).
+	cropBox := boxRectFromArray(page.CropBox)
+	if cropBox != [4]float64{} {
+		// Normalize: ensure min < max.
+		minX, minY, maxX, maxY := cropBox[0], cropBox[1], cropBox[2], cropBox[3]
+		if minX > maxX {
+			minX, maxX = maxX, minX
+		}
+		if minY > maxY {
+			minY, maxY = maxY, minY
+		}
+		for i := range elements {
+			if elements[i].X < minX || elements[i].X > maxX ||
+				elements[i].Y < minY || elements[i].Y > maxY {
+				elements[i].IsClipped = true
+			}
+		}
+	}
+
 	return elements, nil
+}
+
+// boxRectFromArray converts a PdfArray [llx, lly, urx, ury] to [4]float64.
+func boxRectFromArray(arr ast.PdfArray) [4]float64 {
+	if len(arr) < 4 {
+		return [4]float64{}
+	}
+	return [4]float64{pdfFloat(arr[0]), pdfFloat(arr[1]), pdfFloat(arr[2]), pdfFloat(arr[3])}
+}
+
+// pdfFloat extracts a float64 from a PdfInt or PdfReal.
+func pdfFloat(obj ast.PdfObject) float64 {
+	switch v := obj.(type) {
+	case ast.PdfReal:
+		return float64(v)
+	case ast.PdfInt:
+		return float64(v)
+	}
+	return 0
 }
 
 // ExtractText extracts the text from a page's content operations and reconstructs it.
