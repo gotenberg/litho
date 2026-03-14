@@ -48,7 +48,7 @@ func getName(doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string,
 
 // ExtractImages scans a page's resources for Image XObjects and saves them to disk.
 func ExtractImages(doc *document.Document, page *document.Page, outputDir string) ([]models.ImageMeta, error) {
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %v", err)
 	}
 

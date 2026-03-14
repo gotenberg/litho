@@ -38,7 +38,7 @@ func ExtractAttachments(doc *document.Document, outputDir string) ([]string, err
 
 	var savedFiles []string
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %v", err)
 	}
 

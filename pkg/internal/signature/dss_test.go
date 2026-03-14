@@ -97,14 +97,11 @@ func TestCheckRevocation_CRLNotRevoked(t *testing.T) {
 	sigTime := time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC)
 
 	// CRL with a different serial number revoked.
-	crls := []*pkix.CertificateList{{
-		TBSCertList: pkix.TBSCertificateList{
-			ThisUpdate: time.Date(2023, 6, 15, 0, 0, 0, 0, time.UTC),
-			RevokedCertificates: []pkix.RevokedCertificate{{
-				SerialNumber:   big.NewInt(99),
-				RevocationTime: time.Date(2023, 5, 1, 0, 0, 0, 0, time.UTC),
-			}},
-		},
+	crls := []*x509.RevocationList{{
+		RevokedCertificateEntries: []x509.RevocationListEntry{{
+			SerialNumber:   big.NewInt(99),
+			RevocationTime: time.Date(2023, 5, 1, 0, 0, 0, 0, time.UTC),
+		}},
 	}}
 
 	ok, info := checkRevocation(cert, sigTime, nil, crls)
@@ -117,13 +114,11 @@ func TestCheckRevocation_CRLRevokedBeforeSigning(t *testing.T) {
 	cert := &x509.Certificate{SerialNumber: big.NewInt(42)}
 	sigTime := time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC)
 
-	crls := []*pkix.CertificateList{{
-		TBSCertList: pkix.TBSCertificateList{
-			RevokedCertificates: []pkix.RevokedCertificate{{
-				SerialNumber:   big.NewInt(42),
-				RevocationTime: time.Date(2023, 3, 1, 0, 0, 0, 0, time.UTC), // before signing
-			}},
-		},
+	crls := []*x509.RevocationList{{
+		RevokedCertificateEntries: []x509.RevocationListEntry{{
+			SerialNumber:   big.NewInt(42),
+			RevocationTime: time.Date(2023, 3, 1, 0, 0, 0, 0, time.UTC), // before signing
+		}},
 	}}
 
 	ok, _ := checkRevocation(cert, sigTime, nil, crls)
@@ -136,13 +131,11 @@ func TestCheckRevocation_CRLRevokedAfterSigning(t *testing.T) {
 	cert := &x509.Certificate{SerialNumber: big.NewInt(42)}
 	sigTime := time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC)
 
-	crls := []*pkix.CertificateList{{
-		TBSCertList: pkix.TBSCertificateList{
-			RevokedCertificates: []pkix.RevokedCertificate{{
-				SerialNumber:   big.NewInt(42),
-				RevocationTime: time.Date(2023, 9, 1, 0, 0, 0, 0, time.UTC), // after signing
-			}},
-		},
+	crls := []*x509.RevocationList{{
+		RevokedCertificateEntries: []x509.RevocationListEntry{{
+			SerialNumber:   big.NewInt(42),
+			RevocationTime: time.Date(2023, 9, 1, 0, 0, 0, 0, time.UTC), // after signing
+		}},
 	}}
 
 	ok, info := checkRevocation(cert, sigTime, nil, crls)

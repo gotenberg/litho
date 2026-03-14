@@ -36,9 +36,7 @@ linters:
   exclusions:
     generated: lax
     presets:
-      - comments
       - common-false-positives
-      - legacy
     paths:
       - third_party$
       - builtin$

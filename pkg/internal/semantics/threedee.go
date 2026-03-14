@@ -105,7 +105,7 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 				ext = ".prc"
 			}
 
-			if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			if err := os.MkdirAll(outputDir, 0o750); err != nil {
 				return nil, fmt.Errorf("failed to create output directory: %w", err)
 			}
 

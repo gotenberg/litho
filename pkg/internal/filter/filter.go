@@ -2,7 +2,6 @@ package filter
 
 import (
 	"bytes"
-	"compress/lzw"
 	"compress/zlib"
 	"encoding/hex"
 	"fmt"
@@ -130,8 +129,8 @@ func decodeFlateDecode(data []byte) ([]byte, error) {
 }
 
 func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
-	// PDF spec: LZW uses MSB order and starts with 9-bit codes (litWidth=8).
-	// /EarlyChange defaults to 1 (standard LZW behavior).
+	// PDF spec: LZW uses MSB-first order, literal width 8 (codes 0–255),
+	// ClearTable=256, EOD=257. /EarlyChange defaults to 1.
 	earlyChange := 1
 	if parms != nil {
 		if ec, ok := parms["EarlyChange"]; ok {
@@ -139,19 +138,9 @@ func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
 		}
 	}
 
-	order := lzw.MSB
-	litWidth := 8
-
-	// TODO: When earlyChange is 0, Go's compress/lzw (which defaults to EarlyChange=1)
-	// may produce incorrect output. A custom decoder is needed for full correctness.
-	_ = earlyChange
-
-	r := lzw.NewReader(bytes.NewReader(data), order, litWidth)
+	r := newLZWReader(bytes.NewReader(data), earlyChange)
 	var buf bytes.Buffer
 	_, err := io.Copy(&buf, r) //nolint:gosec // Need full read
-	if closeErr := r.Close(); closeErr != nil {
-		return nil, fmt.Errorf("failed to close LZW reader: %w", closeErr)
-	}
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}

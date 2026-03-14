@@ -2,7 +2,6 @@ package signature
 
 import (
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
 	"math/big"
@@ -17,7 +16,7 @@ import (
 // Security Store (/DSS) dictionary in the catalog.
 type dssData struct {
 	Certs []*x509.Certificate
-	CRLs  []*pkix.CertificateList
+	CRLs  []*x509.RevocationList
 	OCSPs []ocspBasicResponse
 	VRI   map[string]*vriEntry
 }
@@ -25,7 +24,7 @@ type dssData struct {
 // vriEntry holds per-signature Validation Related Information.
 type vriEntry struct {
 	Certs []*x509.Certificate
-	CRLs  []*pkix.CertificateList
+	CRLs  []*x509.RevocationList
 	OCSPs []ocspBasicResponse
 }
 
@@ -163,10 +162,10 @@ func parseDSSCerts(doc *document.Document, dict ast.PdfDict) []*x509.Certificate
 }
 
 // parseDSSCRLs extracts Certificate Revocation Lists from /CRLs or /CRL arrays.
-func parseDSSCRLs(doc *document.Document, dict ast.PdfDict) []*pkix.CertificateList {
-	var crls []*pkix.CertificateList
+func parseDSSCRLs(doc *document.Document, dict ast.PdfDict) []*x509.RevocationList {
+	var crls []*x509.RevocationList
 	for _, data := range resolveDSSStreamArray(doc, dict, "CRLs", "CRL") {
-		crl, err := x509.ParseCRL(data) //nolint:staticcheck // x509.ParseCRL is deprecated but pkix.CertificateList is still the standard type
+		crl, err := x509.ParseRevocationList(data)
 		if err == nil {
 			crls = append(crls, crl)
 		}
@@ -310,7 +309,7 @@ func parseOCSPResponse(der []byte) (ocspBasicResponse, error) {
 
 // checkRevocation checks whether a certificate was revoked at the given time
 // using the embedded OCSP responses and CRLs.
-func checkRevocation(cert *x509.Certificate, sigTime time.Time, ocsps []ocspBasicResponse, crls []*pkix.CertificateList) (ok bool, info string) {
+func checkRevocation(cert *x509.Certificate, sigTime time.Time, ocsps []ocspBasicResponse, crls []*x509.RevocationList) (ok bool, info string) {
 	// Try OCSP first (preferred over CRL).
 	for _, resp := range ocsps {
 		for _, sr := range resp.Responses {
@@ -341,7 +340,7 @@ func checkRevocation(cert *x509.Certificate, sigTime time.Time, ocsps []ocspBasi
 	crlChecked := false
 	for _, crl := range crls {
 		crlChecked = true
-		for _, revoked := range crl.TBSCertList.RevokedCertificates {
+		for _, revoked := range crl.RevokedCertificateEntries {
 			if revoked.SerialNumber.Cmp(cert.SerialNumber) == 0 {
 				if revoked.RevocationTime.After(sigTime) {
 					return true, fmt.Sprintf("CRL: certificate revoked on %s (after signing time %s)",

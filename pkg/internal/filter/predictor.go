@@ -201,12 +201,8 @@ func abs(x int) int {
 // applyTIFFPredictor reverses TIFF Predictor 2 (horizontal differencing).
 // Each sample in a row is stored as the difference from the previous sample.
 func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
-	if params.BitsPerComponent != 8 {
-		// TODO: support sub-byte TIFF predictor for BPC < 8.
-		return data, nil
-	}
-
-	rowBytes := params.Columns * params.Colors
+	numSamples := params.Columns * params.Colors
+	rowBytes := (params.Columns*params.Colors*params.BitsPerComponent + 7) / 8
 	if rowBytes == 0 {
 		return data, nil
 	}
@@ -214,12 +210,44 @@ func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
 	result := make([]byte, len(data))
 	copy(result, data)
 
+	if params.BitsPerComponent == 8 {
+		for off := 0; off+rowBytes <= len(result); off += rowBytes {
+			row := result[off : off+rowBytes]
+			for i := params.Colors; i < numSamples; i++ {
+				row[i] += row[i-params.Colors]
+			}
+		}
+		return result, nil
+	}
+
+	// Sub-byte samples (BPC 1, 2, or 4): operate at the bit level.
+	bpc := params.BitsPerComponent
+	mask := byte((1 << bpc) - 1)
+
 	for off := 0; off+rowBytes <= len(result); off += rowBytes {
 		row := result[off : off+rowBytes]
-		for i := params.Colors; i < rowBytes; i++ {
-			row[i] += row[i-params.Colors]
+		for i := params.Colors; i < numSamples; i++ {
+			cur := getBitSample(row, i, bpc, mask)
+			prev := getBitSample(row, i-params.Colors, bpc, mask)
+			setBitSample(row, i, bpc, mask, (cur+prev)&mask)
 		}
 	}
 
 	return result, nil
+}
+
+// getBitSample extracts a sub-byte sample at the given sample index.
+func getBitSample(row []byte, sampleIdx, bpc int, mask byte) byte {
+	bitPos := sampleIdx * bpc
+	byteIdx := bitPos / 8
+	shift := 8 - (bitPos%8 + bpc) // MSB-first packing
+	return (row[byteIdx] >> shift) & mask
+}
+
+// setBitSample writes a sub-byte sample at the given sample index.
+func setBitSample(row []byte, sampleIdx, bpc int, mask byte, val byte) {
+	bitPos := sampleIdx * bpc
+	byteIdx := bitPos / 8
+	shift := 8 - (bitPos%8 + bpc)
+	row[byteIdx] = (row[byteIdx] & ^(mask << shift)) | ((val & mask) << shift)
 }
