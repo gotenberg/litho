@@ -1,6 +1,9 @@
 package models
 
-import "image"
+import (
+	"image"
+	"io"
+)
 
 // OCREngine is an integration interface for Optical Character Recognition.
 // Developers can inject a wrapper for Tesseract, Google Cloud Vision, or any
@@ -64,14 +67,17 @@ type Annotation struct {
 	QuadPoints [][8]float64 // Groups of 8 coordinates defining quadrilateral regions (Redact, Highlight, etc.)
 }
 
-// ImageMeta represents metadata for an extracted image.
+// ImageMeta represents metadata for an extracted image XObject.
+// The raw encoded stream can be accessed lazily via Open, which returns an
+// io.ReadCloser that decodes through the PDF filter pipeline on read. The
+// caller must close the returned reader.
 type ImageMeta struct {
 	Filename         string
 	Width            int
 	Height           int
 	ColorSpace       string
 	BitsPerComponent int
-	FilePath         string // Path where it was saved to disk
+	Open             func() (io.ReadCloser, error) // Lazy accessor for decoded image stream data
 }
 
 // Line represents a stroked line segment on a page, in absolute page coordinates.
@@ -86,10 +92,13 @@ type Table struct {
 }
 
 // EmbeddedFile represents a file embedded within a PDF document.
+// Content is accessed lazily: call Open to obtain an io.ReadCloser that
+// decodes the stream through the PDF filter pipeline on read. The caller
+// must close the returned reader.
 type EmbeddedFile struct {
-	Name     string // Original filename from the file specification
-	MIMEType string // MIME type from the /Subtype entry, if present
-	Data     []byte // Decoded file contents
+	Name     string                        // Original filename from the file specification
+	MIMEType string                        // MIME type from the /Subtype entry, if present
+	Open     func() (io.ReadCloser, error) // Lazy accessor for decoded file content
 }
 
 // Signature represents a cryptographic signature found in the document.
@@ -171,11 +180,13 @@ type Measurement struct {
 }
 
 // Model3D represents a 3D model stream embedded in a PDF annotation.
+// Content is accessed lazily: call Open to obtain an io.ReadCloser that
+// decodes the stream through the PDF filter pipeline on read. The caller
+// must close the returned reader.
 type Model3D struct {
-	Name     string // Annotation name or resource key
-	Subtype  string // "U3D" (Universal 3D) or "PRC" (Product Representation Compact)
-	Data     []byte // Decoded binary stream data
-	FilePath string // Path where it was saved to disk (set by export)
+	Name    string                        // Annotation name or resource key
+	Subtype string                        // "U3D" (Universal 3D) or "PRC" (Product Representation Compact)
+	Open    func() (io.ReadCloser, error) // Lazy accessor for decoded 3D model data
 }
 
 // DSSInfo represents the Document Security Store (/DSS) extracted from

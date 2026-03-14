@@ -33,14 +33,6 @@ linters:
     - usetesting
     - wastedassign
     - whitespace
-  exclusions:
-    generated: lax
-    presets:
-      - common-false-positives
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
 formatters:
   enable:
     - gci
@@ -54,9 +46,3 @@ formatters:
         - default
         - prefix(github.com/gotenberg/litho)
       custom-order: true
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

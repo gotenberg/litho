@@ -171,6 +171,59 @@ func decodeASCIIHex(data []byte) ([]byte, error) {
 	return decoded, nil
 }
 
+// NewStreamReader returns an io.ReadCloser that lazily decodes a PDF stream
+// through its filter pipeline. For single FlateDecode or LZWDecode filters
+// without predictor parameters, the decoded data is streamed without full
+// buffering. For other filter configurations, the stream is decoded eagerly
+// into a buffer on the first call.
+//
+// The caller must close the returned reader when done.
+func NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
+	filterObj, hasFilter := stream.Dict["Filter"]
+	if !hasFilter {
+		return io.NopCloser(bytes.NewReader(stream.Data)), nil
+	}
+
+	var filters []ast.PdfName
+	switch f := filterObj.(type) {
+	case ast.PdfName:
+		filters = append(filters, f)
+	case ast.PdfArray:
+		for _, item := range f {
+			if name, ok := item.(ast.PdfName); ok {
+				filters = append(filters, name)
+			}
+		}
+	default:
+		return nil, fmt.Errorf("invalid type for /Filter: %T", filterObj)
+	}
+
+	parms := extractDecodeParms(stream.Dict, len(filters))
+
+	// Fast path: single Flate or LZW filter without predictor — true streaming.
+	if len(filters) == 1 && extractPredictorParams(parms[0]) == nil {
+		switch filters[0] {
+		case "FlateDecode", "Fl":
+			return zlib.NewReader(bytes.NewReader(stream.Data))
+		case "LZWDecode", "LZW":
+			earlyChange := 1
+			if parms[0] != nil {
+				if ec, ok := parms[0]["EarlyChange"]; ok {
+					earlyChange = pdfInt(ec)
+				}
+			}
+			return io.NopCloser(newLZWReader(bytes.NewReader(stream.Data), earlyChange)), nil
+		}
+	}
+
+	// Slow path: decode fully and wrap in a reader.
+	data, err := DecodeStream(stream)
+	if err != nil {
+		return nil, err
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
 // EncodeStream creates a new PdfStream by applying the specified filter.
 func EncodeStream(data []byte, filter ast.PdfName) (ast.PdfStream, error) {
 	encoded, err := ApplyEncodeFilter(data, filter)

@@ -2,19 +2,16 @@ package semantics
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// Extract3DModels scans a page's annotations for /3D subtype annotations,
-// extracts the /3DD (3D Data) stream, and returns the decoded model data.
-// If outputDir is non-empty, the models are also saved to disk.
-func Extract3DModels(doc *document.Document, page *document.Page, outputDir string) ([]models.Model3D, error) {
+// Extract3DModels scans a page's annotations for /3D subtype annotations and
+// returns metadata with a lazy Open accessor for each 3D data stream. The
+// stream data is not decoded until the caller invokes Open.
+func Extract3DModels(doc *document.Document, page *document.Page) ([]models.Model3D, error) {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
 		return nil, nil
@@ -74,12 +71,6 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 		// Determine the 3D subtype: U3D or PRC.
 		subtype := determine3DSubtype(doc, stream)
 
-		// Decode the stream data.
-		data, err := filter.DecodeStream(stream)
-		if err != nil {
-			continue
-		}
-
 		// Extract a name from the annotation if available.
 		name := fmt.Sprintf("model_%d", modelIdx)
 		if nmObj, ok := annotDict["NM"]; ok {
@@ -92,30 +83,11 @@ func Extract3DModels(doc *document.Document, page *document.Page, outputDir stri
 			}
 		}
 
-		model := models.Model3D{
+		results = append(results, models.Model3D{
 			Name:    name,
 			Subtype: subtype,
-			Data:    data,
-		}
-
-		// Save to disk if outputDir is specified.
-		if outputDir != "" {
-			ext := ".u3d"
-			if subtype == "PRC" {
-				ext = ".prc"
-			}
-
-			if err := os.MkdirAll(outputDir, 0o750); err != nil {
-				return nil, fmt.Errorf("failed to create output directory: %w", err)
-			}
-
-			outPath := filepath.Join(outputDir, name+ext)
-			if err := os.WriteFile(outPath, data, 0o600); err == nil {
-				model.FilePath = outPath
-			}
-		}
-
-		results = append(results, model)
+			Open:    openStreamFunc(stream),
+		})
 		modelIdx++
 	}
 

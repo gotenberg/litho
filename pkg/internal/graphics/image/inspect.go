@@ -1,8 +1,11 @@
 package image
 
 import (
+	"io"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -65,8 +68,16 @@ func InspectImages(doc *document.Document, page *document.Page) []models.ImageMe
 			Height:           height,
 			ColorSpace:       colorSpace,
 			BitsPerComponent: bitsPerComp,
+			Open:             openImageStream(stream),
 		})
 	}
 
 	return images
+}
+
+// openImageStream returns a lazy Open function for an image XObject stream.
+func openImageStream(stream ast.PdfStream) func() (io.ReadCloser, error) {
+	return func() (io.ReadCloser, error) {
+		return filter.NewStreamReader(stream)
+	}
 }

@@ -119,11 +119,11 @@ func TestExtractPronunciationLexicons_MultipleLexicons(t *testing.T) {
 
 	var comp1, comp2 bytes.Buffer
 	w1 := zlib.NewWriter(&comp1)
-	w1.Write([]byte(pls1))
-	w1.Close()
+	_, _ = w1.Write([]byte(pls1))
+	_ = w1.Close()
 	w2 := zlib.NewWriter(&comp2)
-	w2.Write([]byte(pls2))
-	w2.Close()
+	_, _ = w2.Write([]byte(pls2))
+	_ = w2.Close()
 	c1, c2 := comp1.Bytes(), comp2.Bytes()
 
 	var buf bytes.Buffer

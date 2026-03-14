@@ -2,16 +2,9 @@ package image
 
 import (
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
-	"os"
-	"path/filepath"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
-	"github.com/gotenberg/litho/pkg/models"
 )
 
 // getInt is a helper to extract an integer from a dictionary safely.
@@ -44,147 +37,6 @@ func getName(doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string,
 		return string(val), nil
 	}
 	return "", fmt.Errorf("key /%s is not a name", key)
-}
-
-// ExtractImages scans a page's resources for Image XObjects and saves them to disk.
-func ExtractImages(doc *document.Document, page *document.Page, outputDir string) ([]models.ImageMeta, error) {
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %v", err)
-	}
-
-	xobjObj, ok := page.Resources["XObject"]
-	if !ok {
-		return nil, nil // No XObjects
-	}
-
-	xobjResolved, err := document.ResolveObject(doc, xobjObj)
-	if err != nil {
-		return nil, err
-	}
-
-	xobjDict, ok := xobjResolved.(ast.PdfDict)
-	if !ok {
-		return nil, fmt.Errorf("/XObject is not a dictionary")
-	}
-
-	var savedImages []models.ImageMeta
-
-	for name, obj := range xobjDict {
-		resolved, err := document.ResolveObject(doc, obj)
-		if err != nil {
-			continue
-		}
-
-		stream, ok := resolved.(ast.PdfStream)
-		if !ok {
-			continue
-		}
-
-		subtype, err := getName(doc, stream.Dict, "Subtype")
-		if err != nil || subtype != "Image" {
-			continue
-		}
-
-		width, err := getInt(doc, stream.Dict, "Width")
-		if err != nil {
-			continue
-		}
-
-		height, err := getInt(doc, stream.Dict, "Height")
-		if err != nil {
-			continue
-		}
-
-		colorSpace := resolveColorSpace(doc, stream.Dict)
-		bitsPerComp, _ := getInt(doc, stream.Dict, "BitsPerComponent")
-		if bitsPerComp == 0 {
-			bitsPerComp = 8 // Default
-		}
-
-		// Determine the filter
-		filterName := ""
-		if filterObj, ok := stream.Dict["Filter"]; ok {
-			filterRes, _ := document.ResolveObject(doc, filterObj)
-			if fn, ok := filterRes.(ast.PdfName); ok {
-				filterName = string(fn)
-			} else if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {
-				if fn, ok := fArr[0].(ast.PdfName); ok {
-					filterName = string(fn)
-				}
-			}
-		}
-
-		filename := fmt.Sprintf("image_%s", name)
-
-		meta := models.ImageMeta{
-			Filename:         filename,
-			Width:            width,
-			Height:           height,
-			ColorSpace:       colorSpace,
-			BitsPerComponent: bitsPerComp,
-		}
-
-		if filterName == "DCTDecode" {
-			// DCTDecode is raw JPEG data. No decompression needed, save directly.
-			outPath := filepath.Join(outputDir, filename+".jpg")
-			err = os.WriteFile(outPath, stream.Data, 0o600)
-			if err == nil {
-				meta.FilePath = outPath
-				savedImages = append(savedImages, meta)
-			}
-		} else if filterName == "FlateDecode" || filterName == "" {
-			// Decode the stream
-			decodedData, err := filter.DecodeStream(stream)
-			if err != nil {
-				continue
-			}
-
-			// Basic pixel mapping for 8-bit RGB or Grayscale
-			if bitsPerComp == 8 {
-				switch colorSpace {
-				case "DeviceRGB":
-					img := image.NewRGBA(image.Rect(0, 0, width, height))
-					expectedLen := width * height * 3
-					if len(decodedData) >= expectedLen {
-						idx := 0
-						for y := range height {
-							for x := range width {
-								r := decodedData[idx]
-								g := decodedData[idx+1]
-								b := decodedData[idx+2]
-								img.Set(x, y, color.RGBA{r, g, b, 255})
-								idx += 3
-							}
-						}
-						outPath := filepath.Join(outputDir, filename+".png")
-						if err := savePNG(outPath, img); err == nil {
-							meta.FilePath = outPath
-							savedImages = append(savedImages, meta)
-						}
-					}
-				case "DeviceGray":
-					img := image.NewGray(image.Rect(0, 0, width, height))
-					expectedLen := width * height
-					if len(decodedData) >= expectedLen {
-						idx := 0
-						for y := range height {
-							for x := range width {
-								img.Set(x, y, color.Gray{Y: decodedData[idx]})
-								idx++
-							}
-						}
-						outPath := filepath.Join(outputDir, filename+".png")
-						if err := savePNG(outPath, img); err == nil {
-							meta.FilePath = outPath
-							savedImages = append(savedImages, meta)
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return savedImages, nil
 }
 
 // resolveColorSpace extracts the /ColorSpace from an image XObject dictionary
@@ -256,15 +108,4 @@ func resolveColorSpace(doc *document.Document, dict ast.PdfDict) string {
 	default:
 		return "DeviceRGB"
 	}
-}
-
-func savePNG(path string, img image.Image) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = f.Close() //nolint:errcheck // Best-effort close after png.Encode owns the write result
-	}()
-	return png.Encode(f, img)
 }

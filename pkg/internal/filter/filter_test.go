@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"encoding/hex"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -601,6 +602,110 @@ func TestDecodeLZW_EarlyChange0_LargeStream(t *testing.T) {
 
 	if !bytes.Equal(decoded, input) {
 		t.Errorf("large stream roundtrip failed: got %d bytes, want %d bytes", len(decoded), len(input))
+	}
+}
+
+func TestNewStreamReader_NoFilter(t *testing.T) {
+	raw := []byte("unfiltered content")
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{},
+		Data: raw,
+	}
+
+	rc, err := NewStreamReader(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Errorf("got %q, want %q", got, raw)
+	}
+}
+
+func TestNewStreamReader_Flate(t *testing.T) {
+	raw := []byte("hello from flate stream reader")
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Filter": ast.PdfName("FlateDecode"),
+		},
+		Data: zlibCompress(raw),
+	}
+
+	rc, err := NewStreamReader(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Errorf("got %q, want %q", got, raw)
+	}
+}
+
+func TestNewStreamReader_LZW(t *testing.T) {
+	raw := []byte("LZW streaming test data")
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Filter": ast.PdfName("LZWDecode"),
+		},
+		Data: lzwCompress(raw),
+	}
+
+	rc, err := NewStreamReader(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Errorf("got %q, want %q", got, raw)
+	}
+}
+
+func TestNewStreamReader_FlateWithPredictor(t *testing.T) {
+	// Predictor forces fallback to eager decode path.
+	raw := []byte{
+		0, 10, 20, 30,
+		2, 5, 10, 15,
+	}
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Filter": ast.PdfName("FlateDecode"),
+			"DecodeParms": ast.PdfDict{
+				"Predictor": ast.PdfInt(12),
+				"Columns":   ast.PdfInt(3),
+			},
+		},
+		Data: zlibCompress(raw),
+	}
+
+	rc, err := NewStreamReader(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []byte{10, 20, 30, 15, 30, 45}
+	if !bytes.Equal(got, expected) {
+		t.Errorf("got %v, want %v", got, expected)
 	}
 }
 

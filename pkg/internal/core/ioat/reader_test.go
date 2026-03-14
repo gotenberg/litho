@@ -116,8 +116,8 @@ func TestSeek_Current(t *testing.T) {
 	r := NewReader(bytes.NewReader(data), int64(len(data)), 0)
 
 	// Read 2 bytes first
-	r.ReadByte()
-	r.ReadByte()
+	_, _ = r.ReadByte()
+	_, _ = r.ReadByte()
 
 	pos, err := r.Seek(1, io.SeekCurrent)
 	if err != nil {

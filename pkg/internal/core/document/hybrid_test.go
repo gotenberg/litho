@@ -80,7 +80,7 @@ func buildHybridPDF() ([]byte, int64, int64) {
 	compressedBytes := compressed.Bytes()
 
 	// Write object 4 (the XRef stream).
-	buf.WriteString(fmt.Sprintf("4 0 obj\n<< /Type /XRef /Size 5 /W [1 3 1] /Filter /FlateDecode /Length %d >>\nstream\n", len(compressedBytes)))
+	fmt.Fprintf(&buf, "4 0 obj\n<< /Type /XRef /Size 5 /W [1 3 1] /Filter /FlateDecode /Length %d >>\nstream\n", len(compressedBytes))
 	buf.Write(compressedBytes)
 	buf.WriteString("\nendstream\nendobj\n")
 
@@ -90,14 +90,14 @@ func buildHybridPDF() ([]byte, int64, int64) {
 	buf.WriteString("xref\n")
 	buf.WriteString("0 5\n")
 	buf.WriteString("0000000000 65535 f \n")
-	buf.WriteString(fmt.Sprintf("%010d 00000 n \n", off1))
-	buf.WriteString(fmt.Sprintf("%010d 00000 n \n", off2))
-	buf.WriteString(fmt.Sprintf("%010d 00000 n \n", off3old)) // STALE offset
-	buf.WriteString(fmt.Sprintf("%010d 00000 n \n", off4))
+	fmt.Fprintf(&buf, "%010d 00000 n \n", off1)
+	fmt.Fprintf(&buf, "%010d 00000 n \n", off2)
+	fmt.Fprintf(&buf, "%010d 00000 n \n", off3old) // STALE offset
+	fmt.Fprintf(&buf, "%010d 00000 n \n", off4)
 
 	// Trailer with /XRefStm pointing to the compressed stream.
-	buf.WriteString(fmt.Sprintf("trailer\n<< /Size 5 /Root 1 0 R /XRefStm %d >>\n", off4))
-	buf.WriteString(fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefOff))
+	fmt.Fprintf(&buf, "trailer\n<< /Size 5 /Root 1 0 R /XRefStm %d >>\n", off4)
+	fmt.Fprintf(&buf, "startxref\n%d\n%%%%EOF\n", xrefOff)
 
 	return buf.Bytes(), int64(off3old), int64(off3new)
 }

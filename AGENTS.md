@@ -99,6 +99,15 @@ pkg/
 - `resolveObject` must track visited nodes to prevent infinite loops from malicious circular references.
 - Rely on centralized, thread-safe methods provided by the `internal/core/document` package to ensure security and prevent stack overflows.
 
+### Resource Streaming (Critical — No Eager Materialization)
+- **Never load embedded files, images, or other binary resources into memory during parsing.** The reader must collect metadata (byte offset, length, filters, MIME type) without decoding or buffering the resource content.
+- The public API must return a **lazy accessor** for every resource — a value that lets the caller read the content on demand. In `pkg/models`, expose a function field (e.g., `Open func() (io.ReadCloser, error)`) rather than a `[]byte` field. The underlying implementation reads from the original `io.ReaderAt` at the recorded offset only when `Open` is called.
+- **Rationale:** A single PDF may contain hundreds of megabytes of embedded files and images. Eagerly decoding them would make the reader unusable on large documents and would force callers to pay the I/O and memory cost for resources they may never need.
+- Stream filters (Flate, ASCII85, DCT, etc.) must be applied lazily inside the `Open` implementation, chaining the decoded stream through the filter pipeline on read — not at parse time.
+- Callers are responsible for closing the reader returned by `Open`. Document this clearly in Godoc.
+- Within `pkg/internal`, the same rule applies: internal helpers that enumerate resources (attachments, image XObjects, portfolio files, 3D streams) must store stream coordinates, not decoded bytes.
+- **Test guidance:** Unit tests that verify resource content should call `Open`, read, and close. Tests that only verify metadata (filename, MIME type, dimensions) must **not** call `Open` — this ensures the lazy contract is maintained and tests stay fast.
+
 ### Formatting & Imports
 - Run `make fmt` to enforce formatting (gofmt, gofumpt, goimports, gci).
 - Import order enforced by gci: standard library, third-party, then `github.com/gotenberg/litho/...`.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -71,7 +72,7 @@ func Open(r io.ReaderAt, size int64, password string) (*Reader, error) {
 // OpenFile is a convenience method to open a PDF directly from the filesystem.
 // The caller is responsible for closing the *os.File when done.
 func OpenFile(path string, password string) (*Reader, *os.File, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -430,9 +431,10 @@ func (r *Reader) ExtractMeasurements(pageNum int) ([]models.Measurement, error) 
 }
 
 // Extract3DModels extracts 3D model streams (U3D or PRC) from /3D annotations
-// on the given 1-based page number. If outputDir is non-empty, the decoded
-// binary streams are saved to disk.
-func (r *Reader) Extract3DModels(pageNum int, outputDir string) ([]models.Model3D, error) {
+// on the given 1-based page number. Each returned Model3D carries a lazy Open
+// accessor — the stream data is not decoded until the caller invokes Open.
+// The caller must close the reader returned by Open.
+func (r *Reader) Extract3DModels(pageNum int) ([]models.Model3D, error) {
 	catalog, err := document.GetCatalog(r.doc)
 	if err != nil {
 		return nil, err
@@ -447,7 +449,119 @@ func (r *Reader) Extract3DModels(pageNum int, outputDir string) ([]models.Model3
 		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
 	}
 
-	return semantics.Extract3DModels(r.doc, pages[pageNum-1], outputDir)
+	return semantics.Extract3DModels(r.doc, pages[pageNum-1])
+}
+
+// GetPage returns the geometry and metadata for the given 1-based page number.
+func (r *Reader) GetPage(pageNum int) (models.Page, error) {
+	catalog, err := document.GetCatalog(r.doc)
+	if err != nil {
+		return models.Page{}, err
+	}
+
+	pages, err := document.GetPages(r.doc, catalog)
+	if err != nil {
+		return models.Page{}, err
+	}
+
+	if pageNum < 1 || pageNum > len(pages) {
+		return models.Page{}, fmt.Errorf("page number %d is out of bounds", pageNum)
+	}
+
+	p := pages[pageNum-1]
+	w, h := mediaBoxDimensions(p.MediaBox)
+	return models.Page{
+		PageNumber: pageNum,
+		Width:      w,
+		Height:     h,
+		DPM:        p.DPM,
+		MediaBox:   boxToRect(p.MediaBox),
+		CropBox:    boxToRect(p.CropBox),
+		BleedBox:   boxToRect(p.BleedBox),
+		TrimBox:    boxToRect(p.TrimBox),
+		ArtBox:     boxToRect(p.ArtBox),
+	}, nil
+}
+
+// ExtractTextElements extracts spatially positioned text elements from
+// the given 1-based page number.
+func (r *Reader) ExtractTextElements(pageNum int) ([]models.TextElement, error) {
+	catalog, err := document.GetCatalog(r.doc)
+	if err != nil {
+		return nil, err
+	}
+
+	pages, err := document.GetPages(r.doc, catalog)
+	if err != nil {
+		return nil, err
+	}
+
+	if pageNum < 1 || pageNum > len(pages) {
+		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
+	}
+
+	targetPage := pages[pageNum-1]
+
+	ops, err := content.ParsePageContent(r.doc, targetPage.Dict)
+	if err != nil {
+		return nil, err
+	}
+
+	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
+	elements, err := typography.ExtractElements(r.doc, machine, targetPage, ops)
+	if err != nil {
+		if errors.Is(err, typography.ErrFontNotFound) {
+			return nil, fmt.Errorf("page %d text element extraction halted: %w", pageNum, ErrFontMissing)
+		}
+		return nil, err
+	}
+
+	return elements, nil
+}
+
+// InspectImages returns metadata for Image XObjects on the given 1-based
+// page number without decoding pixel data.
+func (r *Reader) InspectImages(pageNum int) ([]models.ImageMeta, error) {
+	catalog, err := document.GetCatalog(r.doc)
+	if err != nil {
+		return nil, err
+	}
+
+	pages, err := document.GetPages(r.doc, catalog)
+	if err != nil {
+		return nil, err
+	}
+
+	if pageNum < 1 || pageNum > len(pages) {
+		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
+	}
+
+	return pdfimage.InspectImages(r.doc, pages[pageNum-1]), nil
+}
+
+// ExtractLines extracts stroked line segments from the content stream of
+// the given 1-based page number.
+func (r *Reader) ExtractLines(pageNum int) ([]models.Line, error) {
+	catalog, err := document.GetCatalog(r.doc)
+	if err != nil {
+		return nil, err
+	}
+
+	pages, err := document.GetPages(r.doc, catalog)
+	if err != nil {
+		return nil, err
+	}
+
+	if pageNum < 1 || pageNum > len(pages) {
+		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
+	}
+
+	ops, err := content.ParsePageContent(r.doc, pages[pageNum-1].Dict)
+	if err != nil {
+		return nil, err
+	}
+
+	return graphics.ExtractLines(ops), nil
 }
 
 // ExtractPronunciationLexicons extracts W3C PLS (Pronunciation Lexicon

@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -173,11 +172,6 @@ func extractFileSpec(doc *document.Document, obj ast.PdfObject) (*models.Embedde
 		return nil, nil
 	}
 
-	data, err := filter.DecodeStream(stream)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode embedded file %q: %w", filename, err)
-	}
-
 	// Extract MIME type from stream's /Subtype (e.g., "application/pdf").
 	mimeType := ""
 	if stObj, ok := stream.Dict["Subtype"]; ok {
@@ -192,6 +186,6 @@ func extractFileSpec(doc *document.Document, obj ast.PdfObject) (*models.Embedde
 	return &models.EmbeddedFile{
 		Name:     filename,
 		MIMEType: mimeType,
-		Data:     data,
+		Open:     openStreamFunc(stream),
 	}, nil
 }
