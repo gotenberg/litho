@@ -10,11 +10,12 @@ Go version: 1.26.0
 ## Build & Quality Commands
 
 ```bash
-make fmt          # gofmt + gofumpt + gci + goimports + go mod tidy
-make lint         # golangci-lint (strict, see .golangci.yml)
-make lint-todo    # Find TODO comments via godox
-go test ./...     # Run all tests
-go build ./cmd/litho  # Build the binary
+make fmt               # gofmt + gofumpt + gci + goimports + go mod tidy
+make lint              # golangci-lint (strict, see .golangci.yml)
+make lint-todo         # Find TODO comments via godox
+make test-unit         # Run unit tests only (go test -race ./...)
+make test-integration  # Run integration/corpus tests (go test -timeout 5m -tags=integration -v github.com/gotenberg/litho/test/integration)
+go build ./cmd/litho   # Build the binary
 ```
 
 Always run `make fmt && make lint` before submitting code.
@@ -74,6 +75,14 @@ pkg/
       cmap/                   # ToUnicode CMap parser
       encodings/              # MacRoman, WinAnsi, Differences, Adobe Glyph List
       truetype/               # Embedded TrueType cmap table parser
+test/
+  integration/                # Integration tests (PDF.js corpus, cross-feature)
+    pdfjs_corpus_test.go      # Corpus tests against Mozilla PDF.js test suite
+    testdata/
+      pdf.js/                 # NOT in Git — populated by scripts/fetch-pdfjs-corpus.sh
+        test_manifest.json
+        pdfs/
+        references/
 ```
 
 ## Coding Rules
@@ -83,6 +92,24 @@ pkg/
 - Always wrap and propagate errors up the call stack.
 - Use `errors.Is()` with sentinel variables — never `strings.Contains()`.
 - Sentinel errors live in `errors.go` per package.
+
+### Context and Cancellation (Critical)
+- **Every public method that performs I/O, loops, or recursion must accept `context.Context` as its first parameter.** This is the only mechanism for callers to impose deadlines and cancel runaway parsing. litho is designed for server use (Gotenberg) where HTTP request deadlines govern processing time.
+- **Never store `ctx` in a struct field.** Pass it through function parameters, per Go convention.
+- **Check `ctx.Err()` at natural checkpoints in internal loops:**
+    - Content stream operator dispatch (every ~100 operators).
+    - Page tree traversal (before processing each node).
+    - Object resolution (`resolveObject` — on each step, alongside cycle detection).
+    - CMap parsing (per entry or per block).
+    - Font resolution (at the top of `resolveFont` and inside encoding table iteration).
+    - XRef table parsing and rebuild (per entry).
+    - Filter pipeline (per read buffer during decompression).
+    - JavaScript VM execution (use goja's interrupt mechanism with `ctx`).
+- **Do NOT add context checks in the lexer's per-token loop.** The lexer is the hottest path; checking one level up (per content stream operator) is sufficient.
+- **Wrap context errors with location info** so the caller knows where cancellation occurred: `fmt.Errorf("extracting text from page %d: %w", pageNum, err)`.
+- **Never return partial results on context cancellation.** Return an error. The caller cannot trust incomplete output. If a future use case requires partial results, that would be a separate streaming API.
+- **Do not introduce litho-specific timeout sentinels.** The standard `context.DeadlineExceeded` and `context.Canceled` are sufficient; callers check with `errors.Is()`.
+- **Trivial accessors that return cached scalar values** (e.g., page count, PDF version) do not need `ctx`.
 
 ### Encapsulation (Critical)
 - Public packages (`pkg/pdf`, `pkg/models`, `pkg/compliance`, `pkg/export`) must **never** accept or return types from `pkg/internal/`.
@@ -96,12 +123,12 @@ pkg/
 ### Centralized Core Utilities (Anti-Duplication)
 - NEVER duplicate core PDF operational logic (e.g., `resolveObject`, `decodePdfString`, `getFloat`) across internal domains.
 - PDF strings are often encrypted; decryption must be handled consistently through the crypto pipeline.
-- `resolveObject` must track visited nodes to prevent infinite loops from malicious circular references.
+- `resolveObject` must track visited nodes to prevent infinite loops from malicious circular references. Context cancellation adds a wall-clock bound on top of this structural bound.
 - Rely on centralized, thread-safe methods provided by the `internal/core/document` package to ensure security and prevent stack overflows.
 
 ### Resource Streaming (Critical — No Eager Materialization)
 - **Never load embedded files, images, or other binary resources into memory during parsing.** The reader must collect metadata (byte offset, length, filters, MIME type) without decoding or buffering the resource content.
-- The public API must return a **lazy accessor** for every resource — a value that lets the caller read the content on demand. In `pkg/models`, expose a function field (e.g., `Open func() (io.ReadCloser, error)`) rather than a `[]byte` field. The underlying implementation reads from the original `io.ReaderAt` at the recorded offset only when `Open` is called.
+- The public API must return a **lazy accessor** for every resource — a value that lets the caller read the content on demand. In `pkg/models`, expose a function field (e.g., `Open func(ctx context.Context) (io.ReadCloser, error)`) rather than a `[]byte` field. The underlying implementation reads from the original `io.ReaderAt` at the recorded offset only when `Open` is called.
 - **Rationale:** A single PDF may contain hundreds of megabytes of embedded files and images. Eagerly decoding them would make the reader unusable on large documents and would force callers to pay the I/O and memory cost for resources they may never need.
 - Stream filters (Flate, ASCII85, DCT, etc.) must be applied lazily inside the `Open` implementation, chaining the decoded stream through the filter pipeline on read — not at parse time.
 - Callers are responsible for closing the reader returned by `Open`. Document this clearly in Godoc.
@@ -122,9 +149,19 @@ pkg/
 - Technical debt must be marked with `// TODO: [Context]`.
 
 ### Testing
+
+#### Unit tests
 - Tests use `_test.go` convention in the same package.
+- Live under `pkg/` and `cmd/` alongside the code they test.
+- Run with `make test-unit`.
 - The compliance package uses a `mockDocBuilder` pattern to construct test PDF documents.
 - Fuzz tests exist for parser and lexer (`_fuzz_test.go`).
+
+#### Integration tests
+- Live in `test/integration/`.
+- Run with `make test-integration` (requires corpus setup first).
+- The PDF.js corpus tests validate the public API against hundreds of real-world PDFs from Mozilla's test suite. See `PDFJS_CORPUS_TESTING.md` for setup and details.
+- Integration test data lives in `test/integration/testdata/` and is **not checked into Git**.
 
 ## Dependencies
 

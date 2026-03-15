@@ -1,6 +1,7 @@
 package interactive
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"strings"
@@ -16,18 +17,18 @@ import (
 // section.
 //
 // Returns nil, nil if no /XFA key is present.
-func extractXFAData(doc *document.Document, acroFormDict ast.PdfDict) (map[string]string, error) {
+func extractXFAData(ctx context.Context, doc *document.Document, acroFormDict ast.PdfDict) (map[string]string, error) {
 	xfaObj, ok := acroFormDict["XFA"]
 	if !ok {
 		return nil, nil
 	}
 
-	xfaResolved, err := document.ResolveObject(doc, xfaObj)
+	xfaResolved, err := document.ResolveObject(ctx, doc, xfaObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /XFA: %w", err)
 	}
 
-	xmlData, err := assembleXFAXML(doc, xfaResolved)
+	xmlData, err := assembleXFAXML(ctx, doc, xfaResolved)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +46,7 @@ func extractXFAData(doc *document.Document, acroFormDict ast.PdfDict) (map[strin
 //   - A single stream object containing the entire XFA XML.
 //   - An array of alternating name/stream pairs:
 //     [ "preamble" <stream1> "datasets" <stream2> "template" <stream3> ... ]
-func assembleXFAXML(doc *document.Document, xfaObj ast.PdfObject) ([]byte, error) {
+func assembleXFAXML(ctx context.Context, doc *document.Document, xfaObj ast.PdfObject) ([]byte, error) {
 	switch v := xfaObj.(type) {
 	case ast.PdfStream:
 		data, err := filter.DecodeStream(v)
@@ -55,7 +56,7 @@ func assembleXFAXML(doc *document.Document, xfaObj ast.PdfObject) ([]byte, error
 		return data, nil
 
 	case ast.PdfArray:
-		return assembleXFAArray(doc, v)
+		return assembleXFAArray(ctx, doc, v)
 
 	default:
 		return nil, fmt.Errorf("unexpected /XFA type: %T", xfaObj)
@@ -64,14 +65,14 @@ func assembleXFAXML(doc *document.Document, xfaObj ast.PdfObject) ([]byte, error
 
 // assembleXFAArray processes the alternating name/stream pairs in an /XFA array
 // and concatenates all decoded stream data.
-func assembleXFAArray(doc *document.Document, arr ast.PdfArray) ([]byte, error) {
+func assembleXFAArray(ctx context.Context, doc *document.Document, arr ast.PdfArray) ([]byte, error) {
 	var buf []byte
 
 	// The array alternates: name (string), stream reference, name, stream, ...
 	for i := 0; i+1 < len(arr); i += 2 {
 		// arr[i] is the packet name (e.g., "preamble", "datasets", "template").
 		// arr[i+1] is the stream reference.
-		streamObj, err := document.ResolveObject(doc, arr[i+1])
+		streamObj, err := document.ResolveObject(ctx, doc, arr[i+1])
 		if err != nil {
 			continue
 		}

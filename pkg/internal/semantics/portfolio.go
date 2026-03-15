@@ -1,6 +1,7 @@
 package semantics
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -11,8 +12,8 @@ import (
 
 // IsPortfolio checks whether the document catalog contains a /Collection
 // dictionary, which marks the PDF as a Portfolio (PDF 1.7+).
-func IsPortfolio(doc *document.Document) (bool, error) {
-	catalog, err := document.GetCatalog(doc)
+func IsPortfolio(ctx context.Context, doc *document.Document) (bool, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return false, err
 	}
@@ -23,8 +24,8 @@ func IsPortfolio(doc *document.Document) (bool, error) {
 // ExtractPortfolioItems traverses the /Names -> /EmbeddedFiles name tree and
 // returns each embedded file's name, MIME type, and decoded data. This allows
 // callers to recursively open embedded PDFs via pdf.Open.
-func ExtractPortfolioItems(doc *document.Document) ([]models.EmbeddedFile, error) {
-	catalog, err := document.GetCatalog(doc)
+func ExtractPortfolioItems(ctx context.Context, doc *document.Document) ([]models.EmbeddedFile, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +34,7 @@ func ExtractPortfolioItems(doc *document.Document) ([]models.EmbeddedFile, error
 	if !ok {
 		return nil, nil
 	}
-	namesRes, err := document.ResolveObject(doc, namesObj)
+	namesRes, err := document.ResolveObject(ctx, doc, namesObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /Names: %w", err)
 	}
@@ -48,7 +49,7 @@ func ExtractPortfolioItems(doc *document.Document) ([]models.EmbeddedFile, error
 	}
 
 	var files []models.EmbeddedFile
-	if err := collectEmbeddedFiles(doc, efObj, &files); err != nil {
+	if err := collectEmbeddedFiles(ctx, doc, efObj, &files); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -56,8 +57,8 @@ func ExtractPortfolioItems(doc *document.Document) ([]models.EmbeddedFile, error
 
 // collectEmbeddedFiles recursively walks an EmbeddedFiles name tree node,
 // extracting each file specification into a models.EmbeddedFile.
-func collectEmbeddedFiles(doc *document.Document, nodeObj ast.PdfObject, files *[]models.EmbeddedFile) error {
-	nodeRes, err := document.ResolveObject(doc, nodeObj)
+func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, files *[]models.EmbeddedFile) error {
+	nodeRes, err := document.ResolveObject(ctx, doc, nodeObj)
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,7 @@ func collectEmbeddedFiles(doc *document.Document, nodeObj ast.PdfObject, files *
 
 	// Intermediate node: recurse into Kids.
 	if kidsObj, ok := nodeDict["Kids"]; ok {
-		kidsRes, err := document.ResolveObject(doc, kidsObj)
+		kidsRes, err := document.ResolveObject(ctx, doc, kidsObj)
 		if err != nil {
 			return fmt.Errorf("failed to resolve /Kids: %w", err)
 		}
@@ -77,7 +78,7 @@ func collectEmbeddedFiles(doc *document.Document, nodeObj ast.PdfObject, files *
 			return nil
 		}
 		for _, kid := range kidsArr {
-			if err := collectEmbeddedFiles(doc, kid, files); err != nil {
+			if err := collectEmbeddedFiles(ctx, doc, kid, files); err != nil {
 				return err
 			}
 		}
@@ -89,7 +90,7 @@ func collectEmbeddedFiles(doc *document.Document, nodeObj ast.PdfObject, files *
 	if !ok {
 		return nil
 	}
-	namesRes, err := document.ResolveObject(doc, namesObj)
+	namesRes, err := document.ResolveObject(ctx, doc, namesObj)
 	if err != nil {
 		return fmt.Errorf("failed to resolve /Names array: %w", err)
 	}
@@ -99,7 +100,7 @@ func collectEmbeddedFiles(doc *document.Document, nodeObj ast.PdfObject, files *
 	}
 
 	for i := 1; i < len(namesArr); i += 2 {
-		ef, err := extractFileSpec(doc, namesArr[i])
+		ef, err := extractFileSpec(ctx, doc, namesArr[i])
 		if err != nil {
 			return err
 		}
@@ -113,8 +114,8 @@ func collectEmbeddedFiles(doc *document.Document, nodeObj ast.PdfObject, files *
 // extractFileSpec extracts a single EmbeddedFile from a File Specification
 // dictionary. It reads /F or /UF for the filename, /EF -> /F for the stream
 // data, and the stream's /Subtype for the MIME type.
-func extractFileSpec(doc *document.Document, obj ast.PdfObject) (*models.EmbeddedFile, error) {
-	specRes, err := document.ResolveObject(doc, obj)
+func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*models.EmbeddedFile, error) {
+	specRes, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve file specification: %w", err)
 	}
@@ -126,12 +127,12 @@ func extractFileSpec(doc *document.Document, obj ast.PdfObject) (*models.Embedde
 	// Determine filename: prefer /UF (Unicode filename), fall back to /F.
 	filename := "embedded"
 	if ufObj, ok := specDict["UF"]; ok {
-		ufRes, _ := document.ResolveObject(doc, ufObj)
+		ufRes, _ := document.ResolveObject(ctx, doc, ufObj)
 		if ufStr, ok := ufRes.(ast.PdfString); ok {
 			filename = document.DecodePdfString(ufStr)
 		}
 	} else if fObj, ok := specDict["F"]; ok {
-		fRes, _ := document.ResolveObject(doc, fObj)
+		fRes, _ := document.ResolveObject(ctx, doc, fObj)
 		if fStr, ok := fRes.(ast.PdfString); ok {
 			filename = document.DecodePdfString(fStr)
 		}
@@ -144,7 +145,7 @@ func extractFileSpec(doc *document.Document, obj ast.PdfObject) (*models.Embedde
 	if !ok {
 		return nil, nil
 	}
-	efRes, err := document.ResolveObject(doc, efObj)
+	efRes, err := document.ResolveObject(ctx, doc, efObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /EF: %w", err)
 	}
@@ -163,7 +164,7 @@ func extractFileSpec(doc *document.Document, obj ast.PdfObject) (*models.Embedde
 		return nil, nil
 	}
 
-	streamRes, err := document.ResolveObject(doc, streamObj)
+	streamRes, err := document.ResolveObject(ctx, doc, streamObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve embedded file stream: %w", err)
 	}
@@ -175,7 +176,7 @@ func extractFileSpec(doc *document.Document, obj ast.PdfObject) (*models.Embedde
 	// Extract MIME type from stream's /Subtype (e.g., "application/pdf").
 	mimeType := ""
 	if stObj, ok := stream.Dict["Subtype"]; ok {
-		stRes, _ := document.ResolveObject(doc, stObj)
+		stRes, _ := document.ResolveObject(ctx, doc, stObj)
 		if stName, ok := stRes.(ast.PdfName); ok {
 			// PDF stores MIME types with / replaced by # in name objects,
 			// but many writers use the plain MIME string as the name value.

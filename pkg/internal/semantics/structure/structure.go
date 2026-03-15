@@ -1,6 +1,7 @@
 package structure
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -18,21 +19,21 @@ type StructElem struct {
 }
 
 // resolve is a helper to resolve indirect references.
-func resolve(doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
+func resolve(ctx context.Context, doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ref)
+		return doc.Resolve(ctx, ref)
 	}
 	return obj, nil
 }
 
 // GetStructTree extracts the root of the logical structure tree.
-func GetStructTree(doc *document.Document) (*StructElem, error) {
+func GetStructTree(ctx context.Context, doc *document.Document) (*StructElem, error) {
 	catalogObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}
 
-	catRes, err := resolve(doc, catalogObj)
+	catRes, err := resolve(ctx, doc, catalogObj)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,7 @@ func GetStructTree(doc *document.Document) (*StructElem, error) {
 		return nil, nil // Not a tagged PDF
 	}
 
-	strTreeRes, err := resolve(doc, strTreeObj)
+	strTreeRes, err := resolve(ctx, doc, strTreeObj)
 	if err != nil {
 		return nil, err
 	}
@@ -60,15 +61,15 @@ func GetStructTree(doc *document.Document) (*StructElem, error) {
 	rootElem := &StructElem{Type: "Root", MCID: -1}
 
 	if kObj, ok := strTree["K"]; ok {
-		kRes, _ := resolve(doc, kObj)
+		kRes, _ := resolve(ctx, doc, kObj)
 		if kArr, ok := kRes.(ast.PdfArray); ok {
 			for _, kid := range kArr {
-				if child := parseStructElem(doc, kid); child != nil {
+				if child := parseStructElem(ctx, doc, kid); child != nil {
 					rootElem.Kids = append(rootElem.Kids, child)
 				}
 			}
 		} else if kDict, ok := kRes.(ast.PdfDict); ok {
-			if child := parseStructElem(doc, kDict); child != nil {
+			if child := parseStructElem(ctx, doc, kDict); child != nil {
 				rootElem.Kids = append(rootElem.Kids, child)
 			}
 		}
@@ -77,8 +78,8 @@ func GetStructTree(doc *document.Document) (*StructElem, error) {
 	return rootElem, nil
 }
 
-func parseStructElem(doc *document.Document, obj ast.PdfObject) *StructElem {
-	res, err := resolve(doc, obj)
+func parseStructElem(ctx context.Context, doc *document.Document, obj ast.PdfObject) *StructElem {
+	res, err := resolve(ctx, doc, obj)
 	if err != nil {
 		return nil
 	}
@@ -92,10 +93,10 @@ func parseStructElem(doc *document.Document, obj ast.PdfObject) *StructElem {
 
 		// Check if it's an MCR (Marked Content Reference) dictionary
 		if tObj, ok := v["Type"]; ok {
-			tRes, _ := resolve(doc, tObj)
+			tRes, _ := resolve(ctx, doc, tObj)
 			if tName, ok := tRes.(ast.PdfName); ok && tName == "MCR" {
 				if mcidObj, ok := v["MCID"]; ok {
-					mcidRes, _ := resolve(doc, mcidObj)
+					mcidRes, _ := resolve(ctx, doc, mcidObj)
 					if mcidInt, ok := mcidRes.(ast.PdfInt); ok {
 						return &StructElem{Type: "MCID", MCID: int(mcidInt)}
 					}
@@ -105,7 +106,7 @@ func parseStructElem(doc *document.Document, obj ast.PdfObject) *StructElem {
 
 		// Some PDFs just drop the MCID in a generic dict
 		if mcidObj, ok := v["MCID"]; ok {
-			mcidRes, _ := resolve(doc, mcidObj)
+			mcidRes, _ := resolve(ctx, doc, mcidObj)
 			if mcidInt, ok := mcidRes.(ast.PdfInt); ok {
 				return &StructElem{Type: "MCID", MCID: int(mcidInt)}
 			}
@@ -113,7 +114,7 @@ func parseStructElem(doc *document.Document, obj ast.PdfObject) *StructElem {
 
 		// It is a standard StructElem. Extract its Structure Type (/S)
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := resolve(doc, sObj)
+			sRes, _ := resolve(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok {
 				elem.Type = string(sName)
 			}
@@ -123,15 +124,15 @@ func parseStructElem(doc *document.Document, obj ast.PdfObject) *StructElem {
 
 		// Recursively parse children (/K)
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(doc, kObj)
+			kRes, _ := resolve(ctx, doc, kObj)
 			if kArr, ok := kRes.(ast.PdfArray); ok {
 				for _, kid := range kArr {
-					if child := parseStructElem(doc, kid); child != nil {
+					if child := parseStructElem(ctx, doc, kid); child != nil {
 						elem.Kids = append(elem.Kids, child)
 					}
 				}
 			} else {
-				if child := parseStructElem(doc, kRes); child != nil {
+				if child := parseStructElem(ctx, doc, kRes); child != nil {
 					elem.Kids = append(elem.Kids, child)
 				}
 			}

@@ -3,10 +3,13 @@ package filter
 import (
 	"bytes"
 	"compress/zlib"
+	"encoding/ascii85"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
+
+	"golang.org/x/image/ccitt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -100,6 +103,12 @@ func applyDecodeFilter(data []byte, filterName ast.PdfName, parms ast.PdfDict) (
 	case "ASCIIHexDecode", "AHx":
 		return decodeASCIIHex(data)
 
+	case "ASCII85Decode", "A85":
+		return decodeASCII85(data)
+
+	case "CCITTFaxDecode", "CCF":
+		return decodeCCITTFax(data, parms)
+
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFilter, filterName)
 	}
@@ -167,6 +176,90 @@ func decodeASCIIHex(data []byte) ([]byte, error) {
 	decoded, err := hex.DecodeString(val)
 	if err != nil {
 		return nil, err
+	}
+	return decoded, nil
+}
+
+func decodeASCII85(data []byte) ([]byte, error) {
+	// PDF ASCII85 streams end with the EOD marker "~>". Strip it (and any
+	// trailing garbage) before passing to Go's decoder, which doesn't
+	// understand the PDF-specific marker.
+	if idx := bytes.Index(data, []byte("~>")); idx != -1 {
+		data = data[:idx]
+	}
+
+	// Strip whitespace that PDF generators may inject between groups.
+	data = bytes.Map(func(r rune) rune {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, data)
+
+	dst := make([]byte, 4*len(data))
+	ndst, _, err := ascii85.Decode(dst, data, true)
+	if err != nil {
+		return nil, fmt.Errorf("ascii85 decode: %w", err)
+	}
+	return dst[:ndst], nil
+}
+
+func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
+	// Extract parameters from /DecodeParms (PDF spec Table 11).
+	k := 0          // /K: <0 = Group 4, 0 = Group 3 1D, >0 = Group 3 mixed
+	columns := 1728 // /Columns: image width in pixels
+	rows := 0       // /Rows: image height (0 = unknown)
+	blackIs1 := false
+	align := false
+
+	if parms != nil {
+		if v, ok := parms["K"]; ok {
+			k = pdfInt(v)
+		}
+		if v, ok := parms["Columns"]; ok {
+			columns = pdfInt(v)
+		}
+		if v, ok := parms["Rows"]; ok {
+			rows = pdfInt(v)
+		}
+		if v, ok := parms["BlackIs1"]; ok {
+			switch b := v.(type) {
+			case ast.PdfBool:
+				blackIs1 = bool(b)
+			case ast.PdfInt:
+				blackIs1 = int(b) != 0
+			}
+		}
+		if v, ok := parms["EncodedByteAlign"]; ok {
+			switch b := v.(type) {
+			case ast.PdfBool:
+				align = bool(b)
+			case ast.PdfInt:
+				align = int(b) != 0
+			}
+		}
+	}
+
+	// Map PDF /K to ccitt.SubFormat.
+	sf := ccitt.Group3
+	if k < 0 {
+		sf = ccitt.Group4
+	}
+
+	height := rows
+	if height <= 0 {
+		height = ccitt.AutoDetectHeight
+	}
+
+	opts := &ccitt.Options{
+		Align:  align,
+		Invert: blackIs1,
+	}
+
+	r := ccitt.NewReader(bytes.NewReader(data), ccitt.MSB, sf, columns, height, opts)
+	decoded, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("ccitt decode: %w", err)
 	}
 	return decoded, nil
 }

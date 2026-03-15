@@ -1,6 +1,7 @@
 package semantics
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -11,13 +12,13 @@ import (
 // Extract3DModels scans a page's annotations for /3D subtype annotations and
 // returns metadata with a lazy Open accessor for each 3D data stream. The
 // stream data is not decoded until the caller invokes Open.
-func Extract3DModels(doc *document.Document, page *document.Page) ([]models.Model3D, error) {
+func Extract3DModels(ctx context.Context, doc *document.Document, page *document.Page) ([]models.Model3D, error) {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
 		return nil, nil
 	}
 
-	annotsResolved, err := document.ResolveObject(doc, annotsObj)
+	annotsResolved, err := document.ResolveObject(ctx, doc, annotsObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /Annots: %w", err)
 	}
@@ -31,7 +32,7 @@ func Extract3DModels(doc *document.Document, page *document.Page) ([]models.Mode
 	modelIdx := 0
 
 	for _, annotRef := range annotsArr {
-		annotResolved, err := document.ResolveObject(doc, annotRef)
+		annotResolved, err := document.ResolveObject(ctx, doc, annotRef)
 		if err != nil {
 			continue
 		}
@@ -46,7 +47,7 @@ func Extract3DModels(doc *document.Document, page *document.Page) ([]models.Mode
 		if !ok {
 			continue
 		}
-		subtypeRes, _ := document.ResolveObject(doc, subtypeObj)
+		subtypeRes, _ := document.ResolveObject(ctx, doc, subtypeObj)
 		subtypeName, ok := subtypeRes.(ast.PdfName)
 		if !ok || subtypeName != "3D" {
 			continue
@@ -58,7 +59,7 @@ func Extract3DModels(doc *document.Document, page *document.Page) ([]models.Mode
 			continue
 		}
 
-		ddResolved, err := document.ResolveObject(doc, ddObj)
+		ddResolved, err := document.ResolveObject(ctx, doc, ddObj)
 		if err != nil {
 			continue
 		}
@@ -69,12 +70,12 @@ func Extract3DModels(doc *document.Document, page *document.Page) ([]models.Mode
 		}
 
 		// Determine the 3D subtype: U3D or PRC.
-		subtype := determine3DSubtype(doc, stream)
+		subtype := determine3DSubtype(ctx, doc, stream)
 
 		// Extract a name from the annotation if available.
 		name := fmt.Sprintf("model_%d", modelIdx)
 		if nmObj, ok := annotDict["NM"]; ok {
-			nmRes, _ := document.ResolveObject(doc, nmObj)
+			nmRes, _ := document.ResolveObject(ctx, doc, nmObj)
 			if nmStr, ok := nmRes.(ast.PdfString); ok {
 				decoded := document.DecodePdfString(nmStr)
 				if decoded != "" {
@@ -99,10 +100,10 @@ func Extract3DModels(doc *document.Document, page *document.Page) ([]models.Mode
 
 // determine3DSubtype checks the stream dictionary to determine whether the
 // 3D data is U3D or PRC format.
-func determine3DSubtype(doc *document.Document, stream ast.PdfStream) string {
+func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.PdfStream) string {
 	// Check /Subtype on the 3D stream dictionary.
 	if stObj, ok := stream.Dict["Subtype"]; ok {
-		stRes, _ := document.ResolveObject(doc, stObj)
+		stRes, _ := document.ResolveObject(ctx, doc, stObj)
 		if name, ok := stRes.(ast.PdfName); ok {
 			switch name {
 			case "U3D":
@@ -115,7 +116,7 @@ func determine3DSubtype(doc *document.Document, stream ast.PdfStream) string {
 
 	// Check /Type as a fallback (some producers use /Type instead of /Subtype).
 	if typeObj, ok := stream.Dict["Type"]; ok {
-		typeRes, _ := document.ResolveObject(doc, typeObj)
+		typeRes, _ := document.ResolveObject(ctx, doc, typeObj)
 		if name, ok := typeRes.(ast.PdfName); ok {
 			switch name {
 			case "U3D":

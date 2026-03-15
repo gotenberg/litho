@@ -1,6 +1,7 @@
 package image
 
 import (
+	"context"
 	"io"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -12,13 +13,13 @@ import (
 // InspectImages scans a page's resources for Image XObjects and returns their
 // metadata without decoding or saving pixel data. This is used by the OCR
 // triage heuristic to quickly evaluate whether a page is a scanned image.
-func InspectImages(doc *document.Document, page *document.Page) []models.ImageMeta {
+func InspectImages(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
 	xobjObj, ok := page.Resources["XObject"]
 	if !ok {
 		return nil
 	}
 
-	xobjResolved, err := document.ResolveObject(doc, xobjObj)
+	xobjResolved, err := document.ResolveObject(ctx, doc, xobjObj)
 	if err != nil {
 		return nil
 	}
@@ -31,7 +32,7 @@ func InspectImages(doc *document.Document, page *document.Page) []models.ImageMe
 	var images []models.ImageMeta
 
 	for name, obj := range xobjDict {
-		resolved, err := document.ResolveObject(doc, obj)
+		resolved, err := document.ResolveObject(ctx, doc, obj)
 		if err != nil {
 			continue
 		}
@@ -41,23 +42,23 @@ func InspectImages(doc *document.Document, page *document.Page) []models.ImageMe
 			continue
 		}
 
-		subtype, err := getName(doc, stream.Dict, "Subtype")
+		subtype, err := getName(ctx, doc, stream.Dict, "Subtype")
 		if err != nil || subtype != "Image" {
 			continue
 		}
 
-		width, err := getInt(doc, stream.Dict, "Width")
+		width, err := getInt(ctx, doc, stream.Dict, "Width")
 		if err != nil {
 			continue
 		}
 
-		height, err := getInt(doc, stream.Dict, "Height")
+		height, err := getInt(ctx, doc, stream.Dict, "Height")
 		if err != nil {
 			continue
 		}
 
-		colorSpace := resolveColorSpace(doc, stream.Dict)
-		bitsPerComp, _ := getInt(doc, stream.Dict, "BitsPerComponent")
+		colorSpace := resolveColorSpace(ctx, doc, stream.Dict)
+		bitsPerComp, _ := getInt(ctx, doc, stream.Dict, "BitsPerComponent")
 		if bitsPerComp == 0 {
 			bitsPerComp = 8
 		}
@@ -76,8 +77,8 @@ func InspectImages(doc *document.Document, page *document.Page) []models.ImageMe
 }
 
 // openImageStream returns a lazy Open function for an image XObject stream.
-func openImageStream(stream ast.PdfStream) func() (io.ReadCloser, error) {
-	return func() (io.ReadCloser, error) {
+func openImageStream(stream ast.PdfStream) func(ctx context.Context) (io.ReadCloser, error) {
+	return func(_ context.Context) (io.ReadCloser, error) {
 		return filter.NewStreamReader(stream)
 	}
 }

@@ -2,6 +2,7 @@ package export
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -31,8 +32,9 @@ func buildMinimalPDF() []byte {
 
 func openTestReader(t *testing.T) *pdf.Reader {
 	t.Helper()
+	ctx := context.Background()
 	data := buildMinimalPDF()
-	r, err := pdf.Open(bytes.NewReader(data), int64(len(data)), "")
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)), "")
 	if err != nil {
 		t.Fatalf("failed to open minimal PDF: %v", err)
 	}
@@ -40,8 +42,9 @@ func openTestReader(t *testing.T) *pdf.Reader {
 }
 
 func TestExtract(t *testing.T) {
+	ctx := context.Background()
 	r := openTestReader(t)
-	doc, err := Extract(r)
+	doc, err := Extract(ctx, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,9 +60,10 @@ func TestExtract(t *testing.T) {
 }
 
 func TestJSON(t *testing.T) {
+	ctx := context.Background()
 	r := openTestReader(t)
 	var buf bytes.Buffer
-	if err := JSON(&buf, r); err != nil {
+	if err := JSON(ctx, &buf, r); err != nil {
 		t.Fatal(err)
 	}
 
@@ -80,9 +84,10 @@ func TestJSON(t *testing.T) {
 }
 
 func TestJSONCompact(t *testing.T) {
+	ctx := context.Background()
 	r := openTestReader(t)
 	var buf bytes.Buffer
-	if err := JSONCompact(&buf, r); err != nil {
+	if err := JSONCompact(ctx, &buf, r); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,8 +105,9 @@ func TestJSONCompact(t *testing.T) {
 }
 
 func TestMarshalJSON(t *testing.T) {
+	ctx := context.Background()
 	r := openTestReader(t)
-	data, err := MarshalJSON(r)
+	data, err := MarshalJSON(ctx, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,8 +122,9 @@ func TestMarshalJSON(t *testing.T) {
 }
 
 func TestMarshalJSONCompact(t *testing.T) {
+	ctx := context.Background()
 	r := openTestReader(t)
-	data, err := MarshalJSONCompact(r)
+	data, err := MarshalJSONCompact(ctx, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,12 +139,13 @@ func TestMarshalJSONCompact(t *testing.T) {
 }
 
 func TestJSON_CompactShorterThanPretty(t *testing.T) {
+	ctx := context.Background()
 	r := openTestReader(t)
-	pretty, err := MarshalJSON(r)
+	pretty, err := MarshalJSON(ctx, r)
 	if err != nil {
 		t.Fatal(err)
 	}
-	compact, err := MarshalJSONCompact(r)
+	compact, err := MarshalJSONCompact(ctx, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,9 +158,10 @@ func TestJSON_EscapeHTML_Disabled(t *testing.T) {
 	// This test verifies that the encoder does not escape HTML characters.
 	// Since the minimal PDF has no text with < > &, we verify by checking
 	// that the encoder configuration works (no \\u003c in output).
+	ctx := context.Background()
 	r := openTestReader(t)
 	var buf bytes.Buffer
-	if err := JSON(&buf, r); err != nil {
+	if err := JSON(ctx, &buf, r); err != nil {
 		t.Fatal(err)
 	}
 	if bytes.Contains(buf.Bytes(), []byte(`\u003c`)) {
@@ -161,8 +170,9 @@ func TestJSON_EscapeHTML_Disabled(t *testing.T) {
 }
 
 func TestJSON_PageGeometry(t *testing.T) {
+	ctx := context.Background()
 	r := openTestReader(t)
-	doc, err := Extract(r)
+	doc, err := Extract(ctx, r)
 	if err != nil {
 		t.Fatal(err)
 	}

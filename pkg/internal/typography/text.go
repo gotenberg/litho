@@ -1,7 +1,9 @@
 package typography
 
 import (
+	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -77,6 +79,21 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			}
 		}
 
+		// Decompose standard ligatures to their component characters so that
+		// text search and comparison works with plain ASCII equivalents.
+		char = decomposeLigature(char)
+
+		// Skip known non-glyph control characters (NUL, CR, LF) that sometimes
+		// appear in PDF strings. Do NOT skip low byte values in general — PDF
+		// fonts frequently use 0x01–0x1F as valid glyph codes (e.g. ligatures).
+		if char == "?" && len(data) > 0 {
+			b := data[0]
+			if b == 0x00 || b == 0x0a || b == 0x0d || b == 0x7f {
+				data = data[n:]
+				continue
+			}
+		}
+
 		// Calculate absolute position
 		tm := state.Text.Tm
 		ctm := state.CTM
@@ -113,8 +130,47 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			}
 		}
 
-		// 3. Clipping check
-		if x < state.ClippingPath.MinX || x > state.ClippingPath.MaxX || y < state.ClippingPath.MinY || y > state.ClippingPath.MaxY {
+		// Compute advance width before visibility checks (needed for clipping).
+		charCode := int(data[0])
+		if n == 2 && len(data) >= 2 {
+			charCode = int(data[0])<<8 | int(data[1])
+		}
+
+		var pageWidth float64
+		if font.WMode == 1 {
+			w1, _, _ := font.GetVerticalMetrics(charCode)
+			wordSpace := 0.0
+			if char == " " {
+				wordSpace = state.Text.Tw
+			}
+			advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
+			dy := advance * state.Text.Tm[3] * ctm[3]
+			pageWidth = math.Abs(dy)
+		} else {
+			glyphWidth := font.GetGlyphWidth(charCode)
+			wordSpace := 0.0
+			if char == " " {
+				wordSpace = state.Text.Tw
+			}
+			advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
+			dx := advance * state.Text.Tm[0] * ctm[0]
+			pageWidth = math.Abs(dx)
+		}
+
+		// 3. Clipping check — use a glyph bounding box (origin + advance width
+		// × font size height) rather than just the origin point so that glyphs
+		// partially outside the clip region are still detected.
+		glyphH := fontSize
+		glyphW := pageWidth
+		if glyphW == 0 {
+			glyphW = 0.5 * fontSize // fallback for unknown width
+		}
+		glyphMinX := x
+		glyphMaxX := x + glyphW
+		glyphMinY := y - 0.2*glyphH // descender estimate
+		glyphMaxY := y + 0.8*glyphH // ascender estimate
+		clip := state.ClippingPath
+		if glyphMaxX < clip.MinX || glyphMinX > clip.MaxX || glyphMaxY < clip.MinY || glyphMinY > clip.MaxY {
 			isHidden = true
 		}
 
@@ -122,6 +178,7 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			Text:          char,
 			X:             x,
 			Y:             y,
+			Width:         pageWidth,
 			FontSize:      fontSize,
 			MCID:          mcid,
 			Hidden:        isHidden,
@@ -133,12 +190,6 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		})
 
 		// Advance text matrix using exact glyph metrics.
-		// Char code: big-endian interpretation of the n consumed bytes (1 for simple fonts, 2 for CIDFonts).
-		charCode := int(data[0])
-		if n == 2 && len(data) >= 2 {
-			charCode = int(data[0])<<8 | int(data[1])
-		}
-
 		if font.WMode == 1 {
 			// Vertical writing mode (PDF spec §9.4.4, Table 108):
 			// Text position advances downward by w1 (vertical advance).
@@ -168,14 +219,130 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 	}
 }
 
-// ReconstructText takes spatial text elements and reassembles them into a string
-// by guessing spaces and newlines based on coordinates.
-// If beads are provided, it respects the article threads to solve multi-column issues.
+// ReconstructText takes spatial text elements and reassembles them into a string.
+// When no article thread beads are provided, it preserves content stream order
+// (matching PDF.js behavior). When beads are provided, it sorts elements by
+// bead index to respect explicit multi-column reading order.
 func ReconstructText(elements []models.TextElement, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
 	}
 
+	// When beads are present, use bead-aware spatial sorting.
+	if len(beads) > 0 {
+		return reconstructWithBeads(elements, beads)
+	}
+
+	// Content stream order: group elements into lines, apply bidi reordering
+	// per line, then join with newlines and inferred spaces.
+	type line struct {
+		elems []models.TextElement
+	}
+	var lines []line
+	cur := line{elems: []models.TextElement{elements[0]}}
+
+	for i := 1; i < len(elements); i++ {
+		prev := elements[i-1]
+		el := elements[i]
+		newLine := false
+		if el.Vertical {
+			if math.Abs(prev.X-el.X) > 2.0 {
+				newLine = true
+			}
+		} else {
+			if math.Abs(prev.Y-el.Y) > 2.0 {
+				newLine = true
+			}
+		}
+		if newLine {
+			lines = append(lines, cur)
+			cur = line{elems: []models.TextElement{el}}
+		} else {
+			cur.elems = append(cur.elems, el)
+		}
+	}
+	lines = append(lines, cur)
+
+	var sb strings.Builder
+	for lineIdx, ln := range lines {
+		if lineIdx > 0 {
+			sb.WriteString("\n")
+		}
+
+		// Bidi reorder within the line.
+		chars := make([]string, len(ln.elems))
+		for i, el := range ln.elems {
+			chars[i] = el.Text
+		}
+		reordered := reorderBidiLine(chars)
+
+		for i, ch := range reordered {
+			if i > 0 {
+				prev := ln.elems[i-1]
+				curr := ln.elems[i]
+				if curr.Vertical {
+					if needsSpace(prev.Y-curr.Y, prev.Width, curr.FontSize) {
+						sb.WriteString(" ")
+					}
+				} else {
+					if needsSpace(curr.X-prev.X, prev.Width, curr.FontSize) {
+						sb.WriteString(" ")
+					}
+				}
+			}
+			sb.WriteString(ch)
+		}
+	}
+
+	return stripSoftHyphens(sb.String())
+}
+
+// needsSpace decides whether to insert a space between two consecutive glyphs.
+// delta is the distance between the two glyphs along the reading direction
+// (curr.X - prev.X for horizontal, prev.Y - curr.Y for vertical).
+// prevWidth is the advance width of the previous glyph (0 if unknown).
+func needsSpace(delta, prevWidth, fontSize float64) bool {
+	if prevWidth > 0 {
+		// Use actual glyph width: space exists when the gap after the glyph
+		// exceeds a fraction of the font size. A typical inter-word space is
+		// ~0.25 em; TJ kerning adjustments rarely exceed 0.1 em in practice.
+		// Use 0.15 em as the threshold to catch word gaps while absorbing kerning.
+		gap := delta - prevWidth
+		return gap > 0.15*fontSize
+	}
+	// Fallback when Width is not set: use a heuristic.
+	// Expected advance is ~0.5*fontSize; a gap well beyond that is a space.
+	// Use a higher threshold (0.3) to avoid false positives from kerning.
+	expectedAdvance := 0.5 * fontSize
+	gap := delta - expectedAdvance
+	return gap > 0.3*fontSize
+}
+
+// decomposeLigature replaces Unicode ligature characters with their component
+// ASCII characters so that text search and comparison works correctly.
+func decomposeLigature(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	switch s {
+	case "\uFB00": // ff
+		return "ff"
+	case "\uFB01": // fi
+		return "fi"
+	case "\uFB02": // fl
+		return "fl"
+	case "\uFB03": // ffi
+		return "ffi"
+	case "\uFB04": // ffl
+		return "ffl"
+	default:
+		return s
+	}
+}
+
+// reconstructWithBeads handles the bead-aware spatial sorting path for PDFs
+// that have article threads defining explicit reading order.
+func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead) string {
 	type elementWithBead struct {
 		models.TextElement
 		BeadIndex int
@@ -205,7 +372,6 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 				minY, maxY = maxY, minY
 			}
 
-			// Check if element is within bead's bounding box
 			if el.X >= minX && el.X <= maxX && el.Y >= minY && el.Y <= maxY {
 				assignedBead = bIdx
 				break
@@ -215,53 +381,44 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 	}
 
 	if isVerticalPage {
-		// Vertical CJK: right-to-left columns, top-to-bottom within each column.
 		sort.SliceStable(ewb, func(i, j int) bool {
-			if len(beads) > 0 {
-				if ewb[i].BeadIndex != ewb[j].BeadIndex {
-					if ewb[i].BeadIndex == -1 {
-						return false
-					}
-					if ewb[j].BeadIndex == -1 {
-						return true
-					}
-					return ewb[i].BeadIndex < ewb[j].BeadIndex
+			if ewb[i].BeadIndex != ewb[j].BeadIndex {
+				if ewb[i].BeadIndex == -1 {
+					return false
 				}
+				if ewb[j].BeadIndex == -1 {
+					return true
+				}
+				return ewb[i].BeadIndex < ewb[j].BeadIndex
 			}
-			// Group elements by columns (same X band = same column).
 			if ewb[i].X > ewb[j].X+2.0 {
-				return true // i is to the right → comes first in CJK vertical
+				return true
 			} else if ewb[i].X < ewb[j].X-2.0 {
 				return false
 			}
-			// Within same column: top-to-bottom (Y descending).
 			return ewb[i].Y > ewb[j].Y
 		})
 	} else {
-		// Horizontal: top-to-bottom (Y descending), then left-to-right (X ascending).
 		sort.SliceStable(ewb, func(i, j int) bool {
-			if len(beads) > 0 {
-				if ewb[i].BeadIndex != ewb[j].BeadIndex {
-					if ewb[i].BeadIndex == -1 {
-						return false
-					}
-					if ewb[j].BeadIndex == -1 {
-						return true
-					}
-					return ewb[i].BeadIndex < ewb[j].BeadIndex
+			if ewb[i].BeadIndex != ewb[j].BeadIndex {
+				if ewb[i].BeadIndex == -1 {
+					return false
 				}
+				if ewb[j].BeadIndex == -1 {
+					return true
+				}
+				return ewb[i].BeadIndex < ewb[j].BeadIndex
 			}
-			// Group elements by lines roughly
 			if ewb[i].Y > ewb[j].Y+2.0 {
-				return true // i is above j
+				return true
 			} else if ewb[i].Y < ewb[j].Y-2.0 {
-				return false // i is below j
+				return false
 			}
 			return ewb[i].X < ewb[j].X
 		})
 	}
 
-	// Group sorted elements into lines/columns for processing.
+	// Group sorted elements into lines.
 	type lineGroup struct {
 		elements []elementWithBead
 	}
@@ -273,10 +430,9 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 		curr := ewb[i]
 
 		isNewLine := false
-		if len(beads) > 0 && prev.BeadIndex != curr.BeadIndex {
+		if prev.BeadIndex != curr.BeadIndex {
 			isNewLine = true
 		} else if isVerticalPage {
-			// New column when X position changes significantly.
 			dx := prev.X - curr.X
 			if dx > 0.5*curr.FontSize || dx < -0.5*curr.FontSize {
 				isNewLine = true
@@ -297,10 +453,8 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 	}
 	lines = append(lines, currentLine)
 
-	// Apply bidi reordering per line and build the output.
 	var sb strings.Builder
 	for lineIdx, line := range lines {
-		// Collect character strings for bidi reordering.
 		chars := make([]string, len(line.elements))
 		for i, el := range line.elements {
 			chars[i] = el.Text
@@ -311,29 +465,23 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 			prevLine := lines[lineIdx-1]
 			lastPrev := prevLine.elements[len(prevLine.elements)-1]
 			firstCurr := line.elements[0]
-			if len(beads) > 0 && lastPrev.BeadIndex != firstCurr.BeadIndex {
+			if lastPrev.BeadIndex != firstCurr.BeadIndex {
 				sb.WriteString("\n\n")
 			} else {
 				sb.WriteString("\n")
 			}
 		}
 
-		// Write the reordered characters with inferred spaces.
 		for i, ch := range reordered {
 			if i > 0 {
 				prev := line.elements[i-1]
 				curr := line.elements[i]
 				if isVerticalPage {
-					// Vertical: detect gaps between characters in the Y direction.
-					expectedY := prev.Y - 0.5*prev.FontSize
-					gap := expectedY - curr.Y
-					if gap > 0.2*curr.FontSize {
+					if needsSpace(prev.Y-curr.Y, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
 				} else {
-					expectedX := prev.X + 0.5*prev.FontSize
-					gap := curr.X - expectedX
-					if gap > 0.2*curr.FontSize {
+					if needsSpace(curr.X-prev.X, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
 				}
@@ -345,23 +493,37 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 	return stripSoftHyphens(sb.String())
 }
 
+// maxFormXObjectDepth is the maximum recursion depth for nested Form XObjects.
+// This prevents stack overflows and excessive processing time from circular
+// references or deeply nested XObjects in malformed PDFs.
+const maxFormXObjectDepth = 10
+
 // extractTextRecursive recursively extracts text from operations, supporting Form XObjects.
-func extractTextRecursive(doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement) error {
+// The visited set tracks indirect reference object numbers to break circular references,
+// and depth guards against non-circular but excessively deep nesting.
+func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int) error {
+	if depth > maxFormXObjectDepth {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	var currentFont *Font
 
 	// Make resources available to the machine for pattern resolution.
+	machine.Ctx = ctx
 	machine.Doc = doc
 	machine.Resources = resources
 
 	// Pre-populate active OCs from resources /Properties
 	if propsObj, ok := resources["Properties"]; ok {
-		propsRes, _ := document.ResolveObject(doc, propsObj)
+		propsRes, _ := document.ResolveObject(ctx, doc, propsObj)
 		if propsDict, ok := propsRes.(ast.PdfDict); ok {
 			for k, v := range propsDict {
-				vRes, _ := document.ResolveObject(doc, v)
+				vRes, _ := document.ResolveObject(ctx, doc, v)
 				if dict, ok := vRes.(ast.PdfDict); ok {
 					if subtypeObj, ok := dict["Type"]; ok {
-						subtypeRes, _ := document.ResolveObject(doc, subtypeObj)
+						subtypeRes, _ := document.ResolveObject(ctx, doc, subtypeObj)
 						if subtypeName, ok := subtypeRes.(ast.PdfName); ok && subtypeName == "OCG" {
 							// Determine visibility using Off -> On -> BaseState priority.
 							visible := true
@@ -426,17 +588,20 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 					x := tx*ctm[0] + ty*ctm[2] + ctm[4]
 					y := tx*ctm[1] + ty*ctm[3] + ctm[5]
 
+					advance := 0.5 * fontSize
+					dx := advance * tm[0] * ctm[0]
+
 					*elements = append(*elements, models.TextElement{
 						Text:          string(r),
 						X:             x,
 						Y:             y,
+						Width:         math.Abs(dx),
 						FontSize:      fontSize,
 						MCID:          mcid,
 						Language:      mcLang2,
 						ExpansionText: mcExpansion2,
 					})
 
-					advance := 0.5 * fontSize
 					state.Text.Tm[4] += advance * state.Text.Tm[0]
 					state.Text.Tm[5] += advance * state.Text.Tm[1]
 				}
@@ -460,18 +625,18 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 
 			resolved := false
 			if resObj, ok := resources["Font"]; ok {
-				resResolved, err := document.ResolveObject(doc, resObj)
+				resResolved, err := document.ResolveObject(ctx, doc, resObj)
 				if err != nil {
 					return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
 				}
 				if resDictRoot, ok := resResolved.(ast.PdfDict); ok {
 					if fontRefObj, ok := resDictRoot[fontName]; ok {
-						fontDictResolved, err := document.ResolveObject(doc, fontRefObj)
+						fontDictResolved, err := document.ResolveObject(ctx, doc, fontRefObj)
 						if err != nil {
 							return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
 						}
 						if fontDict, ok := fontDictResolved.(ast.PdfDict); ok {
-							font, err := GetFont(doc, fontDict)
+							font, err := GetFont(ctx, doc, fontDict)
 							if err != nil {
 								return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
 							}
@@ -558,21 +723,30 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 			if len(op.Operands) == 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					if xobjObj, ok := resources["XObject"]; ok {
-						xobjResolved, _ := document.ResolveObject(doc, xobjObj)
+						xobjResolved, _ := document.ResolveObject(ctx, doc, xobjObj)
 						if xobjDict, ok := xobjResolved.(ast.PdfDict); ok {
 							if targetObj, ok := xobjDict[name]; ok {
-								targetResolved, _ := document.ResolveObject(doc, targetObj)
+								// Track visited Form XObjects by indirect reference to break circular references.
+								objNum := 0
+								if ref, ok := targetObj.(ast.PdfIndirectRef); ok {
+									objNum = ref.ObjectNum
+									if visited[objNum] {
+										continue
+									}
+								}
+
+								targetResolved, _ := document.ResolveObject(ctx, doc, targetObj)
 								if stream, ok := targetResolved.(ast.PdfStream); ok {
 									if subtypeObj, ok := stream.Dict["Subtype"]; ok {
-										subtypeResolved, _ := document.ResolveObject(doc, subtypeObj)
+										subtypeResolved, _ := document.ResolveObject(ctx, doc, subtypeObj)
 										if subtypeName, ok := subtypeResolved.(ast.PdfName); ok && subtypeName == "Form" {
 											// Parse the Form XObject stream
-											formOps, err := content.ParsePageContent(doc, stream)
+											formOps, err := content.ParsePageContent(ctx, doc, stream)
 											if err == nil {
 												// Determine resources
 												formRes := resources // inherit by default
 												if resObj, ok := stream.Dict["Resources"]; ok {
-													resResolved, _ := document.ResolveObject(doc, resObj)
+													resResolved, _ := document.ResolveObject(ctx, doc, resObj)
 													if resDict, ok := resResolved.(ast.PdfDict); ok {
 														formRes = resDict
 													}
@@ -585,7 +759,7 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 
 												// If there is a Matrix in the Form XObject, apply it
 												if matrixObj, ok := stream.Dict["Matrix"]; ok {
-													matrixResolved, err := document.ResolveObject(doc, matrixObj)
+													matrixResolved, err := document.ResolveObject(ctx, doc, matrixObj)
 													if err != nil {
 														return err
 													}
@@ -597,8 +771,16 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 													}
 												}
 
-												// Recurse
-												if err := extractTextRecursive(doc, machine, formRes, formOps, elements); err != nil {
+												// Mark as visited before recursing; unmark after to allow
+												// the same XObject to appear in sibling contexts.
+												if objNum != 0 {
+													visited[objNum] = true
+												}
+												err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1)
+												if objNum != 0 {
+													delete(visited, objNum)
+												}
+												if err != nil {
 													return err
 												}
 
@@ -619,15 +801,16 @@ func extractTextRecursive(doc *document.Document, machine *graphics.Machine, res
 
 // ExtractionConfig holds options for text extraction behavior
 type ExtractionConfig struct {
-	StripInvisible bool // If true, completely omits text matched by invisibility heuristics
-	StripHidden    bool // If true, completely omits text outside the clipping path
+	StripInvisible bool // If true, completely omits text matched by invisibility heuristics (Tr=3, white-on-white)
+	StripHidden    bool // If true, completely omits text outside the graphics state clipping path (W/W*)
+	StripClipped   bool // If true, completely omits text outside the page CropBox
 	StripArtifacts bool // If true, discards text inside /Artifact marked content (headers, footers, page numbers)
 }
 
 // ExtractElements extracts the text from a page's content operations as raw spatial elements.
-func ExtractElements(doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
+func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
 	var elements []models.TextElement
-	if err := extractTextRecursive(doc, machine, page.Resources, ops, &elements); err != nil {
+	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0); err != nil {
 		return nil, err
 	}
 
@@ -673,10 +856,10 @@ func pdfFloat(obj ast.PdfObject) float64 {
 }
 
 // ExtractText extracts the text from a page's content operations and reconstructs it.
-func ExtractText(doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (string, error) {
+func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (string, error) {
 	machine.StripArtifacts = config.StripArtifacts
 
-	elements, err := ExtractElements(doc, machine, page, ops)
+	elements, err := ExtractElements(ctx, doc, machine, page, ops)
 	if err != nil {
 		return "", err
 	}
@@ -690,11 +873,14 @@ func ExtractText(doc *document.Document, machine *graphics.Machine, page *docume
 		if config.StripHidden && el.Hidden {
 			continue
 		}
+		if config.StripClipped && el.IsClipped {
+			continue
+		}
 		filtered = append(filtered, el)
 	}
 
 	var pageBeads []semantics.Bead
-	allThreads, err := semantics.GetThreads(doc)
+	allThreads, err := semantics.GetThreads(ctx, doc)
 	if err != nil {
 		return "", fmt.Errorf("failed to get article threads: %w", err)
 	}

@@ -1,6 +1,8 @@
 package graphics
 
 import (
+	"context"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
@@ -61,6 +63,7 @@ type MarkedContentState struct {
 
 // Machine is the graphics state machine that processes content stream operations.
 type Machine struct {
+	Ctx               context.Context //nolint:containedctx // Machine is a short-lived state machine; ctx is set per-page extraction
 	Stack             []State
 	MarkedContent     []MarkedContentState
 	IgnoreTextOps     bool
@@ -445,7 +448,7 @@ func (m *Machine) Execute(ops []content.Operation) error {
 
 		case "c", "v", "y": // Bezier curves
 			// simplistic bounding box updates using the control points
-			for i := 0; i < len(op.Operands); i += 2 {
+			for i := 0; i+1 < len(op.Operands); i += 2 {
 				x := document.GetFloat(op.Operands[i])
 				y := document.GetFloat(op.Operands[i+1])
 				px := x*state.CTM[0] + y*state.CTM[2] + state.CTM[4]
@@ -620,7 +623,7 @@ func (m *Machine) resolvePatternType(name string) string {
 		return "Pattern"
 	}
 
-	patRes, err := document.ResolveObject(m.Doc, patObj)
+	patRes, err := document.ResolveObject(m.Ctx, m.Doc, patObj)
 	if err != nil {
 		return "Pattern"
 	}
@@ -635,7 +638,7 @@ func (m *Machine) resolvePatternType(name string) string {
 		return "Pattern"
 	}
 
-	entryRes, err := document.ResolveObject(m.Doc, entryObj)
+	entryRes, err := document.ResolveObject(m.Ctx, m.Doc, entryObj)
 	if err != nil {
 		return "Pattern"
 	}
@@ -643,9 +646,9 @@ func (m *Machine) resolvePatternType(name string) string {
 	// Pattern can be a stream (Tiling) or dict (Shading).
 	switch v := entryRes.(type) {
 	case ast.PdfStream:
-		return classifyPattern(m.Doc, v.Dict)
+		return classifyPattern(m.Ctx, m.Doc, v.Dict)
 	case ast.PdfDict:
-		return classifyPattern(m.Doc, v)
+		return classifyPattern(m.Ctx, m.Doc, v)
 	}
 
 	return "Pattern"
@@ -653,13 +656,13 @@ func (m *Machine) resolvePatternType(name string) string {
 
 // classifyPattern examines a pattern dictionary's /PatternType to determine
 // whether it is a Tiling pattern (1) or a Shading pattern (2).
-func classifyPattern(doc *document.Document, dict ast.PdfDict) string {
+func classifyPattern(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
 	ptObj, ok := dict["PatternType"]
 	if !ok {
 		return "Pattern"
 	}
 
-	ptRes, err := document.ResolveObject(doc, ptObj)
+	ptRes, err := document.ResolveObject(ctx, doc, ptObj)
 	if err != nil {
 		return "Pattern"
 	}

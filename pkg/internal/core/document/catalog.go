@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -41,13 +42,13 @@ func BuildPageMap(pages []*Page) map[ast.PdfIndirectRef]int {
 }
 
 // GetCatalog retrieves the Document Catalog from the trailer.
-func GetCatalog(doc *Document) (*Catalog, error) {
+func GetCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}
 
-	resolvedObj, err := ResolveObject(doc, rootObj)
+	resolvedObj, err := ResolveObject(ctx, doc, rootObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve catalog: %v", err)
 	}
@@ -61,13 +62,13 @@ func GetCatalog(doc *Document) (*Catalog, error) {
 }
 
 // GetPages extracts all pages from the Catalog by traversing the page tree.
-func GetPages(doc *Document, catalog *Catalog) ([]*Page, error) {
+func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, error) {
 	pagesObj, ok := catalog.Dict["Pages"]
 	if !ok {
 		return nil, fmt.Errorf("catalog missing /Pages")
 	}
 
-	resolvedPages, err := ResolveObject(doc, pagesObj)
+	resolvedPages, err := ResolveObject(ctx, doc, pagesObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve pages root: %v", err)
 	}
@@ -80,27 +81,27 @@ func GetPages(doc *Document, catalog *Catalog) ([]*Page, error) {
 	var pages []*Page
 	// The root Pages node itself usually doesn't have a useful page reference for a single page,
 	// but we start the traversal here.
-	err = traversePageTree(doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, &pages)
+	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, &pages)
 	if err != nil {
 		return nil, err
 	}
 
 	// Associate Document Parts (PDF 2.0)
-	dpartMap, _ := GetDPartMap(doc)
+	dpartMap, _ := GetDPartMap(ctx, doc)
 	for _, page := range pages {
 		if dpm, ok := dpartMap[page.Ref.ObjectNum]; ok {
 			page.DPM = dpm
 		} else {
 			// Fallback: check if the page dict has a direct /DPart reference
 			if dpartObj, ok := page.Dict["DPart"]; ok {
-				dpartRes, _ := ResolveObject(doc, dpartObj)
+				dpartRes, _ := ResolveObject(ctx, doc, dpartObj)
 				if dpartDict, ok := dpartRes.(ast.PdfDict); ok {
 					if dpmObj, ok := dpartDict["DPM"]; ok {
-						dpmRes, _ := ResolveObject(doc, dpmObj)
+						dpmRes, _ := ResolveObject(ctx, doc, dpmObj)
 						if dpmDict, ok := dpmRes.(ast.PdfDict); ok {
 							dpm := make(map[string]string)
 							for k, v := range dpmDict {
-								vRes, _ := ResolveObject(doc, v)
+								vRes, _ := ResolveObject(ctx, doc, v)
 								if str, ok := vRes.(ast.PdfString); ok {
 									dpm[string(k)] = DecodePdfString(str)
 								} else if name, ok := vRes.(ast.PdfName); ok {
@@ -118,11 +119,15 @@ func GetPages(doc *Document, catalog *Catalog) ([]*Page, error) {
 	return pages, nil
 }
 
-func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, pages *[]*Page) error {
+func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, pages *[]*Page) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	// Inherit or override Resources
 	currentResources := inheritedResources
 	if resObj, ok := node["Resources"]; ok {
-		resResolved, err := ResolveObject(doc, resObj)
+		resResolved, err := ResolveObject(ctx, doc, resObj)
 		if err == nil {
 			if resDict, ok := resResolved.(ast.PdfDict); ok {
 				currentResources = resDict
@@ -133,7 +138,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 	// Inherit or override MediaBox
 	currentMediaBox := inheritedMediaBox
 	if mbObj, ok := node["MediaBox"]; ok {
-		mbResolved, err := ResolveObject(doc, mbObj)
+		mbResolved, err := ResolveObject(ctx, doc, mbObj)
 		if err == nil {
 			if mbArr, ok := mbResolved.(ast.PdfArray); ok {
 				currentMediaBox = mbArr
@@ -144,7 +149,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 	// Inherit or override CropBox (inheritable per PDF spec)
 	currentCropBox := inheritedCropBox
 	if cbObj, ok := node["CropBox"]; ok {
-		cbResolved, err := ResolveObject(doc, cbObj)
+		cbResolved, err := ResolveObject(ctx, doc, cbObj)
 		if err == nil {
 			if cbArr, ok := cbResolved.(ast.PdfArray); ok {
 				currentCropBox = cbArr
@@ -157,7 +162,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 		return fmt.Errorf("node missing /Type")
 	}
 
-	typeResolved, err := ResolveObject(doc, typeObj)
+	typeResolved, err := ResolveObject(ctx, doc, typeObj)
 	if err != nil {
 		return fmt.Errorf("failed to resolve node type: %v", err)
 	}
@@ -174,7 +179,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 			return fmt.Errorf("pages node missing /Kids")
 		}
 
-		kidsResolved, err := ResolveObject(doc, kidsObj)
+		kidsResolved, err := ResolveObject(ctx, doc, kidsObj)
 		if err != nil {
 			return fmt.Errorf("failed to resolve /Kids array: %v", err)
 		}
@@ -189,7 +194,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 			if r, ok := kidObj.(ast.PdfIndirectRef); ok {
 				kidRef = r
 			}
-			kidResolved, err := ResolveObject(doc, kidObj)
+			kidResolved, err := ResolveObject(ctx, doc, kidObj)
 			if err != nil {
 				return fmt.Errorf("failed to resolve kid: %v", err)
 			}
@@ -199,7 +204,7 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 				return fmt.Errorf("kid is not a dictionary")
 			}
 
-			err = traversePageTree(doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, pages)
+			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, pages)
 			if err != nil {
 				return err
 			}
@@ -212,9 +217,9 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 		}
 
 		// BleedBox, TrimBox, ArtBox are non-inheritable; default to CropBox.
-		bleedBox := resolveBoxArray(doc, node, "BleedBox", effectiveCropBox)
-		trimBox := resolveBoxArray(doc, node, "TrimBox", effectiveCropBox)
-		artBox := resolveBoxArray(doc, node, "ArtBox", effectiveCropBox)
+		bleedBox := resolveBoxArray(ctx, doc, node, "BleedBox", effectiveCropBox)
+		trimBox := resolveBoxArray(ctx, doc, node, "TrimBox", effectiveCropBox)
+		artBox := resolveBoxArray(ctx, doc, node, "ArtBox", effectiveCropBox)
 
 		*pages = append(*pages, &Page{
 			Ref:       nodeRef,
@@ -233,12 +238,12 @@ func traversePageTree(doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRe
 
 // resolveBoxArray extracts a named rectangle array from a page dict,
 // falling back to the provided default if the key is absent.
-func resolveBoxArray(doc *Document, dict ast.PdfDict, key ast.PdfName, fallback ast.PdfArray) ast.PdfArray {
+func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key ast.PdfName, fallback ast.PdfArray) ast.PdfArray {
 	obj, ok := dict[key]
 	if !ok {
 		return fallback
 	}
-	resolved, err := ResolveObject(doc, obj)
+	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return fallback
 	}

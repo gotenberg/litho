@@ -1,6 +1,7 @@
 package image
 
 import (
+	"context"
 	"image/color"
 	"testing"
 
@@ -13,7 +14,7 @@ func TestResolveColorSpace_DirectName(t *testing.T) {
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfName("DeviceGray"),
 	}
-	got := resolveColorSpace(doc, dict)
+	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceGray" {
 		t.Errorf("resolveColorSpace = %q, want DeviceGray", got)
 	}
@@ -22,7 +23,7 @@ func TestResolveColorSpace_DirectName(t *testing.T) {
 func TestResolveColorSpace_Missing(t *testing.T) {
 	doc := &document.Document{}
 	dict := ast.PdfDict{}
-	got := resolveColorSpace(doc, dict)
+	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceRGB" {
 		t.Errorf("resolveColorSpace(missing) = %q, want DeviceRGB", got)
 	}
@@ -33,7 +34,7 @@ func TestResolveColorSpace_ICCBased(t *testing.T) {
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{ast.PdfName("ICCBased"), ast.PdfNull{}},
 	}
-	got := resolveColorSpace(doc, dict)
+	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceRGB" {
 		t.Errorf("resolveColorSpace(ICCBased) = %q, want DeviceRGB", got)
 	}
@@ -44,7 +45,7 @@ func TestResolveColorSpace_CalGray(t *testing.T) {
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{ast.PdfName("CalGray"), ast.PdfNull{}},
 	}
-	got := resolveColorSpace(doc, dict)
+	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceGray" {
 		t.Errorf("resolveColorSpace(CalGray) = %q, want DeviceGray", got)
 	}
@@ -60,7 +61,7 @@ func TestResolveColorSpace_Indexed(t *testing.T) {
 			ast.PdfString(""),
 		},
 	}
-	got := resolveColorSpace(doc, dict)
+	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceCMYK" {
 		t.Errorf("resolveColorSpace(Indexed/DeviceCMYK) = %q, want DeviceCMYK", got)
 	}
@@ -71,7 +72,7 @@ func TestResolveColorSpace_Separation(t *testing.T) {
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{ast.PdfName("Separation"), ast.PdfName("Spot1")},
 	}
-	got := resolveColorSpace(doc, dict)
+	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceRGB" {
 		t.Errorf("resolveColorSpace(Separation) = %q, want DeviceRGB", got)
 	}
@@ -82,7 +83,7 @@ func TestResolveColorSpace_EmptyArray(t *testing.T) {
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{},
 	}
-	got := resolveColorSpace(doc, dict)
+	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceRGB" {
 		t.Errorf("resolveColorSpace(empty array) = %q, want DeviceRGB", got)
 	}
@@ -111,7 +112,7 @@ func TestDecodeImage_DeviceGray(t *testing.T) {
 		},
 	}
 
-	img, err := DecodeImage(doc, page, "Im0")
+	img, err := DecodeImage(context.Background(), doc, page, "Im0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +156,7 @@ func TestDecodeImage_DeviceRGB(t *testing.T) {
 		},
 	}
 
-	img, err := DecodeImage(doc, page, "Im0")
+	img, err := DecodeImage(context.Background(), doc, page, "Im0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +176,7 @@ func TestDecodeImage_NotFound(t *testing.T) {
 		},
 	}
 
-	_, err := DecodeImage(doc, page, "Missing")
+	_, err := DecodeImage(context.Background(), doc, page, "Missing")
 	if err == nil {
 		t.Error("expected error for missing image")
 	}
@@ -187,7 +188,7 @@ func TestDecodeImage_NoXObject(t *testing.T) {
 		Resources: ast.PdfDict{},
 	}
 
-	_, err := DecodeImage(doc, page, "Im0")
+	_, err := DecodeImage(context.Background(), doc, page, "Im0")
 	if err == nil {
 		t.Error("expected error for missing /XObject")
 	}
@@ -214,7 +215,7 @@ func TestInspectImages_Basic(t *testing.T) {
 		},
 	}
 
-	images := InspectImages(doc, page)
+	images := InspectImages(context.Background(), doc, page)
 	if len(images) != 1 {
 		t.Fatalf("expected 1 image, got %d", len(images))
 	}
@@ -232,7 +233,7 @@ func TestInspectImages_NoXObject(t *testing.T) {
 		Resources: ast.PdfDict{},
 	}
 
-	images := InspectImages(doc, page)
+	images := InspectImages(context.Background(), doc, page)
 	if images != nil {
 		t.Errorf("expected nil for no XObjects, got %d", len(images))
 	}
@@ -258,7 +259,7 @@ func TestInspectImages_SkipsNonImage(t *testing.T) {
 		},
 	}
 
-	images := InspectImages(doc, page)
+	images := InspectImages(context.Background(), doc, page)
 	if len(images) != 0 {
 		t.Errorf("expected 0 images for Form XObject, got %d", len(images))
 	}

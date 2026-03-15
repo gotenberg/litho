@@ -220,6 +220,13 @@ var GlyphToRune = map[string]rune{
 	"yacute":         0x00FD,
 	"thorn":          0x00FE,
 	"ydieresis":      0x00FF,
+
+	// Standard ligatures (Adobe Glyph List)
+	"fi":  0xFB01,
+	"fl":  0xFB02,
+	"ff":  0xFB00,
+	"ffi": 0xFB03,
+	"ffl": 0xFB04,
 }
 
 // runeToGlyph is the reverse mapping, built lazily.

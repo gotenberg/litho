@@ -2,6 +2,7 @@ package document
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
@@ -72,12 +73,12 @@ func buildNameTreePDF() ([]byte, ast.PdfIndirectRef, ast.PdfIndirectRef) {
 func TestResolveNamedDest_FoundInNameTree(t *testing.T) {
 	pdfData, page1Ref, _ := buildNameTreePDF()
 
-	doc, err := NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	destArr, err := ResolveNamedDest(doc, "Chapter1")
+	destArr, err := ResolveNamedDest(context.Background(), doc, "Chapter1")
 	if err != nil {
 		t.Fatalf("ResolveNamedDest: %v", err)
 	}
@@ -99,12 +100,12 @@ func TestResolveNamedDest_FoundInNameTree(t *testing.T) {
 func TestResolveNamedDest_FoundSecondLeaf(t *testing.T) {
 	pdfData, _, page2Ref := buildNameTreePDF()
 
-	doc, err := NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	destArr, err := ResolveNamedDest(doc, "Chapter2")
+	destArr, err := ResolveNamedDest(context.Background(), doc, "Chapter2")
 	if err != nil {
 		t.Fatalf("ResolveNamedDest: %v", err)
 	}
@@ -123,12 +124,12 @@ func TestResolveNamedDest_FoundSecondLeaf(t *testing.T) {
 func TestResolveNamedDest_NotFound(t *testing.T) {
 	pdfData, _, _ := buildNameTreePDF()
 
-	doc, err := NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	destArr, err := ResolveNamedDest(doc, "NonExistent")
+	destArr, err := ResolveNamedDest(context.Background(), doc, "NonExistent")
 	if err != nil {
 		t.Fatalf("ResolveNamedDest: %v", err)
 	}
@@ -140,13 +141,13 @@ func TestResolveNamedDest_NotFound(t *testing.T) {
 func TestResolveNamedDest_LimitsSkipsBranch(t *testing.T) {
 	pdfData, _, _ := buildNameTreePDF()
 
-	doc, err := NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
 	// "AAA" sorts before "Chapter1", so /Limits pruning should skip both kids.
-	destArr, err := ResolveNamedDest(doc, "AAA")
+	destArr, err := ResolveNamedDest(context.Background(), doc, "AAA")
 	if err != nil {
 		t.Fatalf("ResolveNamedDest: %v", err)
 	}
@@ -158,12 +159,12 @@ func TestResolveNamedDest_LimitsSkipsBranch(t *testing.T) {
 func TestResolveNamedDest_NoNamesDict(t *testing.T) {
 	// Minimal PDF without /Names in catalog.
 	data := minimalPDF()
-	doc, err := NewDocument(bytes.NewReader(data), int64(len(data)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	destArr, err := ResolveNamedDest(doc, "Anything")
+	destArr, err := ResolveNamedDest(context.Background(), doc, "Anything")
 	if err != nil {
 		t.Fatalf("ResolveNamedDest: %v", err)
 	}
@@ -204,12 +205,12 @@ func buildLegacyDestsPDF() ([]byte, ast.PdfIndirectRef) {
 func TestResolveNamedDest_LegacyDestsDict(t *testing.T) {
 	pdfData, pageRef := buildLegacyDestsPDF()
 
-	doc, err := NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	destArr, err := ResolveNamedDest(doc, "Intro")
+	destArr, err := ResolveNamedDest(context.Background(), doc, "Intro")
 	if err != nil {
 		t.Fatalf("ResolveNamedDest: %v", err)
 	}
@@ -244,7 +245,7 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 		},
 	}
 
-	result, err := searchNameTree(doc, leafNode, "dest1")
+	result, err := searchNameTree(context.Background(), doc, leafNode, "dest1")
 	if err != nil {
 		t.Fatalf("searchNameTree: %v", err)
 	}
@@ -255,7 +256,7 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 		t.Fatal("result array is empty")
 	}
 
-	result2, err := searchNameTree(doc, leafNode, "dest2")
+	result2, err := searchNameTree(context.Background(), doc, leafNode, "dest2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +264,7 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 		t.Fatal("expected result for dest2")
 	}
 
-	result3, err := searchNameTree(doc, leafNode, "missing")
+	result3, err := searchNameTree(context.Background(), doc, leafNode, "missing")
 	if err != nil {
 		t.Fatal(err)
 	}

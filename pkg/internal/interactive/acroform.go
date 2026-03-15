@@ -1,6 +1,7 @@
 package interactive
 
 import (
+	"context"
 	"fmt"
 	"maps"
 
@@ -15,8 +16,8 @@ import (
 // ExtractFormData extracts interactive form data (AcroForms) from the document.
 // It also executes PDF JavaScript calculation scripts to resolve dynamic fields.
 // It returns a list of FormFields.
-func ExtractFormData(doc *document.Document) ([]models.FormField, error) {
-	catalog, err := document.GetCatalog(doc)
+func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.FormField, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +27,7 @@ func ExtractFormData(doc *document.Document) ([]models.FormField, error) {
 		return nil, nil // No forms in document
 	}
 
-	acroFormResolved, err := document.ResolveObject(doc, acroFormObj)
+	acroFormResolved, err := document.ResolveObject(ctx, doc, acroFormObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve AcroForm: %v", err)
 	}
@@ -39,7 +40,7 @@ func ExtractFormData(doc *document.Document) ([]models.FormField, error) {
 	// Check for XFA forms first. If present, extract XFA data as the base
 	// layer, then overlay any AcroForm fields on top (AcroForm values take
 	// precedence when both exist, per the PDF spec's fallback semantics).
-	xfaData, _ := extractXFAData(doc, acroFormDict)
+	xfaData, _ := extractXFAData(ctx, doc, acroFormDict)
 
 	fieldsObj, ok := acroFormDict["Fields"]
 	if !ok {
@@ -54,7 +55,7 @@ func ExtractFormData(doc *document.Document) ([]models.FormField, error) {
 		return nil, nil
 	}
 
-	fieldsResolved, err := document.ResolveObject(doc, fieldsObj)
+	fieldsResolved, err := document.ResolveObject(ctx, doc, fieldsObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve Fields: %v", err)
 	}
@@ -71,7 +72,7 @@ func ExtractFormData(doc *document.Document) ([]models.FormField, error) {
 	// Track fields that have calculation scripts
 	calcScripts := make(map[string]string)
 
-	err = traverseFields(doc, fieldsArr, "", "", formDataMap, calcScripts)
+	err = traverseFields(ctx, doc, fieldsArr, "", "", formDataMap, calcScripts)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +105,7 @@ func ExtractFormData(doc *document.Document) ([]models.FormField, error) {
 		_, _ = vm.RunString(`var this = { getField: getField };`) //nolint:errcheck
 
 		// Inject Document-level scripts first (best-effort: malformed JS is non-fatal)
-		docScripts, _ := ExtractDocumentScripts(doc) //nolint:errcheck
+		docScripts, _ := ExtractDocumentScripts(ctx, doc) //nolint:errcheck
 		for _, script := range docScripts {
 			_, _ = vm.RunString(script) //nolint:errcheck
 		}
@@ -138,9 +139,9 @@ func ExtractFormData(doc *document.Document) ([]models.FormField, error) {
 	return results, nil
 }
 
-func traverseFields(doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string) error {
+func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string) error {
 	for _, fieldObj := range fields {
-		fieldResolved, err := document.ResolveObject(doc, fieldObj)
+		fieldResolved, err := document.ResolveObject(ctx, doc, fieldObj)
 		if err != nil {
 			continue
 		}
@@ -153,7 +154,7 @@ func traverseFields(doc *document.Document, fields ast.PdfArray, parentName stri
 		// Extract partial name (/T)
 		partialName := ""
 		if tObj, ok := fieldDict["T"]; ok {
-			tRes, _ := document.ResolveObject(doc, tObj)
+			tRes, _ := document.ResolveObject(ctx, doc, tObj)
 			if tStr, ok := tRes.(ast.PdfString); ok {
 				partialName = document.DecodePdfString(tStr)
 			}
@@ -172,7 +173,7 @@ func traverseFields(doc *document.Document, fields ast.PdfArray, parentName stri
 		// Field Type (/FT) can be inherited
 		currentFT := inheritedFT
 		if ftObj, ok := fieldDict["FT"]; ok {
-			ftRes, _ := document.ResolveObject(doc, ftObj)
+			ftRes, _ := document.ResolveObject(ctx, doc, ftObj)
 			if ftName, ok := ftRes.(ast.PdfName); ok {
 				currentFT = string(ftName)
 			}
@@ -180,7 +181,7 @@ func traverseFields(doc *document.Document, fields ast.PdfArray, parentName stri
 
 		// Extract Value (/V)
 		if vObj, ok := fieldDict["V"]; ok {
-			vRes, _ := document.ResolveObject(doc, vObj)
+			vRes, _ := document.ResolveObject(ctx, doc, vObj)
 
 			if fullName != "" {
 				switch currentFT {
@@ -209,17 +210,17 @@ func traverseFields(doc *document.Document, fields ast.PdfArray, parentName stri
 		// Look for Calculation Scripts in Additional Actions (/AA)
 		if fullName != "" {
 			if aaObj, ok := fieldDict["AA"]; ok {
-				aaRes, _ := document.ResolveObject(doc, aaObj)
+				aaRes, _ := document.ResolveObject(ctx, doc, aaObj)
 				if aaDict, ok := aaRes.(ast.PdfDict); ok {
 					// Check for Calculate (/C) action
 					if cObj, ok := aaDict["C"]; ok {
-						cRes, _ := document.ResolveObject(doc, cObj)
+						cRes, _ := document.ResolveObject(ctx, doc, cObj)
 						if cActionDict, ok := cRes.(ast.PdfDict); ok {
 							if sObj, ok := cActionDict["S"]; ok {
-								sRes, _ := document.ResolveObject(doc, sObj)
+								sRes, _ := document.ResolveObject(ctx, doc, sObj)
 								if sName, ok := sRes.(ast.PdfName); ok && sName == "JavaScript" {
 									if jsObj, ok := cActionDict["JS"]; ok {
-										jsRes, _ := document.ResolveObject(doc, jsObj)
+										jsRes, _ := document.ResolveObject(ctx, doc, jsObj)
 										if jsStr, ok := jsRes.(ast.PdfString); ok {
 											calcScripts[fullName] = document.DecodePdfString(jsStr)
 										} else if jsStream, ok := jsRes.(ast.PdfStream); ok {
@@ -239,9 +240,9 @@ func traverseFields(doc *document.Document, fields ast.PdfArray, parentName stri
 
 		// Traverse children (/Kids)
 		if kidsObj, ok := fieldDict["Kids"]; ok {
-			kidsRes, _ := document.ResolveObject(doc, kidsObj)
+			kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
 			if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
-				if err := traverseFields(doc, kidsArr, fullName, currentFT, formData, calcScripts); err != nil {
+				if err := traverseFields(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts); err != nil {
 					return err
 				}
 			}

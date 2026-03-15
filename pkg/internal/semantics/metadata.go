@@ -1,6 +1,7 @@
 package semantics
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"maps"
@@ -143,12 +144,12 @@ func parseXMP(data []byte) map[string]string {
 }
 
 // getXMPMetadata attempts to extract XMP metadata from the document catalog.
-func getXMPMetadata(doc *document.Document) map[string]string {
+func getXMPMetadata(ctx context.Context, doc *document.Document) map[string]string {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil
 	}
-	catalogObj, err := document.ResolveObject(doc, rootObj)
+	catalogObj, err := document.ResolveObject(ctx, doc, rootObj)
 	if err != nil {
 		return nil
 	}
@@ -160,7 +161,7 @@ func getXMPMetadata(doc *document.Document) map[string]string {
 	if !ok {
 		return nil
 	}
-	metaObj, err := document.ResolveObject(doc, metaRef)
+	metaObj, err := document.ResolveObject(ctx, doc, metaRef)
 	if err != nil {
 		return nil
 	}
@@ -178,12 +179,12 @@ func getXMPMetadata(doc *document.Document) map[string]string {
 }
 
 // getInfoMetadata extracts the legacy /Info dictionary metadata.
-func getInfoMetadata(doc *document.Document) map[string]string {
+func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]string {
 	infoObj, ok := doc.Index.Trailer["Info"]
 	if !ok {
 		return nil
 	}
-	infoResolved, err := document.ResolveObject(doc, infoObj)
+	infoResolved, err := document.ResolveObject(ctx, doc, infoObj)
 	if err != nil {
 		return nil
 	}
@@ -196,7 +197,7 @@ func getInfoMetadata(doc *document.Document) map[string]string {
 	keys := []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate"}
 	for _, key := range keys {
 		if valObj, ok := infoDict[ast.PdfName(key)]; ok {
-			valResolved, _ := document.ResolveObject(doc, valObj)
+			valResolved, _ := document.ResolveObject(ctx, doc, valObj)
 			if strVal, ok := valResolved.(ast.PdfString); ok {
 				metadata[key] = document.DecodePdfString(strVal)
 			}
@@ -208,9 +209,9 @@ func getInfoMetadata(doc *document.Document) map[string]string {
 // GetMetadata extracts document-level metadata. It first reads the legacy /Info
 // dictionary, then overlays any XMP metadata from the catalog's /Metadata stream.
 // XMP values take precedence over /Info values, following the PDF 2.0 standard.
-func GetMetadata(doc *document.Document) (map[string]string, error) {
-	info := getInfoMetadata(doc)
-	xmp := getXMPMetadata(doc)
+func GetMetadata(ctx context.Context, doc *document.Document) (map[string]string, error) {
+	info := getInfoMetadata(ctx, doc)
+	xmp := getXMPMetadata(ctx, doc)
 
 	if info == nil && xmp == nil {
 		return nil, fmt.Errorf("no metadata found (neither /Info dictionary nor XMP stream)")

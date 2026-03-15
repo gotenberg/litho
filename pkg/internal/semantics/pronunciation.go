@@ -1,6 +1,8 @@
 package semantics
 
 import (
+	"context"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
@@ -9,8 +11,8 @@ import (
 
 // ExtractPronunciationLexicons extracts W3C PLS XML documents from the
 // catalog's /PronunciationLexicon array (PDF 2.0).
-func ExtractPronunciationLexicons(doc *document.Document) ([]models.PronunciationLexicon, error) {
-	catalog, err := document.GetCatalog(doc)
+func ExtractPronunciationLexicons(ctx context.Context, doc *document.Document) ([]models.PronunciationLexicon, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +22,7 @@ func ExtractPronunciationLexicons(doc *document.Document) ([]models.Pronunciatio
 		return nil, nil
 	}
 
-	plRes, err := document.ResolveObject(doc, plObj)
+	plRes, err := document.ResolveObject(ctx, doc, plObj)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +35,7 @@ func ExtractPronunciationLexicons(doc *document.Document) ([]models.Pronunciatio
 	var lexicons []models.PronunciationLexicon
 
 	for _, entry := range plArr {
-		entryRes, err := document.ResolveObject(doc, entry)
+		entryRes, err := document.ResolveObject(ctx, doc, entry)
 		if err != nil {
 			continue
 		}

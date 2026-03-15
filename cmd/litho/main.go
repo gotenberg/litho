@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -13,7 +14,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	reader, file, err := pdf.OpenFile(os.Args[1], "")
+	ctx := context.Background()
+
+	reader, file, err := pdf.OpenFile(ctx, os.Args[1], "")
 	if err != nil {
 		fmt.Printf("Failed to open PDF: %v\n", err)
 		os.Exit(1)
@@ -22,22 +25,22 @@ func main() {
 		_ = file.Close() //nolint:errcheck
 	}()
 
-	metadata, _ := reader.GetMetadata()
+	metadata, _ := reader.GetMetadata(ctx)
 	fmt.Println("=== Metadata ===")
 	for k, v := range metadata {
 		fmt.Printf("%s: %s\n", k, v)
 	}
 
-	numPages, _ := reader.NumPages()
+	numPages, _ := reader.NumPages(ctx)
 	fmt.Printf("\n=== Pages: %d ===\n", numPages)
 
 	if numPages > 0 {
-		text, _ := reader.ExtractText(1)
+		text, _ := reader.ExtractText(ctx, 1)
 		fmt.Println("\n=== Page 1 Text ===")
 		fmt.Println(text)
 	}
 
-	formData, _ := reader.GetFormData()
+	formData, _ := reader.GetFormData(ctx)
 	if len(formData) > 0 {
 		fmt.Println("\n=== Form Data ===")
 		for k, v := range formData {

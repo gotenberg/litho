@@ -1,6 +1,7 @@
 package semantics
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,8 +12,8 @@ import (
 )
 
 // ExtractAttachments extracts embedded files from the PDF and saves them to disk.
-func ExtractAttachments(doc *document.Document, outputDir string) ([]string, error) {
-	catalog, err := document.GetCatalog(doc)
+func ExtractAttachments(ctx context.Context, doc *document.Document, outputDir string) ([]string, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +23,7 @@ func ExtractAttachments(doc *document.Document, outputDir string) ([]string, err
 		return nil, nil // No names dictionary
 	}
 
-	namesRes, err := document.ResolveObject(doc, namesObj)
+	namesRes, err := document.ResolveObject(ctx, doc, namesObj)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,7 @@ func ExtractAttachments(doc *document.Document, outputDir string) ([]string, err
 		return nil, fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	err = extractNamesTree(doc, embeddedFilesObj, outputDir, &savedFiles)
+	err = extractNamesTree(ctx, doc, embeddedFilesObj, outputDir, &savedFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +51,8 @@ func ExtractAttachments(doc *document.Document, outputDir string) ([]string, err
 	return savedFiles, nil
 }
 
-func extractNamesTree(doc *document.Document, nodeObj ast.PdfObject, outputDir string, savedFiles *[]string) error {
-	nodeRes, err := document.ResolveObject(doc, nodeObj)
+func extractNamesTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, outputDir string, savedFiles *[]string) error {
+	nodeRes, err := document.ResolveObject(ctx, doc, nodeObj)
 	if err != nil {
 		return err
 	}
@@ -63,10 +64,10 @@ func extractNamesTree(doc *document.Document, nodeObj ast.PdfObject, outputDir s
 
 	// Traverse Kids
 	if kidsObj, ok := nodeDict["Kids"]; ok {
-		kidsRes, _ := document.ResolveObject(doc, kidsObj)
+		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
 		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
 			for _, kid := range kidsArr {
-				if err := extractNamesTree(doc, kid, outputDir, savedFiles); err != nil {
+				if err := extractNamesTree(ctx, doc, kid, outputDir, savedFiles); err != nil {
 					return err
 				}
 			}
@@ -76,25 +77,25 @@ func extractNamesTree(doc *document.Document, nodeObj ast.PdfObject, outputDir s
 
 	// Process Names array (leaf node)
 	if namesObj, ok := nodeDict["Names"]; ok {
-		namesRes, _ := document.ResolveObject(doc, namesObj)
+		namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
 		if namesArr, ok := namesRes.(ast.PdfArray); ok {
 			// Names array alternates between name string and value object
 			for i := 1; i < len(namesArr); i += 2 {
 				valObj := namesArr[i]
-				valRes, _ := document.ResolveObject(doc, valObj)
+				valRes, _ := document.ResolveObject(ctx, doc, valObj)
 
 				if fileSpecDict, ok := valRes.(ast.PdfDict); ok {
 					// We have a File Specification dictionary
 					if efObj, ok := fileSpecDict["EF"]; ok {
-						efRes, _ := document.ResolveObject(doc, efObj)
+						efRes, _ := document.ResolveObject(ctx, doc, efObj)
 						if efDict, ok := efRes.(ast.PdfDict); ok {
 							if fObj, ok := efDict["F"]; ok {
-								fRes, _ := document.ResolveObject(doc, fObj)
+								fRes, _ := document.ResolveObject(ctx, doc, fObj)
 								if stream, ok := fRes.(ast.PdfStream); ok {
 									// Extract filename from File Specification (/F or /UF)
 									filename := "attachment"
 									if nameObj, ok := fileSpecDict["F"]; ok {
-										nameRes, _ := document.ResolveObject(doc, nameObj)
+										nameRes, _ := document.ResolveObject(ctx, doc, nameObj)
 										if nameStr, ok := nameRes.(ast.PdfString); ok {
 											filename = document.DecodePdfString(nameStr)
 										}

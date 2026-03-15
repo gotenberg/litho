@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -13,21 +14,21 @@ import (
 // ValidatePDFUA parses a PDF from the given reader and audits it against a
 // specific PDF/UA profile, returning all compliance violations found. An empty
 // slice means the document passes.
-func ValidatePDFUA(r io.ReaderAt, size int64, profile PDFUAProfile) ([]error, error) {
-	doc, err := document.NewDocument(r, size)
+func ValidatePDFUA(ctx context.Context, r io.ReaderAt, size int64, profile PDFUAProfile) ([]error, error) {
+	doc, err := document.NewDocument(ctx, r, size)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PDF: %w", err)
 	}
-	return validatePDFUA(doc, profile), nil
+	return validatePDFUA(ctx, doc, profile), nil
 }
 
 // validatePDFUA is the internal implementation that operates on a parsed document.
-func validatePDFUA(doc *document.Document, profile PDFUAProfile) []error {
+func validatePDFUA(ctx context.Context, doc *document.Document, profile PDFUAProfile) []error {
 	if profile != PDFUA1 && profile != PDFUA2 {
 		return []error{fmt.Errorf("%w: %s", ErrInvalidProfile, profile)}
 	}
 
-	catalog, err := getCatalog(doc)
+	catalog, err := getCatalog(ctx, doc)
 	if err != nil {
 		return []error{err}
 	}
@@ -35,31 +36,31 @@ func validatePDFUA(doc *document.Document, profile PDFUAProfile) []error {
 	errs := make([]error, 0, 10) //nolint:mnd // multiple check categories below.
 
 	// --- Base rules (both UA-1 and UA-2) ---
-	errs = append(errs, checkLang(doc, catalog)...)
-	errs = append(errs, checkStructTreeRoot(doc, catalog)...)
-	errs = append(errs, checkMarkInfo(doc, catalog)...)
-	errs = append(errs, checkXMPTitle(doc, catalog)...)
-	errs = append(errs, checkFontsToUnicodeUA(doc, catalog)...)
-	errs = append(errs, checkFormFieldTooltips(doc, catalog)...)
-	errs = append(errs, checkImagesHaveAltText(doc, catalog)...)
-	errs = append(errs, checkArtifactTagging(doc, catalog)...)
+	errs = append(errs, checkLang(ctx, doc, catalog)...)
+	errs = append(errs, checkStructTreeRoot(ctx, doc, catalog)...)
+	errs = append(errs, checkMarkInfo(ctx, doc, catalog)...)
+	errs = append(errs, checkXMPTitle(ctx, doc, catalog)...)
+	errs = append(errs, checkFontsToUnicodeUA(ctx, doc, catalog)...)
+	errs = append(errs, checkFormFieldTooltips(ctx, doc, catalog)...)
+	errs = append(errs, checkImagesHaveAltText(ctx, doc, catalog)...)
+	errs = append(errs, checkArtifactTagging(ctx, doc, catalog)...)
 
 	// --- Profile-specific rules ---
 	switch profile {
 	case PDFUA1:
-		errs = append(errs, checkStandardTags(doc, catalog)...)
+		errs = append(errs, checkStandardTags(ctx, doc, catalog)...)
 	case PDFUA2:
-		errs = append(errs, checkPDFVersionForUA2(doc, catalog)...)
-		errs = append(errs, checkNamespaces(doc, catalog)...)
-		errs = append(errs, checkLinkAnnotationNesting(doc, catalog)...)
-		errs = append(errs, checkFormulaMathML(doc, catalog)...)
+		errs = append(errs, checkPDFVersionForUA2(ctx, doc, catalog)...)
+		errs = append(errs, checkNamespaces(ctx, doc, catalog)...)
+		errs = append(errs, checkLinkAnnotationNesting(ctx, doc, catalog)...)
+		errs = append(errs, checkFormulaMathML(ctx, doc, catalog)...)
 	}
 
 	return errs
 }
 
 // checkLang verifies that the /Lang key is present in the document catalog.
-func checkLang(_ *document.Document, catalog ast.PdfDict) []error {
+func checkLang(_ context.Context, _ *document.Document, catalog ast.PdfDict) []error {
 	if _, ok := catalog["Lang"]; !ok {
 		return []error{ErrMissingLang}
 	}
@@ -67,12 +68,12 @@ func checkLang(_ *document.Document, catalog ast.PdfDict) []error {
 }
 
 // checkXMPTitle verifies that the document has XMP metadata containing a dc:title.
-func checkXMPTitle(doc *document.Document, catalog ast.PdfDict) []error {
+func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	mdObj, ok := catalog["Metadata"]
 	if !ok {
 		return []error{ErrMissingXMPTitle}
 	}
-	mdRes, err := resolve(doc, mdObj)
+	mdRes, err := resolve(ctx, doc, mdObj)
 	if err != nil {
 		return []error{ErrMissingXMPTitle}
 	}
@@ -89,14 +90,14 @@ func checkXMPTitle(doc *document.Document, catalog ast.PdfDict) []error {
 
 // checkFontsToUnicodeUA verifies that all fonts have /ToUnicode mappings
 // for reliable text extraction, as required by PDF/UA.
-func checkFontsToUnicodeUA(doc *document.Document, catalog ast.PdfDict) []error {
+func checkFontsToUnicodeUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	var errs []error
-	fonts := collectFontDicts(doc, catalog)
+	fonts := collectFontDicts(ctx, doc, catalog)
 	for name, fontDict := range fonts {
-		if isStandard14Font(doc, fontDict) {
+		if isStandard14Font(ctx, doc, fontDict) {
 			continue
 		}
-		if !hasFontToUnicode(doc, fontDict) {
+		if !hasFontToUnicode(ctx, doc, fontDict) {
 			errs = append(errs, fmt.Errorf("%w: %s", ErrFontMissingToUnicode, name))
 		}
 	}
@@ -105,12 +106,12 @@ func checkFontsToUnicodeUA(doc *document.Document, catalog ast.PdfDict) []error 
 
 // checkFormFieldTooltips verifies that all interactive form fields have a /TU
 // (tooltip) entry for screen reader accessibility.
-func checkFormFieldTooltips(doc *document.Document, catalog ast.PdfDict) []error {
+func checkFormFieldTooltips(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	acroObj, ok := catalog["AcroForm"]
 	if !ok {
 		return nil
 	}
-	acroRes, err := resolve(doc, acroObj)
+	acroRes, err := resolve(ctx, doc, acroObj)
 	if err != nil {
 		return nil
 	}
@@ -122,7 +123,7 @@ func checkFormFieldTooltips(doc *document.Document, catalog ast.PdfDict) []error
 	if !ok {
 		return nil
 	}
-	fieldsRes, err := resolve(doc, fieldsObj)
+	fieldsRes, err := resolve(ctx, doc, fieldsObj)
 	if err != nil {
 		return nil
 	}
@@ -132,13 +133,13 @@ func checkFormFieldTooltips(doc *document.Document, catalog ast.PdfDict) []error
 	}
 	var errs []error
 	for _, fieldObj := range fieldsArr {
-		checkFieldTooltip(doc, fieldObj, &errs)
+		checkFieldTooltip(ctx, doc, fieldObj, &errs)
 	}
 	return errs
 }
 
-func checkFieldTooltip(doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := resolve(doc, obj)
+func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
+	res, err := resolve(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -154,10 +155,10 @@ func checkFieldTooltip(doc *document.Document, obj ast.PdfObject, errs *[]error)
 	}
 	// Recurse into child fields.
 	if kidsObj, ok := dict["Kids"]; ok {
-		kidsRes, _ := resolve(doc, kidsObj)
+		kidsRes, _ := resolve(ctx, doc, kidsObj)
 		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
 			for _, kid := range kidsArr {
-				checkFieldTooltip(doc, kid, errs)
+				checkFieldTooltip(ctx, doc, kid, errs)
 			}
 		}
 	}
@@ -165,12 +166,12 @@ func checkFieldTooltip(doc *document.Document, obj ast.PdfObject, errs *[]error)
 
 // checkImagesHaveAltText traverses the structure tree and verifies that every
 // Figure element has an /Alt attribute.
-func checkImagesHaveAltText(doc *document.Document, catalog ast.PdfDict) []error {
+func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
 		return []error{ErrMissingStructTreeRoot}
 	}
-	strRes, _ := resolve(doc, strObj)
+	strRes, _ := resolve(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return []error{ErrMissingStructTreeRoot}
@@ -181,20 +182,20 @@ func checkImagesHaveAltText(doc *document.Document, catalog ast.PdfDict) []error
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(doc, kObj)
+	kRes, _ := resolve(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
-			checkStructElemAlt(doc, kid, &errs)
+			checkStructElemAlt(ctx, doc, kid, &errs)
 		}
 	case ast.PdfDict:
-		checkStructElemAlt(doc, k, &errs)
+		checkStructElemAlt(ctx, doc, k, &errs)
 	}
 	return errs
 }
 
-func checkStructElemAlt(doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := resolve(doc, obj)
+func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
+	res, err := resolve(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -205,7 +206,7 @@ func checkStructElemAlt(doc *document.Document, obj ast.PdfObject, errs *[]error
 
 	// Check if this is a Figure element.
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := resolve(doc, sObj)
+		sRes, _ := resolve(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
 			if _, hasAlt := dict["Alt"]; !hasAlt {
 				*errs = append(*errs, ErrImageMissingAltText)
@@ -218,26 +219,26 @@ func checkStructElemAlt(doc *document.Document, obj ast.PdfObject, errs *[]error
 	if !ok {
 		return
 	}
-	kRes, _ := resolve(doc, kObj)
+	kRes, _ := resolve(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
-			checkStructElemAlt(doc, kid, errs)
+			checkStructElemAlt(ctx, doc, kid, errs)
 		}
 	case ast.PdfDict:
-		checkStructElemAlt(doc, k, errs)
+		checkStructElemAlt(ctx, doc, k, errs)
 	}
 }
 
 // checkArtifactTagging verifies that all content tagged with specific roles
 // (headers, footers, page numbers) is marked as /Artifact in the structure tree.
 // Per PDF/UA, non-meaningful repeating content must use the /Artifact tag.
-func checkArtifactTagging(doc *document.Document, catalog ast.PdfDict) []error {
+func checkArtifactTagging(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := resolve(doc, strObj)
+	strRes, _ := resolve(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -248,14 +249,14 @@ func checkArtifactTagging(doc *document.Document, catalog ast.PdfDict) []error {
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(doc, kObj)
+	kRes, _ := resolve(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
-			checkArtifactElem(doc, kid, &errs)
+			checkArtifactElem(ctx, doc, kid, &errs)
 		}
 	case ast.PdfDict:
-		checkArtifactElem(doc, k, &errs)
+		checkArtifactElem(ctx, doc, k, &errs)
 	}
 	return errs
 }
@@ -270,8 +271,8 @@ var forbiddenStructTypes = map[string]bool{
 	"Pagination": true,
 }
 
-func checkArtifactElem(doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := resolve(doc, obj)
+func checkArtifactElem(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
+	res, err := resolve(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -281,7 +282,7 @@ func checkArtifactElem(doc *document.Document, obj ast.PdfObject, errs *[]error)
 	}
 
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := resolve(doc, sObj)
+		sRes, _ := resolve(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok {
 			if forbiddenStructTypes[string(sName)] {
 				*errs = append(*errs, fmt.Errorf("%w: /%s should be /Artifact", ErrArtifactTagMissing, sName))
@@ -293,14 +294,14 @@ func checkArtifactElem(doc *document.Document, obj ast.PdfObject, errs *[]error)
 	if !ok {
 		return
 	}
-	kRes, _ := resolve(doc, kObj)
+	kRes, _ := resolve(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
-			checkArtifactElem(doc, kid, errs)
+			checkArtifactElem(ctx, doc, kid, errs)
 		}
 	case ast.PdfDict:
-		checkArtifactElem(doc, k, errs)
+		checkArtifactElem(ctx, doc, k, errs)
 	}
 }
 
@@ -332,12 +333,12 @@ var standardPDF17Tags = map[string]bool{
 
 // checkStandardTags verifies that all structure element types are either standard
 // PDF 1.7 tags or have a mapping in the /RoleMap dictionary.
-func checkStandardTags(doc *document.Document, catalog ast.PdfDict) []error {
+func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := resolve(doc, strObj)
+	strRes, _ := resolve(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -346,7 +347,7 @@ func checkStandardTags(doc *document.Document, catalog ast.PdfDict) []error {
 	// Build the role map.
 	roleMap := make(map[string]bool)
 	if rmObj, ok := strDict["RoleMap"]; ok {
-		rmRes, _ := resolve(doc, rmObj)
+		rmRes, _ := resolve(ctx, doc, rmObj)
 		if rmDict, ok := rmRes.(ast.PdfDict); ok {
 			for key := range rmDict {
 				roleMap[string(key)] = true
@@ -359,20 +360,20 @@ func checkStandardTags(doc *document.Document, catalog ast.PdfDict) []error {
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(doc, kObj)
+	kRes, _ := resolve(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
-			checkStructElemStandard(doc, kid, roleMap, &errs)
+			checkStructElemStandard(ctx, doc, kid, roleMap, &errs)
 		}
 	case ast.PdfDict:
-		checkStructElemStandard(doc, k, roleMap, &errs)
+		checkStructElemStandard(ctx, doc, k, roleMap, &errs)
 	}
 	return errs
 }
 
-func checkStructElemStandard(doc *document.Document, obj ast.PdfObject, roleMap map[string]bool, errs *[]error) {
-	res, err := resolve(doc, obj)
+func checkStructElemStandard(ctx context.Context, doc *document.Document, obj ast.PdfObject, roleMap map[string]bool, errs *[]error) {
+	res, err := resolve(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -382,7 +383,7 @@ func checkStructElemStandard(doc *document.Document, obj ast.PdfObject, roleMap 
 	}
 
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := resolve(doc, sObj)
+		sRes, _ := resolve(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok {
 			tag := string(sName)
 			if !standardPDF17Tags[tag] && !roleMap[tag] {
@@ -396,14 +397,14 @@ func checkStructElemStandard(doc *document.Document, obj ast.PdfObject, roleMap 
 	if !ok {
 		return
 	}
-	kRes, _ := resolve(doc, kObj)
+	kRes, _ := resolve(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
-			checkStructElemStandard(doc, kid, roleMap, errs)
+			checkStructElemStandard(ctx, doc, kid, roleMap, errs)
 		}
 	case ast.PdfDict:
-		checkStructElemStandard(doc, k, roleMap, errs)
+		checkStructElemStandard(ctx, doc, k, roleMap, errs)
 	}
 }
 
@@ -411,10 +412,10 @@ func checkStructElemStandard(doc *document.Document, obj ast.PdfObject, roleMap 
 
 // checkPDFVersionForUA2 verifies the document declares PDF version 2.0.
 // The version is read from the catalog /Version key or from the PDF header.
-func checkPDFVersionForUA2(doc *document.Document, catalog ast.PdfDict) []error {
+func checkPDFVersionForUA2(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	// Check catalog /Version first (overrides header version per spec).
 	if vObj, ok := catalog["Version"]; ok {
-		vRes, _ := resolve(doc, vObj)
+		vRes, _ := resolve(ctx, doc, vObj)
 		if vName, ok := vRes.(ast.PdfName); ok {
 			if strings.HasPrefix(string(vName), "2.") {
 				return nil
@@ -443,12 +444,12 @@ func safeReadHeader(doc *document.Document) (buf []byte, err error) {
 
 // checkNamespaces verifies that /StructTreeRoot contains a /Namespaces array
 // and that each entry has a valid /NS URI.
-func checkNamespaces(doc *document.Document, catalog ast.PdfDict) []error {
+func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := resolve(doc, strObj)
+	strRes, _ := resolve(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -458,7 +459,7 @@ func checkNamespaces(doc *document.Document, catalog ast.PdfDict) []error {
 	if !ok {
 		return []error{ErrMissingNamespaces}
 	}
-	nsRes, _ := resolve(doc, nsObj)
+	nsRes, _ := resolve(ctx, doc, nsObj)
 	nsArr, ok := nsRes.(ast.PdfArray)
 	if !ok || len(nsArr) == 0 {
 		return []error{ErrMissingNamespaces}
@@ -466,7 +467,7 @@ func checkNamespaces(doc *document.Document, catalog ast.PdfDict) []error {
 
 	var errs []error
 	for _, nsEntry := range nsArr {
-		entryRes, _ := resolve(doc, nsEntry)
+		entryRes, _ := resolve(ctx, doc, nsEntry)
 		entryDict, ok := entryRes.(ast.PdfDict)
 		if !ok {
 			errs = append(errs, ErrInvalidStructureNamespace)
@@ -481,27 +482,27 @@ func checkNamespaces(doc *document.Document, catalog ast.PdfDict) []error {
 
 // checkLinkAnnotationNesting verifies that /Link annotations on pages are
 // nested within /Link structure elements in the structure tree.
-func checkLinkAnnotationNesting(doc *document.Document, catalog ast.PdfDict) []error {
-	pages := collectPages(doc, catalog)
+func checkLinkAnnotationNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
 	hasLinkAnnot := false
 	for _, page := range pages {
 		annotsObj, ok := page["Annots"]
 		if !ok {
 			continue
 		}
-		annotsRes, _ := resolve(doc, annotsObj)
+		annotsRes, _ := resolve(ctx, doc, annotsObj)
 		annotsArr, ok := annotsRes.(ast.PdfArray)
 		if !ok {
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			annotRes, _ := resolve(doc, annotObj)
+			annotRes, _ := resolve(ctx, doc, annotObj)
 			annotDict, ok := annotRes.(ast.PdfDict)
 			if !ok {
 				continue
 			}
 			if subtypeObj, ok := annotDict["Subtype"]; ok {
-				subtypeRes, _ := resolve(doc, subtypeObj)
+				subtypeRes, _ := resolve(ctx, doc, subtypeObj)
 				if sName, ok := subtypeRes.(ast.PdfName); ok && sName == "Link" {
 					hasLinkAnnot = true
 					// Check if the annotation has a /StructParent pointing to a Link struct elem.
@@ -517,19 +518,19 @@ func checkLinkAnnotationNesting(doc *document.Document, catalog ast.PdfDict) []e
 	}
 
 	// Verify that at least one Link structure element exists in the struct tree.
-	if !hasStructElemType(doc, catalog, "Link") {
+	if !hasStructElemType(ctx, doc, catalog, "Link") {
 		return []error{ErrLinkNotNested}
 	}
 	return nil
 }
 
 // hasStructElemType checks whether a specific structure element type exists in the tree.
-func hasStructElemType(doc *document.Document, catalog ast.PdfDict, typeName string) bool {
+func hasStructElemType(ctx context.Context, doc *document.Document, catalog ast.PdfDict, typeName string) bool {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
 		return false
 	}
-	strRes, _ := resolve(doc, strObj)
+	strRes, _ := resolve(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return false
@@ -538,29 +539,29 @@ func hasStructElemType(doc *document.Document, catalog ast.PdfDict, typeName str
 	if !ok {
 		return false
 	}
-	kRes, _ := resolve(doc, kObj)
-	return searchStructElemType(doc, kRes, typeName)
+	kRes, _ := resolve(ctx, doc, kObj)
+	return searchStructElemType(ctx, doc, kRes, typeName)
 }
 
-func searchStructElemType(doc *document.Document, obj ast.PdfObject, typeName string) bool {
+func searchStructElemType(ctx context.Context, doc *document.Document, obj ast.PdfObject, typeName string) bool {
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := resolve(doc, kid)
-			if searchStructElemType(doc, kidRes, typeName) {
+			kidRes, _ := resolve(ctx, doc, kid)
+			if searchStructElemType(ctx, doc, kidRes, typeName) {
 				return true
 			}
 		}
 	case ast.PdfDict:
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := resolve(doc, sObj)
+			sRes, _ := resolve(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && string(sName) == typeName {
 				return true
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(doc, kObj)
-			return searchStructElemType(doc, kRes, typeName)
+			kRes, _ := resolve(ctx, doc, kObj)
+			return searchStructElemType(ctx, doc, kRes, typeName)
 		}
 	}
 	return false
@@ -568,12 +569,12 @@ func searchStructElemType(doc *document.Document, obj ast.PdfObject, typeName st
 
 // checkFormulaMathML verifies that /Formula structure elements have an /AF
 // entry containing an associated MathML file.
-func checkFormulaMathML(doc *document.Document, catalog ast.PdfDict) []error {
+func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
 		return nil
 	}
-	strRes, _ := resolve(doc, strObj)
+	strRes, _ := resolve(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -582,23 +583,23 @@ func checkFormulaMathML(doc *document.Document, catalog ast.PdfDict) []error {
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(doc, kObj)
+	kRes, _ := resolve(ctx, doc, kObj)
 
 	var errs []error
-	checkFormulaAF(doc, kRes, &errs)
+	checkFormulaAF(ctx, doc, kRes, &errs)
 	return errs
 }
 
-func checkFormulaAF(doc *document.Document, obj ast.PdfObject, errs *[]error) {
+func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := resolve(doc, kid)
-			checkFormulaAF(doc, kidRes, errs)
+			kidRes, _ := resolve(ctx, doc, kid)
+			checkFormulaAF(ctx, doc, kidRes, errs)
 		}
 	case ast.PdfDict:
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := resolve(doc, sObj)
+			sRes, _ := resolve(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Formula" {
 				if _, hasAF := v["AF"]; !hasAF {
 					*errs = append(*errs, ErrFormulaMissingMathML)
@@ -606,8 +607,8 @@ func checkFormulaAF(doc *document.Document, obj ast.PdfObject, errs *[]error) {
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(doc, kObj)
-			checkFormulaAF(doc, kRes, errs)
+			kRes, _ := resolve(ctx, doc, kObj)
+			checkFormulaAF(ctx, doc, kRes, errs)
 		}
 	}
 }

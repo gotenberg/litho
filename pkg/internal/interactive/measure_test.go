@@ -1,6 +1,7 @@
 package interactive
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -44,7 +45,7 @@ func TestExtractMeasurements_ViewportRL(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func TestExtractMeasurements_ViewportYDefaultsToX(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestExtractMeasurements_LineAnnotation(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +144,7 @@ func TestExtractMeasurements_PolyLineAnnotation(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +171,7 @@ func TestExtractMeasurements_SkipsNonRLSubtype(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +199,7 @@ func TestExtractMeasurements_SkipsNonMeasuredAnnotation(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +215,7 @@ func TestExtractMeasurements_NoVPOrAnnots(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +244,7 @@ func TestExtractMeasurements_ViewportAndAnnotation(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +275,7 @@ func TestExtractMeasurements_AreaUnit(t *testing.T) {
 		},
 	}
 
-	results, err := ExtractMeasurements(nil, page)
+	results, err := ExtractMeasurements(context.Background(), nil, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,14 +288,14 @@ func TestExtractMeasurements_AreaUnit(t *testing.T) {
 }
 
 func TestParseNumberFormatArray_Empty(t *testing.T) {
-	axis := parseNumberFormatArray(nil, ast.PdfArray{})
+	axis := parseNumberFormatArray(context.Background(), nil, ast.PdfArray{})
 	if axis.Unit != "" || axis.ConversionFactor != 0 {
 		t.Errorf("expected zero axis for empty array, got %+v", axis)
 	}
 }
 
 func TestParseNumberFormatArray_NonArray(t *testing.T) {
-	axis := parseNumberFormatArray(nil, ast.PdfName("invalid"))
+	axis := parseNumberFormatArray(context.Background(), nil, ast.PdfName("invalid"))
 	if axis.Unit != "" {
 		t.Errorf("expected zero axis for non-array, got %+v", axis)
 	}

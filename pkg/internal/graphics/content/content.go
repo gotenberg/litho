@@ -2,6 +2,7 @@ package content
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 
@@ -79,7 +80,7 @@ func ParseStreamData(data []byte) ([]Operation, error) {
 }
 
 // ParsePageContent extracts, concatenates, and parses the content streams of a page or form XObject.
-func ParsePageContent(doc *document.Document, node ast.PdfObject) ([]Operation, error) {
+func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfObject) ([]Operation, error) {
 	var streams []ast.PdfStream
 
 	switch v := node.(type) {
@@ -89,7 +90,7 @@ func ParsePageContent(doc *document.Document, node ast.PdfObject) ([]Operation, 
 			return nil, nil // Empty page
 		}
 
-		contentsResolved, err := document.ResolveObject(doc, contentsObj)
+		contentsResolved, err := document.ResolveObject(ctx, doc, contentsObj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve /Contents: %v", err)
 		}
@@ -99,7 +100,7 @@ func ParsePageContent(doc *document.Document, node ast.PdfObject) ([]Operation, 
 			streams = append(streams, c)
 		case ast.PdfArray:
 			for _, item := range c {
-				itemResolved, err := document.ResolveObject(doc, item)
+				itemResolved, err := document.ResolveObject(ctx, doc, item)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve item in /Contents array: %v", err)
 				}

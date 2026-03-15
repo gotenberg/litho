@@ -10,15 +10,15 @@ import (
 	"fmt"
 )
 
-// tableRecord is an entry in the TrueType/OpenType table directory.
-type tableRecord struct {
+// TableRecord is an entry in the TrueType/OpenType table directory.
+type TableRecord struct {
 	Tag    string
 	Offset uint32
 	Length uint32
 }
 
-// parseTableDirectory reads the font's table directory to locate tables by tag.
-func parseTableDirectory(data []byte) ([]tableRecord, error) {
+// ParseTableDirectory reads the font's table directory to locate tables by tag.
+func ParseTableDirectory(data []byte) ([]TableRecord, error) {
 	if len(data) < 12 {
 		return nil, fmt.Errorf("%w: data too short for header", ErrInvalidFont)
 	}
@@ -29,10 +29,10 @@ func parseTableDirectory(data []byte) ([]tableRecord, error) {
 		return nil, fmt.Errorf("%w: data too short for table directory", ErrInvalidFont)
 	}
 
-	records := make([]tableRecord, numTables)
+	records := make([]TableRecord, numTables)
 	for i := range numTables {
 		off := 12 + i*16
-		records[i] = tableRecord{
+		records[i] = TableRecord{
 			Tag:    string(data[off : off+4]),
 			Offset: binary.BigEndian.Uint32(data[off+8 : off+12]),
 			Length: binary.BigEndian.Uint32(data[off+12 : off+16]),
@@ -41,8 +41,8 @@ func parseTableDirectory(data []byte) ([]tableRecord, error) {
 	return records, nil
 }
 
-// tableData extracts the raw bytes for a table by tag.
-func tableData(data []byte, records []tableRecord, tag string) ([]byte, error) {
+// TableData extracts the raw bytes for a table by tag.
+func TableData(data []byte, records []TableRecord, tag string) ([]byte, error) {
 	for _, r := range records {
 		if r.Tag == tag {
 			end := uint64(r.Offset) + uint64(r.Length)
@@ -55,6 +55,54 @@ func tableData(data []byte, records []tableRecord, tag string) ([]byte, error) {
 	return nil, fmt.Errorf("%w: %q", ErrTableNotFound, tag)
 }
 
+// GlyphWidths extracts advance widths from the hmtx (Horizontal Metrics)
+// table using the numberOfHMetrics field from the hhea (Horizontal Header)
+// table. Returns a GID → advance width map in font design units.
+func GlyphWidths(data []byte) (map[uint16]uint16, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return nil, err
+	}
+
+	hheaData, err := TableData(data, records, "hhea")
+	if err != nil {
+		return nil, err
+	}
+	if len(hheaData) < 36 {
+		return nil, fmt.Errorf("%w: hhea table too short", ErrInvalidFont)
+	}
+	numberOfHMetrics := int(binary.BigEndian.Uint16(hheaData[34:36]))
+
+	hmtxData, err := TableData(data, records, "hmtx")
+	if err != nil {
+		return nil, err
+	}
+
+	// Each long horizontal metric is 4 bytes: uint16 advanceWidth + int16 lsb.
+	if len(hmtxData) < numberOfHMetrics*4 {
+		return nil, fmt.Errorf("%w: hmtx table too short", ErrInvalidFont)
+	}
+
+	result := make(map[uint16]uint16, numberOfHMetrics)
+	var lastAdvance uint16
+	for i := range numberOfHMetrics {
+		advance := binary.BigEndian.Uint16(hmtxData[i*4 : i*4+2])
+		result[uint16(i)] = advance //nolint:gosec // GID fits in uint16 for TrueType
+		lastAdvance = advance
+	}
+
+	// Glyphs beyond numberOfHMetrics share the last advance width.
+	// Detect total glyph count from maxp table if available.
+	if maxpData, err := TableData(data, records, "maxp"); err == nil && len(maxpData) >= 6 {
+		numGlyphs := int(binary.BigEndian.Uint16(maxpData[4:6]))
+		for gid := numberOfHMetrics; gid < numGlyphs; gid++ {
+			result[uint16(gid)] = lastAdvance //nolint:gosec // GID fits in uint16 for TrueType
+		}
+	}
+
+	return result, nil
+}
+
 // GlyphToUnicode extracts a glyph ID → Unicode rune mapping from embedded
 // TrueType/OpenType font data. It parses the cmap table looking for a
 // Unicode-compatible subtable (platform 3/encoding 1 Format 4, or
@@ -62,12 +110,12 @@ func tableData(data []byte, records []tableRecord, tag string) ([]byte, error) {
 //
 // The returned map keys are glyph IDs (GIDs) and values are Unicode runes.
 func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
-	records, err := parseTableDirectory(data)
+	records, err := ParseTableDirectory(data)
 	if err != nil {
 		return nil, err
 	}
 
-	cmapData, err := tableData(data, records, "cmap")
+	cmapData, err := TableData(data, records, "cmap")
 	if err != nil {
 		return nil, err
 	}
@@ -79,12 +127,12 @@ func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
 // Returns a map of glyph ID → glyph name. Only post table formats 1.0 and
 // 2.0 are supported; other formats return an empty map.
 func PostGlyphNames(data []byte) (map[uint16]string, error) {
-	records, err := parseTableDirectory(data)
+	records, err := ParseTableDirectory(data)
 	if err != nil {
 		return nil, err
 	}
 
-	postData, err := tableData(data, records, "post")
+	postData, err := TableData(data, records, "post")
 	if err != nil {
 		// post table is optional for our purposes.
 		if errors.Is(err, ErrTableNotFound) {

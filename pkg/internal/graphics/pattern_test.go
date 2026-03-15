@@ -1,6 +1,7 @@
 package graphics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -250,28 +251,28 @@ func TestPattern_SaveRestore(t *testing.T) {
 }
 
 func TestClassifyPattern_Type1(t *testing.T) {
-	got := classifyPattern(nil, ast.PdfDict{"PatternType": ast.PdfInt(1)})
+	got := classifyPattern(context.Background(), nil, ast.PdfDict{"PatternType": ast.PdfInt(1)})
 	if got != "Tiling" {
 		t.Errorf("got %q, want 'Tiling'", got)
 	}
 }
 
 func TestClassifyPattern_Type2(t *testing.T) {
-	got := classifyPattern(nil, ast.PdfDict{"PatternType": ast.PdfInt(2)})
+	got := classifyPattern(context.Background(), nil, ast.PdfDict{"PatternType": ast.PdfInt(2)})
 	if got != "Shading" {
 		t.Errorf("got %q, want 'Shading'", got)
 	}
 }
 
 func TestClassifyPattern_Unknown(t *testing.T) {
-	got := classifyPattern(nil, ast.PdfDict{"PatternType": ast.PdfInt(99)})
+	got := classifyPattern(context.Background(), nil, ast.PdfDict{"PatternType": ast.PdfInt(99)})
 	if got != "Pattern" {
 		t.Errorf("got %q, want 'Pattern'", got)
 	}
 }
 
 func TestClassifyPattern_NoPatternType(t *testing.T) {
-	got := classifyPattern(nil, ast.PdfDict{})
+	got := classifyPattern(context.Background(), nil, ast.PdfDict{})
 	if got != "Pattern" {
 		t.Errorf("got %q, want 'Pattern'", got)
 	}

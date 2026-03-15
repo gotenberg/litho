@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -24,9 +25,9 @@ func GetFloat(obj ast.PdfObject) float64 {
 //
 // This is the single authorised way to chase indirect refs across all internal
 // packages. Callers must never re-implement this logic locally.
-func ResolveObject(doc *Document, obj ast.PdfObject) (ast.PdfObject, error) {
+func ResolveObject(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfObject, error) {
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ref)
+		return doc.Resolve(ctx, ref)
 	}
 	return obj, nil
 }

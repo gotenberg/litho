@@ -2,6 +2,7 @@ package document
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -75,15 +76,16 @@ func TestPageBoxes_AllFiveExplicit(t *testing.T) {
 		},
 	)
 
-	doc, err := NewDocument(bytes.NewReader(pdf), int64(len(pdf)))
+	ctx := context.Background()
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(doc)
+	catalog, err := GetCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(doc, catalog)
+	pages, err := GetPages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,15 +108,16 @@ func TestPageBoxes_CropBoxDefaultsToMediaBox(t *testing.T) {
 		nil,
 	)
 
-	doc, err := NewDocument(bytes.NewReader(pdf), int64(len(pdf)))
+	ctx := context.Background()
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(doc)
+	catalog, err := GetCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(doc, catalog)
+	pages, err := GetPages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,15 +134,16 @@ func TestPageBoxes_InheritedCropBox(t *testing.T) {
 		nil,               // page has no boxes of its own
 	)
 
-	doc, err := NewDocument(bytes.NewReader(pdf), int64(len(pdf)))
+	ctx := context.Background()
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(doc)
+	catalog, err := GetCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(doc, catalog)
+	pages, err := GetPages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,15 +165,16 @@ func TestPageBoxes_PageOverridesCropBox(t *testing.T) {
 		},
 	)
 
-	doc, err := NewDocument(bytes.NewReader(pdf), int64(len(pdf)))
+	ctx := context.Background()
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(doc)
+	catalog, err := GetCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(doc, catalog)
+	pages, err := GetPages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,15 +197,16 @@ func TestPageBoxes_NonInheritableDefaultToCropBox(t *testing.T) {
 		},
 	)
 
-	doc, err := NewDocument(bytes.NewReader(pdf), int64(len(pdf)))
+	ctx := context.Background()
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(doc)
+	catalog, err := GetCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(doc, catalog)
+	pages, err := GetPages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}

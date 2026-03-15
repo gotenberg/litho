@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -38,8 +39,8 @@ func (r *Reader) SetOCREngine(engine models.OCREngine) {
 }
 
 // Open initializes a new Reader from an io.ReaderAt and its total size.
-func Open(r io.ReaderAt, size int64, password string) (*Reader, error) {
-	doc, err := document.NewDocument(r, size)
+func Open(ctx context.Context, r io.ReaderAt, size int64, password string) (*Reader, error) {
+	doc, err := document.NewDocument(ctx, r, size)
 	if err != nil {
 		switch {
 		case errors.Is(err, document.ErrMissingHeader):
@@ -71,7 +72,7 @@ func Open(r io.ReaderAt, size int64, password string) (*Reader, error) {
 
 // OpenFile is a convenience method to open a PDF directly from the filesystem.
 // The caller is responsible for closing the *os.File when done.
-func OpenFile(path string, password string) (*Reader, *os.File, error) {
+func OpenFile(ctx context.Context, path string, password string) (*Reader, *os.File, error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, nil, err
@@ -85,7 +86,7 @@ func OpenFile(path string, password string) (*Reader, *os.File, error) {
 		return nil, nil, err
 	}
 
-	r, err := Open(f, stat.Size(), password)
+	r, err := Open(ctx, f, stat.Size(), password)
 	if err != nil {
 		if err := f.Close(); err != nil {
 			return nil, nil, fmt.Errorf("failed to close file: %w", err)
@@ -96,13 +97,13 @@ func OpenFile(path string, password string) (*Reader, *os.File, error) {
 }
 
 // NumPages returns the total number of pages in the document.
-func (r *Reader) NumPages() (int, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) NumPages(ctx context.Context) (int, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return 0, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return 0, err
 	}
@@ -110,16 +111,41 @@ func (r *Reader) NumPages() (int, error) {
 	return len(pages), nil
 }
 
+// ExtractTextOption configures the behavior of ExtractText.
+type ExtractTextOption func(*extractTextOpts)
+
+type extractTextOpts struct {
+	includeHidden bool
+}
+
+// WithHiddenText includes invisible, clipped, and artifact text that is
+// normally stripped. This is useful for forensic analysis or debugging.
+func WithHiddenText() ExtractTextOption {
+	return func(o *extractTextOpts) {
+		o.includeHidden = true
+	}
+}
+
 // ExtractText cleanly extracts text from a given 1-based page number.
 // It orchestrates the content lexer, graphics state machine, unicode mapping,
 // optional content layer rules, and spatial whitespace inference logic.
-func (r *Reader) ExtractText(pageNum int) (string, error) {
-	catalog, err := document.GetCatalog(r.doc)
+//
+// By default, invisible text (rendering mode 3, white-on-white colors),
+// text outside the clipping path and CropBox, and artifact text (headers,
+// footers, page numbers) are silently dropped. Pass WithHiddenText() to
+// include all text regardless of visibility.
+func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (string, error) {
+	var o extractTextOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return "", err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return "", err
 	}
@@ -131,7 +157,7 @@ func (r *Reader) ExtractText(pageNum int) (string, error) {
 	targetPage := pages[pageNum-1]
 
 	// Extract raw content stream operations
-	ops, err := content.ParsePageContent(r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
 	if err != nil {
 		return "", err
 	}
@@ -139,14 +165,17 @@ func (r *Reader) ExtractText(pageNum int) (string, error) {
 	// Initialize the graphics state machine with the CropBox as the visible region.
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
 
-	// Extract and orchestrate the text using spatial heuristics
+	// Extract and orchestrate the text using spatial heuristics.
+	// When includeHidden is true, all stripping is disabled.
+	strip := !o.includeHidden
 	config := typography.ExtractionConfig{
-		StripInvisible: true,
-		StripHidden:    true,
-		StripArtifacts: true,
+		StripInvisible: strip,
+		StripHidden:    strip,
+		StripClipped:   strip,
+		StripArtifacts: strip,
 	}
 
-	text, err := typography.ExtractText(r.doc, machine, targetPage, ops, config)
+	text, err := typography.ExtractText(ctx, r.doc, machine, targetPage, ops, config)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
 			return "", fmt.Errorf("page %d text extraction halted: %w", pageNum, ErrFontMissing)
@@ -159,10 +188,10 @@ func (r *Reader) ExtractText(pageNum int) (string, error) {
 	// the sentinel error.
 	if strings.TrimSpace(text) == "" {
 		pageW, pageH := mediaBoxDimensions(targetPage.MediaBox)
-		images := pdfimage.InspectImages(r.doc, targetPage)
+		images := pdfimage.InspectImages(ctx, r.doc, targetPage)
 		if heuristics.RequiresOCR(nil, images, pageW, pageH) {
 			if r.ocr != nil {
-				return r.runOCR(targetPage, images, pageNum)
+				return r.runOCR(ctx, targetPage, images, pageNum)
 			}
 			return "", fmt.Errorf("page %d: %w", pageNum, ErrRequiresOCR)
 		}
@@ -172,19 +201,19 @@ func (r *Reader) ExtractText(pageNum int) (string, error) {
 }
 
 // GetMetadata extracts standard document-level metadata (Title, Author, etc.).
-func (r *Reader) GetMetadata() (map[string]string, error) {
-	return semantics.GetMetadata(r.doc)
+func (r *Reader) GetMetadata(ctx context.Context) (map[string]string, error) {
+	return semantics.GetMetadata(ctx, r.doc)
 }
 
 // GetBookmarks extracts the hierarchical outline (table of contents) from the document.
-func (r *Reader) GetBookmarks() ([]models.Bookmark, error) {
-	return semantics.GetOutline(r.doc)
+func (r *Reader) GetBookmarks(ctx context.Context) ([]models.Bookmark, error) {
+	return semantics.GetOutline(ctx, r.doc)
 }
 
 // GetFormData extracts user-typed values from interactive AcroForms.
 // It automatically evaluates any PDF JavaScript calculation scripts.
-func (r *Reader) GetFormData() (map[string]string, error) {
-	fields, err := interactive.ExtractFormData(r.doc)
+func (r *Reader) GetFormData(ctx context.Context) (map[string]string, error) {
+	fields, err := interactive.ExtractFormData(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
@@ -200,13 +229,13 @@ func (r *Reader) GetFormData() (map[string]string, error) {
 // stroked line segments (physical grid) and, when no lines are found, by
 // spatially clustering text elements into rows and inferring column boundaries
 // from consistent X-gaps.
-func (r *Reader) ExtractTables(pageNum int) ([]models.Table, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) ExtractTables(ctx context.Context, pageNum int) ([]models.Table, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -217,14 +246,14 @@ func (r *Reader) ExtractTables(pageNum int) ([]models.Table, error) {
 
 	targetPage := pages[pageNum-1]
 
-	ops, err := content.ParsePageContent(r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
 	if err != nil {
 		return nil, err
 	}
 
 	// Extract text elements via the graphics state machine.
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
-	elements, err := typography.ExtractElements(r.doc, machine, targetPage, ops)
+	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
 			return nil, fmt.Errorf("page %d table extraction halted: %w", pageNum, ErrFontMissing)
@@ -241,26 +270,26 @@ func (r *Reader) ExtractTables(pageNum int) ([]models.Table, error) {
 // IsPortfolio reports whether the document is a PDF Portfolio (Collection).
 // Portfolio PDFs are containers whose visible pages are merely a cover sheet;
 // the real payload is a set of embedded files.
-func (r *Reader) IsPortfolio() (bool, error) {
-	return semantics.IsPortfolio(r.doc)
+func (r *Reader) IsPortfolio(ctx context.Context) (bool, error) {
+	return semantics.IsPortfolio(ctx, r.doc)
 }
 
 // ExtractPortfolioItems returns every file embedded in a PDF Portfolio.
 // Each item includes the original filename, MIME type, and decoded byte data.
 // Callers can recursively pass embedded PDFs back into pdf.Open via
 // bytes.NewReader on the returned Data slice.
-func (r *Reader) ExtractPortfolioItems() ([]models.EmbeddedFile, error) {
-	return semantics.ExtractPortfolioItems(r.doc)
+func (r *Reader) ExtractPortfolioItems(ctx context.Context) ([]models.EmbeddedFile, error) {
+	return semantics.ExtractPortfolioItems(ctx, r.doc)
 }
 
 // GetAnnotations extracts annotations from the given 1-based page number.
-func (r *Reader) GetAnnotations(pageNum int) ([]models.Annotation, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) GetAnnotations(ctx context.Context, pageNum int) ([]models.Annotation, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -270,18 +299,18 @@ func (r *Reader) GetAnnotations(pageNum int) ([]models.Annotation, error) {
 	}
 
 	pageMap := document.BuildPageMap(pages)
-	return interactive.ExtractAnnotations(r.doc, pages[pageNum-1], pageMap)
+	return interactive.ExtractAnnotations(ctx, r.doc, pages[pageNum-1], pageMap)
 }
 
 // DetectRedactions extracts text elements from the given 1-based page number
 // and flags any that fall inside unapplied /Redact annotations.
-func (r *Reader) DetectRedactions(pageNum int) ([]models.TextElement, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) DetectRedactions(ctx context.Context, pageNum int) ([]models.TextElement, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -292,13 +321,13 @@ func (r *Reader) DetectRedactions(pageNum int) ([]models.TextElement, error) {
 
 	targetPage := pages[pageNum-1]
 
-	ops, err := content.ParsePageContent(r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
 	if err != nil {
 		return nil, err
 	}
 
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
-	elements, err := typography.ExtractElements(r.doc, machine, targetPage, ops)
+	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
 			return nil, fmt.Errorf("page %d redaction detection halted: %w", pageNum, ErrFontMissing)
@@ -307,7 +336,7 @@ func (r *Reader) DetectRedactions(pageNum int) ([]models.TextElement, error) {
 	}
 
 	pageMap := document.BuildPageMap(pages)
-	annots, err := interactive.ExtractAnnotations(r.doc, targetPage, pageMap)
+	annots, err := interactive.ExtractAnnotations(ctx, r.doc, targetPage, pageMap)
 	if err != nil {
 		return nil, err
 	}
@@ -368,29 +397,29 @@ func (r *Reader) HintTable() []models.PageOffsetEntry {
 // When a Document Security Store (DSS) is present, embedded OCSP responses,
 // CRLs, and RFC 3161 timestamp tokens are used for Long-Term Validation
 // (LTV), enabling offline verification of signatures with expired certificates.
-func (r *Reader) VerifySignatures(roots *x509.CertPool) ([]models.SignatureValidation, error) {
-	return signature.VerifySignatures(r.doc, roots)
+func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) ([]models.SignatureValidation, error) {
+	return signature.VerifySignatures(ctx, r.doc, roots)
 }
 
 // GetDSSInfo returns a summary of the Document Security Store (/DSS)
 // contents. The DSS holds the embedded validation materials (certificates,
 // CRLs, OCSP responses) needed for Long-Term Validation. Returns nil if
 // no DSS exists.
-func (r *Reader) GetDSSInfo() (*models.DSSInfo, error) {
-	return signature.GetDSSInfo(r.doc)
+func (r *Reader) GetDSSInfo(ctx context.Context) (*models.DSSInfo, error) {
+	return signature.GetDSSInfo(ctx, r.doc)
 }
 
 // ExtractGeoData extracts geospatial metadata from the given 1-based page
 // number. It scans the page's /VP (Viewport) array and Image XObjects for
 // /Measure dictionaries with /Subtype /GEO, returning tie points that map
 // PDF coordinates to GPS (latitude/longitude).
-func (r *Reader) ExtractGeoData(pageNum int) ([]models.GeoData, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) ([]models.GeoData, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +428,7 @@ func (r *Reader) ExtractGeoData(pageNum int) ([]models.GeoData, error) {
 		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
 	}
 
-	return semantics.ExtractGeoData(r.doc, pages[pageNum-1])
+	return semantics.ExtractGeoData(ctx, r.doc, pages[pageNum-1])
 }
 
 // GeoDataToGeoJSON converts extracted geospatial data to a GeoJSON
@@ -412,13 +441,13 @@ func GeoDataToGeoJSON(geo *models.GeoData) string {
 // given 1-based page number. It scans the page's /VP (Viewport) array and
 // Line/PolyLine annotations for /Measure dictionaries with /Subtype /RL,
 // returning scale axes that map PDF coordinates to real-world units.
-func (r *Reader) ExtractMeasurements(pageNum int) ([]models.Measurement, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) ([]models.Measurement, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -427,20 +456,20 @@ func (r *Reader) ExtractMeasurements(pageNum int) ([]models.Measurement, error) 
 		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
 	}
 
-	return interactive.ExtractMeasurements(r.doc, pages[pageNum-1])
+	return interactive.ExtractMeasurements(ctx, r.doc, pages[pageNum-1])
 }
 
 // Extract3DModels extracts 3D model streams (U3D or PRC) from /3D annotations
 // on the given 1-based page number. Each returned Model3D carries a lazy Open
 // accessor — the stream data is not decoded until the caller invokes Open.
 // The caller must close the reader returned by Open.
-func (r *Reader) Extract3DModels(pageNum int) ([]models.Model3D, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Model3D, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -449,17 +478,17 @@ func (r *Reader) Extract3DModels(pageNum int) ([]models.Model3D, error) {
 		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
 	}
 
-	return semantics.Extract3DModels(r.doc, pages[pageNum-1])
+	return semantics.Extract3DModels(ctx, r.doc, pages[pageNum-1])
 }
 
 // GetPage returns the geometry and metadata for the given 1-based page number.
-func (r *Reader) GetPage(pageNum int) (models.Page, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) GetPage(ctx context.Context, pageNum int) (models.Page, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return models.Page{}, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return models.Page{}, err
 	}
@@ -485,13 +514,13 @@ func (r *Reader) GetPage(pageNum int) (models.Page, error) {
 
 // ExtractTextElements extracts spatially positioned text elements from
 // the given 1-based page number.
-func (r *Reader) ExtractTextElements(pageNum int) ([]models.TextElement, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) ([]models.TextElement, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -502,13 +531,13 @@ func (r *Reader) ExtractTextElements(pageNum int) ([]models.TextElement, error) 
 
 	targetPage := pages[pageNum-1]
 
-	ops, err := content.ParsePageContent(r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
 	if err != nil {
 		return nil, err
 	}
 
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
-	elements, err := typography.ExtractElements(r.doc, machine, targetPage, ops)
+	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
 			return nil, fmt.Errorf("page %d text element extraction halted: %w", pageNum, ErrFontMissing)
@@ -521,13 +550,13 @@ func (r *Reader) ExtractTextElements(pageNum int) ([]models.TextElement, error) 
 
 // InspectImages returns metadata for Image XObjects on the given 1-based
 // page number without decoding pixel data.
-func (r *Reader) InspectImages(pageNum int) ([]models.ImageMeta, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) InspectImages(ctx context.Context, pageNum int) ([]models.ImageMeta, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -536,18 +565,18 @@ func (r *Reader) InspectImages(pageNum int) ([]models.ImageMeta, error) {
 		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
 	}
 
-	return pdfimage.InspectImages(r.doc, pages[pageNum-1]), nil
+	return pdfimage.InspectImages(ctx, r.doc, pages[pageNum-1]), nil
 }
 
 // ExtractLines extracts stroked line segments from the content stream of
 // the given 1-based page number.
-func (r *Reader) ExtractLines(pageNum int) ([]models.Line, error) {
-	catalog, err := document.GetCatalog(r.doc)
+func (r *Reader) ExtractLines(ctx context.Context, pageNum int) ([]models.Line, error) {
+	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
 
-	pages, err := document.GetPages(r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -556,7 +585,7 @@ func (r *Reader) ExtractLines(pageNum int) ([]models.Line, error) {
 		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
 	}
 
-	ops, err := content.ParsePageContent(r.doc, pages[pageNum-1].Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, pages[pageNum-1].Dict)
 	if err != nil {
 		return nil, err
 	}
@@ -567,15 +596,15 @@ func (r *Reader) ExtractLines(pageNum int) ([]models.Line, error) {
 // ExtractPronunciationLexicons extracts W3C PLS (Pronunciation Lexicon
 // Specification) XML documents from the catalog's /PronunciationLexicon
 // array (PDF 2.0). Returns nil if none are present.
-func (r *Reader) ExtractPronunciationLexicons() ([]models.PronunciationLexicon, error) {
-	return semantics.ExtractPronunciationLexicons(r.doc)
+func (r *Reader) ExtractPronunciationLexicons(ctx context.Context) ([]models.PronunciationLexicon, error) {
+	return semantics.ExtractPronunciationLexicons(ctx, r.doc)
 }
 
 // ExtractFormulas walks the document structure tree and extracts MathML
 // from /Formula elements that carry an /AF entry with /AFRelationship
 // /Supplement and MIME type application/mathml+xml (PDF 2.0).
-func (r *Reader) ExtractFormulas() ([]models.FormulaElement, error) {
-	return structure.ExtractFormulas(r.doc)
+func (r *Reader) ExtractFormulas(ctx context.Context) ([]models.FormulaElement, error) {
+	return structure.ExtractFormulas(ctx, r.doc)
 }
 
 // mediaBoxDimensions extracts page width and height from a MediaBox array
@@ -621,7 +650,7 @@ func astFloat(obj ast.PdfObject) float64 {
 
 // runOCR extracts the largest image from the page, decodes it, and passes it
 // to the injected OCR engine.
-func (r *Reader) runOCR(page *document.Page, images []models.ImageMeta, pageNum int) (string, error) {
+func (r *Reader) runOCR(ctx context.Context, page *document.Page, images []models.ImageMeta, pageNum int) (string, error) {
 	// Find the largest image by pixel area.
 	bestArea := 0
 	bestName := ""
@@ -637,7 +666,7 @@ func (r *Reader) runOCR(page *document.Page, images []models.ImageMeta, pageNum 
 	}
 
 	// Decode the image stream.
-	img, err := pdfimage.DecodeImage(r.doc, page, ast.PdfName(bestName))
+	img, err := pdfimage.DecodeImage(ctx, r.doc, page, ast.PdfName(bestName))
 	if err != nil {
 		return "", fmt.Errorf("page %d: OCR image decode failed: %w", pageNum, err)
 	}

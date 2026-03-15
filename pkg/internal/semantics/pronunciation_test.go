@@ -3,6 +3,7 @@ package semantics
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"fmt"
 	"testing"
 
@@ -65,12 +66,12 @@ func TestExtractPronunciationLexicons_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doc, err := document.NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	lexicons, err := ExtractPronunciationLexicons(doc)
+	lexicons, err := ExtractPronunciationLexicons(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,12 +100,12 @@ func TestExtractPronunciationLexicons_NoCatalogEntry(t *testing.T) {
 	buf.WriteString(fmt.Sprintf("trailer\n<< /Size 3 /Root 2 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefOff))
 
 	pdfData := buf.Bytes()
-	doc, err := document.NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	lexicons, err := ExtractPronunciationLexicons(doc)
+	lexicons, err := ExtractPronunciationLexicons(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,12 +156,12 @@ func TestExtractPronunciationLexicons_MultipleLexicons(t *testing.T) {
 	buf.WriteString(fmt.Sprintf("trailer\n<< /Size 5 /Root 4 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefOff))
 
 	pdfData := buf.Bytes()
-	doc, err := document.NewDocument(bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	lexicons, err := ExtractPronunciationLexicons(doc)
+	lexicons, err := ExtractPronunciationLexicons(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}

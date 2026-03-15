@@ -1,6 +1,7 @@
 package semantics
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -9,8 +10,8 @@ import (
 )
 
 // GetOutline extracts the hierarchical outline (bookmarks) from the document.
-func GetOutline(doc *document.Document) ([]models.Bookmark, error) {
-	catalog, err := document.GetCatalog(doc)
+func GetOutline(ctx context.Context, doc *document.Document) ([]models.Bookmark, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +21,7 @@ func GetOutline(doc *document.Document) ([]models.Bookmark, error) {
 		return nil, nil // Document has no outline
 	}
 
-	outlinesResolved, err := document.ResolveObject(doc, outlinesObj)
+	outlinesResolved, err := document.ResolveObject(ctx, doc, outlinesObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve outlines: %v", err)
 	}
@@ -36,20 +37,20 @@ func GetOutline(doc *document.Document) ([]models.Bookmark, error) {
 	}
 
 	// Fetch pages and build a clean ref → 1-based page number map.
-	pages, err := document.GetPages(doc, catalog)
+	pages, err := document.GetPages(ctx, doc, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch pages for outline mapping: %v", err)
 	}
 
-	return parseOutlineItems(doc, firstObj, document.BuildPageMap(pages))
+	return parseOutlineItems(ctx, doc, firstObj, document.BuildPageMap(pages))
 }
 
-func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) ([]models.Bookmark, error) {
+func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) ([]models.Bookmark, error) {
 	var bookmarks []models.Bookmark
 	currentObj := itemObj
 
 	for currentObj != nil {
-		resolved, err := document.ResolveObject(doc, currentObj)
+		resolved, err := document.ResolveObject(ctx, doc, currentObj)
 		if err != nil {
 			break
 		}
@@ -62,7 +63,7 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 		var b models.Bookmark
 
 		if titleObj, ok := dict["Title"]; ok {
-			titleRes, _ := document.ResolveObject(doc, titleObj)
+			titleRes, _ := document.ResolveObject(ctx, doc, titleObj)
 			if titleStr, ok := titleRes.(ast.PdfString); ok {
 				b.Title = document.DecodePdfString(titleStr)
 			}
@@ -70,16 +71,16 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 
 		// Resolve Dest — may be a direct array or a named destination string/name.
 		if destObj, ok := dict["Dest"]; ok {
-			b.PageNumber = resolveDestination(doc, destObj, pageMap)
+			b.PageNumber = resolveDestination(ctx, doc, destObj, pageMap)
 		} else if aObj, ok := dict["A"]; ok {
 			// Some bookmarks use an Action (/A) instead of an explicit /Dest.
-			aRes, _ := document.ResolveObject(doc, aObj)
+			aRes, _ := document.ResolveObject(ctx, doc, aObj)
 			if aDict, ok := aRes.(ast.PdfDict); ok {
 				if sObj, ok := aDict["S"]; ok {
-					sRes, _ := document.ResolveObject(doc, sObj)
+					sRes, _ := document.ResolveObject(ctx, doc, sObj)
 					if sName, ok := sRes.(ast.PdfName); ok && sName == "GoTo" {
 						if dObj, ok := aDict["D"]; ok {
-							b.PageNumber = resolveDestination(doc, dObj, pageMap)
+							b.PageNumber = resolveDestination(ctx, doc, dObj, pageMap)
 						}
 					}
 				}
@@ -88,7 +89,7 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 
 		// Recursively parse children
 		if firstChildObj, ok := dict["First"]; ok {
-			children, err := parseOutlineItems(doc, firstChildObj, pageMap)
+			children, err := parseOutlineItems(ctx, doc, firstChildObj, pageMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse outline children: %w", err)
 			}
@@ -112,8 +113,8 @@ func parseOutlineItems(doc *document.Document, itemObj ast.PdfObject, pageMap ma
 // The destination may be a direct PdfArray, a PdfString (named destination),
 // or a PdfName (named destination). Named destinations are looked up via the
 // catalog's /Names -> /Dests tree or the legacy /Dests dictionary.
-func resolveDestination(doc *document.Document, destObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) int {
-	destRes, _ := document.ResolveObject(doc, destObj)
+func resolveDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) int {
+	destRes, _ := document.ResolveObject(ctx, doc, destObj)
 
 	// Try as a direct destination array first.
 	if destArr, ok := destRes.(ast.PdfArray); ok {
@@ -131,7 +132,7 @@ func resolveDestination(doc *document.Document, destObj ast.PdfObject, pageMap m
 		return 0
 	}
 
-	destArr, err := document.ResolveNamedDest(doc, name)
+	destArr, err := document.ResolveNamedDest(ctx, doc, name)
 	if err != nil || destArr == nil {
 		return 0
 	}

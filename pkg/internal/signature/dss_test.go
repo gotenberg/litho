@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -159,7 +160,7 @@ func TestCheckRevocation_NoData(t *testing.T) {
 
 func TestResolveDSSStreamArray_EmptyDict(t *testing.T) {
 	// Smoke test: no keys match.
-	result := resolveDSSStreamArray(nil, nil, "Certs", "Cert")
+	result := resolveDSSStreamArray(context.Background(), nil, nil, "Certs", "Cert")
 	if result != nil {
 		t.Errorf("expected nil, got %v", result)
 	}

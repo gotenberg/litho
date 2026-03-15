@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -19,7 +20,7 @@ func TestExtractMDPPolicy_DocMDP(t *testing.T) {
 		},
 	}
 
-	p := extractMDPPolicy(nil, sigDict)
+	p := extractMDPPolicy(context.Background(), nil, sigDict)
 	if p != 1 {
 		t.Errorf("expected P=1, got %d", p)
 	}
@@ -37,7 +38,7 @@ func TestExtractMDPPolicy_FieldMDP(t *testing.T) {
 		},
 	}
 
-	p := extractMDPPolicy(nil, sigDict)
+	p := extractMDPPolicy(context.Background(), nil, sigDict)
 	if p != 2 {
 		t.Errorf("expected P=2, got %d", p)
 	}
@@ -54,7 +55,7 @@ func TestExtractMDPPolicy_DefaultsTo2ForDocMDP(t *testing.T) {
 		},
 	}
 
-	p := extractMDPPolicy(nil, sigDict)
+	p := extractMDPPolicy(context.Background(), nil, sigDict)
 	if p != 2 {
 		t.Errorf("expected default P=2, got %d", p)
 	}
@@ -65,7 +66,7 @@ func TestExtractMDPPolicy_NoReference(t *testing.T) {
 		"ByteRange": ast.PdfArray{ast.PdfInt(0)},
 	}
 
-	p := extractMDPPolicy(nil, sigDict)
+	p := extractMDPPolicy(context.Background(), nil, sigDict)
 	if p != 0 {
 		t.Errorf("expected P=0, got %d", p)
 	}
@@ -83,7 +84,7 @@ func TestExtractMDPPolicy_NonMDPTransform(t *testing.T) {
 		},
 	}
 
-	p := extractMDPPolicy(nil, sigDict)
+	p := extractMDPPolicy(context.Background(), nil, sigDict)
 	if p != 0 {
 		t.Errorf("expected P=0 for non-MDP transform, got %d", p)
 	}
@@ -169,7 +170,7 @@ func TestClassifyModifications_EmptyObjects(t *testing.T) {
 func TestEvaluateMDP_NoPolicy(t *testing.T) {
 	sig := models.Signature{MDPPolicy: 0}
 	result := models.SignatureValidation{}
-	evaluateMDP(nil, sig, &result)
+	evaluateMDP(context.Background(), nil, sig, &result)
 
 	if result.MDPPolicy != 0 {
 		t.Errorf("expected MDPPolicy=0, got %d", result.MDPPolicy)

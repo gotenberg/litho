@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 
@@ -11,8 +12,8 @@ import (
 
 // ExtractSignatures locates signature fields, extracts the PKCS#7 payload,
 // and computes the document hash based on the ByteRange.
-func ExtractSignatures(doc *document.Document) ([]models.Signature, error) {
-	catalog, err := document.GetCatalog(doc)
+func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Signature, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +23,7 @@ func ExtractSignatures(doc *document.Document) ([]models.Signature, error) {
 		return nil, nil // No forms/signatures
 	}
 
-	acroFormResolved, err := document.ResolveObject(doc, acroFormObj)
+	acroFormResolved, err := document.ResolveObject(ctx, doc, acroFormObj)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +38,7 @@ func ExtractSignatures(doc *document.Document) ([]models.Signature, error) {
 		return nil, nil
 	}
 
-	fieldsResolved, err := document.ResolveObject(doc, fieldsObj)
+	fieldsResolved, err := document.ResolveObject(ctx, doc, fieldsObj)
 	if err != nil {
 		return nil, err
 	}
@@ -48,14 +49,14 @@ func ExtractSignatures(doc *document.Document) ([]models.Signature, error) {
 	}
 
 	var signatures []models.Signature
-	extractSigsRecursive(doc, fieldsArr, "", &signatures)
+	extractSigsRecursive(ctx, doc, fieldsArr, "", &signatures)
 
 	return signatures, nil
 }
 
-func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature) {
+func extractSigsRecursive(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature) {
 	for _, fieldObj := range fields {
-		fieldResolved, err := document.ResolveObject(doc, fieldObj)
+		fieldResolved, err := document.ResolveObject(ctx, doc, fieldObj)
 		if err != nil {
 			continue
 		}
@@ -68,7 +69,7 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 		// Extract partial name
 		partialName := ""
 		if tObj, ok := fieldDict["T"]; ok {
-			tRes, _ := document.ResolveObject(doc, tObj)
+			tRes, _ := document.ResolveObject(ctx, doc, tObj)
 			if tStr, ok := tRes.(ast.PdfString); ok {
 				partialName = document.DecodePdfString(tStr)
 			}
@@ -85,16 +86,16 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 		// Field Type (/FT)
 		if ftObj, ok := fieldDict["FT"]; ok {
-			ftRes, _ := document.ResolveObject(doc, ftObj)
+			ftRes, _ := document.ResolveObject(ctx, doc, ftObj)
 			if ftName, ok := ftRes.(ast.PdfName); ok && ftName == "Sig" {
 				if vObj, ok := fieldDict["V"]; ok {
-					vRes, _ := document.ResolveObject(doc, vObj)
+					vRes, _ := document.ResolveObject(ctx, doc, vObj)
 					if vDict, ok := vRes.(ast.PdfDict); ok {
 						sig := models.Signature{FieldName: fullName}
 
 						// ByteRange
 						if brObj, ok := vDict["ByteRange"]; ok {
-							brRes, _ := document.ResolveObject(doc, brObj)
+							brRes, _ := document.ResolveObject(ctx, doc, brObj)
 							if brArr, ok := brRes.(ast.PdfArray); ok && len(brArr) == 4 {
 								for i := range 4 {
 									if num, ok := brArr[i].(ast.PdfInt); ok {
@@ -106,7 +107,7 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 						// Contents (Hex string PKCS#7)
 						if cObj, ok := vDict["Contents"]; ok {
-							cRes, _ := document.ResolveObject(doc, cObj)
+							cRes, _ := document.ResolveObject(ctx, doc, cObj)
 							if cStr, ok := cRes.(ast.PdfString); ok {
 								sig.Contents = string(cStr)
 							}
@@ -114,14 +115,14 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 						// /M signing time
 						if mObj, ok := vDict["M"]; ok {
-							mRes, _ := document.ResolveObject(doc, mObj)
+							mRes, _ := document.ResolveObject(ctx, doc, mObj)
 							if mStr, ok := mRes.(ast.PdfString); ok {
 								sig.SigningTime = document.DecodePdfString(mStr)
 							}
 						}
 
 						// Extract MDP policy from /Reference array.
-						sig.MDPPolicy = extractMDPPolicy(doc, vDict)
+						sig.MDPPolicy = extractMDPPolicy(ctx, doc, vDict)
 
 						// Calculate hash of the physical bytes defined by ByteRange
 						if sig.ByteRange[1] > 0 && sig.ByteRange[3] > 0 {
@@ -144,9 +145,9 @@ func extractSigsRecursive(doc *document.Document, fields ast.PdfArray, parentNam
 
 		// Traverse Kids
 		if kidsObj, ok := fieldDict["Kids"]; ok {
-			kidsRes, _ := document.ResolveObject(doc, kidsObj)
+			kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
 			if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
-				extractSigsRecursive(doc, kidsArr, fullName, sigs)
+				extractSigsRecursive(ctx, doc, kidsArr, fullName, sigs)
 			}
 		}
 	}

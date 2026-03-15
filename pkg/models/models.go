@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"image"
 	"io"
 )
@@ -31,6 +32,7 @@ type TextElement struct {
 	Text          string
 	X             float64
 	Y             float64
+	Width         float64 // Advance width of this glyph in page-space units
 	FontSize      float64
 	MCID          int
 	Hidden        bool
@@ -77,7 +79,7 @@ type ImageMeta struct {
 	Height           int
 	ColorSpace       string
 	BitsPerComponent int
-	Open             func() (io.ReadCloser, error) // Lazy accessor for decoded image stream data
+	Open             func(ctx context.Context) (io.ReadCloser, error) // Lazy accessor for decoded image stream data
 }
 
 // Line represents a stroked line segment on a page, in absolute page coordinates.
@@ -96,9 +98,9 @@ type Table struct {
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
 type EmbeddedFile struct {
-	Name     string                        // Original filename from the file specification
-	MIMEType string                        // MIME type from the /Subtype entry, if present
-	Open     func() (io.ReadCloser, error) // Lazy accessor for decoded file content
+	Name     string                                           // Original filename from the file specification
+	MIMEType string                                           // MIME type from the /Subtype entry, if present
+	Open     func(ctx context.Context) (io.ReadCloser, error) // Lazy accessor for decoded file content
 }
 
 // Signature represents a cryptographic signature found in the document.
@@ -184,9 +186,9 @@ type Measurement struct {
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
 type Model3D struct {
-	Name    string                        // Annotation name or resource key
-	Subtype string                        // "U3D" (Universal 3D) or "PRC" (Product Representation Compact)
-	Open    func() (io.ReadCloser, error) // Lazy accessor for decoded 3D model data
+	Name    string                                           // Annotation name or resource key
+	Subtype string                                           // "U3D" (Universal 3D) or "PRC" (Product Representation Compact)
+	Open    func(ctx context.Context) (io.ReadCloser, error) // Lazy accessor for decoded 3D model data
 }
 
 // DSSInfo represents the Document Security Store (/DSS) extracted from

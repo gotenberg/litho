@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 
@@ -15,13 +16,13 @@ import (
 // extractMDPPolicy reads the /Reference array from a signature dictionary and
 // returns the DocMDP or FieldMDP /P (permissions) value. Returns 0 if no MDP
 // transform is specified.
-func extractMDPPolicy(doc *document.Document, sigDict ast.PdfDict) int {
+func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.PdfDict) int {
 	refObj, ok := sigDict["Reference"]
 	if !ok {
 		return 0
 	}
 
-	refRes, err := document.ResolveObject(doc, refObj)
+	refRes, err := document.ResolveObject(ctx, doc, refObj)
 	if err != nil {
 		return 0
 	}
@@ -32,7 +33,7 @@ func extractMDPPolicy(doc *document.Document, sigDict ast.PdfDict) int {
 	}
 
 	for _, item := range refArr {
-		itemRes, err := document.ResolveObject(doc, item)
+		itemRes, err := document.ResolveObject(ctx, doc, item)
 		if err != nil {
 			continue
 		}
@@ -45,7 +46,7 @@ func extractMDPPolicy(doc *document.Document, sigDict ast.PdfDict) int {
 		if !ok {
 			continue
 		}
-		tmRes, err := document.ResolveObject(doc, tmObj)
+		tmRes, err := document.ResolveObject(ctx, doc, tmObj)
 		if err != nil {
 			continue
 		}
@@ -63,7 +64,7 @@ func extractMDPPolicy(doc *document.Document, sigDict ast.PdfDict) int {
 		if !ok {
 			continue
 		}
-		tpRes, err := document.ResolveObject(doc, tpObj)
+		tpRes, err := document.ResolveObject(ctx, doc, tpObj)
 		if err != nil {
 			continue
 		}
@@ -92,7 +93,7 @@ func extractMDPPolicy(doc *document.Document, sigDict ast.PdfDict) int {
 
 // evaluateMDP checks whether the document was modified after the signature was
 // applied and whether those modifications comply with the MDP policy.
-func evaluateMDP(doc *document.Document, sig models.Signature, result *models.SignatureValidation) {
+func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signature, result *models.SignatureValidation) {
 	if sig.MDPPolicy == 0 {
 		return
 	}
@@ -115,7 +116,7 @@ func evaluateMDP(doc *document.Document, sig models.Signature, result *models.Si
 
 	// There are bytes after the signed range. Parse the appended objects
 	// to determine if they violate the MDP policy.
-	appendedObjects, err := parseAppendedObjects(doc, signedEnd, fileSize)
+	appendedObjects, err := parseAppendedObjects(ctx, doc, signedEnd, fileSize)
 	if err != nil {
 		result.MDPInfo = fmt.Sprintf("unable to parse appended data: %v", err)
 		return
@@ -150,7 +151,7 @@ var objectHeaderRe = regexp.MustCompile(`(\d+)\s+\d+\s+obj\b`)
 
 // parseAppendedObjects scans the bytes between signedEnd and fileEnd for
 // indirect object definitions and extracts their /Type values.
-func parseAppendedObjects(doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, error) {
+func parseAppendedObjects(_ context.Context, doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, error) {
 	data, err := doc.ReadFileBytes(signedEnd, fileEnd-signedEnd)
 	if err != nil {
 		return nil, err

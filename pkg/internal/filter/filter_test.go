@@ -229,6 +229,69 @@ func TestApplyDecodeFilter_ASCIIHex(t *testing.T) {
 	}
 }
 
+func TestDecodeASCII85(t *testing.T) {
+	// "87cURD]i,\"Ebo7" is the ASCII85 encoding of "Hello World".
+	const encoded = "87cURD]i,\"Ebo7"
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "basic with EOD marker",
+			input: encoded + "~>",
+			want:  "Hello World",
+		},
+		{
+			name:  "trailing garbage after EOD",
+			input: encoded + "~>\x00\x00padding",
+			want:  "Hello World",
+		},
+		{
+			name:  "missing EOD marker",
+			input: encoded,
+			want:  "Hello World",
+		},
+		{
+			name:  "whitespace inside stream",
+			input: "87cUR D]i,\n\"Ebo7~>",
+			want:  "Hello World",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := decodeASCII85([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("decodeASCII85 failed: %v", err)
+			}
+			if string(got) != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyDecodeFilter_ASCII85(t *testing.T) {
+	result, err := ApplyDecodeFilter([]byte("87cURD]i,\"Ebo7~>"), "ASCII85Decode")
+	if err != nil {
+		t.Fatalf("ApplyDecodeFilter failed: %v", err)
+	}
+	if string(result) != "Hello World" {
+		t.Errorf("got %q, want %q", result, "Hello World")
+	}
+}
+
+func TestApplyDecodeFilter_ASCII85_Abbreviation(t *testing.T) {
+	result, err := ApplyDecodeFilter([]byte("87cURD]i,\"Ebo7~>"), "A85")
+	if err != nil {
+		t.Fatalf("ApplyDecodeFilter failed: %v", err)
+	}
+	if string(result) != "Hello World" {
+		t.Errorf("got %q, want %q", result, "Hello World")
+	}
+}
+
 func TestDecodeStream_TIFFPredictor(t *testing.T) {
 	// TIFF Predictor 2 with FlateDecode.
 	// 2 columns, 3 colors → 6 bytes per row.
@@ -731,5 +794,131 @@ func TestDecodeLZW_EarlyChange0vs1_Differ(t *testing.T) {
 	// It may error or produce wrong output — either proves they differ.
 	if err == nil && bytes.Equal(wrong, input) {
 		t.Error("expected EC=0 stream decoded with EC=1 to differ, but got identical output")
+	}
+}
+
+func TestDecodeCCITTFax_Group4_AllWhite(t *testing.T) {
+	// Group 4 encoded 8x1 all-white image.
+	// V(0) encodes an all-white row (single '1' bit), then EOFB (two 12-bit
+	// codes of 000000000001).
+	// Bitstream: 1 000000000001 000000000001 (padded)
+	data := []byte{0x80, 0x10, 0x01}
+
+	parms := ast.PdfDict{
+		"K":       ast.PdfInt(-1),
+		"Columns": ast.PdfInt(8),
+		"Rows":    ast.PdfInt(1),
+	}
+
+	decoded, err := decodeCCITTFax(data, parms)
+	if err != nil {
+		t.Fatalf("decodeCCITTFax Group4 all-white failed: %v", err)
+	}
+
+	expected := []byte{0xFF}
+	if !bytes.Equal(decoded, expected) {
+		t.Errorf("got %02x, want %02x", decoded, expected)
+	}
+}
+
+func TestDecodeCCITTFax_Group4_TwoRows(t *testing.T) {
+	// Group 4, 8x2, both rows all-white.
+	// Row 0: V(0) = 1 bit
+	// Row 1: V(0) = 1 bit
+	// EOFB: 000000000001 000000000001
+	// Bitstream: 1 1 000000000001 000000000001 (padded)
+	data := []byte{0xC0, 0x10, 0x01}
+
+	parms := ast.PdfDict{
+		"K":       ast.PdfInt(-1),
+		"Columns": ast.PdfInt(8),
+		"Rows":    ast.PdfInt(2),
+	}
+
+	decoded, err := decodeCCITTFax(data, parms)
+	if err != nil {
+		t.Fatalf("decodeCCITTFax Group4 2-row all-white failed: %v", err)
+	}
+
+	expected := []byte{0xFF, 0xFF}
+	if !bytes.Equal(decoded, expected) {
+		t.Errorf("got %02x, want %02x", decoded, expected)
+	}
+}
+
+func TestDecodeCCITTFax_Group4_WhiteThenBlack(t *testing.T) {
+	// Group 4, 8x2: row 0 = all white, row 1 = all black.
+	// Row 0: V(0) = 1
+	// Row 1: horizontal mode (001) + white(0) run-length code (00110101)
+	//         + black(8) run-length code (00011)
+	// EOFB: 000000000001 000000000001
+	data := []byte{0x93, 0x51, 0x40, 0x04, 0x00, 0x40}
+
+	parms := ast.PdfDict{
+		"K":       ast.PdfInt(-1),
+		"Columns": ast.PdfInt(8),
+		"Rows":    ast.PdfInt(2),
+	}
+
+	decoded, err := decodeCCITTFax(data, parms)
+	if err != nil {
+		t.Fatalf("decodeCCITTFax Group4 white+black failed: %v", err)
+	}
+
+	expected := []byte{0xFF, 0x00}
+	if !bytes.Equal(decoded, expected) {
+		t.Errorf("got %02x, want %02x", decoded, expected)
+	}
+}
+
+func TestApplyDecodeFilter_CCITTFax(t *testing.T) {
+	// Verify CCITTFaxDecode is wired into the main filter dispatch.
+	data := []byte{0x80, 0x10, 0x01}
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Filter": ast.PdfName("CCITTFaxDecode"),
+			"DecodeParms": ast.PdfDict{
+				"K":       ast.PdfInt(-1),
+				"Columns": ast.PdfInt(8),
+				"Rows":    ast.PdfInt(1),
+			},
+		},
+		Data: data,
+	}
+
+	decoded, err := DecodeStream(stream)
+	if err != nil {
+		t.Fatalf("DecodeStream CCITTFaxDecode failed: %v", err)
+	}
+
+	expected := []byte{0xFF}
+	if !bytes.Equal(decoded, expected) {
+		t.Errorf("got %02x, want %02x", decoded, expected)
+	}
+}
+
+func TestApplyDecodeFilter_CCF_Abbreviation(t *testing.T) {
+	// Verify the /CCF abbreviation also works.
+	data := []byte{0x80, 0x10, 0x01}
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Filter": ast.PdfName("CCF"),
+			"DecodeParms": ast.PdfDict{
+				"K":       ast.PdfInt(-1),
+				"Columns": ast.PdfInt(8),
+				"Rows":    ast.PdfInt(1),
+			},
+		},
+		Data: data,
+	}
+
+	decoded, err := DecodeStream(stream)
+	if err != nil {
+		t.Fatalf("DecodeStream CCF failed: %v", err)
+	}
+
+	expected := []byte{0xFF}
+	if !bytes.Equal(decoded, expected) {
+		t.Errorf("got %02x, want %02x", decoded, expected)
 	}
 }

@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/hex"
@@ -91,8 +92,8 @@ func parsePDFDate(s string) (time.Time, error) {
 // Store (DSS) is present, it uses the embedded OCSP responses, CRLs, and
 // timestamp tokens for Long-Term Validation (LTV), allowing offline
 // verification of signatures whose certificates have since expired.
-func VerifySignatures(doc *document.Document, roots *x509.CertPool) ([]models.SignatureValidation, error) {
-	sigs, err := ExtractSignatures(doc)
+func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.CertPool) ([]models.SignatureValidation, error) {
+	sigs, err := ExtractSignatures(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +102,7 @@ func VerifySignatures(doc *document.Document, roots *x509.CertPool) ([]models.Si
 	}
 
 	// Extract DSS for LTV validation (best-effort).
-	dss, _ := extractDSS(doc)
+	dss, _ := extractDSS(ctx, doc)
 
 	var results []models.SignatureValidation
 
@@ -223,7 +224,7 @@ func VerifySignatures(doc *document.Document, roots *x509.CertPool) ([]models.Si
 			(result.RevocationOK || result.RevocationInfo != "")
 
 		// Evaluate MDP (Modification Detection and Prevention) policy.
-		evaluateMDP(doc, sig, &result)
+		evaluateMDP(ctx, doc, sig, &result)
 
 		results = append(results, result)
 	}
@@ -233,8 +234,8 @@ func VerifySignatures(doc *document.Document, roots *x509.CertPool) ([]models.Si
 
 // GetDSSInfo returns a summary of the Document Security Store contents.
 // Returns nil if no /DSS dictionary exists.
-func GetDSSInfo(doc *document.Document) (*models.DSSInfo, error) {
-	dss, err := extractDSS(doc)
+func GetDSSInfo(ctx context.Context, doc *document.Document) (*models.DSSInfo, error) {
+	dss, err := extractDSS(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

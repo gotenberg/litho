@@ -2,6 +2,7 @@ package image
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -15,13 +16,13 @@ import (
 // DecodeImage decodes a named Image XObject from a page into a Go image.Image.
 // The name parameter is the resource key (e.g., "Im0") under the page's
 // /Resources /XObject dictionary.
-func DecodeImage(doc *document.Document, page *document.Page, name ast.PdfName) (image.Image, error) {
+func DecodeImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (image.Image, error) {
 	xobjObj, ok := page.Resources["XObject"]
 	if !ok {
 		return nil, fmt.Errorf("page has no /XObject resources")
 	}
 
-	xobjResolved, err := document.ResolveObject(doc, xobjObj)
+	xobjResolved, err := document.ResolveObject(ctx, doc, xobjObj)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +37,7 @@ func DecodeImage(doc *document.Document, page *document.Page, name ast.PdfName) 
 		return nil, fmt.Errorf("image %q not found in /XObject", name)
 	}
 
-	resolved, err := document.ResolveObject(doc, obj)
+	resolved, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -46,18 +47,18 @@ func DecodeImage(doc *document.Document, page *document.Page, name ast.PdfName) 
 		return nil, fmt.Errorf("image %q is not a stream", name)
 	}
 
-	width, err := getInt(doc, stream.Dict, "Width")
+	width, err := getInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
 		return nil, err
 	}
 
-	height, err := getInt(doc, stream.Dict, "Height")
+	height, err := getInt(ctx, doc, stream.Dict, "Height")
 	if err != nil {
 		return nil, err
 	}
 
-	colorSpace := resolveColorSpace(doc, stream.Dict)
-	bitsPerComp, _ := getInt(doc, stream.Dict, "BitsPerComponent")
+	colorSpace := resolveColorSpace(ctx, doc, stream.Dict)
+	bitsPerComp, _ := getInt(ctx, doc, stream.Dict, "BitsPerComponent")
 	if bitsPerComp == 0 {
 		bitsPerComp = 8
 	}
@@ -65,7 +66,7 @@ func DecodeImage(doc *document.Document, page *document.Page, name ast.PdfName) 
 	// Determine the filter.
 	filterName := ""
 	if filterObj, ok := stream.Dict["Filter"]; ok {
-		filterRes, _ := document.ResolveObject(doc, filterObj)
+		filterRes, _ := document.ResolveObject(ctx, doc, filterObj)
 		if fn, ok := filterRes.(ast.PdfName); ok {
 			filterName = string(fn)
 		} else if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {

@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/asn1"
 	"fmt"
@@ -45,8 +46,8 @@ type singleResponse struct {
 
 // extractDSS reads the /DSS dictionary from the document catalog and parses
 // all embedded certificates, CRLs, and OCSP responses.
-func extractDSS(doc *document.Document) (*dssData, error) {
-	catalog, err := document.GetCatalog(doc)
+func extractDSS(ctx context.Context, doc *document.Document) (*dssData, error) {
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +57,7 @@ func extractDSS(doc *document.Document) (*dssData, error) {
 		return nil, nil
 	}
 
-	dssResolved, err := document.ResolveObject(doc, dssObj)
+	dssResolved, err := document.ResolveObject(ctx, doc, dssObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /DSS: %w", err)
 	}
@@ -70,18 +71,18 @@ func extractDSS(doc *document.Document) (*dssData, error) {
 		VRI: make(map[string]*vriEntry),
 	}
 
-	dss.Certs = parseDSSCerts(doc, dssDict)
-	dss.CRLs = parseDSSCRLs(doc, dssDict)
-	dss.OCSPs = parseDSSOCSPs(doc, dssDict)
+	dss.Certs = parseDSSCerts(ctx, doc, dssDict)
+	dss.CRLs = parseDSSCRLs(ctx, doc, dssDict)
+	dss.OCSPs = parseDSSOCSPs(ctx, doc, dssDict)
 
 	// /VRI — dictionary keyed by uppercase hex SHA-1 of the signature value,
 	// each value is a dictionary with optional /Cert, /CRL, /OCSP arrays.
 	if vriObj, ok := dssDict["VRI"]; ok {
-		vriResolved, err := document.ResolveObject(doc, vriObj)
+		vriResolved, err := document.ResolveObject(ctx, doc, vriObj)
 		if err == nil {
 			if vriDict, ok := vriResolved.(ast.PdfDict); ok {
 				for key, valObj := range vriDict {
-					entryResolved, err := document.ResolveObject(doc, valObj)
+					entryResolved, err := document.ResolveObject(ctx, doc, valObj)
 					if err != nil {
 						continue
 					}
@@ -91,9 +92,9 @@ func extractDSS(doc *document.Document) (*dssData, error) {
 					}
 
 					entry := &vriEntry{
-						Certs: parseDSSCerts(doc, entryDict),
-						CRLs:  parseDSSCRLs(doc, entryDict),
-						OCSPs: parseDSSOCSPs(doc, entryDict),
+						Certs: parseDSSCerts(ctx, doc, entryDict),
+						CRLs:  parseDSSCRLs(ctx, doc, entryDict),
+						OCSPs: parseDSSOCSPs(ctx, doc, entryDict),
 					}
 					dss.VRI[string(key)] = entry
 				}
@@ -106,7 +107,7 @@ func extractDSS(doc *document.Document) (*dssData, error) {
 
 // resolveDSSStreamArray resolves a named array from a dictionary and decodes
 // each stream entry, returning the raw DER bytes of each stream.
-func resolveDSSStreamArray(doc *document.Document, dict ast.PdfDict, keys ...ast.PdfName) [][]byte {
+func resolveDSSStreamArray(ctx context.Context, doc *document.Document, dict ast.PdfDict, keys ...ast.PdfName) [][]byte {
 	var arrObj ast.PdfObject
 	var found bool
 	for _, key := range keys {
@@ -120,7 +121,7 @@ func resolveDSSStreamArray(doc *document.Document, dict ast.PdfDict, keys ...ast
 		return nil
 	}
 
-	arrResolved, err := document.ResolveObject(doc, arrObj)
+	arrResolved, err := document.ResolveObject(ctx, doc, arrObj)
 	if err != nil {
 		return nil
 	}
@@ -132,7 +133,7 @@ func resolveDSSStreamArray(doc *document.Document, dict ast.PdfDict, keys ...ast
 
 	var results [][]byte
 	for _, streamRef := range arr {
-		streamResolved, err := document.ResolveObject(doc, streamRef)
+		streamResolved, err := document.ResolveObject(ctx, doc, streamRef)
 		if err != nil {
 			continue
 		}
@@ -150,9 +151,9 @@ func resolveDSSStreamArray(doc *document.Document, dict ast.PdfDict, keys ...ast
 }
 
 // parseDSSCerts extracts X.509 certificates from /Certs or /Cert arrays.
-func parseDSSCerts(doc *document.Document, dict ast.PdfDict) []*x509.Certificate {
+func parseDSSCerts(ctx context.Context, doc *document.Document, dict ast.PdfDict) []*x509.Certificate {
 	var certs []*x509.Certificate
-	for _, data := range resolveDSSStreamArray(doc, dict, "Certs", "Cert") {
+	for _, data := range resolveDSSStreamArray(ctx, doc, dict, "Certs", "Cert") {
 		cert, err := x509.ParseCertificate(data)
 		if err == nil {
 			certs = append(certs, cert)
@@ -162,9 +163,9 @@ func parseDSSCerts(doc *document.Document, dict ast.PdfDict) []*x509.Certificate
 }
 
 // parseDSSCRLs extracts Certificate Revocation Lists from /CRLs or /CRL arrays.
-func parseDSSCRLs(doc *document.Document, dict ast.PdfDict) []*x509.RevocationList {
+func parseDSSCRLs(ctx context.Context, doc *document.Document, dict ast.PdfDict) []*x509.RevocationList {
 	var crls []*x509.RevocationList
-	for _, data := range resolveDSSStreamArray(doc, dict, "CRLs", "CRL") {
+	for _, data := range resolveDSSStreamArray(ctx, doc, dict, "CRLs", "CRL") {
 		crl, err := x509.ParseRevocationList(data)
 		if err == nil {
 			crls = append(crls, crl)
@@ -174,9 +175,9 @@ func parseDSSCRLs(doc *document.Document, dict ast.PdfDict) []*x509.RevocationLi
 }
 
 // parseDSSOCSPs extracts OCSP responses from /OCSPs or /OCSP arrays.
-func parseDSSOCSPs(doc *document.Document, dict ast.PdfDict) []ocspBasicResponse {
+func parseDSSOCSPs(ctx context.Context, doc *document.Document, dict ast.PdfDict) []ocspBasicResponse {
 	var responses []ocspBasicResponse
-	for _, data := range resolveDSSStreamArray(doc, dict, "OCSPs", "OCSP") {
+	for _, data := range resolveDSSStreamArray(ctx, doc, dict, "OCSPs", "OCSP") {
 		resp, err := parseOCSPResponse(data)
 		if err == nil {
 			responses = append(responses, resp)

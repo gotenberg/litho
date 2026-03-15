@@ -1,6 +1,7 @@
 package export
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 
@@ -68,34 +69,34 @@ type Document struct {
 // Extract drives a full extraction from the Reader and returns a Document
 // ready for serialization. Per-page extraction errors are silently skipped
 // so that a single corrupt page does not prevent the rest from being exported.
-func Extract(r *pdf.Reader) (*Document, error) {
+func Extract(ctx context.Context, r *pdf.Reader) (*Document, error) {
 	doc := &Document{}
 
 	// Document-level metadata.
-	if meta, err := r.GetMetadata(); err == nil {
+	if meta, err := r.GetMetadata(ctx); err == nil {
 		doc.Metadata = meta
 	}
-	if bm, err := r.GetBookmarks(); err == nil {
+	if bm, err := r.GetBookmarks(ctx); err == nil {
 		doc.Bookmarks = bm
 	}
-	if fd, err := r.GetFormData(); err == nil && len(fd) > 0 {
+	if fd, err := r.GetFormData(ctx); err == nil && len(fd) > 0 {
 		doc.FormData = fd
 	}
-	if sigs, err := r.VerifySignatures(nil); err == nil {
+	if sigs, err := r.VerifySignatures(ctx, nil); err == nil {
 		doc.Signatures = sigs
 	}
-	if dss, err := r.GetDSSInfo(); err == nil {
+	if dss, err := r.GetDSSInfo(ctx); err == nil {
 		doc.DSS = dss
 	}
-	if lexicons, err := r.ExtractPronunciationLexicons(); err == nil {
+	if lexicons, err := r.ExtractPronunciationLexicons(ctx); err == nil {
 		doc.Lexicons = lexicons
 	}
-	if formulas, err := r.ExtractFormulas(); err == nil {
+	if formulas, err := r.ExtractFormulas(ctx); err == nil {
 		doc.Formulas = formulas
 	}
-	if isPortfolio, err := r.IsPortfolio(); err == nil && isPortfolio {
+	if isPortfolio, err := r.IsPortfolio(ctx); err == nil && isPortfolio {
 		doc.IsPortfolio = true
-		if items, err := r.ExtractPortfolioItems(); err == nil {
+		if items, err := r.ExtractPortfolioItems(ctx); err == nil {
 			for _, item := range items {
 				doc.EmbeddedFiles = append(doc.EmbeddedFiles, EmbeddedFileMeta{
 					Name:     item.Name,
@@ -112,31 +113,35 @@ func Extract(r *pdf.Reader) (*Document, error) {
 	}
 
 	// Per-page extraction.
-	numPages, err := r.NumPages()
+	numPages, err := r.NumPages(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	doc.Pages = make([]PageData, 0, numPages)
 	for i := 1; i <= numPages; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		pd := PageData{}
 
-		if page, err := r.GetPage(i); err == nil {
+		if page, err := r.GetPage(ctx, i); err == nil {
 			pd.Page = page
 		}
-		if text, err := r.ExtractText(i); err == nil {
+		if text, err := r.ExtractText(ctx, i); err == nil {
 			pd.Text = text
 		}
-		if elems, err := r.ExtractTextElements(i); err == nil {
+		if elems, err := r.ExtractTextElements(ctx, i); err == nil {
 			pd.TextElements = elems
 		}
-		if annots, err := r.GetAnnotations(i); err == nil {
+		if annots, err := r.GetAnnotations(ctx, i); err == nil {
 			pd.Annotations = annots
 		}
-		if tables, err := r.ExtractTables(i); err == nil {
+		if tables, err := r.ExtractTables(ctx, i); err == nil {
 			pd.Tables = tables
 		}
-		if images, err := r.InspectImages(i); err == nil {
+		if images, err := r.InspectImages(ctx, i); err == nil {
 			for _, img := range images {
 				pd.Images = append(pd.Images, ImageExportMeta{
 					Filename:         img.Filename,
@@ -147,16 +152,16 @@ func Extract(r *pdf.Reader) (*Document, error) {
 				})
 			}
 		}
-		if lines, err := r.ExtractLines(i); err == nil {
+		if lines, err := r.ExtractLines(ctx, i); err == nil {
 			pd.Lines = lines
 		}
-		if measurements, err := r.ExtractMeasurements(i); err == nil {
+		if measurements, err := r.ExtractMeasurements(ctx, i); err == nil {
 			pd.Measurements = measurements
 		}
-		if geo, err := r.ExtractGeoData(i); err == nil {
+		if geo, err := r.ExtractGeoData(ctx, i); err == nil {
 			pd.GeoData = geo
 		}
-		if models3d, err := r.Extract3DModels(i); err == nil {
+		if models3d, err := r.Extract3DModels(ctx, i); err == nil {
 			for _, m := range models3d {
 				pd.Models3D = append(pd.Models3D, Model3DMeta{
 					Name:    m.Name,
@@ -172,8 +177,8 @@ func Extract(r *pdf.Reader) (*Document, error) {
 }
 
 // JSON extracts all data from the Reader and writes it as formatted JSON to w.
-func JSON(w io.Writer, r *pdf.Reader) error {
-	doc, err := Extract(r)
+func JSON(ctx context.Context, w io.Writer, r *pdf.Reader) error {
+	doc, err := Extract(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -185,8 +190,8 @@ func JSON(w io.Writer, r *pdf.Reader) error {
 
 // JSONCompact extracts all data from the Reader and writes it as compact
 // (non-indented) JSON to w.
-func JSONCompact(w io.Writer, r *pdf.Reader) error {
-	doc, err := Extract(r)
+func JSONCompact(ctx context.Context, w io.Writer, r *pdf.Reader) error {
+	doc, err := Extract(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -197,8 +202,8 @@ func JSONCompact(w io.Writer, r *pdf.Reader) error {
 
 // MarshalJSON extracts all data from the Reader and returns it as a
 // formatted JSON byte slice.
-func MarshalJSON(r *pdf.Reader) ([]byte, error) {
-	doc, err := Extract(r)
+func MarshalJSON(ctx context.Context, r *pdf.Reader) ([]byte, error) {
+	doc, err := Extract(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -207,8 +212,8 @@ func MarshalJSON(r *pdf.Reader) ([]byte, error) {
 
 // MarshalJSONCompact extracts all data from the Reader and returns it as
 // a compact JSON byte slice.
-func MarshalJSONCompact(r *pdf.Reader) ([]byte, error) {
-	doc, err := Extract(r)
+func MarshalJSONCompact(ctx context.Context, r *pdf.Reader) ([]byte, error) {
+	doc, err := Extract(ctx, r)
 	if err != nil {
 		return nil, err
 	}

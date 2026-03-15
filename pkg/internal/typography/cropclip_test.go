@@ -1,6 +1,7 @@
 package typography
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -111,7 +112,7 @@ func TestIsClipped_ViaExtractElements(t *testing.T) {
 
 	// ExtractElements with no ops produces no elements, which is fine.
 	// The key assertion is that the machine got the right clipping bounds.
-	elements, err := ExtractElements(nil, machine, page, []content.Operation{})
+	elements, err := ExtractElements(context.Background(), nil, machine, page, []content.Operation{})
 	if err != nil {
 		t.Fatal(err)
 	}

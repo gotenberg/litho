@@ -1,27 +1,29 @@
 package document
 
 import (
+	"context"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
 // ResolveNamedDest looks up a named destination by name, searching the catalog's
 // /Names -> /Dests name tree first, then the legacy /Dests dictionary.
 // Returns nil if the destination is not found.
-func ResolveNamedDest(doc *Document, name string) (ast.PdfArray, error) {
-	catalog, err := GetCatalog(doc)
+func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfArray, error) {
+	catalog, err := GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
 
 	// Preferred: /Names -> /Dests name tree (PDF 1.2+).
 	if namesObj, ok := catalog.Dict["Names"]; ok {
-		namesRes, err := ResolveObject(doc, namesObj)
+		namesRes, err := ResolveObject(ctx, doc, namesObj)
 		if err != nil {
 			return nil, err
 		}
 		if namesDict, ok := namesRes.(ast.PdfDict); ok {
 			if destsObj, ok := namesDict["Dests"]; ok {
-				result, err := searchNameTree(doc, destsObj, name)
+				result, err := searchNameTree(ctx, doc, destsObj, name)
 				if err != nil {
 					return nil, err
 				}
@@ -34,13 +36,13 @@ func ResolveNamedDest(doc *Document, name string) (ast.PdfArray, error) {
 
 	// Fallback: legacy /Dests dictionary (PDF 1.1).
 	if destsObj, ok := catalog.Dict["Dests"]; ok {
-		destsRes, err := ResolveObject(doc, destsObj)
+		destsRes, err := ResolveObject(ctx, doc, destsObj)
 		if err != nil {
 			return nil, err
 		}
 		if destsDict, ok := destsRes.(ast.PdfDict); ok {
 			if destObj, ok := destsDict[ast.PdfName(name)]; ok {
-				return resolveDestValue(doc, destObj)
+				return resolveDestValue(ctx, doc, destObj)
 			}
 		}
 	}
@@ -51,8 +53,8 @@ func ResolveNamedDest(doc *Document, name string) (ast.PdfArray, error) {
 // searchNameTree recursively searches a name tree node for the given key.
 // Name trees use /Kids for intermediate nodes and /Names for leaf nodes,
 // with optional /Limits [min max] arrays for efficient pruning.
-func searchNameTree(doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
-	nodeRes, err := ResolveObject(doc, nodeObj)
+func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
+	nodeRes, err := ResolveObject(ctx, doc, nodeObj)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +65,7 @@ func searchNameTree(doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfAr
 
 	// Check /Limits to prune this branch early.
 	if limitsObj, ok := nodeDict["Limits"]; ok {
-		limitsRes, err := ResolveObject(doc, limitsObj)
+		limitsRes, err := ResolveObject(ctx, doc, limitsObj)
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +82,7 @@ func searchNameTree(doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfAr
 
 	// Intermediate node: recurse into /Kids.
 	if kidsObj, ok := nodeDict["Kids"]; ok {
-		kidsRes, err := ResolveObject(doc, kidsObj)
+		kidsRes, err := ResolveObject(ctx, doc, kidsObj)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +91,7 @@ func searchNameTree(doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfAr
 			return nil, nil
 		}
 		for _, kid := range kidsArr {
-			result, err := searchNameTree(doc, kid, key)
+			result, err := searchNameTree(ctx, doc, kid, key)
 			if err != nil {
 				return nil, err
 			}
@@ -105,7 +107,7 @@ func searchNameTree(doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfAr
 	if !ok {
 		return nil, nil
 	}
-	namesRes, err := ResolveObject(doc, namesObj)
+	namesRes, err := ResolveObject(ctx, doc, namesObj)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +119,7 @@ func searchNameTree(doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfAr
 	for i := 0; i+1 < len(namesArr); i += 2 {
 		entryName := decodeLimitString(namesArr[i])
 		if entryName == key {
-			return resolveDestValue(doc, namesArr[i+1])
+			return resolveDestValue(ctx, doc, namesArr[i+1])
 		}
 	}
 
@@ -126,8 +128,8 @@ func searchNameTree(doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfAr
 
 // resolveDestValue resolves a destination value to a PdfArray.
 // The value may be a direct array or a dictionary containing a /D array.
-func resolveDestValue(doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
-	res, err := ResolveObject(doc, obj)
+func resolveDestValue(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
+	res, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +140,7 @@ func resolveDestValue(doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
 	case ast.PdfDict:
 		// Destination dictionaries store the actual array under /D.
 		if dObj, ok := v["D"]; ok {
-			dRes, err := ResolveObject(doc, dObj)
+			dRes, err := ResolveObject(ctx, doc, dObj)
 			if err != nil {
 				return nil, err
 			}

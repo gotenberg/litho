@@ -1,6 +1,7 @@
 package structure
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -52,7 +53,7 @@ func TestExtractFormulas_WithMathML(t *testing.T) {
 	}
 
 	doc := mockDoc(structTree)
-	formulas, err := ExtractFormulas(doc)
+	formulas, err := ExtractFormulas(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +82,7 @@ func TestExtractFormulas_NoAF(t *testing.T) {
 	}
 
 	doc := mockDoc(structTree)
-	formulas, err := ExtractFormulas(doc)
+	formulas, err := ExtractFormulas(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +124,7 @@ func TestExtractFormulas_WrongAFRelationship(t *testing.T) {
 	}
 
 	doc := mockDoc(structTree)
-	formulas, err := ExtractFormulas(doc)
+	formulas, err := ExtractFormulas(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +170,7 @@ func TestExtractFormulas_NestedFormula(t *testing.T) {
 	}
 
 	doc := mockDoc(structTree)
-	formulas, err := ExtractFormulas(doc)
+	formulas, err := ExtractFormulas(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +193,7 @@ func TestExtractFormulas_NoStructTree(t *testing.T) {
 		},
 	}
 
-	formulas, err := ExtractFormulas(doc)
+	formulas, err := ExtractFormulas(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +218,7 @@ func TestExtractFormulas_NonFormulaElements(t *testing.T) {
 	}
 
 	doc := mockDoc(structTree)
-	formulas, err := ExtractFormulas(doc)
+	formulas, err := ExtractFormulas(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +255,7 @@ func TestExtractFormulas_MultipleFormulas(t *testing.T) {
 	}
 
 	doc := mockDoc(structTree)
-	formulas, err := ExtractFormulas(doc)
+	formulas, err := ExtractFormulas(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +285,7 @@ func TestCollectMCIDs(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var mcids []int
-			collectMCIDs(nil, tc.obj, &mcids)
+			collectMCIDs(context.Background(), nil, tc.obj, &mcids)
 			if len(mcids) != len(tc.want) {
 				t.Fatalf("got %v, want %v", mcids, tc.want)
 			}
@@ -310,7 +311,7 @@ func TestExtractMathMLFromAF_SingleFileSpec(t *testing.T) {
 		},
 	}
 
-	got := extractMathMLFromAF(nil, dict)
+	got := extractMathMLFromAF(context.Background(), nil, dict)
 	if got != "<math/>" {
 		t.Errorf("got %q, want '<math/>'", got)
 	}

@@ -1,6 +1,7 @@
 package semantics
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -12,16 +13,16 @@ import (
 
 // ExtractGeoData scans a page dictionary and its Image XObjects for /Measure
 // dictionaries with /Subtype /GEO. Returns nil if no geospatial data is found.
-func ExtractGeoData(doc *document.Document, page *document.Page) ([]models.GeoData, error) {
+func ExtractGeoData(ctx context.Context, doc *document.Document, page *document.Page) ([]models.GeoData, error) {
 	var results []models.GeoData
 
 	// Check the page-level /VP (Viewport) array for geospatial viewports.
 	if vpObj, ok := page.Dict["VP"]; ok {
-		vpResolved, err := document.ResolveObject(doc, vpObj)
+		vpResolved, err := document.ResolveObject(ctx, doc, vpObj)
 		if err == nil {
 			if vpArr, ok := vpResolved.(ast.PdfArray); ok {
 				for _, vpEntry := range vpArr {
-					vpRes, err := document.ResolveObject(doc, vpEntry)
+					vpRes, err := document.ResolveObject(ctx, doc, vpEntry)
 					if err != nil {
 						continue
 					}
@@ -30,7 +31,7 @@ func ExtractGeoData(doc *document.Document, page *document.Page) ([]models.GeoDa
 						continue
 					}
 					if measureObj, ok := vpDict["Measure"]; ok {
-						geo, err := parseMeasureDict(doc, measureObj)
+						geo, err := parseMeasureDict(ctx, doc, measureObj)
 						if err == nil && geo != nil {
 							results = append(results, *geo)
 						}
@@ -43,11 +44,11 @@ func ExtractGeoData(doc *document.Document, page *document.Page) ([]models.GeoDa
 	// Check Image XObjects for /Measure dictionaries.
 	if page.Resources != nil {
 		if xobjObj, ok := page.Resources["XObject"]; ok {
-			xobjResolved, err := document.ResolveObject(doc, xobjObj)
+			xobjResolved, err := document.ResolveObject(ctx, doc, xobjObj)
 			if err == nil {
 				if xobjDict, ok := xobjResolved.(ast.PdfDict); ok {
 					for _, obj := range xobjDict {
-						resolved, err := document.ResolveObject(doc, obj)
+						resolved, err := document.ResolveObject(ctx, doc, obj)
 						if err != nil {
 							continue
 						}
@@ -56,7 +57,7 @@ func ExtractGeoData(doc *document.Document, page *document.Page) ([]models.GeoDa
 							continue
 						}
 						if measureObj, ok := stream.Dict["Measure"]; ok {
-							geo, err := parseMeasureDict(doc, measureObj)
+							geo, err := parseMeasureDict(ctx, doc, measureObj)
 							if err == nil && geo != nil {
 								results = append(results, *geo)
 							}
@@ -75,8 +76,8 @@ func ExtractGeoData(doc *document.Document, page *document.Page) ([]models.GeoDa
 
 // parseMeasureDict resolves and parses a /Measure dictionary, extracting
 // geospatial data if /Subtype is /GEO.
-func parseMeasureDict(doc *document.Document, measureObj ast.PdfObject) (*models.GeoData, error) {
-	measureResolved, err := document.ResolveObject(doc, measureObj)
+func parseMeasureDict(ctx context.Context, doc *document.Document, measureObj ast.PdfObject) (*models.GeoData, error) {
+	measureResolved, err := document.ResolveObject(ctx, doc, measureObj)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +89,7 @@ func parseMeasureDict(doc *document.Document, measureObj ast.PdfObject) (*models
 
 	// Check /Subtype is /GEO.
 	if subtypeObj, ok := measureDict["Subtype"]; ok {
-		subtypeRes, _ := document.ResolveObject(doc, subtypeObj)
+		subtypeRes, _ := document.ResolveObject(ctx, doc, subtypeObj)
 		if name, ok := subtypeRes.(ast.PdfName); ok {
 			if name != "GEO" {
 				return nil, nil
@@ -102,10 +103,10 @@ func parseMeasureDict(doc *document.Document, measureObj ast.PdfObject) (*models
 
 	// Extract /GCS (Geographic Coordinate System).
 	if gcsObj, ok := measureDict["GCS"]; ok {
-		gcsRes, err := document.ResolveObject(doc, gcsObj)
+		gcsRes, err := document.ResolveObject(ctx, doc, gcsObj)
 		if err == nil {
 			if gcsDict, ok := gcsRes.(ast.PdfDict); ok {
-				parseGCS(doc, gcsDict, geo)
+				parseGCS(ctx, doc, gcsDict, geo)
 			}
 		}
 	}
@@ -113,10 +114,10 @@ func parseMeasureDict(doc *document.Document, measureObj ast.PdfObject) (*models
 	// Extract /GPTS (Geospatial Tie Points) — array of lat/lon pairs.
 	// Format: [lat1 lon1 lat2 lon2 ... latN lonN]
 	if gptsObj, ok := measureDict["GPTS"]; ok {
-		gptsRes, err := document.ResolveObject(doc, gptsObj)
+		gptsRes, err := document.ResolveObject(ctx, doc, gptsObj)
 		if err == nil {
 			if gptsArr, ok := gptsRes.(ast.PdfArray); ok {
-				parseGPTS(doc, measureDict, gptsArr, geo)
+				parseGPTS(ctx, doc, measureDict, gptsArr, geo)
 			}
 		}
 	}
@@ -130,10 +131,10 @@ func parseMeasureDict(doc *document.Document, measureObj ast.PdfObject) (*models
 }
 
 // parseGCS extracts coordinate system info from a /GCS dictionary.
-func parseGCS(doc *document.Document, gcsDict ast.PdfDict, geo *models.GeoData) {
+func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, geo *models.GeoData) {
 	// /Type — "GEOGCS", "PROJCS", etc.
 	if typeObj, ok := gcsDict["Type"]; ok {
-		typeRes, _ := document.ResolveObject(doc, typeObj)
+		typeRes, _ := document.ResolveObject(ctx, doc, typeObj)
 		if name, ok := typeRes.(ast.PdfName); ok {
 			geo.CoordinateSystem = string(name)
 		}
@@ -141,7 +142,7 @@ func parseGCS(doc *document.Document, gcsDict ast.PdfDict, geo *models.GeoData) 
 
 	// /EPSG — EPSG code.
 	if epsgObj, ok := gcsDict["EPSG"]; ok {
-		epsgRes, _ := document.ResolveObject(doc, epsgObj)
+		epsgRes, _ := document.ResolveObject(ctx, doc, epsgObj)
 		switch v := epsgRes.(type) {
 		case ast.PdfInt:
 			geo.EPSG = fmt.Sprintf("%d", int(v))
@@ -153,7 +154,7 @@ func parseGCS(doc *document.Document, gcsDict ast.PdfDict, geo *models.GeoData) 
 	// /WKT — Well-Known Text may contain EPSG info.
 	if geo.EPSG == "" {
 		if wktObj, ok := gcsDict["WKT"]; ok {
-			wktRes, _ := document.ResolveObject(doc, wktObj)
+			wktRes, _ := document.ResolveObject(ctx, doc, wktObj)
 			if wktStr, ok := wktRes.(ast.PdfString); ok {
 				geo.EPSG = extractEPSGFromWKT(string(wktStr))
 			}
@@ -163,11 +164,11 @@ func parseGCS(doc *document.Document, gcsDict ast.PdfDict, geo *models.GeoData) 
 
 // parseGPTS extracts tie points from the /GPTS array and optionally pairs them
 // with the /LPTS (PDF-space points) array.
-func parseGPTS(doc *document.Document, measureDict ast.PdfDict, gptsArr ast.PdfArray, geo *models.GeoData) {
+func parseGPTS(ctx context.Context, doc *document.Document, measureDict ast.PdfDict, gptsArr ast.PdfArray, geo *models.GeoData) {
 	// /LPTS (Local Points) — PDF user space coordinates matching GPTS.
 	var lptsArr ast.PdfArray
 	if lptsObj, ok := measureDict["LPTS"]; ok {
-		lptsRes, err := document.ResolveObject(doc, lptsObj)
+		lptsRes, err := document.ResolveObject(ctx, doc, lptsObj)
 		if err == nil {
 			if arr, ok := lptsRes.(ast.PdfArray); ok {
 				lptsArr = arr

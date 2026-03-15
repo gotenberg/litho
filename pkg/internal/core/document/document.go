@@ -2,6 +2,7 @@ package document
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"maps"
@@ -180,7 +181,7 @@ func (d *Document) parseHybridXRefStream(offset int64) error {
 }
 
 // NewDocument creates a new Document instance by parsing the XRef chains.
-func NewDocument(r io.ReaderAt, size int64) (*Document, error) {
+func NewDocument(ctx context.Context, r io.ReaderAt, size int64) (*Document, error) {
 	// Validate PDF Header
 	headerBuf := make([]byte, 10)
 	_, err := r.ReadAt(headerBuf, 0)
@@ -224,7 +225,7 @@ func NewDocument(r io.ReaderAt, size int64) (*Document, error) {
 		var encDict ast.PdfDict
 		if ref, ok := encObj.(ast.PdfIndirectRef); ok {
 			// Resolving without Crypto is safe because Encrypt dict values are never encrypted
-			obj, err := doc.Resolve(ref)
+			obj, err := doc.Resolve(ctx, ref)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve /Encrypt reference: %w", err)
 			}
@@ -248,7 +249,7 @@ func NewDocument(r io.ReaderAt, size int64) (*Document, error) {
 		doc.Authenticated = handler.Authenticated
 	}
 
-	doc.initOCConfig()
+	doc.initOCConfig(ctx)
 
 	return doc, nil
 }
@@ -270,9 +271,9 @@ func (d *Document) Authenticate(password string) error {
 
 // resolveAny resolves obj if it is an indirect reference, otherwise returns it directly.
 // This is safe to call on any PdfObject (unlike Resolve which requires PdfIndirectRef).
-func (d *Document) resolveAny(obj ast.PdfObject) ast.PdfObject {
+func (d *Document) resolveAny(ctx context.Context, obj ast.PdfObject) ast.PdfObject {
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		res, err := d.Resolve(ref)
+		res, err := d.Resolve(ctx, ref)
 		if err != nil {
 			return nil
 		}
@@ -282,7 +283,7 @@ func (d *Document) resolveAny(obj ast.PdfObject) ast.PdfObject {
 }
 
 // initOCConfig extracts the Optional Content Properties to determine which layers are ON/OFF.
-func (d *Document) initOCConfig() {
+func (d *Document) initOCConfig(ctx context.Context) {
 	d.OCConfig = &OCConfig{
 		On:  make(map[int]bool),
 		Off: make(map[int]bool),
@@ -292,7 +293,7 @@ func (d *Document) initOCConfig() {
 	if !ok {
 		return
 	}
-	catalog, ok := d.resolveAny(rootObj).(ast.PdfDict)
+	catalog, ok := d.resolveAny(ctx, rootObj).(ast.PdfDict)
 	if !ok {
 		return
 	}
@@ -301,7 +302,7 @@ func (d *Document) initOCConfig() {
 	if !ok {
 		return
 	}
-	ocp, ok := d.resolveAny(ocpObj).(ast.PdfDict)
+	ocp, ok := d.resolveAny(ctx, ocpObj).(ast.PdfDict)
 	if !ok {
 		return
 	}
@@ -310,7 +311,7 @@ func (d *Document) initOCConfig() {
 	if !ok {
 		return
 	}
-	dDict, ok := d.resolveAny(dObj).(ast.PdfDict)
+	dDict, ok := d.resolveAny(ctx, dObj).(ast.PdfDict)
 	if !ok {
 		return
 	}
@@ -325,7 +326,7 @@ func (d *Document) initOCConfig() {
 
 	// Parse ON array
 	if onObj, ok := dDict["ON"]; ok {
-		if onArr, ok := d.resolveAny(onObj).(ast.PdfArray); ok {
+		if onArr, ok := d.resolveAny(ctx, onObj).(ast.PdfArray); ok {
 			for _, item := range onArr {
 				if ref, ok := item.(ast.PdfIndirectRef); ok {
 					d.OCConfig.On[ref.ObjectNum] = true
@@ -336,7 +337,7 @@ func (d *Document) initOCConfig() {
 
 	// Parse OFF array
 	if offObj, ok := dDict["OFF"]; ok {
-		if offArr, ok := d.resolveAny(offObj).(ast.PdfArray); ok {
+		if offArr, ok := d.resolveAny(ctx, offObj).(ast.PdfArray); ok {
 			for _, item := range offArr {
 				if ref, ok := item.(ast.PdfIndirectRef); ok {
 					d.OCConfig.Off[ref.ObjectNum] = true
@@ -374,10 +375,10 @@ func (d *Document) ReadFileBytes(offset int64, length int64) ([]byte, error) {
 }
 
 // ExtractFromObjectStream extracts an object from an Object Stream.
-func ExtractFromObjectStream(doc *Document, objStmNum int, targetIndex int) (ast.PdfObject, error) {
+func ExtractFromObjectStream(ctx context.Context, doc *Document, objStmNum int, targetIndex int) (ast.PdfObject, error) {
 	// 1. Resolve the Object Stream itself
 	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
-	obj, err := doc.Resolve(objStmRef)
+	obj, err := doc.Resolve(ctx, objStmRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve object stream %d: %v", objStmNum, err)
 	}
@@ -449,7 +450,11 @@ func ExtractFromObjectStream(doc *Document, objStmNum int, targetIndex int) (ast
 
 // Resolve looks up an indirect reference in the document's cross-reference index
 // and parses the object from the underlying stream if it hasn't been cached yet.
-func (d *Document) Resolve(ref ast.PdfIndirectRef) (ast.PdfObject, error) {
+func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfObject, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// Check for circular reference
 	if d.resolving[ref.ObjectNum] {
 		return nil, fmt.Errorf("%w: object %d", ErrCircularRef, ref.ObjectNum)
@@ -495,7 +500,7 @@ func (d *Document) Resolve(ref ast.PdfIndirectRef) (ast.PdfObject, error) {
 		return obj, nil
 	case 2:
 		// Type 2: Compressed object in an Object Stream (PDF 1.5+)
-		obj, err := ExtractFromObjectStream(d, entry.ObjStmNum, entry.ObjStmIndex)
+		obj, err := ExtractFromObjectStream(ctx, d, entry.ObjStmNum, entry.ObjStmIndex)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)
 		}

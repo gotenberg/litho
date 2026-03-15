@@ -1,6 +1,7 @@
 package semantics
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -21,13 +22,13 @@ type Thread struct {
 }
 
 // GetThreads extracts article threads from the document.
-func GetThreads(doc *document.Document) ([]Thread, error) {
+func GetThreads(ctx context.Context, doc *document.Document) ([]Thread, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}
 
-	rootRes, err := doc.Resolve(rootObj.(ast.PdfIndirectRef))
+	rootRes, err := doc.Resolve(ctx, rootObj.(ast.PdfIndirectRef))
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,7 @@ func GetThreads(doc *document.Document) ([]Thread, error) {
 
 	var threadsArr ast.PdfArray
 	if ref, ok := threadsObj.(ast.PdfIndirectRef); ok {
-		res, err := doc.Resolve(ref)
+		res, err := doc.Resolve(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +64,7 @@ func GetThreads(doc *document.Document) ([]Thread, error) {
 	for _, tRefObj := range threadsArr {
 		var tDict ast.PdfDict
 		if ref, ok := tRefObj.(ast.PdfIndirectRef); ok {
-			res, err := doc.Resolve(ref)
+			res, err := doc.Resolve(ctx, ref)
 			if err != nil {
 				continue
 			}
@@ -80,14 +81,14 @@ func GetThreads(doc *document.Document) ([]Thread, error) {
 		// Info dictionary containing Title
 		if infoObj, ok := tDict["I"]; ok {
 			if ref, ok := infoObj.(ast.PdfIndirectRef); ok {
-				infoRes, err := doc.Resolve(ref)
+				infoRes, err := doc.Resolve(ctx, ref)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve thread /I: %w", err)
 				}
 				if infoDict, ok := infoRes.(ast.PdfDict); ok {
 					if titleObj, ok := infoDict["Title"]; ok {
 						if titleRef, ok := titleObj.(ast.PdfIndirectRef); ok {
-							titleRes, err := doc.Resolve(titleRef)
+							titleRes, err := doc.Resolve(ctx, titleRef)
 							if err != nil {
 								return nil, fmt.Errorf("failed to resolve thread title: %w", err)
 							}
@@ -117,7 +118,7 @@ func GetThreads(doc *document.Document) ([]Thread, error) {
 				}
 				visited[currentBeadRef.ObjectNum] = true
 
-				res, err := doc.Resolve(currentBeadRef)
+				res, err := doc.Resolve(ctx, currentBeadRef)
 				if err != nil {
 					break
 				}
@@ -141,7 +142,7 @@ func GetThreads(doc *document.Document) ([]Thread, error) {
 				if rObj, ok := beadDict["R"]; ok {
 					var rArr ast.PdfArray
 					if ref, ok := rObj.(ast.PdfIndirectRef); ok {
-						res, err := doc.Resolve(ref)
+						res, err := doc.Resolve(ctx, ref)
 						if err != nil {
 							return nil, fmt.Errorf("failed to resolve bead /R: %w", err)
 						}
