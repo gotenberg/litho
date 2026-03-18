@@ -34,12 +34,32 @@ type manifestEntry struct {
 // knownSkips maps manifest IDs to skip reasons for PDFs that exercise features
 // litho does not yet support.
 var knownSkips = map[string]string{
-	// JBIG2Decode filter not implemented.
-	"jbig2-image-load": "JBIG2Decode not supported",
-	// JPXDecode (JPEG2000) filter not implemented.
-	"jpx-image-load": "JPXDecode not supported",
 	// Malformed xref table causes infinite loop in parseXRefChain.
 	"bug1393476": "infinite loop in xref parsing",
+}
+
+// knownSkipPrefixes maps ID prefixes to skip reasons.
+// This avoids listing hundreds of individual entries for entire test families.
+var knownSkipPrefixes = []struct {
+	prefix string
+	reason string
+}{
+	{"jbig2", "JBIG2Decode not supported"},
+	{"JBIG2", "JBIG2Decode not supported"},
+	{"jpx", "JPXDecode (JPEG2000) not supported"},
+}
+
+// skipIfKnown checks both exact-match and prefix-based skip lists.
+func skipIfKnown(t *testing.T, id string) {
+	t.Helper()
+	if reason, ok := knownSkips[id]; ok {
+		t.Skipf("known skip: %s", reason)
+	}
+	for _, sp := range knownSkipPrefixes {
+		if strings.HasPrefix(id, sp.prefix) {
+			t.Skipf("known skip: %s", sp.reason)
+		}
+	}
 }
 
 func loadManifest(t *testing.T) []manifestEntry {
@@ -152,9 +172,7 @@ func TestPDFJSCorpus_Parse(t *testing.T) {
 		t.Run(entry.ID, func(t *testing.T) {
 			t.Parallel()
 
-			if reason, ok := knownSkips[entry.ID]; ok {
-				t.Skipf("known skip: %s", reason)
-			}
+			skipIfKnown(t, entry.ID)
 
 			r := openPDF(t, entry)
 			if r == nil {
@@ -191,9 +209,7 @@ func TestPDFJSCorpus_TextExtraction(t *testing.T) {
 		t.Run(entry.ID, func(t *testing.T) {
 			t.Parallel()
 
-			if reason, ok := knownSkips[entry.ID]; ok {
-				t.Skipf("known skip: %s", reason)
-			}
+			skipIfKnown(t, entry.ID)
 
 			r := openPDF(t, entry)
 			if r == nil {
@@ -232,9 +248,7 @@ func TestPDFJSCorpus_Metadata(t *testing.T) {
 		t.Run(entry.ID, func(t *testing.T) {
 			t.Parallel()
 
-			if reason, ok := knownSkips[entry.ID]; ok {
-				t.Skipf("known skip: %s", reason)
-			}
+			skipIfKnown(t, entry.ID)
 
 			r := openPDF(t, entry)
 			if r == nil {
@@ -286,9 +300,7 @@ func TestPDFJSCorpus_LazyResources(t *testing.T) {
 		t.Run(entry.ID, func(t *testing.T) {
 			t.Parallel()
 
-			if reason, ok := knownSkips[entry.ID]; ok {
-				t.Skipf("known skip: %s", reason)
-			}
+			skipIfKnown(t, entry.ID)
 
 			r := openPDF(t, entry)
 			if r == nil {
@@ -401,9 +413,7 @@ func TestPDFJSCorpus_TextComparison(t *testing.T) {
 		t.Run(entry.ID, func(t *testing.T) {
 			t.Parallel()
 
-			if reason, ok := knownSkips[entry.ID]; ok {
-				t.Skipf("known skip: %s", reason)
-			}
+			skipIfKnown(t, entry.ID)
 
 			// Load reference fixture.
 			refData, err := os.ReadFile(refPath)
