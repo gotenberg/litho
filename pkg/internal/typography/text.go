@@ -168,6 +168,14 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		// during text extraction — it only uses the page viewBox (CropBox).
 		// The CropBox-based IsClipped flag is set later in ExtractElements.
 
+		// Compute text direction angle from the effective transform (Tm × CTM).
+		// The text baseline direction (1,0) in text space maps to:
+		//   dx = Tm[0]*CTM[0] + Tm[1]*CTM[2]
+		//   dy = Tm[0]*CTM[1] + Tm[1]*CTM[3]
+		dirX := tm[0]*ctm[0] + tm[1]*ctm[2]
+		dirY := tm[0]*ctm[1] + tm[1]*ctm[3]
+		angle := math.Atan2(dirY, dirX)
+
 		*elements = append(*elements, models.TextElement{
 			Text:          char,
 			X:             x,
@@ -178,6 +186,7 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			Hidden:        isHidden,
 			Invisible:     isInvisible,
 			Vertical:      font.WMode == 1,
+			Angle:         angle,
 			PatternType:   state.FillPatternType,
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
@@ -243,6 +252,10 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 			if math.Abs(prev.X-el.X) > 2.0 {
 				newLine = true
 			}
+		} else if isRotated(el.Angle) {
+			// For rotated text, project positions onto the perpendicular axis
+			// of the text direction to detect line breaks.
+			newLine = perpDist(prev, el) > 2.0
 		} else {
 			if math.Abs(prev.Y-el.Y) > 2.0 {
 				newLine = true
@@ -278,6 +291,11 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 					if needsSpace(prev.Y-curr.Y, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
+				} else if isRotated(curr.Angle) {
+					// For rotated text, measure distance along the text direction.
+					if needsSpace(alongDist(prev, curr), prev.Width, curr.FontSize) {
+						sb.WriteString(" ")
+					}
 				} else {
 					if needsSpace(curr.X-prev.X, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
@@ -310,6 +328,49 @@ func needsSpace(delta, prevWidth, fontSize float64) bool {
 	expectedAdvance := 0.5 * fontSize
 	gap := delta - expectedAdvance
 	return gap > 0.3*fontSize
+}
+
+// isRotated returns true when the text angle deviates significantly from
+// horizontal (0) or vertical (±π/2). A 1° threshold avoids false positives
+// from minor floating-point drift in purely horizontal/vertical text.
+func isRotated(angle float64) bool {
+	const threshold = math.Pi / 180 // 1 degree
+	a := math.Abs(angle)
+	if a < threshold {
+		return false // ~horizontal
+	}
+	if math.Abs(a-math.Pi/2) < threshold {
+		return false // ~vertical (WMode=1 handled separately)
+	}
+	if math.Abs(a-math.Pi) < threshold {
+		return false // ~180° (mirrored horizontal)
+	}
+	return true
+}
+
+// perpDist returns the absolute distance between two elements projected onto
+// the perpendicular of the average text direction. This replaces the naive
+// |ΔY| check for rotated text.
+func perpDist(a, b models.TextElement) float64 {
+	angle := (a.Angle + b.Angle) / 2
+	sinA := math.Sin(angle)
+	cosA := math.Cos(angle)
+	// Perpendicular direction: (-sin θ, cos θ)
+	pa := -a.X*sinA + a.Y*cosA
+	pb := -b.X*sinA + b.Y*cosA
+	return math.Abs(pa - pb)
+}
+
+// alongDist returns the signed distance between two elements projected onto
+// the text direction vector. Positive means b is ahead of a in reading order.
+func alongDist(a, b models.TextElement) float64 {
+	angle := (a.Angle + b.Angle) / 2
+	cosA := math.Cos(angle)
+	sinA := math.Sin(angle)
+	// Along direction: (cos θ, sin θ)
+	da := a.X*cosA + a.Y*sinA
+	db := b.X*cosA + b.Y*sinA
+	return db - da
 }
 
 // decomposeLigature replaces Unicode ligature characters with their component
