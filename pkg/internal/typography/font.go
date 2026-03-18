@@ -244,9 +244,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	}
 
 	font := &Font{
-		Subtype:      string(subtypeName),
-		Encoding:     copyEncoding(encodings.WinAnsiEncoding), // Default to WinAnsiEncoding
-		MissingWidth: 1000.0,                                  // PDF spec fallback
+		Subtype:  string(subtypeName),
+		Encoding: copyEncoding(encodings.WinAnsiEncoding), // Default to WinAnsiEncoding
+		// MissingWidth defaults to 0 for simple fonts (matches PDF.js).
+		// CIDFont /DW defaults to 1000 per spec and is set below.
 	}
 
 	// Try to extract ToUnicode CMap
@@ -391,7 +392,8 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 			if dfArr, ok := dfResolved.(ast.PdfArray); ok && len(dfArr) > 0 {
 				cidResolved, _ := document.ResolveObject(ctx, doc, dfArr[0])
 				if cidDict, ok := cidResolved.(ast.PdfDict); ok {
-					// /DW is the default glyph width (default 1000 per spec).
+					// /DW is the default glyph width for CIDFonts (default 1000 per spec).
+					font.MissingWidth = 1000.0
 					if dwObj, ok := cidDict["DW"]; ok {
 						font.MissingWidth = document.GetFloat(dwObj)
 					}
