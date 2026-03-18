@@ -294,7 +294,7 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 		}
 	}
 
-	return stripSoftHyphens(sb.String())
+	return normalizeSoftHyphens(sb.String())
 }
 
 // needsSpace decides whether to insert a space between two consecutive glyphs.
@@ -490,7 +490,7 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 		}
 	}
 
-	return stripSoftHyphens(sb.String())
+	return normalizeSoftHyphens(sb.String())
 }
 
 // maxFormXObjectDepth is the maximum recursion depth for nested Form XObjects.

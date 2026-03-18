@@ -60,7 +60,7 @@ func TestReorderBidiLine_Empty(t *testing.T) {
 	}
 }
 
-func TestStripSoftHyphens(t *testing.T) {
+func TestNormalizeSoftHyphens(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -77,9 +77,9 @@ func TestStripSoftHyphens(t *testing.T) {
 			want:  "document",
 		},
 		{
-			name:  "standalone soft hyphens removed",
+			name:  "standalone soft hyphens become regular hyphens",
 			input: "soft\u00ADhyphen",
-			want:  "softhyphen",
+			want:  "soft-hyphen",
 		},
 		{
 			name:  "no hyphens unchanged",
@@ -87,7 +87,7 @@ func TestStripSoftHyphens(t *testing.T) {
 			want:  "hello\nworld",
 		},
 		{
-			name:  "multiple soft hyphens",
+			name:  "multiple soft hyphens at line breaks",
 			input: "un\u00AD\nbreak\u00AD\nable",
 			want:  "unbreakable",
 		},
@@ -95,7 +95,7 @@ func TestStripSoftHyphens(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := stripSoftHyphens(tc.input)
+			got := normalizeSoftHyphens(tc.input)
 			if got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
