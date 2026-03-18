@@ -485,10 +485,75 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 // references or deeply nested XObjects in malformed PDFs.
 const maxFormXObjectDepth = 10
 
+// collectAnnotAppearanceObjects returns the set of object numbers referenced by
+// annotation appearance streams (/AP) on this page. PDF.js skips these during
+// text extraction — they are visual overlays, not page content.
+func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, pageDict ast.PdfDict) map[int]bool {
+	result := make(map[int]bool)
+	annotsObj, ok := pageDict["Annots"]
+	if !ok {
+		return result
+	}
+	annotsResolved, err := document.ResolveObject(ctx, doc, annotsObj)
+	if err != nil {
+		return result
+	}
+	annotsArr, ok := annotsResolved.(ast.PdfArray)
+	if !ok {
+		return result
+	}
+	for _, annotObj := range annotsArr {
+		annotResolved, err := document.ResolveObject(ctx, doc, annotObj)
+		if err != nil {
+			continue
+		}
+		annotDict, ok := annotResolved.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		apObj, ok := annotDict["AP"]
+		if !ok {
+			continue
+		}
+		apResolved, err := document.ResolveObject(ctx, doc, apObj)
+		if err != nil {
+			continue
+		}
+		apDict, ok := apResolved.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		// Collect object numbers from /N (normal), /R (rollover), /D (down) appearances.
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			apEntry, ok := apDict[key]
+			if !ok {
+				continue
+			}
+			if ref, ok := apEntry.(ast.PdfIndirectRef); ok {
+				result[ref.ObjectNum] = true
+			}
+			// An appearance can also be a dict of state-specific appearances.
+			entryResolved, err := document.ResolveObject(ctx, doc, apEntry)
+			if err != nil {
+				continue
+			}
+			if stateDict, ok := entryResolved.(ast.PdfDict); ok {
+				for _, stateObj := range stateDict {
+					if ref, ok := stateObj.(ast.PdfIndirectRef); ok {
+						result[ref.ObjectNum] = true
+					}
+				}
+			}
+		}
+	}
+	return result
+}
+
 // extractTextRecursive recursively extracts text from operations, supporting Form XObjects.
 // The visited set tracks indirect reference object numbers to break circular references,
 // and depth guards against non-circular but excessively deep nesting.
-func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int) error {
+// annotAppearances contains object numbers of annotation appearance streams to skip.
+func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool) error {
 	if depth > maxFormXObjectDepth {
 		return nil
 	}
@@ -720,6 +785,10 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 									if visited[objNum] {
 										continue
 									}
+									// Skip annotation appearance streams (PDF.js excludes them from text extraction).
+									if annotAppearances[objNum] {
+										continue
+									}
 								}
 
 								targetResolved, _ := document.ResolveObject(ctx, doc, targetObj)
@@ -763,7 +832,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 												if objNum != 0 {
 													visited[objNum] = true
 												}
-												err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1)
+												err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances)
 												if objNum != 0 {
 													delete(visited, objNum)
 												}
@@ -796,8 +865,12 @@ type ExtractionConfig struct {
 
 // ExtractElements extracts the text from a page's content operations as raw spatial elements.
 func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
+	// Collect annotation appearance object numbers so we can skip them during
+	// text extraction (PDF.js excludes annotation appearances from getTextContent).
+	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
+
 	var elements []models.TextElement
-	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0); err != nil {
+	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances); err != nil {
 		return nil, err
 	}
 
