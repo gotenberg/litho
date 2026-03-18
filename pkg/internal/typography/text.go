@@ -78,6 +78,14 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 						char = "?"
 					}
 				}
+			} else if font.CIDIdentityFallback && len(data) >= 2 {
+				// CIDToGIDMap /Identity without embedded font: treat the
+				// 2-byte character code as a direct Unicode code point.
+				cp := rune(uint16(data[0])<<8 | uint16(data[1]))
+				if cp > 0 {
+					char = string(cp)
+				}
+				n = 2
 			} else {
 				char = "?"
 			}

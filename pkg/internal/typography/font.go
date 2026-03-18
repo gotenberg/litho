@@ -38,6 +38,8 @@ type Font struct {
 	WMode              int                // 0 = horizontal (default), 1 = vertical
 	DW2                [2]float64         // Default vertical metrics [vY w1] (default: [880 -1000])
 	CIDVerticalMetrics map[int][3]float64 // CID → [w1Y vX vY] from /W2 array
+
+	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
 }
 
 // GetGlyphWidth returns the advance width (in 1/1000 text-space units) for the
@@ -509,6 +511,14 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		extractEmbeddedCmap(ctx, doc, fontDict, font)
 	}
 
+	// CIDToGIDMap /Identity fallback for Type0 fonts: when a CIDFont declares
+	// CIDToGIDMap as /Identity (CID = GID) and has no ToUnicode CMap and no
+	// embedded font program, treat character codes as direct Unicode code points.
+	// This is common for CJK fonts that rely on system font access.
+	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil {
+		applyCIDToGIDIdentityFallback(ctx, doc, fontDict, font)
+	}
+
 	return font, nil
 }
 
@@ -638,6 +648,50 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 	}
 
 	font.GIDToUnicode = gidMap
+}
+
+// applyCIDToGIDIdentityFallback checks whether a Type0 font's CIDFont descendant
+// declares /CIDToGIDMap /Identity. When present, CID values equal GID values,
+// and in the absence of a ToUnicode CMap or embedded font program the CID is
+// treated as a direct Unicode code point. This is the common pattern for CJK
+// fonts that rely on system fonts.
+func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	dfObj, ok := fontDict["DescendantFonts"]
+	if !ok {
+		return
+	}
+	dfRes, _ := document.ResolveObject(ctx, doc, dfObj)
+	dfArr, ok := dfRes.(ast.PdfArray)
+	if !ok || len(dfArr) == 0 {
+		return
+	}
+	cidRes, _ := document.ResolveObject(ctx, doc, dfArr[0])
+	cidDict, ok := cidRes.(ast.PdfDict)
+	if !ok {
+		return
+	}
+	mapObj, ok := cidDict["CIDToGIDMap"]
+	if !ok {
+		return
+	}
+	mapRes, _ := document.ResolveObject(ctx, doc, mapObj)
+	mapName, ok := mapRes.(ast.PdfName)
+	if !ok || mapName != "Identity" {
+		return
+	}
+
+	// Build a synthetic GIDToUnicode table for BMP range.
+	// Most CJK text uses code points in the BMP (U+0000–U+FFFF).
+	font.GIDToUnicode = make(map[uint16]rune, 256)
+	// We don't pre-populate all 65536 entries; instead the text extraction
+	// path will use this as a signal. Let's populate the common ranges.
+	// CJK Unified Ideographs: U+4E00–U+9FFF
+	// CJK Compat: U+F900–U+FAFF
+	// Hangul: U+AC00–U+D7AF
+	// Hiragana: U+3040–U+309F, Katakana: U+30A0–U+30FF
+	// Latin: U+0020–U+007E
+	// Rather than populating huge ranges, set a flag and handle in text.go.
+	font.CIDIdentityFallback = true
 }
 
 // findFontDescriptor locates the /FontDescriptor dictionary. For Type0 fonts,
