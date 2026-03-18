@@ -1,5 +1,10 @@
 package encodings
 
+import (
+	"strconv"
+	"strings"
+)
+
 // GlyphToRune maps Adobe standard glyph names to UTF-8 runes.
 // This is a subset containing common Latin characters.
 var GlyphToRune = map[string]rune{
@@ -249,3 +254,53 @@ func RuneToGlyph(r rune) string {
 }
 
 var hexDigits = [16]byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
+
+// GlyphToRuneFull resolves a glyph name to a Unicode rune using the core
+// GlyphToRune map, the extended AGL, and the "uniXXXX" / "uXXXXXXXX" naming
+// convention. Returns (rune, true) on success, (0, false) if unknown.
+func GlyphToRuneFull(name string) (rune, bool) {
+	if r, ok := GlyphToRune[name]; ok {
+		return r, true
+	}
+	if r, ok := extendedAGL[name]; ok {
+		return r, true
+	}
+	// "uniXXXX" — 4 hex digits after "uni"
+	if len(name) == 7 && name[:3] == "uni" {
+		if r, err := strconv.ParseUint(name[3:], 16, 32); err == nil {
+			return rune(r), true
+		}
+	}
+	// "uXXXXXXXX" — variable hex after "u" (Unicode scalar)
+	if len(name) >= 5 && len(name) <= 9 && name[0] == 'u' && name[1] != 'n' {
+		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil {
+			return rune(r), true
+		}
+	}
+	// Try RecoverGlyphName (strip suffixes like ".001", ".alt", etc.)
+	recovered := RecoverGlyphName(name)
+	if recovered != name {
+		return GlyphToRuneSimple(recovered)
+	}
+	return 0, false
+}
+
+// GlyphToRuneSimple resolves a glyph name without RecoverGlyphName fallback.
+func GlyphToRuneSimple(name string) (rune, bool) {
+	if r, ok := GlyphToRune[name]; ok {
+		return r, true
+	}
+	if r, ok := extendedAGL[name]; ok {
+		return r, true
+	}
+	return 0, false
+}
+
+// RecoverGlyphName strips common suffixes from corrupted glyph names.
+// For example, "A.001" → "A", "space.alt" → "space".
+func RecoverGlyphName(name string) string {
+	if idx := strings.IndexByte(name, '.'); idx > 0 {
+		return name[:idx]
+	}
+	return name
+}

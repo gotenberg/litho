@@ -8,6 +8,7 @@ import (
 	"maps"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -243,9 +244,29 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		return nil, fmt.Errorf("font /Subtype is not a name")
 	}
 
+	// Detect Symbol and ZapfDingbats fonts by BaseFont name to select
+	// the correct default encoding (PDF.js does the same via regex).
+	isSymbolFont := false
+	isDingbatsFont := false
+	if bfObj, ok := fontDict["BaseFont"]; ok {
+		bfRes, _ := document.ResolveObject(ctx, doc, bfObj)
+		if bfName, ok := bfRes.(ast.PdfName); ok {
+			name := strings.ToLower(string(bfName))
+			isSymbolFont = strings.Contains(name, "symbol")
+			isDingbatsFont = strings.Contains(name, "dingbat") || strings.Contains(name, "zapfdingbats")
+		}
+	}
+
+	defaultEncoding := copyEncoding(encodings.WinAnsiEncoding)
+	if isSymbolFont {
+		defaultEncoding = encodings.BuildSymbolEncoding()
+	} else if isDingbatsFont {
+		defaultEncoding = encodings.BuildZapfDingbatsEncoding()
+	}
+
 	font := &Font{
 		Subtype:  string(subtypeName),
-		Encoding: copyEncoding(encodings.WinAnsiEncoding), // Default to WinAnsiEncoding
+		Encoding: defaultEncoding,
 		// MissingWidth defaults to 0 for simple fonts (matches PDF.js).
 		// CIDFont /DW defaults to 1000 per spec and is set below.
 	}
@@ -313,7 +334,7 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 							case ast.PdfInt:
 								currentIndex = int(v)
 							case ast.PdfName:
-								if r, ok := encodings.GlyphToRune[string(v)]; ok {
+								if r, ok := resolveGlyphRune(string(v), isDingbatsFont, isSymbolFont); ok {
 									font.Encoding[byte(currentIndex)] = r
 								}
 								currentIndex++
@@ -584,7 +605,7 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 		if _, exists := font.Encoding[byte(code)]; exists {
 			continue
 		}
-		if r, ok := encodings.GlyphToRune[glyphName]; ok {
+		if r, ok := encodings.GlyphToRuneFull(glyphName); ok {
 			if font.Encoding == nil {
 				font.Encoding = make(map[byte]rune)
 			}
@@ -742,4 +763,21 @@ func extractType3GlyphWidth(stream ast.PdfStream) (float64, error) {
 	}
 
 	return 0, fmt.Errorf("no d0/d1 operator found in CharProc stream")
+}
+
+// resolveGlyphRune maps a glyph name to a Unicode rune, using the appropriate
+// glyph table for the font type. Dingbats and Symbol fonts have their own
+// glyph name → Unicode mappings.
+func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
+	if isDingbats {
+		if r, ok := encodings.DingbatsGlyphsUnicode[name]; ok {
+			return r, true
+		}
+	}
+	if isSymbol {
+		if r, ok := encodings.SymbolGlyphsUnicode[name]; ok {
+			return r, true
+		}
+	}
+	return encodings.GlyphToRuneFull(name)
 }
