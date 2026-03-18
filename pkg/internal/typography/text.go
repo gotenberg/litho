@@ -49,6 +49,13 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		}
 
 		if !ok {
+			if n > 0 {
+				// Codespace range consumed n bytes but found no mapping.
+				// Consume those bytes without trying single-byte fallback
+				// to avoid misinterpreting multi-byte codes.
+				data = data[n:]
+				continue
+			}
 			if r, ok := font.Encoding[data[0]]; ok {
 				char = string(r)
 			} else if font.GIDToUnicode != nil {
