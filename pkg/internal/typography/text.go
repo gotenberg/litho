@@ -157,22 +157,9 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			pageWidth = math.Abs(dx)
 		}
 
-		// 3. Clipping check — use a glyph bounding box (origin + advance width
-		// × font size height) rather than just the origin point so that glyphs
-		// partially outside the clip region are still detected.
-		glyphH := fontSize
-		glyphW := pageWidth
-		if glyphW == 0 {
-			glyphW = 0.5 * fontSize // fallback for unknown width
-		}
-		glyphMinX := x
-		glyphMaxX := x + glyphW
-		glyphMinY := y - 0.2*glyphH // descender estimate
-		glyphMaxY := y + 0.8*glyphH // ascender estimate
-		clip := state.ClippingPath
-		if glyphMaxX < clip.MinX || glyphMinX > clip.MaxX || glyphMaxY < clip.MinY || glyphMinY > clip.MaxY {
-			isHidden = true
-		}
+		// Note: PDF.js does NOT check the graphics state clipping path (W/W*)
+		// during text extraction — it only uses the page viewBox (CropBox).
+		// The CropBox-based IsClipped flag is set later in ExtractElements.
 
 		*elements = append(*elements, models.TextElement{
 			Text:          char,
