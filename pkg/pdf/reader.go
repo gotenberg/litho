@@ -67,9 +67,10 @@ func WithOCREngine(engine models.OCREngine) OpenOption {
 // When opened via OpenFile, the Reader holds a reference to the underlying
 // file; call Close to release it.
 type Reader struct {
-	doc    *document.Document
-	ocr    models.OCREngine
-	closer io.Closer // non-nil when opened via OpenFile
+	doc         *document.Document
+	ocr         models.OCREngine
+	closer      io.Closer        // non-nil when opened via OpenFile
+	cachedPages []*document.Page // memoized page tree; set on first resolvePages call
 }
 
 // Close releases any resources held by the Reader. When the Reader was
@@ -80,6 +81,16 @@ func (r *Reader) Close() error {
 		return r.closer.Close()
 	}
 	return nil
+}
+
+// ClearCache releases the in-memory object cache, font cache, and memoized
+// page tree. This is useful in batch-processing scenarios where a single
+// Reader is used to extract data from many pages sequentially and the caller
+// wants to bound memory usage between pages. The caches are transparently
+// rebuilt on the next access.
+func (r *Reader) ClearCache() {
+	r.cachedPages = nil
+	r.doc.ClearCaches()
 }
 
 // ValidatePDFA audits the document against a specific PDF/A profile,
@@ -638,13 +649,22 @@ func (r *Reader) ExtractFormulas(ctx context.Context) ([]models.FormulaElement, 
 	return structure.ExtractFormulas(ctx, r.doc)
 }
 
-// resolvePages retrieves the catalog and resolves all pages.
+// resolvePages retrieves the catalog and resolves all pages. The result is
+// memoized after the first call since the document is read-only after Open.
 func (r *Reader) resolvePages(ctx context.Context) ([]*document.Page, error) {
+	if r.cachedPages != nil {
+		return r.cachedPages, nil
+	}
 	catalog, err := document.GetCatalog(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
-	return document.GetPages(ctx, r.doc, catalog)
+	pages, err := document.GetPages(ctx, r.doc, catalog)
+	if err != nil {
+		return nil, err
+	}
+	r.cachedPages = pages
+	return pages, nil
 }
 
 // resolvePage resolves the page tree and returns the page at the given

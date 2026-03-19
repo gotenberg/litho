@@ -26,8 +26,8 @@ type Operation struct {
 // and emitting operations when an operator keyword is encountered. Inline
 // images (BI/ID/EI) are detected and safely skipped.
 func parseOperations(p *parser.Parser) ([]Operation, error) {
-	var ops []Operation
-	var operands []ast.PdfObject
+	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
+	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
 
 	for {
 		tok, err := p.Peek(0)

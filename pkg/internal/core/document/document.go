@@ -53,6 +53,11 @@ type Document struct {
 	// Version is the PDF version string extracted from the %PDF-X.Y header
 	// (e.g., "1.4", "1.7", "2.0").
 	Version string
+
+	// FontCache stores resolved font objects keyed by their indirect reference
+	// object number. This avoids re-parsing the same font dictionary (including
+	// ToUnicode CMap decompression) on every Tf operator.
+	FontCache map[int]any
 }
 
 // OCConfig holds the state of Optional Content Groups (Layers)
@@ -232,6 +237,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		resolving:   make(map[int]bool),
 		Logger:      logger,
 		Version:     version,
+		FontCache:   make(map[int]any),
 	}
 
 	// Probe for linearization before seeking to the end of the file.
@@ -408,6 +414,13 @@ func (d *Document) initOCConfig(ctx context.Context) {
 // IsLinearized reports whether the document has a linearization dictionary.
 func (d *Document) IsLinearized() bool {
 	return d.Linearization != nil
+}
+
+// ClearCaches releases the object cache and font cache to free memory.
+// Caches are transparently rebuilt on the next access.
+func (d *Document) ClearCaches() {
+	d.ObjectCache = make(map[int]ast.PdfObject)
+	d.FontCache = make(map[int]any)
 }
 
 // FileSize returns the total size of the underlying PDF file in bytes.

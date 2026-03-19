@@ -8,12 +8,19 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/andybalholm/brotli"
 	"golang.org/x/image/ccitt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
+
+// bufPool reuses bytes.Buffer instances across stream decompression calls
+// to reduce GC pressure from repeated allocations.
+var bufPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
 
 // DecodeStream decodes a PDF stream based on its /Filter dictionary entry.
 // It supports applying multiple filters sequentially if an array is provided.
@@ -129,8 +136,10 @@ func decodeFlateDecode(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r) //nolint:gosec // Need full read
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+	_, err = io.Copy(buf, r) //nolint:gosec // Need full read
 	if closeErr := r.Close(); closeErr != nil {
 		return nil, fmt.Errorf("failed to close zlib reader: %w", closeErr)
 	}
@@ -138,7 +147,10 @@ func decodeFlateDecode(data []byte) ([]byte, error) {
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	// Copy out before returning buffer to pool.
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	return result, nil
 }
 
 func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
@@ -152,12 +164,16 @@ func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
 	}
 
 	r := newLZWReader(bytes.NewReader(data), earlyChange)
-	var buf bytes.Buffer
-	_, err := io.Copy(&buf, r) //nolint:gosec // Need full read
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+	_, err := io.Copy(buf, r) //nolint:gosec // Need full read
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	return result, nil
 }
 
 func decodeASCIIHex(data []byte) ([]byte, error) {
@@ -270,11 +286,16 @@ func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
 
 func decodeBrotli(data []byte) ([]byte, error) {
 	r := brotli.NewReader(bytes.NewReader(data))
-	decoded, err := io.ReadAll(r)
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+	_, err := io.Copy(buf, r) //nolint:gosec // Need full read
 	if err != nil {
 		return nil, fmt.Errorf("brotli decode: %w", err)
 	}
-	return decoded, nil
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	return result, nil
 }
 
 // NewStreamReader returns an io.ReadCloser that lazily decodes a PDF stream

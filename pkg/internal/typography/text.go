@@ -684,7 +684,14 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		}
 	}
 
-	for _, op := range ops {
+	for opIdx, op := range ops {
+		// Check for context cancellation every 100 operators to respect deadlines
+		// without adding per-operator overhead.
+		if opIdx%100 == 0 && opIdx > 0 { //nolint:mnd // amortized cancellation check — frequent enough to respect deadlines, rare enough to avoid overhead
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		// Errors from Execute are non-fatal: unknown/unsupported operators return errors
 		// but must not abort extraction of the remaining content stream.
 		_ = machine.Execute([]content.Operation{op}) //nolint:errcheck
@@ -768,17 +775,32 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 				}
 				if resDictRoot, ok := resResolved.(ast.PdfDict); ok {
 					if fontRefObj, ok := resDictRoot[fontName]; ok {
-						fontDictResolved, err := document.ResolveObject(ctx, doc, fontRefObj)
-						if err != nil {
-							return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
+						// Check font cache by indirect reference object number.
+						if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
+							if cached, ok := doc.FontCache[ref.ObjectNum]; ok {
+								if f, ok := cached.(*Font); ok {
+									currentFont = f
+									resolved = true
+								}
+							}
 						}
-						if fontDict, ok := fontDictResolved.(ast.PdfDict); ok {
-							font, err := GetFont(ctx, doc, fontDict)
+						if !resolved {
+							fontDictResolved, err := document.ResolveObject(ctx, doc, fontRefObj)
 							if err != nil {
 								return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
 							}
-							currentFont = font
-							resolved = true
+							if fontDict, ok := fontDictResolved.(ast.PdfDict); ok {
+								font, err := GetFont(ctx, doc, fontDict)
+								if err != nil {
+									return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
+								}
+								currentFont = font
+								resolved = true
+								// Store in font cache.
+								if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
+									doc.FontCache[ref.ObjectNum] = font
+								}
+							}
 						}
 					}
 				}
@@ -954,7 +976,11 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 	// text extraction — annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
 
-	var elements []models.TextElement
+	// Pre-allocate with a capacity estimate: roughly 1 text element per 3 operators.
+	estimatedCap := max(len(ops)/3,
+		//nolint:mnd // minimum capacity to avoid early reallocations
+		64)
+	elements := make([]models.TextElement, 0, estimatedCap)
 	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances); err != nil {
 		return nil, err
 	}
