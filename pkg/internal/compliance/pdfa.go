@@ -1,4 +1,4 @@
-package pdf
+package compliance
 
 import (
 	"bytes"
@@ -15,13 +15,8 @@ import (
 // ValidatePDFA audits the document against a specific PDF/A profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func (r *Reader) ValidatePDFA(ctx context.Context, profile PDFAProfile) ([]error, error) {
-	return validatePDFA(ctx, r.doc, profile), nil
-}
-
-// validatePDFA is the internal implementation that operates on a parsed document.
-func validatePDFA(ctx context.Context, doc *document.Document, profile PDFAProfile) []error {
-	part := pdfaPart(profile)
+func ValidatePDFA(ctx context.Context, doc *document.Document, profile PDFAProfile) []error {
+	part := PdfaPart(profile)
 	if part == 0 {
 		return []error{fmt.Errorf("%w: %s", ErrInvalidProfile, profile)}
 	}
@@ -59,7 +54,7 @@ func validatePDFA(ctx context.Context, doc *document.Document, profile PDFAProfi
 		// PDF/A-4 natively requires Unicode mapping (no a/b/u split).
 		errs = append(errs, checkUnicodeMapping(ctx, doc, catalog)...)
 		// Sub-profile specific rules.
-		conf4 := pdfaConformance(profile)
+		conf4 := PdfaConformance(profile)
 		if conf4 == 'f' {
 			errs = append(errs, checkAFRelationship(ctx, doc, catalog)...)
 		}
@@ -70,7 +65,7 @@ func validatePDFA(ctx context.Context, doc *document.Document, profile PDFAProfi
 	}
 
 	// --- Conformance level rules (Parts 1-3 only) ---
-	conf := pdfaConformance(profile)
+	conf := PdfaConformance(profile)
 
 	// Level 'u' (Unicode): every font must have a Unicode mapping.
 	// Level 'a' implies 'u', so run 'u' checks for both.
@@ -695,7 +690,7 @@ func validateEmbeddedFilePDFA(ctx context.Context, doc *document.Document, fileS
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrNonPDFAAttachment, err)
 	}
-	if violations := validatePDFA(ctx, embeddedDoc, PDFA2b); len(violations) > 0 {
+	if violations := ValidatePDFA(ctx, embeddedDoc, PDFA2b); len(violations) > 0 {
 		return fmt.Errorf("%w: %v", ErrNonPDFAAttachment, violations[0])
 	}
 	return nil
@@ -971,8 +966,6 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 // --- Helpers ---
 
 // complianceAstFloat extracts a float64 from a PdfObject (PdfInt or PdfReal).
-// This is a compliance-internal version to avoid conflicts with the astFloat
-// in reader.go.
 func complianceAstFloat(obj ast.PdfObject) float64 {
 	switch v := obj.(type) {
 	case ast.PdfReal:
@@ -1171,4 +1164,15 @@ func collectFileSpecsRecursive(ctx context.Context, doc *document.Document, obj 
 			}
 		}
 	}
+}
+
+// safeReadHeader reads the first 16 bytes of the document, recovering from
+// panics caused by a nil io.ReaderAt (e.g., in test mocks).
+func safeReadHeader(doc *document.Document) (buf []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("cannot read header: %v", r)
+		}
+	}()
+	return doc.ReadFileBytes(0, 16) //nolint:mnd // enough for "%PDF-2.0".
 }

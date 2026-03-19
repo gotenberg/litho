@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
@@ -79,6 +80,20 @@ func (r *Reader) Close() error {
 		return r.closer.Close()
 	}
 	return nil
+}
+
+// ValidatePDFA audits the document against a specific PDF/A profile,
+// returning all compliance violations found. An empty slice means the
+// document passes.
+func (r *Reader) ValidatePDFA(ctx context.Context, profile PDFAProfile) ([]error, error) {
+	return compliance.ValidatePDFA(ctx, r.doc, profile), nil
+}
+
+// ValidatePDFUA audits the document against a specific PDF/UA profile,
+// returning all compliance violations found. An empty slice means the
+// document passes.
+func (r *Reader) ValidatePDFUA(ctx context.Context, profile PDFUAProfile) ([]error, error) {
+	return compliance.ValidatePDFUA(ctx, r.doc, profile), nil
 }
 
 // Open initializes a new Reader from an io.ReaderAt and its total size.

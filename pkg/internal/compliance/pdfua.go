@@ -1,4 +1,4 @@
-package pdf
+package compliance
 
 import (
 	"bytes"
@@ -13,12 +13,7 @@ import (
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func (r *Reader) ValidatePDFUA(ctx context.Context, profile PDFUAProfile) ([]error, error) {
-	return validatePDFUA(ctx, r.doc, profile), nil
-}
-
-// validatePDFUA is the internal implementation that operates on a parsed document.
-func validatePDFUA(ctx context.Context, doc *document.Document, profile PDFUAProfile) []error {
+func ValidatePDFUA(ctx context.Context, doc *document.Document, profile PDFUAProfile) []error {
 	if profile != PDFUA1 && profile != PDFUA2 {
 		return []error{fmt.Errorf("%w: %s", ErrInvalidProfile, profile)}
 	}
@@ -424,17 +419,6 @@ func checkPDFVersionForUA2(ctx context.Context, doc *document.Document, catalog 
 		return nil
 	}
 	return []error{ErrInvalidVersionForUA2}
-}
-
-// safeReadHeader reads the first 16 bytes of the document, recovering from
-// panics caused by a nil io.ReaderAt (e.g., in test mocks).
-func safeReadHeader(doc *document.Document) (buf []byte, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("cannot read header: %v", r)
-		}
-	}()
-	return doc.ReadFileBytes(0, 16) //nolint:mnd // enough for "%PDF-2.0".
 }
 
 // checkNamespaces verifies that /StructTreeRoot contains a /Namespaces array

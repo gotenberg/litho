@@ -1,50 +1,51 @@
 package pdf
 
-import "errors"
+import "github.com/gotenberg/litho/pkg/internal/compliance"
 
 // Sentinel errors for compliance violations.
+// Re-exported from the internal compliance package for public API stability.
 var (
 	// PDF/A Level 'b' (Basic Visual Integrity) base rule errors.
-	ErrEncryptionForbidden    = errors.New("compliance: encryption is forbidden in PDF/A")
-	ErrFontNotEmbedded        = errors.New("compliance: font is not embedded")
-	ErrMissingICCProfile      = errors.New("compliance: /OutputIntents missing ICC profile for color reproduction")
-	ErrLZWForbidden           = errors.New("compliance: LZW compression is forbidden in PDF/A")
-	ErrActiveContentForbidden = errors.New("compliance: active content (JavaScript/Launch/Sound/Movie) is forbidden in PDF/A")
+	ErrEncryptionForbidden    = compliance.ErrEncryptionForbidden
+	ErrFontNotEmbedded        = compliance.ErrFontNotEmbedded
+	ErrMissingICCProfile      = compliance.ErrMissingICCProfile
+	ErrLZWForbidden           = compliance.ErrLZWForbidden
+	ErrActiveContentForbidden = compliance.ErrActiveContentForbidden
 
 	// PDF/A Level 'u' (Unicode) errors.
-	ErrMissingUnicodeMapping = errors.New("compliance: font has no /ToUnicode CMap and no standard Adobe encoding")
+	ErrMissingUnicodeMapping = compliance.ErrMissingUnicodeMapping
 
 	// PDF/A Level 'a' (Accessible) errors.
-	ErrUntaggedVisualElement = errors.New("compliance: visual element (Figure) missing /Alt text in structure tree")
+	ErrUntaggedVisualElement = compliance.ErrUntaggedVisualElement
 
 	// Additional compliance errors.
-	ErrFontMissingToUnicode   = errors.New("compliance: font missing /ToUnicode mapping")
-	ErrTransparencyForbidden  = errors.New("compliance: transparency is forbidden in PDF/A-1")
-	ErrJPEG2000Forbidden      = errors.New("compliance: JPEG2000 images are forbidden in PDF/A-1")
-	ErrEmbeddedFilesForbidden = errors.New("compliance: embedded files are forbidden in PDF/A-1")
-	ErrVersionTooHighForA1    = errors.New("compliance: PDF/A-1 requires PDF version 1.4 or lower")
-	ErrNonPDFAAttachment      = errors.New("compliance: embedded file is not a PDF/A-compliant PDF")
-	ErrAttachmentNotPDFA      = errors.New("compliance: embedded file is not PDF/A compliant")
-	ErrAttachmentNoRelation   = errors.New("compliance: embedded file missing /AFRelationship key")
-	ErrMissingAFRelationship  = errors.New("compliance: embedded file missing or invalid /AFRelationship")
-	ErrMissingOCGUsageApp     = errors.New("compliance: /OCProperties missing /AS (Usage Application Dictionaries)")
-	ErrVersionNotPDF20        = errors.New("compliance: PDF/A-4 requires PDF version 2.0")
-	ErrMissing3DSubtype       = errors.New("compliance: 3D annotation stream missing valid /Subtype (U3D or PRC)")
-	ErrMissing3DFallback      = errors.New("compliance: 3D annotation missing 2D fallback appearance (/AP /N)")
-	ErrMissingMarkInfo        = errors.New("compliance: /MarkInfo << /Marked true >> required for conformance level 'a'")
-	ErrMissingStructTreeRoot  = errors.New("compliance: /StructTreeRoot required for conformance level 'a'")
-	ErrMissingLang            = errors.New("compliance: /Lang key missing from document catalog")
-	ErrImageMissingAltText    = errors.New("compliance: image XObject missing /Alt text in structure tree")
-	ErrArtifactTagMissing     = errors.New("compliance: headers/footers/page numbers must be tagged as /Artifact")
-	ErrInvalidProfile         = errors.New("compliance: unknown or invalid profile")
+	ErrFontMissingToUnicode   = compliance.ErrFontMissingToUnicode
+	ErrTransparencyForbidden  = compliance.ErrTransparencyForbidden
+	ErrJPEG2000Forbidden      = compliance.ErrJPEG2000Forbidden
+	ErrEmbeddedFilesForbidden = compliance.ErrEmbeddedFilesForbidden
+	ErrVersionTooHighForA1    = compliance.ErrVersionTooHighForA1
+	ErrNonPDFAAttachment      = compliance.ErrNonPDFAAttachment
+	ErrAttachmentNotPDFA      = compliance.ErrAttachmentNotPDFA
+	ErrAttachmentNoRelation   = compliance.ErrAttachmentNoRelation
+	ErrMissingAFRelationship  = compliance.ErrMissingAFRelationship
+	ErrMissingOCGUsageApp     = compliance.ErrMissingOCGUsageApp
+	ErrVersionNotPDF20        = compliance.ErrVersionNotPDF20
+	ErrMissing3DSubtype       = compliance.ErrMissing3DSubtype
+	ErrMissing3DFallback      = compliance.ErrMissing3DFallback
+	ErrMissingMarkInfo        = compliance.ErrMissingMarkInfo
+	ErrMissingStructTreeRoot  = compliance.ErrMissingStructTreeRoot
+	ErrMissingLang            = compliance.ErrMissingLang
+	ErrImageMissingAltText    = compliance.ErrImageMissingAltText
+	ErrArtifactTagMissing     = compliance.ErrArtifactTagMissing
+	ErrInvalidProfile         = compliance.ErrInvalidProfile
 
 	// PDF/UA-specific errors.
-	ErrMissingXMPTitle           = errors.New("compliance: XMP metadata missing dc:title")
-	ErrMissingFormFieldTooltip   = errors.New("compliance: form field missing /TU (tooltip) for accessibility")
-	ErrNonStandardTag            = errors.New("compliance: non-standard structure tag without /RoleMap entry")
-	ErrInvalidVersionForUA2      = errors.New("compliance: PDF/UA-2 requires PDF version 2.0")
-	ErrMissingNamespaces         = errors.New("compliance: PDF/UA-2 requires /Namespaces in /StructTreeRoot")
-	ErrInvalidStructureNamespace = errors.New("compliance: structure namespace missing required /NS URI")
-	ErrLinkNotNested             = errors.New("compliance: /Link annotation not nested in /Link structure element")
-	ErrFormulaMissingMathML      = errors.New("compliance: /Formula structure element missing /AF with MathML")
+	ErrMissingXMPTitle           = compliance.ErrMissingXMPTitle
+	ErrMissingFormFieldTooltip   = compliance.ErrMissingFormFieldTooltip
+	ErrNonStandardTag            = compliance.ErrNonStandardTag
+	ErrInvalidVersionForUA2      = compliance.ErrInvalidVersionForUA2
+	ErrMissingNamespaces         = compliance.ErrMissingNamespaces
+	ErrInvalidStructureNamespace = compliance.ErrInvalidStructureNamespace
+	ErrLinkNotNested             = compliance.ErrLinkNotNested
+	ErrFormulaMissingMathML      = compliance.ErrFormulaMissingMathML
 )
