@@ -1,3 +1,5 @@
+// Code generated from Adobe Font Metrics data; DO NOT EDIT.
+
 package typography
 
 import "strings"

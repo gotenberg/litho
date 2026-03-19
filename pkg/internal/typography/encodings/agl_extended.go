@@ -1,3 +1,5 @@
+// Code generated from the Adobe Glyph List; DO NOT EDIT.
+
 package encodings
 
 // extendedAGL contains glyph name → Unicode mappings from the full Adobe Glyph
