@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/internal/geospatial"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
@@ -537,7 +538,7 @@ func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) ([]models.GeoD
 	if err != nil {
 		return nil, err
 	}
-	return semantics.ExtractGeoData(ctx, r.doc, targetPage)
+	return geospatial.ExtractGeoData(ctx, r.doc, targetPage)
 }
 
 // ExtractMeasurements extracts 2D rectilinear measurement scales from the

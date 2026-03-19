@@ -1,4 +1,4 @@
-package semantics
+package geospatial
 
 import (
 	"encoding/json"
