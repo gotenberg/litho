@@ -81,13 +81,6 @@ func (r *Reader) Close() error {
 	return nil
 }
 
-// Source returns the underlying io.ReaderAt and its total size. This is
-// useful for passing the raw PDF data to other packages (e.g., compliance
-// validation) without re-reading from disk.
-func (r *Reader) Source() (io.ReaderAt, int64) {
-	return r.doc.RawReader(), r.doc.FileSize()
-}
-
 // Open initializes a new Reader from an io.ReaderAt and its total size.
 // Pass functional options (e.g., WithLogger, WithPassword) to customize behavior.
 func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...Option) (*Reader, error) {

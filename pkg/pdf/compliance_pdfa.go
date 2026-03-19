@@ -1,10 +1,9 @@
-package compliance
+package pdf
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"slices"
 	"strings"
 
@@ -13,29 +12,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
-// ValidatePDFA parses a PDF from the given reader and audits it against a
-// specific PDF/A profile, returning all compliance violations found. An empty
-// slice means the document passes.
-func ValidatePDFA(ctx context.Context, r io.ReaderAt, size int64, profile PDFAProfile) ([]error, error) {
-	doc, err := document.NewDocument(ctx, r, size, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse PDF: %w", err)
-	}
-	return validatePDFA(ctx, doc, profile), nil
-}
-
-// SourceProvider is implemented by types that expose an underlying io.ReaderAt
-// and size (e.g., *pdf.Reader). This allows compliance validation to share
-// the same source data without re-reading from disk.
-type SourceProvider interface {
-	Source() (io.ReaderAt, int64)
-}
-
-// ValidatePDFAFromReader validates a PDF/A profile using a Reader's underlying
-// source, avoiding redundant parsing when the caller already has an open Reader.
-func ValidatePDFAFromReader(ctx context.Context, sp SourceProvider, profile PDFAProfile) ([]error, error) {
-	r, size := sp.Source()
-	return ValidatePDFA(ctx, r, size, profile)
+// ValidatePDFA audits the document against a specific PDF/A profile,
+// returning all compliance violations found. An empty slice means the
+// document passes.
+func (r *Reader) ValidatePDFA(ctx context.Context, profile PDFAProfile) ([]error, error) {
+	return validatePDFA(ctx, r.doc, profile), nil
 }
 
 // validatePDFA is the internal implementation that operates on a parsed document.
@@ -617,13 +598,13 @@ func scanExtGStateForTransparency(ctx context.Context, doc *document.Document, p
 			}
 			// /ca (fill opacity) < 1.0.
 			if caObj, ok := stateDict["ca"]; ok {
-				if v := astFloat(caObj); v < 1.0 && v >= 0 {
+				if v := complianceAstFloat(caObj); v < 1.0 && v >= 0 {
 					return []error{ErrTransparencyForbidden}
 				}
 			}
 			// /CA (stroke opacity) < 1.0.
 			if caObj, ok := stateDict["CA"]; ok {
-				if v := astFloat(caObj); v < 1.0 && v >= 0 {
+				if v := complianceAstFloat(caObj); v < 1.0 && v >= 0 {
 					return []error{ErrTransparencyForbidden}
 				}
 			}
@@ -989,7 +970,10 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 
 // --- Helpers ---
 
-func astFloat(obj ast.PdfObject) float64 {
+// complianceAstFloat extracts a float64 from a PdfObject (PdfInt or PdfReal).
+// This is a compliance-internal version to avoid conflicts with the astFloat
+// in reader.go.
+func complianceAstFloat(obj ast.PdfObject) float64 {
 	switch v := obj.(type) {
 	case ast.PdfReal:
 		return float64(v)
@@ -1081,7 +1065,7 @@ func collectFontDicts(ctx context.Context, doc *document.Document, catalog ast.P
 }
 
 // hasPageFilter checks whether any XObject stream on a page uses the given filter.
-func hasPageFilter(ctx context.Context, doc *document.Document, pageDict ast.PdfDict, filter string) bool {
+func hasPageFilter(ctx context.Context, doc *document.Document, pageDict ast.PdfDict, filterName string) bool {
 	resources := getResources(ctx, doc, pageDict)
 	if resources == nil {
 		return false
@@ -1101,7 +1085,7 @@ func hasPageFilter(ctx context.Context, doc *document.Document, pageDict ast.Pdf
 		if !ok {
 			continue
 		}
-		if streamHasFilter(ctx, doc, stream.Dict, filter) {
+		if streamHasFilter(ctx, doc, stream.Dict, filterName) {
 			return true
 		}
 	}

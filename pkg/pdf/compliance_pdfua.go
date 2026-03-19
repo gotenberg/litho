@@ -1,32 +1,20 @@
-package compliance
+package pdf
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// ValidatePDFUA parses a PDF from the given reader and audits it against a
-// specific PDF/UA profile, returning all compliance violations found. An empty
-// slice means the document passes.
-func ValidatePDFUA(ctx context.Context, r io.ReaderAt, size int64, profile PDFUAProfile) ([]error, error) {
-	doc, err := document.NewDocument(ctx, r, size, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse PDF: %w", err)
-	}
-	return validatePDFUA(ctx, doc, profile), nil
-}
-
-// ValidatePDFUAFromReader validates a PDF/UA profile using a Reader's
-// underlying source, avoiding redundant parsing.
-func ValidatePDFUAFromReader(ctx context.Context, sp SourceProvider, profile PDFUAProfile) ([]error, error) {
-	r, size := sp.Source()
-	return ValidatePDFUA(ctx, r, size, profile)
+// ValidatePDFUA audits the document against a specific PDF/UA profile,
+// returning all compliance violations found. An empty slice means the
+// document passes.
+func (r *Reader) ValidatePDFUA(ctx context.Context, profile PDFUAProfile) ([]error, error) {
+	return validatePDFUA(ctx, r.doc, profile), nil
 }
 
 // validatePDFUA is the internal implementation that operates on a parsed document.

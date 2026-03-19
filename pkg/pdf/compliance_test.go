@@ -1,4 +1,4 @@
-package compliance
+package pdf
 
 import (
 	"context"
@@ -1859,6 +1859,7 @@ func containsError(errs []error, target error) bool {
 func buildTestDoc(m *mockDocument) *document.Document {
 	doc := &document.Document{
 		IsEncrypted: m.encrypt,
+		Logger:      document.NopLogger(),
 	}
 	doc.Index = xref.Index{
 		Entries: make(map[int]xref.XRefEntry),

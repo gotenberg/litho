@@ -1,4 +1,4 @@
-package compliance
+package pdf
 
 // PDFAProfile identifies a specific PDF/A conformance level.
 type PDFAProfile string
