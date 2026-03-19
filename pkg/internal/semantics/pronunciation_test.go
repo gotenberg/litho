@@ -66,7 +66,7 @@ func TestExtractPronunciationLexicons_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestExtractPronunciationLexicons_NoCatalogEntry(t *testing.T) {
 	buf.WriteString(fmt.Sprintf("trailer\n<< /Size 3 /Root 2 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefOff))
 
 	pdfData := buf.Bytes()
-	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestExtractPronunciationLexicons_MultipleLexicons(t *testing.T) {
 	buf.WriteString(fmt.Sprintf("trailer\n<< /Size 5 /Root 4 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefOff))
 
 	pdfData := buf.Bytes()
-	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

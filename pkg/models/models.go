@@ -39,12 +39,12 @@ type TextElement struct {
 	Invisible     bool
 	Vertical      bool    // True when the glyph was set with a WMode=1 (vertical) font
 	Angle         float64 // Text direction angle in radians (0 = horizontal LTR, π/2 = vertical)
-	Redacted      bool   // True when the element falls inside an unapplied /Redact annotation
-	IsClipped     bool   // True when the element falls outside the /CropBox visible region
-	PatternType   string // "Tiling", "Shading", or "" when fill uses a Pattern color space
-	Language      string // BCP 47 language tag from span-level /Lang in marked content
-	ExpansionText string // Expansion text from /E in marked content (e.g., "World Wide Web" for "WWW")
-	MathML        string // MathML markup from a /Formula structure element's /AF entry
+	Redacted      bool    // True when the element falls inside an unapplied /Redact annotation
+	IsClipped     bool    // True when the element falls outside the /CropBox visible region
+	PatternType   string  // "Tiling", "Shading", or "" when fill uses a Pattern color space
+	Language      string  // BCP 47 language tag from span-level /Lang in marked content
+	ExpansionText string  // Expansion text from /E in marked content (e.g., "World Wide Web" for "WWW")
+	MathML        string  // MathML markup from a /Formula structure element's /AF entry
 }
 
 // Bookmark represents an item in the document outline.

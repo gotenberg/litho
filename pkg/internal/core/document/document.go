@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"strconv"
 
@@ -30,6 +31,11 @@ type Document struct {
 	OCConfig      *OCConfig
 	IsEncrypted   bool
 	Authenticated bool
+
+	// Logger is the structured logger used for debug output. It is never nil;
+	// when the caller does not supply a logger, a no-op logger that discards
+	// all output is used.
+	Logger *slog.Logger
 
 	// Linearization holds the linearization parameters if the document is
 	// linearized (fast web view). Nil for non-linearized documents.
@@ -180,8 +186,14 @@ func (d *Document) parseHybridXRefStream(offset int64) error {
 	return nil
 }
 
+// NopLogger returns a logger that discards all output.
+func NopLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 // NewDocument creates a new Document instance by parsing the XRef chains.
-func NewDocument(ctx context.Context, r io.ReaderAt, size int64) (*Document, error) {
+// If logger is nil, a no-op logger is used.
+func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger) (*Document, error) {
 	// Validate PDF Header
 	headerBuf := make([]byte, 10)
 	_, err := r.ReadAt(headerBuf, 0)
@@ -192,12 +204,17 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64) (*Document, err
 		return nil, ErrMissingHeader
 	}
 
+	if logger == nil {
+		logger = NopLogger()
+	}
+
 	doc := &Document{
 		r:           r,
 		size:        size,
 		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
 		ObjectCache: make(map[int]ast.PdfObject),
 		resolving:   make(map[int]bool),
+		Logger:      logger,
 	}
 
 	// Probe for linearization before seeking to the end of the file.
@@ -211,6 +228,9 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64) (*Document, err
 	}
 
 	if err := doc.parseXRefChain(); err != nil {
+		doc.Logger.Debug("xref chain parse failed, attempting rebuild",
+			slog.String("error", err.Error()),
+		)
 		// Fallback: brute-force rebuild by scanning for object headers.
 		doc.Index.Entries = make(map[int]xref.XRefEntry)
 		doc.Index.Trailer = nil
@@ -219,6 +239,12 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64) (*Document, err
 		}
 		doc.Rebuilt = true
 	}
+
+	doc.Logger.Debug("xref parsed",
+		slog.Int("entries", len(doc.Index.Entries)),
+		slog.Bool("rebuilt", doc.Rebuilt),
+		slog.Bool("linearized", doc.Linearization != nil),
+	)
 
 	// Initialize Crypto if Encrypt dictionary is present
 	if encObj, ok := doc.Index.Trailer["Encrypt"]; ok {
@@ -247,9 +273,22 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64) (*Document, err
 		}
 		doc.Crypto = handler
 		doc.Authenticated = handler.Authenticated
+
+		doc.Logger.Debug("encryption detected",
+			slog.Int("V", handler.V),
+			slog.Int("key_length", handler.Length),
+			slog.String("cfm", handler.CFM),
+			slog.Bool("authenticated_empty_password", handler.Authenticated),
+		)
 	}
 
 	doc.initOCConfig(ctx)
+
+	doc.Logger.Debug("document opened",
+		slog.Int64("size_bytes", size),
+		slog.String("header", string(bytes.TrimSpace(headerBuf))),
+		slog.Bool("encrypted", doc.IsEncrypted),
+	)
 
 	return doc, nil
 }
@@ -462,6 +501,11 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 
 	// Check if the object is already in the cache
 	if obj, ok := d.ObjectCache[ref.ObjectNum]; ok {
+		d.Logger.Debug("resolve object cache hit",
+			slog.Int("obj", ref.ObjectNum),
+			slog.Int("gen", ref.GenNum),
+			slog.String("type", fmt.Sprintf("%T", obj)),
+		)
 		return obj, nil
 	}
 
@@ -495,6 +539,13 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 			return nil, fmt.Errorf("failed to parse object %d at offset %d: %v", ref.ObjectNum, entry.Offset, err)
 		}
 
+		d.Logger.Debug("resolve object parsed",
+			slog.Int("obj", ref.ObjectNum),
+			slog.Int("gen", ref.GenNum),
+			slog.Int64("offset", entry.Offset),
+			slog.String("type", fmt.Sprintf("%T", obj)),
+		)
+
 		// Store in cache and return
 		d.ObjectCache[ref.ObjectNum] = obj
 		return obj, nil
@@ -504,6 +555,13 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)
 		}
+
+		d.Logger.Debug("resolve object from object stream",
+			slog.Int("obj", ref.ObjectNum),
+			slog.Int("stream_obj", entry.ObjStmNum),
+			slog.Int("index", entry.ObjStmIndex),
+			slog.String("type", fmt.Sprintf("%T", obj)),
+		)
 
 		// Store in cache and return
 		d.ObjectCache[ref.ObjectNum] = obj

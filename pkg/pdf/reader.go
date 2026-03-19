@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,23 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
+// Option configures optional behavior when opening a PDF document.
+type Option func(*openOpts)
+
+type openOpts struct {
+	logger *slog.Logger
+}
+
+// WithLogger injects a structured logger for debug-level diagnostic output.
+// When set, the parsing engine emits detailed debug logs (font resolution,
+// object resolution, text extraction, etc.) using structured fields.
+// If not set, all debug output is silently discarded.
+func WithLogger(logger *slog.Logger) Option {
+	return func(o *openOpts) {
+		o.logger = logger
+	}
+}
+
 // Reader is the high-level API facade for the PDF parsing engine.
 type Reader struct {
 	doc *document.Document
@@ -39,8 +57,14 @@ func (r *Reader) SetOCREngine(engine models.OCREngine) {
 }
 
 // Open initializes a new Reader from an io.ReaderAt and its total size.
-func Open(ctx context.Context, r io.ReaderAt, size int64, password string) (*Reader, error) {
-	doc, err := document.NewDocument(ctx, r, size)
+// Pass functional options (e.g., WithLogger) to customize behavior.
+func Open(ctx context.Context, r io.ReaderAt, size int64, password string, opts ...Option) (*Reader, error) {
+	var o openOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	doc, err := document.NewDocument(ctx, r, size, o.logger)
 	if err != nil {
 		switch {
 		case errors.Is(err, document.ErrMissingHeader):
@@ -64,6 +88,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, password string) (*Rea
 				}
 				return nil, fmt.Errorf("authentication failed: %w", err)
 			}
+			doc.Logger.Debug("password authentication succeeded")
 		}
 	}
 
@@ -72,7 +97,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, password string) (*Rea
 
 // OpenFile is a convenience method to open a PDF directly from the filesystem.
 // The caller is responsible for closing the *os.File when done.
-func OpenFile(ctx context.Context, path string, password string) (*Reader, *os.File, error) {
+func OpenFile(ctx context.Context, path string, password string, opts ...Option) (*Reader, *os.File, error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, nil, err
@@ -86,7 +111,7 @@ func OpenFile(ctx context.Context, path string, password string) (*Reader, *os.F
 		return nil, nil, err
 	}
 
-	r, err := Open(ctx, f, stat.Size(), password)
+	r, err := Open(ctx, f, stat.Size(), password, opts...)
 	if err != nil {
 		if err := f.Close(); err != nil {
 			return nil, nil, fmt.Errorf("failed to close file: %w", err)
@@ -182,6 +207,13 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		}
 		return "", err
 	}
+
+	r.doc.Logger.Debug("text extracted",
+		slog.Int("page", pageNum),
+		slog.Int("text_length", len(text)),
+		slog.Int("operators", len(ops)),
+		slog.Bool("include_hidden", o.includeHidden),
+	)
 
 	// OCR triage: if no text was extracted, check whether the page looks
 	// like a scanned image and either hand off to the OCR engine or return

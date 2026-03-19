@@ -3,6 +3,7 @@ package typography
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -631,6 +632,11 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // annotAppearances contains object numbers of annotation appearance streams to skip.
 func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool) error {
 	if depth > maxFormXObjectDepth {
+		if doc != nil {
+			doc.Logger.Debug("form xobject max depth reached",
+				slog.Int("depth", depth),
+			)
+		}
 		return nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -950,6 +956,14 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 		return nil, err
 	}
 
+	if doc != nil {
+		doc.Logger.Debug("text elements extracted",
+			slog.Int("count", len(elements)),
+			slog.Int("operators", len(ops)),
+			slog.Int("annot_appearances_skipped", len(annotAppearances)),
+		)
+	}
+
 	// Flag elements that fall outside the CropBox (the visible region).
 	cropBox := boxRectFromArray(page.CropBox)
 	if cropBox != [4]float64{} {
@@ -1013,6 +1027,17 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 			continue
 		}
 		filtered = append(filtered, el)
+	}
+
+	if doc != nil {
+		doc.Logger.Debug("text elements filtered",
+			slog.Int("before", len(elements)),
+			slog.Int("after", len(filtered)),
+			slog.Bool("strip_invisible", config.StripInvisible),
+			slog.Bool("strip_hidden", config.StripHidden),
+			slog.Bool("strip_clipped", config.StripClipped),
+			slog.Bool("strip_artifacts", config.StripArtifacts),
+		)
 	}
 
 	var pageBeads []semantics.Bead

@@ -50,7 +50,7 @@ func missingStartXRefPDF() []byte {
 
 func TestNewDocument_ValidXRef(t *testing.T) {
 	data := minimalPDF()
-	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed on valid PDF: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestNewDocument_ValidXRef(t *testing.T) {
 
 func TestNewDocument_CorruptedXRef_Rebuilds(t *testing.T) {
 	data := corruptedPDF()
-	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed on corrupted PDF: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestNewDocument_CorruptedXRef_Rebuilds(t *testing.T) {
 
 func TestNewDocument_MissingStartXRef_Rebuilds(t *testing.T) {
 	data := missingStartXRefPDF()
-	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestNewDocument_MissingStartXRef_Rebuilds(t *testing.T) {
 
 func TestNewDocument_NoXRef_Rebuilds(t *testing.T) {
 	data := noXRefPDF()
-	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestRebuildXRef_NoTrailer(t *testing.T) {
 func TestNewDocument_TotallyBroken(t *testing.T) {
 	// No header: should fail with ErrMissingHeader, not attempt rebuild.
 	data := []byte("this is not a PDF")
-	_, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
+	_, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
 	if !errors.Is(err, ErrMissingHeader) {
 		t.Errorf("expected ErrMissingHeader, got: %v", err)
 	}

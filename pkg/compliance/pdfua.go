@@ -15,7 +15,7 @@ import (
 // specific PDF/UA profile, returning all compliance violations found. An empty
 // slice means the document passes.
 func ValidatePDFUA(ctx context.Context, r io.ReaderAt, size int64, profile PDFUAProfile) ([]error, error) {
-	doc, err := document.NewDocument(ctx, r, size)
+	doc, err := document.NewDocument(ctx, r, size, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PDF: %w", err)
 	}

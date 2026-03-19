@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -129,7 +130,21 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		allData = append(allData, '\n') // Ensure tokens from separate streams don't merge
 	}
 
+	doc.Logger.Debug("content stream decoded",
+		slog.Int("streams", len(streams)),
+		slog.Int("total_bytes", len(allData)),
+	)
+
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(allData), int64(len(allData)), 0))
 	p := parser.NewParser(lex)
-	return parseOperations(p)
+	ops, err := parseOperations(p)
+	if err != nil {
+		return nil, err
+	}
+
+	doc.Logger.Debug("content stream parsed",
+		slog.Int("operators", len(ops)),
+	)
+
+	return ops, nil
 }

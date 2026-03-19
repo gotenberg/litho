@@ -106,7 +106,7 @@ func buildHybridPDF() ([]byte, int64, int64) {
 func TestHybridXRef_CompressedOverridesLegacy(t *testing.T) {
 	pdfData, off3old, off3new := buildHybridPDF()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestHybridXRef_CompressedOverridesLegacy(t *testing.T) {
 func TestHybridXRef_NonOverriddenEntriesPreserved(t *testing.T) {
 	pdfData, _, _ := buildHybridPDF()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestHybridXRef_NonOverriddenEntriesPreserved(t *testing.T) {
 func TestHybridXRef_NoXRefStm_LegacyOnly(t *testing.T) {
 	// A normal non-hybrid PDF should work unchanged.
 	data := minimalPDF()
-	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed: %v", err)
 	}
@@ -247,7 +247,7 @@ func buildHybridPDF_Type2() []byte {
 func TestHybridXRef_Type2_CompressedObjectFromStream(t *testing.T) {
 	pdfData := buildHybridPDF_Type2()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument failed: %v", err)
 	}

@@ -77,7 +77,7 @@ func TestPageBoxes_AllFiveExplicit(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestPageBoxes_CropBoxDefaultsToMediaBox(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestPageBoxes_InheritedCropBox(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestPageBoxes_PageOverridesCropBox(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestPageBoxes_NonInheritableDefaultToCropBox(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)))
+	doc, err := NewDocument(ctx, bytes.NewReader(pdf), int64(len(pdf)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

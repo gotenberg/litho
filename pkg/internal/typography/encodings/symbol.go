@@ -150,56 +150,56 @@ var DingbatsGlyphsUnicode = map[string]rune{
 // SymbolGlyphsUnicode maps Symbol font glyph names to Unicode runes.
 // Entries that differ from or don't exist in the standard AGL.
 var SymbolGlyphsUnicode = map[string]rune{
-	"universal":      0x2200, "existential": 0x2203, "suchthat": 0x220B,
-	"asteriskmath":   0x2217, "congruent": 0x2245, "Alpha": 0x0391,
-	"Beta":           0x0392, "Chi": 0x03A7, "Delta": 0x0394,
-	"Epsilon":        0x0395, "Phi": 0x03A6, "Gamma": 0x0393,
-	"Eta":            0x0397, "Iota": 0x0399, "theta1": 0x03D1,
-	"Kappa":          0x039A, "Lambda": 0x039B, "Mu": 0x039C,
-	"Nu":             0x039D, "Omicron": 0x039F, "Pi": 0x03A0,
-	"Theta":          0x0398, "Rho": 0x03A1, "Sigma": 0x03A3,
-	"Tau":            0x03A4, "Upsilon": 0x03A5, "sigma1": 0x03C2,
-	"Omega":          0x03A9, "Xi": 0x039E, "Psi": 0x03A8,
-	"Zeta":           0x0396, "therefore": 0x2234, "perpendicular": 0x22A5,
-	"radicalex":      0xF8E5, "alpha": 0x03B1, "beta": 0x03B2,
-	"chi":            0x03C7, "delta": 0x03B4, "epsilon": 0x03B5,
-	"phi":            0x03C6, "gamma": 0x03B3, "eta": 0x03B7,
-	"iota":           0x03B9, "phi1": 0x03D5, "kappa": 0x03BA,
-	"lambda":         0x03BB, "mu": 0x03BC, "nu": 0x03BD,
-	"omicron":        0x03BF, "pi": 0x03C0, "theta": 0x03B8,
-	"rho":            0x03C1, "sigma": 0x03C3, "tau": 0x03C4,
-	"upsilon":        0x03C5, "omega1": 0x03D6, "omega": 0x03C9,
-	"xi":             0x03BE, "psi": 0x03C8, "zeta": 0x03B6,
-	"similar":        0x223C, "Upsilon1": 0x03D2, "minute": 0x2032,
-	"lessequal":      0x2264, "infinity": 0x221E, "club": 0x2663,
-	"diamond":        0x2666, "heart": 0x2665, "spade": 0x2660,
-	"arrowboth":      0x2194, "arrowleft": 0x2190, "arrowup": 0x2191,
-	"arrowright":     0x2192, "arrowdown": 0x2193, "second": 0x2033,
-	"greaterequal":   0x2265, "proportional": 0x221D, "partialdiff": 0x2202,
-	"notequal":       0x2260, "equivalence": 0x2261, "approxequal": 0x2248,
-	"arrowvertex":    0xF8E6, "arrowhorizex": 0xF8E7, "carriagereturn": 0x21B5,
-	"aleph":          0x2135, "Ifraktur": 0x2111, "Rfraktur": 0x211C,
-	"weierstrass":    0x2118, "circlemultiply": 0x2297, "circleplus": 0x2295,
-	"emptyset":       0x2205, "intersection": 0x2229, "union": 0x222A,
+	"universal": 0x2200, "existential": 0x2203, "suchthat": 0x220B,
+	"asteriskmath": 0x2217, "congruent": 0x2245, "Alpha": 0x0391,
+	"Beta": 0x0392, "Chi": 0x03A7, "Delta": 0x0394,
+	"Epsilon": 0x0395, "Phi": 0x03A6, "Gamma": 0x0393,
+	"Eta": 0x0397, "Iota": 0x0399, "theta1": 0x03D1,
+	"Kappa": 0x039A, "Lambda": 0x039B, "Mu": 0x039C,
+	"Nu": 0x039D, "Omicron": 0x039F, "Pi": 0x03A0,
+	"Theta": 0x0398, "Rho": 0x03A1, "Sigma": 0x03A3,
+	"Tau": 0x03A4, "Upsilon": 0x03A5, "sigma1": 0x03C2,
+	"Omega": 0x03A9, "Xi": 0x039E, "Psi": 0x03A8,
+	"Zeta": 0x0396, "therefore": 0x2234, "perpendicular": 0x22A5,
+	"radicalex": 0xF8E5, "alpha": 0x03B1, "beta": 0x03B2,
+	"chi": 0x03C7, "delta": 0x03B4, "epsilon": 0x03B5,
+	"phi": 0x03C6, "gamma": 0x03B3, "eta": 0x03B7,
+	"iota": 0x03B9, "phi1": 0x03D5, "kappa": 0x03BA,
+	"lambda": 0x03BB, "mu": 0x03BC, "nu": 0x03BD,
+	"omicron": 0x03BF, "pi": 0x03C0, "theta": 0x03B8,
+	"rho": 0x03C1, "sigma": 0x03C3, "tau": 0x03C4,
+	"upsilon": 0x03C5, "omega1": 0x03D6, "omega": 0x03C9,
+	"xi": 0x03BE, "psi": 0x03C8, "zeta": 0x03B6,
+	"similar": 0x223C, "Upsilon1": 0x03D2, "minute": 0x2032,
+	"lessequal": 0x2264, "infinity": 0x221E, "club": 0x2663,
+	"diamond": 0x2666, "heart": 0x2665, "spade": 0x2660,
+	"arrowboth": 0x2194, "arrowleft": 0x2190, "arrowup": 0x2191,
+	"arrowright": 0x2192, "arrowdown": 0x2193, "second": 0x2033,
+	"greaterequal": 0x2265, "proportional": 0x221D, "partialdiff": 0x2202,
+	"notequal": 0x2260, "equivalence": 0x2261, "approxequal": 0x2248,
+	"arrowvertex": 0xF8E6, "arrowhorizex": 0xF8E7, "carriagereturn": 0x21B5,
+	"aleph": 0x2135, "Ifraktur": 0x2111, "Rfraktur": 0x211C,
+	"weierstrass": 0x2118, "circlemultiply": 0x2297, "circleplus": 0x2295,
+	"emptyset": 0x2205, "intersection": 0x2229, "union": 0x222A,
 	"propersuperset": 0x2283, "reflexsuperset": 0x2287, "notsubset": 0x2284,
-	"propersubset":   0x2282, "reflexsubset": 0x2286, "element": 0x2208,
-	"notelement":     0x2209, "angle": 0x2220, "gradient": 0x2207,
-	"registerserif":  0xF6DA, "copyrightserif": 0xF6D9, "trademarkserif": 0xF6DB,
-	"product":        0x220F, "radical": 0x221A, "dotmath": 0x22C5,
-	"logicalnot":     0x00AC, "logicaland": 0x2227, "logicalor": 0x2228,
-	"arrowdblboth":   0x21D4, "arrowdblleft": 0x21D0, "arrowdblup": 0x21D1,
-	"arrowdblright":  0x21D2, "arrowdbldown": 0x21D3, "lozenge": 0x25CA,
-	"angleleft":      0x2329, "registersans": 0xF8E8, "copyrightsans": 0xF6D8,
-	"trademarksans":  0xF8EA, "summation": 0x2211, "parenlefttp": 0xF8EB,
-	"parenleftex":    0xF8EC, "parenleftbt": 0xF8ED, "bracketlefttp": 0xF8EE,
-	"bracketleftex":  0xF8EF, "bracketleftbt": 0xF8F0, "bracelefttp": 0xF8F1,
-	"braceleftmid":   0xF8F2, "braceleftbt": 0xF8F3, "braceex": 0xF8F4,
-	"angleright":     0x232A, "integral": 0x222B, "integraltp": 0x2320,
-	"integralex":     0xF8F5, "integralbt": 0x2321, "parenrighttp": 0xF8F6,
-	"parenrightex":   0xF8F7, "parenrightbt": 0xF8F8, "bracketrighttp": 0xF8F9,
+	"propersubset": 0x2282, "reflexsubset": 0x2286, "element": 0x2208,
+	"notelement": 0x2209, "angle": 0x2220, "gradient": 0x2207,
+	"registerserif": 0xF6DA, "copyrightserif": 0xF6D9, "trademarkserif": 0xF6DB,
+	"product": 0x220F, "radical": 0x221A, "dotmath": 0x22C5,
+	"logicalnot": 0x00AC, "logicaland": 0x2227, "logicalor": 0x2228,
+	"arrowdblboth": 0x21D4, "arrowdblleft": 0x21D0, "arrowdblup": 0x21D1,
+	"arrowdblright": 0x21D2, "arrowdbldown": 0x21D3, "lozenge": 0x25CA,
+	"angleleft": 0x2329, "registersans": 0xF8E8, "copyrightsans": 0xF6D8,
+	"trademarksans": 0xF8EA, "summation": 0x2211, "parenlefttp": 0xF8EB,
+	"parenleftex": 0xF8EC, "parenleftbt": 0xF8ED, "bracketlefttp": 0xF8EE,
+	"bracketleftex": 0xF8EF, "bracketleftbt": 0xF8F0, "bracelefttp": 0xF8F1,
+	"braceleftmid": 0xF8F2, "braceleftbt": 0xF8F3, "braceex": 0xF8F4,
+	"angleright": 0x232A, "integral": 0x222B, "integraltp": 0x2320,
+	"integralex": 0xF8F5, "integralbt": 0x2321, "parenrighttp": 0xF8F6,
+	"parenrightex": 0xF8F7, "parenrightbt": 0xF8F8, "bracketrighttp": 0xF8F9,
 	"bracketrightex": 0xF8FA, "bracketrightbt": 0xF8FB, "bracerighttp": 0xF8FC,
-	"bracerightmid":  0xF8FD, "bracerightbt": 0xF8FE,
-	"Euro":           0x20AC,
+	"bracerightmid": 0xF8FD, "bracerightbt": 0xF8FE,
+	"Euro": 0x20AC,
 }
 
 // BuildSymbolEncoding builds a byte→rune encoding map for Symbol fonts by
@@ -207,7 +207,7 @@ var SymbolGlyphsUnicode = map[string]rune{
 // then falling back to the standard glyph list.
 func BuildSymbolEncoding() map[byte]rune {
 	enc := make(map[byte]rune, 128)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		name := SymbolSetEncoding[i]
 		if name == "" {
 			continue
@@ -228,7 +228,7 @@ func BuildSymbolEncoding() map[byte]rune {
 // DingbatsGlyphsUnicode.
 func BuildZapfDingbatsEncoding() map[byte]rune {
 	enc := make(map[byte]rune, 128)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		name := ZapfDingbatsEncoding[i]
 		if name == "" {
 			continue

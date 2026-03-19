@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"maps"
 	"regexp"
 	"strconv"
@@ -518,6 +519,26 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil {
 		applyCIDToGIDIdentityFallback(ctx, doc, fontDict, font)
 	}
+
+	// Determine the font name for logging.
+	fontLogName := string(subtypeName)
+	if bfObj, ok := fontDict["BaseFont"]; ok {
+		bfRes, _ := document.ResolveObject(ctx, doc, bfObj)
+		if bfName, ok := bfRes.(ast.PdfName); ok {
+			fontLogName = string(bfName)
+		}
+	}
+
+	doc.Logger.Debug("font resolved",
+		slog.String("name", fontLogName),
+		slog.String("subtype", string(subtypeName)),
+		slog.Bool("has_tounicode", font.ToUnicode != nil),
+		slog.Bool("has_gid_to_unicode", font.GIDToUnicode != nil),
+		slog.Bool("has_cid_widths", font.CIDWidths != nil),
+		slog.Int("encoding_entries", len(font.Encoding)),
+		slog.Int("wmode", font.WMode),
+		slog.Bool("cid_identity_fallback", font.CIDIdentityFallback),
+	)
 
 	return font, nil
 }

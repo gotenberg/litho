@@ -17,7 +17,7 @@ import (
 // specific PDF/A profile, returning all compliance violations found. An empty
 // slice means the document passes.
 func ValidatePDFA(ctx context.Context, r io.ReaderAt, size int64, profile PDFAProfile) ([]error, error) {
-	doc, err := document.NewDocument(ctx, r, size)
+	doc, err := document.NewDocument(ctx, r, size, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PDF: %w", err)
 	}
@@ -696,7 +696,7 @@ func validateEmbeddedFilePDFA(ctx context.Context, doc *document.Document, fileS
 	}
 
 	// Attempt to parse the embedded PDF and validate it recursively.
-	embeddedDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)))
+	embeddedDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrNonPDFAAttachment, err)
 	}

@@ -73,7 +73,7 @@ func buildNameTreePDF() ([]byte, ast.PdfIndirectRef, ast.PdfIndirectRef) {
 func TestResolveNamedDest_FoundInNameTree(t *testing.T) {
 	pdfData, page1Ref, _ := buildNameTreePDF()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestResolveNamedDest_FoundInNameTree(t *testing.T) {
 func TestResolveNamedDest_FoundSecondLeaf(t *testing.T) {
 	pdfData, _, page2Ref := buildNameTreePDF()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestResolveNamedDest_FoundSecondLeaf(t *testing.T) {
 func TestResolveNamedDest_NotFound(t *testing.T) {
 	pdfData, _, _ := buildNameTreePDF()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestResolveNamedDest_NotFound(t *testing.T) {
 func TestResolveNamedDest_LimitsSkipsBranch(t *testing.T) {
 	pdfData, _, _ := buildNameTreePDF()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestResolveNamedDest_LimitsSkipsBranch(t *testing.T) {
 func TestResolveNamedDest_NoNamesDict(t *testing.T) {
 	// Minimal PDF without /Names in catalog.
 	data := minimalPDF()
-	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
@@ -205,7 +205,7 @@ func buildLegacyDestsPDF() ([]byte, ast.PdfIndirectRef) {
 func TestResolveNamedDest_LegacyDestsDict(t *testing.T) {
 	pdfData, pageRef := buildLegacyDestsPDF()
 
-	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)))
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
