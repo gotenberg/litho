@@ -85,14 +85,14 @@ func (r *Reader) Close() error {
 // ValidatePDFA audits the document against a specific PDF/A profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func (r *Reader) ValidatePDFA(ctx context.Context, profile PDFAProfile) ([]error, error) {
+func (r *Reader) ValidatePDFA(ctx context.Context, profile models.PDFAProfile) ([]error, error) {
 	return compliance.ValidatePDFA(ctx, r.doc, profile), nil
 }
 
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func (r *Reader) ValidatePDFUA(ctx context.Context, profile PDFUAProfile) ([]error, error) {
+func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile) ([]error, error) {
 	return compliance.ValidatePDFUA(ctx, r.doc, profile), nil
 }
 

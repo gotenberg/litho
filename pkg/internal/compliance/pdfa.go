@@ -10,15 +10,16 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ValidatePDFA audits the document against a specific PDF/A profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func ValidatePDFA(ctx context.Context, doc *document.Document, profile PDFAProfile) []error {
+func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) []error {
 	part := PdfaPart(profile)
 	if part == 0 {
-		return []error{fmt.Errorf("%w: %s", ErrInvalidProfile, profile)}
+		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
 	}
 
 	catalog, err := getCatalog(ctx, doc)
@@ -115,10 +116,10 @@ func resolve(ctx context.Context, doc *document.Document, obj ast.PdfObject) (as
 // inspecting both the Trailer /Encrypt key and the document's encryption flag.
 func checkEncryptionForbidden(_ context.Context, doc *document.Document) []error {
 	if _, ok := doc.Index.Trailer["Encrypt"]; ok {
-		return []error{ErrEncryptionForbidden}
+		return []error{models.ErrEncryptionForbidden}
 	}
 	if doc.IsEncrypted {
-		return []error{ErrEncryptionForbidden}
+		return []error{models.ErrEncryptionForbidden}
 	}
 	return nil
 }
@@ -129,19 +130,19 @@ func checkEncryptionForbidden(_ context.Context, doc *document.Document) []error
 func checkICCProfile(_ context.Context, _ *document.Document, catalog ast.PdfDict) []error {
 	oiObj, ok := catalog["OutputIntents"]
 	if !ok {
-		return []error{ErrMissingICCProfile}
+		return []error{models.ErrMissingICCProfile}
 	}
 
 	// OutputIntents is an array; at least one entry must have a /DestOutputProfile.
 	oi, ok := oiObj.(ast.PdfArray)
 	if !ok || len(oi) == 0 {
-		return []error{ErrMissingICCProfile}
+		return []error{models.ErrMissingICCProfile}
 	}
 	// Check that at least one has an ICC profile stream.
 	if slices.ContainsFunc(oi, hasICCProfile) {
 		return nil
 	}
-	return []error{ErrMissingICCProfile}
+	return []error{models.ErrMissingICCProfile}
 }
 
 func hasICCProfile(obj ast.PdfObject) bool {
@@ -158,7 +159,7 @@ func checkNoLZW(ctx context.Context, doc *document.Document, catalog ast.PdfDict
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		if hasPageFilter(ctx, doc, page, "LZWDecode") {
-			return []error{ErrLZWForbidden}
+			return []error{models.ErrLZWForbidden}
 		}
 	}
 	return nil
@@ -182,7 +183,7 @@ func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog a
 		namesRes, _ := resolve(ctx, doc, namesObj)
 		if namesDict, ok := namesRes.(ast.PdfDict); ok {
 			if _, ok := namesDict["JavaScript"]; ok {
-				return []error{ErrActiveContentForbidden}
+				return []error{models.ErrActiveContentForbidden}
 			}
 		}
 	}
@@ -192,25 +193,25 @@ func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog a
 		oaRes, _ := resolve(ctx, doc, oaObj)
 		if oaDict, ok := oaRes.(ast.PdfDict); ok {
 			if isForbiddenAction(oaDict) {
-				return []error{ErrActiveContentForbidden}
+				return []error{models.ErrActiveContentForbidden}
 			}
 		}
 	}
 
 	// Check /AA (Additional Actions) on catalog.
 	if hasForbiddenAdditionalActions(ctx, doc, catalog) {
-		return []error{ErrActiveContentForbidden}
+		return []error{models.ErrActiveContentForbidden}
 	}
 
 	// Check page-level annotations for forbidden actions.
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		if hasForbiddenAnnotActions(ctx, doc, page) {
-			return []error{ErrActiveContentForbidden}
+			return []error{models.ErrActiveContentForbidden}
 		}
 		// Check page-level /AA.
 		if hasForbiddenAdditionalActions(ctx, doc, page) {
-			return []error{ErrActiveContentForbidden}
+			return []error{models.ErrActiveContentForbidden}
 		}
 	}
 
@@ -297,7 +298,7 @@ func checkFontsEmbedded(ctx context.Context, doc *document.Document, catalog ast
 			continue
 		}
 		if !isFontEmbedded(ctx, doc, fontDict) {
-			errs = append(errs, fmt.Errorf("%w: %s", ErrFontNotEmbedded, name))
+			errs = append(errs, fmt.Errorf("%w: %s", models.ErrFontNotEmbedded, name))
 		}
 	}
 	return errs
@@ -370,7 +371,7 @@ func checkUnicodeMapping(ctx context.Context, doc *document.Document, catalog as
 		if hasFontUnicodeMapping(ctx, doc, fontDict) {
 			continue
 		}
-		errs = append(errs, fmt.Errorf("%w: %s", ErrMissingUnicodeMapping, name))
+		errs = append(errs, fmt.Errorf("%w: %s", models.ErrMissingUnicodeMapping, name))
 	}
 	return errs
 }
@@ -412,7 +413,7 @@ func hasFontUnicodeMapping(ctx context.Context, doc *document.Document, fontDict
 // specifying the document's natural language (e.g., "en-US").
 func checkLangEntry(_ context.Context, _ *document.Document, catalog ast.PdfDict) []error {
 	if _, ok := catalog["Lang"]; !ok {
-		return []error{ErrMissingLang}
+		return []error{models.ErrMissingLang}
 	}
 	return nil
 }
@@ -454,7 +455,7 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 			sRes, _ := resolve(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
 				if _, hasAlt := v["Alt"]; !hasAlt {
-					*errs = append(*errs, ErrUntaggedVisualElement)
+					*errs = append(*errs, models.ErrUntaggedVisualElement)
 				}
 			}
 		}
@@ -504,7 +505,7 @@ func checkPDFA1Version(ctx context.Context, doc *document.Document, catalog ast.
 			if isPDFVersionAtMost14(string(vName)) {
 				return nil
 			}
-			return []error{ErrVersionTooHighForA1}
+			return []error{models.ErrVersionTooHighForA1}
 		}
 	}
 
@@ -517,7 +518,7 @@ func checkPDFA1Version(ctx context.Context, doc *document.Document, catalog ast.
 	if _, after, ok := bytes.Cut(headerBuf, []byte("%PDF-")); ok {
 		versionStr := string(after) // e.g., "1.4..."
 		if !isPDFVersionAtMost14(versionStr) {
-			return []error{ErrVersionTooHighForA1}
+			return []error{models.ErrVersionTooHighForA1}
 		}
 	}
 	return nil
@@ -539,7 +540,7 @@ func checkNoTransparency(ctx context.Context, doc *document.Document, catalog as
 	for _, page := range pages {
 		// Check page /Group dictionary for /S /Transparency.
 		if hasGroupTransparency(ctx, doc, page) {
-			return []error{ErrTransparencyForbidden}
+			return []error{models.ErrTransparencyForbidden}
 		}
 		if errs := scanExtGStateForTransparency(ctx, doc, page); len(errs) > 0 {
 			return errs
@@ -588,25 +589,25 @@ func scanExtGStateForTransparency(ctx context.Context, doc *document.Document, p
 			// /BM (blend mode) other than Normal.
 			if bmObj, ok := stateDict["BM"]; ok {
 				if bmName, ok := bmObj.(ast.PdfName); ok && bmName != "Normal" {
-					return []error{ErrTransparencyForbidden}
+					return []error{models.ErrTransparencyForbidden}
 				}
 			}
 			// /ca (fill opacity) < 1.0.
 			if caObj, ok := stateDict["ca"]; ok {
 				if v := complianceAstFloat(caObj); v < 1.0 && v >= 0 {
-					return []error{ErrTransparencyForbidden}
+					return []error{models.ErrTransparencyForbidden}
 				}
 			}
 			// /CA (stroke opacity) < 1.0.
 			if caObj, ok := stateDict["CA"]; ok {
 				if v := complianceAstFloat(caObj); v < 1.0 && v >= 0 {
-					return []error{ErrTransparencyForbidden}
+					return []error{models.ErrTransparencyForbidden}
 				}
 			}
 			// /SMask (soft mask).
 			if smObj, ok := stateDict["SMask"]; ok {
 				if smName, ok := smObj.(ast.PdfName); !ok || smName != "None" {
-					return []error{ErrTransparencyForbidden}
+					return []error{models.ErrTransparencyForbidden}
 				}
 			}
 		}
@@ -618,7 +619,7 @@ func checkNoJPX(ctx context.Context, doc *document.Document, catalog ast.PdfDict
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		if hasPageFilter(ctx, doc, page, "JPXDecode") {
-			return []error{ErrJPEG2000Forbidden}
+			return []error{models.ErrJPEG2000Forbidden}
 		}
 	}
 	return nil
@@ -626,7 +627,7 @@ func checkNoJPX(ctx context.Context, doc *document.Document, catalog ast.PdfDict
 
 func checkNoAttachments(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	if hasEmbeddedFiles(ctx, doc, catalog) {
-		return []error{ErrEmbeddedFilesForbidden}
+		return []error{models.ErrEmbeddedFilesForbidden}
 	}
 	return nil
 }
@@ -657,41 +658,41 @@ func validateEmbeddedFilePDFA(ctx context.Context, doc *document.Document, fileS
 	// Extract the embedded file stream from /EF/F.
 	efObj, ok := fileSpec["EF"]
 	if !ok {
-		return ErrNonPDFAAttachment
+		return models.ErrNonPDFAAttachment
 	}
 	efRes, _ := resolve(ctx, doc, efObj)
 	efDict, ok := efRes.(ast.PdfDict)
 	if !ok {
-		return ErrNonPDFAAttachment
+		return models.ErrNonPDFAAttachment
 	}
 	fObj, ok := efDict["F"]
 	if !ok {
-		return ErrNonPDFAAttachment
+		return models.ErrNonPDFAAttachment
 	}
 	fRes, _ := resolve(ctx, doc, fObj)
 	stream, ok := fRes.(ast.PdfStream)
 	if !ok {
-		return ErrNonPDFAAttachment
+		return models.ErrNonPDFAAttachment
 	}
 
 	// Decode the stream to get the raw file bytes.
 	data, err := filter.DecodeStream(stream)
 	if err != nil {
-		return fmt.Errorf("%w: failed to decode stream", ErrNonPDFAAttachment)
+		return fmt.Errorf("%w: failed to decode stream", models.ErrNonPDFAAttachment)
 	}
 
 	// Non-PDF files (Word, Excel, ZIP, etc.) lack the %PDF- header.
 	if !bytes.HasPrefix(data, []byte("%PDF-")) {
-		return ErrNonPDFAAttachment
+		return models.ErrNonPDFAAttachment
 	}
 
 	// Attempt to parse the embedded PDF and validate it recursively.
 	embeddedDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrNonPDFAAttachment, err)
+		return fmt.Errorf("%w: %v", models.ErrNonPDFAAttachment, err)
 	}
-	if violations := ValidatePDFA(ctx, embeddedDoc, PDFA2b); len(violations) > 0 {
-		return fmt.Errorf("%w: %v", ErrNonPDFAAttachment, violations[0])
+	if violations := ValidatePDFA(ctx, embeddedDoc, models.PDFA2b); len(violations) > 0 {
+		return fmt.Errorf("%w: %v", models.ErrNonPDFAAttachment, violations[0])
 	}
 	return nil
 }
@@ -710,7 +711,7 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 		return nil
 	}
 	if _, ok := ocDict["AS"]; !ok {
-		return []error{ErrMissingOCGUsageApp}
+		return []error{models.ErrMissingOCGUsageApp}
 	}
 	return nil
 }
@@ -735,13 +736,13 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, catalog as
 	for _, fs := range fileSpecs {
 		afObj, ok := fs["AFRelationship"]
 		if !ok {
-			errs = append(errs, ErrMissingAFRelationship)
+			errs = append(errs, models.ErrMissingAFRelationship)
 			continue
 		}
 		afRes, _ := resolve(ctx, doc, afObj)
 		afName, ok := afRes.(ast.PdfName)
 		if !ok || !validAFRelationships[afName] {
-			errs = append(errs, fmt.Errorf("%w: got /%v", ErrMissingAFRelationship, afObj))
+			errs = append(errs, fmt.Errorf("%w: got /%v", models.ErrMissingAFRelationship, afObj))
 		}
 	}
 	return errs
@@ -764,7 +765,7 @@ func checkPDFA4Version(ctx context.Context, doc *document.Document, catalog ast.
 	if err == nil && bytes.Contains(headerBuf, []byte("%PDF-2.")) {
 		return nil
 	}
-	return []error{ErrVersionNotPDF20}
+	return []error{models.ErrVersionNotPDF20}
 }
 
 // valid3DSubtypes are the allowed /Subtype values for 3D streams in PDF/A-4e.
@@ -824,12 +825,12 @@ func validate3DAnnotation(ctx context.Context, doc *document.Document, annotDict
 
 	// Check for valid 3D stream /Subtype.
 	if !has3DStreamSubtype(ctx, doc, annotDict) {
-		errs = append(errs, ErrMissing3DSubtype)
+		errs = append(errs, models.ErrMissing3DSubtype)
 	}
 
 	// Check for 2D fallback appearance (/AP /N).
 	if !has2DFallback(ctx, doc, annotDict) {
-		errs = append(errs, ErrMissing3DFallback)
+		errs = append(errs, models.ErrMissing3DFallback)
 	}
 
 	return errs
@@ -934,19 +935,19 @@ func has2DFallback(ctx context.Context, doc *document.Document, annotDict ast.Pd
 func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	miObj, ok := catalog["MarkInfo"]
 	if !ok {
-		return []error{ErrMissingMarkInfo}
+		return []error{models.ErrMissingMarkInfo}
 	}
 	miRes, _ := resolve(ctx, doc, miObj)
 	miDict, ok := miRes.(ast.PdfDict)
 	if !ok {
-		return []error{ErrMissingMarkInfo}
+		return []error{models.ErrMissingMarkInfo}
 	}
 	markedObj, ok := miDict["Marked"]
 	if !ok {
-		return []error{ErrMissingMarkInfo}
+		return []error{models.ErrMissingMarkInfo}
 	}
 	if b, ok := markedObj.(ast.PdfBool); !ok || !bool(b) {
-		return []error{ErrMissingMarkInfo}
+		return []error{models.ErrMissingMarkInfo}
 	}
 	return nil
 }
@@ -954,11 +955,11 @@ func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfD
 func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
-		return []error{ErrMissingStructTreeRoot}
+		return []error{models.ErrMissingStructTreeRoot}
 	}
 	strRes, _ := resolve(ctx, doc, strObj)
 	if _, ok := strRes.(ast.PdfDict); !ok {
-		return []error{ErrMissingStructTreeRoot}
+		return []error{models.ErrMissingStructTreeRoot}
 	}
 	return nil
 }

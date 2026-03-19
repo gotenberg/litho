@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // mockDoc creates a minimal document-like structure for testing.
@@ -626,15 +627,15 @@ type mockDocument struct {
 // --- Tests ---
 
 func TestPDFA_InvalidProfile(t *testing.T) {
-	errs := ValidatePDFA(context.Background(), buildTestDoc(newMockDoc().build()), PDFAProfile("bogus"))
-	if len(errs) != 1 || !errors.Is(errs[0], ErrInvalidProfile) {
-		t.Errorf("expected ErrInvalidProfile, got %v", errs)
+	errs := ValidatePDFA(context.Background(), buildTestDoc(newMockDoc().build()), models.PDFAProfile("bogus"))
+	if len(errs) != 1 || !errors.Is(errs[0], models.ErrInvalidProfile) {
+		t.Errorf("expected models.ErrInvalidProfile, got %v", errs)
 	}
 }
 
 func TestPDFA1b_MinimalValid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
 	// No pages, no fonts — should pass base checks.
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-1b, got %v", errs)
@@ -643,9 +644,9 @@ func TestPDFA1b_MinimalValid(t *testing.T) {
 
 func TestPDFA_NoOutputIntents(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrMissingICCProfile) {
-		t.Error("expected ErrMissingICCProfile")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrMissingICCProfile) {
+		t.Error("expected models.ErrMissingICCProfile")
 	}
 }
 
@@ -654,32 +655,32 @@ func TestPDFA_Encrypted(t *testing.T) {
 	m.encrypt = true
 	doc := buildTestDoc(m.withOutputIntents().build())
 	doc.IsEncrypted = true
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrEncryptionForbidden) {
-		t.Error("expected ErrEncryptionForbidden")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrEncryptionForbidden) {
+		t.Error("expected models.ErrEncryptionForbidden")
 	}
 }
 
 func TestPDFA_JavaScript(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withJavaScript().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrActiveContentForbidden) {
-		t.Error("expected ErrActiveContentForbidden")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrActiveContentForbidden) {
+		t.Error("expected models.ErrActiveContentForbidden")
 	}
 }
 
 func TestPDFA1_Transparency(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withTransparency().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrTransparencyForbidden) {
-		t.Error("expected ErrTransparencyForbidden for PDF/A-1")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrTransparencyForbidden) {
+		t.Error("expected models.ErrTransparencyForbidden for PDF/A-1")
 	}
 }
 
 func TestPDFA2_TransparencyAllowed(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withTransparency().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrTransparencyForbidden) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrTransparencyForbidden) {
 		t.Error("PDF/A-2 should allow transparency")
 	}
 }
@@ -688,32 +689,32 @@ func TestPDFA2_TransparencyAllowed(t *testing.T) {
 
 func TestPDFA1_VersionCheckCatalog15(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("1.5").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrVersionTooHighForA1) {
-		t.Error("expected ErrVersionTooHighForA1 for catalog /Version 1.5")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrVersionTooHighForA1) {
+		t.Error("expected models.ErrVersionTooHighForA1 for catalog /Version 1.5")
 	}
 }
 
 func TestPDFA1_VersionCheckCatalog20(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrVersionTooHighForA1) {
-		t.Error("expected ErrVersionTooHighForA1 for catalog /Version 2.0")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrVersionTooHighForA1) {
+		t.Error("expected models.ErrVersionTooHighForA1 for catalog /Version 2.0")
 	}
 }
 
 func TestPDFA1_VersionCheckCatalog14Passes(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("1.4").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrVersionTooHighForA1) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrVersionTooHighForA1) {
 		t.Error("PDF version 1.4 should pass PDF/A-1 version check")
 	}
 }
 
 func TestPDFA1_VersionCheckCatalog13Passes(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("1.3").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrVersionTooHighForA1) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrVersionTooHighForA1) {
 		t.Error("PDF version 1.3 should pass PDF/A-1 version check")
 	}
 }
@@ -721,16 +722,16 @@ func TestPDFA1_VersionCheckCatalog13Passes(t *testing.T) {
 func TestPDFA1_VersionCheckNoCatalogVersionPasses(t *testing.T) {
 	// No catalog /Version and no real file header — should assume compliant.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrVersionTooHighForA1) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrVersionTooHighForA1) {
 		t.Error("document without catalog /Version should pass version check")
 	}
 }
 
 func TestPDFA2_SkipsVersionCheck(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrVersionTooHighForA1) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrVersionTooHighForA1) {
 		t.Error("PDF/A-2 should not enforce PDF/A-1 version constraint")
 	}
 }
@@ -739,16 +740,16 @@ func TestPDFA2_SkipsVersionCheck(t *testing.T) {
 
 func TestPDFA1_GroupTransparencyForbidden(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withGroupTransparency().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrTransparencyForbidden) {
-		t.Error("expected ErrTransparencyForbidden for page /Group /S /Transparency")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrTransparencyForbidden) {
+		t.Error("expected models.ErrTransparencyForbidden for page /Group /S /Transparency")
 	}
 }
 
 func TestPDFA2_GroupTransparencyAllowed(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withGroupTransparency().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrTransparencyForbidden) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrTransparencyForbidden) {
 		t.Error("PDF/A-2 should allow /Group transparency")
 	}
 }
@@ -757,40 +758,40 @@ func TestPDFA2_GroupTransparencyAllowed(t *testing.T) {
 
 func TestPDFA1_JPEG2000Forbidden(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withJPXImage().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrJPEG2000Forbidden) {
-		t.Error("expected ErrJPEG2000Forbidden for JPXDecode image in PDF/A-1")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrJPEG2000Forbidden) {
+		t.Error("expected models.ErrJPEG2000Forbidden for JPXDecode image in PDF/A-1")
 	}
 }
 
 func TestPDFA2_JPEG2000Allowed(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withJPXImage().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrJPEG2000Forbidden) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrJPEG2000Forbidden) {
 		t.Error("PDF/A-2 should allow JPEG2000 images")
 	}
 }
 
 func TestPDFA1_AttachmentsForbidden(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFiles(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrEmbeddedFilesForbidden) {
-		t.Error("expected ErrEmbeddedFilesForbidden for PDF/A-1")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrEmbeddedFilesForbidden) {
+		t.Error("expected models.ErrEmbeddedFilesForbidden for PDF/A-1")
 	}
 }
 
 func TestPDFA3_MissingAFRelationship(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFiles(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if !containsError(errs, ErrMissingAFRelationship) {
-		t.Error("expected ErrMissingAFRelationship for PDF/A-3")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if !containsError(errs, models.ErrMissingAFRelationship) {
+		t.Error("expected models.ErrMissingAFRelationship for PDF/A-3")
 	}
 }
 
 func TestPDFA3_ValidAFRelationship(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFiles(true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("PDF/A-3 with valid /AFRelationship should pass")
 	}
 }
@@ -799,53 +800,53 @@ func TestPDFA3_ValidAFRelationship(t *testing.T) {
 
 func TestPDFA3_AFRelationshipSource(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFileAFRelationship("Source").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("/AFRelationship /Source should pass")
 	}
 }
 
 func TestPDFA3_AFRelationshipAlternative(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFileAFRelationship("Alternative").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("/AFRelationship /Alternative should pass")
 	}
 }
 
 func TestPDFA3_AFRelationshipSupplement(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFileAFRelationship("Supplement").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("/AFRelationship /Supplement should pass")
 	}
 }
 
 func TestPDFA3_AFRelationshipUnspecified(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFileAFRelationship("Unspecified").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("/AFRelationship /Unspecified should pass")
 	}
 }
 
 func TestPDFA3_AFRelationshipInvalid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFileAFRelationship("BogusValue").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if !containsError(errs, ErrMissingAFRelationship) {
-		t.Error("expected ErrMissingAFRelationship for invalid /AFRelationship value")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if !containsError(errs, models.ErrMissingAFRelationship) {
+		t.Error("expected models.ErrMissingAFRelationship for invalid /AFRelationship value")
 	}
 }
 
 func TestPDFA3_AFRelationshipMissing(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFileAFRelationship("").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if !containsError(errs, ErrMissingAFRelationship) {
-		t.Error("expected ErrMissingAFRelationship when key is absent")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if !containsError(errs, models.ErrMissingAFRelationship) {
+		t.Error("expected models.ErrMissingAFRelationship when key is absent")
 	}
 }
 
-// --- PDF/A-3 allows any file type (no ErrNonPDFAAttachment) ---
+// --- PDF/A-3 allows any file type (no models.ErrNonPDFAAttachment) ---
 
 func TestPDFA3_NonPDFAttachmentAllowed(t *testing.T) {
 	// PDF/A-3 allows non-PDF attachments — only /AFRelationship is required.
@@ -870,19 +871,19 @@ func TestPDFA3_NonPDFAttachmentAllowed(t *testing.T) {
 		},
 	}
 	doc := buildTestDoc(m.build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrNonPDFAAttachment) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrNonPDFAAttachment) {
 		t.Error("PDF/A-3 should allow non-PDF attachments")
 	}
-	if containsError(errs, ErrMissingAFRelationship) {
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("attachment with valid /AFRelationship should pass")
 	}
 }
 
 func TestPDFA3_NoEmbeddedFilesPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("document without embedded files should not trigger AFRelationship error")
 	}
 }
@@ -891,16 +892,16 @@ func TestPDFA3_NoEmbeddedFilesPasses(t *testing.T) {
 
 func TestPDFA3_OCGMissingAS(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withOCProperties(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if !containsError(errs, ErrMissingOCGUsageApp) {
-		t.Error("expected ErrMissingOCGUsageApp for PDF/A-3 when /OCProperties has no /AS")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if !containsError(errs, models.ErrMissingOCGUsageApp) {
+		t.Error("expected models.ErrMissingOCGUsageApp for PDF/A-3 when /OCProperties has no /AS")
 	}
 }
 
 func TestPDFA3_OCGWithAS(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withOCProperties(true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3b)
-	if containsError(errs, ErrMissingOCGUsageApp) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3b)
+	if containsError(errs, models.ErrMissingOCGUsageApp) {
 		t.Error("PDF/A-3 /OCProperties with /AS should pass")
 	}
 }
@@ -909,18 +910,18 @@ func TestPDFA3_OCGWithAS(t *testing.T) {
 
 func TestPDFA2_NonPDFAttachmentRejected(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withNonPDFEmbeddedFile().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if !containsError(errs, ErrNonPDFAAttachment) {
-		t.Error("expected ErrNonPDFAAttachment for non-PDF embedded file")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrNonPDFAAttachment) {
+		t.Error("expected models.ErrNonPDFAAttachment for non-PDF embedded file")
 	}
 }
 
 func TestPDFA2_EmbeddedFileNoEFStream(t *testing.T) {
 	// Embedded file spec with no /EF dict → non-compliant.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedFiles(true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if !containsError(errs, ErrNonPDFAAttachment) {
-		t.Error("expected ErrNonPDFAAttachment for file spec without stream data")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrNonPDFAAttachment) {
+		t.Error("expected models.ErrNonPDFAAttachment for file spec without stream data")
 	}
 }
 
@@ -928,16 +929,16 @@ func TestPDFA2_EmbeddedPDFMalformedRejected(t *testing.T) {
 	// Looks like PDF (has header) but cannot be parsed.
 	malformedPDF := []byte("%PDF-1.4\n%%EOF\n")
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withEmbeddedPDFFile(malformedPDF, true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if !containsError(errs, ErrNonPDFAAttachment) {
-		t.Error("expected ErrNonPDFAAttachment for malformed embedded PDF")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrNonPDFAAttachment) {
+		t.Error("expected models.ErrNonPDFAAttachment for malformed embedded PDF")
 	}
 }
 
 func TestPDFA2_NoEmbeddedFilesPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrNonPDFAAttachment) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrNonPDFAAttachment) {
 		t.Error("document without embedded files should not trigger attachment errors")
 	}
 }
@@ -945,12 +946,12 @@ func TestPDFA2_NoEmbeddedFilesPasses(t *testing.T) {
 func TestPDFA1_SkipsRecursiveAttachmentCheck(t *testing.T) {
 	// PDF/A-1 uses checkNoAttachments (total ban), not recursive validation.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withNonPDFEmbeddedFile().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrNonPDFAAttachment) {
-		t.Error("PDF/A-1 should use ErrEmbeddedFilesForbidden, not ErrNonPDFAAttachment")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrNonPDFAAttachment) {
+		t.Error("PDF/A-1 should use models.ErrEmbeddedFilesForbidden, not models.ErrNonPDFAAttachment")
 	}
-	if !containsError(errs, ErrEmbeddedFilesForbidden) {
-		t.Error("expected ErrEmbeddedFilesForbidden for PDF/A-1")
+	if !containsError(errs, models.ErrEmbeddedFilesForbidden) {
+		t.Error("expected models.ErrEmbeddedFilesForbidden for PDF/A-1")
 	}
 }
 
@@ -958,32 +959,32 @@ func TestPDFA1_SkipsRecursiveAttachmentCheck(t *testing.T) {
 
 func TestPDFA2_OCGMissingAS(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withOCProperties(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if !containsError(errs, ErrMissingOCGUsageApp) {
-		t.Error("expected ErrMissingOCGUsageApp when /OCProperties has no /AS")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrMissingOCGUsageApp) {
+		t.Error("expected models.ErrMissingOCGUsageApp when /OCProperties has no /AS")
 	}
 }
 
 func TestPDFA2_OCGWithAS(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withOCProperties(true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrMissingOCGUsageApp) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrMissingOCGUsageApp) {
 		t.Error("/OCProperties with /AS should pass")
 	}
 }
 
 func TestPDFA2_NoOCGPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrMissingOCGUsageApp) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrMissingOCGUsageApp) {
 		t.Error("document without /OCProperties should not trigger OCG error")
 	}
 }
 
 func TestPDFA1_SkipsOCGCheck(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withOCProperties(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrMissingOCGUsageApp) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrMissingOCGUsageApp) {
 		t.Error("PDF/A-1 should not check OCG /AS requirements")
 	}
 }
@@ -992,72 +993,72 @@ func TestPDFA1_SkipsOCGCheck(t *testing.T) {
 
 func TestPDFA2_TransparencySMaskAllowed(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withTransparency().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrTransparencyForbidden) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrTransparencyForbidden) {
 		t.Error("PDF/A-2 should allow transparency")
 	}
 }
 
 func TestPDFA2_JPXAllowed(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withJPXImage().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2b)
-	if containsError(errs, ErrJPEG2000Forbidden) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrJPEG2000Forbidden) {
 		t.Error("PDF/A-2 should allow JPEG2000")
 	}
 }
 
 func TestPDFA_FontNotEmbedded(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFont("CustomFont", false, true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrFontNotEmbedded) {
-		t.Error("expected ErrFontNotEmbedded")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrFontNotEmbedded) {
+		t.Error("expected models.ErrFontNotEmbedded")
 	}
 }
 
 func TestPDFA_FontEmbedded(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFont("CustomFont", true, true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrFontNotEmbedded) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrFontNotEmbedded) {
 		t.Error("embedded font should pass")
 	}
 }
 
 func TestPDFA_Standard14SkipsEmbedding(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFont("Helvetica", false, false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
 	// Standard 14 fonts don't need embedding.
-	if containsError(errs, ErrFontNotEmbedded) {
+	if containsError(errs, models.ErrFontNotEmbedded) {
 		t.Error("Standard 14 font should not require embedding")
 	}
 }
 
 func TestPDFA2u_RequiresUnicodeMapping(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFont("CustomFont", true, false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if !containsError(errs, ErrMissingUnicodeMapping) {
-		t.Error("expected ErrMissingUnicodeMapping for conformance 'u'")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if !containsError(errs, models.ErrMissingUnicodeMapping) {
+		t.Error("expected models.ErrMissingUnicodeMapping for conformance 'u'")
 	}
 }
 
 func TestPDFA1a_RequiresMarkInfoAndStructTree(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1a)
-	if !containsError(errs, ErrMissingMarkInfo) {
-		t.Error("expected ErrMissingMarkInfo for conformance 'a'")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1a)
+	if !containsError(errs, models.ErrMissingMarkInfo) {
+		t.Error("expected models.ErrMissingMarkInfo for conformance 'a'")
 	}
-	if !containsError(errs, ErrMissingStructTreeRoot) {
-		t.Error("expected ErrMissingStructTreeRoot for conformance 'a'")
+	if !containsError(errs, models.ErrMissingStructTreeRoot) {
+		t.Error("expected models.ErrMissingStructTreeRoot for conformance 'a'")
 	}
 }
 
 func TestPDFA1a_WithMarkInfoAndStructTree(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withStructTreeRoot().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1a)
-	if containsError(errs, ErrMissingMarkInfo) {
-		t.Error("should not get ErrMissingMarkInfo when MarkInfo is present")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1a)
+	if containsError(errs, models.ErrMissingMarkInfo) {
+		t.Error("should not get models.ErrMissingMarkInfo when MarkInfo is present")
 	}
-	if containsError(errs, ErrMissingStructTreeRoot) {
-		t.Error("should not get ErrMissingStructTreeRoot when StructTreeRoot is present")
+	if containsError(errs, models.ErrMissingStructTreeRoot) {
+		t.Error("should not get models.ErrMissingStructTreeRoot when StructTreeRoot is present")
 	}
 }
 
@@ -1068,9 +1069,9 @@ func TestPDFA_TrailerEncryptKey(t *testing.T) {
 	m := newMockDoc()
 	doc := buildTestDoc(m.withOutputIntents().build())
 	doc.Index.Trailer["Encrypt"] = ast.PdfDict{"V": ast.PdfInt(1)}
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrEncryptionForbidden) {
-		t.Error("expected ErrEncryptionForbidden when /Encrypt in trailer")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrEncryptionForbidden) {
+		t.Error("expected models.ErrEncryptionForbidden when /Encrypt in trailer")
 	}
 }
 
@@ -1078,9 +1079,9 @@ func TestPDFA_OutputIntentsEmptyArray(t *testing.T) {
 	m := newMockDoc()
 	m.catalog["OutputIntents"] = ast.PdfArray{}
 	doc := buildTestDoc(m.build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrMissingICCProfile) {
-		t.Error("expected ErrMissingICCProfile for empty /OutputIntents array")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrMissingICCProfile) {
+		t.Error("expected models.ErrMissingICCProfile for empty /OutputIntents array")
 	}
 }
 
@@ -1094,9 +1095,9 @@ func TestPDFA_OutputIntentsNoICC(t *testing.T) {
 		},
 	}
 	doc := buildTestDoc(m.build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrMissingICCProfile) {
-		t.Error("expected ErrMissingICCProfile when /DestOutputProfile is absent")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrMissingICCProfile) {
+		t.Error("expected models.ErrMissingICCProfile when /DestOutputProfile is absent")
 	}
 }
 
@@ -1137,33 +1138,33 @@ func (b *mockDocBuilder) withMovieAction() *mockDocBuilder {
 
 func TestPDFA_LaunchActionForbidden(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLaunchAction().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrActiveContentForbidden) {
-		t.Error("expected ErrActiveContentForbidden for /Launch action")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrActiveContentForbidden) {
+		t.Error("expected models.ErrActiveContentForbidden for /Launch action")
 	}
 }
 
 func TestPDFA_SoundAnnotActionForbidden(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withSoundAnnotAction().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrActiveContentForbidden) {
-		t.Error("expected ErrActiveContentForbidden for /Sound annotation action")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrActiveContentForbidden) {
+		t.Error("expected models.ErrActiveContentForbidden for /Sound annotation action")
 	}
 }
 
 func TestPDFA_MovieActionForbidden(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withMovieAction().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if !containsError(errs, ErrActiveContentForbidden) {
-		t.Error("expected ErrActiveContentForbidden for /Movie action")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrActiveContentForbidden) {
+		t.Error("expected models.ErrActiveContentForbidden for /Movie action")
 	}
 }
 
 func TestPDFA_NoActiveContent(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrActiveContentForbidden) {
-		t.Error("clean document should not trigger ErrActiveContentForbidden")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrActiveContentForbidden) {
+		t.Error("clean document should not trigger models.ErrActiveContentForbidden")
 	}
 }
 
@@ -1200,8 +1201,8 @@ func TestPDFA_FontFile3Accepted(t *testing.T) {
 		"Count": ast.PdfInt(1),
 	}
 	doc := buildTestDoc(m.build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrFontNotEmbedded) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrFontNotEmbedded) {
 		t.Error("font with /FontFile3 should be considered embedded")
 	}
 }
@@ -1210,65 +1211,65 @@ func TestPDFA_FontFile3Accepted(t *testing.T) {
 
 func TestPDFA2u_ToUnicodePasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFont("CustomFont", true, true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with /ToUnicode should pass Level 'u'")
 	}
 }
 
 func TestPDFA2u_WinAnsiEncodingPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontEncoding("CustomFont", true, "WinAnsiEncoding").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with /WinAnsiEncoding should pass Level 'u'")
 	}
 }
 
 func TestPDFA2u_MacRomanEncodingPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontEncoding("CustomFont", true, "MacRomanEncoding").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with /MacRomanEncoding should pass Level 'u'")
 	}
 }
 
 func TestPDFA2u_StandardEncodingPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontEncoding("CustomFont", true, "StandardEncoding").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with /StandardEncoding should pass Level 'u'")
 	}
 }
 
 func TestPDFA2u_EncodingDictWithBaseEncoding(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontEncodingDict("CustomFont", true, "WinAnsiEncoding").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with encoding dict /BaseEncoding WinAnsiEncoding should pass Level 'u'")
 	}
 }
 
 func TestPDFA2u_NoEncodingNoToUnicodeFails(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontEncoding("CustomFont", true, "").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if !containsError(errs, ErrMissingUnicodeMapping) {
-		t.Error("expected ErrMissingUnicodeMapping for font without /ToUnicode or encoding")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if !containsError(errs, models.ErrMissingUnicodeMapping) {
+		t.Error("expected models.ErrMissingUnicodeMapping for font without /ToUnicode or encoding")
 	}
 }
 
 func TestPDFA2u_NonStandardEncodingFails(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontEncoding("CustomFont", true, "Identity-H").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if !containsError(errs, ErrMissingUnicodeMapping) {
-		t.Error("expected ErrMissingUnicodeMapping for non-standard encoding without /ToUnicode")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if !containsError(errs, models.ErrMissingUnicodeMapping) {
+		t.Error("expected models.ErrMissingUnicodeMapping for non-standard encoding without /ToUnicode")
 	}
 }
 
 func TestPDFA3a_ImpliesLevelU(t *testing.T) {
 	// Level 'a' implies 'u': a font without Unicode mapping should fail.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withStructTreeRoot().withPageFontEncoding("CustomFont", true, "").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA3a)
-	if !containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA3a)
+	if !containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("Level 'a' should also enforce Level 'u' Unicode mapping checks")
 	}
 }
@@ -1276,8 +1277,8 @@ func TestPDFA3a_ImpliesLevelU(t *testing.T) {
 func TestPDFA1b_SkipsUnicodeCheck(t *testing.T) {
 	// Level 'b' should NOT require Unicode mapping.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFont("CustomFont", true, false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("Level 'b' should not enforce Unicode mapping")
 	}
 }
@@ -1286,39 +1287,39 @@ func TestPDFA1b_SkipsUnicodeCheck(t *testing.T) {
 
 func TestPDFA1a_RequiresLang(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withMarkInfo().withStructTreeRoot().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1a)
-	if !containsError(errs, ErrMissingLang) {
-		t.Error("expected ErrMissingLang for conformance 'a'")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1a)
+	if !containsError(errs, models.ErrMissingLang) {
+		t.Error("expected models.ErrMissingLang for conformance 'a'")
 	}
 }
 
 func TestPDFA1a_WithLang(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en-US").withMarkInfo().withStructTreeRoot().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1a)
-	if containsError(errs, ErrMissingLang) {
-		t.Error("should not get ErrMissingLang when /Lang is present")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1a)
+	if containsError(errs, models.ErrMissingLang) {
+		t.Error("should not get models.ErrMissingLang when /Lang is present")
 	}
 }
 
 func TestPDFA2a_FigureMissingAlt(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withFigureStructTree(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2a)
-	if !containsError(errs, ErrUntaggedVisualElement) {
-		t.Error("expected ErrUntaggedVisualElement for Figure without /Alt")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)
+	if !containsError(errs, models.ErrUntaggedVisualElement) {
+		t.Error("expected models.ErrUntaggedVisualElement for Figure without /Alt")
 	}
 }
 
 func TestPDFA2a_FigureWithAlt(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withFigureStructTree(true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2a)
-	if containsError(errs, ErrUntaggedVisualElement) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)
+	if containsError(errs, models.ErrUntaggedVisualElement) {
 		t.Error("Figure with /Alt should pass Level 'a'")
 	}
 }
 
 func TestPDFA2a_MinimalValid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withStructTreeRoot().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2a)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-2a, got %v", errs)
 	}
@@ -1327,8 +1328,8 @@ func TestPDFA2a_MinimalValid(t *testing.T) {
 func TestPDFA1b_SkipsFigureAltCheck(t *testing.T) {
 	// Level 'b' should NOT check for Figure alt text.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withFigureStructTree(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA1b)
-	if containsError(errs, ErrUntaggedVisualElement) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrUntaggedVisualElement) {
 		t.Error("Level 'b' should not enforce Figure alt text")
 	}
 }
@@ -1336,8 +1337,8 @@ func TestPDFA1b_SkipsFigureAltCheck(t *testing.T) {
 func TestPDFA2u_SkipsFigureAltCheck(t *testing.T) {
 	// Level 'u' should NOT check for Figure alt text (only 'a' does).
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withFigureStructTree(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA2u)
-	if containsError(errs, ErrUntaggedVisualElement) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
+	if containsError(errs, models.ErrUntaggedVisualElement) {
 		t.Error("Level 'u' should not enforce Figure alt text")
 	}
 }
@@ -1346,16 +1347,16 @@ func TestPDFA2u_SkipsFigureAltCheck(t *testing.T) {
 
 func TestPDFA4_RequiresVersion20(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("1.7").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if !containsError(errs, ErrVersionNotPDF20) {
-		t.Error("expected ErrVersionNotPDF20 for PDF version 1.7")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if !containsError(errs, models.ErrVersionNotPDF20) {
+		t.Error("expected models.ErrVersionNotPDF20 for PDF version 1.7")
 	}
 }
 
 func TestPDFA4_Version20Passes(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrVersionNotPDF20) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrVersionNotPDF20) {
 		t.Error("PDF 2.0 should pass PDF/A-4 version check")
 	}
 }
@@ -1363,9 +1364,9 @@ func TestPDFA4_Version20Passes(t *testing.T) {
 func TestPDFA4_NoCatalogVersionFails(t *testing.T) {
 	// No catalog /Version and no real file header — should fail for Part 4.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if !containsError(errs, ErrVersionNotPDF20) {
-		t.Error("expected ErrVersionNotPDF20 when no version 2.0 declared")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if !containsError(errs, models.ErrVersionNotPDF20) {
+		t.Error("expected models.ErrVersionNotPDF20 when no version 2.0 declared")
 	}
 }
 
@@ -1374,24 +1375,24 @@ func TestPDFA4_NoCatalogVersionFails(t *testing.T) {
 func TestPDFA4_SkipsMarkInfoCheck(t *testing.T) {
 	// Part 4 does not enforce 'a' conformance — no MarkInfo required.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrMissingMarkInfo) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrMissingMarkInfo) {
 		t.Error("PDF/A-4 should not enforce MarkInfo (no a/b/u conformance)")
 	}
 }
 
 func TestPDFA4_SkipsStructTreeRoot(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrMissingStructTreeRoot) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrMissingStructTreeRoot) {
 		t.Error("PDF/A-4 should not enforce StructTreeRoot")
 	}
 }
 
 func TestPDFA4_SkipsLangCheck(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrMissingLang) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrMissingLang) {
 		t.Error("PDF/A-4 should not enforce /Lang")
 	}
 }
@@ -1400,16 +1401,16 @@ func TestPDFA4_SkipsLangCheck(t *testing.T) {
 
 func TestPDFA4_RequiresUnicodeMapping(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withPageFont("CustomFont", true, false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if !containsError(errs, ErrMissingUnicodeMapping) {
-		t.Error("expected ErrMissingUnicodeMapping for PDF/A-4")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if !containsError(errs, models.ErrMissingUnicodeMapping) {
+		t.Error("expected models.ErrMissingUnicodeMapping for PDF/A-4")
 	}
 }
 
 func TestPDFA4_UnicodeMappingPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withPageFont("CustomFont", true, true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrMissingUnicodeMapping) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with /ToUnicode should pass PDF/A-4")
 	}
 }
@@ -1418,16 +1419,16 @@ func TestPDFA4_UnicodeMappingPasses(t *testing.T) {
 
 func TestPDFA4_OCGMissingAS(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withOCProperties(false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if !containsError(errs, ErrMissingOCGUsageApp) {
-		t.Error("expected ErrMissingOCGUsageApp for PDF/A-4")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if !containsError(errs, models.ErrMissingOCGUsageApp) {
+		t.Error("expected models.ErrMissingOCGUsageApp for PDF/A-4")
 	}
 }
 
 func TestPDFA4_OCGWithAS(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withOCProperties(true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrMissingOCGUsageApp) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrMissingOCGUsageApp) {
 		t.Error("PDF/A-4 /OCProperties with /AS should pass")
 	}
 }
@@ -1436,16 +1437,16 @@ func TestPDFA4_OCGWithAS(t *testing.T) {
 
 func TestPDFA4f_RequiresAFRelationship(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withEmbeddedFileAFRelationship("").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4f)
-	if !containsError(errs, ErrMissingAFRelationship) {
-		t.Error("expected ErrMissingAFRelationship for PDF/A-4f")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4f)
+	if !containsError(errs, models.ErrMissingAFRelationship) {
+		t.Error("expected models.ErrMissingAFRelationship for PDF/A-4f")
 	}
 }
 
 func TestPDFA4f_ValidAFRelationship(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withEmbeddedFileAFRelationship("Data").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4f)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4f)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("PDF/A-4f with valid /AFRelationship should pass")
 	}
 }
@@ -1473,17 +1474,17 @@ func TestPDFA4f_NonPDFAttachmentAllowed(t *testing.T) {
 		},
 	}
 	doc := buildTestDoc(m.build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4f)
-	if containsError(errs, ErrNonPDFAAttachment) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4f)
+	if containsError(errs, models.ErrNonPDFAAttachment) {
 		t.Error("PDF/A-4f should allow non-PDF attachments")
 	}
 }
 
 func TestPDFA4_BaseSkipsAFRelationship(t *testing.T) {
-	// Base PDFA4 (no 'f' suffix) should not check /AFRelationship.
+	// Base models.PDFA4 (no 'f' suffix) should not check /AFRelationship.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withEmbeddedFileAFRelationship("").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrMissingAFRelationship) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrMissingAFRelationship) {
 		t.Error("base PDF/A-4 should not check /AFRelationship")
 	}
 }
@@ -1492,105 +1493,105 @@ func TestPDFA4_BaseSkipsAFRelationship(t *testing.T) {
 
 func TestPDFA4e_Valid3DAnnotation(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").with3DAnnotation("U3D", true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if containsError(errs, ErrMissing3DSubtype) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if containsError(errs, models.ErrMissing3DSubtype) {
 		t.Error("valid /3D annotation with U3D subtype should pass")
 	}
-	if containsError(errs, ErrMissing3DFallback) {
+	if containsError(errs, models.ErrMissing3DFallback) {
 		t.Error("valid /3D annotation with /AP /N should pass")
 	}
 }
 
 func TestPDFA4e_PRCSubtypePasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").with3DAnnotation("PRC", true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if containsError(errs, ErrMissing3DSubtype) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if containsError(errs, models.ErrMissing3DSubtype) {
 		t.Error("PRC subtype should pass")
 	}
 }
 
 func TestPDFA4e_Invalid3DSubtype(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").with3DAnnotation("STEP", true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if !containsError(errs, ErrMissing3DSubtype) {
-		t.Error("expected ErrMissing3DSubtype for invalid 3D stream /Subtype")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if !containsError(errs, models.ErrMissing3DSubtype) {
+		t.Error("expected models.ErrMissing3DSubtype for invalid 3D stream /Subtype")
 	}
 }
 
 func TestPDFA4e_Missing3DFallback(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").with3DAnnotation("U3D", false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if !containsError(errs, ErrMissing3DFallback) {
-		t.Error("expected ErrMissing3DFallback when /AP /N is absent")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if !containsError(errs, models.ErrMissing3DFallback) {
+		t.Error("expected models.ErrMissing3DFallback when /AP /N is absent")
 	}
 }
 
 func TestPDFA4e_Missing3DSubtypeAndFallback(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").with3DAnnotation("STEP", false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if !containsError(errs, ErrMissing3DSubtype) {
-		t.Error("expected ErrMissing3DSubtype")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if !containsError(errs, models.ErrMissing3DSubtype) {
+		t.Error("expected models.ErrMissing3DSubtype")
 	}
-	if !containsError(errs, ErrMissing3DFallback) {
-		t.Error("expected ErrMissing3DFallback")
+	if !containsError(errs, models.ErrMissing3DFallback) {
+		t.Error("expected models.ErrMissing3DFallback")
 	}
 }
 
 func TestPDFA4e_RichMediaValid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withRichMediaAnnotation("U3D", true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if containsError(errs, ErrMissing3DSubtype) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if containsError(errs, models.ErrMissing3DSubtype) {
 		t.Error("valid RichMedia with U3D should pass")
 	}
-	if containsError(errs, ErrMissing3DFallback) {
+	if containsError(errs, models.ErrMissing3DFallback) {
 		t.Error("RichMedia with /AP /N should pass")
 	}
 }
 
 func TestPDFA4e_RichMediaPRCPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withRichMediaAnnotation("PRC", true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if containsError(errs, ErrMissing3DSubtype) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if containsError(errs, models.ErrMissing3DSubtype) {
 		t.Error("RichMedia with PRC subtype should pass")
 	}
 }
 
 func TestPDFA4e_RichMediaInvalidSubtype(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withRichMediaAnnotation("STEP", true).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if !containsError(errs, ErrMissing3DSubtype) {
-		t.Error("expected ErrMissing3DSubtype for RichMedia with invalid stream subtype")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if !containsError(errs, models.ErrMissing3DSubtype) {
+		t.Error("expected models.ErrMissing3DSubtype for RichMedia with invalid stream subtype")
 	}
 }
 
 func TestPDFA4e_RichMediaMissingFallback(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withRichMediaAnnotation("U3D", false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if !containsError(errs, ErrMissing3DFallback) {
-		t.Error("expected ErrMissing3DFallback for RichMedia without /AP /N")
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if !containsError(errs, models.ErrMissing3DFallback) {
+		t.Error("expected models.ErrMissing3DFallback for RichMedia without /AP /N")
 	}
 }
 
 func TestPDFA4_BaseSkips3DCheck(t *testing.T) {
-	// Base PDFA4 (no 'e' suffix) should not check 3D annotations.
+	// Base models.PDFA4 (no 'e' suffix) should not check 3D annotations.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").with3DAnnotation("STEP", false).build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4)
-	if containsError(errs, ErrMissing3DSubtype) || containsError(errs, ErrMissing3DFallback) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
+	if containsError(errs, models.ErrMissing3DSubtype) || containsError(errs, models.ErrMissing3DFallback) {
 		t.Error("base PDF/A-4 should not enforce 3D stream compliance")
 	}
 }
 
 func TestPDFA4e_NoAnnotationsPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
-	if containsError(errs, ErrMissing3DSubtype) || containsError(errs, ErrMissing3DFallback) {
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
+	if containsError(errs, models.ErrMissing3DSubtype) || containsError(errs, models.ErrMissing3DFallback) {
 		t.Error("document without 3D annotations should pass")
 	}
 }
 
 func TestPDFA4e_MinimalValid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4e)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-4e, got %v", errs)
 	}
@@ -1598,7 +1599,7 @@ func TestPDFA4e_MinimalValid(t *testing.T) {
 
 func TestPDFA4f_MinimalValid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
-	errs := ValidatePDFA(context.Background(), doc, PDFA4f)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA4f)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-4f, got %v", errs)
 	}
@@ -1607,15 +1608,15 @@ func TestPDFA4f_MinimalValid(t *testing.T) {
 // --- PDF/UA tests ---
 
 func TestPDFUA_InvalidProfile(t *testing.T) {
-	errs := ValidatePDFUA(context.Background(), buildTestDoc(newMockDoc().build()), PDFUAProfile("bogus"))
-	if len(errs) != 1 || !errors.Is(errs[0], ErrInvalidProfile) {
-		t.Errorf("expected ErrInvalidProfile, got %v", errs)
+	errs := ValidatePDFUA(context.Background(), buildTestDoc(newMockDoc().build()), models.PDFUAProfile("bogus"))
+	if len(errs) != 1 || !errors.Is(errs[0], models.ErrInvalidProfile) {
+		t.Errorf("expected models.ErrInvalidProfile, got %v", errs)
 	}
 }
 
 func TestPDFUA1_MinimalValid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withFigureWithAlt().withXMPTitle().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for valid PDF/UA-1, got %v", errs)
 	}
@@ -1623,175 +1624,175 @@ func TestPDFUA1_MinimalValid(t *testing.T) {
 
 func TestPDFUA_MissingLang(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withMarkInfo().withStructTreeRoot().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if !containsError(errs, ErrMissingLang) {
-		t.Error("expected ErrMissingLang")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if !containsError(errs, models.ErrMissingLang) {
+		t.Error("expected models.ErrMissingLang")
 	}
 }
 
 func TestPDFUA_FigureMissingAlt(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withFigureNoAlt().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if !containsError(errs, ErrImageMissingAltText) {
-		t.Error("expected ErrImageMissingAltText")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if !containsError(errs, models.ErrImageMissingAltText) {
+		t.Error("expected models.ErrImageMissingAltText")
 	}
 }
 
 func TestPDFUA_FigureWithAlt(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withFigureWithAlt().withXMPTitle().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if containsError(errs, ErrImageMissingAltText) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if containsError(errs, models.ErrImageMissingAltText) {
 		t.Error("figure with /Alt should pass")
 	}
 }
 
 func TestPDFUA_HeaderMustBeArtifact(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withHeaderStructElem().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if !containsError(errs, ErrArtifactTagMissing) {
-		t.Error("expected ErrArtifactTagMissing for /Header struct elem")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if !containsError(errs, models.ErrArtifactTagMissing) {
+		t.Error("expected models.ErrArtifactTagMissing for /Header struct elem")
 	}
 }
 
 func TestPDFUA_MissingXMPTitle(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPNoTitle().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if !containsError(errs, ErrMissingXMPTitle) {
-		t.Error("expected ErrMissingXMPTitle when dc:title is missing from XMP")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if !containsError(errs, models.ErrMissingXMPTitle) {
+		t.Error("expected models.ErrMissingXMPTitle when dc:title is missing from XMP")
 	}
 }
 
 func TestPDFUA_WithXMPTitle(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if containsError(errs, ErrMissingXMPTitle) {
-		t.Error("should not get ErrMissingXMPTitle when dc:title is present")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if containsError(errs, models.ErrMissingXMPTitle) {
+		t.Error("should not get models.ErrMissingXMPTitle when dc:title is present")
 	}
 }
 
 func TestPDFUA_NoMetadataStream(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if !containsError(errs, ErrMissingXMPTitle) {
-		t.Error("expected ErrMissingXMPTitle when no /Metadata stream exists")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if !containsError(errs, models.ErrMissingXMPTitle) {
+		t.Error("expected models.ErrMissingXMPTitle when no /Metadata stream exists")
 	}
 }
 
 func TestPDFUA_FormFieldMissingTooltip(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withFormField(false).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if !containsError(errs, ErrMissingFormFieldTooltip) {
-		t.Error("expected ErrMissingFormFieldTooltip")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if !containsError(errs, models.ErrMissingFormFieldTooltip) {
+		t.Error("expected models.ErrMissingFormFieldTooltip")
 	}
 }
 
 func TestPDFUA_FormFieldWithTooltip(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withFormField(true).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if containsError(errs, ErrMissingFormFieldTooltip) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if containsError(errs, models.ErrMissingFormFieldTooltip) {
 		t.Error("form field with /TU should pass")
 	}
 }
 
 func TestPDFUA1_NonStandardTagNoRoleMap(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withXMPTitle().withNonStandardTag("CustomTag", "").build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if !containsError(errs, ErrNonStandardTag) {
-		t.Error("expected ErrNonStandardTag for unmapped custom tag")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if !containsError(errs, models.ErrNonStandardTag) {
+		t.Error("expected models.ErrNonStandardTag for unmapped custom tag")
 	}
 }
 
 func TestPDFUA1_NonStandardTagWithRoleMap(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withXMPTitle().withNonStandardTag("CustomTag", "P").build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if containsError(errs, ErrNonStandardTag) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if containsError(errs, models.ErrNonStandardTag) {
 		t.Error("custom tag with /RoleMap entry should pass")
 	}
 }
 
 func TestPDFUA1_StandardTagPasses(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withXMPTitle().withNonStandardTag("P", "").build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA1)
-	if containsError(errs, ErrNonStandardTag) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if containsError(errs, models.ErrNonStandardTag) {
 		t.Error("standard tag /P should pass without /RoleMap")
 	}
 }
 
 func TestPDFUA2_RequiresVersion20(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withNamespaces(true).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if !containsError(errs, ErrInvalidVersionForUA2) {
-		t.Error("expected ErrInvalidVersionForUA2 when no version 2.0 declared")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if !containsError(errs, models.ErrInvalidVersionForUA2) {
+		t.Error("expected models.ErrInvalidVersionForUA2 when no version 2.0 declared")
 	}
 }
 
 func TestPDFUA2_WithVersion20(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if containsError(errs, ErrInvalidVersionForUA2) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if containsError(errs, models.ErrInvalidVersionForUA2) {
 		t.Error("should pass with catalog /Version 2.0")
 	}
 }
 
 func TestPDFUA2_MissingNamespaces(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if !containsError(errs, ErrMissingNamespaces) {
-		t.Error("expected ErrMissingNamespaces")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if !containsError(errs, models.ErrMissingNamespaces) {
+		t.Error("expected models.ErrMissingNamespaces")
 	}
 }
 
 func TestPDFUA2_InvalidNamespace(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(false).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if !containsError(errs, ErrInvalidStructureNamespace) {
-		t.Error("expected ErrInvalidStructureNamespace for namespace missing /NS")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if !containsError(errs, models.ErrInvalidStructureNamespace) {
+		t.Error("expected models.ErrInvalidStructureNamespace for namespace missing /NS")
 	}
 }
 
 func TestPDFUA2_ValidNamespaces(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if containsError(errs, ErrMissingNamespaces) || containsError(errs, ErrInvalidStructureNamespace) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if containsError(errs, models.ErrMissingNamespaces) || containsError(errs, models.ErrInvalidStructureNamespace) {
 		t.Error("valid namespaces should pass")
 	}
 }
 
 func TestPDFUA2_LinkAnnotMissingStructParent(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).withLinkAnnotation(false).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if !containsError(errs, ErrLinkNotNested) {
-		t.Error("expected ErrLinkNotNested for link annot without /StructParent")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if !containsError(errs, models.ErrLinkNotNested) {
+		t.Error("expected models.ErrLinkNotNested for link annot without /StructParent")
 	}
 }
 
 func TestPDFUA2_LinkAnnotWithStructParentAndStructElem(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).withLinkAnnotation(true).withLinkStructElem().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if containsError(errs, ErrLinkNotNested) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if containsError(errs, models.ErrLinkNotNested) {
 		t.Error("link annot with /StructParent and /Link struct elem should pass")
 	}
 }
 
 func TestPDFUA2_FormulaMissingAF(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).withFormulaNoAF().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if !containsError(errs, ErrFormulaMissingMathML) {
-		t.Error("expected ErrFormulaMissingMathML for /Formula without /AF")
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if !containsError(errs, models.ErrFormulaMissingMathML) {
+		t.Error("expected models.ErrFormulaMissingMathML for /Formula without /AF")
 	}
 }
 
 func TestPDFUA2_FormulaWithAF(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).withFormulaWithAF().build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
-	if containsError(errs, ErrFormulaMissingMathML) {
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if containsError(errs, models.ErrFormulaMissingMathML) {
 		t.Error("formula with /AF should pass")
 	}
 }
 
 func TestPDFUA2_MinimalValid(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).build())
-	errs := ValidatePDFUA(context.Background(), doc, PDFUA2)
+	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for valid PDF/UA-2, got %v", errs)
 	}
@@ -1801,20 +1802,20 @@ func TestPDFUA2_MinimalValid(t *testing.T) {
 
 func TestPdfaPart(t *testing.T) {
 	tests := []struct {
-		profile PDFAProfile
+		profile models.PDFAProfile
 		want    int
 	}{
-		{PDFA1b, 1},
-		{PDFA1a, 1},
-		{PDFA2b, 2},
-		{PDFA2u, 2},
-		{PDFA2a, 2},
-		{PDFA3b, 3},
-		{PDFA3u, 3},
-		{PDFA3a, 3},
-		{PDFA4, 4},
-		{PDFA4e, 4},
-		{PDFA4f, 4},
+		{models.PDFA1b, 1},
+		{models.PDFA1a, 1},
+		{models.PDFA2b, 2},
+		{models.PDFA2u, 2},
+		{models.PDFA2a, 2},
+		{models.PDFA3b, 3},
+		{models.PDFA3u, 3},
+		{models.PDFA3a, 3},
+		{models.PDFA4, 4},
+		{models.PDFA4e, 4},
+		{models.PDFA4f, 4},
 	}
 	for _, tt := range tests {
 		if got := PdfaPart(tt.profile); got != tt.want {
@@ -1825,16 +1826,16 @@ func TestPdfaPart(t *testing.T) {
 
 func TestPdfaConformance(t *testing.T) {
 	tests := []struct {
-		profile PDFAProfile
+		profile models.PDFAProfile
 		want    byte
 	}{
-		{PDFA1b, 'b'},
-		{PDFA1a, 'a'},
-		{PDFA2u, 'u'},
-		{PDFA2a, 'a'},
-		{PDFA4, 0},
-		{PDFA4e, 'e'},
-		{PDFA4f, 'f'},
+		{models.PDFA1b, 'b'},
+		{models.PDFA1a, 'a'},
+		{models.PDFA2u, 'u'},
+		{models.PDFA2a, 'a'},
+		{models.PDFA4, 0},
+		{models.PDFA4e, 'e'},
+		{models.PDFA4f, 'f'},
 	}
 	for _, tt := range tests {
 		if got := PdfaConformance(tt.profile); got != tt.want {

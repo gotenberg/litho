@@ -1,49 +1,24 @@
 package compliance
 
-// PDFAProfile identifies a specific PDF/A conformance level.
-type PDFAProfile string
-
-// PDF/A profile constants covering all ISO 19005 parts and conformance levels.
-const (
-	PDFA1b PDFAProfile = "PDF/A-1b"
-	PDFA1a PDFAProfile = "PDF/A-1a"
-	PDFA2b PDFAProfile = "PDF/A-2b"
-	PDFA2u PDFAProfile = "PDF/A-2u"
-	PDFA2a PDFAProfile = "PDF/A-2a"
-	PDFA3b PDFAProfile = "PDF/A-3b"
-	PDFA3u PDFAProfile = "PDF/A-3u"
-	PDFA3a PDFAProfile = "PDF/A-3a"
-	PDFA4  PDFAProfile = "PDF/A-4"
-	PDFA4e PDFAProfile = "PDF/A-4e"
-	PDFA4f PDFAProfile = "PDF/A-4f"
-)
-
-// PDFUAProfile identifies a specific PDF/UA conformance level.
-type PDFUAProfile string
-
-// PDF/UA profile constants covering ISO 14289 parts.
-const (
-	PDFUA1 PDFUAProfile = "PDF/UA-1"
-	PDFUA2 PDFUAProfile = "PDF/UA-2"
-)
+import "github.com/gotenberg/litho/pkg/models"
 
 // PdfaPart returns the numeric part (1, 2, 3, 4) of the profile.
-func PdfaPart(p PDFAProfile) int {
+func PdfaPart(p models.PDFAProfile) int {
 	switch p {
-	case PDFA1b, PDFA1a:
+	case models.PDFA1b, models.PDFA1a:
 		return 1
-	case PDFA2b, PDFA2u, PDFA2a:
+	case models.PDFA2b, models.PDFA2u, models.PDFA2a:
 		return 2
-	case PDFA3b, PDFA3u, PDFA3a:
+	case models.PDFA3b, models.PDFA3u, models.PDFA3a:
 		return 3
-	case PDFA4, PDFA4e, PDFA4f:
+	case models.PDFA4, models.PDFA4e, models.PDFA4f:
 		return 4
 	}
 	return 0
 }
 
 // PdfaConformance returns the conformance level character ('a', 'b', 'u', 'e', 'f', or empty).
-func PdfaConformance(p PDFAProfile) byte {
+func PdfaConformance(p models.PDFAProfile) byte {
 	s := string(p)
 	if len(s) == 0 {
 		return 0

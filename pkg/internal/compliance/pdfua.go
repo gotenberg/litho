@@ -8,14 +8,15 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func ValidatePDFUA(ctx context.Context, doc *document.Document, profile PDFUAProfile) []error {
-	if profile != PDFUA1 && profile != PDFUA2 {
-		return []error{fmt.Errorf("%w: %s", ErrInvalidProfile, profile)}
+func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) []error {
+	if profile != models.PDFUA1 && profile != models.PDFUA2 {
+		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
 	}
 
 	catalog, err := getCatalog(ctx, doc)
@@ -37,9 +38,9 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile PDFUAPro
 
 	// --- Profile-specific rules ---
 	switch profile {
-	case PDFUA1:
+	case models.PDFUA1:
 		errs = append(errs, checkStandardTags(ctx, doc, catalog)...)
-	case PDFUA2:
+	case models.PDFUA2:
 		errs = append(errs, checkPDFVersionForUA2(ctx, doc, catalog)...)
 		errs = append(errs, checkNamespaces(ctx, doc, catalog)...)
 		errs = append(errs, checkLinkAnnotationNesting(ctx, doc, catalog)...)
@@ -52,7 +53,7 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile PDFUAPro
 // checkLang verifies that the /Lang key is present in the document catalog.
 func checkLang(_ context.Context, _ *document.Document, catalog ast.PdfDict) []error {
 	if _, ok := catalog["Lang"]; !ok {
-		return []error{ErrMissingLang}
+		return []error{models.ErrMissingLang}
 	}
 	return nil
 }
@@ -61,19 +62,19 @@ func checkLang(_ context.Context, _ *document.Document, catalog ast.PdfDict) []e
 func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	mdObj, ok := catalog["Metadata"]
 	if !ok {
-		return []error{ErrMissingXMPTitle}
+		return []error{models.ErrMissingXMPTitle}
 	}
 	mdRes, err := resolve(ctx, doc, mdObj)
 	if err != nil {
-		return []error{ErrMissingXMPTitle}
+		return []error{models.ErrMissingXMPTitle}
 	}
 	stream, ok := mdRes.(ast.PdfStream)
 	if !ok {
-		return []error{ErrMissingXMPTitle}
+		return []error{models.ErrMissingXMPTitle}
 	}
 	// Check raw XMP bytes for dc:title presence.
 	if !bytes.Contains(stream.Data, []byte("dc:title")) {
-		return []error{ErrMissingXMPTitle}
+		return []error{models.ErrMissingXMPTitle}
 	}
 	return nil
 }
@@ -88,7 +89,7 @@ func checkFontsToUnicodeUA(ctx context.Context, doc *document.Document, catalog 
 			continue
 		}
 		if !hasFontToUnicode(ctx, doc, fontDict) {
-			errs = append(errs, fmt.Errorf("%w: %s", ErrFontMissingToUnicode, name))
+			errs = append(errs, fmt.Errorf("%w: %s", models.ErrFontMissingToUnicode, name))
 		}
 	}
 	return errs
@@ -140,7 +141,7 @@ func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfO
 	// Only check terminal fields (those with a /T key and no /Kids, or leaf widgets).
 	if _, hasT := dict["T"]; hasT {
 		if _, hasTU := dict["TU"]; !hasTU {
-			*errs = append(*errs, ErrMissingFormFieldTooltip)
+			*errs = append(*errs, models.ErrMissingFormFieldTooltip)
 		}
 	}
 	// Recurse into child fields.
@@ -159,12 +160,12 @@ func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfO
 func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
-		return []error{ErrMissingStructTreeRoot}
+		return []error{models.ErrMissingStructTreeRoot}
 	}
 	strRes, _ := resolve(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
-		return []error{ErrMissingStructTreeRoot}
+		return []error{models.ErrMissingStructTreeRoot}
 	}
 
 	var errs []error
@@ -199,7 +200,7 @@ func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.Pdf
 		sRes, _ := resolve(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
 			if _, hasAlt := dict["Alt"]; !hasAlt {
-				*errs = append(*errs, ErrImageMissingAltText)
+				*errs = append(*errs, models.ErrImageMissingAltText)
 			}
 		}
 	}
@@ -275,7 +276,7 @@ func checkArtifactElem(ctx context.Context, doc *document.Document, obj ast.PdfO
 		sRes, _ := resolve(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok {
 			if forbiddenStructTypes[string(sName)] {
-				*errs = append(*errs, fmt.Errorf("%w: /%s should be /Artifact", ErrArtifactTagMissing, sName))
+				*errs = append(*errs, fmt.Errorf("%w: /%s should be /Artifact", models.ErrArtifactTagMissing, sName))
 			}
 		}
 	}
@@ -377,7 +378,7 @@ func checkStructElemStandard(ctx context.Context, doc *document.Document, obj as
 		if sName, ok := sRes.(ast.PdfName); ok {
 			tag := string(sName)
 			if !standardPDF17Tags[tag] && !roleMap[tag] {
-				*errs = append(*errs, fmt.Errorf("%w: /%s", ErrNonStandardTag, tag))
+				*errs = append(*errs, fmt.Errorf("%w: /%s", models.ErrNonStandardTag, tag))
 			}
 		}
 	}
@@ -418,7 +419,7 @@ func checkPDFVersionForUA2(ctx context.Context, doc *document.Document, catalog 
 	if err == nil && bytes.Contains(headerBuf, []byte("%PDF-2.")) {
 		return nil
 	}
-	return []error{ErrInvalidVersionForUA2}
+	return []error{models.ErrInvalidVersionForUA2}
 }
 
 // checkNamespaces verifies that /StructTreeRoot contains a /Namespaces array
@@ -436,12 +437,12 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 	nsObj, ok := strDict["Namespaces"]
 	if !ok {
-		return []error{ErrMissingNamespaces}
+		return []error{models.ErrMissingNamespaces}
 	}
 	nsRes, _ := resolve(ctx, doc, nsObj)
 	nsArr, ok := nsRes.(ast.PdfArray)
 	if !ok || len(nsArr) == 0 {
-		return []error{ErrMissingNamespaces}
+		return []error{models.ErrMissingNamespaces}
 	}
 
 	var errs []error
@@ -449,11 +450,11 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 		entryRes, _ := resolve(ctx, doc, nsEntry)
 		entryDict, ok := entryRes.(ast.PdfDict)
 		if !ok {
-			errs = append(errs, ErrInvalidStructureNamespace)
+			errs = append(errs, models.ErrInvalidStructureNamespace)
 			continue
 		}
 		if _, ok := entryDict["NS"]; !ok {
-			errs = append(errs, ErrInvalidStructureNamespace)
+			errs = append(errs, models.ErrInvalidStructureNamespace)
 		}
 	}
 	return errs
@@ -486,7 +487,7 @@ func checkLinkAnnotationNesting(ctx context.Context, doc *document.Document, cat
 					hasLinkAnnot = true
 					// Check if the annotation has a /StructParent pointing to a Link struct elem.
 					if _, ok := annotDict["StructParent"]; !ok {
-						return []error{ErrLinkNotNested}
+						return []error{models.ErrLinkNotNested}
 					}
 				}
 			}
@@ -498,7 +499,7 @@ func checkLinkAnnotationNesting(ctx context.Context, doc *document.Document, cat
 
 	// Verify that at least one Link structure element exists in the struct tree.
 	if !hasStructElemType(ctx, doc, catalog, "Link") {
-		return []error{ErrLinkNotNested}
+		return []error{models.ErrLinkNotNested}
 	}
 	return nil
 }
@@ -581,7 +582,7 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 			sRes, _ := resolve(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Formula" {
 				if _, hasAF := v["AF"]; !hasAF {
-					*errs = append(*errs, ErrFormulaMissingMathML)
+					*errs = append(*errs, models.ErrFormulaMissingMathML)
 				}
 			}
 		}
