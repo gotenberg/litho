@@ -7,6 +7,57 @@
 Module: `github.com/gotenberg/litho`
 Go version: 1.26.0
 
+## Mandatory Workflow
+
+Every non-trivial task **must** follow these five steps in order. No step may be skipped.
+
+### Step 1 — Plan
+
+Before writing any code, present:
+
+- **Problem statement:** What is broken or missing, and why it matters.
+- **Proposed solution:** The approach you will take.
+- **Alternatives considered:** When pertinent, explain what else was considered and why it was rejected.
+- **Scope:** Which files will be created or modified.
+- **Testing strategy:** What tests will be added or updated to verify the change.
+
+**Stop and wait for user approval before proceeding to Step 2.**
+
+### Step 2 — Implement
+
+- Code the approved plan.
+- Verify the build passes (`go build ./...`).
+- Do not deviate from the approved plan without flagging the deviation and getting approval.
+
+### Step 3 — Test
+
+- Write or update tests as described in the plan's testing strategy.
+- Run `make test-unit` (and `make test-integration` when relevant).
+- All new and existing tests must pass.
+
+### Step 4 — Review
+
+Self-review against this checklist and present findings to the user:
+
+- [ ] **Backward compatibility:** No breaking changes to the public API (`pkg/pdf`, `pkg/models`, `pkg/compliance`, `pkg/export`) unless explicitly approved.
+- [ ] **Encapsulation:** No `pkg/internal` types leak into public signatures.
+- [ ] **Error handling:** All errors wrapped and propagated; no silenced errors without justification.
+- [ ] **Context:** I/O-bound or recursive functions accept and check `context.Context`.
+- [ ] **Resource streaming:** No eager materialization of binary resources.
+- [ ] **Linting:** `make fmt && make lint` passes with zero warnings.
+- [ ] **Code quality:** No dead code, no commented-out code, no TODO without context.
+- [ ] **Documentation:** Public types and functions have Godoc comments.
+- [ ] **Tests:** New behavior is covered; no regressions.
+- [ ] **Scope:** Changes are limited to what the plan specified.
+
+### Step 5 — Commit
+
+**Stop and wait for explicit user approval before committing.**
+
+- Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
+- Stage specific files only — never `git add -A` or `git add .`.
+- Do not push unless the user explicitly asks.
+
 ## Build & Quality Commands
 
 ```bash
