@@ -1,11 +1,18 @@
 package document
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
+	"strconv"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/ioat"
+	"github.com/gotenberg/litho/pkg/internal/core/lexer"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // GetFloat safely extracts a float64 from a PdfObject.
@@ -112,4 +119,174 @@ func DecodePdfString(s ast.PdfString) string {
 		return string(utf16.Decode(u16s))
 	}
 	return string(b)
+}
+
+// resolveAny resolves obj if it is an indirect reference, otherwise returns it directly.
+// This is safe to call on any PdfObject (unlike Resolve which requires PdfIndirectRef).
+func (d *Document) resolveAny(ctx context.Context, obj ast.PdfObject) ast.PdfObject {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		res, err := d.Resolve(ctx, ref)
+		if err != nil {
+			return nil
+		}
+		return res
+	}
+	return obj
+}
+
+// ExtractFromObjectStream extracts an object from an Object Stream.
+func ExtractFromObjectStream(ctx context.Context, doc *Document, objStmNum int, targetIndex int) (ast.PdfObject, error) {
+	// 1. Resolve the Object Stream itself
+	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
+	obj, err := doc.Resolve(ctx, objStmRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve object stream %d: %v", objStmNum, err)
+	}
+
+	stream, ok := obj.(ast.PdfStream)
+	if !ok {
+		return nil, fmt.Errorf("object %d is not a stream", objStmNum)
+	}
+
+	// Decompress the stream using the filter package
+	decodedData, err := filter.DecodeStream(stream)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode object stream %d: %v", objStmNum, err)
+	}
+
+	// 2. Extract /N and /First
+	nObj, ok := stream.Dict["N"]
+	if !ok {
+		return nil, fmt.Errorf("object stream missing /N")
+	}
+	n := int(nObj.(ast.PdfInt))
+
+	firstObj, ok := stream.Dict["First"]
+	if !ok {
+		return nil, fmt.Errorf("object stream missing /First")
+	}
+	first := int(firstObj.(ast.PdfInt))
+
+	// 3. Loop N times to read the header integer pairs
+	reader := bytes.NewReader(decodedData)
+	lex := lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), 0))
+
+	targetOffset := -1
+	for i := range n {
+		// Read objNum
+		_, err := lex.NextToken()
+		if err != nil {
+			return nil, err
+		}
+		// Read offset
+		tokOffset, err := lex.NextToken()
+		if err != nil {
+			return nil, err
+		}
+
+		if i == targetIndex {
+			offset, err := strconv.Atoi(tokOffset.Value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid offset in object stream %d: %w", objStmNum, err)
+			}
+			targetOffset = offset
+			break // We found our target offset, can stop reading pairs
+		}
+	}
+
+	if targetOffset == -1 {
+		return nil, fmt.Errorf("target index %d out of bounds in object stream %d", targetIndex, objStmNum)
+	}
+
+	// 4. Calculate absolute position
+	absoluteOffset := int64(first + targetOffset)
+
+	// 5. Seek reader to absoluteOffset and parse
+	lex = lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), absoluteOffset))
+	p := parser.NewParser(lex)
+
+	return p.ParseObject()
+}
+
+// Resolve looks up an indirect reference in the document's cross-reference index
+// and parses the object from the underlying stream if it hasn't been cached yet.
+func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfObject, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Check for circular reference
+	if d.resolving[ref.ObjectNum] {
+		return nil, fmt.Errorf("%w: object %d", ErrCircularRef, ref.ObjectNum)
+	}
+
+	// Check if the object is already in the cache
+	if obj, ok := d.ObjectCache[ref.ObjectNum]; ok {
+		d.Logger.Debug("resolve object cache hit",
+			slog.Int("obj", ref.ObjectNum),
+			slog.Int("gen", ref.GenNum),
+			slog.String("type", fmt.Sprintf("%T", obj)),
+		)
+		return obj, nil
+	}
+
+	// Mark as resolving
+	d.resolving[ref.ObjectNum] = true
+	defer func() { delete(d.resolving, ref.ObjectNum) }()
+
+	// Look up the object in the xref table
+	entry, ok := d.Index.Entries[ref.ObjectNum]
+	if !ok {
+		return nil, fmt.Errorf("%w: object %d", ErrObjectNotFound, ref.ObjectNum)
+	}
+
+	if entry.Free {
+		return ast.PdfNull{}, nil
+	}
+
+	switch entry.Type {
+	case 1:
+		// Type 1: Normal object
+		// Create a new lexer and parser at the specific byte offset
+		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
+		p := parser.NewParser(lex)
+		if d.Crypto != nil {
+			p.WithDecryption(d.Crypto.GetDecryptFunc(ref.ObjectNum, ref.GenNum))
+		}
+
+		// ParseObject handles the '12 0 obj ... endobj' envelope and returns the inner object
+		obj, err := p.ParseObject()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse object %d at offset %d: %v", ref.ObjectNum, entry.Offset, err)
+		}
+
+		d.Logger.Debug("resolve object parsed",
+			slog.Int("obj", ref.ObjectNum),
+			slog.Int("gen", ref.GenNum),
+			slog.Int64("offset", entry.Offset),
+			slog.String("type", fmt.Sprintf("%T", obj)),
+		)
+
+		// Store in cache and return
+		d.ObjectCache[ref.ObjectNum] = obj
+		return obj, nil
+	case 2:
+		// Type 2: Compressed object in an Object Stream (PDF 1.5+)
+		obj, err := ExtractFromObjectStream(ctx, d, entry.ObjStmNum, entry.ObjStmIndex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)
+		}
+
+		d.Logger.Debug("resolve object from object stream",
+			slog.Int("obj", ref.ObjectNum),
+			slog.Int("stream_obj", entry.ObjStmNum),
+			slog.Int("index", entry.ObjStmIndex),
+			slog.String("type", fmt.Sprintf("%T", obj)),
+		)
+
+		// Store in cache and return
+		d.ObjectCache[ref.ObjectNum] = obj
+		return obj, nil
+	}
+	return nil, fmt.Errorf("unknown xref entry type: %d", entry.Type)
 }
