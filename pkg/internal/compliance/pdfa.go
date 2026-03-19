@@ -88,26 +88,11 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 // --- Catalog access ---
 
 func getCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, error) {
-	rootObj, ok := doc.Index.Trailer["Root"]
-	if !ok {
-		return nil, fmt.Errorf("trailer missing /Root")
-	}
-	resolved, err := resolve(ctx, doc, rootObj)
+	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
-	catalog, ok := resolved.(ast.PdfDict)
-	if !ok {
-		return nil, fmt.Errorf("catalog is not a dictionary")
-	}
-	return catalog, nil
-}
-
-func resolve(ctx context.Context, doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		return doc.Resolve(ctx, ref)
-	}
-	return obj, nil
+	return catalog.Dict, nil
 }
 
 // --- Base checks: Level 'b' (Basic Visual Integrity) ---
@@ -180,7 +165,7 @@ var forbiddenActionTypes = map[ast.PdfName]bool{
 func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	// Check /Names /JavaScript name tree.
 	if namesObj, ok := catalog["Names"]; ok {
-		namesRes, _ := resolve(ctx, doc, namesObj)
+		namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
 		if namesDict, ok := namesRes.(ast.PdfDict); ok {
 			if _, ok := namesDict["JavaScript"]; ok {
 				return []error{models.ErrActiveContentForbidden}
@@ -190,7 +175,7 @@ func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog a
 
 	// Check /OpenAction for forbidden action types.
 	if oaObj, ok := catalog["OpenAction"]; ok {
-		oaRes, _ := resolve(ctx, doc, oaObj)
+		oaRes, _ := document.ResolveObject(ctx, doc, oaObj)
 		if oaDict, ok := oaRes.(ast.PdfDict); ok {
 			if isForbiddenAction(oaDict) {
 				return []error{models.ErrActiveContentForbidden}
@@ -238,13 +223,13 @@ func hasForbiddenAdditionalActions(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return false
 	}
-	aaRes, _ := resolve(ctx, doc, aaObj)
+	aaRes, _ := document.ResolveObject(ctx, doc, aaObj)
 	aaDict, ok := aaRes.(ast.PdfDict)
 	if !ok {
 		return false
 	}
 	for _, v := range aaDict {
-		vRes, _ := resolve(ctx, doc, v)
+		vRes, _ := document.ResolveObject(ctx, doc, v)
 		if actionDict, ok := vRes.(ast.PdfDict); ok {
 			if isForbiddenAction(actionDict) {
 				return true
@@ -260,20 +245,20 @@ func hasForbiddenAnnotActions(ctx context.Context, doc *document.Document, pageD
 	if !ok {
 		return false
 	}
-	annotsRes, _ := resolve(ctx, doc, annotsObj)
+	annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
 	annotsArr, ok := annotsRes.(ast.PdfArray)
 	if !ok {
 		return false
 	}
 	for _, annotObj := range annotsArr {
-		annotRes, _ := resolve(ctx, doc, annotObj)
+		annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
 		annotDict, ok := annotRes.(ast.PdfDict)
 		if !ok {
 			continue
 		}
 		// Check /A (action) on the annotation.
 		if aObj, ok := annotDict["A"]; ok {
-			aRes, _ := resolve(ctx, doc, aObj)
+			aRes, _ := document.ResolveObject(ctx, doc, aObj)
 			if aDict, ok := aRes.(ast.PdfDict); ok {
 				if isForbiddenAction(aDict) {
 					return true
@@ -329,7 +314,7 @@ func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.
 	if !ok {
 		return false
 	}
-	bfRes, _ := resolve(ctx, doc, bfObj)
+	bfRes, _ := document.ResolveObject(ctx, doc, bfObj)
 	bfName, ok := bfRes.(ast.PdfName)
 	if !ok {
 		return false
@@ -389,7 +374,7 @@ func hasFontUnicodeMapping(ctx context.Context, doc *document.Document, fontDict
 	if !ok {
 		return false
 	}
-	encRes, _ := resolve(ctx, doc, encObj)
+	encRes, _ := document.ResolveObject(ctx, doc, encObj)
 
 	switch enc := encRes.(type) {
 	case ast.PdfName:
@@ -398,7 +383,7 @@ func hasFontUnicodeMapping(ctx context.Context, doc *document.Document, fontDict
 	case ast.PdfDict:
 		// Encoding dictionary with /BaseEncoding.
 		if beObj, ok := enc["BaseEncoding"]; ok {
-			beRes, _ := resolve(ctx, doc, beObj)
+			beRes, _ := document.ResolveObject(ctx, doc, beObj)
 			if beName, ok := beRes.(ast.PdfName); ok {
 				return standardAdobeEncodings[beName]
 			}
@@ -425,7 +410,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -435,7 +420,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 
 	var errs []error
 	checkFigureAltRecursive(ctx, doc, kRes, &errs)
@@ -446,13 +431,13 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := resolve(ctx, doc, kid)
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
 			checkFigureAltRecursive(ctx, doc, kidRes, errs)
 		}
 	case ast.PdfDict:
 		// Check if this is a Figure element.
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := resolve(ctx, doc, sObj)
+			sRes, _ := document.ResolveObject(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
 				if _, hasAlt := v["Alt"]; !hasAlt {
 					*errs = append(*errs, models.ErrUntaggedVisualElement)
@@ -461,7 +446,7 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 		}
 		// Recurse into children.
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(ctx, doc, kObj)
+			kRes, _ := document.ResolveObject(ctx, doc, kObj)
 			checkFigureAltRecursive(ctx, doc, kRes, errs)
 		}
 	}
@@ -469,19 +454,19 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 
 func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
 	if fdObj, ok := fontDict["FontDescriptor"]; ok {
-		fdRes, _ := resolve(ctx, doc, fdObj)
+		fdRes, _ := document.ResolveObject(ctx, doc, fdObj)
 		if fdDict, ok := fdRes.(ast.PdfDict); ok {
 			return fdDict
 		}
 	}
 	// Type0: /DescendantFonts[0]/FontDescriptor
 	if dfObj, ok := fontDict["DescendantFonts"]; ok {
-		dfRes, _ := resolve(ctx, doc, dfObj)
+		dfRes, _ := document.ResolveObject(ctx, doc, dfObj)
 		if dfArr, ok := dfRes.(ast.PdfArray); ok && len(dfArr) > 0 {
-			cidRes, _ := resolve(ctx, doc, dfArr[0])
+			cidRes, _ := document.ResolveObject(ctx, doc, dfArr[0])
 			if cidDict, ok := cidRes.(ast.PdfDict); ok {
 				if fdObj, ok := cidDict["FontDescriptor"]; ok {
-					fdRes, _ := resolve(ctx, doc, fdObj)
+					fdRes, _ := document.ResolveObject(ctx, doc, fdObj)
 					if fdDict, ok := fdRes.(ast.PdfDict); ok {
 						return fdDict
 					}
@@ -500,7 +485,7 @@ func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict as
 func checkPDFA1Version(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	// Check catalog /Version (overrides header per spec).
 	if vObj, ok := catalog["Version"]; ok {
-		vRes, _ := resolve(ctx, doc, vObj)
+		vRes, _ := document.ResolveObject(ctx, doc, vObj)
 		if vName, ok := vRes.(ast.PdfName); ok {
 			if isPDFVersionAtMost14(string(vName)) {
 				return nil
@@ -556,7 +541,7 @@ func hasGroupTransparency(ctx context.Context, doc *document.Document, pageDict 
 	if !ok {
 		return false
 	}
-	grpRes, _ := resolve(ctx, doc, grpObj)
+	grpRes, _ := document.ResolveObject(ctx, doc, grpObj)
 	grpDict, ok := grpRes.(ast.PdfDict)
 	if !ok {
 		return false
@@ -578,13 +563,13 @@ func scanExtGStateForTransparency(ctx context.Context, doc *document.Document, p
 	if !ok {
 		return nil
 	}
-	gsRes, _ := resolve(ctx, doc, gsObj)
+	gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
 	gsDict, ok := gsRes.(ast.PdfDict)
 	if !ok {
 		return nil
 	}
 	for _, v := range gsDict {
-		vRes, _ := resolve(ctx, doc, v)
+		vRes, _ := document.ResolveObject(ctx, doc, v)
 		if stateDict, ok := vRes.(ast.PdfDict); ok {
 			// /BM (blend mode) other than Normal.
 			if bmObj, ok := stateDict["BM"]; ok {
@@ -594,13 +579,13 @@ func scanExtGStateForTransparency(ctx context.Context, doc *document.Document, p
 			}
 			// /ca (fill opacity) < 1.0.
 			if caObj, ok := stateDict["ca"]; ok {
-				if v := complianceAstFloat(caObj); v < 1.0 && v >= 0 {
+				if v := document.GetFloat(caObj); v < 1.0 && v >= 0 {
 					return []error{models.ErrTransparencyForbidden}
 				}
 			}
 			// /CA (stroke opacity) < 1.0.
 			if caObj, ok := stateDict["CA"]; ok {
-				if v := complianceAstFloat(caObj); v < 1.0 && v >= 0 {
+				if v := document.GetFloat(caObj); v < 1.0 && v >= 0 {
 					return []error{models.ErrTransparencyForbidden}
 				}
 			}
@@ -660,7 +645,7 @@ func validateEmbeddedFilePDFA(ctx context.Context, doc *document.Document, fileS
 	if !ok {
 		return models.ErrNonPDFAAttachment
 	}
-	efRes, _ := resolve(ctx, doc, efObj)
+	efRes, _ := document.ResolveObject(ctx, doc, efObj)
 	efDict, ok := efRes.(ast.PdfDict)
 	if !ok {
 		return models.ErrNonPDFAAttachment
@@ -669,7 +654,7 @@ func validateEmbeddedFilePDFA(ctx context.Context, doc *document.Document, fileS
 	if !ok {
 		return models.ErrNonPDFAAttachment
 	}
-	fRes, _ := resolve(ctx, doc, fObj)
+	fRes, _ := document.ResolveObject(ctx, doc, fObj)
 	stream, ok := fRes.(ast.PdfStream)
 	if !ok {
 		return models.ErrNonPDFAAttachment
@@ -705,7 +690,7 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return nil
 	}
-	ocRes, _ := resolve(ctx, doc, ocObj)
+	ocRes, _ := document.ResolveObject(ctx, doc, ocObj)
 	ocDict, ok := ocRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -739,7 +724,7 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, catalog as
 			errs = append(errs, models.ErrMissingAFRelationship)
 			continue
 		}
-		afRes, _ := resolve(ctx, doc, afObj)
+		afRes, _ := document.ResolveObject(ctx, doc, afObj)
 		afName, ok := afRes.(ast.PdfName)
 		if !ok || !validAFRelationships[afName] {
 			errs = append(errs, fmt.Errorf("%w: got /%v", models.ErrMissingAFRelationship, afObj))
@@ -754,7 +739,7 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, catalog as
 // as required by PDF/A-4 (ISO 19005-4). Checks catalog /Version then header.
 func checkPDFA4Version(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	if vObj, ok := catalog["Version"]; ok {
-		vRes, _ := resolve(ctx, doc, vObj)
+		vRes, _ := document.ResolveObject(ctx, doc, vObj)
 		if vName, ok := vRes.(ast.PdfName); ok {
 			if strings.HasPrefix(string(vName), "2.") {
 				return nil
@@ -785,13 +770,13 @@ func check3DStreamCompliance(ctx context.Context, doc *document.Document, catalo
 		if !ok {
 			continue
 		}
-		annotsRes, _ := resolve(ctx, doc, annotsObj)
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
 		annotsArr, ok := annotsRes.(ast.PdfArray)
 		if !ok {
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			annotRes, _ := resolve(ctx, doc, annotObj)
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
 			annotDict, ok := annotRes.(ast.PdfDict)
 			if !ok {
 				continue
@@ -844,7 +829,7 @@ func has3DStreamSubtype(ctx context.Context, doc *document.Document, annotDict a
 		// For /RichMedia, check /RichMediaContent/Assets for 3D streams.
 		return hasRichMedia3DSubtype(ctx, doc, annotDict)
 	}
-	ddRes, _ := resolve(ctx, doc, ddObj)
+	ddRes, _ := document.ResolveObject(ctx, doc, ddObj)
 	switch dd := ddRes.(type) {
 	case ast.PdfStream:
 		return check3DStreamDict(dd.Dict)
@@ -869,7 +854,7 @@ func hasRichMedia3DSubtype(ctx context.Context, doc *document.Document, annotDic
 	if !ok {
 		return false
 	}
-	rcRes, _ := resolve(ctx, doc, rcObj)
+	rcRes, _ := document.ResolveObject(ctx, doc, rcObj)
 	rcDict, ok := rcRes.(ast.PdfDict)
 	if !ok {
 		return false
@@ -878,7 +863,7 @@ func hasRichMedia3DSubtype(ctx context.Context, doc *document.Document, annotDic
 	if !ok {
 		return false
 	}
-	assetsRes, _ := resolve(ctx, doc, assetsObj)
+	assetsRes, _ := document.ResolveObject(ctx, doc, assetsObj)
 	assetsDict, ok := assetsRes.(ast.PdfDict)
 	if !ok {
 		return false
@@ -887,20 +872,20 @@ func hasRichMedia3DSubtype(ctx context.Context, doc *document.Document, annotDic
 	if !ok {
 		return false
 	}
-	namesRes, _ := resolve(ctx, doc, namesObj)
+	namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
 	namesArr, ok := namesRes.(ast.PdfArray)
 	if !ok {
 		return false
 	}
 	// Names array is [key val key val ...]; check val entries.
 	for i := 1; i < len(namesArr); i += 2 {
-		valRes, _ := resolve(ctx, doc, namesArr[i])
+		valRes, _ := document.ResolveObject(ctx, doc, namesArr[i])
 		if fsDict, ok := valRes.(ast.PdfDict); ok {
 			if efObj, ok := fsDict["EF"]; ok {
-				efRes, _ := resolve(ctx, doc, efObj)
+				efRes, _ := document.ResolveObject(ctx, doc, efObj)
 				if efDict, ok := efRes.(ast.PdfDict); ok {
 					if fObj, ok := efDict["F"]; ok {
-						fRes, _ := resolve(ctx, doc, fObj)
+						fRes, _ := document.ResolveObject(ctx, doc, fObj)
 						if stream, ok := fRes.(ast.PdfStream); ok {
 							if check3DStreamDict(stream.Dict) {
 								return true
@@ -921,7 +906,7 @@ func has2DFallback(ctx context.Context, doc *document.Document, annotDict ast.Pd
 	if !ok {
 		return false
 	}
-	apRes, _ := resolve(ctx, doc, apObj)
+	apRes, _ := document.ResolveObject(ctx, doc, apObj)
 	apDict, ok := apRes.(ast.PdfDict)
 	if !ok {
 		return false
@@ -937,7 +922,7 @@ func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	if !ok {
 		return []error{models.ErrMissingMarkInfo}
 	}
-	miRes, _ := resolve(ctx, doc, miObj)
+	miRes, _ := document.ResolveObject(ctx, doc, miObj)
 	miDict, ok := miRes.(ast.PdfDict)
 	if !ok {
 		return []error{models.ErrMissingMarkInfo}
@@ -957,7 +942,7 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 	if !ok {
 		return []error{models.ErrMissingStructTreeRoot}
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	if _, ok := strRes.(ast.PdfDict); !ok {
 		return []error{models.ErrMissingStructTreeRoot}
 	}
@@ -965,17 +950,6 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 }
 
 // --- Helpers ---
-
-// complianceAstFloat extracts a float64 from a PdfObject (PdfInt or PdfReal).
-func complianceAstFloat(obj ast.PdfObject) float64 {
-	switch v := obj.(type) {
-	case ast.PdfReal:
-		return float64(v)
-	case ast.PdfInt:
-		return float64(v)
-	}
-	return 0
-}
 
 func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []ast.PdfDict {
 	pagesObj, ok := catalog["Pages"]
@@ -988,7 +962,7 @@ func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDi
 }
 
 func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, pages *[]ast.PdfDict) {
-	res, err := resolve(ctx, doc, obj)
+	res, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -996,7 +970,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 	if !ok {
 		return
 	}
-	typeObj, _ := resolve(ctx, doc, dict["Type"])
+	typeObj, _ := document.ResolveObject(ctx, doc, dict["Type"])
 	typeName, _ := typeObj.(ast.PdfName)
 
 	switch typeName {
@@ -1005,7 +979,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 		if !ok {
 			return
 		}
-		kidsRes, _ := resolve(ctx, doc, kidsObj)
+		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
 		kidsArr, ok := kidsRes.(ast.PdfArray)
 		if !ok {
 			return
@@ -1023,7 +997,7 @@ func getResources(ctx context.Context, doc *document.Document, pageDict ast.PdfD
 	if !ok {
 		return nil
 	}
-	resRes, _ := resolve(ctx, doc, resObj)
+	resRes, _ := document.ResolveObject(ctx, doc, resObj)
 	resDict, ok := resRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -1043,13 +1017,13 @@ func collectFontDicts(ctx context.Context, doc *document.Document, catalog ast.P
 		if !ok {
 			continue
 		}
-		fontRes, _ := resolve(ctx, doc, fontObj)
+		fontRes, _ := document.ResolveObject(ctx, doc, fontObj)
 		fontDict, ok := fontRes.(ast.PdfDict)
 		if !ok {
 			continue
 		}
 		for name, fObj := range fontDict {
-			fRes, _ := resolve(ctx, doc, fObj)
+			fRes, _ := document.ResolveObject(ctx, doc, fObj)
 			if fDict, ok := fRes.(ast.PdfDict); ok {
 				fonts[string(name)] = fDict
 			}
@@ -1068,13 +1042,13 @@ func hasPageFilter(ctx context.Context, doc *document.Document, pageDict ast.Pdf
 	if !ok {
 		return false
 	}
-	xobjRes, _ := resolve(ctx, doc, xobjObj)
+	xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
 	xobjDict, ok := xobjRes.(ast.PdfDict)
 	if !ok {
 		return false
 	}
 	for _, obj := range xobjDict {
-		objRes, _ := resolve(ctx, doc, obj)
+		objRes, _ := document.ResolveObject(ctx, doc, obj)
 		stream, ok := objRes.(ast.PdfStream)
 		if !ok {
 			continue
@@ -1091,13 +1065,13 @@ func streamHasFilter(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	if !ok {
 		return false
 	}
-	filterRes, _ := resolve(ctx, doc, filterObj)
+	filterRes, _ := document.ResolveObject(ctx, doc, filterObj)
 	switch f := filterRes.(type) {
 	case ast.PdfName:
 		return string(f) == target
 	case ast.PdfArray:
 		for _, item := range f {
-			itemRes, _ := resolve(ctx, doc, item)
+			itemRes, _ := document.ResolveObject(ctx, doc, item)
 			if n, ok := itemRes.(ast.PdfName); ok && string(n) == target {
 				return true
 			}
@@ -1111,7 +1085,7 @@ func hasEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast.P
 	if !ok {
 		return false
 	}
-	namesRes, _ := resolve(ctx, doc, namesObj)
+	namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
 	namesDict, ok := namesRes.(ast.PdfDict)
 	if !ok {
 		return false
@@ -1125,7 +1099,7 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 	if !ok {
 		return nil
 	}
-	namesRes, _ := resolve(ctx, doc, namesObj)
+	namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
 	namesDict, ok := namesRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -1140,13 +1114,13 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 }
 
 func collectFileSpecsRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, specs *[]ast.PdfDict) {
-	res, _ := resolve(ctx, doc, obj)
+	res, _ := document.ResolveObject(ctx, doc, obj)
 	dict, ok := res.(ast.PdfDict)
 	if !ok {
 		return
 	}
 	if kidsObj, ok := dict["Kids"]; ok {
-		kidsRes, _ := resolve(ctx, doc, kidsObj)
+		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
 		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
 			for _, kid := range kidsArr {
 				collectFileSpecsRecursive(ctx, doc, kid, specs)
@@ -1155,10 +1129,10 @@ func collectFileSpecsRecursive(ctx context.Context, doc *document.Document, obj 
 		return
 	}
 	if namesObj, ok := dict["Names"]; ok {
-		namesRes, _ := resolve(ctx, doc, namesObj)
+		namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
 		if namesArr, ok := namesRes.(ast.PdfArray); ok {
 			for i := 1; i < len(namesArr); i += 2 {
-				valRes, _ := resolve(ctx, doc, namesArr[i])
+				valRes, _ := document.ResolveObject(ctx, doc, namesArr[i])
 				if fsDict, ok := valRes.(ast.PdfDict); ok {
 					*specs = append(*specs, fsDict)
 				}

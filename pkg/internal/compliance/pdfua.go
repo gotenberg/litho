@@ -64,7 +64,7 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	if !ok {
 		return []error{models.ErrMissingXMPTitle}
 	}
-	mdRes, err := resolve(ctx, doc, mdObj)
+	mdRes, err := document.ResolveObject(ctx, doc, mdObj)
 	if err != nil {
 		return []error{models.ErrMissingXMPTitle}
 	}
@@ -102,7 +102,7 @@ func checkFormFieldTooltips(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return nil
 	}
-	acroRes, err := resolve(ctx, doc, acroObj)
+	acroRes, err := document.ResolveObject(ctx, doc, acroObj)
 	if err != nil {
 		return nil
 	}
@@ -114,7 +114,7 @@ func checkFormFieldTooltips(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return nil
 	}
-	fieldsRes, err := resolve(ctx, doc, fieldsObj)
+	fieldsRes, err := document.ResolveObject(ctx, doc, fieldsObj)
 	if err != nil {
 		return nil
 	}
@@ -130,7 +130,7 @@ func checkFormFieldTooltips(ctx context.Context, doc *document.Document, catalog
 }
 
 func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := resolve(ctx, doc, obj)
+	res, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -146,7 +146,7 @@ func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfO
 	}
 	// Recurse into child fields.
 	if kidsObj, ok := dict["Kids"]; ok {
-		kidsRes, _ := resolve(ctx, doc, kidsObj)
+		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
 		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
 			for _, kid := range kidsArr {
 				checkFieldTooltip(ctx, doc, kid, errs)
@@ -162,7 +162,7 @@ func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return []error{models.ErrMissingStructTreeRoot}
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return []error{models.ErrMissingStructTreeRoot}
@@ -173,7 +173,7 @@ func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -186,7 +186,7 @@ func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog
 }
 
 func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := resolve(ctx, doc, obj)
+	res, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -197,7 +197,7 @@ func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.Pdf
 
 	// Check if this is a Figure element.
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := resolve(ctx, doc, sObj)
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
 			if _, hasAlt := dict["Alt"]; !hasAlt {
 				*errs = append(*errs, models.ErrImageMissingAltText)
@@ -210,7 +210,7 @@ func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.Pdf
 	if !ok {
 		return
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -229,7 +229,7 @@ func checkArtifactTagging(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -240,7 +240,7 @@ func checkArtifactTagging(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -263,7 +263,7 @@ var forbiddenStructTypes = map[string]bool{
 }
 
 func checkArtifactElem(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := resolve(ctx, doc, obj)
+	res, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -273,7 +273,7 @@ func checkArtifactElem(ctx context.Context, doc *document.Document, obj ast.PdfO
 	}
 
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := resolve(ctx, doc, sObj)
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok {
 			if forbiddenStructTypes[string(sName)] {
 				*errs = append(*errs, fmt.Errorf("%w: /%s should be /Artifact", models.ErrArtifactTagMissing, sName))
@@ -285,7 +285,7 @@ func checkArtifactElem(ctx context.Context, doc *document.Document, obj ast.PdfO
 	if !ok {
 		return
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -329,7 +329,7 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -338,7 +338,7 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 	// Build the role map.
 	roleMap := make(map[string]bool)
 	if rmObj, ok := strDict["RoleMap"]; ok {
-		rmRes, _ := resolve(ctx, doc, rmObj)
+		rmRes, _ := document.ResolveObject(ctx, doc, rmObj)
 		if rmDict, ok := rmRes.(ast.PdfDict); ok {
 			for key := range rmDict {
 				roleMap[string(key)] = true
@@ -351,7 +351,7 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -364,7 +364,7 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 }
 
 func checkStructElemStandard(ctx context.Context, doc *document.Document, obj ast.PdfObject, roleMap map[string]bool, errs *[]error) {
-	res, err := resolve(ctx, doc, obj)
+	res, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return
 	}
@@ -374,7 +374,7 @@ func checkStructElemStandard(ctx context.Context, doc *document.Document, obj as
 	}
 
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := resolve(ctx, doc, sObj)
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok {
 			tag := string(sName)
 			if !standardPDF17Tags[tag] && !roleMap[tag] {
@@ -388,7 +388,7 @@ func checkStructElemStandard(ctx context.Context, doc *document.Document, obj as
 	if !ok {
 		return
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -406,7 +406,7 @@ func checkStructElemStandard(ctx context.Context, doc *document.Document, obj as
 func checkPDFVersionForUA2(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	// Check catalog /Version first (overrides header version per spec).
 	if vObj, ok := catalog["Version"]; ok {
-		vRes, _ := resolve(ctx, doc, vObj)
+		vRes, _ := document.ResolveObject(ctx, doc, vObj)
 		if vName, ok := vRes.(ast.PdfName); ok {
 			if strings.HasPrefix(string(vName), "2.") {
 				return nil
@@ -429,7 +429,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -439,7 +439,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 	if !ok {
 		return []error{models.ErrMissingNamespaces}
 	}
-	nsRes, _ := resolve(ctx, doc, nsObj)
+	nsRes, _ := document.ResolveObject(ctx, doc, nsObj)
 	nsArr, ok := nsRes.(ast.PdfArray)
 	if !ok || len(nsArr) == 0 {
 		return []error{models.ErrMissingNamespaces}
@@ -447,7 +447,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 	var errs []error
 	for _, nsEntry := range nsArr {
-		entryRes, _ := resolve(ctx, doc, nsEntry)
+		entryRes, _ := document.ResolveObject(ctx, doc, nsEntry)
 		entryDict, ok := entryRes.(ast.PdfDict)
 		if !ok {
 			errs = append(errs, models.ErrInvalidStructureNamespace)
@@ -470,19 +470,19 @@ func checkLinkAnnotationNesting(ctx context.Context, doc *document.Document, cat
 		if !ok {
 			continue
 		}
-		annotsRes, _ := resolve(ctx, doc, annotsObj)
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
 		annotsArr, ok := annotsRes.(ast.PdfArray)
 		if !ok {
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			annotRes, _ := resolve(ctx, doc, annotObj)
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
 			annotDict, ok := annotRes.(ast.PdfDict)
 			if !ok {
 				continue
 			}
 			if subtypeObj, ok := annotDict["Subtype"]; ok {
-				subtypeRes, _ := resolve(ctx, doc, subtypeObj)
+				subtypeRes, _ := document.ResolveObject(ctx, doc, subtypeObj)
 				if sName, ok := subtypeRes.(ast.PdfName); ok && sName == "Link" {
 					hasLinkAnnot = true
 					// Check if the annotation has a /StructParent pointing to a Link struct elem.
@@ -510,7 +510,7 @@ func hasStructElemType(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return false
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return false
@@ -519,7 +519,7 @@ func hasStructElemType(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return false
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 	return searchStructElemType(ctx, doc, kRes, typeName)
 }
 
@@ -527,20 +527,20 @@ func searchStructElemType(ctx context.Context, doc *document.Document, obj ast.P
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := resolve(ctx, doc, kid)
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
 			if searchStructElemType(ctx, doc, kidRes, typeName) {
 				return true
 			}
 		}
 	case ast.PdfDict:
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := resolve(ctx, doc, sObj)
+			sRes, _ := document.ResolveObject(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && string(sName) == typeName {
 				return true
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(ctx, doc, kObj)
+			kRes, _ := document.ResolveObject(ctx, doc, kObj)
 			return searchStructElemType(ctx, doc, kRes, typeName)
 		}
 	}
@@ -554,7 +554,7 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil
 	}
-	strRes, _ := resolve(ctx, doc, strObj)
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {
 		return nil
@@ -563,7 +563,7 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
 
 	var errs []error
 	checkFormulaAF(ctx, doc, kRes, &errs)
@@ -574,12 +574,12 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := resolve(ctx, doc, kid)
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
 			checkFormulaAF(ctx, doc, kidRes, errs)
 		}
 	case ast.PdfDict:
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := resolve(ctx, doc, sObj)
+			sRes, _ := document.ResolveObject(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Formula" {
 				if _, hasAF := v["AF"]; !hasAF {
 					*errs = append(*errs, models.ErrFormulaMissingMathML)
@@ -587,7 +587,7 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(ctx, doc, kObj)
+			kRes, _ := document.ResolveObject(ctx, doc, kObj)
 			checkFormulaAF(ctx, doc, kRes, errs)
 		}
 	}
