@@ -134,11 +134,11 @@ func (d *Document) resolveAny(ctx context.Context, obj ast.PdfObject) ast.PdfObj
 	return obj
 }
 
-// ExtractFromObjectStream extracts an object from an Object Stream.
-func ExtractFromObjectStream(ctx context.Context, doc *Document, objStmNum int, targetIndex int) (ast.PdfObject, error) {
+// extractFromObjectStream extracts an object from an Object Stream.
+func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, targetIndex int) (ast.PdfObject, error) {
 	// 1. Resolve the Object Stream itself
 	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
-	obj, err := doc.Resolve(ctx, objStmRef)
+	obj, err := d.Resolve(ctx, objStmRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve object stream %d: %v", objStmNum, err)
 	}
@@ -272,7 +272,7 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 		return obj, nil
 	case 2:
 		// Type 2: Compressed object in an Object Stream (PDF 1.5+)
-		obj, err := ExtractFromObjectStream(ctx, d, entry.ObjStmNum, entry.ObjStmIndex)
+		obj, err := d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)
 		}
