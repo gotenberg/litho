@@ -166,14 +166,42 @@ func (r *Reader) NumPages(ctx context.Context) (int, error) {
 type ExtractTextOption func(*extractTextOpts)
 
 type extractTextOpts struct {
-	includeHidden bool
+	includeHidden    bool
+	includeInvisible bool
+	includeClipped   bool
+	includeArtifacts bool
 }
 
-// WithHiddenText includes invisible, clipped, and artifact text that is
-// normally stripped. This is useful for forensic analysis or debugging.
+// WithHiddenText includes all normally-stripped text: invisible, clipped,
+// and artifact text. This is a shortcut that enables WithInvisibleText,
+// WithClippedText, and WithArtifacts simultaneously.
 func WithHiddenText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeHidden = true
+	}
+}
+
+// WithInvisibleText includes text that uses rendering mode 3 (invisible)
+// or white-on-white colors. Useful for forensic analysis of hidden content.
+func WithInvisibleText() ExtractTextOption {
+	return func(o *extractTextOpts) {
+		o.includeInvisible = true
+	}
+}
+
+// WithClippedText includes text that falls outside the page CropBox.
+// Useful for detecting overset content or debugging layout issues.
+func WithClippedText() ExtractTextOption {
+	return func(o *extractTextOpts) {
+		o.includeClipped = true
+	}
+}
+
+// WithArtifacts includes text inside /Artifact marked content blocks
+// (headers, footers, page numbers, watermarks) that is normally stripped.
+func WithArtifacts() ExtractTextOption {
+	return func(o *extractTextOpts) {
+		o.includeArtifacts = true
 	}
 }
 
@@ -205,14 +233,13 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 	// Initialize the graphics state machine with the CropBox as the visible region.
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
 
-	// Extract and orchestrate the text using spatial heuristics.
-	// When includeHidden is true, all stripping is disabled.
-	strip := !o.includeHidden
+	// Build the extraction config. WithHiddenText disables all stripping;
+	// the granular options override individual flags.
 	config := typography.ExtractionConfig{
-		StripInvisible: strip,
-		StripHidden:    strip,
-		StripClipped:   strip,
-		StripArtifacts: strip,
+		StripInvisible: !o.includeHidden && !o.includeInvisible,
+		StripHidden:    !o.includeHidden && !o.includeInvisible,
+		StripClipped:   !o.includeHidden && !o.includeClipped,
+		StripArtifacts: !o.includeHidden && !o.includeArtifacts,
 	}
 
 	text, err := typography.ExtractText(ctx, r.doc, machine, targetPage, ops, config)
