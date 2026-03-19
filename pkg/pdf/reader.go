@@ -26,8 +26,8 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// Option configures optional behavior when opening a PDF document.
-type Option func(*openOpts)
+// OpenOption configures optional behavior when opening a PDF document.
+type OpenOption func(*openOpts)
 
 type openOpts struct {
 	logger   *slog.Logger
@@ -39,7 +39,7 @@ type openOpts struct {
 // When set, the parsing engine emits detailed debug logs (font resolution,
 // object resolution, text extraction, etc.) using structured fields.
 // If not set, all debug output is silently discarded.
-func WithLogger(logger *slog.Logger) Option {
+func WithLogger(logger *slog.Logger) OpenOption {
 	return func(o *openOpts) {
 		o.logger = logger
 	}
@@ -47,7 +47,7 @@ func WithLogger(logger *slog.Logger) Option {
 
 // WithPassword supplies the password for an encrypted PDF document.
 // If the document is not encrypted, the password is ignored.
-func WithPassword(password string) Option {
+func WithPassword(password string) OpenOption {
 	return func(o *openOpts) {
 		o.password = password
 	}
@@ -56,7 +56,7 @@ func WithPassword(password string) Option {
 // WithOCREngine injects an OCR backend (e.g., Tesseract, Google Cloud Vision).
 // When set, ExtractText automatically hands off scanned image pages to the
 // OCR engine instead of returning ErrRequiresOCR.
-func WithOCREngine(engine models.OCREngine) Option {
+func WithOCREngine(engine models.OCREngine) OpenOption {
 	return func(o *openOpts) {
 		o.ocr = engine
 	}
@@ -83,7 +83,7 @@ func (r *Reader) Close() error {
 
 // Open initializes a new Reader from an io.ReaderAt and its total size.
 // Pass functional options (e.g., WithLogger, WithPassword) to customize behavior.
-func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...Option) (*Reader, error) {
+func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*Reader, error) {
 	var o openOpts
 	for _, opt := range opts {
 		opt(&o)
@@ -123,7 +123,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...Option) (*Read
 // OpenFile opens a PDF directly from the filesystem. The returned Reader
 // holds a reference to the underlying file; the caller must call
 // Reader.Close when done.
-func OpenFile(ctx context.Context, path string, opts ...Option) (*Reader, error) {
+func OpenFile(ctx context.Context, path string, opts ...OpenOption) (*Reader, error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, err
