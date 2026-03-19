@@ -24,6 +24,20 @@ func ValidatePDFA(ctx context.Context, r io.ReaderAt, size int64, profile PDFAPr
 	return validatePDFA(ctx, doc, profile), nil
 }
 
+// SourceProvider is implemented by types that expose an underlying io.ReaderAt
+// and size (e.g., *pdf.Reader). This allows compliance validation to share
+// the same source data without re-reading from disk.
+type SourceProvider interface {
+	Source() (io.ReaderAt, int64)
+}
+
+// ValidatePDFAFromReader validates a PDF/A profile using a Reader's underlying
+// source, avoiding redundant parsing when the caller already has an open Reader.
+func ValidatePDFAFromReader(ctx context.Context, sp SourceProvider, profile PDFAProfile) ([]error, error) {
+	r, size := sp.Source()
+	return ValidatePDFA(ctx, r, size, profile)
+}
+
 // validatePDFA is the internal implementation that operates on a parsed document.
 func validatePDFA(ctx context.Context, doc *document.Document, profile PDFAProfile) []error {
 	part := pdfaPart(profile)

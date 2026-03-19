@@ -49,6 +49,10 @@ type Document struct {
 	// by scanning the file for object headers because the original xref
 	// data was damaged or missing.
 	Rebuilt bool
+
+	// Version is the PDF version string extracted from the %PDF-X.Y header
+	// (e.g., "1.4", "1.7", "2.0").
+	Version string
 }
 
 // OCConfig holds the state of Optional Content Groups (Layers)
@@ -200,8 +204,20 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file header: %w", err)
 	}
-	if !bytes.Contains(headerBuf, []byte("%PDF-")) {
+	pdfIdx := bytes.Index(headerBuf, []byte("%PDF-"))
+	if pdfIdx == -1 {
 		return nil, ErrMissingHeader
+	}
+
+	// Extract version string (e.g., "1.4", "2.0").
+	version := ""
+	vStart := pdfIdx + len("%PDF-")
+	if vStart < len(headerBuf) {
+		vEnd := vStart
+		for vEnd < len(headerBuf) && headerBuf[vEnd] != '\n' && headerBuf[vEnd] != '\r' && headerBuf[vEnd] != ' ' {
+			vEnd++
+		}
+		version = string(headerBuf[vStart:vEnd])
 	}
 
 	if logger == nil {
@@ -215,6 +231,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		ObjectCache: make(map[int]ast.PdfObject),
 		resolving:   make(map[int]bool),
 		Logger:      logger,
+		Version:     version,
 	}
 
 	// Probe for linearization before seeking to the end of the file.
@@ -286,7 +303,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 
 	doc.Logger.Debug("document opened",
 		slog.Int64("size_bytes", size),
-		slog.String("header", string(bytes.TrimSpace(headerBuf))),
+		slog.String("version", doc.Version),
 		slog.Bool("encrypted", doc.IsEncrypted),
 	)
 

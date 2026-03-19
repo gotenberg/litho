@@ -119,7 +119,7 @@ func openPDF(t *testing.T, entry manifestEntry) *pdf.Reader {
 		t.Fatalf("stat %s: %v", entry.File, err)
 	}
 
-	r, err := pdf.Open(context.Background(), f, info.Size(), "")
+	r, err := pdf.Open(context.Background(), f, info.Size())
 	if err != nil {
 		// Some PDFs are intentionally malformed. An error here is acceptable
 		// as long as we don't panic. Log and return nil so the caller can skip

@@ -34,7 +34,7 @@ func openTestReader(t *testing.T) *pdf.Reader {
 	t.Helper()
 	ctx := context.Background()
 	data := buildMinimalPDF()
-	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)), "")
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("failed to open minimal PDF: %v", err)
 	}

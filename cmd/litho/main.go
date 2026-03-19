@@ -16,13 +16,13 @@ func main() {
 
 	ctx := context.Background()
 
-	reader, file, err := pdf.OpenFile(ctx, os.Args[1], "")
+	reader, err := pdf.OpenFile(ctx, os.Args[1])
 	if err != nil {
 		fmt.Printf("Failed to open PDF: %v\n", err)
 		os.Exit(1)
 	}
 	defer func() {
-		_ = file.Close() //nolint:errcheck
+		_ = reader.Close() //nolint:errcheck
 	}()
 
 	metadata, _ := reader.GetMetadata(ctx)

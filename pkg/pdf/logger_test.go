@@ -26,7 +26,7 @@ func TestWithLogger_DebugOutput(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	data := minimalPDF()
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)), "", pdf.WithLogger(logger))
+	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)), pdf.WithLogger(logger))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestWithoutLogger_NoOutput(t *testing.T) {
 	data := minimalPDF()
 
 	// Open without WithLogger — should produce no output and no errors.
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)), "")
+	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -60,5 +60,47 @@ func TestWithoutLogger_NoOutput(t *testing.T) {
 	_, err = r.NumPages(context.Background())
 	if err != nil {
 		t.Fatalf("NumPages failed: %v", err)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	data := minimalPDF()
+	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if v := r.Version(); v != "1.4" {
+		t.Errorf("Version() = %q, want %q", v, "1.4")
+	}
+}
+
+func TestExtractAllText(t *testing.T) {
+	data := minimalPDF()
+	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	// Minimal PDF has no text content, so ExtractAllText should return empty.
+	text, err := r.ExtractAllText(context.Background())
+	if err != nil {
+		t.Fatalf("ExtractAllText failed: %v", err)
+	}
+	if text != "" {
+		t.Errorf("expected empty text, got %q", text)
+	}
+}
+
+func TestClose_Noop(t *testing.T) {
+	data := minimalPDF()
+	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	// Close on a Reader opened via Open should be a no-op.
+	if err := r.Close(); err != nil {
+		t.Errorf("Close failed: %v", err)
 	}
 }

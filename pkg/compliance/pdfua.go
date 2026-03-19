@@ -22,6 +22,13 @@ func ValidatePDFUA(ctx context.Context, r io.ReaderAt, size int64, profile PDFUA
 	return validatePDFUA(ctx, doc, profile), nil
 }
 
+// ValidatePDFUAFromReader validates a PDF/UA profile using a Reader's
+// underlying source, avoiding redundant parsing.
+func ValidatePDFUAFromReader(ctx context.Context, sp SourceProvider, profile PDFUAProfile) ([]error, error) {
+	r, size := sp.Source()
+	return ValidatePDFUA(ctx, r, size, profile)
+}
+
 // validatePDFUA is the internal implementation that operates on a parsed document.
 func validatePDFUA(ctx context.Context, doc *document.Document, profile PDFUAProfile) []error {
 	if profile != PDFUA1 && profile != PDFUA2 {

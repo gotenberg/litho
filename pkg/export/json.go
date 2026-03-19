@@ -135,7 +135,7 @@ func Extract(ctx context.Context, r *pdf.Reader) (*Document, error) {
 		if elems, err := r.ExtractTextElements(ctx, i); err == nil {
 			pd.TextElements = elems
 		}
-		if annots, err := r.GetAnnotations(ctx, i); err == nil {
+		if annots, err := r.ExtractAnnotations(ctx, i); err == nil {
 			pd.Annotations = annots
 		}
 		if tables, err := r.ExtractTables(ctx, i); err == nil {

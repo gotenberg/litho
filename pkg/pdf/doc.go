@@ -10,26 +10,29 @@
 //	package main
 //
 //	import (
+//		"context"
 //		"fmt"
 //		"log"
 //		"github.com/gotenberg/litho/pkg/pdf"
 //	)
 //
 //	func main() {
+//		ctx := context.Background()
+//
 //		// Open the document
-//		reader, file, err := pdf.OpenFile("document.pdf", "")
+//		reader, err := pdf.OpenFile(ctx, "document.pdf")
 //		if err != nil {
 //			log.Fatal(err)
 //		}
-//		defer file.Close()
+//		defer reader.Close()
 //
 //		// Check page count
-//		pages, _ := reader.NumPages()
-//		fmt.Printf("Total Pages: %d\n", pages)
+//		pages, _ := reader.NumPages(ctx)
+//		fmt.Printf("PDF %s — %d pages\n", reader.Version(), pages)
 //
 //		// Extract clean, reconstructed text from the first page
 //		if pages > 0 {
-//			text, _ := reader.ExtractText(1)
+//			text, _ := reader.ExtractText(ctx, 1)
 //			fmt.Println(text)
 //		}
 //	}

@@ -2,8 +2,10 @@ package models
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"io"
+	"strings"
 )
 
 // OCREngine is an integration interface for Optical Character Recognition.
@@ -159,6 +161,35 @@ type GeoData struct {
 	EPSG             string        // EPSG code if identified (e.g., "4326" for WGS 84)
 	TiePoints        []GeoTiePoint // Mapping from PDF space to GPS coordinates
 	Bounds           [4]float64    // [minLon, minLat, maxLon, maxLat] bounding box
+}
+
+// ToGeoJSON converts the geospatial data to a GeoJSON FeatureCollection
+// string containing tie points as Point features and the bounding box as
+// a Polygon feature.
+func (g *GeoData) ToGeoJSON() string {
+	var features []string
+
+	for i, tp := range g.TiePoints {
+		feature := fmt.Sprintf(
+			`{"type":"Feature","id":%d,"geometry":{"type":"Point","coordinates":[%g,%g]},"properties":{"pdfX":%g,"pdfY":%g}}`,
+			i, tp.Lon, tp.Lat, tp.PDFX, tp.PDFY,
+		)
+		features = append(features, feature)
+	}
+
+	if len(g.TiePoints) > 0 {
+		b := g.Bounds
+		bbox := fmt.Sprintf(
+			`{"type":"Feature","id":"bbox","geometry":{"type":"Polygon","coordinates":[[`+
+				`[%g,%g],[%g,%g],[%g,%g],[%g,%g],[%g,%g]`+
+				`]]},"properties":{"type":"bounds","crs":"%s","epsg":"%s"}}`,
+			b[0], b[1], b[2], b[1], b[2], b[3], b[0], b[3], b[0], b[1],
+			g.CoordinateSystem, g.EPSG,
+		)
+		features = append(features, bbox)
+	}
+
+	return fmt.Sprintf(`{"type":"FeatureCollection","features":[%s]}`, strings.Join(features, ","))
 }
 
 // ScaleAxis describes the unit and conversion factor for one axis of a
