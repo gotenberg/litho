@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/annotation"
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -19,7 +20,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
-	"github.com/gotenberg/litho/pkg/internal/interactive"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/internal/semantics/structure"
 	"github.com/gotenberg/litho/pkg/internal/signature"
@@ -340,7 +340,7 @@ func (r *Reader) GetBookmarks(ctx context.Context) ([]models.Bookmark, error) {
 // simple name→value map. It automatically evaluates any PDF JavaScript
 // calculation scripts. For richer field metadata, use GetFormFields.
 func (r *Reader) GetFormData(ctx context.Context) (map[string]string, error) {
-	fields, err := interactive.ExtractFormData(ctx, r.doc)
+	fields, err := annotation.ExtractFormData(ctx, r.doc)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func (r *Reader) GetFormData(ctx context.Context) (map[string]string, error) {
 // (name, value, type, flags). It automatically evaluates any PDF JavaScript
 // calculation scripts.
 func (r *Reader) GetFormFields(ctx context.Context) ([]models.FormField, error) {
-	return interactive.ExtractFormData(ctx, r.doc)
+	return annotation.ExtractFormData(ctx, r.doc)
 }
 
 // ExtractTables detects tables on the given 1-based page number by analysing
@@ -423,7 +423,7 @@ func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) ([]models.
 	}
 
 	pageMap := document.BuildPageMap(pages)
-	return interactive.ExtractAnnotations(ctx, r.doc, pages[pageNum-1], pageMap)
+	return annotation.ExtractAnnotations(ctx, r.doc, pages[pageNum-1], pageMap)
 }
 
 // DetectRedactions extracts text elements from the given 1-based page number
@@ -455,7 +455,7 @@ func (r *Reader) DetectRedactions(ctx context.Context, pageNum int) ([]models.Te
 	}
 
 	pageMap := document.BuildPageMap(pages)
-	annots, err := interactive.ExtractAnnotations(ctx, r.doc, targetPage, pageMap)
+	annots, err := annotation.ExtractAnnotations(ctx, r.doc, targetPage, pageMap)
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +549,7 @@ func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) ([]models
 	if err != nil {
 		return nil, err
 	}
-	return interactive.ExtractMeasurements(ctx, r.doc, targetPage)
+	return annotation.ExtractMeasurements(ctx, r.doc, targetPage)
 }
 
 // Extract3DModels extracts 3D model streams (U3D or PRC) from /3D annotations
