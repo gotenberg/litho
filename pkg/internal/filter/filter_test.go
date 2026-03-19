@@ -9,6 +9,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/andybalholm/brotli"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
@@ -920,5 +922,79 @@ func TestApplyDecodeFilter_CCF_Abbreviation(t *testing.T) {
 	expected := []byte{0xFF}
 	if !bytes.Equal(decoded, expected) {
 		t.Errorf("got %02x, want %02x", decoded, expected)
+	}
+}
+
+func brotliCompress(data []byte) []byte {
+	var buf bytes.Buffer
+	w := brotli.NewWriter(&buf)
+	_, _ = w.Write(data) //nolint:errcheck // In-memory buffer write cannot fail
+	_ = w.Close()        //nolint:errcheck // Flush to in-memory buffer cannot fail
+	return buf.Bytes()
+}
+
+func TestDecodeStream_Brotli(t *testing.T) {
+	original := []byte("The quick brown fox jumps over the lazy dog")
+	compressed := brotliCompress(original)
+
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Filter": ast.PdfName("BrotliDecode"),
+		},
+		Data: compressed,
+	}
+
+	decoded, err := DecodeStream(stream)
+	if err != nil {
+		t.Fatalf("DecodeStream brotli failed: %v", err)
+	}
+	if !bytes.Equal(decoded, original) {
+		t.Errorf("got %q, want %q", decoded, original)
+	}
+}
+
+func TestBrotli_RoundTrip(t *testing.T) {
+	original := []byte("litho PDF engine — Brotli round-trip test")
+
+	encoded, err := ApplyEncodeFilter(original, "BrotliDecode")
+	if err != nil {
+		t.Fatalf("encode failed: %v", err)
+	}
+
+	decoded, err := applyDecodeFilter(encoded, "BrotliDecode", nil)
+	if err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+
+	if !bytes.Equal(decoded, original) {
+		t.Errorf("round-trip mismatch: got %q, want %q", decoded, original)
+	}
+}
+
+func TestNewStreamReader_Brotli(t *testing.T) {
+	original := []byte("streaming brotli decode test")
+	compressed := brotliCompress(original)
+
+	stream := ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Filter": ast.PdfName("BrotliDecode"),
+		},
+		Data: compressed,
+	}
+
+	rc, err := NewStreamReader(stream)
+	if err != nil {
+		t.Fatalf("NewStreamReader failed: %v", err)
+	}
+	defer func() {
+		_ = rc.Close() //nolint:errcheck
+	}()
+
+	decoded, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("ReadAll failed: %v", err)
+	}
+	if !bytes.Equal(decoded, original) {
+		t.Errorf("got %q, want %q", decoded, original)
 	}
 }

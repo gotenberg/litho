@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/andybalholm/brotli"
 	"golang.org/x/image/ccitt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -108,6 +109,9 @@ func applyDecodeFilter(data []byte, filterName ast.PdfName, parms ast.PdfDict) (
 
 	case "CCITTFaxDecode", "CCF":
 		return decodeCCITTFax(data, parms)
+
+	case "BrotliDecode":
+		return decodeBrotli(data)
 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFilter, filterName)
@@ -264,6 +268,15 @@ func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
 	return decoded, nil
 }
 
+func decodeBrotli(data []byte) ([]byte, error) {
+	r := brotli.NewReader(bytes.NewReader(data))
+	decoded, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("brotli decode: %w", err)
+	}
+	return decoded, nil
+}
+
 // NewStreamReader returns an io.ReadCloser that lazily decodes a PDF stream
 // through its filter pipeline. For single FlateDecode or LZWDecode filters
 // without predictor parameters, the decoded data is streamed without full
@@ -306,6 +319,8 @@ func NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 				}
 			}
 			return io.NopCloser(newLZWReader(bytes.NewReader(stream.Data), earlyChange)), nil
+		case "BrotliDecode":
+			return io.NopCloser(brotli.NewReader(bytes.NewReader(stream.Data))), nil
 		}
 	}
 
@@ -351,6 +366,17 @@ func ApplyEncodeFilter(data []byte, filterName ast.PdfName) ([]byte, error) {
 	case "ASCIIHexDecode", "AHx":
 		encoded := hex.EncodeToString(data)
 		return []byte(encoded + ">"), nil
+
+	case "BrotliDecode":
+		var buf bytes.Buffer
+		w := brotli.NewWriter(&buf)
+		if _, err := w.Write(data); err != nil {
+			return nil, err
+		}
+		if err := w.Close(); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFilter, filterName)
