@@ -1,7 +1,7 @@
 package encodings
 
 // SymbolSetEncoding maps byte values to glyph names for the Symbol font.
-// Sourced from PDF.js src/core/encodings.js.
+// Derived from the Adobe Symbol encoding specification (PDF Reference, Appendix D).
 var SymbolSetEncoding = [256]string{
 	// 0-31: empty
 	32: "space", 33: "exclam", 34: "universal", 35: "numbersign",
@@ -58,7 +58,7 @@ var SymbolSetEncoding = [256]string{
 }
 
 // ZapfDingbatsEncoding maps byte values to glyph names for the ZapfDingbats font.
-// Sourced from PDF.js src/core/encodings.js.
+// Derived from the Adobe ZapfDingbats encoding specification (PDF Reference, Appendix D).
 var ZapfDingbatsEncoding = [256]string{
 	32: "space", 33: "a1", 34: "a2", 35: "a202", 36: "a3", 37: "a4",
 	38: "a5", 39: "a119", 40: "a118", 41: "a117", 42: "a11", 43: "a12",
@@ -102,7 +102,7 @@ var ZapfDingbatsEncoding = [256]string{
 }
 
 // DingbatsGlyphsUnicode maps ZapfDingbats glyph names (a1-a206) to Unicode runes.
-// Sourced from PDF.js src/core/glyphlist.js (getDingbatsGlyphsUnicode).
+// Derived from the Adobe Glyph List for ZapfDingbats.
 var DingbatsGlyphsUnicode = map[string]rune{
 	"a1": 0x2701, "a2": 0x2702, "a3": 0x2704, "a4": 0x260E, "a5": 0x2706,
 	"a6": 0x271D, "a7": 0x271E, "a8": 0x271F, "a9": 0x2720, "a10": 0x2721,

@@ -243,8 +243,8 @@ func (c *CMap) Map(data []byte) (int, string, bool) {
 }
 
 // mapWithCodeSpaces uses codespace ranges to determine valid byte lengths,
-// then looks up the character code in the mapping. This matches PDF.js's
-// readCharCode approach.
+// then looks up the character code in the mapping. It tries each registered
+// byte length (longest first) to find the most specific match.
 func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 	// Collect distinct byte lengths from codespace ranges and try each,
 	// preferring longer matches (more specific).

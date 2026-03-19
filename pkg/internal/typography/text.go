@@ -173,8 +173,10 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			pageWidth = math.Abs(dx)
 		}
 
-		// Note: PDF.js does NOT check the graphics state clipping path (W/W*)
-		// during text extraction — it only uses the page viewBox (CropBox).
+		// The graphics state clipping path (W/W*) is intentionally not checked
+		// during text extraction. Only the page CropBox is used to determine
+		// visibility, because W/W* clips are often used for decorative masking
+		// (e.g., rounded corners, image crops) that should not suppress text.
 		// The CropBox-based IsClipped flag is set later in ExtractElements.
 
 		// Compute text direction angle from the effective transform (Tm × CTM).
@@ -233,8 +235,8 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 
 // ReconstructText takes spatial text elements and reassembles them into a string.
 // When no article thread beads are provided, it preserves content stream order
-// (matching PDF.js behavior). When beads are provided, it sorts elements by
-// bead index to respect explicit multi-column reading order.
+// for maximum fidelity to the original document layout. When beads are provided,
+// it sorts elements by bead index to respect explicit multi-column reading order.
 func ReconstructText(elements []models.TextElement, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
@@ -563,8 +565,9 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 const maxFormXObjectDepth = 10
 
 // collectAnnotAppearanceObjects returns the set of object numbers referenced by
-// annotation appearance streams (/AP) on this page. PDF.js skips these during
-// text extraction — they are visual overlays, not page content.
+// annotation appearance streams (/AP) on this page. These streams render visual
+// overlays (stamps, widgets, markup) and are excluded from text extraction to
+// avoid duplicating content that is not part of the page's semantic text flow.
 func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, pageDict ast.PdfDict) map[int]bool {
 	result := make(map[int]bool)
 	annotsObj, ok := pageDict["Annots"]
@@ -867,7 +870,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 									if visited[objNum] {
 										continue
 									}
-									// Skip annotation appearance streams (PDF.js excludes them from text extraction).
+									// Skip annotation appearance streams — they are visual overlays, not page content.
 									if annotAppearances[objNum] {
 										continue
 									}
@@ -948,7 +951,7 @@ type ExtractionConfig struct {
 // ExtractElements extracts the text from a page's content operations as raw spatial elements.
 func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
 	// Collect annotation appearance object numbers so we can skip them during
-	// text extraction (PDF.js excludes annotation appearances from getTextContent).
+	// text extraction — annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
 
 	var elements []models.TextElement

@@ -1,7 +1,7 @@
 package encodings
 
 // extendedAGL contains glyph name → Unicode mappings from the full Adobe Glyph
-// List (PDF.js glyphlist.js) that are not in the core GlyphToRune map.
+// List (AGL) that are not in the core GlyphToRune map.
 var extendedAGL = map[string]rune{
 	"AEacute":                             0x01FC,
 	"AEmacron":                            0x01E2,

@@ -17,8 +17,8 @@ type CIDCMap struct {
 	Mapping map[int]int
 }
 
-// strToInt converts a PDF hex string (byte sequence) to an integer,
-// matching PDF.js's strToInt function.
+// strToInt converts a PDF hex string (byte sequence) to an integer by
+// treating each byte as a big-endian digit (b[0]<<8 | b[1] for 2 bytes, etc.).
 func strToInt(s ast.PdfString) int {
 	b := []byte(s)
 	result := 0

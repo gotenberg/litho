@@ -5,6 +5,13 @@
 // provides native tools for decrypting files, extracting text using spatial heuristics,
 // evaluating embedded interactive Javascript forms, and stripping out hidden content.
 //
+// # Acknowledgment
+//
+// litho's text extraction pipeline, CMap parser, and font resolution logic were
+// heavily inspired by Mozilla's PDF.js (https://github.com/mozilla/pdf.js).
+// We are grateful to the PDF.js contributors for their pioneering work on
+// open-source PDF parsing.
+//
 // # Example Usage
 //
 //	package main

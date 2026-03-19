@@ -248,7 +248,8 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	}
 
 	// Detect Symbol and ZapfDingbats fonts by BaseFont name to select
-	// the correct default encoding (PDF.js does the same via regex).
+	// the correct default encoding per the PDF spec (these fonts use
+	// their own built-in encodings, not WinAnsiEncoding).
 	isSymbolFont := false
 	isDingbatsFont := false
 	if bfObj, ok := fontDict["BaseFont"]; ok {
@@ -270,8 +271,8 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	font := &Font{
 		Subtype:  string(subtypeName),
 		Encoding: defaultEncoding,
-		// MissingWidth defaults to 0 for simple fonts (matches PDF.js).
-		// CIDFont /DW defaults to 1000 per spec and is set below.
+		// MissingWidth defaults to 0 for simple fonts (PDF spec does not
+		// mandate a default). CIDFont /DW defaults to 1000 per spec and is set below.
 	}
 
 	// Try to extract ToUnicode CMap

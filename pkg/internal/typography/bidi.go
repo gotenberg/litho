@@ -115,9 +115,10 @@ func reverseStrings(s []string) {
 }
 
 // normalizeSoftHyphens converts soft hyphens (U+00AD) to regular hyphens
-// (U+002D), matching PDF.js behavior. At line boundaries, soft hyphens
-// followed by a newline rejoin the split word. Discretionary hyphens
-// (U+2010) at line ends are also removed to rejoin split words.
+// (U+002D) for searchability. At line boundaries, soft hyphens followed by
+// a newline rejoin the split word (the hyphen was discretionary and the word
+// should be continuous). Discretionary hyphens (U+2010) at line ends are
+// also removed to rejoin split words.
 func normalizeSoftHyphens(text string) string {
 	// First pass: remove soft hyphens followed by a newline, joining the word.
 	text = strings.ReplaceAll(text, "\u00AD\n", "")
@@ -125,7 +126,7 @@ func normalizeSoftHyphens(text string) string {
 	// Second pass: remove discretionary hyphens (U+2010) at line boundaries.
 	text = strings.ReplaceAll(text, "\u2010\n", "")
 
-	// Convert remaining standalone soft hyphens to regular hyphens (PDF.js behavior).
+	// Convert remaining standalone soft hyphens to regular ASCII hyphens for searchability.
 	text = strings.ReplaceAll(text, "\u00AD", "-")
 
 	return text
