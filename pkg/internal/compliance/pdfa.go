@@ -178,6 +178,11 @@ func usesDeviceDependentColorSpace(ctx context.Context, doc *document.Document, 
 
 		defaults := collectDefaultColorSpaces(ctx, doc, resources)
 
+		// A transparency group /CS that is device-independent effectively
+		// remaps all device-dependent color spaces on the page (PDF 2.0,
+		// ISO 32000-2:2020 §11.4.8).
+		addTransparencyGroupDefaults(ctx, doc, page, defaults)
+
 		// Check named color spaces in /Resources/ColorSpace.
 		if csObj, ok := resources["ColorSpace"]; ok {
 			csRes, _ := document.ResolveObject(ctx, doc, csObj)
@@ -241,6 +246,49 @@ func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, reso
 		defaults["DeviceGray"] = true
 	}
 	return defaults
+}
+
+// addTransparencyGroupDefaults checks the page's /Group dictionary for a
+// transparency group whose /CS is a device-independent color space. When
+// present, it remaps the corresponding device-dependent family (e.g., a
+// /CS of [/CalRGB ...] covers DeviceRGB).
+func addTransparencyGroupDefaults(ctx context.Context, doc *document.Document, page ast.PdfDict, defaults map[ast.PdfName]bool) {
+	grpObj, ok := page["Group"]
+	if !ok {
+		return
+	}
+	grpRes, _ := document.ResolveObject(ctx, doc, grpObj)
+	grpDict, ok := grpRes.(ast.PdfDict)
+	if !ok {
+		return
+	}
+	csObj, ok := grpDict["CS"]
+	if !ok {
+		return
+	}
+	csRes, _ := document.ResolveObject(ctx, doc, csObj)
+	switch cs := csRes.(type) {
+	case ast.PdfName:
+		// A direct device-independent name (unlikely but valid).
+		return // Device-independent names don't remap anything here.
+	case ast.PdfArray:
+		if len(cs) == 0 {
+			return
+		}
+		familyObj, _ := document.ResolveObject(ctx, doc, cs[0])
+		family, ok := familyObj.(ast.PdfName)
+		if !ok {
+			return
+		}
+		switch family {
+		case "ICCBased", "CalRGB":
+			defaults["DeviceRGB"] = true
+		case "CalGray":
+			defaults["DeviceGray"] = true
+		case "Lab":
+			// Lab is device-independent but doesn't map to a single device family.
+		}
+	}
 }
 
 // isDeviceDependentCS returns true if the color space object resolves to a
