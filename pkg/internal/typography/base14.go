@@ -9,7 +9,7 @@ import "strings"
 // Oblique/italic variants share widths with their upright counterparts.
 // Courier variants are monospaced (600 for all glyphs) and handled separately.
 //
-// Source: Adobe AFM files via Apache PDFBox.
+// Source: Adobe Font Metrics (AFM) specification files.
 //
 //nolint:dupl // Each font's metrics are unique Adobe-defined data; deduplication is not appropriate.
 var standard14GlyphWidths = map[string]map[string]int{
@@ -39,7 +39,7 @@ func isCourier(name string) bool {
 // normalizes comma-separated variants (e.g., "Helvetica,Bold") to the
 // canonical Standard 14 name.
 // stdFontMap maps common font names to their Standard 14 equivalents.
-// Derived from PDF.js's getStdFontMap (standard_fonts.js).
+// Maps common font names to their Standard 14 metric equivalents.
 var stdFontMap = map[string]string{
 	// Standard 14 identity mappings
 	"Times-Roman": "Times-Roman", "Helvetica": "Helvetica", "Courier": "Courier",

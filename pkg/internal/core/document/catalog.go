@@ -133,7 +133,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	// Merge Resources: the node's resources are merged with inherited ones.
 	// Sub-dicts (/Font, /XObject, /ExtGState, etc.) are merged so that
 	// entries from the current node take precedence, but missing entries
-	// fall back to the parent. This matches PDF.js's Dict.merge behavior
+	// fall back to the parent. This handles PDFs where a page defines
 	// and handles PDFs where a page defines partial resources.
 	currentResources := mergeResourceDicts(ctx, doc, inheritedResources, node)
 

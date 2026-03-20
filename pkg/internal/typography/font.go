@@ -970,7 +970,7 @@ func injectStandard14Widths(font *Font, baseFont string) {
 	name := normalizeBase14Name(baseFont)
 	if !isStandard14(name) {
 		// Last resort: use Helvetica (sans-serif) or Times-Roman (serif)
-		// metrics. This matches PDF.js's getBaseFontMetrics fallback.
+		// metrics as a best-effort fallback for width-based space inference.
 		if isSerifFont(baseFont) {
 			name = "Times-Roman"
 		} else {

@@ -15,7 +15,7 @@ import (
 )
 
 // fallbackFont returns a minimal font that uses WinAnsiEncoding, matching
-// PDF.js's PartialEvaluator.fallbackFontDict (Helvetica/WinAnsiEncoding).
+// a minimal Helvetica/WinAnsiEncoding font dictionary.
 // This allows text extraction to continue when a font cannot be resolved,
 // producing best-effort output rather than aborting the page.
 func fallbackFont() *Font {
@@ -269,7 +269,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			if !resolved {
 				// Fall back to a default font rather than aborting the
 				// entire page. Text may be garbled but extraction continues,
-				// matching PDF.js's fallback behavior.
+				// to produce best-effort output rather than aborting the page.
 				if doc != nil {
 					doc.Logger.Debug("font not found, using fallback",
 						slog.String("font", string(fontName)),
