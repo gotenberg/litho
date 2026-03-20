@@ -1,12 +1,10 @@
-package pdf_test
+package pdf
 
 import (
 	"bytes"
 	"context"
 	"sync"
 	"testing"
-
-	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // multiPagePDF builds a valid PDF with 3 pages, each containing a Helvetica text string.
@@ -55,7 +53,7 @@ func multiPagePDF() []byte {
 // from different pages of the same Reader without races or incorrect results.
 func TestConcurrentExtractText(t *testing.T) {
 	data := multiPagePDF()
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -90,7 +88,7 @@ func TestConcurrentExtractText(t *testing.T) {
 // called concurrently without races.
 func TestConcurrentMixedMethods(t *testing.T) {
 	data := multiPagePDF()
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}

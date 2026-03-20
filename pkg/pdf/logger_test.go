@@ -1,4 +1,4 @@
-package pdf_test
+package pdf
 
 import (
 	"bytes"
@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-
-	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // minimalPDF builds a valid PDF with a catalog and one empty page.
@@ -26,7 +24,7 @@ func TestWithLogger_DebugOutput(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	data := minimalPDF()
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)), pdf.WithLogger(logger))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)), WithLogger(logger))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -52,7 +50,7 @@ func TestWithoutLogger_NoOutput(t *testing.T) {
 	data := minimalPDF()
 
 	// Open without WithLogger — should produce no output and no errors.
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -65,7 +63,7 @@ func TestWithoutLogger_NoOutput(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	data := minimalPDF()
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -77,7 +75,7 @@ func TestVersion(t *testing.T) {
 
 func TestExtractAllText(t *testing.T) {
 	data := minimalPDF()
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -94,7 +92,7 @@ func TestExtractAllText(t *testing.T) {
 
 func TestClose_Noop(t *testing.T) {
 	data := minimalPDF()
-	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
