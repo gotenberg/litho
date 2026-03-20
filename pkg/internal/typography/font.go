@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
@@ -674,12 +675,54 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 		return
 	}
 
-	gidMap, err := truetype.GlyphToUnicode(fontData)
-	if err != nil || len(gidMap) == 0 {
+	gidMap := extractGIDToUnicode(fontData)
+	if len(gidMap) == 0 {
 		return
 	}
 
 	font.GIDToUnicode = gidMap
+}
+
+// extractGIDToUnicode dispatches font data to the appropriate parser
+// (TrueType or CFF) based on the font signature.
+func extractGIDToUnicode(fontData []byte) map[uint16]rune {
+	if len(fontData) < 4 {
+		return nil
+	}
+
+	sig := fontData[:4]
+
+	// TrueType: signature 00 01 00 00 or "true"
+	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
+		string(sig) == "true" {
+		gidMap, _ := truetype.GlyphToUnicode(fontData)
+		return gidMap
+	}
+
+	// OpenType/CFF (OTTO): has a TrueType table directory wrapping CFF data.
+	// Extract the "CFF " table and parse it.
+	if string(sig) == "OTTO" {
+		records, err := truetype.ParseTableDirectory(fontData)
+		if err != nil {
+			return nil
+		}
+		cffData, err := truetype.TableData(fontData, records, "CFF ")
+		if err != nil {
+			return nil
+		}
+		gidMap, _ := cff.GlyphToUnicode(cffData)
+		return gidMap
+	}
+
+	// Bare CFF: starts with major version 1.
+	if sig[0] == 1 && sig[1] == 0 {
+		gidMap, _ := cff.GlyphToUnicode(fontData)
+		return gidMap
+	}
+
+	// Unknown format — try TrueType as fallback.
+	gidMap, _ := truetype.GlyphToUnicode(fontData)
+	return gidMap
 }
 
 // applyAdobeCIDFallback checks the CIDSystemInfo of a Type0 font's descendant
