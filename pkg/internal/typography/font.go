@@ -574,7 +574,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 		}
 	}
 
-	// TrueType hmtx widths — Step 4 fallback.
+	// Binary font widths — Step 4 fallback.
 	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile2")
 	if fontData == nil {
 		fontData = decodeFontStream(ctx, doc, fdDict, "FontFile3")
@@ -583,8 +583,8 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 		return
 	}
 
-	widths, err := truetype.GlyphWidths(fontData)
-	if err != nil || len(widths) == 0 {
+	widths := extractBinaryWidths(fontData)
+	if len(widths) == 0 {
 		return
 	}
 
@@ -592,6 +592,45 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 
 	// Read unitsPerEm from the head table for correct scaling.
 	font.UnitsPerEm = readUnitsPerEm(fontData)
+}
+
+// extractBinaryWidths dispatches to TrueType or CFF width extraction based
+// on the font data signature.
+func extractBinaryWidths(fontData []byte) map[uint16]uint16 {
+	if len(fontData) < 4 {
+		return nil
+	}
+	sig := fontData[:4]
+
+	// TrueType
+	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) || string(sig) == "true" {
+		w, _ := truetype.GlyphWidths(fontData)
+		return w
+	}
+
+	// OTTO — extract CFF table and get widths
+	if string(sig) == "OTTO" {
+		records, err := truetype.ParseTableDirectory(fontData)
+		if err != nil {
+			return nil
+		}
+		cffData, err := truetype.TableData(fontData, records, "CFF ")
+		if err != nil {
+			return nil
+		}
+		w, _ := cff.GlyphWidths(cffData)
+		return w
+	}
+
+	// Bare CFF
+	if sig[0] == 1 && sig[1] == 0 {
+		w, _ := cff.GlyphWidths(fontData)
+		return w
+	}
+
+	// Fallback: try TrueType
+	w, _ := truetype.GlyphWidths(fontData)
+	return w
 }
 
 // readUnitsPerEm extracts unitsPerEm from the TrueType/OpenType head table.

@@ -45,7 +45,7 @@ func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
 		return nil, fmt.Errorf("%w: empty top dict INDEX", ErrInvalidCFF)
 	}
 
-	charsetOffset, charStringsOffset, isCID := parseTopDict(topDictEntries[0])
+	info := parseTopDict(topDictEntries[0])
 
 	// Parse String INDEX (custom strings beyond SID 390).
 	stringEnd, stringEntries, err := parseINDEX(data, topDictEnd)
@@ -59,8 +59,8 @@ func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
 
 	// Get number of glyphs from CharStrings INDEX.
 	numGlyphs := 0
-	if charStringsOffset > 0 && int(charStringsOffset) < len(data) {
-		_, csEntries, err := parseINDEX(data, int(charStringsOffset))
+	if info.charStringsOffset > 0 && int(info.charStringsOffset) < len(data) {
+		_, csEntries, err := parseINDEX(data, int(info.charStringsOffset))
 		if err == nil {
 			numGlyphs = len(csEntries)
 		}
@@ -70,14 +70,14 @@ func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
 	}
 
 	// Parse charset: GID → SID mapping.
-	sids, err := parseCharset(data, int(charsetOffset), numGlyphs)
+	sids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
 	if err != nil {
 		return nil, fmt.Errorf("charset: %w", err)
 	}
 
 	// For CID fonts, SIDs are CIDs, not glyph name indices.
 	// We can't map CIDs to Unicode without a predefined CMap (handled elsewhere).
-	if isCID {
+	if info.isCID {
 		return nil, nil
 	}
 
@@ -176,12 +176,18 @@ func readOffset(data []byte, size int) int {
 
 // --- Top DICT parsing ---
 
-// parseTopDict extracts charset offset, CharStrings offset, and CID flag
-// from a Top DICT entry. Uses a minimal DICT parser that handles the
-// operators we care about.
-func parseTopDict(data []byte) (charsetOffset, charStringsOffset int32, isCID bool) {
-	// Defaults per CFF spec.
-	charsetOffset = 0 // 0 = ISOAdobe charset
+// topDictInfo holds key offsets extracted from the CFF Top DICT.
+type topDictInfo struct {
+	charsetOffset     int32
+	charStringsOffset int32
+	privateDictOffset int32
+	privateDictSize   int32
+	isCID             bool
+}
+
+// parseTopDict extracts key offsets from a Top DICT entry.
+func parseTopDict(data []byte) topDictInfo {
+	var info topDictInfo
 
 	operands := make([]int32, 0, 4)
 	for i := 0; i < len(data); {
@@ -197,14 +203,19 @@ func parseTopDict(data []byte) (charsetOffset, charStringsOffset int32, isCID bo
 			switch op {
 			case 15: // charset
 				if len(operands) > 0 {
-					charsetOffset = operands[len(operands)-1]
+					info.charsetOffset = operands[len(operands)-1]
 				}
 			case 17: // CharStrings
 				if len(operands) > 0 {
-					charStringsOffset = operands[len(operands)-1]
+					info.charStringsOffset = operands[len(operands)-1]
+				}
+			case 18: // Private (size, offset)
+				if len(operands) >= 2 {
+					info.privateDictSize = operands[len(operands)-2]
+					info.privateDictOffset = operands[len(operands)-1]
 				}
 			case 1230: // ROS (12 30) — marks CID font
-				isCID = true
+				info.isCID = true
 			}
 			operands = operands[:0]
 			i++
@@ -213,25 +224,25 @@ func parseTopDict(data []byte) (charsetOffset, charStringsOffset int32, isCID bo
 			i++
 		case b >= 247 && b <= 250:
 			if i+1 >= len(data) {
-				return
+				return info
 			}
 			operands = append(operands, (int32(b)-247)*256+int32(data[i+1])+108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(data) {
-				return
+				return info
 			}
 			operands = append(operands, -(int32(b)-251)*256-int32(data[i+1])-108)
 			i += 2
 		case b == 28:
 			if i+2 >= len(data) {
-				return
+				return info
 			}
 			operands = append(operands, int32(int16(binary.BigEndian.Uint16(data[i+1:i+3]))))
 			i += 3
 		case b == 29:
 			if i+4 >= len(data) {
-				return
+				return info
 			}
 			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5])))
 			i += 5
@@ -249,7 +260,7 @@ func parseTopDict(data []byte) (charsetOffset, charStringsOffset int32, isCID bo
 			i++ // skip unknown
 		}
 	}
-	return
+	return info
 }
 
 // --- Charset parsing ---
@@ -326,4 +337,241 @@ func (st *stringTable) get(sid int) string {
 		return string(st.custom[idx])
 	}
 	return ""
+}
+
+// --- Glyph widths ---
+
+// GlyphWidths extracts advance widths from CFF charstring data.
+// It parses each CharString to find the optional width operand, then applies
+// the nominalWidthX/defaultWidthX from the Private DICT.
+// Returns a GID → width map in 1/1000 units (like TrueType).
+func GlyphWidths(data []byte) (map[uint16]uint16, error) {
+	if len(data) < 4 || data[0] != 1 {
+		return nil, fmt.Errorf("%w: not a CFF font", ErrInvalidCFF)
+	}
+
+	hdrSize := max(int(data[2]), 4)
+	pos := hdrSize
+
+	nameEnd, err := skipINDEX(data, pos)
+	if err != nil {
+		return nil, err
+	}
+	topDictEnd, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return nil, fmt.Errorf("%w: no top dict", ErrInvalidCFF)
+	}
+	info := parseTopDict(topDictEntries[0])
+
+	// Skip String INDEX and Global Subr INDEX.
+	_ = topDictEnd
+
+	// Parse Private DICT for nominalWidthX and defaultWidthX.
+	var nominalWidth, defaultWidth int32
+	if info.privateDictOffset > 0 && info.privateDictSize > 0 {
+		pdStart := int(info.privateDictOffset)
+		pdEnd := pdStart + int(info.privateDictSize)
+		if pdEnd <= len(data) {
+			nominalWidth, defaultWidth = parsePrivateDict(data[pdStart:pdEnd])
+		}
+	}
+
+	// Parse CharStrings INDEX.
+	if info.charStringsOffset <= 0 || int(info.charStringsOffset) >= len(data) {
+		return nil, fmt.Errorf("%w: no charstrings", ErrInvalidCFF)
+	}
+	_, csEntries, err := parseINDEX(data, int(info.charStringsOffset))
+	if err != nil || len(csEntries) == 0 {
+		return nil, fmt.Errorf("%w: no charstrings", ErrInvalidCFF)
+	}
+
+	result := make(map[uint16]uint16, len(csEntries))
+	for gid, cs := range csEntries {
+		w := extractCharstringWidth(cs)
+		var width int32
+		if w != nil {
+			width = nominalWidth + *w
+		} else {
+			width = defaultWidth
+		}
+		if width < 0 {
+			width = 0
+		}
+		result[uint16(gid)] = uint16(width) //nolint:gosec // width is non-negative
+	}
+
+	return result, nil
+}
+
+// parsePrivateDict extracts nominalWidthX (op 21) and defaultWidthX (op 20)
+// from a CFF Private DICT.
+func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX int32) {
+	operands := make([]int32, 0, 4)
+	for i := 0; i < len(data); {
+		b := data[i]
+		switch {
+		case b >= 0 && b <= 21:
+			op := int(b)
+			if b == 12 && i+1 < len(data) {
+				i++
+				op = 1200 + int(data[i])
+			}
+			switch op {
+			case 20: // defaultWidthX
+				if len(operands) > 0 {
+					defaultWidthX = operands[len(operands)-1]
+				}
+			case 21: // nominalWidthX
+				if len(operands) > 0 {
+					nominalWidthX = operands[len(operands)-1]
+				}
+			}
+			operands = operands[:0]
+			i++
+		case b >= 32 && b <= 246:
+			operands = append(operands, int32(b)-139)
+			i++
+		case b >= 247 && b <= 250:
+			if i+1 >= len(data) {
+				return
+			}
+			operands = append(operands, (int32(b)-247)*256+int32(data[i+1])+108)
+			i += 2
+		case b >= 251 && b <= 254:
+			if i+1 >= len(data) {
+				return
+			}
+			operands = append(operands, -(int32(b)-251)*256-int32(data[i+1])-108)
+			i += 2
+		case b == 28:
+			if i+2 >= len(data) {
+				return
+			}
+			operands = append(operands, int32(int16(binary.BigEndian.Uint16(data[i+1:i+3]))))
+			i += 3
+		case b == 29:
+			if i+4 >= len(data) {
+				return
+			}
+			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5])))
+			i += 5
+		case b == 30:
+			i++
+			for i < len(data) {
+				nibble := data[i]
+				i++
+				if nibble&0x0F == 0x0F || nibble>>4 == 0x0F {
+					break
+				}
+			}
+		default:
+			i++
+		}
+	}
+	return
+}
+
+// extractCharstringWidth parses a Type 2 charstring and returns the optional
+// width operand (the first "extra" operand before a stack-clearing command).
+// Returns nil if no explicit width is present.
+func extractCharstringWidth(cs []byte) *int32 {
+	// Type 2 charstring: numbers are pushed to the stack, operators consume them.
+	// The width is an optional first operand. It appears when a stack-clearing
+	// operator has one more operand than expected.
+	//
+	// Stack-clearing operators and their expected operand counts:
+	//   1  hstem:    even     14 endchar:   0
+	//   3  vstem:    even     18 hstemhm:   even
+	//   4  vmoveto:  1        21 rmoveto:   2
+	//   22 hmoveto:  1        23 vstemhm:   even
+	//
+	// If stackSize is odd for stem operators, or +1 for moveto, the extra is width.
+
+	stack := make([]int32, 0, 48) //nolint:mnd // typical charstring stack depth
+
+	for i := 0; i < len(cs); {
+		b := cs[i]
+
+		switch {
+		case b == 28:
+			if i+2 >= len(cs) {
+				return nil
+			}
+			stack = append(stack, int32(int16(binary.BigEndian.Uint16(cs[i+1:i+3]))))
+			i += 3
+		case b >= 32 && b <= 246:
+			stack = append(stack, int32(b)-139)
+			i++
+		case b >= 247 && b <= 250:
+			if i+1 >= len(cs) {
+				return nil
+			}
+			stack = append(stack, (int32(b)-247)*256+int32(cs[i+1])+108)
+			i += 2
+		case b >= 251 && b <= 254:
+			if i+1 >= len(cs) {
+				return nil
+			}
+			stack = append(stack, -(int32(b)-251)*256-int32(cs[i+1])-108)
+			i += 2
+		case b == 255:
+			// 32-bit fixed point (16.16)
+			if i+4 >= len(cs) {
+				return nil
+			}
+			stack = append(stack, int32(binary.BigEndian.Uint32(cs[i+1:i+5]))>>16) //nolint:gosec
+			i += 5
+		default:
+			// Operator — check if this is a stack-clearing command.
+			op := int(b)
+			if b == 12 {
+				i++
+				if i >= len(cs) {
+					return nil
+				}
+				// Two-byte operators (12 xx) — none are stack-clearing for width.
+				stack = stack[:0]
+				i++
+				continue
+			}
+			i++
+
+			switch op {
+			case 1, 3, 18, 23: // hstem, vstem, hstemhm, vstemhm — even operands
+				if len(stack)%2 != 0 {
+					w := stack[0]
+					return &w
+				}
+				return nil // no width
+			case 4: // vmoveto — 1 operand
+				if len(stack) > 1 {
+					w := stack[0]
+					return &w
+				}
+				return nil
+			case 22: // hmoveto — 1 operand
+				if len(stack) > 1 {
+					w := stack[0]
+					return &w
+				}
+				return nil
+			case 21: // rmoveto — 2 operands
+				if len(stack) > 2 {
+					w := stack[0]
+					return &w
+				}
+				return nil
+			case 14: // endchar — 0 operands
+				if len(stack) > 0 {
+					w := stack[0]
+					return &w
+				}
+				return nil
+			default:
+				// Non-stack-clearing operator — clear stack and continue.
+				stack = stack[:0]
+			}
+		}
+	}
+	return nil
 }
