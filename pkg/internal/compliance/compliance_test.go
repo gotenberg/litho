@@ -147,6 +147,28 @@ func (b *mockDocBuilder) withPageFont(fontName string, embedded bool, hasToUnico
 	return b
 }
 
+func (b *mockDocBuilder) withDeviceRGBImage() *mockDocBuilder {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"XObject": ast.PdfDict{
+				ast.PdfName("Im0"): ast.PdfStream{
+					Dict: ast.PdfDict{
+						"Subtype":    ast.PdfName("Image"),
+						"ColorSpace": ast.PdfName("DeviceRGB"),
+					},
+				},
+			},
+		},
+	}
+	b.catalog["Pages"] = ast.PdfDict{
+		"Type":  ast.PdfName("Pages"),
+		"Kids":  ast.PdfArray{page},
+		"Count": ast.PdfInt(1),
+	}
+	return b
+}
+
 func (b *mockDocBuilder) withTransparency() *mockDocBuilder {
 	page := ast.PdfDict{
 		"Type": ast.PdfName("Page"),
@@ -643,10 +665,19 @@ func TestPDFA1b_MinimalValid(t *testing.T) {
 }
 
 func TestPDFA_NoOutputIntents(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().build())
+	doc := buildTestDoc(newMockDoc().withDeviceRGBImage().build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
 	if !containsError(errs, models.ErrMissingICCProfile) {
 		t.Error("expected models.ErrMissingICCProfile")
+	}
+}
+
+func TestPDFA_NoOutputIntents_DeviceIndependent(t *testing.T) {
+	// When no device-dependent color spaces are used, OutputIntents is not required.
+	doc := buildTestDoc(newMockDoc().build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrMissingICCProfile) {
+		t.Error("unexpected models.ErrMissingICCProfile for device-independent document")
 	}
 }
 
@@ -1076,7 +1107,7 @@ func TestPDFA_TrailerEncryptKey(t *testing.T) {
 }
 
 func TestPDFA_OutputIntentsEmptyArray(t *testing.T) {
-	m := newMockDoc()
+	m := newMockDoc().withDeviceRGBImage()
 	m.catalog["OutputIntents"] = ast.PdfArray{}
 	doc := buildTestDoc(m.build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
@@ -1086,7 +1117,7 @@ func TestPDFA_OutputIntentsEmptyArray(t *testing.T) {
 }
 
 func TestPDFA_OutputIntentsNoICC(t *testing.T) {
-	m := newMockDoc()
+	m := newMockDoc().withDeviceRGBImage()
 	m.catalog["OutputIntents"] = ast.PdfArray{
 		ast.PdfDict{
 			"Type": ast.PdfName("OutputIntent"),

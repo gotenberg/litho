@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -112,31 +111,169 @@ func checkEncryptionForbidden(_ context.Context, doc *document.Document) []error
 // checkICCProfile verifies that /OutputIntents contains at least one entry
 // with an ICC profile stream (/DestOutputProfile) to define exact color
 // reproduction, as required by PDF/A Level 'b'.
-func checkICCProfile(_ context.Context, _ *document.Document, catalog ast.PdfDict) []error {
-	oiObj, ok := catalog["OutputIntents"]
-	if !ok {
-		return []error{models.ErrMissingICCProfile}
-	}
-
-	// OutputIntents is an array; at least one entry must have a /DestOutputProfile.
-	oi, ok := oiObj.(ast.PdfArray)
-	if !ok || len(oi) == 0 {
-		return []error{models.ErrMissingICCProfile}
-	}
-	// Check that at least one has an ICC profile stream.
-	if slices.ContainsFunc(oi, hasICCProfile) {
+//
+// If the document uses only device-independent color spaces (ICCBased,
+// CalRGB, CalGray, Lab, or Indexed wrapping one of these), OutputIntents
+// with an ICC profile is not required (ISO 19005-1 §6.2.2, ISO 19005-2
+// §6.2.2).
+func checkICCProfile(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	if hasOutputIntentICC(ctx, doc, catalog) {
 		return nil
 	}
-	return []error{models.ErrMissingICCProfile}
+
+	// No ICC output intent found. Check whether the document actually uses
+	// device-dependent color spaces. If it only uses device-independent
+	// color spaces, OutputIntents is not required.
+	if usesDeviceDependentColorSpace(ctx, doc, catalog) {
+		return []error{models.ErrMissingICCProfile}
+	}
+	return nil
 }
 
-func hasICCProfile(obj ast.PdfObject) bool {
-	dict, ok := obj.(ast.PdfDict)
+// hasOutputIntentICC returns true if the catalog's /OutputIntents array
+// contains at least one entry with a /DestOutputProfile key.
+func hasOutputIntentICC(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	oiObj, ok := catalog["OutputIntents"]
 	if !ok {
 		return false
 	}
-	_, has := dict["DestOutputProfile"]
-	return has
+	oiRes, _ := document.ResolveObject(ctx, doc, oiObj)
+	oi, ok := oiRes.(ast.PdfArray)
+	if !ok || len(oi) == 0 {
+		return false
+	}
+	for _, entry := range oi {
+		entryRes, _ := document.ResolveObject(ctx, doc, entry)
+		dict, ok := entryRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		if _, has := dict["DestOutputProfile"]; has {
+			return true
+		}
+	}
+	return false
+}
+
+// deviceDependentNames are the PDF color space names that require an
+// OutputIntents ICC profile for PDF/A conformance.
+var deviceDependentNames = map[ast.PdfName]bool{
+	"DeviceRGB":  true,
+	"DeviceCMYK": true,
+	"DeviceGray": true,
+}
+
+// usesDeviceDependentColorSpace scans page resources and XObject streams
+// for any device-dependent color space reference (DeviceRGB, DeviceCMYK,
+// DeviceGray). If Default{RGB,CMYK,Gray} is defined in the page's
+// ColorSpace resource dict, the corresponding device space is considered
+// remapped to a device-independent space and is not flagged.
+func usesDeviceDependentColorSpace(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+
+		defaults := collectDefaultColorSpaces(ctx, doc, resources)
+
+		// Check named color spaces in /Resources/ColorSpace.
+		if csObj, ok := resources["ColorSpace"]; ok {
+			csRes, _ := document.ResolveObject(ctx, doc, csObj)
+			if csDict, ok := csRes.(ast.PdfDict); ok {
+				for _, v := range csDict {
+					if isDeviceDependentCS(ctx, doc, v, defaults) {
+						return true
+					}
+				}
+			}
+		}
+
+		// Check image XObjects for device-dependent /ColorSpace.
+		if xobjObj, ok := resources["XObject"]; ok {
+			xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+			if xobjDict, ok := xobjRes.(ast.PdfDict); ok {
+				for _, obj := range xobjDict {
+					objRes, _ := document.ResolveObject(ctx, doc, obj)
+					stream, ok := objRes.(ast.PdfStream)
+					if !ok {
+						continue
+					}
+					subtypeObj, _ := stream.Dict["Subtype"]
+					if st, ok := subtypeObj.(ast.PdfName); !ok || st != "Image" {
+						continue
+					}
+					if csVal, ok := stream.Dict["ColorSpace"]; ok {
+						if isDeviceDependentCS(ctx, doc, csVal, defaults) {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// collectDefaultColorSpaces returns the set of device-dependent families
+// that are overridden by Default{RGB,CMYK,Gray} entries in the ColorSpace
+// resource dictionary. When a default is present, the corresponding
+// device space is implicitly remapped to a device-independent space.
+func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict) map[ast.PdfName]bool {
+	defaults := make(map[ast.PdfName]bool)
+	csObj, ok := resources["ColorSpace"]
+	if !ok {
+		return defaults
+	}
+	csRes, _ := document.ResolveObject(ctx, doc, csObj)
+	csDict, ok := csRes.(ast.PdfDict)
+	if !ok {
+		return defaults
+	}
+	if _, ok := csDict["DefaultRGB"]; ok {
+		defaults["DeviceRGB"] = true
+	}
+	if _, ok := csDict["DefaultCMYK"]; ok {
+		defaults["DeviceCMYK"] = true
+	}
+	if _, ok := csDict["DefaultGray"]; ok {
+		defaults["DeviceGray"] = true
+	}
+	return defaults
+}
+
+// isDeviceDependentCS returns true if the color space object resolves to a
+// device-dependent color space (DeviceRGB, DeviceCMYK, DeviceGray) that is
+// not covered by a Default entry in the page's resource dictionary.
+func isDeviceDependentCS(ctx context.Context, doc *document.Document, csObj ast.PdfObject, defaults map[ast.PdfName]bool) bool {
+	resolved, _ := document.ResolveObject(ctx, doc, csObj)
+	switch cs := resolved.(type) {
+	case ast.PdfName:
+		return deviceDependentNames[cs] && !defaults[cs]
+	case ast.PdfArray:
+		if len(cs) == 0 {
+			return false
+		}
+		familyObj, _ := document.ResolveObject(ctx, doc, cs[0])
+		family, ok := familyObj.(ast.PdfName)
+		if !ok {
+			return false
+		}
+		switch family {
+		case "ICCBased", "CalRGB", "CalGray", "Lab":
+			return false
+		case "Indexed", "Separation", "DeviceN":
+			// Check the base color space (second element).
+			if len(cs) >= 2 {
+				return isDeviceDependentCS(ctx, doc, cs[1], defaults)
+			}
+			return false
+		default:
+			return deviceDependentNames[family] && !defaults[family]
+		}
+	}
+	return false
 }
 
 // checkNoLZW scans all page resource streams for forbidden LZW compression.
