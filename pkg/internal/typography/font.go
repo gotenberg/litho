@@ -513,6 +513,15 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		extractEmbeddedCmap(ctx, doc, fontDict, font)
 	}
 
+	// Adobe predefined CID→Unicode fallback for Type0 fonts: when the font's
+	// CIDSystemInfo references a known Adobe character collection (Japan1, GB1,
+	// CNS1, Korea1), use the predefined CID→Unicode map from the Adobe CMap
+	// resources. This handles CJK fonts that have no ToUnicode CMap and no
+	// embedded font program.
+	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil {
+		applyAdobeCIDFallback(ctx, doc, fontDict, font)
+	}
+
 	// CIDToGIDMap /Identity fallback for Type0 fonts: when a CIDFont declares
 	// CIDToGIDMap as /Identity (CID = GID) and has no ToUnicode CMap and no
 	// embedded font program, treat character codes as direct Unicode code points.
@@ -670,6 +679,65 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 	}
 
 	font.GIDToUnicode = gidMap
+}
+
+// applyAdobeCIDFallback checks the CIDSystemInfo of a Type0 font's descendant
+// CIDFont. If the registry is "Adobe" and the ordering matches a known character
+// collection (Japan1, GB1, CNS1, Korea1), it populates font.GIDToUnicode from
+// the predefined Adobe CID→Unicode map, enabling text extraction for CJK fonts
+// without ToUnicode CMaps or embedded font programs.
+func applyAdobeCIDFallback(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	dfObj, ok := fontDict["DescendantFonts"]
+	if !ok {
+		return
+	}
+	dfRes, _ := document.ResolveObject(ctx, doc, dfObj)
+	dfArr, ok := dfRes.(ast.PdfArray)
+	if !ok || len(dfArr) == 0 {
+		return
+	}
+	cidRes, _ := document.ResolveObject(ctx, doc, dfArr[0])
+	cidDict, ok := cidRes.(ast.PdfDict)
+	if !ok {
+		return
+	}
+
+	// Extract /CIDSystemInfo.
+	csObj, ok := cidDict["CIDSystemInfo"]
+	if !ok {
+		return
+	}
+	csRes, _ := document.ResolveObject(ctx, doc, csObj)
+	csDict, ok := csRes.(ast.PdfDict)
+	if !ok {
+		return
+	}
+
+	registryObj, _ := document.ResolveObject(ctx, doc, csDict["Registry"])
+	registry, ok := registryObj.(ast.PdfString)
+	if !ok || string(registry) != "Adobe" {
+		return
+	}
+
+	orderingObj, _ := document.ResolveObject(ctx, doc, csDict["Ordering"])
+	ordering, ok := orderingObj.(ast.PdfString)
+	if !ok {
+		return
+	}
+
+	cidToUnicode := cmap.AdobeCIDToUnicode(string(ordering))
+	if cidToUnicode == nil {
+		return
+	}
+
+	// Build GIDToUnicode from the predefined map.
+	// For CIDFonts, CID ≈ GID when CIDToGIDMap is /Identity or absent.
+	font.GIDToUnicode = make(map[uint16]rune, len(cidToUnicode))
+	for cid, uni := range cidToUnicode {
+		if cid <= 0xFFFF {
+			font.GIDToUnicode[uint16(cid)] = uni //nolint:gosec // cid bounds-checked
+		}
+	}
 }
 
 // applyCIDToGIDIdentityFallback checks whether a Type0 font's CIDFont descendant
