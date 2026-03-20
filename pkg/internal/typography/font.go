@@ -910,9 +910,11 @@ func extractType3GlyphWidth(stream ast.PdfStream) (float64, error) {
 	return 0, fmt.Errorf("no d0/d1 operator found in CharProc stream")
 }
 
-// resolveGlyphRune maps a glyph name to a Unicode rune, using the appropriate
-// glyph table for the font type. Dingbats and Symbol fonts have their own
-// glyph name → Unicode mappings.
+// resolveGlyphRune maps a glyph name to a Unicode rune. For Dingbats and
+// Symbol fonts, their specialised tables are checked first. For all fonts,
+// the standard AGL is checked, followed by the Symbol and Dingbats tables
+// as a last resort (some non-symbol fonts use glyph names like "asteriskmath"
+// from the Symbol encoding in their /Differences arrays).
 func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 	if isDingbats {
 		if r, ok := encodings.DingbatsGlyphsUnicode[name]; ok {
@@ -924,5 +926,19 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 			return r, true
 		}
 	}
-	return encodings.GlyphToRuneFull(name)
+	if r, ok := encodings.GlyphToRuneFull(name); ok {
+		return r, ok
+	}
+	// Last resort: check Symbol and Dingbats tables for all fonts.
+	if !isSymbol {
+		if r, ok := encodings.SymbolGlyphsUnicode[name]; ok {
+			return r, true
+		}
+	}
+	if !isDingbats {
+		if r, ok := encodings.DingbatsGlyphsUnicode[name]; ok {
+			return r, true
+		}
+	}
+	return 0, false
 }
