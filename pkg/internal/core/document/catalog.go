@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -260,9 +261,7 @@ func mergeResourceDicts(ctx context.Context, doc *Document, inherited ast.PdfDic
 
 	// Merge: start with a copy of inherited, overlay node entries.
 	merged := make(ast.PdfDict, len(inherited)+len(nodeRes))
-	for k, v := range inherited {
-		merged[k] = v
-	}
+	maps.Copy(merged, inherited)
 	for k, v := range nodeRes {
 		// For sub-dicts (Font, XObject, ExtGState, etc.), merge entries.
 		inheritedSub, inheritedIsDict := inherited[k]
@@ -284,12 +283,8 @@ func mergeResourceDicts(ctx context.Context, doc *Document, inherited ast.PdfDic
 		}
 		// Merge sub-dict: inherited entries as base, node entries override.
 		sub := make(ast.PdfDict, len(inheritedSubDict)+len(nodeSub))
-		for sk, sv := range inheritedSubDict {
-			sub[sk] = sv
-		}
-		for sk, sv := range nodeSub {
-			sub[sk] = sv
-		}
+		maps.Copy(sub, inheritedSubDict)
+		maps.Copy(sub, nodeSub)
 		merged[k] = sub
 	}
 	return merged
