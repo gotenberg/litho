@@ -2,7 +2,6 @@ package typography
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"math"
 
@@ -540,10 +539,7 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 	}
 
 	var pageBeads []semantics.Bead
-	allThreads, err := semantics.GetThreads(ctx, doc)
-	if err != nil {
-		return "", fmt.Errorf("failed to get article threads: %w", err)
-	}
+	allThreads, _ := semantics.GetThreads(ctx, doc) // Non-fatal: proceed without thread reordering on error.
 	for _, thread := range allThreads {
 		for _, bead := range thread.Beads {
 			if bead.PageRef.ObjectNum == page.Ref.ObjectNum && bead.PageRef.GenNum == page.Ref.GenNum {

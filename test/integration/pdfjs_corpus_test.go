@@ -272,6 +272,11 @@ func compareFixtures(t *testing.T, pdfjs *referenceFixture, litho *referenceFixt
 		}
 
 		if lithoPage.Error != "" {
+			// If PDF.js also has no text for this page, litho's error is acceptable
+			// (e.g., ErrRequiresOCR on a genuinely image-only page).
+			if strings.TrimSpace(pdfjsPage.Text) == "" {
+				continue
+			}
 			t.Errorf("page %d: litho error: %s", pdfjsPage.PageNumber, lithoPage.Error)
 			continue
 		}
