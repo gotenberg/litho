@@ -170,7 +170,9 @@ func lithoReference(ctx context.Context, t *testing.T, r *pdf.Reader, id string,
 
 		page := refPage{PageNumber: i}
 
-		text, err := r.ExtractText(ctx, i)
+		// Use WithHiddenText to match PDF.js's getTextContent, which returns
+		// all text regardless of rendering mode, color, or clipping.
+		text, err := r.ExtractText(ctx, i, pdf.WithHiddenText())
 		if err != nil {
 			page.Error = err.Error()
 			fixture.Pages = append(fixture.Pages, page)
