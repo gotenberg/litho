@@ -174,11 +174,13 @@ func parseCmap(data []byte) (map[uint16]rune, error) {
 		var priority int
 		switch {
 		case pid == 3 && eid == 10:
-			priority = 3 // best: full Unicode
+			priority = 4 // best: full Unicode (Format 12)
 		case pid == 3 && eid == 1:
-			priority = 2 // good: BMP
+			priority = 3 // good: Windows BMP (Format 4)
 		case pid == 0:
-			priority = 1 // acceptable: Unicode platform
+			priority = 2 // acceptable: Unicode platform
+		case pid == 1 && eid == 0:
+			priority = 1 // fallback: Macintosh Roman (Format 0/6)
 		default:
 			continue
 		}
@@ -210,13 +212,68 @@ func parseCmap(data []byte) (map[uint16]rune, error) {
 	format := binary.BigEndian.Uint16(subtable[0:2])
 
 	switch format {
+	case 0:
+		return parseCmapFormat0(subtable)
 	case 4:
 		return parseCmapFormat4(subtable)
+	case 6:
+		return parseCmapFormat6(subtable)
 	case 12:
 		return parseCmapFormat12(subtable)
 	default:
 		return nil, fmt.Errorf("%w: unsupported cmap format %d", ErrInvalidFont, format)
 	}
+}
+
+// parseCmapFormat0 decodes a Format 0 "Byte encoding table" subtable.
+// It contains exactly 256 GID entries, one per byte value. This is the simplest
+// cmap format, commonly found in platform 1 (Macintosh) subtables.
+func parseCmapFormat0(data []byte) (map[uint16]rune, error) {
+	// Format 0: uint16 format, uint16 length, uint16 language, uint8[256] glyphIdArray
+	if len(data) < 262 { //nolint:mnd // 6 byte header + 256 GID bytes
+		return nil, fmt.Errorf("%w: format 0 data too short", ErrInvalidFont)
+	}
+
+	result := make(map[uint16]rune)
+	for code := range 256 {
+		gid := uint16(data[6+code])
+		if gid != 0 {
+			if _, exists := result[gid]; !exists {
+				result[gid] = rune(code)
+			}
+		}
+	}
+	return result, nil
+}
+
+// parseCmapFormat6 decodes a Format 6 "Trimmed table mapping" subtable.
+// It maps a contiguous range of character codes starting at firstCode,
+// with entryCount entries in the glyphIdArray.
+func parseCmapFormat6(data []byte) (map[uint16]rune, error) {
+	// Format 6: uint16 format, uint16 length, uint16 language,
+	//           uint16 firstCode, uint16 entryCount, uint16[] glyphIdArray
+	if len(data) < 10 { //nolint:mnd // minimum header size
+		return nil, fmt.Errorf("%w: format 6 header too short", ErrInvalidFont)
+	}
+
+	firstCode := int(binary.BigEndian.Uint16(data[6:8]))
+	entryCount := int(binary.BigEndian.Uint16(data[8:10]))
+
+	if len(data) < 10+entryCount*2 {
+		return nil, fmt.Errorf("%w: format 6 data truncated", ErrInvalidFont)
+	}
+
+	result := make(map[uint16]rune)
+	for i := range entryCount {
+		gid := binary.BigEndian.Uint16(data[10+i*2 : 10+i*2+2])
+		if gid != 0 {
+			code := firstCode + i
+			if _, exists := result[gid]; !exists {
+				result[gid] = rune(code)
+			}
+		}
+	}
+	return result, nil
 }
 
 // parseCmapFormat4 decodes a Format 4 "Segment mapping to delta values" subtable.

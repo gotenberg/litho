@@ -3,6 +3,7 @@ package encodings
 import (
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // GlyphToRune maps Adobe standard glyph names to UTF-8 runes.
@@ -234,18 +235,21 @@ var GlyphToRune = map[string]rune{
 	"ffl": 0xFB04,
 }
 
-// runeToGlyph is the reverse mapping, built lazily.
-var runeToGlyph map[rune]string
+// runeToGlyph is the reverse mapping, built lazily and thread-safely.
+var (
+	runeToGlyph     map[rune]string
+	runeToGlyphOnce sync.Once
+)
 
 // RuneToGlyph returns the Adobe standard glyph name for a given rune.
 // If no mapping exists, it returns the Unicode name form "uniXXXX".
 func RuneToGlyph(r rune) string {
-	if runeToGlyph == nil {
+	runeToGlyphOnce.Do(func() {
 		runeToGlyph = make(map[rune]string, len(GlyphToRune))
 		for name, ru := range GlyphToRune {
 			runeToGlyph[ru] = name
 		}
-	}
+	})
 	if name, ok := runeToGlyph[r]; ok {
 		return name
 	}
