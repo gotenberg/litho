@@ -10,12 +10,12 @@ import (
 	"time"
 )
 
-// registeredCorpora lists all corpora that must be provisioned before
+// registeredCorpus lists all corpus entries that must be provisioned before
 // integration tests run. Add new entries here when introducing a new corpus.
-var registeredCorpora = []corpus{
+var registeredCorpus = []corpus{
 	{
-		Name:       "pdfjs",
-		ContextDir: "corpus/pdfjs",
+		Name:       "pdf.js",
+		ContextDir: "corpus/pdf.js",
 		OutputDir:  "testdata/pdf.js",
 		ReadyFunc: func() bool {
 			entries, err := os.ReadDir(filepath.Join(corpusDir, "references"))
@@ -26,8 +26,8 @@ var registeredCorpora = []corpus{
 }
 
 func TestMain(m *testing.M) {
-	for i := range registeredCorpora {
-		if err := registeredCorpora[i].provision(); err != nil {
+	for i := range registeredCorpus {
+		if err := registeredCorpus[i].provision(); err != nil {
 			fmt.Fprintf(os.Stderr, "corpus setup failed: %v\n", err)
 			os.Exit(1)
 		}
