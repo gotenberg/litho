@@ -11,8 +11,20 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
+	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/models"
 )
+
+// fallbackFont returns a minimal font that uses WinAnsiEncoding, matching
+// PDF.js's PartialEvaluator.fallbackFontDict (Helvetica/WinAnsiEncoding).
+// This allows text extraction to continue when a font cannot be resolved,
+// producing best-effort output rather than aborting the page.
+func fallbackFont() *Font {
+	return &Font{
+		Subtype:  "Type1",
+		Encoding: copyEncoding(encodings.WinAnsiEncoding),
+	}
+}
 
 // maxFormXObjectDepth is the maximum recursion depth for nested Form XObjects.
 // This prevents stack overflows and excessive processing time from circular
@@ -224,10 +236,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 			resolved := false
 			if resObj, ok := resources["Font"]; ok {
-				resResolved, err := document.ResolveObject(ctx, doc, resObj)
-				if err != nil {
-					return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
-				}
+				resResolved, _ := document.ResolveObject(ctx, doc, resObj)
 				if resDictRoot, ok := resResolved.(ast.PdfDict); ok {
 					if fontRefObj, ok := resDictRoot[fontName]; ok {
 						// Check font cache by indirect reference object number.
@@ -241,19 +250,17 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 						}
 						if !resolved {
 							fontDictResolved, err := document.ResolveObject(ctx, doc, fontRefObj)
-							if err != nil {
-								return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
-							}
-							if fontDict, ok := fontDictResolved.(ast.PdfDict); ok {
-								font, err := GetFont(ctx, doc, fontDict)
-								if err != nil {
-									return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
-								}
-								currentFont = font
-								resolved = true
-								// Store in font cache.
-								if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
-									doc.FontCache[ref.ObjectNum] = font
+							if err == nil {
+								if fontDict, ok := fontDictResolved.(ast.PdfDict); ok {
+									font, err := GetFont(ctx, doc, fontDict)
+									if err == nil {
+										currentFont = font
+										resolved = true
+										// Store in font cache.
+										if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
+											doc.FontCache[ref.ObjectNum] = font
+										}
+									}
 								}
 							}
 						}
@@ -261,7 +268,15 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 				}
 			}
 			if !resolved {
-				return fmt.Errorf("failed to load font /%s: %w", fontName, ErrFontNotFound)
+				// Fall back to a default font rather than aborting the
+				// entire page. Text may be garbled but extraction continues,
+				// matching PDF.js's fallback behavior.
+				if doc != nil {
+					doc.Logger.Debug("font not found, using fallback",
+						slog.String("font", string(fontName)),
+					)
+				}
+				currentFont = fallbackFont()
 			}
 
 		case "Tj": // Show text
