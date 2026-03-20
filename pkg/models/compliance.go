@@ -70,6 +70,7 @@ var (
 	ErrDocInfoXMPMismatch    = errors.New("compliance: document info and XMP metadata are inconsistent")
 	ErrMissingPDFAId         = errors.New("compliance: XMP missing PDF/A identification (pdfaid:part/conformance)")
 	ErrXMPPacketInvalid      = errors.New("compliance: XMP packet header uses forbidden 'bytes' or 'encoding' attribute")
+	ErrXMPExtensionInvalid   = errors.New("compliance: PDF/A extension schema is missing required fields")
 	ErrMissingCatalogMetdata = errors.New("compliance: document catalog missing /Metadata stream")
 
 	// PDF/A annotation errors (ISO 19005, clause 6.3).

@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -31,8 +32,9 @@ func newMockDoc() *mockDocBuilder {
 	}
 }
 
-func (b *mockDocBuilder) withMetadata() *mockDocBuilder {
-	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+// withMetadataProfile adds a /Metadata stream with pdfaid matching the given part/conformance.
+func (b *mockDocBuilder) withMetadataProfile(part int, conformance string) *mockDocBuilder {
+	xmp := fmt.Sprintf(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
     <rdf:Description rdf:about=""
@@ -40,14 +42,14 @@ func (b *mockDocBuilder) withMetadata() *mockDocBuilder {
       xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
       xmlns:xmp="http://ns.adobe.com/xap/1.0/"
       xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
-      <pdfaid:part>1</pdfaid:part>
-      <pdfaid:conformance>B</pdfaid:conformance>
+      <pdfaid:part>%d</pdfaid:part>
+      <pdfaid:conformance>%s</pdfaid:conformance>
       <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Test</rdf:li></rdf:Alt></dc:title>
       <pdf:Producer>litho test</pdf:Producer>
     </rdf:Description>
   </rdf:RDF>
 </x:xmpmeta>
-<?xpacket end="w"?>`
+<?xpacket end="w"?>`, part, conformance)
 	b.catalog["Metadata"] = ast.PdfStream{
 		Dict: ast.PdfDict{
 			"Type":    ast.PdfName("Metadata"),
@@ -56,6 +58,10 @@ func (b *mockDocBuilder) withMetadata() *mockDocBuilder {
 		Data: []byte(xmp),
 	}
 	return b
+}
+
+func (b *mockDocBuilder) withMetadata() *mockDocBuilder {
+	return b.withMetadataProfile(1, "B")
 }
 
 func (b *mockDocBuilder) withOutputIntents() *mockDocBuilder {
@@ -1410,7 +1416,7 @@ func TestPDFA2a_FigureWithAlt(t *testing.T) {
 }
 
 func TestPDFA2a_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().withLang("en").withMarkInfo().withStructTreeRoot().build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadataProfile(2, "A").withLang("en").withMarkInfo().withStructTreeRoot().build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-2a, got %v", errs)
@@ -1682,7 +1688,7 @@ func TestPDFA4e_NoAnnotationsPasses(t *testing.T) {
 }
 
 func TestPDFA4e_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().withCatalogVersion("2.0").build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadataProfile(4, "E").withCatalogVersion("2.0").build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-4e, got %v", errs)
@@ -1690,7 +1696,7 @@ func TestPDFA4e_MinimalValid(t *testing.T) {
 }
 
 func TestPDFA4f_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().withCatalogVersion("2.0").build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadataProfile(4, "F").withCatalogVersion("2.0").build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA4f)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-4f, got %v", errs)
