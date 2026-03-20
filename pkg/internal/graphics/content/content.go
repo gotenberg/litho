@@ -63,7 +63,14 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 		} else {
 			obj, err := p.ParseObject()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse operand: %v (token: %v)", err, tok)
+				// Tolerate malformed operands (stray delimiters like ']',
+				// broken references, etc.) by consuming the bad token and
+				// continuing. PDF.js skips unrecognised tokens in content
+				// streams rather than aborting.
+				if _, consumeErr := p.Consume(); consumeErr != nil {
+					return nil, fmt.Errorf("failed to parse operand: %v (token: %v)", err, tok)
+				}
+				continue
 			}
 			operands = append(operands, obj)
 		}
