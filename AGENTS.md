@@ -61,12 +61,16 @@ Self-review against this checklist and present findings to the user:
 ## Build & Quality Commands
 
 ```bash
-make fmt               # gofmt + gofumpt + gci + goimports + go mod tidy
-make lint              # golangci-lint (strict, see .golangci.yml)
-make lint-todo         # Find TODO comments via godox
-make test-unit         # Run unit tests only (go test -race ./...)
-make test-integration  # Run integration/corpus tests (go test -timeout 5m -tags=integration -v github.com/gotenberg/litho/test/integration)
-go build ./cmd/litho   # Build the binary
+make fmt                                   # gofmt + gofumpt + gci + goimports + go mod tidy
+make lint                                  # golangci-lint (strict, see .golangci.yml)
+make lint-todo                             # Find TODO comments via godox
+make test-unit                             # Run unit tests only (go test -race ./...)
+make test-integration                      # Run all integration/corpus tests (requires Docker)
+make test-integration TAGS=pdf.js          # Run only the PDF.js corpus tests
+make test-integration TAGS=verapdf         # Run only the VeraPDF corpus tests
+make test-integration TAGS=pdf.js,verapdf  # Explicit list (same as default)
+make clean-corpus                          # Remove all corpus data (forces regeneration)
+go build ./cmd/litho                       # Build the binary
 ```
 
 Always run `make fmt && make lint` before submitting code.
@@ -145,9 +149,12 @@ Always run `make fmt && make lint` before submitting code.
 
 #### Integration tests
 - Live in `test/integration/`.
-- Run with `make test-integration` (requires corpus setup first).
-- The PDF.js corpus tests validate the public API against hundreds of real-world PDFs from Mozilla's test suite. See `PDFJS_CORPUS_TESTING.md` for setup and details.
-- Integration test data lives in `test/integration/testdata/` and is **not checked into Git**.
+- Run with `make test-integration` (requires Docker for corpus provisioning via testcontainers).
+- Corpus data is auto-generated on first run and cached in `test/integration/testdata/` (not checked into Git).
+- Use `TAGS=` to select specific corpus: `make test-integration TAGS=pdf.js` or `TAGS=verapdf`.
+- Set `LITHO_REGEN_CORPUS=1` to force corpus regeneration.
+- **PDF.js corpus** (`test/integration/corpus/pdf.js/`): validates text extraction, metadata, and coordinates against Mozilla's PDF.js test suite (~1000 PDFs).
+- **VeraPDF corpus** (`test/integration/corpus/verapdf/`): validates PDF/A and PDF/UA compliance against the veraPDF test corpus, comparing litho's pass/fail verdicts against veraPDF's results.
 
 ## Dependencies
 
