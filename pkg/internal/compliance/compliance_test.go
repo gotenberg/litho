@@ -31,6 +31,33 @@ func newMockDoc() *mockDocBuilder {
 	}
 }
 
+func (b *mockDocBuilder) withMetadata() *mockDocBuilder {
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+      xmlns:dc="http://purl.org/dc/elements/1.1/"
+      xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
+      xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+      xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+      <pdfaid:part>1</pdfaid:part>
+      <pdfaid:conformance>B</pdfaid:conformance>
+      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Test</rdf:li></rdf:Alt></dc:title>
+      <pdf:Producer>litho test</pdf:Producer>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+	b.catalog["Metadata"] = ast.PdfStream{
+		Dict: ast.PdfDict{
+			"Type":    ast.PdfName("Metadata"),
+			"Subtype": ast.PdfName("XML"),
+		},
+		Data: []byte(xmp),
+	}
+	return b
+}
+
 func (b *mockDocBuilder) withOutputIntents() *mockDocBuilder {
 	b.catalog["OutputIntents"] = ast.PdfArray{
 		ast.PdfDict{
@@ -661,7 +688,7 @@ func TestPDFA_InvalidProfile(t *testing.T) {
 }
 
 func TestPDFA1b_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
 	// No pages, no fonts — should pass base checks.
 	if len(errs) != 0 {
@@ -1383,7 +1410,7 @@ func TestPDFA2a_FigureWithAlt(t *testing.T) {
 }
 
 func TestPDFA2a_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withStructTreeRoot().build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().withLang("en").withMarkInfo().withStructTreeRoot().build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-2a, got %v", errs)
@@ -1655,7 +1682,7 @@ func TestPDFA4e_NoAnnotationsPasses(t *testing.T) {
 }
 
 func TestPDFA4e_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().withCatalogVersion("2.0").build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA4e)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-4e, got %v", errs)
@@ -1663,7 +1690,7 @@ func TestPDFA4e_MinimalValid(t *testing.T) {
 }
 
 func TestPDFA4f_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().withCatalogVersion("2.0").build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA4f)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-4f, got %v", errs)

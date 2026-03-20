@@ -65,6 +65,13 @@ var (
 	ErrArtifactTagMissing     = errors.New("compliance: headers/footers/page numbers must be tagged as /Artifact")
 	ErrInvalidProfile         = errors.New("compliance: unknown or invalid profile")
 
+	// PDF/A XMP metadata errors (ISO 19005, clauses 6.6 and 6.7).
+	ErrXMPSchemaViolation    = errors.New("compliance: XMP property uses undeclared schema namespace")
+	ErrDocInfoXMPMismatch    = errors.New("compliance: document info and XMP metadata are inconsistent")
+	ErrMissingPDFAId         = errors.New("compliance: XMP missing PDF/A identification (pdfaid:part/conformance)")
+	ErrXMPPacketInvalid      = errors.New("compliance: XMP packet header uses forbidden 'bytes' or 'encoding' attribute")
+	ErrMissingCatalogMetdata = errors.New("compliance: document catalog missing /Metadata stream")
+
 	// PDF/A annotation errors (ISO 19005, clause 6.3).
 	ErrAnnotationMissingFlags      = errors.New("compliance: annotation missing /F key")
 	ErrAnnotationInvalidFlags      = errors.New("compliance: annotation /F flags invalid (Print must be set, Hidden/Invisible/NoView must be clear)")
