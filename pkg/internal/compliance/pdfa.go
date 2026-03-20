@@ -467,11 +467,26 @@ func checkFontsEmbedded(ctx context.Context, doc *document.Document, catalog ast
 		if isStandard14Font(ctx, doc, fontDict) {
 			continue
 		}
+		// Type3 fonts are inherently embedded — their glyphs are defined
+		// by content streams within the font dictionary itself.
+		if isType3Font(ctx, doc, fontDict) {
+			continue
+		}
 		if !isFontEmbedded(ctx, doc, fontDict) {
 			errs = append(errs, fmt.Errorf("%w: %s", models.ErrFontNotEmbedded, name))
 		}
 	}
 	return errs
+}
+
+func isType3Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	stObj, ok := fontDict["Subtype"]
+	if !ok {
+		return false
+	}
+	stRes, _ := document.ResolveObject(ctx, doc, stObj)
+	st, ok := stRes.(ast.PdfName)
+	return ok && st == "Type3"
 }
 
 func isFontEmbedded(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
@@ -487,11 +502,9 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	return false
 }
 
-func hasFontToUnicode(_ context.Context, _ *document.Document, fontDict ast.PdfDict) bool {
-	// PDF/A conformance levels 'u' and 'a' require an explicit /ToUnicode CMap
-	// to guarantee reliable Unicode text extraction.
-	_, ok := fontDict["ToUnicode"]
-	return ok
+func hasFontToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	// PDF/UA requires Unicode mapping — same valid paths as PDF/A.
+	return hasFontUnicodeMapping(ctx, doc, fontDict)
 }
 
 func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
@@ -546,15 +559,41 @@ func checkUnicodeMapping(ctx context.Context, doc *document.Document, catalog as
 	return errs
 }
 
-// hasFontUnicodeMapping returns true if the font has either a /ToUnicode CMap
-// or a standard Adobe encoding that provides implicit Unicode mapping.
+// hasFontUnicodeMapping returns true if the font has a reliable path to
+// Unicode text extraction. Per ISO 32000-1:2008 §9.10.2, valid paths are:
+//   - Explicit /ToUnicode CMap.
+//   - A standard predefined encoding (WinAnsiEncoding, etc.).
+//   - An /Encoding dict with /BaseEncoding or /Differences (glyph names
+//     mapped through the Adobe Glyph List).
+//   - Type3 fonts (glyphs defined by name; mapped through the AGL).
+//   - Composite (Type0) fonts with a predefined or Identity CMap encoding,
+//     which provides a CID-to-Unicode path via the CIDSystemInfo.
 func hasFontUnicodeMapping(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	// Explicit /ToUnicode CMap is always sufficient.
 	if _, ok := fontDict["ToUnicode"]; ok {
 		return true
 	}
 
-	// Check for a standard predefined encoding name.
+	// Type3 fonts define glyphs by name — the Adobe Glyph List provides
+	// the Unicode mapping.
+	if isType3Font(ctx, doc, fontDict) {
+		return true
+	}
+
+	// Composite (Type0) fonts: a predefined or Identity CMap encoding
+	// provides a valid CID-to-Unicode path.
+	if isCompositeFontWithCMap(ctx, doc, fontDict) {
+		return true
+	}
+
+	// Check for a standard predefined encoding name or an encoding
+	// dictionary with /Differences (glyph name mapping via AGL).
+	return hasStandardOrDifferencesEncoding(ctx, doc, fontDict)
+}
+
+// hasStandardOrDifferencesEncoding returns true if the font has a standard
+// predefined encoding or an encoding dict with /BaseEncoding or /Differences.
+func hasStandardOrDifferencesEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
 		return false
@@ -563,29 +602,101 @@ func hasFontUnicodeMapping(ctx context.Context, doc *document.Document, fontDict
 
 	switch enc := encRes.(type) {
 	case ast.PdfName:
-		// Direct encoding name (e.g., /WinAnsiEncoding).
 		return standardAdobeEncodings[enc]
 	case ast.PdfDict:
-		// Encoding dictionary with /BaseEncoding.
 		if beObj, ok := enc["BaseEncoding"]; ok {
 			beRes, _ := document.ResolveObject(ctx, doc, beObj)
-			if beName, ok := beRes.(ast.PdfName); ok {
-				return standardAdobeEncodings[beName]
+			if beName, ok := beRes.(ast.PdfName); ok && standardAdobeEncodings[beName] {
+				return true
 			}
+		}
+		// /Differences provides explicit glyph name mappings.
+		if _, ok := enc["Differences"]; ok {
+			return true
 		}
 	}
 	return false
+}
+
+// isCompositeFontWithCMap returns true for Type0 (composite) fonts that
+// use a predefined or Identity CMap encoding, providing a CID-to-Unicode
+// mapping path through the CIDSystemInfo.
+func isCompositeFontWithCMap(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	stObj, ok := fontDict["Subtype"]
+	if !ok {
+		return false
+	}
+	stRes, _ := document.ResolveObject(ctx, doc, stObj)
+	st, ok := stRes.(ast.PdfName)
+	if !ok || st != "Type0" {
+		return false
+	}
+	// Must have an /Encoding (the CMap name or stream).
+	_, hasEnc := fontDict["Encoding"]
+	return hasEnc
 }
 
 // --- Level 'a' (Accessible) checks ---
 
 // checkLangEntry verifies that the Document Catalog contains a /Lang entry
 // specifying the document's natural language (e.g., "en-US").
-func checkLangEntry(_ context.Context, _ *document.Document, catalog ast.PdfDict) []error {
-	if _, ok := catalog["Lang"]; !ok {
-		return []error{models.ErrMissingLang}
+func checkLangEntry(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	if hasLangSpecified(ctx, doc, catalog) {
+		return nil
 	}
-	return nil
+	return []error{models.ErrMissingLang}
+}
+
+// hasLangSpecified checks whether a natural language is declared either in
+// the catalog's /Lang key or anywhere in the structure tree. Per ISO 19005
+// §6.8.4 and ISO 14289 §7.2, /Lang may appear on the catalog, the root
+// structure element, or individual structure elements.
+func hasLangSpecified(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	// Catalog-level /Lang is the primary location.
+	if _, ok := catalog["Lang"]; ok {
+		return true
+	}
+	// Fall back: check the structure tree for any /Lang entry.
+	strObj, ok := catalog["StructTreeRoot"]
+	if !ok {
+		return false
+	}
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
+	strDict, ok := strRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	kObj, ok := strDict["K"]
+	if !ok {
+		return false
+	}
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	return structTreeHasLang(ctx, doc, kRes)
+}
+
+// structTreeHasLang recursively checks whether any structure element in the
+// tree has a /Lang key.
+func structTreeHasLang(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
+	switch v := obj.(type) {
+	case ast.PdfDict:
+		if _, has := v["Lang"]; has {
+			return true
+		}
+		if kObj, ok := v["K"]; ok {
+			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			if structTreeHasLang(ctx, doc, kRes) {
+				return true
+			}
+		}
+	case ast.PdfArray:
+		for _, item := range v {
+			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			if structTreeHasLang(ctx, doc, itemRes) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // checkFigureAltText traverses the structure tree and verifies that every

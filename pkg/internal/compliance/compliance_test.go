@@ -1332,6 +1332,23 @@ func TestPDFA1a_WithLang(t *testing.T) {
 	}
 }
 
+func TestPDFA1a_WithLangOnStructElem(t *testing.T) {
+	// /Lang on the root structure element satisfies the requirement.
+	m := newMockDoc().withOutputIntents().withMarkInfo()
+	m.catalog["StructTreeRoot"] = ast.PdfDict{
+		"Type": ast.PdfName("StructTreeRoot"),
+		"K": ast.PdfDict{
+			"S":    ast.PdfName("Document"),
+			"Lang": ast.PdfString("en-US"),
+		},
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1a)
+	if containsError(errs, models.ErrMissingLang) {
+		t.Error("should not get models.ErrMissingLang when /Lang is on root struct elem")
+	}
+}
+
 func TestPDFA2a_FigureMissingAlt(t *testing.T) {
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withFigureStructTree(false).build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)

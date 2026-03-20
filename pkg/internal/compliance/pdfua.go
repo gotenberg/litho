@@ -50,12 +50,13 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 	return errs
 }
 
-// checkLang verifies that the /Lang key is present in the document catalog.
-func checkLang(_ context.Context, _ *document.Document, catalog ast.PdfDict) []error {
-	if _, ok := catalog["Lang"]; !ok {
-		return []error{models.ErrMissingLang}
+// checkLang verifies that a natural language is declared either in the
+// catalog or on the root structure element.
+func checkLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	if hasLangSpecified(ctx, doc, catalog) {
+		return nil
 	}
-	return nil
+	return []error{models.ErrMissingLang}
 }
 
 // checkXMPTitle verifies that the document has XMP metadata containing a dc:title.
