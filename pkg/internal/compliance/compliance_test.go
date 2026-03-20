@@ -96,6 +96,13 @@ func (b *mockDocBuilder) withLang(lang string) *mockDocBuilder {
 	return b
 }
 
+func (b *mockDocBuilder) withViewerPreferences() *mockDocBuilder {
+	b.catalog["ViewerPreferences"] = ast.PdfDict{
+		"DisplayDocTitle": ast.PdfBool(true),
+	}
+	return b
+}
+
 func (b *mockDocBuilder) withJavaScript() *mockDocBuilder {
 	b.catalog["Names"] = ast.PdfDict{
 		"JavaScript": ast.PdfDict{
@@ -1714,7 +1721,7 @@ func TestPDFUA_InvalidProfile(t *testing.T) {
 }
 
 func TestPDFUA1_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withFigureWithAlt().withXMPTitle().build())
+	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withViewerPreferences().withFigureWithAlt().withXMPTitle().build())
 	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for valid PDF/UA-1, got %v", errs)
@@ -1890,7 +1897,7 @@ func TestPDFUA2_FormulaWithAF(t *testing.T) {
 }
 
 func TestPDFUA2_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).build())
+	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withViewerPreferences().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).build())
 	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for valid PDF/UA-2, got %v", errs)

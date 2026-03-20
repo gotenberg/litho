@@ -230,6 +230,8 @@ func pdfuaBaseChecks() []catalogCheckFunc {
 		checkLang,
 		checkStructTreeRoot,
 		checkMarkInfo,
+		checkSuspects,
+		checkDisplayDocTitle,
 		checkXMPTitle,
 		checkFontsToUnicodeUA,
 		checkFormFieldTooltips,
@@ -240,7 +242,7 @@ func pdfuaBaseChecks() []catalogCheckFunc {
 
 func pdfUA1Rules() ruleSet {
 	checks := pdfuaBaseChecks()
-	checks = append(checks, checkStandardTags)
+	checks = append(checks, checkStandardTags, checkTabOrder)
 	return ruleSet{catalogChecks: checks}
 }
 

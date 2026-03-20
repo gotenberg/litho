@@ -93,6 +93,9 @@ var (
 
 	// PDF/UA-specific errors.
 	ErrMissingXMPTitle           = errors.New("compliance: XMP metadata missing dc:title")
+	ErrSuspectsTrue              = errors.New("compliance: /MarkInfo /Suspects must be false")
+	ErrMissingDisplayDocTitle    = errors.New("compliance: /ViewerPreferences /DisplayDocTitle must be true")
+	ErrTabOrderNotStructure      = errors.New("compliance: page /Tabs must be /S (Structure) for PDF/UA")
 	ErrMissingFormFieldTooltip   = errors.New("compliance: form field missing /TU (tooltip) for accessibility")
 	ErrNonStandardTag            = errors.New("compliance: non-standard structure tag without /RoleMap entry")
 	ErrInvalidVersionForUA2      = errors.New("compliance: PDF/UA-2 requires PDF version 2.0")

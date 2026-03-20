@@ -13,6 +13,73 @@ import (
 
 // ValidatePDFUA is defined in rules.go alongside the table-driven rule sets.
 
+// checkSuspects verifies that /MarkInfo does not have /Suspects set to true.
+// Per PDF/UA-1 §7.1, a file with Suspects=true indicates unverified tagging.
+func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	miObj, ok := catalog["MarkInfo"]
+	if !ok {
+		return nil
+	}
+	miRes, _ := document.ResolveObject(ctx, doc, miObj)
+	miDict, ok := miRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	susObj, ok := miDict["Suspects"]
+	if !ok {
+		return nil
+	}
+	susRes, _ := document.ResolveObject(ctx, doc, susObj)
+	if b, ok := susRes.(ast.PdfBool); ok && bool(b) {
+		return []error{models.ErrSuspectsTrue}
+	}
+	return nil
+}
+
+// checkDisplayDocTitle verifies that the catalog's /ViewerPreferences
+// dictionary has /DisplayDocTitle set to true (PDF/UA-1 §7.1).
+func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	vpObj, ok := catalog["ViewerPreferences"]
+	if !ok {
+		return []error{models.ErrMissingDisplayDocTitle}
+	}
+	vpRes, _ := document.ResolveObject(ctx, doc, vpObj)
+	vpDict, ok := vpRes.(ast.PdfDict)
+	if !ok {
+		return []error{models.ErrMissingDisplayDocTitle}
+	}
+	ddtObj, ok := vpDict["DisplayDocTitle"]
+	if !ok {
+		return []error{models.ErrMissingDisplayDocTitle}
+	}
+	ddtRes, _ := document.ResolveObject(ctx, doc, ddtObj)
+	if b, ok := ddtRes.(ast.PdfBool); !ok || !bool(b) {
+		return []error{models.ErrMissingDisplayDocTitle}
+	}
+	return nil
+}
+
+// checkTabOrder verifies that every page with annotations has /Tabs set
+// to /S (Structure), as required by PDF/UA-1 §7.18.1.
+func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		// Only pages with annotations need /Tabs /S.
+		if _, ok := page["Annots"]; !ok {
+			continue
+		}
+		tabsObj, ok := page["Tabs"]
+		if !ok {
+			return []error{models.ErrTabOrderNotStructure}
+		}
+		tabsRes, _ := document.ResolveObject(ctx, doc, tabsObj)
+		if tabsName, ok := tabsRes.(ast.PdfName); !ok || tabsName != "S" {
+			return []error{models.ErrTabOrderNotStructure}
+		}
+	}
+	return nil
+}
+
 // checkLang verifies that a natural language is declared either in the
 // catalog or on the root structure element.
 func checkLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
