@@ -17,6 +17,21 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		fontSize = 12 // Fallback
 	}
 
+	// Compute the effective font size in page-space units by applying the
+	// text matrix and CTM scale. This ensures TextElement.FontSize is in
+	// the same coordinate system as TextElement.Width and positions, which
+	// is critical for correct space inference in ReconstructText.
+	ctm := state.CTM
+	tm := state.Text.Tm
+	effectiveFontSize := math.Abs(fontSize * tm[0] * ctm[0])
+	if effectiveFontSize == 0 {
+		// Vertical or rotated text: try the Y scale.
+		effectiveFontSize = math.Abs(fontSize * tm[3] * ctm[3])
+	}
+	if effectiveFontSize == 0 {
+		effectiveFontSize = fontSize // Last resort: use raw.
+	}
+
 	mcid := -1
 	var mcLang, mcExpansion string
 	for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
@@ -184,7 +199,7 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			X:             x,
 			Y:             y,
 			Width:         pageWidth,
-			FontSize:      fontSize,
+			FontSize:      effectiveFontSize,
 			MCID:          mcid,
 			Hidden:        isHidden,
 			Invisible:     isInvisible,

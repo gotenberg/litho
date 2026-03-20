@@ -253,7 +253,12 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 // delta is the distance between the two glyphs along the reading direction
 // (curr.X - prev.X for horizontal, prev.Y - curr.Y for vertical).
 // prevWidth is the advance width of the previous glyph (0 if unknown).
+// fontSize is the effective font size in page-space units (same coordinate
+// system as delta and prevWidth).
 func needsSpace(delta, prevWidth, fontSize float64) bool {
+	if fontSize <= 0 {
+		return false
+	}
 	if prevWidth > 0 {
 		// Use actual glyph width: space exists when the gap after the glyph
 		// exceeds a fraction of the font size. A typical inter-word space is
