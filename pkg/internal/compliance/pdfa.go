@@ -341,7 +341,6 @@ func checkContentStreamDeviceCS(ctx context.Context, doc *document.Document, cat
 		return nil
 	}
 
-	var errs []error
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		resources := getResources(ctx, doc, page)
@@ -361,40 +360,109 @@ func checkContentStreamDeviceCS(ctx context.Context, doc *document.Document, cat
 			continue // Cannot parse — skip this page.
 		}
 
-		for _, op := range ops {
-			switch op.Operator {
-			case "g", "G":
-				if !defaults["DeviceGray"] {
-					errs = append(errs, fmt.Errorf("%w: DeviceGray via %s operator",
-						models.ErrMissingICCProfile, op.Operator))
-					return errs
-				}
-			case "rg", "RG":
-				if !defaults["DeviceRGB"] {
-					errs = append(errs, fmt.Errorf("%w: DeviceRGB via %s operator",
-						models.ErrMissingICCProfile, op.Operator))
-					return errs
-				}
-			case "k", "K":
-				if !defaults["DeviceCMYK"] {
-					errs = append(errs, fmt.Errorf("%w: DeviceCMYK via %s operator",
-						models.ErrMissingICCProfile, op.Operator))
-					return errs
-				}
-			case "cs", "CS":
-				if len(op.Operands) > 0 {
-					if csName, ok := op.Operands[0].(ast.PdfName); ok {
-						if deviceDependentNames[csName] && !defaults[csName] {
-							errs = append(errs, fmt.Errorf("%w: %s via %s operator",
-								models.ErrMissingICCProfile, csName, op.Operator))
-							return errs
-						}
+		if err := scanOpsForDeviceCS(ops, defaults); err != nil {
+			return []error{err}
+		}
+	}
+	return nil
+}
+
+// checkAnnotationDeviceCS parses annotation appearance streams (/AP /N) and
+// checks for device-dependent color space usage, similar to
+// checkContentStreamDeviceCS but for annotation appearances.
+func checkAnnotationDeviceCS(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	if hasOutputIntentICC(ctx, doc, catalog) {
+		return nil
+	}
+
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		defaults := make(map[ast.PdfName]bool)
+		if resources != nil {
+			defaults = collectDefaultColorSpaces(ctx, doc, resources)
+			addTransparencyGroupDefaults(ctx, doc, page, defaults)
+		}
+
+		if hasPageOutputIntentICC(ctx, doc, page) {
+			continue
+		}
+
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		annotsArr, ok := annotsRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+			annotDict, ok := annotRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			// Get the /AP /N appearance stream.
+			apObj, ok := annotDict["AP"]
+			if !ok {
+				continue
+			}
+			apRes, _ := document.ResolveObject(ctx, doc, apObj)
+			apDict, ok := apRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			nObj, ok := apDict["N"]
+			if !ok {
+				continue
+			}
+
+			// Parse the appearance stream's content.
+			ops, err := content.ParsePageContent(ctx, doc, nObj)
+			if err != nil {
+				continue
+			}
+			if err := scanOpsForDeviceCS(ops, defaults); err != nil {
+				return []error{err}
+			}
+		}
+	}
+	return nil
+}
+
+// scanOpsForDeviceCS checks a sequence of content stream operations for
+// device-dependent color space usage.
+func scanOpsForDeviceCS(ops []content.Operation, defaults map[ast.PdfName]bool) error {
+	for _, op := range ops {
+		switch op.Operator {
+		case "g", "G":
+			if !defaults["DeviceGray"] {
+				return fmt.Errorf("%w: DeviceGray via %s in appearance stream",
+					models.ErrMissingICCProfile, op.Operator)
+			}
+		case "rg", "RG":
+			if !defaults["DeviceRGB"] {
+				return fmt.Errorf("%w: DeviceRGB via %s in appearance stream",
+					models.ErrMissingICCProfile, op.Operator)
+			}
+		case "k", "K":
+			if !defaults["DeviceCMYK"] {
+				return fmt.Errorf("%w: DeviceCMYK via %s in appearance stream",
+					models.ErrMissingICCProfile, op.Operator)
+			}
+		case "cs", "CS":
+			if len(op.Operands) > 0 {
+				if csName, ok := op.Operands[0].(ast.PdfName); ok {
+					if deviceDependentNames[csName] && !defaults[csName] {
+						return fmt.Errorf("%w: %s via %s in appearance stream",
+							models.ErrMissingICCProfile, csName, op.Operator)
 					}
 				}
 			}
 		}
 	}
-	return errs
+	return nil
 }
 
 // checkNoLZW scans all page resource streams for forbidden LZW compression.
