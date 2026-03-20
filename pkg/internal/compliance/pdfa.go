@@ -808,7 +808,7 @@ func checkXMPPacketHeader(data []byte) []error {
 // checkXMPNamespaces walks the XMP XML token stream and verifies that every
 // namespace URI used by properties is either a predefined XMP schema or is
 // declared in a PDF/A extension schema within the same XMP packet. For
-// predefined schemas, it also validates that property names are known.
+// predefined schemas, it also validates property names and value types.
 func checkXMPNamespaces(data []byte) []error {
 	usedProperties, extensionNamespaces := extractXMPProperties(data)
 	var errs []error
@@ -817,15 +817,33 @@ func checkXMPNamespaces(data []byte) []error {
 			errs = append(errs, fmt.Errorf("%w: %s", models.ErrXMPSchemaViolation, ns))
 			continue
 		}
-		// For predefined schemas with a property registry, validate property names.
+		// For predefined schemas with a property registry, validate property names and types.
 		registry, hasRegistry := xmpPropertyRegistry[ns]
 		if !hasRegistry {
 			continue
 		}
-		for prop := range props {
-			if !registry[prop] {
+		for prop, observedType := range props {
+			expectedType, known := registry[prop]
+			if !known {
 				errs = append(errs, fmt.Errorf("%w: %s (unknown property %s)",
 					models.ErrXMPSchemaViolation, ns, prop))
+				continue
+			}
+			// Validate value type if observed.
+			if observedType != xmpAny && expectedType != xmpAny && observedType != expectedType {
+				// Flag: simple type used where container is expected is allowed
+				// (single-value shorthand). Container where simple is expected,
+				// or wrong container type, is a violation.
+				if isSimpleType(expectedType) && isContainerType(observedType) {
+					errs = append(errs, fmt.Errorf("%w: %s property %s has wrong type",
+						models.ErrXMPSchemaViolation, ns, prop))
+				} else if isContainerType(expectedType) && isContainerType(observedType) {
+					// Wrong container type (e.g., Seq instead of Alt).
+					errs = append(errs, fmt.Errorf("%w: %s property %s has wrong container type",
+						models.ErrXMPSchemaViolation, ns, prop))
+				}
+				// Simple where container expected — tolerated (single-value shorthand).
+				// Simple type mismatches — not detectable from XML structure alone.
 			}
 		}
 	}
@@ -833,13 +851,13 @@ func checkXMPNamespaces(data []byte) []error {
 }
 
 // extractXMPProperties parses XMP XML and returns:
-// 1. A map from namespace URI to the set of property names used in that namespace
+// 1. A map from namespace URI to property name → observed type
 // 2. All namespace URIs declared in pdfaExtension:schemas extension blocks
 //
 // Only top-level XMP properties are recorded (direct children of rdf:Description),
 // not sub-elements of structured types.
-func extractXMPProperties(data []byte) (properties map[string]map[string]bool, extensions map[string]bool) {
-	properties = make(map[string]map[string]bool)
+func extractXMPProperties(data []byte) (properties map[string]map[string]xmpType, extensions map[string]bool) {
+	properties = make(map[string]map[string]xmpType)
 	extensions = make(map[string]bool)
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
@@ -848,9 +866,12 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]bool, e
 	const rdfNS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 
 	var inExtensionSchema bool
-	// depth tracks nesting: 0=outside, 1=inside rdf:Description, 2+=inside properties/sub-elements.
+	// depth tracks nesting: 0=outside, 1=inside rdf:Description,
+	// 2=inside a top-level property, 3+=deeper.
 	depth := 0
 	inDescription := false
+	// currentPropNS/Local track the current top-level property being parsed.
+	var currentPropNS, currentPropLocal string
 
 	for {
 		tok, err := decoder.Token()
@@ -862,15 +883,15 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]bool, e
 			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
 				inDescription = true
 				depth = 0
-				// Record namespace-bearing attributes (inline properties on rdf:Description).
+				// Inline attributes are simple-type properties.
 				for _, attr := range t.Attr {
 					if attr.Name.Space != "" && attr.Name.Space != "xmlns" &&
 						attr.Name.Space != rdfNS &&
 						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" {
 						if properties[attr.Name.Space] == nil {
-							properties[attr.Name.Space] = make(map[string]bool)
+							properties[attr.Name.Space] = make(map[string]xmpType)
 						}
-						properties[attr.Name.Space][attr.Name.Local] = true
+						properties[attr.Name.Space][attr.Name.Local] = xmpText
 					}
 				}
 				continue
@@ -878,12 +899,25 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]bool, e
 
 			if inDescription {
 				depth++
-				// Only record top-level properties (depth 1 = direct child of Description).
 				if depth == 1 && t.Name.Space != "" && t.Name.Space != rdfNS {
+					// Record with xmpAny initially; will be refined when we see the child.
+					currentPropNS = t.Name.Space
+					currentPropLocal = t.Name.Local
 					if properties[t.Name.Space] == nil {
-						properties[t.Name.Space] = make(map[string]bool)
+						properties[t.Name.Space] = make(map[string]xmpType)
 					}
-					properties[t.Name.Space][t.Name.Local] = true
+					properties[t.Name.Space][t.Name.Local] = xmpText // default: simple text
+				}
+				// depth == 2: first child of a top-level property — determines the type.
+				if depth == 2 && currentPropNS != "" && t.Name.Space == rdfNS {
+					switch t.Name.Local {
+					case "Alt":
+						properties[currentPropNS][currentPropLocal] = xmpAlt
+					case "Seq":
+						properties[currentPropNS][currentPropLocal] = xmpSeq
+					case "Bag":
+						properties[currentPropNS][currentPropLocal] = xmpBag
+					}
 				}
 			}
 
@@ -908,7 +942,13 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]bool, e
 			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
 				inDescription = false
 				depth = 0
+				currentPropNS = ""
+				currentPropLocal = ""
 			} else if inDescription {
+				if depth == 1 {
+					currentPropNS = ""
+					currentPropLocal = ""
+				}
 				depth--
 			}
 			if t.Name.Local == "schemas" {
