@@ -805,10 +805,17 @@ func checkXMPPacketHeader(data []byte) []error {
 	return nil
 }
 
+// xmpPropInfo holds the observed type and text value of an XMP property.
+type xmpPropInfo struct {
+	observedType xmpType
+	textValue    string // text content for simple-type properties
+}
+
 // checkXMPNamespaces walks the XMP XML token stream and verifies that every
 // namespace URI used by properties is either a predefined XMP schema or is
 // declared in a PDF/A extension schema within the same XMP packet. For
-// predefined schemas, it also validates property names and value types.
+// predefined schemas, it also validates property names, container types,
+// and value formats.
 func checkXMPNamespaces(data []byte) []error {
 	usedProperties, extensionNamespaces := extractXMPProperties(data)
 	var errs []error
@@ -817,37 +824,91 @@ func checkXMPNamespaces(data []byte) []error {
 			errs = append(errs, fmt.Errorf("%w: %s", models.ErrXMPSchemaViolation, ns))
 			continue
 		}
-		// For predefined schemas with a property registry, validate property names and types.
 		registry, hasRegistry := xmpPropertyRegistry[ns]
 		if !hasRegistry {
 			continue
 		}
-		for prop, observedType := range props {
+		for prop, info := range props {
 			expectedType, known := registry[prop]
 			if !known {
 				errs = append(errs, fmt.Errorf("%w: %s (unknown property %s)",
 					models.ErrXMPSchemaViolation, ns, prop))
 				continue
 			}
-			// Validate value type if observed.
-			if observedType != xmpAny && expectedType != xmpAny && observedType != expectedType {
-				// Flag: simple type used where container is expected is allowed
-				// (single-value shorthand). Container where simple is expected,
-				// or wrong container type, is a violation.
-				if isSimpleType(expectedType) && isContainerType(observedType) {
+			observed := info.observedType
+
+			// Container type validation.
+			if observed != xmpAny && expectedType != xmpAny && observed != expectedType {
+				if isSimpleType(expectedType) && isContainerType(observed) {
 					errs = append(errs, fmt.Errorf("%w: %s property %s has wrong type",
 						models.ErrXMPSchemaViolation, ns, prop))
-				} else if isContainerType(expectedType) && isContainerType(observedType) {
-					// Wrong container type (e.g., Seq instead of Alt).
+					continue
+				} else if isContainerType(expectedType) && isContainerType(observed) {
 					errs = append(errs, fmt.Errorf("%w: %s property %s has wrong container type",
 						models.ErrXMPSchemaViolation, ns, prop))
+					continue
 				}
-				// Simple where container expected — tolerated (single-value shorthand).
-				// Simple type mismatches — not detectable from XML structure alone.
+			}
+
+			// Value format validation for simple-type properties.
+			if info.textValue != "" && isSimpleType(expectedType) {
+				if !isValidXMPValue(expectedType, info.textValue) {
+					errs = append(errs, fmt.Errorf("%w: %s property %s has invalid value",
+						models.ErrXMPSchemaViolation, ns, prop))
+				}
+			}
+
+			// Struct-type properties must have child elements, not simple text.
+			if expectedType == xmpStruct && observed == xmpText && info.textValue != "" {
+				errs = append(errs, fmt.Errorf("%w: %s property %s should be structured",
+					models.ErrXMPSchemaViolation, ns, prop))
 			}
 		}
 	}
 	return errs
+}
+
+// isValidXMPValue checks if a text value matches the expected XMP type format.
+func isValidXMPValue(expected xmpType, value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return true
+	}
+	switch expected {
+	case xmpInteger:
+		// Must be a plain integer (no decimal, no fraction, no sign prefix with decimal).
+		if strings.Contains(value, "/") || strings.Contains(value, ".") {
+			return false
+		}
+		for i, c := range value {
+			if i == 0 && (c == '+' || c == '-') {
+				continue
+			}
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+		return len(value) > 0
+	case xmpReal:
+		// Numeric: allow decimal, sign, scientific notation, and EXIF rationals (e.g., 3/2).
+		return true // Lenient on format — Real accepts many representations
+	case xmpDate:
+		// Basic validation: must start with a 4-digit year and not have Z+offset.
+		if len(value) < 4 { //nolint:mnd
+			return false
+		}
+		// Invalid: both Z (UTC) and +/- offset.
+		if strings.Contains(value, "Z+") || strings.Contains(value, "Z-") {
+			return false
+		}
+		return true
+	case xmpBoolean:
+		return value == "True" || value == "False" ||
+			value == "true" || value == "false" ||
+			value == "1" || value == "0"
+	default:
+		return true // Text, URI — any string is valid
+	}
 }
 
 // extractXMPProperties parses XMP XML and returns:
@@ -856,8 +917,8 @@ func checkXMPNamespaces(data []byte) []error {
 //
 // Only top-level XMP properties are recorded (direct children of rdf:Description),
 // not sub-elements of structured types.
-func extractXMPProperties(data []byte) (properties map[string]map[string]xmpType, extensions map[string]bool) {
-	properties = make(map[string]map[string]xmpType)
+func extractXMPProperties(data []byte) (properties map[string]map[string]xmpPropInfo, extensions map[string]bool) {
+	properties = make(map[string]map[string]xmpPropInfo)
 	extensions = make(map[string]bool)
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
@@ -866,12 +927,18 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpType
 	const rdfNS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 
 	var inExtensionSchema bool
-	// depth tracks nesting: 0=outside, 1=inside rdf:Description,
-	// 2=inside a top-level property, 3+=deeper.
 	depth := 0
 	inDescription := false
-	// currentPropNS/Local track the current top-level property being parsed.
 	var currentPropNS, currentPropLocal string
+	var currentTextBuf strings.Builder
+	captureText := false
+
+	recordProp := func(ns, local string, info xmpPropInfo) {
+		if properties[ns] == nil {
+			properties[ns] = make(map[string]xmpPropInfo)
+		}
+		properties[ns][local] = info
+	}
 
 	for {
 		tok, err := decoder.Token()
@@ -883,15 +950,12 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpType
 			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
 				inDescription = true
 				depth = 0
-				// Inline attributes are simple-type properties.
 				for _, attr := range t.Attr {
 					if attr.Name.Space != "" && attr.Name.Space != "xmlns" &&
 						attr.Name.Space != rdfNS &&
 						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" {
-						if properties[attr.Name.Space] == nil {
-							properties[attr.Name.Space] = make(map[string]xmpType)
-						}
-						properties[attr.Name.Space][attr.Name.Local] = xmpText
+						recordProp(attr.Name.Space, attr.Name.Local,
+							xmpPropInfo{observedType: xmpText, textValue: attr.Value})
 					}
 				}
 				continue
@@ -900,33 +964,32 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpType
 			if inDescription {
 				depth++
 				if depth == 1 && t.Name.Space != "" && t.Name.Space != rdfNS {
-					// Record with xmpAny initially; will be refined when we see the child.
 					currentPropNS = t.Name.Space
 					currentPropLocal = t.Name.Local
-					if properties[t.Name.Space] == nil {
-						properties[t.Name.Space] = make(map[string]xmpType)
-					}
-					properties[t.Name.Space][t.Name.Local] = xmpText // default: simple text
+					currentTextBuf.Reset()
+					captureText = true
+					recordProp(t.Name.Space, t.Name.Local,
+						xmpPropInfo{observedType: xmpText})
 				}
-				// depth == 2: first child of a top-level property — determines the type.
 				if depth == 2 && currentPropNS != "" && t.Name.Space == rdfNS {
+					captureText = false // Container — don't capture inner text
 					switch t.Name.Local {
 					case "Alt":
-						properties[currentPropNS][currentPropLocal] = xmpAlt
+						recordProp(currentPropNS, currentPropLocal,
+							xmpPropInfo{observedType: xmpAlt})
 					case "Seq":
-						properties[currentPropNS][currentPropLocal] = xmpSeq
+						recordProp(currentPropNS, currentPropLocal,
+							xmpPropInfo{observedType: xmpSeq})
 					case "Bag":
-						properties[currentPropNS][currentPropLocal] = xmpBag
+						recordProp(currentPropNS, currentPropLocal,
+							xmpPropInfo{observedType: xmpBag})
 					}
 				}
 			}
 
-			// Detect pdfaExtension:schemas container.
 			if t.Name.Local == "schemas" && strings.Contains(t.Name.Space, "pdfa/ns/extension") {
 				inExtensionSchema = true
 			}
-
-			// Inside extension schema, look for namespaceURI elements.
 			if inExtensionSchema && t.Name.Local == "namespaceURI" {
 				if charTok, err := decoder.Token(); err == nil {
 					if charData, ok := charTok.(xml.CharData); ok {
@@ -938,16 +1001,32 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpType
 				}
 			}
 
+		case xml.CharData:
+			if captureText && depth == 1 {
+				currentTextBuf.Write(t)
+			}
+
 		case xml.EndElement:
 			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
 				inDescription = false
 				depth = 0
 				currentPropNS = ""
 				currentPropLocal = ""
+				captureText = false
 			} else if inDescription {
-				if depth == 1 {
+				if depth == 1 && currentPropNS != "" {
+					// Finalize: store captured text value.
+					val := strings.TrimSpace(currentTextBuf.String())
+					if val != "" {
+						recordProp(currentPropNS, currentPropLocal,
+							xmpPropInfo{
+								observedType: properties[currentPropNS][currentPropLocal].observedType,
+								textValue:    val,
+							})
+					}
 					currentPropNS = ""
 					currentPropLocal = ""
+					captureText = false
 				}
 				depth--
 			}
