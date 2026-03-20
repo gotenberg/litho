@@ -129,16 +129,12 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		return err
 	}
 
-	// Inherit or override Resources
-	currentResources := inheritedResources
-	if resObj, ok := node["Resources"]; ok {
-		resResolved, err := ResolveObject(ctx, doc, resObj)
-		if err == nil {
-			if resDict, ok := resResolved.(ast.PdfDict); ok {
-				currentResources = resDict
-			}
-		}
-	}
+	// Merge Resources: the node's resources are merged with inherited ones.
+	// Sub-dicts (/Font, /XObject, /ExtGState, etc.) are merged so that
+	// entries from the current node take precedence, but missing entries
+	// fall back to the parent. This matches PDF.js's Dict.merge behavior
+	// and handles PDFs where a page defines partial resources.
+	currentResources := mergeResourceDicts(ctx, doc, inheritedResources, node)
 
 	// Inherit or override MediaBox
 	currentMediaBox := inheritedMediaBox
@@ -239,6 +235,64 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	}
 
 	return nil
+}
+
+// mergeResourceDicts merges a node's /Resources with inherited resources.
+// Top-level keys (Font, XObject, etc.) from the node take precedence.
+// Within each sub-dict, entries are merged with node entries winning.
+// If the node has no /Resources, the inherited dict is returned as-is.
+func mergeResourceDicts(ctx context.Context, doc *Document, inherited ast.PdfDict, node ast.PdfDict) ast.PdfDict {
+	resObj, ok := node["Resources"]
+	if !ok {
+		return inherited
+	}
+	resResolved, err := ResolveObject(ctx, doc, resObj)
+	if err != nil {
+		return inherited
+	}
+	nodeRes, ok := resResolved.(ast.PdfDict)
+	if !ok {
+		return inherited
+	}
+	if inherited == nil {
+		return nodeRes
+	}
+
+	// Merge: start with a copy of inherited, overlay node entries.
+	merged := make(ast.PdfDict, len(inherited)+len(nodeRes))
+	for k, v := range inherited {
+		merged[k] = v
+	}
+	for k, v := range nodeRes {
+		// For sub-dicts (Font, XObject, ExtGState, etc.), merge entries.
+		inheritedSub, inheritedIsDict := inherited[k]
+		if !inheritedIsDict {
+			merged[k] = v
+			continue
+		}
+		nodeSubResolved, _ := ResolveObject(ctx, doc, v)
+		nodeSub, nodeIsDict := nodeSubResolved.(ast.PdfDict)
+		if !nodeIsDict {
+			merged[k] = v
+			continue
+		}
+		inheritedSubResolved, _ := ResolveObject(ctx, doc, inheritedSub)
+		inheritedSubDict, inheritedSubIsDict := inheritedSubResolved.(ast.PdfDict)
+		if !inheritedSubIsDict {
+			merged[k] = v
+			continue
+		}
+		// Merge sub-dict: inherited entries as base, node entries override.
+		sub := make(ast.PdfDict, len(inheritedSubDict)+len(nodeSub))
+		for sk, sv := range inheritedSubDict {
+			sub[sk] = sv
+		}
+		for sk, sv := range nodeSub {
+			sub[sk] = sv
+		}
+		merged[k] = sub
+	}
+	return merged
 }
 
 // resolveBoxArray extracts a named rectangle array from a page dict,
