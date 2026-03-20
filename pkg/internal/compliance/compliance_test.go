@@ -1999,9 +1999,29 @@ func TestPDFA_DocInfoXMPSync_DCPropertiesEnforced(t *testing.T) {
 	}
 }
 
-func TestPDFA_DocInfoXMPSync_NonDCPropertiesNotEnforced(t *testing.T) {
-	// Keywords/Creator/Producer mismatches should NOT be flagged.
-	m := newMockDoc().withOutputIntents().withMetadata()
+func TestPDFA_DocInfoXMPSync_NonDCPropertiesEnforced(t *testing.T) {
+	// Keywords/Creator/Producer mismatches should be flagged when the XMP
+	// values are in attribute form (extractable by parseXMPForSync).
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+      xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
+      xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+      xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"
+      pdf:Keywords="XMP keywords"
+      pdf:Producer="XMP producer"
+      xmp:CreatorTool="XMP creator"
+      pdfaid:part="1"
+      pdfaid:conformance="B"/>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+	m := newMockDoc().withOutputIntents()
+	m.catalog["Metadata"] = ast.PdfStream{
+		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		Data: []byte(xmp),
+	}
 	doc := buildTestDoc(m.build())
 	doc.Index.Trailer["Info"] = ast.PdfDict{
 		"Keywords": ast.PdfString("different keywords"),
@@ -2009,8 +2029,8 @@ func TestPDFA_DocInfoXMPSync_NonDCPropertiesNotEnforced(t *testing.T) {
 		"Producer": ast.PdfString("different producer"),
 	}
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
-	if containsError(errs, models.ErrDocInfoXMPMismatch) {
-		t.Error("Keywords/Creator/Producer mismatches should not trigger ErrDocInfoXMPMismatch")
+	if !containsError(errs, models.ErrDocInfoXMPMismatch) {
+		t.Error("expected ErrDocInfoXMPMismatch for Keywords/Creator/Producer mismatches")
 	}
 }
 
