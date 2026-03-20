@@ -36,7 +36,7 @@ type verapdfJob struct {
 	ItemDetails struct {
 		Name string `json:"name"`
 	} `json:"itemDetails"`
-	ValidationResult *verapdfValidationResult `json:"validationResult"`
+	ValidationResult []verapdfValidationResult `json:"validationResult"`
 }
 
 type verapdfValidationResult struct {
@@ -147,9 +147,10 @@ func TestVeraPDFCorpus(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				t.Parallel()
 
-				if job.ValidationResult == nil {
+				if len(job.ValidationResult) == 0 {
 					t.Skip("verapdf produced no validation result (parse error?)")
 				}
+				vResult := job.ValidationResult[0]
 
 				expected, ok := expectedCompliantFromFilename(filepath.Base(localPath))
 				if !ok {
@@ -157,9 +158,9 @@ func TestVeraPDFCorpus(t *testing.T) {
 				}
 
 				// Cross-check: does veraPDF agree with the filename convention?
-				if job.ValidationResult.Compliant != expected {
+				if vResult.Compliant != expected {
 					t.Logf("verapdf disagrees with filename: verapdf=%v filename=%v",
-						job.ValidationResult.Compliant, expected)
+						vResult.Compliant, expected)
 				}
 
 				// Open the PDF with litho.
@@ -226,9 +227,9 @@ func TestVeraPDFCorpus(t *testing.T) {
 						t.Logf("  %v", v)
 					}
 				}
-				if job.ValidationResult.Details.FailedRules > 0 {
-					t.Logf("verapdf failed rules (%d):", job.ValidationResult.Details.FailedRules)
-					for _, r := range job.ValidationResult.Details.RuleSummaries {
+				if vResult.Details.FailedRules > 0 {
+					t.Logf("verapdf failed rules (%d):", vResult.Details.FailedRules)
+					for _, r := range vResult.Details.RuleSummaries {
 						if r.Status == "failed" {
 							t.Logf("  clause %s test %d: %s", r.Clause, r.TestNumber, r.Description)
 						}
