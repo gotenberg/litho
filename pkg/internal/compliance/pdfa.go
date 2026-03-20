@@ -828,9 +828,7 @@ func checkXMPCompliance(ctx context.Context, doc *document.Document, catalog ast
 	errs = append(errs, checkPDFAIdentification(xmpData, profile)...)
 
 	// 6.6.2.3.3 / 6.7.8: Extension schema structure validation.
-	// TODO: re-enable when the parser handles nested rdf:li depth correctly
-	// (value types with fields cause false positives on valid schemas).
-	// errs = append(errs, checkExtensionSchemaStructure(xmpData)...)
+	errs = append(errs, checkExtensionSchemaStructure(xmpData)...)
 
 	// 6.7.3: DocInfo ↔ XMP consistency (parts 1 and 4 only;
 	// parts 2/3 use different clause numbering without this requirement).
@@ -1194,19 +1192,38 @@ const (
 	pdfaTypePrefix     = "http://www.aiim.org/pdfa/ns/type#"
 )
 
+// extSchemaLevel identifies the nesting context within an extension schema.
+type extSchemaLevel int
+
+const (
+	extLevelSchema    extSchemaLevel = iota // inside a schema rdf:li
+	extLevelProperty                        // inside a property rdf:li
+	extLevelValueType                       // inside a valueType rdf:li
+	extLevelField                           // inside a field rdf:li
+)
+
 // checkExtensionSchemaStructure validates that PDF/A extension schemas have
 // all required fields per ISO 19005 clause 6.6.2.3.3 / 6.7.8.
+//
+// Extension schemas are nested:
+//
+//	schemas > rdf:li (schema)
+//	  └─ property > rdf:li (property)
+//	  └─ valueType > rdf:li (value type)
+//	       └─ field > rdf:li (field)
+//
+// A depth-aware stack tracks which rdf:li level we're in so that
+// </rdf:li> end events are routed to the correct validator.
 func checkExtensionSchemaStructure(data []byte) []error {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
 	var errs []error
 	var inSchemas bool
-	var schemaDepth int
 
-	// Track required fields within each schema definition.
+	// Track required fields within each definition level.
 	type schemaInfo struct {
-		hasSchema, hasNamespaceURI, hasPrefix, hasProperty bool
+		hasSchema, hasNamespaceURI, hasPrefix bool
 	}
 	type propInfo struct {
 		hasName, hasValueType, hasCategory, hasDescription bool
@@ -1218,7 +1235,23 @@ func checkExtensionSchemaStructure(data []byte) []error {
 	var currentSchema schemaInfo
 	var currentProp propInfo
 	var currentValueType valueTypeInfo
-	var inProperty, inValueType bool
+
+	// Stack tracks the nesting context. Each rdf:li push adds a level;
+	// each </rdf:li> pops one and validates the completed definition.
+	var levelStack []extSchemaLevel
+
+	// pendingLevel is set when we encounter a pdfaSchema:property,
+	// pdfaSchema:valueType, or pdfaType:field element — the NEXT rdf:li
+	// will be at this level.
+	pendingLevel := extLevelSchema
+	hasPending := false
+
+	currentLevel := func() extSchemaLevel {
+		if len(levelStack) == 0 {
+			return extLevelSchema
+		}
+		return levelStack[len(levelStack)-1]
+	}
 
 	for {
 		tok, err := decoder.Token()
@@ -1229,13 +1262,24 @@ func checkExtensionSchemaStructure(data []byte) []error {
 		case xml.StartElement:
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
 				inSchemas = true
-				schemaDepth = 0
+				continue
 			}
 			if !inSchemas {
 				continue
 			}
-			schemaDepth++
 
+			// When we see rdf:li, push the pending level (or schema if none).
+			if t.Name.Local == "li" {
+				if hasPending {
+					levelStack = append(levelStack, pendingLevel)
+					hasPending = false
+				} else if len(levelStack) == 0 {
+					levelStack = append(levelStack, extLevelSchema)
+				}
+				continue
+			}
+
+			// Track which container will hold the next rdf:li items.
 			switch {
 			case t.Name.Space == pdfaSchemaPrefix:
 				switch t.Name.Local {
@@ -1246,12 +1290,13 @@ func checkExtensionSchemaStructure(data []byte) []error {
 				case "prefix":
 					currentSchema.hasPrefix = true
 				case "property":
-					currentSchema.hasProperty = true
-					inProperty = true
+					pendingLevel = extLevelProperty
+					hasPending = true
 				case "valueType":
-					inValueType = true
+					pendingLevel = extLevelValueType
+					hasPending = true
 				}
-			case t.Name.Space == pdfaPropertyPrefix && inProperty:
+			case t.Name.Space == pdfaPropertyPrefix && currentLevel() == extLevelProperty:
 				switch t.Name.Local {
 				case "name":
 					currentProp.hasName = true
@@ -1262,7 +1307,7 @@ func checkExtensionSchemaStructure(data []byte) []error {
 				case "description":
 					currentProp.hasDescription = true
 				}
-			case t.Name.Space == pdfaTypePrefix && inValueType:
+			case t.Name.Space == pdfaTypePrefix && currentLevel() == extLevelValueType:
 				switch t.Name.Local {
 				case "type":
 					currentValueType.hasType = true
@@ -1272,50 +1317,56 @@ func checkExtensionSchemaStructure(data []byte) []error {
 					currentValueType.hasPrefix = true
 				case "description":
 					currentValueType.hasDescription = true
+				case "field":
+					pendingLevel = extLevelField
+					hasPending = true
 				}
-			case t.Name.Space == pdfaFieldPrefix:
-				// Field elements just need to exist — tracked but not validated deeply.
 			}
 
 		case xml.EndElement:
 			if !inSchemas {
 				continue
 			}
-			schemaDepth--
 
-			// End of a schema definition block.
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
 				inSchemas = false
+				continue
 			}
 
-			// Check when we end a li element inside extension schemas.
-			if t.Name.Local == "li" && inSchemas {
-				if inValueType {
-					if currentValueType != (valueTypeInfo{}) {
-						if !currentValueType.hasType || !currentValueType.hasNamespaceURI ||
-							!currentValueType.hasPrefix || !currentValueType.hasDescription {
-							errs = append(errs, models.ErrXMPExtensionInvalid)
-						}
+			if t.Name.Local != "li" || len(levelStack) == 0 {
+				continue
+			}
+
+			// Pop the stack and validate the completed definition.
+			level := levelStack[len(levelStack)-1]
+			levelStack = levelStack[:len(levelStack)-1]
+
+			switch level {
+			case extLevelField:
+				// Fields just need to exist — no deep validation required.
+			case extLevelValueType:
+				if currentValueType != (valueTypeInfo{}) {
+					if !currentValueType.hasType || !currentValueType.hasNamespaceURI ||
+						!currentValueType.hasPrefix || !currentValueType.hasDescription {
+						errs = append(errs, models.ErrXMPExtensionInvalid)
 					}
-					currentValueType = valueTypeInfo{}
-					inValueType = false
-				} else if inProperty {
-					if currentProp != (propInfo{}) {
-						if !currentProp.hasName || !currentProp.hasValueType ||
-							!currentProp.hasCategory || !currentProp.hasDescription {
-							errs = append(errs, models.ErrXMPExtensionInvalid)
-						}
-					}
-					currentProp = propInfo{}
-				} else {
-					// End of a schema li — validate required schema fields.
-					if currentSchema != (schemaInfo{}) {
-						if !currentSchema.hasSchema || !currentSchema.hasNamespaceURI || !currentSchema.hasPrefix {
-							errs = append(errs, models.ErrXMPExtensionInvalid)
-						}
-					}
-					currentSchema = schemaInfo{}
 				}
+				currentValueType = valueTypeInfo{}
+			case extLevelProperty:
+				if currentProp != (propInfo{}) {
+					if !currentProp.hasName || !currentProp.hasValueType ||
+						!currentProp.hasCategory || !currentProp.hasDescription {
+						errs = append(errs, models.ErrXMPExtensionInvalid)
+					}
+				}
+				currentProp = propInfo{}
+			case extLevelSchema:
+				if currentSchema != (schemaInfo{}) {
+					if !currentSchema.hasSchema || !currentSchema.hasNamespaceURI || !currentSchema.hasPrefix {
+						errs = append(errs, models.ErrXMPExtensionInvalid)
+					}
+				}
+				currentSchema = schemaInfo{}
 			}
 		}
 	}
