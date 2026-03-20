@@ -39,7 +39,7 @@ Before writing any code, present:
 
 Self-review against this checklist and present findings to the user:
 
-- [ ] **Backward compatibility:** No breaking changes to the public API (`pkg/pdf`, `pkg/models`, `pkg/compliance`, `pkg/export`) unless explicitly approved.
+- [ ] **Backward compatibility:** No breaking changes to the public API (`pkg/pdf`, `pkg/models`) unless explicitly approved.
 - [ ] **Encapsulation:** No `pkg/internal` types leak into public signatures.
 - [ ] **Error handling:** All errors wrapped and propagated; no silenced errors without justification.
 - [ ] **Context:** I/O-bound or recursive functions accept and check `context.Context`.
@@ -71,71 +71,6 @@ go build ./cmd/litho   # Build the binary
 
 Always run `make fmt && make lint` before submitting code.
 
-## Project Structure
-
-```
-cmd/litho/                    # Binary entrypoint
-pkg/
-  pdf/                        # Public API (Facade). The ONLY entry point for consumers.
-    reader.go                 # Document reader — accepts io.ReaderAt
-  models/                     # Public data structs (Page, TextElement, Bookmark, etc.)
-  compliance/                 # PDF/A and PDF/UA ISO validation (public API wraps internals)
-  export/                     # Serialization layer (JSON, CSV, Markdown)
-  internal/                   # Engine internals — NEVER expose types from here
-    core/
-      ast/                    # PDF object AST (PdfDict, PdfArray, PdfName, PdfStream, etc.)
-      document/               # Document model, catalog, page tree, linearization, XRef rebuild
-      ioat/                   # io.ReaderAt adapter
-      lexer/                  # Byte-level PDF tokenizer
-      parser/                 # Recursive descent PDF object parser
-      xref/                   # Cross-reference table engine
-    crypto/                   # RC4, AES-128, AES-256, password recovery
-    filter/                   # Stream decode filters (Flate, ASCII85, predictors)
-    graphics/
-      content/                # Content stream operator lexer
-      image/                  # Image extraction and decoding
-      postscript/             # Type 4 PostScript function VM
-      state.go                # Graphics state machine (CTM, colors, text state)
-      lines.go                # Line/path detection
-    heuristics/               # Table recognition, OCR hints, redaction detection
-    interactive/
-      acroform.go             # AcroForm field extraction
-      annotation.go           # Annotations and links
-      javascript.go           # JavaScript form field evaluation
-      xfa.go                  # XFA XML Forms
-    semantics/
-      metadata.go             # Document info + XMP
-      attachment.go           # Embedded files
-      outline.go              # Bookmarks
-      portfolio.go            # PDF Portfolios / Collections
-      geospatial.go           # GeoJSON coordinates
-      threedee.go             # 3D/U3D/PRC streams
-      threads.go              # Article threads
-      structure/              # Tagged PDF structure tree
-    signature/
-      signature.go            # PKCS#7 extraction
-      verify.go               # X.509 certificate chain validation
-      dss.go                  # Document Security Store
-      timestamp.go            # PAdES / LTV timestamps
-    typography/
-      font.go                 # Font resolution (Simple, CID, Type 3)
-      base14.go               # Standard 14 Adobe font metrics
-      bidi.go                 # Bidirectional text + soft hyphens
-      text.go                 # Text reconstruction (spatial layout)
-      helpers.go              # Shared typography utilities
-      cmap/                   # ToUnicode CMap parser
-      encodings/              # MacRoman, WinAnsi, Differences, Adobe Glyph List
-      truetype/               # Embedded TrueType cmap table parser
-test/
-  integration/                # Integration tests (PDF.js corpus, cross-feature)
-    pdfjs_corpus_test.go      # Corpus tests against Mozilla PDF.js test suite
-    testdata/
-      pdf.js/                 # NOT in Git — populated by scripts/fetch-pdfjs-corpus.sh
-        test_manifest.json
-        pdfs/
-        references/
-```
-
 ## Coding Rules
 
 ### Error Handling
@@ -163,7 +98,7 @@ test/
 - **Trivial accessors that return cached scalar values** (e.g., page count, PDF version) do not need `ctx`.
 
 ### Encapsulation (Critical)
-- Public packages (`pkg/pdf`, `pkg/models`, `pkg/compliance`, `pkg/export`) must **never** accept or return types from `pkg/internal/`.
+- Public packages (`pkg/pdf`, `pkg/models`) must **never** accept or return types from `pkg/internal/`.
 - The public API accepts `io.ReaderAt` + `size int64`. Internal document parsing happens behind the facade.
 - Map all internal types to `pkg/models` structs before returning to callers.
 
@@ -205,7 +140,7 @@ test/
 - Tests use `_test.go` convention in the same package.
 - Live under `pkg/` and `cmd/` alongside the code they test.
 - Run with `make test-unit`.
-- The compliance package uses a `mockDocBuilder` pattern to construct test PDF documents.
+- The internal compliance package uses a `mockDocBuilder` pattern to construct test PDF documents.
 - Fuzz tests exist for parser and lexer (`_fuzz_test.go`).
 
 #### Integration tests
@@ -216,8 +151,9 @@ test/
 
 ## Dependencies
 
-Minimal by design — pure Go with only two direct dependencies:
+Minimal by design — pure Go with few direct dependencies:
 - `github.com/dop251/goja` — JavaScript VM for dynamic form field evaluation.
+- `github.com/andybalholm/brotli` — Brotli stream decompression.
 - `golang.org/x/text` — Unicode text processing.
 
 ## What Is NOT Implemented
