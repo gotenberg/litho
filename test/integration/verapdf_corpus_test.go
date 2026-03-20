@@ -126,6 +126,10 @@ func loadVerapdfReference(t *testing.T, path string) *verapdfReport {
 // against the veraPDF test corpus. For each PDF, the test compares litho's
 // pass/fail verdict against both the filename convention and veraPDF's result.
 func TestVeraPDFCorpus(t *testing.T) {
+	if !corpusEnabled("verapdf") {
+		t.Skip("verapdf corpus not enabled (check LITHO_CORPUS_TAGS)")
+	}
+
 	refs, err := filepath.Glob(filepath.Join(verapdfReferencesDir, "*.json"))
 	if err != nil || len(refs) == 0 {
 		t.Skip("verapdf references not found")

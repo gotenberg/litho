@@ -464,6 +464,10 @@ func truncate(s string, n int) string {
 // and compared structurally. When no reference exists, the test simply verifies
 // that litho can open and extract without panicking.
 func TestPDFJSCorpus(t *testing.T) {
+	if !corpusEnabled("pdf.js") {
+		t.Skip("pdf.js corpus not enabled (check LITHO_CORPUS_TAGS)")
+	}
+
 	entries := dedup(loadManifest(t))
 
 	for _, entry := range entries {

@@ -16,9 +16,11 @@ lint-todo: ## Find TODOs in Golang codebase
 test-unit: ## Run unit tests
 	go test -race ./...
 
+TAGS=pdf.js,verapdf
+
 .PHONY: test-integration
-test-integration: ## Run integration tests (corpus auto-generated via testcontainers if missing)
-	go test -timeout 25m -tags=integration -v github.com/gotenberg/litho/test/integration
+test-integration: ## Run integration tests. Use TAGS=pdf.js,verapdf to select corpus (default: all)
+	LITHO_CORPUS_TAGS=$(TAGS) go test -timeout 25m -tags=integration -v github.com/gotenberg/litho/test/integration
 
 .PHONY: clean-corpus
 clean-corpus: ## Remove all corpus data (forces regeneration on next test-integration)

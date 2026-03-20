@@ -16,6 +16,22 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// corpusEnabled reports whether the named corpus should be provisioned and
+// tested. When LITHO_CORPUS_TAGS is unset or empty, all corpus entries are
+// enabled. Otherwise only names listed in the comma-separated value are enabled.
+func corpusEnabled(name string) bool {
+	tags := os.Getenv("LITHO_CORPUS_TAGS")
+	if tags == "" {
+		return true
+	}
+	for _, tag := range strings.Split(tags, ",") {
+		if strings.TrimSpace(tag) == name {
+			return true
+		}
+	}
+	return false
+}
+
 // corpus describes a test corpus that can be provisioned via a Docker container.
 type corpus struct {
 	// Name identifies this corpus in log output (e.g. "pdfjs").

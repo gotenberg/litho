@@ -37,7 +37,12 @@ var registeredCorpus = []corpus{
 
 func TestMain(m *testing.M) {
 	for i := range registeredCorpus {
-		if err := registeredCorpus[i].provision(); err != nil {
+		c := &registeredCorpus[i]
+		if !corpusEnabled(c.Name) {
+			fmt.Printf("[%s] skipped (not in LITHO_CORPUS_TAGS)\n", c.Name)
+			continue
+		}
+		if err := c.provision(); err != nil {
 			fmt.Fprintf(os.Stderr, "corpus setup failed: %v\n", err)
 			os.Exit(1)
 		}
