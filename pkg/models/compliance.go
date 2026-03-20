@@ -65,6 +65,13 @@ var (
 	ErrArtifactTagMissing     = errors.New("compliance: headers/footers/page numbers must be tagged as /Artifact")
 	ErrInvalidProfile         = errors.New("compliance: unknown or invalid profile")
 
+	// PDF/A annotation errors (ISO 19005, clause 6.3).
+	ErrAnnotationMissingFlags      = errors.New("compliance: annotation missing /F key")
+	ErrAnnotationInvalidFlags      = errors.New("compliance: annotation /F flags invalid (Print must be set, Hidden/Invisible/NoView must be clear)")
+	ErrAnnotationMissingAppearance = errors.New("compliance: annotation missing appearance stream (/AP /N)")
+	ErrForbiddenAnnotationType     = errors.New("compliance: forbidden annotation type for PDF/A")
+	ErrReferenceXObjectForbidden   = errors.New("compliance: reference XObjects are forbidden in PDF/A")
+
 	// PDF/UA-specific errors.
 	ErrMissingXMPTitle           = errors.New("compliance: XMP metadata missing dc:title")
 	ErrMissingFormFieldTooltip   = errors.New("compliance: form field missing /TU (tooltip) for accessibility")
