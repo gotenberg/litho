@@ -240,7 +240,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 					if fontRefObj, ok := resDictRoot[fontName]; ok {
 						// Check font cache by indirect reference object number.
 						if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
-							if cached, ok := doc.FontCache[ref.ObjectNum]; ok {
+							if cached, ok := doc.GetCachedFont(ref.ObjectNum); ok {
 								if f, ok := cached.(*Font); ok {
 									currentFont = f
 									resolved = true
@@ -257,7 +257,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 										resolved = true
 										// Store in font cache.
 										if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
-											doc.FontCache[ref.ObjectNum] = font
+											doc.SetCachedFont(ref.ObjectNum, font)
 										}
 									}
 								}

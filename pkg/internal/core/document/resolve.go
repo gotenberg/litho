@@ -135,10 +135,11 @@ func (d *Document) resolveAny(ctx context.Context, obj ast.PdfObject) ast.PdfObj
 }
 
 // extractFromObjectStream extracts an object from an Object Stream.
-func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, targetIndex int) (ast.PdfObject, error) {
+// visited is the per-call-chain set for circular-reference detection.
+func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, targetIndex int, visited map[int]bool) (ast.PdfObject, error) {
 	// 1. Resolve the Object Stream itself
 	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
-	obj, err := d.Resolve(ctx, objStmRef)
+	obj, err := d.resolveWith(ctx, objStmRef, visited)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve object stream %d: %v", objStmNum, err)
 	}
@@ -210,18 +211,24 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 
 // Resolve looks up an indirect reference in the document's cross-reference index
 // and parses the object from the underlying stream if it hasn't been cached yet.
+//
+// Resolve is safe for concurrent use by multiple goroutines.
 func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfObject, error) {
+	return d.resolveWith(ctx, ref, nil)
+}
+
+// resolveWith is the internal implementation of Resolve. The visited map tracks
+// object numbers in the current call chain to detect circular references. Each
+// goroutine gets its own visited set, so there is no cross-goroutine interference.
+func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visited map[int]bool) (ast.PdfObject, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	// Check for circular reference
-	if d.resolving[ref.ObjectNum] {
-		return nil, fmt.Errorf("%w: object %d", ErrCircularRef, ref.ObjectNum)
-	}
-
-	// Check if the object is already in the cache
-	if obj, ok := d.ObjectCache[ref.ObjectNum]; ok {
+	// Fast path: check cache under read lock.
+	d.mu.RLock()
+	if obj, ok := d.objectCache[ref.ObjectNum]; ok {
+		d.mu.RUnlock()
 		d.Logger.Debug("resolve object cache hit",
 			slog.Int("obj", ref.ObjectNum),
 			slog.Int("gen", ref.GenNum),
@@ -229,12 +236,19 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 		)
 		return obj, nil
 	}
+	d.mu.RUnlock()
 
-	// Mark as resolving
-	d.resolving[ref.ObjectNum] = true
-	defer func() { delete(d.resolving, ref.ObjectNum) }()
+	// Check for circular reference in this call chain.
+	if visited == nil {
+		visited = make(map[int]bool)
+	}
+	if visited[ref.ObjectNum] {
+		return nil, fmt.Errorf("%w: object %d", ErrCircularRef, ref.ObjectNum)
+	}
+	visited[ref.ObjectNum] = true
+	defer delete(visited, ref.ObjectNum)
 
-	// Look up the object in the xref table
+	// Look up the object in the xref table (Index is immutable after construction).
 	entry, ok := d.Index.Entries[ref.ObjectNum]
 	if !ok {
 		return nil, fmt.Errorf("%w: object %d", ErrObjectNotFound, ref.ObjectNum)
@@ -244,18 +258,20 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 		return ast.PdfNull{}, nil
 	}
 
+	// Parse the object without holding any lock. io.ReaderAt is concurrent-safe.
+	var obj ast.PdfObject
+	var err error
+
 	switch entry.Type {
 	case 1:
 		// Type 1: Normal object
-		// Create a new lexer and parser at the specific byte offset
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
 		p := parser.NewParser(lex)
 		if d.Crypto != nil {
 			p.WithDecryption(d.Crypto.GetDecryptFunc(ref.ObjectNum, ref.GenNum))
 		}
 
-		// ParseObject handles the '12 0 obj ... endobj' envelope and returns the inner object
-		obj, err := p.ParseObject()
+		obj, err = p.ParseObject()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse object %d at offset %d: %v", ref.ObjectNum, entry.Offset, err)
 		}
@@ -267,12 +283,9 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 			slog.String("type", fmt.Sprintf("%T", obj)),
 		)
 
-		// Store in cache and return
-		d.ObjectCache[ref.ObjectNum] = obj
-		return obj, nil
 	case 2:
 		// Type 2: Compressed object in an Object Stream (PDF 1.5+)
-		obj, err := d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex)
+		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, visited)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)
 		}
@@ -284,9 +297,19 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 			slog.String("type", fmt.Sprintf("%T", obj)),
 		)
 
-		// Store in cache and return
-		d.ObjectCache[ref.ObjectNum] = obj
-		return obj, nil
+	default:
+		return nil, fmt.Errorf("unknown xref entry type: %d", entry.Type)
 	}
-	return nil, fmt.Errorf("unknown xref entry type: %d", entry.Type)
+
+	// Cache the result. If another goroutine cached the same object while we
+	// were parsing, use its result for consistency.
+	d.mu.Lock()
+	if existing, ok := d.objectCache[ref.ObjectNum]; ok {
+		d.mu.Unlock()
+		return existing, nil
+	}
+	d.objectCache[ref.ObjectNum] = obj
+	d.mu.Unlock()
+
+	return obj, nil
 }

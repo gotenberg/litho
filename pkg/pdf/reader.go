@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/annotation"
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -67,11 +68,18 @@ func WithOCREngine(engine models.OCREngine) OpenOption {
 // Reader is the high-level API facade for the PDF parsing engine.
 // When opened via OpenFile, the Reader holds a reference to the underlying
 // file; call Close to release it.
+//
+// Reader is safe for concurrent use by multiple goroutines. All extraction
+// methods (ExtractText, GetMetadata, etc.) may be called concurrently on the
+// same Reader. Close and ClearCache must not be called concurrently with
+// other Reader methods.
 type Reader struct {
 	doc         *document.Document
 	ocr         models.OCREngine
-	closer      io.Closer        // non-nil when opened via OpenFile
-	cachedPages []*document.Page // memoized page tree; set on first resolvePages call
+	closer      io.Closer // non-nil when opened via OpenFile
+	pagesOnce   sync.Once
+	cachedPages []*document.Page
+	pagesErr    error
 }
 
 // Close releases any resources held by the Reader. When the Reader was
@@ -89,8 +97,12 @@ func (r *Reader) Close() error {
 // Reader is used to extract data from many pages sequentially and the caller
 // wants to bound memory usage between pages. The caches are transparently
 // rebuilt on the next access.
+//
+// ClearCache must not be called concurrently with other Reader methods.
 func (r *Reader) ClearCache() {
+	r.pagesOnce = sync.Once{} // zero value is a valid, unlocked Once
 	r.cachedPages = nil
+	r.pagesErr = nil
 	r.doc.ClearCaches()
 }
 
@@ -651,21 +663,18 @@ func (r *Reader) ExtractFormulas(ctx context.Context) ([]models.FormulaElement, 
 }
 
 // resolvePages retrieves the catalog and resolves all pages. The result is
-// memoized after the first call since the document is read-only after Open.
+// memoized after the first successful call since the document is read-only
+// after Open. Safe for concurrent use.
 func (r *Reader) resolvePages(ctx context.Context) ([]*document.Page, error) {
-	if r.cachedPages != nil {
-		return r.cachedPages, nil
-	}
-	catalog, err := document.GetCatalog(ctx, r.doc)
-	if err != nil {
-		return nil, err
-	}
-	pages, err := document.GetPages(ctx, r.doc, catalog)
-	if err != nil {
-		return nil, err
-	}
-	r.cachedPages = pages
-	return pages, nil
+	r.pagesOnce.Do(func() {
+		catalog, err := document.GetCatalog(ctx, r.doc)
+		if err != nil {
+			r.pagesErr = err
+			return
+		}
+		r.cachedPages, r.pagesErr = document.GetPages(ctx, r.doc, catalog)
+	})
+	return r.cachedPages, r.pagesErr
 }
 
 // resolvePage resolves the page tree and returns the page at the given

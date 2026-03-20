@@ -231,8 +231,8 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 	// Simulate a flat leaf node.
 	doc := &Document{
 		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
-		ObjectCache: make(map[int]ast.PdfObject),
-		resolving:   make(map[int]bool),
+		objectCache: make(map[int]ast.PdfObject),
+		fontCache:   make(map[int]any),
 	}
 
 	pageRef := ast.PdfIndirectRef{ObjectNum: 10, GenNum: 0}

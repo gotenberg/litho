@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
@@ -15,12 +16,18 @@ import (
 // Document represents a parsed PDF document.
 // It holds a reference to the underlying data stream, the cross-reference index,
 // and a cache of resolved objects to avoid re-parsing.
+//
+// Document is safe for concurrent use by multiple goroutines after construction.
+// All mutable caches (ObjectCache, FontCache) are protected by an internal
+// read-write mutex. The Authenticate method must be called before concurrent
+// use begins (it is part of the setup phase in NewDocument / pdf.Open).
 type Document struct {
 	r             io.ReaderAt
 	size          int64
 	Index         xref.Index
-	ObjectCache   map[int]ast.PdfObject
-	resolving     map[int]bool
+	objectCache   map[int]ast.PdfObject
+	fontCache     map[int]any
+	mu            sync.RWMutex // protects objectCache and fontCache
 	Crypto        *crypto.Handler
 	OCConfig      *OCConfig
 	IsEncrypted   bool
@@ -47,11 +54,6 @@ type Document struct {
 	// Version is the PDF version string extracted from the %PDF-X.Y header
 	// (e.g., "1.4", "1.7", "2.0").
 	Version string
-
-	// FontCache stores resolved font objects keyed by their indirect reference
-	// object number. This avoids re-parsing the same font dictionary (including
-	// ToUnicode CMap decompression) on every Tf operator.
-	FontCache map[int]any
 }
 
 // NopLogger returns a logger that discards all output.
@@ -92,11 +94,10 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		r:           r,
 		size:        size,
 		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
-		ObjectCache: make(map[int]ast.PdfObject),
-		resolving:   make(map[int]bool),
+		objectCache: make(map[int]ast.PdfObject),
+		fontCache:   make(map[int]any),
 		Logger:      logger,
 		Version:     version,
-		FontCache:   make(map[int]any),
 	}
 
 	// Probe for linearization before seeking to the end of the file.
@@ -180,6 +181,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 }
 
 // Authenticate attempts to authenticate an encrypted document with the given password.
+// Authenticate must be called during setup, before the Document is used concurrently.
 func (d *Document) Authenticate(password string) error {
 	if !d.IsEncrypted || d.Crypto == nil {
 		return nil
@@ -189,7 +191,9 @@ func (d *Document) Authenticate(password string) error {
 		d.Authenticated = true
 		// Clear object cache in case we cached encrypted items
 		// (though we shouldn't have been able to read them)
-		d.ObjectCache = make(map[int]ast.PdfObject)
+		d.mu.Lock()
+		d.objectCache = make(map[int]ast.PdfObject)
+		d.mu.Unlock()
 	}
 	return err
 }
@@ -221,9 +225,32 @@ func (d *Document) IsLinearized() bool {
 
 // ClearCaches releases the object cache and font cache to free memory.
 // Caches are transparently rebuilt on the next access.
+//
+// ClearCaches must not be called concurrently with other Document methods.
 func (d *Document) ClearCaches() {
-	d.ObjectCache = make(map[int]ast.PdfObject)
-	d.FontCache = make(map[int]any)
+	d.mu.Lock()
+	d.objectCache = make(map[int]ast.PdfObject)
+	d.fontCache = make(map[int]any)
+	d.mu.Unlock()
+}
+
+// GetCachedFont returns a previously cached font for the given object number.
+// The second return value reports whether the font was found in the cache.
+func (d *Document) GetCachedFont(objNum int) (any, bool) {
+	d.mu.RLock()
+	f, ok := d.fontCache[objNum]
+	d.mu.RUnlock()
+	return f, ok
+}
+
+// SetCachedFont stores a resolved font in the cache, keyed by object number.
+// If the font is already cached, the existing entry is preserved.
+func (d *Document) SetCachedFont(objNum int, font any) {
+	d.mu.Lock()
+	if _, ok := d.fontCache[objNum]; !ok {
+		d.fontCache[objNum] = font
+	}
+	d.mu.Unlock()
 }
 
 // FileSize returns the total size of the underlying PDF file in bytes.
