@@ -139,15 +139,24 @@ func decodeFlateDecode(data []byte) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	_, err = io.Copy(buf, r) //nolint:gosec // Need full read
-	if closeErr := r.Close(); closeErr != nil {
+	_, copyErr := io.Copy(buf, r) //nolint:gosec // Need full read
+	closeErr := r.Close()
+
+	// Tolerate read errors that leave valid partial data. Damaged PDFs
+	// frequently have truncated zlib streams or bad checksums, but the
+	// decompressed bytes up to that point are usable.
+	if copyErr != nil && copyErr != io.EOF && copyErr != io.ErrUnexpectedEOF {
+		// If we got some data, use it despite the error.
+		if buf.Len() == 0 {
+			return nil, copyErr
+		}
+	}
+
+	// Tolerate close errors (checksum mismatches) when we have data.
+	if closeErr != nil && buf.Len() == 0 {
 		return nil, fmt.Errorf("failed to close zlib reader: %w", closeErr)
 	}
-	// Flate decode often gives unexpected EOF but correct data.
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return nil, err
-	}
-	// Copy out before returning buffer to pool.
+
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
 	return result, nil

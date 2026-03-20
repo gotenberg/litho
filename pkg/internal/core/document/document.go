@@ -166,6 +166,10 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 
 	doc.initOCConfig(ctx)
 
+	// Per PDF spec, the catalog /Version key overrides the header version
+	// when present (allows incremental updates to bump the version).
+	doc.initCatalogVersion(ctx)
+
 	doc.Logger.Debug("document opened",
 		slog.Int64("size_bytes", size),
 		slog.String("version", doc.Version),
@@ -188,6 +192,26 @@ func (d *Document) Authenticate(password string) error {
 		d.ObjectCache = make(map[int]ast.PdfObject)
 	}
 	return err
+}
+
+// initCatalogVersion checks the catalog /Version key and overrides the header
+// version if present. Per PDF spec §7.2.2, the catalog version takes precedence.
+func (d *Document) initCatalogVersion(ctx context.Context) {
+	rootObj, ok := d.Index.Trailer["Root"]
+	if !ok {
+		return
+	}
+	catalog, ok := d.resolveAny(ctx, rootObj).(ast.PdfDict)
+	if !ok {
+		return
+	}
+	vObj, ok := catalog["Version"]
+	if !ok {
+		return
+	}
+	if vName, ok := vObj.(ast.PdfName); ok {
+		d.Version = string(vName)
+	}
 }
 
 // IsLinearized reports whether the document has a linearization dictionary.
