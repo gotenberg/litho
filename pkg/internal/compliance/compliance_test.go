@@ -1364,11 +1364,13 @@ func TestPDFA1a_WithLangOnStructElem(t *testing.T) {
 	}
 }
 
-func TestPDFA2a_FigureMissingAlt(t *testing.T) {
+func TestPDFA2a_FigureAltNotRequired(t *testing.T) {
+	// Figure /Alt is a PDF/UA requirement, not PDF/A. VeraPDF does not
+	// enforce it for PDF/A profiles.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withLang("en").withMarkInfo().withFigureStructTree(false).build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)
-	if !containsError(errs, models.ErrUntaggedVisualElement) {
-		t.Error("expected models.ErrUntaggedVisualElement for Figure without /Alt")
+	if containsError(errs, models.ErrUntaggedVisualElement) {
+		t.Error("PDF/A should not require Figure /Alt (that is PDF/UA)")
 	}
 }
 

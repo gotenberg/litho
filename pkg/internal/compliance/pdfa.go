@@ -34,6 +34,8 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 	errs = append(errs, checkICCProfile(ctx, doc, catalog)...)
 	errs = append(errs, checkNoLZW(ctx, doc, catalog)...)
 	errs = append(errs, checkNoActiveContent(ctx, doc, catalog)...)
+	errs = append(errs, checkAnnotationCompliance(ctx, doc, catalog, part)...)
+	errs = append(errs, checkNoReferenceXObjects(ctx, doc, catalog)...)
 
 	// --- Part-specific rules ---
 	switch part {
@@ -81,7 +83,8 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 		}
 		errs = append(errs, checkMarkInfo(ctx, doc, catalog)...)
 		errs = append(errs, checkStructTreeRoot(ctx, doc, catalog)...)
-		errs = append(errs, checkFigureAltText(ctx, doc, catalog)...)
+		// Note: Figure /Alt text is a PDF/UA requirement, not PDF/A.
+		// It is checked in ValidatePDFUA, not here.
 	}
 
 	return errs
@@ -461,6 +464,199 @@ func hasForbiddenAnnotActions(ctx context.Context, doc *document.Document, pageD
 	return false
 }
 
+// --- Annotation checks (ISO 19005, clause 6.3) ---
+
+// forbiddenAnnotSubtypes lists annotation types that are forbidden in PDF/A.
+// Sound, Screen, and Movie are forbidden in all parts. PDF/A-1 additionally
+// forbids 3D; PDF/A-4 allows it only under the 4e sub-profile.
+var forbiddenAnnotSubtypes = map[ast.PdfName]bool{
+	"Sound":  true,
+	"Screen": true,
+	"Movie":  true,
+}
+
+// pdfA1ExtraForbiddenAnnots are additional forbidden types in PDF/A-1.
+var pdfA1ExtraForbiddenAnnots = map[ast.PdfName]bool{
+	"3D":        true,
+	"RichMedia": true,
+}
+
+// checkAnnotationCompliance validates annotation structural requirements:
+// - 6.3.1: no forbidden annotation types
+// - 6.3.2: /F key present with correct flags
+// - 6.3.3: appearance stream (/AP /N) present
+func checkAnnotationCompliance(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []error {
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		annotsArr, ok := annotsRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+			annotDict, ok := annotRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			subtypeName := resolveAnnotSubtype(ctx, doc, annotDict)
+
+			// 6.3.1: Forbidden annotation types.
+			if forbiddenAnnotSubtypes[subtypeName] {
+				errs = append(errs, fmt.Errorf("%w: /%s", models.ErrForbiddenAnnotationType, subtypeName))
+				continue
+			}
+			if part == 1 && pdfA1ExtraForbiddenAnnots[subtypeName] {
+				errs = append(errs, fmt.Errorf("%w: /%s", models.ErrForbiddenAnnotationType, subtypeName))
+				continue
+			}
+
+			// Popup annotations are exempt from /F and /AP requirements.
+			if subtypeName == "Popup" {
+				continue
+			}
+
+			// 6.3.2 t1: /F key must be present.
+			fObj, hasF := annotDict["F"]
+			if !hasF {
+				errs = append(errs, models.ErrAnnotationMissingFlags)
+				continue
+			}
+
+			// 6.3.2 t2: Flag bits — Print=1, Hidden/Invisible/ToggleNoView/NoView=0.
+			fRes, _ := document.ResolveObject(ctx, doc, fObj)
+			if fInt, ok := fRes.(ast.PdfInt); ok {
+				flags := int(fInt)
+				const (
+					flagInvisible    = 1 << 0 // bit 1
+					flagHidden       = 1 << 1 // bit 2
+					flagPrint        = 1 << 2 // bit 3
+					flagNoView       = 1 << 5 // bit 6
+					flagToggleNoView = 1 << 8 // bit 9
+				)
+				printSet := flags&flagPrint != 0
+				badBits := flags&(flagInvisible|flagHidden|flagNoView|flagToggleNoView) != 0
+				if !printSet || badBits {
+					errs = append(errs, models.ErrAnnotationInvalidFlags)
+				}
+			}
+
+			// 6.3.3 t1: Appearance stream (/AP with /N) must be present.
+			// Exempt: annotations with zero-area /Rect (invisible) and
+			// Link annotations (exempt in PDF/A-2+ per ISO 19005-2 §6.3.3).
+			needsAP := !isZeroRect(ctx, doc, annotDict)
+			if needsAP && subtypeName == "Link" && part >= 2 {
+				needsAP = false
+			}
+			if needsAP && !hasAppearanceStream(ctx, doc, annotDict) {
+				errs = append(errs, models.ErrAnnotationMissingAppearance)
+			}
+		}
+	}
+	return errs
+}
+
+func resolveAnnotSubtype(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ast.PdfName {
+	stObj, ok := annotDict["Subtype"]
+	if !ok {
+		return ""
+	}
+	stRes, _ := document.ResolveObject(ctx, doc, stObj)
+	stName, _ := stRes.(ast.PdfName)
+	return stName
+}
+
+func hasAppearanceStream(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	apObj, ok := annotDict["AP"]
+	if !ok {
+		return false
+	}
+	apRes, _ := document.ResolveObject(ctx, doc, apObj)
+	apDict, ok := apRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	_, hasN := apDict["N"]
+	return hasN
+}
+
+// isZeroRect returns true if the annotation's /Rect has zero area (invisible).
+// This covers both [0 0 0 0] and degenerate rectangles like [50 110 50 110]
+// where width or height is zero.
+func isZeroRect(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	rectObj, ok := annotDict["Rect"]
+	if !ok {
+		return false
+	}
+	rectRes, _ := document.ResolveObject(ctx, doc, rectObj)
+	rectArr, ok := rectRes.(ast.PdfArray)
+	if !ok || len(rectArr) < 4 { //nolint:mnd // PDF rectangles have 4 elements
+		return false
+	}
+	x1 := document.GetFloat(rectArr[0])
+	y1 := document.GetFloat(rectArr[1])
+	x2 := document.GetFloat(rectArr[2])
+	y2 := document.GetFloat(rectArr[3])
+	return x1 == x2 || y1 == y2
+}
+
+// --- Reference XObject check (ISO 19005, clause 6.2.9) ---
+
+// checkNoReferenceXObjects scans page XObject resources for reference
+// XObjects, which are forbidden in all PDF/A parts.
+func checkNoReferenceXObjects(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		xobjObj, ok := resources["XObject"]
+		if !ok {
+			continue
+		}
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		xobjDict, ok := xobjRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, obj := range xobjDict {
+			objRes, _ := document.ResolveObject(ctx, doc, obj)
+			switch xo := objRes.(type) {
+			case ast.PdfStream:
+				if isReferenceXObject(xo.Dict) {
+					return []error{models.ErrReferenceXObjectForbidden}
+				}
+			case ast.PdfDict:
+				if isReferenceXObject(xo) {
+					return []error{models.ErrReferenceXObjectForbidden}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// isReferenceXObject returns true if the XObject dict is a reference XObject
+// (/Subtype /Form with a /Ref key).
+func isReferenceXObject(dict ast.PdfDict) bool {
+	stObj, ok := dict["Subtype"]
+	if !ok {
+		return false
+	}
+	stName, ok := stObj.(ast.PdfName)
+	if !ok || stName != "Form" {
+		return false
+	}
+	_, hasRef := dict["Ref"]
+	return hasRef
+}
+
 // --- Font checks ---
 
 func checkFontsEmbedded(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
@@ -610,12 +806,8 @@ func isEmbeddedType1Font(ctx context.Context, doc *document.Document, fontDict a
 	if !ok || st != "Type1" {
 		return false
 	}
-	fd := findFontDescriptor(ctx, doc, fontDict)
-	if fd == nil {
-		return false
-	}
-	_, hasFF := fd["FontFile"]
-	return hasFF
+	// Type1 fonts embed via /FontFile, /FontFile2 (rare), or /FontFile3 (CFF).
+	return isFontEmbedded(ctx, doc, fontDict)
 }
 
 // hasStandardOrDifferencesEncoding returns true if the font has a standard
@@ -1113,10 +1305,12 @@ func checkPDFA4Version(ctx context.Context, doc *document.Document, catalog ast.
 	return []error{models.ErrVersionNotPDF20}
 }
 
-// valid3DSubtypes are the allowed /Subtype values for 3D streams in PDF/A-4e.
+// valid3DSubtypes are the allowed /Subtype values for 3D content in PDF/A-4e.
+// /3D appears on RichMediaContent and RichMediaConfiguration dicts.
 var valid3DSubtypes = map[ast.PdfName]bool{
 	"U3D": true,
 	"PRC": true,
+	"3D":  true,
 }
 
 // check3DStreamCompliance validates /RichMedia and /3D annotations for PDF/A-4e.

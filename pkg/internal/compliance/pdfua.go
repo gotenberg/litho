@@ -191,7 +191,9 @@ func isFieldExemptFromTooltip(ctx context.Context, doc *document.Document, dict 
 	if _, ok := dict["Contents"]; ok {
 		return true
 	}
-	// Check widget annotation children for /Contents or /TU.
+	// Check widget annotation children for /Contents, /TU, or /StructParent
+	// (indicating the widget is tagged in the structure tree, where /Alt
+	// on the /Form structure element serves the same purpose as /TU).
 	if kidsObj, ok := dict["Kids"]; ok {
 		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
 		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
@@ -204,9 +206,16 @@ func isFieldExemptFromTooltip(ctx context.Context, doc *document.Document, dict 
 					if _, ok := kidDict["Contents"]; ok {
 						return true
 					}
+					if _, ok := kidDict["StructParent"]; ok {
+						return true
+					}
 				}
 			}
 		}
+	}
+	// The field itself may be tagged in the structure tree.
+	if _, ok := dict["StructParent"]; ok {
+		return true
 	}
 	return false
 }
@@ -657,17 +666,36 @@ func isMathMLNamespace(ctx context.Context, doc *document.Document, dict ast.Pdf
 		return false
 	}
 	nsRes, _ := document.ResolveObject(ctx, doc, nsObj)
-	// /NS can point to a namespace dict with /NS (URI) key, or be a string.
-	switch ns := nsRes.(type) {
-	case ast.PdfDict:
-		if uriObj, ok := ns["NS"]; ok {
-			uriRes, _ := document.ResolveObject(ctx, doc, uriObj)
-			if uri, ok := uriRes.(ast.PdfString); ok {
-				return string(uri) == mathMLNamespace
+	nsDict, ok := nsRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	// Direct namespace URI match.
+	if uriObj, ok := nsDict["NS"]; ok {
+		uriRes, _ := document.ResolveObject(ctx, doc, uriObj)
+		if uri, ok := uriRes.(ast.PdfString); ok && string(uri) == mathMLNamespace {
+			return true
+		}
+	}
+	// Check /RoleMapNS for a transitive mapping to the MathML namespace.
+	if rmObj, ok := nsDict["RoleMapNS"]; ok {
+		rmRes, _ := document.ResolveObject(ctx, doc, rmObj)
+		if rmDict, ok := rmRes.(ast.PdfDict); ok {
+			for _, v := range rmDict {
+				vRes, _ := document.ResolveObject(ctx, doc, v)
+				if vArr, ok := vRes.(ast.PdfArray); ok && len(vArr) >= 2 {
+					targetNSRes, _ := document.ResolveObject(ctx, doc, vArr[1])
+					if targetDict, ok := targetNSRes.(ast.PdfDict); ok {
+						if uriObj, ok := targetDict["NS"]; ok {
+							uriRes, _ := document.ResolveObject(ctx, doc, uriObj)
+							if uri, ok := uriRes.(ast.PdfString); ok && string(uri) == mathMLNamespace {
+								return true
+							}
+						}
+					}
+				}
 			}
 		}
-	case ast.PdfString:
-		return string(ns) == mathMLNamespace
 	}
 	return false
 }
