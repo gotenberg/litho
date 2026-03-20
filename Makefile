@@ -21,5 +21,5 @@ test-integration: ## Run integration tests (corpus auto-generated via testcontai
 	go test -timeout 25m -tags=integration -v github.com/gotenberg/litho/test/integration
 
 .PHONY: clean-corpus
-clean-corpus: ## Remove the PDF.js corpus (forces regeneration on next test-integration)
-	rm -rf test/integration/testdata/pdf.js
+clean-corpus: ## Remove all corpus data (forces regeneration on next test-integration)
+	rm -rf test/integration/testdata/pdf.js test/integration/testdata/verapdf

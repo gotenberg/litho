@@ -23,6 +23,16 @@ var registeredCorpus = []corpus{
 		},
 		Timeout: 20 * time.Minute,
 	},
+	{
+		Name:       "verapdf",
+		ContextDir: "corpus/verapdf",
+		OutputDir:  "testdata/verapdf",
+		ReadyFunc: func() bool {
+			entries, err := os.ReadDir(filepath.Join(verapdfReferencesDir))
+			return err == nil && len(entries) > 0
+		},
+		Timeout: 15 * time.Minute,
+	},
 }
 
 func TestMain(m *testing.M) {
