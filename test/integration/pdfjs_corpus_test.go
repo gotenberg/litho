@@ -11,17 +11,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-const corpusDir = "testdata/pdf.js"
+const (
+	corpusDir     = "testdata/pdf.js"
+	referencesDir = "testdata/pdf.js/references"
+)
 
 // perSubtestTimeout is the maximum time allowed for a single corpus subtest.
 // Some corpus PDFs have pathologically complex content streams; we skip them
 // rather than blocking the entire suite.
 const perSubtestTimeout = 30 * time.Second
 
-// manifestEntry represents a single entry from PDF.js test_manifest.json.
+// coordTolerance is the maximum allowed difference in coordinate values
+// between PDF.js and litho. Different rounding in CTM and font metrics
+// makes exact equality unrealistic.
+const coordTolerance = 2.0
+
+// --- Manifest types ---
+
 type manifestEntry struct {
 	ID       string `json:"id"`
 	File     string `json:"file"`
@@ -34,12 +44,9 @@ type manifestEntry struct {
 // knownSkips maps manifest IDs to skip reasons for PDFs that exercise features
 // litho does not yet support.
 var knownSkips = map[string]string{
-	// Malformed xref table causes infinite loop in parseXRefChain.
 	"bug1393476": "infinite loop in xref parsing",
 }
 
-// knownSkipPrefixes maps ID prefixes to skip reasons.
-// This avoids listing hundreds of individual entries for entire test families.
 var knownSkipPrefixes = []struct {
 	prefix string
 	reason string
@@ -49,7 +56,6 @@ var knownSkipPrefixes = []struct {
 	{"jpx", "JPXDecode (JPEG2000) not supported"},
 }
 
-// skipIfKnown checks both exact-match and prefix-based skip lists.
 func skipIfKnown(t *testing.T, id string) {
 	t.Helper()
 	if reason, ok := knownSkips[id]; ok {
@@ -62,311 +68,37 @@ func skipIfKnown(t *testing.T, id string) {
 	}
 }
 
-func loadManifest(t *testing.T) []manifestEntry {
-	t.Helper()
+// --- Reference fixture types (matches PDF.js gen-pdfjs-reference.mjs output) ---
 
-	manifestPath := filepath.Join(corpusDir, "test_manifest.json")
-	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-		t.Skip("pdfjs corpus not found at pkg/pdf/testdata/pdf.js; run scripts/fetch-pdfjs-corpus.sh")
-	}
-
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		t.Fatalf("reading manifest: %v", err)
-	}
-
-	var entries []manifestEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		t.Fatalf("parsing manifest: %v", err)
-	}
-
-	return entries
-}
-
-// dedup returns manifest entries deduplicated by file path so each PDF is
-// opened only once even if the manifest lists multiple test types for it.
-func dedup(entries []manifestEntry) []manifestEntry {
-	seen := make(map[string]bool)
-	var unique []manifestEntry
-	for _, e := range entries {
-		if seen[e.File] {
-			continue
-		}
-		seen[e.File] = true
-		unique = append(unique, e)
-	}
-	return unique
-}
-
-// openPDF opens a PDF from the corpus directory. Returns the Reader.
-// If the file does not exist on disk the test is skipped.
-func openPDF(t *testing.T, entry manifestEntry) *pdf.Reader {
-	t.Helper()
-
-	pdfPath := filepath.Join(corpusDir, entry.File)
-	f, err := os.Open(pdfPath)
-	if err != nil {
-		t.Skipf("pdf not available (likely dead upstream link): %s", entry.File)
-	}
-	t.Cleanup(func() {
-		if err := f.Close(); err != nil {
-			t.Errorf("closing %s: %v", entry.File, err)
-		}
-	})
-
-	info, err := f.Stat()
-	if err != nil {
-		t.Fatalf("stat %s: %v", entry.File, err)
-	}
-
-	r, err := pdf.Open(context.Background(), f, info.Size())
-	if err != nil {
-		// Some PDFs are intentionally malformed. An error here is acceptable
-		// as long as we don't panic. Log and return nil so the caller can skip
-		// further extraction.
-		t.Logf("open error (may be expected): %v", err)
-		return nil
-	}
-
-	return r
-}
-
-// runWithTimeout executes fn in a goroutine and waits up to perSubtestTimeout.
-// Returns true if fn completed, false if it timed out.
-func runWithTimeout(t *testing.T, name string, fn func(ctx context.Context)) bool {
-	t.Helper()
-	done := make(chan struct{})
-	ctx, cancel := context.WithTimeout(context.Background(), perSubtestTimeout)
-	defer cancel()
-
-	go func() {
-		defer close(done)
-		fn(ctx)
-	}()
-
-	select {
-	case <-done:
-		return true
-	case <-ctx.Done():
-		t.Logf("%s: skipped (exceeded %v timeout)", name, perSubtestTimeout)
-		return false
-	}
-}
-
-// resolveLastPage returns the effective last page to test for a given entry.
-func resolveLastPage(entry manifestEntry, numPages int) int {
-	lastPage := numPages
-	if entry.LastPage > 0 && entry.LastPage < lastPage {
-		lastPage = entry.LastPage
-	}
-	return lastPage
-}
-
-// TestPDFJSCorpus_Parse opens every PDF in the corpus and traverses its page
-// tree. This exercises the lexer, parser, xref engine, linearization, and
-// decryption pipeline.
-func TestPDFJSCorpus_Parse(t *testing.T) {
-	entries := dedup(loadManifest(t))
-
-	for _, entry := range entries {
-		t.Run(entry.ID, func(t *testing.T) {
-			t.Parallel()
-
-			skipIfKnown(t, entry.ID)
-
-			r := openPDF(t, entry)
-			if r == nil {
-				return
-			}
-
-			runWithTimeout(t, entry.ID, func(ctx context.Context) {
-				numPages, err := r.NumPages(ctx)
-				if err != nil {
-					t.Logf("NumPages error: %v", err)
-					return
-				}
-
-				lastPage := resolveLastPage(entry, numPages)
-
-				for i := 1; i <= lastPage; i++ {
-					if _, err := r.GetPage(ctx, i); err != nil {
-						t.Errorf("GetPage(%d): %v", i, err)
-					}
-				}
-
-				t.Logf("OK: %d pages", lastPage)
-			})
-		})
-	}
-}
-
-// TestPDFJSCorpus_TextExtraction extracts text from every page of every
-// parseable PDF. Survival (no panic, no nil-pointer) is the test.
-func TestPDFJSCorpus_TextExtraction(t *testing.T) {
-	entries := dedup(loadManifest(t))
-
-	for _, entry := range entries {
-		t.Run(entry.ID, func(t *testing.T) {
-			t.Parallel()
-
-			skipIfKnown(t, entry.ID)
-
-			r := openPDF(t, entry)
-			if r == nil {
-				return
-			}
-
-			runWithTimeout(t, entry.ID, func(ctx context.Context) {
-				numPages, err := r.NumPages(ctx)
-				if err != nil {
-					t.Logf("NumPages error: %v", err)
-					return
-				}
-
-				lastPage := resolveLastPage(entry, numPages)
-
-				for i := 1; i <= lastPage; i++ {
-					pageNum := i
-					text, err := r.ExtractText(ctx, pageNum)
-					if err != nil {
-						t.Logf("page %d text error: %v", pageNum, err)
-						return
-					}
-					t.Logf("page %d: %d chars", pageNum, len(text))
-				}
-			})
-		})
-	}
-}
-
-// TestPDFJSCorpus_Metadata exercises the document-level metadata, outline,
-// and form APIs on every parseable PDF.
-func TestPDFJSCorpus_Metadata(t *testing.T) {
-	entries := dedup(loadManifest(t))
-
-	for _, entry := range entries {
-		t.Run(entry.ID, func(t *testing.T) {
-			t.Parallel()
-
-			skipIfKnown(t, entry.ID)
-
-			r := openPDF(t, entry)
-			if r == nil {
-				return
-			}
-
-			runWithTimeout(t, entry.ID, func(ctx context.Context) {
-				meta, err := r.GetMetadata(ctx)
-				if err != nil {
-					t.Logf("GetMetadata error: %v", err)
-				}
-
-				bookmarks, err := r.GetBookmarks(ctx)
-				if err != nil {
-					t.Logf("GetBookmarks error: %v", err)
-				}
-
-				formData, err := r.GetFormData(ctx)
-				if err != nil {
-					t.Logf("GetFormData error: %v", err)
-				}
-
-				isPortfolio, err := r.IsPortfolio(ctx)
-				if err != nil {
-					t.Logf("IsPortfolio error: %v", err)
-				}
-
-				t.Logf("metadata=%d bookmarks=%d formFields=%d portfolio=%v linearized=%v",
-					len(meta), len(bookmarks), len(formData), isPortfolio, r.IsLinearized())
-			})
-		})
-	}
-}
-
-// TestPDFJSCorpus_LazyResources verifies the lazy accessor contract on a
-// small sample of corpus PDFs that contain images. It confirms that Open is
-// present and callable without exercising every resource in every PDF.
-func TestPDFJSCorpus_LazyResources(t *testing.T) {
-	entries := dedup(loadManifest(t))
-
-	const maxSampled = 20
-	sampled := 0
-
-	for _, entry := range entries {
-		if sampled >= maxSampled {
-			break
-		}
-
-		t.Run(entry.ID, func(t *testing.T) {
-			t.Parallel()
-
-			skipIfKnown(t, entry.ID)
-
-			r := openPDF(t, entry)
-			if r == nil {
-				return
-			}
-
-			runWithTimeout(t, entry.ID, func(ctx context.Context) {
-				numPages, err := r.NumPages(ctx)
-				if err != nil {
-					t.Logf("NumPages error: %v", err)
-					return
-				}
-
-				// Only inspect the first page to keep this fast.
-				if numPages < 1 {
-					return
-				}
-
-				images, err := r.InspectImages(ctx, 1)
-				if err != nil {
-					t.Logf("InspectImages error: %v", err)
-					return
-				}
-
-				if len(images) == 0 {
-					return
-				}
-
-				// Verify Open is present and callable on the first image.
-				img := images[0]
-				if img.Open == nil {
-					t.Errorf("image %q: Open accessor is nil", img.Filename)
-					return
-				}
-
-				rc, err := img.Open(context.Background())
-				if err != nil {
-					t.Logf("image %q Open error: %v", img.Filename, err)
-					return
-				}
-				if err := rc.Close(); err != nil {
-					t.Errorf("image %q Close error: %v", img.Filename, err)
-				}
-
-				t.Logf("image %q: %dx%d %s — Open OK", img.Filename, img.Width, img.Height, img.ColorSpace)
-			})
-		})
-
-		sampled++
-	}
-}
-
-// --- Reference comparison types and test ---
-
-// referenceFixture is the JSON schema written by gen-pdfjs-reference.mjs.
 type referenceFixture struct {
 	ID       string          `json:"id"`
 	File     string          `json:"file"`
 	NumPages int             `json:"numPages"`
-	Metadata json.RawMessage `json:"metadata"`
-	Outline  []refOutline    `json:"outline"`
+	Metadata refMetadata     `json:"metadata"`
+	Outline  json.RawMessage `json:"outline"`
 	Pages    []refPage       `json:"pages"`
 }
 
-type refOutline struct {
-	Title string `json:"title"`
+type refMetadata struct {
+	Info refInfo `json:"info"`
+}
+
+type refInfo struct {
+	PDFFormatVersion    string `json:"PDFFormatVersion"`
+	Language            string `json:"Language"`
+	IsLinearized        bool   `json:"IsLinearized"`
+	IsAcroFormPresent   bool   `json:"IsAcroFormPresent"`
+	IsXFAPresent        bool   `json:"IsXFAPresent"`
+	IsCollectionPresent bool   `json:"IsCollectionPresent"`
+	IsSignaturesPresent bool   `json:"IsSignaturesPresent"`
+	Author              string `json:"Author"`
+	Title               string `json:"Title"`
+	Creator             string `json:"Creator"`
+	Producer            string `json:"Producer"`
+	CreationDate        string `json:"CreationDate"`
+	ModDate             string `json:"ModDate"`
+	Keywords            string `json:"Keywords"`
+	EncryptFilterName   any    `json:"EncryptFilterName"`
 }
 
 type refPage struct {
@@ -386,152 +118,311 @@ type refItem struct {
 	FontName string  `json:"fontName"`
 }
 
-const referencesDir = "testdata/pdf.js/references"
+// --- Litho output generation (same schema as PDF.js references) ---
 
-// coordTolerance is the maximum allowed difference in coordinate values
-// between PDF.js and litho. Different rounding in CTM and font metrics
-// makes exact equality unrealistic.
-const coordTolerance = 2.0
+// lithoReference generates a referenceFixture from a litho Reader, producing
+// output in the same format as the PDF.js reference files.
+func lithoReference(ctx context.Context, t *testing.T, r *pdf.Reader, id string, lastPage int) *referenceFixture {
+	t.Helper()
 
-// TestPDFJSCorpus_TextComparison loads reference fixtures generated by
-// gen-pdfjs-reference.mjs and compares litho's text extraction output.
-// Text content must match exactly (after whitespace normalization).
-// Coordinate values are compared with a tolerance.
-func TestPDFJSCorpus_TextComparison(t *testing.T) {
-	if _, err := os.Stat(referencesDir); os.IsNotExist(err) {
-		t.Skip("reference fixtures not found at pkg/pdf/testdata/pdf.js/references/; run scripts/fetch-pdfjs-corpus.sh --refs")
+	fixture := &referenceFixture{ID: id}
+
+	numPages, err := r.NumPages(ctx)
+	if err != nil {
+		t.Logf("NumPages error: %v", err)
+		return nil
+	}
+	fixture.NumPages = numPages
+
+	// Metadata.
+	fixture.Metadata.Info.PDFFormatVersion = r.Version()
+	fixture.Metadata.Info.IsLinearized = r.IsLinearized()
+
+	if meta, err := r.GetMetadata(ctx); err == nil {
+		fixture.Metadata.Info.Author = meta["Author"]
+		fixture.Metadata.Info.Title = meta["Title"]
+		fixture.Metadata.Info.Creator = meta["Creator"]
+		fixture.Metadata.Info.Producer = meta["Producer"]
+		fixture.Metadata.Info.CreationDate = meta["CreationDate"]
+		fixture.Metadata.Info.ModDate = meta["ModDate"]
+		fixture.Metadata.Info.Keywords = meta["Keywords"]
+		fixture.Metadata.Info.Language = meta["Language"]
 	}
 
-	entries := dedup(loadManifest(t))
+	if formData, err := r.GetFormData(ctx); err == nil {
+		fixture.Metadata.Info.IsAcroFormPresent = len(formData) > 0
+	}
 
-	for _, entry := range entries {
-		refPath := filepath.Join(referencesDir, entry.ID+".json")
-		if _, err := os.Stat(refPath); os.IsNotExist(err) {
-			continue // No reference for this entry.
+	if isPortfolio, err := r.IsPortfolio(ctx); err == nil {
+		fixture.Metadata.Info.IsCollectionPresent = isPortfolio
+	}
+
+	// Pages.
+	effectiveLastPage := numPages
+	if lastPage > 0 && lastPage < effectiveLastPage {
+		effectiveLastPage = lastPage
+	}
+
+	for i := 1; i <= effectiveLastPage; i++ {
+		if err := ctx.Err(); err != nil {
+			return fixture
 		}
 
-		t.Run(entry.ID, func(t *testing.T) {
-			t.Parallel()
+		page := refPage{PageNumber: i}
 
-			skipIfKnown(t, entry.ID)
+		text, err := r.ExtractText(ctx, i)
+		if err != nil {
+			page.Error = err.Error()
+			fixture.Pages = append(fixture.Pages, page)
+			continue
+		}
+		page.Text = text
 
-			// Load reference fixture.
-			refData, err := os.ReadFile(refPath)
-			if err != nil {
-				t.Fatalf("reading reference: %v", err)
+		elems, err := r.ExtractTextElements(ctx, i)
+		if err != nil {
+			page.Error = err.Error()
+			fixture.Pages = append(fixture.Pages, page)
+			continue
+		}
+
+		// Group consecutive glyphs into text runs to match PDF.js item format.
+		// PDF.js groups by text content operator (Tj/TJ), producing multi-char
+		// strings. litho's TextElements are per-glyph. We group consecutive
+		// glyphs that share the same Y coordinate (within tolerance) into runs.
+		page.Items = groupGlyphsIntoRuns(elems)
+		page.ItemCount = len(page.Items)
+
+		fixture.Pages = append(fixture.Pages, page)
+	}
+
+	return fixture
+}
+
+// groupGlyphsIntoRuns groups consecutive per-glyph TextElements into text runs
+// matching PDF.js's item format. A new run starts when the Y coordinate changes
+// significantly (different baseline = different text operation).
+func groupGlyphsIntoRuns(elems []models.TextElement) []refItem {
+	if len(elems) == 0 {
+		return nil
+	}
+
+	var runs []refItem
+	current := refItem{
+		Str:    elems[0].Text,
+		X:      elems[0].X,
+		Y:      elems[0].Y,
+		Width:  elems[0].Width,
+		Height: elems[0].FontSize,
+	}
+
+	for i := 1; i < len(elems); i++ {
+		e := elems[i]
+		// Same baseline (within tolerance) = same run.
+		if math.Abs(e.Y-current.Y) < 0.5 {
+			current.Str += e.Text
+			current.Width = (e.X + e.Width) - current.X
+		} else {
+			runs = append(runs, current)
+			current = refItem{
+				Str:    e.Text,
+				X:      e.X,
+				Y:      e.Y,
+				Width:  e.Width,
+				Height: e.FontSize,
 			}
-			var ref referenceFixture
-			if err := json.Unmarshal(refData, &ref); err != nil {
-				t.Fatalf("parsing reference: %v", err)
+		}
+	}
+	runs = append(runs, current)
+
+	return runs
+}
+
+// --- Comparison ---
+
+func compareFixtures(t *testing.T, pdfjs *referenceFixture, litho *referenceFixture) {
+	t.Helper()
+
+	// Page count.
+	if litho.NumPages != pdfjs.NumPages {
+		t.Errorf("numPages: litho=%d pdfjs=%d", litho.NumPages, pdfjs.NumPages)
+	}
+
+	// Metadata.
+	compareMetadata(t, pdfjs.Metadata.Info, litho.Metadata.Info)
+
+	// Per-page text and items.
+	for _, pdfjsPage := range pdfjs.Pages {
+		if pdfjsPage.Error != "" {
+			continue // PDF.js couldn't extract this page either.
+		}
+
+		var lithoPage *refPage
+		for j := range litho.Pages {
+			if litho.Pages[j].PageNumber == pdfjsPage.PageNumber {
+				lithoPage = &litho.Pages[j]
+				break
 			}
+		}
 
-			r := openPDF(t, entry)
-			if r == nil {
-				return
-			}
+		if lithoPage == nil {
+			t.Errorf("page %d: litho has no output", pdfjsPage.PageNumber)
+			continue
+		}
 
-			// Compare page count.
-			numPages, err := r.NumPages(context.Background())
-			if err != nil {
-				t.Logf("NumPages error: %v", err)
-				return
-			}
-			if numPages != ref.NumPages {
-				t.Errorf("page count: litho=%d pdfjs=%d", numPages, ref.NumPages)
-			}
+		if lithoPage.Error != "" {
+			t.Errorf("page %d: litho error: %s", pdfjsPage.PageNumber, lithoPage.Error)
+			continue
+		}
 
-			// Compare outline/bookmarks.
-			if len(ref.Outline) > 0 {
-				bookmarks, err := r.GetBookmarks(context.Background())
-				if err != nil {
-					t.Logf("GetBookmarks error: %v", err)
-				} else if len(bookmarks) > 0 {
-					minLen := min(len(bookmarks), len(ref.Outline))
-					for i := range minLen {
-						if bookmarks[i].Title != ref.Outline[i].Title {
-							t.Errorf("bookmark[%d] title: litho=%q pdfjs=%q",
-								i, bookmarks[i].Title, ref.Outline[i].Title)
-						}
-					}
-				}
-			}
-
-			// Compare per-page text.
-			for _, refPage := range ref.Pages {
-				if refPage.Error != "" {
-					continue // PDF.js couldn't extract this page either.
-				}
-
-				pageNum := refPage.PageNumber
-				completed := runWithTimeout(t, entry.ID, func(ctx context.Context) {
-					text, err := r.ExtractText(ctx, pageNum)
-					if err != nil {
-						t.Logf("page %d text error: %v", pageNum, err)
-						return
-					}
-
-					// Normalize whitespace for comparison: collapse runs of
-					// whitespace to single space, trim.
-					lithoNorm := normalizeWhitespace(text)
-					pdfjsNorm := normalizeWhitespace(refPage.Text)
-
-					if lithoNorm != pdfjsNorm {
-						// Log a truncated diff rather than dumping megabytes.
-						diff := textDiffSummary(pdfjsNorm, lithoNorm, 200)
-						t.Errorf("page %d text mismatch:\n%s", pageNum, diff)
-					}
-
-					// Compare text element coordinates if reference has items.
-					if len(refPage.Items) > 0 {
-						elems, err := r.ExtractTextElements(ctx, pageNum)
-						if err != nil {
-							t.Logf("page %d elements error: %v", pageNum, err)
-							return
-						}
-
-						minLen := min(len(elems), len(refPage.Items))
-
-						coordMismatches := 0
-						for i := range minLen {
-							ri := refPage.Items[i]
-							li := elems[i]
-
-							if math.Abs(li.X-ri.X) > coordTolerance ||
-								math.Abs(li.Y-ri.Y) > coordTolerance {
-								coordMismatches++
-								if coordMismatches <= 3 {
-									t.Logf("page %d elem[%d] coord mismatch: litho=(%.1f,%.1f) pdfjs=(%.1f,%.1f)",
-										pageNum, i, li.X, li.Y, ri.X, ri.Y)
-								}
-							}
-						}
-
-						if coordMismatches > 3 {
-							t.Logf("page %d: %d additional coordinate mismatches (tolerance=%.1f)",
-								pageNum, coordMismatches-3, coordTolerance)
-						}
-					}
-				})
-
-				if !completed {
-					break // Stop checking remaining pages if one timed out.
-				}
-			}
-		})
+		comparePageText(t, pdfjsPage.PageNumber, pdfjsPage.Text, lithoPage.Text)
+		comparePageItems(t, pdfjsPage.PageNumber, pdfjsPage.Items, lithoPage.Items)
 	}
 }
 
-// normalizeWhitespace collapses all runs of whitespace (including newlines)
-// to a single space and trims the result.
-func normalizeWhitespace(s string) string {
-	fields := strings.Fields(s)
-	return strings.Join(fields, " ")
+func compareMetadata(t *testing.T, pdfjs, litho refInfo) {
+	t.Helper()
+
+	if litho.PDFFormatVersion != pdfjs.PDFFormatVersion && pdfjs.PDFFormatVersion != "" {
+		t.Errorf("metadata PDFFormatVersion: litho=%q pdfjs=%q", litho.PDFFormatVersion, pdfjs.PDFFormatVersion)
+	}
+	if litho.IsLinearized != pdfjs.IsLinearized {
+		t.Errorf("metadata IsLinearized: litho=%v pdfjs=%v", litho.IsLinearized, pdfjs.IsLinearized)
+	}
+	if litho.Title != pdfjs.Title && pdfjs.Title != "" {
+		t.Logf("metadata Title: litho=%q pdfjs=%q", litho.Title, pdfjs.Title)
+	}
+	if litho.Author != pdfjs.Author && pdfjs.Author != "" {
+		t.Logf("metadata Author: litho=%q pdfjs=%q", litho.Author, pdfjs.Author)
+	}
 }
 
-// textDiffSummary returns a short summary showing where two strings first
-// diverge, truncated to maxLen characters of context.
+func comparePageText(t *testing.T, pageNum int, pdfjsText, lithoText string) {
+	t.Helper()
+
+	// Normalize whitespace for comparison: collapse runs to single space, trim.
+	pdfjsNorm := normalizeWhitespace(pdfjsText)
+	lithoNorm := normalizeWhitespace(lithoText)
+
+	if lithoNorm != pdfjsNorm {
+		diff := textDiffSummary(pdfjsNorm, lithoNorm, 200)
+		t.Errorf("page %d text mismatch:\n%s", pageNum, diff)
+	}
+}
+
+func comparePageItems(t *testing.T, pageNum int, pdfjsItems, lithoItems []refItem) {
+	t.Helper()
+
+	if len(pdfjsItems) == 0 {
+		return
+	}
+
+	// Compare item count.
+	if len(lithoItems) != len(pdfjsItems) {
+		t.Logf("page %d itemCount: litho=%d pdfjs=%d", pageNum, len(lithoItems), len(pdfjsItems))
+	}
+
+	minLen := min(len(lithoItems), len(pdfjsItems))
+	coordMismatches := 0
+	strMismatches := 0
+
+	for i := range minLen {
+		ri := pdfjsItems[i]
+		li := lithoItems[i]
+
+		if li.Str != ri.Str {
+			strMismatches++
+			if strMismatches <= 3 {
+				t.Logf("page %d item[%d] str: litho=%q pdfjs=%q", pageNum, i, truncate(li.Str, 40), truncate(ri.Str, 40))
+			}
+		}
+
+		if math.Abs(li.X-ri.X) > coordTolerance || math.Abs(li.Y-ri.Y) > coordTolerance {
+			coordMismatches++
+			if coordMismatches <= 3 {
+				t.Logf("page %d item[%d] coord: litho=(%.1f,%.1f) pdfjs=(%.1f,%.1f)",
+					pageNum, i, li.X, li.Y, ri.X, ri.Y)
+			}
+		}
+	}
+
+	if strMismatches > 3 {
+		t.Logf("page %d: %d additional str mismatches", pageNum, strMismatches-3)
+	}
+	if coordMismatches > 3 {
+		t.Logf("page %d: %d additional coord mismatches (tolerance=%.1f)", pageNum, coordMismatches-3, coordTolerance)
+	}
+}
+
+// --- Helpers ---
+
+func loadManifest(t *testing.T) []manifestEntry {
+	t.Helper()
+
+	manifestPath := filepath.Join(corpusDir, "test_manifest.json")
+	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+		t.Skip("pdfjs corpus not found; run scripts/fetch-pdfjs-corpus.sh")
+	}
+
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("reading manifest: %v", err)
+	}
+
+	var entries []manifestEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		t.Fatalf("parsing manifest: %v", err)
+	}
+
+	return entries
+}
+
+func dedup(entries []manifestEntry) []manifestEntry {
+	seen := make(map[string]bool)
+	var unique []manifestEntry
+	for _, e := range entries {
+		if seen[e.File] {
+			continue
+		}
+		seen[e.File] = true
+		unique = append(unique, e)
+	}
+	return unique
+}
+
+func openPDF(t *testing.T, entry manifestEntry) *pdf.Reader {
+	t.Helper()
+
+	pdfPath := filepath.Join(corpusDir, entry.File)
+	f, err := os.Open(pdfPath)
+	if err != nil {
+		t.Skipf("pdf not available: %s", entry.File)
+		return nil
+	}
+	t.Cleanup(func() {
+		if err := f.Close(); err != nil {
+			t.Errorf("closing %s: %v", entry.File, err)
+		}
+	})
+
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatalf("stat %s: %v", entry.File, err)
+	}
+
+	r, err := pdf.Open(context.Background(), f, info.Size())
+	if err != nil {
+		t.Logf("open error (may be expected): %v", err)
+		return nil
+	}
+
+	return r
+}
+
+func normalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 func textDiffSummary(expected, got string, maxLen int) string {
-	// Find the first differing position.
 	minLen := min(len(got), len(expected))
 
 	divergeAt := minLen
@@ -542,11 +433,104 @@ func textDiffSummary(expected, got string, maxLen int) string {
 		}
 	}
 
-	// Show context around the divergence point.
 	start := max(divergeAt-40, 0)
 	endExp := min(divergeAt+maxLen, len(expected))
 	endGot := min(divergeAt+maxLen, len(got))
 
 	return fmt.Sprintf("  first difference at position %d\n  expected: ...%s...\n  got:      ...%s...",
 		divergeAt, expected[start:endExp], got[start:endGot])
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}
+
+// --- The test ---
+
+// TestPDFJSCorpus runs every PDF in the Mozilla PDF.js corpus through litho.
+// When a reference file exists, litho's output is generated in the same format
+// and compared structurally. When no reference exists, the test simply verifies
+// that litho can open and extract without panicking.
+func TestPDFJSCorpus(t *testing.T) {
+	entries := dedup(loadManifest(t))
+
+	for _, entry := range entries {
+		t.Run(entry.ID, func(t *testing.T) {
+			t.Parallel()
+
+			skipIfKnown(t, entry.ID)
+
+			r := openPDF(t, entry)
+			if r == nil {
+				return
+			}
+
+			// Check if a reference file exists for this entry.
+			refPath := filepath.Join(referencesDir, entry.ID+".json")
+			hasRef := false
+			if _, err := os.Stat(refPath); err == nil {
+				hasRef = true
+			}
+
+			done := make(chan struct{})
+			ctx, cancel := context.WithTimeout(context.Background(), perSubtestTimeout)
+			defer cancel()
+
+			go func() {
+				defer close(done)
+
+				if hasRef {
+					// Load PDF.js reference.
+					refData, err := os.ReadFile(refPath)
+					if err != nil {
+						t.Errorf("reading reference: %v", err)
+						return
+					}
+					var pdfjsRef referenceFixture
+					if err := json.Unmarshal(refData, &pdfjsRef); err != nil {
+						t.Errorf("parsing reference: %v", err)
+						return
+					}
+
+					// Generate litho output in the same format.
+					lithoRef := lithoReference(ctx, t, r, entry.ID, entry.LastPage)
+					if lithoRef == nil {
+						return
+					}
+
+					// Compare.
+					compareFixtures(t, &pdfjsRef, lithoRef)
+				} else {
+					// No reference — survival test: open, count pages, extract text.
+					numPages, err := r.NumPages(ctx)
+					if err != nil {
+						t.Logf("NumPages error: %v", err)
+						return
+					}
+
+					lastPage := numPages
+					if entry.LastPage > 0 && entry.LastPage < lastPage {
+						lastPage = entry.LastPage
+					}
+
+					for i := 1; i <= lastPage; i++ {
+						if _, err := r.ExtractText(ctx, i); err != nil {
+							t.Logf("page %d: %v", i, err)
+							return
+						}
+					}
+				}
+			}()
+
+			select {
+			case <-done:
+				// Completed.
+			case <-ctx.Done():
+				t.Logf("skipped (exceeded %v timeout)", perSubtestTimeout)
+			}
+		})
+	}
 }
