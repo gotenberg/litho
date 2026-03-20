@@ -2343,6 +2343,7 @@ func buildTestDoc(m *mockDocument) *document.Document {
 		Entries: make(map[int]xref.XRefEntry),
 		Trailer: ast.PdfDict{
 			"Root": m.catalog,
+			"ID":   ast.PdfArray{ast.PdfString("test"), ast.PdfString("test")},
 		},
 	}
 	return doc

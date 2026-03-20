@@ -93,6 +93,15 @@ func safeReadHeader64(doc *document.Document) (buf []byte, err error) {
 	return doc.ReadFileBytes(0, 64) //nolint:mnd // enough for header + binary comment.
 }
 
+// checkTrailerID verifies that the file trailer contains an /ID key,
+// as required by ISO 19005 clause 6.1.3.
+func checkTrailerID(_ context.Context, doc *document.Document) []error {
+	if _, ok := doc.Index.Trailer["ID"]; !ok {
+		return []error{models.ErrMissingTrailerID}
+	}
+	return nil
+}
+
 // checkEncryptionForbidden verifies that the document is not encrypted by
 // inspecting both the Trailer /Encrypt key and the document's encryption flag.
 func checkEncryptionForbidden(_ context.Context, doc *document.Document) []error {

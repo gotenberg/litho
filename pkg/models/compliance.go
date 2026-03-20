@@ -80,6 +80,7 @@ var (
 	ErrForbiddenAnnotationType     = errors.New("compliance: forbidden annotation type for PDF/A")
 	ErrReferenceXObjectForbidden   = errors.New("compliance: reference XObjects are forbidden in PDF/A")
 	ErrInvalidFileHeader           = errors.New("compliance: file header must start with %PDF-")
+	ErrMissingTrailerID            = errors.New("compliance: file trailer must contain /ID key")
 	ErrMissingBinaryMarker         = errors.New("compliance: file header missing binary comment marker (% + 4 high bytes)")
 	ErrFormXObjectForbiddenKey     = errors.New("compliance: Form XObject contains forbidden key (/OPI, /Subtype2 /PS, or /PS)")
 	ErrPostScriptXObjectForbidden  = errors.New("compliance: PostScript XObjects (/Subtype /PS) are forbidden in PDF/A")
