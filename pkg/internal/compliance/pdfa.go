@@ -13,87 +13,8 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// ValidatePDFA audits the document against a specific PDF/A profile,
-// returning all compliance violations found. An empty slice means the
-// document passes.
-func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) []error {
-	part := PdfaPart(profile)
-	if part == 0 {
-		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
-	}
-
-	catalog, err := getCatalog(ctx, doc)
-	if err != nil {
-		return []error{err}
-	}
-
-	var errs []error
-
-	// --- Base rules: Level 'b' (Basic Visual Integrity) ---
-	errs = append(errs, checkEncryptionForbidden(ctx, doc)...)
-	errs = append(errs, checkFontsEmbedded(ctx, doc, catalog)...)
-	errs = append(errs, checkICCProfile(ctx, doc, catalog)...)
-	errs = append(errs, checkNoLZW(ctx, doc, catalog)...)
-	// PDF/A-4 allows most actions (JavaScript, Launch, etc.).
-	if part <= 3 {
-		errs = append(errs, checkNoActiveContent(ctx, doc, catalog, profile)...)
-	}
-	errs = append(errs, checkAnnotationCompliance(ctx, doc, catalog, part)...)
-	errs = append(errs, checkNoReferenceXObjects(ctx, doc, catalog)...)
-	errs = append(errs, checkXMPCompliance(ctx, doc, catalog, profile)...)
-
-	// --- Part-specific rules ---
-	switch part {
-	case 1:
-		errs = append(errs, checkPDFA1Version(ctx, doc, catalog)...)
-		errs = append(errs, checkNoTransparency(ctx, doc, catalog)...)
-		errs = append(errs, checkNoJPX(ctx, doc, catalog)...)
-		errs = append(errs, checkNoAttachments(ctx, doc, catalog)...)
-	case 2:
-		errs = append(errs, checkAttachmentsPDFA(ctx, doc, catalog)...)
-		errs = append(errs, checkOCGUsageApplication(ctx, doc, catalog)...)
-	case 3:
-		errs = append(errs, checkAFRelationship(ctx, doc, catalog)...)
-		errs = append(errs, checkOCGUsageApplication(ctx, doc, catalog)...)
-	case 4:
-		errs = append(errs, checkPDFA4Version(ctx, doc, catalog)...)
-		errs = append(errs, checkOCGUsageApplication(ctx, doc, catalog)...)
-		// PDF/A-4 natively requires Unicode mapping (no a/b/u split).
-		errs = append(errs, checkUnicodeMapping(ctx, doc, catalog)...)
-		// Sub-profile specific rules.
-		conf4 := PdfaConformance(profile)
-		if conf4 == 'f' {
-			errs = append(errs, checkAFRelationship(ctx, doc, catalog)...)
-		}
-		if conf4 == 'e' {
-			errs = append(errs, check3DStreamCompliance(ctx, doc, catalog)...)
-		}
-		return errs
-	}
-
-	// --- Conformance level rules (Parts 1-3 only) ---
-	conf := PdfaConformance(profile)
-
-	// Level 'u' (Unicode): every font must have a Unicode mapping.
-	// Level 'a' implies 'u', so run 'u' checks for both.
-	if conf == 'u' || conf == 'a' {
-		errs = append(errs, checkUnicodeMapping(ctx, doc, catalog)...)
-	}
-
-	// Level 'a' (Accessible): tagged, structured, and navigable.
-	if conf == 'a' {
-		// /Lang is "should" (recommendation) in PDF/A-1, "shall" in PDF/A-2+.
-		if part >= 2 {
-			errs = append(errs, checkLangEntry(ctx, doc, catalog)...)
-		}
-		errs = append(errs, checkMarkInfo(ctx, doc, catalog)...)
-		errs = append(errs, checkStructTreeRoot(ctx, doc, catalog)...)
-		// Note: Figure /Alt text is a PDF/UA requirement, not PDF/A.
-		// It is checked in ValidatePDFUA, not here.
-	}
-
-	return errs
-}
+// ValidatePDFA and ValidatePDFUA are defined in rules.go alongside the
+// table-driven rule sets.
 
 // --- Catalog access ---
 
@@ -106,6 +27,71 @@ func getCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, error
 }
 
 // --- Base checks: Level 'b' (Basic Visual Integrity) ---
+
+// checkFileHeader verifies the PDF file header conforms to ISO 19005 §6.1.2:
+//  1. The file must start with %PDF-x.y
+//  2. The header must be followed by a binary comment line: a '%' character
+//     followed by at least 4 bytes with values ≥ 128 (0x80). This signals to
+//     file-transfer programs that the file contains binary data.
+func checkFileHeader(_ context.Context, doc *document.Document) []error {
+	// Read enough bytes for the header line + binary comment line.
+	buf, err := safeReadHeader64(doc)
+	if err != nil {
+		// Cannot read header — skip check (e.g., test mocks).
+		return nil
+	}
+
+	// 1. Must start with %PDF-.
+	if !bytes.HasPrefix(buf, []byte("%PDF-")) {
+		return []error{models.ErrInvalidFileHeader}
+	}
+
+	// 2. Find the binary comment line after the first newline.
+	// The binary marker must appear within the first 1024 bytes per spec,
+	// but realistically it's in the first 64 bytes.
+	nlIdx := bytes.IndexAny(buf, "\r\n")
+	if nlIdx < 0 {
+		return []error{models.ErrMissingBinaryMarker}
+	}
+
+	// Skip past the newline(s) — handle \r\n, \r, \n.
+	pos := nlIdx + 1
+	if pos < len(buf) && buf[nlIdx] == '\r' && buf[pos] == '\n' {
+		pos++
+	}
+
+	// The next line must start with '%' followed by ≥ 4 high bytes.
+	if pos >= len(buf) || buf[pos] != '%' {
+		return []error{models.ErrMissingBinaryMarker}
+	}
+	pos++ // skip the '%'
+
+	highCount := 0
+	for pos < len(buf) && buf[pos] != '\r' && buf[pos] != '\n' {
+		if buf[pos] >= 0x80 {
+			highCount++
+		}
+		pos++
+	}
+
+	const requiredHighBytes = 4
+	if highCount < requiredHighBytes {
+		return []error{models.ErrMissingBinaryMarker}
+	}
+
+	return nil
+}
+
+// safeReadHeader64 reads the first 64 bytes of the document, recovering from
+// panics caused by a nil io.ReaderAt (e.g., in test mocks).
+func safeReadHeader64(doc *document.Document) (buf []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("cannot read header: %v", r)
+		}
+	}()
+	return doc.ReadFileBytes(0, 64) //nolint:mnd // enough for header + binary comment.
+}
 
 // checkEncryptionForbidden verifies that the document is not encrypted by
 // inspecting both the Trailer /Encrypt key and the document's encryption flag.
@@ -374,7 +360,7 @@ var allowedNamedActions = map[ast.PdfName]bool{
 // checkNoActiveContent traverses the Catalog, /OpenAction, /AA (Additional
 // Actions), and page-level annotations for forbidden active content actions:
 // /JavaScript, /Launch, /Sound, and /Movie.
-func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile models.PDFAProfile) []error {
+func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	// Check /Names /JavaScript name tree.
 	if namesObj, ok := catalog["Names"]; ok {
 		namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
@@ -413,13 +399,11 @@ func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog a
 	}
 
 	// 6.6.2: Widget annotations and form fields must not have /AA.
-	if PdfaPart(profile) <= 3 {
-		if acroObj, ok := catalog["AcroForm"]; ok {
-			acroRes, _ := document.ResolveObject(ctx, doc, acroObj)
-			if acroDict, ok := acroRes.(ast.PdfDict); ok {
-				if hasFieldAA(ctx, doc, acroDict) {
-					return []error{models.ErrActiveContentForbidden}
-				}
+	if acroObj, ok := catalog["AcroForm"]; ok {
+		acroRes, _ := document.ResolveObject(ctx, doc, acroObj)
+		if acroDict, ok := acroRes.(ast.PdfDict); ok {
+			if hasFieldAA(ctx, doc, acroDict) {
+				return []error{models.ErrActiveContentForbidden}
 			}
 		}
 	}
@@ -627,7 +611,12 @@ var pdfA1ExtraForbiddenAnnots = map[ast.PdfName]bool{
 // - 6.3.1: no forbidden annotation types
 // - 6.3.2: /F key present with correct flags
 // - 6.3.3: appearance stream (/AP /N) present
-func checkAnnotationCompliance(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []error {
+//
+// extraForbidden lists additional annotation subtypes forbidden beyond the
+// base set (e.g., 3D/RichMedia for PDF/A-1). linkExemptFromAP controls
+// whether Link annotations are exempt from appearance stream requirements
+// (true for PDF/A-2+).
+func checkAnnotationCompliance(ctx context.Context, doc *document.Document, catalog ast.PdfDict, extraForbidden map[ast.PdfName]bool, linkExemptFromAP bool) []error {
 	var errs []error
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
@@ -653,7 +642,7 @@ func checkAnnotationCompliance(ctx context.Context, doc *document.Document, cata
 				errs = append(errs, fmt.Errorf("%w: /%s", models.ErrForbiddenAnnotationType, subtypeName))
 				continue
 			}
-			if part == 1 && pdfA1ExtraForbiddenAnnots[subtypeName] {
+			if extraForbidden[subtypeName] {
 				errs = append(errs, fmt.Errorf("%w: /%s", models.ErrForbiddenAnnotationType, subtypeName))
 				continue
 			}
@@ -692,7 +681,7 @@ func checkAnnotationCompliance(ctx context.Context, doc *document.Document, cata
 			// Exempt: annotations with zero-area /Rect (invisible) and
 			// Link annotations (exempt in PDF/A-2+ per ISO 19005-2 §6.3.3).
 			needsAP := !isZeroRect(ctx, doc, annotDict)
-			if needsAP && subtypeName == "Link" && part >= 2 {
+			if needsAP && subtypeName == "Link" && linkExemptFromAP {
 				needsAP = false
 			}
 			if needsAP && !hasAppearanceStream(ctx, doc, annotDict) {
@@ -1348,6 +1337,11 @@ func checkDocInfoXMPSync(ctx context.Context, doc *document.Document, xmpData []
 	}
 
 	// Map of info dict keys to XMP property names.
+	// Only the Dublin Core mappings are enforced for consistency per
+	// veraPDF's interpretation of ISO 19005 clause 6.7.3. The
+	// pdf:Keywords, xmp:CreatorTool, and pdf:Producer mappings are
+	// informational — real-world PDF producers frequently diverge on
+	// these without violating the spec's intent.
 	syncPairs := []struct {
 		infoKey string
 		xmpKey  string
@@ -1355,9 +1349,6 @@ func checkDocInfoXMPSync(ctx context.Context, doc *document.Document, xmpData []
 		{"Title", "dc:title"},
 		{"Author", "dc:creator"},
 		{"Subject", "dc:description"},
-		{"Keywords", "pdf:Keywords"},
-		{"Creator", "xmp:CreatorTool"},
-		{"Producer", "pdf:Producer"},
 	}
 
 	var errs []error

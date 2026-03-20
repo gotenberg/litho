@@ -11,44 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// ValidatePDFUA audits the document against a specific PDF/UA profile,
-// returning all compliance violations found. An empty slice means the
-// document passes.
-func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) []error {
-	if profile != models.PDFUA1 && profile != models.PDFUA2 {
-		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
-	}
-
-	catalog, err := getCatalog(ctx, doc)
-	if err != nil {
-		return []error{err}
-	}
-
-	errs := make([]error, 0, 10) //nolint:mnd // multiple check categories below.
-
-	// --- Base rules (both UA-1 and UA-2) ---
-	errs = append(errs, checkLang(ctx, doc, catalog)...)
-	errs = append(errs, checkStructTreeRoot(ctx, doc, catalog)...)
-	errs = append(errs, checkMarkInfo(ctx, doc, catalog)...)
-	errs = append(errs, checkXMPTitle(ctx, doc, catalog)...)
-	errs = append(errs, checkFontsToUnicodeUA(ctx, doc, catalog)...)
-	errs = append(errs, checkFormFieldTooltips(ctx, doc, catalog)...)
-	errs = append(errs, checkImagesHaveAltText(ctx, doc, catalog)...)
-	errs = append(errs, checkArtifactTagging(ctx, doc, catalog)...)
-
-	// --- Profile-specific rules ---
-	switch profile {
-	case models.PDFUA1:
-		errs = append(errs, checkStandardTags(ctx, doc, catalog)...)
-	case models.PDFUA2:
-		errs = append(errs, checkPDFVersionForUA2(ctx, doc, catalog)...)
-		errs = append(errs, checkNamespaces(ctx, doc, catalog)...)
-		errs = append(errs, checkLinkAnnotationNesting(ctx, doc, catalog)...)
-		errs = append(errs, checkFormulaMathML(ctx, doc, catalog)...)
-	}
-
-	return errs
-}
+// ValidatePDFUA is defined in rules.go alongside the table-driven rule sets.
 
 // checkLang verifies that a natural language is declared either in the
 // catalog or on the root structure element.

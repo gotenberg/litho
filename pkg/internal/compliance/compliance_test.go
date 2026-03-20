@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -1896,6 +1897,123 @@ func TestPDFUA2_MinimalValid(t *testing.T) {
 	}
 }
 
+// --- File header tests ---
+
+// validPDFHeader is a minimal valid PDF header with binary comment marker.
+var validPDFHeader = []byte("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+
+func TestPDFA_ValidFileHeader(t *testing.T) {
+	doc := buildTestDocWithHeader(newMockDoc().withOutputIntents().withMetadata().build(), validPDFHeader)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrInvalidFileHeader) {
+		t.Error("valid %PDF- header should pass")
+	}
+	if containsError(errs, models.ErrMissingBinaryMarker) {
+		t.Error("valid binary comment marker should pass")
+	}
+}
+
+func TestPDFA_MissingBinaryMarker(t *testing.T) {
+	header := []byte("%PDF-1.4\n% no high bytes here\n")
+	doc := buildTestDocWithHeader(newMockDoc().withOutputIntents().withMetadata().build(), header)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrMissingBinaryMarker) {
+		t.Error("expected ErrMissingBinaryMarker when binary comment has no high bytes")
+	}
+}
+
+func TestPDFA_MissingBinaryCommentLine(t *testing.T) {
+	header := []byte("%PDF-1.4\nsome other content\n")
+	doc := buildTestDocWithHeader(newMockDoc().withOutputIntents().withMetadata().build(), header)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrMissingBinaryMarker) {
+		t.Error("expected ErrMissingBinaryMarker when second line does not start with %")
+	}
+}
+
+func TestPDFA_InvalidFileHeaderPrefix(t *testing.T) {
+	header := []byte("not-a-pdf-header\n%\xe2\xe3\xcf\xd3\n")
+	doc := buildTestDocWithHeader(newMockDoc().withOutputIntents().withMetadata().build(), header)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrInvalidFileHeader) {
+		t.Error("expected ErrInvalidFileHeader for non-%PDF- header")
+	}
+}
+
+func TestPDFA_BinaryMarkerFewerThan4HighBytes(t *testing.T) {
+	header := []byte("%PDF-1.7\n%\xe2\xe3\xcf\n") // only 3 high bytes
+	doc := buildTestDocWithHeader(newMockDoc().withOutputIntents().withMetadata().build(), header)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrMissingBinaryMarker) {
+		t.Error("expected ErrMissingBinaryMarker with only 3 high bytes")
+	}
+}
+
+func TestPDFA_BinaryMarkerCRLF(t *testing.T) {
+	header := []byte("%PDF-1.4\r\n%\xe2\xe3\xcf\xd3\r\n")
+	doc := buildTestDocWithHeader(newMockDoc().withOutputIntents().withMetadata().build(), header)
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrMissingBinaryMarker) {
+		t.Error("CRLF line endings should be accepted")
+	}
+}
+
+func TestPDFA_NilReaderSkipsHeaderCheck(t *testing.T) {
+	// Mock docs without a reader should silently skip the header check.
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrInvalidFileHeader) || containsError(errs, models.ErrMissingBinaryMarker) {
+		t.Error("nil reader should skip header check, not fail it")
+	}
+}
+
+// --- DocInfo↔XMP sync tests ---
+
+func TestPDFA_DocInfoXMPSync_DCPropertiesEnforced(t *testing.T) {
+	// Title mismatch between DocInfo and XMP should be flagged.
+	// Use attribute-form XMP where dc:title is inline on rdf:Description.
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+      xmlns:dc="http://purl.org/dc/elements/1.1/"
+      xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"
+      dc:title="XMP Title"
+      pdfaid:part="1"
+      pdfaid:conformance="B"/>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+	m := newMockDoc().withOutputIntents()
+	m.catalog["Metadata"] = ast.PdfStream{
+		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		Data: []byte(xmp),
+	}
+	doc := buildTestDoc(m.build())
+	doc.Index.Trailer["Info"] = ast.PdfDict{
+		"Title": ast.PdfString("Different Title"),
+	}
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if !containsError(errs, models.ErrDocInfoXMPMismatch) {
+		t.Error("expected ErrDocInfoXMPMismatch for Title mismatch")
+	}
+}
+
+func TestPDFA_DocInfoXMPSync_NonDCPropertiesNotEnforced(t *testing.T) {
+	// Keywords/Creator/Producer mismatches should NOT be flagged.
+	m := newMockDoc().withOutputIntents().withMetadata()
+	doc := buildTestDoc(m.build())
+	doc.Index.Trailer["Info"] = ast.PdfDict{
+		"Keywords": ast.PdfString("different keywords"),
+		"Creator":  ast.PdfString("different creator"),
+		"Producer": ast.PdfString("different producer"),
+	}
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrDocInfoXMPMismatch) {
+		t.Error("Keywords/Creator/Producer mismatches should not trigger ErrDocInfoXMPMismatch")
+	}
+}
+
 // --- Profile helpers ---
 
 func TestPdfaPart(t *testing.T) {
@@ -1966,5 +2084,13 @@ func buildTestDoc(m *mockDocument) *document.Document {
 			"Root": m.catalog,
 		},
 	}
+	return doc
+}
+
+// buildTestDocWithHeader creates a test document backed by raw file bytes,
+// allowing file header checks to operate on the provided data.
+func buildTestDocWithHeader(m *mockDocument, headerBytes []byte) *document.Document {
+	doc := buildTestDoc(m)
+	doc.SetRawReader(bytes.NewReader(headerBytes))
 	return doc
 }

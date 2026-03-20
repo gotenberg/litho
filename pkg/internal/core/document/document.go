@@ -263,6 +263,13 @@ func (d *Document) RawReader() io.ReaderAt {
 	return d.r
 }
 
+// SetRawReader sets the underlying io.ReaderAt. This is intended for test
+// code that needs to construct a Document with raw file bytes without
+// going through the full parsing pipeline.
+func (d *Document) SetRawReader(r io.ReaderAt) {
+	d.r = r
+}
+
 // ReadFileBytes reads a specific chunk of raw bytes directly from the underlying file.
 func (d *Document) ReadFileBytes(offset int64, length int64) ([]byte, error) {
 	buf := make([]byte, length)

@@ -79,6 +79,8 @@ var (
 	ErrAnnotationMissingAppearance = errors.New("compliance: annotation missing appearance stream (/AP /N)")
 	ErrForbiddenAnnotationType     = errors.New("compliance: forbidden annotation type for PDF/A")
 	ErrReferenceXObjectForbidden   = errors.New("compliance: reference XObjects are forbidden in PDF/A")
+	ErrInvalidFileHeader           = errors.New("compliance: file header must start with %PDF-")
+	ErrMissingBinaryMarker         = errors.New("compliance: file header missing binary comment marker (% + 4 high bytes)")
 
 	// PDF/UA-specific errors.
 	ErrMissingXMPTitle           = errors.New("compliance: XMP metadata missing dc:title")
