@@ -198,11 +198,13 @@ func TestProbeLinearization_NonLinearized(t *testing.T) {
 }
 
 func TestProbeLinearization_Linearized(t *testing.T) {
-	// A minimal linearized PDF first object.
+	// A minimal linearized PDF first object. /L must match the reported
+	// file size for probeLinearization to accept it.
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Linearized 1 /L 54321 /H [123 456] /O 4 /N 10 /E 9876 /T 50000 >>\nendobj\n")
 	r := newTestReaderAt(data)
 
-	params := probeLinearization(r, int64(len(data)))
+	// Pass the /L value as the file size so the validation accepts it.
+	params := probeLinearization(r, 54321)
 	if params == nil {
 		t.Fatal("expected linearization params, got nil")
 	}

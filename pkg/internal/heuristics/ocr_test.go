@@ -68,15 +68,15 @@ func TestRequiresOCR_ZeroPageDimensions(t *testing.T) {
 	}
 }
 
-func TestRequiresOCR_MultipleSmallImagesLargeCoverage(t *testing.T) {
-	// Multiple images that individually are small but collectively cover
-	// the page (via the totalImageArea > pageArea*10 fallback).
+func TestRequiresOCR_MultipleSmallImagesNotScanned(t *testing.T) {
+	// Multiple images that don't individually cover ≥80% of the page.
+	// These are decorative/partial images, not a scanned page.
 	images := []models.ImageMeta{
 		{Width: 1275, Height: 3300},
 		{Width: 1275, Height: 3300},
 	}
-	if !RequiresOCR(nil, images, 612, 792) {
-		t.Error("expected RequiresOCR=true for multiple large images")
+	if RequiresOCR(nil, images, 612, 792) {
+		t.Error("expected RequiresOCR=false for images that don't individually fill the page")
 	}
 }
 

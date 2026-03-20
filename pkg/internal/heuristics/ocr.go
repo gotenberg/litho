@@ -28,21 +28,12 @@ func RequiresOCR(elements []models.TextElement, images []models.ImageMeta, pageW
 	}
 
 	pageArea := pageWidth * pageHeight
-	var totalImageArea float64
-	for _, img := range images {
-		totalImageArea += float64(img.Width) * float64(img.Height)
-	}
 
-	// Image pixel dimensions aren't directly comparable to page point
-	// dimensions. However, for OCR triage we only care about the ratio:
-	// if the image is "big enough" relative to the page, it's a scan.
-	// We compare the largest image dimension against the page dimension
-	// to see if at least one image approximately fills the page.
-	//
-	// A more precise approach would use the CTM to map image space to
-	// page space, but for a heuristic this is sufficient: we check if
-	// any single image covers ≥80% of the page area by assuming the
-	// image is rendered at its natural aspect ratio.
+	// Check if any single image approximately fills the page. We estimate
+	// rendered dimensions by assuming the image is scaled to fit within
+	// the page (the overwhelmingly common case for scanned documents).
+	// A more precise approach would use the CTM, but for a heuristic
+	// this is sufficient.
 	for _, img := range images {
 		if img.Width <= 0 || img.Height <= 0 {
 			continue
@@ -51,16 +42,11 @@ func RequiresOCR(elements []models.TextElement, images []models.ImageMeta, pageW
 		imgAspect := float64(img.Width) / float64(img.Height)
 		pageAspect := pageWidth / pageHeight
 
-		// Estimate the rendered dimensions assuming the image is scaled
-		// to fit within the page (which is the overwhelmingly common
-		// case for scanned documents).
 		var renderedW, renderedH float64
 		if imgAspect > pageAspect {
-			// Image is wider relative to page — width-limited.
 			renderedW = pageWidth
 			renderedH = pageWidth / imgAspect
 		} else {
-			// Image is taller relative to page — height-limited.
 			renderedH = pageHeight
 			renderedW = pageHeight * imgAspect
 		}
@@ -69,15 +55,6 @@ func RequiresOCR(elements []models.TextElement, images []models.ImageMeta, pageW
 		if coverage >= ocrCoverageThreshold {
 			return true
 		}
-	}
-
-	// Fallback: check if the total image area (in pixel space) vs. page
-	// area (in point space) suggests a large scan. For typical scanned
-	// documents at 150-600 DPI, image pixel counts are much larger than
-	// page point counts, so any image with > 10x the page area (in raw
-	// numbers) is almost certainly a full-page scan.
-	if totalImageArea > pageArea*10 {
-		return true
 	}
 
 	return false

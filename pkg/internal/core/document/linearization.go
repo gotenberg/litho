@@ -55,11 +55,11 @@ type PageOffsetEntry struct {
 
 // probeLinearization reads the first 1024 bytes and looks for a linearization
 // dictionary. If found, it returns the parsed parameters; otherwise nil.
-func probeLinearization(r io.ReaderAt, size int64) *LinearizationParams {
+func probeLinearization(r io.ReaderAt, fileSize int64) *LinearizationParams {
 	// The linearization dictionary is the very first indirect object in the
 	// file, right after the %PDF-X.Y header (and an optional binary comment).
 	// We parse it using the standard parser which handles "N G obj ... endobj".
-	lex := lexer.NewLexer(ioat.NewReader(r, size, 0))
+	lex := lexer.NewLexer(ioat.NewReader(r, fileSize, 0))
 	p := parser.NewParser(lex)
 
 	obj, err := p.ParseObject()
@@ -116,6 +116,13 @@ func probeLinearization(r io.ReaderAt, size int64) *LinearizationParams {
 	// /T — offset of the first-page xref entry (file trailer)
 	if tObj, ok := linDict["T"]; ok {
 		params.FirstPageXRefOffset = pdfToInt64(tObj)
+	}
+
+	// Validate: /L must match the actual file size. A stale linearization
+	// dict left over from a re-save will have a mismatched /L, indicating
+	// the file is no longer truly linearized.
+	if params.FileLength > 0 && params.FileLength != fileSize {
+		return nil
 	}
 
 	return params
