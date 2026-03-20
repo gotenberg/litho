@@ -85,6 +85,11 @@ var (
 	ErrPostScriptXObjectForbidden  = errors.New("compliance: PostScript XObjects (/Subtype /PS) are forbidden in PDF/A")
 	ErrMissingBlendingColorSpace   = errors.New("compliance: page with transparency must have /Group with /CS when no OutputIntent ICC profile is present")
 	ErrInvalidBlendMode            = errors.New("compliance: blend mode is not one of the standard modes defined in ISO 32000-1")
+	ErrExtGStateForbiddenTR        = errors.New("compliance: ExtGState contains forbidden /TR key")
+	ErrExtGStateInvalidTR2         = errors.New("compliance: ExtGState /TR2 must be /Default or absent")
+	ErrInvalidHalftoneType         = errors.New("compliance: halftone /HalftoneType must be 1 or 5")
+	ErrHalftoneNameForbidden       = errors.New("compliance: halftone must not contain /HalftoneName key")
+	ErrHalftoneTransferFunction    = errors.New("compliance: halftone /TransferFunction must be /Default or absent")
 
 	// PDF/UA-specific errors.
 	ErrMissingXMPTitle           = errors.New("compliance: XMP metadata missing dc:title")

@@ -1738,6 +1738,114 @@ func resolveXObjectDict(ctx context.Context, doc *document.Document, obj ast.Pdf
 	return nil
 }
 
+// --- ExtGState compliance (ISO 19005, clause 6.2.5) ---
+
+// checkExtGStateKeys verifies that ExtGState dictionaries do not contain
+// forbidden keys (6.2.5): /TR is forbidden; /TR2 must be /Default if present.
+func checkExtGStateKeys(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		gsObj, ok := resources["ExtGState"]
+		if !ok {
+			continue
+		}
+		gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
+		gsDict, ok := gsRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, v := range gsDict {
+			vRes, _ := document.ResolveObject(ctx, doc, v)
+			stateDict, ok := vRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			if _, ok := stateDict["TR"]; ok {
+				errs = append(errs, models.ErrExtGStateForbiddenTR)
+			}
+			if tr2Obj, ok := stateDict["TR2"]; ok {
+				tr2Res, _ := document.ResolveObject(ctx, doc, tr2Obj)
+				if tr2Name, ok := tr2Res.(ast.PdfName); !ok || tr2Name != "Default" {
+					errs = append(errs, models.ErrExtGStateInvalidTR2)
+				}
+			}
+			if htObj, ok := stateDict["HT"]; ok {
+				errs = append(errs, checkHalftone(ctx, doc, htObj)...)
+			}
+		}
+	}
+	return errs
+}
+
+// checkHalftone validates a halftone dictionary per 6.2.5.
+func checkHalftone(ctx context.Context, doc *document.Document, obj ast.PdfObject) []error {
+	htRes, _ := document.ResolveObject(ctx, doc, obj)
+	htDict, ok := htRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	var errs []error
+	if htTypeObj, ok := htDict["HalftoneType"]; ok {
+		htTypeRes, _ := document.ResolveObject(ctx, doc, htTypeObj)
+		if htInt, ok := htTypeRes.(ast.PdfInt); ok {
+			if htInt != 1 && htInt != 5 { //nolint:mnd // spec values
+				errs = append(errs, models.ErrInvalidHalftoneType)
+			}
+		}
+	}
+	if tfObj, ok := htDict["TransferFunction"]; ok {
+		tfRes, _ := document.ResolveObject(ctx, doc, tfObj)
+		if tfName, ok := tfRes.(ast.PdfName); !ok || tfName != "Default" {
+			errs = append(errs, models.ErrHalftoneTransferFunction)
+		}
+	}
+	return errs
+}
+
+// checkExtGStateKeysPart4 adds PDF/A-4 specific halftone checks:
+// /HalftoneName is forbidden.
+func checkExtGStateKeysPart4(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	errs = append(errs, checkExtGStateKeys(ctx, doc, catalog)...)
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		gsObj, ok := resources["ExtGState"]
+		if !ok {
+			continue
+		}
+		gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
+		gsDict, ok := gsRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, v := range gsDict {
+			vRes, _ := document.ResolveObject(ctx, doc, v)
+			stateDict, ok := vRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			if htObj, ok := stateDict["HT"]; ok {
+				htRes, _ := document.ResolveObject(ctx, doc, htObj)
+				if htDict, ok := htRes.(ast.PdfDict); ok {
+					if _, ok := htDict["HalftoneName"]; ok {
+						errs = append(errs, models.ErrHalftoneNameForbidden)
+					}
+				}
+			}
+		}
+	}
+	return errs
+}
+
 // --- Transparency blending color space (ISO 19005-2, clause 6.2.9/6.2.10) ---
 
 // standardBlendModes are the blend modes defined in ISO 32000-1:2008 §11.3.5.
