@@ -81,6 +81,10 @@ var (
 	ErrReferenceXObjectForbidden   = errors.New("compliance: reference XObjects are forbidden in PDF/A")
 	ErrInvalidFileHeader           = errors.New("compliance: file header must start with %PDF-")
 	ErrMissingBinaryMarker         = errors.New("compliance: file header missing binary comment marker (% + 4 high bytes)")
+	ErrFormXObjectForbiddenKey     = errors.New("compliance: Form XObject contains forbidden key (/OPI, /Subtype2 /PS, or /PS)")
+	ErrPostScriptXObjectForbidden  = errors.New("compliance: PostScript XObjects (/Subtype /PS) are forbidden in PDF/A")
+	ErrMissingBlendingColorSpace   = errors.New("compliance: page with transparency must have /Group with /CS when no OutputIntent ICC profile is present")
+	ErrInvalidBlendMode            = errors.New("compliance: blend mode is not one of the standard modes defined in ISO 32000-1")
 
 	// PDF/UA-specific errors.
 	ErrMissingXMPTitle           = errors.New("compliance: XMP metadata missing dc:title")

@@ -2014,6 +2014,240 @@ func TestPDFA_DocInfoXMPSync_NonDCPropertiesNotEnforced(t *testing.T) {
 	}
 }
 
+// --- Form XObject compliance tests ---
+
+func (b *mockDocBuilder) withFormXObjectOPI() *mockDocBuilder {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"XObject": ast.PdfDict{
+				ast.PdfName("Fm0"): ast.PdfStream{
+					Dict: ast.PdfDict{
+						"Subtype": ast.PdfName("Form"),
+						"OPI":     ast.PdfDict{},
+					},
+				},
+			},
+		},
+	}
+	b.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	return b
+}
+
+func (b *mockDocBuilder) withPostScriptXObject() *mockDocBuilder {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"XObject": ast.PdfDict{
+				ast.PdfName("PS0"): ast.PdfStream{
+					Dict: ast.PdfDict{
+						"Subtype": ast.PdfName("PS"),
+					},
+				},
+			},
+		},
+	}
+	b.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	return b
+}
+
+func TestPDFA2_FormXObjectOPIForbidden(t *testing.T) {
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withFormXObjectOPI().build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrFormXObjectForbiddenKey) {
+		t.Error("expected ErrFormXObjectForbiddenKey for Form XObject with /OPI")
+	}
+}
+
+func TestPDFA2_PostScriptXObjectForbidden(t *testing.T) {
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withPostScriptXObject().build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrPostScriptXObjectForbidden) {
+		t.Error("expected ErrPostScriptXObjectForbidden for /Subtype /PS XObject")
+	}
+}
+
+func TestPDFA1_SkipsFormXObjectCheck(t *testing.T) {
+	// Clause 6.2.9.1 (Form XObject forbidden keys) only applies to parts 2+.
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadata().withFormXObjectOPI().build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrFormXObjectForbiddenKey) {
+		t.Error("PDF/A-1 should not check Form XObject forbidden keys (6.2.9.1)")
+	}
+}
+
+func TestPDFA2_CleanFormXObjectPasses(t *testing.T) {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"XObject": ast.PdfDict{
+				ast.PdfName("Fm0"): ast.PdfStream{
+					Dict: ast.PdfDict{
+						"Subtype": ast.PdfName("Form"),
+					},
+				},
+			},
+		},
+	}
+	m := newMockDoc().withOutputIntents()
+	m.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrFormXObjectForbiddenKey) {
+		t.Error("clean Form XObject should pass")
+	}
+}
+
+// --- Blend mode tests ---
+
+func TestPDFA2_InvalidBlendMode(t *testing.T) {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"ExtGState": ast.PdfDict{
+				ast.PdfName("GS0"): ast.PdfDict{
+					"BM": ast.PdfName("FancyBlend"),
+				},
+			},
+		},
+	}
+	m := newMockDoc().withOutputIntents()
+	m.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrInvalidBlendMode) {
+		t.Error("expected ErrInvalidBlendMode for non-standard blend mode")
+	}
+}
+
+func TestPDFA2_StandardBlendModePasses(t *testing.T) {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"ExtGState": ast.PdfDict{
+				ast.PdfName("GS0"): ast.PdfDict{
+					"BM": ast.PdfName("Multiply"),
+				},
+			},
+		},
+	}
+	m := newMockDoc().withOutputIntents()
+	m.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrInvalidBlendMode) {
+		t.Error("standard blend mode Multiply should pass")
+	}
+}
+
+// --- Transparency blending CS tests ---
+
+func TestPDFA2_TransparencyNoGroupCS(t *testing.T) {
+	// Page with transparency (SMask) but no /Group /CS, and no OutputIntent.
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"ExtGState": ast.PdfDict{
+				ast.PdfName("GS0"): ast.PdfDict{
+					"SMask": ast.PdfDict{}, // Non-None SMask = transparency.
+				},
+			},
+		},
+	}
+	m := newMockDoc() // No OutputIntents!
+	m.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrMissingBlendingColorSpace) {
+		t.Error("expected ErrMissingBlendingColorSpace for transparency without /Group /CS")
+	}
+}
+
+func TestPDFA2_TransparencyWithGroupCSPasses(t *testing.T) {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"ExtGState": ast.PdfDict{
+				ast.PdfName("GS0"): ast.PdfDict{
+					"BM": ast.PdfName("Multiply"),
+				},
+			},
+		},
+		"Group": ast.PdfDict{
+			"S":  ast.PdfName("Transparency"),
+			"CS": ast.PdfName("DeviceRGB"),
+		},
+	}
+	m := newMockDoc() // No OutputIntents.
+	m.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrMissingBlendingColorSpace) {
+		t.Error("transparency with /Group /CS should pass")
+	}
+}
+
+func TestPDFA2_TransparencyWithOutputIntentPasses(t *testing.T) {
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"ExtGState": ast.PdfDict{
+				ast.PdfName("GS0"): ast.PdfDict{
+					"BM": ast.PdfName("Multiply"),
+				},
+			},
+		},
+		// No /Group dict.
+	}
+	m := newMockDoc().withOutputIntents() // OutputIntent covers the requirement.
+	m.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrMissingBlendingColorSpace) {
+		t.Error("OutputIntent should satisfy blending CS requirement")
+	}
+}
+
+func TestPDFA1_SkipsBlendModeCheck(t *testing.T) {
+	// PDF/A-1 uses checkNoTransparency, not checkBlendModes.
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"ExtGState": ast.PdfDict{
+				ast.PdfName("GS0"): ast.PdfDict{
+					"BM": ast.PdfName("FancyBlend"),
+				},
+			},
+		},
+	}
+	m := newMockDoc().withOutputIntents().withMetadata()
+	m.catalog["Pages"] = ast.PdfDict{
+		"Type": ast.PdfName("Pages"), "Kids": ast.PdfArray{page}, "Count": ast.PdfInt(1),
+	}
+	doc := buildTestDoc(m.build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	// PDF/A-1 forbids transparency entirely — should get ErrTransparencyForbidden, not ErrInvalidBlendMode.
+	if containsError(errs, models.ErrInvalidBlendMode) {
+		t.Error("PDF/A-1 should not check blend mode validity (transparency is fully forbidden)")
+	}
+}
+
 // --- Profile helpers ---
 
 func TestPdfaPart(t *testing.T) {

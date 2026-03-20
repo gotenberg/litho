@@ -103,6 +103,9 @@ func pdfA2Checks(profile models.PDFAProfile) []catalogCheckFunc {
 	checks := pdfaParts1to3Base(profile)
 	checks = append(checks,
 		makeAnnotationCheck(nil, true),
+		checkFormXObjectCompliance,
+		checkBlendModes,
+		checkTransparencyBlendingCS,
 		checkAttachmentsPDFA,
 		checkOCGUsageApplication,
 	)
@@ -135,6 +138,9 @@ func pdfA3Checks(profile models.PDFAProfile) []catalogCheckFunc {
 	checks := pdfaParts1to3Base(profile)
 	checks = append(checks,
 		makeAnnotationCheck(nil, true),
+		checkFormXObjectCompliance,
+		checkBlendModes,
+		checkTransparencyBlendingCS,
 		checkAFRelationship,
 		checkOCGUsageApplication,
 	)
@@ -166,6 +172,9 @@ func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 	checks := pdfaBaseChecks(profile)
 	checks = append(checks,
 		makeAnnotationCheck(nil, true),
+		checkFormXObjectCompliance,
+		checkBlendModes,
+		checkTransparencyBlendingCS,
 		checkPDFA4Version,
 		checkOCGUsageApplication,
 		checkUnicodeMapping,

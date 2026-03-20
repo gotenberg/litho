@@ -1495,6 +1495,258 @@ func isReferenceXObject(dict ast.PdfDict) bool {
 	return hasRef
 }
 
+// --- Form XObject checks (ISO 19005, clause 6.2.9.1) ---
+
+// checkFormXObjectCompliance scans Form XObjects for forbidden keys:
+// /OPI, /Subtype2 with value /PS, and /PS (embedded PostScript).
+func checkFormXObjectCompliance(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		xobjObj, ok := resources["XObject"]
+		if !ok {
+			continue
+		}
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		xobjDict, ok := xobjRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, obj := range xobjDict {
+			dict := resolveXObjectDict(ctx, doc, obj)
+			if dict == nil {
+				continue
+			}
+			stObj, ok := dict["Subtype"]
+			if !ok {
+				continue
+			}
+			stName, ok := stObj.(ast.PdfName)
+			if !ok {
+				continue
+			}
+
+			// Check Form XObjects for forbidden keys.
+			if stName == "Form" {
+				if _, ok := dict["OPI"]; ok {
+					errs = append(errs, fmt.Errorf("%w: /OPI", models.ErrFormXObjectForbiddenKey))
+				}
+				if _, ok := dict["PS"]; ok {
+					errs = append(errs, fmt.Errorf("%w: /PS", models.ErrFormXObjectForbiddenKey))
+				}
+				if st2Obj, ok := dict["Subtype2"]; ok {
+					if st2Name, ok := st2Obj.(ast.PdfName); ok && st2Name == "PS" {
+						errs = append(errs, fmt.Errorf("%w: /Subtype2 /PS", models.ErrFormXObjectForbiddenKey))
+					}
+				}
+			}
+
+			// Check for PostScript XObjects (forbidden in all parts).
+			if stName == "PS" {
+				errs = append(errs, models.ErrPostScriptXObjectForbidden)
+			}
+		}
+	}
+	return errs
+}
+
+// resolveXObjectDict resolves an XObject to its dictionary, handling both
+// PdfStream and PdfDict representations.
+func resolveXObjectDict(ctx context.Context, doc *document.Document, obj ast.PdfObject) ast.PdfDict {
+	objRes, _ := document.ResolveObject(ctx, doc, obj)
+	switch xo := objRes.(type) {
+	case ast.PdfStream:
+		return xo.Dict
+	case ast.PdfDict:
+		return xo
+	}
+	return nil
+}
+
+// --- Transparency blending color space (ISO 19005-2, clause 6.2.9/6.2.10) ---
+
+// standardBlendModes are the blend modes defined in ISO 32000-1:2008 §11.3.5.
+var standardBlendModes = map[ast.PdfName]bool{
+	"Normal":     true,
+	"Compatible": true,
+	"Multiply":   true,
+	"Screen":     true,
+	"Overlay":    true,
+	"Darken":     true,
+	"Lighten":    true,
+	"ColorDodge": true,
+	"ColorBurn":  true,
+	"HardLight":  true,
+	"SoftLight":  true,
+	"Difference": true,
+	"Exclusion":  true,
+	"Hue":        true,
+	"Saturation": true,
+	"Color":      true,
+	"Luminosity": true,
+}
+
+// checkBlendModes verifies that all blend modes in ExtGState dictionaries
+// are standard ISO 32000-1 modes. This applies to PDF/A-2+ where
+// transparency is allowed but non-standard blend modes are not.
+func checkBlendModes(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		gsObj, ok := resources["ExtGState"]
+		if !ok {
+			continue
+		}
+		gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
+		gsDict, ok := gsRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, v := range gsDict {
+			vRes, _ := document.ResolveObject(ctx, doc, v)
+			stateDict, ok := vRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			bmObj, ok := stateDict["BM"]
+			if !ok {
+				continue
+			}
+			bmRes, _ := document.ResolveObject(ctx, doc, bmObj)
+			if bmName, ok := bmRes.(ast.PdfName); ok {
+				if !standardBlendModes[bmName] {
+					return []error{fmt.Errorf("%w: /%s", models.ErrInvalidBlendMode, bmName)}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// checkTransparencyBlendingCS verifies that pages using transparency features
+// declare a blending color space when no document-level OutputIntent ICC
+// profile is present (ISO 19005-2 §6.2.9/6.2.10). Each page with
+// transparency must have /Group << /S /Transparency /CS ... >>.
+func checkTransparencyBlendingCS(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	// If the document has an OutputIntent with ICC profile, the requirement
+	// is satisfied globally — no per-page /Group /CS needed.
+	if hasOutputIntentICC(ctx, doc, catalog) {
+		return nil
+	}
+
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if !pageUsesTransparency(ctx, doc, page) {
+			continue
+		}
+		// Page uses transparency: must have /Group with /CS, or a
+		// page-level OutputIntent with an ICC profile.
+		if !hasGroupWithCS(ctx, doc, page) && !hasPageOutputIntentICC(ctx, doc, page) {
+			errs = append(errs, models.ErrMissingBlendingColorSpace)
+		}
+	}
+	return errs
+}
+
+// hasPageOutputIntentICC returns true if the page dictionary itself contains
+// an /OutputIntents array with at least one entry having /DestOutputProfile.
+// This is a page-level override allowed by ISO 32000-2 (PDF 2.0).
+func hasPageOutputIntentICC(ctx context.Context, doc *document.Document, pageDict ast.PdfDict) bool {
+	oiObj, ok := pageDict["OutputIntents"]
+	if !ok {
+		return false
+	}
+	oiRes, _ := document.ResolveObject(ctx, doc, oiObj)
+	oi, ok := oiRes.(ast.PdfArray)
+	if !ok || len(oi) == 0 {
+		return false
+	}
+	for _, entry := range oi {
+		entryRes, _ := document.ResolveObject(ctx, doc, entry)
+		dict, ok := entryRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		if _, has := dict["DestOutputProfile"]; has {
+			return true
+		}
+	}
+	return false
+}
+
+// pageUsesTransparency returns true if the page's ExtGState resources contain
+// any transparency feature: non-Normal blend mode, opacity < 1.0, or SMask.
+// Note: a /Group /S /Transparency declaration alone is not sufficient to
+// trigger this — it is the page's color space group declaration, not evidence
+// of transparent rendering operations.
+func pageUsesTransparency(ctx context.Context, doc *document.Document, pageDict ast.PdfDict) bool {
+	resources := getResources(ctx, doc, pageDict)
+	if resources == nil {
+		return false
+	}
+	gsObj, ok := resources["ExtGState"]
+	if !ok {
+		return false
+	}
+	gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
+	gsDict, ok := gsRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	for _, v := range gsDict {
+		vRes, _ := document.ResolveObject(ctx, doc, v)
+		stateDict, ok := vRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		if bmObj, ok := stateDict["BM"]; ok {
+			if bmName, ok := bmObj.(ast.PdfName); ok && bmName != "Normal" && bmName != "Compatible" {
+				return true
+			}
+		}
+		if caObj, ok := stateDict["ca"]; ok {
+			if v := document.GetFloat(caObj); isTransparentOpacity(v) {
+				return true
+			}
+		}
+		if caObj, ok := stateDict["CA"]; ok {
+			if v := document.GetFloat(caObj); isTransparentOpacity(v) {
+				return true
+			}
+		}
+		if smObj, ok := stateDict["SMask"]; ok {
+			if smName, ok := smObj.(ast.PdfName); !ok || smName != "None" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasGroupWithCS returns true if the page has a /Group dictionary containing
+// both /S /Transparency and a /CS (color space) entry.
+func hasGroupWithCS(ctx context.Context, doc *document.Document, pageDict ast.PdfDict) bool {
+	grpObj, ok := pageDict["Group"]
+	if !ok {
+		return false
+	}
+	grpRes, _ := document.ResolveObject(ctx, doc, grpObj)
+	grpDict, ok := grpRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	_, hasCS := grpDict["CS"]
+	return hasCS
+}
+
 // --- Font checks ---
 
 func checkFontsEmbedded(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
