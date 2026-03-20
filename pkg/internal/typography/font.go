@@ -969,7 +969,13 @@ func decodeFontStream(ctx context.Context, doc *document.Document, fdDict ast.Pd
 func injectStandard14Widths(font *Font, baseFont string) {
 	name := normalizeBase14Name(baseFont)
 	if !isStandard14(name) {
-		return
+		// Last resort: use Helvetica (sans-serif) or Times-Roman (serif)
+		// metrics. This matches PDF.js's getBaseFontMetrics fallback.
+		if isSerifFont(baseFont) {
+			name = "Times-Roman"
+		} else {
+			name = "Helvetica"
+		}
 	}
 
 	widths := make([]float64, 256)

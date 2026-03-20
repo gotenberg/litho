@@ -138,8 +138,9 @@ func TestInjectStandard14Widths_NonStandard(t *testing.T) {
 
 	injectStandard14Widths(font, "CustomFont")
 
-	if len(font.Widths) != 0 {
-		t.Errorf("expected no widths for non-standard font, got %d", len(font.Widths))
+	// Non-standard fonts now get Helvetica fallback widths (matching PDF.js).
+	if len(font.Widths) != 256 {
+		t.Errorf("expected Helvetica fallback widths (256), got %d", len(font.Widths))
 	}
 }
 
