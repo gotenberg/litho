@@ -369,7 +369,7 @@ func loadManifest(t *testing.T) []manifestEntry {
 
 	manifestPath := filepath.Join(corpusDir, "test_manifest.json")
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-		t.Skip("pdfjs corpus not found; run scripts/fetch-pdfjs-corpus.sh")
+		t.Skip("pdfjs corpus not found; TestMain should have generated it via testcontainers")
 	}
 
 	data, err := os.ReadFile(manifestPath)
