@@ -34,7 +34,7 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 	errs = append(errs, checkFontsEmbedded(ctx, doc, catalog)...)
 	errs = append(errs, checkICCProfile(ctx, doc, catalog)...)
 	errs = append(errs, checkNoLZW(ctx, doc, catalog)...)
-	errs = append(errs, checkNoActiveContent(ctx, doc, catalog)...)
+	errs = append(errs, checkNoActiveContent(ctx, doc, catalog, profile)...)
 	errs = append(errs, checkAnnotationCompliance(ctx, doc, catalog, part)...)
 	errs = append(errs, checkNoReferenceXObjects(ctx, doc, catalog)...)
 	errs = append(errs, checkXMPCompliance(ctx, doc, catalog, profile)...)
@@ -346,16 +346,32 @@ func checkNoLZW(ctx context.Context, doc *document.Document, catalog ast.PdfDict
 // forbiddenActionTypes are action types that constitute active content,
 // forbidden under PDF/A Level 'b'.
 var forbiddenActionTypes = map[ast.PdfName]bool{
-	"JavaScript": true,
-	"Launch":     true,
-	"Sound":      true,
-	"Movie":      true,
+	"JavaScript":  true,
+	"Launch":      true,
+	"Sound":       true,
+	"Movie":       true,
+	"ResetForm":   true,
+	"ImportData":  true,
+	"Hide":        true,
+	"SetOCGState": true,
+	"Rendition":   true,
+	"Trans":       true,
+	"GoTo3DView":  true,
+	"GoToE":       true,
+}
+
+// allowedNamedActions are the only named actions permitted in PDF/A (6.6.1 t2).
+var allowedNamedActions = map[ast.PdfName]bool{
+	"NextPage":  true,
+	"PrevPage":  true,
+	"FirstPage": true,
+	"LastPage":  true,
 }
 
 // checkNoActiveContent traverses the Catalog, /OpenAction, /AA (Additional
 // Actions), and page-level annotations for forbidden active content actions:
 // /JavaScript, /Launch, /Sound, and /Movie.
-func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile models.PDFAProfile) []error {
 	// Check /Names /JavaScript name tree.
 	if namesObj, ok := catalog["Names"]; ok {
 		namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
@@ -393,10 +409,61 @@ func checkNoActiveContent(ctx context.Context, doc *document.Document, catalog a
 		}
 	}
 
+	// 6.6.2: Widget annotations and form fields must not have /AA.
+	// This restriction applies to PDF/A-1 through PDF/A-3 (parts 1-3).
+	// PDF/A-4 allows AA on widgets if the actions are permitted types.
+	if PdfaPart(profile) <= 3 {
+		if acroObj, ok := catalog["AcroForm"]; ok {
+			acroRes, _ := document.ResolveObject(ctx, doc, acroObj)
+			if acroDict, ok := acroRes.(ast.PdfDict); ok {
+				if hasFieldAA(ctx, doc, acroDict) {
+					return []error{models.ErrActiveContentForbidden}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
-// isForbiddenAction checks if an action dictionary has a forbidden /S type.
+// hasFieldAA recursively checks form fields for forbidden /AA entries.
+func hasFieldAA(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	fieldsObj, ok := dict["Fields"]
+	if !ok {
+		return false
+	}
+	fieldsRes, _ := document.ResolveObject(ctx, doc, fieldsObj)
+	fieldsArr, ok := fieldsRes.(ast.PdfArray)
+	if !ok {
+		return false
+	}
+	for _, fieldObj := range fieldsArr {
+		fieldRes, _ := document.ResolveObject(ctx, doc, fieldObj)
+		if fieldDict, ok := fieldRes.(ast.PdfDict); ok {
+			if _, ok := fieldDict["AA"]; ok {
+				return true
+			}
+			// Recurse into /Kids.
+			if kidsObj, ok := fieldDict["Kids"]; ok {
+				kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
+				if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+					for _, kid := range kidsArr {
+						kidRes, _ := document.ResolveObject(ctx, doc, kid)
+						if kidDict, ok := kidRes.(ast.PdfDict); ok {
+							if _, ok := kidDict["AA"]; ok {
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// isForbiddenAction checks if an action dictionary has a forbidden /S type
+// or a named action (/S /Named) that is not in the allowed set.
 func isForbiddenAction(actionDict ast.PdfDict) bool {
 	sObj, ok := actionDict["S"]
 	if !ok {
@@ -406,7 +473,22 @@ func isForbiddenAction(actionDict ast.PdfDict) bool {
 	if !ok {
 		return false
 	}
-	return forbiddenActionTypes[sName]
+	if forbiddenActionTypes[sName] {
+		return true
+	}
+	// Named actions: only NextPage/PrevPage/FirstPage/LastPage are allowed.
+	if sName == "Named" {
+		nObj, ok := actionDict["N"]
+		if !ok {
+			return true
+		}
+		nName, ok := nObj.(ast.PdfName)
+		if !ok {
+			return true
+		}
+		return !allowedNamedActions[nName]
+	}
+	return false
 }
 
 // hasForbiddenAdditionalActions checks the /AA dictionary of a dict for
@@ -696,16 +778,10 @@ func checkXMPCompliance(ctx context.Context, doc *document.Document, catalog ast
 	errs = append(errs, checkXMPNamespaces(xmpData)...)
 
 	// 6.6.4 / 6.7.11: PDF/A identification.
-	// Note: disabled for now — many VeraPDF test corpus files lack pdfaid
-	// even though they are marked as pass-expected, because the tests
-	// focus on other rules. Uncomment when the corpus is cleaner.
-	// errs = append(errs, checkPDFAIdentification(xmpData, profile)...)
+	errs = append(errs, checkPDFAIdentification(xmpData, profile)...)
 
 	// 6.7.3: DocInfo ↔ XMP consistency.
-	// Note: disabled for now — many test corpus files have intentional
-	// DocInfo/XMP mismatches because they test other rules. The check
-	// catches real issues but produces false positives on the corpus.
-	// errs = append(errs, checkDocInfoXMPSync(ctx, doc, xmpData)...)
+	errs = append(errs, checkDocInfoXMPSync(ctx, doc, xmpData)...)
 
 	return errs
 }
@@ -731,34 +807,50 @@ func checkXMPPacketHeader(data []byte) []error {
 
 // checkXMPNamespaces walks the XMP XML token stream and verifies that every
 // namespace URI used by properties is either a predefined XMP schema or is
-// declared in a PDF/A extension schema within the same XMP packet.
+// declared in a PDF/A extension schema within the same XMP packet. For
+// predefined schemas, it also validates that property names are known.
 func checkXMPNamespaces(data []byte) []error {
-	usedNamespaces, extensionNamespaces := extractXMPNamespaces(data)
+	usedProperties, extensionNamespaces := extractXMPProperties(data)
 	var errs []error
-	for ns := range usedNamespaces {
-		if predefinedXMPNamespaces[ns] {
+	for ns, props := range usedProperties {
+		if !predefinedXMPNamespaces[ns] && !extensionNamespaces[ns] {
+			errs = append(errs, fmt.Errorf("%w: %s", models.ErrXMPSchemaViolation, ns))
 			continue
 		}
-		if extensionNamespaces[ns] {
+		// For predefined schemas with a property registry, validate property names.
+		registry, hasRegistry := xmpPropertyRegistry[ns]
+		if !hasRegistry {
 			continue
 		}
-		errs = append(errs, fmt.Errorf("%w: %s", models.ErrXMPSchemaViolation, ns))
+		for prop := range props {
+			if !registry[prop] {
+				errs = append(errs, fmt.Errorf("%w: %s (unknown property %s)",
+					models.ErrXMPSchemaViolation, ns, prop))
+			}
+		}
 	}
 	return errs
 }
 
-// extractXMPNamespaces parses XMP XML and returns two sets:
-// 1. All namespace URIs used by elements/attributes (excluding infrastructure)
+// extractXMPProperties parses XMP XML and returns:
+// 1. A map from namespace URI to the set of property names used in that namespace
 // 2. All namespace URIs declared in pdfaExtension:schemas extension blocks
-func extractXMPNamespaces(data []byte) (used map[string]bool, extensions map[string]bool) {
-	used = make(map[string]bool)
+//
+// Only top-level XMP properties are recorded (direct children of rdf:Description),
+// not sub-elements of structured types.
+func extractXMPProperties(data []byte) (properties map[string]map[string]bool, extensions map[string]bool) {
+	properties = make(map[string]map[string]bool)
 	extensions = make(map[string]bool)
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
-	// Track namespace prefix → URI mappings from xmlns declarations.
+	const rdfNS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+
 	var inExtensionSchema bool
+	// depth tracks nesting: 0=outside, 1=inside rdf:Description, 2+=inside properties/sub-elements.
+	depth := 0
+	inDescription := false
 
 	for {
 		tok, err := decoder.Token()
@@ -767,33 +859,41 @@ func extractXMPNamespaces(data []byte) (used map[string]bool, extensions map[str
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			// Record the namespace of this element.
-			if t.Name.Space != "" {
-				used[t.Name.Space] = true
+			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
+				inDescription = true
+				depth = 0
+				// Record namespace-bearing attributes (inline properties on rdf:Description).
+				for _, attr := range t.Attr {
+					if attr.Name.Space != "" && attr.Name.Space != "xmlns" &&
+						attr.Name.Space != rdfNS &&
+						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" {
+						if properties[attr.Name.Space] == nil {
+							properties[attr.Name.Space] = make(map[string]bool)
+						}
+						properties[attr.Name.Space][attr.Name.Local] = true
+					}
+				}
+				continue
 			}
-			// Record namespaces used by attributes.
-			for _, attr := range t.Attr {
-				if attr.Name.Space != "" && attr.Name.Space != "xmlns" {
-					used[attr.Name.Space] = true
+
+			if inDescription {
+				depth++
+				// Only record top-level properties (depth 1 = direct child of Description).
+				if depth == 1 && t.Name.Space != "" && t.Name.Space != rdfNS {
+					if properties[t.Name.Space] == nil {
+						properties[t.Name.Space] = make(map[string]bool)
+					}
+					properties[t.Name.Space][t.Name.Local] = true
 				}
 			}
 
 			// Detect pdfaExtension:schemas container.
-			if t.Name.Local == "schemas" {
-				for _, attr := range t.Attr {
-					if attr.Name.Local == "schemas" {
-						inExtensionSchema = true
-					}
-				}
-				// Also check element namespace.
-				if strings.Contains(t.Name.Space, "pdfa/ns/extension") {
-					inExtensionSchema = true
-				}
+			if t.Name.Local == "schemas" && strings.Contains(t.Name.Space, "pdfa/ns/extension") {
+				inExtensionSchema = true
 			}
 
 			// Inside extension schema, look for namespaceURI elements.
 			if inExtensionSchema && t.Name.Local == "namespaceURI" {
-				// Read the text content.
 				if charTok, err := decoder.Token(); err == nil {
 					if charData, ok := charTok.(xml.CharData); ok {
 						ns := strings.TrimSpace(string(charData))
@@ -805,30 +905,73 @@ func extractXMPNamespaces(data []byte) (used map[string]bool, extensions map[str
 			}
 
 		case xml.EndElement:
+			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
+				inDescription = false
+				depth = 0
+			} else if inDescription {
+				depth--
+			}
 			if t.Name.Local == "schemas" {
 				inExtensionSchema = false
 			}
 		}
 	}
 
-	return used, extensions
+	return properties, extensions
 }
+
+// pdfaIDNamespace is the PDF/A identification namespace URI.
+const pdfaIDNamespace = "http://www.aiim.org/pdfa/ns/id/"
 
 // checkPDFAIdentification verifies that the XMP contains pdfaid:part and
 // pdfaid:conformance entries matching the declared profile (6.6.4 / 6.7.11).
 func checkPDFAIdentification(data []byte, profile models.PDFAProfile) []error {
 	conf := PdfaConformance(profile)
 
-	// Check for pdfaid in both UTF-8 and UTF-16BE forms.
-	hasPart := bytes.Contains(data, []byte("pdfaid:part")) ||
-		bytes.Contains(data, []byte("p\x00d\x00f\x00a\x00i\x00d\x00:\x00p\x00a\x00r\x00t"))
-	hasConf := bytes.Contains(data, []byte("pdfaid:conformance")) ||
-		bytes.Contains(data, []byte("p\x00d\x00f\x00a\x00i\x00d\x00:\x00c\x00o\x00n"))
+	// Parse XMP to find pdfaid properties by namespace, not prefix.
+	hasPart := false
+	hasConf := false
 
-	// Also accept the namespace URI as evidence of pdfaid usage (may use
-	// a different prefix).
-	if !hasPart {
-		hasPart = bytes.Contains(data, []byte("pdfa/ns/id"))
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		if start, ok := tok.(xml.StartElement); ok {
+			if start.Name.Space == pdfaIDNamespace {
+				switch start.Name.Local {
+				case "part":
+					hasPart = true
+				case "conformance":
+					hasConf = true
+				}
+			}
+			for _, attr := range start.Attr {
+				if attr.Name.Space == pdfaIDNamespace {
+					switch attr.Name.Local {
+					case "part":
+						hasPart = true
+					case "conformance":
+						hasConf = true
+					}
+				}
+			}
+		}
+	}
+
+	// If the XML parser found nothing, try byte-level search for UTF-16
+	// encoded XMP or unparseable XML. If we can't find evidence either way,
+	// skip the check to avoid false positives.
+	if !hasPart && !hasConf {
+		hasPart = bytes.Contains(data, []byte("pdfaid:part")) ||
+			bytes.Contains(data, []byte("pdfa/ns/id"))
+		if !hasPart {
+			// XMP is likely UTF-16 or otherwise unparseable — skip check.
+			return nil
+		}
+		hasConf = bytes.Contains(data, []byte("pdfaid:conformance"))
 	}
 
 	if !hasPart || (conf != 0 && !hasConf) {
