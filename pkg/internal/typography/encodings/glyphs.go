@@ -281,6 +281,25 @@ func GlyphToRuneFull(name string) (rune, bool) {
 			return rune(r), true
 		}
 	}
+	// Non-standard glyph name patterns used by some PDF generators:
+	// "Gxx" — 2 hex digits (e.g., "G4F" → U+004F)
+	if len(name) == 3 && name[0] == 'G' {
+		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil && r > 0 {
+			return rune(r), true
+		}
+	}
+	// "g00xx" — 4 hex digits after "g" (e.g., "g0053" → U+0053)
+	if len(name) == 5 && name[0] == 'g' {
+		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil && r > 0 {
+			return rune(r), true
+		}
+	}
+	// "Cdd" / "Cddd" — decimal charcode (e.g., "C141" → rune(141))
+	if len(name) >= 3 && len(name) <= 4 && (name[0] == 'C' || name[0] == 'c') {
+		if r, err := strconv.Atoi(name[1:]); err == nil && r > 0 && r <= 0xFFFF {
+			return rune(r), true
+		}
+	}
 	// Try RecoverGlyphName (strip suffixes like ".001", ".alt", etc.)
 	recovered := RecoverGlyphName(name)
 	if recovered != name {

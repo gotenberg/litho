@@ -506,9 +506,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	// Extract /FontBBox and embedded font metrics from the FontDescriptor.
 	extractFontDescriptorMetrics(ctx, doc, fontDict, font)
 
-	// Embedded TrueType/OpenType cmap fallback: if there is no ToUnicode CMap,
-	// extract the glyph-to-Unicode mapping from the embedded font binary so the
-	// text extraction pipeline can still produce meaningful UTF-8.
+	// Embedded TrueType/OpenType cmap fallback: extract the glyph-to-Unicode
+	// mapping from the embedded font binary when no ToUnicode CMap exists.
+	// When ToUnicode IS present, it is authoritative — the embedded cmap may
+	// disagree because subset fonts remap GIDs.
 	if font.ToUnicode == nil {
 		extractEmbeddedCmap(ctx, doc, fontDict, font)
 	}
