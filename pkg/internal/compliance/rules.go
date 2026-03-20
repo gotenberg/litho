@@ -57,6 +57,7 @@ func pdfaBaseChecks(profile models.PDFAProfile) []catalogCheckFunc {
 	return []catalogCheckFunc{
 		checkFontsEmbedded,
 		checkICCProfile,
+		checkContentStreamDeviceCS,
 		checkNoLZW,
 		checkNoReferenceXObjects,
 		makeXMPCheck(profile),

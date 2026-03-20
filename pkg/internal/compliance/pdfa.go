@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -328,6 +329,72 @@ func isDeviceDependentCS(ctx context.Context, doc *document.Document, csObj ast.
 		}
 	}
 	return false
+}
+
+// checkContentStreamDeviceCS parses page content streams and verifies that
+// device-dependent color spaces are not used without a Default override or
+// OutputIntent. This catches uses of g/G/rg/RG/k/K operators (implicit
+// device CS) and cs/CS operators naming device-dependent spaces directly.
+func checkContentStreamDeviceCS(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	// If document has an OutputIntent with ICC profile, device CS is allowed.
+	if hasOutputIntentICC(ctx, doc, catalog) {
+		return nil
+	}
+
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		defaults := make(map[ast.PdfName]bool)
+		if resources != nil {
+			defaults = collectDefaultColorSpaces(ctx, doc, resources)
+			addTransparencyGroupDefaults(ctx, doc, page, defaults)
+		}
+
+		// Check page-level OutputIntent.
+		if hasPageOutputIntentICC(ctx, doc, page) {
+			continue
+		}
+
+		ops, err := content.ParsePageContent(ctx, doc, page)
+		if err != nil {
+			continue // Cannot parse — skip this page.
+		}
+
+		for _, op := range ops {
+			switch op.Operator {
+			case "g", "G":
+				if !defaults["DeviceGray"] {
+					errs = append(errs, fmt.Errorf("%w: DeviceGray via %s operator",
+						models.ErrMissingICCProfile, op.Operator))
+					return errs
+				}
+			case "rg", "RG":
+				if !defaults["DeviceRGB"] {
+					errs = append(errs, fmt.Errorf("%w: DeviceRGB via %s operator",
+						models.ErrMissingICCProfile, op.Operator))
+					return errs
+				}
+			case "k", "K":
+				if !defaults["DeviceCMYK"] {
+					errs = append(errs, fmt.Errorf("%w: DeviceCMYK via %s operator",
+						models.ErrMissingICCProfile, op.Operator))
+					return errs
+				}
+			case "cs", "CS":
+				if len(op.Operands) > 0 {
+					if csName, ok := op.Operands[0].(ast.PdfName); ok {
+						if deviceDependentNames[csName] && !defaults[csName] {
+							errs = append(errs, fmt.Errorf("%w: %s via %s operator",
+								models.ErrMissingICCProfile, csName, op.Operator))
+							return errs
+						}
+					}
+				}
+			}
+		}
+	}
+	return errs
 }
 
 // checkNoLZW scans all page resource streams for forbidden LZW compression.
