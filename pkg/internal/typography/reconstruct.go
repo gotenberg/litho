@@ -35,13 +35,15 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 		prev := elements[i-1]
 		el := elements[i]
 		newLine := false
-		if el.Vertical {
+		if el.Vertical || isOrthogonalRotation(el.Angle) {
+			// Vertical WMode or 90°/270° rotated text: characters progress
+			// along Y, so line breaks are detected by X changes.
 			if math.Abs(prev.X-el.X) > 2.0 {
 				newLine = true
 			}
 		} else if isRotated(el.Angle) {
-			// For rotated text, project positions onto the perpendicular axis
-			// of the text direction to detect line breaks.
+			// For arbitrarily rotated text, project positions onto the
+			// perpendicular axis of the text direction to detect line breaks.
 			newLine = perpDist(prev, el) > 2.0
 		} else {
 			if math.Abs(prev.Y-el.Y) > 2.0 {
@@ -74,8 +76,8 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 			if i > 0 {
 				prev := ln.elems[i-1]
 				curr := ln.elems[i]
-				if curr.Vertical {
-					if needsSpace(prev.Y-curr.Y, prev.Width, curr.FontSize) {
+				if curr.Vertical || isOrthogonalRotation(curr.Angle) {
+					if needsSpace(curr.Y-prev.Y, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
 				} else if isRotated(curr.Angle) {
@@ -273,6 +275,15 @@ func needsSpace(delta, prevWidth, fontSize float64) bool {
 	expectedAdvance := 0.5 * fontSize
 	gap := delta - expectedAdvance
 	return gap > 0.3*fontSize
+}
+
+// isOrthogonalRotation returns true when the text angle is close to 90° or
+// 270° (±π/2). These are not "rotated" in the arbitrary sense — they are
+// orthogonal text that progresses along the Y axis instead of X.
+func isOrthogonalRotation(angle float64) bool {
+	const threshold = math.Pi / 180 // 1 degree
+	a := math.Abs(angle)
+	return math.Abs(a-math.Pi/2) < threshold || math.Abs(a-3*math.Pi/2) < threshold
 }
 
 // isRotated returns true when the text angle deviates significantly from

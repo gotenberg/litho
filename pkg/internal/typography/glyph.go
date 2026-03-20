@@ -21,13 +21,15 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 	// text matrix and CTM scale. This ensures TextElement.FontSize is in
 	// the same coordinate system as TextElement.Width and positions, which
 	// is critical for correct space inference in ReconstructText.
+	//
+	// The text rendering matrix is Tm × CTM. The horizontal text direction
+	// in page space is (Tm[0]*CTM[0]+Tm[1]*CTM[2], Tm[0]*CTM[1]+Tm[1]*CTM[3]).
+	// The scale factor is the magnitude of this vector × fontSize.
 	ctm := state.CTM
 	tm := state.Text.Tm
-	effectiveFontSize := math.Abs(fontSize * tm[0] * ctm[0])
-	if effectiveFontSize == 0 {
-		// Vertical or rotated text: try the Y scale.
-		effectiveFontSize = math.Abs(fontSize * tm[3] * ctm[3])
-	}
+	dx := tm[0]*ctm[0] + tm[1]*ctm[2]
+	dy := tm[0]*ctm[1] + tm[1]*ctm[3]
+	effectiveFontSize := fontSize * math.Sqrt(dx*dx+dy*dy)
 	if effectiveFontSize == 0 {
 		effectiveFontSize = fontSize // Last resort: use raw.
 	}
@@ -167,8 +169,10 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 				wordSpace = state.Text.Tw
 			}
 			advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
-			dy := advance * state.Text.Tm[3] * ctm[3]
-			pageWidth = math.Abs(dy)
+			// Map the vertical advance through the full Tm × CTM matrix.
+			awx := advance * (tm[2]*ctm[0] + tm[3]*ctm[2])
+			awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
+			pageWidth = math.Sqrt(awx*awx + awy*awy)
 		} else {
 			glyphWidth := font.GetGlyphWidth(charCode)
 			wordSpace := 0.0
@@ -176,8 +180,10 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 				wordSpace = state.Text.Tw
 			}
 			advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
-			dx := advance * state.Text.Tm[0] * ctm[0]
-			pageWidth = math.Abs(dx)
+			// Map the horizontal advance through the full Tm × CTM matrix.
+			awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
+			awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])
+			pageWidth = math.Sqrt(awx*awx + awy*awy)
 		}
 
 		// The graphics state clipping path (W/W*) is intentionally not checked
