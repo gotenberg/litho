@@ -34,8 +34,9 @@ type Font struct {
 	FontMatrix         [6]float64         // Type 3: maps glyph space to text space (default: [0.001 0 0 0.001 0 0])
 	Type3Widths        map[string]float64 // Type 3: glyph name → width from d0/d1 operators (in glyph space)
 	GIDToUnicode       map[uint16]rune    // Glyph ID → Unicode rune from embedded TrueType/OpenType cmap
-	HmtxWidths         map[uint16]uint16  // GID → advance width from TrueType hmtx table (in font design units)
+	HmtxWidths         map[uint16]uint16  // GID → advance width from TrueType hmtx/CFF charstring (in font design units)
 	UnitsPerEm         uint16             // Font design units per em (from head table; default 1000)
+	AvgWidth           uint16             // OS/2 xAvgCharWidth (in font design units; 0 if unavailable)
 	FontBBox           [4]float64         // [xMin yMin xMax yMax] from /FontDescriptor /FontBBox
 	WMode              int                // 0 = horizontal (default), 1 = vertical
 	DW2                [2]float64         // Default vertical metrics [vY w1] (default: [880 -1000])
@@ -120,10 +121,15 @@ func (f *Font) resolveWidth(charCode int) float64 {
 		}
 	}
 
-	// --- Step 5: /FontBBox average, then absolute fallback ---
+	// --- Step 5: /FontBBox width, OS/2 xAvgCharWidth, then absolute fallback ---
 	bboxWidth := f.FontBBox[2] - f.FontBBox[0] // xMax - xMin
 	if bboxWidth > 0 {
 		return bboxWidth
+	}
+
+	// OS/2 xAvgCharWidth provides a better fallback than a hard-coded 1 em.
+	if f.AvgWidth > 0 {
+		return float64(f.AvgWidth) * 1000.0 / float64(max(f.UnitsPerEm, 1))
 	}
 
 	return 1000 // 1 em — prevents zero-width glyphs
@@ -583,6 +589,9 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 		return
 	}
 
+	// OS/2 xAvgCharWidth — a better fallback than FontBBox or 1000.
+	font.AvgWidth = readOS2AvgWidth(fontData)
+
 	widths := extractBinaryWidths(fontData)
 	if len(widths) == 0 {
 		return
@@ -590,8 +599,28 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 
 	font.HmtxWidths = widths
 
-	// Read unitsPerEm from the head table for correct scaling.
-	font.UnitsPerEm = readUnitsPerEm(fontData)
+	// Read unitsPerEm for correct width scaling.
+	// CFF fonts use 1000 units per em by default. For OTTO fonts (CFF inside
+	// OpenType), the head table may report a different value (e.g., 2048) but
+	// CFF charstring widths are always in the CFF coordinate system.
+	if isCFFFont(fontData) {
+		font.UnitsPerEm = 1000 //nolint:mnd // CFF standard
+	} else {
+		font.UnitsPerEm = readUnitsPerEm(fontData)
+	}
+}
+
+// isCFFFont returns true if the font data is bare CFF or OTTO (CFF-in-OpenType).
+func isCFFFont(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	// Bare CFF: major version 1
+	if data[0] == 1 && data[1] == 0 {
+		return true
+	}
+	// OTTO: OpenType with CFF outlines
+	return string(data[:4]) == "OTTO"
 }
 
 // extractBinaryWidths dispatches to TrueType or CFF width extraction based
@@ -631,6 +660,21 @@ func extractBinaryWidths(fontData []byte) map[uint16]uint16 {
 	// Fallback: try TrueType
 	w, _ := truetype.GlyphWidths(fontData)
 	return w
+}
+
+// readOS2AvgWidth extracts xAvgCharWidth from the OS/2 table. Returns 0 if
+// the table is absent or invalid. The value is in font design units.
+func readOS2AvgWidth(data []byte) uint16 {
+	records, err := truetype.ParseTableDirectory(data)
+	if err != nil {
+		return 0
+	}
+	os2Data, err := truetype.TableData(data, records, "OS/2")
+	if err != nil || len(os2Data) < 4 {
+		return 0
+	}
+	// xAvgCharWidth is at offset 2 (after version at offset 0).
+	return binary.BigEndian.Uint16(os2Data[2:4])
 }
 
 // readUnitsPerEm extracts unitsPerEm from the TrueType/OpenType head table.
