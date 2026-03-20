@@ -75,7 +75,10 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 
 	// Level 'a' (Accessible): tagged, structured, and navigable.
 	if conf == 'a' {
-		errs = append(errs, checkLangEntry(ctx, doc, catalog)...)
+		// /Lang is "should" (recommendation) in PDF/A-1, "shall" in PDF/A-2+.
+		if part >= 2 {
+			errs = append(errs, checkLangEntry(ctx, doc, catalog)...)
+		}
 		errs = append(errs, checkMarkInfo(ctx, doc, catalog)...)
 		errs = append(errs, checkStructTreeRoot(ctx, doc, catalog)...)
 		errs = append(errs, checkFigureAltText(ctx, doc, catalog)...)
@@ -586,9 +589,33 @@ func hasFontUnicodeMapping(ctx context.Context, doc *document.Document, fontDict
 		return true
 	}
 
+	// Embedded Type1 fonts with glyph names provide Unicode mapping through
+	// the Adobe Glyph List (ISO 19005, clause 6.3.8 exemption).
+	if isEmbeddedType1Font(ctx, doc, fontDict) {
+		return true
+	}
+
 	// Check for a standard predefined encoding name or an encoding
 	// dictionary with /Differences (glyph name mapping via AGL).
 	return hasStandardOrDifferencesEncoding(ctx, doc, fontDict)
+}
+
+func isEmbeddedType1Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	stObj, ok := fontDict["Subtype"]
+	if !ok {
+		return false
+	}
+	stRes, _ := document.ResolveObject(ctx, doc, stObj)
+	st, ok := stRes.(ast.PdfName)
+	if !ok || st != "Type1" {
+		return false
+	}
+	fd := findFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return false
+	}
+	_, hasFF := fd["FontFile"]
+	return hasFF
 }
 
 // hasStandardOrDifferencesEncoding returns true if the font has a standard
@@ -735,7 +762,7 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 		if sObj, ok := v["S"]; ok {
 			sRes, _ := document.ResolveObject(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
-				if _, hasAlt := v["Alt"]; !hasAlt {
+				if !hasAltOrActualText(v) {
 					*errs = append(*errs, models.ErrUntaggedVisualElement)
 				}
 			}
@@ -746,6 +773,17 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 			checkFigureAltRecursive(ctx, doc, kRes, errs)
 		}
 	}
+}
+
+// hasAltOrActualText returns true if the structure element has /Alt or
+// /ActualText. Per ISO 32000-1:2008 §14.9.4, /ActualText is a valid
+// alternative to /Alt for providing textual descriptions.
+func hasAltOrActualText(dict ast.PdfDict) bool {
+	if _, ok := dict["Alt"]; ok {
+		return true
+	}
+	_, ok := dict["ActualText"]
+	return ok
 }
 
 func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
@@ -775,31 +813,17 @@ func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict as
 
 // --- Part 1 specific ---
 
-// checkPDFA1Version verifies that the document declares PDF version 1.4 or lower,
-// as required by PDF/A-1 (ISO 19005-1). It checks the catalog /Version key first,
-// then falls back to the file header bytes.
+// checkPDFA1Version verifies that the document declares PDF version 1.4 or
+// lower, as required by PDF/A-1 (ISO 19005-1). Only the catalog /Version key
+// is checked — the file header version is informational and not authoritative
+// for conformance, consistent with veraPDF's behavior.
 func checkPDFA1Version(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
-	// Check catalog /Version (overrides header per spec).
 	if vObj, ok := catalog["Version"]; ok {
 		vRes, _ := document.ResolveObject(ctx, doc, vObj)
 		if vName, ok := vRes.(ast.PdfName); ok {
-			if isPDFVersionAtMost14(string(vName)) {
-				return nil
+			if !isPDFVersionAtMost14(string(vName)) {
+				return []error{models.ErrVersionTooHighForA1}
 			}
-			return []error{models.ErrVersionTooHighForA1}
-		}
-	}
-
-	// Fallback: read header bytes for %PDF-x.y.
-	headerBuf, err := safeReadHeader(doc)
-	if err != nil {
-		// Cannot read header in test mocks — assume compliant.
-		return nil
-	}
-	if _, after, ok := bytes.Cut(headerBuf, []byte("%PDF-")); ok {
-		versionStr := string(after) // e.g., "1.4..."
-		if !isPDFVersionAtMost14(versionStr) {
-			return []error{models.ErrVersionTooHighForA1}
 		}
 	}
 	return nil
@@ -867,21 +891,22 @@ func scanExtGStateForTransparency(ctx context.Context, doc *document.Document, p
 	for _, v := range gsDict {
 		vRes, _ := document.ResolveObject(ctx, doc, v)
 		if stateDict, ok := vRes.(ast.PdfDict); ok {
-			// /BM (blend mode) other than Normal.
+			// /BM (blend mode) other than Normal or Compatible.
+			// /Compatible is the PDF 1.0 default, equivalent to /Normal.
 			if bmObj, ok := stateDict["BM"]; ok {
-				if bmName, ok := bmObj.(ast.PdfName); ok && bmName != "Normal" {
+				if bmName, ok := bmObj.(ast.PdfName); ok && bmName != "Normal" && bmName != "Compatible" {
 					return []error{models.ErrTransparencyForbidden}
 				}
 			}
 			// /ca (fill opacity) < 1.0.
 			if caObj, ok := stateDict["ca"]; ok {
-				if v := document.GetFloat(caObj); v < 1.0 && v >= 0 {
+				if v := document.GetFloat(caObj); isTransparentOpacity(v) {
 					return []error{models.ErrTransparencyForbidden}
 				}
 			}
 			// /CA (stroke opacity) < 1.0.
 			if caObj, ok := stateDict["CA"]; ok {
-				if v := document.GetFloat(caObj); v < 1.0 && v >= 0 {
+				if v := document.GetFloat(caObj); isTransparentOpacity(v) {
 					return []error{models.ErrTransparencyForbidden}
 				}
 			}
@@ -894,6 +919,15 @@ func scanExtGStateForTransparency(ctx context.Context, doc *document.Document, p
 		}
 	}
 	return nil
+}
+
+// isTransparentOpacity returns true if the opacity value indicates actual
+// transparency: between 0 and slightly below 1.0. Values very close to 1.0
+// (within 1e-4) are treated as fully opaque to handle floating-point
+// imprecision in PDF writers (e.g., 0.9999999, 1.0000001).
+func isTransparentOpacity(v float64) bool {
+	const epsilon = 1e-4
+	return v >= 0 && v < 1.0-epsilon
 }
 
 func checkNoJPX(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
@@ -979,8 +1013,9 @@ func validateEmbeddedFilePDFA(ctx context.Context, doc *document.Document, fileS
 }
 
 // checkOCGUsageApplication verifies that if Optional Content Groups (Layers)
-// are present via /OCProperties, the dictionary contains /AS (Usage Application
-// Dictionaries) as required by PDF/A-2.
+// with /Usage entries are present via /OCProperties, the dictionary contains
+// /AS (Usage Application Dictionaries) as required by PDF/A-2 and PDF/A-3.
+// /AS is only required when at least one OCG defines a /Usage dict.
 func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	ocObj, ok := catalog["OCProperties"]
 	if !ok {
@@ -991,21 +1026,50 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return nil
 	}
-	if _, ok := ocDict["AS"]; !ok {
-		return []error{models.ErrMissingOCGUsageApp}
+	if _, ok := ocDict["AS"]; ok {
+		return nil
 	}
-	return nil
+	// /AS is only required when OCGs define /Usage entries.
+	if !ocgsHaveUsage(ctx, doc, ocDict) {
+		return nil
+	}
+	return []error{models.ErrMissingOCGUsageApp}
+}
+
+// ocgsHaveUsage returns true if any OCG in the /OCGs array has a /Usage dict.
+func ocgsHaveUsage(ctx context.Context, doc *document.Document, ocDict ast.PdfDict) bool {
+	ocgsObj, ok := ocDict["OCGs"]
+	if !ok {
+		return false
+	}
+	ocgsRes, _ := document.ResolveObject(ctx, doc, ocgsObj)
+	ocgsArr, ok := ocgsRes.(ast.PdfArray)
+	if !ok {
+		return false
+	}
+	for _, ocgObj := range ocgsArr {
+		ocgRes, _ := document.ResolveObject(ctx, doc, ocgObj)
+		if ocgDict, ok := ocgRes.(ast.PdfDict); ok {
+			if _, ok := ocgDict["Usage"]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // --- Part 3 specific ---
 
-// validAFRelationships are the allowed /AFRelationship values per ISO 19005-3.
+// validAFRelationships are the allowed /AFRelationship values per ISO 19005-3
+// and ISO 32000-2:2020 (PDF 2.0). /Undefined is accepted by veraPDF and is
+// used in practice for files with no specific relationship.
 var validAFRelationships = map[ast.PdfName]bool{
 	"Source":      true,
 	"Data":        true,
 	"Alternative": true,
 	"Supplement":  true,
 	"Unspecified": true,
+	"Undefined":   true,
 }
 
 // checkAFRelationship verifies that every embedded file spec has a valid
@@ -1144,7 +1208,8 @@ func check3DStreamDict(dict ast.PdfDict) bool {
 	return ok && valid3DSubtypes[stName]
 }
 
-// hasRichMedia3DSubtype checks /RichMediaContent for 3D assets with valid subtypes.
+// hasRichMedia3DSubtype checks /RichMediaContent for 3D content by examining
+// both the content dict's own /Subtype and /Configurations entries.
 func hasRichMedia3DSubtype(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
 	rcObj, ok := annotDict["RichMediaContent"]
 	if !ok {
@@ -1155,6 +1220,28 @@ func hasRichMedia3DSubtype(ctx context.Context, doc *document.Document, annotDic
 	if !ok {
 		return false
 	}
+
+	// Check if the RichMediaContent itself declares /Subtype /3D.
+	if check3DStreamDict(rcDict) {
+		return true
+	}
+
+	// Check /Configurations for /Subtype /3D entries.
+	if configsObj, ok := rcDict["Configurations"]; ok {
+		configsRes, _ := document.ResolveObject(ctx, doc, configsObj)
+		if configsArr, ok := configsRes.(ast.PdfArray); ok {
+			for _, cfgObj := range configsArr {
+				cfgRes, _ := document.ResolveObject(ctx, doc, cfgObj)
+				if cfgDict, ok := cfgRes.(ast.PdfDict); ok {
+					if check3DStreamDict(cfgDict) {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	// Check /Assets for embedded 3D streams.
 	assetsObj, ok := rcDict["Assets"]
 	if !ok {
 		return false
@@ -1173,7 +1260,6 @@ func hasRichMedia3DSubtype(ctx context.Context, doc *document.Document, annotDic
 	if !ok {
 		return false
 	}
-	// Names array is [key val key val ...]; check val entries.
 	for i := 1; i < len(namesArr); i += 2 {
 		valRes, _ := document.ResolveObject(ctx, doc, namesArr[i])
 		if fsDict, ok := valRes.(ast.PdfDict); ok {
@@ -1227,7 +1313,9 @@ func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	if !ok {
 		return []error{models.ErrMissingMarkInfo}
 	}
-	if b, ok := markedObj.(ast.PdfBool); !ok || !bool(b) {
+	// Resolve in case /Marked is an indirect reference to a boolean.
+	markedRes, _ := document.ResolveObject(ctx, doc, markedObj)
+	if b, ok := markedRes.(ast.PdfBool); !ok || !bool(b) {
 		return []error{models.ErrMissingMarkInfo}
 	}
 	return nil

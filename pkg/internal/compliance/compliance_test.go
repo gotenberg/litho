@@ -506,6 +506,11 @@ func (b *mockDocBuilder) withOCProperties(hasAS bool) *mockDocBuilder {
 			ast.PdfDict{
 				"Type": ast.PdfName("OCG"),
 				"Name": ast.PdfString("Layer1"),
+				"Usage": ast.PdfDict{
+					"Print": ast.PdfDict{
+						"PrintState": ast.PdfName("ON"),
+					},
+				},
 			},
 		},
 		"D": ast.PdfDict{
@@ -1316,11 +1321,21 @@ func TestPDFA1b_SkipsUnicodeCheck(t *testing.T) {
 
 // --- PDF/A Level 'a' (Accessible) tests ---
 
-func TestPDFA1a_RequiresLang(t *testing.T) {
+func TestPDFA2a_RequiresLang(t *testing.T) {
+	// PDF/A-1a: /Lang is "should" (recommendation). PDF/A-2a+: "shall" (required).
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMarkInfo().withStructTreeRoot().build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2a)
+	if !containsError(errs, models.ErrMissingLang) {
+		t.Error("expected models.ErrMissingLang for PDF/A-2a conformance")
+	}
+}
+
+func TestPDFA1a_LangOptional(t *testing.T) {
+	// PDF/A-1a: /Lang is "should" (recommendation), not "shall".
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withMarkInfo().withStructTreeRoot().build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA1a)
-	if !containsError(errs, models.ErrMissingLang) {
-		t.Error("expected models.ErrMissingLang for conformance 'a'")
+	if containsError(errs, models.ErrMissingLang) {
+		t.Error("PDF/A-1a should not require /Lang (it is a recommendation, not a requirement)")
 	}
 }
 

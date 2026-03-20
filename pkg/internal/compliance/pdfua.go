@@ -139,10 +139,12 @@ func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfO
 	if !ok {
 		return
 	}
-	// Only check terminal fields (those with a /T key and no /Kids, or leaf widgets).
+	// Only check terminal fields with /T that are interactive and need tooltips.
 	if _, hasT := dict["T"]; hasT {
-		if _, hasTU := dict["TU"]; !hasTU {
-			*errs = append(*errs, models.ErrMissingFormFieldTooltip)
+		if !isFieldExemptFromTooltip(ctx, doc, dict) {
+			if _, hasTU := dict["TU"]; !hasTU {
+				*errs = append(*errs, models.ErrMissingFormFieldTooltip)
+			}
 		}
 	}
 	// Recurse into child fields.
@@ -154,6 +156,59 @@ func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfO
 			}
 		}
 	}
+}
+
+// isFieldExemptFromTooltip returns true if the field does not need a /TU
+// tooltip. Push buttons (/FT /Btn with /Ff bit 17) and read-only fields
+// (/Ff bit 1) are exempt. Fields with /Alt or /Contents on their widget
+// annotation are also considered accessible.
+func isFieldExemptFromTooltip(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	// Check /Ff (field flags).
+	if ffObj, ok := dict["Ff"]; ok {
+		ffRes, _ := document.ResolveObject(ctx, doc, ffObj)
+		if ffInt, ok := ffRes.(ast.PdfInt); ok {
+			ff := int(ffInt)
+			// Bit 1: ReadOnly.
+			if ff&1 != 0 {
+				return true
+			}
+			// Check if push button: /FT /Btn AND /Ff bit 17.
+			if ftObj, ok := dict["FT"]; ok {
+				ftRes, _ := document.ResolveObject(ctx, doc, ftObj)
+				if ftName, ok := ftRes.(ast.PdfName); ok && ftName == "Btn" {
+					if ff&(1<<16) != 0 { //nolint:mnd // bit 17 (0-indexed: bit 16)
+						return true
+					}
+				}
+			}
+		}
+	}
+	// /Alt or /Contents on the field or its widget children provides
+	// accessibility without /TU.
+	if _, ok := dict["Alt"]; ok {
+		return true
+	}
+	if _, ok := dict["Contents"]; ok {
+		return true
+	}
+	// Check widget annotation children for /Contents or /TU.
+	if kidsObj, ok := dict["Kids"]; ok {
+		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
+		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+			for _, kid := range kidsArr {
+				kidRes, _ := document.ResolveObject(ctx, doc, kid)
+				if kidDict, ok := kidRes.(ast.PdfDict); ok {
+					if _, ok := kidDict["TU"]; ok {
+						return true
+					}
+					if _, ok := kidDict["Contents"]; ok {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // checkImagesHaveAltText traverses the structure tree and verifies that every
@@ -200,7 +255,7 @@ func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.Pdf
 	if sObj, ok := dict["S"]; ok {
 		sRes, _ := document.ResolveObject(ctx, doc, sObj)
 		if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
-			if _, hasAlt := dict["Alt"]; !hasAlt {
+			if !hasAltOrActualText(dict) {
 				*errs = append(*errs, models.ErrImageMissingAltText)
 			}
 		}
@@ -571,6 +626,52 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 	return errs
 }
 
+// mathMLNamespace is the W3C MathML namespace URI.
+const mathMLNamespace = "http://www.w3.org/1998/Math/MathML"
+
+// hasMathMLChild returns true if any child of the element references the
+// MathML namespace via /NS.
+func hasMathMLChild(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	kObj, ok := dict["K"]
+	if !ok {
+		return false
+	}
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	switch k := kRes.(type) {
+	case ast.PdfDict:
+		return isMathMLNamespace(ctx, doc, k)
+	case ast.PdfArray:
+		for _, item := range k {
+			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			if d, ok := itemRes.(ast.PdfDict); ok && isMathMLNamespace(ctx, doc, d) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isMathMLNamespace(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	nsObj, ok := dict["NS"]
+	if !ok {
+		return false
+	}
+	nsRes, _ := document.ResolveObject(ctx, doc, nsObj)
+	// /NS can point to a namespace dict with /NS (URI) key, or be a string.
+	switch ns := nsRes.(type) {
+	case ast.PdfDict:
+		if uriObj, ok := ns["NS"]; ok {
+			uriRes, _ := document.ResolveObject(ctx, doc, uriObj)
+			if uri, ok := uriRes.(ast.PdfString); ok {
+				return string(uri) == mathMLNamespace
+			}
+		}
+	case ast.PdfString:
+		return string(ns) == mathMLNamespace
+	}
+	return false
+}
+
 func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
 	switch v := obj.(type) {
 	case ast.PdfArray:
@@ -582,7 +683,9 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 		if sObj, ok := v["S"]; ok {
 			sRes, _ := document.ResolveObject(ctx, doc, sObj)
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Formula" {
-				if _, hasAF := v["AF"]; !hasAF {
+				// /AF with MathML or a child in the MathML namespace both satisfy
+				// the requirement (ISO 14289-2 §8.2.5.29).
+				if _, hasAF := v["AF"]; !hasAF && !hasMathMLChild(ctx, doc, v) {
 					*errs = append(*errs, models.ErrFormulaMissingMathML)
 				}
 			}
