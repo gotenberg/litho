@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -261,6 +262,145 @@ func checkDocMDPSignatureRefs(ctx context.Context, doc *document.Document, catal
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// --- Numeric limits (6.1.12 / 6.1.13) ---
+
+// maxPDFReal is the maximum absolute value for a PDF real number (6.1.12).
+const maxPDFReal = 32767.0
+
+// checkNumberLimits verifies that real and integer values in page resources
+// and the catalog conform to PDF/A implementation limits.
+func checkNumberLimits(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+
+	// Check catalog values.
+	walkDictForLimits(ctx, doc, catalog, &errs, 0)
+
+	// Check page resource values.
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		walkDictForLimits(ctx, doc, page, &errs, 0)
+		if len(errs) > 0 {
+			return errs[:1]
+		}
+	}
+	return errs
+}
+
+const maxLimitDepth = 10 //nolint:mnd // prevent infinite recursion in nested dicts
+
+func walkDictForLimits(ctx context.Context, doc *document.Document, dict ast.PdfDict, errs *[]error, depth int) {
+	if depth > maxLimitDepth || len(*errs) > 0 {
+		return
+	}
+	for _, val := range dict {
+		checkValueLimits(ctx, doc, val, errs, depth)
+	}
+}
+
+func checkValueLimits(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error, depth int) {
+	if len(*errs) > 0 {
+		return
+	}
+	resolved, _ := document.ResolveObject(ctx, doc, obj)
+	switch v := resolved.(type) {
+	case ast.PdfReal:
+		if math.Abs(float64(v)) > maxPDFReal {
+			*errs = append(*errs, fmt.Errorf("%w: %.1f", models.ErrRealValueTooLarge, v))
+		}
+	case ast.PdfInt:
+		const maxInt32 = 2147483647  //nolint:mnd
+		const minInt32 = -2147483648 //nolint:mnd
+		if int64(v) > maxInt32 || int64(v) < minInt32 {
+			*errs = append(*errs, fmt.Errorf("%w: %d", models.ErrIntegerOutOfRange, v))
+		}
+	case ast.PdfDict:
+		walkDictForLimits(ctx, doc, v, errs, depth+1)
+	case ast.PdfArray:
+		if depth < maxLimitDepth {
+			for _, item := range v {
+				checkValueLimits(ctx, doc, item, errs, depth+1)
+			}
+		}
+	}
+}
+
+// --- Stream /Length validation (6.1.7.1) ---
+
+// checkStreamLengths verifies that unfiltered stream dictionaries' /Length
+// key matches the actual data length.
+func checkStreamLengths(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if contObj, ok := page["Contents"]; ok {
+			if err := checkStreamObjLength(ctx, doc, contObj); err != nil {
+				return []error{err}
+			}
+		}
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		xobjObj, ok := resources["XObject"]
+		if !ok {
+			continue
+		}
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		xobjDict, ok := xobjRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, obj := range xobjDict {
+			if err := checkStreamObjLength(ctx, doc, obj); err != nil {
+				return []error{err}
+			}
+		}
+	}
+	return nil
+}
+
+func checkStreamObjLength(ctx context.Context, doc *document.Document, obj ast.PdfObject) error {
+	resolved, _ := document.ResolveObject(ctx, doc, obj)
+	switch v := resolved.(type) {
+	case ast.PdfStream:
+		return validateStreamLength(v)
+	case ast.PdfArray:
+		for _, item := range v {
+			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			if stream, ok := itemRes.(ast.PdfStream); ok {
+				if err := validateStreamLength(stream); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateStreamLength(stream ast.PdfStream) error {
+	lenObj, ok := stream.Dict["Length"]
+	if !ok {
+		return nil
+	}
+	lenInt, ok := lenObj.(ast.PdfInt)
+	if !ok {
+		return nil
+	}
+	declaredLen := int(lenInt)
+	actualLen := len(stream.Data)
+
+	// Filtered streams: /Length refers to encoded size, but stream.Data
+	// may be raw encoded bytes. Only compare for unfiltered streams.
+	if _, hasFilter := stream.Dict["Filter"]; hasFilter {
+		return nil
+	}
+
+	if declaredLen != actualLen {
+		return fmt.Errorf("%w: declared %d, actual %d",
+			models.ErrStreamLengthMismatch, declaredLen, actualLen)
 	}
 	return nil
 }

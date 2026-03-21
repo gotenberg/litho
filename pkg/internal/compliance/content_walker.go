@@ -32,6 +32,8 @@ type contentWalker struct {
 	resources ast.PdfDict            // current resource dict
 	depth     int                    // recursion depth for Do
 	stack     []walkerState          // q/Q state stack
+	qDepth    int                    // current q/Q nesting depth
+	maxQDepth int                    // maximum q/Q nesting depth seen
 	errors    []error                // accumulated errors
 	visited   map[ast.PdfObject]bool // cycle detection for Do recursion
 }
@@ -122,12 +124,22 @@ func (w *contentWalker) handleOp(op content.Operation) {
 			fillCS:   w.fillCS,
 			strokeCS: w.strokeCS,
 		})
+		w.qDepth++
+		if w.qDepth > w.maxQDepth {
+			w.maxQDepth = w.qDepth
+		}
+		const maxQNesting = 28 //nolint:mnd // PDF spec limit
+		if w.qDepth > maxQNesting {
+			w.errors = append(w.errors, fmt.Errorf("%w: depth %d",
+				models.ErrQNestingTooDeep, w.qDepth))
+		}
 	case "Q":
 		if len(w.stack) > 0 {
 			state := w.stack[len(w.stack)-1]
 			w.stack = w.stack[:len(w.stack)-1]
 			w.fillCS = state.fillCS
 			w.strokeCS = state.strokeCS
+			w.qDepth--
 		}
 	// Extended graphics state.
 	case "gs":

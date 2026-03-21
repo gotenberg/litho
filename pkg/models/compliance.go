@@ -183,4 +183,10 @@ var (
 
 	// ICCBased colour space errors (6.2.4.2).
 	ErrICCBasedSameAsOutputIntent = errors.New("compliance: ICCBased colour space profile is identical to OutputIntent profile")
+
+	// Numeric and stream limit errors (6.1.12/6.1.13/6.1.7.1).
+	ErrRealValueTooLarge    = errors.New("compliance: absolute real value exceeds 32767.0")
+	ErrIntegerOutOfRange    = errors.New("compliance: integer value outside [-2147483648, 2147483647]")
+	ErrStreamLengthMismatch = errors.New("compliance: stream /Length does not match actual data length")
+	ErrQNestingTooDeep      = errors.New("compliance: graphics state nesting (q/Q) exceeds 28 levels")
 )
