@@ -77,7 +77,7 @@ func checkStructTreeLangValues(ctx context.Context, doc *document.Document, obj 
 func isValidLangTag(tag string) bool {
 	tag = strings.TrimSpace(tag)
 	if tag == "" {
-		return false
+		return true // Empty /Lang means "not specified at this level" — valid.
 	}
 	parts := strings.Split(tag, "-")
 	primary := parts[0]

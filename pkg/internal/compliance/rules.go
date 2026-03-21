@@ -91,6 +91,7 @@ func pdfA1Checks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkNoTransparency,
 		checkNoJPX,
 		checkNoAttachments,
+		checkLangValues,
 	)
 	return checks
 }
