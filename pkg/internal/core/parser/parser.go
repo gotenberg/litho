@@ -552,8 +552,10 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 	// Check for invalid hex characters before stripping whitespace.
 	if p.checkFormat {
 		for _, r := range val {
-			if r != ' ' && r != '\t' && r != '\n' && r != '\r' &&
-				!((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			// PDF whitespace: null, tab, LF, FF, CR, space (ISO 32000-1 §7.2.2).
+			isWS := r == 0x00 || r == '\t' || r == '\n' || r == 0x0C || r == '\r' || r == ' '
+			isHex := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+			if !isWS && !isHex {
 				p.recordViolation(fmt.Sprintf("hex string contains invalid character %q", r))
 				break
 			}
@@ -561,7 +563,8 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 	}
 
 	val = strings.Map(func(r rune) rune {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+		// PDF whitespace: null, tab, LF, FF, CR, space.
+		if r == 0x00 || r == '\t' || r == '\n' || r == 0x0C || r == '\r' || r == ' ' {
 			return -1
 		}
 		return r

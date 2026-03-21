@@ -54,6 +54,16 @@ type Document struct {
 	// Version is the PDF version string extracted from the %PDF-X.Y header
 	// (e.g., "1.4", "1.7", "2.0").
 	Version string
+
+	// ComplianceMode enables parser-level format violation collection.
+	// When true, parsers created during object resolution collect hex
+	// string format issues and other structural violations without
+	// failing the parse. Violations are surfaced via FormatViolations.
+	ComplianceMode bool
+
+	// FormatViolations collects parser-level format violations detected
+	// during object resolution when ComplianceMode is true.
+	FormatViolations []error
 }
 
 // NopLogger returns a logger that discards all output.

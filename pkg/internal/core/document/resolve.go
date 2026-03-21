@@ -270,10 +270,20 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		if d.Crypto != nil {
 			p.WithDecryption(d.Crypto.GetDecryptFunc(ref.ObjectNum, ref.GenNum))
 		}
+		if d.ComplianceMode {
+			p.WithFormatChecking()
+		}
 
 		obj, err = p.ParseObject()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse object %d at offset %d: %v", ref.ObjectNum, entry.Offset, err)
+		}
+
+		// Collect parser-level format violations.
+		if d.ComplianceMode && len(p.FormatViolations) > 0 {
+			d.mu.Lock()
+			d.FormatViolations = append(d.FormatViolations, p.FormatViolations...)
+			d.mu.Unlock()
 		}
 
 		d.Logger.Debug("resolve object parsed",

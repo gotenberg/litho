@@ -428,7 +428,12 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 	if !ok {
 		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
 	}
-	return runRuleSet(ctx, doc, rules)
+	// Enable parser-level format checking for subsequent object resolution.
+	doc.ComplianceMode = true
+	errs := runRuleSet(ctx, doc, rules)
+	// Append any parser-level format violations collected during resolution.
+	errs = append(errs, doc.FormatViolations...)
+	return errs
 }
 
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
@@ -439,5 +444,8 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 	if !ok {
 		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
 	}
-	return runRuleSet(ctx, doc, rules)
+	doc.ComplianceMode = true
+	errs := runRuleSet(ctx, doc, rules)
+	errs = append(errs, doc.FormatViolations...)
+	return errs
 }
