@@ -399,6 +399,23 @@ func pdfUA2Rules() ruleSet {
 	return ruleSet{catalogChecks: checks}
 }
 
+// resolveAllObjects forces resolution of every indirect object in the
+// document's xref table. This ensures parser-level format checks (hex
+// strings, etc.) run on ALL objects, not just those reachable from the
+// catalog during compliance rule evaluation.
+func resolveAllObjects(ctx context.Context, doc *document.Document) {
+	for objNum, entry := range doc.Index.Entries {
+		if ctx.Err() != nil {
+			return
+		}
+		if entry.Free || entry.Type != 1 {
+			continue
+		}
+		// Resolve triggers parsing with format checking enabled.
+		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+	}
+}
+
 // --- Factory functions ---
 
 // makeAnnotationCheck returns a check function for annotation compliance
@@ -428,10 +445,11 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 	if !ok {
 		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
 	}
-	// Enable parser-level format checking for subsequent object resolution.
+	// Enable parser-level format checking and resolve ALL objects upfront
+	// so that format violations in every indirect object are collected.
 	doc.ComplianceMode = true
+	resolveAllObjects(ctx, doc)
 	errs := runRuleSet(ctx, doc, rules)
-	// Append any parser-level format violations collected during resolution.
 	errs = append(errs, doc.FormatViolations...)
 	return errs
 }
@@ -445,6 +463,7 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 		return []error{fmt.Errorf("%w: %s", models.ErrInvalidProfile, profile)}
 	}
 	doc.ComplianceMode = true
+	resolveAllObjects(ctx, doc)
 	errs := runRuleSet(ctx, doc, rules)
 	errs = append(errs, doc.FormatViolations...)
 	return errs
