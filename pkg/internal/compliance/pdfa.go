@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -423,6 +424,108 @@ func checkContentStreamDeviceCS(ctx context.Context, doc *document.Document, cat
 		// Also check inline images for device-dependent color spaces.
 		if err := checkInlineImageDeviceCS(ctx, doc, page, defaults, iccN); err != nil {
 			return []error{err}
+		}
+
+		// Note: Form XObject and Type3 CharProc content streams are NOT
+		// scanned here because they have complex Group CS inheritance and
+		// rendering mode semantics that require full graphics state tracking.
+	}
+	return nil
+}
+
+// scanXObjectsForDeviceCS parses Form XObject content streams for device CS.
+func scanXObjectsForDeviceCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) error {
+	xobjObj, ok := resources["XObject"]
+	if !ok {
+		return nil
+	}
+	xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+	xobjDict, ok := xobjRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for _, obj := range xobjDict {
+		objRes, _ := document.ResolveObject(ctx, doc, obj)
+		stream, ok := objRes.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		stObj, _ := stream.Dict["Subtype"]
+		st, _ := stObj.(ast.PdfName)
+		if st != "Form" {
+			continue
+		}
+		// Use the Form XObject's own resources if available.
+		formResources := resources
+		if frObj, ok := stream.Dict["Resources"]; ok {
+			frRes, _ := document.ResolveObject(ctx, doc, frObj)
+			if frDict, ok := frRes.(ast.PdfDict); ok {
+				formResources = frDict
+			}
+		}
+		// Form XObject's /Group transparency CS can remap device colors.
+		formDefaults := make(map[ast.PdfName]bool)
+		maps.Copy(formDefaults, defaults)
+		addTransparencyGroupDefaults(ctx, doc, stream.Dict, formDefaults)
+		if formResources != nil {
+			maps.Copy(formDefaults, collectDefaultColorSpaces(ctx, doc, formResources))
+		}
+		ops, err := content.ParsePageContent(ctx, doc, stream)
+		if err != nil {
+			continue
+		}
+		if err := scanOpsForDeviceCS(ctx, doc, ops, formDefaults, formResources, iccN); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// scanFontsForDeviceCS checks Type3 font CharProc streams for device CS.
+func scanFontsForDeviceCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) error {
+	fontObj, ok := resources["Font"]
+	if !ok {
+		return nil
+	}
+	fontRes, _ := document.ResolveObject(ctx, doc, fontObj)
+	fontDict, ok := fontRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for _, fObj := range fontDict {
+		fRes, _ := document.ResolveObject(ctx, doc, fObj)
+		fDict, ok := fRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		// Only Type3 fonts have CharProcs.
+		stObj, _ := fDict["Subtype"]
+		st, _ := stObj.(ast.PdfName)
+		if st != "Type3" {
+			continue
+		}
+		cpObj, ok := fDict["CharProcs"]
+		if !ok {
+			continue
+		}
+		cpRes, _ := document.ResolveObject(ctx, doc, cpObj)
+		cpDict, ok := cpRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, procObj := range cpDict {
+			procRes, _ := document.ResolveObject(ctx, doc, procObj)
+			procStream, ok := procRes.(ast.PdfStream)
+			if !ok {
+				continue
+			}
+			ops, err := content.ParsePageContent(ctx, doc, procStream)
+			if err != nil {
+				continue
+			}
+			if err := scanOpsForDeviceCS(ctx, doc, ops, defaults, resources, iccN); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
