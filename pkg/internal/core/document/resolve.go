@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
@@ -135,6 +136,12 @@ func ResolveBool(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.Pdf
 	return b, nil
 }
 
+// UTF-16BE byte order mark bytes.
+const (
+	utf16BEBom0 = 0xFE
+	utf16BEBom1 = 0xFF
+)
+
 // DecodePdfString converts a raw PDF string to a Go string, handling the
 // UTF-16BE BOM (0xFE 0xFF) encoding used by many PDF producers.
 //
@@ -144,7 +151,7 @@ func ResolveBool(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.Pdf
 // bytes are guaranteed.
 func DecodePdfString(s ast.PdfString) string {
 	b := []byte(s)
-	if len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF {
+	if len(b) >= 2 && b[0] == utf16BEBom0 && b[1] == utf16BEBom1 {
 		u16s := make([]uint16, (len(b)-2)/2)
 		for i := range u16s {
 			u16s[i] = uint16(b[2+i*2])<<8 | uint16(b[2+i*2+1])
@@ -304,8 +311,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	var err error
 
 	switch entry.Type {
-	case 1:
-		// Type 1: Normal object
+	case xref.XRefTypeNormal:
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
 		p := parser.NewParser(lex)
 		if d.Crypto != nil {
@@ -334,8 +340,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 			slog.String("type", fmt.Sprintf("%T", obj)),
 		)
 
-	case 2:
-		// Type 2: Compressed object in an Object Stream (PDF 1.5+)
+	case xref.XRefTypeCompressed:
 		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, visited)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)

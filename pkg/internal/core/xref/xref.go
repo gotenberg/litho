@@ -10,15 +10,22 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
+// XRef entry type constants (ISO 32000-1, Table 18).
+const (
+	XRefTypeFree       = 0 // Type 0: free object
+	XRefTypeNormal     = 1 // Type 1: object at a byte offset
+	XRefTypeCompressed = 2 // Type 2: object in an object stream
+)
+
 // XRefEntry represents a single cross-reference entry describing the location
 // and status of a PDF object (byte offset, generation number, and entry type).
 type XRefEntry struct {
 	Offset      int64
 	Generation  int
 	Free        bool
-	Type        int // 0=free, 1=normal, 2=compressed in ObjStm
-	ObjStmNum   int // Only for Type 2
-	ObjStmIndex int // Only for Type 2
+	Type        int // XRefTypeFree, XRefTypeNormal, or XRefTypeCompressed
+	ObjStmNum   int // Only for XRefTypeCompressed
+	ObjStmIndex int // Only for XRefTypeCompressed
 }
 
 // Index is an aggregated cross-reference index containing a map of object
@@ -142,15 +149,15 @@ func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, e
 			}
 
 			switch entry.Type {
-			case 0:
+			case XRefTypeFree:
 				entry.Free = true
 				entry.Offset = field2
 				entry.Generation = int(field3)
-			case 1:
+			case XRefTypeNormal:
 				entry.Free = false
 				entry.Offset = field2
 				entry.Generation = int(field3)
-			case 2:
+			case XRefTypeCompressed:
 				entry.Free = false
 				entry.ObjStmNum = int(field2)
 				entry.ObjStmIndex = int(field3)
@@ -246,7 +253,7 @@ func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, 
 					Type:       0,
 				}
 				if isNormal {
-					entry.Type = 1
+					entry.Type = XRefTypeNormal
 				}
 				indexMap[startObj+i] = entry
 			}
