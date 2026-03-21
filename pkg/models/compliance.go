@@ -172,6 +172,9 @@ var (
 	// Font CIDSystemInfo errors (6.2.11.3.1).
 	ErrCIDSystemInfoMismatch = errors.New("compliance: CIDFont and CMap CIDSystemInfo entries are incompatible")
 
+	// Font glyph width consistency errors (6.2.11.5 / 6.2.10.5).
+	ErrGlyphWidthMismatch = errors.New("compliance: font glyph width in dictionary does not match embedded font program")
+
 	// File specification errors (7.11).
 	ErrFileSpecMissingFUF = errors.New("compliance: file specification dictionary missing /F or /UF key")
 

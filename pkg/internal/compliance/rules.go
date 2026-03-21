@@ -56,6 +56,7 @@ func pdfaDocChecks() []docCheckFunc {
 func pdfaBaseChecks(profile models.PDFAProfile) []catalogCheckFunc {
 	return []catalogCheckFunc{
 		checkFontsEmbedded,
+		checkGlyphWidthConsistency,
 		checkICCProfile,
 		checkOutputIntentProfileClass,
 		checkContentStreamCompliance,

@@ -592,7 +592,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 	// OS/2 xAvgCharWidth — a better fallback than FontBBox or 1000.
 	font.AvgWidth = readOS2AvgWidth(fontData)
 
-	widths := extractBinaryWidths(fontData)
+	widths := ExtractBinaryWidths(fontData)
 	if len(widths) == 0 {
 		return
 	}
@@ -606,7 +606,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 	if isCFFFont(fontData) {
 		font.UnitsPerEm = 1000 //nolint:mnd // CFF standard
 	} else {
-		font.UnitsPerEm = readUnitsPerEm(fontData)
+		font.UnitsPerEm = ReadUnitsPerEm(fontData)
 	}
 }
 
@@ -623,9 +623,9 @@ func isCFFFont(data []byte) bool {
 	return string(data[:4]) == "OTTO"
 }
 
-// extractBinaryWidths dispatches to TrueType or CFF width extraction based
+// ExtractBinaryWidths dispatches to TrueType or CFF width extraction based
 // on the font data signature.
-func extractBinaryWidths(fontData []byte) map[uint16]uint16 {
+func ExtractBinaryWidths(fontData []byte) map[uint16]uint16 {
 	if len(fontData) < 4 {
 		return nil
 	}
@@ -677,8 +677,8 @@ func readOS2AvgWidth(data []byte) uint16 {
 	return binary.BigEndian.Uint16(os2Data[2:4])
 }
 
-// readUnitsPerEm extracts unitsPerEm from the TrueType/OpenType head table.
-func readUnitsPerEm(data []byte) uint16 {
+// ReadUnitsPerEm extracts unitsPerEm from the TrueType/OpenType head table.
+func ReadUnitsPerEm(data []byte) uint16 {
 	records, err := truetype.ParseTableDirectory(data)
 	if err != nil {
 		return 1000 // safe default
