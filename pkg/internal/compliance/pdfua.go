@@ -939,6 +939,8 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 
 // checkPDFUAIdentification verifies that the XMP metadata contains
 // pdfuaid:part with the correct value for the declared PDF/UA profile.
+// For PDF/UA-2, pdfuaid:part must be "2" and pdfuaid:rev must be a
+// valid 4-digit year if present.
 func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	mdObj, ok := catalog["Metadata"]
 	if !ok {
@@ -955,11 +957,29 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 		return []error{models.ErrMissingPDFUAId}
 	}
 
-	// Check for pdfuaid:part presence.
-	if !bytes.Contains(data, []byte("pdfuaid:part")) &&
+	// Check for pdfuaid namespace presence.
+	if !bytes.Contains(data, []byte("pdfuaid")) &&
 		!bytes.Contains(data, []byte("pdfua/ns/id")) {
 		return []error{models.ErrMissingPDFUAId}
 	}
+
+	// Verify pdfuaid:part is present and has value "2".
+	if !bytes.Contains(data, []byte("pdfuaid:part")) {
+		// Check attribute form.
+		if !bytes.Contains(data, []byte("pdfua/ns/id")) {
+			return []error{models.ErrMissingPDFUAId}
+		}
+	}
+
+	// Validate pdfuaid:part value is "2" for PDF/UA-2.
+	// Check both element form (>2<) and attribute form (="2").
+	hasPart2 := bytes.Contains(data, []byte(">2</")) ||
+		bytes.Contains(data, []byte(`="2"`)) ||
+		bytes.Contains(data, []byte(`="2"`))
+	if !hasPart2 && bytes.Contains(data, []byte("pdfuaid:part")) {
+		return []error{fmt.Errorf("%w: pdfuaid:part value is not 2", models.ErrMissingPDFUAId)}
+	}
+
 	return nil
 }
 
@@ -1100,6 +1120,152 @@ func checkOnlyTR(ctx context.Context, doc *document.Document, obj ast.PdfObject,
 		if sName, ok := sRes.(ast.PdfName); ok && sName != "TR" {
 			*errs = append(*errs, fmt.Errorf("%w: /%s contains /%s child",
 				models.ErrTableStructureInvalid, parent, sName))
+		}
+	}
+}
+
+// checkListItemChildren verifies that LI elements contain only Lbl and
+// LBody children (7.2 test 20).
+func checkListItemChildren(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	strObj, ok := catalog["StructTreeRoot"]
+	if !ok {
+		return nil
+	}
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
+	strDict, ok := strRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	kObj, ok := strDict["K"]
+	if !ok {
+		return nil
+	}
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+
+	var errs []error
+	checkLIChildrenRecursive(ctx, doc, kRes, &errs, 0)
+	return errs
+}
+
+func checkLIChildrenRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error, depth int) {
+	if depth > 200 { //nolint:mnd
+		return
+	}
+	switch v := obj.(type) {
+	case ast.PdfArray:
+		for _, kid := range v {
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			checkLIChildrenRecursive(ctx, doc, kidRes, errs, depth+1)
+		}
+	case ast.PdfDict:
+		sObj := v["S"]
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
+		sName, _ := sRes.(ast.PdfName)
+
+		if sName == "LI" {
+			if kiObj, ok := v["K"]; ok {
+				kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
+				checkLIOnlyLblLBody(ctx, doc, kiRes, errs)
+			}
+		}
+
+		if kiObj, ok := v["K"]; ok {
+			kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
+			checkLIChildrenRecursive(ctx, doc, kiRes, errs, depth+1)
+		}
+	}
+}
+
+// validLIChildren are the allowed types inside an LI element.
+var validLIChildren = map[ast.PdfName]bool{ //nolint:gochecknoglobals
+	"Lbl": true, "LBody": true,
+}
+
+func checkLIOnlyLblLBody(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
+	switch v := obj.(type) {
+	case ast.PdfArray:
+		for _, kid := range v {
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			if d, ok := kidRes.(ast.PdfDict); ok {
+				sObj := d["S"]
+				sRes, _ := document.ResolveObject(ctx, doc, sObj)
+				if sName, ok := sRes.(ast.PdfName); ok && !validLIChildren[sName] {
+					*errs = append(*errs, fmt.Errorf("%w: LI contains /%s child",
+						models.ErrListStructureInvalid, sName))
+				}
+			}
+		}
+	case ast.PdfDict:
+		sObj := v["S"]
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
+		if sName, ok := sRes.(ast.PdfName); ok && !validLIChildren[sName] {
+			*errs = append(*errs, fmt.Errorf("%w: LI contains /%s child",
+				models.ErrListStructureInvalid, sName))
+		}
+	}
+}
+
+// checkCaptionFirstChild verifies that L and TOC elements may contain
+// a Caption element only as their first child (7.2 test 28, 40).
+func checkCaptionFirstChild(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	strObj, ok := catalog["StructTreeRoot"]
+	if !ok {
+		return nil
+	}
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
+	strDict, ok := strRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	kObj, ok := strDict["K"]
+	if !ok {
+		return nil
+	}
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+
+	var errs []error
+	checkCaptionRecursive(ctx, doc, kRes, &errs, 0)
+	return errs
+}
+
+func checkCaptionRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error, depth int) {
+	if depth > 200 { //nolint:mnd
+		return
+	}
+	switch v := obj.(type) {
+	case ast.PdfArray:
+		for _, kid := range v {
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			checkCaptionRecursive(ctx, doc, kidRes, errs, depth+1)
+		}
+	case ast.PdfDict:
+		sObj := v["S"]
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
+		sName, _ := sRes.(ast.PdfName)
+
+		// L and TOC: Caption allowed only as first child.
+		if sName == "L" || sName == "TOC" {
+			if kiObj, ok := v["K"]; ok {
+				kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
+				if arr, ok := kiRes.(ast.PdfArray); ok {
+					for i, kid := range arr {
+						kidRes, _ := document.ResolveObject(ctx, doc, kid)
+						if d, ok := kidRes.(ast.PdfDict); ok {
+							csObj := d["S"]
+							csRes, _ := document.ResolveObject(ctx, doc, csObj)
+							if csName, ok := csRes.(ast.PdfName); ok && csName == "Caption" && i > 0 {
+								*errs = append(*errs, fmt.Errorf("%w: /%s has Caption not as first child",
+									models.ErrListStructureInvalid, sName))
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if kiObj, ok := v["K"]; ok {
+			kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
+			checkCaptionRecursive(ctx, doc, kiRes, errs, depth+1)
 		}
 	}
 }

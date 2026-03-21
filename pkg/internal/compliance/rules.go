@@ -329,7 +329,7 @@ func pdfuaBaseChecks() []catalogCheckFunc {
 func pdfUA1Rules() ruleSet {
 	checks := pdfuaBaseChecks()
 	checks = append(checks, checkStandardTags, checkTabOrder, checkLangValues, checkOCConfigNames,
-		checkAnnotationAltText, checkTableSectionChildren)
+		checkAnnotationAltText, checkTableSectionChildren, checkListItemChildren, checkCaptionFirstChild)
 	return ruleSet{catalogChecks: checks}
 }
 
