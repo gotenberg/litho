@@ -477,6 +477,73 @@ func (b *mockDocBuilder) withPageFontEncodingDict(fontName string, embedded bool
 	return b
 }
 
+func (b *mockDocBuilder) withType0CIDFontType2(fontName string, embedded bool, hasCIDToGIDMap bool) *mockDocBuilder {
+	cidFont := ast.PdfDict{
+		"Type":    ast.PdfName("Font"),
+		"Subtype": ast.PdfName("CIDFontType2"),
+	}
+	fdDict := ast.PdfDict{}
+	if embedded {
+		fdDict["FontFile2"] = ast.PdfDict{} // Presence is sufficient.
+	}
+	cidFont["FontDescriptor"] = fdDict
+	if hasCIDToGIDMap {
+		cidFont["CIDToGIDMap"] = ast.PdfName("Identity")
+	}
+
+	fontDict := ast.PdfDict{
+		"Type":            ast.PdfName("Font"),
+		"Subtype":         ast.PdfName("Type0"),
+		"BaseFont":        ast.PdfName(fontName),
+		"Encoding":        ast.PdfName("Identity-H"),
+		"DescendantFonts": ast.PdfArray{cidFont},
+		"ToUnicode":       ast.PdfDict{}, // Presence is sufficient.
+	}
+
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"Font": ast.PdfDict{
+				ast.PdfName("F1"): fontDict,
+			},
+		},
+	}
+	b.catalog["Pages"] = ast.PdfDict{
+		"Type":  ast.PdfName("Pages"),
+		"Kids":  ast.PdfArray{page},
+		"Count": ast.PdfInt(1),
+	}
+	return b
+}
+
+func (b *mockDocBuilder) withPageFontName(fontName string) *mockDocBuilder {
+	fontDict := ast.PdfDict{
+		"Type":     ast.PdfName("Font"),
+		"Subtype":  ast.PdfName("TrueType"),
+		"BaseFont": ast.PdfName(fontName),
+	}
+	fdDict := ast.PdfDict{
+		"FontFile2": ast.PdfDict{}, // Embedded.
+	}
+	fontDict["FontDescriptor"] = fdDict
+	fontDict["ToUnicode"] = ast.PdfDict{} // Presence is sufficient.
+
+	page := ast.PdfDict{
+		"Type": ast.PdfName("Page"),
+		"Resources": ast.PdfDict{
+			"Font": ast.PdfDict{
+				ast.PdfName("F1"): fontDict,
+			},
+		},
+	}
+	b.catalog["Pages"] = ast.PdfDict{
+		"Type":  ast.PdfName("Pages"),
+		"Kids":  ast.PdfArray{page},
+		"Count": ast.PdfInt(1),
+	}
+	return b
+}
+
 func (b *mockDocBuilder) withFigureStructTree(hasAlt bool) *mockDocBuilder {
 	figDict := ast.PdfDict{
 		"S": ast.PdfName("Figure"),
@@ -1047,6 +1114,57 @@ func TestPDFA2_OCGWithAS(t *testing.T) {
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
 	if containsError(errs, models.ErrMissingOCGUsageApp) {
 		t.Error("/OCProperties with /AS should pass")
+	}
+}
+
+func TestPDFA_CIDToGIDMap_Missing(t *testing.T) {
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withType0CIDFontType2("MyFont", true, false).build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrMissingCIDToGIDMap) {
+		t.Error("expected models.ErrMissingCIDToGIDMap for embedded CIDFontType2 without /CIDToGIDMap")
+	}
+}
+
+func TestPDFA_CIDToGIDMap_Present(t *testing.T) {
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withType0CIDFontType2("MyFont", true, true).build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrMissingCIDToGIDMap) {
+		t.Error("should not get models.ErrMissingCIDToGIDMap when /CIDToGIDMap is present")
+	}
+}
+
+func TestPDFA_CIDToGIDMap_NotEmbedded(t *testing.T) {
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withType0CIDFontType2("MyFont", false, false).build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrMissingCIDToGIDMap) {
+		t.Error("should not get models.ErrMissingCIDToGIDMap for non-embedded font")
+	}
+}
+
+func TestPDFA2_FontNameUTF8_Valid(t *testing.T) {
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontName("ABCDEF+MyFont").build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if containsError(errs, models.ErrFontNameNotUTF8) {
+		t.Error("valid UTF-8 font name should not trigger error")
+	}
+}
+
+func TestPDFA2_FontNameUTF8_Invalid(t *testing.T) {
+	// #FE#FF are valid hex escapes that produce bytes 0xFE 0xFF, which are
+	// not valid UTF-8.
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontName("Bad#FE#FF").build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if !containsError(errs, models.ErrFontNameNotUTF8) {
+		t.Error("expected models.ErrFontNameNotUTF8 for font name with invalid UTF-8 after hex decode")
+	}
+}
+
+func TestPDFA1_FontNameUTF8_NotChecked(t *testing.T) {
+	// PDF/A-1 should not check font name UTF-8.
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontName("Bad#FE#FF").build())
+	errs := ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if containsError(errs, models.ErrFontNameNotUTF8) {
+		t.Error("PDF/A-1 should not check font name UTF-8")
 	}
 }
 

@@ -40,6 +40,8 @@ var (
 
 	// PDF/A Level 'u' (Unicode) errors.
 	ErrMissingUnicodeMapping = errors.New("compliance: font has no /ToUnicode CMap and no standard Adobe encoding")
+	ErrMissingCIDToGIDMap    = errors.New("compliance: embedded Type 2 CIDFont must have /CIDToGIDMap entry")
+	ErrFontNameNotUTF8       = errors.New("compliance: font name must be valid UTF-8 after hex escape decoding")
 
 	// PDF/A Level 'a' (Accessible) errors.
 	ErrUntaggedVisualElement = errors.New("compliance: visual element (Figure) missing /Alt text in structure tree")

@@ -222,10 +222,20 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 // checkLang verifies that a natural language is declared either in the
 // catalog or on the root structure element.
 func checkLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
-	if hasLangSpecified(ctx, doc, catalog) {
-		return nil
+	if !hasLangSpecified(ctx, doc, catalog) {
+		return []error{models.ErrMissingLang}
 	}
-	return []error{models.ErrMissingLang}
+	// Also verify the catalog /Lang value is non-empty (8.4.4 test 1).
+	if langObj, ok := catalog["Lang"]; ok {
+		langRes, _ := document.ResolveObject(ctx, doc, langObj)
+		if langStr, ok := langRes.(ast.PdfString); ok {
+			decoded := document.DecodePdfString(langStr)
+			if strings.TrimSpace(decoded) == "" {
+				return []error{models.ErrMissingLang}
+			}
+		}
+	}
+	return nil
 }
 
 // checkXMPTitle verifies that the document has XMP metadata containing a dc:title.

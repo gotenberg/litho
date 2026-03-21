@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -2959,6 +2960,125 @@ func isCompositeFontWithCMap(ctx context.Context, doc *document.Document, fontDi
 	// Must have an /Encoding (the CMap name or stream).
 	_, hasEnc := fontDict["Encoding"]
 	return hasEnc
+}
+
+// checkCIDToGIDMap verifies that embedded Type 2 CIDFonts (TrueType-based
+// composite fonts) have a /CIDToGIDMap entry, which must be either /Identity
+// or a stream. This is required by PDF/A for all profiles.
+func checkCIDToGIDMap(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	fonts := collectFontDicts(ctx, doc, catalog)
+	for name, fontDict := range fonts {
+		// Only check Type0 (composite) fonts.
+		stObj, ok := fontDict["Subtype"]
+		if !ok {
+			continue
+		}
+		stRes, _ := document.ResolveObject(ctx, doc, stObj)
+		st, ok := stRes.(ast.PdfName)
+		if !ok || st != "Type0" {
+			continue
+		}
+
+		// Get DescendantFonts[0].
+		dfObj, ok := fontDict["DescendantFonts"]
+		if !ok {
+			continue
+		}
+		dfRes, _ := document.ResolveObject(ctx, doc, dfObj)
+		dfArr, ok := dfRes.(ast.PdfArray)
+		if !ok || len(dfArr) < 1 {
+			continue
+		}
+		cidRes, _ := document.ResolveObject(ctx, doc, dfArr[0])
+		cidFont, ok := cidRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+
+		// Only check CIDFontType2 (TrueType-based CID fonts).
+		cidStObj, ok := cidFont["Subtype"]
+		if !ok {
+			continue
+		}
+		cidStRes, _ := document.ResolveObject(ctx, doc, cidStObj)
+		cidSt, ok := cidStRes.(ast.PdfName)
+		if !ok || cidSt != "CIDFontType2" {
+			continue
+		}
+
+		// Must have CIDToGIDMap.
+		if _, ok := cidFont["CIDToGIDMap"]; !ok {
+			// Only flag if the font is actually embedded.
+			fdDict := findFontDescriptor(ctx, doc, fontDict)
+			if fdDict != nil {
+				for _, key := range []ast.PdfName{"FontFile", "FontFile2", "FontFile3"} {
+					if _, ok := fdDict[key]; ok {
+						errs = append(errs, fmt.Errorf("%w: %s", models.ErrMissingCIDToGIDMap, name))
+						break
+					}
+				}
+			}
+		}
+	}
+	return errs
+}
+
+// checkFontNameUTF8 verifies that font names (/BaseFont) are valid UTF-8
+// after decoding #XX hex escapes. Required for PDF/A-2 and later profiles.
+func checkFontNameUTF8(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	fonts := collectFontDicts(ctx, doc, catalog)
+	for name, fontDict := range fonts {
+		bfObj, ok := fontDict["BaseFont"]
+		if !ok {
+			continue
+		}
+		bfRes, _ := document.ResolveObject(ctx, doc, bfObj)
+		bfName, ok := bfRes.(ast.PdfName)
+		if !ok {
+			continue
+		}
+		decoded := decodePdfNameHexEscapes(string(bfName))
+		if !utf8.Valid([]byte(decoded)) {
+			errs = append(errs, fmt.Errorf("%w: %s", models.ErrFontNameNotUTF8, name))
+		}
+	}
+	return errs
+}
+
+// decodePdfNameHexEscapes decodes #XX hex escape sequences in PDF name objects.
+// For example, "ABCDEF+My#20Font" becomes "ABCDEF+My Font".
+func decodePdfNameHexEscapes(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for i := 0; i < len(name); i++ {
+		if name[i] == '#' && i+2 < len(name) {
+			hi, hiOK := unhex(name[i+1])
+			lo, loOK := unhex(name[i+2])
+			if hiOK && loOK {
+				b.WriteByte(hi<<4 | lo)
+				i += 2
+				continue
+			}
+		}
+		b.WriteByte(name[i])
+	}
+	return b.String()
+}
+
+// unhex returns the numeric value of a hex digit and whether it was valid.
+func unhex(c byte) (byte, bool) {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0', true
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10, true
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10, true
+	default:
+		return 0, false
+	}
 }
 
 // --- Level 'a' (Accessible) checks ---
