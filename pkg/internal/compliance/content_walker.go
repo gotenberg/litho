@@ -434,6 +434,20 @@ func checkContentStreamCompliance(ctx context.Context, doc *document.Document, c
 				return errs[:1]
 			}
 		}
+
+		// Check Pattern resources for device-dependent color spaces.
+		if resources != nil {
+			if errs := checkPatternResourceCS(ctx, doc, resources, defaults, iccN); len(errs) > 0 {
+				return errs[:1]
+			}
+		}
+
+		// Check all XObject resources (including unreferenced) for device CS.
+		if resources != nil {
+			if errs := checkAllXObjectCS(ctx, doc, resources, defaults, iccN); len(errs) > 0 {
+				return errs[:1]
+			}
+		}
 	}
 	return nil
 }
@@ -472,6 +486,104 @@ func checkShadingResourceCS(ctx context.Context, doc *document.Document, resourc
 			}
 			if !iccCoversDeviceCS(iccN, csName) {
 				return []error{fmt.Errorf("%w: %s in Shading resource",
+					models.ErrMissingICCProfile, csName)}
+			}
+		}
+	}
+	return nil
+}
+
+// checkPatternResourceCS scans tiling Pattern resources for device-dependent
+// color spaces by walking their content streams.
+func checkPatternResourceCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) []error {
+	patObj, ok := resources["Pattern"]
+	if !ok {
+		return nil
+	}
+	patRes, _ := document.ResolveObject(ctx, doc, patObj)
+	patDict, ok := patRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for _, obj := range patDict {
+		objRes, _ := document.ResolveObject(ctx, doc, obj)
+		stream, ok := objRes.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		// Only tiling patterns (PatternType 1) have content streams.
+		ptObj, _ := stream.Dict["PatternType"]
+		if ptInt, ok := ptObj.(ast.PdfInt); ok && ptInt != 1 {
+			continue
+		}
+
+		// Walk the pattern's content stream.
+		ops, err := content.ParsePageContent(ctx, doc, stream)
+		if err != nil {
+			continue
+		}
+
+		// Use the pattern's own resources if available, otherwise page resources.
+		patResources := resources
+		if prObj, ok := stream.Dict["Resources"]; ok {
+			prRes, _ := document.ResolveObject(ctx, doc, prObj)
+			if prDict, ok := prRes.(ast.PdfDict); ok {
+				patResources = prDict
+			}
+		}
+
+		// Merge pattern resource defaults with page defaults.
+		patDefaults := make(map[ast.PdfName]bool)
+		maps.Copy(patDefaults, defaults)
+		if patResources != nil {
+			maps.Copy(patDefaults, collectDefaultColorSpaces(ctx, doc, patResources))
+		}
+
+		w := newContentWalker(ctx, doc, patDefaults, iccN, patResources)
+		w.walk(ops)
+		if len(w.errors) > 0 {
+			return w.errors[:1]
+		}
+	}
+	return nil
+}
+
+// checkAllXObjectCS scans all XObject resources (including those not invoked
+// via Do in the content stream) for device-dependent color spaces in Image
+// XObjects.
+func checkAllXObjectCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) []error {
+	xobjObj, ok := resources["XObject"]
+	if !ok {
+		return nil
+	}
+	xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+	xobjDict, ok := xobjRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for _, obj := range xobjDict {
+		objRes, _ := document.ResolveObject(ctx, doc, obj)
+		stream, ok := objRes.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		stObj, _ := stream.Dict["Subtype"]
+		st, _ := stObj.(ast.PdfName)
+		if st != "Image" {
+			continue
+		}
+		csObj, ok := stream.Dict["ColorSpace"]
+		if !ok {
+			continue
+		}
+		if isDeviceDependentCS(ctx, doc, csObj, defaults) {
+			csRes, _ := document.ResolveObject(ctx, doc, csObj)
+			csName := ast.PdfName("")
+			if n, ok := csRes.(ast.PdfName); ok {
+				csName = n
+			}
+			if !iccCoversDeviceCS(iccN, csName) {
+				return []error{fmt.Errorf("%w: %s in Image XObject resource",
 					models.ErrMissingICCProfile, csName)}
 			}
 		}

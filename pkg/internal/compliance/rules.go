@@ -56,7 +56,6 @@ func pdfaDocChecks() []docCheckFunc {
 func pdfaBaseChecks(profile models.PDFAProfile) []catalogCheckFunc {
 	return []catalogCheckFunc{
 		checkFontsEmbedded,
-		checkCIDToGIDMap,
 		checkICCProfile,
 		checkOutputIntentProfileClass,
 		checkContentStreamCompliance,
@@ -128,6 +127,7 @@ func pdfA2Checks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkNoRequirements,
 		checkAttachmentsPDFA,
 		checkOCGUsageApplication,
+		checkCIDToGIDMap,
 		checkFontNameUTF8,
 	)
 	return checks
@@ -172,6 +172,7 @@ func pdfA3Checks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkNoRequirements,
 		checkAFRelationship,
 		checkOCGUsageApplication,
+		checkCIDToGIDMap,
 		checkFontNameUTF8,
 	)
 	return checks
@@ -223,6 +224,7 @@ func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 		checkPDFA4Version,
 		checkOCGUsageApplication,
 		checkUnicodeMapping,
+		checkCIDToGIDMap,
 		checkFontNameUTF8,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
@@ -248,6 +250,7 @@ func pdfA4eRules() ruleSet {
 		checkOCGUsageApplication,
 		checkUnicodeMapping,
 		check3DStreamCompliance,
+		checkCIDToGIDMap,
 		checkFontNameUTF8,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
@@ -274,6 +277,7 @@ func pdfA4fRules() ruleSet {
 		checkOCGUsageApplication,
 		checkUnicodeMapping,
 		checkAFRelationship,
+		checkCIDToGIDMap,
 		checkFontNameUTF8,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
