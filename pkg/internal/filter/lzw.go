@@ -1,9 +1,6 @@
 package filter
 
-import (
-	"errors"
-	"io"
-)
+import "io"
 
 // lzwReader is a custom LZW decoder that supports both EarlyChange=1 (standard)
 // and EarlyChange=0 (legacy PDF) modes. Go's compress/lzw only supports
@@ -151,7 +148,7 @@ func (r *lzwReader) Read(p []byte) (int, error) {
 		case r.prevCode == lzwNoCode:
 			// First code after init or ClearTable: must be a literal.
 			if code >= lzwFirstCode {
-				r.err = errors.New("lzw: unexpected non-literal code after clear")
+				r.err = ErrLZWNonLiteralAfterClear
 				return 0, r.err
 			}
 			r.emit(code)
@@ -173,7 +170,7 @@ func (r *lzwReader) Read(p []byte) (int, error) {
 			r.prevCode = code
 
 		default:
-			r.err = errors.New("lzw: code out of range")
+			r.err = ErrLZWCodeOutOfRange
 			return 0, r.err
 		}
 	}

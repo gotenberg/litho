@@ -1,9 +1,6 @@
 package ioat
 
-import (
-	"errors"
-	"io"
-)
+import "io"
 
 // Reader is a stateful, buffered reader that strictly uses an underlying io.ReaderAt
 // so that multiple goroutines can read from the same source concurrently without
@@ -66,7 +63,7 @@ func (b *Reader) ReadByte() (byte, error) {
 // UnreadByte unreads the last byte. Only one byte can be safely unread.
 func (b *Reader) UnreadByte() error {
 	if b.bufPos <= 0 {
-		return errors.New("ioat.Reader: UnreadByte: at beginning of buffer")
+		return ErrUnreadByte
 	}
 	b.bufPos--
 	return nil
@@ -112,11 +109,11 @@ func (b *Reader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		abs = b.size + offset
 	default:
-		return 0, errors.New("ioat.Reader.Seek: invalid whence")
+		return 0, ErrSeekInvalidWhence
 	}
 
 	if abs < 0 {
-		return 0, errors.New("ioat.Reader.Seek: negative position")
+		return 0, ErrSeekNegativePosition
 	}
 
 	// Invalidate buffer
