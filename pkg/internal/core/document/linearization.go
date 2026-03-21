@@ -206,6 +206,10 @@ func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) 
 	_ = br.readBits(16) // bits for numerator of fraction (item 12)
 	_ = br.readBits(16) // shared object denominator (item 13)
 
+	if br.truncated {
+		return nil, fmt.Errorf("hint stream header truncated at offset %d", br.offset)
+	}
+
 	entries := make([]PageOffsetEntry, numPages)
 
 	// Array 1: object count deltas (N entries, bitsObjCountDelta bits each).
@@ -227,6 +231,10 @@ func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) 
 			delta = int64(br.readBits(bitsPageLenDelta)) //nolint:gosec // Bounded by bitsPageLenDelta.
 		}
 		entries[i].PageLength = minPageLength + delta
+	}
+
+	if br.truncated {
+		return nil, fmt.Errorf("hint stream page offset arrays truncated at offset %d", br.offset)
 	}
 
 	return entries, nil
@@ -292,20 +300,24 @@ func pdfToInt64(obj ast.PdfObject) int64 {
 
 // bitReader reads individual bits from a byte slice, MSB first.
 type bitReader struct {
-	data   []byte
-	offset int // current byte offset
-	bit    int // current bit within the byte (0=MSB, 7=LSB)
+	data      []byte
+	offset    int  // current byte offset
+	bit       int  // current bit within the byte (0=MSB, 7=LSB)
+	truncated bool // set when a read hits the end of data prematurely
 }
 
 func newBitReader(data []byte) *bitReader {
 	return &bitReader{data: data}
 }
 
-// readBits reads n bits and returns them as a uint64.
+// readBits reads n bits and returns them as a uint64. If the underlying
+// data is exhausted before all n bits are read, the result contains
+// only the bits that were available and br.truncated is set to true.
 func (br *bitReader) readBits(n int) uint64 {
 	var result uint64
 	for range n {
 		if br.offset >= len(br.data) {
+			br.truncated = true
 			return result
 		}
 		bit := (br.data[br.offset] >> (7 - br.bit)) & 1

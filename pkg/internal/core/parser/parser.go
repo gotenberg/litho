@@ -370,7 +370,7 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 			if trimLen < 2 {
 				tailN = trimLen
 			}
-			_, _ = reader.ReaderAt().ReadAt(tail[:tailN], streamStart+trimLen-tailN)
+			_, _ = reader.ReaderAt().ReadAt(tail[:tailN], streamStart+trimLen-tailN) //nolint:errcheck // on failure tail stays zeroed, no trim — harmless
 			if tailN == 2 && tail[1] == '\n' {
 				trimLen--
 				if tail[0] == '\r' {

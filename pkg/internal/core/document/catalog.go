@@ -89,7 +89,10 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 	)
 
 	// Associate Document Parts (PDF 2.0)
-	dpartMap, _ := GetDPartMap(ctx, doc)
+	dpartMap, err := GetDPartMap(ctx, doc)
+	if err != nil {
+		doc.Logger.Debug("resolving DPart map", slog.Any("err", err))
+	}
 	for _, page := range pages {
 		if dpm, ok := dpartMap[page.Ref.ObjectNum]; ok {
 			page.DPM = dpm
