@@ -1022,3 +1022,84 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 	}
 	return nil
 }
+
+// --- Table/List containment checks (PDF/UA-1 §7.2) ---
+
+// checkTableSectionChildren verifies that THead, TBody, TFoot elements
+// contain only TR children (7.2 test 36/37).
+func checkTableSectionChildren(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	strObj, ok := catalog["StructTreeRoot"]
+	if !ok {
+		return nil
+	}
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
+	strDict, ok := strRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	kObj, ok := strDict["K"]
+	if !ok {
+		return nil
+	}
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+
+	var errs []error
+	checkSectionChildrenRecursive(ctx, doc, kRes, &errs, 0)
+	return errs
+}
+
+func checkSectionChildrenRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error, depth int) {
+	if depth > 200 { //nolint:mnd // prevent infinite recursion
+		return
+	}
+	switch v := obj.(type) {
+	case ast.PdfArray:
+		for _, kid := range v {
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			checkSectionChildrenRecursive(ctx, doc, kidRes, errs, depth+1)
+		}
+	case ast.PdfDict:
+		sObj := v["S"]
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
+		sName, _ := sRes.(ast.PdfName)
+
+		// THead/TBody/TFoot must contain only TR.
+		if sName == "THead" || sName == "TBody" || sName == "TFoot" {
+			kObj, ok := v["K"]
+			if ok {
+				kRes, _ := document.ResolveObject(ctx, doc, kObj)
+				checkOnlyTR(ctx, doc, kRes, sName, errs)
+			}
+		}
+
+		// Recurse.
+		if kObj, ok := v["K"]; ok {
+			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			checkSectionChildrenRecursive(ctx, doc, kRes, errs, depth+1)
+		}
+	}
+}
+
+func checkOnlyTR(ctx context.Context, doc *document.Document, obj ast.PdfObject, parent ast.PdfName, errs *[]error) {
+	switch v := obj.(type) {
+	case ast.PdfArray:
+		for _, kid := range v {
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			if d, ok := kidRes.(ast.PdfDict); ok {
+				sObj := d["S"]
+				sRes, _ := document.ResolveObject(ctx, doc, sObj)
+				if sName, ok := sRes.(ast.PdfName); ok && sName != "TR" {
+					*errs = append(*errs, fmt.Errorf("%w: /%s contains /%s child",
+						models.ErrTableStructureInvalid, parent, sName))
+				}
+			}
+		}
+	case ast.PdfDict:
+		sObj := v["S"]
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
+		if sName, ok := sRes.(ast.PdfName); ok && sName != "TR" {
+			*errs = append(*errs, fmt.Errorf("%w: /%s contains /%s child",
+				models.ErrTableStructureInvalid, parent, sName))
+		}
+	}
+}
