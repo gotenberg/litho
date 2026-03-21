@@ -184,6 +184,12 @@ func pdfA3aRules() ruleSet {
 	return ruleSet{docChecks: pdfaDocChecks(), catalogChecks: checks}
 }
 
+func pdfA4DocChecks() []docCheckFunc {
+	dc := pdfaDocChecks()
+	dc = append(dc, checkInfoDictPart4)
+	return dc
+}
+
 func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 	checks := pdfaBaseChecks(profile)
 	checks = append(checks,
@@ -202,7 +208,7 @@ func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 		checkOCGUsageApplication,
 		checkUnicodeMapping,
 	)
-	return ruleSet{docChecks: pdfaDocChecks(), catalogChecks: checks}
+	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }
 
 func pdfA4eRules() ruleSet {
@@ -224,7 +230,7 @@ func pdfA4eRules() ruleSet {
 		checkUnicodeMapping,
 		check3DStreamCompliance,
 	)
-	return ruleSet{docChecks: pdfaDocChecks(), catalogChecks: checks}
+	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }
 
 func pdfA4fRules() ruleSet {
@@ -247,7 +253,7 @@ func pdfA4fRules() ruleSet {
 		checkUnicodeMapping,
 		checkAFRelationship,
 	)
-	return ruleSet{docChecks: pdfaDocChecks(), catalogChecks: checks}
+	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }
 
 // --- PDF/UA rule sets ---

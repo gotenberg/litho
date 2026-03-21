@@ -3858,6 +3858,36 @@ func hasWidgetKidsWithAP(ctx context.Context, doc *document.Document, dict ast.P
 	return false
 }
 
+// checkInfoDictPart4 validates PDF/A-4 specific restrictions on the document
+// information dictionary (6.1.3 t04/t05):
+// - /Info is forbidden unless /PieceInfo exists in catalog
+// - If /Info is present, it may only contain /ModDate
+func checkInfoDictPart4(_ context.Context, doc *document.Document) []error {
+	infoObj, ok := doc.Index.Trailer["Info"]
+	if !ok {
+		return nil
+	}
+	// /Info is only allowed when /PieceInfo exists in catalog.
+	catalog, err := getCatalog(context.Background(), doc)
+	if err != nil {
+		return []error{models.ErrInfoDictForbiddenPart4}
+	}
+	if _, ok := catalog["PieceInfo"]; !ok {
+		return []error{models.ErrInfoDictForbiddenPart4}
+	}
+	// If /Info is present, only /ModDate is allowed.
+	infoDict, ok := infoObj.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for key := range infoDict {
+		if key != "ModDate" {
+			return []error{fmt.Errorf("%w: has /%s", models.ErrInfoDictExtraKeysPart4, key)}
+		}
+	}
+	return nil
+}
+
 // checkEmbeddedFilesKeyPart4f verifies that PDF/A-4f documents have an
 // /EmbeddedFiles key in the name dictionary (6.9 t05).
 func checkEmbeddedFilesKeyPart4f(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
