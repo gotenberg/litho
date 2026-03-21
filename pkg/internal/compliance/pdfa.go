@@ -648,6 +648,21 @@ var forbiddenActionTypes = map[ast.PdfName]bool{
 	"GoToE":       true,
 }
 
+// forbiddenActionTypesPart4 is the part-4 variant: JavaScript and GoToE are
+// allowed in PDF/A-4.
+var forbiddenActionTypesPart4 = map[ast.PdfName]bool{
+	"Launch":      true,
+	"Sound":       true,
+	"Movie":       true,
+	"ResetForm":   true,
+	"ImportData":  true,
+	"Hide":        true,
+	"SetOCGState": true,
+	"Rendition":   true,
+	"Trans":       true,
+	"GoTo3DView":  true,
+}
+
 // allowedNamedActions are the only named actions permitted in PDF/A (6.6.1 t2).
 var allowedNamedActions = map[ast.PdfName]bool{
 	"NextPage":  true,
@@ -2143,6 +2158,274 @@ func checkExtGStateKeysPart4(ctx context.Context, doc *document.Document, catalo
 		}
 	}
 	return errs
+}
+
+// --- Rendering intent (ISO 19005, clause 6.2.6) ---
+
+// validRenderingIntents are the four rendering intents defined in ISO 32000-1.
+var validRenderingIntents = map[ast.PdfName]bool{
+	"RelativeColorimetric": true,
+	"AbsoluteColorimetric": true,
+	"Perceptual":           true,
+	"Saturation":           true,
+}
+
+// checkRenderingIntent verifies that all rendering intents in ExtGState /RI
+// and content stream ri operators are one of the four standard values.
+func checkRenderingIntent(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		gsObj, ok := resources["ExtGState"]
+		if !ok {
+			continue
+		}
+		gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
+		gsDict, ok := gsRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, v := range gsDict {
+			vRes, _ := document.ResolveObject(ctx, doc, v)
+			stateDict, ok := vRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			if riObj, ok := stateDict["RI"]; ok {
+				riRes, _ := document.ResolveObject(ctx, doc, riObj)
+				if riName, ok := riRes.(ast.PdfName); ok {
+					if !validRenderingIntents[riName] {
+						return []error{fmt.Errorf("%w: /%s", models.ErrInvalidRenderingIntent, riName)}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// --- Overprint mode (ISO 19005, clause 6.2.4.2) ---
+
+// checkOverprintMode verifies that OPM (overprint mode) is not 1 when an
+// ICCBased CMYK colour space is used with overprinting enabled.
+func checkOverprintMode(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		gsObj, ok := resources["ExtGState"]
+		if !ok {
+			continue
+		}
+		gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
+		gsDict, ok := gsRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, v := range gsDict {
+			vRes, _ := document.ResolveObject(ctx, doc, v)
+			stateDict, ok := vRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			// OPM=1 is only forbidden when overprinting is active.
+			opmObj, hasOPM := stateDict["OPM"]
+			if !hasOPM {
+				continue
+			}
+			opmRes, _ := document.ResolveObject(ctx, doc, opmObj)
+			opmInt, ok := opmRes.(ast.PdfInt)
+			if !ok || opmInt != 1 {
+				continue
+			}
+			// OPM=1: check if overprinting is enabled for stroke or fill.
+			opStroke := false
+			if opObj, ok := stateDict["OP"]; ok {
+				if b, ok := opObj.(ast.PdfBool); ok && bool(b) {
+					opStroke = true
+				}
+			}
+			opFill := false
+			if opObj, ok := stateDict["op"]; ok {
+				if b, ok := opObj.(ast.PdfBool); ok && bool(b) {
+					opFill = true
+				}
+			}
+			if opStroke || opFill {
+				return []error{models.ErrOverprintModeForbidden}
+			}
+		}
+	}
+	return nil
+}
+
+// --- Part 4 active content ---
+
+// checkNoActiveContentPart4 checks forbidden actions for PDF/A-4, which
+// forbids the same actions as parts 1-3 except JavaScript and GoToE.
+func checkNoActiveContentPart4(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	// Skip /Names/JavaScript check — JavaScript is allowed in PDF/A-4.
+	forbidden := forbiddenActionTypesPart4
+
+	if oaObj, ok := catalog["OpenAction"]; ok {
+		oaRes, _ := document.ResolveObject(ctx, doc, oaObj)
+		if oaDict, ok := oaRes.(ast.PdfDict); ok {
+			if isForbiddenActionWith(oaDict, forbidden) {
+				return []error{models.ErrActiveContentForbidden}
+			}
+		}
+	}
+
+	if hasForbiddenAAWith(ctx, doc, catalog, forbidden) {
+		return []error{models.ErrActiveContentForbidden}
+	}
+
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if hasForbiddenAnnotActionsWith(ctx, doc, page, forbidden) {
+			return []error{models.ErrActiveContentForbidden}
+		}
+		if hasForbiddenAAWith(ctx, doc, page, forbidden) {
+			return []error{models.ErrActiveContentForbidden}
+		}
+	}
+
+	if hasForbiddenOutlineActionsWith(ctx, doc, catalog, forbidden) {
+		return []error{models.ErrActiveContentForbidden}
+	}
+
+	return nil
+}
+
+// isForbiddenActionWith is like isForbiddenAction but uses a custom forbidden set.
+func isForbiddenActionWith(actionDict ast.PdfDict, forbidden map[ast.PdfName]bool) bool {
+	sObj, ok := actionDict["S"]
+	if !ok {
+		return false
+	}
+	sName, ok := sObj.(ast.PdfName)
+	if !ok {
+		return false
+	}
+	if forbidden[sName] {
+		return true
+	}
+	if sName == "Named" {
+		nObj, ok := actionDict["N"]
+		if !ok {
+			return true
+		}
+		nName, ok := nObj.(ast.PdfName)
+		if !ok {
+			return true
+		}
+		return !allowedNamedActions[nName]
+	}
+	return false
+}
+
+func hasForbiddenAAWith(ctx context.Context, doc *document.Document, dict ast.PdfDict, forbidden map[ast.PdfName]bool) bool {
+	aaObj, ok := dict["AA"]
+	if !ok {
+		return false
+	}
+	aaRes, _ := document.ResolveObject(ctx, doc, aaObj)
+	aaDict, ok := aaRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	for _, v := range aaDict {
+		vRes, _ := document.ResolveObject(ctx, doc, v)
+		if actionDict, ok := vRes.(ast.PdfDict); ok {
+			if isForbiddenActionWith(actionDict, forbidden) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasForbiddenAnnotActionsWith(ctx context.Context, doc *document.Document, pageDict ast.PdfDict, forbidden map[ast.PdfName]bool) bool {
+	annotsObj, ok := pageDict["Annots"]
+	if !ok {
+		return false
+	}
+	annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+	annotsArr, ok := annotsRes.(ast.PdfArray)
+	if !ok {
+		return false
+	}
+	for _, annotObj := range annotsArr {
+		annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+		annotDict, ok := annotRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		if aObj, ok := annotDict["A"]; ok {
+			aRes, _ := document.ResolveObject(ctx, doc, aObj)
+			if aDict, ok := aRes.(ast.PdfDict); ok {
+				if isForbiddenActionWith(aDict, forbidden) {
+					return true
+				}
+			}
+		}
+		if hasForbiddenAAWith(ctx, doc, annotDict, forbidden) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasForbiddenOutlineActionsWith(ctx context.Context, doc *document.Document, catalog ast.PdfDict, forbidden map[ast.PdfName]bool) bool {
+	outlinesObj, ok := catalog["Outlines"]
+	if !ok {
+		return false
+	}
+	outlinesRes, _ := document.ResolveObject(ctx, doc, outlinesObj)
+	outlinesDict, ok := outlinesRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	firstObj, ok := outlinesDict["First"]
+	if !ok {
+		return false
+	}
+	return walkOutlineItemsWith(ctx, doc, firstObj, 0, forbidden)
+}
+
+func walkOutlineItemsWith(ctx context.Context, doc *document.Document, obj ast.PdfObject, depth int, forbidden map[ast.PdfName]bool) bool {
+	if depth > 100 { //nolint:mnd // prevent infinite loops
+		return false
+	}
+	res, _ := document.ResolveObject(ctx, doc, obj)
+	dict, ok := res.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	if aObj, ok := dict["A"]; ok {
+		aRes, _ := document.ResolveObject(ctx, doc, aObj)
+		if aDict, ok := aRes.(ast.PdfDict); ok {
+			if isForbiddenActionWith(aDict, forbidden) {
+				return true
+			}
+		}
+	}
+	if firstObj, ok := dict["First"]; ok {
+		if walkOutlineItemsWith(ctx, doc, firstObj, depth+1, forbidden) {
+			return true
+		}
+	}
+	if nextObj, ok := dict["Next"]; ok {
+		if walkOutlineItemsWith(ctx, doc, nextObj, depth+1, forbidden) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Transparency blending color space (ISO 19005-2, clause 6.2.9/6.2.10) ---

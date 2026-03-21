@@ -98,6 +98,8 @@ var (
 	ErrMissingDisplayDocTitle    = errors.New("compliance: /ViewerPreferences /DisplayDocTitle must be true")
 	ErrTabOrderNotStructure      = errors.New("compliance: page /Tabs must be /S (Structure) for PDF/UA")
 	ErrInvalidLangTag            = errors.New("compliance: /Lang value is not a valid RFC 3066 language tag")
+	ErrInvalidRenderingIntent    = errors.New("compliance: rendering intent must be RelativeColorimetric, AbsoluteColorimetric, Perceptual, or Saturation")
+	ErrOverprintModeForbidden    = errors.New("compliance: overprint mode (OPM) shall not be 1 with ICCBased CMYK colour space")
 	ErrMissingFormFieldTooltip   = errors.New("compliance: form field missing /TU (tooltip) for accessibility")
 	ErrNonStandardTag            = errors.New("compliance: non-standard structure tag without /RoleMap entry")
 	ErrInvalidVersionForUA2      = errors.New("compliance: PDF/UA-2 requires PDF version 2.0")
