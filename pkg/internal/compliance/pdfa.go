@@ -344,7 +344,31 @@ func addTransparencyGroupDefaults(ctx context.Context, doc *document.Document, p
 			return
 		}
 		switch family {
-		case "ICCBased", "CalRGB":
+		case "ICCBased":
+			// Determine which device family the ICC profile covers
+			// based on its /N (number of components).
+			if len(cs) >= 2 { //nolint:mnd // [/ICCBased stream-ref]
+				iccRef := cs[1]
+				iccRes, _ := document.ResolveObject(ctx, doc, iccRef)
+				if iccStream, ok := iccRes.(ast.PdfStream); ok {
+					if nObj, ok := iccStream.Dict["N"]; ok {
+						if nInt, ok := nObj.(ast.PdfInt); ok {
+							switch int(nInt) {
+							case 1:
+								defaults["DeviceGray"] = true
+							case 3: //nolint:mnd // RGB
+								defaults["DeviceRGB"] = true
+							case 4: //nolint:mnd // CMYK
+								defaults["DeviceCMYK"] = true
+							}
+							return
+						}
+					}
+				}
+			}
+			// Fallback: assume RGB if N is not available.
+			defaults["DeviceRGB"] = true
+		case "CalRGB":
 			defaults["DeviceRGB"] = true
 		case "CalGray":
 			defaults["DeviceGray"] = true

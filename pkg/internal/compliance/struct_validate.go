@@ -1,3 +1,4 @@
+//nolint:unused // Structure tree checks pending rule set wiring — need FP refinement.
 package compliance
 
 import (

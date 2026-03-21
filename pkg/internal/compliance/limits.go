@@ -3,6 +3,8 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -50,16 +52,38 @@ func checkPageSizeBounds(ctx context.Context, doc *document.Document, catalog as
 	return nil
 }
 
+// decodedNameLength returns the byte length of a PdfName after decoding
+// #XX hex escape sequences. Each #XX sequence (3 raw bytes) represents
+// 1 decoded byte.
+func decodedNameLength(name ast.PdfName) int {
+	s := string(name)
+	if !strings.Contains(s, "#") {
+		return len(s)
+	}
+	decoded := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '#' && i+2 < len(s) {
+			if _, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
+				decoded++
+				i += 2 // skip the two hex digits
+				continue
+			}
+		}
+		decoded++
+	}
+	return decoded
+}
+
 // checkNameLengths verifies that PdfName values in the catalog and page
-// resources do not exceed 127 bytes per ISO 19005 §6.1.13.
+// resources do not exceed 127 decoded bytes per ISO 19005 §6.1.13.
 func checkNameLengths(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	const maxNameLen = 127
 
 	// Check catalog-level names.
 	for key := range catalog {
-		if len(key) > maxNameLen {
+		if decodedNameLength(key) > maxNameLen {
 			return []error{fmt.Errorf("%w: /%s (%d bytes)",
-				models.ErrNameTooLong, key, len(key))}
+				models.ErrNameTooLong, key, decodedNameLength(key))}
 		}
 	}
 
@@ -77,20 +101,12 @@ func checkNameLengths(ctx context.Context, doc *document.Document, catalog ast.P
 	return nil
 }
 
-// checkDictNameLengths recursively checks PdfName key lengths in a dictionary.
-func checkDictNameLengths(ctx context.Context, doc *document.Document, dict ast.PdfDict, maxLen int) error {
-	for key, val := range dict {
-		if len(key) > maxLen {
+// checkDictNameLengths checks PdfName key lengths in a dictionary.
+func checkDictNameLengths(_ context.Context, _ *document.Document, dict ast.PdfDict, maxLen int) error {
+	for key := range dict {
+		if decodedNameLength(key) > maxLen {
 			return fmt.Errorf("%w: /%s (%d bytes)",
-				models.ErrNameTooLong, key, len(key))
-		}
-		// Check name values.
-		valRes, _ := document.ResolveObject(ctx, doc, val)
-		if name, ok := valRes.(ast.PdfName); ok {
-			if len(name) > maxLen {
-				return fmt.Errorf("%w: /%s (%d bytes)",
-					models.ErrNameTooLong, name, len(name))
-			}
+				models.ErrNameTooLong, key, decodedNameLength(key))
 		}
 	}
 	return nil

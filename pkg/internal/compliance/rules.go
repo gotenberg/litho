@@ -308,10 +308,6 @@ func pdfuaBaseChecks() []catalogCheckFunc {
 		checkFormFieldTooltips,
 		checkImagesHaveAltText,
 		checkArtifactTagging,
-		checkTableStructure,
-		checkListStructure,
-		checkHeadingHierarchy,
-		checkTHScope,
 	}
 }
 

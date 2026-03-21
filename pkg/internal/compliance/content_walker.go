@@ -435,7 +435,8 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 		}
 
 		// Use annotation's own resources if available.
-		annotResources := defaults
+		annotDefaults := make(map[ast.PdfName]bool)
+		maps.Copy(annotDefaults, defaults)
 		annotResourceDict := ast.PdfDict(nil)
 		nRes, _ := document.ResolveObject(ctx, doc, nObj)
 		if nStream, ok := nRes.(ast.PdfStream); ok {
@@ -443,15 +444,19 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 				arRes, _ := document.ResolveObject(ctx, doc, arObj)
 				if arDict, ok := arRes.(ast.PdfDict); ok {
 					annotResourceDict = arDict
+					// Merge annotation resource defaults.
+					maps.Copy(annotDefaults, collectDefaultColorSpaces(ctx, doc, arDict))
 				}
 			}
+			// Merge Group CS from the appearance stream itself.
+			addTransparencyGroupDefaults(ctx, doc, nStream.Dict, annotDefaults)
 		}
 		if annotResourceDict == nil {
 			// Fall back to page resources.
 			annotResourceDict = getResources(ctx, doc, page)
 		}
 
-		w := newContentWalker(ctx, doc, annotResources, iccN, annotResourceDict)
+		w := newContentWalker(ctx, doc, annotDefaults, iccN, annotResourceDict)
 		w.walk(ops)
 		if len(w.errors) > 0 {
 			return w.errors[:1]
