@@ -548,6 +548,72 @@ func checkInlineImageDeviceCS(ctx context.Context, doc *document.Document, page 
 	return nil
 }
 
+// forbiddenInlineImageFilters lists the byte patterns that indicate a forbidden
+// filter inside an inline image dictionary (between BI and ID markers).
+// Both abbreviated (/F) and full (/Filter) key forms are checked.
+var forbiddenInlineImageFilters = [][]byte{
+	[]byte("/F /LZW"),
+	[]byte("/F /LZWDecode"),
+	[]byte("/F /Crypt"),
+	[]byte("/Filter /LZW"),
+	[]byte("/Filter /LZWDecode"),
+	[]byte("/Filter /Crypt"),
+}
+
+// checkInlineImageFilters is a catalog-level check that scans raw content
+// stream bytes for inline images (BI...ID...EI) using forbidden filters
+// (LZW, LZWDecode, Crypt) per PDF/A clause 6.1.9 test 1.
+func checkInlineImageFilters(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return []error{err}
+		}
+		if err := checkInlineImageFiltersForPage(ctx, doc, page); err != nil {
+			return []error{err}
+		}
+	}
+	return nil
+}
+
+// checkInlineImageFiltersForPage scans a single page's content stream for
+// inline images that use forbidden filters.
+func checkInlineImageFiltersForPage(ctx context.Context, doc *document.Document, page ast.PdfDict) error {
+	contentsObj, ok := page["Contents"]
+	if !ok {
+		return nil
+	}
+	data, err := getContentStreamBytes(ctx, doc, contentsObj)
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+
+	// Scan for BI markers and check filters within inline image dicts.
+	for i := 0; i < len(data)-2; i++ {
+		// Look for "BI" preceded by whitespace/newline.
+		if data[i] == 'B' && data[i+1] == 'I' && (i == 0 || isWhitespace(data[i-1])) {
+			// Find the ID marker to delimit the inline image dict.
+			end := i + 2
+			idIdx := bytes.Index(data[end:], []byte("ID"))
+			if idIdx < 0 {
+				break
+			}
+			dictBytes := data[end : end+idIdx]
+
+			// Check for forbidden filter abbreviations.
+			for _, pattern := range forbiddenInlineImageFilters {
+				if bytes.Contains(dictBytes, pattern) {
+					return models.ErrInlineImageForbiddenFilter
+				}
+			}
+
+			// Skip past the inline image data.
+			i = end + idIdx + 2
+		}
+	}
+	return nil
+}
+
 func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\n' || b == '\r' || b == '\t'
 }
@@ -2373,15 +2439,53 @@ func checkRenderingIntent(ctx context.Context, doc *document.Document, catalog a
 
 // --- Overprint mode (ISO 19005, clause 6.2.4.2) ---
 
+// pageHasICCBasedCMYK returns true if the page's ColorSpace resource
+// dictionary contains at least one ICCBased colour space with N=4 (CMYK).
+func pageHasICCBasedCMYK(ctx context.Context, doc *document.Document, resources ast.PdfDict) bool {
+	csObj, ok := resources["ColorSpace"]
+	if !ok {
+		return false
+	}
+	csRes, _ := document.ResolveObject(ctx, doc, csObj)
+	csDict, ok := csRes.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	for _, v := range csDict {
+		vRes, _ := document.ResolveObject(ctx, doc, v)
+		arr, ok := vRes.(ast.PdfArray)
+		if !ok || len(arr) < 2 { //nolint:mnd // [/ICCBased stream-ref]
+			continue
+		}
+		familyObj, _ := document.ResolveObject(ctx, doc, arr[0])
+		family, ok := familyObj.(ast.PdfName)
+		if !ok || family != "ICCBased" {
+			continue
+		}
+		streamRes, _ := document.ResolveObject(ctx, doc, arr[1])
+		stream, ok := streamRes.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		if nObj, ok := stream.Dict["N"]; ok {
+			if nInt, ok := nObj.(ast.PdfInt); ok && int(nInt) == 4 { //nolint:mnd // CMYK
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // checkOverprintMode verifies that OPM (overprint mode) is not 1 when an
 // ICCBased CMYK colour space is used with overprinting enabled.
-//
-//nolint:unused // Will be wired into the PDF/A rule set.
 func checkOverprintMode(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		resources := getResources(ctx, doc, page)
 		if resources == nil {
+			continue
+		}
+		if !pageHasICCBasedCMYK(ctx, doc, resources) {
 			continue
 		}
 		gsObj, ok := resources["ExtGState"]
@@ -2755,6 +2859,54 @@ func pageUsesTransparency(ctx context.Context, doc *document.Document, pageDict 
 			}
 		}
 	}
+
+	// Check XObject resources for transparency indicators.
+	if xobjObj, ok := resources["XObject"]; ok {
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		if xobjDict, ok := xobjRes.(ast.PdfDict); ok {
+			for _, obj := range xobjDict {
+				objRes, _ := document.ResolveObject(ctx, doc, obj)
+				if stream, ok := objRes.(ast.PdfStream); ok {
+					// Form XObject with transparency group.
+					if hasGroupTransparency(ctx, doc, stream.Dict) {
+						return true
+					}
+					// Image XObject with soft mask.
+					if st := stream.Dict["Subtype"]; st == ast.PdfName("Image") {
+						if _, hasSMask := stream.Dict["SMask"]; hasSMask {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Check annotation appearance streams for transparency.
+	if annotsObj, ok := pageDict["Annots"]; ok {
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		if annotsArr, ok := annotsRes.(ast.PdfArray); ok {
+			for _, annotObj := range annotsArr {
+				annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+				if annotDict, ok := annotRes.(ast.PdfDict); ok {
+					if apObj, ok := annotDict["AP"]; ok {
+						apRes, _ := document.ResolveObject(ctx, doc, apObj)
+						if apDict, ok := apRes.(ast.PdfDict); ok {
+							if nObj, ok := apDict["N"]; ok {
+								nRes, _ := document.ResolveObject(ctx, doc, nObj)
+								if nStream, ok := nRes.(ast.PdfStream); ok {
+									if hasGroupTransparency(ctx, doc, nStream.Dict) {
+										return true
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return false
 }
 
@@ -3169,6 +3321,66 @@ func checkFontNameUTF8(ctx context.Context, doc *document.Document, catalog ast.
 		decoded := decodePdfNameHexEscapes(string(bfName))
 		if !utf8.Valid([]byte(decoded)) {
 			errs = append(errs, fmt.Errorf("%w: %s", models.ErrFontNameNotUTF8, name))
+		}
+	}
+	return errs
+}
+
+// checkTrueTypeEncoding verifies that non-symbolic TrueType fonts use either
+// MacRomanEncoding or WinAnsiEncoding (6.2.11.6 test 2 / 7.21.6 test 2).
+func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	fonts := collectFontDicts(ctx, doc, catalog)
+	for name, fontDict := range fonts {
+		// Only check TrueType fonts.
+		stObj, ok := fontDict["Subtype"]
+		if !ok {
+			continue
+		}
+		stRes, _ := document.ResolveObject(ctx, doc, stObj)
+		st, ok := stRes.(ast.PdfName)
+		if !ok || st != "TrueType" {
+			continue
+		}
+
+		// Check if font is symbolic via FontDescriptor /Flags bit 3 (Symbolic).
+		fdDict := findFontDescriptor(ctx, doc, fontDict)
+		if fdDict != nil {
+			if flagsObj, ok := fdDict["Flags"]; ok {
+				flagsRes, _ := document.ResolveObject(ctx, doc, flagsObj)
+				if flagsInt, ok := flagsRes.(ast.PdfInt); ok {
+					const symbolicBit = 1 << 2 // bit 3 (0-indexed: bit 2)
+					if int(flagsInt)&symbolicBit != 0 {
+						continue // Symbolic fonts are exempt.
+					}
+				}
+			}
+		}
+
+		// Non-symbolic TrueType: must have MacRomanEncoding or WinAnsiEncoding.
+		encObj, ok := fontDict["Encoding"]
+		if !ok {
+			errs = append(errs, fmt.Errorf("%w: %s (no Encoding)",
+				models.ErrMissingUnicodeMapping, name))
+			continue
+		}
+		encRes, _ := document.ResolveObject(ctx, doc, encObj)
+		switch enc := encRes.(type) {
+		case ast.PdfName:
+			if enc != "MacRomanEncoding" && enc != "WinAnsiEncoding" {
+				errs = append(errs, fmt.Errorf("%w: %s (Encoding /%s)",
+					models.ErrMissingUnicodeMapping, name, enc))
+			}
+		case ast.PdfDict:
+			if beObj, ok := enc["BaseEncoding"]; ok {
+				beRes, _ := document.ResolveObject(ctx, doc, beObj)
+				if beName, ok := beRes.(ast.PdfName); ok {
+					if beName != "MacRomanEncoding" && beName != "WinAnsiEncoding" {
+						errs = append(errs, fmt.Errorf("%w: %s (BaseEncoding /%s)",
+							models.ErrMissingUnicodeMapping, name, beName))
+					}
+				}
+			}
 		}
 	}
 	return errs

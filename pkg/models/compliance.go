@@ -166,6 +166,9 @@ var (
 	ErrImageOPIForbidden         = errors.New("compliance: Image dictionary must not contain /OPI key")
 	ErrImageInterpolateForbidden = errors.New("compliance: Image /Interpolate must be false")
 
+	// PDF/A inline image filter errors (6.1.9).
+	ErrInlineImageForbiddenFilter = errors.New("compliance: inline image uses forbidden filter (LZW/Crypt)")
+
 	// Font CIDSystemInfo errors (6.2.11.3.1).
 	ErrCIDSystemInfoMismatch = errors.New("compliance: CIDFont and CMap CIDSystemInfo entries are incompatible")
 )

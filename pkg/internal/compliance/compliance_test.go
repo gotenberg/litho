@@ -1413,7 +1413,18 @@ func TestPDFA_FontFile3Accepted(t *testing.T) {
 // --- PDF/A Level 'u' (Unicode) tests ---
 
 func TestPDFA2u_ToUnicodePasses(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFont("CustomFont", true, true).build())
+	// TrueType font with ToUnicode AND valid encoding (WinAnsiEncoding).
+	b := newMockDoc().withOutputIntents()
+	b = b.withPageFont("CustomFont", true, true)
+	// Add WinAnsiEncoding to the font so checkTrueTypeEncoding passes.
+	pages := b.catalog["Pages"].(ast.PdfDict)
+	kids := pages["Kids"].(ast.PdfArray)
+	page := kids[0].(ast.PdfDict)
+	resources := page["Resources"].(ast.PdfDict)
+	fontRes := resources["Font"].(ast.PdfDict)
+	fontDict := fontRes[ast.PdfName("F1")].(ast.PdfDict)
+	fontDict["Encoding"] = ast.PdfName("WinAnsiEncoding")
+	doc := buildTestDoc(b.build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
 	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with /ToUnicode should pass Level 'u'")
@@ -1436,11 +1447,12 @@ func TestPDFA2u_MacRomanEncodingPasses(t *testing.T) {
 	}
 }
 
-func TestPDFA2u_StandardEncodingPasses(t *testing.T) {
+func TestPDFA2u_StandardEncodingFails(t *testing.T) {
+	// StandardEncoding is NOT valid for non-symbolic TrueType fonts in PDF/A-2+.
 	doc := buildTestDoc(newMockDoc().withOutputIntents().withPageFontEncoding("CustomFont", true, "StandardEncoding").build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA2u)
-	if containsError(errs, models.ErrMissingUnicodeMapping) {
-		t.Error("font with /StandardEncoding should pass Level 'u'")
+	if !containsError(errs, models.ErrMissingUnicodeMapping) {
+		t.Error("non-symbolic TrueType font with /StandardEncoding should fail PDF/A-2u")
 	}
 }
 
@@ -1640,7 +1652,17 @@ func TestPDFA4_RequiresUnicodeMapping(t *testing.T) {
 }
 
 func TestPDFA4_UnicodeMappingPasses(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withCatalogVersion("2.0").withPageFont("CustomFont", true, true).build())
+	// TrueType font with ToUnicode AND valid encoding.
+	b := newMockDoc().withOutputIntents().withCatalogVersion("2.0")
+	b = b.withPageFont("CustomFont", true, true)
+	pages := b.catalog["Pages"].(ast.PdfDict)
+	kids := pages["Kids"].(ast.PdfArray)
+	page := kids[0].(ast.PdfDict)
+	resources := page["Resources"].(ast.PdfDict)
+	fontRes := resources["Font"].(ast.PdfDict)
+	fontDict := fontRes[ast.PdfName("F1")].(ast.PdfDict)
+	fontDict["Encoding"] = ast.PdfName("WinAnsiEncoding")
+	doc := buildTestDoc(b.build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA4)
 	if containsError(errs, models.ErrMissingUnicodeMapping) {
 		t.Error("font with /ToUnicode should pass PDF/A-4")
