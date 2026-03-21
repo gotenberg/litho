@@ -112,6 +112,8 @@ var (
 	ErrMissingEmbeddedFilesKey   = errors.New("compliance: PDF/A-4f must have /EmbeddedFiles in name dictionary")
 	ErrInfoDictForbiddenPart4    = errors.New("compliance: PDF/A-4 trailer /Info forbidden unless /PieceInfo exists in catalog")
 	ErrInfoDictExtraKeysPart4    = errors.New("compliance: PDF/A-4 document info dict may only contain /ModDate")
+	ErrAAInvalidKey              = errors.New("compliance: /AA dictionary contains forbidden key (only E/X/D/U/Fo/Bl allowed)")
+	ErrImageAlternatesForbidden  = errors.New("compliance: image dictionary must not contain /Alternates key")
 	ErrMissingFormFieldTooltip   = errors.New("compliance: form field missing /TU (tooltip) for accessibility")
 	ErrNonStandardTag            = errors.New("compliance: non-standard structure tag without /RoleMap entry")
 	ErrInvalidVersionForUA2      = errors.New("compliance: PDF/UA-2 requires PDF version 2.0")

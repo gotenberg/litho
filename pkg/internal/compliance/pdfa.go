@@ -3683,6 +3683,109 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 	return nil
 }
 
+// --- Additional actions key restrictions (ISO 19005, clause 6.6.3) ---
+
+// allowedAAKeys are the only permitted keys in /AA dictionaries on
+// catalog, page, and non-widget annotation dicts (6.6.3, parts 2+).
+var allowedAAKeys = map[ast.PdfName]bool{
+	"E": true, "X": true, "D": true, "U": true, "Fo": true, "Bl": true,
+}
+
+// checkAAKeyRestrictions verifies that /AA dictionaries on the catalog, pages,
+// and annotations only contain permitted keys (6.6.3).
+func checkAAKeyRestrictions(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	// Check catalog /AA.
+	if err := checkAADict(ctx, doc, catalog); err != nil {
+		return []error{err}
+	}
+	// Check page /AA and annotation /AA.
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if err := checkAADict(ctx, doc, page); err != nil {
+			return []error{err}
+		}
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		annotsArr, ok := annotsRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+			annotDict, ok := annotRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			// Widget annotations are exempt (their /AA is handled by 6.4).
+			stObj, _ := annotDict["Subtype"]
+			if st, ok := stObj.(ast.PdfName); ok && st == "Widget" {
+				continue
+			}
+			if err := checkAADict(ctx, doc, annotDict); err != nil {
+				return []error{err}
+			}
+		}
+	}
+	return nil
+}
+
+func checkAADict(ctx context.Context, doc *document.Document, dict ast.PdfDict) error {
+	aaObj, ok := dict["AA"]
+	if !ok {
+		return nil
+	}
+	aaRes, _ := document.ResolveObject(ctx, doc, aaObj)
+	aaDict, ok := aaRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for key := range aaDict {
+		if !allowedAAKeys[key] {
+			return fmt.Errorf("%w: /%s", models.ErrAAInvalidKey, key)
+		}
+	}
+	return nil
+}
+
+// --- Image dict restrictions (ISO 19005, clause 6.2.7) ---
+
+// checkImageAlternates verifies that image XObjects do not contain the
+// /Alternates key (6.2.7.1, parts 2+).
+func checkImageAlternates(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		xobjObj, ok := resources["XObject"]
+		if !ok {
+			continue
+		}
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		xobjDict, ok := xobjRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, obj := range xobjDict {
+			dict := resolveXObjectDict(ctx, doc, obj)
+			if dict == nil {
+				continue
+			}
+			stObj, _ := dict["Subtype"]
+			if st, ok := stObj.(ast.PdfName); ok && st == "Image" {
+				if _, ok := dict["Alternates"]; ok {
+					return []error{models.ErrImageAlternatesForbidden}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // --- Interactive forms (ISO 19005, clause 6.4) ---
 
 // checkWidgetActions verifies that widget annotation dictionaries do not
