@@ -49,7 +49,7 @@ var pdfaRuleSets map[models.PDFAProfile]ruleSet
 
 // pdfaDocChecks are the document-level checks common to all PDF/A profiles.
 func pdfaDocChecks() []docCheckFunc {
-	return []docCheckFunc{checkFileHeader, checkTrailerID, checkEncryptionForbidden}
+	return []docCheckFunc{checkFileHeader, checkTrailerID, checkEncryptionForbidden, checkObjectHeaderFormat}
 }
 
 // pdfaBaseChecks returns the catalog checks common to all PDF/A profiles.

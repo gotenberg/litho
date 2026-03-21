@@ -25,6 +25,13 @@ type Parser struct {
 	tokens    []lexer.Token
 	err       error
 	decryptFn DecryptFunc
+
+	// FormatViolations collects PDF/A format compliance issues detected
+	// during parsing. The parser remains lenient — violations are recorded
+	// but do not fail the parse. This is nil unless compliance checking
+	// is enabled via WithFormatChecking.
+	FormatViolations []error
+	checkFormat      bool
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -35,6 +42,20 @@ func NewParser(lex *lexer.Lexer) *Parser {
 func (p *Parser) WithDecryption(fn DecryptFunc) *Parser {
 	p.decryptFn = fn
 	return p
+}
+
+// WithFormatChecking enables PDF/A format violation collection during
+// parsing. Violations are appended to FormatViolations without failing
+// the parse.
+func (p *Parser) WithFormatChecking() *Parser {
+	p.checkFormat = true
+	return p
+}
+
+func (p *Parser) recordViolation(msg string) {
+	if p.checkFormat {
+		p.FormatViolations = append(p.FormatViolations, fmt.Errorf("compliance: %s", msg))
+	}
 }
 
 func (p *Parser) Peek(n int) (lexer.Token, error) {
@@ -527,6 +548,18 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 	if len(val) >= 2 && val[0] == '<' && val[len(val)-1] == '>' {
 		val = val[1 : len(val)-1]
 	}
+
+	// Check for invalid hex characters before stripping whitespace.
+	if p.checkFormat {
+		for _, r := range val {
+			if r != ' ' && r != '\t' && r != '\n' && r != '\r' &&
+				!((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+				p.recordViolation(fmt.Sprintf("hex string contains invalid character %q", r))
+				break
+			}
+		}
+	}
+
 	val = strings.Map(func(r rune) rune {
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			return -1
@@ -535,6 +568,9 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 	}, val)
 
 	if len(val)%2 != 0 {
+		if p.checkFormat {
+			p.recordViolation("hex string has odd number of digits")
+		}
 		val += "0"
 	}
 	decoded, err := hex.DecodeString(val)
