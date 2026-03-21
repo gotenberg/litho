@@ -290,11 +290,16 @@ func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
 	}
 
 	r := ccitt.NewReader(bytes.NewReader(data), ccitt.MSB, sf, columns, height, opts)
-	decoded, err := io.ReadAll(r)
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+	_, err := io.Copy(buf, r) //nolint:gosec // Need full read
 	if err != nil {
 		return nil, fmt.Errorf("ccitt decode: %w", err)
 	}
-	return decoded, nil
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	return result, nil
 }
 
 func decodeBrotli(data []byte) ([]byte, error) {
