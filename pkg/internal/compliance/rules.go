@@ -375,7 +375,8 @@ func pdfuaBaseChecks() []catalogCheckFunc {
 func pdfUA1Rules() ruleSet {
 	checks := pdfuaBaseChecks()
 	checks = append(checks, checkStandardTags, checkTabOrder, checkLangValues, checkOCConfigNames,
-		checkAnnotationAltText, checkTableSectionChildren, checkListItemChildren, checkCaptionFirstChild)
+		checkAnnotationAltText, checkTableSectionChildren, checkListItemChildren, checkCaptionFirstChild,
+		checkCIDToGIDMap, checkCIDSystemInfoConsistency, checkTrueTypeEncoding)
 	return ruleSet{catalogChecks: checks}
 }
 
@@ -389,6 +390,9 @@ func pdfUA2Rules() ruleSet {
 		checkPDFUAIdentification,
 		checkAnnotationAltText,
 		checkLangValues,
+		checkCIDToGIDMap,
+		checkCIDSystemInfoConsistency,
+		checkTrueTypeEncoding,
 	)
 	return ruleSet{catalogChecks: checks}
 }
