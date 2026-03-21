@@ -1456,7 +1456,7 @@ func checkPDFAIdentification(data []byte, profile models.PDFAProfile) []error {
 	conf := PdfaConformance(profile)
 
 	// Parse XMP to find pdfaid properties and their values.
-	var partValue, confValue string
+	var partValue, confValue, revValue string
 	hasPart := false
 	hasConf := false
 
@@ -1479,6 +1479,8 @@ func checkPDFAIdentification(data []byte, profile models.PDFAProfile) []error {
 					case "conformance":
 						hasConf = true
 						confValue = attr.Value
+					case "rev":
+						revValue = attr.Value
 					}
 				}
 			}
@@ -1531,7 +1533,25 @@ func checkPDFAIdentification(data []byte, profile models.PDFAProfile) []error {
 				models.ErrMissingPDFAId, confValue, expectedConf))
 		}
 	}
+
+	// Validate pdfaid:rev for PDF/A-4: must be a 4-digit year (6.7.3 test 5).
+	if part == 4 && revValue != "" { //nolint:mnd // PDF/A-4
+		if len(revValue) != 4 || !isAllDigits(revValue) { //nolint:mnd // 4-digit year
+			errs = append(errs, fmt.Errorf("%w: pdfaid:rev=%q (must be 4-digit year)",
+				models.ErrMissingPDFAId, revValue))
+		}
+	}
+
 	return errs
+}
+
+func isAllDigits(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // checkDocInfoXMPSync verifies that document info dict entries are consistent
