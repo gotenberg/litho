@@ -758,7 +758,13 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 		}
 
 		for _, apStreamObj := range appearanceStreams {
-			ops, err := content.ParsePageContent(ctx, doc, apStreamObj)
+			// Resolve indirect references before passing to ParsePageContent.
+			apStreamResolved, _ := document.ResolveObject(ctx, doc, apStreamObj)
+			if apStreamResolved == nil {
+				continue
+			}
+
+			ops, err := content.ParsePageContent(ctx, doc, apStreamResolved)
 			if err != nil {
 				continue
 			}
@@ -767,7 +773,7 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 			annotDefaults := make(map[ast.PdfName]bool)
 			maps.Copy(annotDefaults, defaults)
 			annotResourceDict := ast.PdfDict(nil)
-			apStreamRes, _ := document.ResolveObject(ctx, doc, apStreamObj)
+			apStreamRes := apStreamResolved
 			if apStream, ok := apStreamRes.(ast.PdfStream); ok {
 				if arObj, ok := apStream.Dict["Resources"]; ok {
 					arRes, _ := document.ResolveObject(ctx, doc, arObj)
