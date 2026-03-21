@@ -342,6 +342,7 @@ func pdfUA2Rules() ruleSet {
 		checkFormulaMathML,
 		checkPDFUAIdentification,
 		checkAnnotationAltText,
+		checkLangValues,
 	)
 	return ruleSet{catalogChecks: checks}
 }

@@ -47,6 +47,16 @@ func checkFileHeader(_ context.Context, doc *document.Document) []error {
 		return []error{models.ErrInvalidFileHeader}
 	}
 
+	// 1b. Validate version format: %PDF-x.y where x,y are digits.
+	if len(buf) >= 8 { //nolint:mnd // "%PDF-x.y" = 8 bytes minimum
+		major := buf[5]
+		dot := buf[6]
+		minor := buf[7]
+		if dot != '.' || major < '0' || major > '9' || minor < '0' || minor > '9' {
+			return []error{models.ErrInvalidFileHeader}
+		}
+	}
+
 	// 2. Find the binary comment line after the first newline.
 	// The binary marker must appear within the first 1024 bytes per spec,
 	// but realistically it's in the first 64 bytes.
