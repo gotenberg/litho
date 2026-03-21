@@ -197,6 +197,7 @@ func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 		checkFormFieldAppearances,
 		checkNoAlternatePresentations,
 		checkNoRequirements,
+		checkNoActiveContentPart4,
 		checkPDFA4Version,
 		checkOCGUsageApplication,
 		checkUnicodeMapping,
