@@ -1299,7 +1299,8 @@ var predefinedXMPNamespaces = map[string]bool{
 	"http://www.aiim.org/pdfa/ns/property#":  true,
 	"http://www.aiim.org/pdfa/ns/field#":     true,
 	"http://www.aiim.org/pdfa/ns/type#":      true,
-	// Adobe application namespaces accepted by veraPDF as predefined.
+	// Adobe application namespaces — accepted at namespace level by veraPDF
+	// but individual properties are validated against type definitions.
 	"http://ns.adobe.com/photoshop/1.0/":           true,
 	"http://ns.adobe.com/exif/1.0/":                true,
 	"http://ns.adobe.com/exif/1.0/aux/":            true,
