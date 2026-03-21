@@ -78,7 +78,7 @@ func pdfaParts1to3Base(profile models.PDFAProfile) []catalogCheckFunc {
 func pdfA1Checks(profile models.PDFAProfile) []catalogCheckFunc {
 	checks := pdfaParts1to3Base(profile)
 	checks = append(checks,
-		makeAnnotationCheck(pdfA1ExtraForbiddenAnnots, false),
+		makeAnnotationCheck(extraForbiddenAnnots3DRichMedia, false),
 		checkPDFA1Version,
 		checkNoTransparency,
 		checkNoJPX,
@@ -105,7 +105,7 @@ func pdfA1aRules() ruleSet {
 func pdfA2Checks(profile models.PDFAProfile) []catalogCheckFunc {
 	checks := pdfaParts1to3Base(profile)
 	checks = append(checks,
-		makeAnnotationCheck(nil, true),
+		makeAnnotationCheck(extraForbiddenAnnots3DRichMedia, true),
 		checkFormXObjectCompliance,
 		checkExtGStateKeys,
 		checkBlendModes,
@@ -141,7 +141,7 @@ func pdfA2aRules() ruleSet {
 func pdfA3Checks(profile models.PDFAProfile) []catalogCheckFunc {
 	checks := pdfaParts1to3Base(profile)
 	checks = append(checks,
-		makeAnnotationCheck(nil, true),
+		makeAnnotationCheck(extraForbiddenAnnots3DRichMedia, true),
 		checkFormXObjectCompliance,
 		checkExtGStateKeys,
 		checkBlendModes,
@@ -176,7 +176,7 @@ func pdfA3aRules() ruleSet {
 func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 	checks := pdfaBaseChecks(profile)
 	checks = append(checks,
-		makeAnnotationCheck(nil, true),
+		makeAnnotationCheck(extraForbiddenAnnotsPart4, true),
 		checkFormXObjectCompliance,
 		checkExtGStateKeysPart4,
 		checkBlendModes,
@@ -189,15 +189,37 @@ func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 }
 
 func pdfA4eRules() ruleSet {
-	rs := pdfA4Rules(models.PDFA4e)
-	rs.catalogChecks = append(rs.catalogChecks, check3DStreamCompliance)
-	return rs
+	// PDF/A-4e allows 3D/RichMedia annotations (with compliance requirements).
+	checks := pdfaBaseChecks(models.PDFA4e)
+	checks = append(checks,
+		makeAnnotationCheck(nil, true),
+		checkFormXObjectCompliance,
+		checkExtGStateKeysPart4,
+		checkBlendModes,
+		checkTransparencyBlendingCS,
+		checkPDFA4Version,
+		checkOCGUsageApplication,
+		checkUnicodeMapping,
+		check3DStreamCompliance,
+	)
+	return ruleSet{docChecks: pdfaDocChecks(), catalogChecks: checks}
 }
 
 func pdfA4fRules() ruleSet {
-	rs := pdfA4Rules(models.PDFA4f)
-	rs.catalogChecks = append(rs.catalogChecks, checkAFRelationship)
-	return rs
+	// PDF/A-4f allows FileAttachment annotations (unlike base 4).
+	checks := pdfaBaseChecks(models.PDFA4f)
+	checks = append(checks,
+		makeAnnotationCheck(extraForbiddenAnnots3DRichMedia, true),
+		checkFormXObjectCompliance,
+		checkExtGStateKeysPart4,
+		checkBlendModes,
+		checkTransparencyBlendingCS,
+		checkPDFA4Version,
+		checkOCGUsageApplication,
+		checkUnicodeMapping,
+		checkAFRelationship,
+	)
+	return ruleSet{docChecks: pdfaDocChecks(), catalogChecks: checks}
 }
 
 // --- PDF/UA rule sets ---

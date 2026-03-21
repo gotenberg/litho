@@ -907,18 +907,26 @@ func hasForbiddenAnnotActions(ctx context.Context, doc *document.Document, pageD
 // --- Annotation checks (ISO 19005, clause 6.3) ---
 
 // forbiddenAnnotSubtypes lists annotation types that are forbidden in PDF/A.
-// Sound, Screen, and Movie are forbidden in all parts. PDF/A-1 additionally
-// forbids 3D; PDF/A-4 allows it only under the 4e sub-profile.
+// Sound, Screen, and Movie are forbidden in all parts.
 var forbiddenAnnotSubtypes = map[ast.PdfName]bool{
 	"Sound":  true,
 	"Screen": true,
 	"Movie":  true,
 }
 
-// pdfA1ExtraForbiddenAnnots are additional forbidden types in PDF/A-1.
-var pdfA1ExtraForbiddenAnnots = map[ast.PdfName]bool{
+// extraForbiddenAnnots3DRichMedia are additional forbidden types in PDF/A-1
+// through PDF/A-4 (except 4e which allows 3D/RichMedia).
+var extraForbiddenAnnots3DRichMedia = map[ast.PdfName]bool{
 	"3D":        true,
 	"RichMedia": true,
+}
+
+// extraForbiddenAnnotsPart4 adds FileAttachment to the forbidden set for
+// PDF/A-4 (base and 4f, not 4e).
+var extraForbiddenAnnotsPart4 = map[ast.PdfName]bool{
+	"3D":             true,
+	"RichMedia":      true,
+	"FileAttachment": true,
 }
 
 // checkAnnotationCompliance validates annotation structural requirements:
