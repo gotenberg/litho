@@ -1386,7 +1386,8 @@ func checkXMPPacketHeader(data []byte) []error {
 // xmpPropInfo holds the observed type and text value of an XMP property.
 type xmpPropInfo struct {
 	observedType xmpType
-	textValue    string // text content for simple-type properties
+	textValue    string   // text content for simple-type properties
+	itemValues   []string // values of rdf:li items within containers
 }
 
 // checkXMPNamespaces walks the XMP XML token stream and verifies that every
@@ -1441,9 +1442,66 @@ func checkXMPNamespaces(data []byte) []error {
 				errs = append(errs, fmt.Errorf("%w: %s property %s should be structured",
 					models.ErrXMPSchemaViolation, ns, prop))
 			}
+
+			// Validate item values within containers.
+			// For Seq/Bag of Integer, each item must be valid.
+			if isContainerType(observed) && len(info.itemValues) > 0 {
+				itemType := containerItemType(ns, prop)
+				for _, itemVal := range info.itemValues {
+					if !isValidXMPValue(itemType, itemVal) {
+						errs = append(errs, fmt.Errorf("%w: %s property %s has invalid item value %q",
+							models.ErrXMPSchemaViolation, ns, prop, itemVal))
+						break
+					}
+				}
+			}
 		}
 	}
 	return errs
+}
+
+// containerItemType returns the expected value type for items within a
+// container property. Most Seq/Bag containers hold Text items, but some
+// hold Integer, Real, or Date values per the XMP specification.
+func containerItemType(ns, prop string) xmpType {
+	registry, ok := xmpPropertyRegistry[ns]
+	if !ok {
+		return xmpText
+	}
+	expectedType, ok := registry[prop]
+	if !ok {
+		return xmpText
+	}
+	// For Seq/Bag properties, determine the element type from context.
+	switch {
+	case expectedType == xmpSeq || expectedType == xmpBag:
+		// Check known integer-typed sequences.
+		return seqItemTypes[ns+"|"+prop]
+	default:
+		return xmpText
+	}
+}
+
+// seqItemTypes maps namespace|property to the expected type of items within
+// the container. Properties not listed default to xmpText.
+//
+//nolint:gochecknoglobals // static lookup table
+var seqItemTypes = map[string]xmpType{
+	// tiff: sequences of integers.
+	"http://ns.adobe.com/tiff/1.0/|BitsPerSample":         xmpInteger,
+	"http://ns.adobe.com/tiff/1.0/|YCbCrSubSampling":      xmpInteger,
+	"http://ns.adobe.com/tiff/1.0/|TransferFunction":      xmpInteger,
+	"http://ns.adobe.com/tiff/1.0/|YCbCrCoefficients":     xmpReal,
+	"http://ns.adobe.com/tiff/1.0/|PrimaryChromaticities": xmpReal,
+	"http://ns.adobe.com/tiff/1.0/|ReferenceBlackWhite":   xmpReal,
+	"http://ns.adobe.com/tiff/1.0/|WhitePoint":            xmpReal,
+	// exif: sequences of integers.
+	"http://ns.adobe.com/exif/1.0/|ISOSpeedRatings":         xmpInteger,
+	"http://ns.adobe.com/exif/1.0/|SubjectArea":             xmpInteger,
+	"http://ns.adobe.com/exif/1.0/|SubjectLocation":         xmpInteger,
+	"http://ns.adobe.com/exif/1.0/|ComponentsConfiguration": xmpInteger,
+	// dc: sequences of dates.
+	"http://purl.org/dc/elements/1.1/|date": xmpDate,
 }
 
 // isValidXMPValue checks if a text value matches the expected XMP type format.
@@ -1510,12 +1568,28 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpProp
 	var currentPropNS, currentPropLocal string
 	var currentTextBuf strings.Builder
 	captureText := false
+	var inLI bool             // inside an rdf:li element
+	var liBuf strings.Builder // captures rdf:li text
 
 	recordProp := func(ns, local string, info xmpPropInfo) {
 		if properties[ns] == nil {
 			properties[ns] = make(map[string]xmpPropInfo)
 		}
+		// Preserve existing itemValues when updating.
+		if existing, ok := properties[ns][local]; ok && len(info.itemValues) == 0 {
+			info.itemValues = existing.itemValues
+		}
 		properties[ns][local] = info
+	}
+
+	appendItemValue := func(ns, local, val string) {
+		if properties[ns] == nil {
+			return
+		}
+		if info, ok := properties[ns][local]; ok {
+			info.itemValues = append(info.itemValues, val)
+			properties[ns][local] = info
+		}
 	}
 
 	for {
@@ -1549,7 +1623,7 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpProp
 					recordProp(t.Name.Space, t.Name.Local,
 						xmpPropInfo{observedType: xmpText})
 				}
-				if depth == 2 && currentPropNS != "" && t.Name.Space == rdfNS {
+				if depth == 2 && currentPropNS != "" && t.Name.Space == rdfNS { //nolint:mnd // container depth
 					captureText = false // Container — don't capture inner text
 					switch t.Name.Local {
 					case "Alt":
@@ -1562,6 +1636,10 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpProp
 						recordProp(currentPropNS, currentPropLocal,
 							xmpPropInfo{observedType: xmpBag})
 					}
+				}
+				if depth == 3 && t.Name.Space == rdfNS && t.Name.Local == "li" { //nolint:mnd // li item depth
+					inLI = true
+					liBuf.Reset()
 				}
 			}
 
@@ -1583,6 +1661,9 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpProp
 			if captureText && depth == 1 {
 				currentTextBuf.Write(t)
 			}
+			if inLI {
+				liBuf.Write(t)
+			}
 
 		case xml.EndElement:
 			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
@@ -1591,7 +1672,16 @@ func extractXMPProperties(data []byte) (properties map[string]map[string]xmpProp
 				currentPropNS = ""
 				currentPropLocal = ""
 				captureText = false
+				inLI = false
 			} else if inDescription {
+				// Capture rdf:li item value.
+				if t.Name.Space == rdfNS && t.Name.Local == "li" && inLI {
+					val := strings.TrimSpace(liBuf.String())
+					if val != "" && currentPropNS != "" {
+						appendItemValue(currentPropNS, currentPropLocal, val)
+					}
+					inLI = false
+				}
 				if depth == 1 && currentPropNS != "" {
 					// Finalize: store captured text value.
 					val := strings.TrimSpace(currentTextBuf.String())

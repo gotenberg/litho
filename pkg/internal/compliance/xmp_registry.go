@@ -363,6 +363,23 @@ var xmpPropertyRegistry = map[string]map[string]xmpType{
 		"videoFrameSize": xmpStruct, "videoModDate": xmpDate,
 		"videoPixelAspectRatio": xmpReal, "videoPixelDepth": xmpText,
 	},
+
+	// XMP Paged-Text (xmpTPg:).
+	"http://ns.adobe.com/xap/1.0/t/pg/": {
+		"MaxPageSize":            xmpStruct,
+		"NPages":                 xmpInteger,
+		"Fonts":                  xmpBag,
+		"Colorants":              xmpSeq,
+		"PlateNames":             xmpSeq,
+		"SwatchGroups":           xmpSeq,
+		"HasVisibleOverprint":    xmpBoolean,
+		"HasVisibleTransparency": xmpBoolean,
+	},
+
+	// XMP Basic Job Ticket (xmpBJ:).
+	"http://ns.adobe.com/xap/1.0/bj/": {
+		"JobRef": xmpBag,
+	},
 }
 
 // isSimpleType returns true if the type is a simple value (not a container).

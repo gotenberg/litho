@@ -42,18 +42,15 @@ var namespaceStrictness = map[string]xmpStrictnessLevel{
 
 // checkXMPContainerTypes validates that XMP properties use the correct
 // container types (Bag/Seq/Alt/Simple) per their schema definitions.
-// Only strict-tier namespaces enforce container type constraints.
+// Adobe application namespaces are exempt (they have lenient type handling).
 func checkXMPContainerTypes(data []byte) []error {
 	properties := extractXMPContainerInfo(data)
 	var errs []error
 
 	for ns, props := range properties {
-		strictness, hasStrictness := namespaceStrictness[ns]
-		if !hasStrictness {
-			continue // Unknown namespace — skip container validation.
-		}
-		if strictness != strictCore {
-			continue // Lenient — property names only, no container enforcement.
+		// Skip lenient namespaces for container type checking.
+		if strictness, ok := namespaceStrictness[ns]; ok && strictness != strictCore {
+			continue
 		}
 		registry, hasRegistry := xmpPropertyRegistry[ns]
 		if !hasRegistry {

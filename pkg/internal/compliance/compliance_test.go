@@ -116,6 +116,7 @@ func (b *mockDocBuilder) withEmbeddedFiles(withRelationship bool) *mockDocBuilde
 	fs := ast.PdfDict{
 		"Type": ast.PdfName("Filespec"),
 		"F":    ast.PdfString("data.csv"),
+		"UF":   ast.PdfString("data.csv"),
 		"EF":   ast.PdfDict{"F": ast.PdfDict{}},
 	}
 	if withRelationship {
