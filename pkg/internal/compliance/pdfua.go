@@ -13,6 +13,106 @@ import (
 
 // ValidatePDFUA is defined in rules.go alongside the table-driven rule sets.
 
+// checkLangValues validates that all /Lang entries in the catalog and
+// structure tree are valid RFC 3066 language tags (PDF/UA-1 §7.2).
+func checkLangValues(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	// Catalog-level /Lang.
+	if langObj, ok := catalog["Lang"]; ok {
+		langRes, _ := document.ResolveObject(ctx, doc, langObj)
+		if langStr, ok := langRes.(ast.PdfString); ok {
+			decoded := document.DecodePdfString(langStr)
+			if !isValidLangTag(decoded) {
+				errs = append(errs, fmt.Errorf("%w: %q", models.ErrInvalidLangTag, decoded))
+			}
+		}
+	}
+	// Structure tree /Lang entries.
+	strObj, ok := catalog["StructTreeRoot"]
+	if !ok {
+		return errs
+	}
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
+	strDict, ok := strRes.(ast.PdfDict)
+	if !ok {
+		return errs
+	}
+	kObj, ok := strDict["K"]
+	if !ok {
+		return errs
+	}
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	checkStructTreeLangValues(ctx, doc, kRes, &errs)
+	return errs
+}
+
+func checkStructTreeLangValues(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
+	switch v := obj.(type) {
+	case ast.PdfDict:
+		if langObj, ok := v["Lang"]; ok {
+			langRes, _ := document.ResolveObject(ctx, doc, langObj)
+			if langStr, ok := langRes.(ast.PdfString); ok {
+				decoded := document.DecodePdfString(langStr)
+				if !isValidLangTag(decoded) {
+					*errs = append(*errs, fmt.Errorf("%w: %q", models.ErrInvalidLangTag, decoded))
+				}
+			}
+		}
+		if kObj, ok := v["K"]; ok {
+			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			checkStructTreeLangValues(ctx, doc, kRes, errs)
+		}
+	case ast.PdfArray:
+		for _, item := range v {
+			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			checkStructTreeLangValues(ctx, doc, itemRes, errs)
+		}
+	}
+}
+
+// isValidLangTag performs basic BCP 47 / RFC 3066 language tag validation.
+// A language tag has the form: primary[-subtag[-subtag...]].
+// The primary subtag must be 1-8 ASCII letters. Subsequent subtags must be
+// 1-8 alphanumeric characters.
+func isValidLangTag(tag string) bool {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return false
+	}
+	parts := strings.Split(tag, "-")
+	primary := parts[0]
+	if !isAlpha(primary) || len(primary) == 0 || len(primary) > 8 { //nolint:mnd // BCP 47 subtag length
+		return false
+	}
+	for _, sub := range parts[1:] {
+		if len(sub) == 0 || len(sub) > 8 { //nolint:mnd // BCP 47 subtag length
+			return false
+		}
+		if !isAlphaNum(sub) {
+			return false
+		}
+	}
+	return true
+}
+
+func isAlpha(s string) bool {
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+			return false
+		}
+	}
+	return true
+}
+
+func isAlphaNum(s string) bool {
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			return false
+		}
+	}
+	return true
+}
+
 // checkSuspects verifies that /MarkInfo does not have /Suspects set to true.
 // Per PDF/UA-1 §7.1, a file with Suspects=true indicates unverified tagging.
 func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {

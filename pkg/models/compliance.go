@@ -97,6 +97,7 @@ var (
 	ErrSuspectsTrue              = errors.New("compliance: /MarkInfo /Suspects must be false")
 	ErrMissingDisplayDocTitle    = errors.New("compliance: /ViewerPreferences /DisplayDocTitle must be true")
 	ErrTabOrderNotStructure      = errors.New("compliance: page /Tabs must be /S (Structure) for PDF/UA")
+	ErrInvalidLangTag            = errors.New("compliance: /Lang value is not a valid RFC 3066 language tag")
 	ErrMissingFormFieldTooltip   = errors.New("compliance: form field missing /TU (tooltip) for accessibility")
 	ErrNonStandardTag            = errors.New("compliance: non-standard structure tag without /RoleMap entry")
 	ErrInvalidVersionForUA2      = errors.New("compliance: PDF/UA-2 requires PDF version 2.0")
