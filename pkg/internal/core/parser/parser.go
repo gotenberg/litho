@@ -121,8 +121,14 @@ func (p *Parser) ParseObject() (ast.PdfObject, error) {
 				if _, err := p.Expect(lexer.TokenKeyword); err != nil {
 					return nil, err
 				}
-				objNum, _ := strconv.Atoi(t0.Value)
-				genNum, _ := strconv.Atoi(t1.Value)
+				objNum, err := strconv.Atoi(t0.Value)
+				if err != nil {
+					return nil, fmt.Errorf("invalid object number %q: %w", t0.Value, err)
+				}
+				genNum, err := strconv.Atoi(t1.Value)
+				if err != nil {
+					return nil, fmt.Errorf("invalid generation number %q: %w", t1.Value, err)
+				}
 				return ast.PdfIndirectRef{ObjectNum: objNum, GenNum: genNum}, nil
 			}
 			if t2.Type == lexer.TokenKeyword && t2.Value == "obj" {

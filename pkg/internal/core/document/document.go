@@ -196,16 +196,16 @@ func (d *Document) Authenticate(password string) error {
 	if !d.IsEncrypted || d.Crypto == nil {
 		return nil
 	}
-	err := d.Crypto.Authenticate(password)
-	if err == nil {
-		d.Authenticated = true
-		// Clear object cache in case we cached encrypted items
-		// (though we shouldn't have been able to read them)
-		d.mu.Lock()
-		d.objectCache = make(map[int]ast.PdfObject)
-		d.mu.Unlock()
+	if err := d.Crypto.Authenticate(password); err != nil {
+		return fmt.Errorf("invalid password or unsupported encryption: %w", err)
 	}
-	return fmt.Errorf("authenticating PDF encryption: %w", err)
+	d.Authenticated = true
+	// Clear object cache in case we cached encrypted items
+	// (though we shouldn't have been able to read them).
+	d.mu.Lock()
+	d.objectCache = make(map[int]ast.PdfObject)
+	d.mu.Unlock()
+	return nil
 }
 
 // initCatalogVersion checks the catalog /Version key and overrides the header

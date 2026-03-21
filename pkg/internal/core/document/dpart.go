@@ -37,6 +37,9 @@ func GetDPartMap(ctx context.Context, doc *Document) (map[int]map[string]string,
 }
 
 func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inheritedDPM map[string]string, pageDPMMap map[int]map[string]string) {
+	if ctx.Err() != nil {
+		return
+	}
 	currentDPM := make(map[string]string)
 	maps.Copy(currentDPM, inheritedDPM)
 

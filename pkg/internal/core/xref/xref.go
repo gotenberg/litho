@@ -173,7 +173,9 @@ func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, e
 
 	var prev int64 = 0
 	if prevObj, ok := stream.Dict["Prev"]; ok {
-		prev = int64(prevObj.(ast.PdfInt))
+		if prevInt, ok := prevObj.(ast.PdfInt); ok {
+			prev = int64(prevInt)
+		}
 	}
 
 	return prev, nil
@@ -215,8 +217,14 @@ func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, 
 			return nil, 0, fmt.Errorf("%w: expected count, got %v", ErrMalformedXRef, tok2.Type)
 		}
 
-		startObj, _ := strconv.Atoi(tok1.Value)
-		count, _ := strconv.Atoi(tok2.Value)
+		startObj, err := strconv.Atoi(tok1.Value)
+		if err != nil {
+			return nil, 0, fmt.Errorf("%w: invalid start object number %q: %v", ErrMalformedXRef, tok1.Value, err)
+		}
+		count, err := strconv.Atoi(tok2.Value)
+		if err != nil {
+			return nil, 0, fmt.Errorf("%w: invalid entry count %q: %v", ErrMalformedXRef, tok2.Value, err)
+		}
 
 		for i := range count {
 			tokOff, err := lex.NextToken()
@@ -236,8 +244,14 @@ func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, 
 				return nil, 0, fmt.Errorf("%w: invalid entry", ErrMalformedXRef)
 			}
 
-			offset, _ := strconv.ParseInt(tokOff.Value, 10, 64)
-			gen, _ := strconv.Atoi(tokGen.Value)
+			offset, err := strconv.ParseInt(tokOff.Value, 10, 64)
+			if err != nil {
+				return nil, 0, fmt.Errorf("%w: invalid offset %q: %v", ErrMalformedXRef, tokOff.Value, err)
+			}
+			gen, err := strconv.Atoi(tokGen.Value)
+			if err != nil {
+				return nil, 0, fmt.Errorf("%w: invalid generation %q: %v", ErrMalformedXRef, tokGen.Value, err)
+			}
 			isFree := tokType.Value == "f"
 			isNormal := tokType.Value == "n"
 
