@@ -22,13 +22,11 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		return nil, fmt.Errorf("page has no /XObject resources")
 	}
 
-	xobjResolved, err := document.ResolveObject(ctx, doc, xobjObj)
+	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
 	if err != nil {
 		return nil, err
 	}
-
-	xobjDict, ok := xobjResolved.(ast.PdfDict)
-	if !ok {
+	if xobjDict == nil {
 		return nil, fmt.Errorf("/XObject is not a dictionary")
 	}
 
@@ -37,13 +35,11 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		return nil, fmt.Errorf("image %q not found in /XObject", name)
 	}
 
-	resolved, err := document.ResolveObject(ctx, doc, obj)
+	stream, err := document.ResolveStream(ctx, doc, obj)
 	if err != nil {
 		return nil, err
 	}
-
-	stream, ok := resolved.(ast.PdfStream)
-	if !ok {
+	if stream.Dict == nil {
 		return nil, fmt.Errorf("image %q is not a stream", name)
 	}
 

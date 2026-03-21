@@ -18,13 +18,12 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		return nil, nil
 	}
 
-	annotsResolved, err := document.ResolveObject(ctx, doc, annotsObj)
+	annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /Annots: %w", err)
 	}
 
-	annotsArr, ok := annotsResolved.(ast.PdfArray)
-	if !ok {
+	if annotsArr == nil {
 		return nil, nil
 	}
 
@@ -32,13 +31,12 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 	modelIdx := 0
 
 	for _, annotRef := range annotsArr {
-		annotResolved, err := document.ResolveObject(ctx, doc, annotRef)
+		annotDict, err := document.ResolveDict(ctx, doc, annotRef)
 		if err != nil {
 			continue
 		}
 
-		annotDict, ok := annotResolved.(ast.PdfDict)
-		if !ok {
+		if annotDict == nil {
 			continue
 		}
 
@@ -47,9 +45,8 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		if !ok {
 			continue
 		}
-		subtypeRes, _ := document.ResolveObject(ctx, doc, subtypeObj)
-		subtypeName, ok := subtypeRes.(ast.PdfName)
-		if !ok || subtypeName != "3D" {
+		subtypeName, _ := document.ResolveName(ctx, doc, subtypeObj)
+		if subtypeName != "3D" {
 			continue
 		}
 
@@ -59,13 +56,12 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 			continue
 		}
 
-		ddResolved, err := document.ResolveObject(ctx, doc, ddObj)
+		stream, err := document.ResolveStream(ctx, doc, ddObj)
 		if err != nil {
 			continue
 		}
 
-		stream, ok := ddResolved.(ast.PdfStream)
-		if !ok {
+		if stream.Dict == nil {
 			continue
 		}
 
@@ -75,8 +71,8 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		// Extract a name from the annotation if available.
 		name := fmt.Sprintf("model_%d", modelIdx)
 		if nmObj, ok := annotDict["NM"]; ok {
-			nmRes, _ := document.ResolveObject(ctx, doc, nmObj)
-			if nmStr, ok := nmRes.(ast.PdfString); ok {
+			nmStr, _ := document.ResolveString(ctx, doc, nmObj)
+			if nmStr != "" {
 				decoded := document.DecodePdfString(nmStr)
 				if decoded != "" {
 					name = decoded
@@ -103,30 +99,26 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.PdfStream) string {
 	// Check /Subtype on the 3D stream dictionary.
 	if stObj, ok := stream.Dict["Subtype"]; ok {
-		stRes, _ := document.ResolveObject(ctx, doc, stObj)
-		if name, ok := stRes.(ast.PdfName); ok {
-			switch name {
-			case "U3D":
-				return "U3D"
-			case "PRC":
-				return "PRC"
-			}
+		name, _ := document.ResolveName(ctx, doc, stObj)
+		switch name {
+		case "U3D":
+			return "U3D"
+		case "PRC":
+			return "PRC"
 		}
 	}
 
 	// Check /Type as a fallback (some producers use /Type instead of /Subtype).
 	if typeObj, ok := stream.Dict["Type"]; ok {
-		typeRes, _ := document.ResolveObject(ctx, doc, typeObj)
-		if name, ok := typeRes.(ast.PdfName); ok {
-			switch name {
-			case "U3D":
-				return "U3D"
-			case "PRC":
-				return "PRC"
-			case "3D":
-				// Generic /Type /3D — try to detect from magic bytes.
-				return detect3DFromMagic(stream.Data)
-			}
+		name, _ := document.ResolveName(ctx, doc, typeObj)
+		switch name {
+		case "U3D":
+			return "U3D"
+		case "PRC":
+			return "PRC"
+		case "3D":
+			// Generic /Type /3D — try to detect from magic bytes.
+			return detect3DFromMagic(stream.Data)
 		}
 	}
 

@@ -21,13 +21,11 @@ func GetDPartMap(ctx context.Context, doc *Document) (map[int]map[string]string,
 		return nil, nil // No DPartRoot
 	}
 
-	dprRes, err := ResolveObject(ctx, doc, dprObj)
+	dprDict, err := ResolveDict(ctx, doc, dprObj)
 	if err != nil {
 		return nil, err
 	}
-
-	dprDict, ok := dprRes.(ast.PdfDict)
-	if !ok {
+	if dprDict == nil {
 		return nil, fmt.Errorf("DPartRoot is not a dictionary")
 	}
 
@@ -42,15 +40,13 @@ func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inherit
 	maps.Copy(currentDPM, inheritedDPM)
 
 	if dpmObj, ok := node["DPM"]; ok {
-		dpmRes, _ := ResolveObject(ctx, doc, dpmObj)
-		if dpmDict, ok := dpmRes.(ast.PdfDict); ok {
-			for k, v := range dpmDict {
-				vRes, _ := ResolveObject(ctx, doc, v)
-				if vStr, ok := vRes.(ast.PdfString); ok {
-					currentDPM[string(k)] = DecodePdfString(vStr)
-				} else if vName, ok := vRes.(ast.PdfName); ok {
-					currentDPM[string(k)] = string(vName)
-				}
+		dpmDict, _ := ResolveDict(ctx, doc, dpmObj)
+		for k, v := range dpmDict {
+			vRes, _ := ResolveObject(ctx, doc, v)
+			if vStr, ok := vRes.(ast.PdfString); ok {
+				currentDPM[string(k)] = DecodePdfString(vStr)
+			} else if vName, ok := vRes.(ast.PdfName); ok {
+				currentDPM[string(k)] = string(vName)
 			}
 		}
 	}
@@ -64,13 +60,13 @@ func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inherit
 					kidRef = ref
 				}
 
-				kidRes, _ := ResolveObject(ctx, doc, kid)
-				if kidDict, ok := kidRes.(ast.PdfDict); ok {
+				kidDict, _ := ResolveDict(ctx, doc, kid)
+				if kidDict != nil {
 					// Check if it's a Page dictionary
 					isPage := false
 					if tObj, ok := kidDict["Type"]; ok {
-						tRes, _ := ResolveObject(ctx, doc, tObj)
-						if tName, ok := tRes.(ast.PdfName); ok && tName == "Page" {
+						tName, _ := ResolveName(ctx, doc, tObj)
+						if tName == "Page" {
 							isPage = true
 						}
 					}

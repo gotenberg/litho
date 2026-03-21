@@ -108,13 +108,12 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 			streams = append(streams, c)
 		case ast.PdfArray:
 			for _, item := range c {
-				itemResolved, err := document.ResolveObject(ctx, doc, item)
+				stream, err := document.ResolveStream(ctx, doc, item)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve item in /Contents array: %v", err)
 				}
-				stream, ok := itemResolved.(ast.PdfStream)
-				if !ok {
-					return nil, fmt.Errorf("expected stream in /Contents array, got %T", itemResolved)
+				if stream.Dict == nil {
+					return nil, fmt.Errorf("expected stream in /Contents array")
 				}
 				streams = append(streams, stream)
 			}

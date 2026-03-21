@@ -21,12 +21,11 @@ func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]stri
 		return nil, nil // No names dictionary
 	}
 
-	namesRes, err := document.ResolveObject(ctx, doc, namesObj)
+	namesDict, err := document.ResolveDict(ctx, doc, namesObj)
 	if err != nil {
 		return nil, err
 	}
-	namesDict, ok := namesRes.(ast.PdfDict)
-	if !ok {
+	if namesDict == nil {
 		return nil, fmt.Errorf("/Names is not a dictionary")
 	}
 
@@ -45,20 +44,18 @@ func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]stri
 }
 
 func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string) error {
-	nodeRes, err := document.ResolveObject(ctx, doc, nodeObj)
+	nodeDict, err := document.ResolveDict(ctx, doc, nodeObj)
 	if err != nil {
 		return err
 	}
-
-	nodeDict, ok := nodeRes.(ast.PdfDict)
-	if !ok {
+	if nodeDict == nil {
 		return nil
 	}
 
 	// Traverse Kids
 	if kidsObj, ok := nodeDict["Kids"]; ok {
-		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
-		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
+		if err == nil && kidsArr != nil {
 			for _, kid := range kidsArr {
 				if err := extractJSTree(ctx, doc, kid, scripts); err != nil {
 					return err
@@ -70,25 +67,27 @@ func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfO
 
 	// Process Names array (leaf node)
 	if namesObj, ok := nodeDict["Names"]; ok {
-		namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
-		if namesArr, ok := namesRes.(ast.PdfArray); ok {
+		namesArr, err := document.ResolveArray(ctx, doc, namesObj)
+		if err == nil && namesArr != nil {
 			// Names array alternates between name string and value object (action dict)
 			for i := 1; i < len(namesArr); i += 2 {
 				valObj := namesArr[i]
-				valRes, _ := document.ResolveObject(ctx, doc, valObj)
+				actionDict, err := document.ResolveDict(ctx, doc, valObj)
 
-				if actionDict, ok := valRes.(ast.PdfDict); ok {
+				if err == nil && actionDict != nil {
 					if sObj, ok := actionDict["S"]; ok {
-						sRes, _ := document.ResolveObject(ctx, doc, sObj)
-						if sName, ok := sRes.(ast.PdfName); ok && sName == "JavaScript" {
+						sName, err := document.ResolveName(ctx, doc, sObj)
+						if err == nil && sName == "JavaScript" {
 							if jsObj, ok := actionDict["JS"]; ok {
-								jsRes, _ := document.ResolveObject(ctx, doc, jsObj)
-								if str, ok := jsRes.(ast.PdfString); ok {
-									*scripts = append(*scripts, document.DecodePdfString(str))
-								} else if stream, ok := jsRes.(ast.PdfStream); ok {
-									data, err := filter.DecodeStream(stream)
-									if err == nil {
-										*scripts = append(*scripts, string(data))
+								jsRes, err := document.ResolveObject(ctx, doc, jsObj)
+								if err == nil {
+									if str, ok := jsRes.(ast.PdfString); ok {
+										*scripts = append(*scripts, document.DecodePdfString(str))
+									} else if stream, ok := jsRes.(ast.PdfStream); ok {
+										data, err := filter.DecodeStream(stream)
+										if err == nil {
+											*scripts = append(*scripts, string(data))
+										}
 									}
 								}
 							}

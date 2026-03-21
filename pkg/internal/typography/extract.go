@@ -40,33 +40,30 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return result
 	}
-	annotsResolved, err := document.ResolveObject(ctx, doc, annotsObj)
+	annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil {
 		return result
 	}
-	annotsArr, ok := annotsResolved.(ast.PdfArray)
-	if !ok {
+	if annotsArr == nil {
 		return result
 	}
 	for _, annotObj := range annotsArr {
-		annotResolved, err := document.ResolveObject(ctx, doc, annotObj)
+		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
 		if err != nil {
 			continue
 		}
-		annotDict, ok := annotResolved.(ast.PdfDict)
-		if !ok {
+		if annotDict == nil {
 			continue
 		}
 		apObj, ok := annotDict["AP"]
 		if !ok {
 			continue
 		}
-		apResolved, err := document.ResolveObject(ctx, doc, apObj)
+		apDict, err := document.ResolveDict(ctx, doc, apObj)
 		if err != nil {
 			continue
 		}
-		apDict, ok := apResolved.(ast.PdfDict)
-		if !ok {
+		if apDict == nil {
 			continue
 		}
 		// Collect object numbers from /N (normal), /R (rollover), /D (down) appearances.
@@ -79,15 +76,13 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 				result[ref.ObjectNum] = true
 			}
 			// An appearance can also be a dict of state-specific appearances.
-			entryResolved, err := document.ResolveObject(ctx, doc, apEntry)
+			stateDict, err := document.ResolveDict(ctx, doc, apEntry)
 			if err != nil {
 				continue
 			}
-			if stateDict, ok := entryResolved.(ast.PdfDict); ok {
-				for _, stateObj := range stateDict {
-					if ref, ok := stateObj.(ast.PdfIndirectRef); ok {
-						result[ref.ObjectNum] = true
-					}
+			for _, stateObj := range stateDict {
+				if ref, ok := stateObj.(ast.PdfIndirectRef); ok {
+					result[ref.ObjectNum] = true
 				}
 			}
 		}
@@ -120,30 +115,28 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 	// Pre-populate active OCs from resources /Properties
 	if propsObj, ok := resources["Properties"]; ok {
-		propsRes, _ := document.ResolveObject(ctx, doc, propsObj)
-		if propsDict, ok := propsRes.(ast.PdfDict); ok {
-			for k, v := range propsDict {
-				vRes, _ := document.ResolveObject(ctx, doc, v)
-				if dict, ok := vRes.(ast.PdfDict); ok {
-					if subtypeObj, ok := dict["Type"]; ok {
-						subtypeRes, _ := document.ResolveObject(ctx, doc, subtypeObj)
-						if subtypeName, ok := subtypeRes.(ast.PdfName); ok && subtypeName == "OCG" {
-							// Determine visibility using Off -> On -> BaseState priority.
-							visible := true
-							if ref, ok := v.(ast.PdfIndirectRef); ok {
-								if doc.OCConfig != nil {
-									if doc.OCConfig.Off[ref.ObjectNum] {
-										visible = false
-									} else if doc.OCConfig.On[ref.ObjectNum] {
-										visible = true
-									} else {
-										// Not in either explicit list: fall back to BaseState.
-										visible = doc.OCConfig.BaseState != "OFF"
-									}
+		propsDict, _ := document.ResolveDict(ctx, doc, propsObj)
+		for k, v := range propsDict {
+			dict, _ := document.ResolveDict(ctx, doc, v)
+			if dict != nil {
+				if subtypeObj, ok := dict["Type"]; ok {
+					subtypeName, _ := document.ResolveName(ctx, doc, subtypeObj)
+					if subtypeName != "" && subtypeName == "OCG" {
+						// Determine visibility using Off -> On -> BaseState priority.
+						visible := true
+						if ref, ok := v.(ast.PdfIndirectRef); ok {
+							if doc.OCConfig != nil {
+								if doc.OCConfig.Off[ref.ObjectNum] {
+									visible = false
+								} else if doc.OCConfig.On[ref.ObjectNum] {
+									visible = true
+								} else {
+									// Not in either explicit list: fall back to BaseState.
+									visible = doc.OCConfig.BaseState != "OFF"
 								}
 							}
-							machine.ActiveOCs[string(k)] = visible
 						}
+						machine.ActiveOCs[string(k)] = visible
 					}
 				}
 			}
@@ -235,8 +228,8 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 			resolved := false
 			if resObj, ok := resources["Font"]; ok {
-				resResolved, _ := document.ResolveObject(ctx, doc, resObj)
-				if resDictRoot, ok := resResolved.(ast.PdfDict); ok {
+				resDictRoot, _ := document.ResolveDict(ctx, doc, resObj)
+				if resDictRoot != nil {
 					if fontRefObj, ok := resDictRoot[fontName]; ok {
 						// Check font cache by indirect reference object number.
 						if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
@@ -248,9 +241,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 							}
 						}
 						if !resolved {
-							fontDictResolved, err := document.ResolveObject(ctx, doc, fontRefObj)
+							fontDict, err := document.ResolveDict(ctx, doc, fontRefObj)
 							if err == nil {
-								if fontDict, ok := fontDictResolved.(ast.PdfDict); ok {
+								if fontDict != nil {
 									font, err := GetFont(ctx, doc, fontDict)
 									if err == nil {
 										currentFont = font
@@ -351,8 +344,8 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			if len(op.Operands) == 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					if xobjObj, ok := resources["XObject"]; ok {
-						xobjResolved, _ := document.ResolveObject(ctx, doc, xobjObj)
-						if xobjDict, ok := xobjResolved.(ast.PdfDict); ok {
+						xobjDict, _ := document.ResolveDict(ctx, doc, xobjObj)
+						if xobjDict != nil {
 							if targetObj, ok := xobjDict[name]; ok {
 								// Track visited Form XObjects by indirect reference to break circular references.
 								objNum := 0
@@ -367,19 +360,19 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 									}
 								}
 
-								targetResolved, _ := document.ResolveObject(ctx, doc, targetObj)
-								if stream, ok := targetResolved.(ast.PdfStream); ok {
+								stream, _ := document.ResolveStream(ctx, doc, targetObj)
+								if stream.Dict != nil {
 									if subtypeObj, ok := stream.Dict["Subtype"]; ok {
-										subtypeResolved, _ := document.ResolveObject(ctx, doc, subtypeObj)
-										if subtypeName, ok := subtypeResolved.(ast.PdfName); ok && subtypeName == "Form" {
+										subtypeName, _ := document.ResolveName(ctx, doc, subtypeObj)
+										if subtypeName == "Form" {
 											// Parse the Form XObject stream
 											formOps, err := content.ParsePageContent(ctx, doc, stream)
 											if err == nil {
 												// Determine resources
 												formRes := resources // inherit by default
 												if resObj, ok := stream.Dict["Resources"]; ok {
-													resResolved, _ := document.ResolveObject(ctx, doc, resObj)
-													if resDict, ok := resResolved.(ast.PdfDict); ok {
+													resDict, _ := document.ResolveDict(ctx, doc, resObj)
+													if resDict != nil {
 														formRes = resDict
 													}
 												}
@@ -391,11 +384,11 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 												// If there is a Matrix in the Form XObject, apply it
 												if matrixObj, ok := stream.Dict["Matrix"]; ok {
-													matrixResolved, err := document.ResolveObject(ctx, doc, matrixObj)
+													matrixArr, err := document.ResolveArray(ctx, doc, matrixObj)
 													if err != nil {
 														return err
 													}
-													if matrixArr, ok := matrixResolved.(ast.PdfArray); ok && len(matrixArr) == 6 {
+													if len(matrixArr) == 6 {
 														_ = machine.Execute([]content.Operation{{ //nolint:errcheck
 															Operator: "cm",
 															Operands: matrixArr,

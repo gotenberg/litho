@@ -72,13 +72,11 @@ func assembleXFAArray(ctx context.Context, doc *document.Document, arr ast.PdfAr
 	for i := 0; i+1 < len(arr); i += 2 {
 		// arr[i] is the packet name (e.g., "preamble", "datasets", "template").
 		// arr[i+1] is the stream reference.
-		streamObj, err := document.ResolveObject(ctx, doc, arr[i+1])
+		stream, err := document.ResolveStream(ctx, doc, arr[i+1])
 		if err != nil {
 			continue
 		}
-
-		stream, ok := streamObj.(ast.PdfStream)
-		if !ok {
+		if stream.Dict == nil {
 			continue
 		}
 

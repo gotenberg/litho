@@ -23,13 +23,12 @@ func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Si
 		return nil, nil // No forms/signatures
 	}
 
-	acroFormResolved, err := document.ResolveObject(ctx, doc, acroFormObj)
+	acroFormDict, err := document.ResolveDict(ctx, doc, acroFormObj)
 	if err != nil {
 		return nil, err
 	}
 
-	acroFormDict, ok := acroFormResolved.(ast.PdfDict)
-	if !ok {
+	if acroFormDict == nil {
 		return nil, nil
 	}
 
@@ -38,13 +37,12 @@ func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Si
 		return nil, nil
 	}
 
-	fieldsResolved, err := document.ResolveObject(ctx, doc, fieldsObj)
+	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil {
 		return nil, err
 	}
 
-	fieldsArr, ok := fieldsResolved.(ast.PdfArray)
-	if !ok {
+	if fieldsArr == nil {
 		return nil, nil
 	}
 
@@ -56,21 +54,20 @@ func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Si
 
 func extractSigsRecursive(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature) {
 	for _, fieldObj := range fields {
-		fieldResolved, err := document.ResolveObject(ctx, doc, fieldObj)
+		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil {
 			continue
 		}
 
-		fieldDict, ok := fieldResolved.(ast.PdfDict)
-		if !ok {
+		if fieldDict == nil {
 			continue
 		}
 
 		// Extract partial name
 		partialName := ""
 		if tObj, ok := fieldDict["T"]; ok {
-			tRes, _ := document.ResolveObject(ctx, doc, tObj)
-			if tStr, ok := tRes.(ast.PdfString); ok {
+			tStr, _ := document.ResolveString(ctx, doc, tObj)
+			if tStr != "" {
 				partialName = document.DecodePdfString(tStr)
 			}
 		}
@@ -86,17 +83,17 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 
 		// Field Type (/FT)
 		if ftObj, ok := fieldDict["FT"]; ok {
-			ftRes, _ := document.ResolveObject(ctx, doc, ftObj)
-			if ftName, ok := ftRes.(ast.PdfName); ok && ftName == "Sig" {
+			ftName, _ := document.ResolveName(ctx, doc, ftObj)
+			if ftName == "Sig" {
 				if vObj, ok := fieldDict["V"]; ok {
-					vRes, _ := document.ResolveObject(ctx, doc, vObj)
-					if vDict, ok := vRes.(ast.PdfDict); ok {
+					vDict, _ := document.ResolveDict(ctx, doc, vObj)
+					if vDict != nil {
 						sig := models.Signature{FieldName: fullName}
 
 						// ByteRange
 						if brObj, ok := vDict["ByteRange"]; ok {
-							brRes, _ := document.ResolveObject(ctx, doc, brObj)
-							if brArr, ok := brRes.(ast.PdfArray); ok && len(brArr) == 4 {
+							brArr, _ := document.ResolveArray(ctx, doc, brObj)
+							if len(brArr) == 4 {
 								for i := range 4 {
 									if num, ok := brArr[i].(ast.PdfInt); ok {
 										sig.ByteRange[i] = int64(num)
@@ -107,16 +104,16 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 
 						// Contents (Hex string PKCS#7)
 						if cObj, ok := vDict["Contents"]; ok {
-							cRes, _ := document.ResolveObject(ctx, doc, cObj)
-							if cStr, ok := cRes.(ast.PdfString); ok {
+							cStr, _ := document.ResolveString(ctx, doc, cObj)
+							if cStr != "" {
 								sig.Contents = string(cStr)
 							}
 						}
 
 						// /M signing time
 						if mObj, ok := vDict["M"]; ok {
-							mRes, _ := document.ResolveObject(ctx, doc, mObj)
-							if mStr, ok := mRes.(ast.PdfString); ok {
+							mStr, _ := document.ResolveString(ctx, doc, mObj)
+							if mStr != "" {
 								sig.SigningTime = document.DecodePdfString(mStr)
 							}
 						}
@@ -145,8 +142,8 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 
 		// Traverse Kids
 		if kidsObj, ok := fieldDict["Kids"]; ok {
-			kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
-			if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+			kidsArr, _ := document.ResolveArray(ctx, doc, kidsObj)
+			if kidsArr != nil {
 				extractSigsRecursive(ctx, doc, kidsArr, fullName, sigs)
 			}
 		}

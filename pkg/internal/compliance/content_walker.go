@@ -213,25 +213,23 @@ func (w *contentWalker) handleGS(op content.Operation) {
 	if !ok {
 		return
 	}
-	gsRes, _ := document.ResolveObject(w.ctx, w.doc, gsObj)
-	gsDict, ok := gsRes.(ast.PdfDict)
-	if !ok {
+	gsDict, _ := document.ResolveDict(w.ctx, w.doc, gsObj)
+	if gsDict == nil {
 		return
 	}
 	stateObj, ok := gsDict[gsName]
 	if !ok {
 		return
 	}
-	stateRes, _ := document.ResolveObject(w.ctx, w.doc, stateObj)
-	stateDict, ok := stateRes.(ast.PdfDict)
-	if !ok {
+	stateDict, _ := document.ResolveDict(w.ctx, w.doc, stateObj)
+	if stateDict == nil {
 		return
 	}
 
 	// Check rendering intent in ExtGState.
 	if riObj, ok := stateDict["RI"]; ok {
-		riRes, _ := document.ResolveObject(w.ctx, w.doc, riObj)
-		if riName, ok := riRes.(ast.PdfName); ok {
+		riName, _ := document.ResolveName(w.ctx, w.doc, riObj)
+		if riName != "" {
 			if !validRenderingIntents[riName] {
 				w.errors = append(w.errors, fmt.Errorf("%w: /%s in ExtGState",
 					models.ErrInvalidRenderingIntent, riName))
@@ -255,9 +253,8 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	if !ok {
 		return
 	}
-	xobjRes, _ := document.ResolveObject(w.ctx, w.doc, xobjObj)
-	xobjDict, ok := xobjRes.(ast.PdfDict)
-	if !ok {
+	xobjDict, _ := document.ResolveDict(w.ctx, w.doc, xobjObj)
+	if xobjDict == nil {
 		return
 	}
 	obj, ok := xobjDict[xobjName]
@@ -270,9 +267,8 @@ func (w *contentWalker) handleDo(op content.Operation) {
 		return
 	}
 
-	objRes, _ := document.ResolveObject(w.ctx, w.doc, obj)
-	stream, ok := objRes.(ast.PdfStream)
-	if !ok {
+	stream, _ := document.ResolveStream(w.ctx, w.doc, obj)
+	if stream.Dict == nil {
 		return
 	}
 
@@ -302,8 +298,8 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	// Determine resources for the Form XObject.
 	formResources := w.resources
 	if frObj, ok := stream.Dict["Resources"]; ok {
-		frRes, _ := document.ResolveObject(w.ctx, w.doc, frObj)
-		if frDict, ok := frRes.(ast.PdfDict); ok {
+		frDict, _ := document.ResolveDict(w.ctx, w.doc, frObj)
+		if frDict != nil {
 			formResources = frDict
 		}
 	}
@@ -389,15 +385,13 @@ func (w *contentWalker) walkType3CharProcs() {
 	if !ok {
 		return
 	}
-	fontRes, _ := document.ResolveObject(w.ctx, w.doc, fontObj)
-	fontDict, ok := fontRes.(ast.PdfDict)
-	if !ok {
+	fontDict, _ := document.ResolveDict(w.ctx, w.doc, fontObj)
+	if fontDict == nil {
 		return
 	}
 	for _, fObj := range fontDict {
-		fRes, _ := document.ResolveObject(w.ctx, w.doc, fObj)
-		fDict, ok := fRes.(ast.PdfDict)
-		if !ok {
+		fDict, _ := document.ResolveDict(w.ctx, w.doc, fObj)
+		if fDict == nil {
 			continue
 		}
 		stObj := fDict["Subtype"]
@@ -409,15 +403,13 @@ func (w *contentWalker) walkType3CharProcs() {
 		if !ok {
 			continue
 		}
-		cpRes, _ := document.ResolveObject(w.ctx, w.doc, cpObj)
-		cpDict, ok := cpRes.(ast.PdfDict)
-		if !ok {
+		cpDict, _ := document.ResolveDict(w.ctx, w.doc, cpObj)
+		if cpDict == nil {
 			continue
 		}
 		for _, procObj := range cpDict {
-			procRes, _ := document.ResolveObject(w.ctx, w.doc, procObj)
-			procStream, ok := procRes.(ast.PdfStream)
-			if !ok {
+			procStream, _ := document.ResolveStream(w.ctx, w.doc, procObj)
+			if procStream.Dict == nil {
 				continue
 			}
 			ops, err := content.ParsePageContent(w.ctx, w.doc, procStream)
@@ -513,9 +505,8 @@ func checkShadingResourceCS(ctx context.Context, doc *document.Document, resourc
 	if !ok {
 		return nil
 	}
-	shRes, _ := document.ResolveObject(ctx, doc, shObj)
-	shDict, ok := shRes.(ast.PdfDict)
-	if !ok {
+	shDict, _ := document.ResolveDict(ctx, doc, shObj)
+	if shDict == nil {
 		return nil
 	}
 	for _, obj := range shDict {
@@ -534,11 +525,7 @@ func checkShadingResourceCS(ctx context.Context, doc *document.Document, resourc
 			continue
 		}
 		if isDeviceDependentCS(ctx, doc, csObj, defaults) {
-			csRes, _ := document.ResolveObject(ctx, doc, csObj)
-			csName := ast.PdfName("")
-			if n, ok := csRes.(ast.PdfName); ok {
-				csName = n
-			}
+			csName, _ := document.ResolveName(ctx, doc, csObj)
 			if !iccCoversDeviceCS(iccN, csName) {
 				return []error{fmt.Errorf("%w: %s in Shading resource",
 					models.ErrMissingICCProfile, csName)}
@@ -555,15 +542,13 @@ func checkPatternResourceCS(ctx context.Context, doc *document.Document, resourc
 	if !ok {
 		return nil
 	}
-	patRes, _ := document.ResolveObject(ctx, doc, patObj)
-	patDict, ok := patRes.(ast.PdfDict)
-	if !ok {
+	patDict, _ := document.ResolveDict(ctx, doc, patObj)
+	if patDict == nil {
 		return nil
 	}
 	for _, obj := range patDict {
-		objRes, _ := document.ResolveObject(ctx, doc, obj)
-		stream, ok := objRes.(ast.PdfStream)
-		if !ok {
+		stream, _ := document.ResolveStream(ctx, doc, obj)
+		if stream.Dict == nil {
 			continue
 		}
 		// Only tiling patterns (PatternType 1) have content streams.
@@ -581,8 +566,8 @@ func checkPatternResourceCS(ctx context.Context, doc *document.Document, resourc
 		// Use the pattern's own resources if available, otherwise page resources.
 		patResources := resources
 		if prObj, ok := stream.Dict["Resources"]; ok {
-			prRes, _ := document.ResolveObject(ctx, doc, prObj)
-			if prDict, ok := prRes.(ast.PdfDict); ok {
+			prDict, _ := document.ResolveDict(ctx, doc, prObj)
+			if prDict != nil {
 				patResources = prDict
 			}
 		}
@@ -614,9 +599,8 @@ func checkNamedColorSpaceResources(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return nil
 	}
-	csRes, _ := document.ResolveObject(ctx, doc, csObj)
-	csDict, ok := csRes.(ast.PdfDict)
-	if !ok {
+	csDict, _ := document.ResolveDict(ctx, doc, csObj)
+	if csDict == nil {
 		return nil
 	}
 	for _, obj := range csDict {
@@ -657,15 +641,13 @@ func checkAllXObjectCSRecursive(ctx context.Context, doc *document.Document, res
 	if !ok {
 		return nil
 	}
-	xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
-	xobjDict, ok := xobjRes.(ast.PdfDict)
-	if !ok {
+	xobjDict, _ := document.ResolveDict(ctx, doc, xobjObj)
+	if xobjDict == nil {
 		return nil
 	}
 	for _, obj := range xobjDict {
-		objRes, _ := document.ResolveObject(ctx, doc, obj)
-		stream, ok := objRes.(ast.PdfStream)
-		if !ok {
+		stream, _ := document.ResolveStream(ctx, doc, obj)
+		if stream.Dict == nil {
 			continue
 		}
 		stObj := stream.Dict["Subtype"]
@@ -674,8 +656,8 @@ func checkAllXObjectCSRecursive(ctx context.Context, doc *document.Document, res
 		// Recurse into Form XObject resources.
 		if st == "Form" {
 			if frObj, ok := stream.Dict["Resources"]; ok {
-				frRes, _ := document.ResolveObject(ctx, doc, frObj)
-				if frDict, ok := frRes.(ast.PdfDict); ok {
+				frDict, _ := document.ResolveDict(ctx, doc, frObj)
+				if frDict != nil {
 					formDefaults := make(map[ast.PdfName]bool)
 					maps.Copy(formDefaults, defaults)
 					maps.Copy(formDefaults, collectDefaultColorSpaces(ctx, doc, frDict))
@@ -696,11 +678,7 @@ func checkAllXObjectCSRecursive(ctx context.Context, doc *document.Document, res
 			continue
 		}
 		if isDeviceDependentCS(ctx, doc, csObj, defaults) {
-			csRes, _ := document.ResolveObject(ctx, doc, csObj)
-			csName := ast.PdfName("")
-			if n, ok := csRes.(ast.PdfName); ok {
-				csName = n
-			}
+			csName, _ := document.ResolveName(ctx, doc, csObj)
 			if !iccCoversDeviceCS(iccN, csName) {
 				return []error{fmt.Errorf("%w: %s in Image XObject resource",
 					models.ErrMissingICCProfile, csName)}
@@ -716,24 +694,21 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 	if !ok {
 		return nil
 	}
-	annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
-	annotsArr, ok := annotsRes.(ast.PdfArray)
-	if !ok {
+	annotsArr, _ := document.ResolveArray(ctx, doc, annotsObj)
+	if annotsArr == nil {
 		return nil
 	}
 	for _, annotObj := range annotsArr {
-		annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
-		annotDict, ok := annotRes.(ast.PdfDict)
-		if !ok {
+		annotDict, _ := document.ResolveDict(ctx, doc, annotObj)
+		if annotDict == nil {
 			continue
 		}
 		apObj, ok := annotDict["AP"]
 		if !ok {
 			continue
 		}
-		apRes, _ := document.ResolveObject(ctx, doc, apObj)
-		apDict, ok := apRes.(ast.PdfDict)
-		if !ok {
+		apDict, _ := document.ResolveDict(ctx, doc, apObj)
+		if apDict == nil {
 			continue
 		}
 		// Walk /N (normal), /D (down), /R (rollover) appearance streams.
@@ -776,8 +751,8 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 			apStreamRes := apStreamResolved
 			if apStream, ok := apStreamRes.(ast.PdfStream); ok {
 				if arObj, ok := apStream.Dict["Resources"]; ok {
-					arRes, _ := document.ResolveObject(ctx, doc, arObj)
-					if arDict, ok := arRes.(ast.PdfDict); ok {
+					arDict, _ := document.ResolveDict(ctx, doc, arObj)
+					if arDict != nil {
 						annotResourceDict = arDict
 						maps.Copy(annotDefaults, collectDefaultColorSpaces(ctx, doc, arDict))
 					}

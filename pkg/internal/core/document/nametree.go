@@ -17,11 +17,11 @@ func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfA
 
 	// Preferred: /Names -> /Dests name tree (PDF 1.2+).
 	if namesObj, ok := catalog.Dict["Names"]; ok {
-		namesRes, err := ResolveObject(ctx, doc, namesObj)
+		namesDict, err := ResolveDict(ctx, doc, namesObj)
 		if err != nil {
 			return nil, err
 		}
-		if namesDict, ok := namesRes.(ast.PdfDict); ok {
+		if namesDict != nil {
 			if destsObj, ok := namesDict["Dests"]; ok {
 				result, err := searchNameTree(ctx, doc, destsObj, name)
 				if err != nil {
@@ -36,11 +36,11 @@ func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfA
 
 	// Fallback: legacy /Dests dictionary (PDF 1.1).
 	if destsObj, ok := catalog.Dict["Dests"]; ok {
-		destsRes, err := ResolveObject(ctx, doc, destsObj)
+		destsDict, err := ResolveDict(ctx, doc, destsObj)
 		if err != nil {
 			return nil, err
 		}
-		if destsDict, ok := destsRes.(ast.PdfDict); ok {
+		if destsDict != nil {
 			if destObj, ok := destsDict[ast.PdfName(name)]; ok {
 				return resolveDestValue(ctx, doc, destObj)
 			}
@@ -54,22 +54,21 @@ func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfA
 // Name trees use /Kids for intermediate nodes and /Names for leaf nodes,
 // with optional /Limits [min max] arrays for efficient pruning.
 func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
-	nodeRes, err := ResolveObject(ctx, doc, nodeObj)
+	nodeDict, err := ResolveDict(ctx, doc, nodeObj)
 	if err != nil {
 		return nil, err
 	}
-	nodeDict, ok := nodeRes.(ast.PdfDict)
-	if !ok {
+	if nodeDict == nil {
 		return nil, nil
 	}
 
 	// Check /Limits to prune this branch early.
 	if limitsObj, ok := nodeDict["Limits"]; ok {
-		limitsRes, err := ResolveObject(ctx, doc, limitsObj)
+		limitsArr, err := ResolveArray(ctx, doc, limitsObj)
 		if err != nil {
 			return nil, err
 		}
-		if limitsArr, ok := limitsRes.(ast.PdfArray); ok && len(limitsArr) >= 2 {
+		if len(limitsArr) >= 2 {
 			minStr := decodeLimitString(limitsArr[0])
 			maxStr := decodeLimitString(limitsArr[1])
 			if minStr != "" && maxStr != "" {
@@ -82,12 +81,11 @@ func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, k
 
 	// Intermediate node: recurse into /Kids.
 	if kidsObj, ok := nodeDict["Kids"]; ok {
-		kidsRes, err := ResolveObject(ctx, doc, kidsObj)
+		kidsArr, err := ResolveArray(ctx, doc, kidsObj)
 		if err != nil {
 			return nil, err
 		}
-		kidsArr, ok := kidsRes.(ast.PdfArray)
-		if !ok {
+		if kidsArr == nil {
 			return nil, nil
 		}
 		for _, kid := range kidsArr {
@@ -107,12 +105,11 @@ func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, k
 	if !ok {
 		return nil, nil
 	}
-	namesRes, err := ResolveObject(ctx, doc, namesObj)
+	namesArr, err := ResolveArray(ctx, doc, namesObj)
 	if err != nil {
 		return nil, err
 	}
-	namesArr, ok := namesRes.(ast.PdfArray)
-	if !ok {
+	if namesArr == nil {
 		return nil, nil
 	}
 
@@ -140,11 +137,11 @@ func resolveDestValue(ctx context.Context, doc *Document, obj ast.PdfObject) (as
 	case ast.PdfDict:
 		// Destination dictionaries store the actual array under /D.
 		if dObj, ok := v["D"]; ok {
-			dRes, err := ResolveObject(ctx, doc, dObj)
+			dArr, err := ResolveArray(ctx, doc, dObj)
 			if err != nil {
 				return nil, err
 			}
-			if dArr, ok := dRes.(ast.PdfArray); ok {
+			if dArr != nil {
 				return dArr, nil
 			}
 		}

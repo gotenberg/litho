@@ -102,6 +102,39 @@ func ResolveStream(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.P
 	return stream, nil
 }
 
+// ResolveString resolves obj and returns it as a PdfString. Returns "" (no error)
+// when the resolved object is not a string.
+func ResolveString(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfString, error) {
+	resolved, err := ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return "", err
+	}
+	s, _ := resolved.(ast.PdfString)
+	return s, nil
+}
+
+// ResolveInt resolves obj and returns it as a PdfInt. Returns 0 (no error)
+// when the resolved object is not an integer.
+func ResolveInt(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfInt, error) {
+	resolved, err := ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return 0, err
+	}
+	i, _ := resolved.(ast.PdfInt)
+	return i, nil
+}
+
+// ResolveBool resolves obj and returns it as a PdfBool. Returns false (no error)
+// when the resolved object is not a boolean.
+func ResolveBool(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfBool, error) {
+	resolved, err := ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return false, err
+	}
+	b, _ := resolved.(ast.PdfBool)
+	return b, nil
+}
+
 // DecodePdfString converts a raw PDF string to a Go string, handling the
 // UTF-16BE BOM (0xFE 0xFF) encoding used by many PDF producers.
 //

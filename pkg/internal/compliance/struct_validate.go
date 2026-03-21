@@ -21,9 +21,8 @@ func walkStructTree(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if !ok {
 		return nil
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, _ := document.ResolveDict(ctx, doc, strObj)
+	if strDict == nil {
 		return nil
 	}
 	kObj, ok := strDict["K"]
@@ -74,8 +73,7 @@ func getStructType(ctx context.Context, doc *document.Document, elem ast.PdfDict
 	if !ok {
 		return ""
 	}
-	sRes, _ := document.ResolveObject(ctx, doc, sObj)
-	sName, _ := sRes.(ast.PdfName)
+	sName, _ := document.ResolveName(ctx, doc, sObj)
 	return sName
 }
 
@@ -90,8 +88,8 @@ func getStructChildren(ctx context.Context, doc *document.Document, elem ast.Pdf
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, item := range k {
-			itemRes, _ := document.ResolveObject(ctx, doc, item)
-			if d, ok := itemRes.(ast.PdfDict); ok {
+			d, _ := document.ResolveDict(ctx, doc, item)
+			if d != nil {
 				children = append(children, d)
 			}
 		}
@@ -215,9 +213,8 @@ func checkHeadingHierarchy(ctx context.Context, doc *document.Document, catalog 
 	if !ok {
 		return nil
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, _ := document.ResolveDict(ctx, doc, strObj)
+	if strDict == nil {
 		return nil
 	}
 	kObj, ok := strDict["K"]
@@ -315,8 +312,8 @@ func hasAttribute(ctx context.Context, doc *document.Document, elem ast.PdfDict,
 		}
 	case ast.PdfArray:
 		for _, item := range a {
-			itemRes, _ := document.ResolveObject(ctx, doc, item)
-			if d, ok := itemRes.(ast.PdfDict); ok {
+			d, _ := document.ResolveDict(ctx, doc, item)
+			if d != nil {
 				if _, ok := d[ast.PdfName(attrName)]; ok {
 					return true
 				}

@@ -22,23 +22,21 @@ func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.P
 		return 0
 	}
 
-	refRes, err := document.ResolveObject(ctx, doc, refObj)
+	refArr, err := document.ResolveArray(ctx, doc, refObj)
 	if err != nil {
 		return 0
 	}
 
-	refArr, ok := refRes.(ast.PdfArray)
-	if !ok {
+	if refArr == nil {
 		return 0
 	}
 
 	for _, item := range refArr {
-		itemRes, err := document.ResolveObject(ctx, doc, item)
+		itemDict, err := document.ResolveDict(ctx, doc, item)
 		if err != nil {
 			continue
 		}
-		itemDict, ok := itemRes.(ast.PdfDict)
-		if !ok {
+		if itemDict == nil {
 			continue
 		}
 
@@ -46,12 +44,11 @@ func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.P
 		if !ok {
 			continue
 		}
-		tmRes, err := document.ResolveObject(ctx, doc, tmObj)
+		tmName, err := document.ResolveName(ctx, doc, tmObj)
 		if err != nil {
 			continue
 		}
-		tmName, ok := tmRes.(ast.PdfName)
-		if !ok {
+		if tmName == "" {
 			continue
 		}
 
@@ -64,12 +61,11 @@ func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.P
 		if !ok {
 			continue
 		}
-		tpRes, err := document.ResolveObject(ctx, doc, tpObj)
+		tpDict, err := document.ResolveDict(ctx, doc, tpObj)
 		if err != nil {
 			continue
 		}
-		tpDict, ok := tpRes.(ast.PdfDict)
-		if !ok {
+		if tpDict == nil {
 			continue
 		}
 

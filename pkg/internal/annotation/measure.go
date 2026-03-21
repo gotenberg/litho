@@ -16,108 +16,96 @@ func ExtractMeasurements(ctx context.Context, doc *document.Document, page *docu
 
 	// 1. Check page-level /VP (Viewport) array.
 	if vpObj, ok := page.Dict["VP"]; ok {
-		vpResolved, err := document.ResolveObject(ctx, doc, vpObj)
-		if err == nil {
-			if vpArr, ok := vpResolved.(ast.PdfArray); ok {
-				for _, vpEntry := range vpArr {
-					vpRes, err := document.ResolveObject(ctx, doc, vpEntry)
-					if err != nil {
-						continue
-					}
-					vpDict, ok := vpRes.(ast.PdfDict)
-					if !ok {
-						continue
-					}
-
-					measureObj, ok := vpDict["Measure"]
-					if !ok {
-						continue
-					}
-
-					m, err := parseRLMeasure(ctx, doc, measureObj)
-					if err != nil || m == nil {
-						continue
-					}
-
-					m.Source = "Viewport"
-
-					// Extract viewport /Name.
-					if nameObj, ok := vpDict["Name"]; ok {
-						nameRes, _ := document.ResolveObject(ctx, doc, nameObj)
-						if str, ok := nameRes.(ast.PdfString); ok {
-							m.Name = document.DecodePdfString(str)
-						}
-					}
-
-					// Extract viewport /BBox.
-					if bboxObj, ok := vpDict["BBox"]; ok {
-						bboxRes, _ := document.ResolveObject(ctx, doc, bboxObj)
-						if bboxArr, ok := bboxRes.(ast.PdfArray); ok && len(bboxArr) >= 4 {
-							for i := range 4 {
-								m.BBox[i] = document.GetFloat(bboxArr[i])
-							}
-						}
-					}
-
-					results = append(results, *m)
+		vpArr, err := document.ResolveArray(ctx, doc, vpObj)
+		if err == nil && vpArr != nil {
+			for _, vpEntry := range vpArr {
+				vpDict, err := document.ResolveDict(ctx, doc, vpEntry)
+				if err != nil || vpDict == nil {
+					continue
 				}
+
+				measureObj, ok := vpDict["Measure"]
+				if !ok {
+					continue
+				}
+
+				m, err := parseRLMeasure(ctx, doc, measureObj)
+				if err != nil || m == nil {
+					continue
+				}
+
+				m.Source = "Viewport"
+
+				// Extract viewport /Name.
+				if nameObj, ok := vpDict["Name"]; ok {
+					str, err := document.ResolveString(ctx, doc, nameObj)
+					if err == nil && str != "" {
+						m.Name = document.DecodePdfString(str)
+					}
+				}
+
+				// Extract viewport /BBox.
+				if bboxObj, ok := vpDict["BBox"]; ok {
+					bboxArr, err := document.ResolveArray(ctx, doc, bboxObj)
+					if err == nil && bboxArr != nil && len(bboxArr) >= 4 {
+						for i := range 4 {
+							m.BBox[i] = document.GetFloat(bboxArr[i])
+						}
+					}
+				}
+
+				results = append(results, *m)
 			}
 		}
 	}
 
 	// 2. Check annotations for Line/PolyLine with /Measure.
 	if annotsObj, ok := page.Dict["Annots"]; ok {
-		annotsResolved, err := document.ResolveObject(ctx, doc, annotsObj)
-		if err == nil {
-			if annotsArr, ok := annotsResolved.(ast.PdfArray); ok {
-				for _, annotRef := range annotsArr {
-					annotRes, err := document.ResolveObject(ctx, doc, annotRef)
-					if err != nil {
-						continue
-					}
-					annotDict, ok := annotRes.(ast.PdfDict)
-					if !ok {
-						continue
-					}
-
-					// Only process Line and PolyLine subtypes.
-					subtype := resolveNameStr(ctx, doc, annotDict, "Subtype")
-					if subtype != "Line" && subtype != "PolyLine" {
-						continue
-					}
-
-					measureObj, ok := annotDict["Measure"]
-					if !ok {
-						continue
-					}
-
-					m, err := parseRLMeasure(ctx, doc, measureObj)
-					if err != nil || m == nil {
-						continue
-					}
-
-					m.Source = subtype
-
-					// Use annotation /NM as name.
-					if nmObj, ok := annotDict["NM"]; ok {
-						nmRes, _ := document.ResolveObject(ctx, doc, nmObj)
-						if str, ok := nmRes.(ast.PdfString); ok {
-							m.Name = document.DecodePdfString(str)
-						}
-					}
-
-					// Use annotation /Rect as bounding box.
-					if rectObj, ok := annotDict["Rect"]; ok {
-						rectRes, _ := document.ResolveObject(ctx, doc, rectObj)
-						if rectArr, ok := rectRes.(ast.PdfArray); ok && len(rectArr) >= 4 {
-							for i := range 4 {
-								m.BBox[i] = document.GetFloat(rectArr[i])
-							}
-						}
-					}
-
-					results = append(results, *m)
+		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err == nil && annotsArr != nil {
+			for _, annotRef := range annotsArr {
+				annotDict, err := document.ResolveDict(ctx, doc, annotRef)
+				if err != nil || annotDict == nil {
+					continue
 				}
+
+				// Only process Line and PolyLine subtypes.
+				subtype := resolveNameStr(ctx, doc, annotDict, "Subtype")
+				if subtype != "Line" && subtype != "PolyLine" {
+					continue
+				}
+
+				measureObj, ok := annotDict["Measure"]
+				if !ok {
+					continue
+				}
+
+				m, err := parseRLMeasure(ctx, doc, measureObj)
+				if err != nil || m == nil {
+					continue
+				}
+
+				m.Source = subtype
+
+				// Use annotation /NM as name.
+				if nmObj, ok := annotDict["NM"]; ok {
+					str, err := document.ResolveString(ctx, doc, nmObj)
+					if err == nil && str != "" {
+						m.Name = document.DecodePdfString(str)
+					}
+				}
+
+				// Use annotation /Rect as bounding box.
+				if rectObj, ok := annotDict["Rect"]; ok {
+					rectArr, err := document.ResolveArray(ctx, doc, rectObj)
+					if err == nil && rectArr != nil && len(rectArr) >= 4 {
+						for i := range 4 {
+							m.BBox[i] = document.GetFloat(rectArr[i])
+						}
+					}
+				}
+
+				results = append(results, *m)
 			}
 		}
 	}
@@ -131,12 +119,11 @@ func ExtractMeasurements(ctx context.Context, doc *document.Document, page *docu
 // parseRLMeasure parses a /Measure dictionary and extracts scale data if
 // /Subtype is /RL (Rectilinear). Returns nil if the subtype is not /RL.
 func parseRLMeasure(ctx context.Context, doc *document.Document, measureObj ast.PdfObject) (*models.Measurement, error) {
-	measureRes, err := document.ResolveObject(ctx, doc, measureObj)
+	measureDict, err := document.ResolveDict(ctx, doc, measureObj)
 	if err != nil {
 		return nil, err
 	}
-	measureDict, ok := measureRes.(ast.PdfDict)
-	if !ok {
+	if measureDict == nil {
 		return nil, nil
 	}
 
@@ -174,13 +161,8 @@ func parseRLMeasure(ctx context.Context, doc *document.Document, measureObj ast.
 // PDF spec: the value is an array of Number Format dictionaries; we take
 // the first entry which defines the primary display format.
 func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast.PdfObject) models.ScaleAxis {
-	resolved, err := document.ResolveObject(ctx, doc, obj)
-	if err != nil {
-		return models.ScaleAxis{}
-	}
-
-	arr, ok := resolved.(ast.PdfArray)
-	if !ok {
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil || arr == nil {
 		return models.ScaleAxis{}
 	}
 
@@ -189,12 +171,8 @@ func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast
 	}
 
 	// Take the first number format dictionary.
-	nfRes, err := document.ResolveObject(ctx, doc, arr[0])
-	if err != nil {
-		return models.ScaleAxis{}
-	}
-	nfDict, ok := nfRes.(ast.PdfDict)
-	if !ok {
+	nfDict, err := document.ResolveDict(ctx, doc, arr[0])
+	if err != nil || nfDict == nil {
 		return models.ScaleAxis{}
 	}
 
@@ -202,8 +180,8 @@ func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast
 
 	// /U — unit label string.
 	if uObj, ok := nfDict["U"]; ok {
-		uRes, _ := document.ResolveObject(ctx, doc, uObj)
-		if str, ok := uRes.(ast.PdfString); ok {
+		str, err := document.ResolveString(ctx, doc, uObj)
+		if err == nil && str != "" {
 			axis.Unit = document.DecodePdfString(str)
 		}
 	}
@@ -215,8 +193,8 @@ func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast
 
 	// /D — decimal places (integer, defaults to 0).
 	if dObj, ok := nfDict["D"]; ok {
-		dRes, _ := document.ResolveObject(ctx, doc, dObj)
-		if dInt, ok := dRes.(ast.PdfInt); ok {
+		dInt, err := document.ResolveInt(ctx, doc, dObj)
+		if err == nil && dInt != 0 {
 			axis.Decimals = int(dInt)
 		}
 	}
@@ -230,12 +208,9 @@ func resolveNameStr(ctx context.Context, doc *document.Document, dict ast.PdfDic
 	if !ok {
 		return ""
 	}
-	res, err := document.ResolveObject(ctx, doc, obj)
+	name, err := document.ResolveName(ctx, doc, obj)
 	if err != nil {
 		return ""
 	}
-	if name, ok := res.(ast.PdfName); ok {
-		return string(name)
-	}
-	return ""
+	return string(name)
 }

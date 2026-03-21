@@ -149,24 +149,22 @@ func getXMPMetadata(ctx context.Context, doc *document.Document) map[string]stri
 	if !ok {
 		return nil
 	}
-	catalogObj, err := document.ResolveObject(ctx, doc, rootObj)
+	catalog, err := document.ResolveDict(ctx, doc, rootObj)
 	if err != nil {
 		return nil
 	}
-	catalog, ok := catalogObj.(ast.PdfDict)
-	if !ok {
+	if catalog == nil {
 		return nil
 	}
 	metaRef, ok := catalog["Metadata"]
 	if !ok {
 		return nil
 	}
-	metaObj, err := document.ResolveObject(ctx, doc, metaRef)
+	stream, err := document.ResolveStream(ctx, doc, metaRef)
 	if err != nil {
 		return nil
 	}
-	stream, ok := metaObj.(ast.PdfStream)
-	if !ok {
+	if stream.Dict == nil {
 		return nil
 	}
 
@@ -184,12 +182,11 @@ func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]str
 	if !ok {
 		return nil
 	}
-	infoResolved, err := document.ResolveObject(ctx, doc, infoObj)
+	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
 	if err != nil {
 		return nil
 	}
-	infoDict, ok := infoResolved.(ast.PdfDict)
-	if !ok {
+	if infoDict == nil {
 		return nil
 	}
 
@@ -197,8 +194,8 @@ func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]str
 	keys := []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate"}
 	for _, key := range keys {
 		if valObj, ok := infoDict[ast.PdfName(key)]; ok {
-			valResolved, _ := document.ResolveObject(ctx, doc, valObj)
-			if strVal, ok := valResolved.(ast.PdfString); ok {
+			strVal, _ := document.ResolveString(ctx, doc, valObj)
+			if strVal != "" {
 				metadata[key] = document.DecodePdfString(strVal)
 			}
 		}

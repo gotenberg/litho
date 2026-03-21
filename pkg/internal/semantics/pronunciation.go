@@ -3,7 +3,6 @@ package semantics
 import (
 	"context"
 
-	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
@@ -22,26 +21,24 @@ func ExtractPronunciationLexicons(ctx context.Context, doc *document.Document) (
 		return nil, nil
 	}
 
-	plRes, err := document.ResolveObject(ctx, doc, plObj)
+	plArr, err := document.ResolveArray(ctx, doc, plObj)
 	if err != nil {
 		return nil, err
 	}
 
-	plArr, ok := plRes.(ast.PdfArray)
-	if !ok {
+	if plArr == nil {
 		return nil, nil
 	}
 
 	var lexicons []models.PronunciationLexicon
 
 	for _, entry := range plArr {
-		entryRes, err := document.ResolveObject(ctx, doc, entry)
+		stream, err := document.ResolveStream(ctx, doc, entry)
 		if err != nil {
 			continue
 		}
 
-		stream, ok := entryRes.(ast.PdfStream)
-		if !ok {
+		if stream.Dict == nil {
 			continue
 		}
 

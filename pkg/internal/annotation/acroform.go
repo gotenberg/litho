@@ -27,13 +27,11 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 		return nil, nil // No forms in document
 	}
 
-	acroFormResolved, err := document.ResolveObject(ctx, doc, acroFormObj)
+	acroFormDict, err := document.ResolveDict(ctx, doc, acroFormObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve AcroForm: %v", err)
 	}
-
-	acroFormDict, ok := acroFormResolved.(ast.PdfDict)
-	if !ok {
+	if acroFormDict == nil {
 		return nil, fmt.Errorf("AcroForm is not a dictionary")
 	}
 
@@ -55,13 +53,11 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 		return nil, nil
 	}
 
-	fieldsResolved, err := document.ResolveObject(ctx, doc, fieldsObj)
+	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve Fields: %v", err)
 	}
-
-	fieldsArr, ok := fieldsResolved.(ast.PdfArray)
-	if !ok {
+	if fieldsArr == nil {
 		return nil, fmt.Errorf("fields is not an array")
 	}
 
@@ -141,21 +137,16 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 
 func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string) error {
 	for _, fieldObj := range fields {
-		fieldResolved, err := document.ResolveObject(ctx, doc, fieldObj)
-		if err != nil {
-			continue
-		}
-
-		fieldDict, ok := fieldResolved.(ast.PdfDict)
-		if !ok {
+		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
+		if err != nil || fieldDict == nil {
 			continue
 		}
 
 		// Extract partial name (/T)
 		partialName := ""
 		if tObj, ok := fieldDict["T"]; ok {
-			tRes, _ := document.ResolveObject(ctx, doc, tObj)
-			if tStr, ok := tRes.(ast.PdfString); ok {
+			tStr, err := document.ResolveString(ctx, doc, tObj)
+			if err == nil && tStr != "" {
 				partialName = document.DecodePdfString(tStr)
 			}
 		}
@@ -173,17 +164,17 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		// Field Type (/FT) can be inherited
 		currentFT := inheritedFT
 		if ftObj, ok := fieldDict["FT"]; ok {
-			ftRes, _ := document.ResolveObject(ctx, doc, ftObj)
-			if ftName, ok := ftRes.(ast.PdfName); ok {
+			ftName, err := document.ResolveName(ctx, doc, ftObj)
+			if err == nil && ftName != "" {
 				currentFT = string(ftName)
 			}
 		}
 
 		// Extract Value (/V)
 		if vObj, ok := fieldDict["V"]; ok {
-			vRes, _ := document.ResolveObject(ctx, doc, vObj)
+			vRes, err := document.ResolveObject(ctx, doc, vObj)
 
-			if fullName != "" {
+			if err == nil && fullName != "" {
 				switch currentFT {
 				case "Tx":
 					// Text field
@@ -210,23 +201,25 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		// Look for Calculation Scripts in Additional Actions (/AA)
 		if fullName != "" {
 			if aaObj, ok := fieldDict["AA"]; ok {
-				aaRes, _ := document.ResolveObject(ctx, doc, aaObj)
-				if aaDict, ok := aaRes.(ast.PdfDict); ok {
+				aaDict, err := document.ResolveDict(ctx, doc, aaObj)
+				if err == nil && aaDict != nil {
 					// Check for Calculate (/C) action
 					if cObj, ok := aaDict["C"]; ok {
-						cRes, _ := document.ResolveObject(ctx, doc, cObj)
-						if cActionDict, ok := cRes.(ast.PdfDict); ok {
+						cActionDict, err := document.ResolveDict(ctx, doc, cObj)
+						if err == nil && cActionDict != nil {
 							if sObj, ok := cActionDict["S"]; ok {
-								sRes, _ := document.ResolveObject(ctx, doc, sObj)
-								if sName, ok := sRes.(ast.PdfName); ok && sName == "JavaScript" {
+								sName, err := document.ResolveName(ctx, doc, sObj)
+								if err == nil && sName == "JavaScript" {
 									if jsObj, ok := cActionDict["JS"]; ok {
-										jsRes, _ := document.ResolveObject(ctx, doc, jsObj)
-										if jsStr, ok := jsRes.(ast.PdfString); ok {
-											calcScripts[fullName] = document.DecodePdfString(jsStr)
-										} else if jsStream, ok := jsRes.(ast.PdfStream); ok {
-											data, err := filter.DecodeStream(jsStream)
-											if err == nil {
-												calcScripts[fullName] = string(data)
+										jsRes, err := document.ResolveObject(ctx, doc, jsObj)
+										if err == nil {
+											if jsStr, ok := jsRes.(ast.PdfString); ok {
+												calcScripts[fullName] = document.DecodePdfString(jsStr)
+											} else if jsStream, ok := jsRes.(ast.PdfStream); ok {
+												data, err := filter.DecodeStream(jsStream)
+												if err == nil {
+													calcScripts[fullName] = string(data)
+												}
 											}
 										}
 									}
@@ -240,8 +233,8 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 
 		// Traverse children (/Kids)
 		if kidsObj, ok := fieldDict["Kids"]; ok {
-			kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
-			if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
+			if err == nil && kidsArr != nil {
 				if err := traverseFields(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts); err != nil {
 					return err
 				}

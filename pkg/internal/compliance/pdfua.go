@@ -19,8 +19,8 @@ func checkLangValues(ctx context.Context, doc *document.Document, catalog ast.Pd
 	var errs []error
 	// Catalog-level /Lang.
 	if langObj, ok := catalog["Lang"]; ok {
-		langRes, _ := document.ResolveObject(ctx, doc, langObj)
-		if langStr, ok := langRes.(ast.PdfString); ok {
+		langStr, err := document.ResolveString(ctx, doc, langObj)
+		if err == nil && langStr != "" {
 			decoded := document.DecodePdfString(langStr)
 			if !isValidLangTag(decoded) {
 				errs = append(errs, fmt.Errorf("%w: %q", models.ErrInvalidLangTag, decoded))
@@ -32,16 +32,18 @@ func checkLangValues(ctx context.Context, doc *document.Document, catalog ast.Pd
 	if !ok {
 		return errs
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return errs
 	}
 	kObj, ok := strDict["K"]
 	if !ok {
 		return errs
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		return errs
+	}
 	checkStructTreeLangValues(ctx, doc, kRes, &errs)
 	return errs
 }
@@ -50,8 +52,8 @@ func checkStructTreeLangValues(ctx context.Context, doc *document.Document, obj 
 	switch v := obj.(type) {
 	case ast.PdfDict:
 		if langObj, ok := v["Lang"]; ok {
-			langRes, _ := document.ResolveObject(ctx, doc, langObj)
-			if langStr, ok := langRes.(ast.PdfString); ok {
+			langStr, err := document.ResolveString(ctx, doc, langObj)
+			if err == nil && langStr != "" {
 				decoded := document.DecodePdfString(langStr)
 				if !isValidLangTag(decoded) {
 					*errs = append(*errs, fmt.Errorf("%w: %q", models.ErrInvalidLangTag, decoded))
@@ -120,17 +122,16 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	if !ok {
 		return nil
 	}
-	miRes, _ := document.ResolveObject(ctx, doc, miObj)
-	miDict, ok := miRes.(ast.PdfDict)
-	if !ok {
+	miDict, err := document.ResolveDict(ctx, doc, miObj)
+	if err != nil || miDict == nil {
 		return nil
 	}
 	susObj, ok := miDict["Suspects"]
 	if !ok {
 		return nil
 	}
-	susRes, _ := document.ResolveObject(ctx, doc, susObj)
-	if b, ok := susRes.(ast.PdfBool); ok && bool(b) {
+	b, err := document.ResolveBool(ctx, doc, susObj)
+	if err == nil && bool(b) {
 		return []error{models.ErrSuspectsTrue}
 	}
 	return nil
@@ -143,17 +144,16 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return []error{models.ErrMissingDisplayDocTitle}
 	}
-	vpRes, _ := document.ResolveObject(ctx, doc, vpObj)
-	vpDict, ok := vpRes.(ast.PdfDict)
-	if !ok {
+	vpDict, err := document.ResolveDict(ctx, doc, vpObj)
+	if err != nil || vpDict == nil {
 		return []error{models.ErrMissingDisplayDocTitle}
 	}
 	ddtObj, ok := vpDict["DisplayDocTitle"]
 	if !ok {
 		return []error{models.ErrMissingDisplayDocTitle}
 	}
-	ddtRes, _ := document.ResolveObject(ctx, doc, ddtObj)
-	if b, ok := ddtRes.(ast.PdfBool); !ok || !bool(b) {
+	b, err := document.ResolveBool(ctx, doc, ddtObj)
+	if err != nil || !bool(b) {
 		return []error{models.ErrMissingDisplayDocTitle}
 	}
 	return nil
@@ -172,8 +172,8 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		if !ok {
 			return []error{models.ErrTabOrderNotStructure}
 		}
-		tabsRes, _ := document.ResolveObject(ctx, doc, tabsObj)
-		if tabsName, ok := tabsRes.(ast.PdfName); !ok || tabsName != "S" {
+		tabsName, err := document.ResolveName(ctx, doc, tabsObj)
+		if err != nil || tabsName != "S" {
 			return []error{models.ErrTabOrderNotStructure}
 		}
 	}
@@ -187,16 +187,15 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil
 	}
-	ocRes, _ := document.ResolveObject(ctx, doc, ocObj)
-	ocDict, ok := ocRes.(ast.PdfDict)
-	if !ok {
+	ocDict, err := document.ResolveDict(ctx, doc, ocObj)
+	if err != nil || ocDict == nil {
 		return nil
 	}
 	var errs []error
 	// Check /D (default configuration).
 	if dObj, ok := ocDict["D"]; ok {
-		dRes, _ := document.ResolveObject(ctx, doc, dObj)
-		if dDict, ok := dRes.(ast.PdfDict); ok {
+		dDict, err := document.ResolveDict(ctx, doc, dObj)
+		if err == nil && dDict != nil {
 			if _, ok := dDict["Name"]; !ok {
 				errs = append(errs, models.ErrOCConfigMissingName)
 			}
@@ -204,11 +203,11 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 	}
 	// Check /Configs array.
 	if cfgObj, ok := ocDict["Configs"]; ok {
-		cfgRes, _ := document.ResolveObject(ctx, doc, cfgObj)
-		if cfgArr, ok := cfgRes.(ast.PdfArray); ok {
+		cfgArr, err := document.ResolveArray(ctx, doc, cfgObj)
+		if err == nil && cfgArr != nil {
 			for _, item := range cfgArr {
-				itemRes, _ := document.ResolveObject(ctx, doc, item)
-				if itemDict, ok := itemRes.(ast.PdfDict); ok {
+				itemDict, err := document.ResolveDict(ctx, doc, item)
+				if err == nil && itemDict != nil {
 					if _, ok := itemDict["Name"]; !ok {
 						errs = append(errs, models.ErrOCConfigMissingName)
 					}
@@ -227,8 +226,8 @@ func checkLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict)
 	}
 	// Also verify the catalog /Lang value is non-empty (8.4.4 test 1).
 	if langObj, ok := catalog["Lang"]; ok {
-		langRes, _ := document.ResolveObject(ctx, doc, langObj)
-		if langStr, ok := langRes.(ast.PdfString); ok {
+		langStr, err := document.ResolveString(ctx, doc, langObj)
+		if err == nil && langStr != "" {
 			decoded := document.DecodePdfString(langStr)
 			if strings.TrimSpace(decoded) == "" {
 				return []error{models.ErrMissingLang}
@@ -244,12 +243,8 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	if !ok {
 		return []error{models.ErrMissingXMPTitle}
 	}
-	mdRes, err := document.ResolveObject(ctx, doc, mdObj)
+	stream, err := document.ResolveStream(ctx, doc, mdObj)
 	if err != nil {
-		return []error{models.ErrMissingXMPTitle}
-	}
-	stream, ok := mdRes.(ast.PdfStream)
-	if !ok {
 		return []error{models.ErrMissingXMPTitle}
 	}
 	// Check raw XMP bytes for dc:title presence.
@@ -282,24 +277,16 @@ func checkFormFieldTooltips(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return nil
 	}
-	acroRes, err := document.ResolveObject(ctx, doc, acroObj)
-	if err != nil {
-		return nil
-	}
-	acroDict, ok := acroRes.(ast.PdfDict)
-	if !ok {
+	acroDict, err := document.ResolveDict(ctx, doc, acroObj)
+	if err != nil || acroDict == nil {
 		return nil
 	}
 	fieldsObj, ok := acroDict["Fields"]
 	if !ok {
 		return nil
 	}
-	fieldsRes, err := document.ResolveObject(ctx, doc, fieldsObj)
-	if err != nil {
-		return nil
-	}
-	fieldsArr, ok := fieldsRes.(ast.PdfArray)
-	if !ok {
+	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
+	if err != nil || fieldsArr == nil {
 		return nil
 	}
 	var errs []error
@@ -310,12 +297,8 @@ func checkFormFieldTooltips(ctx context.Context, doc *document.Document, catalog
 }
 
 func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := document.ResolveObject(ctx, doc, obj)
-	if err != nil {
-		return
-	}
-	dict, ok := res.(ast.PdfDict)
-	if !ok {
+	dict, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || dict == nil {
 		return
 	}
 	// Only check terminal fields with /T that are interactive and need tooltips.
@@ -328,8 +311,8 @@ func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfO
 	}
 	// Recurse into child fields.
 	if kidsObj, ok := dict["Kids"]; ok {
-		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
-		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
+		if err == nil && kidsArr != nil {
 			for _, kid := range kidsArr {
 				checkFieldTooltip(ctx, doc, kid, errs)
 			}
@@ -344,8 +327,8 @@ func checkFieldTooltip(ctx context.Context, doc *document.Document, obj ast.PdfO
 func isFieldExemptFromTooltip(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
 	// Check /Ff (field flags).
 	if ffObj, ok := dict["Ff"]; ok {
-		ffRes, _ := document.ResolveObject(ctx, doc, ffObj)
-		if ffInt, ok := ffRes.(ast.PdfInt); ok {
+		ffInt, err := document.ResolveInt(ctx, doc, ffObj)
+		if err == nil && ffInt != 0 {
 			ff := int(ffInt)
 			// Bit 1: ReadOnly.
 			if ff&1 != 0 {
@@ -353,8 +336,8 @@ func isFieldExemptFromTooltip(ctx context.Context, doc *document.Document, dict 
 			}
 			// Check if push button: /FT /Btn AND /Ff bit 17.
 			if ftObj, ok := dict["FT"]; ok {
-				ftRes, _ := document.ResolveObject(ctx, doc, ftObj)
-				if ftName, ok := ftRes.(ast.PdfName); ok && ftName == "Btn" {
+				ftName, err := document.ResolveName(ctx, doc, ftObj)
+				if err == nil && ftName == "Btn" {
 					if ff&(1<<16) != 0 { //nolint:mnd // bit 17 (0-indexed: bit 16)
 						return true
 					}
@@ -374,11 +357,11 @@ func isFieldExemptFromTooltip(ctx context.Context, doc *document.Document, dict 
 	// (indicating the widget is tagged in the structure tree, where /Alt
 	// on the /Form structure element serves the same purpose as /TU).
 	if kidsObj, ok := dict["Kids"]; ok {
-		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
-		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
+		if err == nil && kidsArr != nil {
 			for _, kid := range kidsArr {
-				kidRes, _ := document.ResolveObject(ctx, doc, kid)
-				if kidDict, ok := kidRes.(ast.PdfDict); ok {
+				kidDict, err := document.ResolveDict(ctx, doc, kid)
+				if err == nil && kidDict != nil {
 					if _, ok := kidDict["TU"]; ok {
 						return true
 					}
@@ -406,9 +389,8 @@ func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return []error{models.ErrMissingStructTreeRoot}
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return []error{models.ErrMissingStructTreeRoot}
 	}
 
@@ -417,7 +399,10 @@ func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		return nil
+	}
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -430,19 +415,15 @@ func checkImagesHaveAltText(ctx context.Context, doc *document.Document, catalog
 }
 
 func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := document.ResolveObject(ctx, doc, obj)
-	if err != nil {
-		return
-	}
-	dict, ok := res.(ast.PdfDict)
-	if !ok {
+	dict, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || dict == nil {
 		return
 	}
 
 	// Check if this is a Figure element.
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		if sName, ok := sRes.(ast.PdfName); ok && sName == "Figure" {
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err == nil && sName == "Figure" {
 			if !hasAltOrActualText(dict) {
 				*errs = append(*errs, models.ErrImageMissingAltText)
 			}
@@ -473,9 +454,8 @@ func checkArtifactTagging(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 
@@ -507,18 +487,14 @@ var forbiddenStructTypes = map[string]bool{
 }
 
 func checkArtifactElem(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
-	res, err := document.ResolveObject(ctx, doc, obj)
-	if err != nil {
-		return
-	}
-	dict, ok := res.(ast.PdfDict)
-	if !ok {
+	dict, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || dict == nil {
 		return
 	}
 
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		if sName, ok := sRes.(ast.PdfName); ok {
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err == nil && sName != "" {
 			if forbiddenStructTypes[string(sName)] {
 				*errs = append(*errs, fmt.Errorf("%w: /%s should be /Artifact", models.ErrArtifactTagMissing, sName))
 			}
@@ -573,9 +549,8 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 
@@ -583,12 +558,12 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 	roleMap := make(map[string]bool)
 	roleMapTargets := make(map[string]string)
 	if rmObj, ok := strDict["RoleMap"]; ok {
-		rmRes, _ := document.ResolveObject(ctx, doc, rmObj)
-		if rmDict, ok := rmRes.(ast.PdfDict); ok {
+		rmDict, err := document.ResolveDict(ctx, doc, rmObj)
+		if err == nil && rmDict != nil {
 			for key, val := range rmDict {
 				roleMap[string(key)] = true
-				valRes, _ := document.ResolveObject(ctx, doc, val)
-				if targetName, ok := valRes.(ast.PdfName); ok {
+				targetName, err := document.ResolveName(ctx, doc, val)
+				if err == nil && targetName != "" {
 					roleMapTargets[string(key)] = string(targetName)
 				}
 			}
@@ -639,18 +614,14 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 }
 
 func checkStructElemStandard(ctx context.Context, doc *document.Document, obj ast.PdfObject, roleMap map[string]bool, errs *[]error) {
-	res, err := document.ResolveObject(ctx, doc, obj)
-	if err != nil {
-		return
-	}
-	dict, ok := res.(ast.PdfDict)
-	if !ok {
+	dict, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || dict == nil {
 		return
 	}
 
 	if sObj, ok := dict["S"]; ok {
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		if sName, ok := sRes.(ast.PdfName); ok {
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err == nil && sName != "" {
 			tag := string(sName)
 			if !standardPDF17Tags[tag] && !roleMap[tag] {
 				*errs = append(*errs, fmt.Errorf("%w: /%s", models.ErrNonStandardTag, tag))
@@ -681,8 +652,8 @@ func checkStructElemStandard(ctx context.Context, doc *document.Document, obj as
 func checkPDFVersionForUA2(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	// Check catalog /Version first (overrides header version per spec).
 	if vObj, ok := catalog["Version"]; ok {
-		vRes, _ := document.ResolveObject(ctx, doc, vObj)
-		if vName, ok := vRes.(ast.PdfName); ok {
+		vName, err := document.ResolveName(ctx, doc, vObj)
+		if err == nil && vName != "" {
 			if strings.HasPrefix(string(vName), "2.") {
 				return nil
 			}
@@ -704,9 +675,8 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 	if !ok {
 		return nil // Already caught by checkStructTreeRoot.
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 
@@ -714,17 +684,15 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 	if !ok {
 		return []error{models.ErrMissingNamespaces}
 	}
-	nsRes, _ := document.ResolveObject(ctx, doc, nsObj)
-	nsArr, ok := nsRes.(ast.PdfArray)
-	if !ok || len(nsArr) == 0 {
+	nsArr, err := document.ResolveArray(ctx, doc, nsObj)
+	if err != nil || len(nsArr) == 0 {
 		return []error{models.ErrMissingNamespaces}
 	}
 
 	var errs []error
 	for _, nsEntry := range nsArr {
-		entryRes, _ := document.ResolveObject(ctx, doc, nsEntry)
-		entryDict, ok := entryRes.(ast.PdfDict)
-		if !ok {
+		entryDict, err := document.ResolveDict(ctx, doc, nsEntry)
+		if err != nil || entryDict == nil {
 			errs = append(errs, models.ErrInvalidStructureNamespace)
 			continue
 		}
@@ -745,20 +713,18 @@ func checkLinkAnnotationNesting(ctx context.Context, doc *document.Document, cat
 		if !ok {
 			continue
 		}
-		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
-		annotsArr, ok := annotsRes.(ast.PdfArray)
-		if !ok {
+		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil || annotsArr == nil {
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
-			annotDict, ok := annotRes.(ast.PdfDict)
-			if !ok {
+			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annotDict == nil {
 				continue
 			}
 			if subtypeObj, ok := annotDict["Subtype"]; ok {
-				subtypeRes, _ := document.ResolveObject(ctx, doc, subtypeObj)
-				if sName, ok := subtypeRes.(ast.PdfName); ok && sName == "Link" {
+				sName, err := document.ResolveName(ctx, doc, subtypeObj)
+				if err == nil && sName == "Link" {
 					hasLinkAnnot = true
 					// Check if the annotation has a /StructParent pointing to a Link struct elem.
 					if _, ok := annotDict["StructParent"]; !ok {
@@ -785,9 +751,8 @@ func hasStructElemType(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return false
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return false
 	}
 	kObj, ok := strDict["K"]
@@ -809,8 +774,8 @@ func searchStructElemType(ctx context.Context, doc *document.Document, obj ast.P
 		}
 	case ast.PdfDict:
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := document.ResolveObject(ctx, doc, sObj)
-			if sName, ok := sRes.(ast.PdfName); ok && string(sName) == typeName {
+			sName, err := document.ResolveName(ctx, doc, sObj)
+			if err == nil && string(sName) == typeName {
 				return true
 			}
 		}
@@ -829,9 +794,8 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 	kObj, ok := strDict["K"]
@@ -861,8 +825,8 @@ func hasMathMLChild(ctx context.Context, doc *document.Document, dict ast.PdfDic
 		return isMathMLNamespace(ctx, doc, k)
 	case ast.PdfArray:
 		for _, item := range k {
-			itemRes, _ := document.ResolveObject(ctx, doc, item)
-			if d, ok := itemRes.(ast.PdfDict); ok && isMathMLNamespace(ctx, doc, d) {
+			d, err := document.ResolveDict(ctx, doc, item)
+			if err == nil && d != nil && isMathMLNamespace(ctx, doc, d) {
 				return true
 			}
 		}
@@ -875,30 +839,29 @@ func isMathMLNamespace(ctx context.Context, doc *document.Document, dict ast.Pdf
 	if !ok {
 		return false
 	}
-	nsRes, _ := document.ResolveObject(ctx, doc, nsObj)
-	nsDict, ok := nsRes.(ast.PdfDict)
-	if !ok {
+	nsDict, err := document.ResolveDict(ctx, doc, nsObj)
+	if err != nil || nsDict == nil {
 		return false
 	}
 	// Direct namespace URI match.
 	if uriObj, ok := nsDict["NS"]; ok {
-		uriRes, _ := document.ResolveObject(ctx, doc, uriObj)
-		if uri, ok := uriRes.(ast.PdfString); ok && string(uri) == mathMLNamespace {
+		uri, err := document.ResolveString(ctx, doc, uriObj)
+		if err == nil && string(uri) == mathMLNamespace {
 			return true
 		}
 	}
 	// Check /RoleMapNS for a transitive mapping to the MathML namespace.
 	if rmObj, ok := nsDict["RoleMapNS"]; ok {
-		rmRes, _ := document.ResolveObject(ctx, doc, rmObj)
-		if rmDict, ok := rmRes.(ast.PdfDict); ok {
+		rmDict, err := document.ResolveDict(ctx, doc, rmObj)
+		if err == nil && rmDict != nil {
 			for _, v := range rmDict {
-				vRes, _ := document.ResolveObject(ctx, doc, v)
-				if vArr, ok := vRes.(ast.PdfArray); ok && len(vArr) >= 2 {
-					targetNSRes, _ := document.ResolveObject(ctx, doc, vArr[1])
-					if targetDict, ok := targetNSRes.(ast.PdfDict); ok {
+				vArr, err := document.ResolveArray(ctx, doc, v)
+				if err == nil && vArr != nil && len(vArr) >= 2 {
+					targetDict, err := document.ResolveDict(ctx, doc, vArr[1])
+					if err == nil && targetDict != nil {
 						if uriObj, ok := targetDict["NS"]; ok {
-							uriRes, _ := document.ResolveObject(ctx, doc, uriObj)
-							if uri, ok := uriRes.(ast.PdfString); ok && string(uri) == mathMLNamespace {
+							uri, err := document.ResolveString(ctx, doc, uriObj)
+							if err == nil && string(uri) == mathMLNamespace {
 								return true
 							}
 						}
@@ -919,8 +882,8 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 		}
 	case ast.PdfDict:
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := document.ResolveObject(ctx, doc, sObj)
-			if sName, ok := sRes.(ast.PdfName); ok && sName == "Formula" {
+			sName, err := document.ResolveName(ctx, doc, sObj)
+			if err == nil && sName == "Formula" {
 				// /AF with MathML or a child in the MathML namespace both satisfy
 				// the requirement (ISO 14289-2 §8.2.5.29).
 				if _, hasAF := v["AF"]; !hasAF && !hasMathMLChild(ctx, doc, v) {
@@ -946,9 +909,8 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return []error{models.ErrMissingPDFUAId}
 	}
-	mdRes, _ := document.ResolveObject(ctx, doc, mdObj)
-	stream, ok := mdRes.(ast.PdfStream)
-	if !ok {
+	stream, err := document.ResolveStream(ctx, doc, mdObj)
+	if err != nil {
 		return []error{models.ErrMissingPDFUAId}
 	}
 
@@ -995,15 +957,13 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 		if !ok {
 			continue
 		}
-		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
-		annotsArr, ok := annotsRes.(ast.PdfArray)
-		if !ok {
+		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil || annotsArr == nil {
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
-			annotDict, ok := annotRes.(ast.PdfDict)
-			if !ok {
+			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annotDict == nil {
 				continue
 			}
 
@@ -1015,8 +975,8 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 			// Skip hidden annotations (bit 2 of /F flags).
 			if fObj, ok := annotDict["F"]; ok {
-				fRes, _ := document.ResolveObject(ctx, doc, fObj)
-				if fInt, ok := fRes.(ast.PdfInt); ok {
+				fInt, err := document.ResolveInt(ctx, doc, fObj)
+				if err == nil && fInt != 0 {
 					const flagHidden = 1 << 1 // bit 2
 					if int(fInt)&flagHidden != 0 {
 						continue
@@ -1052,9 +1012,8 @@ func checkTableSectionChildren(ctx context.Context, doc *document.Document, cata
 	if !ok {
 		return nil
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 	kObj, ok := strDict["K"]
@@ -1080,8 +1039,7 @@ func checkSectionChildrenRecursive(ctx context.Context, doc *document.Document, 
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		sName, _ := sRes.(ast.PdfName)
+		sName, _ := document.ResolveName(ctx, doc, sObj)
 
 		// THead/TBody/TFoot must contain only TR.
 		if sName == "THead" || sName == "TBody" || sName == "TFoot" {
@@ -1104,11 +1062,11 @@ func checkOnlyTR(ctx context.Context, doc *document.Document, obj ast.PdfObject,
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
-			if d, ok := kidRes.(ast.PdfDict); ok {
+			d, err := document.ResolveDict(ctx, doc, kid)
+			if err == nil && d != nil {
 				sObj := d["S"]
-				sRes, _ := document.ResolveObject(ctx, doc, sObj)
-				if sName, ok := sRes.(ast.PdfName); ok && sName != "TR" {
+				sName, err := document.ResolveName(ctx, doc, sObj)
+				if err == nil && sName != "" && sName != "TR" {
 					*errs = append(*errs, fmt.Errorf("%w: /%s contains /%s child",
 						models.ErrTableStructureInvalid, parent, sName))
 				}
@@ -1116,8 +1074,8 @@ func checkOnlyTR(ctx context.Context, doc *document.Document, obj ast.PdfObject,
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		if sName, ok := sRes.(ast.PdfName); ok && sName != "TR" {
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err == nil && sName != "" && sName != "TR" {
 			*errs = append(*errs, fmt.Errorf("%w: /%s contains /%s child",
 				models.ErrTableStructureInvalid, parent, sName))
 		}
@@ -1131,9 +1089,8 @@ func checkListItemChildren(ctx context.Context, doc *document.Document, catalog 
 	if !ok {
 		return nil
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 	kObj, ok := strDict["K"]
@@ -1159,8 +1116,7 @@ func checkLIChildrenRecursive(ctx context.Context, doc *document.Document, obj a
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		sName, _ := sRes.(ast.PdfName)
+		sName, _ := document.ResolveName(ctx, doc, sObj)
 
 		if sName == "LI" {
 			if kiObj, ok := v["K"]; ok {
@@ -1185,11 +1141,11 @@ func checkLIOnlyLblLBody(ctx context.Context, doc *document.Document, obj ast.Pd
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
-			if d, ok := kidRes.(ast.PdfDict); ok {
+			d, err := document.ResolveDict(ctx, doc, kid)
+			if err == nil && d != nil {
 				sObj := d["S"]
-				sRes, _ := document.ResolveObject(ctx, doc, sObj)
-				if sName, ok := sRes.(ast.PdfName); ok && !validLIChildren[sName] {
+				sName, err := document.ResolveName(ctx, doc, sObj)
+				if err == nil && sName != "" && !validLIChildren[sName] {
 					*errs = append(*errs, fmt.Errorf("%w: LI contains /%s child",
 						models.ErrListStructureInvalid, sName))
 				}
@@ -1197,8 +1153,8 @@ func checkLIOnlyLblLBody(ctx context.Context, doc *document.Document, obj ast.Pd
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		if sName, ok := sRes.(ast.PdfName); ok && !validLIChildren[sName] {
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err == nil && sName != "" && !validLIChildren[sName] {
 			*errs = append(*errs, fmt.Errorf("%w: LI contains /%s child",
 				models.ErrListStructureInvalid, sName))
 		}
@@ -1212,9 +1168,8 @@ func checkCaptionFirstChild(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return nil
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 	kObj, ok := strDict["K"]
@@ -1240,20 +1195,19 @@ func checkCaptionRecursive(ctx context.Context, doc *document.Document, obj ast.
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		sName, _ := sRes.(ast.PdfName)
+		sName, _ := document.ResolveName(ctx, doc, sObj)
 
 		// L and TOC: Caption allowed only as first child.
 		if sName == "L" || sName == "TOC" {
 			if kiObj, ok := v["K"]; ok {
-				kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
-				if arr, ok := kiRes.(ast.PdfArray); ok {
+				arr, err := document.ResolveArray(ctx, doc, kiObj)
+				if err == nil && arr != nil {
 					for i, kid := range arr {
-						kidRes, _ := document.ResolveObject(ctx, doc, kid)
-						if d, ok := kidRes.(ast.PdfDict); ok {
+						d, err := document.ResolveDict(ctx, doc, kid)
+						if err == nil && d != nil {
 							csObj := d["S"]
-							csRes, _ := document.ResolveObject(ctx, doc, csObj)
-							if csName, ok := csRes.(ast.PdfName); ok && csName == "Caption" && i > 0 {
+							csName, err := document.ResolveName(ctx, doc, csObj)
+							if err == nil && csName == "Caption" && i > 0 {
 								*errs = append(*errs, fmt.Errorf("%w: /%s has Caption not as first child",
 									models.ErrListStructureInvalid, sName))
 							}
@@ -1287,9 +1241,8 @@ func checkTableElementContainment(ctx context.Context, doc *document.Document, c
 	if !ok {
 		return nil
 	}
-	strRes, _ := document.ResolveObject(ctx, doc, strObj)
-	strDict, ok := strRes.(ast.PdfDict)
-	if !ok {
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil || strDict == nil {
 		return nil
 	}
 	kObj, ok := strDict["K"]
@@ -1315,8 +1268,7 @@ func checkContainmentRecursive(ctx context.Context, doc *document.Document, obj 
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sRes, _ := document.ResolveObject(ctx, doc, sObj)
-		sName, _ := sRes.(ast.PdfName)
+		sName, _ := document.ResolveName(ctx, doc, sObj)
 
 		if allowedParents, ok := tableElementParents[sName]; ok {
 			if parentType != "" && !allowedParents[parentType] {

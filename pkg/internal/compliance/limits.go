@@ -33,9 +33,8 @@ func checkPageSizeBounds(ctx context.Context, doc *document.Document, catalog as
 			if !ok {
 				continue
 			}
-			boxRes, _ := document.ResolveObject(ctx, doc, boxObj)
-			boxArr, ok := boxRes.(ast.PdfArray)
-			if !ok || len(boxArr) < 4 { //nolint:mnd // PDF rectangles have 4 elements
+			boxArr, _ := document.ResolveArray(ctx, doc, boxObj)
+			if len(boxArr) < 4 { //nolint:mnd // PDF rectangles have 4 elements
 				continue
 			}
 			x1 := document.GetFloat(boxArr[0])
@@ -132,15 +131,13 @@ func checkStringLengths(ctx context.Context, doc *document.Document, catalog ast
 
 	// Check document info dict strings.
 	if infoObj, ok := doc.Index.Trailer["Info"]; ok {
-		infoRes, _ := document.ResolveObject(ctx, doc, infoObj)
-		if infoDict, ok := infoRes.(ast.PdfDict); ok {
-			for key, val := range infoDict {
-				valRes, _ := document.ResolveObject(ctx, doc, val)
-				if s, ok := valRes.(ast.PdfString); ok {
-					if len(s) > maxLen {
-						return []error{fmt.Errorf("%w: /%s (%d bytes, max %d)",
-							models.ErrStringTooLong, key, len(s), maxLen)}
-					}
+		infoDict, _ := document.ResolveDict(ctx, doc, infoObj)
+		for key, val := range infoDict {
+			s, _ := document.ResolveString(ctx, doc, val)
+			if s != "" {
+				if len(s) > maxLen {
+					return []error{fmt.Errorf("%w: /%s (%d bytes, max %d)",
+						models.ErrStringTooLong, key, len(s), maxLen)}
 				}
 			}
 		}
@@ -185,9 +182,8 @@ func checkCatalogVersionFormat(ctx context.Context, doc *document.Document, cata
 	if !ok {
 		return nil
 	}
-	vRes, _ := document.ResolveObject(ctx, doc, vObj)
-	vName, ok := vRes.(ast.PdfName)
-	if !ok {
+	vName, _ := document.ResolveName(ctx, doc, vObj)
+	if vName == "" {
 		return nil
 	}
 	v := decodeName(vName)
@@ -205,9 +201,8 @@ func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return nil
 	}
-	permsRes, _ := document.ResolveObject(ctx, doc, permsObj)
-	permsDict, ok := permsRes.(ast.PdfDict)
-	if !ok {
+	permsDict, _ := document.ResolveDict(ctx, doc, permsObj)
+	if permsDict == nil {
 		return nil
 	}
 	for key := range permsDict {
@@ -227,18 +222,16 @@ func checkDocMDPSignatureRefs(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return nil
 	}
-	permsRes, _ := document.ResolveObject(ctx, doc, permsObj)
-	permsDict, ok := permsRes.(ast.PdfDict)
-	if !ok {
+	permsDict, _ := document.ResolveDict(ctx, doc, permsObj)
+	if permsDict == nil {
 		return nil
 	}
 	docMDPObj, ok := permsDict["DocMDP"]
 	if !ok {
 		return nil
 	}
-	docMDPRes, _ := document.ResolveObject(ctx, doc, docMDPObj)
-	sigDict, ok := docMDPRes.(ast.PdfDict)
-	if !ok {
+	sigDict, _ := document.ResolveDict(ctx, doc, docMDPObj)
+	if sigDict == nil {
 		return nil
 	}
 	// Check /Reference array for forbidden keys.
@@ -246,15 +239,14 @@ func checkDocMDPSignatureRefs(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return nil
 	}
-	refRes, _ := document.ResolveObject(ctx, doc, refObj)
-	refArr, ok := refRes.(ast.PdfArray)
-	if !ok {
+	refArr, _ := document.ResolveArray(ctx, doc, refObj)
+	if refArr == nil {
 		return nil
 	}
 	forbiddenKeys := []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"}
 	for _, item := range refArr {
-		itemRes, _ := document.ResolveObject(ctx, doc, item)
-		if itemDict, ok := itemRes.(ast.PdfDict); ok {
+		itemDict, _ := document.ResolveDict(ctx, doc, item)
+		if itemDict != nil {
 			for _, key := range forbiddenKeys {
 				if _, ok := itemDict[key]; ok {
 					return []error{fmt.Errorf("%w: Signature Reference contains forbidden /%s",
@@ -348,9 +340,8 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, catalog ast
 		if !ok {
 			continue
 		}
-		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
-		xobjDict, ok := xobjRes.(ast.PdfDict)
-		if !ok {
+		xobjDict, _ := document.ResolveDict(ctx, doc, xobjObj)
+		if xobjDict == nil {
 			continue
 		}
 		for _, obj := range xobjDict {

@@ -21,14 +21,9 @@ func GetOutline(ctx context.Context, doc *document.Document) ([]models.Bookmark,
 		return nil, nil // Document has no outline
 	}
 
-	outlinesResolved, err := document.ResolveObject(ctx, doc, outlinesObj)
+	outlinesDict, err := document.ResolveDictRequired(ctx, doc, outlinesObj, "outlines")
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve outlines: %v", err)
-	}
-
-	outlinesDict, ok := outlinesResolved.(ast.PdfDict)
-	if !ok {
-		return nil, fmt.Errorf("outlines is not a dictionary")
 	}
 
 	firstObj, ok := outlinesDict["First"]
@@ -50,21 +45,20 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 	currentObj := itemObj
 
 	for currentObj != nil {
-		resolved, err := document.ResolveObject(ctx, doc, currentObj)
+		dict, err := document.ResolveDict(ctx, doc, currentObj)
 		if err != nil {
 			break
 		}
 
-		dict, ok := resolved.(ast.PdfDict)
-		if !ok {
+		if dict == nil {
 			break
 		}
 
 		var b models.Bookmark
 
 		if titleObj, ok := dict["Title"]; ok {
-			titleRes, _ := document.ResolveObject(ctx, doc, titleObj)
-			if titleStr, ok := titleRes.(ast.PdfString); ok {
+			titleStr, _ := document.ResolveString(ctx, doc, titleObj)
+			if titleStr != "" {
 				b.Title = document.DecodePdfString(titleStr)
 			}
 		}
@@ -74,11 +68,11 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 			b.PageNumber = resolveDestination(ctx, doc, destObj, pageMap)
 		} else if aObj, ok := dict["A"]; ok {
 			// Some bookmarks use an Action (/A) instead of an explicit /Dest.
-			aRes, _ := document.ResolveObject(ctx, doc, aObj)
-			if aDict, ok := aRes.(ast.PdfDict); ok {
+			aDict, _ := document.ResolveDict(ctx, doc, aObj)
+			if aDict != nil {
 				if sObj, ok := aDict["S"]; ok {
-					sRes, _ := document.ResolveObject(ctx, doc, sObj)
-					if sName, ok := sRes.(ast.PdfName); ok && sName == "GoTo" {
+					sName, _ := document.ResolveName(ctx, doc, sObj)
+					if sName == "GoTo" {
 						if dObj, ok := aDict["D"]; ok {
 							b.PageNumber = resolveDestination(ctx, doc, dObj, pageMap)
 						}

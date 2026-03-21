@@ -19,26 +19,22 @@ func InspectImages(ctx context.Context, doc *document.Document, page *document.P
 		return nil
 	}
 
-	xobjResolved, err := document.ResolveObject(ctx, doc, xobjObj)
+	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
 	if err != nil {
 		return nil
 	}
-
-	xobjDict, ok := xobjResolved.(ast.PdfDict)
-	if !ok {
+	if xobjDict == nil {
 		return nil
 	}
 
 	var images []models.ImageMeta
 
 	for name, obj := range xobjDict {
-		resolved, err := document.ResolveObject(ctx, doc, obj)
+		stream, err := document.ResolveStream(ctx, doc, obj)
 		if err != nil {
 			continue
 		}
-
-		stream, ok := resolved.(ast.PdfStream)
-		if !ok {
+		if stream.Dict == nil {
 			continue
 		}
 

@@ -20,13 +20,11 @@ func (m *Machine) resolvePatternType(name string) string {
 		return "Pattern"
 	}
 
-	patRes, err := document.ResolveObject(m.Ctx, m.Doc, patObj)
+	patDict, err := document.ResolveDict(m.Ctx, m.Doc, patObj)
 	if err != nil {
 		return "Pattern"
 	}
-
-	patDict, ok := patRes.(ast.PdfDict)
-	if !ok {
+	if patDict == nil {
 		return "Pattern"
 	}
 

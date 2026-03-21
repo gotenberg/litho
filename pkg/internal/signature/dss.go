@@ -57,13 +57,12 @@ func extractDSS(ctx context.Context, doc *document.Document) (*dssData, error) {
 		return nil, nil
 	}
 
-	dssResolved, err := document.ResolveObject(ctx, doc, dssObj)
+	dssDict, err := document.ResolveDict(ctx, doc, dssObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /DSS: %w", err)
 	}
 
-	dssDict, ok := dssResolved.(ast.PdfDict)
-	if !ok {
+	if dssDict == nil {
 		return nil, fmt.Errorf("/DSS is not a dictionary")
 	}
 
@@ -78,26 +77,23 @@ func extractDSS(ctx context.Context, doc *document.Document) (*dssData, error) {
 	// /VRI — dictionary keyed by uppercase hex SHA-1 of the signature value,
 	// each value is a dictionary with optional /Cert, /CRL, /OCSP arrays.
 	if vriObj, ok := dssDict["VRI"]; ok {
-		vriResolved, err := document.ResolveObject(ctx, doc, vriObj)
+		vriDict, err := document.ResolveDict(ctx, doc, vriObj)
 		if err == nil {
-			if vriDict, ok := vriResolved.(ast.PdfDict); ok {
-				for key, valObj := range vriDict {
-					entryResolved, err := document.ResolveObject(ctx, doc, valObj)
-					if err != nil {
-						continue
-					}
-					entryDict, ok := entryResolved.(ast.PdfDict)
-					if !ok {
-						continue
-					}
-
-					entry := &vriEntry{
-						Certs: parseDSSCerts(ctx, doc, entryDict),
-						CRLs:  parseDSSCRLs(ctx, doc, entryDict),
-						OCSPs: parseDSSOCSPs(ctx, doc, entryDict),
-					}
-					dss.VRI[string(key)] = entry
+			for key, valObj := range vriDict {
+				entryDict, err := document.ResolveDict(ctx, doc, valObj)
+				if err != nil {
+					continue
 				}
+				if entryDict == nil {
+					continue
+				}
+
+				entry := &vriEntry{
+					Certs: parseDSSCerts(ctx, doc, entryDict),
+					CRLs:  parseDSSCRLs(ctx, doc, entryDict),
+					OCSPs: parseDSSOCSPs(ctx, doc, entryDict),
+				}
+				dss.VRI[string(key)] = entry
 			}
 		}
 	}
@@ -121,24 +117,22 @@ func resolveDSSStreamArray(ctx context.Context, doc *document.Document, dict ast
 		return nil
 	}
 
-	arrResolved, err := document.ResolveObject(ctx, doc, arrObj)
+	arr, err := document.ResolveArray(ctx, doc, arrObj)
 	if err != nil {
 		return nil
 	}
 
-	arr, ok := arrResolved.(ast.PdfArray)
-	if !ok {
+	if arr == nil {
 		return nil
 	}
 
 	var results [][]byte
 	for _, streamRef := range arr {
-		streamResolved, err := document.ResolveObject(ctx, doc, streamRef)
+		stream, err := document.ResolveStream(ctx, doc, streamRef)
 		if err != nil {
 			continue
 		}
-		stream, ok := streamResolved.(ast.PdfStream)
-		if !ok {
+		if stream.Dict == nil {
 			continue
 		}
 		data, err := filter.DecodeStream(stream)

@@ -66,9 +66,8 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		if !ok {
 			continue
 		}
-		ffRes, _ := document.ResolveObject(ctx, doc, ffObj)
-		stream, ok := ffRes.(ast.PdfStream)
-		if !ok {
+		stream, _ := document.ResolveStream(ctx, doc, ffObj)
+		if stream.Dict == nil {
 			continue
 		}
 		data, err := filter.DecodeStream(stream)
@@ -90,10 +89,10 @@ func compareWidths(ctx context.Context, doc *document.Document, fontDict ast.Pdf
 	// Simple fonts are skipped — char code → GID mapping requires cmap
 	// parsing which is not available in the compliance module.
 	if dfObj, ok := fontDict["DescendantFonts"]; ok {
-		dfRes, _ := document.ResolveObject(ctx, doc, dfObj)
-		if dfArr, ok := dfRes.(ast.PdfArray); ok && len(dfArr) > 0 {
-			cidRes, _ := document.ResolveObject(ctx, doc, dfArr[0])
-			if cidDict, ok := cidRes.(ast.PdfDict); ok {
+		dfArr, _ := document.ResolveArray(ctx, doc, dfObj)
+		if len(dfArr) > 0 {
+			cidDict, _ := document.ResolveDict(ctx, doc, dfArr[0])
+			if cidDict != nil {
 				if wObj, ok := cidDict["W"]; ok {
 					return compareCIDWidths(ctx, doc, wObj, binaryWidths, unitsPerEm, fontName)
 				}
@@ -111,9 +110,8 @@ const widthTolerance = 1.0
 
 // compareCIDWidths checks /W array against binary widths for CIDFonts.
 func compareCIDWidths(ctx context.Context, doc *document.Document, wObj ast.PdfObject, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string) error {
-	wRes, _ := document.ResolveObject(ctx, doc, wObj)
-	wArr, ok := wRes.(ast.PdfArray)
-	if !ok {
+	wArr, _ := document.ResolveArray(ctx, doc, wObj)
+	if wArr == nil {
 		return nil
 	}
 
@@ -197,18 +195,16 @@ func checkNotdefGlyphUsage(ctx context.Context, doc *document.Document, catalog 
 		if !ok {
 			continue
 		}
-		encRes, _ := document.ResolveObject(ctx, doc, encObj)
-		encDict, ok := encRes.(ast.PdfDict)
-		if !ok {
+		encDict, _ := document.ResolveDict(ctx, doc, encObj)
+		if encDict == nil {
 			continue
 		}
 		diffObj, ok := encDict["Differences"]
 		if !ok {
 			continue
 		}
-		diffRes, _ := document.ResolveObject(ctx, doc, diffObj)
-		diffArr, ok := diffRes.(ast.PdfArray)
-		if !ok {
+		diffArr, _ := document.ResolveArray(ctx, doc, diffObj)
+		if diffArr == nil {
 			continue
 		}
 		for _, item := range diffArr {

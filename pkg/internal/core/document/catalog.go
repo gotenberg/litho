@@ -50,13 +50,11 @@ func GetCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}
 
-	resolvedObj, err := ResolveObject(ctx, doc, rootObj)
+	catalogDict, err := ResolveDict(ctx, doc, rootObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve catalog: %v", err)
 	}
-
-	catalogDict, ok := resolvedObj.(ast.PdfDict)
-	if !ok {
+	if catalogDict == nil {
 		return nil, fmt.Errorf("catalog is not a dictionary")
 	}
 
@@ -70,13 +68,11 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 		return nil, fmt.Errorf("catalog missing /Pages")
 	}
 
-	resolvedPages, err := ResolveObject(ctx, doc, pagesObj)
+	pagesDict, err := ResolveDict(ctx, doc, pagesObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve pages root: %v", err)
 	}
-
-	pagesDict, ok := resolvedPages.(ast.PdfDict)
-	if !ok {
+	if pagesDict == nil {
 		return nil, fmt.Errorf("pages root is not a dictionary")
 	}
 
@@ -100,11 +96,11 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 		} else {
 			// Fallback: check if the page dict has a direct /DPart reference
 			if dpartObj, ok := page.Dict["DPart"]; ok {
-				dpartRes, _ := ResolveObject(ctx, doc, dpartObj)
-				if dpartDict, ok := dpartRes.(ast.PdfDict); ok {
+				dpartDict, _ := ResolveDict(ctx, doc, dpartObj)
+				if dpartDict != nil {
 					if dpmObj, ok := dpartDict["DPM"]; ok {
-						dpmRes, _ := ResolveObject(ctx, doc, dpmObj)
-						if dpmDict, ok := dpmRes.(ast.PdfDict); ok {
+						dpmDict, _ := ResolveDict(ctx, doc, dpmObj)
+						if dpmDict != nil {
 							dpm := make(map[string]string)
 							for k, v := range dpmDict {
 								vRes, _ := ResolveObject(ctx, doc, v)
@@ -140,9 +136,9 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	// Inherit or override MediaBox
 	currentMediaBox := inheritedMediaBox
 	if mbObj, ok := node["MediaBox"]; ok {
-		mbResolved, err := ResolveObject(ctx, doc, mbObj)
+		mbArr, err := ResolveArray(ctx, doc, mbObj)
 		if err == nil {
-			if mbArr, ok := mbResolved.(ast.PdfArray); ok {
+			if mbArr != nil {
 				currentMediaBox = mbArr
 			}
 		}
@@ -151,9 +147,9 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	// Inherit or override CropBox (inheritable per PDF spec)
 	currentCropBox := inheritedCropBox
 	if cbObj, ok := node["CropBox"]; ok {
-		cbResolved, err := ResolveObject(ctx, doc, cbObj)
+		cbArr, err := ResolveArray(ctx, doc, cbObj)
 		if err == nil {
-			if cbArr, ok := cbResolved.(ast.PdfArray); ok {
+			if cbArr != nil {
 				currentCropBox = cbArr
 			}
 		}
@@ -164,13 +160,11 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		return fmt.Errorf("node missing /Type")
 	}
 
-	typeResolved, err := ResolveObject(ctx, doc, typeObj)
+	typeStr, err := ResolveName(ctx, doc, typeObj)
 	if err != nil {
 		return fmt.Errorf("failed to resolve node type: %v", err)
 	}
-
-	typeStr, ok := typeResolved.(ast.PdfName)
-	if !ok {
+	if typeStr == "" {
 		return fmt.Errorf("node /Type is not a name")
 	}
 
@@ -181,13 +175,11 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			return fmt.Errorf("pages node missing /Kids")
 		}
 
-		kidsResolved, err := ResolveObject(ctx, doc, kidsObj)
+		kidsArr, err := ResolveArray(ctx, doc, kidsObj)
 		if err != nil {
 			return fmt.Errorf("failed to resolve /Kids array: %v", err)
 		}
-
-		kidsArr, ok := kidsResolved.(ast.PdfArray)
-		if !ok {
+		if kidsArr == nil {
 			return fmt.Errorf("/Kids is not an array")
 		}
 
@@ -196,13 +188,11 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			if r, ok := kidObj.(ast.PdfIndirectRef); ok {
 				kidRef = r
 			}
-			kidResolved, err := ResolveObject(ctx, doc, kidObj)
+			kidDict, err := ResolveDict(ctx, doc, kidObj)
 			if err != nil {
 				return fmt.Errorf("failed to resolve kid: %v", err)
 			}
-
-			kidDict, ok := kidResolved.(ast.PdfDict)
-			if !ok {
+			if kidDict == nil {
 				return fmt.Errorf("kid is not a dictionary")
 			}
 
@@ -247,12 +237,11 @@ func mergeResourceDicts(ctx context.Context, doc *Document, inherited ast.PdfDic
 	if !ok {
 		return inherited
 	}
-	resResolved, err := ResolveObject(ctx, doc, resObj)
+	nodeRes, err := ResolveDict(ctx, doc, resObj)
 	if err != nil {
 		return inherited
 	}
-	nodeRes, ok := resResolved.(ast.PdfDict)
-	if !ok {
+	if nodeRes == nil {
 		return inherited
 	}
 	if inherited == nil {
@@ -269,15 +258,13 @@ func mergeResourceDicts(ctx context.Context, doc *Document, inherited ast.PdfDic
 			merged[k] = v
 			continue
 		}
-		nodeSubResolved, _ := ResolveObject(ctx, doc, v)
-		nodeSub, nodeIsDict := nodeSubResolved.(ast.PdfDict)
-		if !nodeIsDict {
+		nodeSub, _ := ResolveDict(ctx, doc, v)
+		if nodeSub == nil {
 			merged[k] = v
 			continue
 		}
-		inheritedSubResolved, _ := ResolveObject(ctx, doc, inheritedSub)
-		inheritedSubDict, inheritedSubIsDict := inheritedSubResolved.(ast.PdfDict)
-		if !inheritedSubIsDict {
+		inheritedSubDict, _ := ResolveDict(ctx, doc, inheritedSub)
+		if inheritedSubDict == nil {
 			merged[k] = v
 			continue
 		}
@@ -297,12 +284,11 @@ func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key a
 	if !ok {
 		return fallback
 	}
-	resolved, err := ResolveObject(ctx, doc, obj)
+	arr, err := ResolveArray(ctx, doc, obj)
 	if err != nil {
 		return fallback
 	}
-	arr, ok := resolved.(ast.PdfArray)
-	if !ok || len(arr) < 4 {
+	if len(arr) < 4 {
 		return fallback
 	}
 	return arr
