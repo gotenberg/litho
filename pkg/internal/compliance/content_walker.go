@@ -231,6 +231,13 @@ func (w *contentWalker) handleDo(op content.Operation) {
 
 	stObj := stream.Dict["Subtype"]
 	st, _ := stObj.(ast.PdfName)
+
+	// Check Image XObject color space.
+	if st == "Image" {
+		w.checkImageCS(stream.Dict)
+		return
+	}
+
 	if st != "Form" {
 		return
 	}
@@ -275,6 +282,32 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	}
 	child.walk(ops)
 	w.errors = append(w.errors, child.errors...)
+}
+
+// checkImageCS validates the /ColorSpace of an Image XObject.
+func (w *contentWalker) checkImageCS(dict ast.PdfDict) {
+	csObj, ok := dict["ColorSpace"]
+	if !ok {
+		return
+	}
+	if isDeviceDependentCS(w.ctx, w.doc, csObj, w.defaults) {
+		csRes, _ := document.ResolveObject(w.ctx, w.doc, csObj)
+		csName := ast.PdfName("")
+		switch cs := csRes.(type) {
+		case ast.PdfName:
+			csName = cs
+		case ast.PdfArray:
+			if len(cs) > 0 {
+				if n, ok := cs[0].(ast.PdfName); ok {
+					csName = n
+				}
+			}
+		}
+		if !iccCoversDeviceCS(w.iccN, csName) {
+			w.errors = append(w.errors, fmt.Errorf("%w: %s in Image XObject",
+				models.ErrMissingICCProfile, csName))
+		}
+	}
 }
 
 // handleRI processes the ri operator for rendering intent validation.
