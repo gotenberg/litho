@@ -136,6 +136,79 @@ func checkICCProfile(ctx context.Context, doc *document.Document, catalog ast.Pd
 	return nil
 }
 
+// iccHeaderMinSize is the minimum number of bytes required to read the
+// device class and color space fields from an ICC profile header.
+const iccHeaderMinSize = 20
+
+// validICCDeviceClasses lists the device class signatures accepted for
+// OutputIntent ICC profiles per ISO 19005, clause 6.2.3 test 1.
+var validICCDeviceClasses = map[string]bool{
+	"prtr": true, // output (printer) profile
+	"mntr": true, // monitor profile
+}
+
+// validICCColorSpaces lists the color space signatures accepted for
+// OutputIntent ICC profiles per ISO 19005, clause 6.2.3 test 1.
+var validICCColorSpaces = map[string]bool{
+	"GRAY": true,
+	"RGB ": true,
+	"CMYK": true,
+}
+
+// checkOutputIntentProfileClass validates that each OutputIntent ICC profile
+// has a valid device class ("prtr" or "mntr") and color space ("GRAY",
+// "RGB ", or "CMYK") per ISO 19005, clause 6.2.3 test 1.
+func checkOutputIntentProfileClass(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	oiObj, ok := catalog["OutputIntents"]
+	if !ok {
+		return nil
+	}
+	oiRes, _ := document.ResolveObject(ctx, doc, oiObj)
+	oi, ok := oiRes.(ast.PdfArray)
+	if !ok || len(oi) == 0 {
+		return nil
+	}
+
+	var errs []error
+	for _, entry := range oi {
+		entryRes, _ := document.ResolveObject(ctx, doc, entry)
+		dict, ok := entryRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		profObj, ok := dict["DestOutputProfile"]
+		if !ok {
+			continue
+		}
+		profRes, _ := document.ResolveObject(ctx, doc, profObj)
+		profStream, ok := profRes.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+
+		// Decode the ICC profile stream data.
+		data, err := filter.DecodeStream(profStream)
+		if err != nil {
+			// Fall back to raw data if decoding fails (uncompressed stream).
+			data = profStream.Data
+		}
+		if len(data) < iccHeaderMinSize {
+			continue
+		}
+
+		deviceClass := string(data[12:16])
+		colorSpace := string(data[16:20])
+
+		if !validICCDeviceClasses[deviceClass] || !validICCColorSpaces[colorSpace] {
+			errs = append(errs, fmt.Errorf(
+				"%w: device class %q, color space %q",
+				models.ErrInvalidICCProfileClass, deviceClass, colorSpace,
+			))
+		}
+	}
+	return errs
+}
+
 // hasOutputIntentICC returns true if the catalog's /OutputIntents array
 // contains at least one entry with a /DestOutputProfile key.
 func hasOutputIntentICC(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
@@ -1672,14 +1745,8 @@ func checkDocInfoXMPSync(ctx context.Context, doc *document.Document, xmpData []
 	}
 
 	// Map of info dict keys to XMP property names per ISO 19005 clause
-	// 6.7.3. Note: parseXMPForSync extracts attribute-form values and
-	// simple element text; it does not extract rdf:Alt or rdf:Seq
-	// container values (e.g., dc:title in <rdf:Alt>). This means DC
-	// properties stored in containers are not compared, which is
-	// intentional — it avoids false positives on test files that use
-	// different DocInfo vs XMP values for DC properties while the
-	// non-DC properties (Keywords, CreatorTool, Producer) and dates
-	// are reliably in attribute or simple-element form.
+	// 6.7.3. parseXMPForSync extracts both attribute-form values and
+	// rdf:Alt/rdf:Seq container values (first entry / x-default).
 	syncPairs := []struct {
 		infoKey string
 		xmpKey  string
@@ -1832,13 +1899,20 @@ func getInfoString(ctx context.Context, doc *document.Document, infoDict ast.Pdf
 }
 
 // parseXMPForSync extracts key XMP property values for DocInfo comparison.
+// It handles both inline attribute values and rdf:Alt/rdf:Seq container
+// values (extracting the x-default or first entry).
 func parseXMPForSync(data []byte) map[string]string {
 	result := make(map[string]string)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
-	var currentNS string
-	var currentLocal string
+	const rdfNS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+
+	var propNS, propLocal string // current top-level property
+	var inContainer bool         // inside rdf:Alt, rdf:Seq, or rdf:Bag
+	var inLI bool                // inside rdf:li within container
+	depth := 0
+	inDesc := false
 
 	for {
 		tok, err := decoder.Token()
@@ -1847,27 +1921,80 @@ func parseXMPForSync(data []byte) map[string]string {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			currentNS = t.Name.Space
-			currentLocal = t.Name.Local
-			// Check for rdf:Description attributes (inline XMP values).
-			for _, attr := range t.Attr {
-				if attr.Name.Space == "" || attr.Name.Space == "xmlns" {
-					continue
+			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
+				inDesc = true
+				depth = 0
+				// Check for rdf:Description attributes (inline XMP values).
+				for _, attr := range t.Attr {
+					if attr.Name.Space == "" || attr.Name.Space == "xmlns" ||
+						attr.Name.Space == rdfNS ||
+						attr.Name.Space == "http://www.w3.org/XML/1998/namespace" {
+						continue
+					}
+					key := nsPrefix(attr.Name.Space) + ":" + attr.Name.Local
+					result[key] = attr.Value
 				}
-				key := nsPrefix(attr.Name.Space) + ":" + attr.Name.Local
-				result[key] = attr.Value
+				continue
 			}
+
+			if inDesc {
+				depth++
+				if depth == 1 && t.Name.Space != "" && t.Name.Space != rdfNS {
+					propNS = t.Name.Space
+					propLocal = t.Name.Local
+					inContainer = false
+					inLI = false
+				}
+				if depth == 2 && t.Name.Space == rdfNS { //nolint:mnd // container wrapper level
+					switch t.Name.Local {
+					case "Alt", "Seq", "Bag":
+						inContainer = true
+					}
+				}
+				if depth == 3 && inContainer && t.Name.Space == rdfNS && t.Name.Local == "li" { //nolint:mnd // container item level
+					inLI = true
+				}
+			}
+
 		case xml.CharData:
-			if currentNS != "" && currentLocal != "" {
-				key := nsPrefix(currentNS) + ":" + currentLocal
-				val := strings.TrimSpace(string(t))
-				if val != "" {
+			if !inDesc || propNS == "" {
+				continue
+			}
+			val := strings.TrimSpace(string(t))
+			if val == "" {
+				continue
+			}
+			key := nsPrefix(propNS) + ":" + propLocal
+
+			if inContainer && inLI {
+				// First rdf:li value in container (or x-default).
+				if _, exists := result[key]; !exists {
 					result[key] = val
 				}
+			} else if depth == 1 && !inContainer {
+				// Simple text property.
+				result[key] = val
 			}
+
 		case xml.EndElement:
-			currentNS = ""
-			currentLocal = ""
+			if t.Name.Space == rdfNS && t.Name.Local == "Description" {
+				inDesc = false
+				depth = 0
+				propNS = ""
+				propLocal = ""
+			} else if inDesc {
+				if t.Name.Space == rdfNS && t.Name.Local == "li" {
+					inLI = false
+				}
+				if depth == 2 && t.Name.Space == rdfNS { //nolint:mnd
+					inContainer = false
+				}
+				if depth == 1 {
+					propNS = ""
+					propLocal = ""
+				}
+				depth--
+			}
 		}
 	}
 	return result
@@ -2002,6 +2129,47 @@ func checkFormXObjectCompliance(ctx context.Context, doc *document.Document, cat
 		}
 	}
 	return errs
+}
+
+// --- Stream external file keys (ISO 19005, clause 6.1.6.1) ---
+
+// checkStreamExternalKeys scans all pages' XObject resources (both Image and
+// Form XObjects) for forbidden external file reference keys: /F, /FFilter,
+// and /FDecodeParms. These keys reference data in external files and are
+// forbidden in PDF/A.
+func checkStreamExternalKeys(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		xobjObj, ok := resources["XObject"]
+		if !ok {
+			continue
+		}
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		xobjDict, ok := xobjRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, obj := range xobjDict {
+			dict := resolveXObjectDict(ctx, doc, obj)
+			if dict == nil {
+				continue
+			}
+			if _, ok := dict["F"]; ok {
+				return []error{fmt.Errorf("%w: /F", models.ErrStreamExternalFileKeys)}
+			}
+			if _, ok := dict["FFilter"]; ok {
+				return []error{fmt.Errorf("%w: /FFilter", models.ErrStreamExternalFileKeys)}
+			}
+			if _, ok := dict["FDecodeParms"]; ok {
+				return []error{fmt.Errorf("%w: /FDecodeParms", models.ErrStreamExternalFileKeys)}
+			}
+		}
+	}
+	return nil
 }
 
 // resolveXObjectDict resolves an XObject to its dictionary, handling both

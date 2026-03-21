@@ -82,6 +82,7 @@ var (
 	ErrInvalidFileHeader           = errors.New("compliance: file header must start with %PDF-")
 	ErrMissingTrailerID            = errors.New("compliance: file trailer must contain /ID key")
 	ErrMissingBinaryMarker         = errors.New("compliance: file header missing binary comment marker (% + 4 high bytes)")
+	ErrStreamExternalFileKeys      = errors.New("compliance: stream dictionary must not contain /F, /FFilter, or /FDecodeParms keys")
 	ErrFormXObjectForbiddenKey     = errors.New("compliance: Form XObject contains forbidden key (/OPI, /Subtype2 /PS, or /PS)")
 	ErrPostScriptXObjectForbidden  = errors.New("compliance: PostScript XObjects (/Subtype /PS) are forbidden in PDF/A")
 	ErrMissingBlendingColorSpace   = errors.New("compliance: page with transparency must have /Group with /CS when no OutputIntent ICC profile is present")
@@ -91,6 +92,7 @@ var (
 	ErrInvalidHalftoneType         = errors.New("compliance: halftone /HalftoneType must be 1 or 5")
 	ErrHalftoneNameForbidden       = errors.New("compliance: halftone must not contain /HalftoneName key")
 	ErrHalftoneTransferFunction    = errors.New("compliance: halftone /TransferFunction must be /Default or absent")
+	ErrInvalidICCProfileClass      = errors.New("compliance: OutputIntent ICC profile must be output (prtr) or monitor (mntr) class with GRAY/RGB/CMYK color space")
 
 	// PDF/UA-specific errors.
 	ErrMissingXMPTitle           = errors.New("compliance: XMP metadata missing dc:title")

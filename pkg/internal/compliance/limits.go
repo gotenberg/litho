@@ -11,8 +11,14 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// checkPageSizeBounds verifies that all page MediaBox dimensions are within
-// the allowed range of [3, 14400] user units per ISO 19005 §6.1.12.
+// pageBoundaryBoxes are the page boundary keys defined in ISO 32000-1 §14.11.2.
+var pageBoundaryBoxes = []ast.PdfName{ //nolint:gochecknoglobals // constant table
+	"MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox",
+}
+
+// checkPageSizeBounds verifies that all page boundary dimensions (MediaBox,
+// CropBox, BleedBox, TrimBox, ArtBox) are within the allowed range of
+// [3, 14400] user units per ISO 19005 §6.1.12 / §6.1.13.
 func checkPageSizeBounds(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	const (
 		minDim = 3.0
@@ -21,32 +27,34 @@ func checkPageSizeBounds(ctx context.Context, doc *document.Document, catalog as
 
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
-		mbObj, ok := page["MediaBox"]
-		if !ok {
-			continue
-		}
-		mbRes, _ := document.ResolveObject(ctx, doc, mbObj)
-		mbArr, ok := mbRes.(ast.PdfArray)
-		if !ok || len(mbArr) < 4 { //nolint:mnd // PDF rectangles have 4 elements
-			continue
-		}
-		x1 := document.GetFloat(mbArr[0])
-		y1 := document.GetFloat(mbArr[1])
-		x2 := document.GetFloat(mbArr[2])
-		y2 := document.GetFloat(mbArr[3])
+		for _, boxName := range pageBoundaryBoxes {
+			boxObj, ok := page[boxName]
+			if !ok {
+				continue
+			}
+			boxRes, _ := document.ResolveObject(ctx, doc, boxObj)
+			boxArr, ok := boxRes.(ast.PdfArray)
+			if !ok || len(boxArr) < 4 { //nolint:mnd // PDF rectangles have 4 elements
+				continue
+			}
+			x1 := document.GetFloat(boxArr[0])
+			y1 := document.GetFloat(boxArr[1])
+			x2 := document.GetFloat(boxArr[2])
+			y2 := document.GetFloat(boxArr[3])
 
-		width := x2 - x1
-		height := y2 - y1
-		if width < 0 {
-			width = -width
-		}
-		if height < 0 {
-			height = -height
-		}
+			width := x2 - x1
+			height := y2 - y1
+			if width < 0 {
+				width = -width
+			}
+			if height < 0 {
+				height = -height
+			}
 
-		if width < minDim || width > maxDim || height < minDim || height > maxDim {
-			return []error{fmt.Errorf("%w: %.1f x %.1f",
-				models.ErrPageSizeOutOfBounds, width, height)}
+			if width < minDim || width > maxDim || height < minDim || height > maxDim {
+				return []error{fmt.Errorf("%w: /%s %.1f x %.1f",
+					models.ErrPageSizeOutOfBounds, boxName, width, height)}
+			}
 		}
 	}
 	return nil
