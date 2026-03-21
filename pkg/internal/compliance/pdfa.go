@@ -419,8 +419,102 @@ func checkContentStreamDeviceCS(ctx context.Context, doc *document.Document, cat
 		if err := scanOpsForDeviceCS(ctx, doc, ops, defaults, resources, iccN); err != nil {
 			return []error{err}
 		}
+
+		// Also check inline images for device-dependent color spaces.
+		if err := checkInlineImageDeviceCS(ctx, doc, page, defaults, iccN); err != nil {
+			return []error{err}
+		}
 	}
 	return nil
+}
+
+// inlineImageDeviceCSAbbrevs maps the abbreviated color space names used in
+// inline image dictionaries (BI...ID...EI) to their full device-dependent names.
+var inlineImageDeviceCSAbbrevs = map[string]ast.PdfName{
+	"/CS /RGB":        "DeviceRGB",
+	"/CS /DeviceRGB":  "DeviceRGB",
+	"/CS /CMYK":       "DeviceCMYK",
+	"/CS /DeviceCMYK": "DeviceCMYK",
+	"/CS /G":          "DeviceGray",
+	"/CS /DeviceGray": "DeviceGray",
+}
+
+// checkInlineImageDeviceCS scans the raw content stream bytes for inline image
+// (BI...ID...EI) blocks that use device-dependent color spaces.
+func checkInlineImageDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) error {
+	// Get raw content stream data.
+	contentsObj, ok := page["Contents"]
+	if !ok {
+		return nil
+	}
+	data, err := getContentStreamBytes(ctx, doc, contentsObj)
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+
+	// Scan for BI markers and check CS within inline image dicts.
+	for i := 0; i < len(data)-2; i++ {
+		// Look for "BI" preceded by whitespace/newline.
+		if data[i] == 'B' && data[i+1] == 'I' && (i == 0 || isWhitespace(data[i-1])) {
+			// Find the ID marker to delimit the inline image dict.
+			end := i + 2
+			idIdx := bytes.Index(data[end:], []byte("ID"))
+			if idIdx < 0 {
+				break
+			}
+			dictBytes := data[end : end+idIdx]
+
+			// Check for device-dependent CS abbreviations.
+			for pattern, deviceCS := range inlineImageDeviceCSAbbrevs {
+				if bytes.Contains(dictBytes, []byte(pattern)) {
+					if !defaults[deviceCS] && !iccCoversDeviceCS(iccN, deviceCS) {
+						return fmt.Errorf("%w: %s in inline image",
+							models.ErrMissingICCProfile, deviceCS)
+					}
+				}
+			}
+
+			// Skip past the inline image data.
+			i = end + idIdx + 2
+		}
+	}
+	return nil
+}
+
+func isWhitespace(b byte) bool {
+	return b == ' ' || b == '\n' || b == '\r' || b == '\t'
+}
+
+// getContentStreamBytes extracts and decodes the raw bytes of a page's content stream(s).
+func getContentStreamBytes(ctx context.Context, doc *document.Document, contentsObj ast.PdfObject) ([]byte, error) {
+	res, err := document.ResolveObject(ctx, doc, contentsObj)
+	if err != nil {
+		return nil, err
+	}
+	switch v := res.(type) {
+	case ast.PdfStream:
+		decoded, err := filter.DecodeStream(v)
+		if err != nil {
+			return v.Data, nil //nolint:nilerr // fall back to raw data
+		}
+		return decoded, nil
+	case ast.PdfArray:
+		var buf bytes.Buffer
+		for _, item := range v {
+			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			if stream, ok := itemRes.(ast.PdfStream); ok {
+				decoded, err := filter.DecodeStream(stream)
+				if err != nil {
+					buf.Write(stream.Data)
+				} else {
+					buf.Write(decoded)
+				}
+				buf.WriteByte('\n')
+			}
+		}
+		return buf.Bytes(), nil
+	}
+	return nil, nil
 }
 
 // checkAnnotationDeviceCS parses annotation appearance streams (/AP /N) and
