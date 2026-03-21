@@ -3034,6 +3034,123 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, catalog ast.P
 	return errs
 }
 
+// checkCIDSystemInfoConsistency verifies that for Type0 fonts, the
+// CIDSystemInfo entries in the CIDFont dictionary and the Encoding CMap
+// stream (if embedded) have compatible Registry/Ordering strings and
+// Supplement values (6.2.11.3.1 / 6.3.3.1).
+func checkCIDSystemInfoConsistency(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	fonts := collectFontDicts(ctx, doc, catalog)
+	for name, fontDict := range fonts {
+		stObj, ok := fontDict["Subtype"]
+		if !ok {
+			continue
+		}
+		stRes, _ := document.ResolveObject(ctx, doc, stObj)
+		st, ok := stRes.(ast.PdfName)
+		if !ok || st != "Type0" {
+			continue
+		}
+
+		// Check if Encoding is Identity-H or Identity-V (exempt).
+		encObj, ok := fontDict["Encoding"]
+		if !ok {
+			continue
+		}
+		encRes, _ := document.ResolveObject(ctx, doc, encObj)
+		if encName, ok := encRes.(ast.PdfName); ok {
+			if encName == "Identity-H" || encName == "Identity-V" {
+				continue
+			}
+		}
+
+		// Get CIDFont CIDSystemInfo.
+		dfObj, ok := fontDict["DescendantFonts"]
+		if !ok {
+			continue
+		}
+		dfRes, _ := document.ResolveObject(ctx, doc, dfObj)
+		dfArr, ok := dfRes.(ast.PdfArray)
+		if !ok || len(dfArr) < 1 {
+			continue
+		}
+		cidFontRes, _ := document.ResolveObject(ctx, doc, dfArr[0])
+		cidFont, ok := cidFontRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		cidInfoObj, ok := cidFont["CIDSystemInfo"]
+		if !ok {
+			continue
+		}
+		cidInfoRes, _ := document.ResolveObject(ctx, doc, cidInfoObj)
+		cidInfo, ok := cidInfoRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+
+		// For embedded CMap streams, check CIDSystemInfo consistency.
+		encStream, ok := encRes.(ast.PdfStream)
+		if !ok {
+			continue // Predefined CMap name — can't check embedded CIDSystemInfo.
+		}
+		cmapInfoObj, ok := encStream.Dict["CIDSystemInfo"]
+		if !ok {
+			continue
+		}
+		cmapInfoRes, _ := document.ResolveObject(ctx, doc, cmapInfoObj)
+		cmapInfo, ok := cmapInfoRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+
+		// Compare Registry and Ordering strings.
+		cidReg := getCIDInfoString(ctx, doc, cidInfo, "Registry")
+		cmapReg := getCIDInfoString(ctx, doc, cmapInfo, "Registry")
+		cidOrd := getCIDInfoString(ctx, doc, cidInfo, "Ordering")
+		cmapOrd := getCIDInfoString(ctx, doc, cmapInfo, "Ordering")
+
+		if cidReg != cmapReg || cidOrd != cmapOrd {
+			errs = append(errs, fmt.Errorf("%w: %s (Registry/Ordering mismatch)",
+				models.ErrCIDSystemInfoMismatch, name))
+			continue
+		}
+
+		// Compare Supplement: CIDFont Supplement must be ≤ CMap Supplement.
+		cidSup := getCIDInfoInt(ctx, doc, cidInfo, "Supplement")
+		cmapSup := getCIDInfoInt(ctx, doc, cmapInfo, "Supplement")
+		if cidSup > cmapSup {
+			errs = append(errs, fmt.Errorf("%w: %s (CIDFont Supplement %d > CMap Supplement %d)",
+				models.ErrCIDSystemInfoMismatch, name, cidSup, cmapSup))
+		}
+	}
+	return errs
+}
+
+func getCIDInfoString(ctx context.Context, doc *document.Document, dict ast.PdfDict, key string) string {
+	obj, ok := dict[ast.PdfName(key)]
+	if !ok {
+		return ""
+	}
+	res, _ := document.ResolveObject(ctx, doc, obj)
+	if s, ok := res.(ast.PdfString); ok {
+		return string(s)
+	}
+	return ""
+}
+
+func getCIDInfoInt(ctx context.Context, doc *document.Document, dict ast.PdfDict, key string) int {
+	obj, ok := dict[ast.PdfName(key)]
+	if !ok {
+		return 0
+	}
+	res, _ := document.ResolveObject(ctx, doc, obj)
+	if n, ok := res.(ast.PdfInt); ok {
+		return int(n)
+	}
+	return 0
+}
+
 // checkFontNameUTF8 verifies that font names (/BaseFont) are valid UTF-8
 // after decoding #XX hex escapes. Required for PDF/A-2 and later profiles.
 func checkFontNameUTF8(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
