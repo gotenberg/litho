@@ -4554,13 +4554,13 @@ func hasWidgetKidsWithAP(ctx context.Context, doc *document.Document, dict ast.P
 // information dictionary (6.1.3 t04/t05):
 // - /Info is forbidden unless /PieceInfo exists in catalog
 // - If /Info is present, it may only contain /ModDate
-func checkInfoDictPart4(_ context.Context, doc *document.Document) []error {
+func checkInfoDictPart4(ctx context.Context, doc *document.Document) []error {
 	infoObj, ok := doc.Index.Trailer["Info"]
 	if !ok {
 		return nil
 	}
 	// /Info is only allowed when /PieceInfo exists in catalog.
-	catalog, err := getCatalog(context.Background(), doc)
+	catalog, err := getCatalog(ctx, doc)
 	if err != nil {
 		return []error{models.ErrInfoDictForbiddenPart4}
 	}

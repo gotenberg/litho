@@ -23,7 +23,6 @@ type walkerState struct {
 // scattered scanOpsForDeviceCS, checkAnnotationDeviceCS, etc. functions
 // with a single consolidated walker.
 type contentWalker struct {
-	ctx       context.Context
 	doc       *document.Document
 	fillCS    ast.PdfName            // current fill color space
 	strokeCS  ast.PdfName            // current stroke color space
@@ -71,9 +70,8 @@ var validPDFOperators = map[string]bool{
 }
 
 // newContentWalker creates a new content walker with the given parameters.
-func newContentWalker(ctx context.Context, doc *document.Document, defaults map[ast.PdfName]bool, iccN int, resources ast.PdfDict) *contentWalker {
+func newContentWalker(doc *document.Document, defaults map[ast.PdfName]bool, iccN int, resources ast.PdfDict) *contentWalker {
 	return &contentWalker{
-		ctx:       ctx,
 		doc:       doc,
 		defaults:  defaults,
 		iccN:      iccN,
@@ -83,11 +81,11 @@ func newContentWalker(ctx context.Context, doc *document.Document, defaults map[
 }
 
 // walk processes a sequence of content stream operations.
-func (w *contentWalker) walk(ops []content.Operation) {
+func (w *contentWalker) walk(ctx context.Context, ops []content.Operation) {
 	for i, op := range ops {
 		// Check context cancellation every 100 operators.
 		if i%100 == 0 { //nolint:mnd // per AGENTS.md context check interval
-			if w.ctx.Err() != nil {
+			if ctx.Err() != nil {
 				return
 			}
 		}
@@ -97,12 +95,12 @@ func (w *contentWalker) walk(ops []content.Operation) {
 				models.ErrUnknownOperator, op.Operator))
 			continue
 		}
-		w.handleOp(op)
+		w.handleOp(ctx, op)
 	}
 }
 
 // handleOp dispatches a single content stream operation.
-func (w *contentWalker) handleOp(op content.Operation) {
+func (w *contentWalker) handleOp(ctx context.Context, op content.Operation) {
 	switch op.Operator {
 	// Device gray operators.
 	case "g", "G":
@@ -115,9 +113,9 @@ func (w *contentWalker) handleOp(op content.Operation) {
 		w.handleDeviceCS(op.Operator, "DeviceCMYK")
 	// Set color space operators.
 	case "cs":
-		w.handleCSOperator(op, false)
+		w.handleCSOperator(ctx, op, false)
 	case "CS":
-		w.handleCSOperator(op, true)
+		w.handleCSOperator(ctx, op, true)
 	// Graphics state save/restore.
 	case "q":
 		w.stack = append(w.stack, walkerState{
@@ -143,10 +141,10 @@ func (w *contentWalker) handleOp(op content.Operation) {
 		}
 	// Extended graphics state.
 	case "gs":
-		w.handleGS(op)
+		w.handleGS(ctx, op)
 	// Invoke XObject.
 	case "Do":
-		w.handleDo(op)
+		w.handleDo(ctx, op)
 	// Rendering intent.
 	case "ri":
 		w.handleRI(op)
@@ -164,7 +162,7 @@ func (w *contentWalker) handleDeviceCS(operator string, deviceCS ast.PdfName) {
 }
 
 // handleCSOperator processes cs/CS operators that set the fill/stroke color space.
-func (w *contentWalker) handleCSOperator(op content.Operation, isStroke bool) {
+func (w *contentWalker) handleCSOperator(ctx context.Context, op content.Operation, isStroke bool) {
 	if len(op.Operands) == 0 {
 		return
 	}
@@ -189,7 +187,7 @@ func (w *contentWalker) handleCSOperator(op content.Operation, isStroke bool) {
 
 	// Resolve named color space from resources.
 	if w.resources != nil {
-		resolvedCS := resolveNamedColorSpace(w.ctx, w.doc, w.resources, csName)
+		resolvedCS := resolveNamedColorSpace(ctx, w.doc, w.resources, csName)
 		if resolvedCS != "" && deviceDependentNames[resolvedCS] &&
 			!w.defaults[resolvedCS] && !iccCoversDeviceCS(w.iccN, resolvedCS) {
 			w.errors = append(w.errors, fmt.Errorf("%w: %s (resolved from /%s) via %s operator",
@@ -199,7 +197,7 @@ func (w *contentWalker) handleCSOperator(op content.Operation, isStroke bool) {
 }
 
 // handleGS processes the gs operator to apply ExtGState changes.
-func (w *contentWalker) handleGS(op content.Operation) {
+func (w *contentWalker) handleGS(ctx context.Context, op content.Operation) {
 	if len(op.Operands) == 0 || w.resources == nil {
 		return
 	}
@@ -213,7 +211,7 @@ func (w *contentWalker) handleGS(op content.Operation) {
 	if !ok {
 		return
 	}
-	gsDict, _ := document.ResolveDict(w.ctx, w.doc, gsObj)
+	gsDict, _ := document.ResolveDict(ctx, w.doc, gsObj)
 	if gsDict == nil {
 		return
 	}
@@ -221,14 +219,14 @@ func (w *contentWalker) handleGS(op content.Operation) {
 	if !ok {
 		return
 	}
-	stateDict, _ := document.ResolveDict(w.ctx, w.doc, stateObj)
+	stateDict, _ := document.ResolveDict(ctx, w.doc, stateObj)
 	if stateDict == nil {
 		return
 	}
 
 	// Check rendering intent in ExtGState.
 	if riObj, ok := stateDict["RI"]; ok {
-		riName, _ := document.ResolveName(w.ctx, w.doc, riObj)
+		riName, _ := document.ResolveName(ctx, w.doc, riObj)
 		if riName != "" {
 			if !validRenderingIntents[riName] {
 				w.errors = append(w.errors, fmt.Errorf("%w: /%s in ExtGState",
@@ -239,7 +237,7 @@ func (w *contentWalker) handleGS(op content.Operation) {
 }
 
 // handleDo processes the Do operator, recursing into Form XObjects.
-func (w *contentWalker) handleDo(op content.Operation) {
+func (w *contentWalker) handleDo(ctx context.Context, op content.Operation) {
 	if len(op.Operands) == 0 || w.resources == nil {
 		return
 	}
@@ -253,7 +251,7 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	if !ok {
 		return
 	}
-	xobjDict, _ := document.ResolveDict(w.ctx, w.doc, xobjObj)
+	xobjDict, _ := document.ResolveDict(ctx, w.doc, xobjObj)
 	if xobjDict == nil {
 		return
 	}
@@ -267,7 +265,7 @@ func (w *contentWalker) handleDo(op content.Operation) {
 		return
 	}
 
-	stream, _ := document.ResolveStream(w.ctx, w.doc, obj)
+	stream, _ := document.ResolveStream(ctx, w.doc, obj)
 	if stream.Dict == nil {
 		return
 	}
@@ -277,7 +275,7 @@ func (w *contentWalker) handleDo(op content.Operation) {
 
 	// Check Image XObject color space.
 	if st == "Image" {
-		w.checkImageCS(stream.Dict)
+		w.checkImageCS(ctx, stream.Dict)
 		return
 	}
 
@@ -290,7 +288,7 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	}
 
 	// Parse the Form XObject's content stream.
-	ops, err := content.ParsePageContent(w.ctx, w.doc, stream)
+	ops, err := content.ParsePageContent(ctx, w.doc, stream)
 	if err != nil {
 		return
 	}
@@ -298,7 +296,7 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	// Determine resources for the Form XObject.
 	formResources := w.resources
 	if frObj, ok := stream.Dict["Resources"]; ok {
-		frDict, _ := document.ResolveDict(w.ctx, w.doc, frObj)
+		frDict, _ := document.ResolveDict(ctx, w.doc, frObj)
 		if frDict != nil {
 			formResources = frDict
 		}
@@ -307,15 +305,14 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	// Merge Form XObject's Group CS defaults.
 	formDefaults := make(map[ast.PdfName]bool)
 	maps.Copy(formDefaults, w.defaults)
-	addTransparencyGroupDefaults(w.ctx, w.doc, stream.Dict, formDefaults)
+	addTransparencyGroupDefaults(ctx, w.doc, stream.Dict, formDefaults)
 	if formResources != nil {
-		maps.Copy(formDefaults, collectDefaultColorSpaces(w.ctx, w.doc, formResources))
+		maps.Copy(formDefaults, collectDefaultColorSpaces(ctx, w.doc, formResources))
 	}
 
 	// Recurse with a child walker sharing error accumulation.
 	w.visited[obj] = true
 	child := &contentWalker{
-		ctx:       w.ctx,
 		doc:       w.doc,
 		defaults:  formDefaults,
 		iccN:      w.iccN,
@@ -323,26 +320,26 @@ func (w *contentWalker) handleDo(op content.Operation) {
 		depth:     w.depth + 1,
 		visited:   w.visited,
 	}
-	child.walk(ops)
+	child.walk(ctx, ops)
 	w.errors = append(w.errors, child.errors...)
 
 	// Check the Form XObject's named ColorSpace resources for device-dependent
 	// color spaces not covered by defaults or ICC output intents.
 	if formResources != nil {
-		if errs := checkNamedColorSpaceResources(w.ctx, w.doc, formResources, formDefaults, w.iccN); len(errs) > 0 {
+		if errs := checkNamedColorSpaceResources(ctx, w.doc, formResources, formDefaults, w.iccN); len(errs) > 0 {
 			w.errors = append(w.errors, errs...)
 		}
 	}
 }
 
 // checkImageCS validates the /ColorSpace of an Image XObject.
-func (w *contentWalker) checkImageCS(dict ast.PdfDict) {
+func (w *contentWalker) checkImageCS(ctx context.Context, dict ast.PdfDict) {
 	csObj, ok := dict["ColorSpace"]
 	if !ok {
 		return
 	}
-	if isDeviceDependentCS(w.ctx, w.doc, csObj, w.defaults) {
-		csRes, _ := document.ResolveObject(w.ctx, w.doc, csObj)
+	if isDeviceDependentCS(ctx, w.doc, csObj, w.defaults) {
+		csRes, _ := document.ResolveObject(ctx, w.doc, csObj)
 		csName := ast.PdfName("")
 		switch cs := csRes.(type) {
 		case ast.PdfName:
@@ -377,7 +374,7 @@ func (w *contentWalker) handleRI(op content.Operation) {
 }
 
 // walkType3CharProcs walks Type3 font CharProc streams for device CS usage.
-func (w *contentWalker) walkType3CharProcs() {
+func (w *contentWalker) walkType3CharProcs(ctx context.Context) {
 	if w.resources == nil {
 		return
 	}
@@ -385,12 +382,12 @@ func (w *contentWalker) walkType3CharProcs() {
 	if !ok {
 		return
 	}
-	fontDict, _ := document.ResolveDict(w.ctx, w.doc, fontObj)
+	fontDict, _ := document.ResolveDict(ctx, w.doc, fontObj)
 	if fontDict == nil {
 		return
 	}
 	for _, fObj := range fontDict {
-		fDict, _ := document.ResolveDict(w.ctx, w.doc, fObj)
+		fDict, _ := document.ResolveDict(ctx, w.doc, fObj)
 		if fDict == nil {
 			continue
 		}
@@ -403,21 +400,20 @@ func (w *contentWalker) walkType3CharProcs() {
 		if !ok {
 			continue
 		}
-		cpDict, _ := document.ResolveDict(w.ctx, w.doc, cpObj)
+		cpDict, _ := document.ResolveDict(ctx, w.doc, cpObj)
 		if cpDict == nil {
 			continue
 		}
 		for _, procObj := range cpDict {
-			procStream, _ := document.ResolveStream(w.ctx, w.doc, procObj)
+			procStream, _ := document.ResolveStream(ctx, w.doc, procObj)
 			if procStream.Dict == nil {
 				continue
 			}
-			ops, err := content.ParsePageContent(w.ctx, w.doc, procStream)
+			ops, err := content.ParsePageContent(ctx, w.doc, procStream)
 			if err != nil {
 				continue
 			}
 			child := &contentWalker{
-				ctx:       w.ctx,
 				doc:       w.doc,
 				defaults:  w.defaults,
 				iccN:      w.iccN,
@@ -425,7 +421,7 @@ func (w *contentWalker) walkType3CharProcs() {
 				depth:     w.depth + 1,
 				visited:   w.visited,
 			}
-			child.walk(ops)
+			child.walk(ctx, ops)
 			w.errors = append(w.errors, child.errors...)
 		}
 	}
@@ -456,10 +452,10 @@ func checkContentStreamCompliance(ctx context.Context, doc *document.Document, c
 		// Walk page content stream.
 		ops, err := content.ParsePageContent(ctx, doc, page)
 		if err == nil && len(ops) > 0 {
-			w := newContentWalker(ctx, doc, defaults, iccN, resources)
-			w.walk(ops)
+			w := newContentWalker(doc, defaults, iccN, resources)
+			w.walk(ctx, ops)
 			// Also walk Type3 CharProcs and Form XObjects recursively via Do.
-			w.walkType3CharProcs()
+			w.walkType3CharProcs(ctx)
 			if len(w.errors) > 0 {
 				return w.errors[:1] // Return first error for consistency with old behavior.
 			}
@@ -579,8 +575,8 @@ func checkPatternResourceCS(ctx context.Context, doc *document.Document, resourc
 			maps.Copy(patDefaults, collectDefaultColorSpaces(ctx, doc, patResources))
 		}
 
-		w := newContentWalker(ctx, doc, patDefaults, iccN, patResources)
-		w.walk(ops)
+		w := newContentWalker(doc, patDefaults, iccN, patResources)
+		w.walk(ctx, ops)
 		if len(w.errors) > 0 {
 			return w.errors[:1]
 		}
@@ -763,8 +759,8 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 				annotResourceDict = getResources(ctx, doc, page)
 			}
 
-			w := newContentWalker(ctx, doc, annotDefaults, iccN, annotResourceDict)
-			w.walk(ops)
+			w := newContentWalker(doc, annotDefaults, iccN, annotResourceDict)
+			w.walk(ctx, ops)
 			if len(w.errors) > 0 {
 				return w.errors[:1]
 			}
