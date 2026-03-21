@@ -57,12 +57,14 @@ func pdfaBaseChecks(profile models.PDFAProfile) []catalogCheckFunc {
 	return []catalogCheckFunc{
 		checkFontsEmbedded,
 		checkICCProfile,
-		checkContentStreamDeviceCS,
-		checkAnnotationDeviceCS,
+		checkContentStreamCompliance,
 		checkNoLZW,
 		checkNoReferenceXObjects,
 		checkRenderingIntent,
 		makeXMPCheck(profile),
+		checkPageSizeBounds,
+		checkNameLengths,
+		makeStringLengthCheck(profile),
 	}
 }
 
@@ -306,6 +308,10 @@ func pdfuaBaseChecks() []catalogCheckFunc {
 		checkFormFieldTooltips,
 		checkImagesHaveAltText,
 		checkArtifactTagging,
+		checkTableStructure,
+		checkListStructure,
+		checkHeadingHierarchy,
+		checkTHScope,
 	}
 }
 

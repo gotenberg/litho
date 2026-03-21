@@ -1,0 +1,132 @@
+package compliance
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
+)
+
+// checkPageSizeBounds verifies that all page MediaBox dimensions are within
+// the allowed range of [3, 14400] user units per ISO 19005 §6.1.12.
+func checkPageSizeBounds(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	const (
+		minDim = 3.0
+		maxDim = 14400.0
+	)
+
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		mbObj, ok := page["MediaBox"]
+		if !ok {
+			continue
+		}
+		mbRes, _ := document.ResolveObject(ctx, doc, mbObj)
+		mbArr, ok := mbRes.(ast.PdfArray)
+		if !ok || len(mbArr) < 4 { //nolint:mnd // PDF rectangles have 4 elements
+			continue
+		}
+		x1 := document.GetFloat(mbArr[0])
+		y1 := document.GetFloat(mbArr[1])
+		x2 := document.GetFloat(mbArr[2])
+		y2 := document.GetFloat(mbArr[3])
+
+		width := x2 - x1
+		height := y2 - y1
+		if width < 0 {
+			width = -width
+		}
+		if height < 0 {
+			height = -height
+		}
+
+		if width < minDim || width > maxDim || height < minDim || height > maxDim {
+			return []error{fmt.Errorf("%w: %.1f x %.1f",
+				models.ErrPageSizeOutOfBounds, width, height)}
+		}
+	}
+	return nil
+}
+
+// checkNameLengths verifies that PdfName values in the catalog and page
+// resources do not exceed 127 bytes per ISO 19005 §6.1.13.
+func checkNameLengths(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	const maxNameLen = 127
+
+	// Check catalog-level names.
+	for key := range catalog {
+		if len(key) > maxNameLen {
+			return []error{fmt.Errorf("%w: /%s (%d bytes)",
+				models.ErrNameTooLong, key, len(key))}
+		}
+	}
+
+	// Check page resource names.
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		if err := checkDictNameLengths(ctx, doc, resources, maxNameLen); err != nil {
+			return []error{err}
+		}
+	}
+	return nil
+}
+
+// checkDictNameLengths recursively checks PdfName key lengths in a dictionary.
+func checkDictNameLengths(ctx context.Context, doc *document.Document, dict ast.PdfDict, maxLen int) error {
+	for key, val := range dict {
+		if len(key) > maxLen {
+			return fmt.Errorf("%w: /%s (%d bytes)",
+				models.ErrNameTooLong, key, len(key))
+		}
+		// Check name values.
+		valRes, _ := document.ResolveObject(ctx, doc, val)
+		if name, ok := valRes.(ast.PdfName); ok {
+			if len(name) > maxLen {
+				return fmt.Errorf("%w: /%s (%d bytes)",
+					models.ErrNameTooLong, name, len(name))
+			}
+		}
+	}
+	return nil
+}
+
+// checkStringLengths verifies that PdfString values do not exceed the
+// maximum length allowed by the profile. PDF/A-2+ allows 32767 bytes;
+// PDF/A-1 and general PDF allow 65535.
+func checkStringLengths(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile models.PDFAProfile) []error {
+	maxLen := 65535 //nolint:mnd // PDF spec string limit
+	if PdfaPart(profile) >= 2 {
+		maxLen = 32767 //nolint:mnd // PDF/A-2+ string limit
+	}
+
+	// Check document info dict strings.
+	if infoObj, ok := doc.Index.Trailer["Info"]; ok {
+		infoRes, _ := document.ResolveObject(ctx, doc, infoObj)
+		if infoDict, ok := infoRes.(ast.PdfDict); ok {
+			for key, val := range infoDict {
+				valRes, _ := document.ResolveObject(ctx, doc, val)
+				if s, ok := valRes.(ast.PdfString); ok {
+					if len(s) > maxLen {
+						return []error{fmt.Errorf("%w: /%s (%d bytes, max %d)",
+							models.ErrStringTooLong, key, len(s), maxLen)}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// makeStringLengthCheck returns a catalog check function for string length
+// validation with the given profile.
+func makeStringLengthCheck(profile models.PDFAProfile) catalogCheckFunc {
+	return func(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+		return checkStringLengths(ctx, doc, catalog, profile)
+	}
+}

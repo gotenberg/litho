@@ -121,4 +121,25 @@ var (
 	ErrInvalidStructureNamespace = errors.New("compliance: structure namespace missing required /NS URI")
 	ErrLinkNotNested             = errors.New("compliance: /Link annotation not nested in /Link structure element")
 	ErrFormulaMissingMathML      = errors.New("compliance: /Formula structure element missing /AF with MathML")
+
+	// Content stream compliance errors (Phase 1).
+	ErrDeviceCSWithoutDefault = errors.New("compliance: device-dependent color space used without Default override or OutputIntent")
+	ErrForbiddenOperator      = errors.New("compliance: forbidden content stream operator")
+
+	// Implementation limit errors (Phase 4).
+	ErrPageSizeOutOfBounds  = errors.New("compliance: page MediaBox dimensions outside allowed range [3, 14400]")
+	ErrNameTooLong          = errors.New("compliance: PDF name exceeds 127-byte limit")
+	ErrStringTooLong        = errors.New("compliance: PDF string exceeds maximum byte length")
+	ErrCIDOutOfRange        = errors.New("compliance: CID value exceeds 65535")
+	ErrInvalidHeaderVersion = errors.New("compliance: file header version does not match declared profile")
+
+	// Structure tree validation errors (Phase 3).
+	ErrTableStructureInvalid    = errors.New("compliance: table structure element has invalid children")
+	ErrTableColumnCountMismatch = errors.New("compliance: table rows have inconsistent column counts")
+	ErrListStructureInvalid     = errors.New("compliance: list structure element has invalid children")
+	ErrHeadingSkipped           = errors.New("compliance: heading levels must not be skipped")
+	ErrMissingTHScope           = errors.New("compliance: TH element missing /Scope attribute")
+
+	// XMP container type errors (Phase 2).
+	ErrXMPContainerTypeMismatch = errors.New("compliance: XMP property uses wrong container type")
 )

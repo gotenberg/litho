@@ -5,13 +5,11 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -389,148 +387,6 @@ func isDeviceDependentCS(ctx context.Context, doc *document.Document, csObj ast.
 	return false
 }
 
-// checkContentStreamDeviceCS parses page content streams and verifies that
-// device-dependent color spaces are not used without a Default override or
-// OutputIntent. This catches uses of g/G/rg/RG/k/K operators (implicit
-// device CS) and cs/CS operators naming device-dependent spaces directly.
-func checkContentStreamDeviceCS(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
-	// Get the ICC profile component count from the catalog-level OutputIntent.
-	catalogICCN := getOutputIntentICCComponents(ctx, doc, catalog)
-
-	pages := collectPages(ctx, doc, catalog)
-	for _, page := range pages {
-		resources := getResources(ctx, doc, page)
-		defaults := make(map[ast.PdfName]bool)
-		if resources != nil {
-			defaults = collectDefaultColorSpaces(ctx, doc, resources)
-			addTransparencyGroupDefaults(ctx, doc, page, defaults)
-		}
-
-		// Use page-level OutputIntent if available, else catalog-level.
-		iccN := catalogICCN
-		if pageICCN := getOutputIntentICCComponents(ctx, doc, page); pageICCN > 0 {
-			iccN = pageICCN
-		}
-
-		ops, err := content.ParsePageContent(ctx, doc, page)
-		if err != nil {
-			continue
-		}
-
-		if err := scanOpsForDeviceCS(ctx, doc, ops, defaults, resources, iccN); err != nil {
-			return []error{err}
-		}
-
-		// Also check inline images for device-dependent color spaces.
-		if err := checkInlineImageDeviceCS(ctx, doc, page, defaults, iccN); err != nil {
-			return []error{err}
-		}
-
-		// Note: Form XObject and Type3 CharProc content streams are NOT
-		// scanned here because they have complex Group CS inheritance and
-		// rendering mode semantics that require full graphics state tracking.
-	}
-	return nil
-}
-
-// scanXObjectsForDeviceCS parses Form XObject content streams for device CS.
-func scanXObjectsForDeviceCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) error {
-	xobjObj, ok := resources["XObject"]
-	if !ok {
-		return nil
-	}
-	xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
-	xobjDict, ok := xobjRes.(ast.PdfDict)
-	if !ok {
-		return nil
-	}
-	for _, obj := range xobjDict {
-		objRes, _ := document.ResolveObject(ctx, doc, obj)
-		stream, ok := objRes.(ast.PdfStream)
-		if !ok {
-			continue
-		}
-		stObj, _ := stream.Dict["Subtype"]
-		st, _ := stObj.(ast.PdfName)
-		if st != "Form" {
-			continue
-		}
-		// Use the Form XObject's own resources if available.
-		formResources := resources
-		if frObj, ok := stream.Dict["Resources"]; ok {
-			frRes, _ := document.ResolveObject(ctx, doc, frObj)
-			if frDict, ok := frRes.(ast.PdfDict); ok {
-				formResources = frDict
-			}
-		}
-		// Form XObject's /Group transparency CS can remap device colors.
-		formDefaults := make(map[ast.PdfName]bool)
-		maps.Copy(formDefaults, defaults)
-		addTransparencyGroupDefaults(ctx, doc, stream.Dict, formDefaults)
-		if formResources != nil {
-			maps.Copy(formDefaults, collectDefaultColorSpaces(ctx, doc, formResources))
-		}
-		ops, err := content.ParsePageContent(ctx, doc, stream)
-		if err != nil {
-			continue
-		}
-		if err := scanOpsForDeviceCS(ctx, doc, ops, formDefaults, formResources, iccN); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// scanFontsForDeviceCS checks Type3 font CharProc streams for device CS.
-func scanFontsForDeviceCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) error {
-	fontObj, ok := resources["Font"]
-	if !ok {
-		return nil
-	}
-	fontRes, _ := document.ResolveObject(ctx, doc, fontObj)
-	fontDict, ok := fontRes.(ast.PdfDict)
-	if !ok {
-		return nil
-	}
-	for _, fObj := range fontDict {
-		fRes, _ := document.ResolveObject(ctx, doc, fObj)
-		fDict, ok := fRes.(ast.PdfDict)
-		if !ok {
-			continue
-		}
-		// Only Type3 fonts have CharProcs.
-		stObj, _ := fDict["Subtype"]
-		st, _ := stObj.(ast.PdfName)
-		if st != "Type3" {
-			continue
-		}
-		cpObj, ok := fDict["CharProcs"]
-		if !ok {
-			continue
-		}
-		cpRes, _ := document.ResolveObject(ctx, doc, cpObj)
-		cpDict, ok := cpRes.(ast.PdfDict)
-		if !ok {
-			continue
-		}
-		for _, procObj := range cpDict {
-			procRes, _ := document.ResolveObject(ctx, doc, procObj)
-			procStream, ok := procRes.(ast.PdfStream)
-			if !ok {
-				continue
-			}
-			ops, err := content.ParsePageContent(ctx, doc, procStream)
-			if err != nil {
-				continue
-			}
-			if err := scanOpsForDeviceCS(ctx, doc, ops, defaults, resources, iccN); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // inlineImageDeviceCSAbbrevs maps the abbreviated color space names used in
 // inline image dictionaries (BI...ID...EI) to their full device-dependent names.
 var inlineImageDeviceCSAbbrevs = map[string]ast.PdfName{
@@ -618,129 +474,6 @@ func getContentStreamBytes(ctx context.Context, doc *document.Document, contents
 		return buf.Bytes(), nil
 	}
 	return nil, nil
-}
-
-// checkAnnotationDeviceCS parses annotation appearance streams (/AP /N) and
-// checks for device-dependent color space usage, similar to
-// checkContentStreamDeviceCS but for annotation appearances.
-func checkAnnotationDeviceCS(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
-	catalogICCN := getOutputIntentICCComponents(ctx, doc, catalog)
-
-	pages := collectPages(ctx, doc, catalog)
-	for _, page := range pages {
-		resources := getResources(ctx, doc, page)
-		defaults := make(map[ast.PdfName]bool)
-		if resources != nil {
-			defaults = collectDefaultColorSpaces(ctx, doc, resources)
-			addTransparencyGroupDefaults(ctx, doc, page, defaults)
-		}
-
-		iccN := catalogICCN
-		if pageICCN := getOutputIntentICCComponents(ctx, doc, page); pageICCN > 0 {
-			iccN = pageICCN
-		}
-
-		annotsObj, ok := page["Annots"]
-		if !ok {
-			continue
-		}
-		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
-		annotsArr, ok := annotsRes.(ast.PdfArray)
-		if !ok {
-			continue
-		}
-		for _, annotObj := range annotsArr {
-			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
-			annotDict, ok := annotRes.(ast.PdfDict)
-			if !ok {
-				continue
-			}
-			// Get the /AP /N appearance stream.
-			apObj, ok := annotDict["AP"]
-			if !ok {
-				continue
-			}
-			apRes, _ := document.ResolveObject(ctx, doc, apObj)
-			apDict, ok := apRes.(ast.PdfDict)
-			if !ok {
-				continue
-			}
-			nObj, ok := apDict["N"]
-			if !ok {
-				continue
-			}
-
-			// Parse the appearance stream's content.
-			ops, err := content.ParsePageContent(ctx, doc, nObj)
-			if err != nil {
-				continue
-			}
-			// Use annotation's own resources if available, fall back to page resources.
-			annotResources := resources
-			nRes, _ := document.ResolveObject(ctx, doc, nObj)
-			if nStream, ok := nRes.(ast.PdfStream); ok {
-				if arObj, ok := nStream.Dict["Resources"]; ok {
-					arRes, _ := document.ResolveObject(ctx, doc, arObj)
-					if arDict, ok := arRes.(ast.PdfDict); ok {
-						annotResources = arDict
-					}
-				}
-			}
-			if err := scanOpsForDeviceCS(ctx, doc, ops, defaults, annotResources, iccN); err != nil {
-				return []error{err}
-			}
-		}
-	}
-	return nil
-}
-
-// scanOpsForDeviceCS checks a sequence of content stream operations for
-// device-dependent color space usage. Named color spaces (e.g., /Cs1) are
-// resolved against the resources ColorSpace dictionary. iccN is the component
-// count of the active OutputIntent ICC profile (0 if none).
-func scanOpsForDeviceCS(ctx context.Context, doc *document.Document, ops []content.Operation, defaults map[ast.PdfName]bool, resources ast.PdfDict, iccN int) error {
-	for _, op := range ops {
-		switch op.Operator {
-		case "g", "G":
-			if !defaults["DeviceGray"] && !iccCoversDeviceCS(iccN, "DeviceGray") {
-				return fmt.Errorf("%w: DeviceGray via %s operator",
-					models.ErrMissingICCProfile, op.Operator)
-			}
-		case "rg", "RG":
-			if !defaults["DeviceRGB"] && !iccCoversDeviceCS(iccN, "DeviceRGB") {
-				return fmt.Errorf("%w: DeviceRGB via %s operator",
-					models.ErrMissingICCProfile, op.Operator)
-			}
-		case "k", "K":
-			if !defaults["DeviceCMYK"] && !iccCoversDeviceCS(iccN, "DeviceCMYK") {
-				return fmt.Errorf("%w: DeviceCMYK via %s operator",
-					models.ErrMissingICCProfile, op.Operator)
-			}
-		case "cs", "CS":
-			if len(op.Operands) == 0 {
-				continue
-			}
-			csName, ok := op.Operands[0].(ast.PdfName)
-			if !ok {
-				continue
-			}
-			// Direct device-dependent name.
-			if deviceDependentNames[csName] && !defaults[csName] && !iccCoversDeviceCS(iccN, csName) {
-				return fmt.Errorf("%w: %s via %s operator",
-					models.ErrMissingICCProfile, csName, op.Operator)
-			}
-			// Resolve named color space from resources.
-			if resources != nil {
-				if resolvedCS := resolveNamedColorSpace(ctx, doc, resources, csName); resolvedCS != "" {
-					if deviceDependentNames[resolvedCS] && !defaults[resolvedCS] && !iccCoversDeviceCS(iccN, resolvedCS) {
-						return fmt.Errorf("%w: %s (resolved from /%s) via %s operator",
-							models.ErrMissingICCProfile, resolvedCS, csName, op.Operator)
-					}
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // resolveNamedColorSpace looks up a color space name in the resources
@@ -1348,6 +1081,9 @@ func checkXMPCompliance(ctx context.Context, doc *document.Document, catalog ast
 
 	// 6.6.2.3.3 / 6.7.8: Extension schema structure validation.
 	errs = append(errs, checkExtensionSchemaStructure(xmpData)...)
+
+	// 6.6.2.3.1 / 6.7.2: Container type validation for strict namespaces.
+	errs = append(errs, checkXMPContainerTypes(xmpData)...)
 
 	// 6.7.3: DocInfo ↔ XMP consistency (parts 1 and 4 only;
 	// parts 2/3 use different clause numbering without this requirement).
@@ -2416,6 +2152,8 @@ func checkRenderingIntent(ctx context.Context, doc *document.Document, catalog a
 
 // checkOverprintMode verifies that OPM (overprint mode) is not 1 when an
 // ICCBased CMYK colour space is used with overprinting enabled.
+//
+//nolint:unused // Will be wired into the PDF/A rule set.
 func checkOverprintMode(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
@@ -3076,6 +2814,8 @@ func structTreeHasLang(ctx context.Context, doc *document.Document, obj ast.PdfO
 
 // checkFigureAltText traverses the structure tree and verifies that every
 // Figure element has an /Alt attribute providing alternative text.
+//
+//nolint:unused // Will be wired into the PDF/A rule set.
 func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
@@ -3098,6 +2838,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 	return errs
 }
 
+//nolint:unused // Called by checkFigureAltText which will be wired in.
 func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
 	switch v := obj.(type) {
 	case ast.PdfArray:
