@@ -161,4 +161,11 @@ var (
 
 	// PDF/A ExtGState errors (6.2.5).
 	ErrExtGStateHTP = errors.New("compliance: ExtGState must not contain /HTP key")
+
+	// PDF/A Image dict errors (6.2.8).
+	ErrImageOPIForbidden         = errors.New("compliance: Image dictionary must not contain /OPI key")
+	ErrImageInterpolateForbidden = errors.New("compliance: Image /Interpolate must be false")
+
+	// Font CIDSystemInfo errors (6.2.11.3.1).
+	ErrCIDSystemInfoMismatch = errors.New("compliance: CIDFont and CMap CIDSystemInfo entries are incompatible")
 )

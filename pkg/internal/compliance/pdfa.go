@@ -3885,6 +3885,77 @@ func checkImageAlternates(ctx context.Context, doc *document.Document, catalog a
 	return nil
 }
 
+// checkImageOPI verifies that image XObjects do not contain the /OPI key
+// (6.2.8 test 2, parts 2+).
+func checkImageOPI(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		xobjObj, ok := resources["XObject"]
+		if !ok {
+			continue
+		}
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		xobjDict, ok := xobjRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, obj := range xobjDict {
+			dict := resolveXObjectDict(ctx, doc, obj)
+			if dict == nil {
+				continue
+			}
+			stObj, _ := dict["Subtype"]
+			if st, ok := stObj.(ast.PdfName); ok && st == "Image" {
+				if _, ok := dict["OPI"]; ok {
+					return []error{models.ErrImageOPIForbidden}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// checkImageInterpolate verifies that image XObjects with /Interpolate key
+// have it set to false (6.2.8 test 3, parts 2+).
+func checkImageInterpolate(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		xobjObj, ok := resources["XObject"]
+		if !ok {
+			continue
+		}
+		xobjRes, _ := document.ResolveObject(ctx, doc, xobjObj)
+		xobjDict, ok := xobjRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, obj := range xobjDict {
+			dict := resolveXObjectDict(ctx, doc, obj)
+			if dict == nil {
+				continue
+			}
+			stObj, _ := dict["Subtype"]
+			if st, ok := stObj.(ast.PdfName); ok && st == "Image" {
+				if interpObj, ok := dict["Interpolate"]; ok {
+					interpRes, _ := document.ResolveObject(ctx, doc, interpObj)
+					if b, ok := interpRes.(ast.PdfBool); ok && bool(b) {
+						return []error{models.ErrImageInterpolateForbidden}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // --- Interactive forms (ISO 19005, clause 6.4) ---
 
 // checkWidgetActions verifies that widget annotation dictionaries do not
