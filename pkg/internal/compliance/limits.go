@@ -154,3 +154,113 @@ func makeStringLengthCheck(profile models.PDFAProfile) catalogCheckFunc {
 		return checkStringLengths(ctx, doc, catalog, profile)
 	}
 }
+
+// decodeName decodes #XX hex escape sequences in a PdfName, returning the
+// decoded string.
+func decodeName(name ast.PdfName) string {
+	s := string(name)
+	if !strings.Contains(s, "#") {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '#' && i+2 < len(s) {
+			if val, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
+				b.WriteByte(byte(val))
+				i += 2
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// checkCatalogVersionFormat verifies that if /Version is present in the
+// catalog, it has exactly 3 characters in the format "x.y" where x and y
+// are digits.
+func checkCatalogVersionFormat(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	vObj, ok := catalog["Version"]
+	if !ok {
+		return nil
+	}
+	vRes, _ := document.ResolveObject(ctx, doc, vObj)
+	vName, ok := vRes.(ast.PdfName)
+	if !ok {
+		return nil
+	}
+	v := decodeName(vName)
+	// Must be exactly 3 characters: "x.y"
+	if len(v) != 3 || v[1] != '.' || v[0] < '0' || v[0] > '9' || v[2] < '0' || v[2] > '9' { //nolint:mnd // version format "x.y"
+		return []error{fmt.Errorf("%w: /%s", models.ErrInvalidHeaderVersion, v)}
+	}
+	return nil
+}
+
+// checkPermissionsDict verifies that the /Perms dictionary in the catalog
+// contains only allowed keys: /UR3 and /DocMDP (6.1.12 test 1).
+func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	permsObj, ok := catalog["Perms"]
+	if !ok {
+		return nil
+	}
+	permsRes, _ := document.ResolveObject(ctx, doc, permsObj)
+	permsDict, ok := permsRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for key := range permsDict {
+		if key != "UR3" && key != "DocMDP" {
+			return []error{fmt.Errorf("%w: /Perms contains forbidden key /%s",
+				models.ErrInvalidHeaderVersion, key)}
+		}
+	}
+	return nil
+}
+
+// checkDocMDPSignatureRefs verifies that if /DocMDP is present in /Perms,
+// the Signature References dictionary does not contain /DigestLocation,
+// /DigestMethod, or /DigestValue (6.1.12 test 2).
+func checkDocMDPSignatureRefs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	permsObj, ok := catalog["Perms"]
+	if !ok {
+		return nil
+	}
+	permsRes, _ := document.ResolveObject(ctx, doc, permsObj)
+	permsDict, ok := permsRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	docMDPObj, ok := permsDict["DocMDP"]
+	if !ok {
+		return nil
+	}
+	docMDPRes, _ := document.ResolveObject(ctx, doc, docMDPObj)
+	sigDict, ok := docMDPRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	// Check /Reference array for forbidden keys.
+	refObj, ok := sigDict["Reference"]
+	if !ok {
+		return nil
+	}
+	refRes, _ := document.ResolveObject(ctx, doc, refObj)
+	refArr, ok := refRes.(ast.PdfArray)
+	if !ok {
+		return nil
+	}
+	forbiddenKeys := []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"}
+	for _, item := range refArr {
+		itemRes, _ := document.ResolveObject(ctx, doc, item)
+		if itemDict, ok := itemRes.(ast.PdfDict); ok {
+			for _, key := range forbiddenKeys {
+				if _, ok := itemDict[key]; ok {
+					return []error{fmt.Errorf("%w: Signature Reference contains forbidden /%s",
+						models.ErrInvalidHeaderVersion, key)}
+				}
+			}
+		}
+	}
+	return nil
+}

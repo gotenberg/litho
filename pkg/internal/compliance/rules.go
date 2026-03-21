@@ -67,6 +67,9 @@ func pdfaBaseChecks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkPageSizeBounds,
 		checkNameLengths,
 		makeStringLengthCheck(profile),
+		checkCatalogVersionFormat,
+		checkPermissionsDict,
+		checkDocMDPSignatureRefs,
 	}
 }
 
