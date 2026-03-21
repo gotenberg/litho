@@ -275,6 +275,14 @@ func (b *mockDocBuilder) withXMPTitle() *mockDocBuilder {
 	return b
 }
 
+func (b *mockDocBuilder) withXMPTitleAndUAId() *mockDocBuilder {
+	b.catalog["Metadata"] = ast.PdfStream{
+		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		Data: []byte(`<x:xmpmeta><rdf:RDF><rdf:Description xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"><dc:title>Test</dc:title><pdfuaid:part>2</pdfuaid:part></rdf:Description></rdf:RDF></x:xmpmeta>`),
+	}
+	return b
+}
+
 func (b *mockDocBuilder) withXMPNoTitle() *mockDocBuilder {
 	b.catalog["Metadata"] = ast.PdfStream{
 		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
@@ -2015,7 +2023,7 @@ func TestPDFUA2_FormulaWithAF(t *testing.T) {
 }
 
 func TestPDFUA2_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withViewerPreferences().withStructTreeRoot().withXMPTitle().withCatalogVersion("2.0").withNamespaces(true).build())
+	doc := buildTestDoc(newMockDoc().withLang("en").withMarkInfo().withViewerPreferences().withStructTreeRoot().withXMPTitleAndUAId().withCatalogVersion("2.0").withNamespaces(true).build())
 	errs := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for valid PDF/UA-2, got %v", errs)

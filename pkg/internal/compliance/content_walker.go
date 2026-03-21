@@ -39,6 +39,35 @@ type contentWalker struct {
 // maxDoRecursion is the maximum depth for recursing into Form XObjects.
 const maxDoRecursion = 10
 
+// validPDFOperators is the complete set of operators defined in ISO 32000-1
+// (Table 51) plus inline image operators (BI, ID, EI). Any operator not in
+// this set is unknown and violates clause 6.2.2.
+var validPDFOperators = map[string]bool{
+	"b": true, "B": true, "b*": true, "B*": true,
+	"BDC": true, "BI": true, "BMC": true, "BT": true, "BX": true,
+	"c": true, "cm": true, "CS": true, "cs": true,
+	"d": true, "d0": true, "d1": true, "Do": true, "DP": true,
+	"EI": true, "EMC": true, "ET": true, "EX": true,
+	"f": true, "f*": true, "F": true,
+	"G": true, "g": true, "gs": true,
+	"h": true,
+	"i": true, "ID": true,
+	"j": true, "J": true,
+	"K": true, "k": true,
+	"l": true,
+	"m": true, "M": true, "MP": true,
+	"n": true,
+	"q": true, "Q": true,
+	"re": true, "RG": true, "rg": true, "ri": true,
+	"S": true, "s": true, "SC": true, "sc": true, "SCN": true, "scn": true, "sh": true,
+	"T*": true, "Tc": true, "Td": true, "TD": true, "Tf": true,
+	"Tj": true, "TJ": true, "TL": true, "Tm": true, "Tr": true, "Ts": true, "Tw": true, "Tz": true,
+	"v": true,
+	"w": true, "W": true, "W*": true,
+	"y":  true,
+	"\"": true, "'": true,
+}
+
 // newContentWalker creates a new content walker with the given parameters.
 func newContentWalker(ctx context.Context, doc *document.Document, defaults map[ast.PdfName]bool, iccN int, resources ast.PdfDict) *contentWalker {
 	return &contentWalker{
@@ -59,6 +88,12 @@ func (w *contentWalker) walk(ops []content.Operation) {
 			if w.ctx.Err() != nil {
 				return
 			}
+		}
+		// 6.2.2 test 1: reject operators not defined in ISO 32000.
+		if !validPDFOperators[op.Operator] {
+			w.errors = append(w.errors, fmt.Errorf("%w: %s",
+				models.ErrUnknownOperator, op.Operator))
+			continue
 		}
 		w.handleOp(op)
 	}
@@ -282,6 +317,14 @@ func (w *contentWalker) handleDo(op content.Operation) {
 	}
 	child.walk(ops)
 	w.errors = append(w.errors, child.errors...)
+
+	// Check the Form XObject's named ColorSpace resources for device-dependent
+	// color spaces not covered by defaults or ICC output intents.
+	if formResources != nil {
+		if errs := checkNamedColorSpaceResources(w.ctx, w.doc, formResources, formDefaults, w.iccN); len(errs) > 0 {
+			w.errors = append(w.errors, errs...)
+		}
+	}
 }
 
 // checkImageCS validates the /ColorSpace of an Image XObject.
@@ -512,7 +555,7 @@ func checkPatternResourceCS(ctx context.Context, doc *document.Document, resourc
 			continue
 		}
 		// Only tiling patterns (PatternType 1) have content streams.
-		ptObj, _ := stream.Dict["PatternType"]
+		ptObj := stream.Dict["PatternType"]
 		if ptInt, ok := ptObj.(ast.PdfInt); ok && ptInt != 1 {
 			continue
 		}
@@ -548,6 +591,45 @@ func checkPatternResourceCS(ctx context.Context, doc *document.Document, resourc
 	return nil
 }
 
+// checkNamedColorSpaceResources scans the /Resources/ColorSpace dictionary
+// for named color spaces that resolve to device-dependent spaces (DeviceRGB,
+// DeviceCMYK, DeviceGray) not covered by defaults or ICC output intents.
+// This satisfies VeraPDF clause 6.2.4.3 which requires that ALL
+// device-dependent color spaces in the document are flagged, even those not
+// explicitly invoked via content stream operators.
+func checkNamedColorSpaceResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) []error {
+	csObj, ok := resources["ColorSpace"]
+	if !ok {
+		return nil
+	}
+	csRes, _ := document.ResolveObject(ctx, doc, csObj)
+	csDict, ok := csRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for _, obj := range csDict {
+		if isDeviceDependentCS(ctx, doc, obj, defaults) {
+			csResolved, _ := document.ResolveObject(ctx, doc, obj)
+			csName := ast.PdfName("")
+			switch cs := csResolved.(type) {
+			case ast.PdfName:
+				csName = cs
+			case ast.PdfArray:
+				if len(cs) > 0 {
+					if n, ok := cs[0].(ast.PdfName); ok {
+						csName = n
+					}
+				}
+			}
+			if !iccCoversDeviceCS(iccN, csName) {
+				return []error{fmt.Errorf("%w: %s in named ColorSpace resource",
+					models.ErrMissingICCProfile, csName)}
+			}
+		}
+	}
+	return nil
+}
+
 // checkAllXObjectCS scans all XObject resources (including those not invoked
 // via Do in the content stream) for device-dependent color spaces in Image
 // XObjects.
@@ -567,7 +649,7 @@ func checkAllXObjectCS(ctx context.Context, doc *document.Document, resources as
 		if !ok {
 			continue
 		}
-		stObj, _ := stream.Dict["Subtype"]
+		stObj := stream.Dict["Subtype"]
 		st, _ := stObj.(ast.PdfName)
 		if st != "Image" {
 			continue

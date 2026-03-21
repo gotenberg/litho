@@ -146,4 +146,12 @@ var (
 
 	// XMP container type errors (Phase 2).
 	ErrXMPContainerTypeMismatch = errors.New("compliance: XMP property uses wrong container type")
+
+	// Content stream operator errors (6.2.2).
+	ErrUnknownOperator = errors.New("compliance: content stream contains unknown operator")
+
+	// PDF/UA identification and annotation accessibility errors.
+	ErrMissingPDFUAId        = errors.New("compliance: XMP missing PDF/UA identification (pdfuaid:part)")
+	ErrAnnotationMissingAlt  = errors.New("compliance: annotation missing /Contents or /Alt in structure element")
+	ErrLinkMissingAltContent = errors.New("compliance: Link annotation missing alternate description via /Contents")
 )

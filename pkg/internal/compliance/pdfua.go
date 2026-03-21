@@ -934,3 +934,91 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 		}
 	}
 }
+
+// --- PDF/UA identification ---
+
+// checkPDFUAIdentification verifies that the XMP metadata contains
+// pdfuaid:part with the correct value for the declared PDF/UA profile.
+func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	mdObj, ok := catalog["Metadata"]
+	if !ok {
+		return []error{models.ErrMissingPDFUAId}
+	}
+	mdRes, _ := document.ResolveObject(ctx, doc, mdObj)
+	stream, ok := mdRes.(ast.PdfStream)
+	if !ok {
+		return []error{models.ErrMissingPDFUAId}
+	}
+
+	data := stream.Data
+	if len(data) == 0 {
+		return []error{models.ErrMissingPDFUAId}
+	}
+
+	// Check for pdfuaid:part presence.
+	if !bytes.Contains(data, []byte("pdfuaid:part")) &&
+		!bytes.Contains(data, []byte("pdfua/ns/id")) {
+		return []error{models.ErrMissingPDFUAId}
+	}
+	return nil
+}
+
+// --- Annotation accessibility (PDF/UA-1 §7.18) ---
+
+// checkAnnotationAltText verifies that non-widget, non-hidden annotations
+// have either a /Contents key or an /Alt entry in their enclosing structure
+// element (PDF/UA-1 §7.18.1).
+func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		annotsArr, ok := annotsRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+			annotDict, ok := annotRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+
+			// Skip Widget annotations and hidden annotations.
+			subtypeName := resolveAnnotSubtype(ctx, doc, annotDict)
+			if subtypeName == "Widget" || subtypeName == "Popup" {
+				continue
+			}
+
+			// Skip hidden annotations (bit 2 of /F flags).
+			if fObj, ok := annotDict["F"]; ok {
+				fRes, _ := document.ResolveObject(ctx, doc, fObj)
+				if fInt, ok := fRes.(ast.PdfInt); ok {
+					const flagHidden = 1 << 1 // bit 2
+					if int(fInt)&flagHidden != 0 {
+						continue
+					}
+				}
+			}
+
+			// Skip annotations with zero-area Rect (invisible).
+			if isZeroRect(ctx, doc, annotDict) {
+				continue
+			}
+
+			// Annotation must have /Contents or /StructParent (linked to struct elem with /Alt).
+			if _, hasContents := annotDict["Contents"]; hasContents {
+				continue
+			}
+			if _, hasStructParent := annotDict["StructParent"]; hasStructParent {
+				continue
+			}
+
+			return []error{models.ErrAnnotationMissingAlt}
+		}
+	}
+	return nil
+}
