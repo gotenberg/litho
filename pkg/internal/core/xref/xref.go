@@ -59,16 +59,32 @@ func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, e
 		return 0, fmt.Errorf("%w: invalid /W array", ErrMalformedXRef)
 	}
 
-	w0 := int(wArray[0].(ast.PdfInt))
-	w1 := int(wArray[1].(ast.PdfInt))
-	w2 := int(wArray[2].(ast.PdfInt))
+	w0Int, ok := wArray[0].(ast.PdfInt)
+	if !ok {
+		return 0, fmt.Errorf("%w: /W[0] is not an integer", ErrMalformedXRef)
+	}
+	w1Int, ok := wArray[1].(ast.PdfInt)
+	if !ok {
+		return 0, fmt.Errorf("%w: /W[1] is not an integer", ErrMalformedXRef)
+	}
+	w2Int, ok := wArray[2].(ast.PdfInt)
+	if !ok {
+		return 0, fmt.Errorf("%w: /W[2] is not an integer", ErrMalformedXRef)
+	}
+	w0 := int(w0Int)
+	w1 := int(w1Int)
+	w2 := int(w2Int)
 	entrySize := w0 + w1 + w2
 
 	sizeObj, ok := stream.Dict["Size"]
 	if !ok {
 		return 0, fmt.Errorf("%w: missing /Size", ErrMalformedXRef)
 	}
-	size := int(sizeObj.(ast.PdfInt))
+	sizeInt, ok := sizeObj.(ast.PdfInt)
+	if !ok {
+		return 0, fmt.Errorf("%w: /Size is not an integer", ErrMalformedXRef)
+	}
+	size := int(sizeInt)
 
 	var indexArray ast.PdfArray
 	if indexObj, ok := stream.Dict["Index"]; ok {
@@ -87,8 +103,16 @@ func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, e
 
 	offset := 0
 	for i := 0; i < len(indexArray); i += 2 {
-		startObj := int(indexArray[i].(ast.PdfInt))
-		count := int(indexArray[i+1].(ast.PdfInt))
+		startInt, ok := indexArray[i].(ast.PdfInt)
+		if !ok {
+			return 0, fmt.Errorf("%w: /Index start is not an integer", ErrMalformedXRef)
+		}
+		countInt, ok := indexArray[i+1].(ast.PdfInt)
+		if !ok {
+			return 0, fmt.Errorf("%w: /Index count is not an integer", ErrMalformedXRef)
+		}
+		startObj := int(startInt)
+		count := int(countInt)
 
 		for j := range count {
 			if offset+entrySize > len(data) {

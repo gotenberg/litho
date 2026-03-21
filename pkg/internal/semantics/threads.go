@@ -28,7 +28,11 @@ func GetThreads(ctx context.Context, doc *document.Document) ([]Thread, error) {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}
 
-	rootRes, err := doc.Resolve(ctx, rootObj.(ast.PdfIndirectRef))
+	rootRef, ok := rootObj.(ast.PdfIndirectRef)
+	if !ok {
+		return nil, fmt.Errorf("trailer /Root is not an indirect reference")
+	}
+	rootRes, err := doc.Resolve(ctx, rootRef)
 	if err != nil {
 		return nil, err
 	}

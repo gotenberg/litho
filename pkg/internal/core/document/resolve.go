@@ -193,13 +193,21 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 	if !ok {
 		return nil, fmt.Errorf("object stream missing /N")
 	}
-	n := int(nObj.(ast.PdfInt))
+	nInt, ok := nObj.(ast.PdfInt)
+	if !ok {
+		return nil, fmt.Errorf("object stream /N is not an integer")
+	}
+	n := int(nInt)
 
 	firstObj, ok := stream.Dict["First"]
 	if !ok {
 		return nil, fmt.Errorf("object stream missing /First")
 	}
-	first := int(firstObj.(ast.PdfInt))
+	firstInt, ok := firstObj.(ast.PdfInt)
+	if !ok {
+		return nil, fmt.Errorf("object stream /First is not an integer")
+	}
+	first := int(firstInt)
 
 	// 3. Loop N times to read the header integer pairs
 	reader := bytes.NewReader(decodedData)
