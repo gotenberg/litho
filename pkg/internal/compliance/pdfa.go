@@ -3683,6 +3683,199 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 	return nil
 }
 
+// --- Interactive forms (ISO 19005, clause 6.4) ---
+
+// checkWidgetActions verifies that widget annotation dictionaries do not
+// contain /A keys (6.4.1). Note: /AA is allowed in parts 2+ (only /A is
+// forbidden per ISO 19005-2/4 clause 6.4.1).
+func checkWidgetActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		annotsArr, ok := annotsRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+			annotDict, ok := annotRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			stObj, _ := annotDict["Subtype"]
+			if st, ok := stObj.(ast.PdfName); !ok || st != "Widget" {
+				continue
+			}
+			if _, ok := annotDict["A"]; ok {
+				return []error{models.ErrWidgetHasAction}
+			}
+		}
+	}
+	return nil
+}
+
+// checkNoXFA verifies that the /AcroForm dictionary does not contain an
+// /XFA key (6.4.2, parts 2+).
+func checkNoXFA(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	acroObj, ok := catalog["AcroForm"]
+	if !ok {
+		return nil
+	}
+	acroRes, _ := document.ResolveObject(ctx, doc, acroObj)
+	acroDict, ok := acroRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	if _, ok := acroDict["XFA"]; ok {
+		return []error{models.ErrXFAForbidden}
+	}
+	return nil
+}
+
+// --- Catalog restrictions (ISO 19005, clause 6.11, 6.12) ---
+
+// checkNoAlternatePresentations verifies that the name dictionary does not
+// contain /AlternatePresentations (6.11, parts 2+).
+func checkNoAlternatePresentations(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	namesObj, ok := catalog["Names"]
+	if !ok {
+		return nil
+	}
+	namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
+	namesDict, ok := namesRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	if _, ok := namesDict["AlternatePresentations"]; ok {
+		return []error{models.ErrAlternatePresentations}
+	}
+	return nil
+}
+
+// checkNoRequirements verifies that the document catalog does not contain
+// a /Requirements key (6.12, parts 2+).
+func checkNoRequirements(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	if _, ok := catalog["Requirements"]; ok {
+		return []error{models.ErrRequirementsKey}
+	}
+	return nil
+}
+
+// --- Form field appearances (ISO 19005, clause 6.9) ---
+
+// checkFormFieldAppearances verifies that all form fields with widgets have
+// an appearance dictionary (/AP).
+func checkFormFieldAppearances(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	acroObj, ok := catalog["AcroForm"]
+	if !ok {
+		return nil
+	}
+	acroRes, _ := document.ResolveObject(ctx, doc, acroObj)
+	acroDict, ok := acroRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	fieldsObj, ok := acroDict["Fields"]
+	if !ok {
+		return nil
+	}
+	fieldsRes, _ := document.ResolveObject(ctx, doc, fieldsObj)
+	fieldsArr, ok := fieldsRes.(ast.PdfArray)
+	if !ok {
+		return nil
+	}
+	var errs []error
+	for _, fieldObj := range fieldsArr {
+		checkFieldAppearance(ctx, doc, fieldObj, &errs)
+	}
+	return errs
+}
+
+func checkFieldAppearance(ctx context.Context, doc *document.Document, obj ast.PdfObject, errs *[]error) {
+	res, _ := document.ResolveObject(ctx, doc, obj)
+	dict, ok := res.(ast.PdfDict)
+	if !ok {
+		return
+	}
+	// If this is a widget (has /Subtype /Widget or has /FT), check for /AP.
+	_, hasFT := dict["FT"]
+	isWidget := false
+	if stObj, ok := dict["Subtype"]; ok {
+		if st, ok := stObj.(ast.PdfName); ok && st == "Widget" {
+			isWidget = true
+		}
+	}
+	if (hasFT || isWidget) && !isHiddenField(dict) && !isZeroRect(ctx, doc, dict) {
+		if _, ok := dict["AP"]; !ok {
+			// Check if the field has widget kids with /AP.
+			if !hasWidgetKidsWithAP(ctx, doc, dict) {
+				*errs = append(*errs, models.ErrFormFieldMissingAP)
+			}
+		}
+	}
+	// Recurse into children.
+	if kidsObj, ok := dict["Kids"]; ok {
+		kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
+		if kidsArr, ok := kidsRes.(ast.PdfArray); ok {
+			for _, kid := range kidsArr {
+				checkFieldAppearance(ctx, doc, kid, errs)
+			}
+		}
+	}
+}
+
+func isHiddenField(dict ast.PdfDict) bool {
+	if ffObj, ok := dict["Ff"]; ok {
+		if ffInt, ok := ffObj.(ast.PdfInt); ok {
+			return int(ffInt)&(1<<1) != 0 // Hidden flag (bit 2)
+		}
+	}
+	return false
+}
+
+func hasWidgetKidsWithAP(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	kidsObj, ok := dict["Kids"]
+	if !ok {
+		return false
+	}
+	kidsRes, _ := document.ResolveObject(ctx, doc, kidsObj)
+	kidsArr, ok := kidsRes.(ast.PdfArray)
+	if !ok {
+		return false
+	}
+	for _, kid := range kidsArr {
+		kidRes, _ := document.ResolveObject(ctx, doc, kid)
+		if kidDict, ok := kidRes.(ast.PdfDict); ok {
+			if _, ok := kidDict["AP"]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// checkEmbeddedFilesKeyPart4f verifies that PDF/A-4f documents have an
+// /EmbeddedFiles key in the name dictionary (6.9 t05).
+func checkEmbeddedFilesKeyPart4f(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	namesObj, ok := catalog["Names"]
+	if !ok {
+		return []error{models.ErrMissingEmbeddedFilesKey}
+	}
+	namesRes, _ := document.ResolveObject(ctx, doc, namesObj)
+	namesDict, ok := namesRes.(ast.PdfDict)
+	if !ok {
+		return []error{models.ErrMissingEmbeddedFilesKey}
+	}
+	if _, ok := namesDict["EmbeddedFiles"]; !ok {
+		return []error{models.ErrMissingEmbeddedFilesKey}
+	}
+	return nil
+}
+
 // --- Helpers ---
 
 func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []ast.PdfDict {

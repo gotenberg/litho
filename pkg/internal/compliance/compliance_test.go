@@ -1704,7 +1704,7 @@ func TestPDFA4e_MinimalValid(t *testing.T) {
 }
 
 func TestPDFA4f_MinimalValid(t *testing.T) {
-	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadataProfile(4, "F").withCatalogVersion("2.0").build())
+	doc := buildTestDoc(newMockDoc().withOutputIntents().withMetadataProfile(4, "F").withCatalogVersion("2.0").withEmbeddedFiles(true).build())
 	errs := ValidatePDFA(context.Background(), doc, models.PDFA4f)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for minimal valid PDF/A-4f, got %v", errs)
