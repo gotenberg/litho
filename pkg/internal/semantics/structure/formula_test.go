@@ -27,12 +27,9 @@ func mockDoc(structTree ast.PdfDict) *document.Document {
 }
 
 func TestExtractFormulas_WithMathML(t *testing.T) {
-	mathmlStream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Subtype": ast.PdfName("application/mathml+xml"),
-		},
-		Data: []byte(sampleMathML),
-	}
+	mathmlStream := ast.NewStream(ast.PdfDict{
+		"Subtype": ast.PdfName("application/mathml+xml"),
+	}, []byte(sampleMathML))
 
 	fileSpec := ast.PdfDict{
 		"AFRelationship": ast.PdfName("Supplement"),
@@ -98,12 +95,9 @@ func TestExtractFormulas_NoAF(t *testing.T) {
 }
 
 func TestExtractFormulas_WrongAFRelationship(t *testing.T) {
-	mathmlStream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Subtype": ast.PdfName("application/mathml+xml"),
-		},
-		Data: []byte(sampleMathML),
-	}
+	mathmlStream := ast.NewStream(ast.PdfDict{
+		"Subtype": ast.PdfName("application/mathml+xml"),
+	}, []byte(sampleMathML))
 
 	fileSpec := ast.PdfDict{
 		"AFRelationship": ast.PdfName("Source"), // Not "Supplement"
@@ -137,12 +131,9 @@ func TestExtractFormulas_WrongAFRelationship(t *testing.T) {
 }
 
 func TestExtractFormulas_NestedFormula(t *testing.T) {
-	mathmlStream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Subtype": ast.PdfName("application/mathml+xml"),
-		},
-		Data: []byte("<math><mi>x</mi></math>"),
-	}
+	mathmlStream := ast.NewStream(ast.PdfDict{
+		"Subtype": ast.PdfName("application/mathml+xml"),
+	}, []byte("<math><mi>x</mi></math>"))
 
 	structTree := ast.PdfDict{
 		"Type": ast.PdfName("StructTreeRoot"),
@@ -235,10 +226,7 @@ func TestExtractFormulas_MultipleFormulas(t *testing.T) {
 				ast.PdfDict{
 					"AFRelationship": ast.PdfName("Supplement"),
 					"EF": ast.PdfDict{
-						"F": ast.PdfStream{
-							Dict: ast.PdfDict{"Subtype": ast.PdfName("application/mathml+xml")},
-							Data: []byte(mathml),
-						},
+						"F": ast.NewStream(ast.PdfDict{"Subtype": ast.PdfName("application/mathml+xml")}, []byte(mathml)),
 					},
 				},
 			},
@@ -303,10 +291,7 @@ func TestExtractMathMLFromAF_SingleFileSpec(t *testing.T) {
 		"AF": ast.PdfDict{
 			"AFRelationship": ast.PdfName("Supplement"),
 			"EF": ast.PdfDict{
-				"F": ast.PdfStream{
-					Dict: ast.PdfDict{"Subtype": ast.PdfName("application/mathml+xml")},
-					Data: []byte("<math/>"),
-				},
+				"F": ast.NewStream(ast.PdfDict{"Subtype": ast.PdfName("application/mathml+xml")}, []byte("<math/>")),
 			},
 		},
 	}

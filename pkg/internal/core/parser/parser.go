@@ -1,12 +1,12 @@
 package parser
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
@@ -286,9 +286,13 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 			_ = reader.UnreadByte()
 		}
 
-		var streamData bytes.Buffer
+		// Record the start offset of the raw stream data.
+		streamStart := reader.Position()
+
+		// Scan forward to find "endstream", counting the data length.
 		endMarker := []byte("endstream")
 		matchLen := 0
+		dataLen := int64(0)
 		for {
 			c, err := reader.ReadByte()
 			if err != nil {
@@ -304,37 +308,71 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 				}
 			} else {
 				if matchLen > 0 {
-					streamData.Write(endMarker[:matchLen])
+					dataLen += int64(matchLen)
 					matchLen = 0
 					if c == endMarker[0] {
 						matchLen = 1
 					} else {
-						streamData.WriteByte(c)
+						dataLen++
 					}
 				} else {
-					streamData.WriteByte(c)
+					dataLen++
 				}
 			}
 		}
 
-		data := streamData.Bytes()
-		// Strip trailing newline before endstream if present
-		if len(data) > 0 && data[len(data)-1] == '\n' {
-			data = data[:len(data)-1]
-			if len(data) > 0 && data[len(data)-1] == '\r' {
-				data = data[:len(data)-1]
+		// Calculate length after stripping trailing newline before endstream.
+		trimLen := dataLen
+		if trimLen > 0 {
+			// Peek at the last 1-2 bytes to strip \r\n, \n, or \r.
+			var tail [2]byte
+			tailN := int64(2)
+			if trimLen < 2 {
+				tailN = trimLen
 			}
-		} else if len(data) > 0 && data[len(data)-1] == '\r' {
-			data = data[:len(data)-1]
+			_, _ = reader.ReaderAt().ReadAt(tail[:tailN], streamStart+trimLen-tailN)
+			if tailN == 2 && tail[1] == '\n' {
+				trimLen--
+				if tail[0] == '\r' {
+					trimLen--
+				}
+			} else if tailN == 2 && tail[1] == '\r' {
+				trimLen--
+			} else if tailN == 1 && tail[0] == '\n' {
+				trimLen--
+			} else if tailN == 1 && tail[0] == '\r' {
+				trimLen--
+			}
 		}
 
-		if p.decryptFn != nil {
-			if dec, err := p.decryptFn(data); err == nil {
-				data = dec
-			}
-		}
+		// Capture values for the lazy loader closure.
+		src := reader.ReaderAt()
+		offset := streamStart
+		length := trimLen
+		decryptFn := p.decryptFn
 
-		return ast.PdfStream{Dict: dict, Data: data}, nil
+		var once sync.Once
+		var cached []byte
+		var cachedErr error
+
+		stream := ast.NewLazyStream(dict, func() ([]byte, error) {
+			once.Do(func() {
+				buf := make([]byte, length)
+				_, cachedErr = src.ReadAt(buf, offset)
+				if cachedErr != nil {
+					return
+				}
+				if decryptFn != nil {
+					if dec, err := decryptFn(buf); err == nil {
+						buf = dec
+					}
+				}
+				cached = buf
+			})
+			return cached, cachedErr
+		})
+
+		return stream, nil
 	}
 
 	return dict, nil

@@ -248,7 +248,11 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		return []error{models.ErrMissingXMPTitle}
 	}
 	// Check raw XMP bytes for dc:title presence.
-	if !bytes.Contains(stream.Data, []byte("dc:title")) {
+	streamData, err := stream.Bytes()
+	if err != nil {
+		return []error{models.ErrMissingXMPTitle}
+	}
+	if !bytes.Contains(streamData, []byte("dc:title")) {
 		return []error{models.ErrMissingXMPTitle}
 	}
 	return nil
@@ -914,8 +918,8 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 		return []error{models.ErrMissingPDFUAId}
 	}
 
-	data := stream.Data
-	if len(data) == 0 {
+	data, err := stream.Bytes()
+	if err != nil || len(data) == 0 {
 		return []error{models.ErrMissingPDFUAId}
 	}
 

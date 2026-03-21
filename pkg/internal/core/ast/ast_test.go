@@ -118,21 +118,18 @@ func TestPdfIndirectRef_String(t *testing.T) {
 }
 
 func TestPdfStream_String(t *testing.T) {
-	s := PdfStream{
-		Dict: PdfDict{"Length": PdfInt(5)},
-		Data: []byte("hello"),
-	}
+	s := NewStream(PdfDict{"Length": PdfInt(5)}, []byte("hello"))
 	got := s.String()
 	if !strings.Contains(got, "stream") {
 		t.Errorf("PdfStream.String() = %q, expected 'stream'", got)
 	}
-	if !strings.Contains(got, "5 bytes") {
-		t.Errorf("PdfStream.String() = %q, expected '5 bytes'", got)
+	if !strings.Contains(got, "endstream") {
+		t.Errorf("PdfStream.String() = %q, expected 'endstream'", got)
 	}
 }
 
 func TestPdfStream_NilDict(t *testing.T) {
-	s := PdfStream{Dict: nil, Data: []byte{1, 2}}
+	s := NewStream(nil, []byte{1, 2})
 	got := s.String()
 	if !strings.Contains(got, "<<>>") {
 		t.Errorf("PdfStream with nil dict.String() = %q, expected <<>>", got)
@@ -150,5 +147,5 @@ func TestIsPdfObject_Interface(t *testing.T) {
 	var _ PdfObject = PdfArray{}
 	var _ PdfObject = PdfDict{}
 	var _ PdfObject = PdfIndirectRef{}
-	var _ PdfObject = PdfStream{}
+	var _ PdfObject = NewStream(nil, nil)
 }

@@ -90,6 +90,17 @@ func (b *Reader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// Position returns the current absolute read position in the underlying
+// ReaderAt, accounting for buffered but unconsumed bytes.
+func (b *Reader) Position() int64 {
+	return b.offset - int64(b.bufLen-b.bufPos)
+}
+
+// ReaderAt returns the underlying io.ReaderAt.
+func (b *Reader) ReaderAt() io.ReaderAt {
+	return b.r
+}
+
 // Seek moves the current offset. Note: this drops the current buffer.
 func (b *Reader) Seek(offset int64, whence int) (int64, error) {
 	var abs int64

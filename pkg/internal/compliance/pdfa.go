@@ -198,7 +198,10 @@ func checkOutputIntentProfileClass(ctx context.Context, doc *document.Document, 
 		data, err := filter.DecodeStream(profStream)
 		if err != nil {
 			// Fall back to raw data if decoding fails (uncompressed stream).
-			data = profStream.Data
+			data, err = profStream.Bytes()
+			if err != nil {
+				continue
+			}
 		}
 		if len(data) < iccHeaderMinSize {
 			continue
@@ -261,7 +264,11 @@ func checkICCBasedNotOutputIntent(ctx context.Context, doc *document.Document, c
 					n = int(nInt)
 				}
 			}
-			if n == oiN && len(stream.Data) == oiLen {
+			streamData, err := stream.Bytes()
+			if err != nil {
+				continue
+			}
+			if n == oiN && len(streamData) == oiLen {
 				errs = append(errs, models.ErrICCBasedSameAsOutputIntent)
 			}
 		}
@@ -300,7 +307,11 @@ func getOutputIntentProfileIdentity(ctx context.Context, doc *document.Document,
 				profN = int(nInt)
 			}
 		}
-		return profN, len(profStream.Data)
+		profData, err := profStream.Bytes()
+		if err != nil {
+			continue
+		}
+		return profN, len(profData)
 	}
 	return 0, 0
 }
@@ -703,7 +714,11 @@ func getContentStreamBytes(ctx context.Context, doc *document.Document, contents
 	case ast.PdfStream:
 		decoded, err := filter.DecodeStream(v)
 		if err != nil {
-			return v.Data, nil //nolint:nilerr // fall back to raw data
+			rawData, rawErr := v.Bytes()
+			if rawErr != nil {
+				return nil, rawErr
+			}
+			return rawData, nil
 		}
 		return decoded, nil
 	case ast.PdfArray:
@@ -713,7 +728,8 @@ func getContentStreamBytes(ctx context.Context, doc *document.Document, contents
 			if err == nil && stream.Dict != nil {
 				decoded, err := filter.DecodeStream(stream)
 				if err != nil {
-					buf.Write(stream.Data)
+					rawData, _ := stream.Bytes()
+					buf.Write(rawData)
 				} else {
 					buf.Write(decoded)
 				}
@@ -1294,8 +1310,8 @@ func checkXMPCompliance(ctx context.Context, doc *document.Document, catalog ast
 		return []error{models.ErrMissingCatalogMetdata}
 	}
 
-	xmpData := stream.Data
-	if len(xmpData) == 0 {
+	xmpData, err := stream.Bytes()
+	if err != nil || len(xmpData) == 0 {
 		decoded, err := filter.DecodeStream(stream)
 		if err != nil {
 			return []error{models.ErrMissingCatalogMetdata}

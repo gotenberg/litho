@@ -66,7 +66,10 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		}
 
 		// Determine the 3D subtype: U3D or PRC.
-		subtype := determine3DSubtype(ctx, doc, stream)
+		subtype, err := determine3DSubtype(ctx, doc, stream)
+		if err != nil {
+			continue
+		}
 
 		// Extract a name from the annotation if available.
 		name := fmt.Sprintf("model_%d", modelIdx)
@@ -96,15 +99,15 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 
 // determine3DSubtype checks the stream dictionary to determine whether the
 // 3D data is U3D or PRC format.
-func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.PdfStream) string {
+func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.PdfStream) (string, error) {
 	// Check /Subtype on the 3D stream dictionary.
 	if stObj, ok := stream.Dict["Subtype"]; ok {
 		name, _ := document.ResolveName(ctx, doc, stObj)
 		switch name {
 		case "U3D":
-			return "U3D"
+			return "U3D", nil
 		case "PRC":
-			return "PRC"
+			return "PRC", nil
 		}
 	}
 
@@ -113,17 +116,25 @@ func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.
 		name, _ := document.ResolveName(ctx, doc, typeObj)
 		switch name {
 		case "U3D":
-			return "U3D"
+			return "U3D", nil
 		case "PRC":
-			return "PRC"
+			return "PRC", nil
 		case "3D":
 			// Generic /Type /3D — try to detect from magic bytes.
-			return detect3DFromMagic(stream.Data)
+			data, err := stream.Bytes()
+			if err != nil {
+				return "", err
+			}
+			return detect3DFromMagic(data), nil
 		}
 	}
 
 	// Last resort: check magic bytes of the raw stream data.
-	return detect3DFromMagic(stream.Data)
+	data, err := stream.Bytes()
+	if err != nil {
+		return "", err
+	}
+	return detect3DFromMagic(data), nil
 }
 
 // detect3DFromMagic inspects the first few bytes of 3D data to determine format.

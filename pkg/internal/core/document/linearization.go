@@ -236,7 +236,7 @@ func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) 
 func decodeHintStreamData(stream ast.PdfStream) ([]byte, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return stream.Data, nil
+		return stream.Bytes()
 	}
 
 	filterName, ok := filterObj.(ast.PdfName)
@@ -254,7 +254,11 @@ func decodeHintStreamData(stream ast.PdfStream) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported hint stream filter: %s", filterName)
 	}
 
-	return decompressFlate(stream.Data)
+	data, err := stream.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read hint stream data: %w", err)
+	}
+	return decompressFlate(data)
 }
 
 // decompressFlate decompresses FlateDecode (zlib) data.

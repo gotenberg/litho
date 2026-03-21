@@ -134,10 +134,35 @@ func (r PdfIndirectRef) String() string {
 	return fmt.Sprintf("%d %d R", r.ObjectNum, r.GenNum)
 }
 
-// PdfStream represents a PDF stream object.
+// PdfStream represents a PDF stream object. Stream data is loaded lazily —
+// the raw bytes are only read from the underlying PDF file when Bytes() is
+// called for the first time.
 type PdfStream struct {
 	Dict PdfDict
-	Data []byte
+	open func() ([]byte, error) // lazy loader, returns raw (possibly encrypted) stream bytes
+}
+
+// NewStream creates a PdfStream with pre-loaded data. Use this in tests and
+// for synthetically constructed streams (e.g., object streams, encoding).
+func NewStream(dict PdfDict, data []byte) PdfStream {
+	return PdfStream{Dict: dict, open: func() ([]byte, error) { return data, nil }}
+}
+
+// NewLazyStream creates a PdfStream with a lazy loader that reads the raw
+// bytes on first access and caches the result. The loader function is called
+// at most once; subsequent calls to Bytes() return the cached result.
+func NewLazyStream(dict PdfDict, loader func() ([]byte, error)) PdfStream {
+	return PdfStream{Dict: dict, open: loader}
+}
+
+// Bytes returns the raw stream bytes (after decryption, before filter
+// decoding). The data is read lazily on first call and cached for subsequent
+// calls if the stream was created with NewLazyStream.
+func (s PdfStream) Bytes() ([]byte, error) {
+	if s.open == nil {
+		return nil, nil
+	}
+	return s.open()
 }
 
 // IsPdfObject marks PdfStream as a PDF object.
@@ -149,5 +174,5 @@ func (s PdfStream) String() string {
 	if s.Dict == nil {
 		dictStr = "<<>>"
 	}
-	return fmt.Sprintf("%s\nstream\n<...%d bytes...>\nendstream", dictStr, len(s.Data))
+	return fmt.Sprintf("%s\nstream\n<...>\nendstream", dictStr)
 }

@@ -74,7 +74,11 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 
 	if filterName == "DCTDecode" {
 		// Raw JPEG — use Go's image/jpeg decoder.
-		img, err := jpeg.Decode(bytes.NewReader(stream.Data))
+		data, err := stream.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read JPEG stream data: %w", err)
+		}
+		img, err := jpeg.Decode(bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode JPEG: %w", err)
 		}

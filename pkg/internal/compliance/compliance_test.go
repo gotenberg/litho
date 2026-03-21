@@ -51,13 +51,10 @@ func (b *mockDocBuilder) withMetadataProfile(part int, conformance string) *mock
   </rdf:RDF>
 </x:xmpmeta>
 <?xpacket end="w"?>`, part, conformance)
-	b.catalog["Metadata"] = ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Type":    ast.PdfName("Metadata"),
-			"Subtype": ast.PdfName("XML"),
-		},
-		Data: []byte(xmp),
-	}
+	b.catalog["Metadata"] = ast.NewStream(ast.PdfDict{
+		"Type":    ast.PdfName("Metadata"),
+		"Subtype": ast.PdfName("XML"),
+	}, []byte(xmp))
 	return b
 }
 
@@ -138,10 +135,7 @@ func (b *mockDocBuilder) withEmbeddedFileAFRelationship(relationship string) *mo
 		"Type": ast.PdfName("Filespec"),
 		"F":    ast.PdfString("invoice.xml"),
 		"EF": ast.PdfDict{
-			"F": ast.PdfStream{
-				Dict: ast.PdfDict{},
-				Data: []byte("<invoice/>"),
-			},
+			"F": ast.NewStream(ast.PdfDict{}, []byte("<invoice/>")),
 		},
 	}
 	if relationship != "" {
@@ -194,12 +188,10 @@ func (b *mockDocBuilder) withDeviceRGBImage() *mockDocBuilder {
 		"Type": ast.PdfName("Page"),
 		"Resources": ast.PdfDict{
 			"XObject": ast.PdfDict{
-				ast.PdfName("Im0"): ast.PdfStream{
-					Dict: ast.PdfDict{
-						"Subtype":    ast.PdfName("Image"),
-						"ColorSpace": ast.PdfName("DeviceRGB"),
-					},
-				},
+				ast.PdfName("Im0"): ast.NewStream(ast.PdfDict{
+					"Subtype":    ast.PdfName("Image"),
+					"ColorSpace": ast.PdfName("DeviceRGB"),
+				}, nil),
 			},
 		},
 	}
@@ -269,26 +261,26 @@ func (b *mockDocBuilder) withHeaderStructElem() *mockDocBuilder {
 }
 
 func (b *mockDocBuilder) withXMPTitle() *mockDocBuilder {
-	b.catalog["Metadata"] = ast.PdfStream{
-		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
-		Data: []byte(`<x:xmpmeta><rdf:RDF><rdf:Description><dc:title>Test</dc:title></rdf:Description></rdf:RDF></x:xmpmeta>`),
-	}
+	b.catalog["Metadata"] = ast.NewStream(
+		ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		[]byte(`<x:xmpmeta><rdf:RDF><rdf:Description><dc:title>Test</dc:title></rdf:Description></rdf:RDF></x:xmpmeta>`),
+	)
 	return b
 }
 
 func (b *mockDocBuilder) withXMPTitleAndUAId() *mockDocBuilder {
-	b.catalog["Metadata"] = ast.PdfStream{
-		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
-		Data: []byte(`<x:xmpmeta><rdf:RDF><rdf:Description xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"><dc:title>Test</dc:title><pdfuaid:part>2</pdfuaid:part></rdf:Description></rdf:RDF></x:xmpmeta>`),
-	}
+	b.catalog["Metadata"] = ast.NewStream(
+		ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		[]byte(`<x:xmpmeta><rdf:RDF><rdf:Description xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"><dc:title>Test</dc:title><pdfuaid:part>2</pdfuaid:part></rdf:Description></rdf:RDF></x:xmpmeta>`),
+	)
 	return b
 }
 
 func (b *mockDocBuilder) withXMPNoTitle() *mockDocBuilder {
-	b.catalog["Metadata"] = ast.PdfStream{
-		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
-		Data: []byte(`<x:xmpmeta><rdf:RDF><rdf:Description></rdf:Description></rdf:RDF></x:xmpmeta>`),
-	}
+	b.catalog["Metadata"] = ast.NewStream(
+		ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		[]byte(`<x:xmpmeta><rdf:RDF><rdf:Description></rdf:Description></rdf:RDF></x:xmpmeta>`),
+	)
 	return b
 }
 
@@ -574,10 +566,7 @@ func (b *mockDocBuilder) withEmbeddedPDFFile(pdfData []byte, withRelationship bo
 		"Type": ast.PdfName("Filespec"),
 		"F":    ast.PdfString("embedded.pdf"),
 		"EF": ast.PdfDict{
-			"F": ast.PdfStream{
-				Dict: ast.PdfDict{},
-				Data: pdfData,
-			},
+			"F": ast.NewStream(ast.PdfDict{}, pdfData),
 		},
 	}
 	if withRelationship {
@@ -600,10 +589,7 @@ func (b *mockDocBuilder) withNonPDFEmbeddedFile() *mockDocBuilder {
 		"F":              ast.PdfString("data.xlsx"),
 		"AFRelationship": ast.PdfName("Data"),
 		"EF": ast.PdfDict{
-			"F": ast.PdfStream{
-				Dict: ast.PdfDict{},
-				Data: []byte("PK\x03\x04not-a-pdf-file"), // ZIP/Office magic bytes.
-			},
+			"F": ast.NewStream(ast.PdfDict{}, []byte("PK\x03\x04not-a-pdf-file")), // ZIP/Office magic bytes.
 		},
 	}
 	b.catalog["Names"] = ast.PdfDict{
@@ -668,13 +654,11 @@ func (b *mockDocBuilder) withJPXImage() *mockDocBuilder {
 		"Type": ast.PdfName("Page"),
 		"Resources": ast.PdfDict{
 			"XObject": ast.PdfDict{
-				ast.PdfName("Im0"): ast.PdfStream{
-					Dict: ast.PdfDict{
-						"Type":    ast.PdfName("XObject"),
-						"Subtype": ast.PdfName("Image"),
-						"Filter":  ast.PdfName("JPXDecode"),
-					},
-				},
+				ast.PdfName("Im0"): ast.NewStream(ast.PdfDict{
+					"Type":    ast.PdfName("XObject"),
+					"Subtype": ast.PdfName("Image"),
+					"Filter":  ast.PdfName("JPXDecode"),
+				}, nil),
 			},
 		},
 	}
@@ -690,15 +674,13 @@ func (b *mockDocBuilder) with3DAnnotation(subtype ast.PdfName, hasFallback bool)
 	annot := ast.PdfDict{
 		"Type":    ast.PdfName("Annot"),
 		"Subtype": ast.PdfName("3D"),
-		"3DD": ast.PdfStream{
-			Dict: ast.PdfDict{
-				"Subtype": subtype,
-			},
-		},
+		"3DD": ast.NewStream(ast.PdfDict{
+			"Subtype": subtype,
+		}, nil),
 	}
 	if hasFallback {
 		annot["AP"] = ast.PdfDict{
-			"N": ast.PdfStream{Dict: ast.PdfDict{}},
+			"N": ast.NewStream(ast.PdfDict{}, nil),
 		}
 	}
 	page := ast.PdfDict{
@@ -725,11 +707,9 @@ func (b *mockDocBuilder) withRichMediaAnnotation(streamSubtype ast.PdfName, hasF
 						"Type": ast.PdfName("Filespec"),
 						"F":    ast.PdfString("model.u3d"),
 						"EF": ast.PdfDict{
-							"F": ast.PdfStream{
-								Dict: ast.PdfDict{
-									"Subtype": streamSubtype,
-								},
-							},
+							"F": ast.NewStream(ast.PdfDict{
+								"Subtype": streamSubtype,
+							}, nil),
 						},
 					},
 				},
@@ -738,7 +718,7 @@ func (b *mockDocBuilder) withRichMediaAnnotation(streamSubtype ast.PdfName, hasF
 	}
 	if hasFallback {
 		annot["AP"] = ast.PdfDict{
-			"N": ast.PdfStream{Dict: ast.PdfDict{}},
+			"N": ast.NewStream(ast.PdfDict{}, nil),
 		}
 	}
 	page := ast.PdfDict{
@@ -1008,10 +988,7 @@ func TestPDFA3_NonPDFAttachmentAllowed(t *testing.T) {
 		"F":              ast.PdfString("data.xlsx"),
 		"AFRelationship": ast.PdfName("Data"),
 		"EF": ast.PdfDict{
-			"F": ast.PdfStream{
-				Dict: ast.PdfDict{},
-				Data: []byte("PK\x03\x04spreadsheet-data"),
-			},
+			"F": ast.NewStream(ast.PdfDict{}, []byte("PK\x03\x04spreadsheet-data")),
 		},
 	}
 	m := newMockDoc().withOutputIntents()
@@ -1713,10 +1690,7 @@ func TestPDFA4f_NonPDFAttachmentAllowed(t *testing.T) {
 		"F":              ast.PdfString("data.xlsx"),
 		"AFRelationship": ast.PdfName("Data"),
 		"EF": ast.PdfDict{
-			"F": ast.PdfStream{
-				Dict: ast.PdfDict{},
-				Data: []byte("PK\x03\x04spreadsheet-data"),
-			},
+			"F": ast.NewStream(ast.PdfDict{}, []byte("PK\x03\x04spreadsheet-data")),
 		},
 	}
 	m := newMockDoc().withOutputIntents().withCatalogVersion("2.0")
@@ -2141,10 +2115,10 @@ func TestPDFA_DocInfoXMPSync_DCPropertiesEnforced(t *testing.T) {
 </x:xmpmeta>
 <?xpacket end="w"?>`
 	m := newMockDoc().withOutputIntents()
-	m.catalog["Metadata"] = ast.PdfStream{
-		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
-		Data: []byte(xmp),
-	}
+	m.catalog["Metadata"] = ast.NewStream(
+		ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		[]byte(xmp),
+	)
 	doc := buildTestDoc(m.build())
 	doc.Index.Trailer["Info"] = ast.PdfDict{
 		"Title": ast.PdfString("Different Title"),
@@ -2174,10 +2148,10 @@ func TestPDFA_DocInfoXMPSync_NonDCPropertiesEnforced(t *testing.T) {
 </x:xmpmeta>
 <?xpacket end="w"?>`
 	m := newMockDoc().withOutputIntents()
-	m.catalog["Metadata"] = ast.PdfStream{
-		Dict: ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
-		Data: []byte(xmp),
-	}
+	m.catalog["Metadata"] = ast.NewStream(
+		ast.PdfDict{"Type": ast.PdfName("Metadata"), "Subtype": ast.PdfName("XML")},
+		[]byte(xmp),
+	)
 	doc := buildTestDoc(m.build())
 	doc.Index.Trailer["Info"] = ast.PdfDict{
 		"Keywords": ast.PdfString("different keywords"),
@@ -2197,12 +2171,10 @@ func (b *mockDocBuilder) withFormXObjectOPI() *mockDocBuilder {
 		"Type": ast.PdfName("Page"),
 		"Resources": ast.PdfDict{
 			"XObject": ast.PdfDict{
-				ast.PdfName("Fm0"): ast.PdfStream{
-					Dict: ast.PdfDict{
-						"Subtype": ast.PdfName("Form"),
-						"OPI":     ast.PdfDict{},
-					},
-				},
+				ast.PdfName("Fm0"): ast.NewStream(ast.PdfDict{
+					"Subtype": ast.PdfName("Form"),
+					"OPI":     ast.PdfDict{},
+				}, nil),
 			},
 		},
 	}
@@ -2217,11 +2189,9 @@ func (b *mockDocBuilder) withPostScriptXObject() *mockDocBuilder {
 		"Type": ast.PdfName("Page"),
 		"Resources": ast.PdfDict{
 			"XObject": ast.PdfDict{
-				ast.PdfName("PS0"): ast.PdfStream{
-					Dict: ast.PdfDict{
-						"Subtype": ast.PdfName("PS"),
-					},
-				},
+				ast.PdfName("PS0"): ast.NewStream(ast.PdfDict{
+					"Subtype": ast.PdfName("PS"),
+				}, nil),
 			},
 		},
 	}
@@ -2261,11 +2231,9 @@ func TestPDFA2_CleanFormXObjectPasses(t *testing.T) {
 		"Type": ast.PdfName("Page"),
 		"Resources": ast.PdfDict{
 			"XObject": ast.PdfDict{
-				ast.PdfName("Fm0"): ast.PdfStream{
-					Dict: ast.PdfDict{
-						"Subtype": ast.PdfName("Form"),
-					},
-				},
+				ast.PdfName("Fm0"): ast.NewStream(ast.PdfDict{
+					"Subtype": ast.PdfName("Form"),
+				}, nil),
 			},
 		},
 	}

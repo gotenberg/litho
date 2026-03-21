@@ -73,8 +73,9 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		data, err := filter.DecodeStream(stream)
 		if err != nil {
 			// Fall back to raw data.
-			if len(stream.Data) > 0 {
-				return stream.Data
+			rawData, rawErr := stream.Bytes()
+			if rawErr == nil && len(rawData) > 0 {
+				return rawData
 			}
 			continue
 		}

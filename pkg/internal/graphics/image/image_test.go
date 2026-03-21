@@ -92,16 +92,13 @@ func TestResolveColorSpace_EmptyArray(t *testing.T) {
 func TestDecodeImage_DeviceGray(t *testing.T) {
 	// 2x2 grayscale image, no filter.
 	pixels := []byte{0, 128, 255, 64}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Subtype":          ast.PdfName("Image"),
-			"Width":            ast.PdfInt(2),
-			"Height":           ast.PdfInt(2),
-			"ColorSpace":       ast.PdfName("DeviceGray"),
-			"BitsPerComponent": ast.PdfInt(8),
-		},
-		Data: pixels,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(2),
+		"Height":           ast.PdfInt(2),
+		"ColorSpace":       ast.PdfName("DeviceGray"),
+		"BitsPerComponent": ast.PdfInt(8),
+	}, pixels)
 
 	doc := &document.Document{}
 	page := &document.Page{
@@ -136,16 +133,13 @@ func TestDecodeImage_DeviceGray(t *testing.T) {
 func TestDecodeImage_DeviceRGB(t *testing.T) {
 	// 1x1 RGB image.
 	pixels := []byte{255, 0, 128}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Subtype":          ast.PdfName("Image"),
-			"Width":            ast.PdfInt(1),
-			"Height":           ast.PdfInt(1),
-			"ColorSpace":       ast.PdfName("DeviceRGB"),
-			"BitsPerComponent": ast.PdfInt(8),
-		},
-		Data: pixels,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(1),
+		"Height":           ast.PdfInt(1),
+		"ColorSpace":       ast.PdfName("DeviceRGB"),
+		"BitsPerComponent": ast.PdfInt(8),
+	}, pixels)
 
 	doc := &document.Document{}
 	page := &document.Page{
@@ -195,16 +189,13 @@ func TestDecodeImage_NoXObject(t *testing.T) {
 }
 
 func TestInspectImages_Basic(t *testing.T) {
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Subtype":          ast.PdfName("Image"),
-			"Width":            ast.PdfInt(100),
-			"Height":           ast.PdfInt(200),
-			"ColorSpace":       ast.PdfName("DeviceRGB"),
-			"BitsPerComponent": ast.PdfInt(8),
-		},
-		Data: []byte{},
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(100),
+		"Height":           ast.PdfInt(200),
+		"ColorSpace":       ast.PdfName("DeviceRGB"),
+		"BitsPerComponent": ast.PdfInt(8),
+	}, []byte{})
 
 	doc := &document.Document{}
 	page := &document.Page{
@@ -241,14 +232,11 @@ func TestInspectImages_NoXObject(t *testing.T) {
 
 func TestInspectImages_SkipsNonImage(t *testing.T) {
 	// A Form XObject (not Image) should be skipped.
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Subtype": ast.PdfName("Form"),
-			"Width":   ast.PdfInt(100),
-			"Height":  ast.PdfInt(100),
-		},
-		Data: []byte{},
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Subtype": ast.PdfName("Form"),
+		"Width":   ast.PdfInt(100),
+		"Height":  ast.PdfInt(100),
+	}, []byte{})
 
 	doc := &document.Document{}
 	page := &document.Page{

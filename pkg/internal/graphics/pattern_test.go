@@ -28,14 +28,12 @@ func TestPattern_ScnSetsTilingPattern(t *testing.T) {
 	m := NewMachine([4]float64{0, 0, 612, 792})
 	m.Resources = ast.PdfDict{
 		"Pattern": ast.PdfDict{
-			"P1": ast.PdfStream{
-				Dict: ast.PdfDict{
-					"PatternType": ast.PdfInt(1),
-					"PaintType":   ast.PdfInt(1),
-					"TilingType":  ast.PdfInt(1),
-					"BBox":        ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(10), ast.PdfInt(10)},
-				},
-			},
+			"P1": ast.NewStream(ast.PdfDict{
+				"PatternType": ast.PdfInt(1),
+				"PaintType":   ast.PdfInt(1),
+				"TilingType":  ast.PdfInt(1),
+				"BBox":        ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(10), ast.PdfInt(10)},
+			}, nil),
 		},
 	}
 
@@ -93,12 +91,10 @@ func TestPattern_ScnWithUnderlyingColor(t *testing.T) {
 	m := NewMachine([4]float64{0, 0, 612, 792})
 	m.Resources = ast.PdfDict{
 		"Pattern": ast.PdfDict{
-			"P1": ast.PdfStream{
-				Dict: ast.PdfDict{
-					"PatternType": ast.PdfInt(1),
-					"PaintType":   ast.PdfInt(2), // Uncolored
-				},
-			},
+			"P1": ast.NewStream(ast.PdfDict{
+				"PatternType": ast.PdfInt(1),
+				"PaintType":   ast.PdfInt(2), // Uncolored
+			}, nil),
 		},
 	}
 
@@ -126,11 +122,9 @@ func TestPattern_CsNonPatternClearsState(t *testing.T) {
 	m := NewMachine([4]float64{0, 0, 612, 792})
 	m.Resources = ast.PdfDict{
 		"Pattern": ast.PdfDict{
-			"P1": ast.PdfStream{
-				Dict: ast.PdfDict{
-					"PatternType": ast.PdfInt(1),
-				},
-			},
+			"P1": ast.NewStream(ast.PdfDict{
+				"PatternType": ast.PdfInt(1),
+			}, nil),
 		},
 	}
 
@@ -164,11 +158,9 @@ func TestPattern_ScNonPatternClearsState(t *testing.T) {
 	m := NewMachine([4]float64{0, 0, 612, 792})
 	m.Resources = ast.PdfDict{
 		"Pattern": ast.PdfDict{
-			"P1": ast.PdfStream{
-				Dict: ast.PdfDict{
-					"PatternType": ast.PdfInt(1),
-				},
-			},
+			"P1": ast.NewStream(ast.PdfDict{
+				"PatternType": ast.PdfInt(1),
+			}, nil),
 		},
 	}
 
@@ -220,11 +212,9 @@ func TestPattern_SaveRestore(t *testing.T) {
 	m := NewMachine([4]float64{0, 0, 612, 792})
 	m.Resources = ast.PdfDict{
 		"Pattern": ast.PdfDict{
-			"P1": ast.PdfStream{
-				Dict: ast.PdfDict{
-					"PatternType": ast.PdfInt(1),
-				},
-			},
+			"P1": ast.NewStream(ast.PdfDict{
+				"PatternType": ast.PdfInt(1),
+			}, nil),
 		},
 	}
 

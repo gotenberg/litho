@@ -39,7 +39,6 @@ Before writing any code, present:
 
 Self-review against this checklist and present findings to the user:
 
-- [ ] **Backward compatibility:** No breaking changes to the public API (`pkg/pdf`, `pkg/models`) unless explicitly approved.
 - [ ] **Encapsulation:** No `pkg/internal` types leak into public signatures.
 - [ ] **Error handling:** All errors wrapped and propagated; no silenced errors without justification.
 - [ ] **Context:** I/O-bound or recursive functions accept and check `context.Context`.

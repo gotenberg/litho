@@ -42,13 +42,10 @@ func TestParseXRefStream_Basic(t *testing.T) {
 	// Entry 2: type=2, objstm=0x0001, index=0x00
 	data = append(data, 0x02, 0x00, 0x01, 0x00)
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"W":    ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
-			"Size": ast.PdfInt(3),
-		},
-		Data: data,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"W":    ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
+		"Size": ast.PdfInt(3),
+	}, data)
 
 	indexMap := make(map[int]XRefEntry)
 	prev, err := ParseXRefStream(stream, indexMap)
@@ -85,14 +82,11 @@ func TestParseXRefStream_Basic(t *testing.T) {
 func TestParseXRefStream_WithPrev(t *testing.T) {
 	// Single entry, with /Prev pointing to offset 500.
 	data := []byte{0x01, 0x00, 0x0A, 0x00}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"W":    ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
-			"Size": ast.PdfInt(1),
-			"Prev": ast.PdfInt(500),
-		},
-		Data: data,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"W":    ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
+		"Size": ast.PdfInt(1),
+		"Prev": ast.PdfInt(500),
+	}, data)
 
 	indexMap := make(map[int]XRefEntry)
 	prev, err := ParseXRefStream(stream, indexMap)
@@ -110,14 +104,11 @@ func TestParseXRefStream_WithIndex(t *testing.T) {
 		0x01, 0x00, 0x20, 0x00, // obj 5: type=1, offset=32
 		0x01, 0x00, 0x40, 0x00, // obj 6: type=1, offset=64
 	}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"W":     ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
-			"Size":  ast.PdfInt(7),
-			"Index": ast.PdfArray{ast.PdfInt(5), ast.PdfInt(2)},
-		},
-		Data: data,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"W":     ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
+		"Size":  ast.PdfInt(7),
+		"Index": ast.PdfArray{ast.PdfInt(5), ast.PdfInt(2)},
+	}, data)
 
 	indexMap := make(map[int]XRefEntry)
 	_, err := ParseXRefStream(stream, indexMap)
@@ -142,13 +133,10 @@ func TestParseXRefStream_WithIndex(t *testing.T) {
 func TestParseXRefStream_NoOverwrite(t *testing.T) {
 	// If an entry already exists, it should not be overwritten.
 	data := []byte{0x01, 0x00, 0xFF, 0x00}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"W":    ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
-			"Size": ast.PdfInt(1),
-		},
-		Data: data,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"W":    ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
+		"Size": ast.PdfInt(1),
+	}, data)
 
 	indexMap := map[int]XRefEntry{
 		0: {Offset: 999, Type: 1},
@@ -163,12 +151,9 @@ func TestParseXRefStream_NoOverwrite(t *testing.T) {
 }
 
 func TestParseXRefStream_MissingW(t *testing.T) {
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Size": ast.PdfInt(1),
-		},
-		Data: []byte{0x01, 0x00, 0x0A, 0x00},
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Size": ast.PdfInt(1),
+	}, []byte{0x01, 0x00, 0x0A, 0x00})
 	_, err := ParseXRefStream(stream, make(map[int]XRefEntry))
 	if err == nil {
 		t.Error("expected error for missing /W")
@@ -176,12 +161,9 @@ func TestParseXRefStream_MissingW(t *testing.T) {
 }
 
 func TestParseXRefStream_MissingSize(t *testing.T) {
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"W": ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
-		},
-		Data: []byte{},
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"W": ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
+	}, []byte{})
 	_, err := ParseXRefStream(stream, make(map[int]XRefEntry))
 	if err == nil {
 		t.Error("expected error for missing /Size")

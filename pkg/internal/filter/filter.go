@@ -29,7 +29,7 @@ var bufPool = sync.Pool{
 func DecodeStream(stream ast.PdfStream) ([]byte, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return stream.Data, nil
+		return stream.Bytes()
 	}
 
 	var filters []ast.PdfName
@@ -50,7 +50,10 @@ func DecodeStream(stream ast.PdfStream) ([]byte, error) {
 	// to the single filter) or an array of dicts matching the filter array.
 	parms := extractDecodeParms(stream.Dict, len(filters))
 
-	data := stream.Data
+	data, err := stream.Bytes()
+	if err != nil {
+		return nil, err
+	}
 	for i, f := range filters {
 		decoded, err := applyDecodeFilter(data, f, parms[i])
 		if err != nil {
@@ -349,7 +352,11 @@ func decodeJBIG2(data []byte, parms ast.PdfDict) ([]byte, error) {
 func NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return io.NopCloser(bytes.NewReader(stream.Data)), nil
+		data, err := stream.Bytes()
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(bytes.NewReader(data)), nil
 	}
 
 	var filters []ast.PdfName
@@ -372,7 +379,11 @@ func NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 	if len(filters) == 1 && extractPredictorParams(parms[0]) == nil {
 		switch filters[0] {
 		case "FlateDecode", "Fl":
-			return zlib.NewReader(bytes.NewReader(stream.Data))
+			raw, err := stream.Bytes()
+			if err != nil {
+				return nil, err
+			}
+			return zlib.NewReader(bytes.NewReader(raw))
 		case "LZWDecode", "LZW":
 			earlyChange := 1
 			if parms[0] != nil {
@@ -380,9 +391,17 @@ func NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 					earlyChange = pdfInt(ec)
 				}
 			}
-			return io.NopCloser(newLZWReader(bytes.NewReader(stream.Data), earlyChange)), nil
+			raw, err := stream.Bytes()
+			if err != nil {
+				return nil, err
+			}
+			return io.NopCloser(newLZWReader(bytes.NewReader(raw), earlyChange)), nil
 		case "BrotliDecode":
-			return io.NopCloser(brotli.NewReader(bytes.NewReader(stream.Data))), nil
+			raw, err := stream.Bytes()
+			if err != nil {
+				return nil, err
+			}
+			return io.NopCloser(brotli.NewReader(bytes.NewReader(raw))), nil
 		}
 	}
 
@@ -405,10 +424,7 @@ func EncodeStream(data []byte, filter ast.PdfName) (ast.PdfStream, error) {
 	dict["Filter"] = filter
 	dict["Length"] = ast.PdfInt(len(encoded))
 
-	return ast.PdfStream{
-		Dict: dict,
-		Data: encoded,
-	}, nil
+	return ast.NewStream(dict, encoded), nil
 }
 
 // ApplyEncodeFilter applies a single encoding filter to the byte slice.

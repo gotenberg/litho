@@ -381,9 +381,13 @@ func validateStreamLength(stream ast.PdfStream) error {
 		return nil
 	}
 	declaredLen := int(lenInt)
-	actualLen := len(stream.Data)
+	streamData, err := stream.Bytes()
+	if err != nil {
+		return nil
+	}
+	actualLen := len(streamData)
 
-	// Filtered streams: /Length refers to encoded size, but stream.Data
+	// Filtered streams: /Length refers to encoded size, but stream data
 	// may be raw encoded bytes. Only compare for unfiltered streams.
 	if _, hasFilter := stream.Dict["Filter"]; hasFilter {
 		return nil

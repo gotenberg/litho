@@ -40,18 +40,15 @@ func TestDecodeStream_FlateWithPredictor(t *testing.T) {
 		2, 5, 10, 15,
 	}
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("FlateDecode"),
-			"DecodeParms": ast.PdfDict{
-				"Predictor":        ast.PdfInt(12),
-				"Columns":          ast.PdfInt(3),
-				"Colors":           ast.PdfInt(1),
-				"BitsPerComponent": ast.PdfInt(8),
-			},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("FlateDecode"),
+		"DecodeParms": ast.PdfDict{
+			"Predictor":        ast.PdfInt(12),
+			"Columns":          ast.PdfInt(3),
+			"Colors":           ast.PdfInt(1),
+			"BitsPerComponent": ast.PdfInt(8),
 		},
-		Data: zlibCompress(raw),
-	}
+	}, zlibCompress(raw))
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -66,12 +63,9 @@ func TestDecodeStream_FlateWithPredictor(t *testing.T) {
 
 func TestDecodeStream_FlateNoPredictor(t *testing.T) {
 	raw := []byte("hello world")
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("FlateDecode"),
-		},
-		Data: zlibCompress(raw),
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("FlateDecode"),
+	}, zlibCompress(raw))
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -85,12 +79,9 @@ func TestDecodeStream_FlateNoPredictor(t *testing.T) {
 
 func TestDecodeStream_LZW(t *testing.T) {
 	raw := []byte("The quick brown fox jumps over the lazy dog")
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("LZWDecode"),
-		},
-		Data: lzwCompress(raw),
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("LZWDecode"),
+	}, lzwCompress(raw))
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -109,16 +100,13 @@ func TestDecodeStream_LZWWithPredictor(t *testing.T) {
 		2, 5, 10, 15,
 	}
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("LZWDecode"),
-			"DecodeParms": ast.PdfDict{
-				"Predictor": ast.PdfInt(12),
-				"Columns":   ast.PdfInt(3),
-			},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("LZWDecode"),
+		"DecodeParms": ast.PdfDict{
+			"Predictor": ast.PdfInt(12),
+			"Columns":   ast.PdfInt(3),
 		},
-		Data: lzwCompress(raw),
-	}
+	}, lzwCompress(raw))
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -133,10 +121,7 @@ func TestDecodeStream_LZWWithPredictor(t *testing.T) {
 
 func TestDecodeStream_NoFilter(t *testing.T) {
 	raw := []byte("unfiltered data")
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{},
-		Data: raw,
-	}
+	stream := ast.NewStream(ast.PdfDict{}, raw)
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -154,15 +139,12 @@ func TestDecodeStream_FilterArray(t *testing.T) {
 	compressed := zlibCompress(raw)
 	hexEncoded := hex.EncodeToString(compressed) + ">"
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfArray{
-				ast.PdfName("ASCIIHexDecode"),
-				ast.PdfName("FlateDecode"),
-			},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfArray{
+			ast.PdfName("ASCIIHexDecode"),
+			ast.PdfName("FlateDecode"),
 		},
-		Data: []byte(hexEncoded),
-	}
+	}, []byte(hexEncoded))
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -181,20 +163,17 @@ func TestDecodeStream_FilterArrayWithParms(t *testing.T) {
 		1, 10, 5, // Sub: 10, 10+5=15
 	}
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfArray{
-				ast.PdfName("FlateDecode"),
-			},
-			"DecodeParms": ast.PdfArray{
-				ast.PdfDict{
-					"Predictor": ast.PdfInt(11),
-					"Columns":   ast.PdfInt(2),
-				},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfArray{
+			ast.PdfName("FlateDecode"),
+		},
+		"DecodeParms": ast.PdfArray{
+			ast.PdfDict{
+				"Predictor": ast.PdfInt(11),
+				"Columns":   ast.PdfInt(2),
 			},
 		},
-		Data: zlibCompress(raw),
-	}
+	}, zlibCompress(raw))
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -208,12 +187,9 @@ func TestDecodeStream_FilterArrayWithParms(t *testing.T) {
 }
 
 func TestDecodeStream_UnsupportedFilter(t *testing.T) {
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("RunLengthDecode"),
-		},
-		Data: []byte{0},
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("RunLengthDecode"),
+	}, []byte{0})
 
 	_, err := DecodeStream(stream)
 	if !errors.Is(err, ErrUnsupportedFilter) {
@@ -301,17 +277,14 @@ func TestDecodeStream_TIFFPredictor(t *testing.T) {
 	// After TIFF un-diff: [10, 20, 30, 15, 30, 45]
 	raw := []byte{10, 20, 30, 5, 10, 15}
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("FlateDecode"),
-			"DecodeParms": ast.PdfDict{
-				"Predictor": ast.PdfInt(2),
-				"Columns":   ast.PdfInt(2),
-				"Colors":    ast.PdfInt(3),
-			},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("FlateDecode"),
+		"DecodeParms": ast.PdfDict{
+			"Predictor": ast.PdfInt(2),
+			"Columns":   ast.PdfInt(2),
+			"Colors":    ast.PdfInt(3),
 		},
-		Data: zlibCompress(raw),
-	}
+	}, zlibCompress(raw))
 
 	result, err := DecodeStream(stream)
 	if err != nil {
@@ -672,10 +645,7 @@ func TestDecodeLZW_EarlyChange0_LargeStream(t *testing.T) {
 
 func TestNewStreamReader_NoFilter(t *testing.T) {
 	raw := []byte("unfiltered content")
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{},
-		Data: raw,
-	}
+	stream := ast.NewStream(ast.PdfDict{}, raw)
 
 	rc, err := NewStreamReader(stream)
 	if err != nil {
@@ -694,12 +664,9 @@ func TestNewStreamReader_NoFilter(t *testing.T) {
 
 func TestNewStreamReader_Flate(t *testing.T) {
 	raw := []byte("hello from flate stream reader")
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("FlateDecode"),
-		},
-		Data: zlibCompress(raw),
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("FlateDecode"),
+	}, zlibCompress(raw))
 
 	rc, err := NewStreamReader(stream)
 	if err != nil {
@@ -718,12 +685,9 @@ func TestNewStreamReader_Flate(t *testing.T) {
 
 func TestNewStreamReader_LZW(t *testing.T) {
 	raw := []byte("LZW streaming test data")
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("LZWDecode"),
-		},
-		Data: lzwCompress(raw),
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("LZWDecode"),
+	}, lzwCompress(raw))
 
 	rc, err := NewStreamReader(stream)
 	if err != nil {
@@ -746,16 +710,13 @@ func TestNewStreamReader_FlateWithPredictor(t *testing.T) {
 		0, 10, 20, 30,
 		2, 5, 10, 15,
 	}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("FlateDecode"),
-			"DecodeParms": ast.PdfDict{
-				"Predictor": ast.PdfInt(12),
-				"Columns":   ast.PdfInt(3),
-			},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("FlateDecode"),
+		"DecodeParms": ast.PdfDict{
+			"Predictor": ast.PdfInt(12),
+			"Columns":   ast.PdfInt(3),
 		},
-		Data: zlibCompress(raw),
-	}
+	}, zlibCompress(raw))
 
 	rc, err := NewStreamReader(stream)
 	if err != nil {
@@ -876,17 +837,14 @@ func TestDecodeCCITTFax_Group4_WhiteThenBlack(t *testing.T) {
 func TestApplyDecodeFilter_CCITTFax(t *testing.T) {
 	// Verify CCITTFaxDecode is wired into the main filter dispatch.
 	data := []byte{0x80, 0x10, 0x01}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("CCITTFaxDecode"),
-			"DecodeParms": ast.PdfDict{
-				"K":       ast.PdfInt(-1),
-				"Columns": ast.PdfInt(8),
-				"Rows":    ast.PdfInt(1),
-			},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("CCITTFaxDecode"),
+		"DecodeParms": ast.PdfDict{
+			"K":       ast.PdfInt(-1),
+			"Columns": ast.PdfInt(8),
+			"Rows":    ast.PdfInt(1),
 		},
-		Data: data,
-	}
+	}, data)
 
 	decoded, err := DecodeStream(stream)
 	if err != nil {
@@ -902,17 +860,14 @@ func TestApplyDecodeFilter_CCITTFax(t *testing.T) {
 func TestApplyDecodeFilter_CCF_Abbreviation(t *testing.T) {
 	// Verify the /CCF abbreviation also works.
 	data := []byte{0x80, 0x10, 0x01}
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("CCF"),
-			"DecodeParms": ast.PdfDict{
-				"K":       ast.PdfInt(-1),
-				"Columns": ast.PdfInt(8),
-				"Rows":    ast.PdfInt(1),
-			},
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("CCF"),
+		"DecodeParms": ast.PdfDict{
+			"K":       ast.PdfInt(-1),
+			"Columns": ast.PdfInt(8),
+			"Rows":    ast.PdfInt(1),
 		},
-		Data: data,
-	}
+	}, data)
 
 	decoded, err := DecodeStream(stream)
 	if err != nil {
@@ -937,12 +892,9 @@ func TestDecodeStream_Brotli(t *testing.T) {
 	original := []byte("The quick brown fox jumps over the lazy dog")
 	compressed := brotliCompress(original)
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("BrotliDecode"),
-		},
-		Data: compressed,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("BrotliDecode"),
+	}, compressed)
 
 	decoded, err := DecodeStream(stream)
 	if err != nil {
@@ -975,12 +927,9 @@ func TestNewStreamReader_Brotli(t *testing.T) {
 	original := []byte("streaming brotli decode test")
 	compressed := brotliCompress(original)
 
-	stream := ast.PdfStream{
-		Dict: ast.PdfDict{
-			"Filter": ast.PdfName("BrotliDecode"),
-		},
-		Data: compressed,
-	}
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfName("BrotliDecode"),
+	}, compressed)
 
 	rc, err := NewStreamReader(stream)
 	if err != nil {
