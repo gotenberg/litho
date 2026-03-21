@@ -138,6 +138,7 @@ func pdfA2Checks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkAnnotationAPOnlyN,
 		checkWidgetButtonAppearance,
 		checkExtGStateHTP,
+		checkICCBasedNotOutputIntent,
 	)
 	return checks
 }
@@ -190,6 +191,7 @@ func pdfA3Checks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkAnnotationAPOnlyN,
 		checkWidgetButtonAppearance,
 		checkExtGStateHTP,
+		checkICCBasedNotOutputIntent,
 	)
 	return checks
 }
@@ -249,6 +251,8 @@ func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 		checkAnnotationAPOnlyN,
 		checkWidgetButtonAppearance,
 		checkExtGStateHTP,
+		checkFileSpecFUF,
+		checkICCBasedNotOutputIntent,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }
@@ -282,6 +286,8 @@ func pdfA4eRules() ruleSet {
 		checkAnnotationAPOnlyN,
 		checkWidgetButtonAppearance,
 		checkExtGStateHTP,
+		checkFileSpecFUF,
+		checkICCBasedNotOutputIntent,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }

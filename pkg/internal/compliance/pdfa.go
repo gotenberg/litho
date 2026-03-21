@@ -220,6 +220,101 @@ func checkOutputIntentProfileClass(ctx context.Context, doc *document.Document, 
 	return errs
 }
 
+// checkICCBasedNotOutputIntent verifies that no page ICCBased colour space
+// uses a profile identical to the OutputIntent's DestOutputProfile
+// (clause 6.2.4.2 test 3). Identity is approximated by comparing the profile's
+// /N value and raw stream data length.
+func checkICCBasedNotOutputIntent(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	oiN, oiLen := getOutputIntentProfileIdentity(ctx, doc, catalog)
+	if oiN == 0 && oiLen == 0 {
+		return nil // no OutputIntent profile to compare against
+	}
+
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		csObj, ok := resources["ColorSpace"]
+		if !ok {
+			continue
+		}
+		csRes, _ := document.ResolveObject(ctx, doc, csObj)
+		csDict, ok := csRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, v := range csDict {
+			vRes, _ := document.ResolveObject(ctx, doc, v)
+			arr, ok := vRes.(ast.PdfArray)
+			if !ok || len(arr) < 2 { //nolint:mnd // [/ICCBased stream-ref]
+				continue
+			}
+			familyObj, _ := document.ResolveObject(ctx, doc, arr[0])
+			family, ok := familyObj.(ast.PdfName)
+			if !ok || family != "ICCBased" {
+				continue
+			}
+			streamRes, _ := document.ResolveObject(ctx, doc, arr[1])
+			stream, ok := streamRes.(ast.PdfStream)
+			if !ok {
+				continue
+			}
+			n := 0
+			if nObj, ok := stream.Dict["N"]; ok {
+				if nInt, ok := nObj.(ast.PdfInt); ok {
+					n = int(nInt)
+				}
+			}
+			if n == oiN && len(stream.Data) == oiLen {
+				errs = append(errs, models.ErrICCBasedSameAsOutputIntent)
+			}
+		}
+	}
+	return errs
+}
+
+// getOutputIntentProfileIdentity returns the /N value and raw stream data
+// length of the first OutputIntent DestOutputProfile found. Returns (0, 0)
+// if no OutputIntent with an ICC profile exists.
+func getOutputIntentProfileIdentity(ctx context.Context, doc *document.Document, catalog ast.PdfDict) (n int, dataLen int) {
+	oiObj, ok := catalog["OutputIntents"]
+	if !ok {
+		return 0, 0
+	}
+	oiRes, _ := document.ResolveObject(ctx, doc, oiObj)
+	oi, ok := oiRes.(ast.PdfArray)
+	if !ok || len(oi) == 0 {
+		return 0, 0
+	}
+	for _, entry := range oi {
+		entryRes, _ := document.ResolveObject(ctx, doc, entry)
+		dict, ok := entryRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		profObj, ok := dict["DestOutputProfile"]
+		if !ok {
+			continue
+		}
+		profRes, _ := document.ResolveObject(ctx, doc, profObj)
+		profStream, ok := profRes.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		profN := 0
+		if nObj, ok := profStream.Dict["N"]; ok {
+			if nInt, ok := nObj.(ast.PdfInt); ok {
+				profN = int(nInt)
+			}
+		}
+		return profN, len(profStream.Data)
+	}
+	return 0, 0
+}
+
 // hasOutputIntentICC returns true if the catalog's /OutputIntents array
 // contains at least one entry with a /DestOutputProfile key.
 func hasOutputIntentICC(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
@@ -3854,19 +3949,34 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, catalog as
 }
 
 // checkFileSpecFUF verifies that all file specification dictionaries for
-// embedded files contain both /F and /UF keys (6.9 test 2).
+// embedded files contain both /F and /UF keys with non-empty string values
+// (clause 7.11 test 1).
 func checkFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
 	fileSpecs := collectFileSpecs(ctx, doc, catalog)
 	var errs []error
 	for _, fs := range fileSpecs {
-		if _, hasF := fs["F"]; !hasF {
-			errs = append(errs, fmt.Errorf("%w: missing /F key", models.ErrMissingAFRelationship))
-		}
-		if _, hasUF := fs["UF"]; !hasUF {
-			errs = append(errs, fmt.Errorf("%w: missing /UF key", models.ErrMissingAFRelationship))
+		fOK := fileSpecHasNonEmptyString(ctx, doc, fs, "F")
+		ufOK := fileSpecHasNonEmptyString(ctx, doc, fs, "UF")
+		if !fOK || !ufOK {
+			errs = append(errs, models.ErrFileSpecMissingFUF)
 		}
 	}
 	return errs
+}
+
+// fileSpecHasNonEmptyString returns true if the dict contains the given key
+// and its value resolves to a non-empty PDF string.
+func fileSpecHasNonEmptyString(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	obj, ok := dict[key]
+	if !ok {
+		return false
+	}
+	res, _ := document.ResolveObject(ctx, doc, obj)
+	s, ok := res.(ast.PdfString)
+	if !ok {
+		return false
+	}
+	return len(document.DecodePdfString(s)) > 0
 }
 
 // --- Part 4 specific ---

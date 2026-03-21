@@ -704,37 +704,50 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 			continue
 		}
 
-		ops, err := content.ParsePageContent(ctx, doc, nObj)
-		if err != nil {
-			continue
-		}
-
-		// Use annotation's own resources if available.
-		annotDefaults := make(map[ast.PdfName]bool)
-		maps.Copy(annotDefaults, defaults)
-		annotResourceDict := ast.PdfDict(nil)
+		// /N can be a stream (single appearance) or a dict of named
+		// appearance states (e.g., /True, /False for checkboxes).
 		nRes, _ := document.ResolveObject(ctx, doc, nObj)
-		if nStream, ok := nRes.(ast.PdfStream); ok {
-			if arObj, ok := nStream.Dict["Resources"]; ok {
-				arRes, _ := document.ResolveObject(ctx, doc, arObj)
-				if arDict, ok := arRes.(ast.PdfDict); ok {
-					annotResourceDict = arDict
-					// Merge annotation resource defaults.
-					maps.Copy(annotDefaults, collectDefaultColorSpaces(ctx, doc, arDict))
-				}
+		var appearanceStreams []ast.PdfObject
+		switch n := nRes.(type) {
+		case ast.PdfStream:
+			appearanceStreams = append(appearanceStreams, nObj)
+		case ast.PdfDict:
+			// Subdictionary of named appearances — walk each.
+			for _, subObj := range n {
+				appearanceStreams = append(appearanceStreams, subObj)
 			}
-			// Merge Group CS from the appearance stream itself.
-			addTransparencyGroupDefaults(ctx, doc, nStream.Dict, annotDefaults)
-		}
-		if annotResourceDict == nil {
-			// Fall back to page resources.
-			annotResourceDict = getResources(ctx, doc, page)
 		}
 
-		w := newContentWalker(ctx, doc, annotDefaults, iccN, annotResourceDict)
-		w.walk(ops)
-		if len(w.errors) > 0 {
-			return w.errors[:1]
+		for _, apStreamObj := range appearanceStreams {
+			ops, err := content.ParsePageContent(ctx, doc, apStreamObj)
+			if err != nil {
+				continue
+			}
+
+			// Use annotation's own resources if available.
+			annotDefaults := make(map[ast.PdfName]bool)
+			maps.Copy(annotDefaults, defaults)
+			annotResourceDict := ast.PdfDict(nil)
+			apStreamRes, _ := document.ResolveObject(ctx, doc, apStreamObj)
+			if apStream, ok := apStreamRes.(ast.PdfStream); ok {
+				if arObj, ok := apStream.Dict["Resources"]; ok {
+					arRes, _ := document.ResolveObject(ctx, doc, arObj)
+					if arDict, ok := arRes.(ast.PdfDict); ok {
+						annotResourceDict = arDict
+						maps.Copy(annotDefaults, collectDefaultColorSpaces(ctx, doc, arDict))
+					}
+				}
+				addTransparencyGroupDefaults(ctx, doc, apStream.Dict, annotDefaults)
+			}
+			if annotResourceDict == nil {
+				annotResourceDict = getResources(ctx, doc, page)
+			}
+
+			w := newContentWalker(ctx, doc, annotDefaults, iccN, annotResourceDict)
+			w.walk(ops)
+			if len(w.errors) > 0 {
+				return w.errors[:1]
+			}
 		}
 	}
 	return nil

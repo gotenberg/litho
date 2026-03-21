@@ -171,4 +171,10 @@ var (
 
 	// Font CIDSystemInfo errors (6.2.11.3.1).
 	ErrCIDSystemInfoMismatch = errors.New("compliance: CIDFont and CMap CIDSystemInfo entries are incompatible")
+
+	// File specification errors (7.11).
+	ErrFileSpecMissingFUF = errors.New("compliance: file specification dictionary missing /F or /UF key")
+
+	// ICCBased colour space errors (6.2.4.2).
+	ErrICCBasedSameAsOutputIntent = errors.New("compliance: ICCBased colour space profile is identical to OutputIntent profile")
 )
