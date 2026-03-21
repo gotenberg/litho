@@ -41,98 +41,145 @@ func ResolveObject(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.P
 	return obj, nil
 }
 
-// ResolveDict resolves obj and returns it as a PdfDict. Returns nil (no error)
-// when the resolved object is not a dictionary — callers that require a dict
-// should check for nil.
+// isNullOrNil returns true if the resolved object is nil or PdfNull,
+// which are valid "absent" values that should not produce type errors.
+func isNullOrNil(obj ast.PdfObject) bool {
+	if obj == nil {
+		return true
+	}
+	_, isNull := obj.(ast.PdfNull)
+	return isNull
+}
+
+// ResolveDict resolves obj and returns it as a PdfDict. Returns (nil, error)
+// when the resolved object is a non-null type other than PdfDict.
 func ResolveDict(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfDict, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, err
 	}
-	dict, _ := resolved.(ast.PdfDict)
+	if isNullOrNil(resolved) {
+		return nil, nil
+	}
+	dict, ok := resolved.(ast.PdfDict)
+	if !ok {
+		return nil, fmt.Errorf("expected PdfDict, got %T", resolved)
+	}
 	return dict, nil
 }
 
 // ResolveDictRequired resolves obj and returns it as a PdfDict, returning an
 // error if the resolved object is not a dictionary.
 func ResolveDictRequired(ctx context.Context, doc *Document, obj ast.PdfObject, context string) (ast.PdfDict, error) {
-	resolved, err := ResolveObject(ctx, doc, obj)
+	dict, err := ResolveDict(ctx, doc, obj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", context, err)
 	}
-	dict, ok := resolved.(ast.PdfDict)
-	if !ok {
-		return nil, fmt.Errorf("%s: expected dictionary, got %T", context, resolved)
+	if dict == nil {
+		return nil, fmt.Errorf("%s: expected dictionary, got null or nil", context)
 	}
 	return dict, nil
 }
 
-// ResolveArray resolves obj and returns it as a PdfArray. Returns nil (no error)
-// when the resolved object is not an array.
+// ResolveArray resolves obj and returns it as a PdfArray. Returns (nil, error)
+// when the resolved object is a non-null type other than PdfArray.
 func ResolveArray(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, err
 	}
-	arr, _ := resolved.(ast.PdfArray)
+	if isNullOrNil(resolved) {
+		return nil, nil
+	}
+	arr, ok := resolved.(ast.PdfArray)
+	if !ok {
+		return nil, fmt.Errorf("expected PdfArray, got %T", resolved)
+	}
 	return arr, nil
 }
 
-// ResolveName resolves obj and returns it as a PdfName. Returns "" (no error)
-// when the resolved object is not a name.
+// ResolveName resolves obj and returns it as a PdfName. Returns ("", error)
+// when the resolved object is a non-null type other than PdfName.
 func ResolveName(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfName, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return "", err
 	}
-	name, _ := resolved.(ast.PdfName)
+	if isNullOrNil(resolved) {
+		return "", nil
+	}
+	name, ok := resolved.(ast.PdfName)
+	if !ok {
+		return "", fmt.Errorf("expected PdfName, got %T", resolved)
+	}
 	return name, nil
 }
 
-// ResolveStream resolves obj and returns it as a PdfStream. Returns the zero
-// value (no error) when the resolved object is not a stream.
+// ResolveStream resolves obj and returns it as a PdfStream. Returns (zero, error)
+// when the resolved object is a non-null type other than PdfStream.
 func ResolveStream(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfStream, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return ast.PdfStream{}, err
 	}
+	if isNullOrNil(resolved) {
+		return ast.PdfStream{}, nil
+	}
 	stream, ok := resolved.(ast.PdfStream)
 	if !ok {
-		return ast.PdfStream{}, nil
+		return ast.PdfStream{}, fmt.Errorf("expected PdfStream, got %T", resolved)
 	}
 	return stream, nil
 }
 
-// ResolveString resolves obj and returns it as a PdfString. Returns "" (no error)
-// when the resolved object is not a string.
+// ResolveString resolves obj and returns it as a PdfString. Returns ("", error)
+// when the resolved object is a non-null type other than PdfString.
 func ResolveString(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfString, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return "", err
 	}
-	s, _ := resolved.(ast.PdfString)
+	if isNullOrNil(resolved) {
+		return "", nil
+	}
+	s, ok := resolved.(ast.PdfString)
+	if !ok {
+		return "", fmt.Errorf("expected PdfString, got %T", resolved)
+	}
 	return s, nil
 }
 
-// ResolveInt resolves obj and returns it as a PdfInt. Returns 0 (no error)
-// when the resolved object is not an integer.
+// ResolveInt resolves obj and returns it as a PdfInt. Returns (0, error)
+// when the resolved object is a non-null type other than PdfInt.
 func ResolveInt(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfInt, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return 0, err
 	}
-	i, _ := resolved.(ast.PdfInt)
+	if isNullOrNil(resolved) {
+		return 0, nil
+	}
+	i, ok := resolved.(ast.PdfInt)
+	if !ok {
+		return 0, fmt.Errorf("expected PdfInt, got %T", resolved)
+	}
 	return i, nil
 }
 
-// ResolveBool resolves obj and returns it as a PdfBool. Returns false (no error)
-// when the resolved object is not a boolean.
+// ResolveBool resolves obj and returns it as a PdfBool. Returns (false, error)
+// when the resolved object is a non-null type other than PdfBool.
 func ResolveBool(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfBool, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return false, err
 	}
-	b, _ := resolved.(ast.PdfBool)
+	if isNullOrNil(resolved) {
+		return false, nil
+	}
+	b, ok := resolved.(ast.PdfBool)
+	if !ok {
+		return false, fmt.Errorf("expected PdfBool, got %T", resolved)
+	}
 	return b, nil
 }
 
