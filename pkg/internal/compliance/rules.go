@@ -129,6 +129,9 @@ func pdfA2Checks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkOCGUsageApplication,
 		checkCIDToGIDMap,
 		checkFontNameUTF8,
+		checkAnnotationAPOnlyN,
+		checkWidgetButtonAppearance,
+		checkExtGStateHTP,
 	)
 	return checks
 }
@@ -174,6 +177,9 @@ func pdfA3Checks(profile models.PDFAProfile) []catalogCheckFunc {
 		checkOCGUsageApplication,
 		checkCIDToGIDMap,
 		checkFontNameUTF8,
+		checkAnnotationAPOnlyN,
+		checkWidgetButtonAppearance,
+		checkExtGStateHTP,
 	)
 	return checks
 }
@@ -226,6 +232,9 @@ func pdfA4Rules(profile models.PDFAProfile) ruleSet {
 		checkUnicodeMapping,
 		checkCIDToGIDMap,
 		checkFontNameUTF8,
+		checkAnnotationAPOnlyN,
+		checkWidgetButtonAppearance,
+		checkExtGStateHTP,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }
@@ -252,6 +261,9 @@ func pdfA4eRules() ruleSet {
 		check3DStreamCompliance,
 		checkCIDToGIDMap,
 		checkFontNameUTF8,
+		checkAnnotationAPOnlyN,
+		checkWidgetButtonAppearance,
+		checkExtGStateHTP,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }
@@ -279,6 +291,9 @@ func pdfA4fRules() ruleSet {
 		checkAFRelationship,
 		checkCIDToGIDMap,
 		checkFontNameUTF8,
+		checkAnnotationAPOnlyN,
+		checkWidgetButtonAppearance,
+		checkExtGStateHTP,
 	)
 	return ruleSet{docChecks: pdfA4DocChecks(), catalogChecks: checks}
 }

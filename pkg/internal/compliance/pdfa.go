@@ -3524,6 +3524,22 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, catalog as
 	return errs
 }
 
+// checkFileSpecFUF verifies that all file specification dictionaries for
+// embedded files contain both /F and /UF keys (6.9 test 2).
+func checkFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	fileSpecs := collectFileSpecs(ctx, doc, catalog)
+	var errs []error
+	for _, fs := range fileSpecs {
+		if _, hasF := fs["F"]; !hasF {
+			errs = append(errs, fmt.Errorf("%w: missing /F key", models.ErrMissingAFRelationship))
+		}
+		if _, hasUF := fs["UF"]; !hasUF {
+			errs = append(errs, fmt.Errorf("%w: missing /UF key", models.ErrMissingAFRelationship))
+		}
+	}
+	return errs
+}
+
 // --- Part 4 specific ---
 
 // checkPDFA4Version verifies that the document declares PDF version 2.0,
@@ -4293,4 +4309,142 @@ func safeReadHeader(doc *document.Document) (buf []byte, err error) {
 		}
 	}()
 	return doc.ReadFileBytes(0, 16) //nolint:mnd // enough for "%PDF-2.0".
+}
+
+// --- Annotation appearance restrictions (6.3.3 test 2 & 3) ---
+
+// checkAnnotationAPOnlyN verifies that annotation appearance dictionaries
+// contain only the /N key (no /R or /D keys). Popup annotations are exempt.
+func checkAnnotationAPOnlyN(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		annotsArr, ok := annotsRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+			annotDict, ok := annotRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			subtypeName := resolveAnnotSubtype(ctx, doc, annotDict)
+			if subtypeName == "Popup" {
+				continue
+			}
+			apObj, ok := annotDict["AP"]
+			if !ok {
+				continue
+			}
+			apRes, _ := document.ResolveObject(ctx, doc, apObj)
+			apDict, ok := apRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			for key := range apDict {
+				if key != "N" {
+					errs = append(errs, models.ErrAnnotationAPExtraKeys)
+					break
+				}
+			}
+		}
+	}
+	return errs
+}
+
+// checkWidgetButtonAppearance verifies that Widget annotations with /FT=Btn
+// have an /AP /N value that is an appearance subdictionary (a dict of
+// name→stream), not a single stream.
+func checkWidgetButtonAppearance(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annotsRes, _ := document.ResolveObject(ctx, doc, annotsObj)
+		annotsArr, ok := annotsRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotRes, _ := document.ResolveObject(ctx, doc, annotObj)
+			annotDict, ok := annotRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			subtypeName := resolveAnnotSubtype(ctx, doc, annotDict)
+			if subtypeName != "Widget" {
+				continue
+			}
+			ftObj, ok := annotDict["FT"]
+			if !ok {
+				continue
+			}
+			ftRes, _ := document.ResolveObject(ctx, doc, ftObj)
+			ftName, ok := ftRes.(ast.PdfName)
+			if !ok || ftName != "Btn" {
+				continue
+			}
+			apObj, ok := annotDict["AP"]
+			if !ok {
+				continue
+			}
+			apRes, _ := document.ResolveObject(ctx, doc, apObj)
+			apDict, ok := apRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			nObj, ok := apDict["N"]
+			if !ok {
+				continue
+			}
+			nRes, _ := document.ResolveObject(ctx, doc, nObj)
+			if _, isStream := nRes.(*ast.PdfStream); isStream {
+				errs = append(errs, models.ErrWidgetButtonAPNotSubdict)
+			}
+		}
+	}
+	return errs
+}
+
+// --- ExtGState /HTP restriction (6.2.5 test 3) ---
+
+// checkExtGStateHTP verifies that no ExtGState dictionary contains the /HTP key.
+func checkExtGStateHTP(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+		gsObj, ok := resources["ExtGState"]
+		if !ok {
+			continue
+		}
+		gsRes, _ := document.ResolveObject(ctx, doc, gsObj)
+		gsDict, ok := gsRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		for _, v := range gsDict {
+			vRes, _ := document.ResolveObject(ctx, doc, v)
+			stateDict, ok := vRes.(ast.PdfDict)
+			if !ok {
+				continue
+			}
+			if _, ok := stateDict["HTP"]; ok {
+				errs = append(errs, models.ErrExtGStateHTP)
+			}
+		}
+	}
+	return errs
 }

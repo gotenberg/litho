@@ -154,4 +154,11 @@ var (
 	ErrMissingPDFUAId        = errors.New("compliance: XMP missing PDF/UA identification (pdfuaid:part)")
 	ErrAnnotationMissingAlt  = errors.New("compliance: annotation missing /Contents or /Alt in structure element")
 	ErrLinkMissingAltContent = errors.New("compliance: Link annotation missing alternate description via /Contents")
+
+	// PDF/A annotation appearance errors (6.3.3).
+	ErrAnnotationAPExtraKeys    = errors.New("compliance: annotation appearance dictionary must contain only /N key")
+	ErrWidgetButtonAPNotSubdict = errors.New("compliance: Widget button /AP /N must be an appearance subdictionary")
+
+	// PDF/A ExtGState errors (6.2.5).
+	ErrExtGStateHTP = errors.New("compliance: ExtGState must not contain /HTP key")
 )
