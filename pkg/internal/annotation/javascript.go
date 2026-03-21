@@ -13,7 +13,7 @@ import (
 func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]string, error) {
 	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting catalog for document scripts: %w", err)
 	}
 
 	namesObj, ok := catalog.Dict["Names"]
@@ -23,7 +23,7 @@ func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]stri
 
 	namesDict, err := document.ResolveDict(ctx, doc, namesObj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolving Names dict: %w", err)
 	}
 	if namesDict == nil {
 		return nil, fmt.Errorf("/Names is not a dictionary")
@@ -37,7 +37,7 @@ func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]stri
 	var scripts []string
 	err = extractJSTree(ctx, doc, jsObj, &scripts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("extracting document scripts: %w", err)
 	}
 
 	return scripts, nil
@@ -46,7 +46,7 @@ func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]stri
 func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string) error {
 	nodeDict, err := document.ResolveDict(ctx, doc, nodeObj)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolving JS name tree node: %w", err)
 	}
 	if nodeDict == nil {
 		return nil
@@ -58,7 +58,7 @@ func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfO
 		if err == nil && kidsArr != nil {
 			for _, kid := range kidsArr {
 				if err := extractJSTree(ctx, doc, kid, scripts); err != nil {
-					return err
+					return fmt.Errorf("traversing JS name tree kids: %w", err)
 				}
 			}
 		}

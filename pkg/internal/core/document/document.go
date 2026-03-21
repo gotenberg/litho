@@ -205,7 +205,7 @@ func (d *Document) Authenticate(password string) error {
 		d.objectCache = make(map[int]ast.PdfObject)
 		d.mu.Unlock()
 	}
-	return err
+	return fmt.Errorf("authenticating PDF encryption: %w", err)
 }
 
 // initCatalogVersion checks the catalog /Version key and overrides the header

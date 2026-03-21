@@ -7,6 +7,7 @@ import (
 	"crypto/md5" //nolint:gosec // Required for PDF standard encryption
 	"crypto/rc4" //nolint:gosec // Required for PDF standard encryption
 	"crypto/sha256"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -137,7 +138,7 @@ func (h *Handler) Authenticate(password string) error {
 			// Decrypt UE string to get the file encryption key
 			block, err := aes.NewCipher(userHash)
 			if err != nil {
-				return err
+				return fmt.Errorf("creating AES cipher for user key decryption: %w", err)
 			}
 
 			// IV is zeroed for this decryption
@@ -164,7 +165,7 @@ func (h *Handler) Authenticate(password string) error {
 			if len(h.oeVal) >= 32 {
 				block, err := aes.NewCipher(ownerHash)
 				if err != nil {
-					return err
+					return fmt.Errorf("creating AES cipher for owner key decryption: %w", err)
 				}
 
 				iv := make([]byte, aes.BlockSize)
@@ -338,7 +339,7 @@ func (h *Handler) GetDecryptFunc(objNum, genNum int) func([]byte) ([]byte, error
 		if h.V >= 4 && h.CFM == "AESV2" {
 			block, err := aes.NewCipher(key)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("creating AES cipher for AESV2 decryption: %w", err)
 			}
 			if len(data) < aes.BlockSize {
 				return data, nil
@@ -363,7 +364,7 @@ func (h *Handler) GetDecryptFunc(objNum, genNum int) func([]byte) ([]byte, error
 
 		c, err := rc4.NewCipher(key) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("creating RC4 cipher for decryption: %w", err)
 		}
 		out := make([]byte, len(data))
 		c.XORKeyStream(out, data)

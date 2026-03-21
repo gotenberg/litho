@@ -2,6 +2,7 @@ package annotation
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -121,7 +122,7 @@ func ExtractMeasurements(ctx context.Context, doc *document.Document, page *docu
 func parseRLMeasure(ctx context.Context, doc *document.Document, measureObj ast.PdfObject) (*models.Measurement, error) {
 	measureDict, err := document.ResolveDict(ctx, doc, measureObj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolving RL measure dict: %w", err)
 	}
 	if measureDict == nil {
 		return nil, nil

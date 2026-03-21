@@ -19,7 +19,7 @@ import (
 func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.FormField, error) {
 	catalog, err := document.GetCatalog(ctx, doc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting catalog for AcroForm: %w", err)
 	}
 
 	acroFormObj, ok := catalog.Dict["AcroForm"]
@@ -70,7 +70,7 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 
 	err = traverseFields(ctx, doc, fieldsArr, "", "", formDataMap, calcScripts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("traversing form fields: %w", err)
 	}
 
 	// If there are calculation scripts, evaluate them using goja
@@ -236,7 +236,7 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil && kidsArr != nil {
 				if err := traverseFields(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts); err != nil {
-					return err
+					return fmt.Errorf("traversing child fields: %w", err)
 				}
 			}
 		}

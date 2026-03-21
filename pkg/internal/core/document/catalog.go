@@ -81,7 +81,7 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 	// but we start the traversal here.
 	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, &pages)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("traversing page tree: %w", err)
 	}
 
 	doc.Logger.Debug("page tree traversed",
@@ -123,7 +123,7 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 
 func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, pages *[]*Page) error {
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("page tree traversal canceled: %w", err)
 	}
 
 	// Merge Resources: the node's resources are merged with inherited ones.
@@ -198,7 +198,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 
 			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, pages)
 			if err != nil {
-				return err
+				return fmt.Errorf("traversing page tree kid: %w", err)
 			}
 		}
 	case "Page":

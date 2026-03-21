@@ -20,7 +20,7 @@ func findStartXRef(r io.ReaderAt, size int64) (int64, error) {
 	buf := make([]byte, bufSize)
 	_, err := r.ReadAt(buf, size-bufSize)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("reading tail bytes for startxref: %w", err)
 	}
 
 	idx := bytes.LastIndex(buf, []byte("startxref"))
@@ -34,7 +34,7 @@ func findStartXRef(r io.ReaderAt, size int64) (int64, error) {
 	lex := lexer.NewLexer(ioat.NewReader(br, int64(len(sub)), 0))
 	tok, err := lex.NextToken()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("scanning token after startxref: %w", err)
 	}
 	if tok.Type != lexer.TokenNumber {
 		return 0, fmt.Errorf("expected offset after startxref, got %v", tok.Value)
@@ -42,7 +42,7 @@ func findStartXRef(r io.ReaderAt, size int64) (int64, error) {
 
 	offset, err := strconv.ParseInt(tok.Value, 10, 64)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("parsing startxref offset value %q: %w", tok.Value, err)
 	}
 
 	return offset, nil
@@ -60,7 +60,7 @@ func (d *Document) parseXRefChain() error {
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
 		tok, err := lex.NextToken()
 		if err != nil {
-			return err
+			return fmt.Errorf("reading token at xref offset %d: %w", currentOffset, err)
 		}
 
 		var prev int64
@@ -68,7 +68,7 @@ func (d *Document) parseXRefChain() error {
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
 			trailerDict, p, err := xref.ParseXRefTable(lex, d.Index.Entries)
 			if err != nil {
-				return err
+				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
 			}
 			prev = p
 			if d.Index.Trailer == nil {
@@ -90,7 +90,7 @@ func (d *Document) parseXRefChain() error {
 			p := parser.NewParser(lex)
 			obj, err := p.ParseObject()
 			if err != nil {
-				return err
+				return fmt.Errorf("parsing xref stream object at offset %d: %w", currentOffset, err)
 			}
 			stream, ok := obj.(ast.PdfStream)
 			if !ok {
@@ -98,7 +98,7 @@ func (d *Document) parseXRefChain() error {
 			}
 			pVal, err := xref.ParseXRefStream(stream, d.Index.Entries)
 			if err != nil {
-				return err
+				return fmt.Errorf("parsing xref stream at offset %d: %w", currentOffset, err)
 			}
 			prev = pVal
 			if d.Index.Trailer == nil {
@@ -122,7 +122,7 @@ func (d *Document) parseHybridXRefStream(offset int64) error {
 	p := parser.NewParser(lex)
 	obj, err := p.ParseObject()
 	if err != nil {
-		return err
+		return fmt.Errorf("parsing hybrid xref stream object at offset %d: %w", offset, err)
 	}
 
 	stream, ok := obj.(ast.PdfStream)
@@ -133,7 +133,7 @@ func (d *Document) parseHybridXRefStream(offset int64) error {
 	// Parse into a temporary map so entries override the legacy table.
 	hybridEntries := make(map[int]xref.XRefEntry)
 	if _, err := xref.ParseXRefStream(stream, hybridEntries); err != nil {
-		return err
+		return fmt.Errorf("parsing hybrid xref stream entries at offset %d: %w", offset, err)
 	}
 
 	// Merge: hybrid entries override legacy entries.

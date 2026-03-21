@@ -30,7 +30,7 @@ func extractXFAData(ctx context.Context, doc *document.Document, acroFormDict as
 
 	xmlData, err := assembleXFAXML(ctx, doc, xfaResolved)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("assembling XFA XML: %w", err)
 	}
 
 	if len(xmlData) == 0 {
@@ -113,7 +113,7 @@ func parseXFADatasets(xmlData []byte) (map[string]string, error) {
 			if inDatasets && t.Name.Local == "data" {
 				result := make(map[string]string)
 				if err := walkXFADataTree(decoder, "", result); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("walking XFA data tree: %w", err)
 				}
 				return result, nil
 			}
@@ -144,7 +144,7 @@ func walkXFADataTree(decoder *xml.Decoder, prefix string, result map[string]stri
 
 			childText, err := collectXFAElement(decoder, fullPath, result)
 			if err != nil {
-				return err
+				return fmt.Errorf("collecting XFA element %q: %w", fullPath, err)
 			}
 
 			if childText != "" {
@@ -180,7 +180,7 @@ func collectXFAElement(decoder *xml.Decoder, path string, result map[string]stri
 
 			childText, err := collectXFAElement(decoder, childPath, result)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("collecting XFA child element %q: %w", childPath, err)
 			}
 			if childText != "" {
 				result[childPath] = childText

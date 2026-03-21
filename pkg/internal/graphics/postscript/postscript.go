@@ -28,14 +28,14 @@ const (
 func Execute(inputs []float64, program []byte) ([]float64, error) {
 	tokens, err := tokenize(string(program))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("tokenizing postscript program: %w", err)
 	}
 
 	stack := make([]float64, 0, len(inputs)+8)
 	stack = append(stack, inputs...)
 
 	if err := execTokens(tokens, &stack); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("executing postscript program: %w", err)
 	}
 
 	return stack, nil
@@ -78,7 +78,7 @@ func parseTokens(s string, inBlock bool) ([]token, string, error) {
 		if ch == '{' {
 			inner, rest, err := parseTokens(s[1:], true)
 			if err != nil {
-				return nil, "", err
+				return nil, "", fmt.Errorf("parsing nested block: %w", err)
 			}
 			tokens = append(tokens, token{kind: tokenBlock, block: inner})
 			s = rest
@@ -111,210 +111,210 @@ func execOp(op string, stack *[]float64, _ []token) error {
 	case "add":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, a+b)
 
 	case "sub":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, a-b)
 
 	case "mul":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, a*b)
 
 	case "div":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		if b == 0 {
-			return ErrDivisionByZero
+			return fmt.Errorf("postscript op %q: %w", op, ErrDivisionByZero)
 		}
 		*stack = append(*stack, a/b)
 
 	case "idiv":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		if b == 0 {
-			return ErrDivisionByZero
+			return fmt.Errorf("postscript op %q: %w", op, ErrDivisionByZero)
 		}
 		*stack = append(*stack, float64(int64(a)/int64(b)))
 
 	case "mod":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		if b == 0 {
-			return ErrDivisionByZero
+			return fmt.Errorf("postscript op %q: %w", op, ErrDivisionByZero)
 		}
 		*stack = append(*stack, float64(int64(a)%int64(b)))
 
 	case "neg":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, -a)
 
 	case "abs":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Abs(a))
 
 	case "ceiling":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Ceil(a))
 
 	case "floor":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Floor(a))
 
 	case "round":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Round(a))
 
 	case "truncate":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Trunc(a))
 
 	case "sqrt":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Sqrt(a))
 
 	case "sin":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Sin(a*math.Pi/180))
 
 	case "cos":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Cos(a*math.Pi/180))
 
 	case "atan":
 		num, den, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Atan2(num, den)*180/math.Pi)
 
 	case "exp":
 		base, exponent, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Pow(base, exponent))
 
 	case "ln":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Log(a))
 
 	case "log":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, math.Log10(a))
 
 	case "cvi":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, float64(int64(a)))
 
 	case "cvr":
 		// In Type 4, cvr is a no-op since the stack is all floats.
 		if len(*stack) < 1 {
-			return ErrStackUnderflow
+			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
 
 	// Stack operators.
 	case "dup":
 		if len(*stack) < 1 {
-			return ErrStackUnderflow
+			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
 		*stack = append(*stack, (*stack)[len(*stack)-1])
 
 	case "exch":
 		n := len(*stack)
 		if n < 2 {
-			return ErrStackUnderflow
+			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
 		(*stack)[n-1], (*stack)[n-2] = (*stack)[n-2], (*stack)[n-1]
 
 	case "pop":
 		if len(*stack) < 1 {
-			return ErrStackUnderflow
+			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
 		*stack = (*stack)[:len(*stack)-1]
 
 	case "copy":
 		count, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		n := int(count)
 		if len(*stack) < n {
-			return ErrStackUnderflow
+			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
 		*stack = append(*stack, (*stack)[len(*stack)-n:]...)
 
 	case "index":
 		idx, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		i := int(idx)
 		if i < 0 || len(*stack) <= i {
-			return ErrStackUnderflow
+			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
 		*stack = append(*stack, (*stack)[len(*stack)-1-i])
 
 	case "roll":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		n := int(a)
 		j := int(b)
 		sLen := len(*stack)
 		if n < 0 || sLen < n {
-			return ErrStackUnderflow
+			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
 		if n == 0 {
 			break
@@ -337,42 +337,42 @@ func execOp(op string, stack *[]float64, _ []token) error {
 	case "eq":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, boolToFloat(a == b))
 
 	case "ne":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, boolToFloat(a != b))
 
 	case "gt":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, boolToFloat(a > b))
 
 	case "ge":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, boolToFloat(a >= b))
 
 	case "lt":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, boolToFloat(a < b))
 
 	case "le":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, boolToFloat(a <= b))
 
@@ -380,28 +380,28 @@ func execOp(op string, stack *[]float64, _ []token) error {
 	case "and":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, float64(int64(a)&int64(b)))
 
 	case "or":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, float64(int64(a)|int64(b)))
 
 	case "xor":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		*stack = append(*stack, float64(int64(a)^int64(b)))
 
 	case "not":
 		a, err := pop1(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		if a == 0 {
 			*stack = append(*stack, 1.0)
@@ -412,7 +412,7 @@ func execOp(op string, stack *[]float64, _ []token) error {
 	case "bitshift":
 		a, b, err := pop2(stack)
 		if err != nil {
-			return err
+			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
 		val := int64(a)
 		shift := int64(b)
@@ -464,11 +464,11 @@ func execTokens(tokens []token, stack *[]float64) error {
 
 				cond, err := pop1(stack)
 				if err != nil {
-					return err
+					return fmt.Errorf("popping condition for 'if': %w", err)
 				}
 				if cond != 0 {
 					if err := execTokens(body, stack); err != nil {
-						return err
+						return fmt.Errorf("executing 'if' body: %w", err)
 					}
 				}
 
@@ -482,15 +482,15 @@ func execTokens(tokens []token, stack *[]float64) error {
 
 				cond, err := pop1(stack)
 				if err != nil {
-					return err
+					return fmt.Errorf("popping condition for 'ifelse': %w", err)
 				}
 				if cond != 0 {
 					if err := execTokens(trueBody, stack); err != nil {
-						return err
+						return fmt.Errorf("executing 'ifelse' true branch: %w", err)
 					}
 				} else {
 					if err := execTokens(falseBody, stack); err != nil {
-						return err
+						return fmt.Errorf("executing 'ifelse' false branch: %w", err)
 					}
 				}
 
