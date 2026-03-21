@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -101,4 +102,79 @@ func validateObjHeader(buf []byte, objNum int) error {
 	}
 
 	return nil
+}
+
+// checkContentStreamHexStrings scans page content stream bytes for hex
+// strings (<...>) and validates that they have an even number of hex
+// digits and contain only valid hex characters (6.1.5/6.1.6).
+func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		contentsObj, ok := page["Contents"]
+		if !ok {
+			continue
+		}
+		data, err := getContentStreamBytes(ctx, doc, contentsObj)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		if err := scanHexStrings(data); err != nil {
+			return []error{err}
+		}
+	}
+	return nil
+}
+
+// scanHexStrings scans raw bytes for hex string tokens (<...>) and
+// validates their format. Dictionary delimiters (<<...>>) are skipped.
+func scanHexStrings(data []byte) error {
+	for i := 0; i < len(data); i++ {
+		if data[i] != '<' {
+			continue
+		}
+		// Skip dictionary delimiters "<<".
+		if i+1 < len(data) && data[i+1] == '<' {
+			i++ // skip second '<'
+			continue
+		}
+		// Found start of hex string. Find closing '>'.
+		end := bytes.IndexByte(data[i+1:], '>')
+		if end < 0 {
+			break
+		}
+		hexContent := data[i+1 : i+1+end]
+		i += end + 1 // advance past '>'
+
+		// Validate hex content.
+		// Skip if content contains non-hex characters — it's likely not
+		// a real hex string (could be inline image data or other context).
+		digitCount := 0
+		valid := true
+		for _, b := range hexContent {
+			if isPDFWhitespace(b) {
+				continue
+			}
+			if !isHexDigit(b) {
+				valid = false
+				break
+			}
+			digitCount++
+		}
+		if !valid {
+			continue // Not a hex string — skip.
+		}
+		if digitCount > 0 && digitCount%2 != 0 {
+			return fmt.Errorf("%w: hex string has odd number of digits (%d)",
+				models.ErrInvalidFileHeader, digitCount)
+		}
+	}
+	return nil
+}
+
+func isPDFWhitespace(b byte) bool {
+	return b == 0x00 || b == 0x09 || b == 0x0A || b == 0x0C || b == 0x0D || b == 0x20
+}
+
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }

@@ -71,6 +71,7 @@ func pdfaBaseChecks(profile models.PDFAProfile) []catalogCheckFunc {
 		makeStringLengthCheck(profile),
 		checkNumberLimits,
 		checkStreamLengths,
+		checkContentStreamHexStrings,
 		checkCatalogVersionFormat,
 		checkPermissionsDict,
 		checkDocMDPSignatureRefs,
