@@ -208,19 +208,6 @@ func DecodePdfString(s ast.PdfString) string {
 	return string(b)
 }
 
-// resolveAny resolves obj if it is an indirect reference, otherwise returns it directly.
-// This is safe to call on any PdfObject (unlike Resolve which requires PdfIndirectRef).
-func (d *Document) resolveAny(ctx context.Context, obj ast.PdfObject) ast.PdfObject {
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		res, err := d.Resolve(ctx, ref)
-		if err != nil {
-			return nil
-		}
-		return res
-	}
-	return obj
-}
-
 // extractFromObjectStream extracts an object from an Object Stream.
 // visited is the per-call-chain set for circular-reference detection.
 func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, targetIndex int, visited map[int]bool) (ast.PdfObject, error) {

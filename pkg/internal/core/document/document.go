@@ -215,8 +215,11 @@ func (d *Document) initCatalogVersion(ctx context.Context) {
 	if !ok {
 		return
 	}
-	catalog, ok := d.resolveAny(ctx, rootObj).(ast.PdfDict)
-	if !ok {
+	catalog, err := ResolveDict(ctx, d, rootObj)
+	if err != nil {
+		d.Logger.Debug("resolving catalog for version check", slog.Any("err", err))
+	}
+	if catalog == nil {
 		return
 	}
 	vObj, ok := catalog["Version"]

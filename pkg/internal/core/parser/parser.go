@@ -295,34 +295,68 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 		// Record the start offset of the raw stream data.
 		streamStart := reader.Position()
 
-		// Scan forward to find "endstream", counting the data length.
-		endMarker := []byte("endstream")
-		matchLen := 0
-		dataLen := int64(0)
-		for {
-			c, err := reader.ReadByte()
-			if err != nil {
-				if err == io.EOF {
-					break
+		// Fast path: if /Length is a direct integer, seek past the stream
+		// data without reading it byte-by-byte. This is critical for large
+		// streams (images, embedded files) where scanning would be wasteful.
+		var dataLen int64
+		usedLength := false
+		if lengthObj, ok := dict["Length"]; ok {
+			if lengthInt, ok := lengthObj.(ast.PdfInt); ok && int64(lengthInt) > 0 {
+				dataLen = int64(lengthInt)
+				// Seek past the stream data.
+				if _, err := reader.Seek(streamStart+dataLen, io.SeekStart); err == nil {
+					// Verify "endstream" follows. Tolerate optional \r\n before it.
+					usedLength = true
+					verify := make([]byte, len("endstream")+2) //nolint:mnd // endstream + optional \r\n
+					n, _ := reader.Read(verify)                //nolint:errcheck // partial read is fine
+					verifyStr := string(verify[:n])
+					// Strip leading whitespace before endstream.
+					for len(verifyStr) > 0 && (verifyStr[0] == '\r' || verifyStr[0] == '\n') {
+						verifyStr = verifyStr[1:]
+					}
+					if !strings.HasPrefix(verifyStr, "endstream") {
+						// /Length was wrong — fall back to byte scanning.
+						usedLength = false
+						if _, err := reader.Seek(streamStart, io.SeekStart); err != nil {
+							return nil, fmt.Errorf("seeking back to stream start: %w", err)
+						}
+					}
 				}
-				return nil, err
 			}
-			if c == endMarker[matchLen] {
-				matchLen++
-				if matchLen == len(endMarker) {
-					break
+		}
+
+		// Slow path: scan byte-by-byte for "endstream" marker.
+		if !usedLength {
+			endMarker := []byte("endstream")
+			matchLen := 0
+			dataLen = 0
+			for {
+				c, err := reader.ReadByte()
+				if err != nil {
+					if err == io.EOF {
+						// EOF mid-match: the partial match bytes are data, not the marker.
+						dataLen += int64(matchLen)
+						break
+					}
+					return nil, err
 				}
-			} else {
-				if matchLen > 0 {
-					dataLen += int64(matchLen)
-					matchLen = 0
-					if c == endMarker[0] {
-						matchLen = 1
+				if c == endMarker[matchLen] {
+					matchLen++
+					if matchLen == len(endMarker) {
+						break
+					}
+				} else {
+					if matchLen > 0 {
+						dataLen += int64(matchLen)
+						matchLen = 0
+						if c == endMarker[0] {
+							matchLen = 1
+						} else {
+							dataLen++
+						}
 					} else {
 						dataLen++
 					}
-				} else {
-					dataLen++
 				}
 			}
 		}

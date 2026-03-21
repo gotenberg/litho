@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -24,8 +25,11 @@ func (d *Document) initOCConfig(ctx context.Context) {
 	if !ok {
 		return
 	}
-	catalog, ok := d.resolveAny(ctx, rootObj).(ast.PdfDict)
-	if !ok {
+	catalog, err := ResolveDict(ctx, d, rootObj)
+	if err != nil {
+		d.Logger.Debug("resolving catalog for OC config", slog.Any("err", err))
+	}
+	if catalog == nil {
 		return
 	}
 
@@ -33,8 +37,11 @@ func (d *Document) initOCConfig(ctx context.Context) {
 	if !ok {
 		return
 	}
-	ocp, ok := d.resolveAny(ctx, ocpObj).(ast.PdfDict)
-	if !ok {
+	ocp, err := ResolveDict(ctx, d, ocpObj)
+	if err != nil {
+		d.Logger.Debug("resolving OCProperties dict", slog.Any("err", err))
+	}
+	if ocp == nil {
 		return
 	}
 
@@ -42,8 +49,11 @@ func (d *Document) initOCConfig(ctx context.Context) {
 	if !ok {
 		return
 	}
-	dDict, ok := d.resolveAny(ctx, dObj).(ast.PdfDict)
-	if !ok {
+	dDict, err := ResolveDict(ctx, d, dObj)
+	if err != nil {
+		d.Logger.Debug("resolving OC default config dict", slog.Any("err", err))
+	}
+	if dDict == nil {
 		return
 	}
 
@@ -57,22 +67,26 @@ func (d *Document) initOCConfig(ctx context.Context) {
 
 	// Parse ON array
 	if onObj, ok := dDict["ON"]; ok {
-		if onArr, ok := d.resolveAny(ctx, onObj).(ast.PdfArray); ok {
-			for _, item := range onArr {
-				if ref, ok := item.(ast.PdfIndirectRef); ok {
-					d.OCConfig.On[ref.ObjectNum] = true
-				}
+		onArr, err := ResolveArray(ctx, d, onObj)
+		if err != nil {
+			d.Logger.Debug("resolving OC ON array", slog.Any("err", err))
+		}
+		for _, item := range onArr {
+			if ref, ok := item.(ast.PdfIndirectRef); ok {
+				d.OCConfig.On[ref.ObjectNum] = true
 			}
 		}
 	}
 
 	// Parse OFF array
 	if offObj, ok := dDict["OFF"]; ok {
-		if offArr, ok := d.resolveAny(ctx, offObj).(ast.PdfArray); ok {
-			for _, item := range offArr {
-				if ref, ok := item.(ast.PdfIndirectRef); ok {
-					d.OCConfig.Off[ref.ObjectNum] = true
-				}
+		offArr, err := ResolveArray(ctx, d, offObj)
+		if err != nil {
+			d.Logger.Debug("resolving OC OFF array", slog.Any("err", err))
+		}
+		for _, item := range offArr {
+			if ref, ok := item.(ast.PdfIndirectRef); ok {
+				d.OCConfig.Off[ref.ObjectNum] = true
 			}
 		}
 	}
