@@ -180,6 +180,45 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	return nil
 }
 
+// checkOCConfigNames verifies that all optional content configuration
+// dictionaries (/D and /Configs in /OCProperties) contain a /Name key.
+func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	ocObj, ok := catalog["OCProperties"]
+	if !ok {
+		return nil
+	}
+	ocRes, _ := document.ResolveObject(ctx, doc, ocObj)
+	ocDict, ok := ocRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	var errs []error
+	// Check /D (default configuration).
+	if dObj, ok := ocDict["D"]; ok {
+		dRes, _ := document.ResolveObject(ctx, doc, dObj)
+		if dDict, ok := dRes.(ast.PdfDict); ok {
+			if _, ok := dDict["Name"]; !ok {
+				errs = append(errs, models.ErrOCConfigMissingName)
+			}
+		}
+	}
+	// Check /Configs array.
+	if cfgObj, ok := ocDict["Configs"]; ok {
+		cfgRes, _ := document.ResolveObject(ctx, doc, cfgObj)
+		if cfgArr, ok := cfgRes.(ast.PdfArray); ok {
+			for _, item := range cfgArr {
+				itemRes, _ := document.ResolveObject(ctx, doc, item)
+				if itemDict, ok := itemRes.(ast.PdfDict); ok {
+					if _, ok := itemDict["Name"]; !ok {
+						errs = append(errs, models.ErrOCConfigMissingName)
+					}
+				}
+			}
+		}
+	}
+	return errs
+}
+
 // checkLang verifies that a natural language is declared either in the
 // catalog or on the root structure element.
 func checkLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
@@ -530,18 +569,49 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 		return nil
 	}
 
-	// Build the role map.
+	// Build the role map (source → target).
 	roleMap := make(map[string]bool)
+	roleMapTargets := make(map[string]string)
 	if rmObj, ok := strDict["RoleMap"]; ok {
 		rmRes, _ := document.ResolveObject(ctx, doc, rmObj)
 		if rmDict, ok := rmRes.(ast.PdfDict); ok {
-			for key := range rmDict {
+			for key, val := range rmDict {
 				roleMap[string(key)] = true
+				valRes, _ := document.ResolveObject(ctx, doc, val)
+				if targetName, ok := valRes.(ast.PdfName); ok {
+					roleMapTargets[string(key)] = string(targetName)
+				}
 			}
 		}
 	}
 
 	var errs []error
+
+	// Validate role map entries.
+	for src, target := range roleMapTargets {
+		// Standard tags must not be remapped (7.1 t07).
+		if standardPDF17Tags[src] {
+			errs = append(errs, fmt.Errorf("%w: /%s → /%s", models.ErrStandardTagRemapped, src, target))
+			continue
+		}
+		// Follow the mapping chain to verify it terminates at a standard type.
+		visited := map[string]bool{src: true}
+		current := target
+		for !standardPDF17Tags[current] {
+			next, ok := roleMapTargets[current]
+			if !ok {
+				// Mapping doesn't terminate at standard type.
+				errs = append(errs, fmt.Errorf("%w: /%s → /%s", models.ErrRoleMapNotTerminating, src, current))
+				break
+			}
+			if visited[current] {
+				errs = append(errs, fmt.Errorf("%w: /%s", models.ErrRoleMapCircular, src))
+				break
+			}
+			visited[current] = true
+			current = next
+		}
+	}
 	kObj, ok := strDict["K"]
 	if !ok {
 		return nil
