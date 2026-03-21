@@ -185,3 +185,39 @@ func compareCIDWidths(ctx context.Context, doc *document.Document, wObj ast.PdfO
 	}
 	return nil
 }
+
+// checkNotdefGlyphUsage detects explicit .notdef glyph references in font
+// Encoding /Differences arrays (6.2.11.8 / 6.2.10.9). A .notdef entry
+// indicates a character code maps to the undefined glyph.
+func checkNotdefGlyphUsage(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	var errs []error
+	fonts := collectFontDicts(ctx, doc, catalog)
+	for name, fontDict := range fonts {
+		encObj, ok := fontDict["Encoding"]
+		if !ok {
+			continue
+		}
+		encRes, _ := document.ResolveObject(ctx, doc, encObj)
+		encDict, ok := encRes.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		diffObj, ok := encDict["Differences"]
+		if !ok {
+			continue
+		}
+		diffRes, _ := document.ResolveObject(ctx, doc, diffObj)
+		diffArr, ok := diffRes.(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		for _, item := range diffArr {
+			if n, ok := item.(ast.PdfName); ok && n == ".notdef" {
+				errs = append(errs, fmt.Errorf("%w: %s",
+					models.ErrNotdefGlyphUsed, name))
+				break
+			}
+		}
+	}
+	return errs
+}

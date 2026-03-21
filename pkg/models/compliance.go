@@ -175,6 +175,9 @@ var (
 	// Font glyph width consistency errors (6.2.11.5 / 6.2.10.5).
 	ErrGlyphWidthMismatch = errors.New("compliance: font glyph width in dictionary does not match embedded font program")
 
+	// .notdef glyph reference error (6.2.11.8 / 6.2.10.9).
+	ErrNotdefGlyphUsed = errors.New("compliance: .notdef glyph referenced in content stream")
+
 	// File specification errors (7.11).
 	ErrFileSpecMissingFUF = errors.New("compliance: file specification dictionary missing /F or /UF key")
 

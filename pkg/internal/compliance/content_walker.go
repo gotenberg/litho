@@ -632,8 +632,15 @@ func checkNamedColorSpaceResources(ctx context.Context, doc *document.Document, 
 
 // checkAllXObjectCS scans all XObject resources (including those not invoked
 // via Do in the content stream) for device-dependent color spaces in Image
-// XObjects.
+// XObjects. Also recurses into Form XObject resources.
 func checkAllXObjectCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) []error {
+	return checkAllXObjectCSRecursive(ctx, doc, resources, defaults, iccN, 0)
+}
+
+func checkAllXObjectCSRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int, depth int) []error {
+	if depth > 10 { //nolint:mnd // prevent infinite recursion
+		return nil
+	}
 	xobjObj, ok := resources["XObject"]
 	if !ok {
 		return nil
@@ -651,6 +658,24 @@ func checkAllXObjectCS(ctx context.Context, doc *document.Document, resources as
 		}
 		stObj := stream.Dict["Subtype"]
 		st, _ := stObj.(ast.PdfName)
+
+		// Recurse into Form XObject resources.
+		if st == "Form" {
+			if frObj, ok := stream.Dict["Resources"]; ok {
+				frRes, _ := document.ResolveObject(ctx, doc, frObj)
+				if frDict, ok := frRes.(ast.PdfDict); ok {
+					formDefaults := make(map[ast.PdfName]bool)
+					maps.Copy(formDefaults, defaults)
+					maps.Copy(formDefaults, collectDefaultColorSpaces(ctx, doc, frDict))
+					addTransparencyGroupDefaults(ctx, doc, stream.Dict, formDefaults)
+					if errs := checkAllXObjectCSRecursive(ctx, doc, frDict, formDefaults, iccN, depth+1); len(errs) > 0 {
+						return errs
+					}
+				}
+			}
+			continue
+		}
+
 		if st != "Image" {
 			continue
 		}
@@ -699,23 +724,25 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 		if !ok {
 			continue
 		}
-		nObj, ok := apDict["N"]
-		if !ok {
-			continue
-		}
-
-		// /N can be a stream (single appearance) or a dict of named
-		// appearance states (e.g., /True, /False for checkboxes).
-		nRes, _ := document.ResolveObject(ctx, doc, nObj)
+		// Walk /N (normal), /D (down), /R (rollover) appearance streams.
 		var appearanceStreams []ast.PdfObject
-		switch n := nRes.(type) {
-		case ast.PdfStream:
-			appearanceStreams = append(appearanceStreams, nObj)
-		case ast.PdfDict:
-			// Subdictionary of named appearances — walk each.
-			for _, subObj := range n {
-				appearanceStreams = append(appearanceStreams, subObj)
+		for _, apKey := range []ast.PdfName{"N", "D", "R"} {
+			apEntryObj, ok := apDict[apKey]
+			if !ok {
+				continue
 			}
+			apEntryRes, _ := document.ResolveObject(ctx, doc, apEntryObj)
+			switch entry := apEntryRes.(type) {
+			case ast.PdfStream:
+				appearanceStreams = append(appearanceStreams, apEntryObj)
+			case ast.PdfDict:
+				for _, subObj := range entry {
+					appearanceStreams = append(appearanceStreams, subObj)
+				}
+			}
+		}
+		if len(appearanceStreams) == 0 {
+			continue
 		}
 
 		for _, apStreamObj := range appearanceStreams {
