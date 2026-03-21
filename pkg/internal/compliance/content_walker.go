@@ -427,6 +427,54 @@ func checkContentStreamCompliance(ctx context.Context, doc *document.Document, c
 		if errs := walkAnnotationAppearances(ctx, doc, page, defaults, iccN); len(errs) > 0 {
 			return errs[:1]
 		}
+
+		// Check Shading resources for device-dependent color spaces.
+		if resources != nil {
+			if errs := checkShadingResourceCS(ctx, doc, resources, defaults, iccN); len(errs) > 0 {
+				return errs[:1]
+			}
+		}
+	}
+	return nil
+}
+
+// checkShadingResourceCS scans Shading resources for device-dependent CS.
+func checkShadingResourceCS(ctx context.Context, doc *document.Document, resources ast.PdfDict, defaults map[ast.PdfName]bool, iccN int) []error {
+	shObj, ok := resources["Shading"]
+	if !ok {
+		return nil
+	}
+	shRes, _ := document.ResolveObject(ctx, doc, shObj)
+	shDict, ok := shRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	for _, obj := range shDict {
+		objRes, _ := document.ResolveObject(ctx, doc, obj)
+		var shadingDict ast.PdfDict
+		switch v := objRes.(type) {
+		case ast.PdfDict:
+			shadingDict = v
+		case ast.PdfStream:
+			shadingDict = v.Dict
+		default:
+			continue
+		}
+		csObj, ok := shadingDict["ColorSpace"]
+		if !ok {
+			continue
+		}
+		if isDeviceDependentCS(ctx, doc, csObj, defaults) {
+			csRes, _ := document.ResolveObject(ctx, doc, csObj)
+			csName := ast.PdfName("")
+			if n, ok := csRes.(ast.PdfName); ok {
+				csName = n
+			}
+			if !iccCoversDeviceCS(iccN, csName) {
+				return []error{fmt.Errorf("%w: %s in Shading resource",
+					models.ErrMissingICCProfile, csName)}
+			}
+		}
 	}
 	return nil
 }
