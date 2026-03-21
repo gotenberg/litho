@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"strings"
 	"unicode/utf8"
 
@@ -501,7 +502,10 @@ func addTransparencyGroupDefaults(ctx context.Context, doc *document.Document, p
 	if !ok {
 		return
 	}
-	csRes, _ := document.ResolveObject(ctx, doc, csObj)
+	csRes, err := document.ResolveObject(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving transparency group color space", slog.Any("err", err))
+	}
 	switch cs := csRes.(type) {
 	case ast.PdfName:
 		// A direct device-independent name (unlikely but valid).
@@ -553,7 +557,10 @@ func addTransparencyGroupDefaults(ctx context.Context, doc *document.Document, p
 // device-dependent color space (DeviceRGB, DeviceCMYK, DeviceGray) that is
 // not covered by a Default entry in the page's resource dictionary.
 func isDeviceDependentCS(ctx context.Context, doc *document.Document, csObj ast.PdfObject, defaults map[ast.PdfName]bool) bool {
-	resolved, _ := document.ResolveObject(ctx, doc, csObj)
+	resolved, err := document.ResolveObject(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving color space object", slog.Any("err", err))
+	}
 	switch cs := resolved.(type) {
 	case ast.PdfName:
 		return deviceDependentNames[cs] && !defaults[cs]
@@ -758,7 +765,10 @@ func resolveNamedColorSpace(ctx context.Context, doc *document.Document, resourc
 		return ""
 	}
 	// Resolve the color space definition.
-	valRes, _ := document.ResolveObject(ctx, doc, valObj)
+	valRes, err := document.ResolveObject(ctx, doc, valObj)
+	if err != nil {
+		doc.Logger.Debug("resolving named color space definition", slog.Any("err", err))
+	}
 	switch cs := valRes.(type) {
 	case ast.PdfName:
 		// Direct name: DeviceRGB, DeviceGray, DeviceCMYK, or device-independent.
@@ -790,7 +800,10 @@ func resolveNamedColorSpace(ctx context.Context, doc *document.Document, resourc
 
 // resolveBaseCS resolves the base color space of Indexed/Separation/DeviceN.
 func resolveBaseCS(ctx context.Context, doc *document.Document, obj ast.PdfObject) ast.PdfName {
-	resolved, _ := document.ResolveObject(ctx, doc, obj)
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		doc.Logger.Debug("resolving base color space", slog.Any("err", err))
+	}
 	switch cs := resolved.(type) {
 	case ast.PdfName:
 		return cs
@@ -1203,7 +1216,10 @@ func resolveAnnotSubtype(ctx context.Context, doc *document.Document, annotDict 
 	if !ok {
 		return ""
 	}
-	stName, _ := document.ResolveName(ctx, doc, stObj)
+	stName, err := document.ResolveName(ctx, doc, stObj)
+	if err != nil {
+		doc.Logger.Debug("resolving annotation subtype", slog.Any("err", err))
+	}
 	return stName
 }
 
@@ -2303,7 +2319,10 @@ func checkNoReferenceXObjects(ctx context.Context, doc *document.Document, catal
 			continue
 		}
 		for _, obj := range xobjDict {
-			objRes, _ := document.ResolveObject(ctx, doc, obj)
+			objRes, err := document.ResolveObject(ctx, doc, obj)
+			if err != nil {
+				doc.Logger.Debug("resolving XObject entry", slog.Any("err", err))
+			}
 			switch xo := objRes.(type) {
 			case ast.PdfStream:
 				if isReferenceXObject(xo.Dict) {
@@ -2435,7 +2454,10 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, catalo
 // resolveXObjectDict resolves an XObject to its dictionary, handling both
 // PdfStream and PdfDict representations.
 func resolveXObjectDict(ctx context.Context, doc *document.Document, obj ast.PdfObject) ast.PdfDict {
-	objRes, _ := document.ResolveObject(ctx, doc, obj)
+	objRes, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		doc.Logger.Debug("resolving XObject dictionary", slog.Any("err", err))
+	}
 	switch xo := objRes.(type) {
 	case ast.PdfStream:
 		return xo.Dict
@@ -3220,7 +3242,10 @@ func hasStandardOrDifferencesEncoding(ctx context.Context, doc *document.Documen
 	if !ok {
 		return false
 	}
-	encRes, _ := document.ResolveObject(ctx, doc, encObj)
+	encRes, err := document.ResolveObject(ctx, doc, encObj)
+	if err != nil {
+		doc.Logger.Debug("resolving font encoding", slog.Any("err", err))
+	}
 
 	switch enc := encRes.(type) {
 	case ast.PdfName:
@@ -3486,7 +3511,10 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, catalog 
 				models.ErrMissingUnicodeMapping, name))
 			continue
 		}
-		encRes, _ := document.ResolveObject(ctx, doc, encObj)
+		encRes, err := document.ResolveObject(ctx, doc, encObj)
+		if err != nil {
+			doc.Logger.Debug("resolving TrueType font encoding", slog.Any("err", err))
+		}
 		switch enc := encRes.(type) {
 		case ast.PdfName:
 			if enc != "MacRomanEncoding" && enc != "WinAnsiEncoding" {
@@ -3575,7 +3603,10 @@ func hasLangSpecified(ctx context.Context, doc *document.Document, catalog ast.P
 	if !ok {
 		return false
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving structure tree root kids", slog.Any("err", err))
+	}
 	return structTreeHasLang(ctx, doc, kRes)
 }
 
@@ -3588,14 +3619,20 @@ func structTreeHasLang(ctx context.Context, doc *document.Document, obj ast.PdfO
 			return true
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			kRes, err := document.ResolveObject(ctx, doc, kObj)
+			if err != nil {
+				doc.Logger.Debug("resolving structure element kids", slog.Any("err", err))
+			}
 			if structTreeHasLang(ctx, doc, kRes) {
 				return true
 			}
 		}
 	case ast.PdfArray:
 		for _, item := range v {
-			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			itemRes, err := document.ResolveObject(ctx, doc, item)
+			if err != nil {
+				doc.Logger.Debug("resolving structure tree array item", slog.Any("err", err))
+			}
 			if structTreeHasLang(ctx, doc, itemRes) {
 				return true
 			}
@@ -3622,7 +3659,10 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving figure alt text structure tree kids", slog.Any("err", err))
+	}
 
 	var errs []error
 	checkFigureAltRecursive(ctx, doc, kRes, &errs)
@@ -3634,7 +3674,10 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving figure structure tree kid", slog.Any("err", err))
+			}
 			checkFigureAltRecursive(ctx, doc, kidRes, errs)
 		}
 	case ast.PdfDict:
@@ -3649,7 +3692,10 @@ func checkFigureAltRecursive(ctx context.Context, doc *document.Document, obj as
 		}
 		// Recurse into children.
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			kRes, err := document.ResolveObject(ctx, doc, kObj)
+			if err != nil {
+				doc.Logger.Debug("resolving figure structure element children", slog.Any("err", err))
+			}
 			checkFigureAltRecursive(ctx, doc, kRes, errs)
 		}
 	}
@@ -4092,7 +4138,10 @@ func has3DStreamSubtype(ctx context.Context, doc *document.Document, annotDict a
 		// For /RichMedia, check /RichMediaContent/Assets for 3D streams.
 		return hasRichMedia3DSubtype(ctx, doc, annotDict)
 	}
-	ddRes, _ := document.ResolveObject(ctx, doc, ddObj)
+	ddRes, err := document.ResolveObject(ctx, doc, ddObj)
+	if err != nil {
+		doc.Logger.Debug("resolving 3D stream data", slog.Any("err", err))
+	}
 	switch dd := ddRes.(type) {
 	case ast.PdfStream:
 		return check3DStreamDict(dd.Dict)
@@ -4633,7 +4682,10 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 	if err != nil || dict == nil {
 		return
 	}
-	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
+	typeName, err := document.ResolveName(ctx, doc, dict["Type"])
+	if err != nil {
+		doc.Logger.Debug("resolving page tree node type", slog.Any("err", err))
+	}
 
 	switch typeName {
 	case "Pages":
@@ -4722,7 +4774,10 @@ func streamHasFilter(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	if !ok {
 		return false
 	}
-	filterRes, _ := document.ResolveObject(ctx, doc, filterObj)
+	filterRes, err := document.ResolveObject(ctx, doc, filterObj)
+	if err != nil {
+		doc.Logger.Debug("resolving stream filter", slog.Any("err", err))
+	}
 	switch f := filterRes.(type) {
 	case ast.PdfName:
 		return string(f) == target
@@ -4894,7 +4949,10 @@ func checkWidgetButtonAppearance(ctx context.Context, doc *document.Document, ca
 			if !ok {
 				continue
 			}
-			nRes, _ := document.ResolveObject(ctx, doc, nObj)
+			nRes, err := document.ResolveObject(ctx, doc, nObj)
+			if err != nil {
+				doc.Logger.Debug("resolving widget button normal appearance", slog.Any("err", err))
+			}
 			if _, isStream := nRes.(*ast.PdfStream); isStream {
 				errs = append(errs, models.ErrWidgetButtonAPNotSubdict)
 			}

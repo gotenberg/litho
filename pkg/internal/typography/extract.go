@@ -115,12 +115,21 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 	// Pre-populate active OCs from resources /Properties
 	if propsObj, ok := resources["Properties"]; ok {
-		propsDict, _ := document.ResolveDict(ctx, doc, propsObj)
+		propsDict, err := document.ResolveDict(ctx, doc, propsObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Properties dict", slog.Any("err", err))
+		}
 		for k, v := range propsDict {
-			dict, _ := document.ResolveDict(ctx, doc, v)
+			dict, err := document.ResolveDict(ctx, doc, v)
+			if err != nil {
+				doc.Logger.Debug("resolving Properties entry", slog.String("key", string(k)), slog.Any("err", err))
+			}
 			if dict != nil {
 				if subtypeObj, ok := dict["Type"]; ok {
-					subtypeName, _ := document.ResolveName(ctx, doc, subtypeObj)
+					subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
+					if err != nil {
+						doc.Logger.Debug("resolving OCG type name", slog.Any("err", err))
+					}
 					if subtypeName != "" && subtypeName == "OCG" {
 						// Determine visibility using Off -> On -> BaseState priority.
 						visible := true
@@ -228,7 +237,10 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 			resolved := false
 			if resObj, ok := resources["Font"]; ok {
-				resDictRoot, _ := document.ResolveDict(ctx, doc, resObj)
+				resDictRoot, err := document.ResolveDict(ctx, doc, resObj)
+				if err != nil {
+					doc.Logger.Debug("resolving Font resource dict", slog.Any("err", err))
+				}
 				if resDictRoot != nil {
 					if fontRefObj, ok := resDictRoot[fontName]; ok {
 						// Check font cache by indirect reference object number.
@@ -344,7 +356,10 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			if len(op.Operands) == 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					if xobjObj, ok := resources["XObject"]; ok {
-						xobjDict, _ := document.ResolveDict(ctx, doc, xobjObj)
+						xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
+						if err != nil {
+							doc.Logger.Debug("resolving XObject dict for Do", slog.Any("err", err))
+						}
 						if xobjDict != nil {
 							if targetObj, ok := xobjDict[name]; ok {
 								// Track visited Form XObjects by indirect reference to break circular references.
@@ -360,10 +375,16 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 									}
 								}
 
-								stream, _ := document.ResolveStream(ctx, doc, targetObj)
+								stream, err := document.ResolveStream(ctx, doc, targetObj)
+								if err != nil {
+									doc.Logger.Debug("resolving Form XObject stream", slog.Any("err", err))
+								}
 								if stream.Dict != nil {
 									if subtypeObj, ok := stream.Dict["Subtype"]; ok {
-										subtypeName, _ := document.ResolveName(ctx, doc, subtypeObj)
+										subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
+										if err != nil {
+											doc.Logger.Debug("resolving XObject subtype", slog.Any("err", err))
+										}
 										if subtypeName == "Form" {
 											// Parse the Form XObject stream
 											formOps, err := content.ParsePageContent(ctx, doc, stream)
@@ -371,7 +392,10 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 												// Determine resources
 												formRes := resources // inherit by default
 												if resObj, ok := stream.Dict["Resources"]; ok {
-													resDict, _ := document.ResolveDict(ctx, doc, resObj)
+													resDict, err := document.ResolveDict(ctx, doc, resObj)
+													if err != nil {
+														doc.Logger.Debug("resolving Form XObject resources", slog.Any("err", err))
+													}
 													if resDict != nil {
 														formRes = resDict
 													}

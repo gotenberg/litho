@@ -96,14 +96,23 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 		} else {
 			// Fallback: check if the page dict has a direct /DPart reference
 			if dpartObj, ok := page.Dict["DPart"]; ok {
-				dpartDict, _ := ResolveDict(ctx, doc, dpartObj)
+				dpartDict, err := ResolveDict(ctx, doc, dpartObj)
+				if err != nil {
+					doc.Logger.Debug("resolving page /DPart dict", slog.Any("err", err))
+				}
 				if dpartDict != nil {
 					if dpmObj, ok := dpartDict["DPM"]; ok {
-						dpmDict, _ := ResolveDict(ctx, doc, dpmObj)
+						dpmDict, err := ResolveDict(ctx, doc, dpmObj)
+						if err != nil {
+							doc.Logger.Debug("resolving page /DPM dict", slog.Any("err", err))
+						}
 						if dpmDict != nil {
 							dpm := make(map[string]string)
 							for k, v := range dpmDict {
-								vRes, _ := ResolveObject(ctx, doc, v)
+								vRes, err := ResolveObject(ctx, doc, v)
+								if err != nil {
+									doc.Logger.Debug("resolving DPM value", slog.String("key", string(k)), slog.Any("err", err))
+								}
 								if str, ok := vRes.(ast.PdfString); ok {
 									dpm[string(k)] = DecodePdfString(str)
 								} else if name, ok := vRes.(ast.PdfName); ok {
@@ -258,12 +267,18 @@ func mergeResourceDicts(ctx context.Context, doc *Document, inherited ast.PdfDic
 			merged[k] = v
 			continue
 		}
-		nodeSub, _ := ResolveDict(ctx, doc, v)
+		nodeSub, err := ResolveDict(ctx, doc, v)
+		if err != nil {
+			doc.Logger.Debug("resolving resource sub-dict for merge", slog.String("key", string(k)), slog.Any("err", err))
+		}
 		if nodeSub == nil {
 			merged[k] = v
 			continue
 		}
-		inheritedSubDict, _ := ResolveDict(ctx, doc, inheritedSub)
+		inheritedSubDict, err := ResolveDict(ctx, doc, inheritedSub)
+		if err != nil {
+			doc.Logger.Debug("resolving inherited resource sub-dict for merge", slog.String("key", string(k)), slog.Any("err", err))
+		}
 		if inheritedSubDict == nil {
 			merged[k] = v
 			continue

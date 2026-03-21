@@ -3,6 +3,7 @@ package geospatial
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 
@@ -81,7 +82,10 @@ func parseMeasureDict(ctx context.Context, doc *document.Document, measureObj as
 
 	// Check /Subtype is /GEO.
 	if subtypeObj, ok := measureDict["Subtype"]; ok {
-		name, _ := document.ResolveName(ctx, doc, subtypeObj)
+		name, err := document.ResolveName(ctx, doc, subtypeObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Measure subtype", slog.Any("err", err))
+		}
 		if name != "" {
 			if name != "GEO" {
 				return nil, nil
@@ -126,7 +130,10 @@ func parseMeasureDict(ctx context.Context, doc *document.Document, measureObj as
 func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, geo *models.GeoData) {
 	// /Type — "GEOGCS", "PROJCS", etc.
 	if typeObj, ok := gcsDict["Type"]; ok {
-		name, _ := document.ResolveName(ctx, doc, typeObj)
+		name, err := document.ResolveName(ctx, doc, typeObj)
+		if err != nil {
+			doc.Logger.Debug("resolving GCS type", slog.Any("err", err))
+		}
 		if name != "" {
 			geo.CoordinateSystem = string(name)
 		}
@@ -134,7 +141,10 @@ func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, 
 
 	// /EPSG — EPSG code.
 	if epsgObj, ok := gcsDict["EPSG"]; ok {
-		epsgRes, _ := document.ResolveObject(ctx, doc, epsgObj)
+		epsgRes, err := document.ResolveObject(ctx, doc, epsgObj)
+		if err != nil {
+			doc.Logger.Debug("resolving GCS EPSG", slog.Any("err", err))
+		}
 		switch v := epsgRes.(type) {
 		case ast.PdfInt:
 			geo.EPSG = fmt.Sprintf("%d", int(v))
@@ -146,7 +156,10 @@ func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, 
 	// /WKT — Well-Known Text may contain EPSG info.
 	if geo.EPSG == "" {
 		if wktObj, ok := gcsDict["WKT"]; ok {
-			wktStr, _ := document.ResolveString(ctx, doc, wktObj)
+			wktStr, err := document.ResolveString(ctx, doc, wktObj)
+			if err != nil {
+				doc.Logger.Debug("resolving GCS WKT", slog.Any("err", err))
+			}
 			if wktStr != "" {
 				geo.EPSG = extractEPSGFromWKT(string(wktStr))
 			}

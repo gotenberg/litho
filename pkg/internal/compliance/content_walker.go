@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -211,7 +212,10 @@ func (w *contentWalker) handleGS(ctx context.Context, op content.Operation) {
 	if !ok {
 		return
 	}
-	gsDict, _ := document.ResolveDict(ctx, w.doc, gsObj)
+	gsDict, err := document.ResolveDict(ctx, w.doc, gsObj)
+	if err != nil {
+		w.doc.Logger.Debug("resolving ExtGState dict", slog.Any("err", err))
+	}
 	if gsDict == nil {
 		return
 	}
@@ -219,14 +223,20 @@ func (w *contentWalker) handleGS(ctx context.Context, op content.Operation) {
 	if !ok {
 		return
 	}
-	stateDict, _ := document.ResolveDict(ctx, w.doc, stateObj)
+	stateDict, err := document.ResolveDict(ctx, w.doc, stateObj)
+	if err != nil {
+		w.doc.Logger.Debug("resolving ExtGState entry dict", slog.Any("err", err))
+	}
 	if stateDict == nil {
 		return
 	}
 
 	// Check rendering intent in ExtGState.
 	if riObj, ok := stateDict["RI"]; ok {
-		riName, _ := document.ResolveName(ctx, w.doc, riObj)
+		riName, err := document.ResolveName(ctx, w.doc, riObj)
+		if err != nil {
+			w.doc.Logger.Debug("resolving rendering intent", slog.Any("err", err))
+		}
 		if riName != "" {
 			if !validRenderingIntents[riName] {
 				w.errors = append(w.errors, fmt.Errorf("%w: /%s in ExtGState",
@@ -251,7 +261,10 @@ func (w *contentWalker) handleDo(ctx context.Context, op content.Operation) {
 	if !ok {
 		return
 	}
-	xobjDict, _ := document.ResolveDict(ctx, w.doc, xobjObj)
+	xobjDict, err := document.ResolveDict(ctx, w.doc, xobjObj)
+	if err != nil {
+		w.doc.Logger.Debug("resolving XObject dict", slog.Any("err", err))
+	}
 	if xobjDict == nil {
 		return
 	}
@@ -265,7 +278,10 @@ func (w *contentWalker) handleDo(ctx context.Context, op content.Operation) {
 		return
 	}
 
-	stream, _ := document.ResolveStream(ctx, w.doc, obj)
+	stream, err := document.ResolveStream(ctx, w.doc, obj)
+	if err != nil {
+		w.doc.Logger.Debug("resolving form XObject stream", slog.Any("err", err))
+	}
 	if stream.Dict == nil {
 		return
 	}
@@ -296,7 +312,10 @@ func (w *contentWalker) handleDo(ctx context.Context, op content.Operation) {
 	// Determine resources for the Form XObject.
 	formResources := w.resources
 	if frObj, ok := stream.Dict["Resources"]; ok {
-		frDict, _ := document.ResolveDict(ctx, w.doc, frObj)
+		frDict, err := document.ResolveDict(ctx, w.doc, frObj)
+		if err != nil {
+			w.doc.Logger.Debug("resolving form XObject resources dict", slog.Any("err", err))
+		}
 		if frDict != nil {
 			formResources = frDict
 		}
@@ -339,7 +358,10 @@ func (w *contentWalker) checkImageCS(ctx context.Context, dict ast.PdfDict) {
 		return
 	}
 	if isDeviceDependentCS(ctx, w.doc, csObj, w.defaults) {
-		csRes, _ := document.ResolveObject(ctx, w.doc, csObj)
+		csRes, err := document.ResolveObject(ctx, w.doc, csObj)
+		if err != nil {
+			w.doc.Logger.Debug("resolving image color space", slog.Any("err", err))
+		}
 		csName := ast.PdfName("")
 		switch cs := csRes.(type) {
 		case ast.PdfName:
@@ -382,12 +404,18 @@ func (w *contentWalker) walkType3CharProcs(ctx context.Context) {
 	if !ok {
 		return
 	}
-	fontDict, _ := document.ResolveDict(ctx, w.doc, fontObj)
+	fontDict, err := document.ResolveDict(ctx, w.doc, fontObj)
+	if err != nil {
+		w.doc.Logger.Debug("resolving font dict", slog.Any("err", err))
+	}
 	if fontDict == nil {
 		return
 	}
 	for _, fObj := range fontDict {
-		fDict, _ := document.ResolveDict(ctx, w.doc, fObj)
+		fDict, err := document.ResolveDict(ctx, w.doc, fObj)
+		if err != nil {
+			w.doc.Logger.Debug("resolving font entry dict", slog.Any("err", err))
+		}
 		if fDict == nil {
 			continue
 		}
@@ -400,12 +428,18 @@ func (w *contentWalker) walkType3CharProcs(ctx context.Context) {
 		if !ok {
 			continue
 		}
-		cpDict, _ := document.ResolveDict(ctx, w.doc, cpObj)
+		cpDict, err := document.ResolveDict(ctx, w.doc, cpObj)
+		if err != nil {
+			w.doc.Logger.Debug("resolving CharProcs dict", slog.Any("err", err))
+		}
 		if cpDict == nil {
 			continue
 		}
 		for _, procObj := range cpDict {
-			procStream, _ := document.ResolveStream(ctx, w.doc, procObj)
+			procStream, err := document.ResolveStream(ctx, w.doc, procObj)
+			if err != nil {
+				w.doc.Logger.Debug("resolving CharProc stream", slog.Any("err", err))
+			}
 			if procStream.Dict == nil {
 				continue
 			}
@@ -501,12 +535,18 @@ func checkShadingResourceCS(ctx context.Context, doc *document.Document, resourc
 	if !ok {
 		return nil
 	}
-	shDict, _ := document.ResolveDict(ctx, doc, shObj)
+	shDict, err := document.ResolveDict(ctx, doc, shObj)
+	if err != nil {
+		doc.Logger.Debug("resolving Shading dict", slog.Any("err", err))
+	}
 	if shDict == nil {
 		return nil
 	}
 	for _, obj := range shDict {
-		objRes, _ := document.ResolveObject(ctx, doc, obj)
+		objRes, err := document.ResolveObject(ctx, doc, obj)
+		if err != nil {
+			doc.Logger.Debug("resolving Shading entry", slog.Any("err", err))
+		}
 		var shadingDict ast.PdfDict
 		switch v := objRes.(type) {
 		case ast.PdfDict:
@@ -521,7 +561,10 @@ func checkShadingResourceCS(ctx context.Context, doc *document.Document, resourc
 			continue
 		}
 		if isDeviceDependentCS(ctx, doc, csObj, defaults) {
-			csName, _ := document.ResolveName(ctx, doc, csObj)
+			csName, err := document.ResolveName(ctx, doc, csObj)
+			if err != nil {
+				doc.Logger.Debug("resolving Shading color space name", slog.Any("err", err))
+			}
 			if !iccCoversDeviceCS(iccN, csName) {
 				return []error{fmt.Errorf("%w: %s in Shading resource",
 					models.ErrMissingICCProfile, csName)}
@@ -538,12 +581,18 @@ func checkPatternResourceCS(ctx context.Context, doc *document.Document, resourc
 	if !ok {
 		return nil
 	}
-	patDict, _ := document.ResolveDict(ctx, doc, patObj)
+	patDict, err := document.ResolveDict(ctx, doc, patObj)
+	if err != nil {
+		doc.Logger.Debug("resolving Pattern dict", slog.Any("err", err))
+	}
 	if patDict == nil {
 		return nil
 	}
 	for _, obj := range patDict {
-		stream, _ := document.ResolveStream(ctx, doc, obj)
+		stream, err := document.ResolveStream(ctx, doc, obj)
+		if err != nil {
+			doc.Logger.Debug("resolving Pattern stream", slog.Any("err", err))
+		}
 		if stream.Dict == nil {
 			continue
 		}
@@ -562,7 +611,10 @@ func checkPatternResourceCS(ctx context.Context, doc *document.Document, resourc
 		// Use the pattern's own resources if available, otherwise page resources.
 		patResources := resources
 		if prObj, ok := stream.Dict["Resources"]; ok {
-			prDict, _ := document.ResolveDict(ctx, doc, prObj)
+			prDict, err := document.ResolveDict(ctx, doc, prObj)
+			if err != nil {
+				doc.Logger.Debug("resolving Pattern resources dict", slog.Any("err", err))
+			}
 			if prDict != nil {
 				patResources = prDict
 			}
@@ -595,13 +647,19 @@ func checkNamedColorSpaceResources(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return nil
 	}
-	csDict, _ := document.ResolveDict(ctx, doc, csObj)
+	csDict, err := document.ResolveDict(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving ColorSpace dict", slog.Any("err", err))
+	}
 	if csDict == nil {
 		return nil
 	}
 	for _, obj := range csDict {
 		if isDeviceDependentCS(ctx, doc, obj, defaults) {
-			csResolved, _ := document.ResolveObject(ctx, doc, obj)
+			csResolved, err := document.ResolveObject(ctx, doc, obj)
+			if err != nil {
+				doc.Logger.Debug("resolving color space", slog.Any("err", err))
+			}
 			csName := ast.PdfName("")
 			switch cs := csResolved.(type) {
 			case ast.PdfName:
@@ -637,12 +695,18 @@ func checkAllXObjectCSRecursive(ctx context.Context, doc *document.Document, res
 	if !ok {
 		return nil
 	}
-	xobjDict, _ := document.ResolveDict(ctx, doc, xobjObj)
+	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
+	if err != nil {
+		doc.Logger.Debug("resolving XObject dict", slog.Any("err", err))
+	}
 	if xobjDict == nil {
 		return nil
 	}
 	for _, obj := range xobjDict {
-		stream, _ := document.ResolveStream(ctx, doc, obj)
+		stream, err := document.ResolveStream(ctx, doc, obj)
+		if err != nil {
+			doc.Logger.Debug("resolving XObject stream", slog.Any("err", err))
+		}
 		if stream.Dict == nil {
 			continue
 		}
@@ -652,7 +716,10 @@ func checkAllXObjectCSRecursive(ctx context.Context, doc *document.Document, res
 		// Recurse into Form XObject resources.
 		if st == "Form" {
 			if frObj, ok := stream.Dict["Resources"]; ok {
-				frDict, _ := document.ResolveDict(ctx, doc, frObj)
+				frDict, err := document.ResolveDict(ctx, doc, frObj)
+				if err != nil {
+					doc.Logger.Debug("resolving form XObject resources dict", slog.Any("err", err))
+				}
 				if frDict != nil {
 					formDefaults := make(map[ast.PdfName]bool)
 					maps.Copy(formDefaults, defaults)
@@ -674,7 +741,10 @@ func checkAllXObjectCSRecursive(ctx context.Context, doc *document.Document, res
 			continue
 		}
 		if isDeviceDependentCS(ctx, doc, csObj, defaults) {
-			csName, _ := document.ResolveName(ctx, doc, csObj)
+			csName, err := document.ResolveName(ctx, doc, csObj)
+			if err != nil {
+				doc.Logger.Debug("resolving image XObject color space name", slog.Any("err", err))
+			}
 			if !iccCoversDeviceCS(iccN, csName) {
 				return []error{fmt.Errorf("%w: %s in Image XObject resource",
 					models.ErrMissingICCProfile, csName)}
@@ -690,12 +760,18 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 	if !ok {
 		return nil
 	}
-	annotsArr, _ := document.ResolveArray(ctx, doc, annotsObj)
+	annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+	if err != nil {
+		doc.Logger.Debug("resolving annotations array", slog.Any("err", err))
+	}
 	if annotsArr == nil {
 		return nil
 	}
 	for _, annotObj := range annotsArr {
-		annotDict, _ := document.ResolveDict(ctx, doc, annotObj)
+		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+		if err != nil {
+			doc.Logger.Debug("resolving annotation dict", slog.Any("err", err))
+		}
 		if annotDict == nil {
 			continue
 		}
@@ -703,7 +779,10 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 		if !ok {
 			continue
 		}
-		apDict, _ := document.ResolveDict(ctx, doc, apObj)
+		apDict, err := document.ResolveDict(ctx, doc, apObj)
+		if err != nil {
+			doc.Logger.Debug("resolving appearance dict", slog.Any("err", err))
+		}
 		if apDict == nil {
 			continue
 		}
@@ -714,7 +793,10 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 			if !ok {
 				continue
 			}
-			apEntryRes, _ := document.ResolveObject(ctx, doc, apEntryObj)
+			apEntryRes, err := document.ResolveObject(ctx, doc, apEntryObj)
+			if err != nil {
+				doc.Logger.Debug("resolving appearance entry", slog.Any("err", err))
+			}
 			switch entry := apEntryRes.(type) {
 			case ast.PdfStream:
 				appearanceStreams = append(appearanceStreams, apEntryObj)
@@ -730,7 +812,10 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 
 		for _, apStreamObj := range appearanceStreams {
 			// Resolve indirect references before passing to ParsePageContent.
-			apStreamResolved, _ := document.ResolveObject(ctx, doc, apStreamObj)
+			apStreamResolved, err := document.ResolveObject(ctx, doc, apStreamObj)
+			if err != nil {
+				doc.Logger.Debug("resolving appearance stream", slog.Any("err", err))
+			}
 			if apStreamResolved == nil {
 				continue
 			}
@@ -747,7 +832,10 @@ func walkAnnotationAppearances(ctx context.Context, doc *document.Document, page
 			apStreamRes := apStreamResolved
 			if apStream, ok := apStreamRes.(ast.PdfStream); ok {
 				if arObj, ok := apStream.Dict["Resources"]; ok {
-					arDict, _ := document.ResolveDict(ctx, doc, arObj)
+					arDict, err := document.ResolveDict(ctx, doc, arObj)
+					if err != nil {
+						doc.Logger.Debug("resolving annotation resources dict", slog.Any("err", err))
+					}
 					if arDict != nil {
 						annotResourceDict = arDict
 						maps.Copy(annotDefaults, collectDefaultColorSpaces(ctx, doc, arDict))

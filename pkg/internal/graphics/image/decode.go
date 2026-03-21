@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -62,7 +63,10 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	// Determine the filter.
 	filterName := ""
 	if filterObj, ok := stream.Dict["Filter"]; ok {
-		filterRes, _ := document.ResolveObject(ctx, doc, filterObj)
+		filterRes, err := document.ResolveObject(ctx, doc, filterObj)
+		if err != nil {
+			doc.Logger.Debug("resolving image filter", slog.Any("err", err))
+		}
 		if fn, ok := filterRes.(ast.PdfName); ok {
 			filterName = string(fn)
 		} else if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {

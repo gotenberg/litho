@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -61,12 +62,18 @@ func checkStructTreeLangValues(ctx context.Context, doc *document.Document, obj 
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			kRes, err := document.ResolveObject(ctx, doc, kObj)
+			if err != nil {
+				doc.Logger.Debug("resolving struct tree K children for lang values", slog.Any("err", err))
+			}
 			checkStructTreeLangValues(ctx, doc, kRes, errs)
 		}
 	case ast.PdfArray:
 		for _, item := range v {
-			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			itemRes, err := document.ResolveObject(ctx, doc, item)
+			if err != nil {
+				doc.Logger.Debug("resolving struct tree array item for lang values", slog.Any("err", err))
+			}
 			checkStructTreeLangValues(ctx, doc, itemRes, errs)
 		}
 	}
@@ -439,7 +446,10 @@ func checkStructElemAlt(ctx context.Context, doc *document.Document, obj ast.Pdf
 	if !ok {
 		return
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct elem K children for alt text", slog.Any("err", err))
+	}
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -468,7 +478,10 @@ func checkArtifactTagging(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for artifact tagging", slog.Any("err", err))
+	}
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -509,7 +522,10 @@ func checkArtifactElem(ctx context.Context, doc *document.Document, obj ast.PdfO
 	if !ok {
 		return
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct elem K children for artifact check", slog.Any("err", err))
+	}
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -605,7 +621,10 @@ func checkStandardTags(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for standard tags", slog.Any("err", err))
+	}
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -638,7 +657,10 @@ func checkStructElemStandard(ctx context.Context, doc *document.Document, obj as
 	if !ok {
 		return
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct elem K children for standard tag check", slog.Any("err", err))
+	}
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, kid := range k {
@@ -763,7 +785,10 @@ func hasStructElemType(ctx context.Context, doc *document.Document, catalog ast.
 	if !ok {
 		return false
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for elem type search", slog.Any("err", err))
+	}
 	return searchStructElemType(ctx, doc, kRes, typeName)
 }
 
@@ -771,7 +796,10 @@ func searchStructElemType(ctx context.Context, doc *document.Document, obj ast.P
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving struct elem array item for type search", slog.Any("err", err))
+			}
 			if searchStructElemType(ctx, doc, kidRes, typeName) {
 				return true
 			}
@@ -784,7 +812,10 @@ func searchStructElemType(ctx context.Context, doc *document.Document, obj ast.P
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			kRes, err := document.ResolveObject(ctx, doc, kObj)
+			if err != nil {
+				doc.Logger.Debug("resolving struct elem K children for type search", slog.Any("err", err))
+			}
 			return searchStructElemType(ctx, doc, kRes, typeName)
 		}
 	}
@@ -806,7 +837,10 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for formula MathML", slog.Any("err", err))
+	}
 
 	var errs []error
 	checkFormulaAF(ctx, doc, kRes, &errs)
@@ -823,7 +857,10 @@ func hasMathMLChild(ctx context.Context, doc *document.Document, dict ast.PdfDic
 	if !ok {
 		return false
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving K children for MathML namespace check", slog.Any("err", err))
+	}
 	switch k := kRes.(type) {
 	case ast.PdfDict:
 		return isMathMLNamespace(ctx, doc, k)
@@ -881,7 +918,10 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving formula array item", slog.Any("err", err))
+			}
 			checkFormulaAF(ctx, doc, kidRes, errs)
 		}
 	case ast.PdfDict:
@@ -896,7 +936,10 @@ func checkFormulaAF(ctx context.Context, doc *document.Document, obj ast.PdfObje
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			kRes, err := document.ResolveObject(ctx, doc, kObj)
+			if err != nil {
+				doc.Logger.Debug("resolving struct elem K children for formula AF check", slog.Any("err", err))
+			}
 			checkFormulaAF(ctx, doc, kRes, errs)
 		}
 	}
@@ -1024,7 +1067,10 @@ func checkTableSectionChildren(ctx context.Context, doc *document.Document, cata
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for table section check", slog.Any("err", err))
+	}
 
 	var errs []error
 	checkSectionChildrenRecursive(ctx, doc, kRes, &errs, 0)
@@ -1038,25 +1084,37 @@ func checkSectionChildrenRecursive(ctx context.Context, doc *document.Document, 
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving section children array item", slog.Any("err", err))
+			}
 			checkSectionChildrenRecursive(ctx, doc, kidRes, errs, depth+1)
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sName, _ := document.ResolveName(ctx, doc, sObj)
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err != nil {
+			doc.Logger.Debug("resolving struct elem S name for section children", slog.Any("err", err))
+		}
 
 		// THead/TBody/TFoot must contain only TR.
 		if sName == "THead" || sName == "TBody" || sName == "TFoot" {
 			kObj, ok := v["K"]
 			if ok {
-				kRes, _ := document.ResolveObject(ctx, doc, kObj)
+				kRes, err := document.ResolveObject(ctx, doc, kObj)
+				if err != nil {
+					doc.Logger.Debug("resolving table section K children for TR check", slog.Any("err", err))
+				}
 				checkOnlyTR(ctx, doc, kRes, sName, errs)
 			}
 		}
 
 		// Recurse.
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			kRes, err := document.ResolveObject(ctx, doc, kObj)
+			if err != nil {
+				doc.Logger.Debug("resolving struct elem K children for section recursion", slog.Any("err", err))
+			}
 			checkSectionChildrenRecursive(ctx, doc, kRes, errs, depth+1)
 		}
 	}
@@ -1101,7 +1159,10 @@ func checkListItemChildren(ctx context.Context, doc *document.Document, catalog 
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for list item check", slog.Any("err", err))
+	}
 
 	var errs []error
 	checkLIChildrenRecursive(ctx, doc, kRes, &errs, 0)
@@ -1115,22 +1176,34 @@ func checkLIChildrenRecursive(ctx context.Context, doc *document.Document, obj a
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving LI children array item", slog.Any("err", err))
+			}
 			checkLIChildrenRecursive(ctx, doc, kidRes, errs, depth+1)
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sName, _ := document.ResolveName(ctx, doc, sObj)
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err != nil {
+			doc.Logger.Debug("resolving struct elem S name for LI children", slog.Any("err", err))
+		}
 
 		if sName == "LI" {
 			if kiObj, ok := v["K"]; ok {
-				kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
+				kiRes, err := document.ResolveObject(ctx, doc, kiObj)
+				if err != nil {
+					doc.Logger.Debug("resolving LI K children for Lbl/LBody check", slog.Any("err", err))
+				}
 				checkLIOnlyLblLBody(ctx, doc, kiRes, errs)
 			}
 		}
 
 		if kiObj, ok := v["K"]; ok {
-			kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
+			kiRes, err := document.ResolveObject(ctx, doc, kiObj)
+			if err != nil {
+				doc.Logger.Debug("resolving struct elem K children for LI recursion", slog.Any("err", err))
+			}
 			checkLIChildrenRecursive(ctx, doc, kiRes, errs, depth+1)
 		}
 	}
@@ -1180,7 +1253,10 @@ func checkCaptionFirstChild(ctx context.Context, doc *document.Document, catalog
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for caption check", slog.Any("err", err))
+	}
 
 	var errs []error
 	checkCaptionRecursive(ctx, doc, kRes, &errs, 0)
@@ -1194,12 +1270,18 @@ func checkCaptionRecursive(ctx context.Context, doc *document.Document, obj ast.
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving caption array item", slog.Any("err", err))
+			}
 			checkCaptionRecursive(ctx, doc, kidRes, errs, depth+1)
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sName, _ := document.ResolveName(ctx, doc, sObj)
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err != nil {
+			doc.Logger.Debug("resolving struct elem S name for caption check", slog.Any("err", err))
+		}
 
 		// L and TOC: Caption allowed only as first child.
 		if sName == "L" || sName == "TOC" {
@@ -1222,7 +1304,10 @@ func checkCaptionRecursive(ctx context.Context, doc *document.Document, obj ast.
 		}
 
 		if kiObj, ok := v["K"]; ok {
-			kiRes, _ := document.ResolveObject(ctx, doc, kiObj)
+			kiRes, err := document.ResolveObject(ctx, doc, kiObj)
+			if err != nil {
+				doc.Logger.Debug("resolving struct elem K children for caption recursion", slog.Any("err", err))
+			}
 			checkCaptionRecursive(ctx, doc, kiRes, errs, depth+1)
 		}
 	}
@@ -1253,7 +1338,10 @@ func checkTableElementContainment(ctx context.Context, doc *document.Document, c
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct tree K children for table containment check", slog.Any("err", err))
+	}
 
 	var errs []error
 	checkContainmentRecursive(ctx, doc, kRes, "", &errs, 0)
@@ -1267,12 +1355,18 @@ func checkContainmentRecursive(ctx context.Context, doc *document.Document, obj 
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving containment array item", slog.Any("err", err))
+			}
 			checkContainmentRecursive(ctx, doc, kidRes, parentType, errs, depth+1)
 		}
 	case ast.PdfDict:
 		sObj := v["S"]
-		sName, _ := document.ResolveName(ctx, doc, sObj)
+		sName, err := document.ResolveName(ctx, doc, sObj)
+		if err != nil {
+			doc.Logger.Debug("resolving struct elem S name for containment check", slog.Any("err", err))
+		}
 
 		if allowedParents, ok := tableElementParents[sName]; ok {
 			if parentType != "" && !allowedParents[parentType] {
@@ -1282,7 +1376,10 @@ func checkContainmentRecursive(ctx context.Context, doc *document.Document, obj 
 		}
 
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			kRes, err := document.ResolveObject(ctx, doc, kObj)
+			if err != nil {
+				doc.Logger.Debug("resolving struct elem K children for containment recursion", slog.Any("err", err))
+			}
 			checkContainmentRecursive(ctx, doc, kRes, sName, errs, depth+1)
 		}
 	}

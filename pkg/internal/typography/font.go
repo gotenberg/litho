@@ -258,7 +258,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	isSymbolFont := false
 	isDingbatsFont := false
 	if bfObj, ok := fontDict["BaseFont"]; ok {
-		bfName, _ := document.ResolveName(ctx, doc, bfObj)
+		bfName, err := document.ResolveName(ctx, doc, bfObj)
+		if err != nil {
+			doc.Logger.Debug("resolving font BaseFont name", slog.Any("err", err))
+		}
 		if bfName != "" {
 			name := strings.ToLower(string(bfName))
 			isSymbolFont = strings.Contains(name, "symbol")
@@ -316,7 +319,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 				// Dictionary-based Encoding
 				baseMap := encodings.WinAnsiEncoding // Default fallback
 				if baseObj, ok := enc["BaseEncoding"]; ok {
-					baseName, _ := document.ResolveName(ctx, doc, baseObj)
+					baseName, err := document.ResolveName(ctx, doc, baseObj)
+					if err != nil {
+						doc.Logger.Debug("resolving font BaseEncoding name", slog.Any("err", err))
+					}
 					if baseName != "" {
 						switch baseName {
 						case "WinAnsiEncoding":
@@ -334,11 +340,17 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 
 				// Process Differences array
 				if diffObj, ok := enc["Differences"]; ok {
-					diffArr, _ := document.ResolveArray(ctx, doc, diffObj)
+					diffArr, err := document.ResolveArray(ctx, doc, diffObj)
+					if err != nil {
+						doc.Logger.Debug("resolving font Differences array", slog.Any("err", err))
+					}
 					if diffArr != nil {
 						currentIndex := 0
 						for _, item := range diffArr {
-							itemRes, _ := document.ResolveObject(ctx, doc, item)
+							itemRes, err := document.ResolveObject(ctx, doc, item)
+							if err != nil {
+								doc.Logger.Debug("resolving Differences item", slog.Any("err", err))
+							}
 							switch v := itemRes.(type) {
 							case ast.PdfInt:
 								currentIndex = int(v)
@@ -360,7 +372,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		// /FontMatrix maps glyph space → text space. Default is [0.001 0 0 0.001 0 0].
 		font.FontMatrix = [6]float64{0.001, 0, 0, 0.001, 0, 0}
 		if fmObj, ok := fontDict["FontMatrix"]; ok {
-			fmArr, _ := document.ResolveArray(ctx, doc, fmObj)
+			fmArr, err := document.ResolveArray(ctx, doc, fmObj)
+			if err != nil {
+				doc.Logger.Debug("resolving Type3 FontMatrix", slog.Any("err", err))
+			}
 			if len(fmArr) == 6 {
 				for i := range 6 {
 					font.FontMatrix[i] = document.GetFloat(fmArr[i])
@@ -370,7 +385,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 
 		// /CharProcs maps glyph names → streams containing d0/d1 width operators.
 		if cpObj, ok := fontDict["CharProcs"]; ok {
-			cpDict, _ := document.ResolveDict(ctx, doc, cpObj)
+			cpDict, err := document.ResolveDict(ctx, doc, cpObj)
+			if err != nil {
+				doc.Logger.Debug("resolving Type3 CharProcs", slog.Any("err", err))
+			}
 			if cpDict != nil {
 				font.Type3Widths = make(map[string]float64, len(cpDict))
 				for name, streamObj := range cpDict {
@@ -398,7 +416,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 			font.LastChar = int(document.GetFloat(lcObj))
 		}
 		if wObj, ok := fontDict["Widths"]; ok {
-			wArr, _ := document.ResolveArray(ctx, doc, wObj)
+			wArr, err := document.ResolveArray(ctx, doc, wObj)
+			if err != nil {
+				doc.Logger.Debug("resolving Type3 Widths array", slog.Any("err", err))
+			}
 			if wArr != nil {
 				font.Widths = make([]float64, len(wArr))
 				for i, item := range wArr {
@@ -417,9 +438,15 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 
 		// CIDFont metrics live in the first element of /DescendantFonts.
 		if dfObj, ok := fontDict["DescendantFonts"]; ok {
-			dfArr, _ := document.ResolveArray(ctx, doc, dfObj)
+			dfArr, err := document.ResolveArray(ctx, doc, dfObj)
+			if err != nil {
+				doc.Logger.Debug("resolving DescendantFonts array", slog.Any("err", err))
+			}
 			if len(dfArr) > 0 {
-				cidDict, _ := document.ResolveDict(ctx, doc, dfArr[0])
+				cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+				if err != nil {
+					doc.Logger.Debug("resolving CIDFont dict", slog.Any("err", err))
+				}
 				if cidDict != nil {
 					// /DW is the default glyph width for CIDFonts (default 1000 per spec).
 					font.MissingWidth = 1000.0
@@ -428,7 +455,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 					}
 					// /W encodes per-CID or range widths.
 					if wObj, ok := cidDict["W"]; ok {
-						wArr, _ := document.ResolveArray(ctx, doc, wObj)
+						wArr, err := document.ResolveArray(ctx, doc, wObj)
+						if err != nil {
+							doc.Logger.Debug("resolving CIDFont /W array", slog.Any("err", err))
+						}
 						if wArr != nil {
 							font.CIDWidths = parseCIDWidths(wArr)
 						}
@@ -439,14 +469,20 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 					}
 					// /DW2: default vertical displacement [vY w1].
 					if dw2Obj, ok := cidDict["DW2"]; ok {
-						dw2Arr, _ := document.ResolveArray(ctx, doc, dw2Obj)
+						dw2Arr, err := document.ResolveArray(ctx, doc, dw2Obj)
+						if err != nil {
+							doc.Logger.Debug("resolving CIDFont /DW2 array", slog.Any("err", err))
+						}
 						if len(dw2Arr) == 2 {
 							font.DW2 = [2]float64{document.GetFloat(dw2Arr[0]), document.GetFloat(dw2Arr[1])}
 						}
 					}
 					// /W2: per-CID vertical metrics [w1Y vX vY].
 					if w2Obj, ok := cidDict["W2"]; ok {
-						w2Arr, _ := document.ResolveArray(ctx, doc, w2Obj)
+						w2Arr, err := document.ResolveArray(ctx, doc, w2Obj)
+						if err != nil {
+							doc.Logger.Debug("resolving CIDFont /W2 array", slog.Any("err", err))
+						}
 						if w2Arr != nil {
 							font.CIDVerticalMetrics = parseCIDVerticalWidths(w2Arr)
 						}
@@ -470,7 +506,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 			font.LastChar = int(document.GetFloat(lcObj))
 		}
 		if wObj, ok := fontDict["Widths"]; ok {
-			wArr, _ := document.ResolveArray(ctx, doc, wObj)
+			wArr, err := document.ResolveArray(ctx, doc, wObj)
+			if err != nil {
+				doc.Logger.Debug("resolving simple font Widths array", slog.Any("err", err))
+			}
 			if wArr != nil {
 				font.Widths = make([]float64, len(wArr))
 				for i, item := range wArr {
@@ -480,7 +519,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		}
 		// /MissingWidth from /FontDescriptor overrides the 1000 default.
 		if fdObj, ok := fontDict["FontDescriptor"]; ok {
-			fdDict, _ := document.ResolveDict(ctx, doc, fdObj)
+			fdDict, err := document.ResolveDict(ctx, doc, fdObj)
+			if err != nil {
+				doc.Logger.Debug("resolving FontDescriptor dict", slog.Any("err", err))
+			}
 			if fdDict != nil {
 				if mwObj, ok := fdDict["MissingWidth"]; ok {
 					font.MissingWidth = document.GetFloat(mwObj)
@@ -493,7 +535,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		// Adobe Font Metrics so spatial text reconstruction succeeds.
 		if len(font.Widths) == 0 {
 			if bfObj, ok := fontDict["BaseFont"]; ok {
-				bfName, _ := document.ResolveName(ctx, doc, bfObj)
+				bfName, err := document.ResolveName(ctx, doc, bfObj)
+				if err != nil {
+					doc.Logger.Debug("resolving BaseFont for Standard 14 fallback", slog.Any("err", err))
+				}
 				if bfName != "" {
 					injectStandard14Widths(font, string(bfName))
 				}
@@ -538,7 +583,10 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	// Determine the font name for logging.
 	fontLogName := string(subtypeName)
 	if bfObj, ok := fontDict["BaseFont"]; ok {
-		bfName, _ := document.ResolveName(ctx, doc, bfObj)
+		bfName, err := document.ResolveName(ctx, doc, bfObj)
+		if err != nil {
+			doc.Logger.Debug("resolving BaseFont for logging", slog.Any("err", err))
+		}
 		if bfName != "" {
 			fontLogName = string(bfName)
 		}
@@ -569,7 +617,10 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 
 	// /FontBBox [xMin yMin xMax yMax] — Step 5 fallback.
 	if bboxObj, ok := fdDict["FontBBox"]; ok {
-		bboxArr, _ := document.ResolveArray(ctx, doc, bboxObj)
+		bboxArr, err := document.ResolveArray(ctx, doc, bboxObj)
+		if err != nil {
+			doc.Logger.Debug("resolving FontBBox array", slog.Any("err", err))
+		}
 		if len(bboxArr) == 4 {
 			for i := range 4 {
 				font.FontBBox[i] = document.GetFloat(bboxArr[i])
@@ -815,11 +866,17 @@ func applyAdobeCIDFallback(ctx context.Context, doc *document.Document, fontDict
 	if !ok {
 		return
 	}
-	dfArr, _ := document.ResolveArray(ctx, doc, dfObj)
+	dfArr, err := document.ResolveArray(ctx, doc, dfObj)
+	if err != nil {
+		doc.Logger.Debug("resolving DescendantFonts for Adobe CID fallback", slog.Any("err", err))
+	}
 	if len(dfArr) == 0 {
 		return
 	}
-	cidDict, _ := document.ResolveDict(ctx, doc, dfArr[0])
+	cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+	if err != nil {
+		doc.Logger.Debug("resolving CIDFont dict for Adobe CID fallback", slog.Any("err", err))
+	}
 	if cidDict == nil {
 		return
 	}
@@ -829,17 +886,26 @@ func applyAdobeCIDFallback(ctx context.Context, doc *document.Document, fontDict
 	if !ok {
 		return
 	}
-	csDict, _ := document.ResolveDict(ctx, doc, csObj)
+	csDict, err := document.ResolveDict(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving CIDSystemInfo dict", slog.Any("err", err))
+	}
 	if csDict == nil {
 		return
 	}
 
-	registry, _ := document.ResolveString(ctx, doc, csDict["Registry"])
+	registry, err := document.ResolveString(ctx, doc, csDict["Registry"])
+	if err != nil {
+		doc.Logger.Debug("resolving CIDSystemInfo Registry", slog.Any("err", err))
+	}
 	if registry == "" || string(registry) != "Adobe" {
 		return
 	}
 
-	ordering, _ := document.ResolveString(ctx, doc, csDict["Ordering"])
+	ordering, err := document.ResolveString(ctx, doc, csDict["Ordering"])
+	if err != nil {
+		doc.Logger.Debug("resolving CIDSystemInfo Ordering", slog.Any("err", err))
+	}
 	if ordering == "" {
 		return
 	}
@@ -869,11 +935,17 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return
 	}
-	dfArr, _ := document.ResolveArray(ctx, doc, dfObj)
+	dfArr, err := document.ResolveArray(ctx, doc, dfObj)
+	if err != nil {
+		doc.Logger.Debug("resolving DescendantFonts for CIDToGID fallback", slog.Any("err", err))
+	}
 	if len(dfArr) == 0 {
 		return
 	}
-	cidDict, _ := document.ResolveDict(ctx, doc, dfArr[0])
+	cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+	if err != nil {
+		doc.Logger.Debug("resolving CIDFont dict for CIDToGID fallback", slog.Any("err", err))
+	}
 	if cidDict == nil {
 		return
 	}
@@ -881,7 +953,10 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return
 	}
-	mapName, _ := document.ResolveName(ctx, doc, mapObj)
+	mapName, err := document.ResolveName(ctx, doc, mapObj)
+	if err != nil {
+		doc.Logger.Debug("resolving CIDToGIDMap name", slog.Any("err", err))
+	}
 	if mapName == "" || mapName != "Identity" {
 		return
 	}
@@ -905,7 +980,10 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
 	// Direct /FontDescriptor on the font dict (simple fonts).
 	if fdObj, ok := fontDict["FontDescriptor"]; ok {
-		fdDict, _ := document.ResolveDict(ctx, doc, fdObj)
+		fdDict, err := document.ResolveDict(ctx, doc, fdObj)
+		if err != nil {
+			doc.Logger.Debug("resolving FontDescriptor dict", slog.Any("err", err))
+		}
 		if fdDict != nil {
 			return fdDict
 		}
@@ -913,12 +991,21 @@ func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict as
 
 	// For Type0: /DescendantFonts[0]/FontDescriptor.
 	if dfObj, ok := fontDict["DescendantFonts"]; ok {
-		dfArr, _ := document.ResolveArray(ctx, doc, dfObj)
+		dfArr, err := document.ResolveArray(ctx, doc, dfObj)
+		if err != nil {
+			doc.Logger.Debug("resolving DescendantFonts for FontDescriptor lookup", slog.Any("err", err))
+		}
 		if len(dfArr) > 0 {
-			cidDict, _ := document.ResolveDict(ctx, doc, dfArr[0])
+			cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+			if err != nil {
+				doc.Logger.Debug("resolving CIDFont dict for FontDescriptor lookup", slog.Any("err", err))
+			}
 			if cidDict != nil {
 				if fdObj, ok := cidDict["FontDescriptor"]; ok {
-					fdDict, _ := document.ResolveDict(ctx, doc, fdObj)
+					fdDict, err := document.ResolveDict(ctx, doc, fdObj)
+					if err != nil {
+						doc.Logger.Debug("resolving CIDFont FontDescriptor dict", slog.Any("err", err))
+					}
 					if fdDict != nil {
 						return fdDict
 					}

@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -33,7 +34,10 @@ func checkPageSizeBounds(ctx context.Context, doc *document.Document, catalog as
 			if !ok {
 				continue
 			}
-			boxArr, _ := document.ResolveArray(ctx, doc, boxObj)
+			boxArr, err := document.ResolveArray(ctx, doc, boxObj)
+			if err != nil {
+				doc.Logger.Debug("resolving page boundary box array", slog.Any("err", err))
+			}
 			if len(boxArr) < 4 { //nolint:mnd // PDF rectangles have 4 elements
 				continue
 			}
@@ -131,9 +135,15 @@ func checkStringLengths(ctx context.Context, doc *document.Document, catalog ast
 
 	// Check document info dict strings.
 	if infoObj, ok := doc.Index.Trailer["Info"]; ok {
-		infoDict, _ := document.ResolveDict(ctx, doc, infoObj)
+		infoDict, err := document.ResolveDict(ctx, doc, infoObj)
+		if err != nil {
+			doc.Logger.Debug("resolving document info dict", slog.Any("err", err))
+		}
 		for key, val := range infoDict {
-			s, _ := document.ResolveString(ctx, doc, val)
+			s, err := document.ResolveString(ctx, doc, val)
+			if err != nil {
+				doc.Logger.Debug("resolving info dict string value", slog.Any("err", err))
+			}
 			if s != "" {
 				if len(s) > maxLen {
 					return []error{fmt.Errorf("%w: /%s (%d bytes, max %d)",
@@ -182,7 +192,10 @@ func checkCatalogVersionFormat(ctx context.Context, doc *document.Document, cata
 	if !ok {
 		return nil
 	}
-	vName, _ := document.ResolveName(ctx, doc, vObj)
+	vName, err := document.ResolveName(ctx, doc, vObj)
+	if err != nil {
+		doc.Logger.Debug("resolving catalog version name", slog.Any("err", err))
+	}
 	if vName == "" {
 		return nil
 	}
@@ -201,7 +214,10 @@ func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return nil
 	}
-	permsDict, _ := document.ResolveDict(ctx, doc, permsObj)
+	permsDict, err := document.ResolveDict(ctx, doc, permsObj)
+	if err != nil {
+		doc.Logger.Debug("resolving permissions dict", slog.Any("err", err))
+	}
 	if permsDict == nil {
 		return nil
 	}
@@ -222,7 +238,10 @@ func checkDocMDPSignatureRefs(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return nil
 	}
-	permsDict, _ := document.ResolveDict(ctx, doc, permsObj)
+	permsDict, err := document.ResolveDict(ctx, doc, permsObj)
+	if err != nil {
+		doc.Logger.Debug("resolving permissions dict for DocMDP check", slog.Any("err", err))
+	}
 	if permsDict == nil {
 		return nil
 	}
@@ -230,7 +249,10 @@ func checkDocMDPSignatureRefs(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return nil
 	}
-	sigDict, _ := document.ResolveDict(ctx, doc, docMDPObj)
+	sigDict, err := document.ResolveDict(ctx, doc, docMDPObj)
+	if err != nil {
+		doc.Logger.Debug("resolving DocMDP signature dict", slog.Any("err", err))
+	}
 	if sigDict == nil {
 		return nil
 	}
@@ -239,13 +261,19 @@ func checkDocMDPSignatureRefs(ctx context.Context, doc *document.Document, catal
 	if !ok {
 		return nil
 	}
-	refArr, _ := document.ResolveArray(ctx, doc, refObj)
+	refArr, err := document.ResolveArray(ctx, doc, refObj)
+	if err != nil {
+		doc.Logger.Debug("resolving signature reference array", slog.Any("err", err))
+	}
 	if refArr == nil {
 		return nil
 	}
 	forbiddenKeys := []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"}
 	for _, item := range refArr {
-		itemDict, _ := document.ResolveDict(ctx, doc, item)
+		itemDict, err := document.ResolveDict(ctx, doc, item)
+		if err != nil {
+			doc.Logger.Debug("resolving signature reference entry", slog.Any("err", err))
+		}
 		if itemDict != nil {
 			for _, key := range forbiddenKeys {
 				if _, ok := itemDict[key]; ok {
@@ -297,7 +325,10 @@ func checkValueLimits(ctx context.Context, doc *document.Document, obj ast.PdfOb
 	if len(*errs) > 0 {
 		return
 	}
-	resolved, _ := document.ResolveObject(ctx, doc, obj)
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		doc.Logger.Debug("resolving object for numeric limit check", slog.Any("err", err))
+	}
 	switch v := resolved.(type) {
 	case ast.PdfReal:
 		if math.Abs(float64(v)) > maxPDFReal {
@@ -340,7 +371,10 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, catalog ast
 		if !ok {
 			continue
 		}
-		xobjDict, _ := document.ResolveDict(ctx, doc, xobjObj)
+		xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
+		if err != nil {
+			doc.Logger.Debug("resolving XObject dict for stream length check", slog.Any("err", err))
+		}
 		if xobjDict == nil {
 			continue
 		}
@@ -354,13 +388,19 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, catalog ast
 }
 
 func checkStreamObjLength(ctx context.Context, doc *document.Document, obj ast.PdfObject) error {
-	resolved, _ := document.ResolveObject(ctx, doc, obj)
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		doc.Logger.Debug("resolving stream object for length check", slog.Any("err", err))
+	}
 	switch v := resolved.(type) {
 	case ast.PdfStream:
 		return validateStreamLength(v)
 	case ast.PdfArray:
 		for _, item := range v {
-			itemRes, _ := document.ResolveObject(ctx, doc, item)
+			itemRes, err := document.ResolveObject(ctx, doc, item)
+			if err != nil {
+				doc.Logger.Debug("resolving stream array item for length check", slog.Any("err", err))
+			}
 			if stream, ok := itemRes.(ast.PdfStream); ok {
 				if err := validateStreamLength(stream); err != nil {
 					return err

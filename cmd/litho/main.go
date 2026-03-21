@@ -25,22 +25,34 @@ func main() {
 		_ = reader.Close() //nolint:errcheck
 	}()
 
-	metadata, _ := reader.GetMetadata(ctx)
+	metadata, err := reader.GetMetadata(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to extract metadata: %v\n", err)
+	}
 	fmt.Println("=== Metadata ===")
 	for k, v := range metadata {
 		fmt.Printf("%s: %s\n", k, v)
 	}
 
-	numPages, _ := reader.NumPages(ctx)
+	numPages, err := reader.NumPages(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to get page count: %v\n", err)
+	}
 	fmt.Printf("\n=== Pages: %d ===\n", numPages)
 
 	if numPages > 0 {
-		text, _ := reader.ExtractText(ctx, 1)
+		text, err := reader.ExtractText(ctx, 1)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to extract text from page 1: %v\n", err)
+		}
 		fmt.Println("\n=== Page 1 Text ===")
 		fmt.Println(text)
 	}
 
-	formData, _ := reader.GetFormData(ctx)
+	formData, err := reader.GetFormData(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to extract form data: %v\n", err)
+	}
 	if len(formData) > 0 {
 		fmt.Println("\n=== Form Data ===")
 		for k, v := range formData {

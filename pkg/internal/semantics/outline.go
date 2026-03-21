@@ -3,6 +3,7 @@ package semantics
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -57,7 +58,10 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 		var b models.Bookmark
 
 		if titleObj, ok := dict["Title"]; ok {
-			titleStr, _ := document.ResolveString(ctx, doc, titleObj)
+			titleStr, err := document.ResolveString(ctx, doc, titleObj)
+			if err != nil {
+				doc.Logger.Debug("resolving outline title", slog.Any("err", err))
+			}
 			if titleStr != "" {
 				b.Title = document.DecodePdfString(titleStr)
 			}
@@ -68,10 +72,16 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 			b.PageNumber = resolveDestination(ctx, doc, destObj, pageMap)
 		} else if aObj, ok := dict["A"]; ok {
 			// Some bookmarks use an Action (/A) instead of an explicit /Dest.
-			aDict, _ := document.ResolveDict(ctx, doc, aObj)
+			aDict, err := document.ResolveDict(ctx, doc, aObj)
+			if err != nil {
+				doc.Logger.Debug("resolving outline action dict", slog.Any("err", err))
+			}
 			if aDict != nil {
 				if sObj, ok := aDict["S"]; ok {
-					sName, _ := document.ResolveName(ctx, doc, sObj)
+					sName, err := document.ResolveName(ctx, doc, sObj)
+					if err != nil {
+						doc.Logger.Debug("resolving outline action subtype", slog.Any("err", err))
+					}
 					if sName == "GoTo" {
 						if dObj, ok := aDict["D"]; ok {
 							b.PageNumber = resolveDestination(ctx, doc, dObj, pageMap)
@@ -108,7 +118,10 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 // or a PdfName (named destination). Named destinations are looked up via the
 // catalog's /Names -> /Dests tree or the legacy /Dests dictionary.
 func resolveDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) int {
-	destRes, _ := document.ResolveObject(ctx, doc, destObj)
+	destRes, err := document.ResolveObject(ctx, doc, destObj)
+	if err != nil {
+		doc.Logger.Debug("resolving destination object", slog.Any("err", err))
+	}
 
 	// Try as a direct destination array first.
 	if destArr, ok := destRes.(ast.PdfArray); ok {

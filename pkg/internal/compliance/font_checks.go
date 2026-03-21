@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -66,7 +67,10 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		if !ok {
 			continue
 		}
-		stream, _ := document.ResolveStream(ctx, doc, ffObj)
+		stream, err := document.ResolveStream(ctx, doc, ffObj)
+		if err != nil {
+			doc.Logger.Debug("resolving font program stream", slog.Any("err", err))
+		}
 		if stream.Dict == nil {
 			continue
 		}
@@ -90,9 +94,15 @@ func compareWidths(ctx context.Context, doc *document.Document, fontDict ast.Pdf
 	// Simple fonts are skipped — char code → GID mapping requires cmap
 	// parsing which is not available in the compliance module.
 	if dfObj, ok := fontDict["DescendantFonts"]; ok {
-		dfArr, _ := document.ResolveArray(ctx, doc, dfObj)
+		dfArr, err := document.ResolveArray(ctx, doc, dfObj)
+		if err != nil {
+			doc.Logger.Debug("resolving DescendantFonts array", slog.Any("err", err))
+		}
 		if len(dfArr) > 0 {
-			cidDict, _ := document.ResolveDict(ctx, doc, dfArr[0])
+			cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+			if err != nil {
+				doc.Logger.Debug("resolving CIDFont dict", slog.Any("err", err))
+			}
 			if cidDict != nil {
 				if wObj, ok := cidDict["W"]; ok {
 					return compareCIDWidths(ctx, doc, wObj, binaryWidths, unitsPerEm, fontName)
@@ -111,7 +121,10 @@ const widthTolerance = 1.0
 
 // compareCIDWidths checks /W array against binary widths for CIDFonts.
 func compareCIDWidths(ctx context.Context, doc *document.Document, wObj ast.PdfObject, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string) error {
-	wArr, _ := document.ResolveArray(ctx, doc, wObj)
+	wArr, err := document.ResolveArray(ctx, doc, wObj)
+	if err != nil {
+		doc.Logger.Debug("resolving CID width array", slog.Any("err", err))
+	}
 	if wArr == nil {
 		return nil
 	}
@@ -119,7 +132,10 @@ func compareCIDWidths(ctx context.Context, doc *document.Document, wObj ast.PdfO
 	// /W array format: [cid [w1 w2 ...]] or [cidFirst cidLast w]
 	i := 0
 	for i < len(wArr) {
-		cidStartRes, _ := document.ResolveObject(ctx, doc, wArr[i])
+		cidStartRes, err := document.ResolveObject(ctx, doc, wArr[i])
+		if err != nil {
+			doc.Logger.Debug("resolving CID start value", slog.Any("err", err))
+		}
 		cidStartInt, ok := cidStartRes.(ast.PdfInt)
 		if !ok {
 			i++
@@ -131,7 +147,10 @@ func compareCIDWidths(ctx context.Context, doc *document.Document, wObj ast.PdfO
 			break
 		}
 
-		nextRes, _ := document.ResolveObject(ctx, doc, wArr[i])
+		nextRes, err := document.ResolveObject(ctx, doc, wArr[i])
+		if err != nil {
+			doc.Logger.Debug("resolving CID width entry", slog.Any("err", err))
+		}
 		switch next := nextRes.(type) {
 		case ast.PdfArray:
 			// [cidStart [w1 w2 w3 ...]]
@@ -196,7 +215,10 @@ func checkNotdefGlyphUsage(ctx context.Context, doc *document.Document, catalog 
 		if !ok {
 			continue
 		}
-		encDict, _ := document.ResolveDict(ctx, doc, encObj)
+		encDict, err := document.ResolveDict(ctx, doc, encObj)
+		if err != nil {
+			doc.Logger.Debug("resolving font encoding dict", slog.Any("err", err))
+		}
 		if encDict == nil {
 			continue
 		}
@@ -204,7 +226,10 @@ func checkNotdefGlyphUsage(ctx context.Context, doc *document.Document, catalog 
 		if !ok {
 			continue
 		}
-		diffArr, _ := document.ResolveArray(ctx, doc, diffObj)
+		diffArr, err := document.ResolveArray(ctx, doc, diffObj)
+		if err != nil {
+			doc.Logger.Debug("resolving encoding differences array", slog.Any("err", err))
+		}
 		if diffArr == nil {
 			continue
 		}

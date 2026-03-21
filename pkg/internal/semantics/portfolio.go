@@ -3,6 +3,7 @@ package semantics
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -122,12 +123,18 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 	// Determine filename: prefer /UF (Unicode filename), fall back to /F.
 	filename := "embedded"
 	if ufObj, ok := specDict["UF"]; ok {
-		ufStr, _ := document.ResolveString(ctx, doc, ufObj)
+		ufStr, err := document.ResolveString(ctx, doc, ufObj)
+		if err != nil {
+			doc.Logger.Debug("resolving portfolio /UF filename", slog.Any("err", err))
+		}
 		if ufStr != "" {
 			filename = document.DecodePdfString(ufStr)
 		}
 	} else if fObj, ok := specDict["F"]; ok {
-		fStr, _ := document.ResolveString(ctx, doc, fObj)
+		fStr, err := document.ResolveString(ctx, doc, fObj)
+		if err != nil {
+			doc.Logger.Debug("resolving portfolio /F filename", slog.Any("err", err))
+		}
 		if fStr != "" {
 			filename = document.DecodePdfString(fStr)
 		}
@@ -169,7 +176,10 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 	// Extract MIME type from stream's /Subtype (e.g., "application/pdf").
 	mimeType := ""
 	if stObj, ok := stream.Dict["Subtype"]; ok {
-		stName, _ := document.ResolveName(ctx, doc, stObj)
+		stName, err := document.ResolveName(ctx, doc, stObj)
+		if err != nil {
+			doc.Logger.Debug("resolving portfolio stream subtype", slog.Any("err", err))
+		}
 		if stName != "" {
 			// PDF stores MIME types with / replaced by # in name objects,
 			// but many writers use the plain MIME string as the name value.

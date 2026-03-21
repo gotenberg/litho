@@ -3,6 +3,7 @@ package document
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -40,9 +41,15 @@ func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inherit
 	maps.Copy(currentDPM, inheritedDPM)
 
 	if dpmObj, ok := node["DPM"]; ok {
-		dpmDict, _ := ResolveDict(ctx, doc, dpmObj)
+		dpmDict, err := ResolveDict(ctx, doc, dpmObj)
+		if err != nil {
+			doc.Logger.Debug("resolving DPart /DPM dict", slog.Any("err", err))
+		}
 		for k, v := range dpmDict {
-			vRes, _ := ResolveObject(ctx, doc, v)
+			vRes, err := ResolveObject(ctx, doc, v)
+			if err != nil {
+				doc.Logger.Debug("resolving DPM value", slog.String("key", string(k)), slog.Any("err", err))
+			}
 			if vStr, ok := vRes.(ast.PdfString); ok {
 				currentDPM[string(k)] = DecodePdfString(vStr)
 			} else if vName, ok := vRes.(ast.PdfName); ok {
@@ -52,7 +59,10 @@ func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inherit
 	}
 
 	if kObj, ok := node["K"]; ok {
-		kRes, _ := ResolveObject(ctx, doc, kObj)
+		kRes, err := ResolveObject(ctx, doc, kObj)
+		if err != nil {
+			doc.Logger.Debug("resolving DPart /K object", slog.Any("err", err))
+		}
 		if kArr, ok := kRes.(ast.PdfArray); ok {
 			for _, kid := range kArr {
 				var kidRef ast.PdfIndirectRef
@@ -60,12 +70,18 @@ func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inherit
 					kidRef = ref
 				}
 
-				kidDict, _ := ResolveDict(ctx, doc, kid)
+				kidDict, err := ResolveDict(ctx, doc, kid)
+				if err != nil {
+					doc.Logger.Debug("resolving DPart kid dict", slog.Any("err", err))
+				}
 				if kidDict != nil {
 					// Check if it's a Page dictionary
 					isPage := false
 					if tObj, ok := kidDict["Type"]; ok {
-						tName, _ := ResolveName(ctx, doc, tObj)
+						tName, err := ResolveName(ctx, doc, tObj)
+						if err != nil {
+							doc.Logger.Debug("resolving DPart kid type", slog.Any("err", err))
+						}
 						if tName == "Page" {
 							isPage = true
 						}

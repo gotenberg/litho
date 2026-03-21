@@ -3,6 +3,7 @@ package semantics
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -45,7 +46,10 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		if !ok {
 			continue
 		}
-		subtypeName, _ := document.ResolveName(ctx, doc, subtypeObj)
+		subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
+		if err != nil {
+			doc.Logger.Debug("resolving 3D annotation subtype", slog.Any("err", err))
+		}
 		if subtypeName != "3D" {
 			continue
 		}
@@ -74,7 +78,10 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		// Extract a name from the annotation if available.
 		name := fmt.Sprintf("model_%d", modelIdx)
 		if nmObj, ok := annotDict["NM"]; ok {
-			nmStr, _ := document.ResolveString(ctx, doc, nmObj)
+			nmStr, err := document.ResolveString(ctx, doc, nmObj)
+			if err != nil {
+				doc.Logger.Debug("resolving 3D annotation name", slog.Any("err", err))
+			}
 			if nmStr != "" {
 				decoded := document.DecodePdfString(nmStr)
 				if decoded != "" {
@@ -102,7 +109,10 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.PdfStream) (string, error) {
 	// Check /Subtype on the 3D stream dictionary.
 	if stObj, ok := stream.Dict["Subtype"]; ok {
-		name, _ := document.ResolveName(ctx, doc, stObj)
+		name, err := document.ResolveName(ctx, doc, stObj)
+		if err != nil {
+			doc.Logger.Debug("resolving 3D stream subtype", slog.Any("err", err))
+		}
 		switch name {
 		case "U3D":
 			return "U3D", nil
@@ -113,7 +123,10 @@ func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.
 
 	// Check /Type as a fallback (some producers use /Type instead of /Subtype).
 	if typeObj, ok := stream.Dict["Type"]; ok {
-		name, _ := document.ResolveName(ctx, doc, typeObj)
+		name, err := document.ResolveName(ctx, doc, typeObj)
+		if err != nil {
+			doc.Logger.Debug("resolving 3D stream type", slog.Any("err", err))
+		}
 		switch name {
 		case "U3D":
 			return "U3D", nil

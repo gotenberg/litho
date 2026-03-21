@@ -3,6 +3,7 @@ package image
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -87,7 +88,10 @@ func resolveColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 					}
 					// Base could itself be an array (e.g. [/ICCBased ...]).
 					if baseArr, ok := baseObj.(ast.PdfArray); ok && len(baseArr) > 0 {
-						baseFamily, _ := document.ResolveObject(ctx, doc, baseArr[0])
+						baseFamily, err := document.ResolveObject(ctx, doc, baseArr[0])
+						if err != nil {
+							doc.Logger.Debug("resolving indexed color space base family", slog.Any("err", err))
+						}
 						if bf, ok := baseFamily.(ast.PdfName); ok {
 							switch bf {
 							case "ICCBased", "CalRGB":

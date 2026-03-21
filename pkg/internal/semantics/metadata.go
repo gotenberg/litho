@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -194,7 +195,10 @@ func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]str
 	keys := []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate"}
 	for _, key := range keys {
 		if valObj, ok := infoDict[ast.PdfName(key)]; ok {
-			strVal, _ := document.ResolveString(ctx, doc, valObj)
+			strVal, err := document.ResolveString(ctx, doc, valObj)
+			if err != nil {
+				doc.Logger.Debug("resolving info dict value", slog.String("key", key), slog.Any("err", err))
+			}
 			if strVal != "" {
 				metadata[key] = document.DecodePdfString(strVal)
 			}

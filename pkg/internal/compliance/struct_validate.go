@@ -4,6 +4,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -21,7 +22,10 @@ func walkStructTree(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if !ok {
 		return nil
 	}
-	strDict, _ := document.ResolveDict(ctx, doc, strObj)
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil {
+		doc.Logger.Debug("resolving StructTreeRoot dict", slog.Any("err", err))
+	}
 	if strDict == nil {
 		return nil
 	}
@@ -29,7 +33,10 @@ func walkStructTree(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving StructTreeRoot children", slog.Any("err", err))
+	}
 
 	var errs []error
 	walkStructElem(ctx, doc, kRes, visitor, 0, &errs)
@@ -50,7 +57,10 @@ func walkStructElem(ctx context.Context, doc *document.Document, obj ast.PdfObje
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving struct tree array child", slog.Any("err", err))
+			}
 			walkStructElem(ctx, doc, kidRes, visitor, depth+1, errs)
 		}
 	case ast.PdfDict:
@@ -62,7 +72,10 @@ func walkStructElem(ctx context.Context, doc *document.Document, obj ast.PdfObje
 		if !ok {
 			return
 		}
-		kRes, _ := document.ResolveObject(ctx, doc, kObj)
+		kRes, err := document.ResolveObject(ctx, doc, kObj)
+		if err != nil {
+			doc.Logger.Debug("resolving struct element children", slog.Any("err", err))
+		}
 		walkStructElem(ctx, doc, kRes, visitor, depth+1, errs)
 	}
 }
@@ -73,7 +86,10 @@ func getStructType(ctx context.Context, doc *document.Document, elem ast.PdfDict
 	if !ok {
 		return ""
 	}
-	sName, _ := document.ResolveName(ctx, doc, sObj)
+	sName, err := document.ResolveName(ctx, doc, sObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct element type name", slog.Any("err", err))
+	}
 	return sName
 }
 
@@ -83,12 +99,18 @@ func getStructChildren(ctx context.Context, doc *document.Document, elem ast.Pdf
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct element K object", slog.Any("err", err))
+	}
 	var children []ast.PdfDict
 	switch k := kRes.(type) {
 	case ast.PdfArray:
 		for _, item := range k {
-			d, _ := document.ResolveDict(ctx, doc, item)
+			d, err := document.ResolveDict(ctx, doc, item)
+			if err != nil {
+				doc.Logger.Debug("resolving struct child dict", slog.Any("err", err))
+			}
 			if d != nil {
 				children = append(children, d)
 			}
@@ -213,7 +235,10 @@ func checkHeadingHierarchy(ctx context.Context, doc *document.Document, catalog 
 	if !ok {
 		return nil
 	}
-	strDict, _ := document.ResolveDict(ctx, doc, strObj)
+	strDict, err := document.ResolveDict(ctx, doc, strObj)
+	if err != nil {
+		doc.Logger.Debug("resolving StructTreeRoot for heading check", slog.Any("err", err))
+	}
 	if strDict == nil {
 		return nil
 	}
@@ -221,7 +246,10 @@ func checkHeadingHierarchy(ctx context.Context, doc *document.Document, catalog 
 	if !ok {
 		return nil
 	}
-	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+	kRes, err := document.ResolveObject(ctx, doc, kObj)
+	if err != nil {
+		doc.Logger.Debug("resolving StructTreeRoot children for heading check", slog.Any("err", err))
+	}
 
 	// Collect all heading levels in document order.
 	var levels []int
@@ -245,7 +273,10 @@ func collectHeadingLevels(ctx context.Context, doc *document.Document, obj ast.P
 	switch v := obj.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			kidRes, err := document.ResolveObject(ctx, doc, kid)
+			if err != nil {
+				doc.Logger.Debug("resolving heading array child", slog.Any("err", err))
+			}
 			collectHeadingLevels(ctx, doc, kidRes, levels, depth+1)
 		}
 	case ast.PdfDict:
@@ -258,7 +289,10 @@ func collectHeadingLevels(ctx context.Context, doc *document.Document, obj ast.P
 		if !ok {
 			return
 		}
-		kRes, _ := document.ResolveObject(ctx, doc, kObj)
+		kRes, err := document.ResolveObject(ctx, doc, kObj)
+		if err != nil {
+			doc.Logger.Debug("resolving heading element children", slog.Any("err", err))
+		}
 		collectHeadingLevels(ctx, doc, kRes, levels, depth+1)
 	}
 }
@@ -304,7 +338,10 @@ func hasAttribute(ctx context.Context, doc *document.Document, elem ast.PdfDict,
 	if !ok {
 		return false
 	}
-	aRes, _ := document.ResolveObject(ctx, doc, aObj)
+	aRes, err := document.ResolveObject(ctx, doc, aObj)
+	if err != nil {
+		doc.Logger.Debug("resolving struct element attribute object", slog.Any("err", err))
+	}
 	switch a := aRes.(type) {
 	case ast.PdfDict:
 		if _, ok := a[ast.PdfName(attrName)]; ok {
@@ -312,7 +349,10 @@ func hasAttribute(ctx context.Context, doc *document.Document, elem ast.PdfDict,
 		}
 	case ast.PdfArray:
 		for _, item := range a {
-			d, _ := document.ResolveDict(ctx, doc, item)
+			d, err := document.ResolveDict(ctx, doc, item)
+			if err != nil {
+				doc.Logger.Debug("resolving attribute array entry", slog.Any("err", err))
+			}
 			if d != nil {
 				if _, ok := d[ast.PdfName(attrName)]; ok {
 					return true

@@ -3,6 +3,7 @@ package semantics
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -62,7 +63,10 @@ func extractNamesTree(ctx context.Context, doc *document.Document, nodeObj ast.P
 
 	// Traverse Kids
 	if kidsObj, ok := nodeDict["Kids"]; ok {
-		kidsArr, _ := document.ResolveArray(ctx, doc, kidsObj)
+		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
+		if err != nil {
+			doc.Logger.Debug("resolving attachment names tree kids", slog.Any("err", err))
+		}
 		for _, kid := range kidsArr {
 			if err := extractNamesTree(ctx, doc, kid, outputDir, savedFiles); err != nil {
 				return err
@@ -73,25 +77,40 @@ func extractNamesTree(ctx context.Context, doc *document.Document, nodeObj ast.P
 
 	// Process Names array (leaf node)
 	if namesObj, ok := nodeDict["Names"]; ok {
-		namesArr, _ := document.ResolveArray(ctx, doc, namesObj)
+		namesArr, err := document.ResolveArray(ctx, doc, namesObj)
+		if err != nil {
+			doc.Logger.Debug("resolving attachment names array", slog.Any("err", err))
+		}
 		if namesArr != nil {
 			// Names array alternates between name string and value object
 			for i := 1; i < len(namesArr); i += 2 {
 				valObj := namesArr[i]
-				fileSpecDict, _ := document.ResolveDict(ctx, doc, valObj)
+				fileSpecDict, err := document.ResolveDict(ctx, doc, valObj)
+				if err != nil {
+					doc.Logger.Debug("resolving file specification dict", slog.Any("err", err))
+				}
 
 				if fileSpecDict != nil {
 					// We have a File Specification dictionary
 					if efObj, ok := fileSpecDict["EF"]; ok {
-						efDict, _ := document.ResolveDict(ctx, doc, efObj)
+						efDict, err := document.ResolveDict(ctx, doc, efObj)
+						if err != nil {
+							doc.Logger.Debug("resolving /EF dict", slog.Any("err", err))
+						}
 						if efDict != nil {
 							if fObj, ok := efDict["F"]; ok {
-								stream, _ := document.ResolveStream(ctx, doc, fObj)
+								stream, err := document.ResolveStream(ctx, doc, fObj)
+								if err != nil {
+									doc.Logger.Debug("resolving embedded file stream", slog.Any("err", err))
+								}
 								if stream.Dict != nil {
 									// Extract filename from File Specification (/F or /UF)
 									filename := "attachment"
 									if nameObj, ok := fileSpecDict["F"]; ok {
-										nameStr, _ := document.ResolveString(ctx, doc, nameObj)
+										nameStr, err := document.ResolveString(ctx, doc, nameObj)
+										if err != nil {
+											doc.Logger.Debug("resolving attachment filename", slog.Any("err", err))
+										}
 										if nameStr != "" {
 											filename = document.DecodePdfString(nameStr)
 										}
