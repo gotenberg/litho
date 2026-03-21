@@ -14,6 +14,7 @@ import (
 	"golang.org/x/image/ccitt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/filter/jbig2"
 )
 
 // bufPool reuses bytes.Buffer instances across stream decompression calls
@@ -119,6 +120,9 @@ func applyDecodeFilter(data []byte, filterName ast.PdfName, parms ast.PdfDict) (
 
 	case "BrotliDecode":
 		return decodeBrotli(data)
+
+	case "JBIG2Decode":
+		return decodeJBIG2(data, parms)
 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFilter, filterName)
@@ -305,6 +309,29 @@ func decodeBrotli(data []byte) ([]byte, error) {
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
 	return result, nil
+}
+
+func decodeJBIG2(data []byte, parms ast.PdfDict) ([]byte, error) {
+	// Extract /JBIG2Globals from DecodeParms if present.
+	var globals []byte
+	if parms != nil {
+		if globalsObj, ok := parms["JBIG2Globals"]; ok {
+			if globalsStream, ok := globalsObj.(ast.PdfStream); ok {
+				// The globals stream may itself be filtered.
+				decoded, err := DecodeStream(globalsStream)
+				if err != nil {
+					return nil, fmt.Errorf("decoding JBIG2Globals: %w", err)
+				}
+				globals = decoded
+			}
+		}
+	}
+
+	pixelData, _, _, err := jbig2.Decode(data, globals)
+	if err != nil {
+		return nil, fmt.Errorf("jbig2 decode: %w", err)
+	}
+	return pixelData, nil
 }
 
 // NewStreamReader returns an io.ReadCloser that lazily decodes a PDF stream
