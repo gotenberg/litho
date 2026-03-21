@@ -1269,3 +1269,65 @@ func checkCaptionRecursive(ctx context.Context, doc *document.Document, obj ast.
 		}
 	}
 }
+
+// tableElementParents maps table-related element types to their allowed parents.
+var tableElementParents = map[ast.PdfName]map[ast.PdfName]bool{ //nolint:gochecknoglobals
+	"TR":    {"Table": true, "THead": true, "TBody": true, "TFoot": true},
+	"THead": {"Table": true},
+	"TBody": {"Table": true},
+	"TFoot": {"Table": true},
+	"TH":    {"TR": true},
+	"TD":    {"TR": true},
+}
+
+// checkTableElementContainment verifies that table structure elements are
+// contained in their required parent elements (7.2 tests 4-9).
+func checkTableElementContainment(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []error {
+	strObj, ok := catalog["StructTreeRoot"]
+	if !ok {
+		return nil
+	}
+	strRes, _ := document.ResolveObject(ctx, doc, strObj)
+	strDict, ok := strRes.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	kObj, ok := strDict["K"]
+	if !ok {
+		return nil
+	}
+	kRes, _ := document.ResolveObject(ctx, doc, kObj)
+
+	var errs []error
+	checkContainmentRecursive(ctx, doc, kRes, "", &errs, 0)
+	return errs
+}
+
+func checkContainmentRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, parentType ast.PdfName, errs *[]error, depth int) {
+	if depth > 200 { //nolint:mnd
+		return
+	}
+	switch v := obj.(type) {
+	case ast.PdfArray:
+		for _, kid := range v {
+			kidRes, _ := document.ResolveObject(ctx, doc, kid)
+			checkContainmentRecursive(ctx, doc, kidRes, parentType, errs, depth+1)
+		}
+	case ast.PdfDict:
+		sObj := v["S"]
+		sRes, _ := document.ResolveObject(ctx, doc, sObj)
+		sName, _ := sRes.(ast.PdfName)
+
+		if allowedParents, ok := tableElementParents[sName]; ok {
+			if parentType != "" && !allowedParents[parentType] {
+				*errs = append(*errs, fmt.Errorf("%w: /%s must be contained in %v, found in /%s",
+					models.ErrTableStructureInvalid, sName, allowedParents, parentType))
+			}
+		}
+
+		if kObj, ok := v["K"]; ok {
+			kRes, _ := document.ResolveObject(ctx, doc, kObj)
+			checkContainmentRecursive(ctx, doc, kRes, sName, errs, depth+1)
+		}
+	}
+}

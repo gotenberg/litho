@@ -379,7 +379,7 @@ func pdfUA1Rules() ruleSet {
 	checks := pdfuaBaseChecks()
 	checks = append(checks, checkStandardTags, checkTabOrder, checkLangValues, checkOCConfigNames,
 		checkAnnotationAltText, checkTableSectionChildren, checkListItemChildren, checkCaptionFirstChild,
-		checkCIDToGIDMap, checkCIDSystemInfoConsistency, checkTrueTypeEncoding)
+		checkTableElementContainment, checkCIDToGIDMap, checkCIDSystemInfoConsistency, checkTrueTypeEncoding)
 	return ruleSet{catalogChecks: checks}
 }
 
