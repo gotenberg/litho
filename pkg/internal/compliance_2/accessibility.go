@@ -575,6 +575,10 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 	rule := annotAltRule(profile)
 
+	// Build a map from annotation object number to whether the enclosing
+	// structure element has a non-empty /Alt entry.
+	structAltMap := buildAnnotStructAltMap(ctx, doc, catalog)
+
 	pages := collectPages(ctx, doc, catalog)
 	var results []Result
 
@@ -598,6 +602,12 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				return results
 			}
 
+			// Grab the object number before resolving, for structure tree lookup.
+			annotObjNum := 0
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+				annotObjNum = ref.ObjectNum
+			}
+
 			annot, err := document.ResolveDict(ctx, doc, annotObj)
 			if err != nil || annot == nil {
 				continue
@@ -614,8 +624,8 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				continue
 			}
 
-			// Check if annotation is hidden.
-			if isAnnotHidden(ctx, doc, annot) {
+			// Check if annotation is hidden or has Rect outside the crop-box.
+			if isAnnotHidden(ctx, doc, annot) || isAnnotOutsideCropBox(ctx, doc, annot, page) {
 				continue
 			}
 
@@ -629,16 +639,79 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 					"page", pageIdx, "annot", annotIdx, "subtype", string(subtype))
 			}
 
-			// Annotation lacks /Contents — would need to check enclosing structure
-			// element for /Alt, but that requires full structure tree → annotation
-			// mapping. For now, flag annotations without /Contents.
-			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx, annotIdx, subtype)
-			slog.Debug("compliance_2/accessibility: annotation missing /Contents", "loc", loc)
+			// Annotation lacks /Contents — check the enclosing structure element for /Alt.
+			if annotObjNum > 0 && structAltMap[annotObjNum] {
+				slog.Debug("compliance_2/accessibility: annotation has /Alt via structure element",
+					"page", pageIdx, "annot", annotIdx, "objNum", annotObjNum)
+				continue
+			}
+
+			loc := fmt.Sprintf("page %d, annot %d (/%s)", pageIdx, annotIdx, subtype)
+			slog.Debug("compliance_2/accessibility: annotation missing /Contents and struct /Alt", "loc", loc)
 			results = append(results, Result{Rule: rule, Context: loc})
 		}
 	}
 
 	return results
+}
+
+// buildAnnotStructAltMap walks the structure tree and returns a set of annotation
+// object numbers whose enclosing structure element has a non-empty /Alt entry.
+// PDF structure elements reference annotations via OBJR (object reference) dicts
+// in their /K children: { /Type /OBJR /Obj <indirect ref to annotation> }.
+func buildAnnotStructAltMap(ctx context.Context, doc *document.Document, catalog ast.PdfDict) map[int]bool {
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+
+	result := make(map[int]bool)
+	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
+		// Check if this structure element has a non-empty /Alt.
+		if !hasNonEmptyStringKey(ctx, doc, elem, "Alt") {
+			return
+		}
+
+		// Scan /K children for OBJR dicts pointing to annotations.
+		kObj, ok := elem["K"]
+		if !ok {
+			return
+		}
+		collectOBJRAnnotObjNums(ctx, doc, kObj, result)
+	})
+
+	return result
+}
+
+// collectOBJRAnnotObjNums finds OBJR dicts in the /K children of a structure element
+// and records the object numbers of their /Obj references.
+func collectOBJRAnnotObjNums(ctx context.Context, doc *document.Document, kObj ast.PdfObject, dest map[int]bool) {
+	// /K can be a single item or an array.
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		// Try as a single dict.
+		checkOBJR(ctx, doc, kObj, dest)
+		return
+	}
+	for _, item := range arr {
+		checkOBJR(ctx, doc, item, dest)
+	}
+}
+
+// checkOBJR checks if obj is an OBJR dict and records the /Obj object number.
+func checkOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject, dest map[int]bool) {
+	dict, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || dict == nil {
+		return
+	}
+	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
+	if typeName != "OBJR" {
+		return
+	}
+	// /Obj is an indirect reference to the annotation.
+	if ref, ok := dict["Obj"].(ast.PdfIndirectRef); ok {
+		dest[ref.ObjectNum] = true
+	}
 }
 
 // isAnnotHidden checks if an annotation has the Hidden flag set.
@@ -652,6 +725,55 @@ func isAnnotHidden(ctx context.Context, doc *document.Document, annot ast.PdfDic
 		return false
 	}
 	return int(flags)&annotFlagHidden != 0
+}
+
+// isAnnotOutsideCropBox checks if the annotation's /Rect is entirely outside
+// the page's effective crop box (CropBox if present, otherwise MediaBox).
+func isAnnotOutsideCropBox(ctx context.Context, doc *document.Document, annot, page ast.PdfDict) bool {
+	annotRect := resolveRect(ctx, doc, annot["Rect"])
+	if annotRect == nil {
+		return false
+	}
+
+	// CropBox defaults to MediaBox per PDF spec.
+	cropBox := resolveRect(ctx, doc, page["CropBox"])
+	if cropBox == nil {
+		cropBox = resolveRect(ctx, doc, page["MediaBox"])
+	}
+	if cropBox == nil {
+		return false
+	}
+
+	// Two rectangles are non-overlapping if one is entirely to the left, right,
+	// above, or below the other.
+	return annotRect[2] <= cropBox[0] || // annot right ≤ crop left
+		annotRect[0] >= cropBox[2] || // annot left ≥ crop right
+		annotRect[3] <= cropBox[1] || // annot top ≤ crop bottom
+		annotRect[1] >= cropBox[3] // annot bottom ≥ crop top
+}
+
+// resolveRect resolves a PDF rectangle (4-element number array) and normalizes it
+// so that [0],[1] is the lower-left and [2],[3] is the upper-right.
+func resolveRect(ctx context.Context, doc *document.Document, obj ast.PdfObject) []float64 {
+	if obj == nil {
+		return nil
+	}
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil || len(arr) < 4 { //nolint:mnd // rectangle has 4 elements
+		return nil
+	}
+	r := make([]float64, 4) //nolint:mnd // rectangle has 4 elements
+	for i := range 4 {      //nolint:mnd // rectangle has 4 elements
+		r[i] = document.GetFloat(arr[i])
+	}
+	// Normalize: ensure [0]<[2] and [1]<[3].
+	if r[0] > r[2] {
+		r[0], r[2] = r[2], r[0]
+	}
+	if r[1] > r[3] {
+		r[1], r[3] = r[3], r[1]
+	}
+	return r
 }
 
 // --- 8b. Widget /AA ---
