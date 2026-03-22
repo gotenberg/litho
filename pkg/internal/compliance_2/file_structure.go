@@ -329,7 +329,9 @@ func checkFileHeader(doc *document.Document, profile string) []Result {
 	}
 
 	// Validate version pattern.
-	// PDF/A-4 requires %PDF-2.n; PDF/A-1/2/3 require %PDF-1.n.
+	// PDF/A-1: any valid %PDF-x.y header is accepted; version is checked separately.
+	// PDF/A-2/3: %PDF-1.n where n is 0-7.
+	// PDF/A-4: %PDF-2.n where n is 0-9.
 	if len(buf) < 8 { //nolint:mnd // minimum for "%PDF-x.y"
 		slog.Debug("compliance_2: file_structure: header too short for version")
 		return fail(fileHeaderRule(profile), "header too short")
@@ -338,12 +340,15 @@ func checkFileHeader(doc *document.Document, profile string) []Result {
 
 	var valid bool
 	switch part {
+	case 1:
+		// PDF/A-1: accept any valid %PDF-x.y (version validated separately).
+		valid = buf[5] >= '1' && buf[5] <= '9' && buf[6] == '.' && buf[7] >= '0' && buf[7] <= '9'
+	case 2, 3: //nolint:mnd // PDF/A-2/3
+		// Must be %PDF-1.n where n is 0-7.
+		valid = buf[5] == '1' && buf[6] == '.' && buf[7] >= '0' && buf[7] <= '7'
 	case 4: //nolint:mnd // PDF/A-4
 		// Must be %PDF-2.n where n is 0-9.
 		valid = buf[5] == '2' && buf[6] == '.' && buf[7] >= '0' && buf[7] <= '9'
-	default:
-		// Must be %PDF-1.n where n is 0-7.
-		valid = buf[5] == '1' && buf[6] == '.' && buf[7] >= '0' && buf[7] <= '7'
 	}
 
 	if !valid {

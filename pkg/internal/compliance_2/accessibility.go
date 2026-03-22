@@ -1092,9 +1092,11 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 			return
 		}
 
-		// Formula elements should have /AF (associated files) with MathML content,
-		// OR non-empty /Alt text, OR non-empty /ActualText as alternative text
-		// representations. Any of these provide accessible representation of the formula.
+		// Formula elements should have one of:
+		// (a) /AF (associated files) with MathML content
+		// (b) Non-empty /Alt text
+		// (c) Non-empty /ActualText
+		// (d) Child structure elements providing the formula content
 		if altObj, hasAlt := elem["Alt"]; hasAlt {
 			altStr, err := document.ResolveString(ctx, doc, altObj)
 			if err == nil && strings.TrimSpace(string(altStr)) != "" {
@@ -1110,29 +1112,32 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 			}
 		}
 
-		afObj, ok := elem["AF"]
-		if !ok {
-			slog.Debug("compliance_2/accessibility: Formula missing /AF, /Alt, and /ActualText", "path", path)
-			results = append(results, Result{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
-			return
-		}
-
-		// /AF can be a single file spec dict or an array; verify it is present and non-empty.
-		afArr, err := document.ResolveArray(ctx, doc, afObj)
-		if err != nil {
-			// Might be a single dict, which is acceptable.
-			afDict, err := document.ResolveDict(ctx, doc, afObj)
-			if err != nil || afDict == nil {
-				slog.Debug("compliance_2/accessibility: Formula /AF unresolvable", "path", path, "error", err)
-				results = append(results, Result{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
+		// Check for /AF.
+		if afObj, hasAF := elem["AF"]; hasAF {
+			afArr, err := document.ResolveArray(ctx, doc, afObj)
+			if err != nil {
+				// Might be a single dict, which is acceptable.
+				afDict, err := document.ResolveDict(ctx, doc, afObj)
+				if err == nil && afDict != nil {
+					return
+				}
+			} else if len(afArr) > 0 {
+				return
 			}
-			return
 		}
 
-		if len(afArr) == 0 {
-			slog.Debug("compliance_2/accessibility: Formula /AF array is empty", "path", path)
-			results = append(results, Result{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
+		// Check for child structure elements — Formula elements that contain
+		// structural children (e.g., math content elements) provide the
+		// formula content directly and do not require /AF or /Alt.
+		if kObj, hasK := elem["K"]; hasK {
+			if hasStructuralChildren(ctx, doc, kObj) {
+				slog.Debug("compliance_2/accessibility: Formula has structural children", "path", path)
+				return
+			}
 		}
+
+		slog.Debug("compliance_2/accessibility: Formula missing /AF, /Alt, /ActualText, and structural children", "path", path)
+		results = append(results, Result{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
 	})
 
 	return results
@@ -1143,6 +1148,32 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 // checkInvisibleAnnotArtifact validates that annotations with the Invisible flag
 // set are not included in the logical structure tree (they must be artifacts).
 // Rule: ISO 14289-2, 8.9.2.2, test 1.
+// hasStructuralChildren checks if /K contains at least one child dict with an /S key
+// (a structure element), as opposed to only MCR/OBJR/integer references.
+func hasStructuralChildren(ctx context.Context, doc *document.Document, kObj ast.PdfObject) bool {
+	// Try as array first.
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err == nil {
+		for _, item := range arr {
+			d, err := document.ResolveDict(ctx, doc, item)
+			if err == nil && d != nil {
+				if _, hasS := d["S"]; hasS {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	// Try as single dict.
+	d, err := document.ResolveDict(ctx, doc, kObj)
+	if err == nil && d != nil {
+		if _, hasS := d["S"]; hasS {
+			return true
+		}
+	}
+	return false
+}
+
 func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
 	if profile != "PDF/UA-2" {
 		return nil

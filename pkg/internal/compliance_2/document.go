@@ -136,15 +136,53 @@ func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule) []R
 }
 
 // catalogVersion extracts the /Version name from the catalog dictionary.
+// PDF names may contain #XX hex escape sequences (e.g., /#32#2E#30 = "2.0"),
+// so the name is decoded before returning.
 func catalogVersion(catalog ast.PdfDict) string {
 	vObj, ok := catalog["Version"]
 	if !ok {
 		return ""
 	}
 	if name, ok := vObj.(ast.PdfName); ok {
-		return string(name)
+		return decodePdfName(string(name))
 	}
 	return ""
+}
+
+// decodePdfName decodes #XX hex escape sequences in a PDF name.
+func decodePdfName(name string) string {
+	if !strings.Contains(name, "#") {
+		return name
+	}
+	var buf strings.Builder
+	buf.Grow(len(name))
+	for i := 0; i < len(name); i++ {
+		if name[i] == '#' && i+2 < len(name) {
+			hi := unhex(name[i+1])
+			lo := unhex(name[i+2])
+			if hi >= 0 && lo >= 0 {
+				buf.WriteByte(byte(hi<<4 | lo)) //nolint:mnd,gosec // hex decode; values bounded 0-15
+				i += 2
+				continue
+			}
+		}
+		buf.WriteByte(name[i])
+	}
+	return buf.String()
+}
+
+// unhex returns the numeric value of a hex digit, or -1 if not a hex digit.
+func unhex(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int(c-'a') + 10 //nolint:mnd // hex offset
+	case c >= 'A' && c <= 'F':
+		return int(c-'A') + 10 //nolint:mnd // hex offset
+	default:
+		return -1
+	}
 }
 
 // checkAlternatePresentations validates that /AlternatePresentations is not
@@ -456,15 +494,22 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
-// configName extracts the /Name string from an OC configuration dictionary.
+// configName extracts the /Name value from an OC configuration dictionary.
+// The value may be a PdfString (text string) or occasionally a PdfName.
 func configName(ctx context.Context, doc *document.Document, cfg ast.PdfDict) string {
 	nameObj, ok := cfg["Name"]
 	if !ok {
 		return ""
 	}
+	// Try as string first (most common).
 	nameStr, err := document.ResolveString(ctx, doc, nameObj)
-	if err != nil {
-		return ""
+	if err == nil && len(nameStr) > 0 {
+		return string(nameStr)
 	}
-	return string(nameStr)
+	// Try as name (some PDF generators).
+	nameVal, err := document.ResolveName(ctx, doc, nameObj)
+	if err == nil && nameVal != "" {
+		return string(nameVal)
+	}
+	return ""
 }

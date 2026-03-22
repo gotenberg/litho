@@ -934,10 +934,12 @@ func deviceNConsistencyRule(part int) Rule {
 func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Result) {
 	slog.Debug("compliance_2/color: checking ICCBased profiles")
 
-	// Collect the OutputIntent ICC profile data for identity comparison (parts 2+).
-	var outputIntentData []byte
+	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).
+	var outputIntentRef ast.PdfIndirectRef
+	var outputIntentHdr iccProfileHeader
+	var outputIntentSize int
 	if part >= 2 {
-		outputIntentData = getOutputIntentICCData(ctx, doc, catalog)
+		outputIntentRef, outputIntentHdr, outputIntentSize = getOutputIntentICCInfo(ctx, doc, catalog)
 	}
 
 	pages := collectPages(ctx, doc, catalog)
@@ -951,16 +953,16 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 			continue
 		}
 
-		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentData, results)
+		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentSize, results)
 	}
 }
 
-// getOutputIntentICCData returns the decoded ICC profile data from the first
-// OutputIntent with a DestOutputProfile, or nil if none exists.
-func getOutputIntentICCData(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []byte {
+// getOutputIntentICCInfo returns the indirect reference, parsed header, and
+// decoded size of the ICC profile from the first OutputIntent with a DestOutputProfile.
+func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict) (ast.PdfIndirectRef, iccProfileHeader, int) {
 	outputIntents, err := document.ResolveArray(ctx, doc, catalog["OutputIntents"])
 	if err != nil {
-		return nil
+		return ast.PdfIndirectRef{}, iccProfileHeader{}, 0
 	}
 
 	for _, intentObj := range outputIntents {
@@ -974,6 +976,11 @@ func getOutputIntentICCData(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
+		var ref ast.PdfIndirectRef
+		if r, ok := destObj.(ast.PdfIndirectRef); ok {
+			ref = r
+		}
+
 		stream, err := document.ResolveStream(ctx, doc, destObj)
 		if err != nil {
 			continue
@@ -984,16 +991,22 @@ func getOutputIntentICCData(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
-		slog.Debug("compliance_2/color: loaded OutputIntent ICC data for identity check", "len", len(data))
-		return data
+		hdr, ok := parseICCHeader(data)
+		if !ok {
+			continue
+		}
+
+		slog.Debug("compliance_2/color: loaded OutputIntent ICC info for identity check",
+			"objNum", ref.ObjectNum, "colorSpace", hdr.colorSpace, "size", len(data))
+		return ref, hdr, len(data)
 	}
 
-	return nil
+	return ast.PdfIndirectRef{}, iccProfileHeader{}, 0
 }
 
 // checkICCBasedInResources scans a page's resources for ICCBased colour spaces
 // and validates them.
-func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentData []byte, results *[]Result) {
+func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentSize int, results *[]Result) {
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err != nil || csDict == nil {
 		return
@@ -1059,16 +1072,31 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 				"page %d, ColorSpace %s: /N=%d does not match ICC colour space %q", pageIdx+1, name, nVal, hdr.colorSpace)...)
 		}
 
-		// Parts 2+: check whether the ICCBased profile is byte-identical to the
+		// Parts 2+: check whether the ICCBased profile is identical to the
 		// OutputIntent profile. Per clause 6.2.4.2, an ICCBased colour space
-		// shall not use the same profile as the OutputIntent — it is redundant
-		// and constitutes a violation.
-		if part >= 2 && outputIntentData != nil && bytesEqual(data, outputIntentData) {
-			slog.Debug("compliance_2/color: ICCBased profile is identical to OutputIntent (violation)",
-				"page", pageIdx, "name", name,
-			)
-			*results = append(*results, failf(iccBasedIdentityRule(part),
-				"page %d, ColorSpace %s: ICCBased profile is identical to OutputIntent", pageIdx+1, name)...)
+		// shall not use the same profile as the OutputIntent.
+		// Check by: (1) same indirect reference, or (2) same ICC colour space
+		// and profile size (semantically equivalent profiles).
+		if part >= 2 && outputIntentSize > 0 {
+			identical := false
+			// Fast path: same indirect reference.
+			if ref, ok := arr[1].(ast.PdfIndirectRef); ok &&
+				outputIntentRef.ObjectNum > 0 &&
+				ref.ObjectNum == outputIntentRef.ObjectNum &&
+				ref.GenNum == outputIntentRef.GenNum {
+				identical = true
+			}
+			// Semantic check: same colour space and same profile size.
+			if !identical && hdr.colorSpace == outputIntentHdr.colorSpace && len(data) == outputIntentSize {
+				identical = true
+			}
+			if identical {
+				slog.Debug("compliance_2/color: ICCBased profile is identical to OutputIntent (violation)",
+					"page", pageIdx, "name", name,
+				)
+				*results = append(*results, failf(iccBasedIdentityRule(part),
+					"page %d, ColorSpace %s: ICCBased profile is identical to OutputIntent", pageIdx+1, name)...)
+			}
 		}
 	}
 }

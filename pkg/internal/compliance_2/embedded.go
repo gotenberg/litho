@@ -281,12 +281,25 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil
 	}
 
+	// Only file specs with /AFRelationship are "associated files" that require
+	// catalog /AF. Legacy embedded files without /AFRelationship are exempt.
+	var associatedSpecs []fileSpecEntry
+	for _, fs := range fileSpecs {
+		if _, hasAFR := fs.dict["AFRelationship"]; hasAFR {
+			associatedSpecs = append(associatedSpecs, fs)
+		}
+	}
+	if len(associatedSpecs) == 0 {
+		slog.Debug("compliance_2/embedded: no associated files (no /AFRelationship), skipping catalog /AF check")
+		return nil
+	}
+
 	rule := catalogAFRule(part)
 
 	afObj, hasAF := catalog["AF"]
 	if !hasAF {
-		slog.Debug("compliance_2/embedded: catalog missing /AF array but file specs with /EF exist")
-		return failf(rule, "catalog missing /AF array but %d embedded file(s) found", len(fileSpecs))
+		slog.Debug("compliance_2/embedded: catalog missing /AF array but associated file specs exist")
+		return failf(rule, "catalog missing /AF array but %d embedded file(s) found", len(associatedSpecs))
 	}
 
 	afArr, err := document.ResolveArray(ctx, doc, afObj)
