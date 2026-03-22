@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
 // --- Standard 14 font names ---
@@ -394,6 +395,71 @@ func hasIdentityCMap(ctx context.Context, doc *document.Document, fontDict ast.P
 	return false
 }
 
+// allGlyphNamesAGLResolvable returns true if all glyph names used by a Type 1
+// font are resolvable via the Adobe Glyph List. It checks multiple sources:
+//  1. Standard 14 fonts (always AGL-based)
+//  2. /Encoding /Differences array glyph names
+//  3. /FontDescriptor /CharSet (lists glyph names in Type 1 subsets)
+func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	// Standard 14 fonts always use AGL-resolvable names.
+	if isStandard14Font(ctx, doc, fontDict) {
+		return true
+	}
+
+	// Check /Encoding /Differences if present.
+	if encObj, ok := fontDict["Encoding"]; ok {
+		encDict, err := document.ResolveDict(ctx, doc, encObj)
+		if err == nil && encDict != nil {
+			if diffObj, hasDiff := encDict["Differences"]; hasDiff {
+				diffArr, err := document.ResolveArray(ctx, doc, diffObj)
+				if err == nil {
+					for _, item := range diffArr {
+						name, ok := item.(ast.PdfName)
+						if !ok {
+							continue // integer code — skip
+						}
+						if string(name) == ".notdef" {
+							continue
+						}
+						if _, resolved := encodings.GlyphToRuneFull(string(name)); !resolved {
+							slog.Debug("compliance_2: fonts: Differences glyph not AGL-resolvable",
+								"glyph", string(name))
+							return false
+						}
+					}
+					return true
+				}
+			}
+		}
+	}
+
+	// Check /FontDescriptor /CharSet — a string of slash-separated glyph names.
+	fd := findFontDescriptor(ctx, doc, fontDict)
+	if fd != nil {
+		if charsetObj, ok := fd["CharSet"]; ok {
+			charsetStr, err := document.ResolveString(ctx, doc, charsetObj)
+			if err == nil && len(charsetStr) > 0 {
+				decoded := document.DecodePdfString(charsetStr)
+				names := strings.SplitSeq(decoded, "/")
+				for name := range names {
+					name = strings.TrimSpace(name)
+					if name == "" || name == ".notdef" {
+						continue
+					}
+					if _, resolved := encodings.GlyphToRuneFull(name); !resolved {
+						slog.Debug("compliance_2: fonts: CharSet glyph not AGL-resolvable",
+							"glyph", name)
+						return false
+					}
+				}
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // --- Main check group ---
 
 // checkFontGroup validates font-related compliance rules across all pages.
@@ -593,6 +659,19 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		}
 		slog.Debug("compliance_2: fonts: symbolic font without /Encoding, ToUnicode still required",
 			"font", fontName)
+	}
+
+	// Exemption (b2): Type 1 fonts whose character names are all resolvable
+	// via the Adobe Glyph List. Per §6.3.8, if every glyph name in the
+	// font's encoding (including /Differences) maps to a Unicode value
+	// through the AGL, ToUnicode is not required.
+	subtype := fontSubtype(ctx, doc, fontDict)
+	if subtype == "Type1" || subtype == "MMType1" {
+		if allGlyphNamesAGLResolvable(ctx, doc, fontDict) {
+			slog.Debug("compliance_2: fonts: Type1 font with all AGL-resolvable glyph names, ToUnicode not required",
+				"font", fontName)
+			return nil
+		}
 	}
 
 	// Exemption (c): Identity-H/Identity-V with CIDToGIDMap.
