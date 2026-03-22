@@ -262,6 +262,11 @@ type walkState struct {
 
 	// headingLevels tracks all heading levels encountered in document order.
 	headingLevels []int
+
+	// tableUsesHeaderIDs is true when the current enclosing Table uses
+	// the Headers+IDs association model (any TD has /Headers in its
+	// attributes). When true, TH elements do not need /Scope.
+	tableUsesHeaderIDs bool
 }
 
 // walkChildren processes the /K entry of a structure element (may be a single
@@ -283,22 +288,34 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		return
 	}
 
-	childIdx := 0
+	// Count only structural children (elements with /S key) for caption
+	// position validation. Non-structural items (MCR integers, OBJR dicts)
+	// must not affect the index.
+	totalStructChildren := 0
+	for _, item := range arr {
+		d, err := document.ResolveDict(ctx, state.doc, item)
+		if err == nil && d != nil {
+			if _, hasS := d["S"]; hasS {
+				totalStructChildren++
+			}
+		}
+	}
+
+	structIdx := 0
 	for _, item := range arr {
 		if ctx.Err() != nil {
 			return
 		}
 		dict, err := document.ResolveDict(ctx, state.doc, item)
 		if err != nil || dict == nil {
-			childIdx++
 			continue
 		}
 		// Only process structure elements (skip marked content refs, object refs).
 		if _, hasS := dict["S"]; hasS {
 			walkElement(ctx, state, dict, parentType, depth, lastHeadingLevel)
-			validateCaptionPosition(state, dict, parentType, childIdx, len(arr))
+			validateCaptionPosition(state, dict, parentType, structIdx, totalStructChildren)
+			structIdx++
 		}
-		childIdx++
 	}
 }
 
@@ -329,9 +346,20 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		validateTHScope(ctx, state, elem)
 	}
 
+	// When entering a Table, determine if it uses the Headers+IDs model.
+	// Save and restore the flag so nested tables don't leak state.
+	prevTableUsesHeaderIDs := state.tableUsesHeaderIDs
+	if typeName == "Table" {
+		state.tableUsesHeaderIDs = tableHasHeaderIDs(ctx, state.doc, elem)
+	}
+
 	// Recurse into children.
 	if kObj, ok := elem["K"]; ok {
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
+	}
+
+	if typeName == "Table" {
+		state.tableUsesHeaderIDs = prevTableUsesHeaderIDs
 	}
 }
 
@@ -493,6 +521,13 @@ func checkHeadingHierarchy(state *walkState) {
 func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
 	slog.Debug("compliance_2/structure: checking TH scope")
 
+	// If the enclosing table uses the Headers+IDs association model
+	// (any TD references TH via /Headers), /Scope is not required on any TH.
+	if state.tableUsesHeaderIDs {
+		slog.Debug("compliance_2/structure: table uses Headers+IDs, skipping /Scope requirement")
+		return
+	}
+
 	// If TH has an /ID attribute, the table may use ID-based header
 	// association (TD elements reference TH via /Headers). In that case,
 	// /Scope is not required.
@@ -541,6 +576,99 @@ func findScopeInAttributes(ctx context.Context, doc *document.Document, aObj ast
 			continue
 		}
 		if _, ok := d["Scope"]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// tableHasHeaderIDs scans a Table structure element's subtree to determine
+// whether any TD cell uses the /Headers attribute (referencing TH IDs).
+// When true, the table uses the Headers+IDs association model and TH elements
+// do not need /Scope.
+func tableHasHeaderIDs(ctx context.Context, doc *document.Document, tableElem ast.PdfDict) bool {
+	kObj, ok := tableElem["K"]
+	if !ok {
+		return false
+	}
+	return scanForHeaders(ctx, doc, kObj, 0)
+}
+
+// scanForHeaders recursively searches structure element children for TD/TH
+// elements that have /Headers in their attribute dict or directly on the element.
+func scanForHeaders(ctx context.Context, doc *document.Document, kObj ast.PdfObject, depth int) bool {
+	if ctx.Err() != nil || depth > maxStructTreeDepth {
+		return false
+	}
+
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		// Single element.
+		dict, err := document.ResolveDict(ctx, doc, kObj)
+		if err != nil || dict == nil {
+			return false
+		}
+		return elemHasHeaders(ctx, doc, dict, depth)
+	}
+
+	for _, item := range arr {
+		dict, err := document.ResolveDict(ctx, doc, item)
+		if err != nil || dict == nil {
+			continue
+		}
+		if elemHasHeaders(ctx, doc, dict, depth) {
+			return true
+		}
+	}
+	return false
+}
+
+// elemHasHeaders checks if a structure element is a TD/TH with /Headers,
+// or recurses into its children.
+func elemHasHeaders(ctx context.Context, doc *document.Document, elem ast.PdfDict, depth int) bool {
+	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+	if typeName == "" {
+		return false
+	}
+
+	// Check if this TD or TH has /Headers directly or in /A attributes.
+	if typeName == "TD" || typeName == "TH" {
+		if _, ok := elem["Headers"]; ok {
+			return true
+		}
+		if findHeadersInAttributes(ctx, doc, elem["A"]) {
+			return true
+		}
+	}
+
+	// Recurse into children (TR, THead, TBody, TFoot, etc.).
+	if kObj, ok := elem["K"]; ok {
+		return scanForHeaders(ctx, doc, kObj, depth+1)
+	}
+	return false
+}
+
+// findHeadersInAttributes checks whether /Headers exists in attribute dict(s).
+func findHeadersInAttributes(ctx context.Context, doc *document.Document, aObj ast.PdfObject) bool {
+	if aObj == nil {
+		return false
+	}
+	dict, err := document.ResolveDict(ctx, doc, aObj)
+	if err == nil && dict != nil {
+		if _, ok := dict["Headers"]; ok {
+			return true
+		}
+	}
+	arr, err := document.ResolveArray(ctx, doc, aObj)
+	if err != nil {
+		return false
+	}
+	for _, item := range arr {
+		d, err := document.ResolveDict(ctx, doc, item)
+		if err != nil || d == nil {
+			continue
+		}
+		if _, ok := d["Headers"]; ok {
 			return true
 		}
 	}
