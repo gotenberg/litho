@@ -52,11 +52,9 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 	results = append(results, checkStreamLZW(ctx, doc, profile)...)
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
 	results = append(results, checkFormatViolations(doc, profile)...)
-	// TODO: checkObjectHeaders and checkStreamLengths disabled pending
-	// byte-level accuracy improvements — they produce too many false
-	// positives due to raw-byte scanning edge cases (filter encoding,
-	// stream padding, linearized offsets).
-	// results = append(results, checkObjectHeaders(ctx, doc, profile)...)
+	// TODO: checkStreamLengths produces FPs on some linearized/complex PDFs
+	// where raw-byte scanning finds endstream at wrong offset. Disabled until
+	// a more robust approach is available (e.g., using xref offsets directly).
 	// results = append(results, checkStreamLengths(ctx, doc, profile)...)
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
 	results = append(results, checkNumericLimits(ctx, doc, profile)...)
@@ -926,6 +924,129 @@ func checkXRefFormat(doc *document.Document, profile string) []Result {
 
 	slog.Debug("compliance_2: file_structure: xref format OK (no xref streams)")
 	return nil
+}
+
+// checkStreamLengths validates §6.1.7.1 t1 / §6.1.6.1 t1: the declared /Length
+// in a stream dictionary must match the actual byte count between the stream
+// keyword and endstream keyword.
+func checkStreamLengths(ctx context.Context, doc *document.Document, profile string) []Result { //nolint:unused // kept for future re-enablement
+	var results []Result
+
+	for objNum, entry := range doc.Index.Entries {
+		if ctx.Err() != nil {
+			return results
+		}
+		if entry.Free || entry.Type != 1 { // only check uncompressed objects
+			continue
+		}
+
+		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil || stream.Dict == nil {
+			continue
+		}
+
+		// Get declared /Length.
+		lengthObj, ok := stream.Dict["Length"]
+		if !ok {
+			continue
+		}
+		declaredLen, err := document.ResolveInt(ctx, doc, lengthObj)
+		if err != nil {
+			continue
+		}
+
+		// Read raw bytes around the object to find stream/endstream markers.
+		// Read enough to cover the object header + dict + stream data.
+		readSize := int64(declaredLen) + 4096 //nolint:mnd // extra for dict overhead
+		if readSize > 1<<20 {                 //nolint:mnd // cap at 1MB to avoid excessive reads
+			continue
+		}
+		rawData, err := doc.ReadFileBytes(entry.Offset, readSize)
+		if err != nil {
+			continue
+		}
+
+		// Find "stream" keyword.
+		streamIdx := bytes.Index(rawData, []byte("stream"))
+		if streamIdx < 0 {
+			continue
+		}
+
+		// Skip past "stream" + EOL marker (CR+LF or LF).
+		dataStart := streamIdx + len("stream")
+		if dataStart < len(rawData) && rawData[dataStart] == '\r' {
+			dataStart++
+		}
+		if dataStart < len(rawData) && rawData[dataStart] == '\n' {
+			dataStart++
+		}
+
+		// Use the declared Length to find where the stream data should end.
+		// Then check if "endstream" follows (possibly after EOL).
+		expectedEnd := dataStart + int(declaredLen)
+		if expectedEnd > len(rawData) {
+			continue // not enough data read
+		}
+
+		// At expectedEnd, there should be an optional EOL then "endstream".
+		tail := rawData[expectedEnd:]
+		trimmed := tail
+		// Skip optional CR and/or LF.
+		if len(trimmed) > 0 && trimmed[0] == '\r' {
+			trimmed = trimmed[1:]
+		}
+		if len(trimmed) > 0 && trimmed[0] == '\n' {
+			trimmed = trimmed[1:]
+		}
+
+		if !bytes.HasPrefix(trimmed, []byte("endstream")) {
+			// endstream not found at declared Length — the declared Length is wrong.
+			// Only report if we can find endstream nearby to confirm the mismatch
+			// is real and not a scanning artifact.
+			endIdx := bytes.Index(rawData[dataStart:], []byte("endstream"))
+			if endIdx < 0 {
+				continue
+			}
+			rawLen := endIdx
+			// Only flag if the mismatch is significant (> 2 bytes for EOL tolerance)
+			// but not too large (> 10% suggests a scanning issue, not a real violation).
+			diff := rawLen - int(declaredLen)
+			absDiff := diff
+			if absDiff < 0 {
+				absDiff = -absDiff
+			}
+			maxDrift := max(
+				//nolint:mnd // 10% tolerance for scanning artifacts
+				int(declaredLen)/10,
+				//nolint:mnd // minimum drift threshold
+				10)
+			if absDiff > 2 && absDiff < maxDrift { //nolint:mnd // EOL tolerance
+				slog.Debug("compliance_2: file_structure: stream length mismatch",
+					"object", objNum, "declared", declaredLen, "actual", rawLen)
+				results = append(results, Result{
+					Rule:    streamLengthRule(profile),
+					Context: fmt.Sprintf("object %d: declared Length=%d but actual=%d", objNum, declaredLen, rawLen),
+				})
+			}
+		}
+	}
+
+	return results
+}
+
+// streamLengthRule returns the rule for stream length mismatch.
+func streamLengthRule(profile string) Rule { //nolint:unused // kept for future re-enablement
+	switch pdfaPart(profile) {
+	case 1:
+		return Rule_19005_1_6_1_7_t01
+	case 2:
+		return Rule_19005_2_6_1_7_1_t01
+	case 3:
+		return Rule_19005_3_6_1_7_1_t01
+	case 4: //nolint:mnd
+		return Rule_19005_4_6_1_6_1_t01
+	}
+	return Rule_19005_1_6_1_7_t01
 }
 
 // pageBoundaryKeys lists all page boundary box keys defined in ISO 32000-1, §14.11.2.

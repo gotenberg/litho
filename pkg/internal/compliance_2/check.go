@@ -206,7 +206,7 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 		if ctx.Err() != nil {
 			return
 		}
-		if entry.Free || entry.Type != 1 {
+		if entry.Free {
 			continue
 		}
 		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
