@@ -159,8 +159,8 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		return results
 	}
 
-	// 7. XMP container types (§6.7.2 / §6.6.2.3.1).
-	xmpCheckContainerTypes(xmpData, part, metaStream, &results)
+	// 7. XMP property types (§6.7.2 / §6.6.2.3.1).
+	xmpCheckPropertyTypes(xmpData, part, metaStream, &results)
 
 	slog.Debug("compliance_2/xmp: XMP checks complete", "violations", len(results))
 	return results
@@ -1650,21 +1650,47 @@ const (
 	xmpContBag
 )
 
-// xmpCheckContainerTypes validates that XMP properties use the correct
-// value/container types per their schema definitions. It also flags
-// unknown property names in known (predefined) schemas.
-func xmpCheckContainerTypes(data []byte, part int, _ ast.PdfStream, results *[]Result) {
+// xmpContainerElementType maps container properties to the expected value type
+// of their items. For example, exif:ISOSpeedRatings is a Seq of Integer, so
+// each rdf:li item must be a valid integer string.
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpContainerElementType = map[string]map[string]xmpPropType{
+	"http://ns.adobe.com/exif/1.0/": {
+		"ISOSpeedRatings":         xmpPropInteger, // Seq Integer
+		"SubjectArea":             xmpPropInteger, // Seq Integer
+		"SubjectLocation":         xmpPropInteger, // Seq Integer
+		"ComponentsConfiguration": xmpPropInteger, // Seq Integer
+		"LensInfo":                xmpPropReal,    // Seq Rational (approximate as Real)
+	},
+	"http://ns.adobe.com/tiff/1.0/": {
+		"BitsPerSample":    xmpPropInteger, // Seq Integer
+		"YCbCrSubSampling": xmpPropInteger, // Seq Integer
+		"TransferFunction": xmpPropInteger, // Seq Integer
+	},
+	"http://purl.org/dc/elements/1.1/": {
+		"date": xmpPropDate, // Seq Date
+	},
+}
+
+// xmpCheckPropertyTypes validates that XMP properties use the correct
+// value/container types per their schema definitions. It also validates
+// simple property value formats, container item value formats, Alt container
+// lang attributes, and struct property structure. It flags unknown property
+// names in known (predefined) schemas.
+func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Result) {
 	slog.Debug("compliance_2/xmp: checking XMP property types")
 
-	observed := xmpExtractContainerInfo(data)
+	observed := xmpExtractPropertyValues(data)
 	_, extensionNS := xmpExtractNamespaces(data)
 
-	slog.Debug("compliance_2/xmp: extracted property info",
+	slog.Debug("compliance_2/xmp: extracted property values",
 		"namespaces", len(observed), "extensionNS", len(extensionNS))
 
 	for ns, props := range observed {
 		// Skip structural namespaces.
 		if ns == xmpRDFNamespace || ns == "adobe:ns:meta/" || ns == "http://www.w3.org/XML/1998/namespace" {
+			slog.Debug("compliance_2/xmp: skipping structural namespace", "ns", ns)
 			continue
 		}
 		// Skip extension-declared namespaces — their types are defined by the extension.
@@ -1676,19 +1702,21 @@ func xmpCheckContainerTypes(data []byte, part int, _ ast.PdfStream, results *[]R
 		if ns == xmpPdfaSchemaPrefix || ns == xmpPdfaPropertyPrefix ||
 			ns == xmpPdfaTypePrefix || ns == xmpPdfaFieldPrefix ||
 			ns == "http://www.aiim.org/pdfa/ns/extension/" {
+			slog.Debug("compliance_2/xmp: skipping pdfa extension machinery namespace", "ns", ns)
 			continue
 		}
 
 		registry, hasSchema := xmpPropertyRegistry[ns]
 		if !hasSchema {
 			// Namespace not in registry — already handled by xmpCheckNamespaces.
+			slog.Debug("compliance_2/xmp: namespace not in property registry, skipping", "ns", ns)
 			continue
 		}
 
-		for prop, obsContType := range props {
+		for prop, pv := range props {
 			expectedType, known := registry[prop]
 			if !known {
-				// Property name not defined in predefined schema → violation.
+				// Property name not defined in predefined schema — violation.
 				slog.Debug("compliance_2/xmp: unknown property in predefined schema",
 					"ns", ns, "prop", prop)
 				*results = append(*results, xmpPropertyTypeRule(part, ns, prop, "unknown property name")...)
@@ -1697,33 +1725,100 @@ func xmpCheckContainerTypes(data []byte, part int, _ ast.PdfStream, results *[]R
 
 			// xmpPropAny matches anything.
 			if expectedType == xmpPropAny {
+				slog.Debug("compliance_2/xmp: property type is Any, skipping validation",
+					"ns", ns, "prop", prop)
 				continue
 			}
 
-			// Check container type mismatch.
+			// Check container type properties (Alt/Seq/Bag).
 			if isContainerPropType(expectedType) {
-				// Expected a container (Alt/Seq/Bag).
 				expectedCont := propTypeToContainerType(expectedType)
-				if obsContType != expectedCont {
+				if pv.containerType != expectedCont {
 					slog.Debug("compliance_2/xmp: container type mismatch",
 						"ns", ns, "prop", prop,
-						"observed", xmpContainerTypeName(obsContType),
+						"observed", xmpContainerTypeName(pv.containerType),
 						"expected", xmpContainerTypeName(expectedCont))
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						fmt.Sprintf("observed=%s expected=%s",
-							xmpContainerTypeName(obsContType),
+							xmpContainerTypeName(pv.containerType),
 							xmpContainerTypeName(expectedCont)))...)
 				}
-			} else if isSimplePropType(expectedType) || expectedType == xmpPropStruct {
-				// Expected simple value or struct — should NOT be in a container.
-				if obsContType != xmpContSimple {
-					slog.Debug("compliance_2/xmp: simple/struct property wrapped in container",
+
+				// Validate Alt container items have xml:lang attribute.
+				if expectedType == xmpPropAlt && !pv.hasLangAttr {
+					slog.Debug("compliance_2/xmp: Alt container missing xml:lang on items",
+						"ns", ns, "prop", prop)
+					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+						"Alt container items missing xml:lang attribute")...)
+				}
+
+				// Validate container item value formats using the element type registry.
+				if elemTypes, nsOK := xmpContainerElementType[ns]; nsOK {
+					if elemType, propOK := elemTypes[prop]; propOK {
+						slog.Debug("compliance_2/xmp: validating container item values",
+							"ns", ns, "prop", prop, "items", len(pv.items), "elemType", elemType)
+						for i, item := range pv.items {
+							if !validateXMPValue(elemType, item) {
+								slog.Debug("compliance_2/xmp: container item value format mismatch",
+									"ns", ns, "prop", prop, "index", i, "value", item, "expectedType", elemType)
+								*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+									fmt.Sprintf("item[%d] value %q does not match expected type", i, item))...)
+							}
+						}
+					}
+				}
+
+				continue
+			}
+
+			// Check simple value type properties.
+			if isSimplePropType(expectedType) {
+				// Expected simple value — should NOT be in a container.
+				if pv.containerType != xmpContSimple {
+					slog.Debug("compliance_2/xmp: simple property wrapped in container",
 						"ns", ns, "prop", prop,
-						"observed", xmpContainerTypeName(obsContType),
+						"observed", xmpContainerTypeName(pv.containerType),
 						"expected", "Simple")
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						fmt.Sprintf("observed=%s expected=Simple",
-							xmpContainerTypeName(obsContType)))...)
+							xmpContainerTypeName(pv.containerType)))...)
+				}
+
+				// Validate simple property value format.
+				if pv.containerType == xmpContSimple && pv.value != "" {
+					if !validateXMPValue(expectedType, pv.value) {
+						slog.Debug("compliance_2/xmp: simple value format mismatch",
+							"ns", ns, "prop", prop, "value", pv.value, "expectedType", expectedType)
+						*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+							fmt.Sprintf("value %q does not match expected type", pv.value))...)
+					} else {
+						slog.Debug("compliance_2/xmp: simple value format OK",
+							"ns", ns, "prop", prop, "expectedType", expectedType)
+					}
+				}
+
+				continue
+			}
+
+			// Check struct type properties.
+			if expectedType == xmpPropStruct {
+				// Expected struct — should NOT be in a container.
+				if pv.containerType != xmpContSimple {
+					slog.Debug("compliance_2/xmp: struct property wrapped in container",
+						"ns", ns, "prop", prop,
+						"observed", xmpContainerTypeName(pv.containerType),
+						"expected", "Simple")
+					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+						fmt.Sprintf("observed=%s expected=Simple",
+							xmpContainerTypeName(pv.containerType)))...)
+				}
+
+				// Verify struct property has sub-elements, not plain text.
+				if !pv.isStructured && pv.containerType == xmpContSimple {
+					slog.Debug("compliance_2/xmp: struct property has plain text instead of sub-elements",
+						"ns", ns, "prop", prop, "value", pv.value)
+					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+						"struct property has plain text value instead of sub-elements")...)
 				}
 			}
 		}
@@ -1762,24 +1857,45 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Result {
 	return nil
 }
 
-// xmpExtractContainerInfo parses XMP XML and returns the observed container
-// type for each top-level property.
-func xmpExtractContainerInfo(data []byte) map[string]map[string]xmpContainerType {
-	result := make(map[string]map[string]xmpContainerType)
+// xmpPropertyValue holds the observed container type and text content of an XMP property.
+type xmpPropertyValue struct {
+	containerType xmpContainerType
+	value         string   // text content for simple values (attribute or element text)
+	items         []string // text items for container elements (rdf:li values)
+	hasLangAttr   bool     // true if any rdf:li has xml:lang attribute
+	isStructured  bool     // true if the property contains sub-elements (not just text)
+}
+
+// xmpExtractPropertyValues parses XMP XML and returns the observed container
+// type plus text content for each top-level property.
+func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValue {
+	result := make(map[string]map[string]xmpPropertyValue)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
-	slog.Debug("compliance_2/xmp: extracting container info")
+	slog.Debug("compliance_2/xmp: extracting property values")
 
 	inDescription := false
 	depth := 0
 	var currentNS, currentLocal string
+	inContainer := false // true when inside rdf:Alt/Seq/Bag at depth 2
+	inLi := false        // true when inside rdf:li at depth 3
+	var currentCharData string
 
-	recordType := func(ns, local string, t xmpContainerType) {
+	record := func(ns, local string, pv xmpPropertyValue) {
 		if result[ns] == nil {
-			result[ns] = make(map[string]xmpContainerType)
+			result[ns] = make(map[string]xmpPropertyValue)
 		}
-		result[ns][local] = t
+		result[ns][local] = pv
+	}
+
+	getOrCreate := func(ns, local string) xmpPropertyValue {
+		if m, ok := result[ns]; ok {
+			if pv, ok := m[local]; ok {
+				return pv
+			}
+		}
+		return xmpPropertyValue{containerType: xmpContSimple}
 	}
 
 	for {
@@ -1796,9 +1912,12 @@ func xmpExtractContainerInfo(data []byte) map[string]map[string]xmpContainerType
 						attr.Name.Space != xmpRDFNamespace &&
 						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" &&
 						attr.Name.Space != "http://www.w3.org/2000/xmlns/" {
-						slog.Debug("compliance_2/xmp: attribute-form property on Description",
-							"ns", attr.Name.Space, "local", attr.Name.Local)
-						recordType(attr.Name.Space, attr.Name.Local, xmpContSimple)
+						slog.Debug("compliance_2/xmp: attribute-form property value",
+							"ns", attr.Name.Space, "local", attr.Name.Local, "value", attr.Value)
+						record(attr.Name.Space, attr.Name.Local, xmpPropertyValue{
+							containerType: xmpContSimple,
+							value:         attr.Value,
+						})
 					}
 				}
 				inDescription = true
@@ -1810,17 +1929,63 @@ func xmpExtractContainerInfo(data []byte) map[string]map[string]xmpContainerType
 				if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
 					currentNS = t.Name.Space
 					currentLocal = t.Name.Local
+					currentCharData = ""
+					inContainer = false
+					inLi = false
 					// Default to simple until we see a container child.
-					recordType(currentNS, currentLocal, xmpContSimple)
+					pv := getOrCreate(currentNS, currentLocal)
+					pv.containerType = xmpContSimple
+					record(currentNS, currentLocal, pv)
+					slog.Debug("compliance_2/xmp: entering property element",
+						"ns", currentNS, "local", currentLocal)
 				}
-				if depth == 2 && currentNS != "" && t.Name.Space == xmpRDFNamespace { //nolint:mnd
-					switch t.Name.Local {
-					case "Alt":
-						recordType(currentNS, currentLocal, xmpContAlt)
-					case "Seq":
-						recordType(currentNS, currentLocal, xmpContSeq)
-					case "Bag":
-						recordType(currentNS, currentLocal, xmpContBag)
+				if depth == 2 && currentNS != "" { //nolint:mnd
+					if t.Name.Space == xmpRDFNamespace {
+						switch t.Name.Local {
+						case "Alt":
+							pv := getOrCreate(currentNS, currentLocal)
+							pv.containerType = xmpContAlt
+							record(currentNS, currentLocal, pv)
+							inContainer = true
+							slog.Debug("compliance_2/xmp: found Alt container",
+								"ns", currentNS, "local", currentLocal)
+						case "Seq":
+							pv := getOrCreate(currentNS, currentLocal)
+							pv.containerType = xmpContSeq
+							record(currentNS, currentLocal, pv)
+							inContainer = true
+							slog.Debug("compliance_2/xmp: found Seq container",
+								"ns", currentNS, "local", currentLocal)
+						case "Bag":
+							pv := getOrCreate(currentNS, currentLocal)
+							pv.containerType = xmpContBag
+							record(currentNS, currentLocal, pv)
+							inContainer = true
+							slog.Debug("compliance_2/xmp: found Bag container",
+								"ns", currentNS, "local", currentLocal)
+						}
+					} else {
+						// Child element that is not an rdf container → structured.
+						pv := getOrCreate(currentNS, currentLocal)
+						pv.isStructured = true
+						record(currentNS, currentLocal, pv)
+						slog.Debug("compliance_2/xmp: property has structured sub-element",
+							"ns", currentNS, "local", currentLocal, "child", t.Name.Local)
+					}
+				}
+				if depth == 3 && inContainer && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" { //nolint:mnd
+					inLi = true
+					currentCharData = ""
+					// Check for xml:lang attribute.
+					for _, attr := range t.Attr {
+						if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" && attr.Name.Local == "lang" {
+							pv := getOrCreate(currentNS, currentLocal)
+							pv.hasLangAttr = true
+							record(currentNS, currentLocal, pv)
+							slog.Debug("compliance_2/xmp: rdf:li has xml:lang attribute",
+								"ns", currentNS, "local", currentLocal, "lang", attr.Value)
+							break
+						}
 					}
 				}
 			}
@@ -1830,16 +1995,58 @@ func xmpExtractContainerInfo(data []byte) map[string]map[string]xmpContainerType
 				depth = 0
 				currentNS = ""
 				currentLocal = ""
+				inContainer = false
+				inLi = false
 			} else if inDescription {
-				if depth == 1 {
+				if depth == 1 && currentNS != "" && !inContainer {
+					// End of simple property element: capture accumulated text.
+					trimmed := strings.TrimSpace(currentCharData)
+					if trimmed != "" {
+						pv := getOrCreate(currentNS, currentLocal)
+						pv.value = trimmed
+						record(currentNS, currentLocal, pv)
+						slog.Debug("compliance_2/xmp: captured simple element text",
+							"ns", currentNS, "local", currentLocal, "value", trimmed)
+					}
 					currentNS = ""
 					currentLocal = ""
 				}
+				if depth == 1 {
+					currentNS = ""
+					currentLocal = ""
+					inContainer = false
+					inLi = false
+				}
+				if depth == 3 && inLi { //nolint:mnd
+					// End of rdf:li — capture accumulated text as an item.
+					trimmed := strings.TrimSpace(currentCharData)
+					if currentNS != "" {
+						pv := getOrCreate(currentNS, currentLocal)
+						pv.items = append(pv.items, trimmed)
+						record(currentNS, currentLocal, pv)
+						slog.Debug("compliance_2/xmp: captured container item",
+							"ns", currentNS, "local", currentLocal, "item", trimmed)
+					}
+					inLi = false
+					currentCharData = ""
+				}
 				depth--
+			}
+		case xml.CharData:
+			if inDescription {
+				if depth == 1 && currentNS != "" && !inContainer {
+					// CharData at depth 1 (simple property text).
+					currentCharData += string(t)
+				}
+				if depth == 3 && inLi { //nolint:mnd
+					// CharData inside rdf:li.
+					currentCharData += string(t)
+				}
 			}
 		}
 	}
 
+	slog.Debug("compliance_2/xmp: extracted property values", "namespaces", len(result))
 	return result
 }
 

@@ -1,154 +1,96 @@
-# XMP Property Value Type Validation — Detailed Plan
+# XMP Property Value Format Validation — Implementation Plan
 
 ## Problem
 
-268 remaining XMP FN across 9 categories. The largest (181 FN) is property value format validation — VeraPDF checks that the actual text content of XMP properties matches the expected type format.
+178 remaining FN (480 check-level violations) where VeraPDF detects XMP property values that don't match their expected type format. The current checker validates container types (Alt/Seq/Bag/Simple) but not the actual text content within values.
 
-## Current state
+## Type breakdown
 
-- `xmpPropertyRegistry` has ~200 properties with expected types (Text, URI, Integer, Real, Boolean, Date, Alt, Seq, Bag, Struct)
-- `xmpCheckContainerTypes` validates container structure (Alt/Seq/Bag vs Simple)
-- Unknown property names in known schemas are flagged
-- **Missing:** validation of the actual text content format within simple values
+| Expected type | Violations | What VeraPDF validates |
+|---------------|-----------|----------------------|
+| `text` | 109 | Non-empty text string; specific subtypes (AgentName, ProperName, MIMEType, URL) |
+| `integer` | 92 | Digits with optional leading sign; no decimal point |
+| `rational` | 50 | EXIF rational: `N/D` numerator/denominator |
+| `null` | 34 | Property should not exist (extension schema declares type that doesn't match) |
+| `date` | 21 | ISO 8601: YYYY[-MM[-DD[Thh:mm[:ss[.s]][TZD]]]] |
+| `lang alt` | 14 | rdf:Alt where each rdf:li has xml:lang attribute |
+| `seq integer` | 14 | rdf:Seq of integer values |
+| `bag text` | 13 | rdf:Bag of text values |
+| `uri` | 10 | Valid URI string |
+| `boolean` | 10 | "True" or "False" (case-sensitive per XMP spec) |
+| `real` | 10 | Valid decimal number (digits with optional decimal point and sign) |
+| `gpscoordinate` | 8 | `DDD,MM,SSk` or `DDD,MM.MMk` format |
+| `agentname` | 8 | Structured: agent name string |
+| `seq rational` | 8 | rdf:Seq of rational values |
+| `propername` | 8 | Structured: proper name string |
+| `url` | 8 | Valid URL |
+| `bag propername` | 6 | rdf:Bag of ProperName |
+| `resourceref` | 6 | Structured type (stRef:*) |
+| `oecf/sfr` | 4 | EXIF structured type |
+| `time` | 4 | Time structured type |
+| `dimensions` | 3 | Structured type (stDim:*) |
+| `CustomValueType` | 3 | Extension-declared type not matching |
+| Others | ~20 | Various EXIF/DynamicMedia structured types |
 
-## Category breakdown
+## Implementation
 
-### A. Property value format mismatch — 181 FN (67%)
+### Step 1: XMP value extractor (new)
 
-VeraPDF error: "XMP property does not correspond to type X"
+Add to `xmpExtractContainerInfo` or new function `xmpExtractPropertyValues`:
+- For each property, record not just the container type but also the **text content** of simple values
+- For container items (rdf:li inside Alt/Seq/Bag), record each item's text content
+- For attributes on rdf:Description, record the attribute value
 
-| Expected type | FN count | What VeraPDF checks |
-|---------------|----------|---------------------|
-| text | 109 | Value must be non-empty text string |
-| integer | 92 | Value must be valid integer (digits, optional sign) |
-| rational | 50 | EXIF rational: "N/D" format (numerator/denominator) |
-| null | 34 | Property should not be present (wrong type entirely) |
-| date | 21 | ISO 8601 date: YYYY or YYYY-MM or YYYY-MM-DD or YYYY-MM-DDThh:mm:ss |
-| lang alt | 14 | Must be rdf:Alt with xml:lang on each rdf:li |
-| seq integer | 14 | Ordered list where each item is an integer |
-| bag text | 13 | Unordered set of text values |
-| uri | 10 | Valid URI string |
-| boolean | 10 | Must be "True" or "False" (case-sensitive per XMP spec) |
-| real | 10 | Valid decimal number |
-| gpscoordinate | 8 | "DDD,MM,SSk" or "DDD,MM.MMk" format |
-| agentname | 8 | Structured type with specific fields |
-| seq rational | 8 | Ordered list of rationals |
-| propername | 8 | Structured type (ProperName) |
-| url | 8 | Valid URL |
-| bag propername | 6 | Bag of ProperName |
-| resourceref | 6 | Structured type (ResourceRef) |
-| others | ~40 | Various EXIF/DynamicMedia structured types |
-
-**Root cause:** Our `xmpCheckContainerTypes` correctly identifies that a property uses Simple vs Alt vs Seq vs Bag. But it does NOT check the actual content of simple values. VeraPDF goes further: for an `xmpPropInteger` property, it parses the text content and verifies it's a valid integer. If someone puts "abc" as the value of `exif:ColorSpace` (which should be Integer), VeraPDF flags it.
-
-**However:** Most of these 181 FN aren't about invalid text format. They're about:
-1. **Extension schema type declarations** — An extension schema declares a property with `valueType="CustomValueType"` but there's no matching ValueType definition. The property exists and has valid content, but the *declared type* is invalid.
-2. **Missing type declarations** — A property in an extension schema has no valueType declared at all (`null` type).
-3. **Container/simple mismatch** that our parser misses because the XMP uses attribute-form values (`dc:format="application/pdf"`) instead of element-form.
-
-### B. Unknown property in predefined schema — 13 FN (5%)
-
-Already partially handled. The remaining 13 are edge cases where:
-- A property name exists in our registry but the namespace URI differs slightly
-- Or the property is in a namespace declared via xmlns but not used by any element (just declared)
-
-### C. Extension schema prefix validation — 35 FN (13%)
-
-VeraPDF checks that extension schema fields use the correct namespace prefix:
-- `pdfaSchema:schema` not `nonpdfaSchema:schema`
-- `pdfaProperty:name` not `nonpdfaProperty:name`
-- `pdfaType:type` not `nonpdfaType:type`
-- `pdfaField:name` not `nonpdfaField:name`
-
-Our extension schema checker validates field PRESENCE but not field NAMESPACE PREFIX. The fix is to check the actual namespace URI of each extension schema field element.
-
-### D. PDF/A identification — 19 FN (7%)
-
-Issues:
-- pdfaid:part/conformance using wrong namespace prefix (not "pdfaid")
-- pdfaid:conformance empty string instead of absent for PDF/A-4
-- pdfaid:rev empty or wrong format
-- Missing PDF/A identification entirely
-
-Some of these should already be caught. Need to verify our identification check handles prefix validation.
-
-### E. DocInfo ↔ XMP sync — 4 FN (1.5%)
-
-Values don't match between Info dict and XMP. Our sync check may not handle Alt container extraction (dc:title is Alt with xml:lang="x-default").
-
-### F. Actions — 10 FN (4%)
-
-Not actually XMP issues — these are action violations (Sound, ResetForm) that happen to be in files categorized under XMP test sections. Need to verify action checking for PDF/A-4.
-
-### G. XMP encoding — 3 FN (1%)
-
-UTF-16 encoding forbidden in PDF/A-4. Need to check XMP packet encoding.
-
-### H-I. Misc — 3 FN (1%)
-
-Structure mapping and lang issues in XMP-area files.
-
-## Implementation plan
-
-### Fix 1: Extension schema prefix validation (35 FN → 0)
-
-**File:** `xmp.go`, `xmpCheckExtensionSchemas`
-
-Currently validates field presence but not namespace prefix. Add prefix validation:
+New return type:
 ```go
-// For each field element in the extension schema:
-if elem.Name.Space != xmpPdfaSchemaPrefix {
-    // Flag: wrong prefix for pdfaSchema field
+type xmpPropertyInfo struct {
+    containerType xmpContainerType
+    value         string        // text content for simple values
+    items         []string      // item values for containers
+    hasLang       bool          // true if rdf:li items have xml:lang
+    isStruct      bool          // true if contains sub-elements (not text)
 }
 ```
 
-The XML decoder provides `elem.Name.Space` for every element, so we already have the namespace. Just need to compare against the expected prefix constants (`xmpPdfaSchemaPrefix`, `xmpPdfaPropertyPrefix`, `xmpPdfaTypePrefix`, `xmpPdfaFieldPrefix`).
+### Step 2: Value format validators
 
-### Fix 2: Attribute-form property detection (50-80 of 181 FN → 0)
+One validator per XMP value type:
 
-**File:** `xmp.go`, `xmpExtractContainerInfo`
-
-Currently only detects properties as child ELEMENTS of `rdf:Description`. But XMP allows attribute-form properties:
-```xml
-<rdf:Description xmlns:xmp="..." xmp:CreatorTool="MyApp" xmp:CreateDate="2024-01-01"/>
+```go
+func isValidXMPInteger(s string) bool     // ^[+-]?\d+$
+func isValidXMPReal(s string) bool        // ^[+-]?\d+(\.\d+)?$
+func isValidXMPBoolean(s string) bool     // "True" or "False" exactly
+func isValidXMPDate(s string) bool        // YYYY or YYYY-MM or YYYY-MM-DD or full ISO 8601
+func isValidXMPURI(s string) bool         // non-empty, no whitespace-only
+func isValidXMPRational(s string) bool    // N/D format (EXIF rationals)
+func isValidXMPGPSCoord(s string) bool    // DDD,MM,SSk or DDD,MM.MMk
 ```
 
-These are simple values that our container parser misses entirely (they're attributes, not elements). We need to also scan attributes on `rdf:Description` elements and record them as `xmpContSimple`.
+### Step 3: Property type checker
 
-### Fix 3: PDF/A identification prefix check (5 of 19 FN → 0)
+Enhance `xmpCheckContainerTypes` to also validate value formats:
 
-**File:** `xmp.go`, `xmpCheckPDFAIdentification`
+For each property in the registry:
+1. **Simple types** (Text, URI, Integer, Real, Boolean, Date):
+   - Must be `xmpContSimple` (not in a container) — already checked
+   - Text content must match the expected format
+2. **Container types** (Alt, Seq, Bag):
+   - Must be the correct container — already checked
+   - Each item's text content must match the element type (e.g., Seq Integer → each item is integer)
+3. **Struct types**:
+   - Must contain sub-elements, not text
+4. **Lang Alt** specifically:
+   - Must be rdf:Alt
+   - Each rdf:li must have xml:lang attribute
 
-Add check that pdfaid:part and pdfaid:conformance use "pdfaid" namespace prefix. Currently we extract the values but don't verify the prefix.
+### Step 4: Extension schema type cross-check
 
-### Fix 4: PDF/A-4 action checking (10 FN → 0)
+When a property is in an extension-declared namespace:
+- Extract the declared `valueType` from the extension schema
+- If the declared type doesn't exist in known types or ValueType declarations → flag as "null" type violation
 
-**File:** `actions.go`
+## File changes
 
-Verify PDF/A-4 action checking works for all forbidden types. The 10 FN in §6.6.1 may be actions embedded in catalog /AA or /OpenAction that aren't being walked.
-
-### Fix 5: XMP encoding check (3 FN → 0)
-
-**File:** `xmp.go`
-
-For PDF/A-4: scan the XMP packet for encoding declaration. If it declares UTF-16BE or UTF-16LE, flag as violation. Check the XML declaration: `<?xml version="1.0" encoding="UTF-16"?>`.
-
-### Fix 6: DocInfo sync improvements (4 FN → 0)
-
-**File:** `xmp.go`, `xmpCheckDocInfoSync`
-
-Fix Alt container extraction for `dc:title` — the value is inside `<rdf:Alt><rdf:li xml:lang="x-default">VALUE</rdf:li></rdf:Alt>`.
-
-### Expected impact
-
-| Fix | FN eliminated | Effort |
-|-----|---------------|--------|
-| Fix 1: Extension prefix validation | ~35 | Small |
-| Fix 2: Attribute-form properties | ~80 | Medium |
-| Fix 3: pdfaid prefix check | ~5 | Small |
-| Fix 4: PDF/A-4 actions | ~10 | Small |
-| Fix 5: XMP encoding | ~3 | Small |
-| Fix 6: DocInfo sync | ~4 | Small |
-| **Total** | **~137** | **Medium** |
-
-The remaining ~44 FN in Category A would require full value format validation (checking integer/date/boolean text content), which is a larger effort for diminishing returns.
+1. **`xmp.go`**: Enhance `xmpExtractContainerInfo` → `xmpExtractPropertyInfo` to capture values and lang attrs
+2. **`xmp.go`**: Enhance `xmpCheckContainerTypes` to validate value formats using the validators
+3. **`xmp_registry.go`**: Add value format validator functions

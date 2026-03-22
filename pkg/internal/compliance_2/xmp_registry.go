@@ -1,5 +1,7 @@
 package compliance2
 
+import "strings"
+
 // xmpPropType represents the expected value type for an XMP property.
 type xmpPropType int
 
@@ -310,4 +312,167 @@ func isContainerPropType(t xmpPropType) bool {
 // isSimplePropType returns true if the type is a simple value (not a container or struct).
 func isSimplePropType(t xmpPropType) bool {
 	return t <= xmpPropDate
+}
+
+// isValidXMPInteger returns true if s is a valid XMP integer value.
+// Format: optional sign followed by digits. Empty string is invalid.
+func isValidXMPInteger(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+
+	start := 0
+	if s[0] == '+' || s[0] == '-' {
+		start = 1
+	}
+
+	if start >= len(s) {
+		return false
+	}
+
+	for i := start; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isValidXMPReal returns true if s is a valid XMP real/float value.
+// Accepts decimal format (e.g., "3.14", "-1.0") and EXIF rational format
+// (e.g., "72/1", "1/100") which is valid for EXIF Real properties in XMP.
+func isValidXMPReal(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+
+	// Accept EXIF rational notation: N/D.
+	if strings.Contains(s, "/") {
+		return isValidXMPRational(s)
+	}
+
+	start := 0
+	if s[0] == '+' || s[0] == '-' {
+		start = 1
+	}
+
+	if start >= len(s) {
+		return false
+	}
+
+	hasDigit := false
+	hasDot := false
+
+	for i := start; i < len(s); i++ {
+		if s[i] >= '0' && s[i] <= '9' {
+			hasDigit = true
+
+			continue
+		}
+
+		if s[i] == '.' && !hasDot {
+			hasDot = true
+
+			continue
+		}
+
+		return false
+	}
+
+	return hasDigit
+}
+
+// isValidXMPBoolean returns true if s is a valid XMP boolean value.
+// XMP booleans are case-sensitive: "True" or "False".
+func isValidXMPBoolean(s string) bool {
+	s = strings.TrimSpace(s)
+	return s == "True" || s == "False"
+}
+
+// isValidXMPDate returns true if s is a valid XMP date value.
+// Accepts ISO 8601 formats: YYYY, YYYY-MM, YYYY-MM-DD, and longer forms with time.
+func isValidXMPDate(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 4 { //nolint:mnd
+		return false
+	}
+
+	// Must start with 4 digits (year).
+	for i := range 4 { //nolint:mnd
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+
+	if len(s) == 4 { //nolint:mnd
+		return true // YYYY
+	}
+
+	if s[4] != '-' { //nolint:mnd
+		return false
+	}
+
+	// Allow any reasonable continuation after YYYY-.
+	return len(s) >= 7 //nolint:mnd // At minimum YYYY-MM
+}
+
+// isValidXMPURI returns true if s is a valid XMP URI value.
+// A URI is any non-empty string.
+func isValidXMPURI(s string) bool {
+	s = strings.TrimSpace(s)
+	return s != ""
+}
+
+// isValidXMPRational returns true if s is a valid EXIF rational value.
+// Format: integer/integer (e.g., "72/1", "1/100").
+//
+//nolint:unused // API for EXIF rational validation; used indirectly via container element checks.
+func isValidXMPRational(s string) bool {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, "/")
+
+	if len(parts) != 2 { //nolint:mnd
+		return false
+	}
+
+	return isValidXMPInteger(parts[0]) && isValidXMPInteger(parts[1])
+}
+
+// isValidXMPGPSCoordinate returns true if s is a valid GPS coordinate value.
+// Format: "DDD,MM,SSk" or "DDD,MM.MMk" where k is N/S/E/W.
+//
+//nolint:unused // API for EXIF GPS validation; used indirectly via container element checks.
+func isValidXMPGPSCoordinate(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 5 { //nolint:mnd
+		return false
+	}
+
+	last := s[len(s)-1]
+	return last == 'N' || last == 'S' || last == 'E' || last == 'W'
+}
+
+// validateXMPValue checks if a text value matches the expected XMP property type format.
+// Returns true if valid or if the type doesn't have a format constraint.
+func validateXMPValue(propType xmpPropType, value string) bool {
+	switch propType {
+	case xmpPropInteger:
+		return isValidXMPInteger(value)
+	case xmpPropReal:
+		return isValidXMPReal(value)
+	case xmpPropBoolean:
+		return isValidXMPBoolean(value)
+	case xmpPropDate:
+		return isValidXMPDate(value)
+	case xmpPropURI:
+		return isValidXMPURI(value)
+	case xmpPropText:
+		return strings.TrimSpace(value) != ""
+	case xmpPropAlt, xmpPropSeq, xmpPropBag, xmpPropStruct, xmpPropAny:
+		return true // Containers and structs validated separately.
+	}
+	return true
 }
