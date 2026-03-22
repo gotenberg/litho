@@ -85,6 +85,11 @@ func checkEmbeddedGroup(ctx context.Context, doc *document.Document, catalog ast
 		results = append(results, checkAFRelationship(ctx, doc, fs, part, profile)...)
 	}
 
+	// --- §6.8 t4: Catalog /AF array must reference file spec dicts (parts 3+) ---
+	if part >= 3 {
+		results = append(results, checkCatalogAF(ctx, doc, catalog, fileSpecs, part)...)
+	}
+
 	slog.Debug("compliance_2/embedded: embedded file checks complete", "violations", len(results))
 	return results
 }
@@ -264,5 +269,64 @@ func afRelationshipRule(part int) Rule {
 		return Rule_19005_4_6_9_t04
 	default:
 		return Rule_19005_3_6_8_t03
+	}
+}
+
+// checkCatalogAF validates §6.8 t4: for PDF/A-3+, each file specification dict
+// with an /EF key must be referenced from the catalog's /AF array. This ensures
+// the associated files are properly declared at the document level.
+func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fileSpecs []fileSpecEntry, part int) []Result {
+	if len(fileSpecs) == 0 {
+		slog.Debug("compliance_2/embedded: no file specs to check for catalog /AF")
+		return nil
+	}
+
+	rule := catalogAFRule(part)
+
+	afObj, hasAF := catalog["AF"]
+	if !hasAF {
+		slog.Debug("compliance_2/embedded: catalog missing /AF array but file specs with /EF exist")
+		return failf(rule, "catalog missing /AF array but %d embedded file(s) found", len(fileSpecs))
+	}
+
+	afArr, err := document.ResolveArray(ctx, doc, afObj)
+	if err != nil || afArr == nil {
+		slog.Debug("compliance_2/embedded: catalog /AF is not a valid array", "error", err)
+		return failf(rule, "catalog /AF is not a valid array")
+	}
+
+	// Build a set of object numbers referenced in the /AF array.
+	afRefs := make(map[int]bool, len(afArr))
+	for _, elem := range afArr {
+		if ref, ok := elem.(ast.PdfIndirectRef); ok {
+			afRefs[ref.ObjectNum] = true
+		}
+	}
+
+	slog.Debug("compliance_2/embedded: catalog /AF references", "count", len(afRefs))
+
+	var results []Result
+	for _, fs := range fileSpecs {
+		if !afRefs[fs.objNum] {
+			slog.Debug("compliance_2/embedded: file spec not referenced in catalog /AF",
+				"object", fs.objNum)
+			results = append(results, Result{
+				Rule:    rule,
+				Context: fmt.Sprintf("object %d: file specification with /EF not referenced in catalog /AF array", fs.objNum),
+			})
+		}
+	}
+
+	return results
+}
+
+func catalogAFRule(part int) Rule {
+	switch part {
+	case 3:
+		return Rule_19005_3_6_8_t04
+	case 4:
+		return Rule_19005_4_6_9_t04
+	default:
+		return Rule_19005_3_6_8_t04
 	}
 }

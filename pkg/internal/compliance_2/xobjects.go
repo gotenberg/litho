@@ -216,22 +216,20 @@ func checkFormXObject(
 		results = append(results, failf(formRule, "page %d, XObject %s: OPI key present", pageNum, name)...)
 	}
 
-	// Parts 2/3: /Subtype2 with value /PS forbidden, /PS key forbidden.
-	if part == 2 || part == 3 {
-		if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
-			sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
-			if sub2Name == "PS" {
-				slog.Debug("compliance_2: xobjects: form has /Subtype2 = /PS",
-					"page", pageNum, "name", name)
-				results = append(results, failf(Rule_19005_2_6_2_9_t01, "page %d, XObject %s: Subtype2 is PS", pageNum, name)...)
-			}
-		}
-
-		if _, hasPS := formDict["PS"]; hasPS {
-			slog.Debug("compliance_2: xobjects: form has /PS key",
+	// Parts 2/3/4: /Subtype2 with value /PS forbidden, /PS key forbidden.
+	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
+		sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
+		if sub2Name == "PS" {
+			slog.Debug("compliance_2: xobjects: form has /Subtype2 = /PS",
 				"page", pageNum, "name", name)
-			results = append(results, failf(Rule_19005_2_6_2_9_t01, "page %d, XObject %s: PS key present", pageNum, name)...)
+			results = append(results, failf(formRule, "page %d, XObject %s: Subtype2 is PS", pageNum, name)...)
 		}
+	}
+
+	if _, hasPS := formDict["PS"]; hasPS {
+		slog.Debug("compliance_2: xobjects: form has /PS key",
+			"page", pageNum, "name", name)
+		results = append(results, failf(formRule, "page %d, XObject %s: PS key present", pageNum, name)...)
 	}
 
 	return results

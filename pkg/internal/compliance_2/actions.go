@@ -166,6 +166,16 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return fail(Rule_19005_1_6_6_2_t03, "catalog")
 	}
 
+	// Parts 2/3: catalog /AA is also forbidden (§6.5.2 t01).
+	if part == 2 {
+		slog.Debug("compliance_2/actions: catalog /AA forbidden for part 2")
+		return fail(Rule_19005_2_6_5_2_t01, "catalog")
+	}
+	if part == 3 {
+		slog.Debug("compliance_2/actions: catalog /AA forbidden for part 3")
+		return fail(Rule_19005_3_6_5_2_t01, "catalog")
+	}
+
 	aaDict, err := document.ResolveDict(ctx, doc, aaObj)
 	if err != nil || aaDict == nil {
 		slog.Debug("compliance_2/actions: catalog /AA is not a dict", "error", err)
@@ -210,10 +220,18 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 			continue
 		}
 
-		// Part 1: page /AA is checked under catalog/page AA prohibition via
-		// the annotation checks; however, the spec does not explicitly forbid
-		// page /AA in part 1 (only catalog /AA). Still walk for forbidden
-		// action types.
+		// Parts 2/3: page /AA is entirely forbidden (§6.5.2 t02).
+		if part == 2 {
+			slog.Debug("compliance_2/actions: page /AA forbidden for part 2", "page", i+1)
+			results = append(results, failf(Rule_19005_2_6_5_2_t02, "page %d", i+1)...)
+			continue
+		}
+		if part == 3 {
+			slog.Debug("compliance_2/actions: page /AA forbidden for part 3", "page", i+1)
+			results = append(results, failf(Rule_19005_3_6_5_2_t02, "page %d", i+1)...)
+			continue
+		}
+
 		aaDict, err := document.ResolveDict(ctx, doc, aaObj)
 		if err != nil || aaDict == nil {
 			continue

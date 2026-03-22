@@ -52,6 +52,12 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 	results = append(results, checkStreamLZW(ctx, doc, profile)...)
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
 	results = append(results, checkFormatViolations(doc, profile)...)
+	// TODO: checkObjectHeaders and checkStreamLengths disabled pending
+	// byte-level accuracy improvements — they produce too many false
+	// positives due to raw-byte scanning edge cases (filter encoding,
+	// stream padding, linearized offsets).
+	// results = append(results, checkObjectHeaders(ctx, doc, profile)...)
+	// results = append(results, checkStreamLengths(ctx, doc, profile)...)
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
 	results = append(results, checkNumericLimits(ctx, doc, profile)...)
 	results = append(results, checkXRefFormat(doc, profile)...)

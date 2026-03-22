@@ -47,6 +47,9 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 	// 8. Annotation alt text (PDF/UA) — Non-Link/Widget annotations must have /Contents or structure element /Alt.
 	results = append(results, checkAnnotationAltText(ctx, doc, catalog, profile)...)
 
+	// 8b. Widget /AA check (PDF/UA) — Widget annotations must not have /AA key (§7.18.5 / §8.10.2.3).
+	results = append(results, checkWidgetAA(ctx, doc, catalog, profile)...)
+
 	// 9. OC config names (PDF/UA) — Optional content configuration dicts must have /Name key.
 	results = append(results, checkOCConfigNames(ctx, doc, catalog, profile)...)
 
@@ -345,11 +348,11 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		tabsObj, ok := page["Tabs"]
 		if !ok {
 			if isPDFUA1 {
-				// PDF/UA-1: every page that has annotations must have /Tabs = /S.
-				if hasAnnots {
-					slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
-					results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
-				}
+				// PDF/UA-1 §7.18.7: every page must have /Tabs = /S when
+				// the document has a structure tree (which is always the
+				// case for PDF/UA-1). Flag all pages missing /Tabs.
+				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
+				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			} else if isPDFUA2 && hasAnnots {
 				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
 				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
@@ -363,7 +366,7 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			continue
 		}
 
-		if isPDFUA1 && hasAnnots && tabsName != "S" {
+		if isPDFUA1 && tabsName != "S" {
 			slog.Debug("compliance_2/accessibility: /Tabs is not /S", "page", pageIdx, "tabs", tabsName)
 			results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
 		} else if isPDFUA2 && hasAnnots && tabsName != "S" && tabsName != "A" && tabsName != "W" {
@@ -417,13 +420,23 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			return
 		}
 
-		// Check for /Alt or /ActualText.
-		_, hasAlt := elem["Alt"]
-		_, hasActualText := elem["ActualText"]
+		// PDF/UA-1 §7.3 (Rule_14289_1_7_3_t01): Figure elements must have /Alt.
+		// PDF/UA-2 §8.2.5.28.2: Figure elements must have /Alt or /ActualText.
+		hasAlt := hasNonEmptyStringKey(ctx, doc, elem, "Alt")
+		hasActualText := hasNonEmptyStringKey(ctx, doc, elem, "ActualText")
 
-		if !hasAlt && !hasActualText {
-			slog.Debug("compliance_2/accessibility: Figure missing /Alt", "path", path)
-			results = append(results, Result{Rule: rule, Context: path})
+		if profile == "PDF/UA-1" {
+			// PDF/UA-1 strictly requires /Alt on Figure elements.
+			if !hasAlt {
+				slog.Debug("compliance_2/accessibility: Figure missing /Alt", "path", path)
+				results = append(results, Result{Rule: rule, Context: path})
+			}
+		} else {
+			// PDF/UA-2 accepts either /Alt or /ActualText.
+			if !hasAlt && !hasActualText {
+				slog.Debug("compliance_2/accessibility: Figure missing /Alt or /ActualText", "path", path)
+				results = append(results, Result{Rule: rule, Context: path})
+			}
 		}
 	})
 
@@ -526,6 +539,78 @@ func isAnnotHidden(ctx context.Context, doc *document.Document, annot ast.PdfDic
 		return false
 	}
 	return int(flags)&annotFlagHidden != 0
+}
+
+// --- 8b. Widget /AA ---
+
+// checkWidgetAA validates that Widget annotations do not have /AA (additional actions)
+// entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.
+// For PDF/UA-2, if /AA is present, the Widget must have a /Contents entry (§8.10.2.3 t02).
+func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	slog.Debug("compliance_2/accessibility: checking Widget /AA")
+
+	pages := collectPages(ctx, doc, catalog)
+	var results []Result
+
+	for pageIdx, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+
+		annots, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			continue
+		}
+
+		for annotIdx, annotObj := range annots {
+			if ctx.Err() != nil {
+				return results
+			}
+
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if subtype != "Widget" {
+				continue
+			}
+
+			_, hasAA := annot["AA"]
+			if !hasAA {
+				continue
+			}
+
+			loc := fmt.Sprintf("page %d, widget annot %d", pageIdx+1, annotIdx)
+
+			if profile == "PDF/UA-2" {
+				// PDF/UA-2 §8.10.2.3 t02: if Widget has /AA, /Contents must be present.
+				if _, hasContents := annot["Contents"]; !hasContents {
+					slog.Debug("compliance_2/accessibility: Widget has /AA without /Contents",
+						"loc", loc)
+					results = append(results, Result{
+						Rule:    Rule_14289_2_8_10_2_3_t02,
+						Context: loc,
+					})
+				}
+			} else {
+				// PDF/UA-1: Widget annotations should not have /AA trigger actions.
+				slog.Debug("compliance_2/accessibility: Widget has forbidden /AA", "loc", loc)
+				results = append(results, Result{
+					Rule:    Rule_14289_1_7_18_1_t03,
+					Context: fmt.Sprintf("widget annotation has /AA at %s", loc),
+				})
+			}
+		}
+	}
+
+	return results
 }
 
 // --- 9. OC config names ---
@@ -1059,6 +1144,19 @@ func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDi
 			walkStructKids(ctx, doc, kidsObj, elemPath, depth+1, fn)
 		}
 	}
+}
+
+// hasNonEmptyStringKey checks if a dict has a non-empty string value for the given key.
+func hasNonEmptyStringKey(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	obj, ok := dict[key]
+	if !ok {
+		return false
+	}
+	str, err := document.ResolveString(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(str)) != ""
 }
 
 // --- XMP helpers ---

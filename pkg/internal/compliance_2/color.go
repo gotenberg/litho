@@ -99,9 +99,15 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 
 	slog.Debug("compliance_2/color: found OutputIntents", "count", len(outputIntents))
 
+	// §6.2.2 t2: if multiple OutputIntents exist with subtype GTS_PDFA1,
+	// they must all reference the same DestOutputProfile. Track all
+	// GTS_PDFA1 subtypes separately for consistency validation.
+	var pdfaIntentCount int
+
 	var (
 		firstProfileRef  ast.PdfObject
 		firstProfileData []byte
+		firstColorSpace  string
 		iccColorSpace    string
 		hasValidICC      bool
 	)
@@ -117,9 +123,22 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			continue
 		}
 
+		// Track OutputIntent subtype (/S key).
+		subtypeName, _ := document.ResolveName(ctx, doc, intent["S"])
+		if subtypeName == "GTS_PDFA1" {
+			pdfaIntentCount++
+		}
+		slog.Debug("compliance_2/color: OutputIntent subtype", "index", i, "S", subtypeName)
+
 		destProfileObj, ok := intent["DestOutputProfile"]
 		if !ok {
-			slog.Debug("compliance_2/color: OutputIntent has no DestOutputProfile", "index", i)
+			// §6.2.2: OutputIntent without DestOutputProfile must have
+			// OutputConditionIdentifier referencing a well-known registry.
+			if _, hasOCI := intent["OutputConditionIdentifier"]; !hasOCI {
+				slog.Debug("compliance_2/color: OutputIntent missing both DestOutputProfile and OutputConditionIdentifier", "index", i)
+				*results = append(*results, failf(outputIntentICCRule(part),
+					"OutputIntent[%d]: missing DestOutputProfile and OutputConditionIdentifier", i)...)
+			}
 			continue
 		}
 
@@ -159,10 +178,13 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			hasValidICC = true
 		}
 
-		// Check that all DestOutputProfile entries reference the same indirect object.
+		// §6.2.2 t2 / §6.2.3 t2: multiple OutputIntents must be consistent.
+		// Check that all DestOutputProfile entries reference the same indirect
+		// object or have identical data, AND that all ICC colour spaces match.
 		if firstProfileRef == nil {
 			firstProfileRef = destProfileObj
 			firstProfileData = data
+			firstColorSpace = hdr.colorSpace
 		} else {
 			// Compare indirect references if available; otherwise compare raw data.
 			if !sameIndirectRef(firstProfileRef, destProfileObj) && !bytesEqual(firstProfileData, data) {
@@ -170,7 +192,24 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 				*results = append(*results, failf(outputIntentConsistencyRule(part),
 					"OutputIntent[%d]: DestOutputProfile does not match first entry", i)...)
 			}
+
+			// Flag inconsistent colour spaces across OutputIntents.
+			if hdr.colorSpace != firstColorSpace {
+				slog.Debug("compliance_2/color: inconsistent OutputIntent colour spaces",
+					"index", i, "expected", firstColorSpace, "got", hdr.colorSpace)
+				*results = append(*results, failf(outputIntentConsistencyRule(part),
+					"OutputIntent[%d]: colour space %q does not match first entry %q", i, hdr.colorSpace, firstColorSpace)...)
+			}
 		}
+	}
+
+	// §6.2.2 t2: if multiple GTS_PDFA1 OutputIntents exist but none has a
+	// valid ICC profile, flag the inconsistency.
+	if pdfaIntentCount > 1 && !hasValidICC {
+		slog.Debug("compliance_2/color: multiple GTS_PDFA1 OutputIntents but no valid ICC profile",
+			"count", pdfaIntentCount)
+		*results = append(*results, failf(outputIntentConsistencyRule(part),
+			"%d GTS_PDFA1 OutputIntents but no valid DestOutputProfile found", pdfaIntentCount)...)
 	}
 
 	slog.Debug("compliance_2/color: OutputIntent ICC check done",
