@@ -1786,7 +1786,12 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Re
 
 				// Validate simple property value format.
 				if pv.containerType == xmpContSimple && pv.value != "" {
-					if !validateXMPValue(expectedType, pv.value) {
+					valid := validateXMPValue(expectedType, pv.value)
+					// EXIF and TIFF properties typed as Real also accept rational "N/D" notation.
+					if !valid && expectedType == xmpPropReal && isEXIFNamespace(ns) {
+						valid = isValidXMPRealOrRational(pv.value)
+					}
+					if !valid {
 						slog.Debug("compliance_2/xmp: simple value format mismatch",
 							"ns", ns, "prop", prop, "value", pv.value, "expectedType", expectedType)
 						*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
@@ -2062,4 +2067,12 @@ func xmpContainerTypeName(t xmpContainerType) string {
 		return "Bag"
 	}
 	return "Unknown"
+}
+
+// isEXIFNamespace returns true if the namespace is EXIF or TIFF, where
+// Real properties accept rational "N/D" notation.
+func isEXIFNamespace(ns string) bool {
+	return ns == "http://ns.adobe.com/exif/1.0/" ||
+		ns == "http://ns.adobe.com/exif/1.0/aux/" ||
+		ns == "http://ns.adobe.com/tiff/1.0/"
 }

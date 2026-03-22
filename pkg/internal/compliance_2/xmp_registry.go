@@ -341,17 +341,12 @@ func isValidXMPInteger(s string) bool {
 }
 
 // isValidXMPReal returns true if s is a valid XMP real/float value.
-// Accepts decimal format (e.g., "3.14", "-1.0") and EXIF rational format
-// (e.g., "72/1", "1/100") which is valid for EXIF Real properties in XMP.
+// Format: optional sign, digits, optional decimal point followed by digits.
+// For EXIF properties that accept rationals, use isValidXMPRealOrRational.
 func isValidXMPReal(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
-	}
-
-	// Accept EXIF rational notation: N/D.
-	if strings.Contains(s, "/") {
-		return isValidXMPRational(s)
 	}
 
 	start := 0
@@ -390,6 +385,16 @@ func isValidXMPReal(s string) bool {
 func isValidXMPBoolean(s string) bool {
 	s = strings.TrimSpace(s)
 	return s == "True" || s == "False"
+}
+
+// isValidXMPRealOrRational returns true if s is a valid decimal or EXIF rational.
+// Used for EXIF namespace properties typed as Real that also accept "N/D" format.
+func isValidXMPRealOrRational(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.Contains(s, "/") {
+		return isValidXMPRational(s)
+	}
+	return isValidXMPReal(s)
 }
 
 // isValidXMPDate returns true if s is a valid XMP date value.
