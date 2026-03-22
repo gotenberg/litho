@@ -8,9 +8,20 @@
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | **1,529 (58.8%)** | +40 |
-| **False Positives** | 97 | **72** | -25 |
-| **False Negatives** | 1,014 | **999** | -15 |
+| **Pass** | 1,489 (57.3%) | **1,826 (70.2%)** | +337 |
+| **False Positives** | 97 | **124** | +27 |
+| **False Negatives** | 1,014 | **650** | -364 |
+
+### Progress by tier
+
+| Tier | Pass | FP | FN | Pass Rate |
+|------|------|-----|-----|-----------|
+| Baseline | 1,489 | 97 | 1,014 | 57.3% |
+| Phase 1-4 (FP + initial) | 1,529 | 72 | 999 | 58.8% |
+| Tier 1 (XMP registry) | 1,790 | 73 | 737 | 68.8% |
+| Tier 2 (nested CS) | 1,830 | 83 | 687 | 70.4% |
+| Tier 3 (font programs) | 1,829 | 116 | 655 | 70.3% |
+| Tier 4+5 (UA/file) | 1,826 | 124 | 650 | 70.2% |
 
 ### Initial results (before improvements)
 
