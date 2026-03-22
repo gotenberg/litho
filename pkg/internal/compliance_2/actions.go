@@ -124,6 +124,9 @@ func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.P
 	// Check /Names/JavaScript name tree for JavaScript actions.
 	results = append(results, checkJavaScriptNameTree(ctx, doc, catalog, part)...)
 
+	// Check outline (bookmark) actions.
+	results = append(results, checkOutlineActions(ctx, doc, catalog, profile, part)...)
+
 	slog.Debug("compliance_2/actions: completed action checks",
 		"profile", profile,
 		"violations", len(results),
@@ -568,6 +571,63 @@ func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalo
 	rule := forbiddenActionTypeRule(part)
 	_ = jsObj // value unused, presence is sufficient
 	return failf(rule, "JavaScript at catalog /Names/JavaScript")
+}
+
+// checkOutlineActions walks the document outline (bookmarks) and checks
+// /A entries on outline items for forbidden action types.
+func checkOutlineActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+	outlinesObj, ok := catalog["Outlines"]
+	if !ok {
+		return nil
+	}
+
+	outlines, err := document.ResolveDict(ctx, doc, outlinesObj)
+	if err != nil || outlines == nil {
+		return nil
+	}
+
+	slog.Debug("compliance_2/actions: checking outline actions")
+
+	var results []Result
+	walkOutlineItems(ctx, doc, outlines["First"], profile, part, &results, 0)
+	return results
+}
+
+// walkOutlineItems recursively walks outline items and checks for forbidden actions.
+func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, profile string, part int, results *[]Result, depth int) {
+	if ctx.Err() != nil || depth > maxActionChainDepth || itemObj == nil {
+		return
+	}
+
+	item, err := document.ResolveDict(ctx, doc, itemObj)
+	if err != nil || item == nil {
+		return
+	}
+
+	// Verify this looks like an outline item (has /Title or /Parent).
+	_, hasTitle := item["Title"]
+	_, hasParent := item["Parent"]
+	if !hasTitle && !hasParent {
+		return
+	}
+
+	// Check /A action on this outline item.
+	if aObj, hasA := item["A"]; hasA {
+		aDict, err := document.ResolveDict(ctx, doc, aObj)
+		if err == nil && aDict != nil {
+			// Verify it's actually an action (has /S key), not a destination.
+			if _, hasS := aDict["S"]; hasS {
+				violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0)
+				*results = append(*results, violations...)
+			}
+		}
+	}
+
+	// Recurse into children.
+	walkOutlineItems(ctx, doc, item["First"], profile, part, results, depth+1)
+
+	// Recurse to next sibling — use depth (not depth+1) since siblings are at same level.
+	walkOutlineItems(ctx, doc, item["Next"], profile, part, results, depth)
 }
 
 // actionKeysPresent returns a human-readable string listing which of /A and

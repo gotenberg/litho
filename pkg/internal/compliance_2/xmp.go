@@ -625,7 +625,7 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	}
 
 	// Validate pdfaid:conformance value (parts 1-3).
-	if part < 4 && confValue != "" && level != 0 { //nolint:mnd
+	if part < 4 && level != 0 { //nolint:mnd
 		expectedConf := strings.ToUpper(string(rune(level)))
 		if !strings.EqualFold(confValue, expectedConf) {
 			slog.Debug("compliance_2/xmp: pdfaid:conformance mismatch",
@@ -638,8 +638,11 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	if part == 4 { //nolint:mnd
 		xmpCheckPart4Conformance(profile, hasConf, confValue, results)
 
-		// Part 4: validate pdfaid:rev (must be "2020").
-		if revValue != "" && revValue != "2020" {
+		// Part 4: validate pdfaid:rev (must be present and "2020").
+		if revValue == "" {
+			slog.Debug("compliance_2/xmp: pdfaid:rev missing for part 4")
+			*results = append(*results, failf(Rule_19005_4_6_7_3_t05, "rev missing (must be 2020)")...)
+		} else if revValue != "2020" {
 			slog.Debug("compliance_2/xmp: pdfaid:rev invalid", "rev", revValue)
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t05, "rev=%s", revValue)...)
 		}
@@ -664,15 +667,15 @@ func xmpCheckPart4Conformance(profile string, hasConf bool, confValue string, re
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%s but must be absent for plain PDF/A-4", confValue)...)
 		}
 	case "PDF/A-4e":
-		// PDF/A-4e: conformance must be absent/empty or "E".
-		if hasConf && confUpper != "" && confUpper != "E" {
+		// PDF/A-4e: conformance MUST be "E".
+		if confUpper != "E" {
 			slog.Debug("compliance_2/xmp: pdfaid:conformance wrong for PDF/A-4e",
 				"actual", confValue)
-			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%s but must be absent or 'E' for PDF/A-4e", confValue)...)
+			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%s but must be 'E' for PDF/A-4e", confValue)...)
 		}
 	case "PDF/A-4f":
-		// PDF/A-4f: conformance must be absent/empty or "F".
-		if hasConf && confUpper != "" && confUpper != "F" {
+		// PDF/A-4f: conformance MUST be "F".
+		if confUpper != "F" {
 			slog.Debug("compliance_2/xmp: pdfaid:conformance wrong for PDF/A-4f",
 				"actual", confValue)
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%s but must be absent or 'F' for PDF/A-4f", confValue)...)
