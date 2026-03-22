@@ -2,6 +2,7 @@ package compliance2
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -33,6 +34,11 @@ func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 	// --- §6.2.3.2 / §6.2.4.2: ICCBased profile restrictions ---
 	checkICCBasedProfiles(ctx, doc, catalog, part, &results)
+
+	// --- §6.2.4.4: Separation and DeviceN colour space consistency ---
+	if part >= 2 {
+		checkSeparationDeviceN(ctx, doc, catalog, part, &results)
+	}
 
 	slog.Debug("compliance_2/color: color checks complete", "violations", len(results))
 	return results
@@ -329,9 +335,12 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 		markDeviceCS(csName, &usage)
 	}
 
-	// Check inline colour spaces in XObject and Font resources.
-	scanXObjectColorSpaces(ctx, doc, resources, &usage)
+	// Check inline colour spaces in XObject, Font, Shading, and Pattern resources.
+	visited := make(map[string]bool) //nolint:mnd // cycle detection for Form XObject recursion.
+	scanXObjectColorSpaces(ctx, doc, resources, &usage, 0, visited)
 	scanFontColorSpaces(ctx, doc, resources, &usage)
+	scanShadingColorSpaces(ctx, doc, resources, &usage)
+	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited)
 
 	return usage
 }
@@ -366,8 +375,13 @@ func markDeviceCS(csName string, usage *deviceCSUsage) {
 	}
 }
 
+// maxFormXObjectDepth is the maximum recursion depth for scanning Form XObject
+// content streams and their nested resources.
+const maxFormXObjectDepth = 10
+
 // scanXObjectColorSpaces checks XObject resources for device colour space usage.
-func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage) {
+// For Form XObjects, it recurses into their content streams and nested resources.
+func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool) {
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
 	if err != nil || xobjDict == nil {
 		return
@@ -384,6 +398,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 			continue
 		}
 
+		// Check the XObject's own /ColorSpace entry.
 		csName, _ := document.ResolveName(ctx, doc, stream.Dict["ColorSpace"])
 		if csName != "" {
 			slog.Debug("compliance_2/color: XObject uses colour space", "name", name, "cs", csName)
@@ -396,7 +411,104 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 				markDeviceCS(csResolved, usage)
 			}
 		}
+
+		// For Form XObjects, recurse into content stream and nested resources.
+		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		if subtype == "Form" {
+			formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited)
+			usage.rgb = usage.rgb || formUsage.rgb
+			usage.cmyk = usage.cmyk || formUsage.cmyk
+			usage.gray = usage.gray || formUsage.gray
+		}
 	}
+}
+
+// scanFormXObjectCS decodes a Form XObject's content stream and scans for
+// device-dependent colour space operators. It also checks nested resources
+// (ColorSpace, XObject, Shading, Pattern) within the Form XObject.
+func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool) deviceCSUsage {
+	var usage deviceCSUsage
+
+	if depth >= maxFormXObjectDepth {
+		slog.Debug("compliance_2/color: Form XObject recursion depth limit reached", "depth", depth)
+		return usage
+	}
+
+	// Cycle detection: use fmt.Sprintf("%p") on the dict map pointer as key.
+	// PdfDict is a map type; each resolved instance has a unique header pointer.
+	dictAddr := fmt.Sprintf("%p", stream.Dict)
+	if visited[dictAddr] {
+		slog.Debug("compliance_2/color: Form XObject already visited, skipping", "addr", dictAddr)
+		return usage
+	}
+	visited[dictAddr] = true
+
+	// Decode and scan the content stream for device CS operators.
+	data, err := filter.DecodeStream(stream)
+	if err != nil {
+		slog.Debug("compliance_2/color: cannot decode Form XObject stream", "error", err)
+		return usage
+	}
+
+	if len(data) > 0 {
+		ops, err := content.ParseStreamData(data)
+		if err != nil {
+			slog.Debug("compliance_2/color: cannot parse Form XObject content stream", "error", err)
+		} else {
+			for idx, op := range ops {
+				if idx%100 == 0 && ctx.Err() != nil { //nolint:mnd // per-spec checkpoint interval
+					return usage
+				}
+
+				switch op.Operator {
+				case "g", "G":
+					usage.gray = true
+				case "rg", "RG":
+					usage.rgb = true
+				case "k", "K":
+					usage.cmyk = true
+				case "cs", "CS":
+					if len(op.Operands) >= 1 {
+						if name, ok := op.Operands[0].(ast.PdfName); ok {
+							markDeviceCS(string(name), &usage)
+						}
+					}
+				}
+
+				if usage.rgb && usage.cmyk && usage.gray {
+					break
+				}
+			}
+		}
+	}
+
+	// Check nested resources within the Form XObject.
+	formRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if err != nil || formRes == nil {
+		return usage
+	}
+
+	// Check ColorSpace dict in nested resources.
+	formCSDict, err := document.ResolveDict(ctx, doc, formRes["ColorSpace"])
+	if err == nil && formCSDict != nil {
+		for csName, csObj := range formCSDict {
+			if ctx.Err() != nil {
+				return usage
+			}
+			resolved := resolveCSName(ctx, doc, csObj)
+			slog.Debug("compliance_2/color: Form XObject nested colour space", "csName", csName, "resolved", resolved)
+			markDeviceCS(resolved, &usage)
+		}
+	}
+
+	// Recurse into nested XObjects.
+	scanXObjectColorSpaces(ctx, doc, formRes, &usage, depth+1, visited)
+
+	// Check nested Shading and Pattern resources.
+	scanShadingColorSpaces(ctx, doc, formRes, &usage)
+	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited)
+
+	return usage
 }
 
 // scanFontColorSpaces checks Font resources for device colour space references
@@ -513,6 +625,269 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 	}
 
 	return usage
+}
+
+// scanShadingColorSpaces checks Shading resources for device colour space usage.
+// Shading dictionaries contain a /ColorSpace entry that may reference a device CS.
+func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage) {
+	shadingDict, err := document.ResolveDict(ctx, doc, resources["Shading"])
+	if err != nil || shadingDict == nil {
+		return
+	}
+
+	for name, shadingObj := range shadingDict {
+		if ctx.Err() != nil {
+			return
+		}
+
+		sd, err := document.ResolveDict(ctx, doc, shadingObj)
+		if err != nil || sd == nil {
+			slog.Debug("compliance_2/color: cannot resolve Shading dict", "name", name, "error", err)
+			continue
+		}
+
+		csObj, ok := sd["ColorSpace"]
+		if !ok {
+			continue
+		}
+
+		csName := resolveCSName(ctx, doc, csObj)
+		if csName != "" {
+			slog.Debug("compliance_2/color: Shading uses colour space", "name", name, "cs", csName)
+			markDeviceCS(csName, usage)
+		}
+	}
+}
+
+// scanPatternColorSpaces checks Pattern resources for device colour space usage.
+// Tiling patterns (Type 1) have their own content streams and resources that may
+// use device-dependent colour spaces.
+func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool) {
+	patternDict, err := document.ResolveDict(ctx, doc, resources["Pattern"])
+	if err != nil || patternDict == nil {
+		return
+	}
+
+	for name, patternObj := range patternDict {
+		if ctx.Err() != nil {
+			return
+		}
+
+		// Patterns can be streams (tiling) or dicts (shading patterns).
+		stream, err := document.ResolveStream(ctx, doc, patternObj)
+		if err != nil {
+			// May be a shading pattern (dict, not stream). Shading patterns
+			// reference a Shading dict which is handled by scanShadingColorSpaces.
+			slog.Debug("compliance_2/color: Pattern is not a stream (likely shading pattern)", "name", name)
+			continue
+		}
+
+		patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"])
+		if patternType != 1 {
+			slog.Debug("compliance_2/color: skipping non-tiling pattern", "name", name, "type", patternType)
+			continue
+		}
+
+		slog.Debug("compliance_2/color: scanning tiling pattern", "name", name)
+
+		// Scan the tiling pattern's content stream as a Form XObject.
+		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited)
+		usage.rgb = usage.rgb || formUsage.rgb
+		usage.cmyk = usage.cmyk || formUsage.cmyk
+		usage.gray = usage.gray || formUsage.gray
+	}
+}
+
+// checkSeparationDeviceN validates Separation and DeviceN colour space
+// consistency per §6.2.4.4. It ensures that the same colorant name always maps
+// to the same alternate colour space across the entire document.
+func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Result) {
+	slog.Debug("compliance_2/color: checking Separation/DeviceN colour space consistency")
+
+	// colorantAlternates tracks colorant name -> first alternate space seen.
+	colorantAlternates := make(map[string]string)
+
+	pages := collectPages(ctx, doc, catalog)
+	for i, page := range pages {
+		if ctx.Err() != nil {
+			return
+		}
+
+		resources := getResources(ctx, doc, page)
+		if resources == nil {
+			continue
+		}
+
+		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, results)
+	}
+
+	slog.Debug("compliance_2/color: Separation/DeviceN check complete",
+		"uniqueColorants", len(colorantAlternates))
+}
+
+// scanSeparationDeviceNInResources scans a resources dictionary for Separation
+// and DeviceN colour space arrays and validates colorant-to-alternate consistency.
+func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, results *[]Result) {
+	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
+	if err != nil || csDict == nil {
+		return
+	}
+
+	for name, csObj := range csDict {
+		if ctx.Err() != nil {
+			return
+		}
+
+		arr, err := document.ResolveArray(ctx, doc, csObj)
+		if err != nil || len(arr) < 2 {
+			continue
+		}
+
+		csType, err := document.ResolveName(ctx, doc, arr[0])
+		if err != nil {
+			continue
+		}
+
+		switch string(csType) {
+		case "Separation":
+			checkSeparationCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, results)
+		case "DeviceN":
+			checkDeviceNCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, results)
+		}
+	}
+}
+
+// checkSeparationCS validates a Separation colour space array:
+// [/Separation /ColorantName /AlternateSpace /TintTransform]
+func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, results *[]Result) {
+	if len(arr) < 4 {
+		slog.Debug("compliance_2/color: Separation array too short", "page", pageIdx, "cs", csName, "len", len(arr))
+		return
+	}
+
+	colorantName, err := document.ResolveName(ctx, doc, arr[1])
+	if err != nil {
+		slog.Debug("compliance_2/color: cannot resolve Separation colorant name", "page", pageIdx, "cs", csName, "error", err)
+		return
+	}
+
+	alternateName := resolveCSName(ctx, doc, arr[2])
+	if alternateName == "" {
+		slog.Debug("compliance_2/color: cannot resolve Separation alternate space", "page", pageIdx, "cs", csName)
+		return
+	}
+
+	slog.Debug("compliance_2/color: found Separation colour space",
+		"page", pageIdx, "cs", csName,
+		"colorant", string(colorantName),
+		"alternate", alternateName,
+	)
+
+	cName := string(colorantName)
+	if prev, ok := colorantAlternates[cName]; ok {
+		if prev != alternateName {
+			slog.Debug("compliance_2/color: Separation colorant alternate mismatch",
+				"colorant", cName, "prevAlternate", prev, "newAlternate", alternateName)
+			*results = append(*results, failf(separationConsistencyRule(part),
+				"page %d, ColorSpace %s: Separation colorant %q uses alternate %q but previously used %q",
+				pageIdx+1, csName, cName, alternateName, prev)...)
+		}
+	} else {
+		colorantAlternates[cName] = alternateName
+	}
+}
+
+// checkDeviceNCS validates a DeviceN colour space array:
+// [/DeviceN [/names...] /AlternateSpace /TintTransform ...]
+func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, results *[]Result) {
+	if len(arr) < 4 {
+		slog.Debug("compliance_2/color: DeviceN array too short", "page", pageIdx, "cs", csName, "len", len(arr))
+		return
+	}
+
+	names, err := document.ResolveArray(ctx, doc, arr[1])
+	if err != nil {
+		slog.Debug("compliance_2/color: cannot resolve DeviceN names array", "page", pageIdx, "cs", csName, "error", err)
+		return
+	}
+
+	alternateName := resolveCSName(ctx, doc, arr[2])
+	if alternateName == "" {
+		slog.Debug("compliance_2/color: cannot resolve DeviceN alternate space", "page", pageIdx, "cs", csName)
+		return
+	}
+
+	slog.Debug("compliance_2/color: found DeviceN colour space",
+		"page", pageIdx, "cs", csName,
+		"colorantCount", len(names),
+		"alternate", alternateName,
+	)
+
+	for _, nameObj := range names {
+		if ctx.Err() != nil {
+			return
+		}
+
+		colorantName, err := document.ResolveName(ctx, doc, nameObj)
+		if err != nil {
+			continue
+		}
+
+		cName := string(colorantName)
+
+		// DeviceN must not use reserved colorant names "All" or "None"
+		// as tint transform targets (per §6.2.4.4).
+		if cName == "All" || cName == "None" {
+			slog.Debug("compliance_2/color: DeviceN uses reserved colorant name",
+				"page", pageIdx, "cs", csName, "colorant", cName)
+			*results = append(*results, failf(deviceNConsistencyRule(part),
+				"page %d, ColorSpace %s: DeviceN uses reserved colorant name %q",
+				pageIdx+1, csName, cName)...)
+			continue
+		}
+
+		if prev, ok := colorantAlternates[cName]; ok {
+			if prev != alternateName {
+				slog.Debug("compliance_2/color: DeviceN colorant alternate mismatch",
+					"colorant", cName, "prevAlternate", prev, "newAlternate", alternateName)
+				*results = append(*results, failf(deviceNConsistencyRule(part),
+					"page %d, ColorSpace %s: DeviceN colorant %q uses alternate %q but previously used %q",
+					pageIdx+1, csName, cName, alternateName, prev)...)
+			}
+		} else {
+			colorantAlternates[cName] = alternateName
+		}
+	}
+}
+
+// separationConsistencyRule returns the rule for Separation colour space
+// consistency based on the PDF/A part.
+func separationConsistencyRule(part int) Rule {
+	switch part {
+	case 2:
+		return Rule_19005_2_6_2_4_4_t01
+	case 3:
+		return Rule_19005_3_6_2_4_4_t01
+	case 4:
+		return Rule_19005_4_6_2_4_4_t01
+	default:
+		return Rule_19005_2_6_2_4_4_t01
+	}
+}
+
+// deviceNConsistencyRule returns the rule for DeviceN colour space consistency
+// based on the PDF/A part.
+func deviceNConsistencyRule(part int) Rule {
+	switch part {
+	case 2:
+		return Rule_19005_2_6_2_4_4_t02
+	case 3:
+		return Rule_19005_3_6_2_4_4_t02
+	case 4:
+		return Rule_19005_4_6_2_4_4_t02
+	default:
+		return Rule_19005_2_6_2_4_4_t02
+	}
 }
 
 // checkICCBasedProfiles validates ICCBased colour space profiles per
