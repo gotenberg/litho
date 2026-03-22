@@ -3,10 +3,14 @@ package compliance2
 import (
 	"context"
 	"log/slog"
+	"math"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
 // --- Standard 14 font names ---
@@ -497,8 +501,17 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	// --- 8. Font name UTF-8 check ---
 	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// --- 5. Glyph width consistency (placeholder — requires font program parsing) ---
+	// --- 5. Glyph width consistency ---
 	results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile)...)
+
+	// --- 6. .notdef glyph check ---
+	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile)...)
+
+	// --- 9. Glyph coverage (CharSet for Type1 subsets) ---
+	results = append(results, checkGlyphCoverage(ctx, doc, fontDict, fontName, pageNum, profile)...)
+
+	// --- 10. ToUnicode CMap values ---
+	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
 	return results
 }
@@ -726,10 +739,12 @@ func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.P
 	return nil
 }
 
+// widthTolerance is the maximum allowed difference between PDF-declared
+// and binary font widths, in 1/1000 text space units.
+const widthTolerance = 1.0
+
 // checkGlyphWidths validates glyph width consistency (rule 5).
-// Full glyph-level comparison requires parsing TrueType/CFF font programs.
-// This check validates that the /Widths array is structurally present and
-// that its length matches /FirstChar and /LastChar.
+// Compares PDF-declared widths against the embedded font program's binary widths.
 func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
 	rule := glyphWidthRule(profile)
 	if rule.Specification == "" {
@@ -743,15 +758,44 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 		return nil
 	}
 
-	subtype := fontSubtype(ctx, doc, fontDict)
-
-	// Only simple fonts (Type1, TrueType, MMType1) use /Widths+FirstChar+LastChar.
-	// Composite fonts (Type0) use /DW and /W on the CIDFont descendant.
-	if subtype != "Type1" && subtype != "TrueType" && subtype != "MMType1" {
+	fd := findFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		slog.Debug("compliance_2: fonts: no FontDescriptor, skipping glyph width check", "font", fontName)
 		return nil
 	}
 
-	// /Widths is required when the font is embedded.
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		slog.Debug("compliance_2: fonts: no embedded font program, skipping glyph width check", "font", fontName)
+		return nil
+	}
+
+	binaryWidths := typography.ExtractBinaryWidths(fontData)
+	if binaryWidths == nil {
+		slog.Debug("compliance_2: fonts: could not extract binary widths", "font", fontName)
+		return nil
+	}
+
+	unitsPerEm := typography.ReadUnitsPerEm(fontData)
+	if unitsPerEm == 0 {
+		unitsPerEm = 1000 //nolint:mnd // safe default
+	}
+
+	slog.Debug("compliance_2: fonts: extracted font metrics",
+		"font", fontName, "binaryWidths", len(binaryWidths), "unitsPerEm", unitsPerEm)
+
+	subtype := fontSubtype(ctx, doc, fontDict)
+
+	// Simple fonts (Type1, TrueType, MMType1): compare /Widths array using FirstChar offset.
+	if subtype == "Type1" || subtype == "TrueType" || subtype == "MMType1" {
+		return checkSimpleFontWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule)
+	}
+
+	return nil
+}
+
+// checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
+func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule) []Result {
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
 		slog.Debug("compliance_2: fonts: font missing /Widths array", "font", fontName, "page", pageNum)
@@ -770,24 +814,158 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 		return failf(rule, "font %s on page %d: missing /FirstChar", fontName, pageNum)
 	}
 
-	lastChar, err := document.ResolveInt(ctx, doc, fontDict["LastChar"])
+	for i, wObj := range widths {
+		charCode := int(firstChar) + i
+		gid := uint16(charCode) //nolint:gosec
+		pdfWidth := document.GetFloat(wObj)
+		if pdfWidth == 0 {
+			continue
+		}
+		bw, ok := binaryWidths[gid]
+		if !ok {
+			continue
+		}
+		expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+		if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
+			slog.Debug("compliance_2: fonts: glyph width mismatch",
+				"font", fontName, "charCode", charCode,
+				"pdfWidth", pdfWidth, "expectedWidth", expectedWidth)
+			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f, font=%.1f)",
+				fontName, pageNum, charCode, pdfWidth, expectedWidth)
+		}
+	}
+
+	slog.Debug("compliance_2: fonts: glyph widths consistent", "font", fontName, "page", pageNum)
+	return nil
+}
+
+// checkCIDFontWidths compares /W array against binary widths for CIDFonts.
+func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule) []Result {
+	wObj, ok := cidFontDict["W"]
+	if !ok {
+		slog.Debug("compliance_2: fonts: CIDFont has no /W array", "font", fontName)
+		return nil
+	}
+
+	wArr, err := document.ResolveArray(ctx, doc, wObj)
 	if err != nil {
-		slog.Debug("compliance_2: fonts: missing /LastChar", "font", fontName)
-		return failf(rule, "font %s on page %d: missing /LastChar", fontName, pageNum)
+		slog.Debug("compliance_2: fonts: resolving CID width array", "font", fontName, "error", err)
+		return nil
+	}
+	if wArr == nil {
+		return nil
 	}
 
-	expectedLen := max(int(lastChar)-int(firstChar)+1, 0)
-	if len(widths) != expectedLen {
-		slog.Debug("compliance_2: fonts: /Widths length mismatch",
-			"font", fontName, "page", pageNum,
-			"widths", len(widths), "expected", expectedLen,
-			"firstChar", firstChar, "lastChar", lastChar)
-		return failf(rule, "font %s on page %d: /Widths has %d entries but FirstChar=%d LastChar=%d expects %d",
-			fontName, pageNum, len(widths), firstChar, lastChar, expectedLen)
+	// /W array format: [cid [w1 w2 ...]] or [cidFirst cidLast w]
+	i := 0
+	for i < len(wArr) {
+		cidStartRes, err := document.ResolveObject(ctx, doc, wArr[i])
+		if err != nil {
+			slog.Debug("compliance_2: fonts: resolving CID start value", "error", err)
+		}
+		cidStartInt, ok := cidStartRes.(ast.PdfInt)
+		if !ok {
+			i++
+			continue
+		}
+		cidStart := int(cidStartInt)
+		i++
+		if i >= len(wArr) {
+			break
+		}
+
+		nextRes, err := document.ResolveObject(ctx, doc, wArr[i])
+		if err != nil {
+			slog.Debug("compliance_2: fonts: resolving CID width entry", "error", err)
+		}
+		switch next := nextRes.(type) {
+		case ast.PdfArray:
+			// [cidStart [w1 w2 w3 ...]]
+			for j, wEntry := range next {
+				cid := cidStart + j
+				gid := uint16(cid) //nolint:gosec
+				pdfWidth := document.GetFloat(wEntry)
+				if pdfWidth == 0 {
+					continue
+				}
+				bw, ok := binaryWidths[gid]
+				if !ok {
+					continue
+				}
+				expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+				if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
+					slog.Debug("compliance_2: fonts: CID glyph width mismatch",
+						"font", fontName, "cid", cid,
+						"pdfWidth", pdfWidth, "expectedWidth", expectedWidth)
+					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
+						fontName, pageNum, cid, pdfWidth, expectedWidth)
+				}
+			}
+			i++
+		case ast.PdfInt:
+			// [cidStart cidEnd w]
+			cidEnd := int(next)
+			i++
+			if i >= len(wArr) {
+				break
+			}
+			pdfWidth := document.GetFloat(wArr[i])
+			i++
+			if pdfWidth == 0 {
+				continue
+			}
+			for cid := cidStart; cid <= cidEnd; cid++ {
+				gid := uint16(cid) //nolint:gosec
+				bw, ok := binaryWidths[gid]
+				if !ok {
+					continue
+				}
+				expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+				if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
+					slog.Debug("compliance_2: fonts: CID glyph width mismatch (range)",
+						"font", fontName, "cid", cid,
+						"pdfWidth", pdfWidth, "expectedWidth", expectedWidth)
+					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
+						fontName, pageNum, cid, pdfWidth, expectedWidth)
+				}
+			}
+		default:
+			i++
+		}
 	}
 
-	slog.Debug("compliance_2: fonts: /Widths structurally valid",
-		"font", fontName, "page", pageNum, "entries", len(widths))
+	slog.Debug("compliance_2: fonts: CID glyph widths consistent", "font", fontName, "page", pageNum)
+	return nil
+}
+
+// extractFontProgramData gets the raw font program bytes from FontDescriptor.
+func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict ast.PdfDict) []byte {
+	for _, key := range []ast.PdfName{"FontFile2", "FontFile3", "FontFile"} {
+		ffObj, ok := fdDict[key]
+		if !ok {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, ffObj)
+		if err != nil {
+			slog.Debug("compliance_2: fonts: resolving font program stream", "key", key, "error", err)
+		}
+		if stream.Dict == nil {
+			continue
+		}
+		data, err := filter.DecodeStream(stream)
+		if err != nil {
+			// Fall back to raw data.
+			rawData, rawErr := stream.Bytes()
+			if rawErr == nil && len(rawData) > 0 {
+				slog.Debug("compliance_2: fonts: using raw font program data", "key", key, "len", len(rawData))
+				return rawData
+			}
+			slog.Debug("compliance_2: fonts: failed to decode font program stream", "key", key, "error", err)
+			continue
+		}
+		slog.Debug("compliance_2: fonts: decoded font program", "key", key, "len", len(data))
+		return data
+	}
 	return nil
 }
 
@@ -839,8 +1017,33 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// --- 2. ToUnicode for composite fonts ---
 	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
-	// --- 6. .notdef check (placeholder) ---
+	// --- 6. .notdef check ---
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile)...)
+
+	// --- 5. Glyph width consistency for CIDFont ---
+	cidFd := findFontDescriptor(ctx, doc, cidFontDict)
+	if cidFd != nil {
+		fontData := extractFontProgramData(ctx, doc, cidFd)
+		if fontData != nil {
+			binaryWidths := typography.ExtractBinaryWidths(fontData)
+			if binaryWidths != nil {
+				unitsPerEm := typography.ReadUnitsPerEm(fontData)
+				if unitsPerEm == 0 {
+					unitsPerEm = 1000 //nolint:mnd // safe default
+				}
+				rule := glyphWidthRule(profile)
+				if rule.Specification != "" {
+					results = append(results, checkCIDFontWidths(ctx, doc, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule)...)
+				}
+			}
+		}
+	}
+
+	// --- 9. CIDFont glyph coverage (CIDSet for CIDFont subsets) ---
+	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile)...)
+
+	// --- 10. ToUnicode CMap values ---
+	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
 	return results
 }
@@ -1019,22 +1222,308 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	return nil
 }
 
-// checkNotdefGlyph checks for .notdef glyph references (rule 6).
-// Full implementation requires content stream analysis; this is a structural
-// placeholder that validates the rule applicability.
-func checkNotdefGlyph(_ context.Context, _ *document.Document, _ ast.PdfDict, fontName string, _ int, profile string) []Result {
+// checkNotdefGlyph checks for .notdef glyph references in font Encoding
+// /Differences arrays (rule 6). A .notdef entry indicates a character code
+// maps to the undefined glyph.
+func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
 	rule := notdefRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: .notdef check not applicable", "profile", profile)
 		return nil
 	}
 
-	// .notdef glyph detection requires content stream operator analysis to
-	// determine which glyphs are actually referenced. This is a structural
-	// placeholder — the full check is performed during content stream processing.
-	slog.Debug("compliance_2: fonts: .notdef check deferred to content stream analysis",
-		"font", fontName)
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		slog.Debug("compliance_2: fonts: no /Encoding entry, skipping .notdef check", "font", fontName)
+		return nil
+	}
 
-	_ = rule
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil {
+		slog.Debug("compliance_2: fonts: resolving font encoding dict", "font", fontName, "error", err)
+	}
+	if encDict == nil {
+		slog.Debug("compliance_2: fonts: encoding is not a dict, skipping .notdef check", "font", fontName)
+		return nil
+	}
+
+	diffObj, ok := encDict["Differences"]
+	if !ok {
+		slog.Debug("compliance_2: fonts: no /Differences in encoding, skipping .notdef check", "font", fontName)
+		return nil
+	}
+
+	diffArr, err := document.ResolveArray(ctx, doc, diffObj)
+	if err != nil {
+		slog.Debug("compliance_2: fonts: resolving encoding differences array", "font", fontName, "error", err)
+	}
+	if diffArr == nil {
+		return nil
+	}
+
+	for _, item := range diffArr {
+		if n, ok := item.(ast.PdfName); ok && n == ".notdef" {
+			slog.Debug("compliance_2: fonts: .notdef glyph found in /Differences",
+				"font", fontName, "page", pageNum)
+			return failf(rule, "font %s on page %d: .notdef glyph in /Differences", fontName, pageNum)
+		}
+	}
+
+	slog.Debug("compliance_2: fonts: no .notdef references in /Differences", "font", fontName)
 	return nil
+}
+
+// --- Glyph coverage (CharSet / CIDSet) rule selectors ---
+
+// charSetRule returns the CharSet rule for Type1 font subsets.
+func charSetRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 1:
+		return Rule_19005_1_6_3_5_t02
+	case 2:
+		return Rule_19005_2_6_2_11_4_1_t02
+	case 3:
+		return Rule_19005_3_6_2_11_4_1_t02
+	case 4:
+		return Rule_19005_4_6_2_10_4_1_t02
+	}
+	return Rule{}
+}
+
+// cidSetRule returns the CIDSet rule for CIDFont subsets.
+func cidSetRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 1:
+		return Rule_19005_1_6_3_5_t03
+	case 2:
+		return Rule_19005_2_6_2_11_4_1_t02
+	case 3:
+		return Rule_19005_3_6_2_11_4_1_t02
+	case 4:
+		return Rule_19005_4_6_2_10_4_1_t02
+	}
+	return Rule{}
+}
+
+// toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
+func toUnicodeCMapValuesRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 2:
+		return Rule_19005_2_6_2_11_7_3_t01
+	case 3:
+		return Rule_19005_3_6_2_11_7_3_t01
+	case 4:
+		return Rule_19005_4_6_2_10_7_t01
+	}
+	return Rule{}
+}
+
+// isSubsetFont returns true if the font's BaseFont name starts with a
+// 6-letter tag followed by '+' (e.g., "ABCDEF+Arial"), indicating a subset.
+func isSubsetFont(basefont string) bool {
+	if len(basefont) < 8 { //nolint:mnd // minimum: 6 tag chars + '+' + 1 name char
+		return false
+	}
+	if basefont[6] != '+' {
+		return false
+	}
+	for i := range 6 {
+		c := basefont[i]
+		if c < 'A' || c > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+// checkGlyphCoverage validates that subset fonts have the required CharSet or
+// CIDSet entries in their FontDescriptor.
+// - Type1 subsets: /FontDescriptor must have /CharSet
+// - CIDFont subsets: /FontDescriptor must have /CIDSet
+func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+	basefont := fontBaseFont(ctx, doc, fontDict)
+	if !isSubsetFont(basefont) {
+		slog.Debug("compliance_2: fonts: not a subset font, skipping glyph coverage check",
+			"font", fontName, "basefont", basefont)
+		return nil
+	}
+
+	subtype := fontSubtype(ctx, doc, fontDict)
+	slog.Debug("compliance_2: fonts: checking glyph coverage for subset font",
+		"font", fontName, "basefont", basefont, "subtype", subtype)
+
+	fd := findFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		slog.Debug("compliance_2: fonts: no FontDescriptor, skipping glyph coverage check", "font", fontName)
+		return nil
+	}
+
+	// Type1 subsets require /CharSet.
+	if subtype == "Type1" || subtype == "MMType1" {
+		rule := charSetRule(profile)
+		if rule.Specification == "" {
+			return nil
+		}
+		// Part 1: CharSet is required. Parts 2+: only check if present (correctness),
+		// but we still flag missing for Part 1.
+		if pdfaPart(profile) == 1 {
+			if _, hasCharSet := fd["CharSet"]; !hasCharSet {
+				slog.Debug("compliance_2: fonts: Type1 subset missing /CharSet",
+					"font", fontName, "page", pageNum)
+				return failf(rule, "font %s on page %d: Type1 subset missing /CharSet", fontName, pageNum)
+			}
+		}
+		slog.Debug("compliance_2: fonts: Type1 subset CharSet check passed", "font", fontName)
+		return nil
+	}
+
+	return nil
+}
+
+// checkCIDFontGlyphCoverage validates that CIDFont subsets have a /CIDSet entry
+// in their FontDescriptor.
+func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+	basefont := fontBaseFont(ctx, doc, cidFontDict)
+	if !isSubsetFont(basefont) {
+		slog.Debug("compliance_2: fonts: CIDFont not a subset, skipping CIDSet check",
+			"font", fontName, "basefont", basefont)
+		return nil
+	}
+
+	rule := cidSetRule(profile)
+	if rule.Specification == "" {
+		return nil
+	}
+
+	fd := findFontDescriptor(ctx, doc, cidFontDict)
+	if fd == nil {
+		slog.Debug("compliance_2: fonts: CIDFont no FontDescriptor, skipping CIDSet check", "font", fontName)
+		return nil
+	}
+
+	// Part 1: CIDSet is required. Parts 2+: only check if present (correctness).
+	if pdfaPart(profile) == 1 {
+		if _, hasCIDSet := fd["CIDSet"]; !hasCIDSet {
+			slog.Debug("compliance_2: fonts: CIDFont subset missing /CIDSet",
+				"font", fontName, "page", pageNum)
+			return failf(rule, "font %s on page %d: CIDFont subset missing /CIDSet", fontName, pageNum)
+		}
+	}
+
+	slog.Debug("compliance_2: fonts: CIDFont subset CIDSet check passed", "font", fontName)
+	return nil
+}
+
+// checkToUnicodeCMapValues validates that a /ToUnicode CMap, if present, is
+// decodable and does not map to invalid Unicode values (U+0000, U+FEFF, U+FFFE).
+func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+	rule := toUnicodeCMapValuesRule(profile)
+	if rule.Specification == "" {
+		slog.Debug("compliance_2: fonts: ToUnicode CMap values check not applicable", "profile", profile)
+		return nil
+	}
+
+	tuObj, ok := fontDict["ToUnicode"]
+	if !ok {
+		slog.Debug("compliance_2: fonts: no /ToUnicode, skipping CMap values check", "font", fontName)
+		return nil
+	}
+
+	stream, err := document.ResolveStream(ctx, doc, tuObj)
+	if err != nil {
+		slog.Debug("compliance_2: fonts: failed to resolve ToUnicode stream",
+			"font", fontName, "error", err)
+		return failf(rule, "font %s on page %d: cannot resolve /ToUnicode stream", fontName, pageNum)
+	}
+	if stream.Dict == nil {
+		slog.Debug("compliance_2: fonts: ToUnicode stream has no dict", "font", fontName)
+		return failf(rule, "font %s on page %d: /ToUnicode stream has no dictionary", fontName, pageNum)
+	}
+
+	data, err := filter.DecodeStream(stream)
+	if err != nil {
+		// Fall back to raw data.
+		data, err = stream.Bytes()
+		if err != nil || len(data) == 0 {
+			slog.Debug("compliance_2: fonts: failed to decode ToUnicode CMap",
+				"font", fontName, "error", err)
+			return failf(rule, "font %s on page %d: cannot decode /ToUnicode CMap", fontName, pageNum)
+		}
+	}
+
+	// Scan the CMap data for invalid Unicode values.
+	// Look for hex strings in beginbfchar/beginbfrange sections that map to
+	// U+0000, U+FEFF, or U+FFFE.
+	cmapStr := string(data)
+	if containsInvalidUnicodeMapping(cmapStr) {
+		slog.Debug("compliance_2: fonts: ToUnicode CMap contains invalid Unicode mapping",
+			"font", fontName, "page", pageNum)
+		return failf(rule, "font %s on page %d: /ToUnicode CMap maps to U+0000, U+FEFF, or U+FFFE",
+			fontName, pageNum)
+	}
+
+	slog.Debug("compliance_2: fonts: ToUnicode CMap values valid", "font", fontName)
+	return nil
+}
+
+// containsInvalidUnicodeMapping scans CMap bfchar/bfrange sections for
+// destination hex strings mapping to U+0000, U+FEFF, or U+FFFE.
+// Only destination values are checked — source codes may legitimately use
+// these values.
+func containsInvalidUnicodeMapping(cmap string) bool {
+	upper := strings.ToUpper(cmap)
+
+	// Only check inside bfchar sections: each line has <src> <dst>.
+	// We look for lines where the SECOND hex string is an invalid value.
+	inBfchar := false
+	inBfrange := false
+	for line := range strings.SplitSeq(upper, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "BEGINBFCHAR") {
+			inBfchar = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "ENDBFCHAR") {
+			inBfchar = false
+			continue
+		}
+		if strings.HasPrefix(trimmed, "BEGINBFRANGE") {
+			inBfrange = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "ENDBFRANGE") {
+			inBfrange = false
+			continue
+		}
+
+		if inBfchar {
+			// Format: <srcCode> <dstUnicode>
+			// Find the second hex string.
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 { //nolint:mnd
+				dst := parts[1]
+				if isInvalidUnicodeDst(dst) {
+					return true
+				}
+			}
+		}
+		if inBfrange {
+			// Format: <srcLo> <srcHi> <dstStart>
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 3 { //nolint:mnd
+				dst := parts[2]
+				if isInvalidUnicodeDst(dst) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// isInvalidUnicodeDst checks if a hex string token is an invalid Unicode
+// destination value (U+0000, U+FEFF, U+FFFE).
+func isInvalidUnicodeDst(token string) bool {
+	t := strings.ToUpper(strings.TrimSpace(token))
+	return t == "<0000>" || t == "<FEFF>" || t == "<FFFE>"
 }
