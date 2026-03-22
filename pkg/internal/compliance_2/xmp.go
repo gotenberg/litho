@@ -113,6 +113,15 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		return results
 	}
 
+	// 1b. XMP encoding must be UTF-8 for part 4 (§6.7.2.1 t05).
+	if part == 4 { //nolint:mnd // PDF/A-4.
+		xmpCheckEncoding(xmpData, part, &results)
+	}
+
+	if ctx.Err() != nil {
+		return results
+	}
+
 	// 2. XMP packet header (§6.7.2.1 / §6.6.2.1).
 	xmpCheckPacketHeader(xmpData, part, &results)
 
@@ -298,6 +307,36 @@ func xmpPacketHeaderEncodingRule(part int) []Result {
 	return nil
 }
 
+// --- 1b. XMP encoding check ---
+
+// xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
+// For PDF/A-4 (§6.7.2.1 t05), UTF-16 encoding is a violation.
+func xmpCheckEncoding(data []byte, _ int, results *[]Result) {
+	slog.Debug("compliance_2/xmp: checking XMP encoding")
+
+	// Check for UTF-16 BOM: FE FF (BE) or FF FE (LE).
+	if len(data) >= 2 { //nolint:mnd // BOM is 2 bytes.
+		if data[0] == 0xFE && data[1] == 0xFF {
+			slog.Debug("compliance_2/xmp: UTF-16BE BOM detected")
+			*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16BE")...)
+			return
+		}
+		if data[0] == 0xFF && data[1] == 0xFE {
+			slog.Debug("compliance_2/xmp: UTF-16LE BOM detected")
+			*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16LE")...)
+			return
+		}
+	}
+
+	// Also check XML declaration for encoding="UTF-16".
+	headerLen := min(len(data), xmpPacketHeaderSize)
+	header := strings.ToLower(string(data[:headerLen]))
+	if strings.Contains(header, "encoding=\"utf-16") || strings.Contains(header, "encoding='utf-16") {
+		slog.Debug("compliance_2/xmp: UTF-16 declared in XML processing instruction")
+		*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16")...)
+	}
+}
+
 // --- 3. XMP schema validation ---
 
 // xmpCheckNamespaces walks the XMP XML and verifies that every namespace URI
@@ -445,6 +484,7 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	var partValue, confValue, revValue string
 	hasPart := false
 	hasConf := false
+	var wrongPrefixPart, wrongPrefixConf, wrongPrefixRev bool
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
@@ -471,6 +511,22 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 					case "rev":
 						revValue = attr.Value
 					}
+				} else if attr.Name.Space != "" && attr.Name.Space != xmpPdfaIDNamespace {
+					// Attribute with matching local name but wrong namespace prefix.
+					switch attr.Name.Local {
+					case "part":
+						slog.Debug("compliance_2/xmp: pdfaid:part attr has wrong namespace prefix",
+							"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
+						wrongPrefixPart = true
+					case "conformance":
+						slog.Debug("compliance_2/xmp: pdfaid:conformance attr has wrong namespace prefix",
+							"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
+						wrongPrefixConf = true
+					case "rev":
+						slog.Debug("compliance_2/xmp: pdfaid:rev attr has wrong namespace prefix",
+							"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
+						wrongPrefixRev = true
+					}
 				}
 			}
 			// Check element form — read text content.
@@ -493,6 +549,23 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 						}
 					}
 				}
+			} else if t.Name.Space != "" && t.Name.Space != xmpPdfaIDNamespace &&
+				t.Name.Space != xmpRDFNamespace {
+				// Element with matching local name but wrong namespace prefix.
+				switch t.Name.Local {
+				case "part":
+					slog.Debug("compliance_2/xmp: pdfaid:part element has wrong namespace prefix",
+						"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
+					wrongPrefixPart = true
+				case "conformance":
+					slog.Debug("compliance_2/xmp: pdfaid:conformance element has wrong namespace prefix",
+						"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
+					wrongPrefixConf = true
+				case "rev":
+					slog.Debug("compliance_2/xmp: pdfaid:rev element has wrong namespace prefix",
+						"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
+					wrongPrefixRev = true
+				}
 			}
 		}
 	}
@@ -500,7 +573,21 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	slog.Debug("compliance_2/xmp: pdfaid parsed",
 		"hasPart", hasPart, "partValue", partValue,
 		"hasConf", hasConf, "confValue", confValue,
-		"revValue", revValue)
+		"revValue", revValue,
+		"wrongPrefixPart", wrongPrefixPart,
+		"wrongPrefixConf", wrongPrefixConf,
+		"wrongPrefixRev", wrongPrefixRev)
+
+	// Emit prefix violations for pdfaid fields using wrong namespace.
+	if wrongPrefixPart {
+		*results = append(*results, xmpPDFAIdPrefixRule(part, "part")...)
+	}
+	if wrongPrefixConf {
+		*results = append(*results, xmpPDFAIdPrefixRule(part, "conformance")...)
+	}
+	if wrongPrefixRev {
+		*results = append(*results, xmpPDFAIdPrefixRule(part, "rev")...)
+	}
 
 	// Fallback: byte scan for pdfaid presence in unparseable XMP.
 	if !hasPart && !hasConf {
@@ -635,6 +722,39 @@ func xmpPDFAConformanceRule(part int, actual string) []Result {
 	return nil
 }
 
+// xmpPDFAIdPrefixRule returns the appropriate rule for a pdfaid field that uses
+// the wrong namespace prefix. The field parameter is "part", "conformance", or "rev".
+func xmpPDFAIdPrefixRule(part int, field string) []Result {
+	ctx := fmt.Sprintf("pdfaid:%s uses wrong namespace prefix", field)
+	switch field {
+	case "part":
+		switch part {
+		case 1:
+			return fail(Rule_19005_1_6_7_11_t04, ctx)
+		case 2: //nolint:mnd
+			return fail(Rule_19005_2_6_6_4_t04, ctx)
+		case 3: //nolint:mnd
+			return fail(Rule_19005_3_6_6_4_t04, ctx)
+		case 4: //nolint:mnd
+			return fail(Rule_19005_4_6_7_3_t04, ctx)
+		}
+	case "conformance":
+		switch part {
+		case 1:
+			return fail(Rule_19005_1_6_7_11_t05, ctx)
+		case 2: //nolint:mnd
+			return fail(Rule_19005_2_6_6_4_t05, ctx)
+		case 3: //nolint:mnd
+			return fail(Rule_19005_3_6_6_4_t05, ctx)
+		}
+	case "rev":
+		if part == 4 { //nolint:mnd
+			return fail(Rule_19005_4_6_7_3_t06, ctx)
+		}
+	}
+	return nil
+}
+
 // --- 5. Extension schema structure ---
 
 // xmpExtSchemaLevel identifies the nesting context within an extension schema.
@@ -717,6 +837,10 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 			}
 
 			// Track fields within each definition level.
+			// For each known field local name, verify the namespace prefix
+			// matches the expected constant. If the local name matches but the
+			// namespace is wrong, emit the corresponding rule (VeraPDF checks
+			// namespace prefix correctness).
 			switch {
 			case t.Name.Space == xmpPdfaSchemaPrefix:
 				slog.Debug("compliance_2/xmp: pdfaSchema element", "local", t.Name.Local)
@@ -735,6 +859,21 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 					pendingLevel = xmpExtLevelValueType
 					hasPending = true
 				}
+			case t.Name.Space != xmpPdfaSchemaPrefix && currentLevel() == xmpExtLevelSchema:
+				// Wrong namespace prefix for a schema-level field.
+				switch t.Name.Local {
+				case "schema", "namespaceURI", "prefix", "property":
+					slog.Debug("compliance_2/xmp: schema field has wrong namespace prefix",
+						"local", t.Name.Local, "space", t.Name.Space,
+						"expected", xmpPdfaSchemaPrefix)
+					*results = append(*results, xmpExtSchemaRule(part, t.Name.Local)...)
+				case "valueType":
+					slog.Debug("compliance_2/xmp: schema valueType has wrong namespace prefix",
+						"space", t.Name.Space, "expected", xmpPdfaSchemaPrefix)
+					// Still need to set up pending level for child parsing.
+					pendingLevel = xmpExtLevelValueType
+					hasPending = true
+				}
 			case t.Name.Space == xmpPdfaPropertyPrefix && currentLevel() == xmpExtLevelProperty:
 				slog.Debug("compliance_2/xmp: pdfaProperty element", "local", t.Name.Local)
 				switch t.Name.Local {
@@ -746,6 +885,15 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 					currentProp.hasCategory = true
 				case "description":
 					currentProp.hasDescription = true
+				}
+			case t.Name.Space != xmpPdfaPropertyPrefix && currentLevel() == xmpExtLevelProperty:
+				// Wrong namespace prefix for a property-level field.
+				switch t.Name.Local {
+				case "name", "valueType", "category", "description":
+					slog.Debug("compliance_2/xmp: property field has wrong namespace prefix",
+						"local", t.Name.Local, "space", t.Name.Space,
+						"expected", xmpPdfaPropertyPrefix)
+					*results = append(*results, xmpExtPropertyRule(part, t.Name.Local)...)
 				}
 			case t.Name.Space == xmpPdfaTypePrefix && currentLevel() == xmpExtLevelValueType:
 				slog.Debug("compliance_2/xmp: pdfaType element", "local", t.Name.Local)
@@ -762,6 +910,21 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 					pendingLevel = xmpExtLevelField
 					hasPending = true
 				}
+			case t.Name.Space != xmpPdfaTypePrefix && currentLevel() == xmpExtLevelValueType:
+				// Wrong namespace prefix for a valueType-level field.
+				switch t.Name.Local {
+				case "type", "namespaceURI", "prefix", "description":
+					slog.Debug("compliance_2/xmp: valueType field has wrong namespace prefix",
+						"local", t.Name.Local, "space", t.Name.Space,
+						"expected", xmpPdfaTypePrefix)
+					*results = append(*results, xmpExtValueTypeRule(part, t.Name.Local)...)
+				case "field":
+					slog.Debug("compliance_2/xmp: valueType field element has wrong namespace prefix",
+						"space", t.Name.Space, "expected", xmpPdfaTypePrefix)
+					// Still need to set up pending level for child parsing.
+					pendingLevel = xmpExtLevelField
+					hasPending = true
+				}
 			case t.Name.Space == xmpPdfaFieldPrefix && currentLevel() == xmpExtLevelField:
 				slog.Debug("compliance_2/xmp: pdfaField element", "local", t.Name.Local)
 				switch t.Name.Local {
@@ -771,6 +934,15 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 					currentField.hasValueType = true
 				case "description":
 					currentField.hasDescription = true
+				}
+			case t.Name.Space != xmpPdfaFieldPrefix && currentLevel() == xmpExtLevelField:
+				// Wrong namespace prefix for a field-level field.
+				switch t.Name.Local {
+				case "name", "valueType", "description":
+					slog.Debug("compliance_2/xmp: pdfaField element has wrong namespace prefix",
+						"local", t.Name.Local, "space", t.Name.Space,
+						"expected", xmpPdfaFieldPrefix)
+					*results = append(*results, xmpExtFieldRule(part, t.Name.Local)...)
 				}
 			}
 
@@ -1198,7 +1370,9 @@ func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.
 
 // xmpParseForSync extracts key XMP property values for DocInfo comparison.
 // It handles both inline attribute values and rdf:Alt/rdf:Seq container
-// values (extracting the x-default or first entry).
+// values. For Alt containers, the x-default language entry is preferred;
+// if absent, the first entry is used. For Seq containers, the first entry
+// is used.
 func xmpParseForSync(data []byte) map[string]string {
 	result := make(map[string]string)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
@@ -1207,9 +1381,16 @@ func xmpParseForSync(data []byte) map[string]string {
 	slog.Debug("compliance_2/xmp: parsing XMP for DocInfo sync")
 
 	var propNS, propLocal string
-	var inContainer, inLI bool
+	var inAlt, inSeqOrBag, inLI bool
+	var liLang string // xml:lang attribute on current rdf:li
 	depth := 0
 	inDesc := false
+
+	// altDefaults tracks x-default values from rdf:Alt containers so they
+	// can override any earlier first-entry value.
+	altDefaults := make(map[string]string)
+	// altFirst tracks the first rdf:li value in Alt containers as fallback.
+	altFirst := make(map[string]string)
 
 	// nsToPrefix maps namespace URIs to the shorthand prefixes used in sync keys.
 	nsToPrefix := map[string]string{
@@ -1254,15 +1435,33 @@ func xmpParseForSync(data []byte) map[string]string {
 				if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
 					propNS = t.Name.Space
 					propLocal = t.Name.Local
+					slog.Debug("compliance_2/xmp: sync entering property",
+						"ns", propNS, "local", propLocal, "depth", depth)
 				}
 				if depth == 2 && t.Name.Space == xmpRDFNamespace { //nolint:mnd
 					switch t.Name.Local {
-					case "Alt", "Seq", "Bag":
-						inContainer = true
+					case "Alt":
+						inAlt = true
+						slog.Debug("compliance_2/xmp: sync entering rdf:Alt",
+							"prop", makeKey(propNS, propLocal))
+					case "Seq", "Bag":
+						inSeqOrBag = true
+						slog.Debug("compliance_2/xmp: sync entering rdf:Seq/Bag",
+							"prop", makeKey(propNS, propLocal), "type", t.Name.Local)
 					}
 				}
-				if inContainer && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
+				if (inAlt || inSeqOrBag) && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
 					inLI = true
+					// Extract xml:lang attribute for Alt container preference.
+					liLang = ""
+					for _, attr := range t.Attr {
+						if attr.Name.Local == "lang" &&
+							(attr.Name.Space == "http://www.w3.org/XML/1998/namespace" || attr.Name.Space == "xml") {
+							liLang = attr.Value
+							slog.Debug("compliance_2/xmp: sync rdf:li lang",
+								"lang", liLang, "prop", makeKey(propNS, propLocal))
+						}
+					}
 				}
 			}
 		case xml.CharData:
@@ -1275,9 +1474,25 @@ func xmpParseForSync(data []byte) map[string]string {
 			}
 			if inLI && propNS != "" {
 				key := makeKey(propNS, propLocal)
-				if _, exists := result[key]; !exists {
-					slog.Debug("compliance_2/xmp: sync li value", "key", key, "value", text)
-					result[key] = text
+				if inAlt {
+					// For Alt containers, track x-default and first entries separately.
+					if liLang == "x-default" {
+						slog.Debug("compliance_2/xmp: sync Alt x-default value",
+							"key", key, "value", text)
+						altDefaults[key] = text
+					}
+					if _, exists := altFirst[key]; !exists {
+						slog.Debug("compliance_2/xmp: sync Alt first value",
+							"key", key, "value", text, "lang", liLang)
+						altFirst[key] = text
+					}
+				} else {
+					// Seq/Bag: take the first entry.
+					if _, exists := result[key]; !exists {
+						slog.Debug("compliance_2/xmp: sync Seq/Bag li value",
+							"key", key, "value", text)
+						result[key] = text
+					}
 				}
 			} else if depth == 1 && propNS != "" {
 				key := makeKey(propNS, propLocal)
@@ -1290,16 +1505,21 @@ func xmpParseForSync(data []byte) map[string]string {
 				depth = 0
 				propNS = ""
 				propLocal = ""
-				inContainer = false
+				inAlt = false
+				inSeqOrBag = false
 				inLI = false
+				liLang = ""
 			} else if inDesc {
 				if t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
 					inLI = false
+					liLang = ""
 				}
 				if depth == 2 && t.Name.Space == xmpRDFNamespace { //nolint:mnd
 					switch t.Name.Local {
-					case "Alt", "Seq", "Bag":
-						inContainer = false
+					case "Alt":
+						inAlt = false
+					case "Seq", "Bag":
+						inSeqOrBag = false
 					}
 				}
 				if depth == 1 {
@@ -1308,6 +1528,19 @@ func xmpParseForSync(data []byte) map[string]string {
 				}
 				depth--
 			}
+		}
+	}
+
+	// Merge Alt container values: prefer x-default, fall back to first entry.
+	for key, val := range altDefaults {
+		slog.Debug("compliance_2/xmp: sync using Alt x-default", "key", key, "value", val)
+		result[key] = val
+	}
+	for key, val := range altFirst {
+		if _, exists := result[key]; !exists {
+			slog.Debug("compliance_2/xmp: sync using Alt first entry (no x-default)",
+				"key", key, "value", val)
+			result[key] = val
 		}
 	}
 
@@ -1341,7 +1574,7 @@ func xmpNormalizePDFDate(pdfDate string) string {
 	min := get2("00")
 	sec := get2("00")
 
-	tz := "Z"
+	tz := "" // No timezone means "relationship to UT is unknown" per PDF spec.
 	s = strings.TrimSpace(s)
 	if len(s) > 0 {
 		switch s[0] {
@@ -1364,20 +1597,28 @@ func xmpNormalizePDFDate(pdfDate string) string {
 		}
 	}
 
+	slog.Debug("compliance_2/xmp: normalized PDF date",
+		"input", pdfDate, "tz", tz)
+
 	return year + "-" + month + "-" + day + "T" + hour + ":" + min + ":" + sec + tz
 }
 
 // xmpNormalizeISO8601 canonicalizes an ISO 8601 date string for comparison.
+// It normalizes +00:00 and -00:00 to Z (all represent UTC), pads HH:MM to
+// HH:MM:SS, but preserves the absence of timezone when none is specified.
 func xmpNormalizeISO8601(s string) string {
 	if !strings.Contains(s, "T") {
 		return s
 	}
 
-	s = strings.TrimSuffix(s, "+00:00")
-	s = strings.TrimSuffix(s, "-00:00")
-	if !strings.HasSuffix(s, "Z") && !strings.ContainsAny(s[strings.LastIndex(s, "T"):], "+-") {
-		s += "Z"
+	// Normalize explicit UTC offsets (+00:00 / -00:00) to Z.
+	if before, ok := strings.CutSuffix(s, "+00:00"); ok {
+		s = before + "Z"
+	} else if before, ok := strings.CutSuffix(s, "-00:00"); ok {
+		s = before + "Z"
 	}
+	// Do NOT append Z when no timezone is present — an absent timezone
+	// means "unknown" and must not compare equal to explicit UTC.
 
 	tIdx := strings.LastIndex(s, "T")
 	timePart := s[tIdx+1:]
@@ -1549,6 +1790,17 @@ func xmpExtractContainerInfo(data []byte) map[string]map[string]xmpContainerType
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
+				// Scan attributes for attribute-form property values.
+				for _, attr := range t.Attr {
+					if attr.Name.Space != "" &&
+						attr.Name.Space != xmpRDFNamespace &&
+						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" &&
+						attr.Name.Space != "http://www.w3.org/2000/xmlns/" {
+						slog.Debug("compliance_2/xmp: attribute-form property on Description",
+							"ns", attr.Name.Space, "local", attr.Name.Local)
+						recordType(attr.Name.Space, attr.Name.Local, xmpContSimple)
+					}
+				}
 				inDescription = true
 				depth = 0
 				continue

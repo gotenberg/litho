@@ -398,6 +398,32 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 		}
 	}
 
+	// Walk widget /AA action chains for forbidden types. In part 4, widget
+	// /AA is structurally allowed but individual actions must still be
+	// validated against the forbidden action type list.
+	if hasAA {
+		aaDict, err := document.ResolveDict(ctx, doc, annotDict["AA"])
+		if err == nil && aaDict != nil {
+			// Part 4: check AA key restrictions (§6.6.3).
+			if part == 4 { //nolint:mnd // PDF/A-4.
+				results = append(results, checkAAKeyRestrictions(ctx, doc, aaDict, location)...)
+			}
+
+			for key, actionObj := range aaDict {
+				if ctx.Err() != nil {
+					return results
+				}
+				actionDict, err := document.ResolveDict(ctx, doc, actionObj)
+				if err != nil || actionDict == nil {
+					continue
+				}
+				slog.Debug("compliance_2/actions: checking widget /AA action",
+					"location", location, "key", key)
+				results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0)...)
+			}
+		}
+	}
+
 	return results
 }
 
