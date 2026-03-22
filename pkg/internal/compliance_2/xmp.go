@@ -1410,32 +1410,115 @@ const (
 )
 
 // xmpCheckContainerTypes validates that XMP properties use the correct
-// container types per their schema definitions.
+// value/container types per their schema definitions. It also flags
+// unknown property names in known (predefined) schemas.
 func xmpCheckContainerTypes(data []byte, part int, _ ast.PdfStream, results *[]Result) {
-	slog.Debug("compliance_2/xmp: checking XMP container types")
+	slog.Debug("compliance_2/xmp: checking XMP property types")
 
 	observed := xmpExtractContainerInfo(data)
+	_, extensionNS := xmpExtractNamespaces(data)
 
-	slog.Debug("compliance_2/xmp: extracted container info", "namespaces", len(observed))
+	slog.Debug("compliance_2/xmp: extracted property info",
+		"namespaces", len(observed), "extensionNS", len(extensionNS))
 
 	for ns, props := range observed {
-		expected, hasSchema := xmpContainerRegistry[ns]
-		if !hasSchema {
+		// Skip structural namespaces.
+		if ns == xmpRDFNamespace || ns == "adobe:ns:meta/" || ns == "http://www.w3.org/XML/1998/namespace" {
 			continue
 		}
-		for prop, obsType := range props {
-			expType, known := expected[prop]
+		// Skip extension-declared namespaces — their types are defined by the extension.
+		if extensionNS[ns] {
+			slog.Debug("compliance_2/xmp: skipping extension-declared namespace", "ns", ns)
+			continue
+		}
+		// Skip PDF/A extension schema machinery namespaces.
+		if ns == xmpPdfaSchemaPrefix || ns == xmpPdfaPropertyPrefix ||
+			ns == xmpPdfaTypePrefix || ns == xmpPdfaFieldPrefix ||
+			ns == "http://www.aiim.org/pdfa/ns/extension/" {
+			continue
+		}
+
+		registry, hasSchema := xmpPropertyRegistry[ns]
+		if !hasSchema {
+			// Namespace not in registry — already handled by xmpCheckNamespaces.
+			continue
+		}
+
+		for prop, obsContType := range props {
+			expectedType, known := registry[prop]
 			if !known {
+				// Property name not defined in predefined schema → violation.
+				slog.Debug("compliance_2/xmp: unknown property in predefined schema",
+					"ns", ns, "prop", prop)
+				*results = append(*results, xmpPropertyTypeRule(part, ns, prop, "unknown property name")...)
 				continue
 			}
-			if obsType != expType {
-				slog.Debug("compliance_2/xmp: container type mismatch",
-					"ns", ns, "prop", prop,
-					"observed", obsType, "expected", expType)
-				*results = append(*results, xmpContainerRule(part, ns, prop, obsType, expType)...)
+
+			// xmpPropAny matches anything.
+			if expectedType == xmpPropAny {
+				continue
+			}
+
+			// Check container type mismatch.
+			if isContainerPropType(expectedType) {
+				// Expected a container (Alt/Seq/Bag).
+				expectedCont := propTypeToContainerType(expectedType)
+				if obsContType != expectedCont {
+					slog.Debug("compliance_2/xmp: container type mismatch",
+						"ns", ns, "prop", prop,
+						"observed", xmpContainerTypeName(obsContType),
+						"expected", xmpContainerTypeName(expectedCont))
+					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+						fmt.Sprintf("observed=%s expected=%s",
+							xmpContainerTypeName(obsContType),
+							xmpContainerTypeName(expectedCont)))...)
+				}
+			} else if isSimplePropType(expectedType) || expectedType == xmpPropStruct {
+				// Expected simple value or struct — should NOT be in a container.
+				if obsContType != xmpContSimple {
+					slog.Debug("compliance_2/xmp: simple/struct property wrapped in container",
+						"ns", ns, "prop", prop,
+						"observed", xmpContainerTypeName(obsContType),
+						"expected", "Simple")
+					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+						fmt.Sprintf("observed=%s expected=Simple",
+							xmpContainerTypeName(obsContType)))...)
+				}
 			}
 		}
 	}
+}
+
+// propTypeToContainerType converts a container xmpPropType to xmpContainerType.
+func propTypeToContainerType(t xmpPropType) xmpContainerType {
+	switch t {
+	case xmpPropAlt:
+		return xmpContAlt
+	case xmpPropSeq:
+		return xmpContSeq
+	case xmpPropBag:
+		return xmpContBag
+	case xmpPropText, xmpPropURI, xmpPropInteger, xmpPropReal, xmpPropBoolean, xmpPropDate, xmpPropStruct, xmpPropAny:
+		return xmpContSimple
+	}
+	return xmpContSimple
+}
+
+// xmpPropertyTypeRule returns the appropriate violation for a property type
+// mismatch in the given part.
+func xmpPropertyTypeRule(part int, ns, prop, detail string) []Result {
+	ctx := fmt.Sprintf("%s:%s %s", ns, prop, detail)
+	switch part {
+	case 1:
+		return fail(Rule_19005_1_6_7_9_t03, ctx)
+	case 2: //nolint:mnd
+		return fail(Rule_19005_2_6_6_2_3_1_t02, ctx)
+	case 3: //nolint:mnd
+		return fail(Rule_19005_3_6_6_2_3_1_t02, ctx)
+	case 4: //nolint:mnd
+		return fail(Rule_19005_4_6_6_1_t01, ctx)
+	}
+	return nil
 }
 
 // xmpExtractContainerInfo parses XMP XML and returns the observed container
@@ -1506,44 +1589,6 @@ func xmpExtractContainerInfo(data []byte) map[string]map[string]xmpContainerType
 	}
 
 	return result
-}
-
-// xmpContainerRegistry maps namespace URIs to property names and their
-// expected container types for strict schemas.
-//
-//nolint:gochecknoglobals // static lookup table
-var xmpContainerRegistry = map[string]map[string]xmpContainerType{
-	"http://purl.org/dc/elements/1.1/": {
-		"contributor": xmpContBag, "creator": xmpContSeq,
-		"date": xmpContSeq, "description": xmpContAlt,
-		"language": xmpContBag, "publisher": xmpContBag,
-		"relation": xmpContBag, "rights": xmpContAlt,
-		"subject": xmpContBag, "title": xmpContAlt,
-		"type": xmpContBag,
-	},
-	"http://ns.adobe.com/xap/1.0/": {
-		"Advisory": xmpContBag, "Identifier": xmpContBag,
-	},
-	"http://ns.adobe.com/xap/1.0/mm/": {
-		"History": xmpContSeq, "Versions": xmpContSeq,
-	},
-}
-
-func xmpContainerRule(part int, ns, prop string, observed, expected xmpContainerType) []Result {
-	ctx := fmt.Sprintf("%s:%s observed=%s expected=%s",
-		ns, prop, xmpContainerTypeName(observed), xmpContainerTypeName(expected))
-
-	switch part {
-	case 1:
-		return fail(Rule_19005_1_6_7_9_t03, ctx)
-	case 2: //nolint:mnd
-		return fail(Rule_19005_2_6_6_2_3_1_t02, ctx)
-	case 3: //nolint:mnd
-		return fail(Rule_19005_3_6_6_2_3_1_t02, ctx)
-	case 4: //nolint:mnd
-		return nil // Part 4 has no separate container type rule.
-	}
-	return nil
 }
 
 func xmpContainerTypeName(t xmpContainerType) string {
