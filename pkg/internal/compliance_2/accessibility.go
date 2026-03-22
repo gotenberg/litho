@@ -160,78 +160,191 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
-// isValidLangTag validates a language tag against BCP 47 / RFC 3066 basic format.
+// isValidLangTag validates a language tag against RFC 5646 (BCP 47) well-formedness.
+// It does NOT check against the IANA subtag registry — only structural validity.
 // An empty or whitespace-only tag is treated as "not present" rather than invalid —
 // callers should skip validation instead of reporting an invalid-tag violation.
 //
-// Primary subtag: 2-8 alpha characters, OR single-character "i" (IANA) / "x" (private use).
-// Subsequent subtags: 1-8 alphanumeric characters, separated by "-".
+// Grammar (simplified from RFC 5646 §2.1):
+//
+//	Language-Tag = langtag / privateuse / grandfathered
+//	langtag      = language ["-" script] ["-" region] *("-" variant) *("-" extension) ["-" privateuse]
+//	language     = 2*3ALPHA ["-" extlang] / 4ALPHA / 5*8ALPHA
+//	extlang      = 3ALPHA *2("-" 3ALPHA)
+//	script       = 4ALPHA
+//	region       = 2ALPHA / 3DIGIT
+//	variant      = 5*8alphanum / (DIGIT 3alphanum)
+//	extension    = singleton 1*("-" 2*8alphanum)
+//	privateuse   = "x" 1*("-" 1*8alphanum)
+//	singleton    = DIGIT / %x41-57 / %x59-5A / %x61-77 / %x79-7A  (any alphanum except 'x'/'X')
 func isValidLangTag(tag string) bool {
 	trimmed := strings.TrimSpace(tag)
 	if trimmed == "" {
-		// Empty or whitespace-only is "absent", not "invalid".
-		slog.Debug("compliance_2/accessibility: lang tag is empty/whitespace, treating as absent", "raw", tag)
 		return true
 	}
 
 	parts := strings.Split(trimmed, "-")
-	primary := parts[0]
+	n := len(parts)
 
-	if len(primary) < 1 {
-		slog.Debug("compliance_2/accessibility: lang tag has empty primary subtag", "tag", tag)
-		return false
+	// Private-use tag: x-...
+	if len(parts[0]) == 1 && (parts[0][0] == 'x' || parts[0][0] == 'X') {
+		return validPrivateUse(parts)
 	}
 
-	// Primary subtag must be all alpha.
-	for _, c := range primary {
-		if !isAlpha(c) {
-			slog.Debug("compliance_2/accessibility: lang tag primary subtag contains non-alpha character",
-				"tag", tag, "char", string(c))
+	// Grandfathered/IANA: i-...
+	if len(parts[0]) == 1 && (parts[0][0] == 'i' || parts[0][0] == 'I') {
+		// "i" followed by at least one subtag of 1-8 alphanum.
+		if n < 2 { //nolint:mnd // grandfathered tags require at least one subtag after "i"
 			return false
 		}
-	}
-
-	// Single-character primary subtags: only "i" (grandfathered/IANA) and "x" (private use) are valid.
-	if len(primary) == 1 {
-		lower := strings.ToLower(primary)
-		if lower != "i" && lower != "x" {
-			slog.Debug("compliance_2/accessibility: lang tag single-char primary subtag is not i/x",
-				"tag", tag, "primary", primary)
-			return false
-		}
-	} else if len(primary) > 8 {
-		// BCP 47: primary language subtag is 2-8 alpha characters.
-		slog.Debug("compliance_2/accessibility: lang tag primary subtag exceeds 8 characters",
-			"tag", tag, "primary", primary, "len", len(primary))
-		return false
-	}
-
-	// Subsequent subtags: 1-8 alphanumeric characters each.
-	for _, sub := range parts[1:] {
-		if len(sub) < 1 || len(sub) > 8 {
-			slog.Debug("compliance_2/accessibility: lang subtag has invalid length",
-				"tag", tag, "subtag", sub, "len", len(sub))
-			return false
-		}
-		for _, c := range sub {
-			if !isAlphaNum(c) {
-				slog.Debug("compliance_2/accessibility: lang subtag contains invalid character",
-					"tag", tag, "subtag", sub, "char", string(c))
+		for _, sub := range parts[1:] {
+			if !isAlphaNumSubtag(sub, 1, 8) { //nolint:mnd // BCP 47 subtag length bounds
 				return false
+			}
+		}
+		return true
+	}
+
+	// Primary language subtag: 2-3 ALPHA (with optional extlang), 4 ALPHA, or 5-8 ALPHA.
+	primary := parts[0]
+	if !isAlphaStr(primary) {
+		return false
+	}
+	pLen := len(primary)
+	if pLen < 2 || pLen > 8 { //nolint:mnd // BCP 47: primary language is 2-8 alpha
+		return false
+	}
+
+	i := 1 // current index into parts
+
+	// Optional extlang: up to 3 sequences of exactly 3 ALPHA, only after 2-3 char primary.
+	if pLen <= 3 { //nolint:mnd // extlang only valid after 2-3 char primary
+		for extCount := 0; extCount < 3 && i < n; extCount++ { //nolint:mnd // up to 3 extlang subtags
+			if len(parts[i]) == 3 && isAlphaStr(parts[i]) { //nolint:mnd // extlang is exactly 3 ALPHA
+				i++
+			} else {
+				break
 			}
 		}
 	}
 
-	slog.Debug("compliance_2/accessibility: lang tag is valid", "tag", tag)
+	// Optional script: exactly 4 ALPHA.
+	if i < n && len(parts[i]) == 4 && isAlphaStr(parts[i]) { //nolint:mnd // script is exactly 4 ALPHA
+		i++
+	}
+
+	// Optional region: 2 ALPHA or 3 DIGIT.
+	if i < n {
+		sub := parts[i]
+		if (len(sub) == 2 && isAlphaStr(sub)) || (len(sub) == 3 && isDigitStr(sub)) { //nolint:mnd // region: 2 ALPHA or 3 DIGIT
+			i++
+		}
+	}
+
+	// Variants: 5-8 alphanum, or DIGIT followed by 3 alphanum.
+	for i < n {
+		sub := parts[i]
+		sLen := len(sub)
+		if sLen >= 5 && sLen <= 8 && isAlphaNumStr(sub) { //nolint:mnd // variant: 5-8 alphanum
+			i++
+		} else if sLen == 4 && isDigit(sub[0]) && isAlphaNumStr(sub[1:]) { //nolint:mnd // variant: DIGIT 3alphanum
+			i++
+		} else {
+			break
+		}
+	}
+
+	// Extensions: singleton 1*("-" 2*8alphanum), where singleton != 'x'/'X'.
+	for i < n {
+		sub := parts[i]
+		if len(sub) != 1 || !isAlphaNumByte(sub[0]) {
+			break
+		}
+		if sub[0] == 'x' || sub[0] == 'X' {
+			break // private-use handled below
+		}
+		i++ // consume singleton
+		if i >= n {
+			return false // singleton must have at least one subtag
+		}
+		consumed := false
+		for i < n && isAlphaNumSubtag(parts[i], 2, 8) { //nolint:mnd // extension subtag: 2-8 alphanum
+			i++
+			consumed = true
+		}
+		if !consumed {
+			return false
+		}
+	}
+
+	// Optional trailing private-use: x-...
+	if i < n {
+		if len(parts[i]) == 1 && (parts[i][0] == 'x' || parts[i][0] == 'X') {
+			return validPrivateUse(parts[i:])
+		}
+		return false // unexpected trailing subtag
+	}
+
 	return true
 }
 
-func isAlpha(c rune) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+// validPrivateUse checks that parts is ["x", sub1, sub2, ...] with each sub being 1-8 alphanum.
+func validPrivateUse(parts []string) bool {
+	if len(parts) < 2 { //nolint:mnd // "x" must be followed by at least one subtag
+		return false
+	}
+	for _, sub := range parts[1:] {
+		if !isAlphaNumSubtag(sub, 1, 8) { //nolint:mnd // private-use subtag: 1-8 alphanum
+			return false
+		}
+	}
+	return true
 }
 
-func isAlphaNum(c rune) bool {
-	return isAlpha(c) || (c >= '0' && c <= '9')
+func isAlphaStr(s string) bool {
+	for i := range len(s) {
+		b := s[i]
+		if (b < 'a' || b > 'z') && (b < 'A' || b > 'Z') {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func isDigitStr(s string) bool {
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func isAlphaNumStr(s string) bool {
+	for i := range len(s) {
+		b := s[i]
+		if (b < 'a' || b > 'z') && (b < 'A' || b > 'Z') && (b < '0' || b > '9') {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
+func isAlphaNumByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
+// isAlphaNumSubtag checks that s is min..max alphanum characters.
+func isAlphaNumSubtag(s string, min, max int) bool {
+	l := len(s)
+	if l < min || l > max {
+		return false
+	}
+	return isAlphaNumStr(s)
 }
 
 // --- 2. DisplayDocTitle ---
