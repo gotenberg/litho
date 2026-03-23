@@ -407,14 +407,12 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	// Walk widget /AA action chains for forbidden types. In part 4, widget
 	// /AA is structurally allowed but individual actions must still be
 	// validated against the forbidden action type list.
+	// Note: Widget annotations have additional allowed AA keys (K, V, F, C)
+	// beyond the standard E, X, D, U, Fo, Bl — do NOT apply the non-widget
+	// AA key restriction check here.
 	if hasAA {
 		aaDict, err := document.ResolveDict(ctx, doc, annotDict["AA"])
 		if err == nil && aaDict != nil {
-			// Part 4: check AA key restrictions (§6.6.3).
-			if part == 4 { //nolint:mnd // PDF/A-4.
-				results = append(results, checkAAKeyRestrictions(ctx, doc, aaDict, location)...)
-			}
-
 			for key, actionObj := range aaDict {
 				if ctx.Err() != nil {
 					return results

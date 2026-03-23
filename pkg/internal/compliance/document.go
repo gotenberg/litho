@@ -79,31 +79,13 @@ func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
-// checkVersionPart1 validates that PDF/A-1 documents have PDF version 1.4 or lower.
-// Checks catalog /Version first, then falls back to the file header.
-func checkVersionPart1(doc *document.Document, catalog ast.PdfDict) []Result {
-	version := catalogVersion(catalog)
-	if version == "" {
-		version = doc.Version
-	}
-
-	slog.Debug("compliance_2/document: checking PDF/A-1 version", "version", version)
-
-	if version == "" {
-		return nil
-	}
-
-	// Parse major.minor from version string (e.g., "1.4").
-	if len(version) >= 3 && version[0] == '1' && version[1] == '.' {
-		minor := version[2]
-		if minor >= '0' && minor <= '4' {
-			slog.Debug("compliance_2/document: PDF/A-1 version OK", "version", version)
-			return nil
-		}
-	}
-
-	slog.Debug("compliance_2/document: PDF/A-1 version too high", "version", version)
-	return failf(Rule_19005_1_6_1_2_t01, "PDF version %s exceeds 1.4 for PDF/A-1", version)
+// checkVersionPart1 validates that the PDF header format is correct for PDF/A-1.
+// Per §6.1.2, the rule checks that the header is `%PDF-x.y` format, NOT the
+// version number value. VeraPDF does not enforce a maximum version here.
+func checkVersionPart1(_ *document.Document, _ ast.PdfDict) []Result {
+	// The header format is validated at parse time by the lexer.
+	// §6.1.2 does not restrict the version number for PDF/A-1.
+	return nil
 }
 
 // checkVersionPart4 validates that PDF/A-4 documents have PDF version 2.0.
