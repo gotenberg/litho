@@ -894,6 +894,13 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 
 	for i, wObj := range widths {
 		charCode := int(firstChar) + i
+		// Skip non-outline glyphs: .notdef (GID 0) and control/whitespace
+		// characters (charCode ≤ 0x20). PDF producers legitimately override
+		// widths for these glyphs, and the spec only requires consistency
+		// for glyphs with visible outlines.
+		if charCode <= 0x20 {
+			continue
+		}
 		gid := uint16(charCode) //nolint:gosec
 		pdfWidth := document.GetFloat(wObj)
 		if pdfWidth == 0 {
@@ -961,6 +968,10 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			// [cidStart [w1 w2 w3 ...]]
 			for j, wEntry := range next {
 				cid := cidStart + j
+				// Skip .notdef (CID 0) — no visible outlines.
+				if cid == 0 {
+					continue
+				}
 				gid := uint16(cid) //nolint:gosec
 				pdfWidth := document.GetFloat(wEntry)
 				if pdfWidth == 0 {
@@ -993,6 +1004,10 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				continue
 			}
 			for cid := cidStart; cid <= cidEnd; cid++ {
+				// Skip .notdef (CID 0) — no visible outlines.
+				if cid == 0 {
+					continue
+				}
 				gid := uint16(cid) //nolint:gosec
 				bw, ok := binaryWidths[gid]
 				if !ok {
