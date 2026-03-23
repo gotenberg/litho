@@ -862,18 +862,22 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 	slog.Debug("compliance_2: fonts: extracted font metrics",
 		"font", fontName, "binaryWidths", len(binaryWidths), "unitsPerEm", unitsPerEm)
 
+	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
+	charCodeToGID := typography.ExtractCharCodeToGID(fontData)
+
 	subtype := fontSubtype(ctx, doc, fontDict)
 
 	// Simple fonts (Type1, TrueType, MMType1): compare /Widths array using FirstChar offset.
 	if subtype == "Type1" || subtype == "TrueType" || subtype == "MMType1" {
-		return checkSimpleFontWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule)
+		return checkSimpleFontWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID)
 	}
 
 	return nil
 }
 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
-func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule) []Result {
+// charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
+func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16) []Result {
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
 		slog.Debug("compliance_2: fonts: font missing /Widths array", "font", fontName, "page", pageNum)
@@ -901,7 +905,15 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if charCode <= 0x20 {
 			continue
 		}
+		// Map charCode to GID using the font's cmap table. If no cmap
+		// is available (e.g., Type1 fonts) or the charCode is not in the
+		// cmap, fall back to identity mapping (GID = charCode).
 		gid := uint16(charCode) //nolint:gosec
+		if charCodeToGID != nil {
+			if mappedGID, ok := charCodeToGID[uint16(charCode)]; ok { //nolint:gosec
+				gid = mappedGID
+			}
+		}
 		pdfWidth := document.GetFloat(wObj)
 		if pdfWidth == 0 {
 			continue

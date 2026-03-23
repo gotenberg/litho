@@ -103,6 +103,28 @@ func GlyphWidths(data []byte) (map[uint16]uint16, error) {
 	return result, nil
 }
 
+// CharCodeToGID extracts a character code → glyph ID mapping from the cmap
+// table. This is the inverse of GlyphToUnicode: it maps Unicode code points
+// (used as character codes in PDF TrueType fonts) to glyph IDs.
+func CharCodeToGID(data []byte) (map[uint16]uint16, error) {
+	gidToRune, err := GlyphToUnicode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[uint16]uint16, len(gidToRune))
+	for gid, r := range gidToRune {
+		if r >= 0 && r <= 0xFFFF {
+			charCode := uint16(r) //nolint:gosec // BMP code point fits in uint16
+			// Only store first mapping per charCode.
+			if _, exists := result[charCode]; !exists {
+				result[charCode] = gid
+			}
+		}
+	}
+	return result, nil
+}
+
 // GlyphToUnicode extracts a glyph ID → Unicode rune mapping from embedded
 // TrueType/OpenType font data. It parses the cmap table looking for a
 // Unicode-compatible subtable (platform 3/encoding 1 Format 4, or

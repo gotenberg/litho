@@ -709,6 +709,24 @@ func ExtractBinaryWidths(fontData []byte) map[uint16]uint16 {
 	return w
 }
 
+// ExtractCharCodeToGID returns a charCode → GID mapping for TrueType fonts.
+// Returns nil for non-TrueType fonts (CFF/Type1).
+func ExtractCharCodeToGID(fontData []byte) map[uint16]uint16 {
+	if len(fontData) < 4 {
+		return nil
+	}
+	sig := fontData[:4]
+
+	// TrueType or OTTO with cmap table.
+	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
+		string(sig) == "true" || string(sig) == "OTTO" {
+		m, _ := truetype.CharCodeToGID(fontData)
+		return m
+	}
+
+	return nil
+}
+
 // readOS2AvgWidth extracts xAvgCharWidth from the OS/2 table. Returns 0 if
 // the table is absent or invalid. The value is in font design units.
 func readOS2AvgWidth(data []byte) uint16 {
