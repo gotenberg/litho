@@ -273,10 +273,11 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 			slog.Debug("compliance_2/color: cannot resolve ColorSpace dict", "page", i, "error", err)
 		}
 
-		deviceCSUsed := scanForDeviceColorSpaces(ctx, doc, csDict, resources)
+		// Scan content stream operators for device CS usage and collect
+		// XObject names referenced by Do operators.
+		contentCSUsed, referencedXObjects := scanContentStreamDeviceCS(ctx, doc, page, i)
 
-		// Also scan content stream operators for device CS usage.
-		contentCSUsed := scanContentStreamDeviceCS(ctx, doc, page, i)
+		deviceCSUsed := scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects)
 		deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
 		deviceCSUsed.cmyk = deviceCSUsed.cmyk || contentCSUsed.cmyk
 		deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.gray
@@ -360,7 +361,7 @@ type deviceCSUsage struct {
 
 // scanForDeviceColorSpaces looks through page resources for uses of DeviceRGB,
 // DeviceCMYK, and DeviceGray colour spaces.
-func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict) deviceCSUsage {
+func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool) deviceCSUsage {
 	var usage deviceCSUsage
 
 	// Check named colour spaces in the ColorSpace dictionary.
@@ -374,8 +375,10 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 	}
 
 	// Check inline colour spaces in XObject, Font, Shading, and Pattern resources.
+	// Only scan XObjects that are actually referenced by Do operators in the
+	// content stream; unreferenced XObjects are not "used" per the spec.
 	visited := make(map[string]bool) //nolint:mnd // cycle detection for Form XObject recursion.
-	scanXObjectColorSpaces(ctx, doc, resources, &usage, 0, visited)
+	scanXObjectColorSpaces(ctx, doc, resources, &usage, 0, visited, referencedXObjects)
 	scanFontColorSpaces(ctx, doc, resources, &usage)
 	scanShadingColorSpaces(ctx, doc, resources, &usage)
 	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited)
@@ -419,7 +422,7 @@ const maxFormXObjectDepth = 10
 
 // scanXObjectColorSpaces checks XObject resources for device colour space usage.
 // For Form XObjects, it recurses into their content streams and nested resources.
-func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool) {
+func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, referencedNames map[string]bool) {
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
 	if err != nil || xobjDict == nil {
 		return
@@ -428,6 +431,12 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 	for name, xobjObj := range xobjDict {
 		if ctx.Err() != nil {
 			return
+		}
+
+		// Only scan XObjects that are actually invoked (by Do operators).
+		// Unreferenced XObjects in /Resources are not "used" per the spec.
+		if referencedNames != nil && !referencedNames[string(name)] {
+			continue
 		}
 
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
@@ -488,6 +497,9 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		return usage
 	}
 
+	// Track Do operator targets so we only scan referenced nested XObjects.
+	nestedXObjects := make(map[string]bool)
+
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(data)
 		if err != nil {
@@ -511,10 +523,12 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 							markDeviceCS(string(name), &usage)
 						}
 					}
-				}
-
-				if usage.rgb && usage.cmyk && usage.gray {
-					break
+				case "Do":
+					if len(op.Operands) >= 1 {
+						if name, ok := op.Operands[0].(ast.PdfName); ok {
+							nestedXObjects[string(name)] = true
+						}
+					}
 				}
 			}
 		}
@@ -539,8 +553,8 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		}
 	}
 
-	// Recurse into nested XObjects.
-	scanXObjectColorSpaces(ctx, doc, formRes, &usage, depth+1, visited)
+	// Recurse into nested XObjects (only those referenced by Do operators).
+	scanXObjectColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, nestedXObjects)
 
 	// Check nested Shading and Pattern resources.
 	scanShadingColorSpaces(ctx, doc, formRes, &usage)
@@ -598,25 +612,26 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 //   - rg/RG → DeviceRGB
 //   - k/K → DeviceCMYK
 //   - cs/CS with operand "DeviceRGB", "DeviceCMYK", or "DeviceGray"
-func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) deviceCSUsage {
+func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool) {
 	var usage deviceCSUsage
+	referencedXObjects := make(map[string]bool)
 
 	streamData, err := getPageContentBytes(ctx, doc, page)
 	if err != nil {
 		slog.Debug("compliance_2/color: failed to get content stream bytes for CS scan",
 			"page", pageIdx, "error", err)
-		return usage
+		return usage, referencedXObjects
 	}
 
 	if len(streamData) == 0 {
-		return usage
+		return usage, referencedXObjects
 	}
 
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
 		slog.Debug("compliance_2/color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)
-		return usage
+		return usage, referencedXObjects
 	}
 
 	slog.Debug("compliance_2/color: scanning content stream operators for device CS",
@@ -627,7 +642,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 		if idx%100 == 0 && ctx.Err() != nil { //nolint:mnd // per-spec checkpoint interval
 			slog.Debug("compliance_2/color: context cancelled during content CS scan",
 				"page", pageIdx, "operator_index", idx)
-			return usage
+			return usage, referencedXObjects
 		}
 
 		switch op.Operator {
@@ -652,17 +667,17 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 					markDeviceCS(string(name), &usage)
 				}
 			}
-		}
-
-		// Short-circuit if all three are already found.
-		if usage.rgb && usage.cmyk && usage.gray {
-			slog.Debug("compliance_2/color: all device CS found, stopping early",
-				"page", pageIdx)
-			return usage
+		case "Do":
+			// Track XObject names referenced by Do operators.
+			if len(op.Operands) >= 1 {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					referencedXObjects[string(name)] = true
+				}
+			}
 		}
 	}
 
-	return usage
+	return usage, referencedXObjects
 }
 
 // scanShadingColorSpaces checks Shading resources for device colour space usage.
