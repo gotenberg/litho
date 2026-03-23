@@ -84,41 +84,150 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 	slog.Debug("compliance_2/accessibility: checking /Lang requirement")
 
 	langRule := langRequiredRule(profile)
-	langValidRule := langValidRule(profile)
+	validRule := langValidRule(profile)
 
-	langObj, ok := catalog["Lang"]
-	if !ok {
-		slog.Debug("compliance_2/accessibility: catalog missing /Lang key")
-		return fail(langRule, "catalog")
+	catalogLang := resolveNonEmptyLang(ctx, doc, catalog)
+
+	if catalogLang == "" {
+		// PDF/UA-2 §8.4.4 requires catalog /Lang explicitly.
+		if profile == "PDF/UA-2" {
+			slog.Debug("compliance_2/accessibility: catalog missing /Lang key (required for PDF/UA-2)")
+			return fail(langRule, "catalog")
+		}
+
+		// PDF/UA-1 §7.2 t34: natural language must be determinable. If catalog
+		// /Lang is absent, the language can still be determined through the
+		// structure tree — the tree root or individual elements may carry /Lang.
+		slog.Debug("compliance_2/accessibility: catalog missing /Lang, checking structure tree inheritance")
+		return checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
 	}
 
-	langStr, err := document.ResolveString(ctx, doc, langObj)
-	if err != nil {
-		slog.Debug("compliance_2/accessibility: /Lang is unresolvable", "error", err)
-		return fail(langRule, "catalog")
-	}
+	slog.Debug("compliance_2/accessibility: catalog /Lang value", "lang", catalogLang)
 
-	trimmed := strings.TrimSpace(string(langStr))
-	if trimmed == "" {
-		// Empty or whitespace-only /Lang is treated as "not determined" — this is a
-		// missing-lang violation (t34), not an invalid-format violation (t29).
-		slog.Debug("compliance_2/accessibility: /Lang is empty/whitespace, treating as absent")
-		return fail(langRule, "catalog")
-	}
-
-	slog.Debug("compliance_2/accessibility: catalog /Lang value", "lang", trimmed)
-
-	if !isValidLangTag(trimmed) {
-		slog.Debug("compliance_2/accessibility: catalog /Lang is invalid BCP 47", "lang", trimmed)
-		return failf(langValidRule, "lang=%s", trimmed)
+	if !isValidLangTag(catalogLang) {
+		slog.Debug("compliance_2/accessibility: catalog /Lang is invalid BCP 47", "lang", catalogLang)
+		return failf(validRule, "lang=%s", catalogLang)
 	}
 
 	slog.Debug("compliance_2/accessibility: catalog /Lang is valid, checking structure elements")
 
-	// Also validate /Lang values in structure elements.
-	results := validateStructureLangs(ctx, doc, catalog, langValidRule)
+	// Catalog provides global /Lang — validate /Lang format in structure elements.
+	return validateStructureLangs(ctx, doc, catalog, validRule)
+}
+
+// resolveNonEmptyLang resolves a /Lang entry from a dict and returns the trimmed
+// string, or "" if absent, unresolvable, or empty/whitespace.
+func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
+	langObj, ok := dict["Lang"]
+	if !ok {
+		return ""
+	}
+	langStr, err := document.ResolveString(ctx, doc, langObj)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(langStr))
+}
+
+// checkStructureTreeLangCoverage verifies that all structure elements can
+// determine their natural language through /Lang inheritance in the structure
+// tree, even when catalog /Lang is absent. An element inherits /Lang from its
+// nearest ancestor that carries a non-empty /Lang value.
+func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Result {
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		// No structure tree at all — can't determine language for anything.
+		slog.Debug("compliance_2/accessibility: no StructTreeRoot, language cannot be determined")
+		return fail(langRule, "catalog")
+	}
+
+	// Check if the structure tree root itself has /Lang.
+	rootLang := resolveNonEmptyLang(ctx, doc, treeRoot)
+	if rootLang != "" && !isValidLangTag(rootLang) {
+		return failf(validRule, "lang=%s, StructTreeRoot", rootLang)
+	}
+
+	var results []Result
+	walkStructureElementsWithLang(ctx, doc, treeRoot, rootLang, func(elem ast.PdfDict, path string, inheritedLang string) {
+		elemLang := resolveNonEmptyLang(ctx, doc, elem)
+		effectiveLang := inheritedLang
+		if elemLang != "" {
+			// Validate format of this element's own /Lang.
+			if !isValidLangTag(elemLang) {
+				results = append(results, Result{Rule: validRule, Context: fmt.Sprintf("lang=%s, %s", elemLang, path)})
+				return
+			}
+			effectiveLang = elemLang
+		}
+
+		if effectiveLang == "" {
+			// No /Lang from self or any ancestor — violation.
+			slog.Debug("compliance_2/accessibility: structure element has no determinable language",
+				"path", path)
+			results = append(results, Result{Rule: langRule, Context: path})
+		}
+	})
 
 	return results
+}
+
+// walkStructureElementsWithLang is like walkStructureElements but tracks the
+// inherited /Lang value through the tree. The callback receives the effective
+// inherited language (from ancestors, not including the element's own /Lang).
+func walkStructureElementsWithLang(ctx context.Context, doc *document.Document, root ast.PdfDict, rootLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+	kidsObj, ok := root["K"]
+	if !ok {
+		return
+	}
+	walkStructKidsWithLang(ctx, doc, kidsObj, "root", 0, rootLang, fn)
+}
+
+func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+	if ctx.Err() != nil || depth > maxStructTreeWalkDepth {
+		return
+	}
+
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil {
+		dict, err := document.ResolveDict(ctx, doc, obj)
+		if err != nil || dict == nil {
+			return
+		}
+		visitStructElemWithLang(ctx, doc, dict, path, depth, inheritedLang, fn)
+		return
+	}
+
+	for i, kid := range arr {
+		if ctx.Err() != nil {
+			return
+		}
+		kidDict, err := document.ResolveDict(ctx, doc, kid)
+		if err != nil || kidDict == nil {
+			continue
+		}
+		childPath := fmt.Sprintf("%s[%d]", path, i)
+		visitStructElemWithLang(ctx, doc, kidDict, childPath, depth, inheritedLang, fn)
+	}
+}
+
+func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+	if _, hasS := elem["S"]; !hasS {
+		return
+	}
+	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+	elemPath := fmt.Sprintf("%s/%s", path, string(typeName))
+
+	fn(elem, elemPath, inheritedLang)
+
+	// Compute the effective /Lang for children: own /Lang overrides inherited.
+	childLang := inheritedLang
+	if ownLang := resolveNonEmptyLang(ctx, doc, elem); ownLang != "" {
+		childLang = ownLang
+	}
+
+	if kidsObj, ok := elem["K"]; ok {
+		walkStructKidsWithLang(ctx, doc, kidsObj, elemPath, depth+1, childLang, fn)
+	}
 }
 
 // validateStructureLangs walks the structure tree and validates any /Lang entries.
