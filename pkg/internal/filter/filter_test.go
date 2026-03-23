@@ -188,7 +188,7 @@ func TestDecodeStream_FilterArrayWithParms(t *testing.T) {
 
 func TestDecodeStream_UnsupportedFilter(t *testing.T) {
 	stream := ast.NewStream(ast.PdfDict{
-		"Filter": ast.PdfName("RunLengthDecode"),
+		"Filter": ast.PdfName("NoSuchFilter"),
 	}, []byte{0})
 
 	_, err := DecodeStream(stream)
