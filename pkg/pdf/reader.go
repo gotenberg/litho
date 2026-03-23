@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/annotation"
-	compliance2 "github.com/gotenberg/litho/pkg/internal/compliance_2"
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
@@ -127,14 +127,14 @@ func (r *Reader) ClearCache() {
 // returning all compliance violations found. An empty slice means the
 // document passes.
 func (r *Reader) ValidatePDFA(ctx context.Context, profile models.PDFAProfile) ([]error, error) {
-	return compliance2.ValidatePDFA(ctx, r.doc, profile)
+	return compliance.ValidatePDFA(ctx, r.doc, profile)
 }
 
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
 func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile) ([]error, error) {
-	return compliance2.ValidatePDFUA(ctx, r.doc, profile)
+	return compliance.ValidatePDFUA(ctx, r.doc, profile)
 }
 
 // Open initializes a new Reader from an io.ReaderAt and its total size.

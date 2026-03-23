@@ -1,4 +1,4 @@
-package compliance2
+package compliance
 
 import "testing"
 

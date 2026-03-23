@@ -1,393 +1,483 @@
 package compliance
 
-// xmpType represents the expected value type for an XMP property.
-type xmpType int
+import "strings"
+
+// xmpPropType represents the expected value type for an XMP property.
+type xmpPropType int
 
 const (
 	// Simple value types — stored as text content or attributes.
-	xmpText    xmpType = iota // Plain text string.
-	xmpURI                    // URI string.
-	xmpInteger                // Integer value.
-	xmpReal                   // Real/float value.
-	xmpBoolean                // Boolean (True/False).
-	xmpDate                   // ISO 8601 date.
+	xmpPropText    xmpPropType = iota // Plain text string.
+	xmpPropURI                        // URI string.
+	xmpPropInteger                    // Integer value.
+	xmpPropReal                       // Real/float value.
+	xmpPropBoolean                    // Boolean (True/False).
+	xmpPropDate                       // ISO 8601 date.
 
 	// Container types — wrapped in rdf:Alt, rdf:Seq, or rdf:Bag.
-	xmpAlt    // rdf:Alt (language alternatives).
-	xmpSeq    // rdf:Seq (ordered list).
-	xmpBag    // rdf:Bag (unordered set).
-	xmpStruct // Structured value (nested properties).
+	xmpPropAlt    // rdf:Alt (language alternatives).
+	xmpPropSeq    // rdf:Seq (ordered list).
+	xmpPropBag    // rdf:Bag (unordered set).
+	xmpPropStruct // Structured value (nested properties).
 
-	// xmpAny matches any type (for properties whose type is flexible).
-	xmpAny
+	// xmpPropAny matches any type (for properties whose type is flexible).
+	xmpPropAny
 )
 
 // xmpPropertyRegistry maps predefined XMP namespace URIs to the set of valid
 // property names and their expected types. Properties not listed here require
 // a PDF/A extension schema declaration.
 //
-// Sources: XMP Specification Parts 1-3, EXIF/XMP mapping, Adobe Camera Raw
-// schema, ISO 19005 (PDF/A identification).
-var xmpPropertyRegistry = map[string]map[string]xmpType{
+// Sources: XMP Specification Parts 1-3 (ISO 16684), EXIF/XMP mapping,
+// Adobe Camera Raw schema, ISO 19005 (PDF/A identification).
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpPropertyRegistry = map[string]map[string]xmpPropType{
 	// Dublin Core (dc:).
 	"http://purl.org/dc/elements/1.1/": {
-		"contributor": xmpBag, "coverage": xmpText, "creator": xmpSeq,
-		"date": xmpSeq, "description": xmpAlt, "format": xmpText,
-		"identifier": xmpText, "language": xmpBag, "publisher": xmpBag,
-		"relation": xmpBag, "rights": xmpAlt, "source": xmpText,
-		"subject": xmpBag, "title": xmpAlt, "type": xmpBag,
+		"contributor": xmpPropBag, "coverage": xmpPropText, "creator": xmpPropSeq,
+		"date": xmpPropSeq, "description": xmpPropAlt, "format": xmpPropText,
+		"identifier": xmpPropText, "language": xmpPropBag, "publisher": xmpPropBag,
+		"relation": xmpPropBag, "rights": xmpPropAlt, "source": xmpPropText,
+		"subject": xmpPropBag, "title": xmpPropAlt, "type": xmpPropBag,
 	},
 
 	// XMP Basic (xmp:).
 	"http://ns.adobe.com/xap/1.0/": {
-		"Advisory":     xmpBag,
-		"BaseURL":      xmpURI,
-		"CreateDate":   xmpDate,
-		"CreatorTool":  xmpText,
-		"Identifier":   xmpBag,
-		"Label":        xmpText,
-		"MetadataDate": xmpDate,
-		"ModifyDate":   xmpDate,
-		"Nickname":     xmpText,
-		"Rating":       xmpReal,
-		"Thumbnails":   xmpAlt,
+		"Advisory":     xmpPropBag,
+		"BaseURL":      xmpPropURI,
+		"CreateDate":   xmpPropDate,
+		"CreatorTool":  xmpPropText,
+		"Identifier":   xmpPropBag,
+		"Label":        xmpPropText,
+		"MetadataDate": xmpPropDate,
+		"ModifyDate":   xmpPropDate,
+		"Nickname":     xmpPropText,
+		"Rating":       xmpPropReal,
+		"Thumbnails":   xmpPropAlt,
 	},
 
 	// XMP Media Management (xmpMM:).
 	"http://ns.adobe.com/xap/1.0/mm/": {
-		"DerivedFrom":        xmpStruct,
-		"DocumentID":         xmpURI,
-		"History":            xmpSeq,
-		"InstanceID":         xmpURI,
-		"Ingredients":        xmpBag,
-		"LastURL":            xmpURI,
-		"ManagedFrom":        xmpStruct,
-		"Manager":            xmpText,
-		"ManageUI":           xmpURI,
-		"ManageTo":           xmpURI,
-		"ManagerVariant":     xmpText,
-		"OriginalDocumentID": xmpURI,
-		"Pantry":             xmpBag,
-		"RenditionClass":     xmpText,
-		"RenditionOf":        xmpStruct,
-		"RenditionParams":    xmpText,
-		"SaveID":             xmpInteger,
-		"Subject":            xmpBag,
-		"VersionID":          xmpText,
-		"Versions":           xmpSeq,
+		"DerivedFrom":        xmpPropStruct,
+		"DocumentID":         xmpPropURI,
+		"History":            xmpPropSeq,
+		"InstanceID":         xmpPropURI,
+		"Ingredients":        xmpPropBag,
+		"LastURL":            xmpPropURI,
+		"ManagedFrom":        xmpPropStruct,
+		"Manager":            xmpPropText,
+		"ManageUI":           xmpPropURI,
+		"ManageTo":           xmpPropURI,
+		"ManagerVariant":     xmpPropText,
+		"OriginalDocumentID": xmpPropURI,
+		"Pantry":             xmpPropBag,
+		"RenditionClass":     xmpPropText,
+		"RenditionOf":        xmpPropStruct,
+		"RenditionParams":    xmpPropText,
+		"SaveID":             xmpPropInteger,
+		"Subject":            xmpPropBag,
+		"VersionID":          xmpPropText,
+		"Versions":           xmpPropSeq,
 	},
 
 	// XMP Rights (xmpRights:).
 	"http://ns.adobe.com/xap/1.0/rights/": {
-		"Certificate":  xmpURI,
-		"Marked":       xmpBoolean,
-		"Owner":        xmpBag,
-		"UsageTerms":   xmpAlt,
-		"WebStatement": xmpURI,
+		"Certificate":  xmpPropURI,
+		"Marked":       xmpPropBoolean,
+		"Owner":        xmpPropBag,
+		"UsageTerms":   xmpPropAlt,
+		"WebStatement": xmpPropURI,
 	},
 
 	// PDF (pdf:).
 	"http://ns.adobe.com/pdf/1.3/": {
-		"Keywords":   xmpText,
-		"PDFVersion": xmpText,
-		"Producer":   xmpText,
-		"Trapped":    xmpText,
+		"Keywords":   xmpPropText,
+		"PDFVersion": xmpPropText,
+		"Producer":   xmpPropText,
+		"Trapped":    xmpPropText,
 	},
 
 	// PDF/A Identification (pdfaid:).
 	"http://www.aiim.org/pdfa/ns/id/": {
-		"amd":         xmpText,
-		"conformance": xmpText,
-		"part":        xmpInteger,
-		"corr":        xmpText,
-		"rev":         xmpText,
+		"amd":         xmpPropText,
+		"conformance": xmpPropText,
+		"part":        xmpPropInteger,
+		"corr":        xmpPropText,
+		"rev":         xmpPropText,
 	},
 
 	// Photoshop (photoshop:).
 	"http://ns.adobe.com/photoshop/1.0/": {
-		"AuthorsPosition":        xmpText,
-		"CaptionWriter":          xmpText,
-		"Category":               xmpText,
-		"City":                   xmpText,
-		"ColorMode":              xmpInteger,
-		"Country":                xmpText,
-		"Credit":                 xmpText,
-		"DateCreated":            xmpDate,
-		"DocumentAncestors":      xmpBag,
-		"Headline":               xmpText,
-		"History":                xmpText,
-		"ICCProfile":             xmpText,
-		"Instructions":           xmpText,
-		"LabelColor":             xmpText,
-		"Source":                 xmpText,
-		"State":                  xmpText,
-		"SupplementalCategories": xmpBag,
-		"TextLayers":             xmpSeq,
-		"TransmissionReference":  xmpText,
-		"Urgency":                xmpInteger,
-		"SidecarForExtension":    xmpText,
-		"EmbeddedXMPDigest":      xmpText,
-		"AncestorLink":           xmpText,
-		"LegacyIPTCDigest":       xmpText,
+		"AuthorsPosition": xmpPropText, "CaptionWriter": xmpPropText,
+		"Category": xmpPropText, "City": xmpPropText,
+		"ColorMode": xmpPropInteger, "Country": xmpPropText,
+		"Credit": xmpPropText, "DateCreated": xmpPropDate,
+		"DocumentAncestors": xmpPropBag, "Headline": xmpPropText,
+		"History": xmpPropText, "ICCProfile": xmpPropText,
+		"Instructions": xmpPropText, "LabelColor": xmpPropText,
+		"Source": xmpPropText, "State": xmpPropText,
+		"SupplementalCategories": xmpPropBag, "TextLayers": xmpPropSeq,
+		"TransmissionReference": xmpPropText, "Urgency": xmpPropInteger,
+		"SidecarForExtension": xmpPropText, "EmbeddedXMPDigest": xmpPropText,
+		"AncestorLink": xmpPropText, "LegacyIPTCDigest": xmpPropText,
 	},
 
 	// EXIF (exif:).
 	"http://ns.adobe.com/exif/1.0/": {
-		"ApertureValue":            xmpReal,
-		"BrightnessValue":          xmpReal,
-		"CFAPattern":               xmpStruct,
-		"ColorSpace":               xmpInteger,
-		"CompressedBitsPerPixel":   xmpReal,
-		"ComponentsConfiguration":  xmpSeq,
-		"Contrast":                 xmpInteger,
-		"CustomRendered":           xmpInteger,
-		"DateTimeDigitized":        xmpDate,
-		"DateTimeOriginal":         xmpDate,
-		"DeviceSettingDescription": xmpStruct,
-		"DigitalZoomRatio":         xmpReal,
-		"ExifVersion":              xmpText,
-		"ExposureBiasValue":        xmpReal,
-		"ExposureIndex":            xmpReal,
-		"ExposureMode":             xmpInteger,
-		"ExposureProgram":          xmpInteger,
-		"ExposureTime":             xmpReal,
-		"FileSource":               xmpInteger,
-		"Flash":                    xmpStruct,
-		"FlashEnergy":              xmpReal,
-		"FlashpixVersion":          xmpText,
-		"FNumber":                  xmpReal,
-		"FocalLength":              xmpReal,
-		"FocalLengthIn35mmFilm":    xmpInteger,
-		"FocalPlaneResolutionUnit": xmpInteger,
-		"FocalPlaneXResolution":    xmpReal,
-		"FocalPlaneYResolution":    xmpReal,
-		"GainControl":              xmpInteger,
-		"GPSAltitude":              xmpReal,
-		"GPSAltitudeRef":           xmpInteger,
-		"GPSAreaInformation":       xmpText,
-		"GPSDestBearing":           xmpReal,
-		"GPSDestBearingRef":        xmpText,
-		"GPSDestDistance":          xmpReal,
-		"GPSDestDistanceRef":       xmpText,
-		"GPSDestLatitude":          xmpText,
-		"GPSDestLongitude":         xmpText,
-		"GPSDifferential":          xmpInteger,
-		"GPSDOP":                   xmpReal,
-		"GPSImgDirection":          xmpReal,
-		"GPSImgDirectionRef":       xmpText,
-		"GPSLatitude":              xmpText,
-		"GPSLongitude":             xmpText,
-		"GPSMapDatum":              xmpText,
-		"GPSMeasureMode":           xmpText,
-		"GPSProcessingMethod":      xmpText,
-		"GPSSatellites":            xmpText,
-		"GPSSpeed":                 xmpReal,
-		"GPSSpeedRef":              xmpText,
-		"GPSStatus":                xmpText,
-		"GPSTimeStamp":             xmpDate,
-		"GPSTrack":                 xmpReal,
-		"GPSTrackRef":              xmpText,
-		"GPSVersionID":             xmpText,
-		"ImageUniqueID":            xmpText,
-		"ISOSpeedRatings":          xmpSeq,
-		"LightSource":              xmpInteger,
-		"MakerNote":                xmpText,
-		"MaxApertureValue":         xmpReal,
-		"MeteringMode":             xmpInteger,
-		"NativeDigest":             xmpText,
-		"OECF":                     xmpStruct,
-		"PixelXDimension":          xmpInteger,
-		"PixelYDimension":          xmpInteger,
-		"RelatedSoundFile":         xmpText,
-		"Saturation":               xmpInteger,
-		"SceneCaptureType":         xmpInteger,
-		"SceneType":                xmpInteger,
-		"SensingMethod":            xmpInteger,
-		"Sharpness":                xmpInteger,
-		"ShutterSpeedValue":        xmpReal,
-		"SpatialFrequencyResponse": xmpStruct,
-		"SpectralSensitivity":      xmpText,
-		"SubjectArea":              xmpSeq,
-		"SubjectDistance":          xmpReal,
-		"SubjectDistanceRange":     xmpInteger,
-		"SubjectLocation":          xmpSeq,
-		"UserComment":              xmpAlt,
-		"WhiteBalance":             xmpInteger,
-		// Additional EXIF 2.3+ properties.
-		"Gamma":                     xmpReal,
-		"PhotographicSensitivity":   xmpInteger,
-		"SensitivityType":           xmpInteger,
-		"StandardOutputSensitivity": xmpInteger,
-		"RecommendedExposureIndex":  xmpInteger,
-		"ISOSpeed":                  xmpInteger,
-		"ISOSpeedLatitudeyyy":       xmpInteger,
-		"ISOSpeedLatitudezzz":       xmpInteger,
-		"CameraOwnerName":           xmpText,
-		"BodySerialNumber":          xmpText,
-		"LensInfo":                  xmpSeq,
-		"LensMake":                  xmpText,
-		"LensModel":                 xmpText,
-		"LensSerialNumber":          xmpText,
+		"ApertureValue": xmpPropReal, "BrightnessValue": xmpPropReal,
+		"CFAPattern": xmpPropStruct, "ColorSpace": xmpPropInteger,
+		"CompressedBitsPerPixel": xmpPropReal, "ComponentsConfiguration": xmpPropSeq,
+		"Contrast": xmpPropInteger, "CustomRendered": xmpPropInteger,
+		"DateTimeDigitized": xmpPropDate, "DateTimeOriginal": xmpPropDate,
+		"DeviceSettingDescription": xmpPropStruct, "DigitalZoomRatio": xmpPropReal,
+		"ExifVersion": xmpPropText, "ExposureBiasValue": xmpPropReal,
+		"ExposureIndex": xmpPropReal, "ExposureMode": xmpPropInteger,
+		"ExposureProgram": xmpPropInteger, "ExposureTime": xmpPropReal,
+		"FileSource": xmpPropInteger, "Flash": xmpPropStruct,
+		"FlashEnergy": xmpPropReal, "FlashpixVersion": xmpPropText,
+		"FNumber": xmpPropReal, "FocalLength": xmpPropReal,
+		"FocalLengthIn35mmFilm": xmpPropInteger, "FocalPlaneResolutionUnit": xmpPropInteger,
+		"FocalPlaneXResolution": xmpPropReal, "FocalPlaneYResolution": xmpPropReal,
+		"GainControl": xmpPropInteger, "GPSAltitude": xmpPropReal,
+		"GPSAltitudeRef": xmpPropInteger, "GPSAreaInformation": xmpPropText,
+		"GPSDestBearing": xmpPropReal, "GPSDestBearingRef": xmpPropText,
+		"GPSDestDistance": xmpPropReal, "GPSDestDistanceRef": xmpPropText,
+		"GPSDestLatitude": xmpPropText, "GPSDestLongitude": xmpPropText,
+		"GPSDifferential": xmpPropInteger, "GPSDOP": xmpPropReal,
+		"GPSImgDirection": xmpPropReal, "GPSImgDirectionRef": xmpPropText,
+		"GPSLatitude": xmpPropText, "GPSLongitude": xmpPropText,
+		"GPSMapDatum": xmpPropText, "GPSMeasureMode": xmpPropText,
+		"GPSProcessingMethod": xmpPropText, "GPSSatellites": xmpPropText,
+		"GPSSpeed": xmpPropReal, "GPSSpeedRef": xmpPropText,
+		"GPSStatus": xmpPropText, "GPSTimeStamp": xmpPropDate,
+		"GPSTrack": xmpPropReal, "GPSTrackRef": xmpPropText,
+		"GPSVersionID": xmpPropText, "ImageUniqueID": xmpPropText,
+		"ISOSpeedRatings": xmpPropSeq, "LightSource": xmpPropInteger,
+		"MakerNote": xmpPropText, "MaxApertureValue": xmpPropReal,
+		"MeteringMode": xmpPropInteger, "NativeDigest": xmpPropText,
+		"OECF": xmpPropStruct, "PixelXDimension": xmpPropInteger,
+		"PixelYDimension": xmpPropInteger, "RelatedSoundFile": xmpPropText,
+		"Saturation": xmpPropInteger, "SceneCaptureType": xmpPropInteger,
+		"SceneType": xmpPropInteger, "SensingMethod": xmpPropInteger,
+		"Sharpness": xmpPropInteger, "ShutterSpeedValue": xmpPropReal,
+		"SpatialFrequencyResponse": xmpPropStruct, "SpectralSensitivity": xmpPropText,
+		"SubjectArea": xmpPropSeq, "SubjectDistance": xmpPropReal,
+		"SubjectDistanceRange": xmpPropInteger, "SubjectLocation": xmpPropSeq,
+		"UserComment": xmpPropAlt, "WhiteBalance": xmpPropInteger,
+		"Gamma": xmpPropReal, "PhotographicSensitivity": xmpPropInteger,
+		"SensitivityType": xmpPropInteger, "StandardOutputSensitivity": xmpPropInteger,
+		"RecommendedExposureIndex": xmpPropInteger, "ISOSpeed": xmpPropInteger,
+		"ISOSpeedLatitudeyyy": xmpPropInteger, "ISOSpeedLatitudezzz": xmpPropInteger,
+		"CameraOwnerName": xmpPropText, "BodySerialNumber": xmpPropText,
+		"LensInfo": xmpPropSeq, "LensMake": xmpPropText,
+		"LensModel": xmpPropText, "LensSerialNumber": xmpPropText,
 	},
 
 	// EXIF Auxiliary (aux:).
 	"http://ns.adobe.com/exif/1.0/aux/": {
-		"Firmware":                 xmpText,
-		"FlashCompensation":        xmpReal,
-		"ImageNumber":              xmpInteger,
-		"Lens":                     xmpText,
-		"LensID":                   xmpInteger,
-		"LensInfo":                 xmpSeq,
-		"OwnerName":                xmpText,
-		"SerialNumber":             xmpText,
-		"ApproximateFocusDistance": xmpReal,
+		"Firmware": xmpPropText, "FlashCompensation": xmpPropReal,
+		"ImageNumber": xmpPropInteger, "Lens": xmpPropText,
+		"LensID": xmpPropInteger, "LensInfo": xmpPropSeq,
+		"OwnerName": xmpPropText, "SerialNumber": xmpPropText,
+		"ApproximateFocusDistance": xmpPropReal,
 	},
 
 	// TIFF (tiff:).
 	"http://ns.adobe.com/tiff/1.0/": {
-		"Artist":                    xmpText,
-		"BitsPerSample":             xmpSeq,
-		"Compression":               xmpInteger,
-		"Copyright":                 xmpAlt,
-		"DateTime":                  xmpDate,
-		"ImageDescription":          xmpAlt,
-		"ImageLength":               xmpInteger,
-		"ImageWidth":                xmpInteger,
-		"Make":                      xmpText,
-		"Model":                     xmpText,
-		"NativeDigest":              xmpText,
-		"Orientation":               xmpInteger,
-		"PhotometricInterpretation": xmpInteger,
-		"PlanarConfiguration":       xmpInteger,
-		"PrimaryChromaticities":     xmpSeq,
-		"ReferenceBlackWhite":       xmpSeq,
-		"ResolutionUnit":            xmpInteger,
-		"SamplesPerPixel":           xmpInteger,
-		"Software":                  xmpText,
-		"TransferFunction":          xmpSeq,
-		"WhitePoint":                xmpSeq,
-		"XResolution":               xmpReal,
-		"YCbCrCoefficients":         xmpSeq,
-		"YCbCrPositioning":          xmpInteger,
-		"YCbCrSubSampling":          xmpSeq,
-		"YResolution":               xmpReal,
+		"Artist": xmpPropText, "BitsPerSample": xmpPropSeq,
+		"Compression": xmpPropInteger, "Copyright": xmpPropAlt,
+		"DateTime": xmpPropDate, "ImageDescription": xmpPropAlt,
+		"ImageLength": xmpPropInteger, "ImageWidth": xmpPropInteger,
+		"Make": xmpPropText, "Model": xmpPropText,
+		"NativeDigest": xmpPropText, "Orientation": xmpPropInteger,
+		"PhotometricInterpretation": xmpPropInteger, "PlanarConfiguration": xmpPropInteger,
+		"PrimaryChromaticities": xmpPropSeq, "ReferenceBlackWhite": xmpPropSeq,
+		"ResolutionUnit": xmpPropInteger, "SamplesPerPixel": xmpPropInteger,
+		"Software": xmpPropText, "TransferFunction": xmpPropSeq,
+		"WhitePoint": xmpPropSeq, "XResolution": xmpPropReal,
+		"YCbCrCoefficients": xmpPropSeq, "YCbCrPositioning": xmpPropInteger,
+		"YCbCrSubSampling": xmpPropSeq, "YResolution": xmpPropReal,
 	},
 
 	// Camera Raw Settings (crs:).
 	"http://ns.adobe.com/camera-raw-settings/1.0/": {
-		"AutoBrightness": xmpBoolean, "AutoContrast": xmpBoolean,
-		"AutoExposure": xmpBoolean, "AutoShadows": xmpBoolean,
-		"BlueHue": xmpInteger, "BlueSaturation": xmpInteger,
-		"Brightness": xmpInteger, "CameraProfile": xmpText,
-		"ChromaticAberrationB": xmpInteger, "ChromaticAberrationR": xmpInteger,
-		"ColorNoiseReduction": xmpInteger, "Contrast": xmpInteger,
-		"CropAngle": xmpReal, "CropBottom": xmpReal,
-		"CropHeight": xmpReal, "CropLeft": xmpReal,
-		"CropRight": xmpReal, "CropTop": xmpReal,
-		"CropUnits": xmpInteger, "CropWidth": xmpReal,
-		"Exposure": xmpReal, "GreenHue": xmpInteger,
-		"GreenSaturation": xmpInteger, "HasCrop": xmpBoolean,
-		"HasSettings": xmpText, "LuminanceSmoothing": xmpInteger,
-		"RawFileName": xmpText, "RedHue": xmpInteger,
-		"RedSaturation": xmpInteger, "Saturation": xmpInteger,
-		"Shadows": xmpInteger, "ShadowTint": xmpInteger,
-		"Sharpness": xmpInteger, "Temperature": xmpInteger,
-		"Tint": xmpInteger, "ToneCurve": xmpSeq,
-		"ToneCurveName": xmpText, "Version": xmpText,
-		"VignetteAmount": xmpInteger, "VignetteMidpoint": xmpInteger,
-		"WhiteBalance": xmpText,
-		// Additional CRS properties.
-		"Exposure2012": xmpReal, "Contrast2012": xmpInteger,
-		"Highlights2012": xmpInteger, "Shadows2012": xmpInteger,
-		"Whites2012": xmpInteger, "Blacks2012": xmpInteger,
-		"Clarity2012": xmpInteger, "Vibrance": xmpInteger,
-		"Defringe": xmpInteger, "Dehaze": xmpInteger,
-		"LensProfileEnable": xmpInteger, "LensManualDistortionAmount": xmpInteger,
-		"PerspectiveVertical": xmpInteger, "PerspectiveHorizontal": xmpInteger,
-		"PerspectiveRotate": xmpReal, "PerspectiveScale": xmpInteger,
-		"PostCropVignetteAmount": xmpInteger, "GrainAmount": xmpInteger,
-		"SplitToningHighlightHue": xmpInteger, "SplitToningHighlightSaturation": xmpInteger,
-		"SplitToningShadowHue": xmpInteger, "SplitToningShadowSaturation": xmpInteger,
-		"SplitToningBalance": xmpInteger,
-		"ParametricShadows":  xmpInteger, "ParametricDarks": xmpInteger,
-		"ParametricLights": xmpInteger, "ParametricHighlights": xmpInteger,
-		"ParametricShadowSplit": xmpInteger, "ParametricMidtoneSplit": xmpInteger,
-		"ParametricHighlightSplit": xmpInteger,
-		"SharpenRadius":            xmpReal, "SharpenDetail": xmpInteger,
-		"SharpenEdgeMasking":        xmpInteger,
-		"ColorNoiseReductionDetail": xmpInteger, "ColorNoiseReductionSmoothness": xmpInteger,
-		"LuminanceNoiseReductionDetail": xmpInteger, "LuminanceNoiseReductionContrast": xmpInteger,
-		"ConvertToGrayscale": xmpBoolean, "CameraProfileDigest": xmpText,
-		"AlreadyApplied": xmpBoolean, "ProcessVersion": xmpText,
+		"AutoBrightness": xmpPropBoolean, "AutoContrast": xmpPropBoolean,
+		"AutoExposure": xmpPropBoolean, "AutoShadows": xmpPropBoolean,
+		"BlueHue": xmpPropInteger, "BlueSaturation": xmpPropInteger,
+		"Brightness": xmpPropInteger, "CameraProfile": xmpPropText,
+		"ChromaticAberrationB": xmpPropInteger, "ChromaticAberrationR": xmpPropInteger,
+		"ColorNoiseReduction": xmpPropInteger, "Contrast": xmpPropInteger,
+		"CropAngle": xmpPropReal, "CropBottom": xmpPropReal,
+		"CropHeight": xmpPropReal, "CropLeft": xmpPropReal,
+		"CropRight": xmpPropReal, "CropTop": xmpPropReal,
+		"CropUnits": xmpPropInteger, "CropWidth": xmpPropReal,
+		"Exposure": xmpPropReal, "GreenHue": xmpPropInteger,
+		"GreenSaturation": xmpPropInteger, "HasCrop": xmpPropBoolean,
+		"HasSettings": xmpPropText, "LuminanceSmoothing": xmpPropInteger,
+		"RawFileName": xmpPropText, "RedHue": xmpPropInteger,
+		"RedSaturation": xmpPropInteger, "Saturation": xmpPropInteger,
+		"Shadows": xmpPropInteger, "ShadowTint": xmpPropInteger,
+		"Sharpness": xmpPropInteger, "Temperature": xmpPropInteger,
+		"Tint": xmpPropInteger, "ToneCurve": xmpPropSeq,
+		"ToneCurveName": xmpPropText, "Version": xmpPropText,
+		"VignetteAmount": xmpPropInteger, "VignetteMidpoint": xmpPropInteger,
+		"WhiteBalance": xmpPropText,
+		"Exposure2012": xmpPropReal, "Contrast2012": xmpPropInteger,
+		"Highlights2012": xmpPropInteger, "Shadows2012": xmpPropInteger,
+		"Whites2012": xmpPropInteger, "Blacks2012": xmpPropInteger,
+		"Clarity2012": xmpPropInteger, "Vibrance": xmpPropInteger,
+		"Defringe": xmpPropInteger, "Dehaze": xmpPropInteger,
+		"LensProfileEnable": xmpPropInteger, "LensManualDistortionAmount": xmpPropInteger,
+		"PerspectiveVertical": xmpPropInteger, "PerspectiveHorizontal": xmpPropInteger,
+		"PerspectiveRotate": xmpPropReal, "PerspectiveScale": xmpPropInteger,
+		"PostCropVignetteAmount": xmpPropInteger, "GrainAmount": xmpPropInteger,
+		"SplitToningHighlightHue": xmpPropInteger, "SplitToningHighlightSaturation": xmpPropInteger,
+		"SplitToningShadowHue": xmpPropInteger, "SplitToningShadowSaturation": xmpPropInteger,
+		"SplitToningBalance": xmpPropInteger,
+		"ParametricShadows":  xmpPropInteger, "ParametricDarks": xmpPropInteger,
+		"ParametricLights": xmpPropInteger, "ParametricHighlights": xmpPropInteger,
+		"ParametricShadowSplit": xmpPropInteger, "ParametricMidtoneSplit": xmpPropInteger,
+		"ParametricHighlightSplit": xmpPropInteger,
+		"SharpenRadius":            xmpPropReal, "SharpenDetail": xmpPropInteger,
+		"SharpenEdgeMasking":        xmpPropInteger,
+		"ColorNoiseReductionDetail": xmpPropInteger, "ColorNoiseReductionSmoothness": xmpPropInteger,
+		"LuminanceNoiseReductionDetail": xmpPropInteger, "LuminanceNoiseReductionContrast": xmpPropInteger,
+		"ConvertToGrayscale": xmpPropBoolean, "CameraProfileDigest": xmpPropText,
+		"AlreadyApplied": xmpPropBoolean, "ProcessVersion": xmpPropText,
 	},
 
 	// XMP Dynamic Media (xmpDM:).
 	"http://ns.adobe.com/xmp/1.0/DynamicMedia/": {
-		"absPeakAudioFilePath": xmpURI, "album": xmpText,
-		"altTapeName": xmpText, "altTimecode": xmpStruct,
-		"artist": xmpText, "audioChannelType": xmpText,
-		"audioCompressor": xmpText, "audioModDate": xmpDate,
-		"audioSampleRate": xmpInteger, "audioSampleType": xmpText,
-		"beatSpliceParams": xmpStruct, "cameraAngle": xmpText,
-		"cameraLabel": xmpText, "cameraModel": xmpText,
-		"cameraMove": xmpText, "client": xmpText,
-		"comment": xmpText, "composer": xmpText,
-		"contributedMedia": xmpBag, "copyright": xmpText,
-		"director": xmpText, "directorPhotography": xmpText,
-		"discNumber": xmpText, "duration": xmpStruct,
-		"engineer": xmpText, "fileDataRate": xmpReal,
-		"genre": xmpText, "good": xmpBoolean,
-		"instrument": xmpText, "introTime": xmpStruct,
-		"key": xmpText, "logComment": xmpText,
-		"loop": xmpBoolean, "lyrics": xmpText,
-		"markers": xmpSeq, "metadataModDate": xmpDate,
-		"numberOfBeats": xmpReal, "outCue": xmpStruct,
-		"partOfCompilation": xmpBoolean, "projectName": xmpText,
-		"projectRef": xmpStruct, "pullDown": xmpText,
-		"relativePeakAudioFilePath": xmpURI,
-		"relativeTimestamp":         xmpStruct, "releaseDate": xmpDate,
-		"resampleParams": xmpStruct, "scaleType": xmpText,
-		"scene": xmpText, "shotDate": xmpText,
-		"shotDay": xmpText, "shotLocation": xmpText,
-		"shotName": xmpText, "shotNumber": xmpText,
-		"shotSize": xmpText, "speakerPlacement": xmpText,
-		"startTimecode": xmpStruct, "stretchMode": xmpText,
-		"takeNumber": xmpInteger, "tapeName": xmpText,
-		"tempo": xmpReal, "timeScaleParams": xmpStruct,
-		"timeSignature": xmpText, "trackNumber": xmpInteger,
-		"Tracks": xmpBag, "videoAlphaMode": xmpText,
-		"videoAlphaPremultipleColor":   xmpStruct,
-		"videoAlphaUnityIsTransparent": xmpBoolean,
-		"videoColorSpace":              xmpText, "videoCompressor": xmpText,
-		"videoFieldOrder": xmpText, "videoFrameRate": xmpReal,
-		"videoFrameSize": xmpStruct, "videoModDate": xmpDate,
-		"videoPixelAspectRatio": xmpReal, "videoPixelDepth": xmpText,
+		"absPeakAudioFilePath": xmpPropURI, "album": xmpPropText,
+		"altTapeName": xmpPropText, "altTimecode": xmpPropStruct,
+		"artist": xmpPropText, "audioChannelType": xmpPropText,
+		"audioCompressor": xmpPropText, "audioModDate": xmpPropDate,
+		"audioSampleRate": xmpPropInteger, "audioSampleType": xmpPropText,
+		"beatSpliceParams": xmpPropStruct, "cameraAngle": xmpPropText,
+		"cameraLabel": xmpPropText, "cameraModel": xmpPropText,
+		"cameraMove": xmpPropText, "client": xmpPropText,
+		"comment": xmpPropText, "composer": xmpPropText,
+		"contributedMedia": xmpPropBag, "copyright": xmpPropText,
+		"director": xmpPropText, "directorPhotography": xmpPropText,
+		"discNumber": xmpPropText, "duration": xmpPropStruct,
+		"engineer": xmpPropText, "fileDataRate": xmpPropReal,
+		"genre": xmpPropText, "good": xmpPropBoolean,
+		"instrument": xmpPropText, "introTime": xmpPropStruct,
+		"key": xmpPropText, "logComment": xmpPropText,
+		"loop": xmpPropBoolean, "lyrics": xmpPropText,
+		"markers": xmpPropSeq, "metadataModDate": xmpPropDate,
+		"numberOfBeats": xmpPropReal, "outCue": xmpPropStruct,
+		"partOfCompilation": xmpPropBoolean, "projectName": xmpPropText,
+		"projectRef": xmpPropStruct, "pullDown": xmpPropText,
+		"relativePeakAudioFilePath": xmpPropURI,
+		"relativeTimestamp":         xmpPropStruct, "releaseDate": xmpPropDate,
+		"resampleParams": xmpPropStruct, "scaleType": xmpPropText,
+		"scene": xmpPropText, "shotDate": xmpPropText,
+		"shotDay": xmpPropText, "shotLocation": xmpPropText,
+		"shotName": xmpPropText, "shotNumber": xmpPropText,
+		"shotSize": xmpPropText, "speakerPlacement": xmpPropText,
+		"startTimecode": xmpPropStruct, "stretchMode": xmpPropText,
+		"takeNumber": xmpPropInteger, "tapeName": xmpPropText,
+		"tempo": xmpPropReal, "timeScaleParams": xmpPropStruct,
+		"timeSignature": xmpPropText, "trackNumber": xmpPropInteger,
+		"Tracks": xmpPropBag, "videoAlphaMode": xmpPropText,
+		"videoAlphaPremultipleColor":   xmpPropStruct,
+		"videoAlphaUnityIsTransparent": xmpPropBoolean,
+		"videoColorSpace":              xmpPropText, "videoCompressor": xmpPropText,
+		"videoFieldOrder": xmpPropText, "videoFrameRate": xmpPropReal,
+		"videoFrameSize": xmpPropStruct, "videoModDate": xmpPropDate,
+		"videoPixelAspectRatio": xmpPropReal, "videoPixelDepth": xmpPropText,
 	},
 
 	// XMP Paged-Text (xmpTPg:).
 	"http://ns.adobe.com/xap/1.0/t/pg/": {
-		"MaxPageSize":            xmpStruct,
-		"NPages":                 xmpInteger,
-		"Fonts":                  xmpBag,
-		"Colorants":              xmpSeq,
-		"PlateNames":             xmpSeq,
-		"SwatchGroups":           xmpSeq,
-		"HasVisibleOverprint":    xmpBoolean,
-		"HasVisibleTransparency": xmpBoolean,
+		"MaxPageSize": xmpPropStruct, "NPages": xmpPropInteger,
+		"Fonts": xmpPropBag, "Colorants": xmpPropSeq,
+		"PlateNames": xmpPropSeq, "SwatchGroups": xmpPropSeq,
+		"HasVisibleOverprint": xmpPropBoolean, "HasVisibleTransparency": xmpPropBoolean,
 	},
 
 	// XMP Basic Job Ticket (xmpBJ:).
 	"http://ns.adobe.com/xap/1.0/bj/": {
-		"JobRef": xmpBag,
+		"JobRef": xmpPropBag,
 	},
 }
 
-// isSimpleType returns true if the type is a simple value (not a container).
-func isSimpleType(t xmpType) bool {
-	return t <= xmpDate
+// isContainerPropType returns true if the type is an RDF container (Alt/Seq/Bag).
+func isContainerPropType(t xmpPropType) bool {
+	return t >= xmpPropAlt && t <= xmpPropBag
 }
 
-// isContainerType returns true if the type is an RDF container (Alt/Seq/Bag).
-func isContainerType(t xmpType) bool {
-	return t >= xmpAlt && t <= xmpBag
+// isSimplePropType returns true if the type is a simple value (not a container or struct).
+func isSimplePropType(t xmpPropType) bool {
+	return t <= xmpPropDate
+}
+
+// isValidXMPInteger returns true if s is a valid XMP integer value.
+// Format: optional sign followed by digits. Empty string is invalid.
+func isValidXMPInteger(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+
+	start := 0
+	if s[0] == '+' || s[0] == '-' {
+		start = 1
+	}
+
+	if start >= len(s) {
+		return false
+	}
+
+	for i := start; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isValidXMPReal returns true if s is a valid XMP real/float value.
+// Format: optional sign, digits, optional decimal point followed by digits.
+// For EXIF properties that accept rationals, use isValidXMPRealOrRational.
+func isValidXMPReal(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+
+	start := 0
+	if s[0] == '+' || s[0] == '-' {
+		start = 1
+	}
+
+	if start >= len(s) {
+		return false
+	}
+
+	hasDigit := false
+	hasDot := false
+
+	for i := start; i < len(s); i++ {
+		if s[i] >= '0' && s[i] <= '9' {
+			hasDigit = true
+
+			continue
+		}
+
+		if s[i] == '.' && !hasDot {
+			hasDot = true
+
+			continue
+		}
+
+		return false
+	}
+
+	return hasDigit
+}
+
+// isValidXMPBoolean returns true if s is a valid XMP boolean value.
+// XMP booleans are case-sensitive: "True" or "False".
+func isValidXMPBoolean(s string) bool {
+	s = strings.TrimSpace(s)
+	return s == "True" || s == "False"
+}
+
+// isValidXMPRealOrRational returns true if s is a valid decimal or EXIF rational.
+// Used for EXIF namespace properties typed as Real that also accept "N/D" format.
+func isValidXMPRealOrRational(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.Contains(s, "/") {
+		return isValidXMPRational(s)
+	}
+	return isValidXMPReal(s)
+}
+
+// isValidXMPDate returns true if s is a valid XMP date value.
+// Accepts ISO 8601 formats: YYYY, YYYY-MM, YYYY-MM-DD, and longer forms with time.
+func isValidXMPDate(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 4 { //nolint:mnd
+		return false
+	}
+
+	// Must start with 4 digits (year).
+	for i := range 4 { //nolint:mnd
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+
+	if len(s) == 4 { //nolint:mnd
+		return true // YYYY
+	}
+
+	if s[4] != '-' { //nolint:mnd
+		return false
+	}
+
+	// Allow any reasonable continuation after YYYY-.
+	return len(s) >= 7 //nolint:mnd // At minimum YYYY-MM
+}
+
+// isValidXMPURI returns true if s is a valid XMP URI value.
+// A URI is any non-empty string.
+func isValidXMPURI(s string) bool {
+	s = strings.TrimSpace(s)
+	return s != ""
+}
+
+// isValidXMPRational returns true if s is a valid EXIF rational value.
+// Format: integer/integer (e.g., "72/1", "1/100").
+//
+//nolint:unused // API for EXIF rational validation; used indirectly via container element checks.
+func isValidXMPRational(s string) bool {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, "/")
+
+	if len(parts) != 2 { //nolint:mnd
+		return false
+	}
+
+	return isValidXMPInteger(parts[0]) && isValidXMPInteger(parts[1])
+}
+
+// isValidXMPGPSCoordinate returns true if s is a valid GPS coordinate value.
+// Format: "DDD,MM,SSk" or "DDD,MM.MMk" where k is N/S/E/W.
+//
+//nolint:unused // API for EXIF GPS validation; used indirectly via container element checks.
+func isValidXMPGPSCoordinate(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 5 { //nolint:mnd
+		return false
+	}
+
+	last := s[len(s)-1]
+	return last == 'N' || last == 'S' || last == 'E' || last == 'W'
+}
+
+// validateXMPValue checks if a text value matches the expected XMP property type format.
+// Returns true if valid or if the type doesn't have a format constraint.
+func validateXMPValue(propType xmpPropType, value string) bool {
+	switch propType {
+	case xmpPropInteger:
+		return isValidXMPInteger(value)
+	case xmpPropReal:
+		return isValidXMPReal(value)
+	case xmpPropBoolean:
+		return isValidXMPBoolean(value)
+	case xmpPropDate:
+		return isValidXMPDate(value)
+	case xmpPropURI:
+		return isValidXMPURI(value)
+	case xmpPropText:
+		return strings.TrimSpace(value) != ""
+	case xmpPropAlt, xmpPropSeq, xmpPropBag, xmpPropStruct, xmpPropAny:
+		return true // Containers and structs validated separately.
+	}
+	return true
 }
