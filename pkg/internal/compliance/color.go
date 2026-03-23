@@ -951,9 +951,9 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).
 	var outputIntentRef ast.PdfIndirectRef
 	var outputIntentHdr iccProfileHeader
-	var outputIntentSize int
+	var outputIntentData []byte
 	if part >= 2 {
-		outputIntentRef, outputIntentHdr, outputIntentSize = getOutputIntentICCInfo(ctx, doc, catalog)
+		outputIntentRef, outputIntentHdr, outputIntentData = getOutputIntentICCInfo(ctx, doc, catalog)
 	}
 
 	pages := collectPages(ctx, doc, catalog)
@@ -967,16 +967,17 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 			continue
 		}
 
-		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentSize, results)
+		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, results)
 	}
 }
 
-// getOutputIntentICCInfo returns the indirect reference, parsed header, and
-// decoded size of the ICC profile from the first OutputIntent with a DestOutputProfile.
-func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict) (ast.PdfIndirectRef, iccProfileHeader, int) {
+// getOutputIntentICCInfo returns the indirect reference, parsed header, decoded
+// data, and decoded size of the ICC profile from the first OutputIntent with a
+// DestOutputProfile.
+func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict) (ast.PdfIndirectRef, iccProfileHeader, []byte) {
 	outputIntents, err := document.ResolveArray(ctx, doc, catalog["OutputIntents"])
 	if err != nil {
-		return ast.PdfIndirectRef{}, iccProfileHeader{}, 0
+		return ast.PdfIndirectRef{}, iccProfileHeader{}, nil
 	}
 
 	for _, intentObj := range outputIntents {
@@ -1012,15 +1013,15 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 
 		slog.Debug("compliance_2/color: loaded OutputIntent ICC info for identity check",
 			"objNum", ref.ObjectNum, "colorSpace", hdr.colorSpace, "size", len(data))
-		return ref, hdr, len(data)
+		return ref, hdr, data
 	}
 
-	return ast.PdfIndirectRef{}, iccProfileHeader{}, 0
+	return ast.PdfIndirectRef{}, iccProfileHeader{}, nil
 }
 
 // checkICCBasedInResources scans a page's resources for ICCBased colour spaces
 // and validates them.
-func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentSize int, results *[]Result) {
+func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, results *[]Result) {
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err != nil || csDict == nil {
 		return
@@ -1087,21 +1088,20 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 		}
 
 		// Parts 2+: check whether the ICCBased profile is identical to the
-		// OutputIntent profile. Per clause 6.2.4.2, an ICCBased colour space
-		// shall not use the same profile as the OutputIntent.
-		// Check by: (1) same indirect reference, or (2) same ICC colour space
-		// and profile size (semantically equivalent profiles).
-		if part >= 2 && outputIntentSize > 0 {
+		// OutputIntent profile. Per clause 6.2.4.2, this restriction applies
+		// only when the OutputIntent has a CMYK destination profile.
+		// Compare by (1) same indirect reference, or (2) byte-equal decoded data.
+		if part >= 2 && len(outputIntentData) > 0 && outputIntentHdr.colorSpace == "CMYK" {
 			identical := false
-			// Fast path: same indirect reference.
+			// Same indirect reference.
 			if ref, ok := arr[1].(ast.PdfIndirectRef); ok &&
 				outputIntentRef.ObjectNum > 0 &&
 				ref.ObjectNum == outputIntentRef.ObjectNum &&
 				ref.GenNum == outputIntentRef.GenNum {
 				identical = true
 			}
-			// Semantic check: same colour space and same profile size.
-			if !identical && hdr.colorSpace == outputIntentHdr.colorSpace && len(data) == outputIntentSize {
+			// Byte-equal decoded profile data (for different objects with same content).
+			if !identical && hdr.colorSpace == "CMYK" && bytesEqual(data, outputIntentData) {
 				identical = true
 			}
 			if identical {
