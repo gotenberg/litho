@@ -18,6 +18,32 @@ const (
 	annotFlagToggleNoView = 1 << 8 // bit 9 (PDF/A-2+)
 )
 
+// standardAnnotTypes1 lists annotation subtypes defined in ISO 32000-1:2008, Table 169.
+//
+//nolint:gochecknoglobals // constant set.
+var standardAnnotTypes1 = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
+	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
+	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
+	"FileAttachment": true, "Sound": true, "Movie": true, "Widget": true,
+	"Screen": true, "PrinterMark": true, "TrapNet": true, "Watermark": true,
+	"3D": true,
+}
+
+// standardAnnotTypes2 lists annotation subtypes defined in ISO 32000-2:2020, Table 171.
+//
+//nolint:gochecknoglobals // constant set.
+var standardAnnotTypes2 = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
+	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
+	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
+	"FileAttachment": true, "Sound": true, "Movie": true, "Widget": true,
+	"Screen": true, "PrinterMark": true, "TrapNet": true, "Watermark": true,
+	"3D": true, "RichMedia": true, "Redact": true, "Projection": true,
+}
+
 // checkAnnotationGroup validates annotation compliance rules for PDF/A profiles.
 // For PDF/UA profiles, annotation checks are handled by the accessibility group,
 // so this function returns nil.
@@ -106,16 +132,26 @@ func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfD
 	case 1:
 		// PDF/A-1: FileAttachment, Sound, Movie are forbidden.
 		// 3D and RichMedia are also forbidden (not in PDF Reference).
+		// Non-standard subtypes (not in ISO 32000-1, Table 169) are forbidden.
 		switch subtype {
 		case "FileAttachment", "Sound", "Movie", "3D", "RichMedia":
 			forbidden = true
+		default:
+			if !standardAnnotTypes1[subtype] {
+				forbidden = true
+			}
 		}
 	case 2, 3:
 		// PDF/A-2/3: 3D, RichMedia are forbidden.
 		// Sound, Screen, Movie are also forbidden per the rule description.
+		// Non-standard subtypes (not in ISO 32000-1, Table 169) are forbidden.
 		switch subtype {
 		case "3D", "RichMedia", "Sound", "Screen", "Movie":
 			forbidden = true
+		default:
+			if !standardAnnotTypes1[subtype] {
+				forbidden = true
+			}
 		}
 	case 4:
 		// PDF/A-4 depends on the conformance level.
@@ -126,18 +162,30 @@ func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfD
 			switch subtype {
 			case "Sound", "Screen", "Movie":
 				forbidden = true
+			default:
+				if !standardAnnotTypes2[subtype] {
+					forbidden = true
+				}
 			}
 		case 'f':
 			// PDF/A-4f: FileAttachment is allowed, but 3D/RichMedia are not.
 			switch subtype {
 			case "3D", "RichMedia", "Sound", "Screen", "Movie":
 				forbidden = true
+			default:
+				if !standardAnnotTypes2[subtype] {
+					forbidden = true
+				}
 			}
 		default:
 			// PDF/A-4 (base): Sound, Screen, Movie, 3D, RichMedia, FileAttachment forbidden.
 			switch subtype {
 			case "Sound", "Screen", "Movie", "3D", "RichMedia", "FileAttachment":
 				forbidden = true
+			default:
+				if !standardAnnotTypes2[subtype] {
+					forbidden = true
+				}
 			}
 		}
 	}

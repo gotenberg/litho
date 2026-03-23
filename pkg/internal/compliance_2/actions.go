@@ -127,6 +127,9 @@ func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.P
 	// Check outline (bookmark) actions.
 	results = append(results, checkOutlineActions(ctx, doc, catalog, profile, part)...)
 
+	// Check AcroForm field actions.
+	results = append(results, checkFormFieldActions(ctx, doc, catalog, profile, part)...)
+
 	slog.Debug("compliance_2/actions: completed action checks",
 		"profile", profile,
 		"violations", len(results),
@@ -628,6 +631,84 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 
 	// Recurse to next sibling — use depth (not depth+1) since siblings are at same level.
 	walkOutlineItems(ctx, doc, item["Next"], profile, part, results, depth)
+}
+
+// checkFormFieldActions walks the AcroForm /Fields array and checks form field
+// dicts for forbidden actions (/A and /AA keys).
+func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+	acroFormObj, ok := catalog["AcroForm"]
+	if !ok {
+		return nil
+	}
+	acroForm, err := document.ResolveDict(ctx, doc, acroFormObj)
+	if err != nil || acroForm == nil {
+		return nil
+	}
+	fieldsObj, ok := acroForm["Fields"]
+	if !ok {
+		return nil
+	}
+	fields, err := document.ResolveArray(ctx, doc, fieldsObj)
+	if err != nil {
+		return nil
+	}
+
+	slog.Debug("compliance_2/actions: checking AcroForm field actions", "fields", len(fields))
+	var results []Result
+	walkFormFields(ctx, doc, fields, profile, part, &results, 0)
+	return results
+}
+
+// walkFormFields recursively checks form field dicts for forbidden actions.
+func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Result, depth int) {
+	if depth > maxActionChainDepth {
+		return
+	}
+	for i, fieldObj := range fields {
+		if ctx.Err() != nil {
+			return
+		}
+		field, err := document.ResolveDict(ctx, doc, fieldObj)
+		if err != nil || field == nil {
+			continue
+		}
+		loc := fmt.Sprintf("form field %d", i)
+
+		// Check /A on the field.
+		if aObj, hasA := field["A"]; hasA {
+			aDict, err := document.ResolveDict(ctx, doc, aObj)
+			if err == nil && aDict != nil {
+				if _, hasS := aDict["S"]; hasS {
+					*results = append(*results, walkActionChain(ctx, doc, aDict, profile, part, loc, 0)...)
+				}
+			}
+		}
+
+		// Check /AA on the field.
+		if aaObj, hasAA := field["AA"]; hasAA {
+			aaDict, err := document.ResolveDict(ctx, doc, aaObj)
+			if err == nil && aaDict != nil {
+				for key, valObj := range aaDict {
+					actDict, err := document.ResolveDict(ctx, doc, valObj)
+					if err != nil || actDict == nil {
+						continue
+					}
+					if _, hasS := actDict["S"]; hasS {
+						*results = append(*results, walkActionChain(ctx, doc, actDict, profile, part,
+							fmt.Sprintf("%s /AA/%s", loc, key), 0)...)
+					}
+				}
+			}
+		}
+
+		// Recurse into /Kids.
+		if kidsObj, hasKids := field["Kids"]; hasKids {
+			kids, err := document.ResolveArray(ctx, doc, kidsObj)
+			if err == nil {
+				walkFormFields(ctx, doc, kids, profile, part, results, depth+1)
+			}
+		}
+	}
 }
 
 // actionKeysPresent returns a human-readable string listing which of /A and
