@@ -25,6 +25,9 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 	// 1. Language (§7.2/§8.2) — /Lang key required in catalog.
 	results = append(results, checkLangRequired(ctx, doc, catalog, profile)...)
 
+	// 1b. Outline language (§7.2 t2, PDF/UA-1) — outline entries must have determinable language.
+	results = append(results, checkOutlineLang(ctx, doc, catalog, profile)...)
+
 	// 2. DisplayDocTitle (§7.1) — /ViewerPreferences must have /DisplayDocTitle=true.
 	results = append(results, checkDisplayDocTitle(ctx, doc, catalog, profile)...)
 
@@ -228,6 +231,62 @@ func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem a
 	if kidsObj, ok := elem["K"]; ok {
 		walkStructKidsWithLang(ctx, doc, kidsObj, elemPath, depth+1, childLang, fn)
 	}
+}
+
+// checkOutlineLang verifies that outline entries (bookmarks) have a determinable
+// natural language. Per PDF/UA-1 §7.2 t2, each outline item's /Title text
+// must have a determinable language: either the item itself has /Lang, or
+// the catalog has /Lang.
+func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	outlinesObj, ok := catalog["Outlines"]
+	if !ok {
+		return nil
+	}
+	outlines, err := document.ResolveDict(ctx, doc, outlinesObj)
+	if err != nil || outlines == nil {
+		return nil
+	}
+
+	// If catalog has /Lang, all outline entries inherit it.
+	catalogLang := resolveNonEmptyLang(ctx, doc, catalog)
+	if catalogLang != "" {
+		return nil
+	}
+
+	// Walk outline items and check for /Lang.
+	var results []Result
+	walkOutlineItemsForLang(ctx, doc, outlines["First"], &results, 0)
+	return results
+}
+
+func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Result, depth int) {
+	if ctx.Err() != nil || depth > maxStructTreeWalkDepth || itemObj == nil {
+		return
+	}
+
+	item, err := document.ResolveDict(ctx, doc, itemObj)
+	if err != nil || item == nil {
+		return
+	}
+
+	_, hasTitle := item["Title"]
+	if !hasTitle {
+		return
+	}
+
+	// Check if this outline item has /Lang.
+	lang := resolveNonEmptyLang(ctx, doc, item)
+	if lang == "" {
+		*results = append(*results, fail(Rule_14289_1_7_2_t02, "outline item")...)
+	}
+
+	// Recurse into children and siblings.
+	walkOutlineItemsForLang(ctx, doc, item["First"], results, depth+1)
+	walkOutlineItemsForLang(ctx, doc, item["Next"], results, depth)
 }
 
 // validateStructureLangs walks the structure tree and validates any /Lang entries.
