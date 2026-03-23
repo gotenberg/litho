@@ -8,9 +8,9 @@
 
 | Metric | Baseline | Tier 4+5 | Current | Delta (total) |
 |--------|----------|----------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | **2,015 (77.5%)** | +526 |
+| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | **2,016 (77.5%)** | +527 |
 | **False Positives** | 97 | 124 | **~111** | +14 |
-| **False Negatives** | 1,014 | 650 | **~475** | -539 |
+| **False Negatives** | 1,014 | 650 | **~474** | -540 |
 
 ### Progress by tier
 
@@ -263,3 +263,37 @@ Not part of the original Phase 7 prompt but the largest remaining FP category.
 | **DocInfo sync** | 1 | `6-7-3-t03-fail-a` | `dc:creator` sync: "shall contain exactly one entry". The file may have multiple `dc:creator` entries or a mismatch with Info dict Author. **Fix path:** In `xmpCheckDocInfoSync`, validate that `dc:creator` Seq has exactly one entry when the Author field is present. |
 | **PDF/A identification prefix** | 3 | `6-7-11-t04/05-fail-a`, `6-7-3-t01-fail-b` | `pdfaid:part` and `pdfaid:conformance` use wrong namespace prefix. The prefix detection at lines 526-580 in `xmpCheckPDFAIdentification` may not catch all cases — the wrong-prefix detection requires the local name to match exactly, but the property might be in a completely different element (not an rdf:Description attribute). **Fix path:** Scan all XML elements/attributes for `part`/`conformance`/`rev` local names in non-pdfaid namespaces. |
 | **Misc** | 6 | `6-7-4-t01-fail-c` (lang), `6-7-3-4-t01/02-fail-a` (role map), `6-7-2-1-t01-fail-d` (UTF-8), `6-6-4-t01-fail-{a,b}` (conformance) | Scattered issues: invalid lang tag not caught, role map validation gap, UTF-8 encoding check gap, and conformance level mismatches where litho catches a DIFFERENT violation but not the VeraPDF-expected one. |
+
+### Phases 10-13 — File Structure, PDF/UA Structure, Fonts, Annotations
+**Fixed:** 1 FN (non-standard annotation subtypes). Net: 2,016/2,601 (77.5%).
+
+#### What was fixed
+1. **Non-standard annotation types (§6.3.1):** Annotations with subtypes not listed in ISO 32000-1 Table 169 (parts 1-3) or ISO 32000-2 Table 171 (part 4) are now flagged as forbidden.
+2. **Form field action checking:** `checkFormFieldActions` walks AcroForm `/Fields` tree for forbidden `/A` and `/AA` actions (no net test change).
+3. **Stream length infrastructure:** `checkStreamLengths` implemented but disabled — raw byte scanning produces FPs on linearized/complex PDFs.
+4. **Compressed object resolution:** `resolveAllObjects` now includes type-2 (compressed) objects.
+
+#### Remaining FN breakdown (585 tests, by area)
+
+| Area | FN Count | Top Issues |
+|------|----------|------------|
+| **PDF/A-2b** | 141 | Color spaces (§6.2.4: 25), XMP extensions (§6.6.2.3: 10), font encoding (§6.2.10-11: 27), stream format (§6.1.7-9: 13), Separation/DeviceN (§6.2.4.4: 14) |
+| **PDF/A-4** | 148 | Actions (§6.6.1: 6), color (§6.2.4: 22), fonts (§6.2.10: 18), file structure (§6.1: 20), embedded files (§6.9: 8), XMP (§6.7: 12) |
+| **PDF/UA-1** | 68 | Outline lang (§7.2 t2: 21), lang tag FN from old compliance pkg (§7.2 t29: 16), form TU/Alt (§7.18.1 t3: 4), table columns (§7.2 t43: 3), role map (§7.1 t5: 3), heading hierarchy (§7.4: 6) |
+| **PDF/UA-2** | 37 | Namespace/role map (§8.2.4: 8), table columns (§8.2.5.26: 6), font CMap (§8.4.5.4: 5), artifact tagging (§8.2.2: 3), ToUnicode CMap values (§8.4.5.8: 3) |
+| **PDF/A-1b** | 44 | File structure (§6.1: 20), fonts (§6.3: 10), XMP (§6.7: 10) |
+| **Others** | 147 | PDF/A-1a, 2a, 2u, 3b, 4e, 4f — similar distribution |
+
+#### Key unsolved areas requiring major new implementations
+
+| Feature | FN Impact | Complexity | Description |
+|---------|-----------|------------|-------------|
+| **Separation/DeviceN color validation** | ~20 | High | Validate spot color names, alternateSpace, tintTransform across all resource types |
+| **Device CS ↔ OutputIntent coverage** | ~25 | Medium | DeviceRGB/CMYK/Gray require OutputIntent with matching color space |
+| **Font glyph width comparison** | ~40 | Very High | Parse TrueType hmtx + CFF charstrings, compare with /Widths |
+| **Stream length validation** | ~10 | High | Robust stream/endstream byte counting (linearized PDF support) |
+| **PDF/UA outline lang (§7.2 t2)** | ~21 | Medium | Check /Lang on outline items, inherit from catalog |
+| **PDF/UA-2 namespace role mapping (§8.2.4)** | ~8 | High | Validate /NS entries, role map chains across namespaces |
+| **Table column count (§7.2 t43 / §8.2.5.26)** | ~6 | Medium | Count columns per row accounting for /ColSpan |
+| **XMP property value format** | ~15 | Medium | Per-part predefined namespace enforcement + strict type validation |
+| **CharSet/CIDSet font subset validation** | ~6 | Medium | Validate /CharSet lists all glyphs in embedded font program |
