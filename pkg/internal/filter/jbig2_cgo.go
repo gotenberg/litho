@@ -4,9 +4,10 @@ package filter
 
 /*
 #cgo pkg-config: jbig2dec
-#include <jbig2.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <jbig2.h>
 
 // decodeJBIG2C decodes a JBIG2 stream, optionally preceded by global segment
 // data. The decoded 1-bpp bitmap is returned as packed bytes (MSB-first),
