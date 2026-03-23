@@ -36,6 +36,8 @@ func TestIsValidLangTag(t *testing.T) {
 		{"extension then private", "en-a-ext1-x-priv"},
 		{"variant digit-prefix", "en-US-1abc"},
 		{"case insensitive script", "en-latn-us"},
+		{"single-letter language RFC 3066", "p"},
+		{"single-letter with region", "p-pt"},
 	}
 
 	for _, tc := range valid {
@@ -51,7 +53,8 @@ func TestIsValidLangTag(t *testing.T) {
 		name string
 		tag  string
 	}{
-		{"single letter not i or x", "a"},
+		// Note: single-letter primary like "a" is valid per RFC 3066 (1-8 ALPHA).
+		// It was invalid per RFC 5646 (2-8 ALPHA) but PDF spec references RFC 3066.
 		{"too-long primary", "abcdefghi"},
 		{"single digit primary", "1"},
 		{"digit in primary", "e1"},

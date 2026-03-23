@@ -268,16 +268,20 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
-// isValidLangTag validates a language tag against RFC 5646 (BCP 47) well-formedness.
+// isValidLangTag validates a language tag against RFC 3066 / RFC 5646 (BCP 47)
+// well-formedness. The PDF spec (ISO 32000-1:2008, 14.9.2) references RFC 3066
+// which allows 1-8 ALPHA for the primary language subtag (RFC 5646 tightened
+// this to 2-8). We accept 1-8 to match VeraPDF's behavior and the spec reference.
+//
 // It does NOT check against the IANA subtag registry — only structural validity.
 // An empty or whitespace-only tag is treated as "not present" rather than invalid —
 // callers should skip validation instead of reporting an invalid-tag violation.
 //
-// Grammar (simplified from RFC 5646 §2.1):
+// Grammar (simplified from RFC 5646 §2.1, with RFC 3066 primary language):
 //
 //	Language-Tag = langtag / privateuse / grandfathered
 //	langtag      = language ["-" script] ["-" region] *("-" variant) *("-" extension) ["-" privateuse]
-//	language     = 2*3ALPHA ["-" extlang] / 4ALPHA / 5*8ALPHA
+//	language     = 1*8ALPHA ["-" extlang]   (RFC 3066 allows 1-8 ALPHA)
 //	extlang      = 3ALPHA *2("-" 3ALPHA)
 //	script       = 4ALPHA
 //	region       = 2ALPHA / 3DIGIT
@@ -313,13 +317,14 @@ func isValidLangTag(tag string) bool {
 		return true
 	}
 
-	// Primary language subtag: 2-3 ALPHA (with optional extlang), 4 ALPHA, or 5-8 ALPHA.
+	// Primary language subtag: 1-8 ALPHA per RFC 3066 (referenced by PDF spec ISO 32000-1:2008, 14.9.2).
+	// RFC 5646 restricts to 2-8 ALPHA, but PDF conforming readers must accept RFC 3066.
 	primary := parts[0]
 	if !isAlphaStr(primary) {
 		return false
 	}
 	pLen := len(primary)
-	if pLen < 2 || pLen > 8 { //nolint:mnd // BCP 47: primary language is 2-8 alpha
+	if pLen < 1 || pLen > 8 { //nolint:mnd // RFC 3066: primary language is 1-8 alpha
 		return false
 	}
 
