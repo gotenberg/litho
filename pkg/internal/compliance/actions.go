@@ -615,13 +615,23 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 	}
 
 	// Check /A action on this outline item.
+	// For PDF/A, outline items are user-initiated (not automatic triggers).
+	// The spec restricts certain action types in /AA (additional actions)
+	// but outline /A is explicit user interaction. VeraPDF does not flag
+	// /JavaScript or /SetOCGState on outline items for PDF/A.
 	if aObj, hasA := item["A"]; hasA {
 		aDict, err := document.ResolveDict(ctx, doc, aObj)
 		if err == nil && aDict != nil {
 			// Verify it's actually an action (has /S key), not a destination.
 			if _, hasS := aDict["S"]; hasS {
-				violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0)
-				*results = append(*results, violations...)
+				if isPDFUA(profile) {
+					violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0)
+					*results = append(*results, violations...)
+				} else {
+					// PDF/A: check with outline-specific exemptions.
+					violations := checkOutlineActionPDFA(ctx, doc, aDict, profile, part)
+					*results = append(*results, violations...)
+				}
 			}
 		}
 	}
@@ -631,6 +641,71 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 
 	// Recurse to next sibling — use depth (not depth+1) since siblings are at same level.
 	walkOutlineItems(ctx, doc, item["Next"], profile, part, results, depth)
+}
+
+// outlineExemptActionsPart4 are action types that VeraPDF does not flag on
+// outline items for PDF/A-4. Outline /A is user-initiated, not an automatic trigger.
+//
+//nolint:gochecknoglobals // package-level lookup table.
+var outlineExemptActionsPart4 = map[ast.PdfName]bool{
+	"JavaScript": true,
+}
+
+// outlineExemptActionsPart4e extends Part4 exemptions for PDF/A-4e, which
+// additionally allows SetOCGState and GoTo3DView on outline items.
+//
+//nolint:gochecknoglobals // package-level lookup table.
+var outlineExemptActionsPart4e = map[ast.PdfName]bool{
+	"JavaScript":  true,
+	"SetOCGState": true,
+	"GoTo3DView":  true,
+}
+
+// checkOutlineActionPDFA checks an outline item action for PDF/A, using the
+// standard forbidden set minus outline-exempt types.
+func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int) []Result {
+	actionType, _ := document.ResolveName(ctx, doc, action["S"])
+	if actionType == "" {
+		return nil
+	}
+
+	var results []Result
+
+	// Determine outline-exempt actions based on profile.
+	var exempt map[ast.PdfName]bool
+	switch profile {
+	case "PDF/A-4e":
+		exempt = outlineExemptActionsPart4e
+	case "PDF/A-4", "PDF/A-4f":
+		exempt = outlineExemptActionsPart4
+	}
+
+	// Check forbidden action types, skipping outline-exempt types.
+	if !exempt[actionType] {
+		forbidden := forbiddenActionTypes
+		switch part {
+		case 2, 3: //nolint:mnd // PDF/A-2 and PDF/A-3.
+			forbidden = forbiddenActionTypesPart23
+		case 4: //nolint:mnd // PDF/A-4.
+			forbidden = forbiddenActionTypesPart4
+		}
+
+		if forbidden[actionType] {
+			rule := forbiddenActionTypeRule(part)
+			results = append(results, failf(rule, "%s at outline item", actionType)...)
+		}
+	}
+
+	// Also check named actions (§6.6.1 test 2 / §6.5.1 test 2).
+	if actionType == "Named" {
+		actionName, _ := document.ResolveName(ctx, doc, action["N"])
+		if actionName != "" && !allowedNamedActions[actionName] {
+			rule := namedActionRule(part)
+			results = append(results, failf(rule, "%s at outline item", actionName)...)
+		}
+	}
+
+	return results
 }
 
 // checkFormFieldActions walks the AcroForm /Fields array and checks form field
