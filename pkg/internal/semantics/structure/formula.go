@@ -5,7 +5,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -188,7 +187,7 @@ func extractMathMLFromAF(ctx context.Context, doc *document.Document, dict ast.P
 			}
 		}
 
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			continue
 		}

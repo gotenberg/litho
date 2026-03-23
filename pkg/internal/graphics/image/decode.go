@@ -11,7 +11,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // DecodeImage decodes a named Image XObject from a page into a Go image.Image.
@@ -90,7 +89,7 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	}
 
 	// Decode stream data (FlateDecode, etc.).
-	decodedData, err := filter.DecodeStream(stream)
+	decodedData, err := doc.DecodeStream(stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode stream: %w", err)
 	}

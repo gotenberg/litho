@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/geospatial"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
@@ -27,6 +28,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // OpenOption configures optional behavior when opening a PDF document.
@@ -36,6 +38,7 @@ type openOpts struct {
 	logger   *slog.Logger
 	password string
 	ocr      models.OCREngine
+	filters  []plugins.FilterDecoder
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -62,6 +65,20 @@ func WithPassword(password string) OpenOption {
 func WithOCREngine(engine models.OCREngine) OpenOption {
 	return func(o *openOpts) {
 		o.ocr = engine
+	}
+}
+
+// WithFilterPlugin registers a filter decoder plugin for stream
+// decompression. Multiple plugins can be registered; each handles the
+// filter name returned by its FilterName method.
+//
+// Example:
+//
+//	import "github.com/gotenberg/litho/pkg/plugins/jbig2"
+//	reader, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(jbig2.New()))
+func WithFilterPlugin(p plugins.FilterDecoder) OpenOption {
+	return func(o *openOpts) {
+		o.filters = append(o.filters, p)
 	}
 }
 
@@ -154,6 +171,10 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 			}
 			doc.Logger.Debug("password authentication succeeded")
 		}
+	}
+
+	if len(o.filters) > 0 {
+		doc.Filters = filter.NewDecoder(o.filters)
 	}
 
 	return &Reader{doc: doc, ocr: o.ocr}, nil

@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
 func TestExtractType3GlyphWidth_D0(t *testing.T) {
 	// A CharProc stream containing: "500 0 d0"
 	stream := ast.NewStream(ast.PdfDict{}, []byte("500 0 d0"))
-	w, err := extractType3GlyphWidth(stream)
+	w, err := extractType3GlyphWidth(&document.Document{Logger: document.NopLogger()}, stream)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -22,7 +23,7 @@ func TestExtractType3GlyphWidth_D0(t *testing.T) {
 func TestExtractType3GlyphWidth_D1(t *testing.T) {
 	// A CharProc stream containing: "600 0 0 -200 600 800 d1"
 	stream := ast.NewStream(ast.PdfDict{}, []byte("600 0 0 -200 600 800 d1"))
-	w, err := extractType3GlyphWidth(stream)
+	w, err := extractType3GlyphWidth(&document.Document{Logger: document.NopLogger()}, stream)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -33,7 +34,7 @@ func TestExtractType3GlyphWidth_D1(t *testing.T) {
 
 func TestExtractType3GlyphWidth_NoOperator(t *testing.T) {
 	stream := ast.NewStream(ast.PdfDict{}, []byte("100 200 m 300 400 l S"))
-	_, err := extractType3GlyphWidth(stream)
+	_, err := extractType3GlyphWidth(&document.Document{Logger: document.NopLogger()}, stream)
 	if err == nil {
 		t.Error("expected error for missing d0/d1, got nil")
 	}

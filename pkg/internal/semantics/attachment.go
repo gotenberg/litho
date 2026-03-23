@@ -9,7 +9,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // ExtractAttachments extracts embedded files from the PDF and saves them to disk.
@@ -120,7 +119,7 @@ func extractNamesTree(ctx context.Context, doc *document.Document, nodeObj ast.P
 									filename = filepath.Base(filename)
 
 									// Decode and save stream
-									data, err := filter.DecodeStream(stream)
+									data, err := doc.DecodeStream(stream)
 									if err == nil {
 										outPath := filepath.Join(outputDir, filename)
 										err = os.WriteFile(outPath, data, 0o600)

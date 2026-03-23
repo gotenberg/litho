@@ -296,7 +296,8 @@ func TestExtractMathMLFromAF_SingleFileSpec(t *testing.T) {
 		},
 	}
 
-	got := extractMathMLFromAF(context.Background(), nil, dict)
+	doc := &document.Document{Logger: document.NopLogger()}
+	got := extractMathMLFromAF(context.Background(), doc, dict)
 	if got != "<math/>" {
 		t.Errorf("got %q, want '<math/>'", got)
 	}

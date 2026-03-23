@@ -190,6 +190,6 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 	return &models.EmbeddedFile{
 		Name:     filename,
 		MIMEType: mimeType,
-		Open:     openStreamFunc(stream),
+		Open:     openStreamFunc(doc, stream),
 	}, nil
 }

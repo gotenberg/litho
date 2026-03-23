@@ -7,7 +7,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -148,7 +147,7 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			continue
 		}
 
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			slog.Debug("compliance_2/color: cannot decode ICC profile stream", "index", i, "error", err)
 			*results = append(*results, failf(outputIntentICCRule(part), "OutputIntent[%d]: failed to decode ICC profile", i)...)
@@ -483,7 +482,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	visited[dictAddr] = true
 
 	// Decode and scan the content stream for device CS operators.
-	data, err := filter.DecodeStream(stream)
+	data, err := doc.DecodeStream(stream)
 	if err != nil {
 		slog.Debug("compliance_2/color: cannot decode Form XObject stream", "error", err)
 		return usage
@@ -986,7 +985,7 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			continue
 		}
@@ -1046,7 +1045,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			continue
 		}
 
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			slog.Debug("compliance_2/color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),

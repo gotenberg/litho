@@ -8,7 +8,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // extractXFAData checks the AcroForm dictionary for an /XFA key, resolves and
@@ -49,7 +48,7 @@ func extractXFAData(ctx context.Context, doc *document.Document, acroFormDict as
 func assembleXFAXML(ctx context.Context, doc *document.Document, xfaObj ast.PdfObject) ([]byte, error) {
 	switch v := xfaObj.(type) {
 	case ast.PdfStream:
-		data, err := filter.DecodeStream(v)
+		data, err := doc.DecodeStream(v)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode XFA stream: %w", err)
 		}
@@ -80,7 +79,7 @@ func assembleXFAArray(ctx context.Context, doc *document.Document, arr ast.PdfAr
 			continue
 		}
 
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			continue
 		}

@@ -1,6 +1,11 @@
 //go:build cgo
 
-package filter
+// Package jpx provides a JPXDecode (JPEG 2000) filter plugin backed by
+// libopenjp2.
+//
+// This package requires CGO and the libopenjp2 C library. Install it via
+// your system package manager (e.g., brew install openjpeg).
+package jpx
 
 /*
 #cgo pkg-config: libopenjp2
@@ -53,13 +58,11 @@ static OPJ_BOOL mem_seek(OPJ_OFF_T pos, void *user) {
 	return OPJ_TRUE;
 }
 
-// decodeJPX decodes JPEG 2000 data and writes interleaved pixel bytes into
+// decodeJPXC decodes JPEG 2000 data and writes interleaved pixel bytes into
 // *out_buf (caller must free). Returns 0 on success, -1 on error.
-// *out_len receives the byte length, *out_w / *out_h / *out_comps the image
-// dimensions.
-static int decodeJPX(const unsigned char *src, size_t src_len,
-                     unsigned char **out_buf, size_t *out_len,
-                     int *out_w, int *out_h, int *out_comps) {
+static int decodeJPXC(const unsigned char *src, size_t src_len,
+                      unsigned char **out_buf, size_t *out_len,
+                      int *out_w, int *out_h, int *out_comps) {
 
 	// Detect codec from the first bytes.
 	OPJ_CODEC_FORMAT fmt = OPJ_CODEC_JP2;
@@ -152,13 +155,7 @@ import (
 	"unsafe"
 )
 
-// decodeJPX decodes JPEG 2000 (JPX) data via libopenjp2 and returns raw
-// interleaved pixel bytes.
-func decodeJPX(data []byte) ([]byte, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("jpx decode: empty input")
-	}
-
+func decode(data []byte) ([]byte, error) {
 	var (
 		outBuf   *C.uchar
 		outLen   C.size_t
@@ -167,7 +164,7 @@ func decodeJPX(data []byte) ([]byte, error) {
 		outComps C.int
 	)
 
-	rc := C.decodeJPX(
+	rc := C.decodeJPXC(
 		(*C.uchar)(unsafe.Pointer(&data[0])),
 		C.size_t(len(data)),
 		&outBuf, &outLen,

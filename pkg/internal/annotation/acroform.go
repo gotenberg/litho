@@ -9,7 +9,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -216,7 +215,7 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 											if jsStr, ok := jsRes.(ast.PdfString); ok {
 												calcScripts[fullName] = document.DecodePdfString(jsStr)
 											} else if jsStream, ok := jsRes.(ast.PdfStream); ok {
-												data, err := filter.DecodeStream(jsStream)
+												data, err := doc.DecodeStream(jsStream)
 												if err == nil {
 													calcScripts[fullName] = string(data)
 												}

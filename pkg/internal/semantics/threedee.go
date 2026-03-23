@@ -93,7 +93,7 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		results = append(results, models.Model3D{
 			Name:    name,
 			Subtype: subtype,
-			Open:    openStreamFunc(stream),
+			Open:    openStreamFunc(doc, stream),
 		})
 		modelIdx++
 	}

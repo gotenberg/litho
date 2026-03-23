@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -42,7 +41,7 @@ func ExtractPronunciationLexicons(ctx context.Context, doc *document.Document) (
 			continue
 		}
 
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			continue
 		}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // knownXMPNamespaces lists the predefined XMP namespace URIs that do not
@@ -210,8 +209,8 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	slog.Debug("compliance_2/xmp: decoding metadata stream bytes")
 	xmpData, err := stream.Bytes()
 	if err != nil || len(xmpData) == 0 {
-		slog.Debug("compliance_2/xmp: Bytes() returned empty, trying filter.DecodeStream")
-		decoded, decErr := filter.DecodeStream(stream)
+		slog.Debug("compliance_2/xmp: Bytes() returned empty, trying doc.DecodeStream")
+		decoded, decErr := doc.DecodeStream(stream)
 		if decErr != nil {
 			slog.Debug("compliance_2/xmp: DecodeStream failed", "error", decErr)
 			*results = append(*results, xmpMetadataRule(part, 1)...)

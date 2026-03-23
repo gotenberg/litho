@@ -10,7 +10,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // dssData holds the raw validation materials extracted from the Document
@@ -135,7 +134,7 @@ func resolveDSSStreamArray(ctx context.Context, doc *document.Document, dict ast
 		if stream.Dict == nil {
 			continue
 		}
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			continue
 		}

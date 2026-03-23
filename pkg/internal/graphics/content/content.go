@@ -12,7 +12,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // Operation represents a drawing or state operation in a PDF content stream.
@@ -128,7 +127,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 
 	var allData []byte
 	for _, s := range streams {
-		data, err := filter.DecodeStream(s)
+		data, err := doc.DecodeStream(s)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode content stream: %v", err)
 		}

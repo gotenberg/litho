@@ -13,7 +13,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
@@ -288,7 +287,7 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		stream, err := document.ResolveStream(ctx, doc, tuObj)
 		if err == nil {
 			if stream.Dict != nil {
-				decoded, err := filter.DecodeStream(stream)
+				decoded, err := doc.DecodeStream(stream)
 				if err == nil {
 					c, err := cmap.Parse(decoded)
 					if err == nil {
@@ -399,7 +398,7 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 					if stream.Dict == nil {
 						continue
 					}
-					w, err := extractType3GlyphWidth(stream)
+					w, err := extractType3GlyphWidth(doc, stream)
 					if err != nil {
 						continue
 					}
@@ -1030,7 +1029,7 @@ func decodeFontStream(ctx context.Context, doc *document.Document, fdDict ast.Pd
 	if stream.Dict == nil {
 		return nil
 	}
-	data, err := filter.DecodeStream(stream)
+	data, err := doc.DecodeStream(stream)
 	if err != nil {
 		return nil
 	}
@@ -1090,8 +1089,8 @@ func injectStandard14Widths(font *Font, baseFont string) {
 // d1 (setcachedevice): wx wy llx lly urx ury d1 — sets width and cache bbox.
 //
 // The first operand (wx) is the horizontal advance width in glyph space units.
-func extractType3GlyphWidth(stream ast.PdfStream) (float64, error) {
-	data, err := filter.DecodeStream(stream)
+func extractType3GlyphWidth(doc *document.Document, stream ast.PdfStream) (float64, error) {
+	data, err := doc.DecodeStream(stream)
 	if err != nil {
 		return 0, err
 	}

@@ -8,7 +8,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -204,7 +203,7 @@ func getPageContentBytes(ctx context.Context, doc *document.Document, page ast.P
 
 	var allData []byte
 	for _, s := range streams {
-		data, err := filter.DecodeStream(s)
+		data, err := doc.DecodeStream(s)
 		if err != nil {
 			return nil, fmt.Errorf("decoding content stream: %w", err)
 		}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
@@ -1031,7 +1030,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		if stream.Dict == nil {
 			continue
 		}
-		data, err := filter.DecodeStream(stream)
+		data, err := doc.DecodeStream(stream)
 		if err != nil {
 			// Fall back to raw data.
 			rawData, rawErr := stream.Bytes()
@@ -1519,7 +1518,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		return failf(rule, "font %s on page %d: /ToUnicode stream has no dictionary", fontName, pageNum)
 	}
 
-	data, err := filter.DecodeStream(stream)
+	data, err := doc.DecodeStream(stream)
 	if err != nil {
 		// Fall back to raw data.
 		data, err = stream.Bytes()

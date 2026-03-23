@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // Document represents a parsed PDF document.
@@ -64,6 +65,29 @@ type Document struct {
 	// FormatViolations collects parser-level format violations detected
 	// during object resolution when ComplianceMode is true.
 	FormatViolations []error
+
+	// Filters holds registered filter plugins for stream decoding.
+	// Nil when no plugins are registered. Set once during construction,
+	// then read-only.
+	Filters *filter.Decoder
+}
+
+// DecodeStream decodes a PDF stream using the document's filter decoder
+// (which may include registered plugins). If no custom decoder is set,
+// falls back to the package-level filter.DecodeStream.
+func (d *Document) DecodeStream(stream ast.PdfStream) ([]byte, error) {
+	if d.Filters != nil {
+		return d.Filters.DecodeStream(stream)
+	}
+	return filter.DecodeStream(stream)
+}
+
+// NewStreamReader returns a lazy reader using the document's filter decoder.
+func (d *Document) NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
+	if d.Filters != nil {
+		return d.Filters.NewStreamReader(stream)
+	}
+	return filter.NewStreamReader(stream)
 }
 
 // NopLogger returns a logger that discards all output.

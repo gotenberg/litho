@@ -8,7 +8,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // checkAccessibilityGroup validates PDF/UA accessibility requirements.
@@ -1440,10 +1439,10 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil, false
 	}
 
-	data, err := filter.DecodeStream(stream)
+	data, err := doc.DecodeStream(stream)
 	if err != nil {
 		// Fallback to raw bytes if decode fails (metadata streams are often uncompressed).
-		slog.Debug("compliance_2/accessibility: filter.DecodeStream failed, trying raw", "error", err)
+		slog.Debug("compliance_2/accessibility: doc.DecodeStream failed, trying raw", "error", err)
 		data, err = stream.Bytes()
 		if err != nil {
 			slog.Debug("compliance_2/accessibility: failed to read raw metadata stream", "error", err)

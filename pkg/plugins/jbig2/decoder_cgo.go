@@ -1,6 +1,10 @@
 //go:build cgo
 
-package filter
+// Package jbig2 provides a JBIG2Decode filter plugin backed by libjbig2dec.
+//
+// This package requires CGO and the libjbig2dec C library. Install it via
+// your system package manager (e.g., brew install jbig2dec).
+package jbig2
 
 /*
 #cgo pkg-config: jbig2dec
@@ -85,32 +89,9 @@ import "C"
 import (
 	"fmt"
 	"unsafe"
-
-	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// decodeJBIG2 decodes JBIG2 data via libjbig2dec. The DecodeParms dict may
-// contain a /JBIG2Globals stream that is fed to the decoder before the
-// page-specific data.
-func decodeJBIG2(data []byte, parms ast.PdfDict) ([]byte, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("jbig2 decode: empty input")
-	}
-
-	// Extract /JBIG2Globals from DecodeParms if present.
-	var globals []byte
-	if parms != nil {
-		if globalsObj, ok := parms["JBIG2Globals"]; ok {
-			if globalsStream, ok := globalsObj.(ast.PdfStream); ok {
-				decoded, err := DecodeStream(globalsStream)
-				if err != nil {
-					return nil, fmt.Errorf("decoding JBIG2Globals: %w", err)
-				}
-				globals = decoded
-			}
-		}
-	}
-
+func decode(data []byte, globals []byte) ([]byte, error) {
 	var (
 		globalsPtr *C.uchar
 		globalsLen C.size_t

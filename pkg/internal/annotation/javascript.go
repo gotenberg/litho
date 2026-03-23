@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // ExtractDocumentScripts extracts document-level JavaScript scripts from the PDF Name tree.
@@ -84,7 +83,7 @@ func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfO
 									if str, ok := jsRes.(ast.PdfString); ok {
 										*scripts = append(*scripts, document.DecodePdfString(str))
 									} else if stream, ok := jsRes.(ast.PdfStream); ok {
-										data, err := filter.DecodeStream(stream)
+										data, err := doc.DecodeStream(stream)
 										if err == nil {
 											*scripts = append(*scripts, string(data))
 										}

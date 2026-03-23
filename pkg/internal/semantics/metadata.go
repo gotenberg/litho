@@ -10,7 +10,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // xmpMeta is the top-level XMP wrapper element.
@@ -169,7 +168,7 @@ func getXMPMetadata(ctx context.Context, doc *document.Document) map[string]stri
 		return nil
 	}
 
-	decoded, err := filter.DecodeStream(stream)
+	decoded, err := doc.DecodeStream(stream)
 	if err != nil {
 		return nil
 	}

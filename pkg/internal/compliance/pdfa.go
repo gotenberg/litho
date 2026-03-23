@@ -11,7 +11,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -196,7 +195,7 @@ func checkOutputIntentProfileClass(ctx context.Context, doc *document.Document, 
 		}
 
 		// Decode the ICC profile stream data.
-		data, err := filter.DecodeStream(profStream)
+		data, err := doc.DecodeStream(profStream)
 		if err != nil {
 			// Fall back to raw data if decoding fails (uncompressed stream).
 			data, err = profStream.Bytes()
@@ -719,7 +718,7 @@ func getContentStreamBytes(ctx context.Context, doc *document.Document, contents
 	}
 	switch v := res.(type) {
 	case ast.PdfStream:
-		decoded, err := filter.DecodeStream(v)
+		decoded, err := doc.DecodeStream(v)
 		if err != nil {
 			rawData, rawErr := v.Bytes()
 			if rawErr != nil {
@@ -733,7 +732,7 @@ func getContentStreamBytes(ctx context.Context, doc *document.Document, contents
 		for _, item := range v {
 			stream, err := document.ResolveStream(ctx, doc, item)
 			if err == nil && stream.Dict != nil {
-				decoded, err := filter.DecodeStream(stream)
+				decoded, err := doc.DecodeStream(stream)
 				if err != nil {
 					rawData, _ := stream.Bytes()
 					buf.Write(rawData)
@@ -1328,7 +1327,7 @@ func checkXMPCompliance(ctx context.Context, doc *document.Document, catalog ast
 
 	xmpData, err := stream.Bytes()
 	if err != nil || len(xmpData) == 0 {
-		decoded, err := filter.DecodeStream(stream)
+		decoded, err := doc.DecodeStream(stream)
 		if err != nil {
 			return []error{models.ErrMissingCatalogMetdata}
 		}
@@ -3913,7 +3912,7 @@ func validateEmbeddedFilePDFA(ctx context.Context, doc *document.Document, fileS
 	}
 
 	// Decode the stream to get the raw file bytes.
-	data, err := filter.DecodeStream(stream)
+	data, err := doc.DecodeStream(stream)
 	if err != nil {
 		return fmt.Errorf("%w: failed to decode stream", models.ErrNonPDFAAttachment)
 	}
