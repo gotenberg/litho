@@ -302,6 +302,7 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 	}
 
 	structIdx := 0
+	hCount := 0 // Count of H (generic heading) children for §7.4.4 t1.
 	for _, item := range arr {
 		if ctx.Err() != nil {
 			return
@@ -312,6 +313,16 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		}
 		// Only process structure elements (skip marked content refs, object refs).
 		if _, hasS := dict["S"]; hasS {
+			// Check for H (generic heading) children — §7.4.4 t1.
+			childType, _ := document.ResolveName(ctx, state.doc, dict["S"])
+			if childType == "H" {
+				hCount++
+				if hCount > 1 {
+					*state.results = append(*state.results,
+						failf(Rule_14289_1_7_4_4_t01, "node contains %d H children (max 1)", hCount)...)
+				}
+			}
+
 			walkElement(ctx, state, dict, parentType, depth, lastHeadingLevel)
 			validateCaptionPosition(state, dict, parentType, structIdx, totalStructChildren)
 			structIdx++
