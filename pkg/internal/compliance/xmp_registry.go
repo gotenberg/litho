@@ -95,7 +95,7 @@ var xmpPropertyRegistry = map[string]map[string]xmpPropType{
 		"Keywords":   xmpPropText,
 		"PDFVersion": xmpPropText,
 		"Producer":   xmpPropText,
-		"Trapped":    xmpPropText,
+		"Trapped":    xmpPropBoolean,
 	},
 
 	// PDF/A Identification (pdfaid:).
