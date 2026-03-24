@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -27,6 +28,7 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Result
+	visited := make(map[string]bool)
 
 	for i, page := range pages {
 		if ctx.Err() != nil {
@@ -39,35 +41,67 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 			continue
 		}
 
-		xobjectDict, err := document.ResolveDict(ctx, doc, res["XObject"])
-		if err != nil || xobjectDict == nil {
-			continue
-		}
-
-		slog.Debug("compliance_2: xobjects: checking page", "page", i+1, "xobjects", len(xobjectDict))
-
-		for name, obj := range xobjectDict {
-			if ctx.Err() != nil {
-				slog.Debug("compliance_2: xobjects: context cancelled")
-				return results
-			}
-
-			xobjDict, err := document.ResolveDict(ctx, doc, obj)
-			if err != nil || xobjDict == nil {
-				slog.Debug("compliance_2: xobjects: could not resolve XObject", "name", name, "error", err)
-				continue
-			}
-
-			subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
-
-			slog.Debug("compliance_2: xobjects: checking XObject", "page", i+1, "name", name, "subtype", subtype)
-
-			results = append(results, checkXObject(ctx, doc, xobjDict, subtype, name, i+1, part, profile)...)
-		}
+		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0)
 	}
 
 	slog.Debug("compliance_2: xobjects: checks complete", "violations", len(results))
 	return results
+}
+
+// scanXObjectResources iterates XObject resources, validates each, and recurses
+// into Form XObject sub-resources.
+func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Result, visited map[string]bool, depth int) {
+	if depth > 10 || ctx.Err() != nil {
+		return
+	}
+
+	xobjectDict, err := document.ResolveDict(ctx, doc, res["XObject"])
+	if err != nil || xobjectDict == nil {
+		return
+	}
+
+	for name, obj := range xobjectDict {
+		if ctx.Err() != nil {
+			return
+		}
+
+		// Cycle detection via indirect ref.
+		if ref, ok := obj.(ast.PdfIndirectRef); ok {
+			key := fmt.Sprintf("xo:%d", ref.ObjectNum)
+			if visited[key] {
+				continue
+			}
+			visited[key] = true
+		}
+
+		// XObjects are streams — resolve as stream to access the dict.
+		stream, err := document.ResolveStream(ctx, doc, obj)
+		if err != nil {
+			// Fallback: try as plain dict (some producers use dict-only XObjects).
+			xobjDict, err := document.ResolveDict(ctx, doc, obj)
+			if err != nil || xobjDict == nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
+			*results = append(*results, checkXObject(ctx, doc, xobjDict, subtype, name, pageNum, part, profile)...)
+			continue
+		}
+
+		xobjDict := stream.Dict
+		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
+
+		slog.Debug("compliance_2: xobjects: checking XObject", "page", pageNum, "name", name, "subtype", subtype)
+
+		*results = append(*results, checkXObject(ctx, doc, xobjDict, subtype, name, pageNum, part, profile)...)
+
+		// Recurse into Form XObject sub-resources.
+		if subtype == "Form" {
+			subRes, _ := document.ResolveDict(ctx, doc, xobjDict["Resources"])
+			if subRes != nil {
+				scanXObjectResources(ctx, doc, subRes, pageNum, part, profile, results, visited, depth+1)
+			}
+		}
+	}
 }
 
 // checkXObject validates a single XObject against the constraints for the given
