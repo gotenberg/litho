@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Tier 4+5 | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Delta (total) |
-|--------|----------|----------|---------|---------|---------|---------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | **2,158 (83.0%)** | +669 |
-| **False Positives** | 97 | 124 | ~108 | 75 | 35 | 35 | **35** | -62 |
-| **False Negatives** | 1,014 | 650 | ~500 | 470 | 485 | 419 | **407** | -607 |
+| Metric | Baseline | Tier 4+5 | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Delta (total) |
+|--------|----------|----------|---------|---------|---------|---------|---------|---------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | **2,173 (83.5%)** | +684 |
+| **False Positives** | 97 | 124 | ~108 | 75 | 35 | 35 | 35 | **37** | -60 |
+| **False Negatives** | 1,014 | 650 | ~500 | 470 | 485 | 419 | 407 | **390** | -624 |
 
 ### Progress by tier
 
@@ -26,7 +26,8 @@
 | Round 2 (FP-first + targeted FN) | 2,055 | 75 | 470 | 79.0% |
 | Round 3 (FP elimination) | 2,080 | 35 | 485 | 80.0% |
 | Round 4 (FN-dominated push) | 2,146 | 35 | 419 | 82.5% |
-| **Round 5 (breadth FN push)** | **2,158** | **35** | **407** | **83.0%** |
+| Round 5 (breadth FN push) | 2,158 | 35 | 407 | 83.0% |
+| **Round 6 (diagnostic-first)** | **2,173** | **37** | **390** | **83.5%** |
 
 ### Initial results (before improvements)
 
@@ -472,3 +473,40 @@ This round applied a breadth-first approach across multiple compliance areas, ma
 | ~10 | §6.1.12 | Object format validation |
 | ~9 | §8.2.4 | PDF/UA-2 namespace role mapping |
 | ~283 | Various | Long-tail across ~40 rule clauses |
+
+## Round 6 — Diagnostic-First Push (2026-03-24)
+
+**Starting point:** 2,158 / 2,601 (83.0%), 35 FP, 407 FN
+**Final result:** 2,173 / 2,601 (83.5%), 37 FP, 390 FN
+
+This round used a diagnostic-first approach: built an FN table grouping all 407 FN files by clause+testNumber (215 unique rule combinations), then triaged each into GREEN (simple dict/value checks), YELLOW (new logic), or RED (parser changes). Implemented GREEN fixes only.
+
+### Diagnostic Findings
+
+The 407 FN files split into:
+- **RED (parser-level, skipped):** §6.1.8 t01 (10, stream format), §6.1.4 t01 (6, xref format), §6.1.7 t01 (5, stream dict), §6.1.9 (8, string format), §6.1.2 (5, header), §6.2.4.2 t02 (6, overprint mode/graphics state)
+- **YELLOW (moderate logic):** §6.2.9/6.2.10 (18, transparency device CS), §6.2.3 t01 (6, OutputIntent device CS)
+- **GREEN (implemented):** XObject stream resolution, Colorants dict consistency
+
+### Fixes applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **XObject stream resolution** — The XObject scanner used `ResolveDict` which silently failed on stream-backed XObjects (most images and forms). Fixed to use `ResolveStream` with dict fallback. Also added recursion into Form XObject sub-resources. | `xobjects.go` | **-15 FN, +2 FP** |
+| 2 | **Colorants dict Separation consistency** — Separation arrays inside DeviceN `/Attributes/Colorants` dictionaries now checked for consistency with other Separation arrays having the same colorant name. | `color.go` | **-2 FN** |
+
+### Key remaining FN areas (390 total)
+
+| Files | Primary Rule | Category |
+|-------|-------------|----------|
+| ~10 | §6.1.8 t01 | RED — Stream/object format (parser) |
+| ~9 | §6.2.9 t04 | YELLOW — Transparency device CS |
+| ~9 | §6.2.10 t04 | YELLOW — Transparency blending CS |
+| ~6 | §6.1.4 t01 | RED — Xref format (parser) |
+| ~6 | §6.2.3 t01 | YELLOW — OutputIntent device CS |
+| ~6 | §6.2.4.2 t02 | RED — Overprint mode (graphics state) |
+| ~6 | §6.2.4.4 t03 | YELLOW — Separation consistency edge cases |
+| ~6 | §6.7.2 t03 | YELLOW — XMP DocInfo sync |
+| ~5 | §6.1.7 t01 | RED — Stream dict format (parser) |
+| ~5 | §6.1.12 t02 | RED — Implementation limits edge cases |
+| ~327 | Various | Long-tail across ~200 rule combinations |
