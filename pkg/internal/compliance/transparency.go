@@ -312,6 +312,42 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			}
 		}
 
+		// Check Image XObjects for /SMask (soft mask images).
+		if !pageUsesTransparency {
+			xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
+			if err == nil && xobjDict != nil {
+				for _, xobjObj := range xobjDict {
+					if pageUsesTransparency {
+						break
+					}
+					stream, err := document.ResolveStream(ctx, doc, xobjObj)
+					if err != nil {
+						continue
+					}
+					subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+					switch string(subtype) {
+					case "Image":
+						// Image with /SMask triggers transparency.
+						if _, hasSMask := stream.Dict["SMask"]; hasSMask {
+							pageUsesTransparency = true
+						}
+					case "Form":
+						// Form XObject with transparency group triggers transparency.
+						groupObj, hasGroup := stream.Dict["Group"]
+						if hasGroup {
+							group, err := document.ResolveDict(ctx, doc, groupObj)
+							if err == nil && group != nil {
+								s, _ := document.ResolveName(ctx, doc, group["S"])
+								if s == "Transparency" {
+									pageUsesTransparency = true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
 		// If the page uses transparency, it must have a blending colour space.
 		// The OutputIntent ICC profile provides a default blending CS for the
 		// entire document, so pages without an explicit /Group /CS are valid
