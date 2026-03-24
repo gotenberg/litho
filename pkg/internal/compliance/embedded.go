@@ -296,41 +296,72 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	rule := catalogAFRule(part)
 
-	afObj, hasAF := catalog["AF"]
-	if !hasAF {
-		slog.Debug("compliance_2/embedded: catalog missing /AF array but associated file specs exist")
-		return failf(rule, "catalog missing /AF array but %d embedded file(s) found", len(associatedSpecs))
-	}
+	// Collect all /AF references from catalog, pages, and annotations.
+	// The /AF array can appear on any of these per the spec.
+	afRefs := make(map[int]bool)
+	collectAFRefs(ctx, doc, catalog["AF"], afRefs)
 
-	afArr, err := document.ResolveArray(ctx, doc, afObj)
-	if err != nil || afArr == nil {
-		slog.Debug("compliance_2/embedded: catalog /AF is not a valid array", "error", err)
-		return failf(rule, "catalog /AF is not a valid array")
-	}
+	// Also collect from pages and their annotations.
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			break
+		}
+		collectAFRefs(ctx, doc, page["AF"], afRefs)
 
-	// Build a set of object numbers referenced in the /AF array.
-	afRefs := make(map[int]bool, len(afArr))
-	for _, elem := range afArr {
-		if ref, ok := elem.(ast.PdfIndirectRef); ok {
-			afRefs[ref.ObjectNum] = true
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+		annots, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			continue
+		}
+		for _, annotObj := range annots {
+			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annotDict == nil {
+				continue
+			}
+			collectAFRefs(ctx, doc, annotDict["AF"], afRefs)
 		}
 	}
 
-	slog.Debug("compliance_2/embedded: catalog /AF references", "count", len(afRefs))
+	slog.Debug("compliance_2/embedded: total /AF references collected", "count", len(afRefs))
+
+	if len(afRefs) == 0 {
+		slog.Debug("compliance_2/embedded: no /AF arrays found anywhere but associated file specs exist")
+		return failf(rule, "no /AF array found but %d embedded file(s) with /AFRelationship exist", len(associatedSpecs))
+	}
 
 	var results []Result
-	for _, fs := range fileSpecs {
+	for _, fs := range associatedSpecs {
 		if !afRefs[fs.objNum] {
-			slog.Debug("compliance_2/embedded: file spec not referenced in catalog /AF",
+			slog.Debug("compliance_2/embedded: file spec not referenced in any /AF",
 				"object", fs.objNum)
 			results = append(results, Result{
 				Rule:    rule,
-				Context: fmt.Sprintf("object %d: file specification with /EF not referenced in catalog /AF array", fs.objNum),
+				Context: fmt.Sprintf("object %d: file specification with /AFRelationship not referenced in any /AF array", fs.objNum),
 			})
 		}
 	}
 
 	return results
+}
+
+// collectAFRefs adds object numbers from an /AF array to the refs set.
+func collectAFRefs(ctx context.Context, doc *document.Document, afObj ast.PdfObject, refs map[int]bool) {
+	if afObj == nil {
+		return
+	}
+	arr, err := document.ResolveArray(ctx, doc, afObj)
+	if err != nil || arr == nil {
+		return
+	}
+	for _, elem := range arr {
+		if ref, ok := elem.(ast.PdfIndirectRef); ok {
+			refs[ref.ObjectNum] = true
+		}
+	}
 }
 
 func catalogAFRule(part int) Rule {
