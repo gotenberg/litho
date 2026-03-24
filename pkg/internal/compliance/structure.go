@@ -336,6 +336,12 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	validateTableContainment(state, typeName, parentType)
 	validateListContainment(ctx, state, elem, typeName, parentType)
 
+	// TOC/TOCI containment: TOCI must be inside TOC.
+	if typeName == "TOCI" && parentType != "TOC" && parentType != "" {
+		*state.results = append(*state.results,
+			failf(Rule_14289_1_7_2_t26, "TOCI inside %s instead of TOC", parentType)...)
+	}
+
 	// Track heading levels.
 	if hl := headingLevel(typeName); hl > 0 {
 		state.headingLevels = append(state.headingLevels, hl)
@@ -403,8 +409,21 @@ func validateTableContainment(state *walkState, typeName ast.PdfName, parentType
 		}
 	}
 
-	// Table children: THead/TBody/TFoot must contain only TR.
+	// Table children: Table may contain only TR, THead, TBody, TFoot, Caption.
+	// THead/TBody/TFoot must contain only TR.
+	// TR must contain only TH and TD.
 	switch parentType {
+	case "Table":
+		switch typeName {
+		case "TR", "THead", "TBody", "TFoot", "Caption":
+			// Valid Table children.
+		default:
+			slog.Debug("compliance_2/structure: invalid child of Table",
+				"parent", parentType, "child", typeName,
+			)
+			*state.results = append(*state.results,
+				failf(Rule_14289_1_7_2_t03, "Table contains %s instead of TR/THead/TBody/TFoot/Caption", typeName)...)
+		}
 	case "THead", "TBody", "TFoot":
 		if typeName != "TR" && typeName != "Caption" {
 			slog.Debug("compliance_2/structure: invalid child of table section",
@@ -412,6 +431,17 @@ func validateTableContainment(state *walkState, typeName ast.PdfName, parentType
 			)
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t03, "%s contains %s instead of TR", parentType, typeName)...)
+		}
+	case "TR":
+		switch typeName {
+		case "TH", "TD":
+			// Valid TR children.
+		default:
+			slog.Debug("compliance_2/structure: invalid child of TR",
+				"parent", parentType, "child", typeName,
+			)
+			*state.results = append(*state.results,
+				failf(Rule_14289_1_7_2_t10, "TR contains %s instead of TH/TD", typeName)...)
 		}
 	}
 }
