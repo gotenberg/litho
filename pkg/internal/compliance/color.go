@@ -1289,6 +1289,35 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 				pageIdx+1, csName, cName)...)
 		}
 	}
+
+	// §6.2.4.4 t2: Separation arrays in Colorants dictionaries must also be
+	// consistent with all other Separation arrays with the same colorant name.
+	if colorantsDict != nil {
+		for cName, cObj := range colorantsDict {
+			cArr, err := document.ResolveArray(ctx, doc, cObj)
+			if err != nil || len(cArr) < 3 {
+				continue
+			}
+			cType, _ := document.ResolveName(ctx, doc, cArr[0])
+			if cType != "Separation" {
+				continue
+			}
+			cAlt := resolveCSName(ctx, doc, cArr[2])
+			if cAlt == "" {
+				continue
+			}
+			name := string(cName)
+			if prev, ok := colorantAlternates[name]; ok {
+				if prev != cAlt {
+					*results = append(*results, failf(deviceNConsistencyRule(part),
+						"page %d, Colorants dict: Separation %q uses alternate %q but previously used %q",
+						pageIdx+1, name, cAlt, prev)...)
+				}
+			} else {
+				colorantAlternates[name] = cAlt
+			}
+		}
+	}
 }
 
 // separationConsistencyRule returns the rule for Separation colour space
