@@ -289,23 +289,32 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 			"usesGray", deviceCSUsed.gray,
 		)
 
-		// DeviceRGB: needs DefaultRGB or OutputIntent with RGB.
+		// Check page transparency group colour space as additional coverage.
+		// Per the spec, the "current transparency blending space" also provides
+		// device CS coverage.
+		blendingCS := pageBlendingColorSpace(ctx, doc, page)
+
+		// DeviceRGB: needs DefaultRGB, OutputIntent with RGB, or RGB blending CS.
 		if deviceCSUsed.rgb && !defaults.hasRGB {
-			if !hasICC || iccColorSpace != "RGB " {
+			rgbCovered := (hasICC && iccColorSpace == "RGB ") || blendingCS == "RGB "
+			if !rgbCovered {
 				slog.Debug("compliance_2/color: DeviceRGB used without coverage", "page", i)
 				*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used without DefaultRGB or RGB OutputIntent", i+1)...)
 			}
 		}
 
-		// DeviceCMYK: needs DefaultCMYK or OutputIntent with CMYK.
+		// DeviceCMYK: needs DefaultCMYK, OutputIntent with CMYK, or CMYK blending CS.
 		if deviceCSUsed.cmyk && !defaults.hasCMYK {
-			if !hasICC || iccColorSpace != "CMYK" {
+			cmykCovered := (hasICC && iccColorSpace == "CMYK") || blendingCS == "CMYK"
+			if !cmykCovered {
 				slog.Debug("compliance_2/color: DeviceCMYK used without coverage", "page", i)
 				*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used without DefaultCMYK or CMYK OutputIntent", i+1)...)
 			}
 		}
 
 		// DeviceGray: needs DefaultGray or any OutputIntent.
+		// Unlike DeviceRGB/DeviceCMYK, the spec does NOT allow the
+		// transparency blending CS to cover DeviceGray.
 		if deviceCSUsed.gray && !defaults.hasGray {
 			if !hasICC {
 				slog.Debug("compliance_2/color: DeviceGray used without coverage", "page", i)
@@ -313,6 +322,53 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 			}
 		}
 	}
+}
+
+// pageBlendingColorSpace returns the ICC colour space signature of the page's
+// transparency group colour space (/Group /CS), or "" if absent. The returned
+// value is "RGB ", "CMYK", or "GRAY" (ICC 4-byte signature).
+func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page ast.PdfDict) string {
+	groupObj, ok := page["Group"]
+	if !ok {
+		return ""
+	}
+	group, err := document.ResolveDict(ctx, doc, groupObj)
+	if err != nil || group == nil {
+		return ""
+	}
+	// Must be a transparency group.
+	s, _ := document.ResolveName(ctx, doc, group["S"])
+	if s != "Transparency" {
+		return ""
+	}
+	csObj, ok := group["CS"]
+	if !ok {
+		return ""
+	}
+	// Resolve the colour space. Only device-independent (ICCBased) blending
+	// colour spaces provide device CS coverage. Device{RGB,CMYK,Gray} blending
+	// colour spaces do NOT count as coverage.
+	csName := resolveCSName(ctx, doc, csObj)
+	if csName != "ICCBased" {
+		return ""
+	}
+	arr, err := document.ResolveArray(ctx, doc, csObj)
+	if err != nil || len(arr) < 2 {
+		return ""
+	}
+	stream, err := document.ResolveStream(ctx, doc, arr[1])
+	if err != nil {
+		return ""
+	}
+	data, err := doc.DecodeStream(stream)
+	if err != nil {
+		return ""
+	}
+	hdr, ok := parseICCHeader(data)
+	if !ok {
+		return ""
+	}
+	return hdr.colorSpace
 }
 
 // defaultCS tracks which Default{RGB,CMYK,Gray} colour spaces are set.
