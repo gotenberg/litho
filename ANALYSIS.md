@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Tier 4+5 | Round 1 | Round 2 | Round 3 | Round 4 | Delta (total) |
-|--------|----------|----------|---------|---------|---------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | **2,146 (82.5%)** | +657 |
-| **False Positives** | 97 | 124 | ~108 | 75 | 35 | **35** | -62 |
-| **False Negatives** | 1,014 | 650 | ~500 | 470 | 485 | **419** | -595 |
+| Metric | Baseline | Tier 4+5 | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Delta (total) |
+|--------|----------|----------|---------|---------|---------|---------|---------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | **2,158 (83.0%)** | +669 |
+| **False Positives** | 97 | 124 | ~108 | 75 | 35 | 35 | **35** | -62 |
+| **False Negatives** | 1,014 | 650 | ~500 | 470 | 485 | 419 | **407** | -607 |
 
 ### Progress by tier
 
@@ -25,7 +25,8 @@
 | Round 1 (FP compliance push) | 1,993 | ~108 | ~500 | 76.6% |
 | Round 2 (FP-first + targeted FN) | 2,055 | 75 | 470 | 79.0% |
 | Round 3 (FP elimination) | 2,080 | 35 | 485 | 80.0% |
-| **Round 4 (FN-dominated push)** | **2,146** | **35** | **419** | **82.5%** |
+| Round 4 (FN-dominated push) | 2,146 | 35 | 419 | 82.5% |
+| **Round 5 (breadth FN push)** | **2,158** | **35** | **407** | **83.0%** |
 
 ### Initial results (before improvements)
 
@@ -430,3 +431,44 @@ This round focused on reducing false negatives through comprehensive improvement
 | ~10 | §6.1.12 | Object format validation |
 | ~9 | §8.2.4 | PDF/UA-2 namespace role mapping |
 | ~269 | Various | Long-tail across ~40 different rule clauses |
+
+## Round 5 — Breadth FN Push (2026-03-24)
+
+**Starting point:** 2,146 / 2,601 (82.5%), 35 FP, 419 FN
+**Final result:** 2,158 / 2,601 (83.0%), 35 FP, 407 FN
+
+This round applied a breadth-first approach across multiple compliance areas, making small targeted fixes rather than going deep on any single area.
+
+### Fixes applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **pdf:Trapped type correction** — Changed from xmpPropText to xmpPropBoolean in XMP registry. Values like "true" (lowercase) or "Unknown" are now violations. | `xmp_registry.go` | 0 (correct but no test impact) |
+| 2 | **Transparency detection: Image SMask + Form XObject groups** — Added detection for Image XObjects with `/SMask` and Form XObjects with transparency groups as transparency triggers requiring blending CS. | `transparency.go` | **-2 FN** |
+| 3 | **Table containment: Table children + TR children + TOCI** — Table may only contain TR/THead/TBody/TFoot/Caption. TR may only contain TH/TD. TOCI must be inside TOC. | `structure.go` | **-5 FN** |
+| 4 | **H tag limit** — Each node may contain at most one child H (generic heading) tag per §7.4.4 t1. | `structure.go` | **-1 FN** |
+| 5 | **Table section counts + list containment** — Table max 1 THead/TFoot, TFoot/THead require TBody. LI must be inside L, LBody inside LI. | `structure.go` | **-6 FN** |
+
+### Phases attempted but skipped
+
+| Phase | Reason |
+|-------|--------|
+| XMP extension schema (§6.7.8/§6.6.2.3) | Requires deep SAX parser level-stack debugging |
+| File structure stream length (§6.1.8) | Requires parser-level byte offset tracking |
+| ICCBased overprint mode (§6.2.4.2 t2) | Requires content stream state tracking |
+| PDF/UA-2 namespace role mapping (§8.2.4) | Requires structure tree + namespace chain walking |
+| Font encoding (§6.3.x) | Parser-level hex string format checks |
+
+### Key remaining FN areas (407 total)
+
+| Files | Primary Rule | What's Missing |
+|-------|-------------|----------------|
+| ~41 | §6.2.4.3 | Device CS in remaining unscanned contexts |
+| ~16 | §7.2 | PDF/UA-1 structure containment (column count, Caption position) |
+| ~15 | §6.7.9 | XMP property type validation edge cases |
+| ~12 | §6.2.4.2 | ICCBased overprint mode, profile identity in XObjects |
+| ~11 | §6.2.2 | Content stream resource requirements |
+| ~10 | §6.2.9 | Transparency blending CS edge cases |
+| ~10 | §6.1.12 | Object format validation |
+| ~9 | §8.2.4 | PDF/UA-2 namespace role mapping |
+| ~283 | Various | Long-tail across ~40 rule clauses |
