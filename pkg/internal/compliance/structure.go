@@ -375,7 +375,9 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
 	}
 
+	// Table section count validation (§7.2 t11-t14).
 	if typeName == "Table" {
+		validateTableSectionCounts(ctx, state, elem)
 		state.tableUsesHeaderIDs = prevTableUsesHeaderIDs
 	}
 }
@@ -457,12 +459,71 @@ func validateTableContainment(state *walkState, typeName ast.PdfName, parentType
 	}
 }
 
+// validateTableSectionCounts checks that a Table has at most 1 THead, 1 TFoot,
+// and that TFoot/THead require TBody (§7.2 t11-t14).
+func validateTableSectionCounts(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
+	kObj, ok := tableElem["K"]
+	if !ok {
+		return
+	}
+	arr, err := document.ResolveArray(ctx, state.doc, kObj)
+	if err != nil {
+		return
+	}
+
+	var theadCount, tfootCount, tbodyCount int
+	for _, item := range arr {
+		d, err := document.ResolveDict(ctx, state.doc, item)
+		if err != nil || d == nil {
+			continue
+		}
+		childType, _ := document.ResolveName(ctx, state.doc, d["S"])
+		switch childType {
+		case "THead":
+			theadCount++
+		case "TFoot":
+			tfootCount++
+		case "TBody":
+			tbodyCount++
+		}
+	}
+
+	if theadCount > 1 {
+		*state.results = append(*state.results,
+			failf(Rule_14289_1_7_2_t11, "Table has %d THead children (max 1)", theadCount)...)
+	}
+	if tfootCount > 1 {
+		*state.results = append(*state.results,
+			failf(Rule_14289_1_7_2_t12, "Table has %d TFoot children (max 1)", tfootCount)...)
+	}
+	if tfootCount > 0 && tbodyCount == 0 {
+		*state.results = append(*state.results,
+			failf(Rule_14289_1_7_2_t13, "Table has TFoot but no TBody")...)
+	}
+	if theadCount > 0 && tbodyCount == 0 {
+		*state.results = append(*state.results,
+			failf(Rule_14289_1_7_2_t14, "Table has THead but no TBody")...)
+	}
+}
+
 // validateListContainment checks PDF/UA list structure rules.
 func validateListContainment(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName, parentType ast.PdfName) {
 	// L must contain only LI (and optionally Caption).
 	if parentType == "L" && typeName != "LI" && typeName != "Caption" && typeName != "L" {
 		*state.results = append(*state.results,
 			failf(Rule_14289_1_7_2_t09, "L contains %s instead of LI", typeName)...)
+	}
+
+	// LI must be inside L.
+	if typeName == "LI" && parentType != "L" && parentType != "" {
+		*state.results = append(*state.results,
+			failf(Rule_14289_1_7_2_t17, "LI inside %s instead of L", parentType)...)
+	}
+
+	// LBody must be inside LI.
+	if typeName == "LBody" && parentType != "LI" && parentType != "" {
+		*state.results = append(*state.results,
+			failf(Rule_14289_1_7_2_t18, "LBody inside %s instead of LI", parentType)...)
 	}
 
 	// LI must contain Lbl and/or LBody.
