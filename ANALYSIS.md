@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Tier 4+5 | Round 1 | Round 2 | Round 3 | Delta (total) |
-|--------|----------|----------|---------|---------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | 1,993 (76.6%) | 2,055 (79.0%) | **2,080 (80.0%)** | +591 |
-| **False Positives** | 97 | 124 | ~108 | 75 | **35** | -62 |
-| **False Negatives** | 1,014 | 650 | ~500 | 470 | **485** | -529 |
+| Metric | Baseline | Tier 4+5 | Round 1 | Round 2 | Round 3 | Round 4 | Delta (total) |
+|--------|----------|----------|---------|---------|---------|---------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | **2,146 (82.5%)** | +657 |
+| **False Positives** | 97 | 124 | ~108 | 75 | 35 | **35** | -62 |
+| **False Negatives** | 1,014 | 650 | ~500 | 470 | 485 | **419** | -595 |
 
 ### Progress by tier
 
@@ -24,7 +24,8 @@
 | Tier 4+5 (UA/file) | 1,826 | 124 | 650 | 70.2% |
 | Round 1 (FP compliance push) | 1,993 | ~108 | ~500 | 76.6% |
 | Round 2 (FP-first + targeted FN) | 2,055 | 75 | 470 | 79.0% |
-| **Round 3 (FP elimination)** | **2,080** | **35** | **485** | **80.0%** |
+| Round 3 (FP elimination) | 2,080 | 35 | 485 | 80.0% |
+| **Round 4 (FN-dominated push)** | **2,146** | **35** | **419** | **82.5%** |
 
 ### Initial results (before improvements)
 
@@ -121,7 +122,7 @@ Validates low-level PDF format requirements: header format (`%PDF-x.y`), binary 
 Three sub-checks:
 
 1. **OutputIntent ICC profiles** — Parses the ICC profile header (bytes 12–16 = device class, 16–20 = color space signature) from each OutputIntent's `/DestOutputProfile` stream. Validates device class is `prtr`/`mntr`, color space is `GRAY`/`RGB `/`CMYK`, and multiple OutputIntents are consistent.
-2. **Device color spaces** — Scans each page's resources for DeviceRGB, DeviceCMYK, DeviceGray usage. Scans named color spaces in `/ColorSpace` dicts, content stream operators (`g`/`G`, `rg`/`RG`, `k`/`K`, `cs`/`CS`), Form XObject content streams (recursively with cycle detection), Type 3 font resources, Shading dicts, and Pattern resources. Only XObjects actually invoked by `Do` operators are scanned. Validates that each device CS is covered by a DefaultCS, an OutputIntent with matching color space, or a device-independent page transparency blending CS (ICCBased, CalRGB, CalGray, Lab).
+2. **Device color spaces** — Scans each page's resources for DeviceRGB, DeviceCMYK, DeviceGray usage across all resource types: named colour spaces in `/ColorSpace` dicts (including Indexed base spaces and Separation/DeviceN alternate spaces), content stream operators (`g`/`G`, `rg`/`RG`, `k`/`K`, `cs`/`CS`), inline images (`BI` blocks via raw byte scanning for `/CS` parameters), Form XObject content streams (recursively with cycle detection and DefaultCS awareness), Type 3 font CharProc content streams, Shading dicts, Tiling and Shading Pattern resources, Image XObject `/ColorSpace` entries, and annotation appearance streams (`/AP` dicts). Only XObjects actually invoked by `Do` operators are scanned. Validates that each device CS is covered by a DefaultCS, an OutputIntent with matching color space, or a device-independent page transparency blending CS (ICCBased, CalRGB, CalGray, Lab).
 3. **ICCBased profiles** — Validates `/N` component count matches the ICC profile, and that ICCBased profiles are not identical to the OutputIntent (CMYK only, compared by indirect reference then byte-equal).
 
 #### Fonts (`fonts.go`, 1634 lines)
@@ -393,3 +394,39 @@ This round focused exclusively on eliminating false positives through four targe
 | 2 | §6.9 t4 | Digital signature validation edge cases | Review signature checks |
 | 2 | §6.8 t4 | Embedded file validation in PDF/A-3 | Review AF/EF resolution |
 | 13 | Various | Scattered (1 file each across 13 different rules) | Per-file debugging needed |
+
+## Round 4 — FN-Dominated Push (2026-03-24)
+
+**Starting point:** 2,080 / 2,601 (80.0%), 35 FP, 485 FN
+**Final result:** 2,146 / 2,601 (82.5%), 35 FP, 419 FN
+
+This round focused on reducing false negatives through comprehensive improvements to device colour space detection and Separation/DeviceN validation. All changes in `color.go`.
+
+### Fixes applied
+
+| # | Fix | Impact |
+|---|-----|--------|
+| 1 | **Separation/DeviceN alternate space as device CS** — When a named CS is Separation or DeviceN, its alternate space (arr[2]) is now checked for device CS. Previously only the top-level CS name was checked. | **+22 FN** |
+| 2 | **DeviceN Colorants dictionary validation** — For spot colorants in DeviceN arrays, verifies `/Attributes/Colorants` dictionary contains entries. Missing entries → violation per §6.2.4.4 t1. | (included in +22) |
+| 3 | **Recursive Separation/DeviceN scanning** — The consistency checker now recurses into Form XObject resources, not just page-level resources. | (included in +22) |
+| 4 | **Inline image CS detection** — New `scanInlineImageCS()` does raw byte scanning for `BI...ID` blocks. Detects `/CS /RGB`, `/CS /CMYK`, `/CS /G` abbreviations and full names. Applied to page content streams and Form XObject streams. | **+11 FN** |
+| 5 | **Annotation appearance stream scanning** — New `scanAnnotationAppearanceCS()` scans `/AP` dictionaries (N/R/D appearances) on page annotations for device CS via Form XObject scanning. | **+17 FN** |
+| 6 | **Type 3 CharProcs content scanning** — `scanFontColorSpaces()` now decodes and parses CharProc streams for device CS operators (`g/G/rg/RG/k/K/cs/CS`). | **+13 FN** |
+| 7 | **Indexed CS base space detection** — Named CS and Image XObject `/ColorSpace` entries of type Indexed now have their base space (arr[1]) checked for device CS. | **+3 FN** |
+| 8 | **Form XObject DefaultCS awareness** — When scanning Form XObject resources for Indexed base spaces, the XObject's own `/DefaultRGB/CMYK/Gray` entries are checked before flagging, avoiding false positives. | (regression prevention) |
+| 9 | **Shading pattern CS detection** — Pattern Type 2 (shading patterns) now check their `/Shading` dict's `/ColorSpace` for device CS. | (no additional FN, but correct) |
+
+### Key remaining FN areas (419 total)
+
+| Files | Primary Rule | What's Missing |
+|-------|-------------|----------------|
+| ~53 | §6.2.4.3 | Device CS in remaining unscanned contexts (complex nesting, edge cases) |
+| ~19 | §7.2 | PDF/UA-1 lang/structure checks |
+| ~15 | §6.7.9 | XMP property type validation |
+| ~12 | §6.2.4.2 | ICCBased profile overprint mode, profile identity |
+| ~11 | §6.2.9 | Transparency blending CS requirements |
+| ~11 | §6.2.2 | Content stream resource dictionary requirements |
+| ~10 | §6.1.8 | Stream length / file structure validation |
+| ~10 | §6.1.12 | Object format validation |
+| ~9 | §8.2.4 | PDF/UA-2 namespace role mapping |
+| ~269 | Various | Long-tail across ~40 different rule clauses |
