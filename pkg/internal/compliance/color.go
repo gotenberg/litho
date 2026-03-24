@@ -345,30 +345,39 @@ func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page as
 	if !ok {
 		return ""
 	}
-	// Resolve the colour space. Only device-independent (ICCBased) blending
-	// colour spaces provide device CS coverage. Device{RGB,CMYK,Gray} blending
-	// colour spaces do NOT count as coverage.
+	// Resolve the colour space. Device-independent blending colour spaces
+	// provide device CS coverage. This includes ICCBased, CalRGB, CalGray,
+	// and Lab. Device{RGB,CMYK,Gray} blending spaces do NOT count.
 	csName := resolveCSName(ctx, doc, csObj)
-	if csName != "ICCBased" {
+	switch csName {
+	case "CalRGB":
+		return "RGB "
+	case "CalGray":
+		return "GRAY"
+	case "Lab":
+		return "GRAY" // Lab is device-independent; treat as covering Gray.
+	case "ICCBased":
+		// Read the ICC profile to determine the actual colour space.
+		arr, err := document.ResolveArray(ctx, doc, csObj)
+		if err != nil || len(arr) < 2 {
+			return ""
+		}
+		stream, err := document.ResolveStream(ctx, doc, arr[1])
+		if err != nil {
+			return ""
+		}
+		data, err := doc.DecodeStream(stream)
+		if err != nil {
+			return ""
+		}
+		hdr, ok := parseICCHeader(data)
+		if !ok {
+			return ""
+		}
+		return hdr.colorSpace
+	default:
 		return ""
 	}
-	arr, err := document.ResolveArray(ctx, doc, csObj)
-	if err != nil || len(arr) < 2 {
-		return ""
-	}
-	stream, err := document.ResolveStream(ctx, doc, arr[1])
-	if err != nil {
-		return ""
-	}
-	data, err := doc.DecodeStream(stream)
-	if err != nil {
-		return ""
-	}
-	hdr, ok := parseICCHeader(data)
-	if !ok {
-		return ""
-	}
-	return hdr.colorSpace
 }
 
 // defaultCS tracks which Default{RGB,CMYK,Gray} colour spaces are set.

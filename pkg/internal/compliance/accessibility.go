@@ -129,7 +129,7 @@ func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.P
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(langStr))
+	return strings.TrimSpace(document.DecodePdfString(langStr))
 }
 
 // checkStructureTreeLangCoverage verifies that all structure elements can
@@ -150,6 +150,24 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		return failf(validRule, "lang=%s, StructTreeRoot", rootLang)
 	}
 
+	// First pass: check if ANY element in the tree has /Lang. If so, language
+	// is at least partially determinable. Elements without structure-level /Lang
+	// may still have language set via BDC marked content operators in the content
+	// stream, which litho does not currently parse. To avoid false positives on
+	// files that use inline BDC /Lang, we only flag coverage violations when the
+	// entire tree is devoid of /Lang.
+	anyLangFound := rootLang != ""
+	if !anyLangFound {
+		walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
+			if anyLangFound {
+				return
+			}
+			if resolveNonEmptyLang(ctx, doc, elem) != "" {
+				anyLangFound = true
+			}
+		})
+	}
+
 	var results []Result
 	walkStructureElementsWithLang(ctx, doc, treeRoot, rootLang, func(elem ast.PdfDict, path string, inheritedLang string) {
 		elemLang := resolveNonEmptyLang(ctx, doc, elem)
@@ -163,8 +181,9 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 			effectiveLang = elemLang
 		}
 
-		if effectiveLang == "" {
-			// No /Lang from self or any ancestor — violation.
+		if effectiveLang == "" && !anyLangFound {
+			// No /Lang from self or any ancestor, and no /Lang anywhere in
+			// the tree — language is truly not determinable.
 			slog.Debug("compliance_2/accessibility: structure element has no determinable language",
 				"path", path)
 			results = append(results, Result{Rule: langRule, Context: path})
@@ -309,7 +328,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 				"path", path, "error", err)
 			return
 		}
-		trimmed := strings.TrimSpace(string(langStr))
+		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 		if trimmed == "" {
 			// Empty /Lang in structure element — not an invalid-format error.
 			// The "language not determined" checks (t21-t24, t30-t34) handle this case separately.

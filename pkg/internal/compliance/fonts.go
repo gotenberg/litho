@@ -906,13 +906,19 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 			continue
 		}
 		// Map charCode to GID using the font's cmap table. If no cmap
-		// is available (e.g., Type1 fonts) or the charCode is not in the
-		// cmap, fall back to identity mapping (GID = charCode).
+		// is available (e.g., Type1 fonts), fall back to identity mapping.
 		gid := uint16(charCode) //nolint:gosec
 		if charCodeToGID != nil {
-			if mappedGID, ok := charCodeToGID[uint16(charCode)]; ok { //nolint:gosec
-				gid = mappedGID
+			mappedGID, ok := charCodeToGID[uint16(charCode)] //nolint:gosec
+			if !ok || mappedGID == 0 {
+				// The cmap doesn't map this charCode (or maps to .notdef).
+				// The font likely uses a PDF-level encoding (Differences,
+				// built-in Type1 encoding) that maps this charCode to a
+				// glyph not reachable via the Unicode cmap. Skip the width
+				// comparison rather than comparing against the wrong glyph.
+				continue
 			}
+			gid = mappedGID
 		}
 		pdfWidth := document.GetFloat(wObj)
 		if pdfWidth == 0 {
