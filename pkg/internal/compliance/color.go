@@ -1061,6 +1061,9 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 
 	// colorantAlternates tracks colorant name -> first alternate space seen.
 	colorantAlternates := make(map[string]string)
+	// colorantTintRefs tracks colorant name -> first tint transform indirect ref object number.
+	// Used for tint transform consistency (same name must reference same object).
+	colorantTintRefs := make(map[string]int)
 
 	pages := collectPages(ctx, doc, catalog)
 	for i, page := range pages {
@@ -1073,7 +1076,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
-		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, results)
+		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintRefs, results)
 	}
 
 	slog.Debug("compliance_2/color: Separation/DeviceN check complete",
@@ -1082,14 +1085,14 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 
 // scanSeparationDeviceNInResources scans a resources dictionary for Separation
 // and DeviceN colour space arrays and validates colorant-to-alternate consistency.
-func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, results *[]Result) {
+func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintRefs map[string]int, results *[]Result) {
 	visited := make(map[string]bool)
-	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, results, 0, visited)
+	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintRefs, results, 0, visited)
 }
 
 // scanSeparationDeviceNRecursive scans resources (and Form XObject sub-resources)
 // for Separation and DeviceN colour space arrays.
-func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, results *[]Result, depth int, visited map[string]bool) {
+func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintRefs map[string]int, results *[]Result, depth int, visited map[string]bool) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
@@ -1113,7 +1116,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 
 			switch string(csType) {
 			case "Separation":
-				checkSeparationCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, results)
+				checkSeparationCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, colorantTintRefs, results)
 			case "DeviceN":
 				checkDeviceNCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, results)
 			}
@@ -1144,14 +1147,14 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		}
 		subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 		if subRes != nil {
-			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, results, depth+1, visited)
+			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintRefs, results, depth+1, visited)
 		}
 	}
 }
 
 // checkSeparationCS validates a Separation colour space array:
 // [/Separation /ColorantName /AlternateSpace /TintTransform]
-func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, results *[]Result) {
+func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, _ map[string]int, results *[]Result) {
 	if len(arr) < 4 {
 		slog.Debug("compliance_2/color: Separation array too short", "page", pageIdx, "cs", csName, "len", len(arr))
 		return
