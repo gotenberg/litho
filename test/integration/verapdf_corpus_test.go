@@ -184,7 +184,7 @@ func TestVeraPDFCorpus(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), perVeraPDFSubtestTimeout)
 				defer cancel()
 
-				reader, err := pdf.Open(ctx, f, info.Size(), jbig2.New(), jpx.New())
+				reader, err := pdf.Open(ctx, f, info.Size(), pdf.WithFilterPlugin(jbig2.New()), pdf.WithFilterPlugin(jpx.New()))
 				if err != nil {
 					if expected {
 						t.Errorf("litho cannot open a file expected to pass: %v", err)
