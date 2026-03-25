@@ -348,6 +348,13 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			}
 		}
 
+		// Check Type 3 fonts for transparency triggers.
+		// Type 3 font CharProcs may use ExtGState with transparency or
+		// reference Form XObjects with transparency groups.
+		if !pageUsesTransparency {
+			pageUsesTransparency = checkType3FontTransparency(ctx, doc, res)
+		}
+
 		// If the page uses transparency, it must have a blending colour space.
 		// The OutputIntent ICC profile provides a default blending CS for the
 		// entire document, so pages without an explicit /Group /CS are valid
@@ -364,6 +371,86 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		}
 	}
 	return results
+}
+
+// checkType3FontTransparency checks whether any Type 3 font in the page
+// resources uses transparency (via ExtGState or transparency group XObjects
+// in its own resources).
+func checkType3FontTransparency(ctx context.Context, doc *document.Document, pageRes ast.PdfDict) bool {
+	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
+	if err != nil || fontDict == nil {
+		return false
+	}
+	for _, fontObj := range fontDict {
+		fd, err := document.ResolveDict(ctx, doc, fontObj)
+		if err != nil || fd == nil {
+			continue
+		}
+		subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"])
+		if subtype != "Type3" {
+			continue
+		}
+		fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"])
+		if err != nil || fontRes == nil {
+			continue
+		}
+		// Check Type 3 font's ExtGState for transparency.
+		gsDict, err := document.ResolveDict(ctx, doc, fontRes["ExtGState"])
+		if err == nil && gsDict != nil {
+			for _, gsObj := range gsDict {
+				gs, err := document.ResolveDict(ctx, doc, gsObj)
+				if err != nil || gs == nil {
+					continue
+				}
+				if bmObj, hasBM := gs["BM"]; hasBM {
+					bm := resolveBlendMode(ctx, doc, bmObj)
+					if bm != "" && bm != "Normal" && bm != "Compatible" {
+						return true
+					}
+				}
+				if smaskObj, hasSMask := gs["SMask"]; hasSMask {
+					smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
+					if smaskName != "None" {
+						return true
+					}
+				}
+				if caObj, hasCA := gs["CA"]; hasCA {
+					if !floatEquals1(document.GetFloat(caObj)) {
+						return true
+					}
+				}
+				if caObj, hasCa := gs["ca"]; hasCa {
+					if !floatEquals1(document.GetFloat(caObj)) {
+						return true
+					}
+				}
+			}
+		}
+		// Check Type 3 font's XObjects for transparency groups.
+		xobjDict, err := document.ResolveDict(ctx, doc, fontRes["XObject"])
+		if err == nil && xobjDict != nil {
+			for _, xobjObj := range xobjDict {
+				stream, err := document.ResolveStream(ctx, doc, xobjObj)
+				if err != nil {
+					continue
+				}
+				st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+				if st == "Form" {
+					groupObj, hasGroup := stream.Dict["Group"]
+					if hasGroup {
+						group, err := document.ResolveDict(ctx, doc, groupObj)
+						if err == nil && group != nil {
+							s, _ := document.ResolveName(ctx, doc, group["S"])
+							if s == "Transparency" {
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // --- Helpers ---
