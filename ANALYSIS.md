@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Delta (total) |
-|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | **2,188 (84.1%)** | +699 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | **37** | -60 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | **375** | -639 |
+| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Delta (total) |
+|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | **2,194 (84.4%)** | +705 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | **37** | -60 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | **369** | -645 |
 
 ### Progress by tier
 
@@ -28,7 +28,8 @@
 | Round 4 (FN-dominated push) | 2,146 | 35 | 419 | 82.5% |
 | Round 5 (breadth FN push) | 2,158 | 35 | 407 | 83.0% |
 | Round 6 (diagnostic-first) | 2,173 | 37 | 390 | 83.5% |
-| **Round 7 (YELLOW tier)** | **2,188** | **37** | **375** | **84.1%** |
+| Round 7 (YELLOW tier) | 2,188 | 37 | 375 | 84.1% |
+| **Round 8 (RED infrastructure)** | **2,194** | **37** | **369** | **84.4%** |
 
 ### Initial results (before improvements)
 
@@ -543,3 +544,38 @@ Targeted YELLOW-tier rule clusters: checks that need new logic but don't require
 | ~6 | §6.7.2 t03 | XMP DocInfo sync |
 | ~5 | §6.1.7 t01 | RED — Stream dict format (parser) |
 | ~318 | Various | Long-tail across ~200 rule combinations |
+
+## Round 8 — RED Infrastructure (2026-03-25)
+
+**Starting point:** 2,188 / 2,601 (84.1%), 37 FP, 375 FN
+**Final result:** 2,194 / 2,601 (84.4%), 37 FP, 369 FN
+
+This round targeted parser-level infrastructure changes in `pkg/internal/core/parser/`.
+
+### Fixes applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **Stream /Length + EOL validation** — During compliance parsing, records violations when: (a) /Length doesn't match actual stream byte count (fast-path seek to endstream fails), (b) stream keyword followed by CR only (must be CR+LF or LF), (c) missing /Length key. Uses existing FormatViolations infrastructure. | `parser/parser.go`, `compliance/file_structure.go` | **-6 FN** |
+
+### Tasks attempted but skipped/reverted
+
+| Task | Reason |
+|------|--------|
+| Overprint mode (§6.2.4.2 t02) | Simplified approach (flag OPM=1 with any OP=true) caused 6 FP. Rule requires knowing active color space is ICCBased CMYK, which needs full graphics state tracking. |
+| Hex string validation (§6.1.6/§6.1.9) | Already implemented in parser — only 3 remaining FN are edge cases. |
+| Xref format (§6.1.4) | Requires xref parser changes — higher risk for limited gain (6 FN). |
+| /Length indirect reference (§6.1.7) | Parser doesn't know profile; check is only valid for PDF/A-1. Needs profile-aware parser or separate compliance scan. |
+
+### Key remaining FN areas (369 total)
+
+| Files | Primary Rule | Category |
+|-------|-------------|----------|
+| ~9 | §6.2.9 t04 | Transparency in remaining contexts |
+| ~9 | §6.2.10 t04 | Transparency blending CS edge cases |
+| ~6 | §6.1.4 t01 | Xref format (parser-level) |
+| ~6 | §6.2.4.2 t02 | Overprint mode (graphics state tracking) |
+| ~6 | §6.2.3 t01 | OutputIntent ICC edge cases |
+| ~6 | §6.7.2 t03 | XMP DocInfo sync |
+| ~5 | §6.1.7 t01 | Stream dict format (parser) |
+| ~322 | Various | Long-tail across ~195 rule combinations |
