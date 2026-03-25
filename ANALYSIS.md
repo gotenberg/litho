@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Tier 4+5 | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Delta (total) |
-|--------|----------|----------|---------|---------|---------|---------|---------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,826 (70.2%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | **2,173 (83.5%)** | +684 |
-| **False Positives** | 97 | 124 | ~108 | 75 | 35 | 35 | 35 | **37** | -60 |
-| **False Negatives** | 1,014 | 650 | ~500 | 470 | 485 | 419 | 407 | **390** | -624 |
+| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Delta (total) |
+|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | **2,188 (84.1%)** | +699 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | **37** | -60 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | **375** | -639 |
 
 ### Progress by tier
 
@@ -27,7 +27,8 @@
 | Round 3 (FP elimination) | 2,080 | 35 | 485 | 80.0% |
 | Round 4 (FN-dominated push) | 2,146 | 35 | 419 | 82.5% |
 | Round 5 (breadth FN push) | 2,158 | 35 | 407 | 83.0% |
-| **Round 6 (diagnostic-first)** | **2,173** | **37** | **390** | **83.5%** |
+| Round 6 (diagnostic-first) | 2,173 | 37 | 390 | 83.5% |
+| **Round 7 (YELLOW tier)** | **2,188** | **37** | **375** | **84.1%** |
 
 ### Initial results (before improvements)
 
@@ -510,3 +511,35 @@ The 407 FN files split into:
 | ~5 | §6.1.7 t01 | RED — Stream dict format (parser) |
 | ~5 | §6.1.12 t02 | RED — Implementation limits edge cases |
 | ~327 | Various | Long-tail across ~200 rule combinations |
+
+## Round 7 — YELLOW Tier (2026-03-25)
+
+**Starting point:** 2,173 / 2,601 (83.5%), 37 FP, 390 FN
+**Final result:** 2,188 / 2,601 (84.1%), 37 FP, 375 FN
+
+Targeted YELLOW-tier rule clusters: checks that need new logic but don't require parser changes.
+
+### Fixes applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **Type 3 font transparency detection** — Type 3 font CharProcs may use ExtGState with transparency settings (BM, SMask, CA, ca) or reference Form XObjects with transparency groups. These now trigger the blending CS requirement. | `transparency.go` | **-14 FN** |
+| 2 | **ICCBased profile identity vs blending CS** — Extended the ICCBased CMYK identity check (§6.2.4.2 t3) to compare against the page's transparency blending CS, not just OutputIntent. Also scans Form XObject sub-resources for ICCBased CS. | `color.go` | **-1 FN** |
+
+### Tasks attempted but reverted
+
+- **Separation tint transform consistency** (§6.2.4.4 t03) — Simple object-reference comparison was too strict, causing 2 FP on files where equivalent functions have different object numbers. VeraPDF compares function content, not refs. Reverted.
+
+### Key remaining FN areas (375 total)
+
+| Files | Primary Rule | Category |
+|-------|-------------|----------|
+| ~10 | §6.1.8 t01 | RED — Stream/object format (parser) |
+| ~9 | §6.2.9 t04 | Transparency in remaining contexts |
+| ~9 | §6.2.10 t04 | Transparency blending CS edge cases |
+| ~6 | §6.1.4 t01 | RED — Xref format (parser) |
+| ~6 | §6.2.4.2 t02 | RED — Overprint mode (graphics state) |
+| ~6 | §6.2.3 t01 | OutputIntent ICC edge cases |
+| ~6 | §6.7.2 t03 | XMP DocInfo sync |
+| ~5 | §6.1.7 t01 | RED — Stream dict format (parser) |
+| ~318 | Various | Long-tail across ~200 rule combinations |
