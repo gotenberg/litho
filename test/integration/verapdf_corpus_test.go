@@ -13,6 +13,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/pkg/plugins/jbig2"
+	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 const (
@@ -182,7 +184,7 @@ func TestVeraPDFCorpus(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), perVeraPDFSubtestTimeout)
 				defer cancel()
 
-				reader, err := pdf.Open(ctx, f, info.Size())
+				reader, err := pdf.Open(ctx, f, info.Size(), jbig2.New(), jpx.New())
 				if err != nil {
 					if expected {
 						t.Errorf("litho cannot open a file expected to pass: %v", err)
