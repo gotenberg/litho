@@ -1295,30 +1295,28 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 	// §6.2.4.4 t2: Separation arrays in Colorants dictionaries must also be
 	// consistent with all other Separation arrays with the same colorant name.
-	if colorantsDict != nil {
-		for cName, cObj := range colorantsDict {
-			cArr, err := document.ResolveArray(ctx, doc, cObj)
-			if err != nil || len(cArr) < 3 {
-				continue
+	for cName, cObj := range colorantsDict {
+		cArr, err := document.ResolveArray(ctx, doc, cObj)
+		if err != nil || len(cArr) < 3 {
+			continue
+		}
+		cType, _ := document.ResolveName(ctx, doc, cArr[0])
+		if cType != "Separation" {
+			continue
+		}
+		cAlt := resolveCSName(ctx, doc, cArr[2])
+		if cAlt == "" {
+			continue
+		}
+		name := string(cName)
+		if prev, ok := colorantAlternates[name]; ok {
+			if prev != cAlt {
+				*results = append(*results, failf(deviceNConsistencyRule(part),
+					"page %d, Colorants dict: Separation %q uses alternate %q but previously used %q",
+					pageIdx+1, name, cAlt, prev)...)
 			}
-			cType, _ := document.ResolveName(ctx, doc, cArr[0])
-			if cType != "Separation" {
-				continue
-			}
-			cAlt := resolveCSName(ctx, doc, cArr[2])
-			if cAlt == "" {
-				continue
-			}
-			name := string(cName)
-			if prev, ok := colorantAlternates[name]; ok {
-				if prev != cAlt {
-					*results = append(*results, failf(deviceNConsistencyRule(part),
-						"page %d, Colorants dict: Separation %q uses alternate %q but previously used %q",
-						pageIdx+1, name, cAlt, prev)...)
-				}
-			} else {
-				colorantAlternates[name] = cAlt
-			}
+		} else {
+			colorantAlternates[name] = cAlt
 		}
 	}
 }
@@ -1377,7 +1375,42 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 			continue
 		}
 
-		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, results)
+		// Get page blending CS ICC ref for identity comparison.
+		blendingCSRef := getPageBlendingICCRef(ctx, doc, page)
+
+		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
+
+		// Also scan Form XObject sub-resources for ICCBased CS.
+		xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
+		if err == nil && xobjDict != nil {
+			for _, xobjObj := range xobjDict {
+				stream, err := document.ResolveStream(ctx, doc, xobjObj)
+				if err != nil {
+					continue
+				}
+				st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+				if st != "Form" {
+					continue
+				}
+				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+				if subRes != nil {
+					// Use the Form XObject's own Group CS ref if it has one.
+					formBlendRef := blendingCSRef
+					if grp, _ := document.ResolveDict(ctx, doc, stream.Dict["Group"]); grp != nil {
+						if csObj, ok := grp["CS"]; ok {
+							if csArr, err := document.ResolveArray(ctx, doc, csObj); err == nil && len(csArr) >= 2 {
+								if csT, _ := document.ResolveName(ctx, doc, csArr[0]); csT == "ICCBased" {
+									if ref, ok := csArr[1].(ast.PdfIndirectRef); ok {
+										formBlendRef = ref
+									}
+								}
+							}
+						}
+					}
+					checkICCBasedInResources(ctx, doc, subRes, part, i, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results)
+				}
+			}
+		}
 	}
 }
 
@@ -1431,7 +1464,7 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 
 // checkICCBasedInResources scans a page's resources for ICCBased colour spaces
 // and validates them.
-func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, results *[]Result) {
+func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Result) {
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err != nil || csDict == nil {
 		return
@@ -1498,24 +1531,36 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 		}
 
 		// Parts 2+: check whether the ICCBased profile is identical to the
-		// OutputIntent profile. Per clause 6.2.4.2, this restriction applies
-		// only when the OutputIntent has a CMYK destination profile.
-		// Compare by (1) same indirect reference, or (2) byte-equal decoded data.
-		if part >= 2 && len(outputIntentData) > 0 && outputIntentHdr.colorSpace == "CMYK" {
+		// OutputIntent profile OR the transparency blending CS profile.
+		// Per clause 6.2.4.2, this restriction applies only when the profile
+		// is CMYK. Compare by (1) same indirect reference, or (2) byte-equal data.
+		if part >= 2 && hdr.colorSpace == "CMYK" {
+			iccRef, _ := arr[1].(ast.PdfIndirectRef)
 			identical := false
-			// Same indirect reference.
-			if ref, ok := arr[1].(ast.PdfIndirectRef); ok &&
-				outputIntentRef.ObjectNum > 0 &&
-				ref.ObjectNum == outputIntentRef.ObjectNum &&
-				ref.GenNum == outputIntentRef.GenNum {
-				identical = true
+
+			// Check against OutputIntent profile.
+			if len(outputIntentData) > 0 && outputIntentHdr.colorSpace == "CMYK" {
+				if iccRef.ObjectNum > 0 &&
+					outputIntentRef.ObjectNum > 0 &&
+					iccRef.ObjectNum == outputIntentRef.ObjectNum &&
+					iccRef.GenNum == outputIntentRef.GenNum {
+					identical = true
+				}
+				if !identical && bytesEqual(data, outputIntentData) {
+					identical = true
+				}
 			}
-			// Byte-equal decoded profile data (for different objects with same content).
-			if !identical && hdr.colorSpace == "CMYK" && bytesEqual(data, outputIntentData) {
-				identical = true
+
+			// Check against page transparency blending CS profile.
+			if !identical && blendingCSRef.ObjectNum > 0 && iccRef.ObjectNum > 0 {
+				if iccRef.ObjectNum == blendingCSRef.ObjectNum &&
+					iccRef.GenNum == blendingCSRef.GenNum {
+					identical = true
+				}
 			}
+
 			if identical {
-				slog.Debug("compliance_2/color: ICCBased profile is identical to OutputIntent (violation)",
+				slog.Debug("compliance_2/color: ICCBased profile is identical to OutputIntent or blending CS (violation)",
 					"page", pageIdx, "name", name,
 				)
 				*results = append(*results, failf(iccBasedIdentityRule(part),
@@ -1523,6 +1568,39 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			}
 		}
 	}
+}
+
+// getPageBlendingICCRef returns the indirect reference to the ICCBased profile
+// stream used as the page's transparency blending CS, or a zero ref if absent.
+func getPageBlendingICCRef(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfIndirectRef {
+	groupObj, ok := page["Group"]
+	if !ok {
+		return ast.PdfIndirectRef{}
+	}
+	group, err := document.ResolveDict(ctx, doc, groupObj)
+	if err != nil || group == nil {
+		return ast.PdfIndirectRef{}
+	}
+	s, _ := document.ResolveName(ctx, doc, group["S"])
+	if s != "Transparency" {
+		return ast.PdfIndirectRef{}
+	}
+	csObj, ok := group["CS"]
+	if !ok {
+		return ast.PdfIndirectRef{}
+	}
+	arr, err := document.ResolveArray(ctx, doc, csObj)
+	if err != nil || len(arr) < 2 {
+		return ast.PdfIndirectRef{}
+	}
+	csType, _ := document.ResolveName(ctx, doc, arr[0])
+	if csType != "ICCBased" {
+		return ast.PdfIndirectRef{}
+	}
+	if ref, ok := arr[1].(ast.PdfIndirectRef); ok {
+		return ref
+	}
+	return ast.PdfIndirectRef{}
 }
 
 // expectedComponentCount returns the expected /N value for a given ICC colour
