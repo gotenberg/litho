@@ -705,6 +705,7 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 	var results []Result
 	hexRule := hexStringRule(profile)
 	objRule := objHeaderRule(profile)
+	streamRule := streamFormatRule(profile)
 
 	for _, violation := range doc.FormatViolations {
 		msg := violation.Error()
@@ -712,7 +713,9 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 			"error", msg)
 
 		rule := hexRule
-		if containsObjHeaderPattern(msg) {
+		if containsStreamPattern(msg) {
+			rule = streamRule
+		} else if containsObjHeaderPattern(msg) {
 			rule = objRule
 		}
 
@@ -727,6 +730,12 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 	return results
 }
 
+// containsStreamPattern returns true if the error message relates to
+// stream formatting (Length mismatch, EOL after stream keyword, indirect Length).
+func containsStreamPattern(msg string) bool {
+	return bytes.Contains([]byte(msg), []byte("stream"))
+}
+
 // containsObjHeaderPattern returns true if the error message relates to
 // object header formatting (obj/endobj keywords, header line).
 func containsObjHeaderPattern(msg string) bool {
@@ -736,6 +745,23 @@ func containsObjHeaderPattern(msg string) bool {
 		}
 	}
 	return false
+}
+
+// streamFormatRule returns the rule for stream format violations
+// (/Length mismatch, EOL after stream keyword, indirect /Length).
+func streamFormatRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 1:
+		return Rule_19005_1_6_1_7_t01
+	case 2:
+		return Rule_19005_2_6_1_8_t01
+	case 3:
+		return Rule_19005_3_6_1_8_t01
+	case 4:
+		return Rule_19005_4_6_1_6_1_t01
+	default:
+		return Rule_19005_1_6_1_7_t01
+	}
 }
 
 // checkNumericLimits validates §6.1.12/6.1.13: numeric value limits for

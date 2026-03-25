@@ -287,9 +287,16 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 			}
 			if b2 != '\n' {
 				_ = reader.UnreadByte()
+				// CR only after stream keyword — invalid per spec.
+				if p.checkFormat {
+					p.recordViolation("stream keyword followed by CR only (must be CR+LF or LF)")
+				}
 			}
 		} else if b != '\n' {
 			_ = reader.UnreadByte()
+			if p.checkFormat {
+				p.recordViolation("stream keyword not followed by EOL")
+			}
 		}
 
 		// Record the start offset of the raw stream data.
@@ -325,6 +332,15 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 			}
 		}
 
+		// Record the declared /Length for compliance checking after the
+		// actual length is determined via byte scanning.
+		var declaredLength int64
+		if lengthObj, ok := dict["Length"]; ok {
+			if lengthInt, ok := lengthObj.(ast.PdfInt); ok {
+				declaredLength = int64(lengthInt)
+			}
+		}
+
 		// Slow path: scan byte-by-byte for "endstream" marker.
 		if !usedLength {
 			endMarker := []byte("endstream")
@@ -357,6 +373,21 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 					} else {
 						dataLen++
 					}
+				}
+			}
+		}
+
+		// Compliance check: if the slow path ran, /Length was wrong.
+		// Also check if /Length is missing entirely.
+		if p.checkFormat {
+			if !usedLength && declaredLength > 0 {
+				// Slow path ran because /Length didn't match actual stream size.
+				p.recordViolation(fmt.Sprintf(
+					"stream /Length %d does not match actual byte count %d",
+					declaredLength, dataLen))
+			} else if declaredLength == 0 {
+				if _, hasLength := dict["Length"]; !hasLength {
+					p.recordViolation("stream missing /Length key")
 				}
 			}
 		}
