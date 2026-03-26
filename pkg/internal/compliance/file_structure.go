@@ -1156,9 +1156,52 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 	slog.Debug("compliance_2: file_structure: checking page boundaries", "profile", profile)
 
 	rule := pageBoundRule(profile)
-	pages := collectPages(ctx, doc, catalog)
 	var results []Result
 
+	// Also check the Pages tree root for inherited boundary boxes.
+	// Only flag root boundaries that are NOT overridden by individual pages.
+	pagesObj, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
+
+	pages := collectPages(ctx, doc, catalog)
+
+	if pagesObj != nil {
+		for _, key := range pageBoundaryKeys {
+			boxObj, ok := pagesObj[key]
+			if !ok {
+				continue
+			}
+			// Check if ALL pages override this key — if any page inherits it, validate.
+			anyInherits := false
+			for _, page := range pages {
+				if _, has := page[key]; !has {
+					anyInherits = true
+					break
+				}
+			}
+			if !anyInherits {
+				continue // Every page has its own — tree root value is irrelevant.
+			}
+			arr, err := document.ResolveArray(ctx, doc, boxObj)
+			if err != nil || len(arr) < 4 { //nolint:mnd // BBox requires 4 values.
+				continue
+			}
+			x1, err1 := resolveFloat(ctx, doc, arr[0])
+			y1, err2 := resolveFloat(ctx, doc, arr[1])
+			x2, err3 := resolveFloat(ctx, doc, arr[2])
+			y2, err4 := resolveFloat(ctx, doc, arr[3])
+			if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+				continue
+			}
+			width := math.Abs(x2 - x1)
+			height := math.Abs(y2 - y1)
+			if width < minPageBound || width > maxPageBound || height < minPageBound || height > maxPageBound {
+				results = append(results, Result{
+					Rule:    rule,
+					Context: fmt.Sprintf("Pages tree /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", key, width, height, minPageBound, maxPageBound),
+				})
+			}
+		}
+	}
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
 			return results
