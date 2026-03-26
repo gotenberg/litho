@@ -234,7 +234,7 @@ The corpus is auto-provisioned on first run via Docker testcontainers and cached
 
 ---
 
-## False Positives — 35
+## False Positives — 37
 
 Litho reports violations on files that should pass.
 
@@ -242,74 +242,81 @@ Litho reports violations on files that should pass.
 
 | Profile | FP |
 |---------|----|
-| PDF/A-4 | 11 |
-| PDF/A-2b | 5 |
-| PDF/A-1b | 4 |
+| PDF/A-4 | 10 |
 | PDF/UA-1 | 6 |
+| PDF/A-2b | 5 |
+| PDF/A-1b | 6 |
 | PDF/A-1a | 2 |
 | PDF/A-3b | 2 |
 | PDF/A-4e | 1 |
 | PDF/A-4f | 1 |
 | PDF/A-2u | 1 |
-| PDF/UA-2 | 2 |
+| PDF/UA-2 | 1 |
 
-### Remaining FP clusters
+### FP by violation rule
 
 | Count | Rule | Area | Issue |
 |-------|------|------|-------|
-| 6 | §6.2.4.3 t2/t3/t4 | Device CS coverage | Page-level OutputIntents (PDF/A-4), XObject blending CS, Form XObject DefaultCS |
-| 5 | §6.6.2.3.x | XMP property/extension schemas | Incomplete registry entries or overly strict type checking |
-| 3 | §7.1 t7 | Standard tag remapping | Role map validation too strict for valid remappings |
-| 2 | §7.3 t1 | Figure alt text | False detection of missing /Alt on Figure elements |
-| 2 | §6.7.9 t3 | XMP date format | Date validation too strict |
+| 7 | §6.2.4.3 t2/t3/t4 | Device CS coverage | Device CS in page/XObject with coverage from page-level OutputIntents (PDF/A-4), Form XObject DefaultCS, or blending CS not detected |
+| 5 | §6.6.2.3.x | XMP property/extension schemas | Extension schema validation too strict or registry incomplete |
+| 3 | §7.1 t7 | Standard tag remapping | Role map validation flags valid remappings of standard types |
+| 2 | §7.3 t1 | Figure alt text | /Alt on Figure not detected (may be in attributes or ActualText) |
+| 2 | §6.2.5 t1 | Form XObject /Subtype2 PS | XObject scanner now resolves streams; finds /Subtype2 /PS in test files designed for other rules |
+| 2 | §6.7.9 t3 | XMP property type | Date or container type validation too strict |
 | 2 | §6.9 t4 | Digital signatures | Signature validation edge cases |
 | 2 | §6.8 t4 | Embedded files | Embedded file validation in PDF/A-3 |
-| 13 | Various | Scattered | One-off issues across 13 different rules (1 file each) |
+| 12 | Various | Scattered | One-off issues across 12 different rules (1 file each) |
 
-## False Negatives — 485
+## False Negatives — 332
 
-Litho reports compliant on files that should fail. (Count increased from 470 due to Round 3 removing incorrect violations that coincidentally caught 14 fail-expected files for the wrong reason — these now need proper rule implementations.)
+Litho reports compliant on files that should fail.
 
 ### By profile
 
 | Profile | FN |
 |---------|----|
-| PDF/A-4 | ~155 |
-| PDF/A-2b | ~148 |
-| PDF/UA-1 | ~70 |
-| PDF/A-1b | ~50 |
-| PDF/UA-2 | ~39 |
-| PDF/A-2a | ~8 |
-| PDF/A-2u | ~7 |
-| PDF/A-1a | ~5 |
+| PDF/A-4 | ~110 |
+| PDF/A-2b | ~105 |
+| PDF/UA-1 | ~48 |
+| PDF/A-1b | ~35 |
+| PDF/UA-2 | ~20 |
+| PDF/A-2a | ~5 |
+| PDF/A-2u | ~3 |
+| PDF/A-1a | ~3 |
 | PDF/A-4e | ~3 |
 
 ### Top FN clusters by rule
 
 | Count | Rule | What's missing |
 |-------|------|----------------|
-| 18 | §6.2.4.4 t1 | Separation/DeviceN color space validation not implemented |
-| 12 | §6.2.4.3 t1 | Device CS detection in nested resources (Patterns, Shadings, inline images) |
-| 10 | §6.1.8 t1 | Stream length / file structure validation |
-| 18 | §6.2.9 t4/t5 | Transparency blending CS validation edge cases |
-| 18 | §6.2.10 t4/t5 | Font encoding / width validation edge cases |
-| 12 | §6.2.4.4 t2/t3 | Separation/DeviceN (additional rules) |
-| 6 | §6.7.2 t3 | XMP property value format validation |
-| 6 | §6.2.4.2 t2 | ICCBased profile /N validation |
-| 6 | §6.2.3 t1 | OutputIntent consistency |
-| 6 | §6.2.2 t2/t4 | OutputIntent ICC profile validation |
-| 6 | §6.1.4 t1 | File structure format |
-| 6 | §6.1.12 t2 | Object format validation |
+| 10 | §6.1.8 t01 | Object/stream format: obj/endobj keyword whitespace (parser-level byte format) |
+| 6 | §6.2.3 t01 | OutputIntent ICC profile edge cases (deep ICC validation beyond header) |
+| 6 | §6.1.12 t02 | Implementation limits: objects inside object streams or edge cases |
+| 6 | §6.7.2 t03 | XMP property type: container or value type mismatches in predefined schemas |
+| 5 | §6.2.2 t02 | Content stream resource completeness (operator needs resource not in dict) |
+| 5 | §6.2.10.9 t01 | Font .notdef glyph reference in text rendering |
+| 5 | §6.2.11.7.3 t01 | Font CIDToGIDMap validation |
+| 4 | §7.18.7 t01 | Annotation embedded file spec validation |
+| 4 | §7.18.1 t03 | Form field TU key or Widget alt description |
+| 4 | §6.7.3 t01 | PDF/A identification: pdfaid prefix, part value, conformance |
+| 4 | §6.1.5 t01 | Hex string even-digit requirement (parser-level) |
+| 4 | §6.2.4.2 t03 | ICCBased CMYK identity with OutputIntent in XObject resources |
+| 4 | §6.2.4.4 t03 | Separation tint transform consistency (requires function content comparison) |
+| 4 | §6.2.11.4.1 t02 | Font glyph coverage (embedded font must define all referenced glyphs) |
+| 4 | §6.2.11.8 t01 | .notdef glyph reference from text showing operators |
+| 253 | Various | Long-tail across ~175 rule combinations (1-3 files each) |
 
-### Root cause groups
+### Root cause categories
 
-1. **Separation/DeviceN CS** (~30 FN) — Not yet implemented. Needs structural validation of colorant names, alternate spaces, and tint transforms.
-2. **Device CS recursive scanning** (~25 FN) — Device CS detection in Shadings, Patterns, inline images, and deeply nested Form XObjects.
-3. **XMP property validation** (~20 FN) — Property registry incomplete, value type validation too lenient, extension schema field validation gaps.
-4. **Font encoding/width** (~20 FN) — CIDFont /W validation, Differences array validation, CFF width comparison.
-5. **File structure** (~20 FN) — Stream length validation, hex string format, object limits (PDF/A-1).
-6. **Transparency** (~18 FN) — Blending CS validation, soft mask, alpha value edge cases.
-7. **PDF/UA structure** (~40 FN) — Outline lang, namespace role mapping, table column validation, artifact tagging.
+| Category | FN | Status |
+|----------|-----|--------|
+| **Parser-level format** | ~45 | RED: stream/obj format (§6.1.8), hex strings (§6.1.5), implementation limits (§6.1.12), object format (§6.1.9). Requires byte-level parser validation. |
+| **Content stream analysis** | ~15 | RED: resource completeness (§6.2.2 t2), undefined operators (§6.2.2 t1), content stream named resources (§6.2.2 t3). Requires operator-level resource cross-referencing. |
+| **Font program analysis** | ~25 | YELLOW: CIDToGIDMap (§6.2.11.7.3), glyph coverage (§6.2.11.4.1), .notdef reference (§6.2.11.8), width comparison edge cases. Requires deeper font program parsing. |
+| **ICC/OutputIntent edge cases** | ~15 | YELLOW: deep ICC profile validation (§6.2.3 t1), ICCBased identity in XObject resources (§6.2.4.2 t3), tint transform comparison (§6.2.4.4 t3). |
+| **XMP edge cases** | ~20 | YELLOW: property type mismatches (§6.7.2/§6.7.9), extension schema field validation (§6.6.2.3.3), pdfaid identification (§6.7.3). |
+| **PDF/UA structure** | ~25 | YELLOW: annotation accessibility (§7.18), table column count (§7.2 t42/t43), PDF/UA-2 namespace role mapping (§8.2.4). |
+| **Long tail** | ~185 | Mixed: ~175 unique rules with 1-3 files each. Diminishing returns — each fix addresses ≤3 FN. |
 
 ---
 
