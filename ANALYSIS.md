@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Delta (total) |
-|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | **2,210 (85.0%)** | +721 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | **37** | -60 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | **353** | -661 |
+| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Delta (total) |
+|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,216 (85.2%)** | +727 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | **37** | -60 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **347** | -667 |
 
 ### Progress by tier
 
@@ -30,7 +30,8 @@
 | Round 6 (diagnostic-first) | 2,173 | 37 | 390 | 83.5% |
 | Round 7 (YELLOW tier) | 2,188 | 37 | 375 | 84.1% |
 | Round 8 (RED infrastructure) | 2,194 | 37 | 369 | 84.4% |
-| **Round 9 (final push to 85%)** | **2,210** | **37** | **353** | **85.0%** |
+| Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
+| **Round 10 (graphics state machine)** | **2,216** | **37** | **347** | **85.2%** |
 
 ### Initial results (before improvements)
 
@@ -586,33 +587,47 @@ This round targeted parser-level infrastructure changes in `pkg/internal/core/pa
 **Starting point:** 2,194 / 2,601 (84.4%), 37 FP, 369 FN
 **Final result:** 2,210 / 2,601 (85.0%), 37 FP, 353 FN
 
-This round achieved the 85% target with a single comprehensive transparency fix.
+### Fix applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **Blending CS compatibility + annotation transparency** — (a) device CS used as blending colour space must match OutputIntent (DeviceRGB→RGB OI, DeviceCMYK→CMYK OI); checks page, Form XObject, and annotation appearance /Group/CS; (b) annotation appearance streams with transparency groups or transparent ExtGState now trigger the blending CS requirement; (c) extracted reusable `resourcesHaveTransparency` helper. | `transparency.go` | **-16 FN** |
+
+### Analysis
+
+litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE with the OutputIntent colour space. Test files with `DeviceCMYK` as blending CS and RGB OutputIntent (or vice versa) passed litho's check because they had a /Group/CS, even though the device CS conflicted with the OutputIntent. The fix adds a compatibility check: device blending CS must match the OutputIntent's ICC colour space (GRAY is always compatible).
+
+## Round 10 — Graphics State Machine (2026-03-26)
+
+**Starting point:** 2,210 / 2,601 (85.0%), 37 FP, 353 FN
+**Final result:** 2,216 / 2,601 (85.2%), 37 FP, 347 FN
 
 ### Fix applied
 
 | # | Fix | Files | Impact |
 |---|-----|-------|--------|
-| 1 | **Blending CS compatibility + annotation transparency** — Three improvements: (a) when OutputIntent exists, device CS used as blending colour space must match (DeviceRGB→RGB OI, DeviceCMYK→CMYK OI); checks page, Form XObject, and annotation appearance /Group/CS; (b) annotation appearance streams with transparency groups or transparent ExtGState now trigger the blending CS requirement; (c) extracted reusable `resourcesHaveTransparency` helper. | `transparency.go` | **-16 FN** |
+| 1 | **Content stream graphics state machine** — Minimal content stream interpreter tracking fill/stroke colour space, overprint mode (OPM), and overprint flags (OP/op) through q/Q save/restore and gs/cs/CS operators. At each painting operator, checks §6.2.4.2 t02: OPM=1 forbidden when ICCBased CMYK is active and overprint is enabled. Fill-only operators (f/F/f*) check only fill overprint; stroke-only (S/s) check only stroke; combined (B/B*) check both. Named CS resolved from resources with caching (ICCBased N=4 → CMYK). | `content_state.go`, `graphics.go` | **-6 FN** |
 
 ### Analysis
 
-The key insight was that litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE with the OutputIntent colour space. Test files with `DeviceCMYK` as blending CS and RGB OutputIntent (or vice versa) passed litho's check because they had a /Group/CS, even though the device CS conflicted with the OutputIntent. The fix adds a compatibility check: device blending CS must match the OutputIntent's ICC colour space (GRAY is always compatible).
+Previous attempt at OPM validation (Round 8) used a page-level approximation that caused 6 FP. The correct approach requires a state machine that tracks which colour space is active at each painting operator. The key subtlety: fill-only operators (`f`) must only check fill overprint, not stroke overprint. A test file with `/OP true` (stroke) but `/op false` (fill) that only uses fill operations is valid — the simplified approach flagged it incorrectly.
 
-### Milestone: 85.0% (2,210 / 2,601)
+The state machine (~250 lines in `content_state.go`) handles: q/Q state stack, gs (ExtGState application), cs/CS (explicit CS set), rg/RG/k/K/g/G (implicit device CS), and painting operators with fill/stroke discrimination. Named colour spaces are resolved from resources and cached (ICCBased with N=4 → "ICCBased-CMYK").
 
-From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 27.7 percentage points across 9 rounds:
+### Milestone: 85.2% (2,216 / 2,601)
+
+From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 27.9 percentage points across 10 rounds:
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,210 (85.0%) | +721 (+48.4%) |
+| **Pass** | 1,489 (57.3%) | 2,216 (85.2%) | +727 (+48.8%) |
 | **False Positives** | 97 | 37 | -60 (-61.9%) |
-| **False Negatives** | 1,014 | 353 | -661 (-65.2%) |
+| **False Negatives** | 1,014 | 347 | -667 (-65.8%) |
 
-### Key remaining FN areas (353 total)
+### Key remaining FN areas (347 total)
 
 | Files | Primary Rule | Category |
 |-------|-------------|----------|
-| ~6 | §6.2.4.2 t02 | Overprint mode (requires graphics state tracking) |
 | ~6 | §6.1.4 t01 | Xref format (parser-level) |
 | ~6 | §6.2.3 t01 | OutputIntent ICC edge cases |
 | ~6 | §6.7.2 t03 | XMP DocInfo sync |
