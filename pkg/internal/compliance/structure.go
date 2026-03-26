@@ -10,11 +10,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// standardStructTypes lists all standard structure types defined in
-// ISO 32000-1:2008 (14.8.4) and ISO 32000-2:2020 (14.8.4). Non-standard
-// types must be mapped to one of these via the /RoleMap or /Namespaces dict.
+// standardStructTypes lists all standard structure types across both
+// ISO 32000-1:2008 and ISO 32000-2:2020. Used for general lookups.
 var standardStructTypes = map[ast.PdfName]bool{ //nolint:gochecknoglobals // constant set.
-	// ISO 32000-1 types.
+	// ISO 32000-1 types (14.8.4).
 	"Document": true, "Part": true, "Art": true, "Sect": true, "Div": true,
 	"BlockQuote": true, "Caption": true, "TOC": true, "TOCI": true, "Index": true,
 	"NonStruct": true, "Private": true, "H": true, "H1": true, "H2": true,
@@ -28,6 +27,29 @@ var standardStructTypes = map[ast.PdfName]bool{ //nolint:gochecknoglobals // con
 	// ISO 32000-2 additional types (PDF 2.0 / PDF/UA-2).
 	"DocumentFragment": true, "Aside": true, "Title": true, "Sub": true,
 	"Em": true, "Strong": true, "Artifact": true, "FENote": true,
+}
+
+// standardStructTypesPDF2Only lists types added in ISO 32000-2 that are NOT
+// standard structure types in ISO 32000-1. For PDF/UA-1 and PDF/A-1/2/3,
+// these are non-standard and CAN be legitimately remapped.
+//
+//nolint:gochecknoglobals // constant set.
+var standardStructTypesPDF2Only = map[ast.PdfName]bool{
+	"DocumentFragment": true, "Aside": true, "Title": true, "Sub": true,
+	"Em": true, "Strong": true, "Artifact": true, "FENote": true,
+}
+
+// isStandardStructType returns true if the name is a standard structure type
+// for the given profile. ISO 32000-2 types (Title, Artifact, Em, Strong, etc.)
+// are only standard for PDF/A-4 and PDF/UA-2.
+func isStandardStructType(name ast.PdfName, profile string) bool {
+	if !standardStructTypes[name] {
+		return false
+	}
+	if standardStructTypesPDF2Only[name] {
+		return pdfaPart(profile) == 4 || profile == "PDF/UA-2"
+	}
+	return true
 }
 
 // maxStructTreeDepth is the recursion limit for walking the structure tree.
@@ -171,7 +193,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 
 	// Check standard types are not remapped.
 	for src := range mapping {
-		if standardStructTypes[src] {
+		if isStandardStructType(src, profile) {
 			slog.Debug("compliance_2/structure: standard type remapped", "type", src)
 			*results = append(*results, failf(roleMapStandardRemapRule(profile), "standard type %s is remapped", src)...)
 		}
@@ -182,7 +204,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		if ctx.Err() != nil {
 			return
 		}
-		if standardStructTypes[src] {
+		if isStandardStructType(src, profile) {
 			continue // already reported above
 		}
 		if !resolveToStandard(src, mapping, results, profile) {
@@ -203,7 +225,7 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 		target, ok := mapping[current]
 		if !ok {
 			// current is not in the mapping; check if it is a standard type.
-			if standardStructTypes[current] {
+			if isStandardStructType(current, profile) {
 				return true
 			}
 			*results = append(*results, failf(roleMapNonStandardRule(profile),
@@ -211,7 +233,7 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 			return false
 		}
 
-		if standardStructTypes[target] {
+		if isStandardStructType(target, profile) {
 			return true
 		}
 
