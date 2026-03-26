@@ -8,9 +8,9 @@
 
 | Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Round 11-12 | Delta (total) |
 |--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|-------------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,263 (87.0%)** | +774 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **21** | -76 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | **316** | -698 |
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,264 (87.0%)** | +775 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **18** | -79 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | **318** | -696 |
 
 ### Progress by tier
 
@@ -33,7 +33,7 @@
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
 | Round 10 (gfx state + xref + UTF-8 + OI + XMP) | 2,231 | 37 | 332 | 85.8% |
 | Round 11 (parser-level §6.1.x) | 2,241 | 37 | 322 | 86.2% |
-| **Round 12 (§6.1.x + FP fixes)** | **2,263** | **21** | **316** | **87.0%** |
+| **Round 12 (§6.1.x + FP fixes)** | **2,264** | **18** | **318** | **87.0%** |
 
 ### Initial results (before improvements)
 
@@ -740,11 +740,13 @@ Targeted parser-level format validation. Every §6.1.x FN file was analyzed for 
 | 4 | **Only check referenced XObjects** — XObject compliance checks (Subtype2/PS, OPI, etc.) now only apply to XObjects invoked by Do operators. Unreferenced XObjects in /Resources are not "used" per the spec. Collects Do targets from content stream. | `xobjects.go` | **-2 FP** |
 | 5 | **XMP property type: rational notation + structured Alt** — (a) xmpDM Real properties accept rational "N/D" notation (same as EXIF/TIFF); (b) Alt containers with structured items (e.g., xmp:Thumbnails) don't require xml:lang on rdf:li items. Added isStructured detection for sub-elements at depth > 3 inside rdf:li. | `xmp.go` | **-4 FP** |
 | 6 | **XMP extension schema level stack + optional property** — (a) Multi-item Seq/Bag in extension schemas: only the first rdf:li consumed the pending level; subsequent items had no level. Now tracks containerLevel for all items. (b) pdfaSchema:property is optional — schemas can declare only valueTypes. | `xmp.go` | **-2 FP** |
+| 7 | **Profile-aware standard structure types** — ISO 32000-2 types (Title, Artifact, Em, Strong, etc.) are only standard for PDF/A-4 and PDF/UA-2. For PDF/UA-1, these are non-standard and can be remapped. Split type set + isStandardStructType() helper. | `structure.go` | **-3 FP, +2 FN exposed** |
 
-### Milestone: 86.4% (2,247 / 2,601)
+### Milestone: 87.0% (2,264 / 2,601)
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,263 (87.0%) | +774 (+52.0%) |
-| **False Positives** | 97 | 21 | -76 (-78.4%) |
+| **Pass** | 1,489 (57.3%) | 2,264 (87.0%) | +775 (+52.1%) |
+| **False Positives** | 97 | 18 | -79 (-81.4%) |
+| **False Negatives** | 1,014 | 318 | -696 (-68.6%) |
 | **False Negatives** | 1,014 | 316 | -698 (-68.8%) |
