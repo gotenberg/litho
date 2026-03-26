@@ -66,9 +66,11 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 	if part := pdfaPart(profile); part >= 2 {
 		results = append(results, checkSignatureReferences(ctx, doc, catalog, profile)...)
 	}
+	if part := pdfaPart(profile); part >= 2 {
+		results = append(results, checkUTF8Names(ctx, doc, catalog, profile)...)
+	}
 	if part := pdfaPart(profile); part == 4 {
 		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
-		results = append(results, checkUTF8Names(ctx, doc, catalog)...)
 	}
 
 	slog.Debug("compliance_2: file_structure: checks complete",
@@ -1321,12 +1323,27 @@ func sigRefRule(part int) Rule {
 	}
 }
 
-// checkUTF8Names validates §6.1.7 (PDF/A-4): font names, colorant names in
-// Separation/DeviceN colour spaces, and structure type names must be valid
-// UTF-8 after #XX hex escape expansion.
-func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+// utf8NameRule returns the rule for UTF-8 name validation based on part.
+func utf8NameRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 2:
+		return Rule_19005_2_6_1_8_t01
+	case 3:
+		return Rule_19005_3_6_1_8_t01
+	case 4:
+		return Rule_19005_4_6_1_7_t01
+	default:
+		return Rule_19005_4_6_1_7_t01
+	}
+}
+
+// checkUTF8Names validates §6.1.7 (PDF/A-4) / §6.1.8 (PDF/A-2/3): font names,
+// colorant names in Separation/DeviceN colour spaces, and structure type names
+// must be valid UTF-8 after #XX hex escape expansion.
+func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
 	var results []Result
 	seen := make(map[string]bool) // Avoid duplicate reports for the same name.
+	rule := utf8NameRule(profile)
 
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
@@ -1348,7 +1365,7 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 				}
 				baseFontName, _ := document.ResolveName(ctx, doc, fd["BaseFont"])
 				if baseFontName != "" {
-					checkNameUTF8(string(baseFontName), "font name", seen, &results)
+					checkNameUTF8(string(baseFontName), "font name", rule, seen, &results)
 				}
 			}
 		}
@@ -1367,7 +1384,7 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 					if len(arr) >= 2 {
 						cName, _ := document.ResolveName(ctx, doc, arr[1])
 						if cName != "" {
-							checkNameUTF8(string(cName), "Separation colorant", seen, &results)
+							checkNameUTF8(string(cName), "Separation colorant", rule, seen, &results)
 						}
 					}
 				case "DeviceN":
@@ -1376,7 +1393,7 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 						for _, nameObj := range names {
 							cName, _ := document.ResolveName(ctx, doc, nameObj)
 							if cName != "" {
-								checkNameUTF8(string(cName), "DeviceN colorant", seen, &results)
+								checkNameUTF8(string(cName), "DeviceN colorant", rule, seen, &results)
 							}
 						}
 					}
@@ -1388,16 +1405,16 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	// Structure type names.
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err == nil && treeRoot != nil {
-		checkStructureTypeUTF8(ctx, doc, treeRoot, seen, &results)
+		checkStructureTypeUTF8(ctx, doc, treeRoot, rule, seen, &results)
 
 		// RoleMap names.
 		roleMap, err := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
 		if err == nil && roleMap != nil {
 			for srcName, dstObj := range roleMap {
-				checkNameUTF8(string(srcName), "RoleMap source", seen, &results)
+				checkNameUTF8(string(srcName), "RoleMap source", rule, seen, &results)
 				dstName, _ := document.ResolveName(ctx, doc, dstObj)
 				if dstName != "" {
-					checkNameUTF8(string(dstName), "RoleMap target", seen, &results)
+					checkNameUTF8(string(dstName), "RoleMap target", rule, seen, &results)
 				}
 			}
 		}
@@ -1408,18 +1425,18 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 // checkStructureTypeUTF8 recursively walks the structure tree and validates
 // that each element's /S type name is valid UTF-8.
-func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root ast.PdfDict, seen map[string]bool, results *[]Result) {
+func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root ast.PdfDict, rule Rule, seen map[string]bool, results *[]Result) {
 	walkStructureElements(ctx, doc, root, func(elem ast.PdfDict, _ string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 		if typeName != "" {
-			checkNameUTF8(string(typeName), "structure type", seen, results)
+			checkNameUTF8(string(typeName), "structure type", rule, seen, results)
 		}
 	})
 }
 
 // checkNameUTF8 validates that a PDF name, after #XX hex escape expansion,
 // is a valid UTF-8 string. Reports a violation if not.
-func checkNameUTF8(name, context string, seen map[string]bool, results *[]Result) {
+func checkNameUTF8(name, context string, rule Rule, seen map[string]bool, results *[]Result) {
 	if seen[name] {
 		return
 	}
@@ -1427,7 +1444,7 @@ func checkNameUTF8(name, context string, seen map[string]bool, results *[]Result
 
 	decoded := expandNameHexEscapes(name)
 	if !utf8.ValidString(decoded) {
-		*results = append(*results, failf(Rule_19005_4_6_1_7_t01,
+		*results = append(*results, failf(rule,
 			"%s %q is not valid UTF-8", context, name)...)
 	}
 }
