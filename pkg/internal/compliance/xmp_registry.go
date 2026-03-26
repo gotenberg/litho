@@ -399,10 +399,17 @@ func isValidXMPRealOrRational(s string) bool {
 
 // isValidXMPDate returns true if s is a valid XMP date value.
 // Accepts ISO 8601 formats: YYYY, YYYY-MM, YYYY-MM-DD, and longer forms with time.
+// Also accepts PDF date format (D:YYYYMMDDHHmmSS+HH'mm') since some producers
+// write PDF-format dates into XMP properties.
 func isValidXMPDate(s string) bool {
 	s = strings.TrimSpace(s)
 	if len(s) < 4 { //nolint:mnd
 		return false
+	}
+
+	// Accept PDF date format: D:YYYY...
+	if strings.HasPrefix(s, "D:") && len(s) >= 6 { //nolint:mnd
+		return true
 	}
 
 	// Must start with 4 digits (year).
