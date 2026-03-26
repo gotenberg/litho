@@ -8,9 +8,9 @@
 
 | Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Round 11-12 | Delta (total) |
 |--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|-------------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,264 (87.0%)** | +775 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **18** | -79 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | **318** | -696 |
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,266 (87.1%)** | +777 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **15** | -82 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | **319** | -695 |
 
 ### Progress by tier
 
@@ -33,7 +33,7 @@
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
 | Round 10 (gfx state + xref + UTF-8 + OI + XMP) | 2,231 | 37 | 332 | 85.8% |
 | Round 11 (parser-level §6.1.x) | 2,241 | 37 | 322 | 86.2% |
-| **Round 12 (§6.1.x + FP fixes)** | **2,264** | **18** | **318** | **87.0%** |
+| **Round 12 (§6.1.x + FP fixes)** | **2,266** | **15** | **319** | **87.1%** |
 
 ### Initial results (before improvements)
 
@@ -741,12 +741,13 @@ Targeted parser-level format validation. Every §6.1.x FN file was analyzed for 
 | 5 | **XMP property type: rational notation + structured Alt** — (a) xmpDM Real properties accept rational "N/D" notation (same as EXIF/TIFF); (b) Alt containers with structured items (e.g., xmp:Thumbnails) don't require xml:lang on rdf:li items. Added isStructured detection for sub-elements at depth > 3 inside rdf:li. | `xmp.go` | **-4 FP** |
 | 6 | **XMP extension schema level stack + optional property** — (a) Multi-item Seq/Bag in extension schemas: only the first rdf:li consumed the pending level; subsequent items had no level. Now tracks containerLevel for all items. (b) pdfaSchema:property is optional — schemas can declare only valueTypes. | `xmp.go` | **-2 FP** |
 | 7 | **Profile-aware standard structure types** — ISO 32000-2 types (Title, Artifact, Em, Strong, etc.) are only standard for PDF/A-4 and PDF/UA-2. For PDF/UA-1, these are non-standard and can be remapped. Split type set + isStandardStructType() helper. | `structure.go` | **-3 FP, +2 FN exposed** |
+| 8 | **Figure alt text: /ActualText + /Caption** — PDF/UA-1 accepts /Alt OR /ActualText (presence, even empty). PDF/UA-2 also accepts /Caption child. Changed from non-empty /Alt requirement to presence-based check. | `accessibility.go` | **-3 FP, +1 FN exposed** |
 
-### Milestone: 87.0% (2,264 / 2,601)
+### Milestone: 87.1% (2,266 / 2,601)
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,264 (87.0%) | +775 (+52.1%) |
-| **False Positives** | 97 | 18 | -79 (-81.4%) |
-| **False Negatives** | 1,014 | 318 | -696 (-68.6%) |
+| **Pass** | 1,489 (57.3%) | 2,266 (87.1%) | +777 (+52.2%) |
+| **False Positives** | 97 | 15 | -82 (-84.5%) |
+| **False Negatives** | 1,014 | 319 | -695 (-68.5%) |
 | **False Negatives** | 1,014 | 316 | -698 (-68.8%) |
