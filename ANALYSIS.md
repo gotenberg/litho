@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Delta (total) |
-|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | **2,194 (84.4%)** | +705 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | **37** | -60 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | **369** | -645 |
+| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Delta (total) |
+|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | **2,210 (85.0%)** | +721 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | **37** | -60 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | **353** | -661 |
 
 ### Progress by tier
 
@@ -29,7 +29,8 @@
 | Round 5 (breadth FN push) | 2,158 | 35 | 407 | 83.0% |
 | Round 6 (diagnostic-first) | 2,173 | 37 | 390 | 83.5% |
 | Round 7 (YELLOW tier) | 2,188 | 37 | 375 | 84.1% |
-| **Round 8 (RED infrastructure)** | **2,194** | **37** | **369** | **84.4%** |
+| Round 8 (RED infrastructure) | 2,194 | 37 | 369 | 84.4% |
+| **Round 9 (final push to 85%)** | **2,210** | **37** | **353** | **85.0%** |
 
 ### Initial results (before improvements)
 
@@ -579,3 +580,41 @@ This round targeted parser-level infrastructure changes in `pkg/internal/core/pa
 | ~6 | §6.7.2 t03 | XMP DocInfo sync |
 | ~5 | §6.1.7 t01 | Stream dict format (parser) |
 | ~322 | Various | Long-tail across ~195 rule combinations |
+
+## Round 9 — Final Push to 85% (2026-03-26)
+
+**Starting point:** 2,194 / 2,601 (84.4%), 37 FP, 369 FN
+**Final result:** 2,210 / 2,601 (85.0%), 37 FP, 353 FN
+
+This round achieved the 85% target with a single comprehensive transparency fix.
+
+### Fix applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **Blending CS compatibility + annotation transparency** — Three improvements: (a) when OutputIntent exists, device CS used as blending colour space must match (DeviceRGB→RGB OI, DeviceCMYK→CMYK OI); checks page, Form XObject, and annotation appearance /Group/CS; (b) annotation appearance streams with transparency groups or transparent ExtGState now trigger the blending CS requirement; (c) extracted reusable `resourcesHaveTransparency` helper. | `transparency.go` | **-16 FN** |
+
+### Analysis
+
+The key insight was that litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE with the OutputIntent colour space. Test files with `DeviceCMYK` as blending CS and RGB OutputIntent (or vice versa) passed litho's check because they had a /Group/CS, even though the device CS conflicted with the OutputIntent. The fix adds a compatibility check: device blending CS must match the OutputIntent's ICC colour space (GRAY is always compatible).
+
+### Milestone: 85.0% (2,210 / 2,601)
+
+From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 27.7 percentage points across 9 rounds:
+
+| Metric | Baseline | Current | Delta |
+|--------|----------|---------|-------|
+| **Pass** | 1,489 (57.3%) | 2,210 (85.0%) | +721 (+48.4%) |
+| **False Positives** | 97 | 37 | -60 (-61.9%) |
+| **False Negatives** | 1,014 | 353 | -661 (-65.2%) |
+
+### Key remaining FN areas (353 total)
+
+| Files | Primary Rule | Category |
+|-------|-------------|----------|
+| ~6 | §6.2.4.2 t02 | Overprint mode (requires graphics state tracking) |
+| ~6 | §6.1.4 t01 | Xref format (parser-level) |
+| ~6 | §6.2.3 t01 | OutputIntent ICC edge cases |
+| ~6 | §6.7.2 t03 | XMP DocInfo sync |
+| ~5 | §6.1.7 t01 | Stream dict format (parser) |
+| ~324 | Various | Long-tail across ~190 rule combinations |
