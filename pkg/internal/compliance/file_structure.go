@@ -63,6 +63,9 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 	results = append(results, checkXRefFormat(doc, profile)...)
 	results = append(results, checkXRefTableByteFormat(doc, profile)...)
 
+	if part := pdfaPart(profile); part >= 2 {
+		results = append(results, checkSignatureReferences(ctx, doc, catalog, profile)...)
+	}
 	if part := pdfaPart(profile); part == 4 {
 		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
 		results = append(results, checkUTF8Names(ctx, doc, catalog)...)
@@ -1255,6 +1258,67 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile 
 
 	slog.Debug("compliance_2: file_structure: PDF/A-4 trailer Info OK")
 	return nil
+}
+
+// checkSignatureReferences validates §6.1.12 t02 (PDF/A-2+): if /Perms/DocMDP
+// is present, the Signature References dictionary shall not contain
+// DigestLocation, DigestMethod, or DigestValue keys.
+func checkSignatureReferences(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	permsObj, ok := catalog["Perms"]
+	if !ok {
+		return nil
+	}
+	perms, err := document.ResolveDict(ctx, doc, permsObj)
+	if err != nil || perms == nil {
+		return nil
+	}
+	docMDPObj, ok := perms["DocMDP"]
+	if !ok {
+		return nil
+	}
+
+	// Resolve the DocMDP signature dictionary.
+	sigDict, err := document.ResolveDict(ctx, doc, docMDPObj)
+	if err != nil || sigDict == nil {
+		return nil
+	}
+
+	// Check /Reference array entries for forbidden keys.
+	refArr, err := document.ResolveArray(ctx, doc, sigDict["Reference"])
+	if err != nil || len(refArr) == 0 {
+		return nil
+	}
+
+	var results []Result
+	part := pdfaPart(profile)
+	forbidden := []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"}
+
+	for i, refObj := range refArr {
+		refDict, err := document.ResolveDict(ctx, doc, refObj)
+		if err != nil || refDict == nil {
+			continue
+		}
+		for _, key := range forbidden {
+			if _, has := refDict[key]; has {
+				results = append(results, failf(sigRefRule(part),
+					"Signature Reference[%d] contains forbidden key /%s", i, key)...)
+			}
+		}
+	}
+	return results
+}
+
+func sigRefRule(part int) Rule {
+	switch part {
+	case 2:
+		return Rule_19005_2_6_1_12_t02
+	case 3:
+		return Rule_19005_3_6_1_12_t02
+	case 4:
+		return Rule_19005_4_6_1_12_t01
+	default:
+		return Rule_19005_2_6_1_12_t02
+	}
 }
 
 // checkUTF8Names validates §6.1.7 (PDF/A-4): font names, colorant names in
