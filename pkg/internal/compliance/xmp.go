@@ -1767,7 +1767,8 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Re
 				}
 
 				// Validate Alt container items have xml:lang attribute.
-				if expectedType == xmpPropAlt && !pv.hasLangAttr {
+				// Struct-valued Alt items (e.g., xmp:Thumbnails) don't need xml:lang.
+				if expectedType == xmpPropAlt && !pv.hasLangAttr && !pv.isStructured {
 					slog.Debug("compliance_2/xmp: Alt container missing xml:lang on items",
 						"ns", ns, "prop", prop)
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
@@ -1809,8 +1810,8 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Re
 				// Validate simple property value format.
 				if pv.containerType == xmpContSimple && pv.value != "" {
 					valid := validateXMPValue(expectedType, pv.value)
-					// EXIF and TIFF properties typed as Real also accept rational "N/D" notation.
-					if !valid && expectedType == xmpPropReal && isEXIFNamespace(ns) {
+					// EXIF, TIFF, and xmpDM properties typed as Real accept rational "N/D" notation.
+					if !valid && expectedType == xmpPropReal && acceptsRationalNotation(ns) {
 						valid = isValidXMPRealOrRational(pv.value)
 					}
 					if !valid {
@@ -2000,6 +2001,12 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 							"ns", currentNS, "local", currentLocal, "child", t.Name.Local)
 					}
 				}
+				// Inside an rdf:li, a non-rdf sub-element indicates structured content.
+				if depth > 3 && inLi && t.Name.Space != xmpRDFNamespace { //nolint:mnd
+					pv := getOrCreate(currentNS, currentLocal)
+					pv.isStructured = true
+					record(currentNS, currentLocal, pv)
+				}
 				if depth == 3 && inContainer && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" { //nolint:mnd
 					inLi = true
 					currentCharData = ""
@@ -2091,10 +2098,11 @@ func xmpContainerTypeName(t xmpContainerType) string {
 	return "Unknown"
 }
 
-// isEXIFNamespace returns true if the namespace is EXIF or TIFF, where
-// Real properties accept rational "N/D" notation.
-func isEXIFNamespace(ns string) bool {
+// acceptsRationalNotation returns true if the namespace allows Real properties
+// to use rational "N/D" notation (e.g., "72/1", "768/702").
+func acceptsRationalNotation(ns string) bool {
 	return ns == "http://ns.adobe.com/exif/1.0/" ||
 		ns == "http://ns.adobe.com/exif/1.0/aux/" ||
-		ns == "http://ns.adobe.com/tiff/1.0/"
+		ns == "http://ns.adobe.com/tiff/1.0/" ||
+		ns == "http://ns.adobe.com/xmp/1.0/DynamicMedia/"
 }
