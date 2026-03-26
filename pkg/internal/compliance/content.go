@@ -48,13 +48,30 @@ var validPDFOperators = map[string]bool{
 }
 
 // forbiddenInlineImageFilters lists filter names that are not permitted in
-// inline images for PDF/A conformance.
+// inline images for PDF/A conformance (parts 1-3).
 //
 //nolint:gochecknoglobals // package-level lookup table.
 var forbiddenInlineImageFilters = map[string]bool{
 	"LZW":       true,
 	"LZWDecode": true,
 	"Crypt":     true,
+}
+
+// allowedInlineImageFiltersPart4 lists filter names/abbreviations permitted
+// in inline images for PDF/A-4 (ISO 32000-2:2020, Table 92).
+//
+//nolint:gochecknoglobals // package-level lookup table.
+var allowedInlineImageFiltersPart4 = map[string]bool{
+	"AHx": true, "ASCIIHexDecode": true,
+	"A85": true, "ASCII85Decode": true,
+	"LZW": false, "LZWDecode": false, // explicitly forbidden
+	"Fl": true, "FlateDecode": true,
+	"RL": true, "RunLengthDecode": true,
+	"CCF": true, "CCITTFaxDecode": true,
+	"DCT": true, "DCTDecode": true,
+	"JPXDecode":   true,
+	"JBIG2Decode": true,
+	"Crypt":       false, // explicitly forbidden
 }
 
 // checkContentGroup validates content stream operators for PDF/A conformance.
@@ -251,7 +268,16 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Result {
 		dictBytes := data[offset:idIdx]
 		filterVal := extractInlineImageFilter(dictBytes)
 		if filterVal != "" {
-			if forbiddenInlineImageFilters[filterVal] {
+			forbidden := false
+			if part == 4 { //nolint:mnd // PDF/A-4 uses allowlist
+				allowed, known := allowedInlineImageFiltersPart4[filterVal]
+				if !known || !allowed {
+					forbidden = true
+				}
+			} else {
+				forbidden = forbiddenInlineImageFilters[filterVal]
+			}
+			if forbidden {
 				slog.Debug("compliance_2/content: forbidden inline image filter",
 					"page", pageNum, "filter", filterVal)
 				results = append(results, failf(inlineImageFilterRule(part),
