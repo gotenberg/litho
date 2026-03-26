@@ -36,9 +36,9 @@ func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.Pd
 	checkICCBasedProfiles(ctx, doc, catalog, part, &results)
 
 	// --- §6.2.4.4: Separation and DeviceN colour space consistency ---
-	if part >= 2 {
-		checkSeparationDeviceN(ctx, doc, catalog, part, &results)
-	}
+	// Run for all parts: part 1 needs DeviceN component limit (§6.1.12 t09),
+	// parts 2+ need colorant consistency (§6.2.4.4 t01/t02).
+	checkSeparationDeviceN(ctx, doc, catalog, part, &results)
 
 	slog.Debug("compliance_2/color: color checks complete", "violations", len(results))
 	return results
@@ -1211,6 +1211,17 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		return
 	}
 
+	// §6.1.12 t09: DeviceN component limit (PDF/A-1: 8, PDF/A-2+: 32).
+	maxComponents := 32 //nolint:mnd // PDF/A-2+ limit
+	if part == 1 {
+		maxComponents = 8 //nolint:mnd // PDF/A-1 limit
+	}
+	if len(names) > maxComponents {
+		*results = append(*results, failf(deviceNComponentRule(part),
+			"page %d, ColorSpace %s: DeviceN has %d components (max %d)",
+			pageIdx+1, csName, len(names), maxComponents)...)
+	}
+
 	alternateName := resolveCSName(ctx, doc, arr[2])
 	if alternateName == "" {
 		slog.Debug("compliance_2/color: cannot resolve DeviceN alternate space", "page", pageIdx, "cs", csName)
@@ -1328,6 +1339,13 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 // separationConsistencyRule returns the rule for Separation colour space
 // consistency based on the PDF/A part.
+// deviceNComponentRule returns the rule for DeviceN component count limit.
+func deviceNComponentRule(part int) Rule {
+	// PDF/A-1 uses §6.1.12 t09, parts 2+ don't have a separate rule
+	// for DeviceN component count (limit is 32, rarely exceeded).
+	return Rule_19005_1_6_1_12_t09
+}
+
 func separationConsistencyRule(part int) Rule {
 	switch part {
 	case 2:
