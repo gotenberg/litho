@@ -644,20 +644,18 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			}
 		}
 
-		if !hasAnnots && isPDFUA2 {
-			// PDF/UA-2 only requires /Tabs on pages with annotations.
+		if !hasAnnots {
+			// Both PDF/UA-1 and PDF/UA-2 only require /Tabs on pages with annotations.
 			continue
 		}
 
 		tabsObj, ok := page["Tabs"]
 		if !ok {
 			if isPDFUA1 {
-				// PDF/UA-1 §7.18.7: every page must have /Tabs = /S when
-				// the document has a structure tree (which is always the
-				// case for PDF/UA-1). Flag all pages missing /Tabs.
+				// PDF/UA-1 §7.18.3: every page with annotations must have /Tabs = /S.
 				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
 				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
-			} else if isPDFUA2 && hasAnnots {
+			} else if isPDFUA2 {
 				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
 				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			}

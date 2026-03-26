@@ -813,7 +813,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 	if langObj, ok := catalog["Lang"]; ok {
 		langStr, err := document.ResolveString(ctx, doc, langObj)
 		if err == nil {
-			trimmed := strings.TrimSpace(string(langStr))
+			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 			if trimmed != "" && !isValidLangTag(trimmed) {
 				slog.Debug("compliance_2/structure: catalog /Lang is invalid", "lang", trimmed)
 				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
@@ -836,7 +836,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		if err != nil {
 			return
 		}
-		trimmed := strings.TrimSpace(string(langStr))
+		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 		if trimmed != "" && !isValidLangTag(trimmed) {
 			slog.Debug("compliance_2/structure: invalid /Lang in structure element",
 				"lang", trimmed, "path", path)
