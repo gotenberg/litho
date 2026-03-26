@@ -6,11 +6,11 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Delta (total) |
-|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,241 (86.2%)** | +752 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | **37** | -60 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **322** | -692 |
+| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Round 11-12 | Delta (total) |
+|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|-------------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,247 (86.4%)** | +758 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **37** | -60 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | **316** | -698 |
 
 ### Progress by tier
 
@@ -32,7 +32,8 @@
 | Round 8 (RED infrastructure) | 2,194 | 37 | 369 | 84.4% |
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
 | Round 10 (gfx state + xref + UTF-8 + OI + XMP) | 2,231 | 37 | 332 | 85.8% |
-| **Round 11 (parser-level §6.1.x)** | **2,241** | **37** | **322** | **86.2%** |
+| Round 11 (parser-level §6.1.x) | 2,241 | 37 | 322 | 86.2% |
+| **Round 12 (continued §6.1.x)** | **2,247** | **37** | **316** | **86.4%** |
 
 ### Initial results (before improvements)
 
@@ -723,3 +724,23 @@ Targeted parser-level format validation. Every §6.1.x FN file was analyzed for 
 | 2 | **Signature References forbidden keys (§6.1.12 t02)** — When /Perms/DocMDP is present, Signature Reference dicts must not contain DigestLocation, DigestMethod, or DigestValue. New function iterates the signature dict's /Reference array. | `file_structure.go` | **-3 FN** |
 | 3 | **Object header byte-level format (§6.1.8/§6.1.9)** — Raw-byte validator at xref entry offset during object resolution. Checks: object number and generation separated by single space, generation and "obj" keyword separated by single space. Same pattern as xref table validator. No parser behavior change. | `document/resolve.go`, `document/xref.go` | **-4 FN** |
 | 4 | **Inline image filter allowlist (§6.1.9 t01 for PDF/A-4)** — Changed from blocklist (LZW/Crypt forbidden) to allowlist of standard filter names from ISO 32000-2:2020 Table 92 for PDF/A-4. Parts 1-3 still use blocklist. | `content.go` | **-2 FN** |
+
+## Round 12 — Continued §6.1.x + Page Boundaries (2026-03-26)
+
+**Starting point:** 2,241 / 2,601 (86.2%), 37 FP, 322 FN
+**Final result:** 2,247 / 2,601 (86.4%), 37 FP, 316 FN
+
+### Fixes applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **UTF-8 name validation for PDF/A-2/3 (§6.1.8 t01)** — Extended checkUTF8Names to run for parts 2+ (not just part 4). Same UTF-8 validation, different rule mapping per part. | `file_structure.go` | **-2 FN** |
+| 2 | **Page boundary inheritance (§6.1.13 t11)** — Page boundary boxes on the Pages tree root (inherited by child pages) now validated. Only flags root boundaries that are actually inherited by at least one page — if all pages override the key, the root value is ignored. | `file_structure.go` | **-4 FN** |
+
+### Milestone: 86.4% (2,247 / 2,601)
+
+| Metric | Baseline | Current | Delta |
+|--------|----------|---------|-------|
+| **Pass** | 1,489 (57.3%) | 2,247 (86.4%) | +758 (+50.9%) |
+| **False Positives** | 97 | 37 | -60 (-61.9%) |
+| **False Negatives** | 1,014 | 316 | -698 (-68.8%) |
