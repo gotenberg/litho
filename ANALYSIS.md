@@ -310,13 +310,75 @@ Litho reports compliant on files that should fail.
 
 | Category | FN | Status |
 |----------|-----|--------|
-| **Parser-level format** | ~45 | RED: stream/obj format (§6.1.8), hex strings (§6.1.5), implementation limits (§6.1.12), object format (§6.1.9). Requires byte-level parser validation. |
-| **Content stream analysis** | ~15 | RED: resource completeness (§6.2.2 t2), undefined operators (§6.2.2 t1), content stream named resources (§6.2.2 t3). Requires operator-level resource cross-referencing. |
+| **Parser-level format** | ~54 | Detailed breakdown below. |
+| **Content stream analysis** | ~15 | YELLOW: resource completeness (§6.2.2 t2), undefined operators (§6.2.2 t1), content stream named resources (§6.2.2 t3). Requires operator-level resource cross-referencing. |
 | **Font program analysis** | ~25 | YELLOW: CIDToGIDMap (§6.2.11.7.3), glyph coverage (§6.2.11.4.1), .notdef reference (§6.2.11.8), width comparison edge cases. Requires deeper font program parsing. |
 | **ICC/OutputIntent edge cases** | ~15 | YELLOW: deep ICC profile validation (§6.2.3 t1), ICCBased identity in XObject resources (§6.2.4.2 t3), tint transform comparison (§6.2.4.4 t3). |
 | **XMP edge cases** | ~20 | YELLOW: property type mismatches (§6.7.2/§6.7.9), extension schema field validation (§6.6.2.3.3), pdfaid identification (§6.7.3). |
 | **PDF/UA structure** | ~25 | YELLOW: annotation accessibility (§7.18), table column count (§7.2 t42/t43), PDF/UA-2 namespace role mapping (§8.2.4). |
-| **Long tail** | ~185 | Mixed: ~175 unique rules with 1-3 files each. Diminishing returns — each fix addresses ≤3 FN. |
+| **Long tail** | ~175 | Mixed: ~170 unique rules with 1-3 files each. Diminishing returns — each fix addresses ≤3 FN. |
+
+### Parser-level format breakdown (54 FN across §6.1.x)
+
+Detailed analysis of every §6.1.x FN file, grouped by implementation tier.
+
+#### Tier 1 — Compliance-package only, no parser changes (19 FN)
+
+| Count | Rule | Violation | What exists | What's missing | Fix |
+|-------|------|-----------|-------------|----------------|-----|
+| 3 | §6.1.12 t02 (A-1b) | Real value > 32767.0 | Check exists for `PdfReal` | May miss `PdfInt` values that exceed real limit, or reals in unreached objects | Debug each file; extend real check |
+| 3 | §6.1.12 t02 (A-2b) | Signature refs: DigestLocation/DigestMethod/DigestValue forbidden when DocMDP present | Rule exists, no implementation | Iterate `/Perms/DocMDP` → signature dict → `/Reference` array → check for forbidden keys | New function in `document.go` |
+| 4 | §6.1.13 t11 (A-2b) | Page boundary < 3 or > 14400 units | `checkPageBoundaries()` exists | May only check MediaBox; needs all 5 box types (CropBox, BleedBox, TrimBox, ArtBox) | Extend existing function |
+| 1 | §6.1.12 t09 (A-1b) | DeviceN components > 8 | Constants defined, never used | Check `len(names)` in DeviceN arrays | Add to `checkDeviceNCS` in `color.go` |
+| 1 | §6.1.12 t10 (A-1b) | CID value > 65535 | Constant defined, never used | Parse CIDFont `/W` arrays, check CID values | Add to `fonts.go` |
+| 1 | §6.1.13 t10 (A-2b) | CID value > 65535 | Same | Same, for parts 2+ | Same |
+| 1 | §6.1.12 t01 (A-4) | Catalog /Version must start with "2" | Check exists in `document.go` | Edge case — debug | Debug |
+| 1 | §6.1.3 t05 (A-4) | Info dict shall only contain ModDate | `checkPDFA4TrailerInfo` exists | Edge case — debug | Debug |
+| 1 | §6.1.13 t01 (A-2b) | Integer out of range | Check exists | Edge case — debug | Debug |
+| 1 | §6.1.13 t03 (A-2b) | String > 32767 bytes | Check exists | Edge case — debug | Debug |
+| 2 | §6.1.3 t01 (A-2b/A-4) | Trailer missing /ID | Check exists | May not check xref stream trailer dict | Extend to xref stream trailers |
+
+#### Tier 2 — Parser changes, low risk (18 FN)
+
+| Count | Rule | Violation | Approach |
+|-------|------|-----------|----------|
+| 10 | §6.1.8 t01 (A-1b/A-4) | Object header: "N G obj" whitespace must be single space, preceded/followed by EOL | Read raw bytes at xref entry offset during `resolveWith()` when ComplianceMode=true. Validate: `<digits><SP><digits><SP>obj<EOL>`. Same pattern as `ValidateXRefTableFormat`. |
+| 8 | §6.1.9 t01 (A-2b/A-4) | Same rule (different clause number for different parts) | Same implementation — the rule maps to the same check with different rule variables. |
+
+**Note:** 6 of the §6.1.8 FN (for PDF/A-2b) actually test UTF-8 name validation (VeraPDF clause says "names shall be valid UTF-8"), already fixed in Round 10. Only 4 remain as true obj header format FN (A-1b + some A-4). The §6.1.9 files test the same obj header format for parts 2+. Combined: 10-12 FN from object header format.
+
+#### Tier 3 — Content stream and edge cases (10 FN)
+
+| Count | Rule | Violation | Approach |
+|-------|------|-----------|----------|
+| 4 | §6.1.6 t01/t02 (A-1b/A-2b) | Hex string format (even digits, valid chars) | Parser already validates during object resolution. FN persists because hex strings in content streams aren't validated. Add raw-byte scan of content streams for `<hex>` patterns. |
+| 4 | §6.1.2 t01/t02 (A-2b/A-4) | File header format (%PDF-x.y EOL, binary comment) | `checkFileHeader` exists. Debug each file for specific edge case (e.g., header offset, CR-only EOL, binary comment bytes ≤ 127). |
+| 2 | §6.1.9 t01 (A-4) | Inline image filter not in standard allowlist | Change forbidden-filter blocklist to standard-filter allowlist for PDF/A-4. |
+
+#### Tier 4 — Remaining xref + misc (7 FN)
+
+| Count | Rule | Violation | Approach |
+|-------|------|-----------|----------|
+| 1 | §6.1.4 t02 (A-1b) | Xref keyword/header EOL | Debug remaining edge case from Round 10 |
+| 3 | §6.1.5 t01 (A-1b) | **Misattributed** — actually test DocInfo↔XMP sync (§6.7.3), not hex strings | Already handled by sync checker; debug why these 3 files still fail |
+| 3 | §6.1.13 t09 (A-2b) | Page boundary additional edge cases | Same as §6.1.13 t11 above — may need different box types or tolerance |
+
+#### Summary: projected impact by implementation phase
+
+| Phase | Scope | FN fixed | Risk | Files |
+|-------|-------|----------|------|-------|
+| 1. DeviceN/CID limits | Compliance only | ~3 | None | `color.go`, `fonts.go` |
+| 2. Signature refs | Compliance only | ~3 | None | `document.go` |
+| 3. Page boundaries | Compliance only | ~4 | None | `file_structure.go` |
+| 4. Object header format | Parser (raw bytes) | ~12 | Low | `document/resolve.go` |
+| 5. Edge case debugging | Mixed | ~7 | None | Various |
+| 6. Hex in content streams | Compliance only | ~4 | None | `content.go` |
+| 7. File header edges | Compliance only | ~4 | None | `file_structure.go` |
+| 8. Inline image allowlist | Compliance only | ~2 | None | `content.go` |
+| 9. Remaining misc | Mixed | ~4 | Low | Various |
+| **Total** | | **~43** | | |
+
+**Projected: 2,231 + 43 = 2,274 / 2,601 ≈ 87.4%**
 
 ---
 
