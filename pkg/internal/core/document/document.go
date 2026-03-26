@@ -66,6 +66,11 @@ type Document struct {
 	// during object resolution when ComplianceMode is true.
 	FormatViolations []error
 
+	// XRefTableOffsets records the byte offsets of traditional xref tables
+	// encountered during parsing. Used by the compliance engine for raw-byte
+	// format validation after ComplianceMode is enabled.
+	XRefTableOffsets []int64
+
 	// Filters holds registered filter plugins for stream decoding.
 	// Nil when no plugins are registered. Set once during construction,
 	// then read-only.

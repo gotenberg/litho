@@ -59,6 +59,7 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
 	results = append(results, checkNumericLimits(ctx, doc, profile)...)
 	results = append(results, checkXRefFormat(doc, profile)...)
+	results = append(results, checkXRefTableByteFormat(doc, profile)...)
 
 	if part := pdfaPart(profile); part == 4 {
 		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
@@ -706,6 +707,7 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 	hexRule := hexStringRule(profile)
 	objRule := objHeaderRule(profile)
 	streamRule := streamFormatRule(profile)
+	xrefRule := xrefFormatRule(profile)
 
 	for _, violation := range doc.FormatViolations {
 		msg := violation.Error()
@@ -713,7 +715,9 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 			"error", msg)
 
 		rule := hexRule
-		if containsStreamPattern(msg) {
+		if containsXRefPattern(msg) {
+			rule = xrefRule
+		} else if containsStreamPattern(msg) {
 			rule = streamRule
 		} else if containsObjHeaderPattern(msg) {
 			rule = objRule
@@ -728,6 +732,12 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 	slog.Debug("compliance_2: file_structure: parser format violations reported",
 		"count", len(results))
 	return results
+}
+
+// containsXRefPattern returns true if the error message relates to xref
+// table formatting (subsection header separator, EOL after xref keyword).
+func containsXRefPattern(msg string) bool {
+	return bytes.Contains([]byte(msg), []byte("xref"))
 }
 
 // containsStreamPattern returns true if the error message relates to
@@ -745,6 +755,53 @@ func containsObjHeaderPattern(msg string) bool {
 		}
 	}
 	return false
+}
+
+// checkXRefTableByteFormat validates xref table raw-byte formatting by calling
+// the document's ValidateXRefTableFormat for each recorded xref table offset.
+// Any violations are collected in doc.FormatViolations and then mapped to rules.
+func checkXRefTableByteFormat(doc *document.Document, profile string) []Result {
+	if len(doc.XRefTableOffsets) == 0 {
+		return nil
+	}
+
+	// Record count before validation so we only process new violations.
+	prevCount := len(doc.FormatViolations)
+
+	for _, offset := range doc.XRefTableOffsets {
+		doc.ValidateXRefTableFormat(offset)
+	}
+
+	if len(doc.FormatViolations) == prevCount {
+		return nil
+	}
+
+	// Map new violations to rules.
+	rule := xrefFormatRule(profile)
+	var results []Result
+	for _, v := range doc.FormatViolations[prevCount:] {
+		results = append(results, Result{
+			Rule:    rule,
+			Context: v.Error(),
+		})
+	}
+	return results
+}
+
+// xrefFormatRule returns the rule for xref table format violations.
+func xrefFormatRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 1:
+		return Rule_19005_1_6_1_4_t01
+	case 2:
+		return Rule_19005_2_6_1_4_t02
+	case 3:
+		return Rule_19005_3_6_1_4_t02
+	case 4:
+		return Rule_19005_4_6_1_4_t01
+	default:
+		return Rule_19005_1_6_1_4_t01
+	}
 }
 
 // streamFormatRule returns the rule for stream format violations
