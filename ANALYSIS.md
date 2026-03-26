@@ -8,8 +8,8 @@
 
 | Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Round 11-12 | Delta (total) |
 |--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|-------------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,255 (86.7%)** | +766 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **29** | -68 |
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,257 (86.8%)** | +768 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **27** | -70 |
 | **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | **316** | -698 |
 
 ### Progress by tier
@@ -33,7 +33,7 @@
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
 | Round 10 (gfx state + xref + UTF-8 + OI + XMP) | 2,231 | 37 | 332 | 85.8% |
 | Round 11 (parser-level §6.1.x) | 2,241 | 37 | 322 | 86.2% |
-| **Round 12 (§6.1.x + device CS FP)** | **2,255** | **29** | **316** | **86.7%** |
+| **Round 12 (§6.1.x + FP fixes)** | **2,257** | **27** | **316** | **86.8%** |
 
 ### Initial results (before improvements)
 
@@ -737,11 +737,12 @@ Targeted parser-level format validation. Every §6.1.x FN file was analyzed for 
 | 1 | **UTF-8 name validation for PDF/A-2/3 (§6.1.8 t01)** — Extended checkUTF8Names to run for parts 2+ (not just part 4). Same UTF-8 validation, different rule mapping per part. | `file_structure.go` | **-2 FN** |
 | 2 | **Page boundary inheritance (§6.1.13 t11)** — Page boundary boxes on the Pages tree root (inherited by child pages) now validated. Only flags root boundaries that are actually inherited by at least one page — if all pages override the key, the root value is ignored. | `file_structure.go` | **-4 FN** |
 | 3 | **Device CS coverage: page-level OutputIntents + Form XObject DefaultCS + isolated Group CS** — Three missing coverage mechanisms: (a) PDF/A-4 page-level /OutputIntents with /GTS_PDFA or /GTS_PDFA1; (b) Form XObject/Pattern own /DefaultRGB|CMYK|Gray suppresses internal device CS; (c) isolated transparency group /CS provides device-independent coverage. Non-isolated groups correctly excluded. | `color.go`, `transparency.go` | **-8 FP** |
+| 4 | **Only check referenced XObjects** — XObject compliance checks (Subtype2/PS, OPI, etc.) now only apply to XObjects invoked by Do operators. Unreferenced XObjects in /Resources are not "used" per the spec. Collects Do targets from content stream. | `xobjects.go` | **-2 FP** |
 
 ### Milestone: 86.4% (2,247 / 2,601)
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,255 (86.7%) | +766 (+51.5%) |
-| **False Positives** | 97 | 29 | -68 (-70.1%) |
+| **Pass** | 1,489 (57.3%) | 2,257 (86.8%) | +768 (+51.6%) |
+| **False Positives** | 97 | 27 | -70 (-72.2%) |
 | **False Negatives** | 1,014 | 316 | -698 (-68.8%) |
