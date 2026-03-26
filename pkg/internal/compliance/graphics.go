@@ -36,6 +36,14 @@ func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast
 		}
 
 		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1)...)
+
+		// Content stream state machine checks (OPM with ICCBased CMYK, etc.).
+		if part >= 2 {
+			streamData, err := getPageContentBytes(ctx, doc, page)
+			if err == nil && len(streamData) > 0 {
+				results = append(results, checkContentStreamState(ctx, doc, streamData, res, part, i+1)...)
+			}
+		}
 	}
 
 	slog.Debug("compliance_2/graphics: checks complete", "violations", len(results))
