@@ -1239,13 +1239,13 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		return
 	}
 
-	xmpValues := xmpParseForSync(xmpData)
-	if xmpValues == nil {
+	syncResult := xmpParseForSync(xmpData)
+	if syncResult == nil {
 		slog.Debug("compliance_2/xmp: failed to parse XMP for sync")
 		return
 	}
 
-	slog.Debug("compliance_2/xmp: parsed XMP sync values", "count", len(xmpValues))
+	slog.Debug("compliance_2/xmp: parsed XMP sync values", "count", len(syncResult.values))
 
 	syncPairs := []struct {
 		infoKey string
@@ -1270,7 +1270,7 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			continue
 		}
 
-		xmpVal, hasXMP := xmpValues[pair.xmpKey]
+		xmpVal, hasXMP := syncResult.values[pair.xmpKey]
 
 		// If Info dict has a non-empty entry but XMP is missing the
 		// corresponding property, that is a sync violation.
@@ -1279,6 +1279,18 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 				"infoKey", pair.infoKey, "xmpKey", pair.xmpKey, "infoVal", infoVal)
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, "")...)
 			continue
+		}
+
+		// §6.7.3 t3 (part 1): dc:creator must contain exactly one entry
+		// when /Author is present.
+		if part == 1 && pair.infoKey == "Author" {
+			if count, ok := syncResult.entryCounts[pair.xmpKey]; ok && count > 1 {
+				slog.Debug("compliance_2/xmp: dc:creator has multiple entries",
+					"count", count)
+				*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey,
+					fmt.Sprintf("%d entries", count))...)
+				continue
+			}
 		}
 
 		normInfo := strings.TrimSpace(infoVal)
@@ -1370,13 +1382,20 @@ func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.
 	return ""
 }
 
+// xmpSyncResult holds the parsed XMP values and container entry counts.
+type xmpSyncResult struct {
+	values      map[string]string // Property key → first value
+	entryCounts map[string]int    // Property key → number of rdf:li entries (Seq/Bag only)
+}
+
 // xmpParseForSync extracts key XMP property values for DocInfo comparison.
 // It handles both inline attribute values and rdf:Alt/rdf:Seq container
 // values. For Alt containers, the x-default language entry is preferred;
 // if absent, the first entry is used. For Seq containers, the first entry
-// is used.
-func xmpParseForSync(data []byte) map[string]string {
+// is used. Entry counts are tracked for Seq/Bag containers.
+func xmpParseForSync(data []byte) *xmpSyncResult {
 	result := make(map[string]string)
+	entryCounts := make(map[string]int)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
@@ -1489,7 +1508,8 @@ func xmpParseForSync(data []byte) map[string]string {
 						altFirst[key] = text
 					}
 				} else {
-					// Seq/Bag: take the first entry.
+					// Seq/Bag: take the first entry; count all entries.
+					entryCounts[key]++
 					if _, exists := result[key]; !exists {
 						slog.Debug("compliance_2/xmp: sync Seq/Bag li value",
 							"key", key, "value", text)
@@ -1547,7 +1567,7 @@ func xmpParseForSync(data []byte) map[string]string {
 	}
 
 	slog.Debug("compliance_2/xmp: sync parsing complete", "values", len(result))
-	return result
+	return &xmpSyncResult{values: result, entryCounts: entryCounts}
 }
 
 // xmpNormalizePDFDate converts a PDF date string (D:YYYYMMDDHHmmSS+HH'mm')
