@@ -8,9 +8,9 @@
 
 | Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Delta (total) |
 |--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,216 (85.2%)** | +727 |
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,221 (85.4%)** | +732 |
 | **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | **37** | -60 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **347** | -667 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **342** | -672 |
 
 ### Progress by tier
 
@@ -31,7 +31,7 @@
 | Round 7 (YELLOW tier) | 2,188 | 37 | 375 | 84.1% |
 | Round 8 (RED infrastructure) | 2,194 | 37 | 369 | 84.4% |
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
-| **Round 10 (graphics state machine)** | **2,216** | **37** | **347** | **85.2%** |
+| **Round 10 (gfx state + xref format)** | **2,221** | **37** | **342** | **85.4%** |
 
 ### Initial results (before improvements)
 
@@ -602,29 +602,30 @@ litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE wi
 **Starting point:** 2,210 / 2,601 (85.0%), 37 FP, 353 FN
 **Final result:** 2,216 / 2,601 (85.2%), 37 FP, 347 FN
 
-### Fix applied
+### Fixes applied
 
 | # | Fix | Files | Impact |
 |---|-----|-------|--------|
 | 1 | **Content stream graphics state machine** — Minimal content stream interpreter tracking fill/stroke colour space, overprint mode (OPM), and overprint flags (OP/op) through q/Q save/restore and gs/cs/CS operators. At each painting operator, checks §6.2.4.2 t02: OPM=1 forbidden when ICCBased CMYK is active and overprint is enabled. Fill-only operators (f/F/f*) check only fill overprint; stroke-only (S/s) check only stroke; combined (B/B*) check both. Named CS resolved from resources with caching (ICCBased N=4 → CMYK). | `content_state.go`, `graphics.go` | **-6 FN** |
+| 2 | **Xref table byte-level format validation** — Raw-byte validator reads directly from io.ReaderAt at recorded xref table offsets. Checks: xref keyword followed by single EOL, subsection header start/count separated by single space, extra whitespace detection. Xref offsets stored during parsing, validated by compliance engine. | `document/xref.go`, `document/document.go`, `file_structure.go` | **-5 FN** |
 
 ### Analysis
 
-Previous attempt at OPM validation (Round 8) used a page-level approximation that caused 6 FP. The correct approach requires a state machine that tracks which colour space is active at each painting operator. The key subtlety: fill-only operators (`f`) must only check fill overprint, not stroke overprint. A test file with `/OP true` (stroke) but `/op false` (fill) that only uses fill operations is valid — the simplified approach flagged it incorrectly.
+**Graphics state machine:** Previous attempt at OPM validation (Round 8) used a page-level approximation that caused 6 FP. The correct approach requires a state machine that tracks which colour space is active at each painting operator. The key subtlety: fill-only operators (`f`) must only check fill overprint, not stroke overprint. A test file with `/OP true` (stroke) but `/op false` (fill) that only uses fill operations is valid — the simplified approach flagged it incorrectly. The state machine (~250 lines in `content_state.go`) handles: q/Q state stack, gs (ExtGState application), cs/CS (explicit CS set), rg/RG/k/K/g/G (implicit device CS), and painting operators with fill/stroke discrimination.
 
-The state machine (~250 lines in `content_state.go`) handles: q/Q state stack, gs (ExtGState application), cs/CS (explicit CS set), rg/RG/k/K/g/G (implicit device CS), and painting operators with fill/stroke discrimination. Named colour spaces are resolved from resources and cached (ICCBased with N=4 → "ICCBased-CMYK").
+**Xref format:** The lexer-based xref parser can't validate byte-level format because it treats all whitespace equivalently. The solution: record xref table offsets during parsing, then run a separate raw-byte validation pass from the compliance engine. This avoids modifying the lenient parser while enabling strict format checks.
 
-### Milestone: 85.2% (2,216 / 2,601)
+### Milestone: 85.4% (2,221 / 2,601)
 
-From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 27.9 percentage points across 10 rounds:
+From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 28.1 percentage points across 10 rounds:
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,216 (85.2%) | +727 (+48.8%) |
+| **Pass** | 1,489 (57.3%) | 2,221 (85.4%) | +732 (+49.2%) |
 | **False Positives** | 97 | 37 | -60 (-61.9%) |
-| **False Negatives** | 1,014 | 347 | -667 (-65.8%) |
+| **False Negatives** | 1,014 | 342 | -672 (-66.3%) |
 
-### Key remaining FN areas (347 total)
+### Key remaining FN areas (342 total)
 
 | Files | Primary Rule | Category |
 |-------|-------------|----------|
@@ -632,4 +633,4 @@ From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved b
 | ~6 | §6.2.3 t01 | OutputIntent ICC edge cases |
 | ~6 | §6.7.2 t03 | XMP DocInfo sync |
 | ~5 | §6.1.7 t01 | Stream dict format (parser) |
-| ~324 | Various | Long-tail across ~190 rule combinations |
+| ~319 | Various | Long-tail across ~188 rule combinations |
