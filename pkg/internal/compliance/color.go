@@ -105,11 +105,10 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 	var pdfaIntentCount int
 
 	var (
-		firstProfileRef  ast.PdfObject
-		firstProfileData []byte
-		firstColorSpace  string
-		iccColorSpace    string
-		hasValidICC      bool
+		firstProfileRef ast.PdfObject
+		firstColorSpace string
+		iccColorSpace   string
+		hasValidICC     bool
 	)
 
 	for i, intentObj := range outputIntents {
@@ -121,6 +120,14 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 		if err != nil || intent == nil {
 			slog.Debug("compliance_2/color: cannot resolve OutputIntent dict", "index", i, "error", err)
 			continue
+		}
+
+		// PDF/A-4 §6.2.3 t3: DestOutputProfileRef is forbidden.
+		if part == 4 {
+			if _, has := intent["DestOutputProfileRef"]; has {
+				*results = append(*results, failf(Rule_19005_4_6_2_3_t03,
+					"OutputIntent[%d]: contains forbidden /DestOutputProfileRef", i)...)
+			}
 		}
 
 		// Track OutputIntent subtype (/S key).
@@ -179,18 +186,16 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 		}
 
 		// §6.2.2 t2 / §6.2.3 t2: multiple OutputIntents must be consistent.
-		// Check that all DestOutputProfile entries reference the same indirect
-		// object or have identical data, AND that all ICC colour spaces match.
+		// All DestOutputProfile entries must reference the same indirect object.
+		// The spec requires the same indirect object, not merely identical data.
 		if firstProfileRef == nil {
 			firstProfileRef = destProfileObj
-			firstProfileData = data
 			firstColorSpace = hdr.colorSpace
 		} else {
-			// Compare indirect references if available; otherwise compare raw data.
-			if !sameIndirectRef(firstProfileRef, destProfileObj) && !bytesEqual(firstProfileData, data) {
+			if !sameIndirectRef(firstProfileRef, destProfileObj) {
 				slog.Debug("compliance_2/color: non-matching DestOutputProfile", "index", i)
 				*results = append(*results, failf(outputIntentConsistencyRule(part),
-					"OutputIntent[%d]: DestOutputProfile does not match first entry", i)...)
+					"OutputIntent[%d]: DestOutputProfile does not reference same object as first entry", i)...)
 			}
 
 			// Flag inconsistent colour spaces across OutputIntents.
