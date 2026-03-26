@@ -41,7 +41,11 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 			continue
 		}
 
-		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0)
+		// Collect Do operator targets from the page content stream so we
+		// only check XObjects that are actually referenced (used).
+		_, referencedXObjects := scanContentStreamDeviceCS(ctx, doc, page, i)
+
+		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
 	}
 
 	slog.Debug("compliance_2: xobjects: checks complete", "violations", len(results))
@@ -49,8 +53,9 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 }
 
 // scanXObjectResources iterates XObject resources, validates each, and recurses
-// into Form XObject sub-resources.
-func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Result, visited map[string]bool, depth int) {
+// into Form XObject sub-resources. At depth 0 (page level), only XObjects
+// referenced by Do operators are checked — unreferenced XObjects are skipped.
+func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Result, visited map[string]bool, depth int, referencedNames map[string]bool) {
 	if depth > 10 || ctx.Err() != nil {
 		return
 	}
@@ -61,6 +66,10 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 	}
 
 	for name, obj := range xobjectDict {
+		// At page level, only check XObjects actually invoked by Do operators.
+		if depth == 0 && referencedNames != nil && !referencedNames[string(name)] {
+			continue
+		}
 		if ctx.Err() != nil {
 			return
 		}
@@ -98,7 +107,7 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 		if subtype == "Form" {
 			subRes, _ := document.ResolveDict(ctx, doc, xobjDict["Resources"])
 			if subRes != nil {
-				scanXObjectResources(ctx, doc, subRes, pageNum, part, profile, results, visited, depth+1)
+				scanXObjectResources(ctx, doc, subRes, pageNum, part, profile, results, visited, depth+1, nil)
 			}
 		}
 	}
