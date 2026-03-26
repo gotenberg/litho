@@ -346,6 +346,11 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 
 	switch entry.Type {
 	case xref.XRefTypeNormal:
+		// Compliance: validate raw-byte object header format.
+		if d.ComplianceMode {
+			d.validateObjectHeaderFormat(entry.Offset, ref.ObjectNum)
+		}
+
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
 		p := parser.NewParser(lex)
 		if d.Crypto != nil {

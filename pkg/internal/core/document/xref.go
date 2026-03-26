@@ -143,6 +143,99 @@ func (d *Document) parseHybridXRefStream(offset int64) error {
 	return nil
 }
 
+// validateObjectHeaderFormat performs raw-byte validation of an indirect object
+// header "N G obj". The spec requires: object number and generation number
+// separated by a single white-space character, generation number and obj
+// keyword separated by a single white-space character, obj preceded by EOL,
+// endobj preceded by EOL.
+func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
+	// Read enough bytes to cover the header: "NNNNNNNNN GGGGG obj\n" ≈ 25 bytes.
+	var buf [40]byte
+	n, _ := d.r.ReadAt(buf[:], offset)
+	if n < 5 { //nolint:mnd // need at least "N G obj"
+		return
+	}
+	data := buf[:n]
+
+	// Parse: <digits> <separator> <digits> <separator> "obj" <EOL>
+	pos := 0
+
+	// Object number: digits.
+	for pos < len(data) && data[pos] >= '0' && data[pos] <= '9' {
+		pos++
+	}
+	if pos == 0 || pos >= len(data) {
+		return // Can't parse — skip.
+	}
+
+	// Separator between object number and generation: must be single SP (0x20).
+	if data[pos] != ' ' {
+		d.mu.Lock()
+		d.FormatViolations = append(d.FormatViolations,
+			fmt.Errorf("compliance: obj header %d: object number not followed by single space (0x%02X)", objNum, data[pos]))
+		d.mu.Unlock()
+		return
+	}
+	// Check for multiple spaces.
+	spCount := 0
+	for pos < len(data) && data[pos] == ' ' {
+		spCount++
+		pos++
+	}
+	if spCount > 1 {
+		d.mu.Lock()
+		d.FormatViolations = append(d.FormatViolations,
+			fmt.Errorf("compliance: obj header %d: %d spaces between object number and generation (must be 1)", objNum, spCount))
+		d.mu.Unlock()
+	}
+
+	// Generation number: digits.
+	genStart := pos
+	for pos < len(data) && data[pos] >= '0' && data[pos] <= '9' {
+		pos++
+	}
+	if pos == genStart || pos >= len(data) {
+		return
+	}
+
+	// Separator between generation and "obj": must be single SP (0x20).
+	if data[pos] != ' ' {
+		d.mu.Lock()
+		d.FormatViolations = append(d.FormatViolations,
+			fmt.Errorf("compliance: obj header %d: generation not followed by single space (0x%02X)", objNum, data[pos]))
+		d.mu.Unlock()
+		return
+	}
+	spCount = 0
+	for pos < len(data) && data[pos] == ' ' {
+		spCount++
+		pos++
+	}
+	if spCount > 1 {
+		d.mu.Lock()
+		d.FormatViolations = append(d.FormatViolations,
+			fmt.Errorf("compliance: obj header %d: %d spaces between generation and obj keyword (must be 1)", objNum, spCount))
+		d.mu.Unlock()
+	}
+
+	// "obj" keyword.
+	if pos+3 > len(data) || string(data[pos:pos+3]) != "obj" {
+		return // Not a valid object header — skip.
+	}
+	pos += 3
+
+	// After "obj": must be followed by EOL or whitespace.
+	if pos < len(data) {
+		ch := data[pos]
+		if ch != '\n' && ch != '\r' && ch != ' ' {
+			d.mu.Lock()
+			d.FormatViolations = append(d.FormatViolations,
+				fmt.Errorf("compliance: obj header %d: obj keyword not followed by EOL or space (0x%02X)", objNum, ch))
+			d.mu.Unlock()
+		}
+	}
+}
+
 // ValidateXRefTableFormat performs raw-byte validation of a traditional xref
 // table's format. It reads directly from the underlying io.ReaderAt to check
 // byte-level formatting that the lenient lexer-based parser cannot detect.
