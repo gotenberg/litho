@@ -242,8 +242,8 @@ func blendingCSRule(part int) Rule {
 }
 
 func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, profile string, part int) []Result {
-	hasOutputIntent := documentHasOutputIntent(ctx, doc, catalog)
-	slog.Debug("compliance_2/transparency: output intent check", "hasOutputIntent", hasOutputIntent)
+	hasOutputIntent, oiColorSpace := documentOutputIntentInfo(ctx, doc, catalog)
+	slog.Debug("compliance_2/transparency: output intent check", "hasOutputIntent", hasOutputIntent, "oiColorSpace", oiColorSpace)
 
 	var results []Result
 	for i, page := range pages {
@@ -355,6 +355,11 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			pageUsesTransparency = checkType3FontTransparency(ctx, doc, res)
 		}
 
+		// Also check annotations for transparency triggers.
+		if !pageUsesTransparency {
+			pageUsesTransparency = checkAnnotationTransparency(ctx, doc, page)
+		}
+
 		// If the page uses transparency, it must have a blending colour space.
 		// The OutputIntent ICC profile provides a default blending CS for the
 		// entire document, so pages without an explicit /Group /CS are valid
@@ -365,12 +370,247 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					"page", i+1)
 				results = append(results, failf(blendingCSRule(part), "page %d", i+1)...)
 			}
-		} else if pageUsesTransparency && hasOutputIntent {
-			slog.Debug("compliance_2/transparency: page uses transparency, OutputIntent provides default blending CS",
-				"page", i+1)
+		}
+
+		// Even when an OutputIntent exists, device CS used as blending CS
+		// must be compatible with the OutputIntent's ICC color space.
+		if pageUsesTransparency && hasOutputIntent && oiColorSpace != "" {
+			results = append(results, checkBlendingCSCompatibility(ctx, doc, page, res, oiColorSpace, i+1, part)...)
 		}
 	}
 	return results
+}
+
+// checkAnnotationTransparency checks whether any annotation on the page
+// uses transparency (via appearance streams with transparency groups or
+// ExtGState with transparency settings).
+func checkAnnotationTransparency(ctx context.Context, doc *document.Document, page ast.PdfDict) bool {
+	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil || len(annotsArr) == 0 {
+		return false
+	}
+	for _, annotObj := range annotsArr {
+		if ctx.Err() != nil {
+			return false
+		}
+		annot, err := document.ResolveDict(ctx, doc, annotObj)
+		if err != nil || annot == nil {
+			continue
+		}
+		apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
+		if err != nil || apDict == nil {
+			continue
+		}
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			apObj, ok := apDict[key]
+			if !ok {
+				continue
+			}
+			stream, err := document.ResolveStream(ctx, doc, apObj)
+			if err != nil {
+				continue
+			}
+			// Check for transparency group on the appearance Form XObject.
+			groupObj, hasGroup := stream.Dict["Group"]
+			if hasGroup {
+				group, err := document.ResolveDict(ctx, doc, groupObj)
+				if err == nil && group != nil {
+					s, _ := document.ResolveName(ctx, doc, group["S"])
+					if s == "Transparency" {
+						return true
+					}
+				}
+			}
+			// Check ExtGState in appearance resources.
+			apRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+			if err == nil && apRes != nil {
+				if resourcesHaveTransparency(ctx, doc, apRes) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// resourcesHaveTransparency checks if a resources dict contains ExtGState
+// entries with transparency settings (non-Normal BM, SMask, CA/ca < 1.0).
+func resourcesHaveTransparency(ctx context.Context, doc *document.Document, resources ast.PdfDict) bool {
+	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
+	if err != nil || gsDict == nil {
+		return false
+	}
+	for _, gsObj := range gsDict {
+		gs, err := document.ResolveDict(ctx, doc, gsObj)
+		if err != nil || gs == nil {
+			continue
+		}
+		if bmObj, hasBM := gs["BM"]; hasBM {
+			bm := resolveBlendMode(ctx, doc, bmObj)
+			if bm != "" && bm != "Normal" && bm != "Compatible" {
+				return true
+			}
+		}
+		if smaskObj, hasSMask := gs["SMask"]; hasSMask {
+			smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
+			if smaskName != "None" {
+				return true
+			}
+		}
+		if caObj, hasCA := gs["CA"]; hasCA {
+			if !floatEquals1(document.GetFloat(caObj)) {
+				return true
+			}
+		}
+		if caObj, hasCa := gs["ca"]; hasCa {
+			if !floatEquals1(document.GetFloat(caObj)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// checkBlendingCSCompatibility validates that any device CS used as a blending
+// colour space on the page (or in XObjects, annotations, Type 3 fonts) is
+// compatible with the OutputIntent's ICC colour space.
+func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, page ast.PdfDict, resources ast.PdfDict, oiColorSpace string, pageNum int, part int) []Result {
+	var results []Result
+
+	// Check page-level /Group/CS.
+	pageBlendCS := resolveBlendingDeviceCS(ctx, doc, page)
+	if pageBlendCS != "" && !blendingCSMatchesOutputIntent(pageBlendCS, oiColorSpace) {
+		results = append(results, failf(blendingCSRule(part),
+			"page %d: blending CS %s incompatible with OutputIntent %s", pageNum, pageBlendCS, oiColorSpace)...)
+	}
+
+	// Check Form XObject /Group/CS entries.
+	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
+	if err == nil && xobjDict != nil {
+		for _, xobjObj := range xobjDict {
+			stream, err := document.ResolveStream(ctx, doc, xobjObj)
+			if err != nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+			if subtype != "Form" {
+				continue
+			}
+			xoCS := resolveBlendingDeviceCS(ctx, doc, stream.Dict)
+			if xoCS != "" && !blendingCSMatchesOutputIntent(xoCS, oiColorSpace) {
+				results = append(results, failf(blendingCSRule(part),
+					"page %d: Form XObject blending CS %s incompatible with OutputIntent %s", pageNum, xoCS, oiColorSpace)...)
+			}
+		}
+	}
+
+	// Check annotation appearance /Group/CS entries.
+	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err == nil {
+		for _, annotObj := range annotsArr {
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+			apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
+			if err != nil || apDict == nil {
+				continue
+			}
+			for _, key := range []ast.PdfName{"N", "R", "D"} {
+				apObj, ok := apDict[key]
+				if !ok {
+					continue
+				}
+				stream, err := document.ResolveStream(ctx, doc, apObj)
+				if err != nil {
+					continue
+				}
+				apCS := resolveBlendingDeviceCS(ctx, doc, stream.Dict)
+				if apCS != "" && !blendingCSMatchesOutputIntent(apCS, oiColorSpace) {
+					results = append(results, failf(blendingCSRule(part),
+						"page %d: annotation blending CS %s incompatible with OutputIntent %s", pageNum, apCS, oiColorSpace)...)
+				}
+			}
+		}
+	}
+
+	return results
+}
+
+// resolveBlendingDeviceCS extracts the device CS name from a dict's
+// /Group << /S /Transparency /CS <cs> >>. Returns "DeviceRGB", "DeviceCMYK",
+// "DeviceGray", or "" if not a device CS or not present.
+func resolveBlendingDeviceCS(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
+	groupObj, ok := dict["Group"]
+	if !ok {
+		return ""
+	}
+	group, err := document.ResolveDict(ctx, doc, groupObj)
+	if err != nil || group == nil {
+		return ""
+	}
+	s, _ := document.ResolveName(ctx, doc, group["S"])
+	if s != "Transparency" {
+		return ""
+	}
+	csObj, ok := group["CS"]
+	if !ok {
+		return ""
+	}
+	csName, _ := document.ResolveName(ctx, doc, csObj)
+	cs := string(csName)
+	if cs == "DeviceRGB" || cs == "DeviceCMYK" || cs == "DeviceGray" {
+		return cs
+	}
+	return ""
+}
+
+// blendingCSMatchesOutputIntent checks if a device blending CS is compatible
+// with the OutputIntent's ICC colour space.
+func blendingCSMatchesOutputIntent(deviceCS string, oiColorSpace string) bool {
+	switch deviceCS {
+	case "DeviceRGB":
+		return oiColorSpace == "RGB "
+	case "DeviceCMYK":
+		return oiColorSpace == "CMYK"
+	case "DeviceGray":
+		return true // DeviceGray is compatible with any OutputIntent.
+	}
+	return true
+}
+
+// documentOutputIntentInfo returns whether the document has an OutputIntent
+// with a DestOutputProfile stream, and the ICC colour space of that profile.
+func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict) (bool, string) {
+	oiObj, hasOI := catalog["OutputIntents"]
+	if !hasOI {
+		return false, ""
+	}
+	arr, err := document.ResolveArray(ctx, doc, oiObj)
+	if err != nil || len(arr) == 0 {
+		return false, ""
+	}
+	for _, intentObj := range arr {
+		intent, err := document.ResolveDict(ctx, doc, intentObj)
+		if err != nil || intent == nil {
+			continue
+		}
+		destObj, ok := intent["DestOutputProfile"]
+		if !ok {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, destObj)
+		if err != nil {
+			continue
+		}
+		data, err := doc.DecodeStream(stream)
+		if err != nil || len(data) < 20 {
+			return true, "" // Has OutputIntent but can't read color space
+		}
+		cs := string(data[16:20])
+		return true, cs
+	}
+	return false, ""
 }
 
 // checkType3FontTransparency checks whether any Type 3 font in the page
@@ -476,42 +716,6 @@ const alphaEpsilon = 1e-6
 
 func floatEquals1(v float64) bool {
 	return math.Abs(v-1.0) < alphaEpsilon
-}
-
-// documentHasOutputIntent checks whether the catalog contains an OutputIntents
-// array with at least one entry that has a valid DestOutputProfile stream.
-// A bare OutputIntents entry without a DestOutputProfile does not provide a
-// default blending colour space.
-func documentHasOutputIntent(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
-	oiObj, hasOI := catalog["OutputIntents"]
-	if !hasOI {
-		return false
-	}
-
-	arr, err := document.ResolveArray(ctx, doc, oiObj)
-	if err != nil || len(arr) == 0 {
-		return false
-	}
-
-	slog.Debug("compliance_2/transparency: found OutputIntents", "count", len(arr))
-
-	// At least one OutputIntent must have a DestOutputProfile stream.
-	for _, intentObj := range arr {
-		intent, err := document.ResolveDict(ctx, doc, intentObj)
-		if err != nil || intent == nil {
-			continue
-		}
-		if destObj, ok := intent["DestOutputProfile"]; ok {
-			_, err := document.ResolveStream(ctx, doc, destObj)
-			if err == nil {
-				slog.Debug("compliance_2/transparency: OutputIntent has DestOutputProfile stream")
-				return true
-			}
-		}
-	}
-
-	slog.Debug("compliance_2/transparency: no OutputIntent has a DestOutputProfile stream")
-	return false
 }
 
 // pageHasBlendingCS checks whether a page dictionary has a Group dict with
