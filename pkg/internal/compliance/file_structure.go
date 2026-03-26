@@ -3,9 +3,11 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"math"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -63,6 +65,7 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 
 	if part := pdfaPart(profile); part == 4 {
 		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
+		results = append(results, checkUTF8Names(ctx, doc, catalog)...)
 	}
 
 	slog.Debug("compliance_2: file_structure: checks complete",
@@ -1252,4 +1255,137 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile 
 
 	slog.Debug("compliance_2: file_structure: PDF/A-4 trailer Info OK")
 	return nil
+}
+
+// checkUTF8Names validates §6.1.7 (PDF/A-4): font names, colorant names in
+// Separation/DeviceN colour spaces, and structure type names must be valid
+// UTF-8 after #XX hex escape expansion.
+func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+	var results []Result
+	seen := make(map[string]bool) // Avoid duplicate reports for the same name.
+
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		res := getResources(ctx, doc, page)
+		if res == nil {
+			continue
+		}
+
+		// Font names: check /BaseFont on each font.
+		fontDict, err := document.ResolveDict(ctx, doc, res["Font"])
+		if err == nil && fontDict != nil {
+			for _, fontObj := range fontDict {
+				fd, err := document.ResolveDict(ctx, doc, fontObj)
+				if err != nil || fd == nil {
+					continue
+				}
+				baseFontName, _ := document.ResolveName(ctx, doc, fd["BaseFont"])
+				if baseFontName != "" {
+					checkNameUTF8(string(baseFontName), "font name", seen, &results)
+				}
+			}
+		}
+
+		// Colorant names in Separation/DeviceN colour spaces.
+		csDict, err := document.ResolveDict(ctx, doc, res["ColorSpace"])
+		if err == nil && csDict != nil {
+			for _, csObj := range csDict {
+				arr, err := document.ResolveArray(ctx, doc, csObj)
+				if err != nil || len(arr) < 2 {
+					continue
+				}
+				csType, _ := document.ResolveName(ctx, doc, arr[0])
+				switch string(csType) {
+				case "Separation":
+					if len(arr) >= 2 {
+						cName, _ := document.ResolveName(ctx, doc, arr[1])
+						if cName != "" {
+							checkNameUTF8(string(cName), "Separation colorant", seen, &results)
+						}
+					}
+				case "DeviceN":
+					if len(arr) >= 2 {
+						names, _ := document.ResolveArray(ctx, doc, arr[1])
+						for _, nameObj := range names {
+							cName, _ := document.ResolveName(ctx, doc, nameObj)
+							if cName != "" {
+								checkNameUTF8(string(cName), "DeviceN colorant", seen, &results)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Structure type names.
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err == nil && treeRoot != nil {
+		checkStructureTypeUTF8(ctx, doc, treeRoot, seen, &results)
+
+		// RoleMap names.
+		roleMap, err := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
+		if err == nil && roleMap != nil {
+			for srcName, dstObj := range roleMap {
+				checkNameUTF8(string(srcName), "RoleMap source", seen, &results)
+				dstName, _ := document.ResolveName(ctx, doc, dstObj)
+				if dstName != "" {
+					checkNameUTF8(string(dstName), "RoleMap target", seen, &results)
+				}
+			}
+		}
+	}
+
+	return results
+}
+
+// checkStructureTypeUTF8 recursively walks the structure tree and validates
+// that each element's /S type name is valid UTF-8.
+func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root ast.PdfDict, seen map[string]bool, results *[]Result) {
+	walkStructureElements(ctx, doc, root, func(elem ast.PdfDict, _ string) {
+		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+		if typeName != "" {
+			checkNameUTF8(string(typeName), "structure type", seen, results)
+		}
+	})
+}
+
+// checkNameUTF8 validates that a PDF name, after #XX hex escape expansion,
+// is a valid UTF-8 string. Reports a violation if not.
+func checkNameUTF8(name, context string, seen map[string]bool, results *[]Result) {
+	if seen[name] {
+		return
+	}
+	seen[name] = true
+
+	decoded := expandNameHexEscapes(name)
+	if !utf8.ValidString(decoded) {
+		*results = append(*results, failf(Rule_19005_4_6_1_7_t01,
+			"%s %q is not valid UTF-8", context, name)...)
+	}
+}
+
+// expandNameHexEscapes expands #XX hex escape sequences in a PDF name.
+// For example, "A#20B" becomes "A B".
+func expandNameHexEscapes(name string) string {
+	if len(name) < 3 { //nolint:mnd // minimum for a #XX sequence
+		return name
+	}
+
+	var buf []byte
+	for i := 0; i < len(name); i++ {
+		if name[i] == '#' && i+2 < len(name) {
+			b, err := hex.DecodeString(name[i+1 : i+3])
+			if err == nil && len(b) == 1 {
+				buf = append(buf, b[0])
+				i += 2
+				continue
+			}
+		}
+		buf = append(buf, name[i])
+	}
+	return string(buf)
 }
