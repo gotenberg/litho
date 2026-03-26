@@ -8,9 +8,9 @@
 
 | Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Delta (total) |
 |--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,230 (85.7%)** | +741 |
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,231 (85.8%)** | +742 |
 | **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | **37** | -60 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **333** | -681 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **332** | -682 |
 
 ### Progress by tier
 
@@ -31,7 +31,7 @@
 | Round 7 (YELLOW tier) | 2,188 | 37 | 375 | 84.1% |
 | Round 8 (RED infrastructure) | 2,194 | 37 | 369 | 84.4% |
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
-| **Round 10 (gfx state + xref + UTF-8 + OI)** | **2,230** | **37** | **333** | **85.7%** |
+| **Round 10 (gfx state + xref + UTF-8 + OI + XMP)** | **2,231** | **37** | **332** | **85.8%** |
 
 ### Initial results (before improvements)
 
@@ -610,6 +610,7 @@ litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE wi
 | 2 | **Xref table byte-level format validation** — Raw-byte validator reads directly from io.ReaderAt at recorded xref table offsets. Checks: xref keyword followed by single EOL, subsection header start/count separated by single space, extra whitespace detection. Xref offsets stored during parsing, validated by compliance engine. | `document/xref.go`, `document/document.go`, `file_structure.go` | **-5 FN** |
 | 3 | **UTF-8 name validation (PDF/A-4)** — Font names (/BaseFont), colorant names in Separation/DeviceN, structure type names (/S), and RoleMap entries must be valid UTF-8 after #XX hex escape expansion. Decodes PDF name escapes, validates with utf8.ValidString, deduplicates by name. | `file_structure.go` | **-6 FN** |
 | 4 | **OutputIntent fixes** — (a) PDF/A-4 §6.2.3 t3: /DestOutputProfileRef forbidden; (b) §6.2.3 t2: multiple OutputIntents must reference same indirect object (removed bytesEqual fallback — spec requires object identity, not content equality). | `color.go` | **-3 FN** |
+| 5 | **XMP DocInfo dc:creator count** — For PDF/A-1 §6.7.3 t3: when /Author is present, dc:creator must have exactly one rdf:Seq entry. Extended xmpParseForSync to track container entry counts. | `xmp.go` | **-1 FN** |
 
 ### Analysis
 
@@ -617,15 +618,15 @@ litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE wi
 
 **Xref format:** The lexer-based xref parser can't validate byte-level format because it treats all whitespace equivalently. The solution: record xref table offsets during parsing, then run a separate raw-byte validation pass from the compliance engine. This avoids modifying the lenient parser while enabling strict format checks.
 
-### Milestone: 85.7% (2,230 / 2,601)
+### Milestone: 85.8% (2,231 / 2,601)
 
-From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 28.4 percentage points across 10 rounds:
+From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 28.5 percentage points across 10 rounds:
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,230 (85.7%) | +741 (+49.8%) |
+| **Pass** | 1,489 (57.3%) | 2,231 (85.8%) | +742 (+49.8%) |
 | **False Positives** | 97 | 37 | -60 (-61.9%) |
-| **False Negatives** | 1,014 | 333 | -681 (-67.2%) |
+| **False Negatives** | 1,014 | 332 | -682 (-67.3%) |
 
 ### Key remaining FN areas (342 total)
 
