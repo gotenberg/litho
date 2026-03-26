@@ -724,21 +724,22 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			return
 		}
 
-		// PDF/UA-1 §7.3 (Rule_14289_1_7_3_t01): Figure elements must have /Alt.
-		// PDF/UA-2 §8.2.5.28.2: Figure elements must have /Alt or /ActualText.
-		hasAlt := hasNonEmptyStringKey(ctx, doc, elem, "Alt")
-		hasActualText := hasNonEmptyStringKey(ctx, doc, elem, "ActualText")
+		// Check presence of /Alt or /ActualText. Even empty string values satisfy
+		// the requirement, but null/absent does not.
+		hasAlt := hasStringKeyPresent(ctx, doc, elem, "Alt")
+		hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 
 		if profile == "PDF/UA-1" {
-			// PDF/UA-1 strictly requires /Alt on Figure elements.
-			if !hasAlt {
-				slog.Debug("compliance_2/accessibility: Figure missing /Alt", "path", path)
+			// PDF/UA-1 §7.3: Figure must have /Alt or /ActualText.
+			if !hasAlt && !hasActualText {
+				slog.Debug("compliance_2/accessibility: Figure missing /Alt and /ActualText", "path", path)
 				results = append(results, Result{Rule: rule, Context: path})
 			}
 		} else {
-			// PDF/UA-2 accepts either /Alt or /ActualText.
-			if !hasAlt && !hasActualText {
-				slog.Debug("compliance_2/accessibility: Figure missing /Alt or /ActualText", "path", path)
+			// PDF/UA-2 §8.2.5.28.2: Figure must have /Alt, /ActualText, or a /Caption child.
+			hasCaptionChild := figureHasCaptionChild(ctx, doc, elem)
+			if !hasAlt && !hasActualText && !hasCaptionChild {
+				slog.Debug("compliance_2/accessibility: Figure missing /Alt, /ActualText, or Caption", "path", path)
 				results = append(results, Result{Rule: rule, Context: path})
 			}
 		}
@@ -1601,6 +1602,49 @@ func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDi
 			walkStructKids(ctx, doc, kidsObj, elemPath, depth+1, fn)
 		}
 	}
+}
+
+// hasStringKeyPresent checks if a dict has a key whose value resolves to a
+// string (even an empty string). Returns false if the key is absent, the
+// value is null, or it's not a string type.
+func hasStringKeyPresent(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	obj, ok := dict[key]
+	if !ok {
+		return false
+	}
+	_, err := document.ResolveString(ctx, doc, obj)
+	return err == nil
+}
+
+// figureHasCaptionChild checks if a Figure structure element has a child
+// element with /S /Caption. Used for PDF/UA-2 §8.2.5.28.2.
+func figureHasCaptionChild(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
+	kObj, ok := elem["K"]
+	if !ok {
+		return false
+	}
+	// /K can be a single dict or an array.
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		// Try as single element.
+		child, err := document.ResolveDict(ctx, doc, kObj)
+		if err != nil || child == nil {
+			return false
+		}
+		childType, _ := document.ResolveName(ctx, doc, child["S"])
+		return childType == "Caption"
+	}
+	for _, item := range arr {
+		child, err := document.ResolveDict(ctx, doc, item)
+		if err != nil || child == nil {
+			continue
+		}
+		childType, _ := document.ResolveName(ctx, doc, child["S"])
+		if childType == "Caption" {
+			return true
+		}
+	}
+	return false
 }
 
 // hasNonEmptyStringKey checks if a dict has a non-empty string value for the given key.
