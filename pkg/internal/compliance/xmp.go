@@ -801,6 +801,11 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 	var levelStack []xmpExtSchemaLevel
 	pendingLevel := xmpExtLevelSchema
 	hasPending := false
+	// containerLevel tracks the level that rdf:li items should push when
+	// inside an rdf:Seq/rdf:Bag container. This allows multiple items in
+	// the same container to all push the correct level (not just the first).
+	containerLevel := xmpExtLevelSchema
+	inSeqBag := false
 
 	currentLevel := func() xmpExtSchemaLevel {
 		if len(levelStack) == 0 {
@@ -825,11 +830,23 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 				continue
 			}
 
-			// When we see rdf:li, push the pending level.
+			// rdf:Seq/rdf:Bag: remember the container level for subsequent rdf:li items.
+			if t.Name.Local == "Seq" || t.Name.Local == "Bag" {
+				if hasPending {
+					containerLevel = pendingLevel
+					inSeqBag = true
+				}
+				continue
+			}
+
+			// When we see rdf:li, push the appropriate level.
 			if t.Name.Local == "li" {
 				if hasPending {
 					levelStack = append(levelStack, pendingLevel)
 					hasPending = false
+				} else if inSeqBag {
+					// Subsequent items in the same Seq/Bag reuse the container level.
+					levelStack = append(levelStack, containerLevel)
 				} else if len(levelStack) == 0 {
 					levelStack = append(levelStack, xmpExtLevelSchema)
 				}
@@ -953,6 +970,11 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 				continue
 			}
 
+			// Reset container tracking when Seq/Bag closes.
+			if t.Name.Local == "Seq" || t.Name.Local == "Bag" {
+				inSeqBag = false
+			}
+
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
 				slog.Debug("compliance_2/xmp: leaving extension schemas block")
 				inSchemas = false
@@ -1039,9 +1061,8 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 				if !currentSchema.hasPrefix {
 					*results = append(*results, xmpExtSchemaRule(part, "prefix")...)
 				}
-				if !currentSchema.hasProperty {
-					*results = append(*results, xmpExtSchemaRule(part, "property")...)
-				}
+				// pdfaSchema:property and pdfaSchema:valueType are optional —
+				// a schema may declare only properties, only valueTypes, or both.
 				currentSchema = schemaInfo{}
 			}
 		}
