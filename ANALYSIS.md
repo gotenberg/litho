@@ -8,9 +8,9 @@
 
 | Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Delta (total) |
 |--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,221 (85.4%)** | +732 |
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | **2,227 (85.6%)** | +738 |
 | **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | **37** | -60 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **342** | -672 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | **336** | -678 |
 
 ### Progress by tier
 
@@ -31,7 +31,7 @@
 | Round 7 (YELLOW tier) | 2,188 | 37 | 375 | 84.1% |
 | Round 8 (RED infrastructure) | 2,194 | 37 | 369 | 84.4% |
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
-| **Round 10 (gfx state + xref format)** | **2,221** | **37** | **342** | **85.4%** |
+| **Round 10 (gfx state + xref + UTF-8)** | **2,227** | **37** | **336** | **85.6%** |
 
 ### Initial results (before improvements)
 
@@ -608,6 +608,7 @@ litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE wi
 |---|-----|-------|--------|
 | 1 | **Content stream graphics state machine** — Minimal content stream interpreter tracking fill/stroke colour space, overprint mode (OPM), and overprint flags (OP/op) through q/Q save/restore and gs/cs/CS operators. At each painting operator, checks §6.2.4.2 t02: OPM=1 forbidden when ICCBased CMYK is active and overprint is enabled. Fill-only operators (f/F/f*) check only fill overprint; stroke-only (S/s) check only stroke; combined (B/B*) check both. Named CS resolved from resources with caching (ICCBased N=4 → CMYK). | `content_state.go`, `graphics.go` | **-6 FN** |
 | 2 | **Xref table byte-level format validation** — Raw-byte validator reads directly from io.ReaderAt at recorded xref table offsets. Checks: xref keyword followed by single EOL, subsection header start/count separated by single space, extra whitespace detection. Xref offsets stored during parsing, validated by compliance engine. | `document/xref.go`, `document/document.go`, `file_structure.go` | **-5 FN** |
+| 3 | **UTF-8 name validation (PDF/A-4)** — Font names (/BaseFont), colorant names in Separation/DeviceN, structure type names (/S), and RoleMap entries must be valid UTF-8 after #XX hex escape expansion. Decodes PDF name escapes, validates with utf8.ValidString, deduplicates by name. | `file_structure.go` | **-6 FN** |
 
 ### Analysis
 
@@ -615,15 +616,15 @@ litho checked WHETHER a blending CS existed but not WHETHER it was COMPATIBLE wi
 
 **Xref format:** The lexer-based xref parser can't validate byte-level format because it treats all whitespace equivalently. The solution: record xref table offsets during parsing, then run a separate raw-byte validation pass from the compliance engine. This avoids modifying the lenient parser while enabling strict format checks.
 
-### Milestone: 85.4% (2,221 / 2,601)
+### Milestone: 85.6% (2,227 / 2,601)
 
-From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 28.1 percentage points across 10 rounds:
+From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved by 28.3 percentage points across 10 rounds:
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,221 (85.4%) | +732 (+49.2%) |
+| **Pass** | 1,489 (57.3%) | 2,227 (85.6%) | +738 (+49.6%) |
 | **False Positives** | 97 | 37 | -60 (-61.9%) |
-| **False Negatives** | 1,014 | 342 | -672 (-66.3%) |
+| **False Negatives** | 1,014 | 336 | -678 (-66.9%) |
 
 ### Key remaining FN areas (342 total)
 
