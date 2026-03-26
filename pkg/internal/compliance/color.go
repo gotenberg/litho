@@ -306,9 +306,21 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		// device CS coverage.
 		blendingCS := pageBlendingColorSpace(ctx, doc, page)
 
+		// PDF/A-4 (PDF 2.0): page-level OutputIntents provide coverage for
+		// the page, overriding or supplementing catalog-level OutputIntents.
+		pageHasICC, pageICCCS := false, ""
+		if part == 4 { //nolint:mnd
+			pageHasICC, pageICCCS = checkPageOutputIntent(ctx, doc, page)
+		}
+		effectiveHasICC := hasICC || pageHasICC
+		effectiveICCCS := iccColorSpace
+		if pageHasICC {
+			effectiveICCCS = pageICCCS
+		}
+
 		// DeviceRGB: needs DefaultRGB, OutputIntent with RGB, or RGB blending CS.
 		if deviceCSUsed.rgb && !defaults.hasRGB {
-			rgbCovered := (hasICC && iccColorSpace == "RGB ") || blendingCS == "RGB "
+			rgbCovered := (effectiveHasICC && effectiveICCCS == "RGB ") || blendingCS == "RGB "
 			if !rgbCovered {
 				slog.Debug("compliance_2/color: DeviceRGB used without coverage", "page", i)
 				*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used without DefaultRGB or RGB OutputIntent", i+1)...)
@@ -317,7 +329,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 
 		// DeviceCMYK: needs DefaultCMYK, OutputIntent with CMYK, or CMYK blending CS.
 		if deviceCSUsed.cmyk && !defaults.hasCMYK {
-			cmykCovered := (hasICC && iccColorSpace == "CMYK") || blendingCS == "CMYK"
+			cmykCovered := (effectiveHasICC && effectiveICCCS == "CMYK") || blendingCS == "CMYK"
 			if !cmykCovered {
 				slog.Debug("compliance_2/color: DeviceCMYK used without coverage", "page", i)
 				*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used without DefaultCMYK or CMYK OutputIntent", i+1)...)
@@ -325,10 +337,8 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		}
 
 		// DeviceGray: needs DefaultGray or any OutputIntent.
-		// Unlike DeviceRGB/DeviceCMYK, the spec does NOT allow the
-		// transparency blending CS to cover DeviceGray.
 		if deviceCSUsed.gray && !defaults.hasGray {
-			if !hasICC {
+			if !effectiveHasICC {
 				slog.Debug("compliance_2/color: DeviceGray used without coverage", "page", i)
 				*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used without DefaultGray or OutputIntent", i+1)...)
 			}
@@ -339,6 +349,44 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 // pageBlendingColorSpace returns the ICC colour space signature of the page's
 // transparency group colour space (/Group /CS), or "" if absent. The returned
 // value is "RGB ", "CMYK", or "GRAY" (ICC 4-byte signature).
+// checkPageOutputIntent checks for a page-level /OutputIntents array (PDF 2.0).
+// Returns whether an OutputIntent with a valid ICC profile exists and its colour space.
+func checkPageOutputIntent(ctx context.Context, doc *document.Document, page ast.PdfDict) (bool, string) {
+	oiObj, ok := page["OutputIntents"]
+	if !ok {
+		return false, ""
+	}
+	arr, err := document.ResolveArray(ctx, doc, oiObj)
+	if err != nil || len(arr) == 0 {
+		return false, ""
+	}
+	for _, intentObj := range arr {
+		intent, err := document.ResolveDict(ctx, doc, intentObj)
+		if err != nil || intent == nil {
+			continue
+		}
+		// Only accept PDF/A OutputIntents, not PDF/X or others.
+		s, _ := document.ResolveName(ctx, doc, intent["S"])
+		if s != "GTS_PDFA" && s != "GTS_PDFA1" {
+			continue
+		}
+		destObj, ok := intent["DestOutputProfile"]
+		if !ok {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, destObj)
+		if err != nil {
+			continue
+		}
+		data, err := doc.DecodeStream(stream)
+		if err != nil || len(data) < 20 { //nolint:mnd // ICC header min size
+			return true, ""
+		}
+		return true, string(data[16:20])
+	}
+	return false, ""
+}
+
 func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page ast.PdfDict) string {
 	groupObj, ok := page["Group"]
 	if !ok {
@@ -694,7 +742,86 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	scanShadingColorSpaces(ctx, doc, formRes, &usage)
 	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited)
 
+	// Suppress device CS usage that is covered by the Form/Pattern's own
+	// DefaultCS entries. Device CS operators in the content stream are
+	// covered if the Form's resources define a matching Default colour space.
+	formDefaults := collectDefaultColorSpaces(ctx, doc, formRes)
+	if formDefaults.hasRGB {
+		usage.rgb = false
+	}
+	if formDefaults.hasCMYK {
+		usage.cmyk = false
+	}
+	if formDefaults.hasGray {
+		usage.gray = false
+	}
+
+	// Also suppress if the Form XObject's /Group/CS provides a device-
+	// independent blending colour space that covers the device CS.
+	groupCS := formGroupICCColorSpace(ctx, doc, stream)
+	if groupCS == "RGB " {
+		usage.rgb = false
+	}
+	if groupCS == "CMYK" {
+		usage.cmyk = false
+	}
+	if groupCS == "GRAY" {
+		usage.gray = false
+	}
+
 	return usage
+}
+
+// formGroupICCColorSpace returns the ICC colour space signature of a Form
+// XObject's /Group/CS, or "" if absent or not device-independent.
+func formGroupICCColorSpace(ctx context.Context, doc *document.Document, stream ast.PdfStream) string {
+	groupObj, ok := stream.Dict["Group"]
+	if !ok {
+		return ""
+	}
+	group, err := document.ResolveDict(ctx, doc, groupObj)
+	if err != nil || group == nil {
+		return ""
+	}
+	s, _ := document.ResolveName(ctx, doc, group["S"])
+	if s != "Transparency" {
+		return ""
+	}
+	// Only isolated transparency groups provide device CS coverage.
+	// Non-isolated groups inherit the parent's colour space.
+	iVal, _ := document.ResolveBool(ctx, doc, group["I"])
+	if !bool(iVal) {
+		return ""
+	}
+	csObj, ok := group["CS"]
+	if !ok {
+		return ""
+	}
+	// Check for device-independent CS types.
+	csName := resolveCSName(ctx, doc, csObj)
+	switch csName {
+	case "CalRGB":
+		return "RGB "
+	case "CalGray":
+		return "GRAY"
+	case "Lab":
+		return "GRAY"
+	case "ICCBased":
+		arr, err := document.ResolveArray(ctx, doc, csObj)
+		if err != nil || len(arr) < 2 {
+			return ""
+		}
+		iccStream, err := document.ResolveStream(ctx, doc, arr[1])
+		if err != nil {
+			return ""
+		}
+		data, err := doc.DecodeStream(iccStream)
+		if err != nil || len(data) < 20 { //nolint:mnd // ICC header min size
+			return ""
+		}
+		return string(data[16:20])
+	}
+	return ""
 }
 
 // scanFontColorSpaces checks Font resources for device colour space references
