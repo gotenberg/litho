@@ -698,12 +698,28 @@ From the baseline of 57.3% (1,489 / 2,601), the compliance engine has improved b
 | **False Positives** | 97 | 37 | -60 (-61.9%) |
 | **False Negatives** | 1,014 | 332 | -682 (-67.3%) |
 
-### Key remaining FN areas (342 total)
+### Key remaining FN areas (332 total)
 
 | Files | Primary Rule | Category |
 |-------|-------------|----------|
-| ~6 | §6.1.4 t01 | Xref format (parser-level) |
 | ~6 | §6.2.3 t01 | OutputIntent ICC edge cases |
 | ~6 | §6.7.2 t03 | XMP DocInfo sync |
-| ~5 | §6.1.7 t01 | Stream dict format (parser) |
-| ~319 | Various | Long-tail across ~188 rule combinations |
+| ~6 | §6.1.12 t02 | Implementation limits edge cases |
+| ~5 | §6.2.2 t02 | Content stream resource completeness |
+| ~310 | Various | Long-tail across ~185 rule combinations |
+
+## Round 11 — Parser-Level §6.1.x Validation (2026-03-26)
+
+**Starting point:** 2,231 / 2,601 (85.8%), 37 FP, 332 FN
+**Final result:** 2,241 / 2,601 (86.2%), 37 FP, 322 FN
+
+Targeted parser-level format validation. Every §6.1.x FN file was analyzed for exact VeraPDF violation and categorized into implementation tiers. See detailed breakdown in the "Parser-level format breakdown" section above.
+
+### Fixes applied
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **DeviceN component limit (§6.1.12 t09)** — DeviceN colour spaces must not exceed 8 components for PDF/A-1 (32 for parts 2+). Extended Separation/DeviceN scanner to run for all parts, not just part >= 2. | `color.go` | **-1 FN** |
+| 2 | **Signature References forbidden keys (§6.1.12 t02)** — When /Perms/DocMDP is present, Signature Reference dicts must not contain DigestLocation, DigestMethod, or DigestValue. New function iterates the signature dict's /Reference array. | `file_structure.go` | **-3 FN** |
+| 3 | **Object header byte-level format (§6.1.8/§6.1.9)** — Raw-byte validator at xref entry offset during object resolution. Checks: object number and generation separated by single space, generation and "obj" keyword separated by single space. Same pattern as xref table validator. No parser behavior change. | `document/resolve.go`, `document/xref.go` | **-4 FN** |
+| 4 | **Inline image filter allowlist (§6.1.9 t01 for PDF/A-4)** — Changed from blocklist (LZW/Crypt forbidden) to allowlist of standard filter names from ISO 32000-2:2020 Table 92 for PDF/A-4. Parts 1-3 still use blocklist. | `content.go` | **-2 FN** |
