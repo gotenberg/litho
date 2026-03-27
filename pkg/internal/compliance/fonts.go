@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
@@ -563,6 +564,50 @@ func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, 
 	return count > 0
 }
 
+// collectVisibleFontNames parses the page content stream and returns the set
+// of font resource names that are used for visible rendering (text rendering
+// mode != 3). Returns nil if the content stream can't be parsed (in which case
+// all fonts should be checked).
+func collectVisibleFontNames(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]bool {
+	streamData, err := getPageContentBytes(ctx, doc, page)
+	if err != nil || len(streamData) == 0 {
+		return nil
+	}
+
+	ops, err := content.ParseStreamData(streamData)
+	if err != nil {
+		return nil
+	}
+
+	visible := make(map[string]bool)
+	currentFont := ""
+	renderMode := 0 // default rendering mode is 0 (fill)
+
+	for _, op := range ops {
+		switch op.Operator {
+		case "Tf":
+			if len(op.Operands) >= 1 {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					currentFont = string(name)
+				}
+			}
+		case "Tr":
+			if len(op.Operands) >= 1 {
+				if modeInt, ok := op.Operands[0].(ast.PdfInt); ok {
+					renderMode = int(modeInt)
+				}
+			}
+		case "Tj", "TJ", "'", "\"":
+			// Text showing operator — mark current font as visible if mode != 3
+			if currentFont != "" && renderMode != 3 { //nolint:mnd // rendering mode 3 = invisible
+				visible[currentFont] = true
+			}
+		}
+	}
+
+	return visible
+}
+
 // --- Main check group ---
 
 // checkFontGroup validates font-related compliance rules across all pages.
@@ -605,6 +650,12 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 			continue
 		}
 
+		// Collect which fonts are used for visible rendering by Tf operators
+		// in the page content stream. Fonts not referenced by Tf, or fonts
+		// used exclusively with rendering mode 3 (invisible), are exempt
+		// from width consistency and embedding checks per the spec.
+		visibleFonts := collectVisibleFontNames(ctx, doc, page)
+
 		for fontName, fontRef := range fontDict {
 			if ctx.Err() != nil {
 				return results
@@ -625,10 +676,12 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 			}
 
 			checked[fontKey] = true
+			// Skip width/embedding checks for fonts not used for visible rendering.
+			isVisible := visibleFonts == nil || visibleFonts[fontKey]
 			slog.Debug("compliance_2: fonts: checking font",
-				"font", fontKey, "page", pageIdx+1)
+				"font", fontKey, "page", pageIdx+1, "visible", isVisible)
 
-			results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageIdx+1, profile)...)
+			results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageIdx+1, profile, isVisible)...)
 		}
 	}
 
@@ -638,7 +691,9 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 }
 
 // checkSingleFont runs all font checks against a single font dictionary.
-func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+// If isVisible is false, width consistency and embedding checks are skipped
+// (the font is not used for visible rendering).
+func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool) []Result {
 	var results []Result
 
 	subtype := fontSubtype(ctx, doc, fontDict)
@@ -657,7 +712,10 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	}
 
 	// --- 1. Font embedding check ---
-	results = append(results, checkFontEmbedding(ctx, doc, fontDict, fontName, pageNum, profile, isType3)...)
+	// Only for fonts used for visible rendering.
+	if isVisible {
+		results = append(results, checkFontEmbedding(ctx, doc, fontDict, fontName, pageNum, profile, isType3)...)
+	}
 
 	// --- 2. ToUnicode mapping check ---
 	results = append(results, checkToUnicode(ctx, doc, fontDict, fontName, pageNum, profile)...)
@@ -671,7 +729,10 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
 	// --- 5. Glyph width consistency ---
-	results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	// Only for fonts used for visible rendering.
+	if isVisible {
+		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	}
 
 	// --- 6. .notdef glyph check ---
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile)...)
