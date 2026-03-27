@@ -459,6 +459,110 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	return false
 }
 
+// symbolEncodingNames lists all glyph names from the Symbol font encoding
+// (PDF Reference Appendix D, Table D.5). Used for the ToUnicode exemption
+// that accepts Type 1 fonts whose names are from the Symbol font character set.
+//
+//nolint:gochecknoglobals // constant lookup table.
+var symbolEncodingNames = map[string]bool{
+	"space": true, "exclam": true, "universal": true, "numbersign": true,
+	"existential": true, "percent": true, "ampersand": true, "suchthat": true,
+	"parenleft": true, "parenright": true, "asteriskmath": true, "plus": true,
+	"comma": true, "minus": true, "period": true, "slash": true,
+	"zero": true, "one": true, "two": true, "three": true, "four": true,
+	"five": true, "six": true, "seven": true, "eight": true, "nine": true,
+	"colon": true, "semicolon": true, "less": true, "equal": true, "greater": true,
+	"question": true, "congruent": true, "Alpha": true, "Beta": true, "Chi": true,
+	"Delta": true, "Epsilon": true, "Phi": true, "Gamma": true, "Eta": true,
+	"Iota": true, "theta1": true, "Kappa": true, "Lambda": true, "Mu": true,
+	"Nu": true, "Omicron": true, "Pi": true, "Theta": true, "Rho": true,
+	"Sigma": true, "Tau": true, "Upsilon": true, "sigma1": true, "Omega": true,
+	"Xi": true, "Psi": true, "Zeta": true, "bracketleft": true, "therefore": true,
+	"bracketright": true, "perpendicular": true, "underscore": true, "radicalex": true,
+	"alpha": true, "beta": true, "chi": true, "delta": true, "epsilon": true,
+	"phi": true, "gamma": true, "eta": true, "iota": true, "phi1": true,
+	"kappa": true, "lambda": true, "mu": true, "nu": true, "omicron": true,
+	"pi": true, "theta": true, "rho": true, "sigma": true, "tau": true,
+	"upsilon": true, "omega1": true, "omega": true, "xi": true, "psi": true,
+	"zeta": true, "braceleft": true, "bar": true, "braceright": true, "similar": true,
+	"Upsilon1": true, "minute": true, "lessequal": true, "fraction": true,
+	"infinity": true, "florin": true, "club": true, "diamond": true,
+	"heart": true, "spade": true, "arrowboth": true, "arrowleft": true,
+	"arrowup": true, "arrowright": true, "arrowdown": true, "degree": true,
+	"plusminus": true, "second": true, "greaterequal": true, "multiply": true,
+	"proportional": true, "partialdiff": true, "bullet": true, "divide": true,
+	"notequal": true, "equivalence": true, "approxequal": true, "ellipsis": true,
+	"arrowvertex": true, "arrowhorizex": true, "carriagereturn": true,
+	"aleph": true, "Ifraktur": true, "Rfraktur": true, "weierstrass": true,
+	"circlemultiply": true, "circleplus": true, "emptyset": true,
+	"intersection": true, "union": true, "propersuperset": true,
+	"reflexsuperset": true, "notsubset": true, "propersubset": true,
+	"reflexsubset": true, "element": true, "notelement": true, "angle": true,
+	"gradient": true, "registerserif": true, "copyrightserif": true,
+	"trademarkserif": true, "product": true, "radical": true, "dotmath": true,
+	"logicalnot": true, "logicaland": true, "logicalor": true,
+	"arrowdblboth": true, "arrowdblleft": true, "arrowdblup": true,
+	"arrowdblright": true, "arrowdbldown": true, "lozenge": true,
+	"angleleft": true, "registersans": true, "copyrightsans": true,
+	"trademarksans": true, "summation": true, "parenlefttp": true,
+	"parenleftex": true, "parenleftbt": true, "bracketlefttp": true,
+	"bracketleftex": true, "bracketleftbt": true, "bracelefttp": true,
+	"braceleftmid": true, "braceleftbt": true, "braceex": true,
+	"angleright": true, "integral": true, "integraltp": true,
+	"integralex": true, "integralbt": true, "parenrighttp": true,
+	"parenrightex": true, "parenrightbt": true, "bracketrighttp": true,
+	"bracketrightex": true, "bracketrightbt": true, "bracerighttp": true,
+	"bracerightmid": true, "bracerightbt": true,
+	// .notdef and space variants
+	".notdef": true,
+}
+
+// isSymbolFontByName returns true if the font's BaseFont name indicates it's
+// the Adobe Symbol font or a subset thereof. The Symbol font is specifically
+// exempt from ToUnicode per §6.3.8 condition 2.
+func isSymbolFontByName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	baseFontName, _ := document.ResolveName(ctx, doc, fontDict["BaseFont"])
+	name := string(baseFontName)
+	// Strip subset prefix (e.g., "ABCDEF+Symbol" → "Symbol")
+	if idx := strings.Index(name, "+"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	// Accept exact "Symbol" or names containing "Symbol" as a word boundary
+	// (e.g., "MdSymbolA-Regular" contains "Symbol").
+	return strings.Contains(name, "Symbol")
+}
+
+// allGlyphNamesInSymbolEncoding returns true if all glyph names in a Type 1
+// font's CharSet are from the Symbol font encoding (PDF Reference Appendix D).
+func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	fd := findFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return false
+	}
+	charsetObj, ok := fd["CharSet"]
+	if !ok {
+		return false
+	}
+	charsetStr, err := document.ResolveString(ctx, doc, charsetObj)
+	if err != nil || len(charsetStr) == 0 {
+		return false
+	}
+	decoded := document.DecodePdfString(charsetStr)
+	names := strings.SplitSeq(decoded, "/")
+	count := 0
+	for name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		count++
+		if !symbolEncodingNames[name] {
+			return false
+		}
+	}
+	return count > 0
+}
+
 // --- Main check group ---
 
 // checkFontGroup validates font-related compliance rules across all pages.
@@ -668,6 +772,14 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	if subtype == "Type1" || subtype == "MMType1" {
 		if allGlyphNamesAGLResolvable(ctx, doc, fontDict) {
 			slog.Debug("compliance_2: fonts: Type1 font with all AGL-resolvable glyph names, ToUnicode not required",
+				"font", fontName)
+			return nil
+		}
+		// Exemption (b3): The Symbol font itself (BaseFont = Symbol or
+		// *+Symbol) is exempt because its character names are defined in
+		// PDF Reference Appendix D with standard Unicode mappings.
+		if isSymbolFontByName(ctx, doc, fontDict) && allGlyphNamesInSymbolEncoding(ctx, doc, fontDict) {
+			slog.Debug("compliance_2: fonts: Symbol font with all Symbol-encoding glyph names, ToUnicode not required",
 				"font", fontName)
 			return nil
 		}
