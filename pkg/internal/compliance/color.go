@@ -349,6 +349,31 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 // pageBlendingColorSpace returns the ICC colour space signature of the page's
 // transparency group colour space (/Group /CS), or "" if absent. The returned
 // value is "RGB ", "CMYK", or "GRAY" (ICC 4-byte signature).
+// collectUsedCSNames parses the page content stream and returns the set of
+// colour space names referenced by cs/CS operators. Returns nil if the
+// content stream can't be parsed.
+func collectUsedCSNames(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]bool {
+	streamData, err := getPageContentBytes(ctx, doc, page)
+	if err != nil || len(streamData) == 0 {
+		return nil
+	}
+	ops, err := content.ParseStreamData(streamData)
+	if err != nil {
+		return nil
+	}
+	used := make(map[string]bool)
+	for _, op := range ops {
+		if op.Operator == "cs" || op.Operator == "CS" {
+			if len(op.Operands) >= 1 {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					used[string(name)] = true
+				}
+			}
+		}
+	}
+	return used
+}
+
 // checkPageOutputIntent checks for a page-level /OutputIntents array (PDF 2.0).
 // Returns whether an OutputIntent with a valid ICC profile exists and its colour space.
 func checkPageOutputIntent(ctx context.Context, doc *document.Document, page ast.PdfDict) (bool, string) {
@@ -1528,7 +1553,10 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		// Get page blending CS ICC ref for identity comparison.
 		blendingCSRef := getPageBlendingICCRef(ctx, doc, page)
 
-		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
+		// Collect CS names actually used by cs/CS operators in the content stream.
+		usedCSNames := collectUsedCSNames(ctx, doc, page)
+
+		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, usedCSNames, results)
 
 		// Also scan Form XObject sub-resources for ICCBased CS.
 		xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
@@ -1557,7 +1585,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 							}
 						}
 					}
-					checkICCBasedInResources(ctx, doc, subRes, part, i, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results)
+					checkICCBasedInResources(ctx, doc, subRes, part, i, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
 				}
 			}
 		}
@@ -1614,7 +1642,7 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 
 // checkICCBasedInResources scans a page's resources for ICCBased colour spaces
 // and validates them.
-func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Result) {
+func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, usedCSNames map[string]bool, results *[]Result) {
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err != nil || csDict == nil {
 		return
@@ -1623,6 +1651,12 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 	for name, csObj := range csDict {
 		if ctx.Err() != nil {
 			return
+		}
+
+		// Skip CS names not referenced by cs/CS operators in the content stream.
+		// A CS declared in Resources but never used is not a violation.
+		if usedCSNames != nil && !usedCSNames[string(name)] {
+			continue
 		}
 
 		arr, err := document.ResolveArray(ctx, doc, csObj)
