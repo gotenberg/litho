@@ -837,8 +837,8 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 			return nil
 		}
 		// Exemption (b3): The Symbol font itself (BaseFont = Symbol or
-		// *+Symbol) is exempt because its character names are defined in
-		// PDF Reference Appendix D with standard Unicode mappings.
+		// *+Symbol) is exempt when all CharSet names are in the standard
+		// Symbol encoding set.
 		if isSymbolFontByName(ctx, doc, fontDict) && allGlyphNamesInSymbolEncoding(ctx, doc, fontDict) {
 			slog.Debug("compliance_2: fonts: Symbol font with all Symbol-encoding glyph names, ToUnicode not required",
 				"font", fontName)
