@@ -429,12 +429,14 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 	if hasD {
 		dConfig, err := document.ResolveDict(ctx, doc, dObj)
 		if err == nil && dConfig != nil {
-			name := configName(ctx, doc, dConfig)
-			if name == "" {
+			if !configHasName(dConfig) {
 				slog.Debug("compliance_2/document: PDF/A-4 default OC config missing /Name")
 				results = append(results, fail(Rule_19005_4_6_10_t01, "default config (D)")...)
 			} else {
-				names = append(names, name)
+				name := configName(ctx, doc, dConfig)
+				if name != "" {
+					names = append(names, name)
+				}
 			}
 		}
 	}
@@ -452,12 +454,14 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 				if err != nil || cfg == nil {
 					continue
 				}
-				name := configName(ctx, doc, cfg)
-				if name == "" {
+				if !configHasName(cfg) {
 					slog.Debug("compliance_2/document: PDF/A-4 OC config missing /Name", "index", i)
 					results = append(results, failf(Rule_19005_4_6_10_t01, "config %d", i)...)
 				} else {
-					names = append(names, name)
+					name := configName(ctx, doc, cfg)
+					if name != "" {
+						names = append(names, name)
+					}
 				}
 			}
 		}
@@ -476,16 +480,23 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
+// configHasName returns true if the OC configuration dict has a /Name key.
+func configHasName(cfg ast.PdfDict) bool {
+	_, ok := cfg["Name"]
+	return ok
+}
+
 // configName extracts the /Name value from an OC configuration dictionary.
 // The value may be a PdfString (text string) or occasionally a PdfName.
+// Returns "" for absent, empty, or unresolvable values.
 func configName(ctx context.Context, doc *document.Document, cfg ast.PdfDict) string {
 	nameObj, ok := cfg["Name"]
 	if !ok {
 		return ""
 	}
-	// Try as string first (most common).
+	// Try as string first (most common). Accept empty strings.
 	nameStr, err := document.ResolveString(ctx, doc, nameObj)
-	if err == nil && len(nameStr) > 0 {
+	if err == nil {
 		return string(nameStr)
 	}
 	// Try as name (some PDF generators).
