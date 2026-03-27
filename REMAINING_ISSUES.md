@@ -1,114 +1,85 @@
 # Remaining FP and FN — Detailed Analysis
 
-**State:** 2,269 / 2,601 (87.2%), 12 FP, 319 FN
+**State:** 2,276 / 2,601 (87.5%), 4 FP, 320 FN
 
 ---
 
-## FIXED FALSE POSITIVES (25 fixed in Round 12)
+## FIXED FALSE POSITIVES (33 fixed across Rounds 12+)
 
 - FP-1: Device CS coverage gaps — **FIXED** (page-level OutputIntents, Form XObject DefaultCS, isolated Group CS)
 - FP-2: Form XObject /Subtype2 /PS — **FIXED** (only check referenced XObjects)
-- FP-3: XMP property type too strict — **4 of 5 FIXED** (rational notation, structured Alt)
+- FP-3: XMP property type too strict — **5 of 5 FIXED** (rational notation, structured Alt, SupplementalCategories)
 - FP-4: XMP extension schema structure — **FIXED** (level stack + optional property)
 - FP-5: Standard tag remapping — **FIXED** (profile-aware type set)
 - FP-6: Figure alt text — **FIXED** (/ActualText + /Caption)
-- FP-7 partial: Lang UTF-16BE, Tabs, XMP dates — **3 FIXED**
+- FP-7 partial: Lang UTF-16BE, Tabs, XMP dates, Symbol font, OCG Name — **8 FIXED**
+- FP-R2: Glyph width + font embedding — **FIXED** (collectFontUsage: invisible Tr 3 fonts exempt)
+- FP-R4: ToUnicode for PDF/A-2u — **FIXED** (per-glyph exemption via Type 1 encoding extraction)
+- FP-R8: ICCBased CMYK identity — **FIXED** (only check CS names used by cs/CS operators)
 
 ---
 
-## REMAINING FALSE POSITIVES (12 files)
+## REMAINING FALSE POSITIVES (4 files)
 
-### FP-R1. ToUnicode exemption (1 file)
+All 4 remaining FP files are the same issue: **AFRelationship on non-catalog objects**.
 
-**File:** 6-3-8-t01-pass-e (A-1a)
-
-**Litho violation:** `6.3.8 test 1: The font dictionary shall include a ToUnicode entry`
-
-**What's missing:** The font uses a standard encoding where all glyph names are resolvable through the Adobe Glyph List (AGL). §6.3.8 exempts ToUnicode when "the font uses a standard encoding and all glyph names are in the AGL, or the font is a Type 1 font with an Encoding entry and all names in the Differences array are in the AGL." litho's exemption check may miss some valid AGL glyph name variants.
-
-**How to fix:** In `fonts.go`, in the ToUnicode exemption logic, debug this specific font to identify which glyph name fails the AGL lookup. Common issues: (a) the AGL lookup is case-sensitive when it shouldn't be, (b) glyph names like `uni00A0` or `uFB01` are valid AGL patterns but the regex may not match all forms, (c) the `.notdef` glyph should be excluded from the AGL requirement.
-
-### FP-R2. Glyph width mismatch (2 files)
-
-**Files:** 6-3-6-t01-pass-a (A-1b), 6-2-10-5-t01-pass-a (A-4)
-
-**Litho violation:** Glyph width information in font dictionary and embedded font program inconsistent.
-
-**What's missing:** The width comparison fails due to encoding/cmap mapping edge cases. Specifically:
-- 6-3-6-t01-pass-a: TrueType font TT0 with char 69 (0x45 = 'E'), PDF width=150.0 vs font=610.8. The cmap maps charCode 69 to the wrong GID because the font uses a non-standard encoding that litho doesn't fully resolve.
-- 6-2-10-5-t01-pass-a: Similar encoding-to-GID mapping issue.
-
-**How to fix:** In `checkSimpleFontWidths` (fonts.go), when the cmap returns a GID that produces a large width mismatch (> 100 units), check if the font has a `/Differences` array or custom `/Encoding` that maps the charCode to a different glyph. Use the `post` table to resolve glyph names from the Differences array to GIDs. If the post table lookup fails, skip the comparison (same approach as the existing cmap-miss skip).
-
-### FP-R3. XMP SupplementalCategories container type (1 file)
-
-**File:** 6-7-2-t13-pass-l (A-1b)
-
-**Litho violation:** `photoshop:SupplementalCategories observed=Simple expected=Bag`
-
-**What's missing:** The file expresses `photoshop:SupplementalCategories` as a simple attribute value (inline on `rdf:Description`) instead of an `rdf:Bag` container. Per XMP spec, a Bag with a single item CAN be expressed as a simple attribute value. However, a blanket fix (accepting Simple for all Bag/Seq) caused 18 FN regressions.
-
-**How to fix:** Change the registry type for `photoshop:SupplementalCategories` from `xmpPropBag` to `xmpPropAny`. This accepts any form for this specific property without affecting other Bag/Seq properties. Alternatively, maintain a small allowlist of properties where Simple-as-Bag is acceptable.
-
-### FP-R4. ToUnicode for PDF/A-2u (1 file)
-
-**File:** 6-2-11-7-2-t01-pass-e (A-2u)
-
-**Litho violation:** `6.2.11.7.2 test 1: The Font dictionary shall define the map of all used character codes to Unicode values`
-
-**What's missing:** PDF/A-2 §6.2.11.7.2 allows Unicode mapping "via a ToUnicode entry, or other mechanisms as defined in ISO 19005-2, 6.2.11.7.2." The "other mechanisms" include: (a) predefined CMap-based mapping (Identity-H with CIDToGIDMap), (b) encoding-based mapping where all glyph names are AGL-resolvable. litho may not recognize all valid alternative mechanisms.
-
-**How to fix:** In the ToUnicode check for parts 2+, extend the exemption to also accept: (a) CIDFonts with Identity-H encoding and valid CIDToGIDMap, (b) simple fonts with Encoding/Differences where all names are AGL-resolvable. Debug this specific font to find which mechanism it uses.
-
-### FP-R5. AFRelationship on XObject/annotation file specs (4 files)
+### FP-LAST. AFRelationship on XObject/annotation file specs (4 files)
 
 **Files:** 6-8-t02-pass-b (A-3b), 6-8-t02-pass-d (A-3b), 6-3-1-t01-pass-d (A-4e), 6-3-1-t01-pass-a (A-4f)
 
 **Litho violation:** `6.8 test 4` / `6.9 test 4`: No /AF array found but embedded files with /AFRelationship exist.
 
-**What's missing:** litho's embedded file checker finds file specs via `/Names/EmbeddedFiles` and checks for `/AFRelationship` on each. But these files associate their embedded files via `/AF` arrays on non-catalog objects:
-- A-3b files: `/AF [9 0 R]` on **Image XObjects** (not catalog or page)
-- A-4e file: File specs with `/AFRelationship` exist but are associated via annotations
-- A-4f file: File spec (obj 12) has `/AFRelationship /Unspecified` — the checker's `/AF` scanner may not reach it
+**What's missing:** litho's embedded file checker finds file specs via `/Names/EmbeddedFiles` and the catalog/page `/AF` arrays. But these files associate their embedded files via `/AF` arrays on **non-standard objects**:
+- A-3b files: `/AF [9 0 R]` on **Image XObjects** — the embedded file is associated with an image, not the page or catalog
+- A-4e file: File specs with `/AFRelationship /Unspecified` associated via **3D annotation** resources
+- A-4f file: File spec associated via **FileAttachment annotation** — the checker may not walk annotation file specs
 
-**How to fix:** In `embedded.go`, extend the `/AF` array scanner to also check:
-1. XObject dicts (Image and Form XObjects) for `/AF` entries
-2. Annotation dicts for `/AF` entries
-3. Any dict in the document that has `/AF` — iterate all resolved objects and check for `/AF` key
+**Root cause:** The `/AF` array scanner in `embedded.go` checks:
+1. Catalog `/AF` ✓
+2. Page dicts `/AF` ✓
+3. Annotation dicts `/AF` — **NOT checked**
+4. XObject dicts `/AF` — **NOT checked**
+5. Other dicts `/AF` — **NOT checked**
 
-The most thorough approach: during `resolveAllObjects()`, collect all dicts that have `/AF` and validate their file spec entries. This avoids the need to enumerate all possible locations.
+**How to fix:** In `embedded.go`, extend the `/AF` scanner to walk:
 
-### FP-R6. OCG config Name with empty value (1 file)
+```go
+// For each page:
+//   1. Check page["AF"] (already done)
+//   2. Walk page["Annots"] → each annot["AF"]
+//   3. Walk page["Resources"]["XObject"] → each xobj.Dict["AF"]
 
-**File:** 6-10-t01-pass-b (A-4)
+// For annotations, also check:
+//   - FileAttachment annotations → annot["FS"] → file spec dict
+//   - RichMedia/3D annotations → annotation resources with /AF
+```
 
-**Litho violation:** `6.10 test 1: Each optional content configuration dictionary shall contain the Name key`
+The most robust approach: iterate ALL resolved objects in the document. For each dict that has `/AF`, resolve the file spec refs and validate `/AFRelationship`. This covers all possible locations without enumeration.
 
-**What's missing:** The file's title says "Optional content configuration dictionary contains the Name key with empty value." The OCG config DOES have `/Name` — but its value is an empty string. litho's check requires `/Name` to be present, which it is. The issue might be that litho also validates the value is non-empty, when the spec only requires the key to be present.
+```go
+func collectAllAFFileSpecs(ctx context.Context, doc *document.Document) []ast.PdfDict {
+    var specs []ast.PdfDict
+    for _, entry := range doc.Index.Entries {
+        obj := doc.ResolveObjectByRef(entry)
+        dict, ok := obj.(ast.PdfDict)
+        if !ok { continue }
+        afObj, ok := dict["AF"]
+        if !ok { continue }
+        afArr, _ := document.ResolveArray(ctx, doc, afObj)
+        for _, ref := range afArr {
+            spec, _ := document.ResolveDict(ctx, doc, ref)
+            if spec != nil {
+                specs = append(specs, spec)
+            }
+        }
+    }
+    return specs
+}
+```
 
-**How to fix:** In `document.go`, in the OCG config Name check, change from `hasNonEmptyName()` to a simple key-presence check: `_, ok := config["Name"]`. The spec says "shall contain the Name key" — it doesn't say the value must be non-empty.
+**Estimated effort:** ~30 lines in `embedded.go`. The challenge is accessing the full resolved object cache — `doc.Index.Entries` gives xref entries, but resolving each object is expensive. A targeted scan (pages → annots → XObjects) is more efficient.
 
-### FP-R7. Font embedding with text rendering mode 3 (1 file)
-
-**File:** 6-2-10-4-1-t01-pass-a (A-4)
-
-**Litho violation:** `6.2.10.4.1 test 1: The font programs for all fonts used for rendering shall be embedded [font T1_0 on page 1]`
-
-**What's missing:** The file's title says "Type1 font that is used for rendering is not embedded; the text rendering mode is 3." Text rendering mode 3 means "invisible" — the font is NOT used for visible rendering. The spec says fonts "used for rendering" must be embedded. Mode 3 fonts are exempt because they're not visible.
-
-**How to fix:** This requires the content stream graphics state machine to track text rendering mode (`Tr` operator). In `checkFontGroup` (fonts.go), instead of checking ALL fonts in Resources, only check fonts that are actually used for visible rendering (mode 0, 1, 2, 4, 5, 6, 7 — all except 3). This requires either:
-- A state-machine pass that collects which fonts are used with which rendering modes
-- A simplified heuristic: if ANY `Tr 3` operator appears before text operators using the font, skip that font
-
-### FP-R8. ICCBased CMYK identity check (1 file)
-
-**File:** 6-2-4-2-t03-pass-b (A-4)
-
-**Litho violation:** `6.2.4.2 test 3: An ICCBased colour space shall not be used where the profile is a CMYK destination profile and is identical to that in the current PDF/A OutputIntent`
-
-**What's missing:** The file's title says "ICCBased CMYK colour space and PDF/A OutputIntent use identical profiles; the ICCBased color space is not used for rendering." The ICCBased CS is present in page resources but never actually used by any content stream operator. The spec says "shall not be used" — if it's declared but unused, it's not a violation.
-
-**How to fix:** Similar to FP-R7: the ICCBased identity check should only flag profiles that are actually SET as the current colour space by `cs`/`CS` operators. This requires the content stream state machine to track which colour spaces are actually used. In `checkICCBasedInResources` (color.go), instead of checking all named CS in the ColorSpace dict, only check those referenced by content stream `cs`/`CS` operators.
+**Alternative:** Walk pages, then for each page walk annotations and XObjects, collecting `/AF` entries. This covers the test file cases without full-document iteration.
 
 ---
 
