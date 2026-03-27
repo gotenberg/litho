@@ -805,6 +805,38 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 	}
 }
 
+// ExtractType1EncodingNames reads the built-in encoding from a raw Type 1
+// font program (/FontFile stream) and returns a map of charCode → glyphName.
+// Returns nil if the encoding section cannot be found or parsed.
+func ExtractType1EncodingNames(fontData []byte) map[byte]string {
+	encStart := bytes.Index(fontData, []byte("/Encoding"))
+	if encStart == -1 {
+		return nil
+	}
+	encEnd := bytes.Index(fontData[encStart:], []byte("readonly def"))
+	if encEnd == -1 {
+		encEnd = len(fontData) - encStart
+	}
+	encSection := fontData[encStart : encStart+encEnd]
+
+	result := make(map[byte]string)
+	for _, match := range type1EncodingRe.FindAllSubmatch(encSection, -1) {
+		code, err := strconv.Atoi(string(match[1]))
+		if err != nil || code < 0 || code > 255 { //nolint:mnd
+			continue
+		}
+		glyphName := string(match[2])
+		if glyphName != ".notdef" {
+			result[byte(code)] = glyphName //nolint:gosec
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
 // extractEmbeddedCmap attempts to extract a GID→Unicode mapping from the
 // embedded TrueType (/FontFile2) or OpenType (/FontFile3) font program.
 // For Type0 fonts the FontDescriptor lives inside the CIDFont descendant.

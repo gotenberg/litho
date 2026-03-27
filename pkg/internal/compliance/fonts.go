@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"math"
 	"strings"
 	"unicode/utf8"
@@ -564,11 +565,17 @@ func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, 
 	return count > 0
 }
 
-// collectVisibleFontNames parses the page content stream and returns the set
-// of font resource names that are used for visible rendering (text rendering
-// mode != 3). Returns nil if the content stream can't be parsed (in which case
-// all fonts should be checked).
-func collectVisibleFontNames(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]bool {
+// fontUsageInfo tracks how a font is used in a content stream.
+type fontUsageInfo struct {
+	visible   bool          // true if used with rendering mode != 3
+	charCodes map[byte]bool // character codes referenced by Tj/TJ
+}
+
+// collectFontUsage parses the page content stream and returns usage
+// information for each font: whether it's used for visible rendering and
+// which character codes are referenced. Returns nil if the content stream
+// can't be parsed (in which case all fonts should be checked).
+func collectFontUsage(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]*fontUsageInfo {
 	streamData, err := getPageContentBytes(ctx, doc, page)
 	if err != nil || len(streamData) == 0 {
 		return nil
@@ -579,9 +586,39 @@ func collectVisibleFontNames(ctx context.Context, doc *document.Document, page a
 		return nil
 	}
 
-	visible := make(map[string]bool)
+	usage := make(map[string]*fontUsageInfo)
 	currentFont := ""
 	renderMode := 0 // default rendering mode is 0 (fill)
+
+	getOrCreate := func(name string) *fontUsageInfo {
+		if u, ok := usage[name]; ok {
+			return u
+		}
+		u := &fontUsageInfo{charCodes: make(map[byte]bool)}
+		usage[name] = u
+		return u
+	}
+
+	collectStringBytes := func(obj ast.PdfObject) {
+		if currentFont == "" {
+			return
+		}
+		u := getOrCreate(currentFont)
+		switch s := obj.(type) {
+		case ast.PdfString:
+			for _, b := range []byte(s) {
+				u.charCodes[b] = true
+			}
+		case ast.PdfArray:
+			for _, item := range s {
+				if str, ok := item.(ast.PdfString); ok {
+					for _, b := range []byte(str) {
+						u.charCodes[b] = true
+					}
+				}
+			}
+		}
+	}
 
 	for _, op := range ops {
 		switch op.Operator {
@@ -597,15 +634,136 @@ func collectVisibleFontNames(ctx context.Context, doc *document.Document, page a
 					renderMode = int(modeInt)
 				}
 			}
-		case "Tj", "TJ", "'", "\"":
-			// Text showing operator — mark current font as visible if mode != 3
-			if currentFont != "" && renderMode != 3 { //nolint:mnd // rendering mode 3 = invisible
-				visible[currentFont] = true
+		case "Tj":
+			if currentFont != "" && renderMode != 3 { //nolint:mnd
+				getOrCreate(currentFont).visible = true
+			}
+			if len(op.Operands) >= 1 {
+				collectStringBytes(op.Operands[0])
+			}
+		case "TJ":
+			if currentFont != "" && renderMode != 3 { //nolint:mnd
+				getOrCreate(currentFont).visible = true
+			}
+			if len(op.Operands) >= 1 {
+				collectStringBytes(op.Operands[0])
+			}
+		case "'", "\"":
+			if currentFont != "" && renderMode != 3 { //nolint:mnd
+				getOrCreate(currentFont).visible = true
+			}
+			if len(op.Operands) >= 1 {
+				collectStringBytes(op.Operands[len(op.Operands)-1])
 			}
 		}
 	}
 
-	return visible
+	return usage
+}
+
+// usedGlyphNamesResolvable returns true if all glyph names referenced by the
+// used character codes in a Type 1 font are resolvable to Unicode — either
+// via the AGL or the Symbol encoding set.
+func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
+	encoding := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	if encoding == nil {
+		return false
+	}
+
+	for code := range usage.charCodes {
+		glyphName, ok := encoding[code]
+		if !ok || glyphName == ".notdef" || glyphName == "" {
+			continue // unmapped or .notdef — skip
+		}
+		if _, resolved := encodings.GlyphToRuneFull(glyphName); resolved {
+			continue
+		}
+		if symbolEncodingNames[glyphName] {
+			continue
+		}
+		slog.Debug("compliance_2: fonts: used glyph not resolvable",
+			"code", code, "glyph", glyphName)
+		return false
+	}
+	return true
+}
+
+// resolveSimpleFontEncoding builds a charCode → glyphName mapping for a
+// simple font (Type1, TrueType). Checks PDF-level /Encoding first, then
+// falls back to the Type 1 font program's built-in encoding.
+func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
+	// Priority 1: PDF-level /Encoding.
+	if encObj, ok := fontDict["Encoding"]; ok {
+		// Named encoding.
+		if encName, err := document.ResolveName(ctx, doc, encObj); err == nil && encName != "" {
+			return predefinedEncodingNames(string(encName))
+		}
+		// Encoding dict with /Differences.
+		if encDict, err := document.ResolveDict(ctx, doc, encObj); err == nil && encDict != nil {
+			result := make(map[byte]string)
+			// Start from BaseEncoding if present.
+			if baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"]); err == nil && baseName != "" {
+				maps.Copy(result, predefinedEncodingNames(string(baseName)))
+			}
+			// Apply /Differences overrides.
+			if diffArr, err := document.ResolveArray(ctx, doc, encDict["Differences"]); err == nil {
+				code := 0
+				for _, item := range diffArr {
+					switch v := item.(type) {
+					case ast.PdfInt:
+						code = int(v)
+					case ast.PdfName:
+						if code >= 0 && code <= 255 { //nolint:mnd
+							result[byte(code)] = string(v) //nolint:gosec
+						}
+						code++
+					}
+				}
+			}
+			if len(result) > 0 {
+				return result
+			}
+		}
+	}
+
+	// Priority 2: Type 1 font program built-in encoding (/FontFile).
+	fd := findFontDescriptor(ctx, doc, fontDict)
+	if fd != nil {
+		if fontFileObj, ok := fd["FontFile"]; ok {
+			stream, err := document.ResolveStream(ctx, doc, fontFileObj)
+			if err == nil {
+				data, err := doc.DecodeStream(stream)
+				if err == nil {
+					return typography.ExtractType1EncodingNames(data)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// predefinedEncodingNames returns a charCode → glyphName mapping for a
+// named PDF encoding.
+func predefinedEncodingNames(name string) map[byte]string {
+	var table map[byte]rune
+	switch name {
+	case "WinAnsiEncoding":
+		table = encodings.WinAnsiEncoding
+	case "MacRomanEncoding":
+		table = encodings.MacRomanEncoding
+	case "MacExpertEncoding":
+		table = encodings.MacExpertEncoding
+	default:
+		return nil
+	}
+	result := make(map[byte]string, len(table))
+	for code, r := range table {
+		if glyphName := encodings.RuneToGlyph(r); glyphName != "" {
+			result[code] = glyphName
+		}
+	}
+	return result
 }
 
 // --- Main check group ---
@@ -650,11 +808,9 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 			continue
 		}
 
-		// Collect which fonts are used for visible rendering by Tf operators
-		// in the page content stream. Fonts not referenced by Tf, or fonts
-		// used exclusively with rendering mode 3 (invisible), are exempt
-		// from width consistency and embedding checks per the spec.
-		visibleFonts := collectVisibleFontNames(ctx, doc, page)
+		// Collect font usage from the page content stream: which fonts are
+		// visible (rendering mode != 3) and which character codes are used.
+		fontUsage := collectFontUsage(ctx, doc, page)
 
 		for fontName, fontRef := range fontDict {
 			if ctx.Err() != nil {
@@ -677,11 +833,15 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 			checked[fontKey] = true
 			// Skip width/embedding checks for fonts not used for visible rendering.
-			isVisible := visibleFonts == nil || visibleFonts[fontKey]
+			var usage *fontUsageInfo
+			if fontUsage != nil {
+				usage = fontUsage[fontKey]
+			}
+			isVisible := fontUsage == nil || (usage != nil && usage.visible)
 			slog.Debug("compliance_2: fonts: checking font",
 				"font", fontKey, "page", pageIdx+1, "visible", isVisible)
 
-			results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageIdx+1, profile, isVisible)...)
+			results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageIdx+1, profile, isVisible, usage)...)
 		}
 	}
 
@@ -692,8 +852,9 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 // checkSingleFont runs all font checks against a single font dictionary.
 // If isVisible is false, width consistency and embedding checks are skipped
-// (the font is not used for visible rendering).
-func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool) []Result {
+// (the font is not used for visible rendering). Usage provides per-charCode
+// usage information for ToUnicode exemption checks.
+func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Result {
 	var results []Result
 
 	subtype := fontSubtype(ctx, doc, fontDict)
@@ -718,7 +879,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	}
 
 	// --- 2. ToUnicode mapping check ---
-	results = append(results, checkToUnicode(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	results = append(results, checkToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// --- 7. TrueType encoding check ---
 	if subtype == "TrueType" {
@@ -783,7 +944,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 }
 
 // checkToUnicode validates the ToUnicode mapping requirement (rule 2).
-func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: ToUnicode check not applicable", "profile", profile)
@@ -843,6 +1004,20 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 			slog.Debug("compliance_2: fonts: Symbol font with all Symbol-encoding glyph names, ToUnicode not required",
 				"font", fontName)
 			return nil
+		}
+		// Exemption (b4): Symbol-type fonts where only the USED character
+		// codes map to resolvable glyph names. This handles fonts like
+		// MdSymbolA-Regular that have many custom glyphs in CharSet but
+		// only use standard Symbol/AGL glyphs in the content stream.
+		// Limited to Symbol-named fonts to avoid false exemptions for
+		// unrelated fonts (e.g., CMEX10) whose used chars happen to
+		// have resolvable names.
+		if isSymbolFontByName(ctx, doc, fontDict) && usage != nil && len(usage.charCodes) > 0 {
+			if usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
+				slog.Debug("compliance_2: fonts: Symbol font used glyph names all resolvable, ToUnicode not required",
+					"font", fontName)
+				return nil
+			}
 		}
 	}
 
