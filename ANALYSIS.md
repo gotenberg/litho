@@ -6,11 +6,12 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Round 11-12 | Delta (total) |
-|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|-------------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | **2,276 (87.5%)** | +787 |
-| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | **4** | -93 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | **320** | -694 |
+| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Round 11-12 | Round 13 | Round 14 | Delta (total) |
+|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|-------------|----------|----------|---------------|
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | 2,276 (87.5%) | 2,281 (87.7%) | **2,359 (90.7%)** | +870 |
+| **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | 4 | 0 | **0** | -97 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | 320 | 320 | **242** | -772 |
+
 
 ### Progress by tier
 
@@ -33,7 +34,9 @@
 | Round 9 (final push to 85%) | 2,210 | 37 | 353 | 85.0% |
 | Round 10 (gfx state + xref + UTF-8 + OI + XMP) | 2,231 | 37 | 332 | 85.8% |
 | Round 11 (parser-level §6.1.x) | 2,241 | 37 | 322 | 86.2% |
-| **Round 12 (§6.1.x + FP fixes)** | **2,276** | **4** | **320** | **87.5%** |
+| Round 12 (§6.1.x + FP fixes) | 2,276 | 4 | 320 | 87.5% |
+| Round 13 (zero FP) | 2,281 | 0 | 320 | 87.7% |
+| **Round 14 (multi-FN push)** | **2,359** | **0** | **242** | **90.7%** |
 
 ### Initial results (before improvements)
 
@@ -746,11 +749,43 @@ Targeted parser-level format validation. Every §6.1.x FN file was analyzed for 
 | 10 | **Tabs only required on pages with annotations** — PDF/UA-1 §7.18.3 requires /Tabs /S only on pages that have annotations, not all pages. Skips pages with no /Annots. | `accessibility.go` | **-1 FP** |
 | 11 | **XMP date: accept PDF format** — XMP date validator now accepts D:YYYY... PDF date format alongside ISO 8601. Some producers write PDF dates into XMP properties. | `xmp_registry.go` | **-1 FP** |
 
-### Milestone: 87.5% (2,276 / 2,601)
+### Round 13 — Zero False Positives (87.7%)
+
+Eliminated the last 4 FP by extending the `/AF` array scanner in `embedded.go` to recognize file spec associations beyond catalog/page-level `/AF` arrays:
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **XObject /AF arrays** — Scan Image and Form XObject dicts for `/AF` arrays. A-3b files associate embedded files with images via `/AF` on the XObject stream dict. | `embedded.go` | **-2 FP** |
+| 2 | **Annotation /FS references** — FileAttachment annotations directly reference file specs via `/FS`. Count these as valid associations without requiring a separate `/AF` entry. | `embedded.go` | **-1 FP** |
+| 3 | **RichMedia /Asset traversal** — RichMedia (3D) annotations reference file specs through `/RichMediaContent/Configurations/*/Instances/*/Asset` and `/RichMediaContent/Assets` name trees. | `embedded.go` | **-1 FP** |
+
+### Round 14 — XMP Validation (88.3%)
+
+Improved XMP property type validation to catch 16 additional FN:
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **Strict ISO 8601 date validation** — Rewrote `isValidXMPDate()` to properly validate `T` separator, `hh:mm:ss` format, mutual exclusivity of `Z` and offset timezone. Catches "TIME" typo, "Z+offset" double timezone, and non-date prefixes. | `xmp_registry.go` | **-6 FN** |
+| 2 | **Registry type corrections** — `xmpDM:shotDate` corrected from Text to Date; `crs:HasSettings` corrected from Text to Boolean. Invalid values now detected by type-specific validators. | `xmp_registry.go` | **-2 FN** |
+| 3 | **Extension schema prefix validation** — Go's XML parser resolves namespace prefixes to URIs, making wrong prefixes invisible to SAX-based checking. Added raw-text `xmlns:` declaration scanning to detect when extension schema elements use wrong prefix names (e.g., `nonpdfaSchema:` instead of `pdfaSchema:`). | `xmp.go` | **-4 FN** |
+| 4 | **Date validation edge cases** — Additional files caught by the stricter date validation across different test groups. | `xmp_registry.go` | **-4 FN** |
+| 5 | **Device CS sub-scope tracking** — Page-level DefaultCS (DefaultRGB/CMYK/Gray) was wrongly suppressing device CS violations from tiling patterns and Form XObjects that have their own resource scope. Per ISO 32000-2 §8.6.5.7, DefaultCS only applies to the content stream whose Resources define it. Added `subScope*` flags to `deviceCSUsage` that bypass parent-scope DefaultCS and can only be covered by OutputIntent or blending CS. | `color.go` | **-2 FN** |
+| 6 | **Type0 .notdef glyph detection** — Added `checkType0NotdefGlyph()` that scans raw text operator strings for CID 0 references in Type0 fonts with Identity-H/Identity-V encoding. Also added `rawStrings` collection to `fontUsageInfo` to preserve full string operands for CID analysis. | `fonts.go` | **-5 FN** |
+| 7 | **Content stream resource completeness** — New `checkContentStreamResources()` validates that every named resource referenced by operators (`Tf`, `cs`/`CS`, `Do`, `gs`, `sh`, `BDC`/`DP`) exists in the content stream's Resources dict. Also checks for undefined operators (not in ISO 32000). Scans both page content streams and referenced Form XObject content streams. | `content_state.go`, `graphics.go` | **-7 FN** |
+| 8 | **Object header/endobj format validation** — Extended `validateObjectHeaderFormat` with `validateEndobjFormat`: scans forward to find `endobj` and checks it's preceded AND followed by EOL markers. Tightened `obj` after-keyword check to require EOL (not just space). | `xref.go` | **-9 FN** |
+| 9 | **ToUnicode CMap forbidden values** — Fixed two bugs in `containsInvalidUnicodeMapping`: (a) CMap `beginbfchar` keyword has a count prefix (e.g., "1 beginbfchar") — changed `HasPrefix` to `Contains`; (b) mapping and `endbfchar` can appear on the same line with CR endings — check mapping BEFORE checking section end. Added PDF/UA-1 and PDF/UA-2 rules to `toUnicodeCMapValuesRule`. | `fonts.go` | **-12 FN** |
+| 10 | **CIDSystemInfo consistency** — Extended `checkCIDSystemInfo` to: (a) handle predefined CMap names (e.g., "Adobe-Japan1-2") by parsing the name format "Registry-Ordering-Supplement"; (b) add Supplement comparison — CIDFont Supplement must be ≤ CMap Supplement (parts 2+ only per spec). Added `parsePredefinedCMapName()`. | `fonts.go` | **-5 FN** |
+| 11 | **Separation tint transform consistency** — Added deep structural comparison of tint transform function objects (`tintTransformEqual`). Compares function dicts key-by-key and stream bytes after decoding, ignoring compression and indirect/direct status. Uses `pdfObjectEqual` for recursive PDF object comparison. | `color.go` | **-2 FN** |
+| 12 | **ICCBased CMYK identity in sub-resources** — Extended `checkICCBasedProfiles` with recursive Form XObject scanning (`scanICCBasedRecursive`) and annotation appearance stream scanning. Added byte-content comparison for blending CS identity (previously only compared indirect references). Extracted `resolveFormBlendingRef` helper. | `color.go` | **-2 FN** |
+| 13 | **File header format** — Tightened `checkFileHeader`: (a) byte 8 must be EOL immediately after `%PDF-x.y` — extra digits (`%PDF-1.70`) and spaces are violations; (b) single EOL marker required — double LF (`\n\n`) rejected; (c) CR+LF correctly treated as single EOL. | `file_structure.go` | **-6 FN** |
+| 14 | **Implementation limits** — Four sub-fixes: (a) DocInfo dict: resolve indirect ref before checking keys; (b) Catalog /Version: require exactly 3 chars `"2.n"`, reject `"2.00"`; (c) content stream reals > 32767 for PDF/A-1; (d) trailer /ID: reject empty string elements. | `file_structure.go`, `document.go`, `content_state.go` | **-7 FN** |
+| 15 | **Type 1 CharSet completeness** — For PDF/UA-1 §7.21.4.2: if FontDescriptor has /CharSet, verify it lists ALL glyph names from the font program. Parses /CharSet string and compares against `ExtractGlyphNames()` output. | `fonts.go` | **-2 FN** |
+| 16 | **Rendering intent `ri` operator + Form XObject ExtGState** — Added `ri` operator validation to `checkContentStreamResources` (invalid intent names like `/Custom`). Extended graphics checks to scan Form XObject ExtGState entries for halftone/intent violations. | `content_state.go`, `graphics.go` | **-1 FN** |
+
+### Milestone: 90.7% (2,359 / 2,601)
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,276 (87.5%) | +787 (+52.9%) |
-| **False Positives** | 97 | 4 | -93 (-95.9%) |
-| **False Negatives** | 1,014 | 320 | -694 (-68.4%) |
-| **False Negatives** | 1,014 | 316 | -698 (-68.8%) |
+| **Pass** | 1,489 (57.3%) | 2,359 (90.7%) | +870 (+58.4%) |
+| **False Positives** | 97 | 0 | -97 (-100%) |
+| **False Negatives** | 1,014 | 242 | -772 (-76.1%) |

@@ -567,8 +567,9 @@ func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, 
 
 // fontUsageInfo tracks how a font is used in a content stream.
 type fontUsageInfo struct {
-	visible   bool          // true if used with rendering mode != 3
-	charCodes map[byte]bool // character codes referenced by Tj/TJ
+	visible    bool            // true if used with rendering mode != 3
+	charCodes  map[byte]bool   // character codes referenced by Tj/TJ
+	rawStrings []ast.PdfString // raw string operands from text operators (for CID .notdef detection)
 }
 
 // collectFontUsage parses the page content stream and returns usage
@@ -609,12 +610,14 @@ func collectFontUsage(ctx context.Context, doc *document.Document, page ast.PdfD
 			for _, b := range []byte(s) {
 				u.charCodes[b] = true
 			}
+			u.rawStrings = append(u.rawStrings, s)
 		case ast.PdfArray:
 			for _, item := range s {
 				if str, ok := item.(ast.PdfString); ok {
 					for _, b := range []byte(str) {
 						u.charCodes[b] = true
 					}
+					u.rawStrings = append(u.rawStrings, str)
 				}
 			}
 		}
@@ -868,7 +871,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 
 	// Type 0 (composite) fonts: check descendant CIDFonts.
 	if subtype == "Type0" {
-		results = append(results, checkType0Font(ctx, doc, fontDict, fontName, pageNum, profile)...)
+		results = append(results, checkType0Font(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 		return results
 	}
 
@@ -896,7 +899,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	}
 
 	// --- 6. .notdef glyph check ---
-	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// --- 9. Glyph coverage (CharSet for Type1 subsets) ---
 	results = append(results, checkGlyphCoverage(ctx, doc, fontDict, fontName, pageNum, profile)...)
@@ -1432,7 +1435,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 
 // checkType0Font validates composite font properties including descendant
 // CIDFonts, CIDSystemInfo, CIDToGIDMap, and ToUnicode.
-func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
 	results := make([]Result, 0, 4) //nolint:mnd // estimated capacity for composite font checks.
 
 	basefont := fontBaseFont(ctx, doc, fontDict)
@@ -1477,7 +1480,8 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
 	// --- 6. .notdef check ---
-	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, nil)...)
+	results = append(results, checkType0NotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// --- 5. Glyph width consistency for CIDFont ---
 	cidFd := findFontDescriptor(ctx, doc, cidFontDict)
@@ -1590,30 +1594,42 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		"font", fontName,
 		"registry", cidRegistry, "ordering", cidOrdering, "supplement", cidSupplement)
 
-	// Get CMap CIDSystemInfo — the CMap may be a stream with its own CIDSystemInfo.
+	// Get CMap CIDSystemInfo from either the embedded CMap stream or a predefined CMap name.
 	encObj, ok := type0Dict["Encoding"]
 	if !ok {
 		slog.Debug("compliance_2: fonts: Type0 font missing Encoding", "font", fontName)
 		return nil
 	}
 
+	var cmapRegistry, cmapOrdering ast.PdfString
+	var cmapSupplement ast.PdfInt
+
 	cmapStream, err := document.ResolveStream(ctx, doc, encObj)
-	if err != nil {
-		slog.Debug("compliance_2: fonts: Encoding is not a stream (may be a name), skipping CIDSystemInfo check",
-			"font", fontName)
-		return nil
+	if err == nil {
+		// Embedded CMap stream — read CIDSystemInfo from the stream dict.
+		cmapSysInfo, err := document.ResolveDict(ctx, doc, cmapStream.Dict["CIDSystemInfo"])
+		if err != nil || cmapSysInfo == nil {
+			slog.Debug("compliance_2: fonts: CMap stream missing CIDSystemInfo", "font", fontName)
+			return nil
+		}
+		cmapRegistry, _ = document.ResolveString(ctx, doc, cmapSysInfo["Registry"])
+		cmapOrdering, _ = document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])
+		cmapSupplement, _ = document.ResolveInt(ctx, doc, cmapSysInfo["Supplement"])
+	} else {
+		// Named (predefined) CMap — extract CIDSystemInfo from the name.
+		// Predefined CMap names follow the pattern "Registry-Ordering-Supplement"
+		// (e.g., "Adobe-Japan1-2", "Adobe-Korea1-0").
+		encName, _ := document.ResolveName(ctx, doc, encObj)
+		reg, ord, sup := parsePredefinedCMapName(string(encName))
+		if reg == "" {
+			slog.Debug("compliance_2: fonts: cannot parse CMap name for CIDSystemInfo",
+				"font", fontName, "encoding", encName)
+			return nil
+		}
+		cmapRegistry = ast.PdfString(reg)
+		cmapOrdering = ast.PdfString(ord)
+		cmapSupplement = ast.PdfInt(sup)
 	}
-
-	cmapSysInfo, err := document.ResolveDict(ctx, doc, cmapStream.Dict["CIDSystemInfo"])
-	if err != nil || cmapSysInfo == nil {
-		slog.Debug("compliance_2: fonts: CMap stream missing CIDSystemInfo",
-			"font", fontName)
-		return nil
-	}
-
-	cmapRegistry, _ := document.ResolveString(ctx, doc, cmapSysInfo["Registry"])
-	cmapOrdering, _ := document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])
-	cmapSupplement, _ := document.ResolveInt(ctx, doc, cmapSysInfo["Supplement"])
 
 	slog.Debug("compliance_2: fonts: CMap CIDSystemInfo",
 		"font", fontName,
@@ -1627,15 +1643,55 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 			fontName, pageNum, cidRegistry, cidOrdering, cmapRegistry, cmapOrdering)
 	}
 
-	// Note: Supplement comparison is informational per ISO 32000. The CIDFont
-	// Supplement does not need to match the CMap Supplement. A CIDFont with a
-	// lower Supplement than its CMap simply means some CIDs may not be mapped,
-	// which is valid. Only Registry and Ordering are required to be consistent.
-	slog.Debug("compliance_2: fonts: CIDSystemInfo Supplement values (informational)",
-		"font", fontName, "cidSupplement", cidSupplement, "cmapSupplement", cmapSupplement)
+	// CIDFont Supplement must be ≤ CMap Supplement (parts 2+ only;
+	// PDF/A-1 §6.3.3.1 only requires Registry/Ordering match).
+	part := pdfaPart(profile)
+	if part >= 2 && cidSupplement > cmapSupplement { //nolint:mnd
+		slog.Debug("compliance_2: fonts: CIDSystemInfo Supplement violation",
+			"font", fontName, "cidSupplement", cidSupplement, "cmapSupplement", cmapSupplement)
+		return failf(rule, "font %s on page %d: CIDFont Supplement (%d) > CMap Supplement (%d)",
+			fontName, pageNum, cidSupplement, cmapSupplement)
+	}
 
 	slog.Debug("compliance_2: fonts: CIDSystemInfo is consistent", "font", fontName)
 	return nil
+}
+
+// parsePredefinedCMapName extracts Registry, Ordering, and Supplement from a
+// predefined CMap name like "Adobe-Japan1-2". Returns empty strings if the
+// name doesn't match the expected pattern.
+func parsePredefinedCMapName(name string) (registry, ordering string, supplement int) {
+	// Strip -H/-V suffix if present.
+	base := name
+	if strings.HasSuffix(base, "-H") || strings.HasSuffix(base, "-V") {
+		base = base[:len(base)-2]
+	}
+
+	// Expected format: Registry-Ordering-Supplement (e.g., "Adobe-Japan1-2").
+	// Find the last hyphen to split Supplement.
+	lastDash := strings.LastIndex(base, "-")
+	if lastDash < 0 {
+		return "", "", 0
+	}
+	supStr := base[lastDash+1:]
+	rest := base[:lastDash]
+
+	// Parse Supplement as integer.
+	sup := 0
+	for _, ch := range supStr {
+		if ch < '0' || ch > '9' {
+			return "", "", 0
+		}
+		sup = sup*10 + int(ch-'0')
+	}
+
+	// Find the first hyphen to split Registry from Ordering.
+	before, after, ok := strings.Cut(rest, "-")
+	if !ok {
+		return "", "", 0
+	}
+
+	return before, after, sup
 }
 
 // checkType0ToUnicode validates the ToUnicode requirement for composite fonts (rule 2).
@@ -1681,54 +1737,79 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	return nil
 }
 
-// checkNotdefGlyph checks for .notdef glyph references in font Encoding
-// /Differences arrays (rule 6). A .notdef entry indicates a character code
-// maps to the undefined glyph.
-func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+// checkNotdefGlyph checks for .notdef glyph references. A character code that
+// maps to .notdef (GID 0 or glyph name ".notdef") is a violation.
+//
+// For simple fonts (Type1/TrueType): resolves encoding and checks each used
+// character code. For TrueType with embedded programs: also checks the font's
+// cmap for GID 0 mappings.
+func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
 	rule := notdefRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: .notdef check not applicable", "profile", profile)
 		return nil
 	}
 
+	// Check /Encoding /Differences for explicit ".notdef" entries.
+	if r := checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, rule); r != nil {
+		return r
+	}
+
+	return nil
+}
+
+// checkNotdefInDifferences checks /Encoding /Differences for explicit ".notdef" entries.
+func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Result {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: no /Encoding entry, skipping .notdef check", "font", fontName)
 		return nil
 	}
-
 	encDict, err := document.ResolveDict(ctx, doc, encObj)
-	if err != nil {
-		slog.Debug("compliance_2: fonts: resolving font encoding dict", "font", fontName, "error", err)
-	}
-	if encDict == nil {
-		slog.Debug("compliance_2: fonts: encoding is not a dict, skipping .notdef check", "font", fontName)
+	if err != nil || encDict == nil {
 		return nil
 	}
-
 	diffObj, ok := encDict["Differences"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: no /Differences in encoding, skipping .notdef check", "font", fontName)
 		return nil
 	}
-
 	diffArr, err := document.ResolveArray(ctx, doc, diffObj)
-	if err != nil {
-		slog.Debug("compliance_2: fonts: resolving encoding differences array", "font", fontName, "error", err)
-	}
-	if diffArr == nil {
+	if err != nil || diffArr == nil {
 		return nil
 	}
-
 	for _, item := range diffArr {
 		if n, ok := item.(ast.PdfName); ok && n == ".notdef" {
-			slog.Debug("compliance_2: fonts: .notdef glyph found in /Differences",
-				"font", fontName, "page", pageNum)
 			return failf(rule, "font %s on page %d: .notdef glyph in /Differences", fontName, pageNum)
 		}
 	}
+	return nil
+}
 
-	slog.Debug("compliance_2: fonts: no .notdef references in /Differences", "font", fontName)
+// checkType0NotdefGlyph checks if a Type0 (composite) font references CID 0
+// (.notdef) in any text operator string. For Identity-H/Identity-V encoded
+// fonts, scans raw string bytes for 2-byte CID 0 sequences.
+func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
+	rule := notdefRule(profile)
+	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {
+		return nil
+	}
+
+	// Only handle Identity-H / Identity-V encoding (2-byte CIDs).
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	if encName != "Identity-H" && encName != "Identity-V" {
+		return nil
+	}
+
+	// Scan raw strings for 2-byte CID 0 (0x00 0x00).
+	for _, s := range usage.rawStrings {
+		data := []byte(s)
+		for i := 0; i+1 < len(data); i += 2 { //nolint:mnd
+			if data[i] == 0 && data[i+1] == 0 {
+				slog.Debug("compliance_2: fonts: Type0 text references CID 0 (.notdef)",
+					"font", fontName, "page", pageNum)
+				return failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1766,6 +1847,12 @@ func cidSetRule(profile string) Rule {
 
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
 func toUnicodeCMapValuesRule(profile string) Rule {
+	if isPDFUA(profile) {
+		if strings.Contains(profile, "2") {
+			return Rule_14289_2_8_4_5_8_t02
+		}
+		return Rule_14289_1_7_21_7_t02
+	}
 	switch pdfaPart(profile) {
 	case 2:
 		return Rule_19005_2_6_2_11_7_3_t01
@@ -1820,22 +1907,53 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 	// Type1 subsets require /CharSet.
 	if subtype == "Type1" || subtype == "MMType1" {
 		rule := charSetRule(profile)
-		if rule.Specification == "" {
+		if rule.Specification == "" && !isPDFUA(profile) {
 			return nil
 		}
-		// Part 1: CharSet is required. Parts 2+: only check if present (correctness),
-		// but we still flag missing for Part 1.
-		if pdfaPart(profile) == 1 {
-			if _, hasCharSet := fd["CharSet"]; !hasCharSet {
-				slog.Debug("compliance_2: fonts: Type1 subset missing /CharSet",
-					"font", fontName, "page", pageNum)
-				return failf(rule, "font %s on page %d: Type1 subset missing /CharSet", fontName, pageNum)
+
+		charSetStr, _ := document.ResolveString(ctx, doc, fd["CharSet"])
+
+		// Part 1: CharSet presence is required.
+		if pdfaPart(profile) == 1 && charSetStr == "" {
+			return failf(rule, "font %s on page %d: Type1 subset missing /CharSet", fontName, pageNum)
+		}
+
+		// PDF/UA-1 §7.21.4.2: if CharSet present, it must list ALL font program glyphs.
+		if charSetStr != "" && isPDFUA(profile) {
+			fontData := extractFontProgramData(ctx, doc, fd)
+			if fontData != nil {
+				glyphNames := typography.ExtractGlyphNames(fontData)
+				if glyphNames != nil {
+					return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, Rule_14289_1_7_21_4_2_t01)
+				}
 			}
 		}
-		slog.Debug("compliance_2: fonts: Type1 subset CharSet check passed", "font", fontName)
+
 		return nil
 	}
 
+	return nil
+}
+
+// checkCharSetCompleteness verifies that /CharSet lists all glyph names
+// present in the font program.
+func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, fontName string, pageNum int, rule Rule) []Result {
+	charSetNames := make(map[string]bool)
+	for name := range strings.SplitSeq(charSetStr, "/") {
+		if name != "" {
+			charSetNames[name] = true
+		}
+	}
+
+	for _, name := range glyphNames {
+		if name == ".notdef" || name == "" {
+			continue
+		}
+		if !charSetNames[name] {
+			return failf(rule, "font %s on page %d: glyph %q in font program not listed in /CharSet",
+				fontName, pageNum, name)
+		}
+	}
 	return nil
 }
 
@@ -1929,52 +2047,55 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 // destination hex strings mapping to U+0000, U+FEFF, or U+FFFE.
 // Only destination values are checked — source codes may legitimately use
 // these values.
-func containsInvalidUnicodeMapping(cmap string) bool {
-	upper := strings.ToUpper(cmap)
+func containsInvalidUnicodeMapping(cmapData string) bool {
+	// Normalise line endings: CR+LF and bare CR → LF.
+	normalized := strings.ReplaceAll(cmapData, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	upper := strings.ToUpper(normalized)
 
-	// Only check inside bfchar sections: each line has <src> <dst>.
-	// We look for lines where the SECOND hex string is an invalid value.
+	// Track bfchar/bfrange sections. The keyword is preceded by a count
+	// (e.g., "1 beginbfchar"), so use Contains rather than HasPrefix.
 	inBfchar := false
 	inBfrange := false
 	for line := range strings.SplitSeq(upper, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "BEGINBFCHAR") {
+
+		// Transition into bfchar/bfrange sections.
+		if strings.Contains(trimmed, "BEGINBFCHAR") {
 			inBfchar = true
 			continue
 		}
-		if strings.HasPrefix(trimmed, "ENDBFCHAR") {
-			inBfchar = false
-			continue
-		}
-		if strings.HasPrefix(trimmed, "BEGINBFRANGE") {
+		if strings.Contains(trimmed, "BEGINBFRANGE") {
 			inBfrange = true
 			continue
 		}
-		if strings.HasPrefix(trimmed, "ENDBFRANGE") {
-			inBfrange = false
-			continue
-		}
 
+		// Check mapping entries BEFORE checking for section end, because
+		// the mapping and end keyword can appear on the same line
+		// (e.g., "<01> <0000> endbfchar" with CR line endings).
 		if inBfchar {
-			// Format: <srcCode> <dstUnicode>
-			// Find the second hex string.
 			parts := strings.Fields(trimmed)
 			if len(parts) >= 2 { //nolint:mnd
-				dst := parts[1]
-				if isInvalidUnicodeDst(dst) {
+				if isInvalidUnicodeDst(parts[1]) {
 					return true
 				}
 			}
 		}
 		if inBfrange {
-			// Format: <srcLo> <srcHi> <dstStart>
 			parts := strings.Fields(trimmed)
 			if len(parts) >= 3 { //nolint:mnd
-				dst := parts[2]
-				if isInvalidUnicodeDst(dst) {
+				if isInvalidUnicodeDst(parts[2]) {
 					return true
 				}
 			}
+		}
+
+		// Transition out of sections.
+		if strings.Contains(trimmed, "ENDBFCHAR") {
+			inBfchar = false
+		}
+		if strings.Contains(trimmed, "ENDBFRANGE") {
+			inBfrange = false
 		}
 	}
 	return false

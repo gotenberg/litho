@@ -1,6 +1,6 @@
 # Remaining FP and FN — Detailed Analysis
 
-**State:** 2,276 / 2,601 (87.5%), 4 FP, 320 FN
+**State:** 2,359 / 2,601 (90.7%), 0 FP, 242 FN
 
 ---
 
@@ -16,89 +16,32 @@
 - FP-R2: Glyph width + font embedding — **FIXED** (collectFontUsage: invisible Tr 3 fonts exempt)
 - FP-R4: ToUnicode for PDF/A-2u — **FIXED** (per-glyph exemption via Type 1 encoding extraction)
 - FP-R8: ICCBased CMYK identity — **FIXED** (only check CS names used by cs/CS operators)
+- FP-LAST: AFRelationship on non-catalog objects — **4 of 4 FIXED** (XObject /AF, annotation /FS, RichMedia /Asset traversal)
 
 ---
 
-## REMAINING FALSE POSITIVES (4 files)
+## REMAINING FALSE POSITIVES (0 files)
 
-All 4 remaining FP files are the same issue: **AFRelationship on non-catalog objects**.
-
-### FP-LAST. AFRelationship on XObject/annotation file specs (4 files)
-
-**Files:** 6-8-t02-pass-b (A-3b), 6-8-t02-pass-d (A-3b), 6-3-1-t01-pass-d (A-4e), 6-3-1-t01-pass-a (A-4f)
-
-**Litho violation:** `6.8 test 4` / `6.9 test 4`: No /AF array found but embedded files with /AFRelationship exist.
-
-**What's missing:** litho's embedded file checker finds file specs via `/Names/EmbeddedFiles` and the catalog/page `/AF` arrays. But these files associate their embedded files via `/AF` arrays on **non-standard objects**:
-- A-3b files: `/AF [9 0 R]` on **Image XObjects** — the embedded file is associated with an image, not the page or catalog
-- A-4e file: File specs with `/AFRelationship /Unspecified` associated via **3D annotation** resources
-- A-4f file: File spec associated via **FileAttachment annotation** — the checker may not walk annotation file specs
-
-**Root cause:** The `/AF` array scanner in `embedded.go` checks:
-1. Catalog `/AF` ✓
-2. Page dicts `/AF` ✓
-3. Annotation dicts `/AF` — **NOT checked**
-4. XObject dicts `/AF` — **NOT checked**
-5. Other dicts `/AF` — **NOT checked**
-
-**How to fix:** In `embedded.go`, extend the `/AF` scanner to walk:
-
-```go
-// For each page:
-//   1. Check page["AF"] (already done)
-//   2. Walk page["Annots"] → each annot["AF"]
-//   3. Walk page["Resources"]["XObject"] → each xobj.Dict["AF"]
-
-// For annotations, also check:
-//   - FileAttachment annotations → annot["FS"] → file spec dict
-//   - RichMedia/3D annotations → annotation resources with /AF
-```
-
-The most robust approach: iterate ALL resolved objects in the document. For each dict that has `/AF`, resolve the file spec refs and validate `/AFRelationship`. This covers all possible locations without enumeration.
-
-```go
-func collectAllAFFileSpecs(ctx context.Context, doc *document.Document) []ast.PdfDict {
-    var specs []ast.PdfDict
-    for _, entry := range doc.Index.Entries {
-        obj := doc.ResolveObjectByRef(entry)
-        dict, ok := obj.(ast.PdfDict)
-        if !ok { continue }
-        afObj, ok := dict["AF"]
-        if !ok { continue }
-        afArr, _ := document.ResolveArray(ctx, doc, afObj)
-        for _, ref := range afArr {
-            spec, _ := document.ResolveDict(ctx, doc, ref)
-            if spec != nil {
-                specs = append(specs, spec)
-            }
-        }
-    }
-    return specs
-}
-```
-
-**Estimated effort:** ~30 lines in `embedded.go`. The challenge is accessing the full resolved object cache — `doc.Index.Entries` gives xref entries, but resolving each object is expensive. A targeted scan (pages → annots → XObjects) is more efficient.
-
-**Alternative:** Walk pages, then for each page walk annotations and XObjects, collecting `/AF` entries. This covers the test file cases without full-document iteration.
+All FP have been fixed. The `/AF` scanner in `embedded.go` now covers:
+1. Catalog `/AF` array
+2. Page dicts `/AF` arrays
+3. Annotation dicts `/AF` arrays
+4. Annotation `/FS` keys (FileAttachment annotations directly referencing file specs)
+5. RichMedia annotation `/RichMediaContent/Assets` name trees
+6. RichMedia annotation `/Configurations/*/Instances/*/Asset` references
+7. XObject dicts `/AF` arrays (Image and Form XObjects)
 
 ---
 
 ## FALSE NEGATIVES (316 files, 206 unique rules)
 
-### FN-1. XMP property type validation (25 files)
+### FN-1. XMP property type validation (8 remaining, 16 fixed in Round 14)
 
-**Rules:** §6.7.9 t2/t3 (15 files), §6.6.2.3.1 t2 (6 files), §6.6.2.3.3 (4 files)
+**Fixed (16 files):** Strict date validation (6), registry type corrections for shotDate/HasSettings (2), extension schema prefix validation (4), additional date edge cases (4).
 
-**What's missing:** The XMP SAX parser detects container type mismatches (Seq vs Bag vs Alt vs Simple) and value type mismatches (Integer, Boolean, Date). The remaining FN have:
-- Properties in predefined namespaces with wrong container type that the checker doesn't detect (e.g., a Simple property wrapped in rdf:Bag)
-- Extension schema field validation gaps at nested levels (ValueType fields)
-- Properties that use namespace prefixes differently than expected
+**Remaining (8 files):** §6.7.9 t2/t3 — properties in predefined namespaces that VeraPDF doesn't consider defined for the PDF/A-1 XMP spec version (e.g., `xmp:Rating`, `xmp:Label`, `xmpTPg:Colorants/Fonts/PlateNames`, `exif/aux:Lens`, `crs:AutoBrightness`, `xmpDM:videoColorSpace`, `pdf:Trapped`). Plus 1 file (6-6-2-3-3-t03-fail-b) with cascading extension schema structure issue.
 
-**How to fix:**
-1. Debug each FN file's XMP to identify the specific property and its expected vs observed type
-2. For container type mismatches: the `xmpCheckPropertyTypes` function compares `containerType` against the registry — verify the comparison logic handles all cases (some properties may be `xmpPropAny` when they should be strict)
-3. For extension schemas: the `xmpCheckExtensionSchemas` function has a level stack — trace it through the FN files to find the off-by-one error
-4. Each fix is 1-5 lines adjusting the comparison or level tracking
+**How to fix remaining:** Requires a part-specific property registry — for PDF/A-1, the predefined xmp schema has fewer properties than for PDF/A-2+. Properties like `xmp:Rating` and `xmp:Label` were added in later XMP spec versions and should be flagged as "unknown property in predefined schema" for part 1.
 
 ### FN-2. Device CS in unreached resources (19 files)
 

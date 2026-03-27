@@ -214,7 +214,7 @@ var xmpPropertyRegistry = map[string]map[string]xmpPropType{
 		"CropUnits": xmpPropInteger, "CropWidth": xmpPropReal,
 		"Exposure": xmpPropReal, "GreenHue": xmpPropInteger,
 		"GreenSaturation": xmpPropInteger, "HasCrop": xmpPropBoolean,
-		"HasSettings": xmpPropText, "LuminanceSmoothing": xmpPropInteger,
+		"HasSettings": xmpPropBoolean, "LuminanceSmoothing": xmpPropInteger,
 		"RawFileName": xmpPropText, "RedHue": xmpPropInteger,
 		"RedSaturation": xmpPropInteger, "Saturation": xmpPropInteger,
 		"Shadows": xmpPropInteger, "ShadowTint": xmpPropInteger,
@@ -273,7 +273,7 @@ var xmpPropertyRegistry = map[string]map[string]xmpPropType{
 		"relativePeakAudioFilePath": xmpPropURI,
 		"relativeTimestamp":         xmpPropStruct, "releaseDate": xmpPropDate,
 		"resampleParams": xmpPropStruct, "scaleType": xmpPropText,
-		"scene": xmpPropText, "shotDate": xmpPropText,
+		"scene": xmpPropText, "shotDate": xmpPropDate,
 		"shotDay": xmpPropText, "shotLocation": xmpPropText,
 		"shotName": xmpPropText, "shotNumber": xmpPropText,
 		"shotSize": xmpPropText, "speakerPlacement": xmpPropText,
@@ -398,8 +398,9 @@ func isValidXMPRealOrRational(s string) bool {
 }
 
 // isValidXMPDate returns true if s is a valid XMP date value.
-// Accepts ISO 8601 formats: YYYY, YYYY-MM, YYYY-MM-DD, and longer forms with time.
-// Also accepts PDF date format (D:YYYYMMDDHHmmSS+HH'mm') since some producers
+// Accepts ISO 8601 formats: YYYY, YYYY-MM, YYYY-MM-DD, YYYY-MM-DDThh:mm,
+// YYYY-MM-DDThh:mm:ss, with optional fractional seconds and timezone (Z or
+// ±hh:mm). Also accepts PDF date format (D:YYYY...) since some producers
 // write PDF-format dates into XMP properties.
 func isValidXMPDate(s string) bool {
 	s = strings.TrimSpace(s)
@@ -423,12 +424,77 @@ func isValidXMPDate(s string) bool {
 		return true // YYYY
 	}
 
+	// YYYY-MM
 	if s[4] != '-' { //nolint:mnd
 		return false
 	}
+	if len(s) < 7 || !isDigit(s[5]) || !isDigit(s[6]) { //nolint:mnd
+		return false
+	}
+	if len(s) == 7 { //nolint:mnd
+		return true // YYYY-MM
+	}
 
-	// Allow any reasonable continuation after YYYY-.
-	return len(s) >= 7 //nolint:mnd // At minimum YYYY-MM
+	// YYYY-MM-DD
+	if s[7] != '-' { //nolint:mnd
+		return false
+	}
+	if len(s) < 10 || !isDigit(s[8]) || !isDigit(s[9]) { //nolint:mnd
+		return false
+	}
+	if len(s) == 10 { //nolint:mnd
+		return true // YYYY-MM-DD
+	}
+
+	// Time component requires 'T' separator.
+	if s[10] != 'T' { //nolint:mnd
+		return false
+	}
+	// At minimum: YYYY-MM-DDThh:mm (length 16).
+	if len(s) < 16 { //nolint:mnd
+		return false
+	}
+	if !isDigit(s[11]) || !isDigit(s[12]) || s[13] != ':' || !isDigit(s[14]) || !isDigit(s[15]) { //nolint:mnd
+		return false
+	}
+
+	rest := s[16:] //nolint:mnd
+	// Optional :ss
+	if len(rest) > 0 && rest[0] == ':' {
+		if len(rest) < 3 || !isDigit(rest[1]) || !isDigit(rest[2]) { //nolint:mnd
+			return false
+		}
+		rest = rest[3:] //nolint:mnd
+	}
+	// Optional fractional seconds (.digits).
+	if len(rest) > 0 && rest[0] == '.' {
+		i := 1
+		for i < len(rest) && isDigit(rest[i]) {
+			i++
+		}
+		if i == 1 {
+			return false // "." with no digits
+		}
+		rest = rest[i:]
+	}
+	// Timezone: Z, +hh:mm, or -hh:mm. Empty means local time.
+	if len(rest) == 0 {
+		return true
+	}
+	if rest == "Z" {
+		return true
+	}
+	if rest[0] != '+' && rest[0] != '-' {
+		return false
+	}
+	// +hh:mm or +hh (abbreviated).
+	switch len(rest) {
+	case 3: //nolint:mnd
+		return isDigit(rest[1]) && isDigit(rest[2])
+	case 6: //nolint:mnd
+		return isDigit(rest[1]) && isDigit(rest[2]) && rest[3] == ':' && isDigit(rest[4]) && isDigit(rest[5])
+	}
+	return false
 }
 
 // isValidXMPURI returns true if s is a valid XMP URI value.

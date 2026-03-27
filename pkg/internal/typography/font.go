@@ -727,6 +727,32 @@ func ExtractCharCodeToGID(fontData []byte) map[uint16]uint16 {
 	return nil
 }
 
+// ExtractGlyphNames returns a GID → glyph name mapping from a font program.
+// For TrueType/OpenType: uses the post table.
+// For CFF: uses the charset + string table.
+// Returns nil if the font type is unrecognized or has no glyph names.
+func ExtractGlyphNames(fontData []byte) map[uint16]string {
+	if len(fontData) < 4 {
+		return nil
+	}
+	sig := fontData[:4]
+
+	// TrueType or OTTO: use post table.
+	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
+		string(sig) == "true" || string(sig) == "OTTO" {
+		m, _ := truetype.PostGlyphNames(fontData)
+		return m
+	}
+
+	// Bare CFF font.
+	if sig[0] == 1 && sig[1] == 0 {
+		m, _ := cff.GlyphNames(fontData)
+		return m
+	}
+
+	return nil
+}
+
 // readOS2AvgWidth extracts xAvgCharWidth from the OS/2 table. Returns 0 if
 // the table is absent or invalid. The value is in font design units.
 func readOS2AvgWidth(data []byte) uint16 {

@@ -110,9 +110,10 @@ Always run `make fmt && make lint` before submitting code.
 - Handle `io.EOF` gracefully — never panic.
 
 ### Centralized Core Utilities (Anti-Duplication)
-- NEVER duplicate core PDF operational logic (e.g., `resolveObject`, `decodePdfString`, `getFloat`) across internal domains.
+- NEVER duplicate core PDF operational logic (e.g., `ResolveDict`, `DecodePdfString`, `GetFloat`) across internal domains.
 - PDF strings are often encrypted; decryption must be handled consistently through the crypto pipeline.
-- `resolveObject` must track visited nodes to prevent infinite loops from malicious circular references. Context cancellation adds a wall-clock bound on top of this structural bound.
+- **Prefer typed resolve helpers over `ResolveObject`:** use `ResolveDict`, `ResolveArray`, `ResolveName`, `ResolveStream`, `ResolveString`, `ResolveInt`, `ResolveBool` from the `internal/core/document` package. These handle indirect-reference resolution and type assertion in one step, propagating errors properly. Reserve `ResolveObject` only for multi-type switches (`switch v := obj.(type)`).
+- `ResolveObject` must track visited nodes to prevent infinite loops from malicious circular references. Context cancellation adds a wall-clock bound on top of this structural bound.
 - Rely on centralized, thread-safe methods provided by the `internal/core/document` package to ensure security and prevent stack overflows.
 
 ### Resource Streaming (Critical — No Eager Materialization)

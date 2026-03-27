@@ -769,11 +769,98 @@ const (
 	xmpExtLevelField                              // inside a field rdf:li
 )
 
+// xmpExpectedPrefix maps extension schema namespace URIs to the expected
+// XML prefix name per the PDF/A extension schema specification.
+//
+//nolint:gochecknoglobals // static lookup table
+var xmpExpectedPrefix = map[string]string{
+	xmpPdfaSchemaPrefix:   "pdfaSchema",
+	xmpPdfaPropertyPrefix: "pdfaProperty",
+	xmpPdfaTypePrefix:     "pdfaType",
+	xmpPdfaFieldPrefix:    "pdfaField",
+}
+
+// xmpExtractPrefixMap scans raw XMP bytes for xmlns:prefix="uri" declarations
+// and returns a map from namespace URI to the actual prefix name used.
+func xmpExtractPrefixMap(data []byte) map[string]string {
+	result := make(map[string]string)
+	s := string(data)
+	for {
+		idx := strings.Index(s, "xmlns:")
+		if idx < 0 {
+			break
+		}
+		s = s[idx+6:] // skip "xmlns:"
+		eqIdx := strings.IndexByte(s, '=')
+		if eqIdx < 0 {
+			break
+		}
+		prefix := s[:eqIdx]
+		s = s[eqIdx+1:]
+		if len(s) == 0 {
+			break
+		}
+		quote := s[0]
+		if quote != '"' && quote != '\'' {
+			continue
+		}
+		s = s[1:]
+		endIdx := strings.IndexByte(s, quote)
+		if endIdx < 0 {
+			break
+		}
+		uri := s[:endIdx]
+		s = s[endIdx+1:]
+		result[uri] = prefix
+	}
+	return result
+}
+
 // xmpCheckExtensionSchemas validates that PDF/A extension schemas have all
 // required fields per ISO 19005 clause 6.6.2.3.3 / 6.7.8.
 // Each missing field emits a specific rule (t02–t18).
+// It also validates that extension schema elements use the expected namespace
+// prefix names (e.g., "pdfaSchema" not "nonpdfaSchema").
 func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 	slog.Debug("compliance_2/xmp: checking extension schema structure")
+
+	// Extract prefix→URI map to check prefix name correctness.
+	prefixMap := xmpExtractPrefixMap(data)
+
+	// Check that pdfa extension schema namespace URIs use the expected prefix names.
+	for uri, expectedPrefix := range xmpExpectedPrefix {
+		if actualPrefix, ok := prefixMap[uri]; ok && actualPrefix != expectedPrefix {
+			slog.Debug("compliance_2/xmp: wrong namespace prefix for extension schema namespace",
+				"uri", uri, "expected", expectedPrefix, "actual", actualPrefix)
+			switch uri {
+			case xmpPdfaSchemaPrefix:
+				*results = append(*results, xmpExtSchemaRule(part, "schema")...)
+				*results = append(*results, xmpExtSchemaRule(part, "namespaceURI")...)
+				*results = append(*results, xmpExtSchemaRule(part, "prefix")...)
+				*results = append(*results, xmpExtSchemaRule(part, "property")...)
+				*results = append(*results, xmpExtSchemaRule(part, "valueType")...)
+			case xmpPdfaPropertyPrefix:
+				*results = append(*results, xmpExtPropertyRule(part, "name")...)
+				*results = append(*results, xmpExtPropertyRule(part, "valueType")...)
+				*results = append(*results, xmpExtPropertyRule(part, "category")...)
+				*results = append(*results, xmpExtPropertyRule(part, "description")...)
+			case xmpPdfaTypePrefix:
+				*results = append(*results, xmpExtValueTypeRule(part, "type")...)
+				*results = append(*results, xmpExtValueTypeRule(part, "namespaceURI")...)
+				*results = append(*results, xmpExtValueTypeRule(part, "prefix")...)
+				*results = append(*results, xmpExtValueTypeRule(part, "description")...)
+				*results = append(*results, xmpExtValueTypeRule(part, "field")...)
+			case xmpPdfaFieldPrefix:
+				*results = append(*results, xmpExtFieldRule(part, "name")...)
+				*results = append(*results, xmpExtFieldRule(part, "valueType")...)
+				*results = append(*results, xmpExtFieldRule(part, "description")...)
+			}
+			// Skip SAX-based checks — prefix mismatch means Go's XML parser
+			// resolved the URI correctly but the document uses the wrong prefix.
+			// The SAX parser would see correct URIs and not detect the issue.
+			return
+		}
+	}
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false

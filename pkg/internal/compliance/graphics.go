@@ -37,16 +37,105 @@ func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast
 
 		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1)...)
 
-		// Content stream state machine checks (OPM with ICCBased CMYK, etc.).
-		if part >= 2 {
-			streamData, err := getPageContentBytes(ctx, doc, page)
-			if err == nil && len(streamData) > 0 {
+		streamData, err := getPageContentBytes(ctx, doc, page)
+		if err == nil && len(streamData) > 0 {
+			// Content stream state machine checks (OPM with ICCBased CMYK, etc.).
+			if part >= 2 {
 				results = append(results, checkContentStreamState(ctx, doc, streamData, res, part, i+1)...)
 			}
+			// Content stream resource completeness (§6.2.2).
+			if res == nil {
+				res = make(ast.PdfDict) // empty dict for lookup (page has no Resources)
+			}
+			results = append(results, checkContentStreamResources(ctx, doc, streamData, res, part, i+1)...)
 		}
+
+		// Also check Form XObject content streams for resource completeness.
+		// Only scan Forms referenced by Do operators in the page content.
+		var referencedXObjects map[string]bool
+		if streamData != nil {
+			_, referencedXObjects = scanContentStreamDeviceCS(ctx, doc, page, i)
+		}
+		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects)...)
+
+		// Scan Form XObject ExtGState for halftone/rendering intent violations.
+		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1)...)
 	}
 
 	slog.Debug("compliance_2/graphics: checks complete", "violations", len(results))
+	return results
+}
+
+// checkFormXObjectResources checks content stream resource completeness for
+// Form XObjects referenced by Do operators on the page. Each Form XObject
+// has its own Resources dict; operators in its content stream must reference
+// resources defined there.
+func checkFormXObjectResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part int, pageNum int, referencedNames map[string]bool) []Result {
+	if pageRes == nil {
+		return nil
+	}
+	xoDict, err := document.ResolveDict(ctx, doc, pageRes["XObject"])
+	if err != nil || xoDict == nil {
+		return nil
+	}
+
+	var results []Result
+	for xoName, xoObj := range xoDict {
+		// Only check Form XObjects that are actually referenced by Do operators.
+		if referencedNames != nil && !referencedNames[string(xoName)] {
+			continue
+		}
+		if ctx.Err() != nil {
+			return results
+		}
+		stream, err := document.ResolveStream(ctx, doc, xoObj)
+		if err != nil {
+			continue
+		}
+		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		if subtype != "Form" {
+			continue
+		}
+		formData, err := doc.DecodeStream(stream)
+		if err != nil || len(formData) == 0 {
+			continue
+		}
+		formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if formRes == nil {
+			formRes = make(ast.PdfDict)
+		}
+		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, part, pageNum)...)
+	}
+	return results
+	return results
+}
+
+// checkFormXObjectExtGState scans Form XObject resources for ExtGState
+// entries (halftone, rendering intent, etc.) that the page-level scan misses.
+func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, profile string, part, pageNum int) []Result {
+	if pageRes == nil {
+		return nil
+	}
+	xoDict, err := document.ResolveDict(ctx, doc, pageRes["XObject"])
+	if err != nil || xoDict == nil {
+		return nil
+	}
+	var results []Result
+	for _, xoObj := range xoDict {
+		stream, err := document.ResolveStream(ctx, doc, xoObj)
+		if err != nil {
+			continue
+		}
+		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		if st != "Form" {
+			continue
+		}
+		formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if formRes == nil {
+			continue
+		}
+		results = append(results, checkExtGStateGraphics(ctx, doc, formRes, profile, part, pageNum)...)
+	}
 	return results
 }
 

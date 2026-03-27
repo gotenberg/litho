@@ -2,7 +2,9 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -257,6 +259,227 @@ func (c *contentStateChecker) resolveCSType(name string) string {
 
 	c.csCache[name] = resolved
 	return resolved
+}
+
+// knownPDFOperators is the set of valid content stream operators per ISO 32000.
+//
+//nolint:gochecknoglobals // static lookup table
+var knownPDFOperators = map[string]bool{
+	// General graphics state
+	"w": true, "J": true, "j": true, "M": true, "d": true, "ri": true,
+	"i": true, "gs": true,
+	// Special graphics state
+	"q": true, "Q": true, "cm": true,
+	// Path construction
+	"m": true, "l": true, "c": true, "v": true, "y": true, "h": true, "re": true,
+	// Path painting
+	"S": true, "s": true, "f": true, "F": true, "f*": true,
+	"B": true, "B*": true, "b": true, "b*": true, "n": true,
+	// Clipping
+	"W": true, "W*": true,
+	// Text objects
+	"BT": true, "ET": true,
+	// Text state
+	"Tc": true, "Tw": true, "Tz": true, "TL": true, "Tf": true, "Tr": true, "Ts": true,
+	// Text positioning
+	"Td": true, "TD": true, "Tm": true, "T*": true,
+	// Text showing
+	"Tj": true, "TJ": true, "'": true, "\"": true,
+	// Type 3 font
+	"d0": true, "d1": true,
+	// Color
+	"CS": true, "cs": true, "SC": true, "SCN": true, "sc": true, "scn": true,
+	"G": true, "g": true, "RG": true, "rg": true, "K": true, "k": true,
+	// Shading
+	"sh": true,
+	// External objects
+	"Do": true,
+	// Inline images
+	"BI": true, "ID": true, "EI": true,
+	// XObject
+	// Marked content
+	"MP": true, "DP": true, "BMC": true, "BDC": true, "EMC": true,
+	// Compatibility
+	"BX": true, "EX": true,
+}
+
+// operatorResourceCategory maps content stream operators to the Resources
+// sub-dictionary key they reference. Only operators with a named resource
+// operand (first operand is a PdfName) are listed.
+//
+//nolint:gochecknoglobals // static lookup table
+var operatorResourceCategory = map[string]ast.PdfName{
+	"Tf":  "Font",
+	"cs":  "ColorSpace",
+	"CS":  "ColorSpace",
+	"gs":  "ExtGState",
+	"Do":  "XObject",
+	"sh":  "Shading",
+	"DP":  "Properties",
+	"BDC": "Properties",
+}
+
+// checkContentStreamResources validates that all named resources referenced by
+// operators in the content stream exist in the associated Resources dictionary,
+// and that no undefined operators are used.
+func checkContentStreamResources(
+	ctx context.Context,
+	doc *document.Document,
+	streamData []byte,
+	resources ast.PdfDict,
+	part int,
+	pageNum int,
+) []Result {
+	ops, err := content.ParseStreamData(streamData)
+	if err != nil {
+		return nil
+	}
+
+	undefinedRule := undefinedOperatorRule(part)
+	resourceRule := missingResourceRule(part)
+	realRule := realRangeRuleByPart(part)
+
+	var results []Result
+	reported := make(map[string]bool) // avoid duplicate violations
+	reportedRealLimit := false
+
+	for idx, op := range ops {
+		if idx%200 == 0 && ctx.Err() != nil { //nolint:mnd
+			return results
+		}
+
+		// Check ri operator for invalid rendering intent.
+		if op.Operator == "ri" && len(op.Operands) >= 1 {
+			if riName, ok := op.Operands[0].(ast.PdfName); ok {
+				if !validRenderingIntents[string(riName)] {
+					riRule := renderingIntentRule(part)
+					if riRule.Specification != "" {
+						key := "ri:" + string(riName)
+						if !reported[key] {
+							reported[key] = true
+							results = append(results, failf(riRule, "page %d: ri operator uses invalid intent %q", pageNum, riName)...)
+						}
+					}
+				}
+			}
+		}
+
+		// Check content stream operands for real values exceeding PDF/A-1 limit.
+		if part == 1 && !reportedRealLimit && realRule.Specification != "" {
+			for _, operand := range op.Operands {
+				if r, ok := operand.(ast.PdfReal); ok {
+					if math.Abs(float64(r)) > maxRealAbs1 {
+						results = append(results, Result{
+							Rule:    realRule,
+							Context: fmt.Sprintf("page %d: content stream real %g exceeds +/-%g", pageNum, float64(r), maxRealAbs1),
+						})
+						reportedRealLimit = true
+						break
+					}
+				}
+			}
+		}
+
+		// Test 1: check for undefined operators.
+		if !knownPDFOperators[op.Operator] && undefinedRule.Specification != "" {
+			key := "op:" + op.Operator
+			if !reported[key] {
+				reported[key] = true
+				results = append(results, failf(undefinedRule, "page %d: undefined operator %q", pageNum, op.Operator)...)
+			}
+			continue
+		}
+
+		// Test 2/3: check named resource references.
+		category, ok := operatorResourceCategory[op.Operator]
+		if !ok || len(op.Operands) < 1 {
+			continue
+		}
+
+		// cs/CS with direct device CS names don't need resource lookup.
+		if op.Operator == "cs" || op.Operator == "CS" {
+			if name, ok := op.Operands[0].(ast.PdfName); ok {
+				switch name {
+				case "DeviceRGB", "DeviceCMYK", "DeviceGray", "Pattern":
+					continue
+				}
+			}
+		}
+
+		name, ok := op.Operands[0].(ast.PdfName)
+		if !ok {
+			continue
+		}
+
+		// For BDC/DP: the first operand is a tag name, the second is
+		// properties (name or dict). Only check if second operand is a name.
+		if op.Operator == "BDC" || op.Operator == "DP" {
+			if len(op.Operands) < 2 { //nolint:mnd
+				continue
+			}
+			propName, ok := op.Operands[1].(ast.PdfName)
+			if !ok {
+				continue // inline dict, no resource lookup needed
+			}
+			name = propName
+		}
+
+		// Look up the name in the appropriate Resources sub-dictionary.
+		subDict, err := document.ResolveDict(ctx, doc, resources[category])
+		if err != nil || subDict == nil {
+			key := string(category) + ":" + string(name)
+			if !reported[key] && resourceRule.Specification != "" {
+				reported[key] = true
+				results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+			}
+			continue
+		}
+		if _, exists := subDict[name]; !exists {
+			key := string(category) + ":" + string(name)
+			if !reported[key] && resourceRule.Specification != "" {
+				reported[key] = true
+				results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+			}
+		}
+	}
+
+	return results
+}
+
+func realRangeRuleByPart(part int) Rule {
+	switch part {
+	case 1:
+		return Rule_19005_1_6_1_12_t02
+	}
+	return Rule{}
+}
+
+func undefinedOperatorRule(part int) Rule {
+	switch part {
+	case 1:
+		return Rule_19005_1_6_2_2_t01
+	case 2: //nolint:mnd
+		return Rule_19005_2_6_2_2_t01
+	case 3: //nolint:mnd
+		return Rule_19005_3_6_2_2_t01
+	case 4: //nolint:mnd
+		return Rule_19005_4_6_2_2_t01
+	}
+	return Rule{}
+}
+
+func missingResourceRule(part int) Rule {
+	switch part {
+	case 1:
+		return Rule_19005_1_6_2_2_t02
+	case 2: //nolint:mnd
+		return Rule_19005_2_6_2_2_t02
+	case 3: //nolint:mnd
+		return Rule_19005_3_6_2_2_t02
+	case 4: //nolint:mnd
+		return Rule_19005_4_6_2_2_t02
+	}
+	return Rule{}
 }
 
 // checkAtPaintingOp checks state-dependent compliance rules when a painting

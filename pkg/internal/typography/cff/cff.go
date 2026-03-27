@@ -101,6 +101,59 @@ func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
 	return result, nil
 }
 
+// GlyphNames extracts a GID → glyph name mapping from CFF font data.
+// Returns nil for CID-keyed fonts (which use CIDs, not glyph names).
+func GlyphNames(data []byte) (map[uint16]string, error) {
+	if len(data) < 4 || data[0] != 1 {
+		return nil, fmt.Errorf("%w: invalid CFF header", ErrInvalidCFF)
+	}
+	hdrSize := max(int(data[2]), 4)
+	pos := hdrSize
+
+	nameEnd, err := skipINDEX(data, pos)
+	if err != nil {
+		return nil, err
+	}
+	topDictEnd, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return nil, err
+	}
+	info := parseTopDict(topDictEntries[0])
+	if info.isCID {
+		return nil, nil
+	}
+	_, stringEntries, err := parseINDEX(data, topDictEnd)
+	if err != nil {
+		return nil, err
+	}
+	strings := &stringTable{custom: stringEntries}
+
+	numGlyphs := 0
+	if info.charStringsOffset > 0 && int(info.charStringsOffset) < len(data) {
+		_, csEntries, err := parseINDEX(data, int(info.charStringsOffset))
+		if err == nil {
+			numGlyphs = len(csEntries)
+		}
+	}
+	if numGlyphs == 0 {
+		return nil, nil
+	}
+
+	sids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[uint16]string, len(sids))
+	for gid, sid := range sids {
+		name := strings.get(sid)
+		if name != "" {
+			result[uint16(gid)] = name //nolint:gosec
+		}
+	}
+	return result, nil
+}
+
 // --- INDEX parsing ---
 
 // parseINDEX reads a CFF INDEX structure and returns the end offset and

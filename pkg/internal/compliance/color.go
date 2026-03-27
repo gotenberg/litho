@@ -293,12 +293,18 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		deviceCSUsed.rgb = deviceCSUsed.rgb || annotUsage.rgb
 		deviceCSUsed.cmyk = deviceCSUsed.cmyk || annotUsage.cmyk
 		deviceCSUsed.gray = deviceCSUsed.gray || annotUsage.gray
+		deviceCSUsed.subScopeRGB = deviceCSUsed.subScopeRGB || annotUsage.subScopeRGB
+		deviceCSUsed.subScopeCMYK = deviceCSUsed.subScopeCMYK || annotUsage.subScopeCMYK
+		deviceCSUsed.subScopeGray = deviceCSUsed.subScopeGray || annotUsage.subScopeGray
 
 		slog.Debug("compliance_2/color: device colour spaces found on page",
 			"page", i,
 			"usesRGB", deviceCSUsed.rgb,
 			"usesCMYK", deviceCSUsed.cmyk,
 			"usesGray", deviceCSUsed.gray,
+			"subScopeRGB", deviceCSUsed.subScopeRGB,
+			"subScopeCMYK", deviceCSUsed.subScopeCMYK,
+			"subScopeGray", deviceCSUsed.subScopeGray,
 		)
 
 		// Check page transparency group colour space as additional coverage.
@@ -318,30 +324,42 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 			effectiveICCCS = pageICCCS
 		}
 
+		// Universal coverage: OutputIntent and blending CS apply to ALL scopes.
+		rgbUniversalCover := (effectiveHasICC && effectiveICCCS == "RGB ") || blendingCS == "RGB "
+		cmykUniversalCover := (effectiveHasICC && effectiveICCCS == "CMYK") || blendingCS == "CMYK"
+		grayUniversalCover := effectiveHasICC
+
 		// DeviceRGB: needs DefaultRGB, OutputIntent with RGB, or RGB blending CS.
-		if deviceCSUsed.rgb && !defaults.hasRGB {
-			rgbCovered := (effectiveHasICC && effectiveICCCS == "RGB ") || blendingCS == "RGB "
-			if !rgbCovered {
-				slog.Debug("compliance_2/color: DeviceRGB used without coverage", "page", i)
-				*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used without DefaultRGB or RGB OutputIntent", i+1)...)
-			}
+		if deviceCSUsed.rgb && !defaults.hasRGB && !rgbUniversalCover {
+			slog.Debug("compliance_2/color: DeviceRGB used without coverage", "page", i)
+			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used without DefaultRGB or RGB OutputIntent", i+1)...)
+		}
+		// Sub-scope DeviceRGB: page DefaultRGB doesn't apply; only universal coverage.
+		if deviceCSUsed.subScopeRGB && !rgbUniversalCover {
+			slog.Debug("compliance_2/color: DeviceRGB used in sub-scope without coverage", "page", i)
+			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used in pattern/form without local DefaultRGB or RGB OutputIntent", i+1)...)
 		}
 
 		// DeviceCMYK: needs DefaultCMYK, OutputIntent with CMYK, or CMYK blending CS.
-		if deviceCSUsed.cmyk && !defaults.hasCMYK {
-			cmykCovered := (effectiveHasICC && effectiveICCCS == "CMYK") || blendingCS == "CMYK"
-			if !cmykCovered {
-				slog.Debug("compliance_2/color: DeviceCMYK used without coverage", "page", i)
-				*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used without DefaultCMYK or CMYK OutputIntent", i+1)...)
-			}
+		if deviceCSUsed.cmyk && !defaults.hasCMYK && !cmykUniversalCover {
+			slog.Debug("compliance_2/color: DeviceCMYK used without coverage", "page", i)
+			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used without DefaultCMYK or CMYK OutputIntent", i+1)...)
+		}
+		// Sub-scope DeviceCMYK: page DefaultCMYK doesn't apply.
+		if deviceCSUsed.subScopeCMYK && !cmykUniversalCover {
+			slog.Debug("compliance_2/color: DeviceCMYK used in sub-scope without coverage", "page", i)
+			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used in pattern/form without local DefaultCMYK or CMYK OutputIntent", i+1)...)
 		}
 
 		// DeviceGray: needs DefaultGray or any OutputIntent.
-		if deviceCSUsed.gray && !defaults.hasGray {
-			if !effectiveHasICC {
-				slog.Debug("compliance_2/color: DeviceGray used without coverage", "page", i)
-				*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used without DefaultGray or OutputIntent", i+1)...)
-			}
+		if deviceCSUsed.gray && !defaults.hasGray && !grayUniversalCover {
+			slog.Debug("compliance_2/color: DeviceGray used without coverage", "page", i)
+			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used without DefaultGray or OutputIntent", i+1)...)
+		}
+		// Sub-scope DeviceGray: page DefaultGray doesn't apply.
+		if deviceCSUsed.subScopeGray && !grayUniversalCover {
+			slog.Debug("compliance_2/color: DeviceGray used in sub-scope without coverage", "page", i)
+			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used in pattern/form without local DefaultGray or OutputIntent", i+1)...)
 		}
 	}
 }
@@ -507,6 +525,13 @@ type deviceCSUsage struct {
 	rgb  bool
 	cmyk bool
 	gray bool
+	// subScope* track device CS usage from sub-scopes (Form XObjects,
+	// tiling patterns) that is NOT covered by the sub-scope's own DefaultCS
+	// or Group CS. This usage cannot be covered by a parent scope's DefaultCS
+	// per ISO 32000-2 §8.6.5.7 — only OutputIntent or blending CS apply.
+	subScopeRGB  bool
+	subScopeCMYK bool
+	subScopeGray bool
 }
 
 // scanForDeviceColorSpaces looks through page resources for uses of DeviceRGB,
@@ -644,6 +669,9 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 			usage.rgb = usage.rgb || formUsage.rgb
 			usage.cmyk = usage.cmyk || formUsage.cmyk
 			usage.gray = usage.gray || formUsage.gray
+			usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
+			usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
+			usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
 		}
 	}
 }
@@ -793,6 +821,14 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	if groupCS == "GRAY" {
 		usage.gray = false
 	}
+
+	// Device CS that remains after sub-scope DefaultCS and Group CS
+	// suppression is "uncovered from sub-scope". Parent-scope DefaultCS
+	// cannot cover it (ISO 32000-2 §8.6.5.7: DefaultCS applies only
+	// to the content stream whose Resources define it).
+	usage.subScopeRGB = usage.subScopeRGB || usage.rgb
+	usage.subScopeCMYK = usage.subScopeCMYK || usage.cmyk
+	usage.subScopeGray = usage.subScopeGray || usage.gray
 
 	return usage
 }
@@ -1106,6 +1142,9 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
+				usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
+				usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
+				usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
 				continue
 			}
 			// Dict of sub-appearances (keyed by state name).
@@ -1122,6 +1161,9 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
+				usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
+				usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
+				usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
 			}
 		}
 	}
@@ -1207,6 +1249,9 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		usage.rgb = usage.rgb || formUsage.rgb
 		usage.cmyk = usage.cmyk || formUsage.cmyk
 		usage.gray = usage.gray || formUsage.gray
+		usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
+		usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
+		usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
 	}
 }
 
@@ -1218,9 +1263,8 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 
 	// colorantAlternates tracks colorant name -> first alternate space seen.
 	colorantAlternates := make(map[string]string)
-	// colorantTintRefs tracks colorant name -> first tint transform indirect ref object number.
-	// Used for tint transform consistency (same name must reference same object).
-	colorantTintRefs := make(map[string]int)
+	// colorantTintFuncs tracks colorant name -> first tint transform (resolved).
+	colorantTintFuncs := make(map[string]ast.PdfObject)
 
 	pages := collectPages(ctx, doc, catalog)
 	for i, page := range pages {
@@ -1233,7 +1277,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
-		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintRefs, results)
+		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, results)
 	}
 
 	slog.Debug("compliance_2/color: Separation/DeviceN check complete",
@@ -1242,14 +1286,14 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 
 // scanSeparationDeviceNInResources scans a resources dictionary for Separation
 // and DeviceN colour space arrays and validates colorant-to-alternate consistency.
-func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintRefs map[string]int, results *[]Result) {
+func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result) {
 	visited := make(map[string]bool)
-	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintRefs, results, 0, visited)
+	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, 0, visited)
 }
 
 // scanSeparationDeviceNRecursive scans resources (and Form XObject sub-resources)
 // for Separation and DeviceN colour space arrays.
-func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintRefs map[string]int, results *[]Result, depth int, visited map[string]bool) {
+func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result, depth int, visited map[string]bool) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
@@ -1273,7 +1317,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 
 			switch string(csType) {
 			case "Separation":
-				checkSeparationCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, colorantTintRefs, results)
+				checkSeparationCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, results)
 			case "DeviceN":
 				checkDeviceNCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, results)
 			}
@@ -1304,28 +1348,25 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		}
 		subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 		if subRes != nil {
-			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintRefs, results, depth+1, visited)
+			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth+1, visited)
 		}
 	}
 }
 
 // checkSeparationCS validates a Separation colour space array:
 // [/Separation /ColorantName /AlternateSpace /TintTransform]
-func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, _ map[string]int, results *[]Result) {
-	if len(arr) < 4 {
-		slog.Debug("compliance_2/color: Separation array too short", "page", pageIdx, "cs", csName, "len", len(arr))
+func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result) {
+	if len(arr) < 4 { //nolint:mnd
 		return
 	}
 
 	colorantName, err := document.ResolveName(ctx, doc, arr[1])
 	if err != nil {
-		slog.Debug("compliance_2/color: cannot resolve Separation colorant name", "page", pageIdx, "cs", csName, "error", err)
 		return
 	}
 
 	alternateName := resolveCSName(ctx, doc, arr[2])
 	if alternateName == "" {
-		slog.Debug("compliance_2/color: cannot resolve Separation alternate space", "page", pageIdx, "cs", csName)
 		return
 	}
 
@@ -1336,17 +1377,145 @@ func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfA
 	)
 
 	cName := string(colorantName)
-	if prev, ok := colorantAlternates[cName]; ok {
-		if prev != alternateName {
-			slog.Debug("compliance_2/color: Separation colorant alternate mismatch",
-				"colorant", cName, "prevAlternate", prev, "newAlternate", alternateName)
-			*results = append(*results, failf(separationConsistencyRule(part),
+	rule := separationConsistencyRule(part)
+
+	if prevAlt, ok := colorantAlternates[cName]; ok {
+		// Check alternate space consistency.
+		if prevAlt != alternateName {
+			*results = append(*results, failf(rule,
 				"page %d, ColorSpace %s: Separation colorant %q uses alternate %q but previously used %q",
-				pageIdx+1, csName, cName, alternateName, prev)...)
+				pageIdx+1, csName, cName, alternateName, prevAlt)...)
+		}
+		// Check tint transform consistency.
+		if prevTint, hasPrev := colorantTintFuncs[cName]; hasPrev {
+			if !tintTransformEqual(ctx, doc, prevTint, arr[3]) {
+				slog.Debug("compliance_2/color: tint transform mismatch",
+					"colorant", cName, "page", pageIdx, "cs", csName)
+				*results = append(*results, failf(rule,
+					"page %d, ColorSpace %s: Separation colorant %q has different tintTransform",
+					pageIdx+1, csName, cName)...)
+			}
 		}
 	} else {
 		colorantAlternates[cName] = alternateName
+		colorantTintFuncs[cName] = arr[3]
 	}
+}
+
+// tintTransformEqual compares two tint transform function objects for
+// equivalence. Per the spec, the comparison is structural (same dict keys/values
+// and stream content), ignoring compression and indirect/direct status.
+func tintTransformEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObject) bool {
+	// Try as streams (Type 4 PostScript calculator functions).
+	sa, errA := document.ResolveStream(ctx, doc, a)
+	sb, errB := document.ResolveStream(ctx, doc, b)
+	if errA == nil && errB == nil {
+		return functionStreamEqual(ctx, doc, sa, sb)
+	}
+
+	// Try as dicts (Type 0/2/3 functions).
+	da, errA := document.ResolveDict(ctx, doc, a)
+	db, errB := document.ResolveDict(ctx, doc, b)
+	if errA == nil && errB == nil && da != nil && db != nil {
+		return functionDictEqual(ctx, doc, da, db)
+	}
+
+	return false
+}
+
+// functionStreamEqual compares two function streams (Type 4 PostScript).
+func functionStreamEqual(ctx context.Context, doc *document.Document, a, b ast.PdfStream) bool {
+	// Compare decoded stream bytes.
+	dataA, errA := doc.DecodeStream(a)
+	dataB, errB := doc.DecodeStream(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	if !bytes.Equal(dataA, dataB) {
+		return false
+	}
+	// Compare function dict keys (FunctionType, Domain, Range, etc.)
+	// ignoring stream-specific keys (Length, Filter, DecodeParms).
+	return functionDictEqual(ctx, doc, a.Dict, b.Dict)
+}
+
+// functionDictEqual compares two function dictionaries, ignoring
+// stream-encoding keys (Length, Filter, DecodeParms, DL).
+func functionDictEqual(ctx context.Context, doc *document.Document, a, b ast.PdfDict) bool {
+	skip := map[ast.PdfName]bool{"Length": true, "Filter": true, "DecodeParms": true, "DL": true}
+	keysA := 0
+	for k, vA := range a {
+		if skip[k] {
+			continue
+		}
+		keysA++
+		vB, ok := b[k]
+		if !ok {
+			return false
+		}
+		if !pdfObjectEqual(ctx, doc, vA, vB) {
+			return false
+		}
+	}
+	keysB := 0
+	for k := range b {
+		if !skip[k] {
+			keysB++
+		}
+	}
+	return keysA == keysB
+}
+
+// pdfObjectEqual compares two PDF objects for structural equality,
+// resolving indirect references.
+func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObject) bool {
+	// Resolve indirect refs.
+	a, _ = document.ResolveObject(ctx, doc, a)
+	b, _ = document.ResolveObject(ctx, doc, b)
+
+	switch va := a.(type) {
+	case ast.PdfName:
+		vb, ok := b.(ast.PdfName)
+		return ok && va == vb
+	case ast.PdfInt:
+		vb, ok := b.(ast.PdfInt)
+		return ok && va == vb
+	case ast.PdfReal:
+		vb, ok := b.(ast.PdfReal)
+		return ok && va == vb
+	case ast.PdfString:
+		vb, ok := b.(ast.PdfString)
+		return ok && va == vb
+	case ast.PdfBool:
+		vb, ok := b.(ast.PdfBool)
+		return ok && va == vb
+	case ast.PdfArray:
+		vb, ok := b.(ast.PdfArray)
+		if !ok || len(va) != len(vb) {
+			return false
+		}
+		for i := range va {
+			if !pdfObjectEqual(ctx, doc, va[i], vb[i]) {
+				return false
+			}
+		}
+		return true
+	case ast.PdfDict:
+		vb, ok := b.(ast.PdfDict)
+		if !ok || len(va) != len(vb) {
+			return false
+		}
+		for k, valA := range va {
+			valB, exists := vb[k]
+			if !exists || !pdfObjectEqual(ctx, doc, valA, valB) {
+				return false
+			}
+		}
+		return true
+	case nil:
+		return b == nil
+	}
+	return false
 }
 
 // checkDeviceNCS validates a DeviceN colour space array:
@@ -1558,38 +1727,106 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 
 		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, usedCSNames, results)
 
-		// Also scan Form XObject sub-resources for ICCBased CS.
-		xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
-		if err == nil && xobjDict != nil {
-			for _, xobjObj := range xobjDict {
-				stream, err := document.ResolveStream(ctx, doc, xobjObj)
-				if err != nil {
+		// Recursively scan Form XObject and annotation sub-resources.
+		visited := make(map[string]bool)
+		scanICCBasedRecursive(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, 0, visited)
+
+		// Scan annotation appearance streams.
+		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annotsArr {
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
+			if apDict == nil {
+				continue
+			}
+			for _, key := range []ast.PdfName{"N", "R", "D"} {
+				apObj, ok := apDict[key]
+				if !ok {
 					continue
 				}
-				st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-				if st != "Form" {
+				stream, err := document.ResolveStream(ctx, doc, apObj)
+				if err != nil {
 					continue
 				}
 				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 				if subRes != nil {
-					// Use the Form XObject's own Group CS ref if it has one.
-					formBlendRef := blendingCSRef
-					if grp, _ := document.ResolveDict(ctx, doc, stream.Dict["Group"]); grp != nil {
-						if csObj, ok := grp["CS"]; ok {
-							if csArr, err := document.ResolveArray(ctx, doc, csObj); err == nil && len(csArr) >= 2 {
-								if csT, _ := document.ResolveName(ctx, doc, csArr[0]); csT == "ICCBased" {
-									if ref, ok := csArr[1].(ast.PdfIndirectRef); ok {
-										formBlendRef = ref
-									}
-								}
-							}
-						}
-					}
+					formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
 					checkICCBasedInResources(ctx, doc, subRes, part, i, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
+					scanICCBasedRecursive(ctx, doc, subRes, part, i, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, 1, visited)
 				}
 			}
 		}
 	}
+}
+
+// scanICCBasedRecursive scans Form XObject sub-resources recursively for
+// ICCBased colour spaces.
+func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Result, depth int, visited map[string]bool) {
+	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+		return
+	}
+
+	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
+	if err != nil || xobjDict == nil {
+		return
+	}
+
+	for _, xobjObj := range xobjDict {
+		if ctx.Err() != nil {
+			return
+		}
+		// Cycle detection.
+		if ref, ok := xobjObj.(ast.PdfIndirectRef); ok {
+			key := fmt.Sprintf("icc-%d", ref.ObjectNum)
+			if visited[key] {
+				continue
+			}
+			visited[key] = true
+		}
+		stream, err := document.ResolveStream(ctx, doc, xobjObj)
+		if err != nil {
+			continue
+		}
+		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		if st != "Form" {
+			continue
+		}
+		subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if subRes == nil {
+			continue
+		}
+		formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
+		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
+		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited)
+	}
+}
+
+// resolveFormBlendingRef extracts the ICCBased blending CS ref from a Form
+// XObject's Group CS, falling back to the parent's blending ref.
+func resolveFormBlendingRef(ctx context.Context, doc *document.Document, stream ast.PdfStream, parentRef ast.PdfIndirectRef) ast.PdfIndirectRef {
+	grp, _ := document.ResolveDict(ctx, doc, stream.Dict["Group"])
+	if grp == nil {
+		return parentRef
+	}
+	csObj, ok := grp["CS"]
+	if !ok {
+		return parentRef
+	}
+	csArr, err := document.ResolveArray(ctx, doc, csObj)
+	if err != nil || len(csArr) < 2 { //nolint:mnd
+		return parentRef
+	}
+	csT, _ := document.ResolveName(ctx, doc, csArr[0])
+	if csT != "ICCBased" {
+		return parentRef
+	}
+	if ref, ok := csArr[1].(ast.PdfIndirectRef); ok {
+		return ref
+	}
+	return parentRef
 }
 
 // getOutputIntentICCInfo returns the indirect reference, parsed header, decoded
@@ -1736,10 +1973,21 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			}
 
 			// Check against page transparency blending CS profile.
-			if !identical && blendingCSRef.ObjectNum > 0 && iccRef.ObjectNum > 0 {
-				if iccRef.ObjectNum == blendingCSRef.ObjectNum &&
+			if !identical && blendingCSRef.ObjectNum > 0 {
+				if iccRef.ObjectNum > 0 &&
+					iccRef.ObjectNum == blendingCSRef.ObjectNum &&
 					iccRef.GenNum == blendingCSRef.GenNum {
 					identical = true
+				}
+				if !identical {
+					// Compare by decoded data if references differ.
+					blendStream, err := document.ResolveStream(ctx, doc, blendingCSRef)
+					if err == nil {
+						blendData, err := doc.DecodeStream(blendStream)
+						if err == nil && bytesEqual(data, blendData) {
+							identical = true
+						}
+					}
 				}
 			}
 

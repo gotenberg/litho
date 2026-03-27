@@ -107,8 +107,8 @@ func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule) []R
 		return nil
 	}
 
-	// Must start with "2.".
-	if len(version) >= 3 && version[0] == '2' && version[1] == '.' && version[2] >= '0' && version[2] <= '9' {
+	// Must be exactly "2.n" (3 characters) where n is a digit.
+	if len(version) == 3 && version[0] == '2' && version[1] == '.' && version[2] >= '0' && version[2] <= '9' { //nolint:mnd
 		slog.Debug("compliance_2/document: PDF 2.0 version OK", "version", version)
 		return nil
 	}

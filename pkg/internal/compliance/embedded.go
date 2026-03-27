@@ -301,7 +301,7 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	afRefs := make(map[int]bool)
 	collectAFRefs(ctx, doc, catalog["AF"], afRefs)
 
-	// Also collect from pages and their annotations.
+	// Also collect from pages, their annotations, and XObject resources.
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		if ctx.Err() != nil {
@@ -309,20 +309,52 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		}
 		collectAFRefs(ctx, doc, page["AF"], afRefs)
 
+		// Annotations.
 		annotsObj, ok := page["Annots"]
-		if !ok {
-			continue
-		}
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			continue
-		}
-		for _, annotObj := range annots {
-			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annotDict == nil {
-				continue
+		if ok {
+			annots, err := document.ResolveArray(ctx, doc, annotsObj)
+			if err == nil {
+				for _, annotObj := range annots {
+					annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+					if err != nil || annotDict == nil {
+						continue
+					}
+					collectAFRefs(ctx, doc, annotDict["AF"], afRefs)
+
+					// Annotations with /FS directly reference a file spec
+					// (e.g., FileAttachment). This counts as a valid
+					// association — no separate /AF entry required.
+					if fsObj, hasFS := annotDict["FS"]; hasFS {
+						if ref, isRef := fsObj.(ast.PdfIndirectRef); isRef {
+							afRefs[ref.ObjectNum] = true
+						}
+					}
+
+					// RichMedia annotations reference file specs through
+					// /RichMediaContent/Assets (a name tree).
+					collectRichMediaFileSpecRefs(ctx, doc, annotDict, afRefs)
+				}
 			}
-			collectAFRefs(ctx, doc, annotDict["AF"], afRefs)
+		}
+
+		// XObject resources (Image and Form XObjects can have /AF).
+		res := getResources(ctx, doc, page)
+		if res != nil {
+			xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
+			if err == nil && xobjDict != nil {
+				for _, xobjObj := range xobjDict {
+					stream, err := document.ResolveStream(ctx, doc, xobjObj)
+					if err != nil {
+						// Try as dict (some XObjects may be plain dicts).
+						xd, err := document.ResolveDict(ctx, doc, xobjObj)
+						if err == nil && xd != nil {
+							collectAFRefs(ctx, doc, xd["AF"], afRefs)
+						}
+						continue
+					}
+					collectAFRefs(ctx, doc, stream.Dict["AF"], afRefs)
+				}
+			}
 		}
 	}
 
@@ -360,6 +392,59 @@ func collectAFRefs(ctx context.Context, doc *document.Document, afObj ast.PdfObj
 	for _, elem := range arr {
 		if ref, ok := elem.(ast.PdfIndirectRef); ok {
 			refs[ref.ObjectNum] = true
+		}
+	}
+}
+
+// collectRichMediaFileSpecRefs extracts file spec references from a RichMedia
+// annotation. File specs can appear in two places:
+//   - /RichMediaContent/Assets name tree (key/value pairs)
+//   - /RichMediaContent/Configurations/*/Instances/*/Asset
+func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, refs map[int]bool) {
+	rmContent, ok := annotDict["RichMediaContent"]
+	if !ok {
+		return
+	}
+	rmDict, err := document.ResolveDict(ctx, doc, rmContent)
+	if err != nil || rmDict == nil {
+		return
+	}
+
+	// 1. /Assets name tree.
+	assetsDict, err := document.ResolveDict(ctx, doc, rmDict["Assets"])
+	if err == nil && assetsDict != nil {
+		namesArr, err := document.ResolveArray(ctx, doc, assetsDict["Names"])
+		if err == nil {
+			for i := 1; i < len(namesArr); i += 2 {
+				if ref, ok := namesArr[i].(ast.PdfIndirectRef); ok {
+					refs[ref.ObjectNum] = true
+				}
+			}
+		}
+	}
+
+	// 2. /Configurations → instances → /Asset.
+	configs, err := document.ResolveArray(ctx, doc, rmDict["Configurations"])
+	if err != nil {
+		return
+	}
+	for _, cfgObj := range configs {
+		cfgDict, err := document.ResolveDict(ctx, doc, cfgObj)
+		if err != nil || cfgDict == nil {
+			continue
+		}
+		instances, err := document.ResolveArray(ctx, doc, cfgDict["Instances"])
+		if err != nil {
+			continue
+		}
+		for _, instObj := range instances {
+			instDict, err := document.ResolveDict(ctx, doc, instObj)
+			if err != nil || instDict == nil {
+				continue
+			}
+			if assetRef, ok := instDict["Asset"].(ast.PdfIndirectRef); ok {
+				refs[assetRef.ObjectNum] = true
+			}
 		}
 	}
 }

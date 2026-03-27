@@ -366,19 +366,28 @@ func checkFileHeader(doc *document.Document, profile string) []Result {
 	}
 	slog.Debug("compliance_2: file_structure: header version OK", "version", version)
 
-	// Check binary comment marker after the header line.
-	// After %PDF-x.y, there should be an EOL then % followed by 4 bytes > 127.
+	// After %PDF-x.y, byte 8 must be an EOL marker immediately.
+	// No extra digits, spaces, or other characters between version and EOL.
 	var results []Result
-	eolIdx := bytes.IndexAny(buf[8:], "\r\n")
-	if eolIdx < 0 {
-		slog.Debug("compliance_2: file_structure: no EOL after header version")
-		return failf(fileBinaryCommentRule(profile), "no EOL after header line")
+	if len(buf) <= 8 || (buf[8] != '\n' && buf[8] != '\r') { //nolint:mnd
+		slog.Debug("compliance_2: file_structure: byte after version is not EOL",
+			"byte", buf[8])
+		return fail(fileHeaderRule(profile),
+			fmt.Sprintf("header version not immediately followed by EOL marker (byte 8 = 0x%02X)", buf[8]))
 	}
 
-	// Skip past all EOL characters.
-	commentStart := 8 + eolIdx
-	for commentStart < len(buf) && (buf[commentStart] == '\r' || buf[commentStart] == '\n') {
-		commentStart++
+	// The EOL must be a single marker: LF, CR, or CR+LF.
+	// Double EOL (LF+LF, CR+CR) is a violation.
+	commentStart := 9 //nolint:mnd // byte after first EOL char
+	if buf[8] == '\r' && commentStart < len(buf) && buf[commentStart] == '\n' {
+		commentStart++ // CR+LF is a single EOL
+	}
+
+	// Verify no extra EOL before the binary comment.
+	if commentStart < len(buf) && (buf[commentStart] == '\r' || buf[commentStart] == '\n') {
+		slog.Debug("compliance_2: file_structure: multiple EOL markers after header")
+		return fail(fileBinaryCommentRule(profile),
+			"header followed by multiple EOL markers instead of single EOL")
 	}
 
 	if commentStart >= len(buf) || buf[commentStart] != '%' {
@@ -424,10 +433,20 @@ func checkTrailerID(doc *document.Document, profile string) []Result {
 		return fail(trailerIDRule(profile), "missing ID in trailer")
 	}
 
-	// For PDF/A-2+ the ID array must not be empty.
-	if arr, ok := idObj.(ast.PdfArray); ok && len(arr) == 0 {
-		slog.Debug("compliance_2: file_structure: trailer /ID array is empty")
-		return fail(trailerIDRule(profile), "empty ID array in trailer")
+	// Validate the ID array: must have 2 non-empty string elements.
+	if arr, ok := idObj.(ast.PdfArray); ok {
+		if len(arr) == 0 {
+			slog.Debug("compliance_2: file_structure: trailer /ID array is empty")
+			return fail(trailerIDRule(profile), "empty ID array in trailer")
+		}
+		if len(arr) >= 2 { //nolint:mnd
+			id0, _ := arr[0].(ast.PdfString)
+			id1, _ := arr[1].(ast.PdfString)
+			if len(id0) == 0 || len(id1) == 0 {
+				slog.Debug("compliance_2: file_structure: trailer /ID has empty string element")
+				return fail(trailerIDRule(profile), "ID array contains empty string element")
+			}
+		}
 	}
 
 	slog.Debug("compliance_2: file_structure: trailer /ID present")
@@ -1286,7 +1305,8 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile 
 	}
 
 	// §6.1.3 t05: if Info dict is present, it may only contain /ModDate.
-	if infoDict, ok := infoObj.(ast.PdfDict); ok {
+	infoDict, _ := document.ResolveDict(context.Background(), doc, infoObj)
+	if infoDict != nil {
 		var badKeys []string
 		for key := range infoDict {
 			if key != "ModDate" {

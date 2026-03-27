@@ -224,13 +224,64 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 	}
 	pos += 3
 
-	// After "obj": must be followed by EOL or whitespace.
+	// After "obj": must be followed by EOL marker (LF, CR, or CR+LF).
 	if pos < len(data) {
 		ch := data[pos]
-		if ch != '\n' && ch != '\r' && ch != ' ' {
+		if ch != '\n' && ch != '\r' {
 			d.mu.Lock()
 			d.FormatViolations = append(d.FormatViolations,
-				fmt.Errorf("compliance: obj header %d: obj keyword not followed by EOL or space (0x%02X)", objNum, ch))
+				fmt.Errorf("compliance: obj header %d: obj keyword not followed by EOL marker (0x%02X)", objNum, ch))
+			d.mu.Unlock()
+		}
+	}
+
+	// Validate endobj: scan forward to find "endobj" and check it's
+	// preceded by an EOL marker (LF or CR).
+	d.validateEndobjFormat(offset, objNum)
+}
+
+// validateEndobjFormat scans the object body starting at offset to find
+// "endobj" and validates it is preceded by an EOL marker.
+func (d *Document) validateEndobjFormat(offset int64, objNum int) {
+	// Read a generous chunk. Most objects are small; 16KB handles most cases.
+	const maxScan = 16384
+	buf := make([]byte, maxScan)
+	n, _ := d.r.ReadAt(buf, offset)
+	if n < 10 { //nolint:mnd
+		return
+	}
+	data := buf[:n]
+
+	// Search for "endobj" — scan from the end since we want the LAST one
+	// (objects can contain the string "endobj" in string literals).
+	endobjIdx := -1
+	for i := len(data) - 6; i >= 0; i-- { //nolint:mnd
+		if string(data[i:i+6]) == "endobj" {
+			endobjIdx = i
+			break
+		}
+	}
+	if endobjIdx < 1 {
+		return // Not found or at position 0.
+	}
+
+	// Check that endobj is preceded by EOL (LF or CR).
+	prevByte := data[endobjIdx-1]
+	if prevByte != '\n' && prevByte != '\r' {
+		d.mu.Lock()
+		d.FormatViolations = append(d.FormatViolations,
+			fmt.Errorf("compliance: obj %d: endobj not preceded by EOL marker (0x%02X)", objNum, prevByte))
+		d.mu.Unlock()
+	}
+
+	// Check that endobj is followed by EOL (LF or CR) or EOF.
+	afterIdx := endobjIdx + 6 //nolint:mnd
+	if afterIdx < len(data) {
+		afterByte := data[afterIdx]
+		if afterByte != '\n' && afterByte != '\r' {
+			d.mu.Lock()
+			d.FormatViolations = append(d.FormatViolations,
+				fmt.Errorf("compliance: obj %d: endobj not followed by EOL marker (0x%02X)", objNum, afterByte))
 			d.mu.Unlock()
 		}
 	}
