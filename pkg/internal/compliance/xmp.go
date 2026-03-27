@@ -1777,14 +1777,21 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Re
 			if isContainerPropType(expectedType) {
 				expectedCont := propTypeToContainerType(expectedType)
 				if pv.containerType != expectedCont {
-					slog.Debug("compliance_2/xmp: container type mismatch",
-						"ns", ns, "prop", prop,
-						"observed", xmpContainerTypeName(pv.containerType),
-						"expected", xmpContainerTypeName(expectedCont))
-					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-						fmt.Sprintf("observed=%s expected=%s",
-							xmpContainerTypeName(pv.containerType),
-							xmpContainerTypeName(expectedCont)))...)
+					// Specific exemption: photoshop:SupplementalCategories (Bag)
+					// can be expressed as a simple attribute per XMP spec shorthand.
+					exemptSimpleAsBag := expectedType == xmpPropBag &&
+						pv.containerType == xmpContSimple &&
+						prop == "SupplementalCategories"
+					if !exemptSimpleAsBag {
+						slog.Debug("compliance_2/xmp: container type mismatch",
+							"ns", ns, "prop", prop,
+							"observed", xmpContainerTypeName(pv.containerType),
+							"expected", xmpContainerTypeName(expectedCont))
+						*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+							fmt.Sprintf("observed=%s expected=%s",
+								xmpContainerTypeName(pv.containerType),
+								xmpContainerTypeName(expectedCont)))...)
+					}
 				}
 
 				// Validate Alt container items have xml:lang attribute.
