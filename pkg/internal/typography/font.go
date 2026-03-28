@@ -770,16 +770,26 @@ func readOS2AvgWidth(data []byte) uint16 {
 
 // ReadUnitsPerEm extracts unitsPerEm from the TrueType/OpenType head table.
 func ReadUnitsPerEm(data []byte) uint16 {
+	if len(data) < 4 {
+		return 1000 //nolint:mnd // safe default
+	}
+	// Bare CFF font: use CFF FontMatrix instead of TrueType head table.
+	if data[0] == 1 && data[1] == 0 {
+		if upm := cff.ReadUnitsPerEm(data); upm > 0 {
+			return upm
+		}
+		return 1000 //nolint:mnd
+	}
 	records, err := truetype.ParseTableDirectory(data)
 	if err != nil {
-		return 1000 // safe default
+		return 1000 //nolint:mnd // safe default
 	}
 	headData, err := truetype.TableData(data, records, "head")
-	if err != nil || len(headData) < 20 {
-		return 1000
+	if err != nil || len(headData) < 20 { //nolint:mnd
+		return 1000 //nolint:mnd
 	}
 	// unitsPerEm is at offset 18 in the head table.
-	return binary.BigEndian.Uint16(headData[18:20])
+	return binary.BigEndian.Uint16(headData[18:20]) //nolint:mnd
 }
 
 // type1EncodingRe matches "dup <code> /<name> put" lines in Type1 font programs.

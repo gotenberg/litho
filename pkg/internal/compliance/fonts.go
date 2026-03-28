@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"maps"
@@ -845,6 +846,9 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 				"font", fontKey, "page", pageIdx+1, "visible", isVisible)
 
 			results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageIdx+1, profile, isVisible, usage)...)
+
+			// PUA ActualText check (needs page and catalog context).
+			results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageIdx+1, profile, page, catalog)...)
 		}
 	}
 
@@ -908,6 +912,131 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
 	return results
+}
+
+// checkPUAWithoutActualText flags fonts with PUA ToUnicode mappings when
+// neither the structure tree nor the page content stream has any ActualText.
+// This is a conservative check: it only fires when there is zero ActualText
+// anywhere, avoiding false positives from ActualText that covers a different
+// span than the PUA character.
+func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict) []Result {
+	rule := puaActualTextRule(profile)
+	if rule.Specification == "" {
+		return nil
+	}
+
+	tuObj, ok := fontDict["ToUnicode"]
+	if !ok {
+		return nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, tuObj)
+	if err != nil {
+		return nil
+	}
+	data, err := doc.DecodeStream(stream)
+	if err != nil || !containsPUAMapping(string(data)) {
+		return nil
+	}
+
+	// PUA mapping exists. Check for ActualText in structure tree.
+	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if treeRoot != nil && structTreeHasActualText(ctx, doc, treeRoot, 0) {
+		return nil
+	}
+
+	// Check for ActualText in content stream (BDC properties).
+	contentData, _ := getPageContentBytes(ctx, doc, page)
+	if len(contentData) > 0 && bytes.Contains(contentData, []byte("ActualText")) {
+		return nil
+	}
+
+	return failf(rule, "font %s on page %d: ToUnicode maps to PUA without ActualText", fontName, pageNum)
+}
+
+// structTreeHasActualText recursively checks if any structure element has /ActualText.
+func structTreeHasActualText(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) bool {
+	if depth > 30 { //nolint:mnd
+		return false
+	}
+	if _, ok := node["ActualText"]; ok {
+		return true
+	}
+	kObj := node["K"]
+	if kObj == nil {
+		return false
+	}
+	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
+		for _, kid := range arr {
+			kidDict, _ := document.ResolveDict(ctx, doc, kid)
+			if kidDict != nil && structTreeHasActualText(ctx, doc, kidDict, depth+1) {
+				return true
+			}
+		}
+	} else if kidDict, _ := document.ResolveDict(ctx, doc, kObj); kidDict != nil {
+		return structTreeHasActualText(ctx, doc, kidDict, depth+1)
+	}
+	return false
+}
+
+// containsPUAMapping scans a ToUnicode CMap for destination values in the
+// Unicode Private Use Area (U+E000-U+F8FF BMP PUA).
+func containsPUAMapping(cmapData string) bool {
+	normalized := strings.ReplaceAll(cmapData, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	upper := strings.ToUpper(normalized)
+
+	inBfchar := false
+	for line := range strings.SplitSeq(upper, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "BEGINBFCHAR") {
+			inBfchar = true
+			continue
+		}
+		if inBfchar {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 { //nolint:mnd
+				if isPUAHex(parts[1]) {
+					return true
+				}
+			}
+		}
+		if strings.Contains(trimmed, "ENDBFCHAR") {
+			inBfchar = false
+		}
+	}
+	return false
+}
+
+// isPUAHex checks if a hex token like "<E000>" is in the Unicode PUA range.
+func isPUAHex(token string) bool {
+	t := strings.TrimSpace(token)
+	if len(t) < 3 || t[0] != '<' || t[len(t)-1] != '>' { //nolint:mnd
+		return false
+	}
+	hex := t[1 : len(t)-1]
+	val := uint32(0)
+	for _, c := range hex {
+		val <<= 4
+		switch {
+		case c >= '0' && c <= '9':
+			val |= uint32(c - '0')
+		case c >= 'A' && c <= 'F':
+			val |= uint32(c-'A') + 10 //nolint:mnd
+		default:
+			return false
+		}
+	}
+	return (val >= 0xE000 && val <= 0xF8FF) || (val >= 0xF0000 && val <= 0xFFFFF)
+}
+
+func puaActualTextRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 2: //nolint:mnd
+		return Rule_19005_2_6_2_11_7_3_t01
+	case 3: //nolint:mnd
+		return Rule_19005_3_6_2_11_7_3_t01
+	}
+	return Rule{}
 }
 
 // --- Individual check implementations ---
@@ -1216,6 +1345,29 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
 	charCodeToGID := typography.ExtractCharCodeToGID(fontData)
 
+	// For fonts without a cmap (Type1/CFF), build charCode→GID via glyph names:
+	// PDF encoding maps charCode→glyphName; font program maps GID→glyphName.
+	if charCodeToGID == nil {
+		glyphNames := typography.ExtractGlyphNames(fontData)
+		if glyphNames != nil {
+			enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+			if len(enc) > 0 {
+				nameToGID := make(map[string]uint16, len(glyphNames))
+				for gid, name := range glyphNames {
+					if _, exists := nameToGID[name]; !exists {
+						nameToGID[name] = gid
+					}
+				}
+				charCodeToGID = make(map[uint16]uint16)
+				for code, name := range enc {
+					if gid, ok := nameToGID[name]; ok {
+						charCodeToGID[uint16(code)] = gid
+					}
+				}
+			}
+		}
+	}
+
 	subtype := fontSubtype(ctx, doc, fontDict)
 
 	// Simple fonts (Type1, TrueType, MMType1): compare /Widths array using FirstChar offset.
@@ -1249,24 +1401,13 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 
 	for i, wObj := range widths {
 		charCode := int(firstChar) + i
-		// Skip non-outline glyphs: .notdef (GID 0) and control/whitespace
-		// characters (charCode ≤ 0x20). PDF producers legitimately override
-		// widths for these glyphs, and the spec only requires consistency
-		// for glyphs with visible outlines.
-		if charCode <= 0x20 {
+		if charCode <= 0x20 { //nolint:mnd
 			continue
 		}
-		// Map charCode to GID using the font's cmap table. If no cmap
-		// is available (e.g., Type1 fonts), fall back to identity mapping.
 		gid := uint16(charCode) //nolint:gosec
 		if charCodeToGID != nil {
 			mappedGID, ok := charCodeToGID[uint16(charCode)] //nolint:gosec
 			if !ok || mappedGID == 0 {
-				// The cmap doesn't map this charCode (or maps to .notdef).
-				// The font likely uses a PDF-level encoding (Differences,
-				// built-in Type1 encoding) that maps this charCode to a
-				// glyph not reachable via the Unicode cmap. Skip the width
-				// comparison rather than comparing against the wrong glyph.
 				continue
 			}
 			gid = mappedGID
@@ -1281,9 +1422,6 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		}
 		expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
 		if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
-			slog.Debug("compliance_2: fonts: glyph width mismatch",
-				"font", fontName, "charCode", charCode,
-				"pdfWidth", pdfWidth, "expectedWidth", expectedWidth)
 			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f, font=%.1f)",
 				fontName, pageNum, charCode, pdfWidth, expectedWidth)
 		}
@@ -1479,6 +1617,9 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// --- 2. ToUnicode for composite fonts ---
 	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
+	// --- CMap embedding and WMode checks ---
+	results = append(results, checkCMapEmbedding(ctx, doc, fontDict, fontName, pageNum, profile)...)
+
 	// --- 6. .notdef check ---
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, nil)...)
 	results = append(results, checkType0NotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
@@ -1610,7 +1751,8 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		cmapSysInfo, err := document.ResolveDict(ctx, doc, cmapStream.Dict["CIDSystemInfo"])
 		if err != nil || cmapSysInfo == nil {
 			slog.Debug("compliance_2: fonts: CMap stream missing CIDSystemInfo", "font", fontName)
-			return nil
+			return failf(rule, "font %s on page %d: embedded CMap stream missing CIDSystemInfo",
+				fontName, pageNum)
 		}
 		cmapRegistry, _ = document.ResolveString(ctx, doc, cmapSysInfo["Registry"])
 		cmapOrdering, _ = document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])
@@ -1624,7 +1766,10 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		if reg == "" {
 			slog.Debug("compliance_2: fonts: cannot parse CMap name for CIDSystemInfo",
 				"font", fontName, "encoding", encName)
-			return nil
+			// Non-Identity encoding that can't be resolved — the CIDSystemInfo
+			// relationship can't be satisfied.
+			return failf(rule, "font %s on page %d: encoding %q is not a valid predefined CMap",
+				fontName, pageNum, string(encName))
 		}
 		cmapRegistry = ast.PdfString(reg)
 		cmapOrdering = ast.PdfString(ord)
@@ -1645,8 +1790,10 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 
 	// CIDFont Supplement must be ≤ CMap Supplement (parts 2+ only;
 	// PDF/A-1 §6.3.3.1 only requires Registry/Ordering match).
+	// PDF/UA profiles also require Supplement check.
 	part := pdfaPart(profile)
-	if part >= 2 && cidSupplement > cmapSupplement { //nolint:mnd
+	checkSupplement := part >= 2 || isPDFUA(profile) //nolint:mnd
+	if checkSupplement && cidSupplement > cmapSupplement {
 		slog.Debug("compliance_2: fonts: CIDSystemInfo Supplement violation",
 			"font", fontName, "cidSupplement", cidSupplement, "cmapSupplement", cmapSupplement)
 		return failf(rule, "font %s on page %d: CIDFont Supplement (%d) > CMap Supplement (%d)",
@@ -1660,6 +1807,166 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 // parsePredefinedCMapName extracts Registry, Ordering, and Supplement from a
 // predefined CMap name like "Adobe-Japan1-2". Returns empty strings if the
 // name doesn't match the expected pattern.
+// predefinedCMapPrefixes lists the predefined CMap name prefixes from
+// ISO 32000-1 Table 118. A CMap name starting with one of these (followed
+// by -H, -V, or -Supplement) is predefined and doesn't need embedding.
+//
+//nolint:gochecknoglobals // static lookup table
+var predefinedCMapPrefixes = []string{
+	"Adobe-GB1", "Adobe-CNS1", "Adobe-Japan1", "Adobe-Korea1",
+	"Adobe-Japan2", "Identity-H", "Identity-V",
+	// Common predefined names
+	"UniGB-UCS2", "UniGB-UTF16", "UniCNS-UCS2", "UniCNS-UTF16",
+	"UniJIS-UCS2", "UniJIS-UTF16", "UniKS-UCS2", "UniKS-UTF16",
+	"UniJIS2004-UTF16", "UniJIS-UTF8",
+}
+
+func isPredefinedCMap(name string) bool {
+	if name == "Identity-H" || name == "Identity-V" {
+		return true
+	}
+	for _, prefix := range predefinedCMapPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkCMapEmbedding validates CMap-related rules for Type0 fonts:
+//   - t1: Non-predefined CMaps must be embedded as streams
+//   - t2: Embedded CMap WMode dict value must match stream program value
+//   - t3: Embedded CMap must not reference (usecmap) non-predefined CMaps
+func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+	if !isPDFUA(profile) {
+		// Also applies to PDF/A but handled by separate rules.
+		return nil
+	}
+
+	encObj, ok := type0Dict["Encoding"]
+	if !ok {
+		return nil
+	}
+
+	// Check if encoding is a name (not embedded) vs stream (embedded).
+	encName, _ := document.ResolveName(ctx, doc, encObj)
+	encStream, streamErr := document.ResolveStream(ctx, doc, encObj)
+
+	// Select rules based on profile.
+	ruleT1 := Rule_14289_1_7_21_3_3_t01
+	ruleT2 := Rule_14289_1_7_21_3_3_t02
+	ruleT3 := Rule_14289_1_7_21_3_3_t03
+	if profile == "PDF/UA-2" {
+		ruleT1 = Rule_14289_2_8_4_5_4_t01
+		ruleT2 = Rule_14289_2_8_4_5_4_t02
+		ruleT3 = Rule_14289_2_8_4_5_4_t03
+	}
+
+	// t1: If encoding is a name and NOT predefined, it must be embedded.
+	// For PDF/UA-2 (ISO 32000-2 Table 116), only Identity-H/V are predefined.
+	if streamErr != nil && string(encName) != "" {
+		predefined := isPredefinedCMap(string(encName))
+		if profile == "PDF/UA-2" {
+			predefined = encName == "Identity-H" || encName == "Identity-V"
+		}
+		if !predefined {
+			return failf(ruleT1,
+				"font %s on page %d: CMap %q is not predefined and not embedded",
+				fontName, pageNum, encName)
+		}
+		return nil
+	}
+
+	if streamErr != nil || encStream.Dict == nil {
+		return nil
+	}
+
+	var results []Result
+
+	// t2: WMode in dict must match WMode in stream program.
+	dictWMode, _ := document.ResolveInt(ctx, doc, encStream.Dict["WMode"])
+	data, err := doc.DecodeStream(encStream)
+	if err == nil && len(data) > 0 {
+		streamWMode := extractCMapStreamWMode(data)
+		if streamWMode >= 0 && int(dictWMode) != streamWMode {
+			results = append(results, failf(ruleT2,
+				"font %s on page %d: CMap dict WMode=%d but stream WMode=%d",
+				fontName, pageNum, dictWMode, streamWMode)...)
+		}
+
+		// t3: Check for usecmap referencing non-predefined CMaps.
+		// Check both stream program text AND dict /UseCMap key.
+		usedCMap := extractUseCMap(data)
+		if usedCMap == "" {
+			// Also check /UseCMap in the stream dict.
+			// /UseCMap can be a name (predefined reference) or a stream (embedded).
+			// Only flag non-predefined name references — streams are embedded and OK.
+			if ucObj := encStream.Dict["UseCMap"]; ucObj != nil {
+				// Try as name first (direct or resolved).
+				ucName, _ := document.ResolveName(ctx, doc, ucObj)
+				if ucName != "" {
+					usedCMap = string(ucName)
+				}
+				// If it resolves to a stream, it's embedded — not a violation.
+				if _, err := document.ResolveStream(ctx, doc, ucObj); err == nil {
+					usedCMap = "" // embedded, skip
+				}
+			}
+		}
+		if usedCMap != "" && strings.Contains(usedCMap, "-") {
+			predefined := isPredefinedCMap(usedCMap)
+			if profile == "PDF/UA-2" {
+				predefined = usedCMap == "Identity-H" || usedCMap == "Identity-V"
+			}
+			if !predefined {
+				results = append(results, failf(ruleT3,
+					"font %s on page %d: embedded CMap references non-predefined CMap %q",
+					fontName, pageNum, usedCMap)...)
+			}
+		}
+	}
+
+	return results
+}
+
+// extractCMapStreamWMode parses a CMap program for "/WMode N def" and returns N.
+// Returns -1 if not found.
+func extractCMapStreamWMode(data []byte) int {
+	s := string(data)
+	_, after, ok := strings.Cut(s, "/WMode")
+	if !ok {
+		return -1
+	}
+	// Skip "/WMode" and any whitespace.
+	rest := after //nolint:mnd
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	if len(rest) == 0 {
+		return -1
+	}
+	// Parse integer.
+	if rest[0] >= '0' && rest[0] <= '9' {
+		return int(rest[0] - '0')
+	}
+	return -1
+}
+
+// extractUseCMap parses a CMap program for "/<name> usecmap" and returns the name.
+func extractUseCMap(data []byte) string {
+	s := string(data)
+	before, _, ok := strings.Cut(s, "usecmap")
+	if !ok {
+		return ""
+	}
+	// Search backwards for the CMap name (starts with /).
+	before = strings.TrimRight(before, " \t\r\n")
+	lastSlash := strings.LastIndex(before, "/")
+	if lastSlash < 0 {
+		return ""
+	}
+	name := strings.TrimSpace(before[lastSlash+1:])
+	return name
+}
+
 func parsePredefinedCMapName(name string) (registry, ordering string, supplement int) {
 	// Strip -H/-V suffix if present.
 	base := name
@@ -1752,6 +2059,71 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	// Check /Encoding /Differences for explicit ".notdef" entries.
 	if r := checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, rule); r != nil {
 		return r
+	}
+
+	if usage == nil || len(usage.charCodes) == 0 {
+		return nil
+	}
+
+	subtype := fontSubtype(ctx, doc, fontDict)
+
+	// For Type1/CFF: if the encoding explicitly maps a used charCode to
+	// ".notdef", it's a violation. For charCodes below 0x20 (control range)
+	// with no encoding entry, the glyph is .notdef since standard encodings
+	// don't define glyphs for control characters. For charCodes >= 0x20,
+	// absence of explicit encoding doesn't imply .notdef (standard encoding
+	// provides defaults for printable ASCII).
+	if subtype == "Type1" || subtype == "MMType1" {
+		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+		if len(enc) > 0 {
+			for code := range usage.charCodes {
+				glyphName := enc[code]
+				if glyphName == ".notdef" {
+					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+				}
+				if glyphName == "" && code < 0x20 { //nolint:mnd
+					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+				}
+			}
+		}
+	}
+
+	// For TrueType: compose PDF encoding → glyph name → GID via post table.
+	// If post table absent, use cmap directly for charCode 0 (always .notdef).
+	if subtype == "TrueType" {
+		fd := findFontDescriptor(ctx, doc, fontDict)
+		if fd != nil {
+			fontData := extractFontProgramData(ctx, doc, fd)
+			if fontData != nil {
+				glyphNames := typography.ExtractGlyphNames(fontData)
+				if glyphNames != nil {
+					// Build glyphName→GID reverse map.
+					nameToGID := make(map[string]uint16, len(glyphNames))
+					for gid, gn := range glyphNames {
+						if _, ok := nameToGID[gn]; !ok {
+							nameToGID[gn] = gid
+						}
+					}
+					enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+					for code := range usage.charCodes {
+						glyphName := enc[code]
+						if glyphName == "" || glyphName == ".notdef" {
+							return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+						}
+						if gid, ok := nameToGID[glyphName]; ok && gid == 0 {
+							return failf(rule, "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
+						}
+					}
+				} else {
+					// No post table glyph names — use cmap directly.
+					// Only flag charCode 0 → GID 0 (universally .notdef).
+					charToGID := typography.ExtractCharCodeToGID(fontData)
+					if charToGID != nil && usage.charCodes[0] && charToGID[0] == 0 {
+						return failf(rule, "font %s on page %d: charCode 0 maps to GID 0 (.notdef)", fontName, pageNum)
+					}
+				}
+			}
+		}
 	}
 
 	return nil

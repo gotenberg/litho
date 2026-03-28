@@ -8,9 +8,9 @@
 
 | Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | Round 11-12 | Round 13 | Round 14 | Delta (total) |
 |--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|-------------|----------|----------|---------------|
-| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | 2,276 (87.5%) | 2,281 (87.7%) | **2,359 (90.7%)** | +870 |
+| **Pass** | 1,489 (57.3%) | 1,993 (76.6%) | 2,055 (79.0%) | 2,080 (80.0%) | 2,146 (82.5%) | 2,158 (83.0%) | 2,173 (83.5%) | 2,188 (84.1%) | 2,194 (84.4%) | 2,210 (85.0%) | 2,241 (86.2%) | 2,276 (87.5%) | 2,281 (87.7%) | **2,439 (93.8%)** | +950 |
 | **False Positives** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | 4 | 0 | **0** | -97 |
-| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | 320 | 320 | **242** | -772 |
+| **False Negatives** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | 320 | 320 | **162** | -852 |
 
 
 ### Progress by tier
@@ -36,7 +36,7 @@
 | Round 11 (parser-level §6.1.x) | 2,241 | 37 | 322 | 86.2% |
 | Round 12 (§6.1.x + FP fixes) | 2,276 | 4 | 320 | 87.5% |
 | Round 13 (zero FP) | 2,281 | 0 | 320 | 87.7% |
-| **Round 14 (multi-FN push)** | **2,359** | **0** | **242** | **90.7%** |
+| **Round 14 (multi-FN push)** | **2,439** | **0** | **162** | **93.8%** |
 
 ### Initial results (before improvements)
 
@@ -781,11 +781,39 @@ Improved XMP property type validation to catch 16 additional FN:
 | 14 | **Implementation limits** — Four sub-fixes: (a) DocInfo dict: resolve indirect ref before checking keys; (b) Catalog /Version: require exactly 3 chars `"2.n"`, reject `"2.00"`; (c) content stream reals > 32767 for PDF/A-1; (d) trailer /ID: reject empty string elements. | `file_structure.go`, `document.go`, `content_state.go` | **-7 FN** |
 | 15 | **Type 1 CharSet completeness** — For PDF/UA-1 §7.21.4.2: if FontDescriptor has /CharSet, verify it lists ALL glyph names from the font program. Parses /CharSet string and compares against `ExtractGlyphNames()` output. | `fonts.go` | **-2 FN** |
 | 16 | **Rendering intent `ri` operator + Form XObject ExtGState** — Added `ri` operator validation to `checkContentStreamResources` (invalid intent names like `/Custom`). Extended graphics checks to scan Form XObject ExtGState entries for halftone/intent violations. | `content_state.go`, `graphics.go` | **-1 FN** |
+| 17 | **Part-specific XMP property registry** — For PDF/A-1, properties added after the 2004 XMP spec (xmp:Rating, xmp:Label, pdf:Trapped, all exif/aux, crs, xmpDM properties) are now flagged as "unknown property in predefined schema." Uses `xmpPart1Properties` map to gate property lookup by part number. | `xmp.go` | **-6 FN** |
+| 18 | **Implicit DeviceGray detection** — Content streams using painting operators (`f`, `S`, `B`, etc.) without any prior colour space setting implicitly use DeviceGray. Track fill/stroke CS state through `q`/`Q` save/restore in both `scanContentStreamDeviceCS` and `scanFormXObjectCS`. | `color.go` | **-3 FN** |
+| 19 | **Type1/TrueType .notdef detection** — For Type1: flag charCodes < 0x20 with empty encoding (control chars = .notdef). For TrueType: compose encoding→post table for GID 0, or use cmap directly for charCode 0. | `fonts.go` | **-4 FN** |
+| 20 | **CFF FontMatrix + glyph name width mapping** — Fixed `ReadUnitsPerEm` for bare CFF fonts: parses FontMatrix from Top DICT (nibble-encoded reals) to compute correct upm (e.g., 2048 instead of default 1000). This unblocked the charCode→glyphName→GID width mapping for Type1/CFF fonts. Added `cff.ReadUnitsPerEm`, `parseFontMatrixScale`, `parseRealNumber`. | `cff/cff.go`, `font.go`, `fonts.go` | **-2 FN** |
+| 21 | **PUA ActualText check** — For fonts with PUA ToUnicode mappings (U+E000-U+F8FF), check if ActualText exists in either the structure tree or content stream. Only flags when zero ActualText found anywhere (conservative: avoids FP from partial ActualText coverage). | `fonts.go` | **-2 FN** |
+| 22 | **Content stream resource completeness: inherited resources + Type3 CharProcs** — Two sub-fixes: (a) pages with inherited-only Resources (no own /Resources key) now flagged when content references named resources; (b) Type3 font CharProc content streams checked for resource references without explicit Resources dict. Fixed code ordering to check resources before early-continue on nil Resources. | `graphics.go` | **-4 FN** |
+| 23 | **HTO key forbidden + annotation appearance ExtGState + Type 5 sub-halftone TF** — Three sub-fixes: (a) check /HTO key (alongside /HTP) in ExtGState; (b) scan annotation appearance Resources/ExtGState for rendering intent and halftone violations; (c) for parts 2-3, check Type 5 halftone sub-components for TransferFunction (PDF/A-4 excluded due to permissive ISO 32000-2 TF rules). | `graphics.go` | **-1 FN** |
+| 24 | **Form field /TU key** — PDF/UA-1 §7.18.1 t3: form fields must have non-empty /TU or Alt on enclosing Form structure element. Walks /AcroForm/Fields recursively, exempts Hidden/Invisible annotations and annotations with Rect outside CropBox. Falls back to checking structure tree for Form elements with /Alt. | `accessibility.go` | **-4 FN** |
+| 25 | **Embedded file spec /F and /UF** — Rewrote `checkPDFUAFileSpecFUF` to scan ALL file spec objects with /EF key (not just the EmbeddedFiles name tree). Catches file specs referenced by FileAttachment annotations that aren't in the name tree. | `accessibility.go` | **-4 FN** |
+| 26 | **Table column count consistency** — Added `validateTableColumnConsistency`: collects all TR rows (including via THead/TBody/TFoot), counts ColSpan-adjusted columns per row, verifies consistency. Skips tables with RowSpan > 1 (grid model too complex). Supports both PDF/UA-1 §7.2 t43 and PDF/UA-2 §8.2.5.26 t3/t4. | `structure.go` | **-6 FN** |
+| 27 | **Namespace role mapping** — PDF/UA-2 §8.2.4 t3: detect same-namespace role mappings in RoleMapNS. Walks all namespace dicts, checks each mapping target namespace URI against source. Also added infrastructure for t1/t4 standard namespace membership checking. | `accessibility.go` | **-2 FN** |
+| 28 | **Circular role mapping for PDF/UA-2** — Enabled legacy `/RoleMap` checking for PDF/UA-2 (was PDF/UA-1 only). The existing `resolveToStandard` cycle detector now catches self-referential (`LI→LI`) and indirect circular (`Standard→Text body→Standard`) mappings. Restricted standard-type-remapping check to PDF/UA-1 only (PDF/UA-2 allows it). | `structure.go` | **-4 FN** |
+| 29 | **Table column count with RowSpan grid model** — Replaced the skip-on-RowSpan approach with a proper grid model (`computeEffectiveColumns`). Tracks which column positions are occupied by RowSpan carry-over using a carry map. Fixed off-by-one: carry set to `rs` (not `rs-1`) so the same-row decrement doesn't prematurely clear it. | `structure.go` | **-2 FN** |
+| 30 | **Strongly vs weakly structured headings** — PDF/UA-1 §7.4.4 t2/t3: detect if document uses both H (generic) and H1-H6 (specific) headings. Tracks `hasGenericH` and `hasSpecificH` flags during structure tree walk. | `structure.go` | **-4 FN** |
+| 31 | **Formula Alt/ActualText** — PDF/UA-1 §7.7 t1: Formula structure elements must have /Alt or /ActualText (presence check). | `structure.go` | **-1 FN** |
+| 32 | **Note /ID entry** — PDF/UA-1 §7.9 t1/t2: Note structure elements must have /ID entry, and IDs must be unique across the document. Tracks seen IDs in `noteIDs` map during tree walk. | `structure.go` | **-3 FN** |
+| 33 | **L Caption position** — PDF/UA-1 §7.2 t40: L (list) element Caption must be first child. Added `L` case to `validateCaptionPosition`. | `structure.go` | **-2 FN** |
+| 34 | **TOC Caption position** — PDF/UA-1 §7.2 t28: TOC element Caption must be first child. Added `TOC` case to `validateCaptionPosition`. | `structure.go` | **-2 FN** |
+| 35 | **Link Contents** — PDF/UA-1 §7.18.5 t2: Link annotations must have non-empty /Contents. Scans all pages for Link annotations. | `accessibility.go` | **-2 FN** |
+| 36 | **Media clip CT/Alt** — PDF/UA-1 §7.18.6.2 t1/t2: media clip dicts (Screen → Rendition → /C) must have /CT and /Alt keys. Initially checked the wrong dict (/D data dict); fixed to check /C clip dict. | `accessibility.go` | **-2 FN** |
+| 37 | **CIDSystemInfo Supplement for PDF/UA + embedded CMap validation** — Extended Supplement check (`cidSupplement > cmapSupplement`) to also run for PDF/UA profiles (was parts 2+ only). Also flag embedded CMap streams missing CIDSystemInfo, and unparseable predefined CMap names. | `fonts.go` | **-2 FN** |
+| 38 | **Content marking §7.1 t1/t2/t3** — Full content stream marked content parser: tracks BMC/BDC/EMC nesting with `markerKind` (Artifact vs tagged vs taggedMCID). t3: detects painting operators at depth 0, exempts `Do` to tagged Form XObjects. t1: Artifact inside tagged span with MCID. t2: tagged span with MCID inside Artifact. Key insight: only MCID-bearing spans count as "tagged content" for nesting violations; BMC/BDC without MCID are just grouping markers. | `accessibility.go` | **-4 FN** |
+| 39 | **CMap embedding, WMode, and usecmap** — PDF/UA-1 §7.21.3.3: t1: non-predefined CMaps must be embedded. t2: embedded CMap dict WMode must match stream program WMode. t3: usecmap must not reference non-predefined CMaps. Parses CMap stream program for `/WMode N def` and `/<name> usecmap`. | `fonts.go` | **-4 FN** |
+| 40 | **Link destination consistency** — PDF/UA-2 §8.2.5.20 t2: Link annotations within a single Link/Reference structure element must target the same destination. Collects OBJR Link annotations, extracts destinations via /Dest or /A GoTo/URI, compares. | `structure.go` | **-1 FN** |
+| 41 | **Content marking for PDF/UA-2** — Extended `checkContentMarking` from PDF/UA-1 only to all PDF/UA profiles. Uses `Rule_14289_2_8_2_2_t01` for PDF/UA-2 (§8.2.2 t1: untagged content must be artifact). | `accessibility.go` | **-2 FN** |
+| 42 | **Cross-namespace role mapping chain detection** — Extended §8.2.4 t3 check to follow RoleMapNS chains through intermediate namespaces. Detects indirect same-namespace mappings like `Q`(PDF2.0) → `T`(XHTML) → `P`(PDF2.0) where the chain returns to the source namespace. | `accessibility.go` | **-1 FN** |
+| 43 | **CMap embedding for PDF/UA-2** — Extended `checkCMapEmbedding` with profile-aware rules and predefined CMap lists. For PDF/UA-2 (ISO 32000-2 Table 116), only Identity-H/V are predefined — named CMaps like "Adobe-Korea1-2" require embedding. Also checks `/UseCMap` dict key for non-predefined references. Fixed `extractUseCMap` false match on single-letter names. | `fonts.go` | **-2 FN** |
+| 44 | **pdfuaid property prefix validation** — PDF/UA §5 t4/t5: validate `amd`/`corr`/`rev` prefix and `rev` 4-digit year value. Handles both pdfa and pdfua namespace URIs. | `accessibility.go` | **-4 FN** |
 
-### Milestone: 90.7% (2,359 / 2,601)
+### Milestone: 93.8% (2,439 / 2,601)
 
 | Metric | Baseline | Current | Delta |
 |--------|----------|---------|-------|
-| **Pass** | 1,489 (57.3%) | 2,359 (90.7%) | +870 (+58.4%) |
+| **Pass** | 1,489 (57.3%) | 2,439 (93.8%) | +950 (+63.8%) |
 | **False Positives** | 97 | 0 | -97 (-100%) |
-| **False Negatives** | 1,014 | 242 | -772 (-76.1%) |
+| **False Negatives** | 1,014 | 162 | -852 (-84.0%) |

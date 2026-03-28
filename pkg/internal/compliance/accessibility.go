@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // checkAccessibilityGroup validates PDF/UA accessibility requirements.
@@ -55,11 +57,17 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 	// 9. OC config names (PDF/UA) — Optional content configuration dicts must have /Name key.
 	results = append(results, checkOCConfigNames(ctx, doc, catalog, profile)...)
 
-	// 10. PDF/UA identification (PDF/UA-2) — XMP must contain pdfuaid:part=2.
+	// 10. PDF/UA identification — XMP pdfuaid namespace validation.
 	results = append(results, checkPDFUAIdentification(ctx, doc, catalog, profile)...)
+
+	// 10b. PDF/UA-id property prefix validation (§5 t4/t5).
+	results = append(results, checkPDFUAIDPrefixes(ctx, doc, catalog, profile)...)
 
 	// 11. Namespaces (PDF/UA-2) — /StructTreeRoot must have /Namespaces array.
 	results = append(results, checkNamespaces(ctx, doc, catalog, profile)...)
+
+	// 11b. Namespace role mapping validation (PDF/UA-2 §8.2.4).
+	results = append(results, checkNamespaceRoleMapping(ctx, doc, catalog, profile)...)
 
 	// 12. Link nesting (PDF/UA-2) — Link annotations must be nested in Link structure elements.
 	results = append(results, checkLinkNesting(ctx, doc, catalog, profile)...)
@@ -72,6 +80,18 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 
 	// 15. File specification /F and /UF (PDF/UA-1) — §7.11 t01.
 	results = append(results, checkPDFUAFileSpecFUF(ctx, doc, catalog, profile)...)
+
+	// 16. Form field TU key (PDF/UA-1 §7.18.1 t03).
+	results = append(results, checkFormFieldTU(ctx, doc, catalog, profile)...)
+
+	// 17. Link annotation Contents (PDF/UA-1 §7.18.5 t02).
+	results = append(results, checkLinkContents(ctx, doc, catalog, profile)...)
+
+	// 18. Media clip data CT and Alt (PDF/UA-1 §7.18.6.2 t01/t02).
+	results = append(results, checkMediaClipData(ctx, doc, catalog, profile)...)
+
+	// 19. Content marking (PDF/UA-1 §7.1 t3).
+	results = append(results, checkContentMarking(ctx, doc, catalog, profile)...)
 
 	slog.Debug("compliance_2/accessibility: checks complete", "violations", len(results))
 	return results
@@ -1132,6 +1152,113 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 	return nil
 }
 
+// checkPDFUAIDPrefixes validates that pdfuaid properties use the correct
+// "pdfuaid" namespace prefix and that pdfuaid:rev is a 4-digit year.
+func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if !isPDFUA(profile) {
+		return nil
+	}
+
+	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
+	if !ok {
+		return nil
+	}
+
+	// Extract the prefix used for the pdfuaid namespace URI.
+	// PDF/UA-2 may use "http://www.aiim.org/pdfua/ns/id/" instead of the
+	// PDF/A ID namespace.
+	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
+	prefixMap := xmpExtractPrefixMap(xmpData)
+	pdfuaidPrefix := prefixMap[xmpPdfaIDNamespace]
+	pdfuaPrefix := prefixMap[pdfuaIDNamespace]
+
+	var results []Result
+	raw := string(xmpData)
+
+	if profile == "PDF/UA-1" {
+		// t4: "amd" property must use "pdfuaid" prefix.
+		if strings.Contains(raw, ":amd") && pdfuaidPrefix != "pdfuaid" {
+			// Only flag if "amd" appears with a non-pdfuaid prefix.
+			if pdfuaidPrefix != "" && strings.Contains(raw, pdfuaidPrefix+":amd") {
+				// The prefix is wrong but the property exists.
+			} else if !strings.Contains(raw, "pdfuaid:amd") && strings.Contains(raw, ":amd") {
+				results = append(results, failf(Rule_14289_1_5_t04,
+					"property 'amd' does not use 'pdfuaid' prefix")...)
+			}
+		}
+		// t5: "corr" property must use "pdfuaid" prefix.
+		if strings.Contains(raw, ":corr") && pdfuaidPrefix != "pdfuaid" {
+			if !strings.Contains(raw, "pdfuaid:corr") && strings.Contains(raw, ":corr") {
+				results = append(results, failf(Rule_14289_1_5_t05,
+					"property 'corr' does not use 'pdfuaid' prefix")...)
+			}
+		}
+	}
+
+	if profile == "PDF/UA-2" {
+		// t4: "rev" property must use "pdfuaid" prefix.
+		// Check both pdfa and pdfua namespace URIs.
+		effectivePrefix := pdfuaidPrefix
+		if effectivePrefix == "" {
+			effectivePrefix = pdfuaPrefix
+		}
+		if effectivePrefix != "" && effectivePrefix != "pdfuaid" {
+			if strings.Contains(raw, effectivePrefix+":rev") {
+				results = append(results, failf(Rule_14289_2_5_t04,
+					"property 'rev' uses prefix %q instead of 'pdfuaid'", effectivePrefix)...)
+			}
+		}
+		// t5: pdfuaid:rev must be a 4-digit year.
+		revValue := extractXMPPropertyValue(raw, "pdfuaid", "rev")
+		if revValue == "" && effectivePrefix != "" {
+			revValue = extractXMPPropertyValue(raw, effectivePrefix, "rev")
+		}
+		if revValue != "" && !isFourDigitYear(revValue) {
+			results = append(results, failf(Rule_14289_2_5_t05,
+				"pdfuaid:rev value %q is not a 4-digit year", revValue)...)
+		}
+	}
+
+	return results
+}
+
+// extractXMPPropertyValue extracts the value of prefix:localName from raw XMP.
+// Handles both attribute form (prefix:name="value") and element form (<prefix:name>value</prefix:name>).
+func extractXMPPropertyValue(raw, prefix, localName string) string {
+	key := prefix + ":" + localName
+	// Attribute form: key="value"
+	if idx := strings.Index(raw, key+"=\""); idx >= 0 {
+		start := idx + len(key) + 2
+		end := strings.Index(raw[start:], "\"")
+		if end >= 0 {
+			return raw[start : start+end]
+		}
+	}
+	// Element form: <key>value</key>
+	openTag := "<" + key + ">"
+	closeTag := "</" + key + ">"
+	if idx := strings.Index(raw, openTag); idx >= 0 {
+		start := idx + len(openTag)
+		end := strings.Index(raw[start:], closeTag)
+		if end >= 0 {
+			return strings.TrimSpace(raw[start : start+end])
+		}
+	}
+	return ""
+}
+
+func isFourDigitYear(s string) bool {
+	if len(s) != 4 { //nolint:mnd
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // --- 11. Namespaces (PDF/UA-2) ---
 
 func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
@@ -1195,6 +1322,216 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 	}
 
 	return results
+}
+
+// --- 11b. Namespace role mapping (PDF/UA-2 §8.2.4) ---
+
+// standardNamespaceURIs lists the namespace URIs that are "standard" per
+// ISO 32000-2:2020, 14.8.6.
+//
+//nolint:gochecknoglobals // static lookup table
+var standardNamespaceURIs = map[string]bool{
+	"http://iso.org/pdf/ssn":             true, // PDF 1.7
+	"http://iso.org/pdf2/ssn":            true, // PDF 2.0
+	"http://www.w3.org/1998/Math/MathML": true, // MathML
+}
+
+// checkNamespaceRoleMapping validates PDF/UA-2 §8.2.4:
+// - t1/t4: all structure elements must belong to or be role-mapped to a standard namespace
+// - t3: within a namespace, types shall not be role-mapped to types in the same namespace
+func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+
+	// Collect namespace dicts and their URIs.
+	nsArr, _ := document.ResolveArray(ctx, doc, treeRoot["Namespaces"])
+
+	// Build a map of namespace URI → RoleMapNS dict for chain following.
+	nsByURI := make(map[string]ast.PdfDict)
+	for _, nsObj := range nsArr {
+		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
+		if nsDict == nil {
+			continue
+		}
+		uri, _ := document.ResolveString(ctx, doc, nsDict["NS"])
+		if len(uri) > 0 {
+			rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"])
+			if rmns != nil {
+				nsByURI[string(uri)] = rmns
+			}
+		}
+	}
+
+	// t3: check each namespace's RoleMapNS. Follow chains through intermediate
+	// namespaces — if the final target resolves back to the source namespace
+	// (directly or indirectly), it's a same-namespace mapping violation.
+	var results []Result
+	for _, nsObj := range nsArr {
+		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
+		if nsDict == nil {
+			continue
+		}
+		srcURI, _ := document.ResolveString(ctx, doc, nsDict["NS"])
+		rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"])
+		if rmns == nil {
+			continue
+		}
+		for typeName, mappingObj := range rmns {
+			if roleMapChainReturnsSameNS(ctx, doc, string(srcURI), string(typeName), nsByURI) {
+				results = append(results, failf(Rule_14289_2_8_2_4_t03,
+					"namespace %q: type %s maps back to same namespace through chain",
+					string(srcURI), typeName)...)
+			}
+			_ = mappingObj
+		}
+	}
+
+	// t1/t4: walk structure tree, check each element resolves to a standard namespace.
+	// Elements with no explicit /NS use the first namespace in the array.
+	defaultNSURI := ""
+	if len(nsArr) > 0 {
+		nsDict, _ := document.ResolveDict(ctx, doc, nsArr[0])
+		if nsDict != nil {
+			ns, _ := document.ResolveString(ctx, doc, nsDict["NS"])
+			defaultNSURI = string(ns)
+		}
+	}
+
+	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsArr, &results)
+	return results
+}
+
+// walkNSCheck recursively walks structure elements and checks namespace membership.
+func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, results *[]Result) {
+	if ctx.Err() != nil {
+		return
+	}
+
+	sType, _ := document.ResolveName(ctx, doc, node["S"])
+	if sType != "" {
+		// Determine the element's namespace URI.
+		elemNSURI := defaultNSURI
+		if nsObj, ok := node["NS"]; ok {
+			nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
+			if nsDict != nil {
+				ns, _ := document.ResolveString(ctx, doc, nsDict["NS"])
+				if len(ns) > 0 {
+					elemNSURI = string(ns)
+				}
+			}
+		}
+
+		// Check if the element's namespace (or role-mapped target) is standard.
+		if !standardNamespaceURIs[elemNSURI] {
+			// Check if the namespace has a RoleMapNS that maps to a standard NS.
+			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) {
+				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
+					"structure type %s in namespace %q is not mapped to a standard namespace",
+					sType, elemNSURI)...)
+				return // One violation is enough per document.
+			}
+		}
+	}
+
+	kObj := node["K"]
+	if kObj == nil {
+		return
+	}
+	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
+		for _, kid := range arr {
+			d, _ := document.ResolveDict(ctx, doc, kid)
+			if d != nil {
+				walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, results)
+			}
+		}
+	} else if d, _ := document.ResolveDict(ctx, doc, kObj); d != nil {
+		walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, results)
+	}
+}
+
+// typeMapsToStandardNS checks if a structure type in a given namespace has a
+// RoleMapNS entry that ultimately resolves to a standard namespace.
+func typeMapsToStandardNS(ctx context.Context, doc *document.Document, typeName, nsURI string, nsArr ast.PdfArray) bool {
+	// Find the namespace dict for nsURI.
+	for _, nsObj := range nsArr {
+		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
+		if nsDict == nil {
+			continue
+		}
+		ns, _ := document.ResolveString(ctx, doc, nsDict["NS"])
+		if string(ns) != nsURI {
+			continue
+		}
+		rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"])
+		if rmns == nil {
+			return false
+		}
+		mappingObj, ok := rmns[ast.PdfName(typeName)]
+		if !ok {
+			return false
+		}
+		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
+		if len(arr) < 2 { //nolint:mnd
+			return false
+		}
+		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
+		if targetNSDict == nil {
+			return false
+		}
+		targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
+		return standardNamespaceURIs[string(targetURI)]
+	}
+	return false
+}
+
+// roleMapChainReturnsSameNS follows a RoleMapNS chain starting from typeName
+// in srcNSURI and returns true if the chain eventually maps back to the
+// source namespace (directly or through intermediates).
+func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcNSURI string, typeName string, nsByURI map[string]ast.PdfDict) bool {
+	currentType := typeName
+	currentNS := srcNSURI
+	visited := map[string]bool{currentNS + ":" + currentType: true}
+
+	for range 10 { //nolint:mnd // max chain depth
+		rmns, ok := nsByURI[currentNS]
+		if !ok {
+			return false
+		}
+		mappingObj, ok := rmns[ast.PdfName(currentType)]
+		if !ok {
+			return false
+		}
+		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
+		if len(arr) < 2 { //nolint:mnd
+			return false
+		}
+		targetType, _ := document.ResolveName(ctx, doc, arr[0])
+		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
+		if targetNSDict == nil {
+			return false
+		}
+		targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
+		targetNS := string(targetURI)
+
+		if targetNS == srcNSURI {
+			return true // Chain resolves back to source namespace.
+		}
+
+		key := targetNS + ":" + string(targetType)
+		if visited[key] {
+			return false // Cycle without returning to source NS.
+		}
+		visited[key] = true
+		currentType = string(targetType)
+		currentNS = targetNS
+	}
+	return false
 }
 
 // --- 12. Link nesting (PDF/UA-2) ---
@@ -1442,65 +1779,41 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 	rule := Rule_14289_1_7_11_t01
 	var results []Result
 
-	// Walk embedded files from catalog /Names/EmbeddedFiles name tree.
-	namesObj, ok := catalog["Names"]
-	if !ok {
-		slog.Debug("compliance_2/accessibility: no /Names in catalog, skipping file spec check")
-		return nil
-	}
-
-	namesDict, err := document.ResolveDict(ctx, doc, namesObj)
-	if err != nil || namesDict == nil {
-		return nil
-	}
-
-	efObj, ok := namesDict["EmbeddedFiles"]
-	if !ok {
-		slog.Debug("compliance_2/accessibility: no /EmbeddedFiles in Names dict")
-		return nil
-	}
-
-	// Walk the name tree to find file spec dicts.
-	fileSpecs := collectNameTreeValues(ctx, doc, efObj)
-	for i, fsObj := range fileSpecs {
+	// Scan ALL file specification dicts with /EF key (embedded files) for
+	// non-empty /F and /UF. This covers file specs referenced from the
+	// EmbeddedFiles name tree, FileAttachment annotations, and other sources.
+	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
 			return results
 		}
-
-		fsDict, err := document.ResolveDict(ctx, doc, fsObj)
-		if err != nil || fsDict == nil {
+		if entry.Free {
 			continue
 		}
 
-		hasF := false
-		hasUF := false
-
-		if fObj, ok := fsDict["F"]; ok {
-			fStr, err := document.ResolveString(ctx, doc, fObj)
-			if err == nil && len(fStr) > 0 {
-				hasF = true
-			}
-		}
-		if ufObj, ok := fsDict["UF"]; ok {
-			ufStr, err := document.ResolveString(ctx, doc, ufObj)
-			if err == nil && len(ufStr) > 0 {
-				hasUF = true
-			}
+		dict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil || dict == nil {
+			continue
 		}
 
-		if !hasF || !hasUF {
-			slog.Debug("compliance_2/accessibility: file spec missing /F or /UF",
-				"index", i, "hasF", hasF, "hasUF", hasUF)
+		typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
+		if typeName != "Filespec" {
+			continue
+		}
+		if _, hasEF := dict["EF"]; !hasEF {
+			continue // Only check embedded file specs.
+		}
+
+		fStr, _ := document.ResolveString(ctx, doc, dict["F"])
+		ufStr, _ := document.ResolveString(ctx, doc, dict["UF"])
+
+		if len(fStr) == 0 || len(ufStr) == 0 {
 			results = append(results, Result{
 				Rule:    rule,
-				Context: fmt.Sprintf("file spec %d: F=%v, UF=%v", i, hasF, hasUF),
+				Context: fmt.Sprintf("object %d: file spec F=%v UF=%v", objNum, len(fStr) > 0, len(ufStr) > 0),
 			})
 		}
 	}
 
-	if len(results) == 0 {
-		slog.Debug("compliance_2/accessibility: all file specs have /F and /UF")
-	}
 	return results
 }
 
@@ -1772,9 +2085,419 @@ func annotAltRule(profile string) Rule {
 	return Rule_14289_1_7_18_1_t02
 }
 
+// --- 17. Link annotation Contents ---
+
+// checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
+// have a non-empty /Contents key providing an alternate description.
+func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	pages := collectPages(ctx, doc, catalog)
+	var results []Result
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annotsArr {
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if subtype != "Link" {
+				continue
+			}
+			contents, _ := document.ResolveString(ctx, doc, annot["Contents"])
+			if len(contents) == 0 {
+				results = append(results, failf(Rule_14289_1_7_18_5_t02,
+					"Link annotation without non-empty /Contents")...)
+				return results
+			}
+		}
+	}
+	return results
+}
+
+// --- 18. Media clip data ---
+
+// checkMediaClipData validates PDF/UA-1 §7.18.6.2: media clip data dicts
+// must have /CT (content type, t01) and /Alt (alternative text, t02).
+// Finds media clips via Screen annotation → Rendition action → clip → data.
+func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	var results []Result
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annotsArr {
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if subtype != "Screen" {
+				continue
+			}
+			// Follow: annotation /A → Rendition action /R → /C (media clip dict).
+			// The /CT and /Alt keys are on the clip dict, not the nested /D data dict.
+			aDict, _ := document.ResolveDict(ctx, doc, annot["A"])
+			if aDict == nil {
+				continue
+			}
+			rDict, _ := document.ResolveDict(ctx, doc, aDict["R"])
+			if rDict == nil {
+				continue
+			}
+			clipDict, _ := document.ResolveDict(ctx, doc, rDict["C"])
+			if clipDict == nil {
+				continue
+			}
+
+			// t01: /CT key must be present on the clip dict.
+			if _, hasCT := clipDict["CT"]; !hasCT {
+				results = append(results, failf(Rule_14289_1_7_18_6_2_t01,
+					"media clip missing /CT key")...)
+			}
+			// t02: /Alt key must be present on the clip dict.
+			if _, hasAlt := clipDict["Alt"]; !hasAlt {
+				results = append(results, failf(Rule_14289_1_7_18_6_2_t02,
+					"media clip missing /Alt key")...)
+			}
+		}
+	}
+	return results
+}
+
+// --- 19. Content marking ---
+
+// markerKind tracks whether a BMC/BDC span is Artifact or tagged content.
+type markerKind int
+
+const (
+	markerTagged     markerKind = iota // BMC/BDC with a structure tag, no MCID
+	markerTaggedMCID                   // BDC with MCID (real structure element reference)
+	markerArtifact                     // BMC /Artifact or BDC /Artifact
+)
+
+// checkContentMarking validates PDF/UA-1 §7.1:
+//   - t1: Artifact content must not appear inside tagged content
+//   - t2: Tagged content must not appear inside Artifact
+//   - t3: All painting operators must be inside a marked content span
+func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if !isPDFUA(profile) {
+		return nil
+	}
+
+	pages := collectPages(ctx, doc, catalog)
+	var results []Result
+
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+
+		data, err := getPageContentBytes(ctx, doc, page)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		ops, err := content.ParseStreamData(data)
+		if err != nil {
+			continue
+		}
+
+		// Track BMC/BDC/EMC nesting with marker kind (Artifact vs tagged).
+		var markerStack []markerKind
+		hasUntaggedPainting := false
+		allUntaggedIsTaggedDo := true
+		reportedT1 := false
+		reportedT2 := false
+		resources := getResources(ctx, doc, page)
+
+		classifyMarker := func(op content.Operation) markerKind {
+			if len(op.Operands) < 1 {
+				return markerTagged
+			}
+			tag, ok := op.Operands[0].(ast.PdfName)
+			if !ok {
+				return markerTagged
+			}
+			if tag == "Artifact" {
+				return markerArtifact
+			}
+			// Check for MCID in the properties dict (second operand).
+			if len(op.Operands) >= 2 { //nolint:mnd
+				if d, ok := op.Operands[1].(ast.PdfDict); ok {
+					if _, hasMCID := d["MCID"]; hasMCID {
+						return markerTaggedMCID
+					}
+				}
+			}
+			return markerTagged
+		}
+
+		inArtifact := func() bool {
+			return slices.Contains(markerStack, markerArtifact)
+		}
+		inTaggedMCID := func() bool {
+			return slices.Contains(markerStack, markerTaggedMCID)
+		}
+
+		for _, op := range ops {
+			switch op.Operator {
+			case "BMC", "BDC":
+				kind := classifyMarker(op)
+				// t1: Artifact inside tagged content with MCID.
+				if kind == markerArtifact && !reportedT1 && inTaggedMCID() {
+					results = append(results, failf(Rule_14289_1_7_1_t01,
+						"content marked as Artifact inside tagged content")...)
+					reportedT1 = true
+				}
+				// t2: Tagged content with MCID inside Artifact.
+				if kind == markerTaggedMCID && !reportedT2 && inArtifact() {
+					results = append(results, failf(Rule_14289_1_7_1_t02,
+						"tagged content inside content marked as Artifact")...)
+					reportedT2 = true
+				}
+				markerStack = append(markerStack, kind)
+			case "EMC":
+				if len(markerStack) > 0 {
+					markerStack = markerStack[:len(markerStack)-1]
+				}
+			case "Do":
+				if len(markerStack) == 0 {
+					hasUntaggedPainting = true
+					if !doTargetIsTagged(ctx, doc, resources, op) {
+						allUntaggedIsTaggedDo = false
+					}
+				}
+			case "f", "F", "f*", "S", "s", "B", "B*", "b", "b*",
+				"Tj", "TJ", "'", "\"", "sh":
+				if len(markerStack) == 0 {
+					hasUntaggedPainting = true
+					allUntaggedIsTaggedDo = false
+				}
+			}
+		}
+
+		// t3: painting operators outside any marked content span.
+		if hasUntaggedPainting && !allUntaggedIsTaggedDo {
+			rule := Rule_14289_1_7_1_t03
+			if profile == "PDF/UA-2" {
+				rule = Rule_14289_2_8_2_2_t01
+			}
+			results = append(results, failf(rule,
+				"page content not marked as Artifact or tagged")...)
+			return results
+		}
+	}
+	return results
+}
+
+// doTargetIsTagged checks if a Do operator's target XObject is a Form XObject
+// with its own structure tagging (StructParents or BMC/BDC markers).
+func doTargetIsTagged(ctx context.Context, doc *document.Document, resources ast.PdfDict, op content.Operation) bool {
+	if resources == nil || len(op.Operands) < 1 {
+		return false
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		return false
+	}
+	xoDict, _ := document.ResolveDict(ctx, doc, resources["XObject"])
+	if xoDict == nil {
+		return false
+	}
+	stream, err := document.ResolveStream(ctx, doc, xoDict[name])
+	if err != nil || stream.Dict == nil {
+		return false
+	}
+	st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+	if st != "Form" {
+		return false
+	}
+	// Form XObject with StructParents is tagged via structure tree.
+	if _, hasSP := stream.Dict["StructParents"]; hasSP {
+		return true
+	}
+	if _, hasSP := stream.Dict["StructParent"]; hasSP {
+		return true
+	}
+	return false
+}
+
 func ocConfigNameRule(profile string) Rule {
 	if profile == "PDF/UA-2" {
 		return Rule_14289_2_8_7_t01
 	}
 	return Rule_14289_1_7_10_t01
+}
+
+// --- 16. Form field TU key ---
+
+// checkFormFieldTU validates that form fields have a non-empty /TU key.
+// Per PDF/UA-1 §7.18.1 test 3: "A form field shall have a TU key present
+// or all its Widget annotations shall have alternative descriptions."
+// This check validates /TU presence and non-emptiness. The alternative
+// (Widget Alt in structure tree) is not checked due to complexity.
+func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	acroForm, err := document.ResolveDict(ctx, doc, catalog["AcroForm"])
+	if err != nil || acroForm == nil {
+		return nil
+	}
+
+	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
+	if err != nil {
+		return nil
+	}
+
+	var results []Result
+	for _, fieldObj := range fields {
+		results = append(results, checkFieldTURecursive(ctx, doc, fieldObj, 0)...)
+	}
+	return results
+}
+
+// annotRectOutsideCropBox checks if an annotation's /Rect is entirely outside
+// the page's /CropBox (or /MediaBox if no CropBox). Returns true if the
+// annotation is not visible on the page.
+func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
+	rect, err := document.ResolveArray(ctx, doc, annot["Rect"])
+	if err != nil || len(rect) < 4 { //nolint:mnd
+		return false
+	}
+	// Resolve the page to get CropBox/MediaBox.
+	pageObj := annot["P"]
+	if pageObj == nil {
+		return false
+	}
+	page, err := document.ResolveDict(ctx, doc, pageObj)
+	if err != nil || page == nil {
+		return false
+	}
+	box, err := document.ResolveArray(ctx, doc, page["CropBox"])
+	if err != nil || len(box) < 4 { //nolint:mnd
+		box, err = document.ResolveArray(ctx, doc, page["MediaBox"])
+		if err != nil || len(box) < 4 { //nolint:mnd
+			return false
+		}
+	}
+	// Parse rectangles.
+	rx1, ry1 := document.GetFloat(rect[0]), document.GetFloat(rect[1])
+	rx2, ry2 := document.GetFloat(rect[2]), document.GetFloat(rect[3])
+	bx1, by1 := document.GetFloat(box[0]), document.GetFloat(box[1])
+	bx2, by2 := document.GetFloat(box[2]), document.GetFloat(box[3])
+	// Normalise: ensure min < max.
+	if rx1 > rx2 {
+		rx1, rx2 = rx2, rx1
+	}
+	if ry1 > ry2 {
+		ry1, ry2 = ry2, ry1
+	}
+	if bx1 > bx2 {
+		bx1, bx2 = bx2, bx1
+	}
+	if by1 > by2 {
+		by1, by2 = by2, by1
+	}
+	// Check non-intersection.
+	return rx2 <= bx1 || rx1 >= bx2 || ry2 <= by1 || ry1 >= by2
+}
+
+// formStructElementHasAlt walks the structure tree looking for a Form element
+// with a non-empty /Alt entry. This is the alternative to /TU per §7.18.1 t3.
+func formStructElementHasAlt(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) bool {
+	if depth > 30 { //nolint:mnd
+		return false
+	}
+	sType, _ := document.ResolveName(ctx, doc, node["S"])
+	if sType == "Form" {
+		alt, _ := document.ResolveString(ctx, doc, node["Alt"])
+		if len(alt) > 0 {
+			return true
+		}
+	}
+	kObj := node["K"]
+	if kObj == nil {
+		return false
+	}
+	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
+		for _, kid := range arr {
+			kidDict, _ := document.ResolveDict(ctx, doc, kid)
+			if kidDict != nil && formStructElementHasAlt(ctx, doc, kidDict, depth+1) {
+				return true
+			}
+		}
+	} else if kidDict, _ := document.ResolveDict(ctx, doc, kObj); kidDict != nil {
+		return formStructElementHasAlt(ctx, doc, kidDict, depth+1)
+	}
+	return false
+}
+
+// checkFieldTURecursive checks a form field (and its children) for /TU.
+func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int) []Result {
+	if depth > 10 { //nolint:mnd
+		return nil
+	}
+	field, err := document.ResolveDict(ctx, doc, fieldObj)
+	if err != nil || field == nil {
+		return nil
+	}
+
+	// Check if this is a terminal field (has /FT or /Subtype Widget).
+	_, hasFT := field["FT"]
+	subtype, _ := document.ResolveName(ctx, doc, field["Subtype"])
+	isTerminal := hasFT || subtype == "Widget"
+
+	if isTerminal {
+		// Hidden or invisible annotations are exempt.
+		flags, _ := document.ResolveInt(ctx, doc, field["F"])
+		const (
+			invisBit  = 1 << 0 // bit 0
+			hiddenBit = 1 << 1 // bit 1
+			noViewBit = 1 << 5 // bit 5
+		)
+		if int(flags)&(hiddenBit|invisBit|noViewBit) != 0 {
+			return nil
+		}
+		// Annotations with Rect outside the page CropBox are exempt.
+		if annotRectOutsideCropBox(ctx, doc, field) {
+			return nil
+		}
+
+		// Check /TU key: must be present and non-empty.
+		tuStr, _ := document.ResolveString(ctx, doc, field["TU"])
+		if len(tuStr) > 0 {
+			return nil
+		}
+		// TU missing or empty — check if widget has Alt in structure tree.
+		catalog, _ := document.GetCatalog(ctx, doc)
+		treeRoot, _ := document.ResolveDict(ctx, doc, catalog.Dict["StructTreeRoot"])
+		if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, 0) {
+			return nil
+		}
+		fieldName, _ := document.ResolveString(ctx, doc, field["T"])
+		return failf(Rule_14289_1_7_18_1_t03,
+			"form field %q: missing or empty /TU key and no Alt on enclosing structure element", string(fieldName))
+	}
+
+	// Non-terminal: recurse into /Kids.
+	kids, err := document.ResolveArray(ctx, doc, field["Kids"])
+	if err != nil {
+		return nil
+	}
+	var results []Result
+	for _, kid := range kids {
+		results = append(results, checkFieldTURecursive(ctx, doc, kid, depth+1)...)
+	}
+	return results
 }

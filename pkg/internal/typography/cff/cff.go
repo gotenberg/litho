@@ -392,6 +392,189 @@ func (st *stringTable) get(sid int) string {
 	return ""
 }
 
+// ReadUnitsPerEm extracts the effective units-per-em from a CFF font's
+// FontMatrix in the Top DICT. Default is 1000 (FontMatrix [0.001 ...]).
+// Returns 0 if the data is not a valid CFF font.
+func ReadUnitsPerEm(data []byte) uint16 {
+	if len(data) < 4 || data[0] != 1 {
+		return 0
+	}
+	hdrSize := max(int(data[2]), 4)
+	nameEnd, err := skipINDEX(data, hdrSize)
+	if err != nil {
+		return 1000 //nolint:mnd
+	}
+	_, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return 1000 //nolint:mnd
+	}
+
+	scale := parseFontMatrixScale(topDictEntries[0])
+	if scale <= 0 {
+		return 1000 //nolint:mnd // default CFF FontMatrix
+	}
+	upm := uint16(1.0/scale + 0.5) //nolint:gosec,mnd
+	if upm == 0 {
+		return 1000 //nolint:mnd
+	}
+	return upm
+}
+
+// parseFontMatrixScale scans a CFF Top DICT for the FontMatrix operator (12 7)
+// and returns the first element (horizontal scale). Returns 0 if absent.
+// Handles both integer and real (nibble-encoded) number operands.
+func parseFontMatrixScale(dictData []byte) float64 {
+	// We need to track the last few operands as float64 to handle reals.
+	operands := make([]float64, 0, 6) //nolint:mnd
+
+	for i := 0; i < len(dictData); {
+		b := dictData[i]
+		switch {
+		case b >= 0 && b <= 21:
+			op := int(b)
+			if b == 12 && i+1 < len(dictData) {
+				i++
+				op = 1200 + int(dictData[i])
+			}
+			if op == 1207 && len(operands) >= 1 { //nolint:mnd // FontMatrix (12 7)
+				return operands[0]
+			}
+			operands = operands[:0]
+			i++
+		case b >= 32 && b <= 246: //nolint:mnd
+			operands = append(operands, float64(int32(b)-139))
+			i++
+		case b >= 247 && b <= 250: //nolint:mnd
+			if i+1 >= len(dictData) {
+				return 0
+			}
+			operands = append(operands, float64((int32(b)-247)*256+int32(dictData[i+1])+108))
+			i += 2
+		case b >= 251 && b <= 254: //nolint:mnd
+			if i+1 >= len(dictData) {
+				return 0
+			}
+			operands = append(operands, float64(-(int32(b)-251)*256-int32(dictData[i+1])-108))
+			i += 2
+		case b == 28: //nolint:mnd
+			if i+2 >= len(dictData) {
+				return 0
+			}
+			operands = append(operands, float64(int16(binary.BigEndian.Uint16(dictData[i+1:i+3]))))
+			i += 3
+		case b == 29: //nolint:mnd
+			if i+4 >= len(dictData) {
+				return 0
+			}
+			operands = append(operands, float64(int32(binary.BigEndian.Uint32(dictData[i+1:i+5]))))
+			i += 5
+		case b == 30: //nolint:mnd
+			// Real number: nibble-encoded.
+			val, end := parseRealNumber(dictData, i+1)
+			operands = append(operands, val)
+			i = end
+		default:
+			i++
+		}
+	}
+	return 0
+}
+
+// parseRealNumber decodes a CFF nibble-encoded real number starting at pos.
+// Returns the value and the position after the last byte consumed.
+func parseRealNumber(data []byte, pos int) (float64, int) {
+	var buf [32]byte
+	n := 0
+	for pos < len(data) {
+		b := data[pos]
+		pos++
+		for _, shift := range []uint{4, 0} {
+			nibble := (b >> shift) & 0x0F
+			if nibble == 0x0F {
+				goto done
+			}
+			if n >= len(buf)-1 {
+				goto done
+			}
+			switch {
+			case nibble <= 9: //nolint:mnd
+				buf[n] = '0' + byte(nibble)
+				n++
+			case nibble == 0x0A: //nolint:mnd
+				buf[n] = '.'
+				n++
+			case nibble == 0x0B: //nolint:mnd
+				buf[n] = 'E'
+				n++
+			case nibble == 0x0C: //nolint:mnd
+				buf[n] = 'E'
+				n++
+				buf[n] = '-'
+				n++
+			case nibble == 0x0E: //nolint:mnd
+				buf[n] = '-'
+				n++
+			}
+		}
+	}
+done:
+	if n == 0 {
+		return 0, pos
+	}
+	// Parse the string as float64.
+	val := 0.0
+	neg := false
+	i := 0
+	if buf[0] == '-' {
+		neg = true
+		i = 1
+	}
+	// Integer part.
+	for i < n && buf[i] >= '0' && buf[i] <= '9' {
+		val = val*10 + float64(buf[i]-'0')
+		i++
+	}
+	// Fractional part.
+	if i < n && buf[i] == '.' {
+		i++
+		frac := 0.1
+		for i < n && buf[i] >= '0' && buf[i] <= '9' {
+			val += float64(buf[i]-'0') * frac
+			frac /= 10
+			i++
+		}
+	}
+	// Exponent.
+	if i < n && buf[i] == 'E' {
+		i++
+		expNeg := false
+		if i < n && buf[i] == '-' {
+			expNeg = true
+			i++
+		}
+		exp := 0
+		for i < n && buf[i] >= '0' && buf[i] <= '9' {
+			exp = exp*10 + int(buf[i]-'0')
+			i++
+		}
+		if expNeg {
+			exp = -exp
+		}
+		mult := 1.0
+		for e := 0; e < exp; e++ {
+			mult *= 10
+		}
+		for e := 0; e > exp; e-- {
+			mult /= 10
+		}
+		val *= mult
+	}
+	if neg {
+		val = -val
+	}
+	return val, pos
+}
+
 // --- Glyph widths ---
 
 // GlyphWidths extracts advance widths from CFF charstring data.

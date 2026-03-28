@@ -708,6 +708,8 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 
 	// Track Do operator targets so we only scan referenced nested XObjects.
 	nestedXObjects := make(map[string]bool)
+	formFillCSSet := false
+	formStrokeCSSet := false
 
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(data)
@@ -720,17 +722,53 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 				}
 
 				switch op.Operator {
-				case "g", "G":
+				case "g":
 					usage.gray = true
-				case "rg", "RG":
+					formFillCSSet = true
+				case "G":
+					usage.gray = true
+					formStrokeCSSet = true
+				case "rg":
 					usage.rgb = true
-				case "k", "K":
+					formFillCSSet = true
+				case "RG":
+					usage.rgb = true
+					formStrokeCSSet = true
+				case "k":
 					usage.cmyk = true
-				case "cs", "CS":
+					formFillCSSet = true
+				case "K":
+					usage.cmyk = true
+					formStrokeCSSet = true
+				case "cs":
+					formFillCSSet = true
 					if len(op.Operands) >= 1 {
 						if name, ok := op.Operands[0].(ast.PdfName); ok {
 							markDeviceCS(string(name), &usage)
 						}
+					}
+				case "CS":
+					formStrokeCSSet = true
+					if len(op.Operands) >= 1 {
+						if name, ok := op.Operands[0].(ast.PdfName); ok {
+							markDeviceCS(string(name), &usage)
+						}
+					}
+				case "sc", "scn":
+					formFillCSSet = true
+				case "SC", "SCN":
+					formStrokeCSSet = true
+				case "f", "F", "f*":
+					if !formFillCSSet {
+						usage.gray = true
+					}
+				case "S", "s":
+					if !formStrokeCSSet {
+						usage.gray = true
+					}
+				case "B", "B*", "b", "b*":
+					if !formFillCSSet || !formStrokeCSSet {
+						usage.gray = true
 					}
 				case "Do":
 					if len(op.Operands) >= 1 {
@@ -1001,6 +1039,13 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 	slog.Debug("compliance_2/color: scanning content stream operators for device CS",
 		"page", pageIdx, "opCount", len(ops))
 
+	// Track whether fill/stroke CS has been explicitly set. If a painting
+	// operator runs without any prior CS setting, DeviceGray is implicitly used.
+	fillCSSet := false
+	strokeCSSet := false
+	type csState struct{ fill, stroke bool }
+	var csStack []csState
+
 	for idx, op := range ops {
 		// Check context every ~100 operators.
 		if idx%100 == 0 && ctx.Err() != nil { //nolint:mnd // per-spec checkpoint interval
@@ -1010,26 +1055,71 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 		}
 
 		switch op.Operator {
+		case "q":
+			csStack = append(csStack, csState{fillCSSet, strokeCSSet})
+		case "Q":
+			if len(csStack) > 0 {
+				prev := csStack[len(csStack)-1]
+				csStack = csStack[:len(csStack)-1]
+				fillCSSet = prev.fill
+				strokeCSSet = prev.stroke
+			}
 		case "g", "G":
-			slog.Debug("compliance_2/color: DeviceGray operator found",
-				"page", pageIdx, "operator", op.Operator)
 			usage.gray = true
+			if op.Operator == "g" {
+				fillCSSet = true
+			} else {
+				strokeCSSet = true
+			}
 		case "rg", "RG":
-			slog.Debug("compliance_2/color: DeviceRGB operator found",
-				"page", pageIdx, "operator", op.Operator)
 			usage.rgb = true
+			if op.Operator == "rg" {
+				fillCSSet = true
+			} else {
+				strokeCSSet = true
+			}
 		case "k", "K":
-			slog.Debug("compliance_2/color: DeviceCMYK operator found",
-				"page", pageIdx, "operator", op.Operator)
 			usage.cmyk = true
-		case "cs", "CS":
-			// cs/CS take a colour space name operand.
+			if op.Operator == "k" {
+				fillCSSet = true
+			} else {
+				strokeCSSet = true
+			}
+		case "cs":
+			fillCSSet = true
 			if len(op.Operands) >= 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
-					slog.Debug("compliance_2/color: cs/CS operator with operand",
-						"page", pageIdx, "operator", op.Operator, "csName", string(name))
 					markDeviceCS(string(name), &usage)
 				}
+			}
+		case "CS":
+			strokeCSSet = true
+			if len(op.Operands) >= 1 {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					markDeviceCS(string(name), &usage)
+				}
+			}
+		case "sc", "scn":
+			fillCSSet = true
+		case "SC", "SCN":
+			strokeCSSet = true
+		// Painting operators: if no CS has been set, implicit DeviceGray.
+		case "f", "F", "f*":
+			if !fillCSSet {
+				usage.gray = true
+			}
+		case "S", "s":
+			if !strokeCSSet {
+				usage.gray = true
+			}
+		case "B", "B*", "b", "b*":
+			if !fillCSSet || !strokeCSSet {
+				usage.gray = true
+			}
+		case "Tj", "TJ", "'", "\"":
+			// Text uses fill CS by default (Tr 0).
+			if !fillCSSet {
+				usage.gray = true
 			}
 		case "Do":
 			// Track XObject names referenced by Do operators.

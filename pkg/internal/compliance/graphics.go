@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // checkGraphicsGroup validates ExtGState, halftones, rendering intent, and
@@ -31,23 +32,32 @@ func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast
 		slog.Debug("compliance_2/graphics: checking page", "page", i+1)
 
 		res := getResources(ctx, doc, page)
+
+		// §6.2.2: check content stream resource completeness even when
+		// the page has no Resources (the absence itself may be a violation).
+		streamData, err := getPageContentBytes(ctx, doc, page)
+		if err == nil && len(streamData) > 0 {
+			_, hasOwnRes := page["Resources"]
+			if !hasOwnRes && contentReferencesResources(streamData) {
+				results = append(results, failf(missingResourceRule(part),
+					"page %d: content stream references resources but page has no explicitly associated Resources dictionary", i+1)...)
+			}
+			if res != nil {
+				// Content stream resource completeness.
+				results = append(results, checkContentStreamResources(ctx, doc, streamData, res, part, i+1)...)
+			}
+		}
+
 		if res == nil {
 			continue
 		}
 
 		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1)...)
 
-		streamData, err := getPageContentBytes(ctx, doc, page)
 		if err == nil && len(streamData) > 0 {
-			// Content stream state machine checks (OPM with ICCBased CMYK, etc.).
 			if part >= 2 {
 				results = append(results, checkContentStreamState(ctx, doc, streamData, res, part, i+1)...)
 			}
-			// Content stream resource completeness (§6.2.2).
-			if res == nil {
-				res = make(ast.PdfDict) // empty dict for lookup (page has no Resources)
-			}
-			results = append(results, checkContentStreamResources(ctx, doc, streamData, res, part, i+1)...)
 		}
 
 		// Also check Form XObject content streams for resource completeness.
@@ -60,6 +70,12 @@ func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast
 
 		// Scan Form XObject ExtGState for halftone/rendering intent violations.
 		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1)...)
+
+		// Check Type3 font CharProc resource completeness.
+		results = append(results, checkType3CharProcResources(ctx, doc, res, part, i+1)...)
+
+		// Scan annotation appearance ExtGState for halftone/rendering intent.
+		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1)...)
 	}
 
 	slog.Debug("compliance_2/graphics: checks complete", "violations", len(results))
@@ -108,6 +124,113 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 	}
 	return results
 	return results
+}
+
+// checkType3CharProcResources checks Type3 font CharProc content streams for
+// resource references. Type3 CharProcs are content streams that may reference
+// colour spaces, fonts, etc. If they do, the Type3 font dict must have an
+// explicitly associated /Resources entry.
+func checkType3CharProcResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int) []Result {
+	if pageRes == nil {
+		return nil
+	}
+	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
+	if err != nil || fontDict == nil {
+		return nil
+	}
+	var results []Result
+	for fontName, fontRef := range fontDict {
+		fd, err := document.ResolveDict(ctx, doc, fontRef)
+		if err != nil || fd == nil {
+			continue
+		}
+		subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"])
+		if subtype != "Type3" {
+			continue
+		}
+		// Check if CharProc content streams reference named resources.
+		_, hasOwnRes := fd["Resources"]
+		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
+		if err != nil || charProcs == nil {
+			continue
+		}
+		for _, cpObj := range charProcs {
+			stream, err := document.ResolveStream(ctx, doc, cpObj)
+			if err != nil {
+				continue
+			}
+			data, err := doc.DecodeStream(stream)
+			if err != nil || len(data) == 0 {
+				continue
+			}
+			if !hasOwnRes && contentReferencesResources(data) {
+				results = append(results, failf(missingResourceRule(part),
+					"page %d: Type3 font %s CharProc references resources without explicit Resources dictionary",
+					pageNum, fontName)...)
+				return results
+			}
+			// Also check that referenced resources exist in the Type3 Resources dict.
+			if hasOwnRes {
+				type3Res, _ := document.ResolveDict(ctx, doc, fd["Resources"])
+				if type3Res != nil {
+					results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, part, pageNum)...)
+				}
+			}
+		}
+	}
+	return results
+}
+
+// checkAnnotationAppearanceExtGState scans annotation appearance stream
+// resources for ExtGState entries (rendering intent, halftone, etc.).
+func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Document, page ast.PdfDict, profile string, part, pageNum int) []Result {
+	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil || len(annotsArr) == 0 {
+		return nil
+	}
+	var results []Result
+	for _, annotObj := range annotsArr {
+		annot, _ := document.ResolveDict(ctx, doc, annotObj)
+		if annot == nil {
+			continue
+		}
+		apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
+		if apDict == nil {
+			continue
+		}
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			apObj, ok := apDict[key]
+			if !ok {
+				continue
+			}
+			stream, err := document.ResolveStream(ctx, doc, apObj)
+			if err != nil {
+				continue
+			}
+			apRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+			if apRes != nil {
+				results = append(results, checkExtGStateGraphics(ctx, doc, apRes, profile, part, pageNum)...)
+			}
+		}
+	}
+	return results
+}
+
+// contentReferencesResources checks if a content stream has any operators
+// that reference named resources (Tf, cs/CS, Do, gs, sh, BDC/DP).
+func contentReferencesResources(streamData []byte) bool {
+	ops, err := content.ParseStreamData(streamData)
+	if err != nil {
+		return false
+	}
+	for _, op := range ops {
+		if _, ok := operatorResourceCategory[op.Operator]; ok && len(op.Operands) >= 1 {
+			if _, isName := op.Operands[0].(ast.PdfName); isName {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // checkFormXObjectExtGState scans Form XObject resources for ExtGState
@@ -255,6 +378,12 @@ func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ stri
 			"gs", gsName, "page", pageNum)
 		return failf(htpForbiddenRule(part), "page %d, ExtGState %s", pageNum, gsName)
 	}
+	// HTO key is also forbidden (PDF/A-4 §6.2.5 t3).
+	if _, hasHTO := gs["HTO"]; hasHTO {
+		slog.Debug("compliance_2/graphics: ExtGState contains forbidden HTO key",
+			"gs", gsName, "page", pageNum)
+		return failf(htpForbiddenRule(part), "page %d, ExtGState %s: HTO key forbidden", pageNum, gsName)
+	}
 	return nil
 }
 
@@ -343,6 +472,25 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 			slog.Debug("compliance_2/graphics: halftone has non-Default TransferFunction",
 				"gs", gsName, "page", pageNum)
 			results = append(results, failf(halftoneTransferRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
+		}
+	}
+
+	// For Type 5 composite halftones (parts 2-3 only): check sub-halftone
+	// dicts for TransferFunction. PDF/A-4 (ISO 32000-2) has more permissive
+	// TF rules that we can't fully distinguish pass/fail cases for.
+	if htType == 5 && part >= 2 && part <= 3 { //nolint:mnd
+		for key, subObj := range ht {
+			if key == "HalftoneType" || key == "HalftoneName" || key == "Type" || key == "TransferFunction" {
+				continue
+			}
+			subHT, err := document.ResolveDict(ctx, doc, subObj)
+			if err != nil || subHT == nil {
+				continue
+			}
+			if _, hasTF := subHT["TransferFunction"]; hasTF {
+				results = append(results, failf(halftoneTransferRule(part),
+					"page %d, ExtGState %s, halftone component %s has TransferFunction", pageNum, gsName, key)...)
+			}
 		}
 	}
 

@@ -69,6 +69,36 @@ var knownXMPNamespaces = map[string]bool{
 	"http://www.aiim.org/pdfa/ns/type#":      true,
 }
 
+// xmpPart1Properties lists the properties that were defined in the 2004/2005
+// XMP Specification (referenced by PDF/A-1). Properties in predefined namespaces
+// that are NOT in this map are considered "unknown" for PDF/A-1 and require an
+// extension schema declaration. Only namespaces whose property set differs from
+// the full registry need entries here.
+//
+//nolint:gochecknoglobals // static lookup table
+var xmpPart1Properties = map[string]map[string]bool{
+	// XMP Basic (xmp:) — 2004 spec defined all except Rating and Label
+	// (Rating was introduced in the 2012 XMP spec).
+	"http://ns.adobe.com/xap/1.0/": {
+		"Advisory": true, "BaseURL": true, "CreateDate": true,
+		"CreatorTool": true, "Identifier": true, "MetadataDate": true,
+		"ModifyDate": true, "Nickname": true, "Thumbnails": true,
+		// NOT included: Rating, Label (added in later XMP spec versions).
+	},
+	// Adobe PDF (pdf:) — 2004 spec defined these properties.
+	// Trapped was in the PDF Info dict but not in the 2004 XMP pdf schema.
+	"http://ns.adobe.com/pdf/1.3/": {
+		"Keywords": true, "PDFVersion": true, "Producer": true,
+		// NOT included: Trapped.
+	},
+	// EXIF Aux — NOT in the 2004 XMP spec. No properties predefined for part 1.
+	"http://ns.adobe.com/exif/1.0/aux/": {},
+	// Camera Raw Settings — NOT in the 2004 XMP spec.
+	"http://ns.adobe.com/camera-raw-settings/1.0/": {},
+	// XMP Dynamic Media — NOT in the 2004 XMP spec.
+	"http://ns.adobe.com/xmp/1.0/DynamicMedia/": {},
+}
+
 // pdfaExtension namespace URIs for schema, property, field, and type definitions.
 const (
 	xmpPdfaSchemaPrefix   = "http://www.aiim.org/pdfa/ns/schema#"
@@ -1845,6 +1875,15 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Re
 
 		for prop, pv := range props {
 			expectedType, known := registry[prop]
+			// For PDF/A-1: properties must be in the 2004 XMP spec.
+			// Properties added in later spec versions are "unknown."
+			if known && part == 1 {
+				if part1Props, ok := xmpPart1Properties[ns]; ok {
+					if _, inPart1 := part1Props[prop]; !inPart1 {
+						known = false
+					}
+				}
+			}
 			if !known {
 				// Property name not defined in predefined schema — violation.
 				slog.Debug("compliance_2/xmp: unknown property in predefined schema",
