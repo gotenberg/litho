@@ -137,6 +137,11 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 		}
 		slog.Debug("compliance_2/color: OutputIntent subtype", "index", i, "S", subtypeName)
 
+		// Only PDF/A OutputIntents provide device CS coverage.
+		// GTS_PDFA1 is the subtype for parts 1-3; GTS_PDFA for part 4.
+		// Other subtypes (e.g. GTS_PDFX) do not grant coverage.
+		isPDFAIntent := subtypeName == "GTS_PDFA1" || subtypeName == "GTS_PDFA"
+
 		destProfileObj, ok := intent["DestOutputProfile"]
 		if !ok {
 			// §6.2.2: OutputIntent without DestOutputProfile must have
@@ -180,7 +185,8 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			slog.Debug("compliance_2/color: invalid ICC colour space", "index", i, "colorSpace", hdr.colorSpace)
 			*results = append(*results, failf(outputIntentICCRule(part),
 				"OutputIntent[%d]: invalid colour space %q (expected GRAY, RGB  or CMYK)", i, hdr.colorSpace)...)
-		} else {
+		} else if isPDFAIntent {
+			// Only PDF/A OutputIntents grant device CS coverage.
 			iccColorSpace = hdr.colorSpace
 			hasValidICC = true
 		}
@@ -948,57 +954,57 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 
 		slog.Debug("compliance_2/color: checking Type3 font resources", "font", name)
 
+		// Scan CharProcs content streams for device CS operators.
+		// This must run even when the font has no /Resources dict, since
+		// Type3 fonts may legally inherit resources from the page.
+		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
+		if err == nil && charProcs != nil {
+			for cpName, cpObj := range charProcs {
+				stream, err := document.ResolveStream(ctx, doc, cpObj)
+				if err != nil {
+					continue
+				}
+				streamData, err := doc.DecodeStream(stream)
+				if err != nil {
+					continue
+				}
+				ops, err := content.ParseStreamData(streamData)
+				if err != nil {
+					continue
+				}
+				for _, op := range ops {
+					switch op.Operator {
+					case "g", "G":
+						usage.gray = true
+					case "rg", "RG":
+						usage.rgb = true
+					case "k", "K":
+						usage.cmyk = true
+					case "cs", "CS":
+						if len(op.Operands) >= 1 {
+							if csN, ok := op.Operands[0].(ast.PdfName); ok {
+								markDeviceCS(string(csN), usage)
+							}
+						}
+					}
+				}
+				slog.Debug("compliance_2/color: scanned Type3 CharProc", "font", name, "charProc", cpName)
+			}
+		}
+
+		// Scan font's own ColorSpace resource dict (if present).
 		fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"])
 		if err != nil || fontRes == nil {
 			continue
 		}
-
 		fontCSDict, err := document.ResolveDict(ctx, doc, fontRes["ColorSpace"])
 		if err != nil {
 			continue
 		}
-
 		for csName, csObj := range fontCSDict {
 			resolved := resolveCSName(ctx, doc, csObj)
 			slog.Debug("compliance_2/color: Type3 font colour space", "font", name, "csName", csName, "resolved", resolved)
 			markDeviceCS(resolved, usage)
-		}
-
-		// Also scan CharProcs content streams for device CS operators.
-		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
-		if err != nil || charProcs == nil {
-			continue
-		}
-		for cpName, cpObj := range charProcs {
-			stream, err := document.ResolveStream(ctx, doc, cpObj)
-			if err != nil {
-				continue
-			}
-			streamData, err := doc.DecodeStream(stream)
-			if err != nil {
-				continue
-			}
-			ops, err := content.ParseStreamData(streamData)
-			if err != nil {
-				continue
-			}
-			for _, op := range ops {
-				switch op.Operator {
-				case "g", "G":
-					usage.gray = true
-				case "rg", "RG":
-					usage.rgb = true
-				case "k", "K":
-					usage.cmyk = true
-				case "cs", "CS":
-					if len(op.Operands) >= 1 {
-						if csN, ok := op.Operands[0].(ast.PdfName); ok {
-							markDeviceCS(string(csN), usage)
-						}
-					}
-				}
-			}
-			slog.Debug("compliance_2/color: scanned Type3 CharProc", "font", name, "charProc", cpName)
 		}
 	}
 }

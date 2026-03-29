@@ -475,21 +475,35 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 		}
 	}
 
-	// For Type 5 composite halftones (parts 2-3 only): check sub-halftone
-	// dicts for TransferFunction. PDF/A-4 (ISO 32000-2) has more permissive
-	// TF rules that we can't fully distinguish pass/fail cases for.
-	if htType == 5 && part >= 2 && part <= 3 { //nolint:mnd
+	// For Type 5 composite halftones (parts 2+): validate TransferFunction
+	// on sub-halftone dicts per the VeraPDF rule:
+	//   - Default: always exempt
+	//   - CMYK primaries (Cyan/Magenta/Yellow/Black): TF must be absent
+	//   - Non-primary colorants (Red/Green/Blue/spots): TF must be present
+	if htType == 5 && part >= 2 { //nolint:mnd
+		cmykPrimaries := map[ast.PdfName]bool{
+			"Cyan": true, "Magenta": true, "Yellow": true, "Black": true,
+		}
+		htMetaKeys := map[ast.PdfName]bool{
+			"HalftoneType": true, "HalftoneName": true, "Type": true, "TransferFunction": true,
+		}
 		for key, subObj := range ht {
-			if key == "HalftoneType" || key == "HalftoneName" || key == "Type" || key == "TransferFunction" {
+			if htMetaKeys[key] || key == "Default" {
 				continue
 			}
 			subHT, err := document.ResolveDict(ctx, doc, subObj)
 			if err != nil || subHT == nil {
 				continue
 			}
-			if _, hasTF := subHT["TransferFunction"]; hasTF {
+			_, hasTF := subHT["TransferFunction"]
+			if cmykPrimaries[key] && hasTF {
+				// CMYK primary: TF must be absent.
 				results = append(results, failf(halftoneTransferRule(part),
-					"page %d, ExtGState %s, halftone component %s has TransferFunction", pageNum, gsName, key)...)
+					"page %d, ExtGState %s, CMYK halftone component %s has TransferFunction", pageNum, gsName, key)...)
+			} else if !cmykPrimaries[key] && !hasTF {
+				// Non-primary: TF must be present.
+				results = append(results, failf(halftoneTransferRule(part),
+					"page %d, ExtGState %s, non-primary halftone component %s missing TransferFunction", pageNum, gsName, key)...)
 			}
 		}
 	}

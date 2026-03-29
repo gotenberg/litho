@@ -86,6 +86,16 @@ func ParseStreamData(data []byte) ([]Operation, error) {
 	return parseOperations(p)
 }
 
+// ParseStreamDataFormatChecked parses content stream data with PDF/A format
+// checking enabled. Returns operations and any hex string format violations
+// detected by the parser.
+func ParseStreamDataFormatChecked(data []byte) ([]Operation, []error) {
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	p := parser.NewParser(lex).WithFormatChecking()
+	ops, _ := parseOperations(p)
+	return ops, p.FormatViolations
+}
+
 // ParsePageContent extracts, concatenates, and parses the content streams of a page or form XObject.
 func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfObject) ([]Operation, error) {
 	var streams []ast.PdfStream

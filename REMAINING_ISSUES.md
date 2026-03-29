@@ -1,6 +1,8 @@
 # Remaining False Negatives — Detailed Analysis
 
-**State:** 2,439 / 2,601 (93.8%), 0 FP, 162 FN
+**State:** 2,503 / 2,601 (96.2%), 0 FP, 98 FN
+
+**Round 15 fixes (64 files):** Device CS OutputIntent filtering, page-level transparency Group, pattern transparency, Type3 CharProc device CS, XMP part-1 property registry, XMP type overrides, CFF ValidCIDs, TrueType EmptyGIDs, Type0 CID odd-length strings, TrueType post-format-3 width heuristic, CFF charCode→GID name mapping, Type3 width checking, CharSet/CIDSet completeness, Differences AGL validation, pdfaid prefix/value/conformance fixes, DocInfo/XMP sync improvements, xref double-EOL, content stream hex strings, non-standard filter names, TransferFunction sub-halftone, inline image rendering intent, annotation BM transparency
 
 ---
 
@@ -428,3 +430,6 @@ This is a specialized binary format parser not yet implemented.
 8. **FN-E: File structure/syntax** — Requires parser-level changes
 9. **FN-G2: Separation tint transform deep comparison** — Fragile
 10. **FN-L: PDF/UA-2 structure containment** — Many distinct single-file rules
+
+
+4649bf50-b89f-4914-b7de-5b9cbbb6cf4b

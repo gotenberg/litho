@@ -331,6 +331,14 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 		return
 	}
 
+	// Check for multiple EOL markers (double LF, etc.) — must be a single EOL.
+	if pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r') {
+		d.mu.Lock()
+		d.FormatViolations = append(d.FormatViolations,
+			fmt.Errorf("compliance: xref keyword and subsection header separated by multiple EOL markers"))
+		d.mu.Unlock()
+	}
+
 	// Check for extra whitespace before subsection header (forbidden).
 	if pos < len(buf) && (buf[pos] == ' ' || buf[pos] == '\t') {
 		d.mu.Lock()

@@ -753,6 +753,48 @@ func ExtractGlyphNames(fontData []byte) map[uint16]string {
 	return nil
 }
 
+// ExtractEmptyGIDs returns the set of GIDs with empty glyph data in a
+// TrueType font (where loca[gid] == loca[gid+1]). Returns nil for non-TrueType.
+func ExtractEmptyGIDs(fontData []byte) map[uint16]bool {
+	if len(fontData) < 4 {
+		return nil
+	}
+	sig := fontData[:4]
+	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
+		string(sig) == "true" {
+		m, _ := truetype.EmptyGIDs(fontData)
+		return m
+	}
+	return nil
+}
+
+// ExtractValidCIDs returns the set of CIDs present in a CID-keyed CFF font.
+// Returns nil for non-CID or non-CFF fonts.
+func ExtractValidCIDs(fontData []byte) map[uint16]bool {
+	if len(fontData) < 4 {
+		return nil
+	}
+	// Bare CFF font.
+	if fontData[0] == 1 && fontData[1] == 0 {
+		m, _ := cff.ValidCIDs(fontData)
+		return m
+	}
+	// OTTO (CFF inside OpenType).
+	if string(fontData[:4]) == "OTTO" {
+		records, err := truetype.ParseTableDirectory(fontData)
+		if err != nil {
+			return nil
+		}
+		cffData, err := truetype.TableData(fontData, records, "CFF ")
+		if err != nil {
+			return nil
+		}
+		m, _ := cff.ValidCIDs(cffData)
+		return m
+	}
+	return nil
+}
+
 // readOS2AvgWidth extracts xAvgCharWidth from the OS/2 table. Returns 0 if
 // the table is absent or invalid. The value is in font design units.
 func readOS2AvgWidth(data []byte) uint16 {

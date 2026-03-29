@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // --- File structure numeric limits (ISO 32000-1 / ISO 32000-2) ---
@@ -58,6 +59,8 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 	// where raw-byte scanning finds endstream at wrong offset. Disabled until
 	// a more robust approach is available (e.g., using xref offsets directly).
 	// results = append(results, checkStreamLengths(ctx, doc, profile)...)
+	results = append(results, checkContentStreamHexStrings(ctx, doc, catalog, profile)...)
+	results = append(results, checkNonStandardFilters(ctx, doc, profile)...)
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
 	results = append(results, checkNumericLimits(ctx, doc, profile)...)
 	results = append(results, checkXRefFormat(doc, profile)...)
@@ -309,6 +312,21 @@ func hexStringRule(profile string) Rule {
 		return Rule_19005_4_6_1_5_t01
 	default:
 		return Rule_19005_1_6_1_6_t01
+	}
+}
+
+func hexStringInvalidCharRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 1:
+		return Rule_19005_1_6_1_6_t02
+	case 2: //nolint:mnd
+		return Rule_19005_2_6_1_6_t02
+	case 3: //nolint:mnd
+		return Rule_19005_3_6_1_6_t02
+	case 4: //nolint:mnd
+		return Rule_19005_4_6_1_5_t02
+	default:
+		return Rule_19005_1_6_1_6_t02
 	}
 }
 
@@ -663,6 +681,122 @@ func hasLZWFilter(ctx context.Context, doc *document.Document, dict ast.PdfDict)
 	return false
 }
 
+// standardFilters lists the PDF stream filter names from ISO 32000-2 Table 6.
+// Filter names are case-sensitive.
+var standardFilters = map[string]bool{
+	"ASCIIHexDecode":  true,
+	"ASCII85Decode":   true,
+	"LZWDecode":       true, // listed but forbidden separately
+	"FlateDecode":     true,
+	"RunLengthDecode": true,
+	"CCITTFaxDecode":  true,
+	"JBIG2Decode":     true,
+	"DCTDecode":       true,
+	"JPXDecode":       true,
+	"Crypt":           true,
+}
+
+// checkNonStandardFilters validates that all stream /Filter names are
+// from the standard set (case-sensitive). Non-standard filter names
+// like /Flatedecode (wrong case) are forbidden.
+func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string) []Result {
+	rule := streamFilterRule(profile)
+	if rule.Specification == "" {
+		return nil
+	}
+
+	var results []Result
+	for objNum, entry := range doc.Index.Entries {
+		if ctx.Err() != nil {
+			return results
+		}
+		if entry.Free {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil || stream.Dict == nil {
+			continue
+		}
+		filterObj, ok := stream.Dict["Filter"]
+		if !ok {
+			continue
+		}
+		// Single filter name.
+		if name, err := document.ResolveName(ctx, doc, filterObj); err == nil && name != "" {
+			if !standardFilters[string(name)] {
+				results = append(results, Result{
+					Rule:    rule,
+					Context: fmt.Sprintf("object %d uses non-standard filter /%s", objNum, name),
+				})
+			}
+			continue
+		}
+		// Array of filter names.
+		if arr, err := document.ResolveArray(ctx, doc, filterObj); err == nil {
+			for _, elem := range arr {
+				if n, err := document.ResolveName(ctx, doc, elem); err == nil && n != "" {
+					if !standardFilters[string(n)] {
+						results = append(results, Result{
+							Rule:    rule,
+							Context: fmt.Sprintf("object %d uses non-standard filter /%s", objNum, n),
+						})
+					}
+				}
+			}
+		}
+	}
+	return results
+}
+
+// streamFilterRule returns the rule for non-standard stream filters.
+func streamFilterRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 4: //nolint:mnd
+		return Rule_19005_4_6_1_6_2_t01
+	}
+	// Parts 1-3 use the LZW/filter clause for non-standard filters.
+	return lzwFilterRule(profile)
+}
+
+// checkContentStreamHexStrings parses page content streams with format
+// checking enabled to detect hex string violations: odd digit count
+// (§6.1.6 t1) and non-hex characters (§6.1.6 t2).
+func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	oddRule := hexStringRule(profile)
+	if oddRule.Specification == "" {
+		return nil
+	}
+	charRule := hexStringInvalidCharRule(profile)
+
+	pages := collectPages(ctx, doc, catalog)
+	var results []Result
+
+	for i, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		streamData, err := getPageContentBytes(ctx, doc, page)
+		if err != nil || len(streamData) == 0 {
+			continue
+		}
+
+		_, violations := content.ParseStreamDataFormatChecked(streamData)
+		for _, v := range violations {
+			msg := v.Error()
+			rule := oddRule
+			if bytes.Contains([]byte(msg), []byte("invalid character")) {
+				rule = charRule
+			}
+			results = append(results, Result{
+				Rule:    rule,
+				Context: fmt.Sprintf("page %d: %s", i+1, msg),
+			})
+			break // one violation per page is sufficient
+		}
+	}
+	return results
+}
+
 // checkEmbeddedFiles validates §6.1.11: embedded files are forbidden in PDF/A-1.
 func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
 	if pdfaPart(profile) != 1 {
@@ -744,10 +878,16 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 		rule := hexRule
 		if containsXRefPattern(msg) {
 			rule = xrefRule
+			// PDF/A-1 distinguishes t01 (spacing) from t02 (EOL).
+			if pdfaPart(profile) == 1 && isXrefEOLViolation(msg) {
+				rule = Rule_19005_1_6_1_4_t02
+			}
 		} else if containsStreamPattern(msg) {
 			rule = streamRule
 		} else if containsObjHeaderPattern(msg) {
 			rule = objRule
+		} else if bytes.Contains([]byte(msg), []byte("invalid character")) {
+			rule = hexStringInvalidCharRule(profile)
 		}
 
 		results = append(results, Result{
@@ -804,9 +944,14 @@ func checkXRefTableByteFormat(doc *document.Document, profile string) []Result {
 	}
 
 	// Map new violations to rules.
-	rule := xrefFormatRule(profile)
 	var results []Result
 	for _, v := range doc.FormatViolations[prevCount:] {
+		rule := xrefFormatRule(profile)
+		// PDF/A-1 distinguishes t01 (subsection header spacing) from
+		// t02 (EOL after xref keyword). Other parts use a single rule.
+		if pdfaPart(profile) == 1 && isXrefEOLViolation(v.Error()) {
+			rule = Rule_19005_1_6_1_4_t02
+		}
 		results = append(results, Result{
 			Rule:    rule,
 			Context: v.Error(),
@@ -829,6 +974,12 @@ func xrefFormatRule(profile string) Rule {
 	default:
 		return Rule_19005_1_6_1_4_t01
 	}
+}
+
+// isXrefEOLViolation returns true if the violation message relates to
+// the EOL marker after the xref keyword (t02), not subsection header spacing (t01).
+func isXrefEOLViolation(msg string) bool {
+	return bytes.Contains([]byte(msg), []byte("EOL")) || bytes.Contains([]byte(msg), []byte("not followed by"))
 }
 
 // streamFormatRule returns the rule for stream format violations

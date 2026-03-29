@@ -103,6 +103,67 @@ func GlyphWidths(data []byte) (map[uint16]uint16, error) {
 	return result, nil
 }
 
+// EmptyGIDs returns the set of GIDs that have zero-length glyph data in
+// a TrueType font. It parses the loca table (using the indexToLocFormat
+// from the head table) to find GIDs where loca[gid] == loca[gid+1],
+// indicating an empty/absent glyph outline (renders as .notdef).
+func EmptyGIDs(data []byte) (map[uint16]bool, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return nil, err
+	}
+
+	headData, err := TableData(data, records, "head")
+	if err != nil {
+		return nil, err
+	}
+	if len(headData) < 54 { //nolint:mnd
+		return nil, fmt.Errorf("%w: head table too short", ErrInvalidFont)
+	}
+	indexToLocFormat := int16(binary.BigEndian.Uint16(headData[50:52]))
+
+	locaData, err := TableData(data, records, "loca")
+	if err != nil {
+		return nil, err
+	}
+
+	maxpData, err := TableData(data, records, "maxp")
+	if err != nil {
+		return nil, err
+	}
+	if len(maxpData) < 6 { //nolint:mnd
+		return nil, fmt.Errorf("%w: maxp table too short", ErrInvalidFont)
+	}
+	numGlyphs := int(binary.BigEndian.Uint16(maxpData[4:6]))
+
+	result := make(map[uint16]bool)
+	switch indexToLocFormat {
+	case 0: // Short format: offsets are uint16, actual offset = value * 2.
+		if len(locaData) < (numGlyphs+1)*2 {
+			return nil, fmt.Errorf("%w: loca table too short for short format", ErrInvalidFont)
+		}
+		for gid := range numGlyphs {
+			off0 := binary.BigEndian.Uint16(locaData[gid*2:])
+			off1 := binary.BigEndian.Uint16(locaData[gid*2+2:])
+			if off0 == off1 {
+				result[uint16(gid)] = true //nolint:gosec
+			}
+		}
+	case 1: // Long format: offsets are uint32.
+		if len(locaData) < (numGlyphs+1)*4 {
+			return nil, fmt.Errorf("%w: loca table too short for long format", ErrInvalidFont)
+		}
+		for gid := range numGlyphs {
+			off0 := binary.BigEndian.Uint32(locaData[gid*4:])
+			off1 := binary.BigEndian.Uint32(locaData[gid*4+4:])
+			if off0 == off1 {
+				result[uint16(gid)] = true //nolint:gosec
+			}
+		}
+	}
+	return result, nil
+}
+
 // CharCodeToGID extracts a character code → glyph ID mapping from the cmap
 // table. This is the inverse of GlyphToUnicode: it maps Unicode code points
 // (used as character codes in PDF TrueType fonts) to glyph IDs.

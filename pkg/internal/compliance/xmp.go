@@ -97,6 +97,32 @@ var xmpPart1Properties = map[string]map[string]bool{
 	"http://ns.adobe.com/camera-raw-settings/1.0/": {},
 	// XMP Dynamic Media — NOT in the 2004 XMP spec.
 	"http://ns.adobe.com/xmp/1.0/DynamicMedia/": {},
+	// XMP Paged-Text (xmpTPg:) — for PDF/A-1, VeraPDF only accepts
+	// MaxPageSize and NPages as predefined. Colorants, Fonts, PlateNames
+	// and SwatchGroups require extension schema declarations.
+	"http://ns.adobe.com/xap/1.0/t/pg/": {
+		"MaxPageSize": true, "NPages": true,
+	},
+	// PDF/A Identification (pdfaid:) — only part, conformance, and amd
+	// existed in PDF/A-1 (ISO 19005-1). corr and rev were added later.
+	"http://www.aiim.org/pdfa/ns/id/": {
+		"part": true, "conformance": true, "amd": true,
+	},
+}
+
+// xmpPart1TypeOverrides lists properties whose type in the 2004 XMP Specification
+// (referenced by PDF/A-1) differs from the type in the current full registry.
+//
+//nolint:gochecknoglobals // static lookup table
+var xmpPart1TypeOverrides = map[string]map[string]xmpPropType{
+	// photoshop:SupplementalCategories was Text in 2004, changed to Bag Text later.
+	"http://ns.adobe.com/photoshop/1.0/": {
+		"SupplementalCategories": xmpPropText,
+	},
+	// exif:GPSMeasureMode is Integer (2 or 3), not Text.
+	"http://ns.adobe.com/exif/1.0/": {
+		"GPSMeasureMode": xmpPropInteger,
+	},
 }
 
 // pdfaExtension namespace URIs for schema, property, field, and type definitions.
@@ -607,6 +633,19 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 		"wrongPrefixConf", wrongPrefixConf,
 		"wrongPrefixRev", wrongPrefixRev)
 
+	// Detect wrong prefix via raw byte scan. The XML parser resolves
+	// namespaces by URI, so "pdfa:part" with the correct URI appears correct
+	// to the parser. We need to check the actual serialized prefix.
+	if hasPart && !wrongPrefixPart {
+		wrongPrefixPart = xmpHasWrongPdfaidPrefix(data, "part")
+	}
+	if hasConf && !wrongPrefixConf {
+		wrongPrefixConf = xmpHasWrongPdfaidPrefix(data, "conformance")
+	}
+	if revValue != "" && !wrongPrefixRev {
+		wrongPrefixRev = xmpHasWrongPdfaidPrefix(data, "rev")
+	}
+
 	// Emit prefix violations for pdfaid fields using wrong namespace.
 	if wrongPrefixPart {
 		*results = append(*results, xmpPDFAIdPrefixRule(part, "part")...)
@@ -619,7 +658,9 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	}
 
 	// Fallback: byte scan for pdfaid presence in unparseable XMP.
-	if !hasPart && !hasConf {
+	// Only use fallback when the XML parser found no pdfaid fields at all
+	// (not when it successfully parsed some fields but not others).
+	if !hasPart && !hasConf && revValue == "" && !wrongPrefixPart && !wrongPrefixConf && !wrongPrefixRev {
 		hasPart = bytes.Contains(data, []byte("pdfaid:part")) ||
 			bytes.Contains(data, []byte("pdfa/ns/id"))
 		if !hasPart {
@@ -654,9 +695,10 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	}
 
 	// Validate pdfaid:conformance value (parts 1-3).
+	// Must be uppercase (A, B, U) — case-sensitive comparison.
 	if part < 4 && level != 0 { //nolint:mnd
 		expectedConf := strings.ToUpper(string(rune(level)))
-		if !strings.EqualFold(confValue, expectedConf) {
+		if confValue != expectedConf {
 			slog.Debug("compliance_2/xmp: pdfaid:conformance mismatch",
 				"actual", confValue, "expected", expectedConf)
 			*results = append(*results, xmpPDFAConformanceRule(part, confValue)...)
@@ -690,26 +732,70 @@ func xmpCheckPart4Conformance(profile string, hasConf bool, confValue string, re
 
 	switch profile {
 	case "PDF/A-4":
-		// Plain PDF/A-4: conformance must be absent or empty.
-		if hasConf && confUpper != "" {
+		// Plain PDF/A-4: conformance must be absent entirely.
+		// An empty conformance attribute is still a violation.
+		if hasConf {
 			slog.Debug("compliance_2/xmp: pdfaid:conformance present for plain PDF/A-4")
-			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%s but must be absent for plain PDF/A-4", confValue)...)
+			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%q but must be absent for plain PDF/A-4", confValue)...)
 		}
 	case "PDF/A-4e":
-		// PDF/A-4e: conformance MUST be "E".
-		if confUpper != "E" {
+		// PDF/A-4e: conformance MUST be exactly "E" (case-sensitive).
+		if confValue != "E" {
 			slog.Debug("compliance_2/xmp: pdfaid:conformance wrong for PDF/A-4e",
 				"actual", confValue)
-			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%s but must be 'E' for PDF/A-4e", confValue)...)
+			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%q but must be 'E' for PDF/A-4e", confValue)...)
 		}
 	case "PDF/A-4f":
-		// PDF/A-4f: conformance MUST be "F".
-		if confUpper != "F" {
+		// PDF/A-4f: conformance MUST be exactly "F" (case-sensitive).
+		if confValue != "F" {
 			slog.Debug("compliance_2/xmp: pdfaid:conformance wrong for PDF/A-4f",
 				"actual", confValue)
-			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%s but must be absent or 'F' for PDF/A-4f", confValue)...)
+			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%q but must be 'F' for PDF/A-4f", confValue)...)
 		}
 	}
+}
+
+// xmpHasWrongPdfaidPrefix scans raw XMP bytes to check if a pdfaid field
+// uses a non-"pdfaid" prefix (e.g., "pdfa:part" instead of "pdfaid:part").
+// The XML parser resolves namespaces by URI, masking the actual prefix.
+func xmpHasWrongPdfaidPrefix(data []byte, field string) bool {
+	// Look for the field name preceded by a colon and prefix.
+	// Valid: "pdfaid:part" / "pdfaid:conformance" / "pdfaid:rev"
+	// Invalid: "pdfa:part" / "foo:part" (any prefix != "pdfaid")
+	needle := []byte(":" + field)
+	validPrefix := []byte("pdfaid:" + field)
+	for off := 0; ; {
+		idx := bytes.Index(data[off:], needle)
+		if idx < 0 {
+			break
+		}
+		pos := off + idx
+		// Check if exactly "pdfaid" precedes the colon (not a longer prefix
+		// containing "pdfaid" as a substring, e.g., "nonpdfaid").
+		prefixStart := pos - 6 //nolint:mnd // len("pdfaid") == 6
+		if prefixStart >= 0 && bytes.Equal(data[prefixStart:prefixStart+len(validPrefix)], validPrefix) {
+			// Verify the prefix boundary: character before "pdfaid" must not be a letter.
+			if prefixStart == 0 || !isASCIILetter(data[prefixStart-1]) {
+				// Correct prefix — keep searching for other occurrences.
+				off = pos + len(needle)
+				continue
+			}
+		}
+		// Found the field with a non-"pdfaid" prefix. Verify it's an XML
+		// attribute/element name (preceded by a letter, not inside a URL).
+		if pos > 0 {
+			prev := data[pos-1]
+			if prev >= 'a' && prev <= 'z' || prev >= 'A' && prev <= 'Z' {
+				return true
+			}
+		}
+		off = pos + len(needle)
+	}
+	return false
+}
+
+func isASCIILetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 func xmpPDFAIdMissingRule(part int) []Result {
@@ -1403,8 +1489,16 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 	for _, pair := range syncPairs {
 		infoVal := xmpGetInfoString(ctx, doc, infoDict, pair.infoKey)
 		if infoVal == "" {
-			slog.Debug("compliance_2/xmp: DocInfo key empty or absent, skipping sync",
-				"key", pair.infoKey)
+			// If the key exists and the value is a non-null indirect
+			// reference that can't be resolved as a string, it's a sync
+			// violation when XMP has a non-empty value.
+			if xmpInfoKeyPresent(infoDict, pair.infoKey) &&
+				!xmpInfoValueIsNull(ctx, doc, infoDict, pair.infoKey) {
+				xmpVal := syncResult.values[pair.xmpKey]
+				if xmpVal != "" {
+					*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, "(unresolvable)", pair.xmpKey, xmpVal)...)
+				}
+			}
 			continue
 		}
 
@@ -1431,8 +1525,17 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			}
 		}
 
-		normInfo := strings.TrimSpace(infoVal)
-		normXMP := strings.TrimSpace(xmpVal)
+		normInfo := infoVal
+		normXMP := xmpVal
+		// Date fields: Info dict dates must use D: prefix format.
+		// A date in non-D: format (e.g., raw ISO 8601) is malformed and
+		// considered non-equivalent even if the time value matches.
+		isDateField := pair.infoKey == "CreationDate" || pair.infoKey == "ModDate"
+		if isDateField && !strings.HasPrefix(normInfo, "D:") && normInfo != "" {
+			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
+			continue
+		}
+		// Normalize dates for comparison.
 		if strings.HasPrefix(normInfo, "D:") {
 			normInfo = xmpNormalizePDFDate(normInfo)
 		}
@@ -1508,6 +1611,28 @@ func xmpDocInfoSyncRulePart4(testNum int, ctx string) []Result {
 }
 
 // xmpGetInfoString retrieves a string value from the document info dict.
+// xmpInfoKeyPresent returns true if the Info dict has the given key, even if
+// the value can't be resolved as a string.
+func xmpInfoKeyPresent(infoDict ast.PdfDict, key string) bool {
+	_, ok := infoDict[ast.PdfName(key)]
+	return ok
+}
+
+// xmpInfoValueIsNull returns true if the Info dict value for the given key
+// resolves to a PDF null object.
+func xmpInfoValueIsNull(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) bool {
+	valObj, ok := infoDict[ast.PdfName(key)]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, valObj)
+	if err != nil {
+		return false
+	}
+	_, isNull := resolved.(ast.PdfNull)
+	return isNull
+}
+
 func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) string {
 	valObj, ok := infoDict[ast.PdfName(key)]
 	if !ok {
@@ -1881,6 +2006,15 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Re
 				if part1Props, ok := xmpPart1Properties[ns]; ok {
 					if _, inPart1 := part1Props[prop]; !inPart1 {
 						known = false
+					}
+				}
+				// Apply part-1-specific type overrides for properties
+				// whose type differs between the 2004 and later XMP specs.
+				if known {
+					if nsOverrides, ok := xmpPart1TypeOverrides[ns]; ok {
+						if overrideType, ok := nsOverrides[prop]; ok {
+							expectedType = overrideType
+						}
 					}
 				}
 			}

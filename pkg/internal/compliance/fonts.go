@@ -899,7 +899,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	// --- 5. Glyph width consistency ---
 	// Only for fonts used for visible rendering.
 	if isVisible {
-		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile)...)
+		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 	}
 
 	// --- 6. .notdef glyph check ---
@@ -1240,12 +1240,31 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 								"font", fontName, "baseEncoding", baseEnc)
 						}
 
-						// Part 1 additionally forbids Differences in the encoding dict.
-						if pdfaPart(profile) == 1 {
-							if _, hasDiff := encDict["Differences"]; hasDiff {
+						// Part 1: Differences is forbidden entirely.
+						// Parts 2+: Differences is allowed only if all glyph names
+						// are in the Adobe Glyph List.
+						if diffObj, hasDiff := encDict["Differences"]; hasDiff {
+							if pdfaPart(profile) == 1 {
 								slog.Debug("compliance_2: fonts: non-symbolic TrueType has Differences in encoding dict (part 1)",
 									"font", fontName, "page", pageNum)
 								results = append(results, failf(rule, "font %s on page %d has Differences in encoding dict", fontName, pageNum)...)
+							} else {
+								// Validate all glyph names in Differences against AGL.
+								diffArr, diffErr := document.ResolveArray(ctx, doc, diffObj)
+								if diffErr == nil {
+									for _, item := range diffArr {
+										name, ok := item.(ast.PdfName)
+										if !ok || string(name) == ".notdef" {
+											continue
+										}
+										if _, resolved := encodings.GlyphToRuneFull(string(name)); !resolved {
+											results = append(results, failf(rule,
+												"font %s on page %d: Differences glyph %q not in Adobe Glyph List",
+												fontName, pageNum, string(name))...)
+											break
+										}
+									}
+								}
 							}
 						}
 					}
@@ -1303,17 +1322,16 @@ const widthTolerance = 1.0
 
 // checkGlyphWidths validates glyph width consistency (rule 5).
 // Compares PDF-declared widths against the embedded font program's binary widths.
-func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
 	rule := glyphWidthRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: glyph width check not applicable", "profile", profile)
 		return nil
 	}
 
-	// Type3 fonts have their own width mechanism.
+	// Type3 fonts: compare /Widths against CharProc d0/d1 widths.
 	if isType3Font(ctx, doc, fontDict) {
-		slog.Debug("compliance_2: fonts: skipping glyph width check for Type3", "font", fontName)
-		return nil
+		return checkType3FontWidths(ctx, doc, fontDict, fontName, pageNum, rule)
 	}
 
 	fd := findFontDescriptor(ctx, doc, fontDict)
@@ -1360,8 +1378,15 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 				}
 				charCodeToGID = make(map[uint16]uint16)
 				for code, name := range enc {
+					if name == ".notdef" || name == "" {
+						continue
+					}
 					if gid, ok := nameToGID[name]; ok {
 						charCodeToGID[uint16(code)] = gid
+					} else {
+						// Glyph name not in font charset → maps to GID 0 (.notdef).
+						// Include it so width comparison can detect the mismatch.
+						charCodeToGID[uint16(code)] = 0
 					}
 				}
 			}
@@ -1372,7 +1397,7 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 
 	// Simple fonts (Type1, TrueType, MMType1): compare /Widths array using FirstChar offset.
 	if subtype == "Type1" || subtype == "TrueType" || subtype == "MMType1" {
-		return checkSimpleFontWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID)
+		return checkSimpleFontWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, usage)
 	}
 
 	return nil
@@ -1380,7 +1405,7 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
 // charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
-func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16) []Result {
+func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Result {
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
 		slog.Debug("compliance_2: fonts: font missing /Widths array", "font", fontName, "page", pageNum)
@@ -1407,13 +1432,21 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		gid := uint16(charCode) //nolint:gosec
 		if charCodeToGID != nil {
 			mappedGID, ok := charCodeToGID[uint16(charCode)] //nolint:gosec
-			if !ok || mappedGID == 0 {
+			if !ok {
 				continue
 			}
 			gid = mappedGID
 		}
+		// The spec requires width consistency only for "glyphs referenced
+		// for rendering." Skip charCodes not used in text operators.
+		charUsed := usage != nil && usage.charCodes[byte(charCode)] //nolint:gosec
 		pdfWidth := document.GetFloat(wObj)
-		if pdfWidth == 0 {
+		if pdfWidth == 0 && !charUsed {
+			continue
+		}
+		// Skip non-used charCodes when glyph is missing from font program
+		// (GID 0 from name mapping) — only flag if the charCode is used.
+		if gid == 0 && !charUsed {
 			continue
 		}
 		bw, ok := binaryWidths[gid]
@@ -1428,6 +1461,91 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 	}
 
 	slog.Debug("compliance_2: fonts: glyph widths consistent", "font", fontName, "page", pageNum)
+	return nil
+}
+
+// checkType3FontWidths compares /Widths against glyph widths declared by
+// d0/d1 operators in Type3 font CharProcs.
+func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Result {
+	widthsObj, hasWidths := fontDict["Widths"]
+	if !hasWidths {
+		return nil
+	}
+	widths, err := document.ResolveArray(ctx, doc, widthsObj)
+	if err != nil || len(widths) == 0 {
+		return nil
+	}
+	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
+	if err != nil {
+		return nil
+	}
+
+	// Build charCode→glyphName from /Encoding /Differences.
+	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+
+	// Resolve CharProcs dict.
+	charProcs, err := document.ResolveDict(ctx, doc, fontDict["CharProcs"])
+	if err != nil || charProcs == nil {
+		return nil
+	}
+
+	// Extract FontMatrix scale factor. Type3 FontMatrix is typically
+	// [0.001 0 0 0.001 0 0], meaning glyph coordinates are in 1/1000 units
+	// and widths from d0/d1 are in glyph space. The PDF /Widths values are
+	// in text space (1/1000 of user space unit). Scale = FontMatrix[0] * 1000.
+	fmScale := 1.0
+	if fmArr, err := document.ResolveArray(ctx, doc, fontDict["FontMatrix"]); err == nil && len(fmArr) >= 1 {
+		sx := document.GetFloat(fmArr[0])
+		if sx > 0 {
+			fmScale = sx * 1000.0
+		}
+	}
+
+	// Extract widths from each CharProc by finding d0/d1 operator.
+	charProcWidths := make(map[string]float64)
+	for glyphName, cpObj := range charProcs {
+		stream, err := document.ResolveStream(ctx, doc, cpObj)
+		if err != nil {
+			continue
+		}
+		streamData, err := doc.DecodeStream(stream)
+		if err != nil {
+			continue
+		}
+		ops, err := content.ParseStreamData(streamData)
+		if err != nil {
+			continue
+		}
+		for _, op := range ops {
+			// d1: wx wy llx lly urx ury d1
+			// d0: wx wy d0
+			if (op.Operator == "d1" && len(op.Operands) >= 6) || //nolint:mnd
+				(op.Operator == "d0" && len(op.Operands) >= 2) { //nolint:mnd
+				wx := document.GetFloat(op.Operands[0])
+				charProcWidths[string(glyphName)] = wx
+				break
+			}
+		}
+	}
+
+	// Compare /Widths against CharProc widths.
+	for i, wObj := range widths {
+		charCode := byte(int(firstChar) + i) //nolint:gosec
+		glyphName := enc[charCode]
+		if glyphName == "" {
+			continue
+		}
+		cpWidth, ok := charProcWidths[glyphName]
+		if !ok {
+			continue
+		}
+		pdfWidth := document.GetFloat(wObj)
+		expectedWidth := cpWidth * fmScale
+		if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
+			return failf(rule, "font %s on page %d: char %d (%s) width mismatch (PDF=%.1f, glyph=%.1f)",
+				fontName, pageNum, int(firstChar)+i, glyphName, pdfWidth, expectedWidth)
+		}
+	}
 	return nil
 }
 
@@ -2115,11 +2233,30 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 						}
 					}
 				} else {
-					// No post table glyph names — use cmap directly.
-					// Only flag charCode 0 → GID 0 (universally .notdef).
+					// No post table glyph names — use cmap + loca + /Widths.
 					charToGID := typography.ExtractCharCodeToGID(fontData)
-					if charToGID != nil && usage.charCodes[0] && charToGID[0] == 0 {
-						return failf(rule, "font %s on page %d: charCode 0 maps to GID 0 (.notdef)", fontName, pageNum)
+					if charToGID != nil {
+						// GID 0 is always .notdef.
+						if usage.charCodes[0] && charToGID[0] == 0 {
+							return failf(rule, "font %s on page %d: charCode 0 maps to GID 0 (.notdef)", fontName, pageNum)
+						}
+						// For non-zero GIDs: empty glyph data + PDF width=0 → .notdef.
+						emptyGIDs := typography.ExtractEmptyGIDs(fontData)
+						if emptyGIDs != nil {
+							firstChar, widths := simpleFontWidths(ctx, doc, fontDict)
+							for code := range usage.charCodes {
+								gid, inCmap := charToGID[uint16(code)]
+								if !inCmap {
+									continue // No cmap entry — can't determine GID.
+								}
+								if gid == 0 {
+									return failf(rule, "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
+								}
+								if emptyGIDs[gid] && simpleFontWidthIsZero(firstChar, widths, code) {
+									return failf(rule, "font %s on page %d: charCode %d maps to empty glyph with width 0 (.notdef)", fontName, pageNum, code)
+								}
+							}
+						}
 					}
 				}
 			}
@@ -2156,8 +2293,9 @@ func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontD
 }
 
 // checkType0NotdefGlyph checks if a Type0 (composite) font references CID 0
-// (.notdef) in any text operator string. For Identity-H/Identity-V encoded
-// fonts, scans raw string bytes for 2-byte CID 0 sequences.
+// (.notdef) in any text operator string, or references a CID that is absent
+// from the embedded font program's charset (also renders as .notdef).
+// For Identity-H/Identity-V encoded fonts, scans raw string bytes for 2-byte CIDs.
 func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
 	rule := notdefRule(profile)
 	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {
@@ -2170,19 +2308,159 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		return nil
 	}
 
-	// Scan raw strings for 2-byte CID 0 (0x00 0x00).
+	// Collect all referenced CIDs from raw strings.
+	usedCIDs := make(map[uint16]bool)
+	hasOddLengthString := false
 	for _, s := range usage.rawStrings {
 		data := []byte(s)
+		if len(data)%2 != 0 {
+			hasOddLengthString = true
+		}
 		for i := 0; i+1 < len(data); i += 2 { //nolint:mnd
-			if data[i] == 0 && data[i+1] == 0 {
-				slog.Debug("compliance_2: fonts: Type0 text references CID 0 (.notdef)",
-					"font", fontName, "page", pageNum)
-				return failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
+			cid := uint16(data[i])<<8 | uint16(data[i+1])
+			usedCIDs[cid] = true
+		}
+	}
+
+	// An odd-length string with a 2-byte CMap (Identity-H/V) means the
+	// last byte cannot form a valid CID — the renderer uses .notdef.
+	if hasOddLengthString {
+		slog.Debug("compliance_2: fonts: Type0/Identity text has odd-length string (.notdef)",
+			"font", fontName, "page", pageNum)
+		return failf(rule, "font %s on page %d: odd-length string with 2-byte CMap references .notdef", fontName, pageNum)
+	}
+
+	// CID 0 is always .notdef.
+	if usedCIDs[0] {
+		slog.Debug("compliance_2: fonts: Type0 text references CID 0 (.notdef)",
+			"font", fontName, "page", pageNum)
+		return failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
+	}
+
+	// Check if referenced CIDs are present in the embedded font program.
+	// Resolve descendant CIDFont to get the font program.
+	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
+	if err != nil || len(descArr) == 0 {
+		return nil
+	}
+	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
+	if err != nil || cidFontDict == nil {
+		return nil
+	}
+
+	fd := findFontDescriptor(ctx, doc, cidFontDict)
+	if fd == nil {
+		return nil
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil
+	}
+
+	cidSubtype := fontSubtype(ctx, doc, cidFontDict)
+
+	switch cidSubtype {
+	case "CIDFontType0":
+		// CFF font: check if CIDs exist in the charset.
+		validCIDs := typography.ExtractValidCIDs(fontData)
+		if validCIDs == nil {
+			return nil
+		}
+		for cid := range usedCIDs {
+			if !validCIDs[cid] {
+				slog.Debug("compliance_2: fonts: Type0/CFF text references absent CID",
+					"font", fontName, "page", pageNum, "cid", cid)
+				return failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
+			}
+		}
+
+	case "CIDFontType2":
+		// TrueType CIDFont: with CIDToGIDMap=/Identity, CID == GID.
+		cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"])
+		if cidToGIDMap != "Identity" {
+			return nil
+		}
+		// Empty glyph data + PDF width=0 → .notdef.
+		// Empty glyph data + PDF width>0 → valid invisible glyph (space, etc.).
+		emptyGIDs := typography.ExtractEmptyGIDs(fontData)
+		if emptyGIDs != nil {
+			for cid := range usedCIDs {
+				if emptyGIDs[cid] && lookupCIDWidth(ctx, doc, cidFontDict, cid) == 0 {
+					slog.Debug("compliance_2: fonts: Type0/TrueType CID maps to empty glyph with width 0",
+						"font", fontName, "page", pageNum, "cid", cid)
+					return failf(rule, "font %s on page %d: CID %d maps to empty glyph with width 0 (.notdef)", fontName, pageNum, cid)
+				}
 			}
 		}
 	}
 
 	return nil
+}
+
+// simpleFontWidths extracts FirstChar and the /Widths array from a simple font dict.
+func simpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (int, []ast.PdfObject) {
+	firstChar := int(document.GetFloat(fontDict["FirstChar"]))
+	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
+	if err != nil {
+		return firstChar, nil
+	}
+	return firstChar, widths
+}
+
+// simpleFontWidthIsZero returns true if the PDF /Widths entry for charCode is 0.
+func simpleFontWidthIsZero(firstChar int, widths []ast.PdfObject, charCode byte) bool {
+	idx := int(charCode) - firstChar
+	if idx < 0 || idx >= len(widths) {
+		return false // Not in range — can't determine.
+	}
+	return document.GetFloat(widths[idx]) == 0
+}
+
+// lookupCIDWidth returns the PDF-declared width for a CID from the /W array
+// and /DW default of a CIDFont dict.
+func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cid uint16) float64 {
+	// Default width.
+	dw := document.GetFloat(cidFontDict["DW"])
+	if dw == 0 {
+		dw = 1000 // PDF spec default.
+	}
+
+	wObj, ok := cidFontDict["W"]
+	if !ok {
+		return dw
+	}
+	wArr, err := document.ResolveArray(ctx, doc, wObj)
+	if err != nil || len(wArr) == 0 {
+		return dw
+	}
+
+	cidInt := int(cid)
+	for i := 0; i < len(wArr); {
+		first := int(document.GetFloat(wArr[i]))
+		if i+1 >= len(wArr) {
+			break
+		}
+		// Format 1: [cidStart [w1 w2 ...]]
+		if arr, err := document.ResolveArray(ctx, doc, wArr[i+1]); err == nil && arr != nil {
+			for j, w := range arr {
+				if first+j == cidInt {
+					return document.GetFloat(w)
+				}
+			}
+			i += 2
+			continue
+		}
+		// Format 2: [cidFirst cidLast w]
+		if i+2 >= len(wArr) {
+			break
+		}
+		last := int(document.GetFloat(wArr[i+1]))
+		if cidInt >= first && cidInt <= last {
+			return document.GetFloat(wArr[i+2])
+		}
+		i += 3
+	}
+	return dw
 }
 
 // --- Glyph coverage (CharSet / CIDSet) rule selectors ---
@@ -2213,6 +2491,33 @@ func cidSetRule(profile string) Rule {
 		return Rule_19005_3_6_2_11_4_1_t02
 	case 4:
 		return Rule_19005_4_6_2_10_4_1_t02
+	}
+	return Rule{}
+}
+
+// charSetCompletenessRule returns the rule for CharSet completeness
+// (all font program glyphs must be listed in /CharSet).
+func charSetCompletenessRule(profile string) Rule {
+	if isPDFUA(profile) {
+		return Rule_14289_1_7_21_4_2_t01
+	}
+	switch pdfaPart(profile) {
+	case 2: //nolint:mnd
+		return Rule_19005_2_6_2_11_4_2_t01
+	case 3: //nolint:mnd
+		return Rule_19005_3_6_2_11_4_2_t01
+	}
+	return Rule{}
+}
+
+// cidSetCompletenessRule returns the rule for CIDSet completeness
+// (all CIDs in font program must be identified in /CIDSet).
+func cidSetCompletenessRule(profile string) Rule {
+	switch pdfaPart(profile) {
+	case 2: //nolint:mnd
+		return Rule_19005_2_6_2_11_4_2_t02
+	case 3: //nolint:mnd
+		return Rule_19005_3_6_2_11_4_2_t02
 	}
 	return Rule{}
 }
@@ -2290,13 +2595,17 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return failf(rule, "font %s on page %d: Type1 subset missing /CharSet", fontName, pageNum)
 		}
 
-		// PDF/UA-1 §7.21.4.2: if CharSet present, it must list ALL font program glyphs.
-		if charSetStr != "" && isPDFUA(profile) {
-			fontData := extractFontProgramData(ctx, doc, fd)
-			if fontData != nil {
-				glyphNames := typography.ExtractGlyphNames(fontData)
-				if glyphNames != nil {
-					return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, Rule_14289_1_7_21_4_2_t01)
+		// §6.2.11.4.2 t1 / PDF/UA-1 §7.21.4.2: if CharSet present, it must
+		// list ALL font program glyphs (parts 2/3 and PDF/UA).
+		if charSetStr != "" {
+			completenessRule := charSetCompletenessRule(profile)
+			if completenessRule.Specification != "" {
+				fontData := extractFontProgramData(ctx, doc, fd)
+				if fontData != nil {
+					glyphNames := typography.ExtractGlyphNames(fontData)
+					if glyphNames != nil {
+						return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule)
+					}
 				}
 			}
 		}
@@ -2359,7 +2668,87 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 		}
 	}
 
+	// §6.2.11.4.2 t2: if CIDSet present, it must identify ALL CIDs in the font program.
+	completenessRule := cidSetCompletenessRule(profile)
+	if completenessRule.Specification != "" {
+		cidSetObj, hasCIDSet := fd["CIDSet"]
+		if hasCIDSet {
+			if r := checkCIDSetCompleteness(ctx, doc, cidFontDict, cidSetObj, fontName, pageNum, completenessRule); r != nil {
+				return r
+			}
+		}
+	}
+
 	slog.Debug("compliance_2: fonts: CIDFont subset CIDSet check passed", "font", fontName)
+	return nil
+}
+
+// checkCIDSetCompleteness decodes a CIDSet bitfield stream and verifies
+// it covers all GIDs with non-empty glyph data in the embedded font program.
+func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Result {
+	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
+	if err != nil {
+		return nil
+	}
+	cidSetData, err := doc.DecodeStream(stream)
+	if err != nil || len(cidSetData) == 0 {
+		return nil
+	}
+
+	// Decode CIDSet bitfield: bit N of byte M represents CID (M*8 + (7-N)).
+	cidSetBits := make(map[uint16]bool)
+	for i, b := range cidSetData {
+		for bit := 7; bit >= 0; bit-- {
+			if b&(1<<uint(bit)) != 0 {
+				cid := uint16(i*8 + (7 - bit)) //nolint:gosec,mnd
+				cidSetBits[cid] = true
+			}
+		}
+	}
+
+	// Get font program and find non-empty GIDs.
+	fd := findFontDescriptor(ctx, doc, cidFontDict)
+	if fd == nil {
+		return nil
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil
+	}
+
+	// Check CIDToGIDMap to determine CID→GID mapping.
+	cidToGIDName, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"])
+
+	emptyGIDs := typography.ExtractEmptyGIDs(fontData)
+	if emptyGIDs == nil {
+		// Not a TrueType font or can't parse loca — try CFF.
+		validCIDs := typography.ExtractValidCIDs(fontData)
+		for cid := range validCIDs {
+			if cid == 0 {
+				continue // .notdef
+			}
+			if !cidSetBits[cid] {
+				return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
+			}
+		}
+		return nil
+	}
+
+	// TrueType: with CIDToGIDMap=/Identity, CID == GID.
+	if cidToGIDName != "Identity" {
+		return nil // Can't verify non-Identity mappings.
+	}
+
+	// Find GIDs with actual glyph data (non-empty).
+	for gid := uint16(1); gid < uint16(len(cidSetData)*8); gid++ { //nolint:gosec,mnd
+		if !emptyGIDs[gid] {
+			// GID has data → CID (== GID under Identity) must be in CIDSet.
+			if !cidSetBits[gid] {
+				return failf(rule, "font %s on page %d: CID %d (GID %d) has glyph data but not in /CIDSet",
+					fontName, pageNum, gid, gid)
+			}
+		}
+	}
 	return nil
 }
 

@@ -154,6 +154,53 @@ func GlyphNames(data []byte) (map[uint16]string, error) {
 	return result, nil
 }
 
+// ValidCIDs returns the set of CIDs present in a CID-keyed CFF font's charset.
+// For non-CID fonts, returns nil. In a CID-keyed CFF, the charset maps
+// GID → CID; this function inverts that to return all valid CIDs.
+func ValidCIDs(data []byte) (map[uint16]bool, error) {
+	if len(data) < 4 || data[0] != 1 {
+		return nil, fmt.Errorf("%w: invalid CFF header", ErrInvalidCFF)
+	}
+	hdrSize := max(int(data[2]), 4)
+	pos := hdrSize
+
+	nameEnd, err := skipINDEX(data, pos)
+	if err != nil {
+		return nil, err
+	}
+	_, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return nil, err
+	}
+	info := parseTopDict(topDictEntries[0])
+	if !info.isCID {
+		return nil, nil // Not a CID-keyed font.
+	}
+
+	numGlyphs := 0
+	if info.charStringsOffset > 0 && int(info.charStringsOffset) < len(data) {
+		_, csEntries, err := parseINDEX(data, int(info.charStringsOffset))
+		if err == nil {
+			numGlyphs = len(csEntries)
+		}
+	}
+	if numGlyphs == 0 {
+		return nil, nil
+	}
+
+	// In CID-keyed CFF, the charset entries are CIDs (not SIDs).
+	cids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[uint16]bool, len(cids))
+	for _, cid := range cids {
+		result[uint16(cid)] = true //nolint:gosec
+	}
+	return result, nil
+}
+
 // --- INDEX parsing ---
 
 // parseINDEX reads a CFF INDEX structure and returns the end offset and

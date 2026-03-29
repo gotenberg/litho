@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -443,6 +444,72 @@ func checkContentStreamResources(
 		}
 	}
 
+	// Check inline image /Intent values for invalid rendering intents.
+	// BI ... ID blocks are skipped by the parser, so we scan raw bytes.
+	results = append(results, checkInlineImageIntent(streamData, part, pageNum)...)
+
+	return results
+}
+
+// checkInlineImageIntent scans raw content stream bytes for inline image
+// dictionaries (BI ... ID) containing an /Intent key with an invalid value.
+func checkInlineImageIntent(data []byte, part int, pageNum int) []Result {
+	riRule := renderingIntentRule(part)
+	if riRule.Specification == "" {
+		return nil
+	}
+
+	var results []Result
+	for i := 0; i < len(data)-2; i++ { //nolint:mnd
+		// Look for "BI" followed by whitespace (start of inline image).
+		if data[i] != 'B' || data[i+1] != 'I' {
+			continue
+		}
+		if i+2 < len(data) && data[i+2] != ' ' && data[i+2] != '\n' && data[i+2] != '\r' && data[i+2] != '\t' {
+			continue
+		}
+		// Scan until "ID" keyword (preceded and followed by whitespace).
+		end := -1
+		for k := i + 3; k < len(data)-2; k++ { //nolint:mnd
+			if data[k] == 'I' && data[k+1] == 'D' &&
+				(data[k-1] == ' ' || data[k-1] == '\n' || data[k-1] == '\r' || data[k-1] == '\t') &&
+				(data[k+2] == ' ' || data[k+2] == '\n' || data[k+2] == '\r') {
+				end = k - i
+				break
+			}
+		}
+		if end < 0 {
+			continue
+		}
+		dictBytes := data[i+2 : i+end]
+		// Look for /Intent in the inline image dictionary.
+		_, after, ok := bytes.Cut(dictBytes, []byte("/Intent"))
+		if !ok {
+			continue
+		}
+		// Extract the intent value (next name token after /Intent).
+		rest := after // skip "/Intent"
+		// Skip whitespace.
+		j := 0
+		for j < len(rest) && (rest[j] == ' ' || rest[j] == '\n' || rest[j] == '\r' || rest[j] == '\t') {
+			j++
+		}
+		if j >= len(rest) || rest[j] != '/' {
+			continue
+		}
+		// Read the name value.
+		j++ // skip '/'
+		nameStart := j
+		for j < len(rest) && rest[j] != ' ' && rest[j] != '\n' && rest[j] != '\r' && rest[j] != '/' {
+			j++
+		}
+		intentName := string(rest[nameStart:j])
+		if !validRenderingIntents[intentName] {
+			results = append(results, failf(riRule, "page %d: inline image uses invalid intent %q", pageNum, intentName)...)
+			return results
+		}
+		i += end // advance past this BI block
+	}
 	return results
 }
 

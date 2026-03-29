@@ -261,6 +261,17 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 
 		pageUsesTransparency := false
 
+		// A page with its own transparency Group is itself using transparency.
+		if groupObj, hasGroup := page["Group"]; hasGroup {
+			group, gErr := document.ResolveDict(ctx, doc, groupObj)
+			if gErr == nil && group != nil {
+				s, _ := document.ResolveName(ctx, doc, group["S"])
+				if s == "Transparency" {
+					pageUsesTransparency = true
+				}
+			}
+		}
+
 		// Check blend modes in ExtGState.
 		gsDict, err := document.ResolveDict(ctx, doc, res["ExtGState"])
 		if err == nil && gsDict != nil {
@@ -346,6 +357,11 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					}
 				}
 			}
+		}
+
+		// Check tiling patterns for transparency triggers.
+		if !pageUsesTransparency {
+			pageUsesTransparency = checkPatternTransparency(ctx, doc, res)
 		}
 
 		// Check Type 3 fonts for transparency triggers.
@@ -445,6 +461,14 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 		annot, err := document.ResolveDict(ctx, doc, annotObj)
 		if err != nil || annot == nil {
 			continue
+		}
+		// Check /BM (blend mode) directly on the annotation dict.
+		// PDF annotations can carry their own blend mode (ISO 32000-2 Table 165).
+		if bmObj, hasBM := annot["BM"]; hasBM {
+			bm := resolveBlendMode(ctx, doc, bmObj)
+			if bm != "" && bm != "Normal" && bm != "Compatible" {
+				return true
+			}
 		}
 		apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
 		if err != nil || apDict == nil {
@@ -644,6 +668,11 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 		if err != nil || intent == nil {
 			continue
 		}
+		// Only PDF/A OutputIntents provide coverage.
+		s, _ := document.ResolveName(ctx, doc, intent["S"])
+		if s != "GTS_PDFA1" && s != "GTS_PDFA" {
+			continue
+		}
 		destObj, ok := intent["DestOutputProfile"]
 		if !ok {
 			continue
@@ -665,6 +694,58 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 // checkType3FontTransparency checks whether any Type 3 font in the page
 // resources uses transparency (via ExtGState or transparency group XObjects
 // in its own resources).
+// checkPatternTransparency checks whether any tiling pattern in the page
+// resources uses transparency (via ExtGState with alpha or blend mode).
+func checkPatternTransparency(ctx context.Context, doc *document.Document, pageRes ast.PdfDict) bool {
+	patDict, err := document.ResolveDict(ctx, doc, pageRes["Pattern"])
+	if err != nil || patDict == nil {
+		return false
+	}
+	for _, patObj := range patDict {
+		stream, err := document.ResolveStream(ctx, doc, patObj)
+		if err != nil {
+			continue
+		}
+		patRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if err != nil || patRes == nil {
+			continue
+		}
+		gsDict, err := document.ResolveDict(ctx, doc, patRes["ExtGState"])
+		if err != nil || gsDict == nil {
+			continue
+		}
+		for _, gsObj := range gsDict {
+			gs, err := document.ResolveDict(ctx, doc, gsObj)
+			if err != nil || gs == nil {
+				continue
+			}
+			if bmObj, hasBM := gs["BM"]; hasBM {
+				bm := resolveBlendMode(ctx, doc, bmObj)
+				if bm != "" && bm != "Normal" && bm != "Compatible" {
+					return true
+				}
+			}
+			if smaskObj, hasSMask := gs["SMask"]; hasSMask {
+				smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
+				if smaskName != "None" {
+					return true
+				}
+			}
+			if caObj, hasCA := gs["CA"]; hasCA {
+				if !floatEquals1(document.GetFloat(caObj)) {
+					return true
+				}
+			}
+			if caObj, hasCa := gs["ca"]; hasCa {
+				if !floatEquals1(document.GetFloat(caObj)) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func checkType3FontTransparency(ctx context.Context, doc *document.Document, pageRes ast.PdfDict) bool {
 	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
 	if err != nil || fontDict == nil {
