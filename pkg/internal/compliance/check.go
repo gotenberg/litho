@@ -48,18 +48,18 @@ type checkGroup func(ctx context.Context, doc *document.Document, catalog ast.Pd
 // that can be type-asserted to access the structured Rule and Context fields.
 // An empty slice means the document passes.
 func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) ([]error, error) {
-	slog.Debug("compliance_2: starting PDF/A validation", "profile", profile)
+	slog.Debug("compliance: starting PDF/A validation", "profile", profile)
 
 	groups, ok := pdfaCheckGroups[profile]
 	if !ok {
-		slog.Error("compliance_2: unknown PDF/A profile", "profile", profile)
-		return nil, fmt.Errorf("compliance_2: unknown PDF/A profile: %s", profile)
+		slog.Error("compliance: unknown PDF/A profile", "profile", profile)
+		return nil, fmt.Errorf("compliance: unknown PDF/A profile: %s", profile)
 	}
 
 	catalog, err := getCatalog(ctx, doc)
 	if err != nil {
-		slog.Error("compliance_2: failed to get catalog", "error", err)
-		return nil, fmt.Errorf("compliance_2: failed to get catalog: %w", err)
+		slog.Error("compliance: failed to get catalog", "error", err)
+		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
 	}
 
 	// Enable parser-level format checking and resolve all objects upfront.
@@ -68,7 +68,7 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 
 	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
 
-	slog.Debug("compliance_2: PDF/A validation complete",
+	slog.Debug("compliance: PDF/A validation complete",
 		"profile", profile,
 		"violations", len(violations),
 	)
@@ -80,18 +80,18 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 // [Violation] value that can be type-asserted to access the structured Rule
 // and Context fields. An empty slice means the document passes.
 func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) ([]error, error) {
-	slog.Debug("compliance_2: starting PDF/UA validation", "profile", profile)
+	slog.Debug("compliance: starting PDF/UA validation", "profile", profile)
 
 	groups, ok := pdfuaCheckGroups[profile]
 	if !ok {
-		slog.Error("compliance_2: unknown PDF/UA profile", "profile", profile)
-		return nil, fmt.Errorf("compliance_2: unknown PDF/UA profile: %s", profile)
+		slog.Error("compliance: unknown PDF/UA profile", "profile", profile)
+		return nil, fmt.Errorf("compliance: unknown PDF/UA profile: %s", profile)
 	}
 
 	catalog, err := getCatalog(ctx, doc)
 	if err != nil {
-		slog.Error("compliance_2: failed to get catalog", "error", err)
-		return nil, fmt.Errorf("compliance_2: failed to get catalog: %w", err)
+		slog.Error("compliance: failed to get catalog", "error", err)
+		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
 	}
 
 	doc.ComplianceMode = true
@@ -99,7 +99,7 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 
 	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
 
-	slog.Debug("compliance_2: PDF/UA validation complete",
+	slog.Debug("compliance: PDF/UA validation complete",
 		"profile", profile,
 		"violations", len(violations),
 	)
@@ -112,7 +112,7 @@ func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	var violations []Violation
 	for _, group := range groups {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2: context cancelled, stopping validation")
+			slog.Debug("compliance: context cancelled, stopping validation")
 			return violations
 		}
 		violations = append(violations, group(ctx, doc, catalog, profile)...)
@@ -201,7 +201,7 @@ func getCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, error
 // resolveAllObjects forces resolution of every indirect object in the xref
 // table. This ensures parser-level format checks run on ALL objects.
 func resolveAllObjects(ctx context.Context, doc *document.Document) {
-	slog.Debug("compliance_2: resolving all objects for format checks")
+	slog.Debug("compliance: resolving all objects for format checks")
 	count := 0
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
@@ -213,19 +213,19 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		count++
 	}
-	slog.Debug("compliance_2: resolved all objects", "count", count)
+	slog.Debug("compliance: resolved all objects", "count", count)
 }
 
 // collectPages traverses the page tree and returns all leaf page dicts.
 func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []ast.PdfDict {
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
-		slog.Debug("compliance_2: catalog missing /Pages")
+		slog.Debug("compliance: catalog missing /Pages")
 		return nil
 	}
 	var pages []ast.PdfDict
 	collectPagesRecursive(ctx, doc, pagesObj, &pages, 0)
-	slog.Debug("compliance_2: collected pages", "count", len(pages))
+	slog.Debug("compliance: collected pages", "count", len(pages))
 	return pages
 }
 
@@ -271,6 +271,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 func getResources(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfDict {
 	res, err := document.ResolveDict(ctx, doc, page["Resources"])
 	if err != nil {
+		slog.Debug("compliance: cannot resolve page resources", "error", err)
 		return nil
 	}
 	return res

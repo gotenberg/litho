@@ -64,7 +64,7 @@ func checkStructureGroup(ctx context.Context, doc *document.Document, catalog as
 	level := pdfaLevel(profile)
 	ua := isPDFUA(profile)
 
-	slog.Debug("compliance_2/structure: starting structure checks",
+	slog.Debug("compliance.structure: starting structure checks",
 		"profile", profile, "part", part, "level", level, "ua", ua,
 	)
 
@@ -117,38 +117,38 @@ func checkStructureGroup(ctx context.Context, doc *document.Document, catalog as
 		}
 	}
 
-	slog.Debug("compliance_2/structure: structure checks complete", "violations", len(results))
+	slog.Debug("compliance.structure: structure checks complete", "violations", len(results))
 	return results
 }
 
 // checkMarkInfo validates that the catalog contains /MarkInfo with /Marked=true.
 func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, results *[]Violation) {
-	slog.Debug("compliance_2/structure: checking MarkInfo")
+	slog.Debug("compliance.structure: checking MarkInfo")
 
 	markInfoObj, ok := catalog["MarkInfo"]
 	if !ok {
-		slog.Debug("compliance_2/structure: catalog missing /MarkInfo")
+		slog.Debug("compliance.structure: catalog missing /MarkInfo")
 		*results = append(*results, fail(markInfoRule(profile, part), "catalog missing /MarkInfo")...)
 		return
 	}
 
 	markInfo, err := document.ResolveDict(ctx, doc, markInfoObj)
 	if err != nil || markInfo == nil {
-		slog.Debug("compliance_2/structure: cannot resolve /MarkInfo", "error", err)
+		slog.Debug("compliance.structure: cannot resolve /MarkInfo", "error", err)
 		*results = append(*results, fail(markInfoRule(profile, part), "cannot resolve /MarkInfo")...)
 		return
 	}
 
 	markedObj, ok := markInfo["Marked"]
 	if !ok {
-		slog.Debug("compliance_2/structure: /MarkInfo missing /Marked entry")
+		slog.Debug("compliance.structure: /MarkInfo missing /Marked entry")
 		*results = append(*results, fail(markInfoRule(profile, part), "/MarkInfo missing /Marked entry")...)
 		return
 	}
 
 	marked, err := document.ResolveBool(ctx, doc, markedObj)
 	if err != nil || !bool(marked) {
-		slog.Debug("compliance_2/structure: /Marked is not true", "marked", marked, "error", err)
+		slog.Debug("compliance.structure: /Marked is not true", "marked", marked, "error", err)
 		*results = append(*results, fail(markInfoRule(profile, part), "/Marked is not true")...)
 	}
 }
@@ -160,23 +160,23 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 		return nil
 	}
 
-	slog.Debug("compliance_2/structure: checking StructTreeRoot")
+	slog.Debug("compliance.structure: checking StructTreeRoot")
 
 	stObj, ok := catalog["StructTreeRoot"]
 	if !ok {
-		slog.Debug("compliance_2/structure: catalog missing /StructTreeRoot")
+		slog.Debug("compliance.structure: catalog missing /StructTreeRoot")
 		*results = append(*results, fail(structTreeRootRule(profile, part), "catalog missing /StructTreeRoot")...)
 		return nil
 	}
 
 	st, err := document.ResolveDict(ctx, doc, stObj)
 	if err != nil || st == nil {
-		slog.Debug("compliance_2/structure: cannot resolve /StructTreeRoot", "error", err)
+		slog.Debug("compliance.structure: cannot resolve /StructTreeRoot", "error", err)
 		*results = append(*results, fail(structTreeRootRule(profile, part), "cannot resolve /StructTreeRoot")...)
 		return nil
 	}
 
-	slog.Debug("compliance_2/structure: /StructTreeRoot found")
+	slog.Debug("compliance.structure: /StructTreeRoot found")
 	return st
 }
 
@@ -184,17 +184,17 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 // Non-standard tags must map to standard types, standard tags must not be
 // remapped, and no circular mappings may exist.
 func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
-	slog.Debug("compliance_2/structure: checking RoleMap")
+	slog.Debug("compliance.structure: checking RoleMap")
 
 	rmObj, ok := structTreeRoot["RoleMap"]
 	if !ok {
-		slog.Debug("compliance_2/structure: no /RoleMap present")
+		slog.Debug("compliance.structure: no /RoleMap present")
 		return
 	}
 
 	roleMap, err := document.ResolveDict(ctx, doc, rmObj)
 	if err != nil || roleMap == nil {
-		slog.Debug("compliance_2/structure: cannot resolve /RoleMap", "error", err)
+		slog.Debug("compliance.structure: cannot resolve /RoleMap", "error", err)
 		return
 	}
 
@@ -206,7 +206,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		}
 		target, err := document.ResolveName(ctx, doc, valObj)
 		if err != nil {
-			slog.Debug("compliance_2/structure: cannot resolve RoleMap target", "key", key, "error", err)
+			slog.Debug("compliance.structure: cannot resolve RoleMap target", "key", key, "error", err)
 			continue
 		}
 		mapping[key] = target
@@ -216,7 +216,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	if !isPDFUA(profile) || profile == "PDF/UA-1" {
 		for src := range mapping {
 			if isStandardStructType(src, profile) {
-				slog.Debug("compliance_2/structure: standard type remapped", "type", src)
+				slog.Debug("compliance.structure: standard type remapped", "type", src)
 				*results = append(*results, failf(roleMapStandardRemapRule(profile), "standard type %s is remapped", src)...)
 			}
 		}
@@ -225,7 +225,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	// Check for self-mappings (A→A) which are always circular.
 	for src, target := range mapping {
 		if src == target {
-			slog.Debug("compliance_2/structure: self-mapping detected", "type", src)
+			slog.Debug("compliance.structure: self-mapping detected", "type", src)
 			*results = append(*results, failf(roleMapCircularRule(profile),
 				"circular mapping for %s", src)...)
 		}
@@ -240,7 +240,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 			continue
 		}
 		if !resolveToStandard(src, mapping, results, profile) {
-			slog.Debug("compliance_2/structure: non-standard type not mapped to standard",
+			slog.Debug("compliance.structure: non-standard type not mapped to standard",
 				"type", src, "target", target,
 			)
 		}
@@ -288,11 +288,11 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 // containment, heading hierarchy, table structure, list structure, captions,
 // and TH scope attributes.
 func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
-	slog.Debug("compliance_2/structure: walking structure tree")
+	slog.Debug("compliance.structure: walking structure tree")
 
 	kidsObj, ok := structTreeRoot["K"]
 	if !ok {
-		slog.Debug("compliance_2/structure: StructTreeRoot has no /K entry")
+		slog.Debug("compliance.structure: StructTreeRoot has no /K entry")
 		return
 	}
 
@@ -408,7 +408,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		return
 	}
 
-	slog.Debug("compliance_2/structure: visiting element", "type", typeName, "parent", parentType, "depth", depth)
+	slog.Debug("compliance.structure: visiting element", "type", typeName, "parent", parentType, "depth", depth)
 
 	// Table and list structure validation.
 	validateTableContainment(state, typeName, parentType)
@@ -833,7 +833,7 @@ func validateTableChildren(state *walkState, typeName ast.PdfName, parentType as
 		case "TR", "THead", "TBody", "TFoot", "Caption":
 			// Valid Table children.
 		default:
-			slog.Debug("compliance_2/structure: invalid child of Table",
+			slog.Debug("compliance.structure: invalid child of Table",
 				"parent", parentType, "child", typeName,
 			)
 			*state.results = append(*state.results,
@@ -841,7 +841,7 @@ func validateTableChildren(state *walkState, typeName ast.PdfName, parentType as
 		}
 	case "THead", "TBody", "TFoot":
 		if typeName != "TR" && typeName != "Caption" {
-			slog.Debug("compliance_2/structure: invalid child of table section",
+			slog.Debug("compliance.structure: invalid child of table section",
 				"parent", parentType, "child", typeName,
 			)
 			*state.results = append(*state.results,
@@ -852,7 +852,7 @@ func validateTableChildren(state *walkState, typeName ast.PdfName, parentType as
 		case "TH", "TD":
 			// Valid TR children.
 		default:
-			slog.Debug("compliance_2/structure: invalid child of TR",
+			slog.Debug("compliance.structure: invalid child of TR",
 				"parent", parentType, "child", typeName,
 			)
 			*state.results = append(*state.results,
@@ -940,7 +940,7 @@ func validateListContainment(ctx context.Context, state *walkState, elem ast.Pdf
 		case "Lbl", "LBody":
 			// OK
 		default:
-			slog.Debug("compliance_2/structure: LI contains unexpected child", "child", typeName)
+			slog.Debug("compliance.structure: LI contains unexpected child", "child", typeName)
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t10, "LI contains %s instead of Lbl/LBody", typeName)...)
 		}
@@ -1114,7 +1114,7 @@ func checkHeadingHierarchy(state *walkState) {
 		return
 	}
 
-	slog.Debug("compliance_2/structure: checking heading hierarchy",
+	slog.Debug("compliance.structure: checking heading hierarchy",
 		"count", len(state.headingLevels),
 	)
 
@@ -1123,7 +1123,7 @@ func checkHeadingHierarchy(state *walkState) {
 		// If the level jumps forward by more than 1, a level was skipped.
 		// When maxSeen == 0 (first heading), the first heading must be H1.
 		if level > maxSeen+1 {
-			slog.Debug("compliance_2/structure: heading level skipped",
+			slog.Debug("compliance.structure: heading level skipped",
 				"expected", maxSeen+1, "got", level,
 			)
 			*state.results = append(*state.results,
@@ -1247,6 +1247,7 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 			}
 			atStr, err := document.ResolveString(ctx, doc, atObj)
 			if err != nil {
+				slog.Debug("compliance.structure: cannot resolve attribute string", "error", err)
 				continue
 			}
 			decoded := document.DecodePdfString(atStr)
@@ -1476,12 +1477,12 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 // When the table uses ID-based header association (TH has /ID attribute),
 // /Scope is not required per ISO 14289-1, 7.5.
 func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
-	slog.Debug("compliance_2/structure: checking TH scope")
+	slog.Debug("compliance.structure: checking TH scope")
 
 	// If the enclosing table uses the Headers+IDs association model
 	// (any TD references TH via /Headers), /Scope is not required on any TH.
 	if state.tableUsesHeaderIDs {
-		slog.Debug("compliance_2/structure: table uses Headers+IDs, skipping /Scope requirement")
+		slog.Debug("compliance.structure: table uses Headers+IDs, skipping /Scope requirement")
 		return
 	}
 
@@ -1489,7 +1490,7 @@ func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
 	// association (TD elements reference TH via /Headers). In that case,
 	// /Scope is not required.
 	if _, hasID := elem["ID"]; hasID {
-		slog.Debug("compliance_2/structure: TH has /ID, skipping /Scope requirement (ID-based header association)")
+		slog.Debug("compliance.structure: TH has /ID, skipping /Scope requirement (ID-based header association)")
 		return
 	}
 
@@ -1636,7 +1637,7 @@ func findHeadersInAttributes(ctx context.Context, doc *document.Document, aObj a
 // if a /Lang entry is present in the catalog or structure elements, its value
 // must be a valid RFC 3066 language tag.
 func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
-	slog.Debug("compliance_2/structure: checking /Lang validity for PDF/A level 'a'", "profile", profile)
+	slog.Debug("compliance.structure: checking /Lang validity for PDF/A level 'a'", "profile", profile)
 
 	rule := pdfaLangValidRule(part)
 
@@ -1648,7 +1649,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		if err == nil {
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 			if trimmed != "" && !isValidLangTag(trimmed) {
-				slog.Debug("compliance_2/structure: catalog /Lang is invalid", "lang", trimmed)
+				slog.Debug("compliance.structure: catalog /Lang is invalid", "lang", trimmed)
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
 			}
 		}
@@ -1671,7 +1672,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		}
 		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 		if trimmed != "" && !isValidLangTag(trimmed) {
-			slog.Debug("compliance_2/structure: invalid /Lang in structure element",
+			slog.Debug("compliance.structure: invalid /Lang in structure element",
 				"lang", trimmed, "path", path)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
@@ -1756,6 +1757,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 			}
 			langStr, err := document.ResolveString(ctx, doc, langObj)
 			if err != nil {
+				slog.Debug("compliance.structure: cannot resolve Lang string", "error", err)
 				continue
 			}
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
@@ -1769,7 +1771,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	if len(results) == 0 {
-		slog.Debug("compliance_2/structure: all /Lang values valid for PDF/A level 'a'")
+		slog.Debug("compliance.structure: all /Lang values valid for PDF/A level 'a'")
 	}
 	return results
 }

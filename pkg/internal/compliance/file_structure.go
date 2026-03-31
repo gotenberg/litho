@@ -43,7 +43,7 @@ const (
 
 // checkFileStructureGroup validates PDF file structure rules (§6.1).
 func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2: file_structure: starting checks", "profile", profile)
+	slog.Debug("compliance.file_structure: starting checks", "profile", profile)
 
 	var results []Violation
 
@@ -77,7 +77,7 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
 	}
 
-	slog.Debug("compliance_2: file_structure: checks complete",
+	slog.Debug("compliance.file_structure: checks complete",
 		"profile", profile,
 		"violations", len(results),
 	)
@@ -342,7 +342,7 @@ func xrefStreamForbiddenRule(_ string) Rule {
 func checkFileHeader(doc *document.Document, profile string) []Violation {
 	buf, err := safeReadHeader(doc, headerReadSize)
 	if err != nil {
-		slog.Debug("compliance_2: file_structure: cannot read header", "error", err)
+		slog.Debug("compliance.file_structure: cannot read header", "error", err)
 		return nil
 	}
 
@@ -350,7 +350,7 @@ func checkFileHeader(doc *document.Document, profile string) []Violation {
 
 	// Check that file starts with %PDF-.
 	if !bytes.HasPrefix(buf, []byte("%PDF-")) {
-		slog.Debug("compliance_2: file_structure: header does not start with %PDF-")
+		slog.Debug("compliance.file_structure: header does not start with %PDF-")
 		return fail(fileHeaderRule(profile), "header does not start with %PDF-")
 	}
 
@@ -359,7 +359,7 @@ func checkFileHeader(doc *document.Document, profile string) []Violation {
 	// PDF/A-2/3: %PDF-1.n where n is 0-7.
 	// PDF/A-4: %PDF-2.n where n is 0-9.
 	if len(buf) < 8 { //nolint:mnd // minimum for "%PDF-x.y"
-		slog.Debug("compliance_2: file_structure: header too short for version")
+		slog.Debug("compliance.file_structure: header too short for version")
 		return fail(fileHeaderRule(profile), "header too short")
 	}
 	version := string(buf[5:8]) // e.g., "1.4" or "2.0"
@@ -378,18 +378,18 @@ func checkFileHeader(doc *document.Document, profile string) []Violation {
 	}
 
 	if !valid {
-		slog.Debug("compliance_2: file_structure: header version mismatch",
+		slog.Debug("compliance.file_structure: header version mismatch",
 			"version", version, "part", part)
 		return fail(fileHeaderRule(profile),
 			fmt.Sprintf("header %q does not match required pattern", "%PDF-"+version))
 	}
-	slog.Debug("compliance_2: file_structure: header version OK", "version", version)
+	slog.Debug("compliance.file_structure: header version OK", "version", version)
 
 	// After %PDF-x.y, byte 8 must be an EOL marker immediately.
 	// No extra digits, spaces, or other characters between version and EOL.
 	var results []Violation
 	if len(buf) <= 8 || (buf[8] != '\n' && buf[8] != '\r') { //nolint:mnd
-		slog.Debug("compliance_2: file_structure: byte after version is not EOL",
+		slog.Debug("compliance.file_structure: byte after version is not EOL",
 			"byte", buf[8])
 		return fail(fileHeaderRule(profile),
 			fmt.Sprintf("header version not immediately followed by EOL marker (byte 8 = 0x%02X)", buf[8]))
@@ -404,27 +404,27 @@ func checkFileHeader(doc *document.Document, profile string) []Violation {
 
 	// Verify no extra EOL before the binary comment.
 	if commentStart < len(buf) && (buf[commentStart] == '\r' || buf[commentStart] == '\n') {
-		slog.Debug("compliance_2: file_structure: multiple EOL markers after header")
+		slog.Debug("compliance.file_structure: multiple EOL markers after header")
 		return fail(fileBinaryCommentRule(profile),
 			"header followed by multiple EOL markers instead of single EOL")
 	}
 
 	if commentStart >= len(buf) || buf[commentStart] != '%' {
-		slog.Debug("compliance_2: file_structure: missing binary comment marker")
+		slog.Debug("compliance.file_structure: missing binary comment marker")
 		return failf(fileBinaryCommentRule(profile), "missing %% binary comment after header")
 	}
 
 	// Check the 4 bytes after the %.
 	binaryStart := commentStart + 1
 	if binaryStart+minBinaryBytes > len(buf) {
-		slog.Debug("compliance_2: file_structure: binary comment too short")
+		slog.Debug("compliance.file_structure: binary comment too short")
 		return failf(fileBinaryCommentRule(profile), "binary comment has fewer than 4 bytes")
 	}
 
 	for i := range minBinaryBytes {
 		b := buf[binaryStart+i]
 		if b <= 127 { //nolint:mnd // PDF spec: each byte > 127
-			slog.Debug("compliance_2: file_structure: binary comment byte not > 127",
+			slog.Debug("compliance.file_structure: binary comment byte not > 127",
 				"index", i, "value", b)
 			results = append(results, Violation{
 				Rule:    fileBinaryCommentRule(profile),
@@ -434,7 +434,7 @@ func checkFileHeader(doc *document.Document, profile string) []Violation {
 		}
 	}
 
-	slog.Debug("compliance_2: file_structure: binary comment OK")
+	slog.Debug("compliance.file_structure: binary comment OK")
 	return nil
 }
 
@@ -442,33 +442,33 @@ func checkFileHeader(doc *document.Document, profile string) []Violation {
 func checkTrailerID(doc *document.Document, profile string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
-		slog.Debug("compliance_2: file_structure: no trailer dictionary")
+		slog.Debug("compliance.file_structure: no trailer dictionary")
 		return fail(trailerIDRule(profile), "no trailer dictionary")
 	}
 
 	idObj, hasID := trailer["ID"]
 	if !hasID {
-		slog.Debug("compliance_2: file_structure: trailer missing /ID")
+		slog.Debug("compliance.file_structure: trailer missing /ID")
 		return fail(trailerIDRule(profile), "missing ID in trailer")
 	}
 
 	// Validate the ID array: must have 2 non-empty string elements.
 	if arr, ok := idObj.(ast.PdfArray); ok {
 		if len(arr) == 0 {
-			slog.Debug("compliance_2: file_structure: trailer /ID array is empty")
+			slog.Debug("compliance.file_structure: trailer /ID array is empty")
 			return fail(trailerIDRule(profile), "empty ID array in trailer")
 		}
 		if len(arr) >= 2 { //nolint:mnd
 			id0, _ := arr[0].(ast.PdfString)
 			id1, _ := arr[1].(ast.PdfString)
 			if len(id0) == 0 || len(id1) == 0 {
-				slog.Debug("compliance_2: file_structure: trailer /ID has empty string element")
+				slog.Debug("compliance.file_structure: trailer /ID has empty string element")
 				return fail(trailerIDRule(profile), "ID array contains empty string element")
 			}
 		}
 	}
 
-	slog.Debug("compliance_2: file_structure: trailer /ID present")
+	slog.Debug("compliance.file_structure: trailer /ID present")
 
 	// Check linearized ID consistency (§6.1.3 t04) — PDF/A-1 only.
 	if pdfaPart(profile) == 1 && doc.Linearization != nil {
@@ -490,36 +490,36 @@ func checkLinearizedID(doc *document.Document, _ string) []Violation {
 	trailer := doc.Index.Trailer
 	idObj, hasID := trailer["ID"]
 	if !hasID {
-		slog.Debug("compliance_2: file_structure: linearized PDF missing /ID in trailer")
+		slog.Debug("compliance.file_structure: linearized PDF missing /ID in trailer")
 		return nil
 	}
 
 	idArr, ok := idObj.(ast.PdfArray)
 	if !ok || len(idArr) < 2 { //nolint:mnd // ID array needs 2 elements
-		slog.Debug("compliance_2: file_structure: linearized ID array too short")
+		slog.Debug("compliance.file_structure: linearized ID array too short")
 		return nil
 	}
 
-	slog.Debug("compliance_2: file_structure: linearized ID present and valid")
+	slog.Debug("compliance.file_structure: linearized ID present and valid")
 	return nil
 }
 
 // checkEncryptionForbidden validates §6.1.3: /Encrypt must not be in trailer.
 func checkEncryptionForbidden(doc *document.Document, profile string) []Violation {
 	if doc.IsEncrypted {
-		slog.Debug("compliance_2: file_structure: document is encrypted")
+		slog.Debug("compliance.file_structure: document is encrypted")
 		return fail(encryptRule(profile), "document is encrypted")
 	}
 
 	trailer := doc.Index.Trailer
 	if trailer != nil {
 		if _, hasEncrypt := trailer["Encrypt"]; hasEncrypt {
-			slog.Debug("compliance_2: file_structure: trailer contains /Encrypt")
+			slog.Debug("compliance.file_structure: trailer contains /Encrypt")
 			return fail(encryptRule(profile), "Encrypt key present in trailer")
 		}
 	}
 
-	slog.Debug("compliance_2: file_structure: no encryption — pass")
+	slog.Debug("compliance.file_structure: no encryption — pass")
 	return nil
 }
 
@@ -528,7 +528,7 @@ func checkEncryptionForbidden(doc *document.Document, profile string) []Violatio
 func checkPostEOFData(doc *document.Document, profile string) []Violation {
 	fileSize := doc.FileSize()
 	if fileSize <= 0 {
-		slog.Debug("compliance_2: file_structure: unknown file size, skipping post-EOF check")
+		slog.Debug("compliance.file_structure: unknown file size, skipping post-EOF check")
 		return nil
 	}
 
@@ -537,14 +537,14 @@ func checkPostEOFData(doc *document.Document, profile string) []Violation {
 	offset := fileSize - readLen
 	tail, err := doc.ReadFileBytes(offset, readLen)
 	if err != nil {
-		slog.Debug("compliance_2: file_structure: cannot read file tail", "error", err)
+		slog.Debug("compliance.file_structure: cannot read file tail", "error", err)
 		return nil
 	}
 
 	// Find the last occurrence of %%EOF.
 	lastIdx := bytes.LastIndex(tail, []byte(eofMarker))
 	if lastIdx < 0 {
-		slog.Debug("compliance_2: file_structure: no %%EOF marker found in tail")
+		slog.Debug("compliance.file_structure: no %%EOF marker found in tail")
 		// No %%EOF found — this is a structural issue, but we report it as post-EOF
 		// since the rule specifically concerns data after %%EOF.
 		return fail(postEOFRule(profile), "no %%EOF marker found in file")
@@ -568,13 +568,13 @@ func checkPostEOFData(doc *document.Document, profile string) []Violation {
 		}
 		extraBytes := remaining - consumed
 		if extraBytes > 0 {
-			slog.Debug("compliance_2: file_structure: data after %%EOF",
+			slog.Debug("compliance.file_structure: data after %%EOF",
 				"extra_bytes", extraBytes)
 			return failf(postEOFRule(profile), "%d byte(s) after last %%%%EOF", extraBytes)
 		}
 	}
 
-	slog.Debug("compliance_2: file_structure: no data after %%EOF — pass")
+	slog.Debug("compliance.file_structure: no data after %%EOF — pass")
 	return nil
 }
 
@@ -586,7 +586,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2: file_structure: context cancelled in stream external keys check")
+			slog.Debug("compliance.file_structure: context cancelled in stream external keys check")
 			return results
 		}
 		if entry.Free {
@@ -605,7 +605,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 			}
 		}
 		if len(found) > 0 {
-			slog.Debug("compliance_2: file_structure: stream has forbidden external keys",
+			slog.Debug("compliance.file_structure: stream has forbidden external keys",
 				"object", objNum, "keys", found)
 			results = append(results, Violation{
 				Rule:    streamExternalKeysRule(profile),
@@ -615,7 +615,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 	}
 
 	if len(results) == 0 {
-		slog.Debug("compliance_2: file_structure: no forbidden stream external keys found")
+		slog.Debug("compliance.file_structure: no forbidden stream external keys found")
 	}
 	return results
 }
@@ -626,7 +626,7 @@ func checkStreamLZW(ctx context.Context, doc *document.Document, profile string)
 
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2: file_structure: context cancelled in LZW check")
+			slog.Debug("compliance.file_structure: context cancelled in LZW check")
 			return results
 		}
 		if entry.Free {
@@ -639,7 +639,7 @@ func checkStreamLZW(ctx context.Context, doc *document.Document, profile string)
 		}
 
 		if hasLZWFilter(ctx, doc, stream.Dict) {
-			slog.Debug("compliance_2: file_structure: LZW filter found",
+			slog.Debug("compliance.file_structure: LZW filter found",
 				"object", objNum)
 			results = append(results, Violation{
 				Rule:    lzwFilterRule(profile),
@@ -649,7 +649,7 @@ func checkStreamLZW(ctx context.Context, doc *document.Document, profile string)
 	}
 
 	if len(results) == 0 {
-		slog.Debug("compliance_2: file_structure: no LZW filters found")
+		slog.Debug("compliance.file_structure: no LZW filters found")
 	}
 	return results
 }
@@ -801,7 +801,7 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 // checkEmbeddedFiles validates §6.1.11: embedded files are forbidden in PDF/A-1.
 func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if pdfaPart(profile) != 1 {
-		slog.Debug("compliance_2: file_structure: embedded files check skipped (not PDF/A-1)")
+		slog.Debug("compliance.file_structure: embedded files check skipped (not PDF/A-1)")
 		return nil
 	}
 
@@ -813,7 +813,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 		namesDict, err := document.ResolveDict(ctx, doc, namesObj)
 		if err == nil && namesDict != nil {
 			if _, hasEF := namesDict["EmbeddedFiles"]; hasEF {
-				slog.Debug("compliance_2: file_structure: Names dict contains /EmbeddedFiles")
+				slog.Debug("compliance.file_structure: Names dict contains /EmbeddedFiles")
 				results = append(results, fail(embeddedFilesNameRule(profile),
 					"EmbeddedFiles key present in Names dictionary")...)
 			}
@@ -840,7 +840,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 		}
 
 		if _, hasEF := dict["EF"]; hasEF {
-			slog.Debug("compliance_2: file_structure: file spec dict has /EF key",
+			slog.Debug("compliance.file_structure: file spec dict has /EF key",
 				"object", objNum)
 			results = append(results, Violation{
 				Rule:    embeddedFilesEFRule(profile),
@@ -850,7 +850,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	if len(results) == 0 {
-		slog.Debug("compliance_2: file_structure: no embedded files found — pass")
+		slog.Debug("compliance.file_structure: no embedded files found — pass")
 	}
 	return results
 }
@@ -861,7 +861,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 // ComplianceMode is enabled.
 func checkFormatViolations(doc *document.Document, profile string) []Violation {
 	if len(doc.FormatViolations) == 0 {
-		slog.Debug("compliance_2: file_structure: no parser format violations")
+		slog.Debug("compliance.file_structure: no parser format violations")
 		return nil
 	}
 
@@ -873,7 +873,7 @@ func checkFormatViolations(doc *document.Document, profile string) []Violation {
 
 	for _, violation := range doc.FormatViolations {
 		msg := violation.Error()
-		slog.Debug("compliance_2: file_structure: parser format violation",
+		slog.Debug("compliance.file_structure: parser format violation",
 			"error", msg)
 
 		rule := hexRule
@@ -897,7 +897,7 @@ func checkFormatViolations(doc *document.Document, profile string) []Violation {
 		})
 	}
 
-	slog.Debug("compliance_2: file_structure: parser format violations reported",
+	slog.Debug("compliance.file_structure: parser format violations reported",
 		"count", len(results))
 	return results
 }
@@ -979,13 +979,13 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []V
 		if prevByte != '\n' && prevByte != '\r' {
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: fmt.Sprintf("compliance: obj header %d: object number not preceded by EOL marker (0x%02X)", objNum, prevByte),
+				Context: fmt.Sprintf("compliance.file_structure: obj header %d: object number not preceded by EOL marker (0x%02X)", objNum, prevByte),
 			})
 		}
 	}
 
 	if len(results) > 0 {
-		slog.Debug("compliance_2: file_structure: obj header leading whitespace violations",
+		slog.Debug("compliance.file_structure: obj header leading whitespace violations",
 			"count", len(results))
 	}
 	return results
@@ -1075,21 +1075,21 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// Check indirect object count.
 	objCount := len(doc.Index.Entries)
 	if objCount > maxIndirectObjs {
-		slog.Debug("compliance_2: file_structure: too many indirect objects",
+		slog.Debug("compliance.file_structure: too many indirect objects",
 			"count", objCount)
 		results = append(results, Violation{
 			Rule:    indirectObjCountRule(profile),
 			Context: fmt.Sprintf("indirect object count %d exceeds %d", objCount, maxIndirectObjs),
 		})
 	} else {
-		slog.Debug("compliance_2: file_structure: indirect object count OK",
+		slog.Debug("compliance.file_structure: indirect object count OK",
 			"count", objCount)
 	}
 
 	// Walk all objects checking names, strings, integers, reals, arrays, dicts.
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2: file_structure: context cancelled in numeric limits check")
+			slog.Debug("compliance.file_structure: context cancelled in numeric limits check")
 			return results
 		}
 		if entry.Free {
@@ -1098,6 +1098,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 
 		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil {
+			slog.Debug("compliance.file_structure: cannot resolve object", "error", err)
 			continue
 		}
 
@@ -1109,7 +1110,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	results = append(results, checkContentStreamLimits(ctx, doc, part, profile)...)
 
 	if len(results) == 0 {
-		slog.Debug("compliance_2: file_structure: all numeric limits OK")
+		slog.Debug("compliance.file_structure: all numeric limits OK")
 	}
 	return results
 }
@@ -1175,6 +1176,7 @@ func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNu
 	}
 	ops, err := content.ParseStreamData(data)
 	if err != nil {
+		slog.Debug("compliance.file_structure: cannot parse content stream", "error", err)
 		return nil
 	}
 	var results []Violation
@@ -1330,7 +1332,7 @@ func isHexDigit(c byte) bool {
 // checkXRefFormat validates §6.1.4: xref streams are forbidden in PDF/A-1.
 func checkXRefFormat(doc *document.Document, profile string) []Violation {
 	if pdfaPart(profile) != 1 {
-		slog.Debug("compliance_2: file_structure: xref format check skipped (not PDF/A-1)")
+		slog.Debug("compliance.file_structure: xref format check skipped (not PDF/A-1)")
 		return nil
 	}
 
@@ -1338,7 +1340,7 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 	// (type 2), which is only possible with xref streams.
 	for _, entry := range doc.Index.Entries {
 		if entry.Type == xref.XRefTypeCompressed {
-			slog.Debug("compliance_2: file_structure: xref streams detected (compressed objects found)")
+			slog.Debug("compliance.file_structure: xref streams detected (compressed objects found)")
 			return fail(xrefStreamForbiddenRule(profile), "document uses xref streams")
 		}
 	}
@@ -1347,12 +1349,12 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer != nil {
 		if typeName, ok := trailer["Type"].(ast.PdfName); ok && typeName == "XRef" {
-			slog.Debug("compliance_2: file_structure: trailer is an xref stream")
+			slog.Debug("compliance.file_structure: trailer is an xref stream")
 			return fail(xrefStreamForbiddenRule(profile), "document uses xref streams")
 		}
 	}
 
-	slog.Debug("compliance_2: file_structure: xref format OK (no xref streams)")
+	slog.Debug("compliance.file_structure: xref format OK (no xref streams)")
 	return nil
 }
 
@@ -1382,6 +1384,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		}
 		declaredLen, err := document.ResolveInt(ctx, doc, lengthObj)
 		if err != nil {
+			slog.Debug("compliance.file_structure: cannot resolve stream length", "error", err)
 			continue
 		}
 
@@ -1393,6 +1396,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		}
 		rawData, err := doc.ReadFileBytes(entry.Offset, readSize)
 		if err != nil {
+			slog.Debug("compliance.file_structure: cannot read raw stream bytes", "error", err)
 			continue
 		}
 
@@ -1451,7 +1455,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 				//nolint:mnd // minimum drift threshold
 				10)
 			if absDiff > 2 && absDiff < maxDrift { //nolint:mnd // EOL tolerance
-				slog.Debug("compliance_2: file_structure: stream length mismatch",
+				slog.Debug("compliance.file_structure: stream length mismatch",
 					"object", objNum, "declared", declaredLen, "actual", rawLen)
 				results = append(results, Violation{
 					Rule:    streamLengthRule(profile),
@@ -1488,11 +1492,11 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 	part := pdfaPart(profile)
 	// Page boundary size limits apply to PDF/A-2, -3, and -4.
 	if part < 2 { //nolint:mnd // PDF/A-1 does not have this rule.
-		slog.Debug("compliance_2: file_structure: page boundary check skipped (not PDF/A-2+)")
+		slog.Debug("compliance.file_structure: page boundary check skipped (not PDF/A-2+)")
 		return nil
 	}
 
-	slog.Debug("compliance_2: file_structure: checking page boundaries", "profile", profile)
+	slog.Debug("compliance.file_structure: checking page boundaries", "profile", profile)
 
 	rule := pageBoundRule(profile)
 	var results []Violation
@@ -1569,7 +1573,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 			height := math.Abs(y2 - y1)
 
 			if width < minPageBound || width > maxPageBound || height < minPageBound || height > maxPageBound {
-				slog.Debug("compliance_2: file_structure: page boundary out of range",
+				slog.Debug("compliance.file_structure: page boundary out of range",
 					"page", pageIdx+1, "box", string(key),
 					"width", width, "height", height,
 				)
@@ -1582,7 +1586,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 	}
 
 	if len(results) == 0 {
-		slog.Debug("compliance_2: file_structure: all page boundaries OK")
+		slog.Debug("compliance.file_structure: all page boundaries OK")
 	}
 	return results
 }
@@ -1613,14 +1617,14 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile 
 
 	infoObj, hasInfo := trailer["Info"]
 	if !hasInfo {
-		slog.Debug("compliance_2: file_structure: no /Info in trailer — pass (PDF/A-4)")
+		slog.Debug("compliance.file_structure: no /Info in trailer — pass (PDF/A-4)")
 		return nil
 	}
 
 	// §6.1.3 t04: /Info is only allowed if /PieceInfo exists in catalog.
 	_, hasPieceInfo := catalog["PieceInfo"]
 	if !hasPieceInfo {
-		slog.Debug("compliance_2: file_structure: /Info present without /PieceInfo in catalog")
+		slog.Debug("compliance.file_structure: /Info present without /PieceInfo in catalog")
 		return fail(Rule_19005_4_6_1_3_t04, "Info key present in trailer but PieceInfo not in catalog")
 	}
 
@@ -1634,14 +1638,14 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile 
 			}
 		}
 		if len(badKeys) > 0 {
-			slog.Debug("compliance_2: file_structure: Info dict has non-ModDate keys",
+			slog.Debug("compliance.file_structure: Info dict has non-ModDate keys",
 				"keys", badKeys)
 			return failf(Rule_19005_4_6_1_3_t05,
 				"Info dictionary contains keys %v (only ModDate allowed)", badKeys)
 		}
 	}
 
-	slog.Debug("compliance_2: file_structure: PDF/A-4 trailer Info OK")
+	slog.Debug("compliance.file_structure: PDF/A-4 trailer Info OK")
 	return nil
 }
 

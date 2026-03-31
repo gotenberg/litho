@@ -15,17 +15,17 @@ import (
 // image /OPI, and image /Interpolate constraints across all pages.
 func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
-		slog.Debug("compliance_2: xobjects: skipping for PDF/UA profile", "profile", profile)
+		slog.Debug("compliance.xobjects: skipping for PDF/UA profile", "profile", profile)
 		return nil
 	}
 
 	part := pdfaPart(profile)
 	if part == 0 {
-		slog.Debug("compliance_2: xobjects: unknown profile part", "profile", profile)
+		slog.Debug("compliance.xobjects: unknown profile part", "profile", profile)
 		return nil
 	}
 
-	slog.Debug("compliance_2: xobjects: starting checks", "profile", profile, "part", part)
+	slog.Debug("compliance.xobjects: starting checks", "profile", profile, "part", part)
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
@@ -33,7 +33,7 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 
 	for i, page := range pages {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2: xobjects: context cancelled")
+			slog.Debug("compliance.xobjects: context cancelled")
 			return results
 		}
 
@@ -52,7 +52,7 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 		results = append(results, checkInlineImageInterpolate(ctx, doc, page, i+1, part)...)
 	}
 
-	slog.Debug("compliance_2: xobjects: checks complete", "violations", len(results))
+	slog.Debug("compliance.xobjects: checks complete", "violations", len(results))
 	return results
 }
 
@@ -184,7 +184,7 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 		xobjDict := stream.Dict
 		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
 
-		slog.Debug("compliance_2: xobjects: checking XObject", "page", pageNum, "name", name, "subtype", subtype)
+		slog.Debug("compliance.xobjects: checking XObject", "page", pageNum, "name", name, "subtype", subtype)
 
 		*results = append(*results, checkXObject(ctx, doc, stream, xobjDict, subtype, name, pageNum, part, profile)...)
 
@@ -216,14 +216,14 @@ func checkXObject(
 	// §6.2.9 — Reference XObjects forbidden (all parts).
 	// A /Ref key in the XObject dict indicates a reference XObject.
 	if _, hasRef := xobjDict["Ref"]; hasRef {
-		slog.Debug("compliance_2: xobjects: found /Ref key (reference XObject)",
+		slog.Debug("compliance.xobjects: found /Ref key (reference XObject)",
 			"page", pageNum, "name", name)
 		results = append(results, refXObjectRule(part, pageNum, name)...)
 	}
 
 	// PostScript XObjects forbidden (all parts).
 	if subtype == "PS" {
-		slog.Debug("compliance_2: xobjects: found PostScript XObject",
+		slog.Debug("compliance.xobjects: found PostScript XObject",
 			"page", pageNum, "name", name)
 		results = append(results, psXObjectRule(part, pageNum, name)...)
 	}
@@ -268,7 +268,7 @@ func checkFormXObjectPart1(
 	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
 		sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
 		if sub2Name == "PS" {
-			slog.Debug("compliance_2: xobjects: form has /Subtype2 = /PS",
+			slog.Debug("compliance.xobjects: form has /Subtype2 = /PS",
 				"page", pageNum, "name", name)
 			results = append(results, failf(Rule_19005_1_6_2_5_t01, "page %d, XObject %s", pageNum, name)...)
 		}
@@ -276,7 +276,7 @@ func checkFormXObjectPart1(
 
 	// /PS key is forbidden in form XObject.
 	if _, hasPS := formDict["PS"]; hasPS {
-		slog.Debug("compliance_2: xobjects: form has /PS key",
+		slog.Debug("compliance.xobjects: form has /PS key",
 			"page", pageNum, "name", name)
 		results = append(results, failf(Rule_19005_1_6_2_5_t01, "page %d, XObject %s", pageNum, name)...)
 	}
@@ -296,14 +296,14 @@ func checkImageXObjectPart1(
 
 	// /Alternates forbidden.
 	if _, hasAlt := imgDict["Alternates"]; hasAlt {
-		slog.Debug("compliance_2: xobjects: image has /Alternates",
+		slog.Debug("compliance.xobjects: image has /Alternates",
 			"page", pageNum, "name", name)
 		results = append(results, failf(Rule_19005_1_6_2_4_t01, "page %d, XObject %s", pageNum, name)...)
 	}
 
 	// /OPI forbidden.
 	if _, hasOPI := imgDict["OPI"]; hasOPI {
-		slog.Debug("compliance_2: xobjects: image has /OPI",
+		slog.Debug("compliance.xobjects: image has /OPI",
 			"page", pageNum, "name", name)
 		results = append(results, failf(Rule_19005_1_6_2_4_t02, "page %d, XObject %s", pageNum, name)...)
 	}
@@ -312,7 +312,7 @@ func checkImageXObjectPart1(
 	if interpObj, hasInterp := imgDict["Interpolate"]; hasInterp {
 		interpVal, err := document.ResolveBool(ctx, doc, interpObj)
 		if err == nil && bool(interpVal) {
-			slog.Debug("compliance_2: xobjects: image has /Interpolate = true",
+			slog.Debug("compliance.xobjects: image has /Interpolate = true",
 				"page", pageNum, "name", name)
 			results = append(results, failf(Rule_19005_1_6_2_4_t03, "page %d, XObject %s", pageNum, name)...)
 		}
@@ -344,7 +344,7 @@ func checkFormXObject(
 
 	// /OPI key forbidden in form XObject.
 	if _, hasOPI := formDict["OPI"]; hasOPI {
-		slog.Debug("compliance_2: xobjects: form has /OPI key",
+		slog.Debug("compliance.xobjects: form has /OPI key",
 			"page", pageNum, "name", name)
 		results = append(results, failf(formRule, "page %d, XObject %s: OPI key present", pageNum, name)...)
 	}
@@ -353,14 +353,14 @@ func checkFormXObject(
 	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
 		sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
 		if sub2Name == "PS" {
-			slog.Debug("compliance_2: xobjects: form has /Subtype2 = /PS",
+			slog.Debug("compliance.xobjects: form has /Subtype2 = /PS",
 				"page", pageNum, "name", name)
 			results = append(results, failf(formRule, "page %d, XObject %s: Subtype2 is PS", pageNum, name)...)
 		}
 	}
 
 	if _, hasPS := formDict["PS"]; hasPS {
-		slog.Debug("compliance_2: xobjects: form has /PS key",
+		slog.Debug("compliance.xobjects: form has /PS key",
 			"page", pageNum, "name", name)
 		results = append(results, failf(formRule, "page %d, XObject %s: PS key present", pageNum, name)...)
 	}
@@ -394,14 +394,14 @@ func checkImageXObject(
 
 	// /Alternates forbidden (§6.2.7/6.2.8).
 	if _, hasAlt := imgDict["Alternates"]; hasAlt {
-		slog.Debug("compliance_2: xobjects: image has /Alternates",
+		slog.Debug("compliance.xobjects: image has /Alternates",
 			"page", pageNum, "name", name)
 		results = append(results, failf(altRule, "page %d, XObject %s", pageNum, name)...)
 	}
 
 	// /OPI forbidden (§6.2.8).
 	if _, hasOPI := imgDict["OPI"]; hasOPI {
-		slog.Debug("compliance_2: xobjects: image has /OPI",
+		slog.Debug("compliance.xobjects: image has /OPI",
 			"page", pageNum, "name", name)
 		results = append(results, failf(opiRule, "page %d, XObject %s", pageNum, name)...)
 	}
@@ -410,7 +410,7 @@ func checkImageXObject(
 	if interpObj, hasInterp := imgDict["Interpolate"]; hasInterp {
 		interpVal, err := document.ResolveBool(ctx, doc, interpObj)
 		if err == nil && bool(interpVal) {
-			slog.Debug("compliance_2: xobjects: image has /Interpolate = true",
+			slog.Debug("compliance.xobjects: image has /Interpolate = true",
 				"page", pageNum, "name", name)
 			results = append(results, failf(interpRule, "page %d, XObject %s", pageNum, name)...)
 		}

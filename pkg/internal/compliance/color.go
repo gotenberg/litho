@@ -19,11 +19,11 @@ import (
 func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 	if part == 0 {
-		slog.Debug("compliance_2/color: skipping color checks for non-PDF/A profile", "profile", profile)
+		slog.Debug("compliance.color: skipping color checks for non-PDF/A profile", "profile", profile)
 		return nil
 	}
 
-	slog.Debug("compliance_2/color: starting color checks", "profile", profile, "part", part)
+	slog.Debug("compliance.color: starting color checks", "profile", profile, "part", part)
 
 	var results []Violation
 
@@ -41,7 +41,7 @@ func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.Pd
 	// parts 2+ need colorant consistency (§6.2.4.4 t01/t02).
 	checkSeparationDeviceN(ctx, doc, catalog, part, &results)
 
-	slog.Debug("compliance_2/color: color checks complete", "violations", len(results))
+	slog.Debug("compliance.color: color checks complete", "violations", len(results))
 	return results
 }
 
@@ -59,7 +59,7 @@ const iccHeaderSize = 20
 // ICC profile data.
 func parseICCHeader(data []byte) (iccProfileHeader, bool) {
 	if len(data) < iccHeaderSize {
-		slog.Debug("compliance_2/color: ICC profile too short", "len", len(data))
+		slog.Debug("compliance.color: ICC profile too short", "len", len(data))
 		return iccProfileHeader{}, false
 	}
 	hdr := iccProfileHeader{
@@ -67,7 +67,7 @@ func parseICCHeader(data []byte) (iccProfileHeader, bool) {
 		colorSpace:  string(data[16:20]),
 		version:     int(data[8]), // Major version byte.
 	}
-	slog.Debug("compliance_2/color: parsed ICC header",
+	slog.Debug("compliance.color: parsed ICC header",
 		"deviceClass", hdr.deviceClass,
 		"colorSpace", hdr.colorSpace,
 		"version", hdr.version,
@@ -93,15 +93,15 @@ var validICCColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant
 // or §6.2.3 (parts 2-4). It returns the ICC colour space string and whether a
 // valid ICC profile was found.
 func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) (string, bool) {
-	slog.Debug("compliance_2/color: checking OutputIntent ICC profiles")
+	slog.Debug("compliance.color: checking OutputIntent ICC profiles")
 
 	outputIntents, err := document.ResolveArray(ctx, doc, catalog["OutputIntents"])
 	if err != nil || len(outputIntents) == 0 {
-		slog.Debug("compliance_2/color: no OutputIntents found", "error", err)
+		slog.Debug("compliance.color: no OutputIntents found", "error", err)
 		return "", false
 	}
 
-	slog.Debug("compliance_2/color: found OutputIntents", "count", len(outputIntents))
+	slog.Debug("compliance.color: found OutputIntents", "count", len(outputIntents))
 
 	// §6.2.2 t2: if multiple OutputIntents exist with subtype GTS_PDFA1,
 	// they must all reference the same DestOutputProfile. Track all
@@ -122,7 +122,7 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 
 		intent, err := document.ResolveDict(ctx, doc, intentObj)
 		if err != nil || intent == nil {
-			slog.Debug("compliance_2/color: cannot resolve OutputIntent dict", "index", i, "error", err)
+			slog.Debug("compliance.color: cannot resolve OutputIntent dict", "index", i, "error", err)
 			continue
 		}
 
@@ -139,7 +139,7 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 		if subtypeName == "GTS_PDFA1" {
 			pdfaIntentCount++
 		}
-		slog.Debug("compliance_2/color: OutputIntent subtype", "index", i, "S", subtypeName)
+		slog.Debug("compliance.color: OutputIntent subtype", "index", i, "S", subtypeName)
 
 		// Only PDF/A OutputIntents provide device CS coverage.
 		// GTS_PDFA1 is the subtype for parts 1-3; GTS_PDFA for part 4.
@@ -151,7 +151,7 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			// §6.2.2: OutputIntent without DestOutputProfile must have
 			// OutputConditionIdentifier referencing a well-known registry.
 			if _, hasOCI := intent["OutputConditionIdentifier"]; !hasOCI {
-				slog.Debug("compliance_2/color: OutputIntent missing both DestOutputProfile and OutputConditionIdentifier", "index", i)
+				slog.Debug("compliance.color: OutputIntent missing both DestOutputProfile and OutputConditionIdentifier", "index", i)
 				*results = append(*results, failf(outputIntentICCRule(part),
 					"OutputIntent[%d]: missing DestOutputProfile and OutputConditionIdentifier", i)...)
 			}
@@ -160,13 +160,13 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 
 		stream, err := document.ResolveStream(ctx, doc, destProfileObj)
 		if err != nil {
-			slog.Debug("compliance_2/color: cannot resolve DestOutputProfile stream", "index", i, "error", err)
+			slog.Debug("compliance.color: cannot resolve DestOutputProfile stream", "index", i, "error", err)
 			continue
 		}
 
 		data, err := doc.DecodeStream(stream)
 		if err != nil {
-			slog.Debug("compliance_2/color: cannot decode ICC profile stream", "index", i, "error", err)
+			slog.Debug("compliance.color: cannot decode ICC profile stream", "index", i, "error", err)
 			*results = append(*results, failf(outputIntentICCRule(part), "OutputIntent[%d]: failed to decode ICC profile", i)...)
 			continue
 		}
@@ -179,14 +179,14 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 
 		// Validate device class.
 		if !validICCDeviceClasses[hdr.deviceClass] {
-			slog.Debug("compliance_2/color: invalid ICC device class", "index", i, "deviceClass", hdr.deviceClass)
+			slog.Debug("compliance.color: invalid ICC device class", "index", i, "deviceClass", hdr.deviceClass)
 			*results = append(*results, failf(outputIntentICCRule(part),
 				"OutputIntent[%d]: invalid device class %q (expected prtr or mntr)", i, hdr.deviceClass)...)
 		}
 
 		// Validate colour space.
 		if !validICCColorSpaces[hdr.colorSpace] {
-			slog.Debug("compliance_2/color: invalid ICC colour space", "index", i, "colorSpace", hdr.colorSpace)
+			slog.Debug("compliance.color: invalid ICC colour space", "index", i, "colorSpace", hdr.colorSpace)
 			*results = append(*results, failf(outputIntentICCRule(part),
 				"OutputIntent[%d]: invalid colour space %q (expected GRAY, RGB  or CMYK)", i, hdr.colorSpace)...)
 		} else if isPDFAIntent {
@@ -209,14 +209,14 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			firstColorSpace = hdr.colorSpace
 		} else {
 			if !sameIndirectRef(firstProfileRef, destProfileObj) {
-				slog.Debug("compliance_2/color: non-matching DestOutputProfile", "index", i)
+				slog.Debug("compliance.color: non-matching DestOutputProfile", "index", i)
 				*results = append(*results, failf(outputIntentConsistencyRule(part),
 					"OutputIntent[%d]: DestOutputProfile does not reference same object as first entry", i)...)
 			}
 
 			// Flag inconsistent colour spaces across OutputIntents.
 			if hdr.colorSpace != firstColorSpace {
-				slog.Debug("compliance_2/color: inconsistent OutputIntent colour spaces",
+				slog.Debug("compliance.color: inconsistent OutputIntent colour spaces",
 					"index", i, "expected", firstColorSpace, "got", hdr.colorSpace)
 				*results = append(*results, failf(outputIntentConsistencyRule(part),
 					"OutputIntent[%d]: colour space %q does not match first entry %q", i, hdr.colorSpace, firstColorSpace)...)
@@ -227,13 +227,13 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 	// §6.2.2 t2: if multiple GTS_PDFA1 OutputIntents exist but none has a
 	// valid ICC profile, flag the inconsistency.
 	if pdfaIntentCount > 1 && !hasValidICC {
-		slog.Debug("compliance_2/color: multiple GTS_PDFA1 OutputIntents but no valid ICC profile",
+		slog.Debug("compliance.color: multiple GTS_PDFA1 OutputIntents but no valid ICC profile",
 			"count", pdfaIntentCount)
 		*results = append(*results, failf(outputIntentConsistencyRule(part),
 			"%d GTS_PDFA1 OutputIntents but no valid DestOutputProfile found", pdfaIntentCount)...)
 	}
 
-	slog.Debug("compliance_2/color: OutputIntent ICC check done",
+	slog.Debug("compliance.color: OutputIntent ICC check done",
 		"hasValidICC", hasValidICC,
 		"iccColorSpace", iccColorSpace,
 	)
@@ -323,7 +323,7 @@ func normaliseICCProfileID(data []byte) []byte {
 // checkDeviceColorSpaces validates that device-dependent colour spaces
 // (DeviceRGB, DeviceCMYK, DeviceGray) are only used when allowed.
 func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
-	slog.Debug("compliance_2/color: checking device-dependent colour spaces")
+	slog.Debug("compliance.color: checking device-dependent colour spaces")
 
 	pages := collectPages(ctx, doc, catalog)
 	for i, page := range pages {
@@ -333,12 +333,12 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 
 		resources := getResources(ctx, doc, page)
 		if resources == nil {
-			slog.Debug("compliance_2/color: page has no resources", "page", i)
+			slog.Debug("compliance.color: page has no resources", "page", i)
 			continue
 		}
 
 		defaults := collectDefaultColorSpaces(ctx, doc, resources)
-		slog.Debug("compliance_2/color: page default colour spaces",
+		slog.Debug("compliance.color: page default colour spaces",
 			"page", i,
 			"hasDefaultRGB", defaults.hasRGB,
 			"hasDefaultCMYK", defaults.hasCMYK,
@@ -348,7 +348,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		// Scan colour spaces used in the page resources.
 		csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 		if err != nil {
-			slog.Debug("compliance_2/color: cannot resolve ColorSpace dict", "page", i, "error", err)
+			slog.Debug("compliance.color: cannot resolve ColorSpace dict", "page", i, "error", err)
 		}
 
 		// Scan content stream operators for device CS usage and collect
@@ -369,7 +369,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		deviceCSUsed.subScopeCMYK = deviceCSUsed.subScopeCMYK || annotUsage.subScopeCMYK
 		deviceCSUsed.subScopeGray = deviceCSUsed.subScopeGray || annotUsage.subScopeGray
 
-		slog.Debug("compliance_2/color: device colour spaces found on page",
+		slog.Debug("compliance.color: device colour spaces found on page",
 			"page", i,
 			"usesRGB", deviceCSUsed.rgb,
 			"usesCMYK", deviceCSUsed.cmyk,
@@ -403,34 +403,34 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 
 		// DeviceRGB: needs DefaultRGB, OutputIntent with RGB, or RGB blending CS.
 		if deviceCSUsed.rgb && !defaults.hasRGB && !rgbUniversalCover {
-			slog.Debug("compliance_2/color: DeviceRGB used without coverage", "page", i)
+			slog.Debug("compliance.color: DeviceRGB used without coverage", "page", i)
 			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used without DefaultRGB or RGB OutputIntent", i+1)...)
 		}
 		// Sub-scope DeviceRGB: page DefaultRGB doesn't apply; only universal coverage.
 		if deviceCSUsed.subScopeRGB && !rgbUniversalCover {
-			slog.Debug("compliance_2/color: DeviceRGB used in sub-scope without coverage", "page", i)
+			slog.Debug("compliance.color: DeviceRGB used in sub-scope without coverage", "page", i)
 			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used in pattern/form without local DefaultRGB or RGB OutputIntent", i+1)...)
 		}
 
 		// DeviceCMYK: needs DefaultCMYK, OutputIntent with CMYK, or CMYK blending CS.
 		if deviceCSUsed.cmyk && !defaults.hasCMYK && !cmykUniversalCover {
-			slog.Debug("compliance_2/color: DeviceCMYK used without coverage", "page", i)
+			slog.Debug("compliance.color: DeviceCMYK used without coverage", "page", i)
 			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used without DefaultCMYK or CMYK OutputIntent", i+1)...)
 		}
 		// Sub-scope DeviceCMYK: page DefaultCMYK doesn't apply.
 		if deviceCSUsed.subScopeCMYK && !cmykUniversalCover {
-			slog.Debug("compliance_2/color: DeviceCMYK used in sub-scope without coverage", "page", i)
+			slog.Debug("compliance.color: DeviceCMYK used in sub-scope without coverage", "page", i)
 			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used in pattern/form without local DefaultCMYK or CMYK OutputIntent", i+1)...)
 		}
 
 		// DeviceGray: needs DefaultGray or any OutputIntent.
 		if deviceCSUsed.gray && !defaults.hasGray && !grayUniversalCover {
-			slog.Debug("compliance_2/color: DeviceGray used without coverage", "page", i)
+			slog.Debug("compliance.color: DeviceGray used without coverage", "page", i)
 			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used without DefaultGray or OutputIntent", i+1)...)
 		}
 		// Sub-scope DeviceGray: page DefaultGray doesn't apply.
 		if deviceCSUsed.subScopeGray && !grayUniversalCover {
-			slog.Debug("compliance_2/color: DeviceGray used in sub-scope without coverage", "page", i)
+			slog.Debug("compliance.color: DeviceGray used in sub-scope without coverage", "page", i)
 			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used in pattern/form without local DefaultGray or OutputIntent", i+1)...)
 		}
 	}
@@ -449,6 +449,7 @@ func collectUsedCSNames(ctx context.Context, doc *document.Document, page ast.Pd
 	}
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
+		slog.Debug("compliance.color: cannot parse page content stream", "error", err)
 		return nil
 	}
 	used := make(map[string]bool)
@@ -491,6 +492,7 @@ func checkPageOutputIntent(ctx context.Context, doc *document.Document, page ast
 		}
 		stream, err := document.ResolveStream(ctx, doc, destObj)
 		if err != nil {
+			slog.Debug("compliance.color: cannot resolve output profile stream", "error", err)
 			continue
 		}
 		data, err := doc.DecodeStream(stream)
@@ -572,21 +574,21 @@ func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, reso
 
 	csDict, err := document.ResolveDict(ctx, doc, csObj)
 	if err != nil || csDict == nil {
-		slog.Debug("compliance_2/color: cannot resolve ColorSpace dict for defaults", "error", err)
+		slog.Debug("compliance.color: cannot resolve ColorSpace dict for defaults", "error", err)
 		return defaultCS{}
 	}
 
 	var ds defaultCS
 	if _, ok := csDict["DefaultRGB"]; ok {
-		slog.Debug("compliance_2/color: found DefaultRGB")
+		slog.Debug("compliance.color: found DefaultRGB")
 		ds.hasRGB = true
 	}
 	if _, ok := csDict["DefaultCMYK"]; ok {
-		slog.Debug("compliance_2/color: found DefaultCMYK")
+		slog.Debug("compliance.color: found DefaultCMYK")
 		ds.hasCMYK = true
 	}
 	if _, ok := csDict["DefaultGray"]; ok {
-		slog.Debug("compliance_2/color: found DefaultGray")
+		slog.Debug("compliance.color: found DefaultGray")
 		ds.hasGray = true
 	}
 	return ds
@@ -617,7 +619,7 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 			return usage
 		}
 		csName := resolveCSName(ctx, doc, csObj)
-		slog.Debug("compliance_2/color: checking named colour space", "name", name, "resolved", csName)
+		slog.Debug("compliance.color: checking named colour space", "name", name, "resolved", csName)
 		markDeviceCS(csName, &usage)
 
 		// Separation and DeviceN arrays use an alternate space (arr[2]) that
@@ -708,7 +710,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
-			slog.Debug("compliance_2/color: cannot resolve XObject stream", "name", name, "error", err)
+			slog.Debug("compliance.color: cannot resolve XObject stream", "name", name, "error", err)
 			continue
 		}
 
@@ -716,7 +718,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		csObj := stream.Dict["ColorSpace"]
 		csResolved := resolveCSName(ctx, doc, csObj)
 		if csResolved != "" {
-			slog.Debug("compliance_2/color: XObject uses colour space", "name", name, "cs", csResolved)
+			slog.Debug("compliance.color: XObject uses colour space", "name", name, "cs", csResolved)
 			markDeviceCS(csResolved, usage)
 			// Check base/alternate spaces for Indexed, Separation, DeviceN.
 			arr, err := document.ResolveArray(ctx, doc, csObj)
@@ -755,7 +757,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	var usage deviceCSUsage
 
 	if depth >= maxFormXObjectDepth {
-		slog.Debug("compliance_2/color: Form XObject recursion depth limit reached", "depth", depth)
+		slog.Debug("compliance.color: Form XObject recursion depth limit reached", "depth", depth)
 		return usage
 	}
 
@@ -763,7 +765,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	// PdfDict is a map type; each resolved instance has a unique header pointer.
 	dictAddr := fmt.Sprintf("%p", stream.Dict)
 	if visited[dictAddr] {
-		slog.Debug("compliance_2/color: Form XObject already visited, skipping", "addr", dictAddr)
+		slog.Debug("compliance.color: Form XObject already visited, skipping", "addr", dictAddr)
 		return usage
 	}
 	visited[dictAddr] = true
@@ -771,7 +773,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	// Decode and scan the content stream for device CS operators.
 	data, err := doc.DecodeStream(stream)
 	if err != nil {
-		slog.Debug("compliance_2/color: cannot decode Form XObject stream", "error", err)
+		slog.Debug("compliance.color: cannot decode Form XObject stream", "error", err)
 		return usage
 	}
 
@@ -786,7 +788,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(data)
 		if err != nil {
-			slog.Debug("compliance_2/color: cannot parse Form XObject content stream", "error", err)
+			slog.Debug("compliance.color: cannot parse Form XObject content stream", "error", err)
 		} else {
 			for idx, op := range ops {
 				if idx%100 == 0 && ctx.Err() != nil { //nolint:mnd // per-spec checkpoint interval
@@ -870,7 +872,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 				return usage
 			}
 			resolved := resolveCSName(ctx, doc, csObj)
-			slog.Debug("compliance_2/color: Form XObject nested colour space", "csName", csName, "resolved", resolved)
+			slog.Debug("compliance.color: Form XObject nested colour space", "csName", csName, "resolved", resolved)
 			markDeviceCS(resolved, &usage)
 
 			// Check Indexed base space.
@@ -1018,7 +1020,7 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 			continue
 		}
 
-		slog.Debug("compliance_2/color: checking Type3 font resources", "font", name)
+		slog.Debug("compliance.color: checking Type3 font resources", "font", name)
 
 		// Scan CharProcs content streams for device CS operators.
 		// This must run even when the font has no /Resources dict, since
@@ -1028,14 +1030,17 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 			for cpName, cpObj := range charProcs {
 				stream, err := document.ResolveStream(ctx, doc, cpObj)
 				if err != nil {
+					slog.Debug("compliance.color: cannot resolve CharProc stream", "error", err)
 					continue
 				}
 				streamData, err := doc.DecodeStream(stream)
 				if err != nil {
+					slog.Debug("compliance.color: cannot decode CharProc stream", "error", err)
 					continue
 				}
 				ops, err := content.ParseStreamData(streamData)
 				if err != nil {
+					slog.Debug("compliance.color: cannot parse CharProc stream", "error", err)
 					continue
 				}
 				for _, op := range ops {
@@ -1054,7 +1059,7 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 						}
 					}
 				}
-				slog.Debug("compliance_2/color: scanned Type3 CharProc", "font", name, "charProc", cpName)
+				slog.Debug("compliance.color: scanned Type3 CharProc", "font", name, "charProc", cpName)
 			}
 		}
 
@@ -1065,11 +1070,12 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 		}
 		fontCSDict, err := document.ResolveDict(ctx, doc, fontRes["ColorSpace"])
 		if err != nil {
+			slog.Debug("compliance.color: cannot resolve font ColorSpace dict", "error", err)
 			continue
 		}
 		for csName, csObj := range fontCSDict {
 			resolved := resolveCSName(ctx, doc, csObj)
-			slog.Debug("compliance_2/color: Type3 font colour space", "font", name, "csName", csName, "resolved", resolved)
+			slog.Debug("compliance.color: Type3 font colour space", "font", name, "csName", csName, "resolved", resolved)
 			markDeviceCS(resolved, usage)
 		}
 	}
@@ -1087,7 +1093,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 
 	streamData, err := getPageContentBytes(ctx, doc, page)
 	if err != nil {
-		slog.Debug("compliance_2/color: failed to get content stream bytes for CS scan",
+		slog.Debug("compliance.color: failed to get content stream bytes for CS scan",
 			"page", pageIdx, "error", err)
 		return usage, referencedXObjects
 	}
@@ -1103,12 +1109,12 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
-		slog.Debug("compliance_2/color: failed to parse content stream for CS scan",
+		slog.Debug("compliance.color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)
 		return usage, referencedXObjects
 	}
 
-	slog.Debug("compliance_2/color: scanning content stream operators for device CS",
+	slog.Debug("compliance.color: scanning content stream operators for device CS",
 		"page", pageIdx, "opCount", len(ops))
 
 	// Track whether fill/stroke CS has been explicitly set. If a painting
@@ -1121,7 +1127,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 	for idx, op := range ops {
 		// Check context every ~100 operators.
 		if idx%100 == 0 && ctx.Err() != nil { //nolint:mnd // per-spec checkpoint interval
-			slog.Debug("compliance_2/color: context cancelled during content CS scan",
+			slog.Debug("compliance.color: context cancelled during content CS scan",
 				"page", pageIdx, "operator_index", idx)
 			return usage, referencedXObjects
 		}
@@ -1317,6 +1323,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 			for _, subObj := range subDict {
 				subStream, err := document.ResolveStream(ctx, doc, subObj)
 				if err != nil {
+					slog.Debug("compliance.color: cannot resolve sub-XObject stream", "error", err)
 					continue
 				}
 				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited)
@@ -1347,7 +1354,7 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 
 		sd, err := document.ResolveDict(ctx, doc, shadingObj)
 		if err != nil || sd == nil {
-			slog.Debug("compliance_2/color: cannot resolve Shading dict", "name", name, "error", err)
+			slog.Debug("compliance.color: cannot resolve Shading dict", "name", name, "error", err)
 			continue
 		}
 
@@ -1358,7 +1365,7 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 
 		csName := resolveCSName(ctx, doc, csObj)
 		if csName != "" {
-			slog.Debug("compliance_2/color: Shading uses colour space", "name", name, "cs", csName)
+			slog.Debug("compliance.color: Shading uses colour space", "name", name, "cs", csName)
 			markDeviceCS(csName, usage)
 		}
 	}
@@ -1400,11 +1407,11 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 
 		patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"])
 		if patternType != 1 {
-			slog.Debug("compliance_2/color: skipping non-tiling pattern", "name", name, "type", patternType)
+			slog.Debug("compliance.color: skipping non-tiling pattern", "name", name, "type", patternType)
 			continue
 		}
 
-		slog.Debug("compliance_2/color: scanning tiling pattern", "name", name)
+		slog.Debug("compliance.color: scanning tiling pattern", "name", name)
 
 		// Scan the tiling pattern's content stream as a Form XObject.
 		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited)
@@ -1421,7 +1428,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 // consistency per §6.2.4.4. It ensures that the same colorant name always maps
 // to the same alternate colour space across the entire document.
 func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) {
-	slog.Debug("compliance_2/color: checking Separation/DeviceN colour space consistency")
+	slog.Debug("compliance.color: checking Separation/DeviceN colour space consistency")
 
 	// colorantAlternates tracks colorant name -> first alternate space seen.
 	colorantAlternates := make(map[string]string)
@@ -1455,6 +1462,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 			for _, apKey := range []ast.PdfName{"N", "R", "D"} {
 				apStream, err := document.ResolveStream(ctx, doc, apDict[apKey])
 				if err != nil {
+					slog.Debug("compliance.color: cannot resolve appearance stream", "error", err)
 					continue
 				}
 				if apStream.Dict == nil {
@@ -1468,7 +1476,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 		}
 	}
 
-	slog.Debug("compliance_2/color: Separation/DeviceN check complete",
+	slog.Debug("compliance.color: Separation/DeviceN check complete",
 		"uniqueColorants", len(colorantAlternates))
 }
 
@@ -1500,6 +1508,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 
 			csType, err := document.ResolveName(ctx, doc, arr[0])
 			if err != nil {
+				slog.Debug("compliance.color: cannot resolve color space type name", "error", err)
 				continue
 			}
 
@@ -1528,6 +1537,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		}
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
+			slog.Debug("compliance.color: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -1558,7 +1568,7 @@ func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfA
 		return
 	}
 
-	slog.Debug("compliance_2/color: found Separation colour space",
+	slog.Debug("compliance.color: found Separation colour space",
 		"page", pageIdx, "cs", csName,
 		"colorant", string(colorantName),
 		"alternate", alternateName,
@@ -1577,7 +1587,7 @@ func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfA
 		// Check tint transform consistency.
 		if prevTint, hasPrev := colorantTintFuncs[cName]; hasPrev {
 			if !tintTransformEqual(ctx, doc, prevTint, arr[3]) {
-				slog.Debug("compliance_2/color: tint transform mismatch",
+				slog.Debug("compliance.color: tint transform mismatch",
 					"colorant", cName, "page", pageIdx, "cs", csName)
 				*results = append(*results, failf(rule,
 					"page %d, ColorSpace %s: Separation colorant %q has different tintTransform",
@@ -1710,13 +1720,13 @@ func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObj
 // [/DeviceN [/names...] /AlternateSpace /TintTransform ...]
 func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
 	if len(arr) < 4 {
-		slog.Debug("compliance_2/color: DeviceN array too short", "page", pageIdx, "cs", csName, "len", len(arr))
+		slog.Debug("compliance.color: DeviceN array too short", "page", pageIdx, "cs", csName, "len", len(arr))
 		return
 	}
 
 	names, err := document.ResolveArray(ctx, doc, arr[1])
 	if err != nil {
-		slog.Debug("compliance_2/color: cannot resolve DeviceN names array", "page", pageIdx, "cs", csName, "error", err)
+		slog.Debug("compliance.color: cannot resolve DeviceN names array", "page", pageIdx, "cs", csName, "error", err)
 		return
 	}
 
@@ -1733,11 +1743,11 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 	alternateName := resolveCSName(ctx, doc, arr[2])
 	if alternateName == "" {
-		slog.Debug("compliance_2/color: cannot resolve DeviceN alternate space", "page", pageIdx, "cs", csName)
+		slog.Debug("compliance.color: cannot resolve DeviceN alternate space", "page", pageIdx, "cs", csName)
 		return
 	}
 
-	slog.Debug("compliance_2/color: found DeviceN colour space",
+	slog.Debug("compliance.color: found DeviceN colour space",
 		"page", pageIdx, "cs", csName,
 		"colorantCount", len(names),
 		"alternate", alternateName,
@@ -1752,6 +1762,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 		colorantName, err := document.ResolveName(ctx, doc, nameObj)
 		if err != nil {
+			slog.Debug("compliance.color: cannot resolve colorant name", "error", err)
 			continue
 		}
 
@@ -1761,7 +1772,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		// DeviceN must not use reserved colorant names "All" or "None"
 		// as tint transform targets (per §6.2.4.4).
 		if cName == "All" || cName == "None" {
-			slog.Debug("compliance_2/color: DeviceN uses reserved colorant name",
+			slog.Debug("compliance.color: DeviceN uses reserved colorant name",
 				"page", pageIdx, "cs", csName, "colorant", cName)
 			*results = append(*results, failf(deviceNConsistencyRule(part),
 				"page %d, ColorSpace %s: DeviceN uses reserved colorant name %q",
@@ -1771,7 +1782,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 		if prev, ok := colorantAlternates[cName]; ok {
 			if prev != alternateName {
-				slog.Debug("compliance_2/color: DeviceN colorant alternate mismatch",
+				slog.Debug("compliance.color: DeviceN colorant alternate mismatch",
 					"colorant", cName, "prevAlternate", prev, "newAlternate", alternateName)
 				*results = append(*results, failf(deviceNConsistencyRule(part),
 					"page %d, ColorSpace %s: DeviceN colorant %q uses alternate %q but previously used %q",
@@ -1899,7 +1910,7 @@ func deviceNConsistencyRule(part int) Rule {
 // checkICCBasedProfiles validates ICCBased colour space profiles per
 // §6.2.3.2 (part 1) or §6.2.4.2 (parts 2-4).
 func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) {
-	slog.Debug("compliance_2/color: checking ICCBased profiles")
+	slog.Debug("compliance.color: checking ICCBased profiles")
 
 	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).
 	var outputIntentRef ast.PdfIndirectRef
@@ -1957,6 +1968,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 				}
 				stream, err := document.ResolveStream(ctx, doc, apObj)
 				if err != nil {
+					slog.Debug("compliance.color: cannot resolve appearance stream", "error", err)
 					continue
 				}
 				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
@@ -1996,6 +2008,7 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		}
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
+			slog.Debug("compliance.color: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -2064,11 +2077,13 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 
 		stream, err := document.ResolveStream(ctx, doc, destObj)
 		if err != nil {
+			slog.Debug("compliance.color: cannot resolve output profile stream", "error", err)
 			continue
 		}
 
 		data, err := doc.DecodeStream(stream)
 		if err != nil {
+			slog.Debug("compliance.color: cannot decode output profile stream", "error", err)
 			continue
 		}
 
@@ -2077,7 +2092,7 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
-		slog.Debug("compliance_2/color: loaded OutputIntent ICC info for identity check",
+		slog.Debug("compliance.color: loaded OutputIntent ICC info for identity check",
 			"objNum", ref.ObjectNum, "colorSpace", hdr.colorSpace, "size", len(data))
 		return ref, hdr, data
 	}
@@ -2111,6 +2126,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		csType, err := document.ResolveName(ctx, doc, arr[0])
 		if err != nil {
+			slog.Debug("compliance.color: cannot resolve color space type name", "error", err)
 			continue
 		}
 
@@ -2140,11 +2156,11 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			continue
 		}
 
-		slog.Debug("compliance_2/color: found ICCBased colour space", "page", pageIdx, "name", name)
+		slog.Debug("compliance.color: found ICCBased colour space", "page", pageIdx, "name", name)
 
 		stream, err := document.ResolveStream(ctx, doc, arr[1])
 		if err != nil {
-			slog.Debug("compliance_2/color: cannot resolve ICCBased stream", "page", pageIdx, "name", name, "error", err)
+			slog.Debug("compliance.color: cannot resolve ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),
 				"page %d, ColorSpace %s: cannot resolve ICCBased profile stream", pageIdx+1, name)...)
 			continue
@@ -2153,7 +2169,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 		// Validate /N matches the ICC profile colour space.
 		nVal, err := document.ResolveInt(ctx, doc, stream.Dict["N"])
 		if err != nil {
-			slog.Debug("compliance_2/color: ICCBased missing /N", "page", pageIdx, "name", name)
+			slog.Debug("compliance.color: ICCBased missing /N", "page", pageIdx, "name", name)
 			*results = append(*results, failf(iccBasedNRule(part),
 				"page %d, ColorSpace %s: ICCBased profile missing /N entry", pageIdx+1, name)...)
 			continue
@@ -2161,7 +2177,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		data, err := doc.DecodeStream(stream)
 		if err != nil {
-			slog.Debug("compliance_2/color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
+			slog.Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),
 				"page %d, ColorSpace %s: cannot decode ICCBased profile", pageIdx+1, name)...)
 			continue
@@ -2176,7 +2192,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		expectedN := expectedComponentCount(hdr.colorSpace)
 		if expectedN == 0 || int(nVal) != expectedN {
-			slog.Debug("compliance_2/color: ICCBased /N mismatch",
+			slog.Debug("compliance.color: ICCBased /N mismatch",
 				"page", pageIdx, "name", name,
 				"N", nVal, "expectedN", expectedN,
 				"colorSpace", hdr.colorSpace,
@@ -2226,7 +2242,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			}
 
 			if identical {
-				slog.Debug("compliance_2/color: ICCBased profile is identical to OutputIntent or blending CS (violation)",
+				slog.Debug("compliance.color: ICCBased profile is identical to OutputIntent or blending CS (violation)",
 					"page", pageIdx, "name", name,
 				)
 				*results = append(*results, failf(iccBasedIdentityRule(part),

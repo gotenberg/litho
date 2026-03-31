@@ -79,34 +79,34 @@ var allowedInlineImageFiltersPart4 = map[string]bool{
 // image filters. For PDF/UA profiles, no content stream checks are performed.
 func checkContentGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
-		slog.Debug("compliance_2/content: skipping for PDF/UA profile", "profile", profile)
+		slog.Debug("compliance.content: skipping for PDF/UA profile", "profile", profile)
 		return nil
 	}
 
 	part := pdfaPart(profile)
 	if part == 0 {
-		slog.Debug("compliance_2/content: unknown profile part", "profile", profile)
+		slog.Debug("compliance.content: unknown profile part", "profile", profile)
 		return nil
 	}
 
-	slog.Debug("compliance_2/content: starting checks", "profile", profile, "part", part)
+	slog.Debug("compliance.content: starting checks", "profile", profile, "part", part)
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
 	for i, page := range pages {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2/content: context cancelled during page iteration")
+			slog.Debug("compliance.content: context cancelled during page iteration")
 			return results
 		}
 
-		slog.Debug("compliance_2/content: checking page", "page", i+1)
+		slog.Debug("compliance.content: checking page", "page", i+1)
 
 		pageResults := checkPageContent(ctx, doc, page, part, i+1)
 		results = append(results, pageResults...)
 	}
 
-	slog.Debug("compliance_2/content: checks complete", "violations", len(results))
+	slog.Debug("compliance.content: checks complete", "violations", len(results))
 	return results
 }
 
@@ -115,25 +115,25 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 	// Get raw decoded content stream bytes for inline image scanning.
 	streamData, err := getPageContentBytes(ctx, doc, page)
 	if err != nil {
-		slog.Debug("compliance_2/content: failed to get content stream bytes",
+		slog.Debug("compliance.content: failed to get content stream bytes",
 			"page", pageNum, "error", err)
 		return nil
 	}
 
 	if len(streamData) == 0 {
-		slog.Debug("compliance_2/content: empty content stream", "page", pageNum)
+		slog.Debug("compliance.content: empty content stream", "page", pageNum)
 		return nil
 	}
 
 	// Parse into operations for operator validation and q/Q nesting.
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
-		slog.Debug("compliance_2/content: failed to parse content stream",
+		slog.Debug("compliance.content: failed to parse content stream",
 			"page", pageNum, "error", err)
 		return nil
 	}
 
-	slog.Debug("compliance_2/content: parsed operations", "page", pageNum, "count", len(ops))
+	slog.Debug("compliance.content: parsed operations", "page", pageNum, "count", len(ops))
 
 	var results []Violation
 
@@ -144,14 +144,14 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 	for idx, op := range ops {
 		// Check context every ~100 operators.
 		if idx%100 == 0 && ctx.Err() != nil { //nolint:mnd // per-spec checkpoint interval
-			slog.Debug("compliance_2/content: context cancelled during operator walk",
+			slog.Debug("compliance.content: context cancelled during operator walk",
 				"page", pageNum, "operator_index", idx)
 			return results
 		}
 
 		// Check for unknown operators.
 		if !validPDFOperators[op.Operator] {
-			slog.Debug("compliance_2/content: unknown operator",
+			slog.Debug("compliance.content: unknown operator",
 				"page", pageNum, "operator", op.Operator)
 			results = append(results, failf(unknownOperatorRule(part),
 				"page %d: operator %q", pageNum, op.Operator)...)
@@ -175,7 +175,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 	if maxDepthSeen > maxQNesting {
 		rule := qNestingRule(part)
 		if rule.Clause != "" {
-			slog.Debug("compliance_2/content: q/Q nesting exceeded",
+			slog.Debug("compliance.content: q/Q nesting exceeded",
 				"page", pageNum, "depth", maxDepthSeen)
 			results = append(results, failf(rule,
 				"page %d: q/Q nesting depth %d exceeds %d", pageNum, maxDepthSeen, maxQNesting)...)
@@ -278,7 +278,7 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 				forbidden = forbiddenInlineImageFilters[filterVal]
 			}
 			if forbidden {
-				slog.Debug("compliance_2/content: forbidden inline image filter",
+				slog.Debug("compliance.content: forbidden inline image filter",
 					"page", pageNum, "filter", filterVal)
 				results = append(results, failf(inlineImageFilterRule(part),
 					"page %d: inline image uses forbidden filter %q", pageNum, filterVal)...)

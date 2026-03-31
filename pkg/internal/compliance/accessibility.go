@@ -16,11 +16,11 @@ import (
 // For non-PDF/UA profiles, it returns nil immediately.
 func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !isPDFUA(profile) {
-		slog.Debug("compliance_2/accessibility: skipping for non-PDF/UA profile", "profile", profile)
+		slog.Debug("compliance.accessibility: skipping for non-PDF/UA profile", "profile", profile)
 		return nil
 	}
 
-	slog.Debug("compliance_2/accessibility: starting checks", "profile", profile)
+	slog.Debug("compliance.accessibility: starting checks", "profile", profile)
 
 	results := make([]Violation, 0, 16) //nolint:mnd // estimated capacity for accessibility checks.
 
@@ -108,7 +108,7 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 	// 24. Structure destinations (PDF/UA-2 §8.8).
 	results = append(results, checkStructureDestinations(ctx, doc, catalog, profile)...)
 
-	slog.Debug("compliance_2/accessibility: checks complete", "violations", len(results))
+	slog.Debug("compliance.accessibility: checks complete", "violations", len(results))
 	return results
 }
 
@@ -119,7 +119,7 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 //   - Missing /Lang or empty /Lang in catalog -> langRequiredRule (t34 for PDF/UA-1, 8.4.4 t01 for PDF/UA-2)
 //   - Present but invalid /Lang format        -> langValidRule (t29 for PDF/UA-1, 8.4.4 t02 for PDF/UA-2)
 func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking /Lang requirement")
+	slog.Debug("compliance.accessibility: checking /Lang requirement")
 
 	langRule := langRequiredRule(profile)
 	validRule := langValidRule(profile)
@@ -129,25 +129,25 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 	if catalogLang == "" {
 		// PDF/UA-2 §8.4.4 requires catalog /Lang explicitly.
 		if profile == "PDF/UA-2" {
-			slog.Debug("compliance_2/accessibility: catalog missing /Lang key (required for PDF/UA-2)")
+			slog.Debug("compliance.accessibility: catalog missing /Lang key (required for PDF/UA-2)")
 			return fail(langRule, "catalog")
 		}
 
 		// PDF/UA-1 §7.2 t34: natural language must be determinable. If catalog
 		// /Lang is absent, the language can still be determined through the
 		// structure tree — the tree root or individual elements may carry /Lang.
-		slog.Debug("compliance_2/accessibility: catalog missing /Lang, checking structure tree inheritance")
+		slog.Debug("compliance.accessibility: catalog missing /Lang, checking structure tree inheritance")
 		return checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
 	}
 
-	slog.Debug("compliance_2/accessibility: catalog /Lang value", "lang", catalogLang)
+	slog.Debug("compliance.accessibility: catalog /Lang value", "lang", catalogLang)
 
 	if !isValidLangTag(catalogLang) {
-		slog.Debug("compliance_2/accessibility: catalog /Lang is invalid BCP 47", "lang", catalogLang)
+		slog.Debug("compliance.accessibility: catalog /Lang is invalid BCP 47", "lang", catalogLang)
 		return failf(validRule, "lang=%s", catalogLang)
 	}
 
-	slog.Debug("compliance_2/accessibility: catalog /Lang is valid, checking structure elements")
+	slog.Debug("compliance.accessibility: catalog /Lang is valid, checking structure elements")
 
 	// Catalog provides global /Lang — validate /Lang format in structure elements.
 	return validateStructureLangs(ctx, doc, catalog, validRule)
@@ -175,7 +175,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
 		// No structure tree at all — can't determine language for anything.
-		slog.Debug("compliance_2/accessibility: no StructTreeRoot, language cannot be determined")
+		slog.Debug("compliance.accessibility: no StructTreeRoot, language cannot be determined")
 		return fail(langRule, "catalog")
 	}
 
@@ -219,7 +219,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		if effectiveLang == "" && !anyLangFound {
 			// No /Lang from self or any ancestor, and no /Lang anywhere in
 			// the tree — language is truly not determinable.
-			slog.Debug("compliance_2/accessibility: structure element has no determinable language",
+			slog.Debug("compliance.accessibility: structure element has no determinable language",
 				"path", path)
 			results = append(results, Violation{Rule: langRule, Context: path})
 		}
@@ -347,7 +347,7 @@ func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemOb
 func validateStructureLangs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, rule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance_2/accessibility: no StructTreeRoot for lang validation")
+		slog.Debug("compliance.accessibility: no StructTreeRoot for lang validation")
 		return nil
 	}
 
@@ -359,7 +359,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		}
 		langStr, err := document.ResolveString(ctx, doc, langObj)
 		if err != nil {
-			slog.Debug("compliance_2/accessibility: cannot resolve /Lang in structure element",
+			slog.Debug("compliance.accessibility: cannot resolve /Lang in structure element",
 				"path", path, "error", err)
 			return
 		}
@@ -367,12 +367,12 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		if trimmed == "" {
 			// Empty /Lang in structure element — not an invalid-format error.
 			// The "language not determined" checks (t21-t24, t30-t34) handle this case separately.
-			slog.Debug("compliance_2/accessibility: empty /Lang in structure element, skipping format check",
+			slog.Debug("compliance.accessibility: empty /Lang in structure element, skipping format check",
 				"path", path)
 			return
 		}
 		if !isValidLangTag(trimmed) {
-			slog.Debug("compliance_2/accessibility: invalid /Lang in structure element",
+			slog.Debug("compliance.accessibility: invalid /Lang in structure element",
 				"lang", trimmed, "path", path)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
@@ -576,82 +576,82 @@ func isAlphaNumSubtag(s string, min, max int) bool {
 // --- 2. DisplayDocTitle ---
 
 func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking /DisplayDocTitle")
+	slog.Debug("compliance.accessibility: checking /DisplayDocTitle")
 
 	rule := displayDocTitleRule(profile)
 
 	vpObj, ok := catalog["ViewerPreferences"]
 	if !ok {
-		slog.Debug("compliance_2/accessibility: catalog missing /ViewerPreferences")
+		slog.Debug("compliance.accessibility: catalog missing /ViewerPreferences")
 		return fail(rule, "ViewerPreferences missing")
 	}
 
 	vp, err := document.ResolveDict(ctx, doc, vpObj)
 	if err != nil || vp == nil {
-		slog.Debug("compliance_2/accessibility: cannot resolve /ViewerPreferences", "error", err)
+		slog.Debug("compliance.accessibility: cannot resolve /ViewerPreferences", "error", err)
 		return fail(rule, "ViewerPreferences unresolvable")
 	}
 
 	ddtObj, ok := vp["DisplayDocTitle"]
 	if !ok {
-		slog.Debug("compliance_2/accessibility: /DisplayDocTitle not present")
+		slog.Debug("compliance.accessibility: /DisplayDocTitle not present")
 		return fail(rule, "DisplayDocTitle missing")
 	}
 
 	ddt, err := document.ResolveBool(ctx, doc, ddtObj)
 	if err != nil || !bool(ddt) {
-		slog.Debug("compliance_2/accessibility: /DisplayDocTitle is not true", "value", ddt)
+		slog.Debug("compliance.accessibility: /DisplayDocTitle is not true", "value", ddt)
 		return fail(rule, "DisplayDocTitle=false")
 	}
 
-	slog.Debug("compliance_2/accessibility: /DisplayDocTitle is true")
+	slog.Debug("compliance.accessibility: /DisplayDocTitle is true")
 	return nil
 }
 
 // --- 3. Suspects ---
 
 func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking /Suspects")
+	slog.Debug("compliance.accessibility: checking /Suspects")
 
 	rule := suspectsRule(profile)
 
 	miObj, ok := catalog["MarkInfo"]
 	if !ok {
-		slog.Debug("compliance_2/accessibility: catalog missing /MarkInfo (Suspects check passes)")
+		slog.Debug("compliance.accessibility: catalog missing /MarkInfo (Suspects check passes)")
 		return nil
 	}
 
 	mi, err := document.ResolveDict(ctx, doc, miObj)
 	if err != nil || mi == nil {
-		slog.Debug("compliance_2/accessibility: cannot resolve /MarkInfo", "error", err)
+		slog.Debug("compliance.accessibility: cannot resolve /MarkInfo", "error", err)
 		return nil
 	}
 
 	susObj, ok := mi["Suspects"]
 	if !ok {
-		slog.Debug("compliance_2/accessibility: /Suspects absent (OK)")
+		slog.Debug("compliance.accessibility: /Suspects absent (OK)")
 		return nil
 	}
 
 	sus, err := document.ResolveBool(ctx, doc, susObj)
 	if err != nil {
-		slog.Debug("compliance_2/accessibility: cannot resolve /Suspects", "error", err)
+		slog.Debug("compliance.accessibility: cannot resolve /Suspects", "error", err)
 		return nil
 	}
 
 	if bool(sus) {
-		slog.Debug("compliance_2/accessibility: /Suspects is true")
+		slog.Debug("compliance.accessibility: /Suspects is true")
 		return fail(rule, "Suspects=true")
 	}
 
-	slog.Debug("compliance_2/accessibility: /Suspects is false (OK)")
+	slog.Debug("compliance.accessibility: /Suspects is false (OK)")
 	return nil
 }
 
 // --- 4. Tab order ---
 
 func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking tab order")
+	slog.Debug("compliance.accessibility: checking tab order")
 
 	isPDFUA1 := profile == string("PDF/UA-1")
 	isPDFUA2 := profile == string("PDF/UA-2")
@@ -688,10 +688,10 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		if !ok {
 			if isPDFUA1 {
 				// PDF/UA-1 §7.18.3: every page with annotations must have /Tabs = /S.
-				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
+				slog.Debug("compliance.accessibility: page missing /Tabs", "page", pageIdx)
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			} else if isPDFUA2 {
-				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
+				slog.Debug("compliance.accessibility: page missing /Tabs", "page", pageIdx)
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			}
 			continue
@@ -699,15 +699,15 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 		tabsName, err := document.ResolveName(ctx, doc, tabsObj)
 		if err != nil {
-			slog.Debug("compliance_2/accessibility: cannot resolve /Tabs", "page", pageIdx, "error", err)
+			slog.Debug("compliance.accessibility: cannot resolve /Tabs", "page", pageIdx, "error", err)
 			continue
 		}
 
 		if isPDFUA1 && tabsName != "S" {
-			slog.Debug("compliance_2/accessibility: /Tabs is not /S", "page", pageIdx, "tabs", tabsName)
+			slog.Debug("compliance.accessibility: /Tabs is not /S", "page", pageIdx, "tabs", tabsName)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
 		} else if isPDFUA2 && hasAnnots && tabsName != "S" && tabsName != "A" && tabsName != "W" {
-			slog.Debug("compliance_2/accessibility: /Tabs is not /S, /A or /W", "page", pageIdx, "tabs", tabsName)
+			slog.Debug("compliance.accessibility: /Tabs is not /S, /A or /W", "page", pageIdx, "tabs", tabsName)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
 		}
 	}
@@ -718,35 +718,35 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 // --- 5. XMP title ---
 
 func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking XMP dc:title")
+	slog.Debug("compliance.accessibility: checking XMP dc:title")
 
 	rule := xmpTitleRule(profile)
 
 	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
 	if !ok {
-		slog.Debug("compliance_2/accessibility: no XMP metadata available")
+		slog.Debug("compliance.accessibility: no XMP metadata available")
 		return fail(rule, "no XMP metadata")
 	}
 
 	if !containsDCTitle(xmpData) {
-		slog.Debug("compliance_2/accessibility: XMP does not contain dc:title")
+		slog.Debug("compliance.accessibility: XMP does not contain dc:title")
 		return fail(rule, "")
 	}
 
-	slog.Debug("compliance_2/accessibility: XMP contains dc:title")
+	slog.Debug("compliance.accessibility: XMP contains dc:title")
 	return nil
 }
 
 // --- 6. Figure alt text ---
 
 func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking Figure alt text")
+	slog.Debug("compliance.accessibility: checking Figure alt text")
 
 	rule := figureAltRule(profile)
 
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance_2/accessibility: no StructTreeRoot for Figure alt check")
+		slog.Debug("compliance.accessibility: no StructTreeRoot for Figure alt check")
 		return nil
 	}
 
@@ -766,7 +766,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			hasAlt := hasNonEmptyStringKey(ctx, doc, elem, "Alt")
 			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 			if !hasAlt && !hasActualText {
-				slog.Debug("compliance_2/accessibility: Figure missing /Alt and /ActualText", "path", path)
+				slog.Debug("compliance.accessibility: Figure missing /Alt and /ActualText", "path", path)
 				results = append(results, Violation{Rule: rule, Context: path})
 			}
 		} else {
@@ -776,7 +776,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 			hasCaptionChild := figureHasCaptionChild(ctx, doc, elem)
 			if !hasAlt && !hasActualText && !hasCaptionChild {
-				slog.Debug("compliance_2/accessibility: Figure missing /Alt, /ActualText, or Caption", "path", path)
+				slog.Debug("compliance.accessibility: Figure missing /Alt, /ActualText, or Caption", "path", path)
 				results = append(results, Violation{Rule: rule, Context: path})
 			}
 		}
@@ -793,14 +793,14 @@ func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDi
 	// a heuristic check that cannot be fully validated without rendering. We log
 	// the check but return no violations — a future enhancement may add
 	// heuristic detection of repeated header/footer content.
-	slog.Debug("compliance_2/accessibility: artifact tagging check (heuristic, not enforced)")
+	slog.Debug("compliance.accessibility: artifact tagging check (heuristic, not enforced)")
 	return nil
 }
 
 // --- 8. Annotation alt text ---
 
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking annotation alt text")
+	slog.Debug("compliance.accessibility: checking annotation alt text")
 
 	rule := annotAltRule(profile)
 
@@ -823,6 +823,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 
@@ -848,7 +849,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			// Popup annotations are explicitly exempt — they inherit content
 			// from their parent annotation and do not need /Contents or /Alt.
 			if subtype == "Link" || subtype == "Widget" || subtype == "Popup" {
-				slog.Debug("compliance_2/accessibility: skipping exempt annotation subtype",
+				slog.Debug("compliance.accessibility: skipping exempt annotation subtype",
 					"page", pageIdx, "annot", annotIdx, "subtype", string(subtype))
 				continue
 			}
@@ -864,19 +865,19 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				if err == nil && strings.TrimSpace(string(contentsStr)) != "" {
 					continue
 				}
-				slog.Debug("compliance_2/accessibility: annotation has empty /Contents",
+				slog.Debug("compliance.accessibility: annotation has empty /Contents",
 					"page", pageIdx, "annot", annotIdx, "subtype", string(subtype))
 			}
 
 			// Annotation lacks /Contents — check the enclosing structure element for /Alt.
 			if annotObjNum > 0 && structAltMap[annotObjNum] {
-				slog.Debug("compliance_2/accessibility: annotation has /Alt via structure element",
+				slog.Debug("compliance.accessibility: annotation has /Alt via structure element",
 					"page", pageIdx, "annot", annotIdx, "objNum", annotObjNum)
 				continue
 			}
 
 			loc := fmt.Sprintf("page %d, annot %d (/%s)", pageIdx, annotIdx, subtype)
-			slog.Debug("compliance_2/accessibility: annotation missing /Contents and struct /Alt", "loc", loc)
+			slog.Debug("compliance.accessibility: annotation missing /Contents and struct /Alt", "loc", loc)
 			results = append(results, Violation{Rule: rule, Context: loc})
 		}
 	}
@@ -1011,7 +1012,7 @@ func resolveRect(ctx context.Context, doc *document.Document, obj ast.PdfObject)
 // entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.
 // For PDF/UA-2, if /AA is present, the Widget must have a /Contents entry (§8.10.2.3 t02).
 func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking Widget /AA")
+	slog.Debug("compliance.accessibility: checking Widget /AA")
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
@@ -1028,6 +1029,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 
@@ -1056,7 +1058,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			if profile == "PDF/UA-2" {
 				// PDF/UA-2 §8.10.2.3 t02: if Widget has /AA, /Contents must be present.
 				if _, hasContents := annot["Contents"]; !hasContents {
-					slog.Debug("compliance_2/accessibility: Widget has /AA without /Contents",
+					slog.Debug("compliance.accessibility: Widget has /AA without /Contents",
 						"loc", loc)
 					results = append(results, Violation{
 						Rule:    Rule_14289_2_8_10_2_3_t02,
@@ -1065,7 +1067,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 				}
 			} else {
 				// PDF/UA-1: Widget annotations should not have /AA trigger actions.
-				slog.Debug("compliance_2/accessibility: Widget has forbidden /AA", "loc", loc)
+				slog.Debug("compliance.accessibility: Widget has forbidden /AA", "loc", loc)
 				results = append(results, Violation{
 					Rule:    Rule_14289_1_7_18_1_t03,
 					Context: fmt.Sprintf("widget annotation has /AA at %s", loc),
@@ -1080,13 +1082,13 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 // --- 9. OC config names ---
 
 func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2/accessibility: checking OC config names")
+	slog.Debug("compliance.accessibility: checking OC config names")
 
 	rule := ocConfigNameRule(profile)
 
 	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])
 	if err != nil || ocProps == nil {
-		slog.Debug("compliance_2/accessibility: no /OCProperties, skipping OC check")
+		slog.Debug("compliance.accessibility: no /OCProperties, skipping OC check")
 		return nil
 	}
 
@@ -1098,7 +1100,7 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 		dConfig, err := document.ResolveDict(ctx, doc, dObj)
 		if err == nil && dConfig != nil {
 			if !hasNonEmptyName(ctx, doc, dConfig) {
-				slog.Debug("compliance_2/accessibility: default OC config missing /Name")
+				slog.Debug("compliance.accessibility: default OC config missing /Name")
 				results = append(results, Violation{Rule: rule, Context: "default config (D)"})
 			}
 			// §7.10 t02 (PDF/UA-1): /AS key forbidden in any OC config dict.
@@ -1134,7 +1136,7 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 		}
 
 		if !hasNonEmptyName(ctx, doc, cfg) {
-			slog.Debug("compliance_2/accessibility: OC config missing /Name", "index", i)
+			slog.Debug("compliance.accessibility: OC config missing /Name", "index", i)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("config %d", i)})
 		}
 		// §7.10 t02 (PDF/UA-1): /AS key forbidden.
@@ -1314,23 +1316,23 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 		return nil
 	}
 
-	slog.Debug("compliance_2/accessibility: checking /Namespaces in StructTreeRoot")
+	slog.Debug("compliance.accessibility: checking /Namespaces in StructTreeRoot")
 
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance_2/accessibility: no StructTreeRoot for namespace check")
+		slog.Debug("compliance.accessibility: no StructTreeRoot for namespace check")
 		return nil
 	}
 
 	nsObj, ok := treeRoot["Namespaces"]
 	if !ok {
-		slog.Debug("compliance_2/accessibility: StructTreeRoot missing /Namespaces")
+		slog.Debug("compliance.accessibility: StructTreeRoot missing /Namespaces")
 		return fail(Rule_14289_2_8_2_4_t01, "Namespaces missing from StructTreeRoot")
 	}
 
 	nsArray, err := document.ResolveArray(ctx, doc, nsObj)
 	if err != nil || len(nsArray) == 0 {
-		slog.Debug("compliance_2/accessibility: /Namespaces is empty or unresolvable", "error", err)
+		slog.Debug("compliance.accessibility: /Namespaces is empty or unresolvable", "error", err)
 		return fail(Rule_14289_2_8_2_4_t01, "Namespaces empty")
 	}
 
@@ -1342,14 +1344,14 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 		nsDict, err := document.ResolveDict(ctx, doc, nsEntryObj)
 		if err != nil || nsDict == nil {
-			slog.Debug("compliance_2/accessibility: cannot resolve namespace entry", "index", i, "error", err)
+			slog.Debug("compliance.accessibility: cannot resolve namespace entry", "index", i, "error", err)
 			continue
 		}
 
 		// Each namespace dict must have /NS (URI).
 		nsURIObj, ok := nsDict["NS"]
 		if !ok {
-			slog.Debug("compliance_2/accessibility: namespace entry missing /NS", "index", i)
+			slog.Debug("compliance.accessibility: namespace entry missing /NS", "index", i)
 			results = append(results, Violation{
 				Rule:    Rule_14289_2_8_2_4_t01,
 				Context: fmt.Sprintf("namespace %d missing /NS", i),
@@ -1359,13 +1361,13 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 		nsURI, err := document.ResolveString(ctx, doc, nsURIObj)
 		if err != nil || string(nsURI) == "" {
-			slog.Debug("compliance_2/accessibility: namespace /NS is empty", "index", i)
+			slog.Debug("compliance.accessibility: namespace /NS is empty", "index", i)
 			results = append(results, Violation{
 				Rule:    Rule_14289_2_8_2_4_t01,
 				Context: fmt.Sprintf("namespace %d has empty /NS", i),
 			})
 		} else {
-			slog.Debug("compliance_2/accessibility: namespace entry valid", "index", i, "ns", string(nsURI))
+			slog.Debug("compliance.accessibility: namespace entry valid", "index", i, "ns", string(nsURI))
 		}
 	}
 
@@ -1621,11 +1623,11 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 		return nil
 	}
 
-	slog.Debug("compliance_2/accessibility: checking link nesting in structure tree")
+	slog.Debug("compliance.accessibility: checking link nesting in structure tree")
 
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance_2/accessibility: no StructTreeRoot for link nesting check")
+		slog.Debug("compliance.accessibility: no StructTreeRoot for link nesting check")
 		return nil
 	}
 
@@ -1639,6 +1641,7 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 		}
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 		for _, annotObj := range annots {
@@ -1654,7 +1657,7 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 	}
 
 	if linkAnnotCount == 0 {
-		slog.Debug("compliance_2/accessibility: no link annotations found")
+		slog.Debug("compliance.accessibility: no link annotations found")
 		return nil
 	}
 
@@ -1667,7 +1670,7 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 		}
 	})
 
-	slog.Debug("compliance_2/accessibility: link annotation/structure counts",
+	slog.Debug("compliance.accessibility: link annotation/structure counts",
 		"annotations", linkAnnotCount, "structElements", linkStructCount)
 
 	if linkStructCount == 0 && linkAnnotCount > 0 {
@@ -1684,11 +1687,11 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 
-	slog.Debug("compliance_2/accessibility: checking Formula structure elements for /AF (MathML)")
+	slog.Debug("compliance.accessibility: checking Formula structure elements for /AF (MathML)")
 
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance_2/accessibility: no StructTreeRoot for Formula check")
+		slog.Debug("compliance.accessibility: no StructTreeRoot for Formula check")
 		return nil
 	}
 
@@ -1707,14 +1710,14 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		if altObj, hasAlt := elem["Alt"]; hasAlt {
 			altStr, err := document.ResolveString(ctx, doc, altObj)
 			if err == nil && strings.TrimSpace(string(altStr)) != "" {
-				slog.Debug("compliance_2/accessibility: Formula has /Alt text", "path", path)
+				slog.Debug("compliance.accessibility: Formula has /Alt text", "path", path)
 				return
 			}
 		}
 		if atObj, hasAT := elem["ActualText"]; hasAT {
 			atStr, err := document.ResolveString(ctx, doc, atObj)
 			if err == nil && strings.TrimSpace(string(atStr)) != "" {
-				slog.Debug("compliance_2/accessibility: Formula has /ActualText", "path", path)
+				slog.Debug("compliance.accessibility: Formula has /ActualText", "path", path)
 				return
 			}
 		}
@@ -1738,12 +1741,12 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		// formula content directly and do not require /AF or /Alt.
 		if kObj, hasK := elem["K"]; hasK {
 			if hasStructuralChildren(ctx, doc, kObj) {
-				slog.Debug("compliance_2/accessibility: Formula has structural children", "path", path)
+				slog.Debug("compliance.accessibility: Formula has structural children", "path", path)
 				return
 			}
 		}
 
-		slog.Debug("compliance_2/accessibility: Formula missing /AF, /Alt, /ActualText, and structural children", "path", path)
+		slog.Debug("compliance.accessibility: Formula missing /AF, /Alt, /ActualText, and structural children", "path", path)
 		results = append(results, Violation{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
 	})
 
@@ -1786,7 +1789,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 		return nil
 	}
 
-	slog.Debug("compliance_2/accessibility: checking invisible annotation artifact requirement")
+	slog.Debug("compliance.accessibility: checking invisible annotation artifact requirement")
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
@@ -1803,6 +1806,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 
@@ -1823,6 +1827,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 			}
 			flags, err := document.ResolveInt(ctx, doc, fObj)
 			if err != nil {
+				slog.Debug("compliance.accessibility: cannot resolve annotation flags", "error", err)
 				continue
 			}
 
@@ -1836,7 +1841,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 			if _, hasStructParent := annot["StructParent"]; hasStructParent {
 				subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 				loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
-				slog.Debug("compliance_2/accessibility: invisible annotation in structure tree", "loc", loc)
+				slog.Debug("compliance.accessibility: invisible annotation in structure tree", "loc", loc)
 				results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t01, Context: loc})
 			}
 		}
@@ -1854,7 +1859,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		return nil
 	}
 
-	slog.Debug("compliance_2/accessibility: checking file specification /F and /UF")
+	slog.Debug("compliance.accessibility: checking file specification /F and /UF")
 
 	rule := Rule_14289_1_7_11_t01
 	var results []Violation
@@ -2076,17 +2081,17 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	stream, err := document.ResolveStream(ctx, doc, metaObj)
 	if err != nil {
-		slog.Debug("compliance_2/accessibility: failed to resolve /Metadata stream", "error", err)
+		slog.Debug("compliance.accessibility: failed to resolve /Metadata stream", "error", err)
 		return nil, false
 	}
 
 	data, err := doc.DecodeStream(stream)
 	if err != nil {
 		// Fallback to raw bytes if decode fails (metadata streams are often uncompressed).
-		slog.Debug("compliance_2/accessibility: doc.DecodeStream failed, trying raw", "error", err)
+		slog.Debug("compliance.accessibility: doc.DecodeStream failed, trying raw", "error", err)
 		data, err = stream.Bytes()
 		if err != nil {
-			slog.Debug("compliance_2/accessibility: failed to read raw metadata stream", "error", err)
+			slog.Debug("compliance.accessibility: failed to read raw metadata stream", "error", err)
 			return nil, false
 		}
 	}
@@ -2211,6 +2216,7 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 
@@ -2446,10 +2452,12 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		}
 		ops, err := content.ParseStreamData(streamData)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue
 		}
 		for _, op := range ops {
 			if op.Operator != "Do" || len(op.Operands) < 1 {
+				slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 				continue
 			}
 			name, ok := op.Operands[0].(ast.PdfName)
@@ -2472,6 +2480,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		// Check if this Form XObject contains MCIDs (has /StructParents).
 		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot resolve form XObject stream", "error", err)
 			continue
 		}
 		if _, hasSP := stream.Dict["StructParents"]; hasSP {
@@ -2508,10 +2517,12 @@ func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.Pdf
 
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		xobjDict := stream.Dict
 		if xobjDict == nil {
+			slog.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
@@ -2982,6 +2993,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		}
 		ops, err := content.ParseStreamData(data)
 		if err != nil {
+			slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue
 		}
 
@@ -3131,6 +3143,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 
 	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
 	if err != nil {
+		slog.Debug("compliance.accessibility: cannot resolve form fields array", "error", err)
 		return nil
 	}
 
@@ -3267,6 +3280,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 	// Non-terminal: recurse into /Kids.
 	kids, err := document.ResolveArray(ctx, doc, field["Kids"])
 	if err != nil {
+		slog.Debug("compliance.accessibility: cannot resolve field kids array", "error", err)
 		return nil
 	}
 	var results []Violation

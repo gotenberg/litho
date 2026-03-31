@@ -4,9 +4,6 @@ run:
   tests: false
 linters:
   default: none
-  settings:
-    dupl:
-      threshold: 200
   enable:
     - asasalint
     - asciicheck
@@ -27,15 +24,23 @@ linters:
     - ineffassign
     - misspell
     - prealloc
-    - promlinter
     - staticcheck
     - testableexamples
     - tparallel
     - unconvert
     - unused
+    - sloglint
     - usetesting
+    - gocritic
     - wastedassign
     - whitespace
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
 formatters:
   enable:
     - gci
@@ -49,3 +54,5 @@ formatters:
         - default
         - prefix(github.com/gotenberg/litho)
       custom-order: true
+  exclusions:
+    generated: lax

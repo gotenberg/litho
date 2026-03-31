@@ -59,7 +59,7 @@ func checkJPXImage(stream ast.PdfStream, name ast.PdfName, pageNum, part int) []
 		return checkRawJ2K(data, name, pageNum, rules)
 	}
 
-	slog.Debug("compliance_2/jpx: unrecognised JPEG2000 format", "page", pageNum, "name", name)
+	slog.Debug("compliance.jpx: unrecognised JPEG2000 format", "page", pageNum, "name", name)
 	return nil
 }
 
@@ -233,6 +233,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Violation {
 	numComponents, ssiz, err := parseJ2KSIZMarker(data)
 	if err != nil {
+		slog.Debug("compliance.jpx: cannot parse J2K SIZ marker", "error", err)
 		return nil
 	}
 

@@ -63,7 +63,7 @@ func checkContentStreamState(
 
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
-		slog.Debug("compliance_2/content_state: failed to parse content stream",
+		slog.Debug("compliance.content: failed to parse content stream",
 			"page", pageNum, "error", err)
 		return nil
 	}
@@ -333,6 +333,7 @@ func checkContentStreamResources(
 ) []Violation {
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
+		slog.Debug("compliance.content: cannot parse content stream", "error", err)
 		return nil
 	}
 
@@ -561,7 +562,7 @@ func (c *contentStateChecker) checkAtPaintingOp(op string, isFill, isStroke bool
 
 	if isFill && c.state.overprintFill && c.state.fillCS == "ICCBased-CMYK" && !c.reportedOverprintFill {
 		c.reportedOverprintFill = true
-		slog.Debug("compliance_2/content_state: OPM=1 with fill overprint and ICCBased CMYK",
+		slog.Debug("compliance.content: OPM=1 with fill overprint and ICCBased CMYK",
 			"page", c.pageNum, "op", op)
 		c.results = append(c.results, failf(overprintModeRule(c.part),
 			"page %d: OPM=1 with fill overprint and ICCBased CMYK colour space",
@@ -570,7 +571,7 @@ func (c *contentStateChecker) checkAtPaintingOp(op string, isFill, isStroke bool
 
 	if isStroke && c.state.overprintStr && c.state.strokeCS == "ICCBased-CMYK" && !c.reportedOverprintStroke {
 		c.reportedOverprintStroke = true
-		slog.Debug("compliance_2/content_state: OPM=1 with stroke overprint and ICCBased CMYK",
+		slog.Debug("compliance.content: OPM=1 with stroke overprint and ICCBased CMYK",
 			"page", c.pageNum, "op", op)
 		c.results = append(c.results, failf(overprintModeRule(c.part),
 			"page %d: OPM=1 with stroke overprint and ICCBased CMYK colour space",

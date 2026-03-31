@@ -261,12 +261,12 @@ func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.
 func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
 	fdObj, ok := fontDict["FontDescriptor"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: no FontDescriptor entry", "font", fontDict["BaseFont"])
+		slog.Debug("compliance: fonts: no FontDescriptor entry", "font", fontDict["BaseFont"])
 		return nil
 	}
 	fd, err := document.ResolveDict(ctx, doc, fdObj)
 	if err != nil {
-		slog.Debug("compliance_2: fonts: failed to resolve FontDescriptor", "error", err)
+		slog.Debug("compliance: fonts: failed to resolve FontDescriptor", "error", err)
 		return nil
 	}
 	return fd
@@ -276,33 +276,33 @@ func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict as
 // FontFile2, or FontFile3 stream indicating an embedded font program.
 func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict) bool {
 	if fd == nil {
-		slog.Debug("compliance_2: fonts: no font descriptor, font not embedded")
+		slog.Debug("compliance: fonts: no font descriptor, font not embedded")
 		return false
 	}
 	for _, key := range []ast.PdfName{"FontFile", "FontFile2", "FontFile3"} {
 		if obj, ok := fd[key]; ok {
 			resolved, err := document.ResolveObject(ctx, doc, obj)
 			if err != nil {
-				slog.Debug("compliance_2: fonts: failed to resolve font file entry",
+				slog.Debug("compliance: fonts: failed to resolve font file entry",
 					"key", key, "error", err)
 				continue
 			}
 			if _, isStream := resolved.(ast.PdfStream); isStream {
-				slog.Debug("compliance_2: fonts: font is embedded", "key", key)
+				slog.Debug("compliance: fonts: font is embedded", "key", key)
 				return true
 			}
 			// Non-null, non-stream: treat as present but invalid (still "embedded"
 			// for the purpose of the embedding check).
 			if resolved != nil {
 				if _, isNull := resolved.(ast.PdfNull); !isNull {
-					slog.Debug("compliance_2: fonts: font file entry present but not a stream",
+					slog.Debug("compliance: fonts: font file entry present but not a stream",
 						"key", key, "type", resolved)
 					return true
 				}
 			}
 		}
 	}
-	slog.Debug("compliance_2: fonts: no FontFile/FontFile2/FontFile3 found, font not embedded")
+	slog.Debug("compliance: fonts: no FontFile/FontFile2/FontFile3 found, font not embedded")
 	return false
 }
 
@@ -314,12 +314,12 @@ func isSymbolicFont(ctx context.Context, doc *document.Document, fd ast.PdfDict)
 	}
 	flags, err := document.ResolveInt(ctx, doc, fd["Flags"])
 	if err != nil {
-		slog.Debug("compliance_2: fonts: failed to resolve Flags", "error", err)
+		slog.Debug("compliance: fonts: failed to resolve Flags", "error", err)
 		return false
 	}
 	const symbolicBit = 1 << 2 // bit 3 (0-indexed bit 2) = symbolic
 	symbolic := (int(flags) & symbolicBit) != 0
-	slog.Debug("compliance_2: fonts: checked symbolic flag", "flags", flags, "symbolic", symbolic)
+	slog.Debug("compliance: fonts: checked symbolic flag", "flags", flags, "symbolic", symbolic)
 	return symbolic
 }
 
@@ -400,7 +400,7 @@ func hasIdentityCMap(ctx context.Context, doc *document.Document, fontDict ast.P
 	}
 	cmapName, _ := document.ResolveName(ctx, doc, stream.Dict["CMapName"])
 	if cmapName == "Identity-H" || cmapName == "Identity-V" {
-		slog.Debug("compliance_2: fonts: encoding stream has Identity CMap name", "cmapName", cmapName)
+		slog.Debug("compliance: fonts: encoding stream has Identity CMap name", "cmapName", cmapName)
 		return true
 	}
 	return false
@@ -433,7 +433,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 							continue
 						}
 						if _, resolved := encodings.GlyphToRuneFull(string(name)); !resolved {
-							slog.Debug("compliance_2: fonts: Differences glyph not AGL-resolvable",
+							slog.Debug("compliance: fonts: Differences glyph not AGL-resolvable",
 								"glyph", string(name))
 							return false
 						}
@@ -458,7 +458,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 						continue
 					}
 					if _, resolved := encodings.GlyphToRuneFull(name); !resolved {
-						slog.Debug("compliance_2: fonts: CharSet glyph not AGL-resolvable",
+						slog.Debug("compliance: fonts: CharSet glyph not AGL-resolvable",
 							"glyph", name)
 						return false
 					}
@@ -507,7 +507,7 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 			_, resolved = encodings.SymbolGlyphsUnicode[string(name)]
 		}
 		if !resolved {
-			slog.Debug("compliance_2: fonts: Type3 Differences glyph not AGL-resolvable",
+			slog.Debug("compliance: fonts: Type3 Differences glyph not AGL-resolvable",
 				"glyph", string(name))
 			return false
 		}
@@ -638,6 +638,7 @@ func collectFontUsage(ctx context.Context, doc *document.Document, page ast.PdfD
 
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
+		slog.Debug("compliance: cannot parse content stream", "error", err)
 		return nil
 	}
 
@@ -738,7 +739,7 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 		if symbolEncodingNames[glyphName] {
 			continue
 		}
-		slog.Debug("compliance_2: fonts: used glyph not resolvable",
+		slog.Debug("compliance: fonts: used glyph not resolvable",
 			"code", code, "glyph", glyphName)
 		return false
 	}
@@ -827,11 +828,11 @@ func predefinedEncodingNames(name string) map[byte]string {
 
 // checkFontGroup validates font-related compliance rules across all pages.
 func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance_2: fonts: starting font checks", "profile", profile)
+	slog.Debug("compliance: fonts: starting font checks", "profile", profile)
 
 	pages := collectPages(ctx, doc, catalog)
 	if len(pages) == 0 {
-		slog.Debug("compliance_2: fonts: no pages found")
+		slog.Debug("compliance: fonts: no pages found")
 		return nil
 	}
 
@@ -842,25 +843,25 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2: fonts: context cancelled")
+			slog.Debug("compliance: fonts: context cancelled")
 			return results
 		}
 
 		resources := getResources(ctx, doc, page)
 		if resources == nil {
-			slog.Debug("compliance_2: fonts: page has no resources", "page", pageIdx+1)
+			slog.Debug("compliance: fonts: page has no resources", "page", pageIdx+1)
 			continue
 		}
 
 		fontDictObj, ok := resources["Font"]
 		if !ok {
-			slog.Debug("compliance_2: fonts: page has no /Font resource", "page", pageIdx+1)
+			slog.Debug("compliance: fonts: page has no /Font resource", "page", pageIdx+1)
 			continue
 		}
 
 		fontDict, err := document.ResolveDict(ctx, doc, fontDictObj)
 		if err != nil {
-			slog.Debug("compliance_2: fonts: failed to resolve /Font dict",
+			slog.Debug("compliance: fonts: failed to resolve /Font dict",
 				"page", pageIdx+1, "error", err)
 			continue
 		}
@@ -876,14 +877,14 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 			fontKey := string(fontName)
 			if checked[fontKey] {
-				slog.Debug("compliance_2: fonts: font already checked",
+				slog.Debug("compliance: fonts: font already checked",
 					"font", fontKey, "page", pageIdx+1)
 				continue
 			}
 
 			font, err := document.ResolveDict(ctx, doc, fontRef)
 			if err != nil || font == nil {
-				slog.Debug("compliance_2: fonts: failed to resolve font dict",
+				slog.Debug("compliance: fonts: failed to resolve font dict",
 					"font", fontKey, "page", pageIdx+1, "error", err)
 				continue
 			}
@@ -895,7 +896,7 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 				usage = fontUsage[fontKey]
 			}
 			isVisible := fontUsage == nil || (usage != nil && usage.visible)
-			slog.Debug("compliance_2: fonts: checking font",
+			slog.Debug("compliance: fonts: checking font",
 				"font", fontKey, "page", pageIdx+1, "visible", isVisible)
 
 			results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageIdx+1, profile, isVisible, usage)...)
@@ -905,7 +906,7 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		}
 	}
 
-	slog.Debug("compliance_2: fonts: font checks complete",
+	slog.Debug("compliance: fonts: font checks complete",
 		"violations", len(results), "fonts_checked", len(checked))
 	return results
 }
@@ -920,7 +921,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	subtype := fontSubtype(ctx, doc, fontDict)
 	basefont := fontBaseFont(ctx, doc, fontDict)
 
-	slog.Debug("compliance_2: fonts: font details",
+	slog.Debug("compliance: fonts: font details",
 		"name", fontName, "subtype", subtype, "basefont", basefont, "page", pageNum)
 
 	// Type 3 fonts have no font program — skip embedding checks.
@@ -984,6 +985,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 	}
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil {
+		slog.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
 		return nil
 	}
 	data, err := doc.DecodeStream(stream)
@@ -1098,13 +1100,13 @@ func puaActualTextRule(profile string) Rule {
 func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isType3 bool) []Violation {
 	rule := fontEmbeddingRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: embedding check not applicable", "profile", profile)
+		slog.Debug("compliance: fonts: embedding check not applicable", "profile", profile)
 		return nil
 	}
 
 	// Type 3 fonts have no external font program.
 	if isType3 {
-		slog.Debug("compliance_2: fonts: skipping embedding check for Type3", "font", fontName)
+		slog.Debug("compliance: fonts: skipping embedding check for Type3", "font", fontName)
 		return nil
 	}
 
@@ -1113,18 +1115,18 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 	if fd == nil {
 		// No FontDescriptor means not embedded. PDF/A requires embedding even
 		// for the 14 standard fonts.
-		slog.Debug("compliance_2: fonts: no FontDescriptor, font not embedded",
+		slog.Debug("compliance: fonts: no FontDescriptor, font not embedded",
 			"font", fontName, "page", pageNum, "standard14", std14)
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
 	if !isFontEmbedded(ctx, doc, fd) {
-		slog.Debug("compliance_2: fonts: font not embedded",
+		slog.Debug("compliance: fonts: font not embedded",
 			"font", fontName, "page", pageNum, "standard14", std14)
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
-	slog.Debug("compliance_2: fonts: font is embedded", "font", fontName, "page", pageNum)
+	slog.Debug("compliance: fonts: font is embedded", "font", fontName, "page", pageNum)
 	return nil
 }
 
@@ -1132,7 +1134,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: ToUnicode check not applicable", "profile", profile)
+		slog.Debug("compliance: fonts: ToUnicode check not applicable", "profile", profile)
 		return nil
 	}
 
@@ -1143,19 +1145,19 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	if isType3Font(ctx, doc, fontDict) {
 		part := pdfaPart(profile)
 		if part == 4 || isPDFUA(profile) { //nolint:mnd
-			slog.Debug("compliance_2: fonts: skipping ToUnicode check for Type3 (part 4 / PDF/UA)",
+			slog.Debug("compliance: fonts: skipping ToUnicode check for Type3 (part 4 / PDF/UA)",
 				"font", fontName)
 			return nil
 		}
 		// For parts 1–3: check if all Differences glyph names are AGL-resolvable.
 		if allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict) {
-			slog.Debug("compliance_2: fonts: Type3 font Differences all AGL-resolvable, ToUnicode not required",
+			slog.Debug("compliance: fonts: Type3 font Differences all AGL-resolvable, ToUnicode not required",
 				"font", fontName)
 			return nil
 		}
 		// Fall through to the ToUnicode presence check below.
 		if !hasToUnicode(fontDict) {
-			slog.Debug("compliance_2: fonts: Type3 font missing ToUnicode with non-AGL glyph names",
+			slog.Debug("compliance: fonts: Type3 font missing ToUnicode with non-AGL glyph names",
 				"font", fontName, "page", pageNum)
 			return failf(rule, "font %s on page %d", fontName, pageNum)
 		}
@@ -1165,14 +1167,14 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// Exemption (a): standard encoding with Adobe Glyph List coverage.
 	// This covers MacRomanEncoding, WinAnsiEncoding, and MacExpertEncoding.
 	if hasStandardEncoding(ctx, doc, fontDict) {
-		slog.Debug("compliance_2: fonts: font uses standard encoding, ToUnicode not required",
+		slog.Debug("compliance: fonts: font uses standard encoding, ToUnicode not required",
 			"font", fontName)
 		return nil
 	}
 
 	// Exemption (a) extended: encoding dictionary with standard BaseEncoding.
 	if hasStandardBaseEncoding(ctx, doc, fontDict) {
-		slog.Debug("compliance_2: fonts: font uses encoding dict with standard BaseEncoding, ToUnicode not required",
+		slog.Debug("compliance: fonts: font uses encoding dict with standard BaseEncoding, ToUnicode not required",
 			"font", fontName)
 		return nil
 	}
@@ -1183,11 +1185,11 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	fd := findFontDescriptor(ctx, doc, fontDict)
 	if isSymbolicFont(ctx, doc, fd) {
 		if _, hasEncoding := fontDict["Encoding"]; hasEncoding {
-			slog.Debug("compliance_2: fonts: symbolic font with /Encoding, ToUnicode not required",
+			slog.Debug("compliance: fonts: symbolic font with /Encoding, ToUnicode not required",
 				"font", fontName)
 			return nil
 		}
-		slog.Debug("compliance_2: fonts: symbolic font without /Encoding, ToUnicode still required",
+		slog.Debug("compliance: fonts: symbolic font without /Encoding, ToUnicode still required",
 			"font", fontName)
 	}
 
@@ -1198,7 +1200,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	subtype := fontSubtype(ctx, doc, fontDict)
 	if subtype == "Type1" || subtype == "MMType1" {
 		if allGlyphNamesAGLResolvable(ctx, doc, fontDict) {
-			slog.Debug("compliance_2: fonts: Type1 font with all AGL-resolvable glyph names, ToUnicode not required",
+			slog.Debug("compliance: fonts: Type1 font with all AGL-resolvable glyph names, ToUnicode not required",
 				"font", fontName)
 			return nil
 		}
@@ -1206,7 +1208,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		// *+Symbol) is exempt when all CharSet names are in the standard
 		// Symbol encoding set.
 		if isSymbolFontByName(ctx, doc, fontDict) && allGlyphNamesInSymbolEncoding(ctx, doc, fontDict) {
-			slog.Debug("compliance_2: fonts: Symbol font with all Symbol-encoding glyph names, ToUnicode not required",
+			slog.Debug("compliance: fonts: Symbol font with all Symbol-encoding glyph names, ToUnicode not required",
 				"font", fontName)
 			return nil
 		}
@@ -1219,7 +1221,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		// have resolvable names.
 		if isSymbolFontByName(ctx, doc, fontDict) && usage != nil && len(usage.charCodes) > 0 {
 			if usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
-				slog.Debug("compliance_2: fonts: Symbol font used glyph names all resolvable, ToUnicode not required",
+				slog.Debug("compliance: fonts: Symbol font used glyph names all resolvable, ToUnicode not required",
 					"font", fontName)
 				return nil
 			}
@@ -1230,18 +1232,18 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// For PDF/UA, a ToUnicode CMap is required for Identity-encoded Type0 fonts
 	// unless glyph-level Unicode mapping is available through other means.
 	if hasIdentityCMap(ctx, doc, fontDict) && !isPDFUA(profile) {
-		slog.Debug("compliance_2: fonts: font uses Identity CMap, ToUnicode exemption (PDF/A)",
+		slog.Debug("compliance: fonts: font uses Identity CMap, ToUnicode exemption (PDF/A)",
 			"font", fontName)
 		return nil
 	}
 
 	if !hasToUnicode(fontDict) {
-		slog.Debug("compliance_2: fonts: font missing ToUnicode",
+		slog.Debug("compliance: fonts: font missing ToUnicode",
 			"font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
-	slog.Debug("compliance_2: fonts: font has ToUnicode", "font", fontName)
+	slog.Debug("compliance: fonts: font has ToUnicode", "font", fontName)
 	return nil
 }
 
@@ -1252,7 +1254,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 	fd := findFontDescriptor(ctx, doc, fontDict)
 	symbolic := isSymbolicFont(ctx, doc, fd)
 
-	slog.Debug("compliance_2: fonts: checking TrueType encoding",
+	slog.Debug("compliance: fonts: checking TrueType encoding",
 		"font", fontName, "symbolic", symbolic, "page", pageNum)
 
 	if symbolic {
@@ -1260,11 +1262,11 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 		rule := trueTypeEncodingSymbolicNoEncodingRule(profile)
 		if rule.Specification != "" {
 			if _, hasEnc := fontDict["Encoding"]; hasEnc {
-				slog.Debug("compliance_2: fonts: symbolic TrueType has /Encoding",
+				slog.Debug("compliance: fonts: symbolic TrueType has /Encoding",
 					"font", fontName, "page", pageNum)
 				results = append(results, failf(rule, "font %s on page %d", fontName, pageNum)...)
 			} else {
-				slog.Debug("compliance_2: fonts: symbolic TrueType correctly omits /Encoding",
+				slog.Debug("compliance: fonts: symbolic TrueType correctly omits /Encoding",
 					"font", fontName)
 			}
 		}
@@ -1273,7 +1275,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 		// We flag the rule but cannot fully verify without parsing the embedded
 		// TrueType program. This is a structural check placeholder.
 		_ = trueTypeSymbolicCmapRule(profile)
-		slog.Debug("compliance_2: fonts: symbolic TrueType cmap check deferred to font program analysis",
+		slog.Debug("compliance: fonts: symbolic TrueType cmap check deferred to font program analysis",
 			"font", fontName)
 	} else {
 		// Non-symbolic TrueType must use MacRomanEncoding or WinAnsiEncoding.
@@ -1281,35 +1283,35 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 		if rule.Specification != "" {
 			encObj, hasEnc := fontDict["Encoding"]
 			if !hasEnc {
-				slog.Debug("compliance_2: fonts: non-symbolic TrueType missing /Encoding",
+				slog.Debug("compliance: fonts: non-symbolic TrueType missing /Encoding",
 					"font", fontName, "page", pageNum)
 				results = append(results, failf(rule, "font %s on page %d has no Encoding", fontName, pageNum)...)
 			} else {
 				// Check if encoding is a name (direct) or dict with BaseEncoding.
 				encName, _ := document.ResolveName(ctx, doc, encObj)
 				if encName == "MacRomanEncoding" || encName == "WinAnsiEncoding" {
-					slog.Debug("compliance_2: fonts: non-symbolic TrueType has valid encoding",
+					slog.Debug("compliance: fonts: non-symbolic TrueType has valid encoding",
 						"font", fontName, "encoding", encName)
 				} else if encName != "" {
 					// Invalid encoding name.
-					slog.Debug("compliance_2: fonts: non-symbolic TrueType has invalid encoding name",
+					slog.Debug("compliance: fonts: non-symbolic TrueType has invalid encoding name",
 						"font", fontName, "encoding", encName, "page", pageNum)
 					results = append(results, failf(rule, "font %s on page %d encoding=%s", fontName, pageNum, encName)...)
 				} else {
 					// Encoding is a dictionary — check BaseEncoding.
 					encDict, err := document.ResolveDict(ctx, doc, encObj)
 					if err != nil || encDict == nil {
-						slog.Debug("compliance_2: fonts: non-symbolic TrueType encoding is not a name or dict",
+						slog.Debug("compliance: fonts: non-symbolic TrueType encoding is not a name or dict",
 							"font", fontName, "page", pageNum)
 						results = append(results, failf(rule, "font %s on page %d has invalid Encoding type", fontName, pageNum)...)
 					} else {
 						baseEnc, _ := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
 						if baseEnc != "MacRomanEncoding" && baseEnc != "WinAnsiEncoding" {
-							slog.Debug("compliance_2: fonts: non-symbolic TrueType has invalid BaseEncoding",
+							slog.Debug("compliance: fonts: non-symbolic TrueType has invalid BaseEncoding",
 								"font", fontName, "baseEncoding", baseEnc, "page", pageNum)
 							results = append(results, failf(rule, "font %s on page %d BaseEncoding=%s", fontName, pageNum, baseEnc)...)
 						} else {
-							slog.Debug("compliance_2: fonts: non-symbolic TrueType BaseEncoding is valid",
+							slog.Debug("compliance: fonts: non-symbolic TrueType BaseEncoding is valid",
 								"font", fontName, "baseEncoding", baseEnc)
 						}
 
@@ -1318,7 +1320,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 						// are in the Adobe Glyph List.
 						if diffObj, hasDiff := encDict["Differences"]; hasDiff {
 							if pdfaPart(profile) == 1 {
-								slog.Debug("compliance_2: fonts: non-symbolic TrueType has Differences in encoding dict (part 1)",
+								slog.Debug("compliance: fonts: non-symbolic TrueType has Differences in encoding dict (part 1)",
 									"font", fontName, "page", pageNum)
 								results = append(results, failf(rule, "font %s on page %d has Differences in encoding dict", fontName, pageNum)...)
 							} else {
@@ -1353,13 +1355,13 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := fontNameUTF8Rule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: font name UTF-8 check not applicable", "profile", profile)
+		slog.Debug("compliance: fonts: font name UTF-8 check not applicable", "profile", profile)
 		return nil
 	}
 
 	basefontObj, ok := fontDict["BaseFont"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: no BaseFont entry, skipping UTF-8 check", "font", fontName, "page", pageNum)
+		slog.Debug("compliance: fonts: no BaseFont entry, skipping UTF-8 check", "font", fontName, "page", pageNum)
 		// BaseFont key is truly absent — this is not a UTF-8 violation; the
 		// embedding check will catch the missing font program. Do not flag here
 		// to avoid false positives when the key exists but cannot be decoded.
@@ -1368,19 +1370,19 @@ func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.P
 
 	basefontName, ok := basefontObj.(ast.PdfName)
 	if !ok {
-		slog.Debug("compliance_2: fonts: BaseFont is not a PdfName, skipping UTF-8 check",
+		slog.Debug("compliance: fonts: BaseFont is not a PdfName, skipping UTF-8 check",
 			"font", fontName, "page", pageNum)
 		// BaseFont resolves to a non-name type — not a UTF-8 violation.
 		return nil
 	}
 
 	if !utf8.ValidString(string(basefontName)) {
-		slog.Debug("compliance_2: fonts: BaseFont name is not valid UTF-8",
+		slog.Debug("compliance: fonts: BaseFont name is not valid UTF-8",
 			"font", fontName, "basefont", string(basefontName), "page", pageNum)
 		return failf(rule, "font %s on page %d BaseFont=%s", fontName, pageNum, string(basefontName))
 	}
 
-	slog.Debug("compliance_2: fonts: BaseFont name is valid UTF-8",
+	slog.Debug("compliance: fonts: BaseFont name is valid UTF-8",
 		"font", fontName, "basefont", string(basefontName))
 
 	// Suppress unused warning for doc — used in other check functions via
@@ -1398,7 +1400,7 @@ const widthTolerance = 1.0
 func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := glyphWidthRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: glyph width check not applicable", "profile", profile)
+		slog.Debug("compliance: fonts: glyph width check not applicable", "profile", profile)
 		return nil
 	}
 
@@ -1409,19 +1411,19 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 
 	fd := findFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
-		slog.Debug("compliance_2: fonts: no FontDescriptor, skipping glyph width check", "font", fontName)
+		slog.Debug("compliance: fonts: no FontDescriptor, skipping glyph width check", "font", fontName)
 		return nil
 	}
 
 	fontData := extractFontProgramData(ctx, doc, fd)
 	if fontData == nil {
-		slog.Debug("compliance_2: fonts: no embedded font program, skipping glyph width check", "font", fontName)
+		slog.Debug("compliance: fonts: no embedded font program, skipping glyph width check", "font", fontName)
 		return nil
 	}
 
 	binaryWidths := typography.ExtractBinaryWidths(fontData)
 	if binaryWidths == nil {
-		slog.Debug("compliance_2: fonts: could not extract binary widths", "font", fontName)
+		slog.Debug("compliance: fonts: could not extract binary widths", "font", fontName)
 		return nil
 	}
 
@@ -1430,7 +1432,7 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 		unitsPerEm = 1000 //nolint:mnd // safe default
 	}
 
-	slog.Debug("compliance_2: fonts: extracted font metrics",
+	slog.Debug("compliance: fonts: extracted font metrics",
 		"font", fontName, "binaryWidths", len(binaryWidths), "unitsPerEm", unitsPerEm)
 
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
@@ -1481,19 +1483,19 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
-		slog.Debug("compliance_2: fonts: font missing /Widths array", "font", fontName, "page", pageNum)
+		slog.Debug("compliance: fonts: font missing /Widths array", "font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d: missing /Widths array", fontName, pageNum)
 	}
 
 	widths, err := document.ResolveArray(ctx, doc, widthsObj)
 	if err != nil {
-		slog.Debug("compliance_2: fonts: cannot resolve /Widths", "font", fontName, "error", err)
+		slog.Debug("compliance: fonts: cannot resolve /Widths", "font", fontName, "error", err)
 		return failf(rule, "font %s on page %d: cannot resolve /Widths", fontName, pageNum)
 	}
 
 	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
 	if err != nil {
-		slog.Debug("compliance_2: fonts: missing /FirstChar", "font", fontName)
+		slog.Debug("compliance: fonts: missing /FirstChar", "font", fontName)
 		return failf(rule, "font %s on page %d: missing /FirstChar", fontName, pageNum)
 	}
 
@@ -1533,7 +1535,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		}
 	}
 
-	slog.Debug("compliance_2: fonts: glyph widths consistent", "font", fontName, "page", pageNum)
+	slog.Debug("compliance: fonts: glyph widths consistent", "font", fontName, "page", pageNum)
 	return nil
 }
 
@@ -1550,6 +1552,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	}
 	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
 	if err != nil {
+		slog.Debug("compliance: cannot resolve FirstChar", "error", err)
 		return nil
 	}
 
@@ -1579,14 +1582,17 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	for glyphName, cpObj := range charProcs {
 		stream, err := document.ResolveStream(ctx, doc, cpObj)
 		if err != nil {
+			slog.Debug("compliance: cannot resolve CharProc stream", "error", err)
 			continue
 		}
 		streamData, err := doc.DecodeStream(stream)
 		if err != nil {
+			slog.Debug("compliance: cannot decode CharProc stream", "error", err)
 			continue
 		}
 		ops, err := content.ParseStreamData(streamData)
 		if err != nil {
+			slog.Debug("compliance: cannot parse CharProc stream", "error", err)
 			continue
 		}
 		for _, op := range ops {
@@ -1626,13 +1632,13 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule) []Violation {
 	wObj, ok := cidFontDict["W"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: CIDFont has no /W array", "font", fontName)
+		slog.Debug("compliance: fonts: CIDFont has no /W array", "font", fontName)
 		return nil
 	}
 
 	wArr, err := document.ResolveArray(ctx, doc, wObj)
 	if err != nil {
-		slog.Debug("compliance_2: fonts: resolving CID width array", "font", fontName, "error", err)
+		slog.Debug("compliance: fonts: resolving CID width array", "font", fontName, "error", err)
 		return nil
 	}
 	if wArr == nil {
@@ -1644,7 +1650,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 	for i < len(wArr) {
 		cidStartRes, err := document.ResolveObject(ctx, doc, wArr[i])
 		if err != nil {
-			slog.Debug("compliance_2: fonts: resolving CID start value", "error", err)
+			slog.Debug("compliance: fonts: resolving CID start value", "error", err)
 		}
 		cidStartInt, ok := cidStartRes.(ast.PdfInt)
 		if !ok {
@@ -1659,7 +1665,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 
 		nextRes, err := document.ResolveObject(ctx, doc, wArr[i])
 		if err != nil {
-			slog.Debug("compliance_2: fonts: resolving CID width entry", "error", err)
+			slog.Debug("compliance: fonts: resolving CID width entry", "error", err)
 		}
 		switch next := nextRes.(type) {
 		case ast.PdfArray:
@@ -1681,7 +1687,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				}
 				expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
 				if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
-					slog.Debug("compliance_2: fonts: CID glyph width mismatch",
+					slog.Debug("compliance: fonts: CID glyph width mismatch",
 						"font", fontName, "cid", cid,
 						"pdfWidth", pdfWidth, "expectedWidth", expectedWidth)
 					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
@@ -1713,7 +1719,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				}
 				expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
 				if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
-					slog.Debug("compliance_2: fonts: CID glyph width mismatch (range)",
+					slog.Debug("compliance: fonts: CID glyph width mismatch (range)",
 						"font", fontName, "cid", cid,
 						"pdfWidth", pdfWidth, "expectedWidth", expectedWidth)
 					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
@@ -1725,7 +1731,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 		}
 	}
 
-	slog.Debug("compliance_2: fonts: CID glyph widths consistent", "font", fontName, "page", pageNum)
+	slog.Debug("compliance: fonts: CID glyph widths consistent", "font", fontName, "page", pageNum)
 	return nil
 }
 
@@ -1738,7 +1744,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		}
 		stream, err := document.ResolveStream(ctx, doc, ffObj)
 		if err != nil {
-			slog.Debug("compliance_2: fonts: resolving font program stream", "key", key, "error", err)
+			slog.Debug("compliance: fonts: resolving font program stream", "key", key, "error", err)
 		}
 		if stream.Dict == nil {
 			continue
@@ -1748,13 +1754,13 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 			// Fall back to raw data.
 			rawData, rawErr := stream.Bytes()
 			if rawErr == nil && len(rawData) > 0 {
-				slog.Debug("compliance_2: fonts: using raw font program data", "key", key, "len", len(rawData))
+				slog.Debug("compliance: fonts: using raw font program data", "key", key, "len", len(rawData))
 				return rawData
 			}
-			slog.Debug("compliance_2: fonts: failed to decode font program stream", "key", key, "error", err)
+			slog.Debug("compliance: fonts: failed to decode font program stream", "key", key, "error", err)
 			continue
 		}
-		slog.Debug("compliance_2: fonts: decoded font program", "key", key, "len", len(data))
+		slog.Debug("compliance: fonts: decoded font program", "key", key, "len", len(data))
 		return data
 	}
 	return nil
@@ -1768,13 +1774,13 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	results := make([]Violation, 0, 4) //nolint:mnd // estimated capacity for composite font checks.
 
 	basefont := fontBaseFont(ctx, doc, fontDict)
-	slog.Debug("compliance_2: fonts: checking Type0 composite font",
+	slog.Debug("compliance: fonts: checking Type0 composite font",
 		"font", fontName, "basefont", basefont, "page", pageNum)
 
 	// Resolve /DescendantFonts array.
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
-		slog.Debug("compliance_2: fonts: Type0 font has no DescendantFonts",
+		slog.Debug("compliance: fonts: Type0 font has no DescendantFonts",
 			"font", fontName, "error", err)
 		// Without descendants we cannot check further, but the font is still
 		// subject to embedding checks at the Type0 level.
@@ -1784,13 +1790,13 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// PDF spec requires exactly one descendant CIDFont.
 	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
 	if err != nil || cidFontDict == nil {
-		slog.Debug("compliance_2: fonts: failed to resolve descendant CIDFont",
+		slog.Debug("compliance: fonts: failed to resolve descendant CIDFont",
 			"font", fontName, "error", err)
 		return results
 	}
 
 	cidSubtype := fontSubtype(ctx, doc, cidFontDict)
-	slog.Debug("compliance_2: fonts: CIDFont subtype",
+	slog.Debug("compliance: fonts: CIDFont subtype",
 		"font", fontName, "cidSubtype", cidSubtype)
 
 	// --- Font embedding for the CIDFont ---
@@ -1850,21 +1856,21 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSubtype, fontName string, pageNum int, profile string) []Violation {
 	rule := cidToGIDMapRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: CIDToGIDMap check not applicable",
+		slog.Debug("compliance: fonts: CIDToGIDMap check not applicable",
 			"profile", profile)
 		return nil
 	}
 
 	// Only applies to CIDFontType2.
 	if cidSubtype != "CIDFontType2" {
-		slog.Debug("compliance_2: fonts: CIDToGIDMap check only for CIDFontType2",
+		slog.Debug("compliance: fonts: CIDToGIDMap check only for CIDFontType2",
 			"font", fontName, "subtype", cidSubtype)
 		return nil
 	}
 
 	cidToGIDObj, ok := cidFontDict["CIDToGIDMap"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: CIDFontType2 missing CIDToGIDMap",
+		slog.Debug("compliance: fonts: CIDFontType2 missing CIDToGIDMap",
 			"font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
@@ -1872,7 +1878,7 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 	// CIDToGIDMap can be the name "Identity" or a stream.
 	resolved, err := document.ResolveObject(ctx, doc, cidToGIDObj)
 	if err != nil {
-		slog.Debug("compliance_2: fonts: failed to resolve CIDToGIDMap",
+		slog.Debug("compliance: fonts: failed to resolve CIDToGIDMap",
 			"font", fontName, "error", err)
 		return failf(rule, "font %s on page %d (resolve error)", fontName, pageNum)
 	}
@@ -1880,17 +1886,17 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 	switch v := resolved.(type) {
 	case ast.PdfName:
 		if v == "Identity" {
-			slog.Debug("compliance_2: fonts: CIDToGIDMap is Identity", "font", fontName)
+			slog.Debug("compliance: fonts: CIDToGIDMap is Identity", "font", fontName)
 			return nil
 		}
-		slog.Debug("compliance_2: fonts: CIDToGIDMap invalid name",
+		slog.Debug("compliance: fonts: CIDToGIDMap invalid name",
 			"font", fontName, "value", v)
 		return failf(rule, "font %s on page %d CIDToGIDMap=%s", fontName, pageNum, v)
 	case ast.PdfStream:
-		slog.Debug("compliance_2: fonts: CIDToGIDMap is a stream", "font", fontName)
+		slog.Debug("compliance: fonts: CIDToGIDMap is a stream", "font", fontName)
 		return nil
 	default:
-		slog.Debug("compliance_2: fonts: CIDToGIDMap has unexpected type",
+		slog.Debug("compliance: fonts: CIDToGIDMap has unexpected type",
 			"font", fontName, "type", resolved)
 		return failf(rule, "font %s on page %d CIDToGIDMap has invalid type", fontName, pageNum)
 	}
@@ -1901,14 +1907,14 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := cidSystemInfoRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: CIDSystemInfo check not applicable",
+		slog.Debug("compliance: fonts: CIDSystemInfo check not applicable",
 			"profile", profile)
 		return nil
 	}
 
 	// If encoding is Identity-H or Identity-V, any CIDSystemInfo values are valid.
 	if hasIdentityCMap(ctx, doc, type0Dict) {
-		slog.Debug("compliance_2: fonts: Identity CMap, CIDSystemInfo check skipped",
+		slog.Debug("compliance: fonts: Identity CMap, CIDSystemInfo check skipped",
 			"font", fontName)
 		return nil
 	}
@@ -1916,7 +1922,7 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 	// Get CIDFont CIDSystemInfo.
 	cidSysInfo, err := document.ResolveDict(ctx, doc, cidFontDict["CIDSystemInfo"])
 	if err != nil || cidSysInfo == nil {
-		slog.Debug("compliance_2: fonts: CIDFont missing CIDSystemInfo",
+		slog.Debug("compliance: fonts: CIDFont missing CIDSystemInfo",
 			"font", fontName, "error", err)
 		return nil
 	}
@@ -1925,14 +1931,14 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 	cidOrdering, _ := document.ResolveString(ctx, doc, cidSysInfo["Ordering"])
 	cidSupplement, _ := document.ResolveInt(ctx, doc, cidSysInfo["Supplement"])
 
-	slog.Debug("compliance_2: fonts: CIDFont CIDSystemInfo",
+	slog.Debug("compliance: fonts: CIDFont CIDSystemInfo",
 		"font", fontName,
 		"registry", cidRegistry, "ordering", cidOrdering, "supplement", cidSupplement)
 
 	// Get CMap CIDSystemInfo from either the embedded CMap stream or a predefined CMap name.
 	encObj, ok := type0Dict["Encoding"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: Type0 font missing Encoding", "font", fontName)
+		slog.Debug("compliance: fonts: Type0 font missing Encoding", "font", fontName)
 		return nil
 	}
 
@@ -1944,7 +1950,7 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		// Embedded CMap stream — read CIDSystemInfo from the stream dict.
 		cmapSysInfo, err := document.ResolveDict(ctx, doc, cmapStream.Dict["CIDSystemInfo"])
 		if err != nil || cmapSysInfo == nil {
-			slog.Debug("compliance_2: fonts: CMap stream missing CIDSystemInfo", "font", fontName)
+			slog.Debug("compliance: fonts: CMap stream missing CIDSystemInfo", "font", fontName)
 			return failf(rule, "font %s on page %d: embedded CMap stream missing CIDSystemInfo",
 				fontName, pageNum)
 		}
@@ -1958,7 +1964,7 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		encName, _ := document.ResolveName(ctx, doc, encObj)
 		reg, ord, sup := parsePredefinedCMapName(string(encName))
 		if reg == "" {
-			slog.Debug("compliance_2: fonts: cannot parse CMap name for CIDSystemInfo",
+			slog.Debug("compliance: fonts: cannot parse CMap name for CIDSystemInfo",
 				"font", fontName, "encoding", encName)
 			// Non-Identity encoding that can't be resolved — the CIDSystemInfo
 			// relationship can't be satisfied.
@@ -1970,13 +1976,13 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		cmapSupplement = ast.PdfInt(sup)
 	}
 
-	slog.Debug("compliance_2: fonts: CMap CIDSystemInfo",
+	slog.Debug("compliance: fonts: CMap CIDSystemInfo",
 		"font", fontName,
 		"registry", cmapRegistry, "ordering", cmapOrdering, "supplement", cmapSupplement)
 
 	// Registry and Ordering must match.
 	if string(cidRegistry) != string(cmapRegistry) || string(cidOrdering) != string(cmapOrdering) {
-		slog.Debug("compliance_2: fonts: CIDSystemInfo Registry/Ordering mismatch",
+		slog.Debug("compliance: fonts: CIDSystemInfo Registry/Ordering mismatch",
 			"font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d (CIDFont Registry=%s Ordering=%s, CMap Registry=%s Ordering=%s)",
 			fontName, pageNum, cidRegistry, cidOrdering, cmapRegistry, cmapOrdering)
@@ -1988,13 +1994,13 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 	part := pdfaPart(profile)
 	checkSupplement := part >= 2 || isPDFUA(profile) //nolint:mnd
 	if checkSupplement && cidSupplement > cmapSupplement {
-		slog.Debug("compliance_2: fonts: CIDSystemInfo Supplement violation",
+		slog.Debug("compliance: fonts: CIDSystemInfo Supplement violation",
 			"font", fontName, "cidSupplement", cidSupplement, "cmapSupplement", cmapSupplement)
 		return failf(rule, "font %s on page %d: CIDFont Supplement (%d) > CMap Supplement (%d)",
 			fontName, pageNum, cidSupplement, cmapSupplement)
 	}
 
-	slog.Debug("compliance_2: fonts: CIDSystemInfo is consistent", "font", fontName)
+	slog.Debug("compliance: fonts: CIDSystemInfo is consistent", "font", fontName)
 	return nil
 }
 
@@ -2137,7 +2143,7 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 
 	for _, cidVal := range cidCMap.Mapping {
 		if cidVal > maxCID {
-			slog.Debug("compliance_2: fonts: CID value exceeds 65535",
+			slog.Debug("compliance: fonts: CID value exceeds 65535",
 				"font", fontName, "page", pageNum, "cid", cidVal)
 			return failf(rule,
 				"font %s on page %d: CID value %d exceeds maximum 65,535",
@@ -2323,7 +2329,7 @@ func parsePredefinedCMapName(name string) (registry, ordering string, supplement
 func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: ToUnicode check not applicable for Type0",
+		slog.Debug("compliance: fonts: ToUnicode check not applicable for Type0",
 			"profile", profile)
 		return nil
 	}
@@ -2336,7 +2342,7 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 		if string(registry) == "Adobe" {
 			switch string(ordering) {
 			case "GB1", "CNS1", "Japan1", "Korea1":
-				slog.Debug("compliance_2: fonts: Type0 font uses standard CJK collection, ToUnicode exemption applies",
+				slog.Debug("compliance: fonts: Type0 font uses standard CJK collection, ToUnicode exemption applies",
 					"font", fontName, "ordering", ordering)
 				return nil
 			}
@@ -2344,12 +2350,12 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	}
 
 	if !hasToUnicode(type0Dict) {
-		slog.Debug("compliance_2: fonts: Type0 font missing ToUnicode",
+		slog.Debug("compliance: fonts: Type0 font missing ToUnicode",
 			"font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
-	slog.Debug("compliance_2: fonts: Type0 font has ToUnicode", "font", fontName)
+	slog.Debug("compliance: fonts: Type0 font has ToUnicode", "font", fontName)
 	return nil
 }
 
@@ -2516,14 +2522,14 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 	// An odd-length string with a 2-byte CMap (Identity-H/V) means the
 	// last byte cannot form a valid CID — the renderer uses .notdef.
 	if hasOddLengthString {
-		slog.Debug("compliance_2: fonts: Type0/Identity text has odd-length string (.notdef)",
+		slog.Debug("compliance: fonts: Type0/Identity text has odd-length string (.notdef)",
 			"font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d: odd-length string with 2-byte CMap references .notdef", fontName, pageNum)
 	}
 
 	// CID 0 is always .notdef.
 	if usedCIDs[0] {
-		slog.Debug("compliance_2: fonts: Type0 text references CID 0 (.notdef)",
+		slog.Debug("compliance: fonts: Type0 text references CID 0 (.notdef)",
 			"font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
 	}
@@ -2559,7 +2565,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		}
 		for cid := range usedCIDs {
 			if !validCIDs[cid] {
-				slog.Debug("compliance_2: fonts: Type0/CFF text references absent CID",
+				slog.Debug("compliance: fonts: Type0/CFF text references absent CID",
 					"font", fontName, "page", pageNum, "cid", cid)
 				return failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
 			}
@@ -2577,7 +2583,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		if emptyGIDs != nil {
 			for cid := range usedCIDs {
 				if emptyGIDs[cid] && lookupCIDWidth(ctx, doc, cidFontDict, cid) == 0 {
-					slog.Debug("compliance_2: fonts: Type0/TrueType CID maps to empty glyph with width 0",
+					slog.Debug("compliance: fonts: Type0/TrueType CID maps to empty glyph with width 0",
 						"font", fontName, "page", pageNum, "cid", cid)
 					return failf(rule, "font %s on page %d: CID %d maps to empty glyph with width 0 (.notdef)", fontName, pageNum, cid)
 				}
@@ -2787,18 +2793,18 @@ func isSubsetFont(basefont string) bool {
 func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	basefont := fontBaseFont(ctx, doc, fontDict)
 	if !isSubsetFont(basefont) {
-		slog.Debug("compliance_2: fonts: not a subset font, skipping glyph coverage check",
+		slog.Debug("compliance: fonts: not a subset font, skipping glyph coverage check",
 			"font", fontName, "basefont", basefont)
 		return nil
 	}
 
 	subtype := fontSubtype(ctx, doc, fontDict)
-	slog.Debug("compliance_2: fonts: checking glyph coverage for subset font",
+	slog.Debug("compliance: fonts: checking glyph coverage for subset font",
 		"font", fontName, "basefont", basefont, "subtype", subtype)
 
 	fd := findFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
-		slog.Debug("compliance_2: fonts: no FontDescriptor, skipping glyph coverage check", "font", fontName)
+		slog.Debug("compliance: fonts: no FontDescriptor, skipping glyph coverage check", "font", fontName)
 		return nil
 	}
 
@@ -2888,7 +2894,7 @@ func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, f
 func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	basefont := fontBaseFont(ctx, doc, cidFontDict)
 	if !isSubsetFont(basefont) {
-		slog.Debug("compliance_2: fonts: CIDFont not a subset, skipping CIDSet check",
+		slog.Debug("compliance: fonts: CIDFont not a subset, skipping CIDSet check",
 			"font", fontName, "basefont", basefont)
 		return nil
 	}
@@ -2900,14 +2906,14 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 
 	fd := findFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
-		slog.Debug("compliance_2: fonts: CIDFont no FontDescriptor, skipping CIDSet check", "font", fontName)
+		slog.Debug("compliance: fonts: CIDFont no FontDescriptor, skipping CIDSet check", "font", fontName)
 		return nil
 	}
 
 	// Part 1: CIDSet is required. Parts 2+: only check if present (correctness).
 	if pdfaPart(profile) == 1 {
 		if _, hasCIDSet := fd["CIDSet"]; !hasCIDSet {
-			slog.Debug("compliance_2: fonts: CIDFont subset missing /CIDSet",
+			slog.Debug("compliance: fonts: CIDFont subset missing /CIDSet",
 				"font", fontName, "page", pageNum)
 			return failf(rule, "font %s on page %d: CIDFont subset missing /CIDSet", fontName, pageNum)
 		}
@@ -2936,7 +2942,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 		}
 	}
 
-	slog.Debug("compliance_2: fonts: CIDFont subset CIDSet check passed", "font", fontName)
+	slog.Debug("compliance: fonts: CIDFont subset CIDSet check passed", "font", fontName)
 	return nil
 }
 
@@ -2945,6 +2951,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
+		slog.Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
 	cidSetData, err := doc.DecodeStream(stream)
@@ -3030,10 +3037,12 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
+		slog.Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
 	cidSetData, err := doc.DecodeStream(stream)
 	if err != nil {
+		slog.Debug("compliance: cannot decode CIDSet stream", "error", err)
 		return nil
 	}
 
@@ -3064,24 +3073,24 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := toUnicodeCMapValuesRule(profile)
 	if rule.Specification == "" {
-		slog.Debug("compliance_2: fonts: ToUnicode CMap values check not applicable", "profile", profile)
+		slog.Debug("compliance: fonts: ToUnicode CMap values check not applicable", "profile", profile)
 		return nil
 	}
 
 	tuObj, ok := fontDict["ToUnicode"]
 	if !ok {
-		slog.Debug("compliance_2: fonts: no /ToUnicode, skipping CMap values check", "font", fontName)
+		slog.Debug("compliance: fonts: no /ToUnicode, skipping CMap values check", "font", fontName)
 		return nil
 	}
 
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil {
-		slog.Debug("compliance_2: fonts: failed to resolve ToUnicode stream",
+		slog.Debug("compliance: fonts: failed to resolve ToUnicode stream",
 			"font", fontName, "error", err)
 		return failf(rule, "font %s on page %d: cannot resolve /ToUnicode stream", fontName, pageNum)
 	}
 	if stream.Dict == nil {
-		slog.Debug("compliance_2: fonts: ToUnicode stream has no dict", "font", fontName)
+		slog.Debug("compliance: fonts: ToUnicode stream has no dict", "font", fontName)
 		return failf(rule, "font %s on page %d: /ToUnicode stream has no dictionary", fontName, pageNum)
 	}
 
@@ -3090,7 +3099,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		// Fall back to raw data.
 		data, err = stream.Bytes()
 		if err != nil || len(data) == 0 {
-			slog.Debug("compliance_2: fonts: failed to decode ToUnicode CMap",
+			slog.Debug("compliance: fonts: failed to decode ToUnicode CMap",
 				"font", fontName, "error", err)
 			return failf(rule, "font %s on page %d: cannot decode /ToUnicode CMap", fontName, pageNum)
 		}
@@ -3101,13 +3110,13 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	// U+0000, U+FEFF, or U+FFFE.
 	cmapStr := string(data)
 	if containsInvalidUnicodeMapping(cmapStr) {
-		slog.Debug("compliance_2: fonts: ToUnicode CMap contains invalid Unicode mapping",
+		slog.Debug("compliance: fonts: ToUnicode CMap contains invalid Unicode mapping",
 			"font", fontName, "page", pageNum)
 		return failf(rule, "font %s on page %d: /ToUnicode CMap maps to U+0000, U+FEFF, or U+FFFE",
 			fontName, pageNum)
 	}
 
-	slog.Debug("compliance_2: fonts: ToUnicode CMap values valid", "font", fontName)
+	slog.Debug("compliance: fonts: ToUnicode CMap values valid", "font", fontName)
 	return nil
 }
 

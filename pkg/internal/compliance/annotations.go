@@ -49,25 +49,25 @@ var standardAnnotTypes2 = map[ast.PdfName]bool{
 // so this function returns nil.
 func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
-		slog.Debug("compliance_2: annotations: skipping for PDF/UA (handled by accessibility group)")
+		slog.Debug("compliance: annotations: skipping for PDF/UA (handled by accessibility group)")
 		return nil
 	}
 
 	part := pdfaPart(profile)
 	level := pdfaLevel(profile)
 	if part == 0 {
-		slog.Debug("compliance_2: annotations: unknown profile, skipping", "profile", profile)
+		slog.Debug("compliance: annotations: unknown profile, skipping", "profile", profile)
 		return nil
 	}
 
-	slog.Debug("compliance_2: annotations: starting checks", "profile", profile, "part", part, "level", level)
+	slog.Debug("compliance: annotations: starting checks", "profile", profile, "part", part, "level", level)
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
-			slog.Debug("compliance_2: annotations: context cancelled")
+			slog.Debug("compliance: annotations: context cancelled")
 			return results
 		}
 
@@ -78,12 +78,12 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			slog.Debug("compliance_2: annotations: failed to resolve /Annots array",
+			slog.Debug("compliance: annotations: failed to resolve /Annots array",
 				"page", pageIdx, "error", err)
 			continue
 		}
 
-		slog.Debug("compliance_2: annotations: processing page", "page", pageIdx, "count", len(annots))
+		slog.Debug("compliance: annotations: processing page", "page", pageIdx, "count", len(annots))
 
 		for annotIdx, annotObj := range annots {
 			if ctx.Err() != nil {
@@ -92,7 +92,7 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 
 			annot, err := document.ResolveDict(ctx, doc, annotObj)
 			if err != nil || annot == nil {
-				slog.Debug("compliance_2: annotations: failed to resolve annotation dict",
+				slog.Debug("compliance: annotations: failed to resolve annotation dict",
 					"page", pageIdx, "annot", annotIdx, "error", err)
 				continue
 			}
@@ -100,7 +100,7 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx, annotIdx, subtype)
 
-			slog.Debug("compliance_2: annotations: checking annotation",
+			slog.Debug("compliance: annotations: checking annotation",
 				"page", pageIdx, "annot", annotIdx, "subtype", subtype)
 
 			// 1. Forbidden annotation types.
@@ -124,7 +124,7 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 		}
 	}
 
-	slog.Debug("compliance_2: annotations: checks complete", "violations", len(results))
+	slog.Debug("compliance: annotations: checks complete", "violations", len(results))
 	return results
 }
 
@@ -200,7 +200,7 @@ func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfD
 	}
 
 	rule := forbiddenAnnotTypeRule(part)
-	slog.Debug("compliance_2: annotations: forbidden type", "subtype", subtype, "loc", loc)
+	slog.Debug("compliance: annotations: forbidden type", "subtype", subtype, "loc", loc)
 	return failf(rule, "%s: forbidden annotation type %s", loc, subtype)
 }
 
@@ -230,6 +230,7 @@ func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast
 	}
 	stream, err := document.ResolveStream(ctx, doc, streamObj)
 	if err != nil {
+		slog.Debug("compliance: cannot resolve 3DD stream", "error", err)
 		return nil
 	}
 	subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -253,14 +254,14 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 	if part == 1 {
 		// PDF/A-1: /F key is mandatory, combined with flag value check.
 		if !hasF {
-			slog.Debug("compliance_2: annotations: missing /F key", "loc", loc)
+			slog.Debug("compliance: annotations: missing /F key", "loc", loc)
 			return failf(Rule_19005_1_6_5_3_t02,
 				"%s: annotation flags missing (F absent)", loc)
 		}
 
 		flags, err := document.ResolveInt(ctx, doc, fObj)
 		if err != nil {
-			slog.Debug("compliance_2: annotations: failed to resolve /F", "loc", loc, "error", err)
+			slog.Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
 			return nil
 		}
 
@@ -271,18 +272,18 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 	// Parts 2, 3, 4: Popup annotations may omit /F.
 	if !hasF {
 		if subtype == "Popup" {
-			slog.Debug("compliance_2: annotations: Popup without /F, allowed in parts 2+", "loc", loc)
+			slog.Debug("compliance: annotations: Popup without /F, allowed in parts 2+", "loc", loc)
 			return nil
 		}
 
 		rule := flagFKeyRule(part)
-		slog.Debug("compliance_2: annotations: missing /F key", "loc", loc)
+		slog.Debug("compliance: annotations: missing /F key", "loc", loc)
 		return failf(rule, "%s: annotation missing /F key", loc)
 	}
 
 	flags, err := document.ResolveInt(ctx, doc, fObj)
 	if err != nil {
-		slog.Debug("compliance_2: annotations: failed to resolve /F", "loc", loc, "error", err)
+		slog.Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -301,7 +302,7 @@ func checkFlagValues1(f int, loc string) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance_2: annotations: invalid flags",
+	slog.Debug("compliance: annotations: invalid flags",
 		"loc", loc, "F", f,
 		"Print", printSet, "Hidden", hiddenSet,
 		"Invisible", invisibleSet, "NoView", noViewSet)
@@ -323,7 +324,7 @@ func checkFlagValues2Plus(f, part int, loc string) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance_2: annotations: invalid flags",
+	slog.Debug("compliance: annotations: invalid flags",
 		"loc", loc, "F", f,
 		"Print", printSet, "Hidden", hiddenSet,
 		"Invisible", invisibleSet, "NoView", noViewSet,
@@ -383,31 +384,31 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	if !hasAP {
 		// Check if this annotation is exempt from requiring /AP.
 		if linkExemptFromAP(subtype, part) {
-			slog.Debug("compliance_2: annotations: Link exempt from /AP", "loc", loc)
+			slog.Debug("compliance: annotations: Link exempt from /AP", "loc", loc)
 			return nil
 		}
 		if subtype == "Popup" {
-			slog.Debug("compliance_2: annotations: Popup exempt from /AP", "loc", loc)
+			slog.Debug("compliance: annotations: Popup exempt from /AP", "loc", loc)
 			return nil
 		}
 		if isZeroRect(ctx, doc, annot) {
-			slog.Debug("compliance_2: annotations: zero-area rect, exempt from /AP", "loc", loc)
+			slog.Debug("compliance: annotations: zero-area rect, exempt from /AP", "loc", loc)
 			return nil
 		}
 		// PDF/A-4: Projection annotations are also exempt.
 		if part == 4 && subtype == "Projection" {
-			slog.Debug("compliance_2: annotations: Projection exempt from /AP", "loc", loc)
+			slog.Debug("compliance: annotations: Projection exempt from /AP", "loc", loc)
 			return nil
 		}
 
 		rule := apRequiredRule(part)
-		slog.Debug("compliance_2: annotations: missing /AP", "loc", loc)
+		slog.Debug("compliance: annotations: missing /AP", "loc", loc)
 		return failf(rule, "%s: annotation missing appearance dictionary (/AP)", loc)
 	}
 
 	ap, err := document.ResolveDict(ctx, doc, apObj)
 	if err != nil || ap == nil {
-		slog.Debug("compliance_2: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
+		slog.Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -417,7 +418,7 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	nObj, hasN := ap["N"]
 	if !hasN {
 		rule := apRequiredRule(part)
-		slog.Debug("compliance_2: annotations: /AP missing /N entry", "loc", loc)
+		slog.Debug("compliance: annotations: /AP missing /N entry", "loc", loc)
 		results = append(results, failf(rule, "%s: appearance dictionary missing /N entry", loc)...)
 		return results
 	}
@@ -426,7 +427,7 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	if len(ap) > 1 {
 		extras := apExtraKeys(ap)
 		rule := apOnlyNRule(part)
-		slog.Debug("compliance_2: annotations: /AP has extra keys", "loc", loc, "extras", extras)
+		slog.Debug("compliance: annotations: /AP has extra keys", "loc", loc, "extras", extras)
 		results = append(results, failf(rule, "%s: appearance dictionary contains extra entries: %s", loc, extras)...)
 	}
 
@@ -498,7 +499,7 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string) []Violation {
 	resolved, err := document.ResolveObject(ctx, doc, nObj)
 	if err != nil {
-		slog.Debug("compliance_2: annotations: failed to resolve /N value", "loc", loc, "error", err)
+		slog.Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -507,7 +508,7 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 		if _, ok := resolved.(ast.PdfDict); !ok {
 			rule := nSubdictRule(part)
 			typeName := fmt.Sprintf("%T", resolved)
-			slog.Debug("compliance_2: annotations: Widget/Btn /N is not a subdictionary",
+			slog.Debug("compliance: annotations: Widget/Btn /N is not a subdictionary",
 				"loc", loc, "type", typeName)
 			return failf(rule, "%s: Widget/Btn /N is %s instead of subdictionary", loc, typeName)
 		}
@@ -524,18 +525,18 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 		if isWidget {
 			// Widget with non-Btn FT: /N should still be a stream.
 			rule := nStreamRule(part)
-			slog.Debug("compliance_2: annotations: Widget (non-Btn) /N is not a stream",
+			slog.Debug("compliance: annotations: Widget (non-Btn) /N is not a stream",
 				"loc", loc, "ft", ft)
 			return failf(rule, "%s: Widget/FT=%s /N is not an appearance stream", loc, ft)
 		}
 		rule := nStreamRule(part)
-		slog.Debug("compliance_2: annotations: non-Widget /N is not a stream",
+		slog.Debug("compliance: annotations: non-Widget /N is not a stream",
 			"loc", loc, "subtype", "non-Widget")
 		return failf(rule, "%s: /N is dict instead of appearance stream", loc)
 	default:
 		rule := nStreamRule(part)
 		typeName := fmt.Sprintf("%T", resolved)
-		slog.Debug("compliance_2: annotations: /N has unexpected type",
+		slog.Debug("compliance: annotations: /N has unexpected type",
 			"loc", loc, "type", typeName)
 		return failf(rule, "%s: /N has unexpected type %s", loc, typeName)
 	}
@@ -613,7 +614,7 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 
 	resolved, err := document.ResolveObject(ctx, doc, caObj)
 	if err != nil {
-		slog.Debug("compliance_2: annotations: failed to resolve /CA", "loc", loc, "error", err)
+		slog.Debug("compliance: annotations: failed to resolve /CA", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -622,7 +623,7 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 		return nil
 	}
 
-	slog.Debug("compliance_2: annotations: /CA is not 1.0", "loc", loc, "ca", ca)
+	slog.Debug("compliance: annotations: /CA is not 1.0", "loc", loc, "ca", ca)
 	return failf(Rule_19005_1_6_5_3_t01, "%s: annotation /CA is %g instead of 1.0", loc, ca)
 }
 
