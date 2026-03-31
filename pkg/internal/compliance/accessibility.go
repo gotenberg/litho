@@ -93,6 +93,21 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 	// 19. Content marking (PDF/UA-1 §7.1 t3).
 	results = append(results, checkContentMarking(ctx, doc, catalog, profile)...)
 
+	// 20. Encryption permissions (PDF/UA-1 §7.16 t01).
+	results = append(results, checkEncryptionPermissions(doc, profile)...)
+
+	// 21. Annotation structure nesting (PDF/UA-1 §7.18.x).
+	results = append(results, checkAnnotationNesting(ctx, doc, catalog, profile)...)
+
+	// 22. Form XObject restrictions (PDF/UA-1 §7.20).
+	results = append(results, checkFormXObjectRestrictions(ctx, doc, catalog, profile)...)
+
+	// 23. PDF/UA-2 form structure checks (§8.10.1, §8.10.2.3).
+	results = append(results, checkPDFUA2FormStructure(ctx, doc, catalog, profile)...)
+
+	// 24. Structure destinations (PDF/UA-2 §8.8).
+	results = append(results, checkStructureDestinations(ctx, doc, catalog, profile)...)
+
 	slog.Debug("compliance_2/accessibility: checks complete", "violations", len(results))
 	return results
 }
@@ -735,26 +750,30 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 
+	roleMap := loadRoleMap(ctx, doc, treeRoot)
+
 	var results []Result
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		if typeName != "Figure" {
+		// Resolve through RoleMap to catch non-standard types mapped to Figure.
+		stdType := resolveStandardType(typeName, roleMap, profile)
+		if stdType != "Figure" {
 			return
 		}
 
-		// Check presence of /Alt or /ActualText. Even empty string values satisfy
-		// the requirement, but null/absent does not.
-		hasAlt := hasStringKeyPresent(ctx, doc, elem, "Alt")
-		hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
-
 		if profile == "PDF/UA-1" {
-			// PDF/UA-1 §7.3: Figure must have /Alt or /ActualText.
+			// PDF/UA-1 §7.3: Figure must have non-empty /Alt, or /ActualText (presence suffices).
+			hasAlt := hasNonEmptyStringKey(ctx, doc, elem, "Alt")
+			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 			if !hasAlt && !hasActualText {
 				slog.Debug("compliance_2/accessibility: Figure missing /Alt and /ActualText", "path", path)
 				results = append(results, Result{Rule: rule, Context: path})
 			}
 		} else {
 			// PDF/UA-2 §8.2.5.28.2: Figure must have /Alt, /ActualText, or a /Caption child.
+			// Presence (even empty) satisfies the requirement for PDF/UA-2.
+			hasAlt := hasStringKeyPresent(ctx, doc, elem, "Alt")
+			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 			hasCaptionChild := figureHasCaptionChild(ctx, doc, elem)
 			if !hasAlt && !hasActualText && !hasCaptionChild {
 				slog.Debug("compliance_2/accessibility: Figure missing /Alt, /ActualText, or Caption", "path", path)
@@ -1082,6 +1101,14 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 				slog.Debug("compliance_2/accessibility: default OC config missing /Name")
 				results = append(results, Result{Rule: rule, Context: "default config (D)"})
 			}
+			// §7.10 t02 (PDF/UA-1): /AS key forbidden in any OC config dict.
+			if profile == "PDF/UA-1" {
+				if _, hasAS := dConfig["AS"]; hasAS {
+					results = append(results, Result{
+						Rule: Rule_14289_1_7_10_t02, Context: "default config (D)",
+					})
+				}
+			}
 		}
 	}
 
@@ -1110,6 +1137,14 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 			slog.Debug("compliance_2/accessibility: OC config missing /Name", "index", i)
 			results = append(results, Result{Rule: rule, Context: fmt.Sprintf("config %d", i)})
 		}
+		// §7.10 t02 (PDF/UA-1): /AS key forbidden.
+		if profile == "PDF/UA-1" {
+			if _, hasAS := cfg["AS"]; hasAS {
+				results = append(results, Result{
+					Rule: Rule_14289_1_7_10_t02, Context: fmt.Sprintf("config %d", i),
+				})
+			}
+		}
 	}
 
 	return results
@@ -1131,24 +1166,29 @@ func hasNonEmptyName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 // --- 10. PDF/UA identification (PDF/UA-2) ---
 
 func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
-	if profile != "PDF/UA-2" {
+	if !isPDFUA(profile) {
 		return nil
 	}
 
-	slog.Debug("compliance_2/accessibility: checking PDF/UA-2 identification in XMP")
-
 	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
 	if !ok {
-		slog.Debug("compliance_2/accessibility: no XMP metadata for PDF/UA-2 identification")
+		if profile == "PDF/UA-1" {
+			return fail(Rule_14289_1_5_t01, "no XMP metadata")
+		}
 		return fail(Rule_14289_2_5_t01, "no XMP metadata")
 	}
 
-	if !containsPDFUAIDPart(xmpData, "2") {
-		slog.Debug("compliance_2/accessibility: XMP does not contain pdfuaid:part=2")
-		return fail(Rule_14289_2_5_t02, "pdfuaid:part is not 2")
+	switch profile {
+	case "PDF/UA-1":
+		if !containsPDFUAIDPart(xmpData, "1") {
+			return fail(Rule_14289_1_5_t02, "pdfuaid:part is not 1")
+		}
+	case "PDF/UA-2":
+		if !containsPDFUAIDPart(xmpData, "2") {
+			return fail(Rule_14289_2_5_t02, "pdfuaid:part is not 2")
+		}
 	}
 
-	slog.Debug("compliance_2/accessibility: PDF/UA-2 identification found")
 	return nil
 }
 
@@ -1176,6 +1216,14 @@ func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog a
 	raw := string(xmpData)
 
 	if profile == "PDF/UA-1" {
+		// t3: "part" property must use "pdfuaid" prefix.
+		if !strings.Contains(raw, "pdfuaid:part") {
+			// Check if "part" exists under a different prefix.
+			if pdfuaidPrefix != "" && pdfuaidPrefix != "pdfuaid" && strings.Contains(raw, pdfuaidPrefix+":part") {
+				results = append(results, failf(Rule_14289_1_5_t03,
+					"property 'part' uses prefix %q instead of 'pdfuaid'", pdfuaidPrefix)...)
+			}
+		}
 		// t4: "amd" property must use "pdfuaid" prefix.
 		if strings.Contains(raw, ":amd") && pdfuaidPrefix != "pdfuaid" {
 			// Only flag if "amd" appears with a non-pdfuaid prefix.
@@ -1383,12 +1431,44 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 			continue
 		}
 		for typeName, mappingObj := range rmns {
+			// t03: same-namespace circular mapping.
 			if roleMapChainReturnsSameNS(ctx, doc, string(srcURI), string(typeName), nsByURI) {
 				results = append(results, failf(Rule_14289_2_8_2_4_t03,
 					"namespace %q: type %s maps back to same namespace through chain",
 					string(srcURI), typeName)...)
 			}
-			_ = mappingObj
+			// t04: standard type remapped to non-standard.
+			if standardNamespaceURIs[string(srcURI)] && isStandardStructType(typeName, "PDF/UA-2") {
+				// Check if the target is also in a standard namespace type.
+				targetArr, _ := document.ResolveArray(ctx, doc, mappingObj)
+				if len(targetArr) >= 2 { //nolint:mnd
+					targetNSDict, _ := document.ResolveDict(ctx, doc, targetArr[1])
+					if targetNSDict != nil {
+						targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
+						targetType, _ := document.ResolveName(ctx, doc, targetArr[0])
+						if !standardNamespaceURIs[string(targetURI)] || !isStandardStructType(targetType, "PDF/UA-2") {
+							results = append(results, failf(Rule_14289_2_8_2_4_t04,
+								"standard type %s remapped to %s in namespace %q",
+								typeName, targetType, string(targetURI))...)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// t04: also check the StructTreeRoot's old-style /RoleMap for standard types
+	// remapped to non-standard types. This applies when the PDF uses legacy RoleMap
+	// entries alongside namespace-based structure.
+	roleMap, _ := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
+	for src, dstObj := range roleMap {
+		if isStandardStructType(ast.PdfName(src), "PDF/UA-2") {
+			dstName, _ := document.ResolveName(ctx, doc, dstObj)
+			if dstName != "" && !isStandardStructType(dstName, "PDF/UA-2") {
+				results = append(results, failf(Rule_14289_2_8_2_4_t04,
+					"standard type %s remapped to non-standard type %s in StructTreeRoot /RoleMap",
+					src, dstName)...)
+			}
 		}
 	}
 
@@ -1770,7 +1850,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
 // files contain both /F and /UF keys (ISO 14289-1, §7.11 t01).
 func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
-	if profile != "PDF/UA-1" {
+	if !isPDFUA(profile) {
 		return nil
 	}
 
@@ -1803,14 +1883,28 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 			continue // Only check embedded file specs.
 		}
 
-		fStr, _ := document.ResolveString(ctx, doc, dict["F"])
-		ufStr, _ := document.ResolveString(ctx, doc, dict["UF"])
+		// PDF/UA-1 §7.11: /F and /UF must both be present and non-empty.
+		if profile == "PDF/UA-1" {
+			fStr, _ := document.ResolveString(ctx, doc, dict["F"])
+			ufStr, _ := document.ResolveString(ctx, doc, dict["UF"])
 
-		if len(fStr) == 0 || len(ufStr) == 0 {
-			results = append(results, Result{
-				Rule:    rule,
-				Context: fmt.Sprintf("object %d: file spec F=%v UF=%v", objNum, len(fStr) > 0, len(ufStr) > 0),
-			})
+			if len(fStr) == 0 || len(ufStr) == 0 {
+				results = append(results, Result{
+					Rule:    rule,
+					Context: fmt.Sprintf("object %d: file spec F=%v UF=%v", objNum, len(fStr) > 0, len(ufStr) > 0),
+				})
+			}
+		}
+
+		// PDF/UA-2 §8.14.1: /Desc must be present on embedded file specs.
+		if profile == "PDF/UA-2" {
+			descStr, _ := document.ResolveString(ctx, doc, dict["Desc"])
+			if len(descStr) == 0 {
+				results = append(results, Result{
+					Rule:    Rule_14289_2_8_14_1_t01,
+					Context: fmt.Sprintf("object %d: embedded file spec missing /Desc", objNum),
+				})
+			}
 		}
 	}
 
@@ -2027,6 +2121,649 @@ func containsPDFUAIDPart(xmpData []byte, part string) bool {
 	return strings.Contains(xmp, needle)
 }
 
+// --- 20. Encryption permissions ---
+
+// checkEncryptionPermissions validates PDF/UA-1 §7.16: if encrypted, the
+// /Encrypt dictionary must contain a /P key whose 10th bit is true
+// (accessibility content extraction permitted).
+func checkEncryptionPermissions(doc *document.Document, profile string) []Result {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	if !doc.IsEncrypted {
+		return nil
+	}
+
+	trailer := doc.Index.Trailer
+	encObj, ok := trailer["Encrypt"]
+	if !ok {
+		return fail(Rule_14289_1_7_16_t01, "file is encrypted but no /Encrypt dictionary in trailer")
+	}
+
+	// Resolve the Encrypt dict (may be an indirect ref).
+	var encDict ast.PdfDict
+	switch v := encObj.(type) {
+	case ast.PdfDict:
+		encDict = v
+	case ast.PdfIndirectRef:
+		obj, err := doc.Resolve(context.Background(), v)
+		if err != nil {
+			return fail(Rule_14289_1_7_16_t01, "cannot resolve /Encrypt dictionary")
+		}
+		d, ok := obj.(ast.PdfDict)
+		if !ok {
+			return fail(Rule_14289_1_7_16_t01, "resolved /Encrypt is not a dictionary")
+		}
+		encDict = d
+	default:
+		return fail(Rule_14289_1_7_16_t01, "/Encrypt is not a dictionary")
+	}
+
+	pObj, hasP := encDict["P"]
+	if !hasP {
+		return fail(Rule_14289_1_7_16_t01, "encrypted file has no /P key in /Encrypt dictionary")
+	}
+
+	pVal, ok := pObj.(ast.PdfInt)
+	if !ok {
+		return fail(Rule_14289_1_7_16_t01, "/P is not an integer")
+	}
+
+	// Bit 10 (1-indexed) = bit 9 (0-indexed) = 0x200.
+	const accessibilityBit = 1 << 9
+	if int(pVal)&accessibilityBit == 0 {
+		return failf(Rule_14289_1_7_16_t01,
+			"10th bit of /P (%d) is false — accessibility content extraction not permitted", int(pVal))
+	}
+
+	return nil
+}
+
+// --- 21. Annotation structure nesting ---
+
+// checkAnnotationNesting validates PDF/UA-1 §7.18.x annotation nesting rules:
+//   - §7.18.1 t01: Non-exempt annotations must be nested within an Annot tag
+//   - §7.18.2 t01: TrapNet annotations are forbidden
+//   - §7.18.4 t01: Widget annotations must be nested within a Form tag
+//   - §7.18.5 t01: Link annotations must be nested within a Link tag
+//   - §7.18.8 t01: PrinterMark annotations must NOT be in the logical structure
+func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	// Build map: annotation objNum -> enclosing structure element standard type.
+	structParentMap := buildAnnotStructTypeMap(ctx, doc, catalog, profile)
+
+	pages := collectPages(ctx, doc, catalog)
+	var results []Result
+
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+
+		annotsObj, ok := page["Annots"]
+		if !ok {
+			continue
+		}
+
+		annots, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			continue
+		}
+
+		for _, annotObj := range annots {
+			if ctx.Err() != nil {
+				return results
+			}
+
+			annotObjNum := 0
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+				annotObjNum = ref.ObjectNum
+			}
+
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+
+			// Skip hidden or outside-crop-box annotations (all rules share these exemptions).
+			if isAnnotHidden(ctx, doc, annot) || isAnnotOutsideCropBox(ctx, doc, annot, page) {
+				continue
+			}
+
+			// Skip Popup annotations — they are auxiliary and don't have structure requirements.
+			if subtype == "Popup" {
+				continue
+			}
+
+			stdType := structParentMap[annotObjNum] // "" if not in structure tree
+
+			switch subtype {
+			case "TrapNet":
+				// §7.18.2: TrapNet annotations are forbidden.
+				results = append(results, fail(Rule_14289_1_7_18_2_t01,
+					"TrapNet annotation exists")...)
+
+			case "PrinterMark":
+				// §7.18.8: PrinterMark must NOT be in logical structure.
+				if stdType != "" {
+					results = append(results, fail(Rule_14289_1_7_18_8_t01,
+						"PrinterMark annotation is included in logical structure")...)
+				}
+
+			case "Widget":
+				// §7.18.4: Widget must be nested within Form tag.
+				if stdType != "Form" {
+					results = append(results, failf(Rule_14289_1_7_18_4_t01,
+						"Widget annotation nested within %s instead of Form", nestingDesc(stdType))...)
+				}
+
+			case "Link":
+				// §7.18.5: Link must be nested within Link tag.
+				if stdType != "Link" {
+					results = append(results, failf(Rule_14289_1_7_18_5_t01,
+						"Link annotation nested within %s instead of Link", nestingDesc(stdType))...)
+				}
+
+			default:
+				// §7.18.1: All other annotations must be nested within Annot tag.
+				if stdType != "Annot" {
+					results = append(results, failf(Rule_14289_1_7_18_1_t01,
+						"%s annotation nested within %s instead of Annot", subtype, nestingDesc(stdType))...)
+				}
+			}
+		}
+	}
+
+	return results
+}
+
+// nestingDesc returns a human-readable description for the annotation's
+// enclosing structure element standard type, or "Artifact" if not in structure.
+func nestingDesc(stdType string) string {
+	if stdType == "" {
+		return "Artifact"
+	}
+	return stdType
+}
+
+// buildAnnotStructTypeMap walks the structure tree and returns a map from
+// annotation object number to the standard type name of the enclosing structure
+// element. Annotations not referenced by any structure element are absent.
+func buildAnnotStructTypeMap(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) map[int]string {
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+
+	// Load role map for resolving non-standard types to standard types.
+	roleMap := loadRoleMap(ctx, doc, treeRoot)
+
+	result := make(map[int]string)
+	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
+		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+		if typeName == "" {
+			return
+		}
+
+		stdType := resolveStandardType(typeName, roleMap, profile)
+
+		kObj, ok := elem["K"]
+		if !ok {
+			return
+		}
+		collectOBJRWithType(ctx, doc, kObj, string(stdType), result)
+	})
+
+	return result
+}
+
+// loadRoleMap loads the /RoleMap dictionary from the structure tree root.
+func loadRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) map[ast.PdfName]ast.PdfName {
+	rmObj, ok := structTreeRoot["RoleMap"]
+	if !ok {
+		return nil
+	}
+	rm, err := document.ResolveDict(ctx, doc, rmObj)
+	if err != nil || rm == nil {
+		return nil
+	}
+	mapping := make(map[ast.PdfName]ast.PdfName, len(rm))
+	for key, val := range rm {
+		targetName, err := document.ResolveName(ctx, doc, val)
+		if err == nil && targetName != "" {
+			mapping[key] = targetName
+		}
+	}
+	return mapping
+}
+
+// resolveStandardType follows the role map chain to find the standard type.
+// Returns the original name if already standard or if no mapping exists.
+func resolveStandardType(name ast.PdfName, roleMap map[ast.PdfName]ast.PdfName, profile string) ast.PdfName {
+	if isStandardStructType(name, profile) {
+		return name
+	}
+	visited := map[ast.PdfName]bool{name: true}
+	current := name
+	for range 50 { //nolint:mnd // depth limit for role map chain
+		target, ok := roleMap[current]
+		if !ok {
+			return current
+		}
+		if isStandardStructType(target, profile) {
+			return target
+		}
+		if visited[target] {
+			return current // circular
+		}
+		visited[target] = true
+		current = target
+	}
+	return current
+}
+
+// collectOBJRWithType finds OBJR dicts in /K children and records the annotation
+// object numbers with their enclosing element's standard type.
+func collectOBJRWithType(ctx context.Context, doc *document.Document, kObj ast.PdfObject, stdType string, dest map[int]string) {
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		recordOBJRType(ctx, doc, kObj, stdType, dest)
+		return
+	}
+	for _, item := range arr {
+		recordOBJRType(ctx, doc, item, stdType, dest)
+	}
+}
+
+// recordOBJRType checks if obj is an OBJR dict and records the annotation
+// object number with the given standard type.
+func recordOBJRType(ctx context.Context, doc *document.Document, obj ast.PdfObject, stdType string, dest map[int]string) {
+	dict, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || dict == nil {
+		return
+	}
+	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
+	if typeName != "OBJR" {
+		return
+	}
+	if ref, ok := dict["Obj"].(ast.PdfIndirectRef); ok {
+		dest[ref.ObjectNum] = stdType
+	}
+}
+
+// --- 22. Form XObject restrictions (PDF/UA-1 §7.20) ---
+
+// checkFormXObjectRestrictions validates PDF/UA-1 §7.20:
+//   - t01: Reference XObjects are forbidden (Form XObject with /Ref key)
+//   - t02: Form XObjects with MCIDs must not be referenced more than once
+func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	var results []Result
+	checkedForRef := make(map[int]bool)
+
+	// Get inherited resources from the Pages tree root (fallback for pages
+	// without their own /Resources).
+	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
+	inheritedRes := getResources(ctx, doc, pagesDict)
+
+	// t01: Scan XObject resources for /Ref key (reference XObjects forbidden).
+	// t02: Count Do operator invocations per Form XObject across all pages.
+	doRefCounts := make(map[int]int) // Form XObject objNum -> Do invocation count
+
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		res := getResources(ctx, doc, page)
+		if res == nil {
+			res = inheritedRes
+		}
+		if res == nil {
+			continue
+		}
+
+		// t01: check for /Ref in Form XObjects (only once per object).
+		scanFormXObjectsUA(ctx, doc, res, &results, checkedForRef, 0)
+
+		// t02: parse content stream for Do operators, resolve names to objNums.
+		xobjDict, _ := document.ResolveDict(ctx, doc, res["XObject"])
+		if xobjDict == nil {
+			continue
+		}
+		streamData, err := getPageContentBytes(ctx, doc, page)
+		if err != nil || len(streamData) == 0 {
+			continue
+		}
+		ops, err := content.ParseStreamData(streamData)
+		if err != nil {
+			continue
+		}
+		for _, op := range ops {
+			if op.Operator != "Do" || len(op.Operands) < 1 {
+				continue
+			}
+			name, ok := op.Operands[0].(ast.PdfName)
+			if !ok {
+				continue
+			}
+			xobjRef, ok := xobjDict[name].(ast.PdfIndirectRef)
+			if !ok {
+				continue
+			}
+			doRefCounts[xobjRef.ObjectNum]++
+		}
+	}
+
+	// t02: Form XObjects with MCIDs must not be referenced more than once.
+	for objNum, count := range doRefCounts {
+		if count <= 1 {
+			continue
+		}
+		// Check if this Form XObject contains MCIDs (has /StructParents).
+		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil {
+			continue
+		}
+		if _, hasSP := stream.Dict["StructParents"]; hasSP {
+			results = append(results, failf(Rule_14289_1_7_20_t02,
+				"Form XObject (obj %d) contains MCIDs and is referenced %d times", objNum, count)...)
+		}
+	}
+
+	return results
+}
+
+// scanFormXObjectsUA scans XObject resources for PDF/UA-1 §7.20 t01: /Ref
+// key forbidden. XObjects are streams, so we use ResolveStream.
+// checkedForRef prevents reporting the same object twice.
+func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.PdfDict, results *[]Result, checkedForRef map[int]bool, depth int) {
+	if depth > 10 || ctx.Err() != nil {
+		return
+	}
+
+	xobjectsObj, ok := res["XObject"]
+	if !ok {
+		return
+	}
+	xobjects, err := document.ResolveDict(ctx, doc, xobjectsObj)
+	if err != nil || xobjects == nil {
+		return
+	}
+
+	for _, xobjObj := range xobjects {
+		ref, isRef := xobjObj.(ast.PdfIndirectRef)
+		if isRef && checkedForRef[ref.ObjectNum] {
+			continue
+		}
+
+		stream, err := document.ResolveStream(ctx, doc, xobjObj)
+		if err != nil {
+			continue
+		}
+		xobjDict := stream.Dict
+		if xobjDict == nil {
+			continue
+		}
+		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
+		if subtype != "Form" {
+			continue
+		}
+
+		if isRef {
+			checkedForRef[ref.ObjectNum] = true
+		}
+
+		// t01: /Ref key forbidden (reference XObject).
+		if _, hasRef := xobjDict["Ref"]; hasRef {
+			*results = append(*results, fail(Rule_14289_1_7_20_t01,
+				"Form XObject contains /Ref key (reference XObject)")...)
+		}
+
+		// Recurse into sub-resources.
+		subRes, _ := document.ResolveDict(ctx, doc, xobjDict["Resources"])
+		if subRes != nil {
+			scanFormXObjectsUA(ctx, doc, subRes, results, checkedForRef, depth+1)
+		}
+	}
+}
+
+// --- 23. PDF/UA-2 form structure checks ---
+
+// checkPDFUA2FormStructure validates:
+//   - §8.10.1 t02: Form structure element contains at most one widget annotation.
+//   - §8.10.2.3 t01: Widget without label needs /Contents entry.
+func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+
+	var results []Result
+
+	// §8.10.1 t02: walk structure tree for Form elements with >1 widget OBJR.
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err == nil && treeRoot != nil {
+		walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
+			typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+			if typeName != "Form" {
+				return
+			}
+			// Count OBJR children pointing to widget annotations.
+			widgetCount := countOBJRWidgets(ctx, doc, elem)
+			if widgetCount > 1 {
+				results = append(results, failf(Rule_14289_2_8_10_1_t02,
+					"Form structure element at %s contains %d widget annotations", path, widgetCount)...)
+			}
+		})
+	}
+
+	// §8.10.2.3 t01: Widget annotations without label need /Contents.
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annotsArr {
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if subtype != "Widget" {
+				continue
+			}
+			if isAnnotHidden(ctx, doc, annot) {
+				continue
+			}
+			// Check if widget has a /Contents entry.
+			if contentsObj, ok := annot["Contents"]; ok {
+				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
+				if err == nil && len(contentsStr) > 0 {
+					continue // has Contents
+				}
+			}
+			// Check if the widget's parent field has a label (via /TU or sibling text).
+			// For simplicity, we only check /Contents presence on the widget itself.
+			results = append(results, fail(Rule_14289_2_8_10_2_3_t01,
+				"Widget annotation has no label and no /Contents entry")...)
+		}
+	}
+
+	return results
+}
+
+// countOBJRWidgets counts OBJR children of a structure element that point to
+// Widget annotations.
+func countOBJRWidgets(ctx context.Context, doc *document.Document, elem ast.PdfDict) int {
+	kObj, ok := elem["K"]
+	if !ok {
+		return 0
+	}
+	count := 0
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		// Single child.
+		if isWidgetOBJR(ctx, doc, kObj) {
+			return 1
+		}
+		return 0
+	}
+	for _, item := range arr {
+		if isWidgetOBJR(ctx, doc, item) {
+			count++
+		}
+	}
+	return count
+}
+
+func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
+	d, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || d == nil {
+		return false
+	}
+	typeName, _ := document.ResolveName(ctx, doc, d["Type"])
+	if typeName != "OBJR" {
+		return false
+	}
+	// Resolve the referenced object and check if it's a Widget.
+	ref, ok := d["Obj"].(ast.PdfIndirectRef)
+	if !ok {
+		return false
+	}
+	annot, err := document.ResolveDict(ctx, doc, ref)
+	if err != nil || annot == nil {
+		return false
+	}
+	subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+	return subtype == "Widget"
+}
+
+// --- 24. Structure destinations (PDF/UA-2 §8.8) ---
+
+// checkStructureDestinations validates PDF/UA-2 §8.8:
+//   - t01: Destinations in outline items, OpenAction, and Link annotations
+//     must be structure destinations (array starting with struct element ref).
+//   - t02: GoTo action destinations must be structure destinations.
+func checkStructureDestinations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+
+	var results []Result
+
+	// Check outline destinations (t01 for /Dest, t02 for /A GoTo).
+	outlinesObj, ok := catalog["Outlines"]
+	if ok {
+		outlines, _ := document.ResolveDict(ctx, doc, outlinesObj)
+		if outlines != nil {
+			walkOutlineStructDest(ctx, doc, outlines["First"], &results, 0)
+		}
+	}
+
+	// Check catalog /OpenAction (t01).
+	if oaObj, ok := catalog["OpenAction"]; ok {
+		if !isStructureDestination(ctx, doc, oaObj) {
+			// Could be an action dict — check if GoTo.
+			oaDict, _ := document.ResolveDict(ctx, doc, oaObj)
+			if oaDict != nil {
+				if s, _ := document.ResolveName(ctx, doc, oaDict["S"]); s == "GoTo" {
+					if dObj, hasDest := oaDict["D"]; hasDest {
+						if !isStructureDestination(ctx, doc, dObj) {
+							results = append(results, fail(Rule_14289_2_8_8_t02,
+								"OpenAction GoTo destination is not a structure destination")...)
+						}
+					}
+				}
+			} else {
+				// Direct destination array.
+				results = append(results, fail(Rule_14289_2_8_8_t01,
+					"OpenAction destination is not a structure destination")...)
+			}
+		}
+	}
+
+	return results
+}
+
+// walkOutlineStructDest walks outline items checking destinations.
+func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Result, depth int) {
+	if depth > 200 || ctx.Err() != nil { //nolint:mnd
+		return
+	}
+	item, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || item == nil {
+		return
+	}
+
+	// Check /Dest on outline item (t01).
+	if destObj, hasDest := item["Dest"]; hasDest {
+		if !isStructureDestination(ctx, doc, destObj) {
+			*results = append(*results, fail(Rule_14289_2_8_8_t01,
+				"Outline item destination is not a structure destination")...)
+		}
+	}
+
+	// Check /A action on outline item.
+	if aObj, hasA := item["A"]; hasA {
+		aDict, _ := document.ResolveDict(ctx, doc, aObj)
+		if aDict != nil {
+			s, _ := document.ResolveName(ctx, doc, aDict["S"])
+			if s == "GoTo" {
+				if dObj, hasDest := aDict["D"]; hasDest {
+					if !isStructureDestination(ctx, doc, dObj) {
+						*results = append(*results, fail(Rule_14289_2_8_8_t02,
+							"Outline GoTo action destination is not a structure destination")...)
+					}
+				}
+			}
+		}
+	}
+
+	// Recurse: children then siblings.
+	walkOutlineStructDest(ctx, doc, item["First"], results, depth+1)
+	walkOutlineStructDest(ctx, doc, item["Next"], results, depth)
+}
+
+// isStructureDestination checks if a destination object is a "structure
+// destination" per PDF 2.0 — an array whose first element references a
+// structure element (has /Type /StructElem or /S key) rather than a page.
+func isStructureDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject) bool {
+	// Resolve named destination if it's a string/name.
+	if nameObj, err := document.ResolveName(ctx, doc, destObj); err == nil && nameObj != "" {
+		// Named destination — look up in /Names/Dests.
+		// For simplicity, assume named destinations are not structure destinations.
+		return false
+	}
+
+	arr, err := document.ResolveArray(ctx, doc, destObj)
+	if err != nil || len(arr) == 0 {
+		return false
+	}
+
+	// The first element of a structure destination is a reference to a
+	// structure element dict (has /S key), not a page dict (has /Type /Page).
+	firstDict, err := document.ResolveDict(ctx, doc, arr[0])
+	if err != nil || firstDict == nil {
+		return false
+	}
+
+	// Structure elements have /S key.
+	if _, hasS := firstDict["S"]; hasS {
+		return true
+	}
+
+	// Also check /Type /StructElem explicitly.
+	typeName, _ := document.ResolveName(ctx, doc, firstDict["Type"])
+	return typeName == "StructElem"
+}
+
 // --- Rule selectors ---
 
 func langRequiredRule(profile string) Rule {
@@ -2144,17 +2881,14 @@ func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast
 			if subtype != "Screen" {
 				continue
 			}
-			// Follow: annotation /A → Rendition action /R → /C (media clip dict).
-			// The /CT and /Alt keys are on the clip dict, not the nested /D data dict.
+			// Find the media clip dict. Two structures are used:
+			//   (a) annot /A → rendition action /R → /C (clip dict)
+			//   (b) annot /A → rendition action /C (clip dict directly)
 			aDict, _ := document.ResolveDict(ctx, doc, annot["A"])
 			if aDict == nil {
 				continue
 			}
-			rDict, _ := document.ResolveDict(ctx, doc, aDict["R"])
-			if rDict == nil {
-				continue
-			}
-			clipDict, _ := document.ResolveDict(ctx, doc, rDict["C"])
+			clipDict := resolveMediaClipDict(ctx, doc, aDict)
 			if clipDict == nil {
 				continue
 			}
@@ -2164,14 +2898,54 @@ func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast
 				results = append(results, failf(Rule_14289_1_7_18_6_2_t01,
 					"media clip missing /CT key")...)
 			}
-			// t02: /Alt key must be present on the clip dict.
-			if _, hasAlt := clipDict["Alt"]; !hasAlt {
+			// t02: /Alt key must be present with valid content.
+			if !hasValidMediaClipAlt(ctx, doc, clipDict) {
 				results = append(results, failf(Rule_14289_1_7_18_6_2_t02,
-					"media clip missing /Alt key")...)
+					"media clip missing or invalid /Alt key")...)
 			}
 		}
 	}
 	return results
+}
+
+// resolveMediaClipDict finds the media clip dictionary from a rendition action.
+// Tries /R → /C first (rendition dict with clip), then /C directly on the action.
+func resolveMediaClipDict(ctx context.Context, doc *document.Document, actionDict ast.PdfDict) ast.PdfDict {
+	// Path (a): action /R (rendition dict) → /C (clip dict).
+	if rDict, _ := document.ResolveDict(ctx, doc, actionDict["R"]); rDict != nil {
+		if clipDict, _ := document.ResolveDict(ctx, doc, rDict["C"]); clipDict != nil {
+			return clipDict
+		}
+	}
+	// Path (b): action /C directly (clip dict on the action itself).
+	if clipDict, _ := document.ResolveDict(ctx, doc, actionDict["C"]); clipDict != nil {
+		return clipDict
+	}
+	return nil
+}
+
+// hasValidMediaClipAlt checks if the media clip dict has a valid /Alt entry.
+// Per ISO 32000-1 Table 274, /Alt is an array of pairs [lang, text, ...].
+// A missing key, empty array, or array with only empty strings is invalid.
+func hasValidMediaClipAlt(ctx context.Context, doc *document.Document, clipDict ast.PdfDict) bool {
+	altObj, hasAlt := clipDict["Alt"]
+	if !hasAlt {
+		return false
+	}
+	altArr, err := document.ResolveArray(ctx, doc, altObj)
+	if err != nil {
+		// Not an array — check as string.
+		s, err := document.ResolveString(ctx, doc, altObj)
+		return err == nil && strings.TrimSpace(string(s)) != ""
+	}
+	// Must have at least one lang+text pair with non-empty text.
+	for i := 1; i < len(altArr); i += 2 {
+		s, err := document.ResolveString(ctx, doc, altArr[i])
+		if err == nil && strings.TrimSpace(string(s)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // --- 19. Content marking ---

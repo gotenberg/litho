@@ -91,10 +91,9 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 		checkFieldAppearance(ctx, doc, field, part, fieldIdx, results)
 	}
 
-	// PDF/UA: form field tooltips — fields must have /TU.
-	if ua {
-		checkFieldTooltip(ctx, doc, field, profile, fieldIdx, results)
-	}
+	// PDF/UA: form field tooltips — handled by checkFormFieldTU in
+	// accessibility.go (which also checks for Alt on enclosing structure
+	// elements as an alternative to /TU).
 
 	// Recurse into child fields (/Kids).
 	kidsObj, ok := field["Kids"]

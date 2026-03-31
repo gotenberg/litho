@@ -205,6 +205,13 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		return results
 	}
 
+	// 5b. Extension property valueType correspondence (§6.6.2.3.1 t02).
+	xmpCheckExtensionPropertyTypes(xmpData, part, &results)
+
+	if ctx.Err() != nil {
+		return results
+	}
+
 	// 6. DocInfo ↔ XMP consistency (§6.7.3) — parts 1 and 4 only.
 	if part == 1 || part == 4 { //nolint:mnd // PDF/A parts with DocInfo sync requirement
 		xmpCheckDocInfoSync(ctx, doc, xmpData, part, &results)
@@ -1443,6 +1450,195 @@ func xmpExtFieldRule(part int, field string) []Result {
 		return fail(Rule_19005_4_6_6_1_t01, ctx)
 	}
 	return nil
+}
+
+// xmpPredefinedValueTypes lists XMP value type names that do not require a
+// custom valueType definition in the extension schema.  This covers types from
+// the XMP Specification (ISO 16684-1) and the PDF specification.
+//
+//nolint:gochecknoglobals // static lookup table
+var xmpPredefinedValueTypes = map[string]bool{
+	// Core simple types
+	"Text": true, "URI": true, "URL": true, "Boolean": true, "Date": true,
+	"Integer": true, "Real": true, "MIMEType": true, "AgentName": true,
+	"RenditionClass": true, "GUID": true, "Locale": true, "XPath": true,
+	"ProperName": true, "Rational": true, "Part": true, "Lang Alt": true,
+	"Choice": true,
+	// Structured types predefined in XMP
+	"ResourceRef": true, "ResourceEvent": true, "Version": true,
+	"Rendition": true, "Job": true, "Thumbnail": true, "Dimensions": true,
+	"Font": true, "Colorant": true, "Flash": true, "CFAPattern": true,
+	"DeviceSettings": true, "OECF/SFR": true, "GPS": true,
+	// Container shorthand types
+	"bag Text": true, "bag ProperName": true, "bag Locale": true,
+	"bag Job": true, "bag Xpath": true, "seq Text": true,
+	"seq ResourceEvent": true, "seq ResourceRef": true, "seq Version": true,
+	"alt Text": true,
+	// open/closed choice
+	"open Choice of Text": true, "closed Choice of Text": true,
+	"open Choice of Integer": true, "closed Choice of Integer": true,
+	"open Choice of Real": true, "closed Choice of Real": true,
+	"open Choice of Date": true, "closed Choice of Date": true,
+	// Ordered/unordered array (PDF spec style)
+	"Bag Text": true, "Seq Text": true, "Bag ProperName": true,
+	"Seq ResourceEvent": true, "Seq ResourceRef": true, "Seq Version": true,
+	"Bag Job": true, "Bag Xpath": true, "Bag Locale": true,
+}
+
+// xmpCheckExtensionPropertyTypes validates that extension schema properties
+// declare valueTypes that correspond to either predefined XMP types or custom
+// value types with proper field definitions.  If a property uses a custom
+// valueType that has no field definitions in the extension schema, the property
+// "does not correspond to" its declared type (clause 6.6.2.3.1 test 2).
+func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Result) {
+	slog.Debug("compliance_2/xmp: checking extension property valueType correspondence")
+
+	// Parse the extension schema to build:
+	//   propValueTypes:  map[schemaURI]map[propName]valueType
+	//   customTypes:     map[typeName]hasFields
+	type extSchema struct {
+		nsURI      string
+		propTypes  map[string]string // property name → declared valueType
+		typeFields map[string]bool   // custom type name → hasFields
+	}
+
+	var schemas []extSchema
+	var current *extSchema
+
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+
+	var inSchemas bool
+	var inProperty, inValueType bool
+	var propName, propVT string
+	var vtName string
+	var vtHasField bool
+	depth := 0 // nesting depth within a schema rdf:li
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
+				inSchemas = true
+				continue
+			}
+			if !inSchemas {
+				continue
+			}
+
+			switch {
+			case t.Name.Local == "li" && t.Name.Space == xmpRDFNamespace:
+				depth++
+				if depth == 1 {
+					// New schema definition.
+					s := extSchema{
+						propTypes:  make(map[string]string),
+						typeFields: make(map[string]bool),
+					}
+					schemas = append(schemas, s)
+					current = &schemas[len(schemas)-1]
+				}
+			case t.Name.Local == "Seq" || t.Name.Local == "Bag":
+				// Container inside property or valueType block — ignore.
+			case t.Name.Space == xmpPdfaSchemaPrefix:
+				switch t.Name.Local {
+				case "namespaceURI":
+					if current != nil {
+						if charTok, err2 := decoder.Token(); err2 == nil {
+							if cd, ok := charTok.(xml.CharData); ok {
+								current.nsURI = strings.TrimSpace(string(cd))
+							}
+						}
+					}
+				case "property":
+					inProperty = true
+				case "valueType":
+					inValueType = true
+				}
+			case t.Name.Space == xmpPdfaPropertyPrefix && inProperty:
+				switch t.Name.Local {
+				case "name":
+					if charTok, err2 := decoder.Token(); err2 == nil {
+						if cd, ok := charTok.(xml.CharData); ok {
+							propName = strings.TrimSpace(string(cd))
+						}
+					}
+				case "valueType":
+					if charTok, err2 := decoder.Token(); err2 == nil {
+						if cd, ok := charTok.(xml.CharData); ok {
+							propVT = strings.TrimSpace(string(cd))
+						}
+					}
+				}
+			case t.Name.Space == xmpPdfaTypePrefix && inValueType:
+				switch t.Name.Local {
+				case "type":
+					if charTok, err2 := decoder.Token(); err2 == nil {
+						if cd, ok := charTok.(xml.CharData); ok {
+							vtName = strings.TrimSpace(string(cd))
+						}
+					}
+				case "field":
+					vtHasField = true
+				}
+			}
+
+		case xml.EndElement:
+			if t.Name.Local == "schemas" {
+				inSchemas = false
+				continue
+			}
+			if !inSchemas {
+				continue
+			}
+
+			switch {
+			case t.Name.Local == "li" && t.Name.Space == xmpRDFNamespace:
+				depth--
+				if depth < 0 {
+					depth = 0
+				}
+			case t.Name.Space == xmpPdfaSchemaPrefix && t.Name.Local == "property":
+				// End of property block — record accumulated property.
+				if current != nil && propName != "" && propVT != "" {
+					current.propTypes[propName] = propVT
+				}
+				propName = ""
+				propVT = ""
+				inProperty = false
+			case t.Name.Space == xmpPdfaSchemaPrefix && t.Name.Local == "valueType":
+				// End of valueType block — record accumulated type.
+				if current != nil && vtName != "" {
+					current.typeFields[vtName] = vtHasField
+				}
+				vtName = ""
+				vtHasField = false
+				inValueType = false
+			}
+		}
+	}
+
+	// Validate: for each property whose valueType is not predefined, check
+	// that the custom type is defined with field declarations.
+	for _, s := range schemas {
+		for pName, vt := range s.propTypes {
+			if xmpPredefinedValueTypes[vt] {
+				continue
+			}
+			hasFields, defined := s.typeFields[vt]
+			if !defined || !hasFields {
+				slog.Debug("compliance_2/xmp: extension property valueType not properly defined",
+					"ns", s.nsURI, "prop", pName, "valueType", vt,
+					"defined", defined, "hasFields", hasFields)
+				*results = append(*results, xmpPropertyTypeRule(part, s.nsURI, pName,
+					fmt.Sprintf("does not correspond to type %s", vt))...)
+			}
+		}
+	}
 }
 
 // --- 6. DocInfo ↔ XMP consistency ---

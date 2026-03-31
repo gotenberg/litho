@@ -63,6 +63,7 @@ func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast
 	// --- OCG Config /Name checks (part 4) ---
 	if part == 4 {
 		results = append(results, checkOCConfigNamesPDFA(ctx, doc, catalog)...)
+		results = append(results, checkOCGOrderCompleteness(ctx, doc, catalog)...)
 	}
 
 	// --- Info dict restrictions (part 4) ---
@@ -73,6 +74,16 @@ func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast
 	// --- Permissions dict ---
 	if part >= 2 {
 		results = append(results, checkPermissionsDict(ctx, doc, catalog, part)...)
+	}
+
+	// --- PresSteps forbidden (part 4) §6.11 t2 ---
+	if part == 4 {
+		results = append(results, checkPresSteps(ctx, doc, catalog)...)
+	}
+
+	// --- Embedded file stream /Subtype MIME type (part 4) §6.9 t1 ---
+	if part == 4 {
+		results = append(results, checkEmbeddedFileMIME(ctx, doc, catalog)...)
 	}
 
 	slog.Debug("compliance_2/document: document checks complete", "violations", len(results))
@@ -505,4 +516,144 @@ func configName(ctx context.Context, doc *document.Document, cfg ast.PdfDict) st
 		return string(nameVal)
 	}
 	return ""
+}
+
+// checkPresSteps validates PDF/A-4 §6.11 t2: no page may have /PresSteps.
+func checkPresSteps(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+	pages := collectPages(ctx, doc, catalog)
+	for i, page := range pages {
+		if _, has := page["PresSteps"]; has {
+			return failf(Rule_19005_4_6_11_t02, "page %d contains /PresSteps entry", i)
+		}
+	}
+	return nil
+}
+
+// checkEmbeddedFileMIME validates PDF/A-4 §6.9 t1: embedded file streams must
+// have a valid /Subtype MIME type.
+func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+	// Walk the /Names/EmbeddedFiles name tree.
+	names, err := document.ResolveDict(ctx, doc, catalog["Names"])
+	if err != nil || names == nil {
+		return nil
+	}
+	efTree, err := document.ResolveDict(ctx, doc, names["EmbeddedFiles"])
+	if err != nil || efTree == nil {
+		return nil
+	}
+	namesArr, err := document.ResolveArray(ctx, doc, efTree["Names"])
+	if err != nil || len(namesArr) == 0 {
+		return nil
+	}
+
+	var results []Result
+	// Names array is [name1, filespec1, name2, filespec2, ...]
+	for i := 1; i < len(namesArr); i += 2 {
+		fileSpec, err := document.ResolveDict(ctx, doc, namesArr[i])
+		if err != nil || fileSpec == nil {
+			continue
+		}
+		efDict, err := document.ResolveDict(ctx, doc, fileSpec["EF"])
+		if err != nil || efDict == nil {
+			continue
+		}
+		// Check /F and /UF streams for /Subtype.
+		for _, key := range []ast.PdfName{"F", "UF"} {
+			streamObj, ok := efDict[key]
+			if !ok {
+				continue
+			}
+			stream, err := document.ResolveStream(ctx, doc, streamObj)
+			if err != nil {
+				continue
+			}
+			subtypeObj, hasSubtype := stream.Dict["Subtype"]
+			if !hasSubtype {
+				results = append(results, failf(Rule_19005_4_6_9_t01,
+					"embedded file stream missing /Subtype MIME type")...)
+				break
+			}
+			// The MIME type is a PdfName which may have encoded '/' as '#2F'.
+			// Resolve it to get the decoded name.
+			subtype, _ := document.ResolveName(ctx, doc, subtypeObj)
+			decoded := string(subtype)
+			// Also try decoding #XX sequences for names not automatically decoded.
+			decoded = strings.ReplaceAll(decoded, "#2F", "/")
+			decoded = strings.ReplaceAll(decoded, "#2f", "/")
+			if decoded == "" || !strings.Contains(decoded, "/") {
+				results = append(results, failf(Rule_19005_4_6_9_t01,
+					"embedded file stream invalid /Subtype MIME type: %q", subtype)...)
+				break
+			}
+		}
+	}
+	return results
+}
+
+// checkOCGOrderCompleteness validates PDF/A-4 §6.10 t3: if an OC config dict
+// has an /Order key, the Order array must reference all OCGs in the document.
+func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])
+	if err != nil || ocProps == nil {
+		return nil
+	}
+
+	// Collect all OCG references from /OCGs array.
+	ocgsArr, err := document.ResolveArray(ctx, doc, ocProps["OCGs"])
+	if err != nil || len(ocgsArr) == 0 {
+		return nil
+	}
+	allOCGs := make(map[int]bool, len(ocgsArr))
+	for _, ocg := range ocgsArr {
+		if ref, ok := ocg.(ast.PdfIndirectRef); ok {
+			allOCGs[ref.ObjectNum] = true
+		}
+	}
+
+	// Check default config (/D) for /Order key.
+	dObj, ok := ocProps["D"]
+	if !ok {
+		return nil
+	}
+	dConfig, err := document.ResolveDict(ctx, doc, dObj)
+	if err != nil || dConfig == nil {
+		return nil
+	}
+	orderObj, hasOrder := dConfig["Order"]
+	if !hasOrder {
+		return nil
+	}
+
+	// Collect OCG refs in the Order array (can be nested).
+	orderOCGs := make(map[int]bool)
+	collectOrderOCGRefs(ctx, doc, orderObj, orderOCGs, 0)
+
+	// Check that all OCGs are referenced.
+	for objNum := range allOCGs {
+		if !orderOCGs[objNum] {
+			return failf(Rule_19005_4_6_10_t03,
+				"OCG object %d not referenced in Order array", objNum)
+		}
+	}
+	return nil
+}
+
+// collectOrderOCGRefs recursively collects OCG indirect refs from an Order array.
+func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, result map[int]bool, depth int) {
+	if depth > 20 { //nolint:mnd
+		return
+	}
+	// Direct indirect ref = OCG.
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		result[ref.ObjectNum] = true
+		return
+	}
+	// Array: recurse into each element.
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil {
+		return
+	}
+	for _, item := range arr {
+		collectOrderOCGRefs(ctx, doc, item, result, depth+1)
+	}
 }

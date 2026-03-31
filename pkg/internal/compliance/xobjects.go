@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -46,10 +47,94 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 		_, referencedXObjects := scanContentStreamDeviceCS(ctx, doc, page, i)
 
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
+
+		// Check inline images for Interpolate = true.
+		results = append(results, checkInlineImageInterpolate(ctx, doc, page, i+1, part)...)
 	}
 
 	slog.Debug("compliance_2: xobjects: checks complete", "violations", len(results))
 	return results
+}
+
+// checkInlineImageInterpolate scans a page's content stream for inline images
+// with /I true (Interpolate). Inline images use BI..ID..EI blocks with
+// abbreviated key names: /I for Interpolate.
+func checkInlineImageInterpolate(_ context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int) []Result {
+	streamData, err := getPageContentBytes(context.Background(), doc, page)
+	if err != nil || len(streamData) == 0 {
+		return nil
+	}
+
+	// Select the appropriate rule.
+	var rule Rule
+	switch part {
+	case 1:
+		rule = Rule_19005_1_6_2_4_t03
+	case 2, 3: //nolint:mnd
+		rule = Rule_19005_2_6_2_8_t03
+	case 4: //nolint:mnd
+		rule = Rule_19005_4_6_2_7_1_t03
+	default:
+		return nil
+	}
+
+	// Scan for BI blocks and check /I or /Interpolate key.
+	data := streamData
+	for i := 0; i < len(data)-2; i++ {
+		if data[i] != 'B' || data[i+1] != 'I' {
+			continue
+		}
+		if i > 0 && !isWhitespace(data[i-1]) {
+			continue
+		}
+		if i+2 >= len(data) || !isWhitespace(data[i+2]) {
+			continue
+		}
+		// Found BI — scan for ID marker to delimit the dict area.
+		end := bytes.Index(data[i:], []byte("\nID"))
+		if end < 0 {
+			end = bytes.Index(data[i:], []byte(" ID"))
+		}
+		if end < 0 {
+			end = bytes.Index(data[i:], []byte("\rID"))
+		}
+		if end < 0 {
+			continue
+		}
+		block := data[i : i+end]
+		// Check for /I true or /Interpolate true.
+		if hasInlineImageInterpolateTrue(block) {
+			return failf(rule, "page %d: inline image has Interpolate=true", pageNum)
+		}
+	}
+	return nil
+}
+
+// hasInlineImageInterpolateTrue checks if an inline image BI block contains
+// /I true or /Interpolate true.
+func hasInlineImageInterpolateTrue(block []byte) bool {
+	// Check /Interpolate true (full name).
+	if _, after, ok := bytes.Cut(block, []byte("/Interpolate")); ok {
+		rest := bytes.TrimLeft(after, " \t\r\n")
+		if bytes.HasPrefix(rest, []byte("true")) {
+			return true
+		}
+	}
+	// Check /I true (abbreviated name). Must be followed by whitespace to
+	// distinguish from other keys like /IM, /Intent, etc.
+	for j := 0; j < len(block)-1; j++ {
+		if block[j] == '/' && block[j+1] == 'I' {
+			// Ensure /I is not part of a longer key name.
+			if j+2 < len(block) && !isWhitespace(block[j+2]) {
+				continue
+			}
+			rest := bytes.TrimLeft(block[j+2:], " \t\r\n")
+			if bytes.HasPrefix(rest, []byte("true")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // scanXObjectResources iterates XObject resources, validates each, and recurses
@@ -92,7 +177,7 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 				continue
 			}
 			subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
-			*results = append(*results, checkXObject(ctx, doc, xobjDict, subtype, name, pageNum, part, profile)...)
+			*results = append(*results, checkXObject(ctx, doc, ast.PdfStream{}, xobjDict, subtype, name, pageNum, part, profile)...)
 			continue
 		}
 
@@ -101,7 +186,7 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 
 		slog.Debug("compliance_2: xobjects: checking XObject", "page", pageNum, "name", name, "subtype", subtype)
 
-		*results = append(*results, checkXObject(ctx, doc, xobjDict, subtype, name, pageNum, part, profile)...)
+		*results = append(*results, checkXObject(ctx, doc, stream, xobjDict, subtype, name, pageNum, part, profile)...)
 
 		// Recurse into Form XObject sub-resources.
 		if subtype == "Form" {
@@ -118,6 +203,7 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 func checkXObject(
 	ctx context.Context,
 	doc *document.Document,
+	stream ast.PdfStream,
 	xobjDict ast.PdfDict,
 	subtype ast.PdfName,
 	name ast.PdfName,
@@ -149,6 +235,10 @@ func checkXObject(
 			results = append(results, checkFormXObject(ctx, doc, xobjDict, name, pageNum, part, profile)...)
 		case "Image":
 			results = append(results, checkImageXObject(ctx, doc, xobjDict, name, pageNum, part)...)
+			// §6.2.8.3 / §6.2.7.3 — JPEG2000 codestream constraints.
+			if hasJPXFilter(ctx, doc, xobjDict) {
+				results = append(results, checkJPXImage(stream, name, pageNum, part)...)
+			}
 		}
 	} else {
 		// PDF/A-1 also checks form XObject forbidden keys (§6.2.5).
@@ -323,6 +413,16 @@ func checkImageXObject(
 			slog.Debug("compliance_2: xobjects: image has /Interpolate = true",
 				"page", pageNum, "name", name)
 			results = append(results, failf(interpRule, "page %d, XObject %s", pageNum, name)...)
+		}
+	}
+
+	// /Intent must be a valid rendering intent (§6.2.6).
+	if intentObj, hasIntent := imgDict["Intent"]; hasIntent {
+		intent, _ := document.ResolveName(ctx, doc, intentObj)
+		if !validRenderingIntents[string(intent)] {
+			riRule := renderingIntentRule(part)
+			results = append(results, failf(riRule,
+				"page %d, XObject %s: invalid rendering intent %q", pageNum, name, intent)...)
 		}
 	}
 

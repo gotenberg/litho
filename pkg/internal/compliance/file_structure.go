@@ -55,6 +55,7 @@ func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalo
 	results = append(results, checkStreamLZW(ctx, doc, profile)...)
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
 	results = append(results, checkFormatViolations(doc, profile)...)
+	results = append(results, checkObjHeaderLeadingWhitespace(doc, profile)...)
 	// TODO: checkStreamLengths produces FPs on some linearized/complex PDFs
 	// where raw-byte scanning finds endstream at wrong offset. Disabled until
 	// a more robust approach is available (e.g., using xref offsets directly).
@@ -924,6 +925,72 @@ func containsObjHeaderPattern(msg string) bool {
 	return false
 }
 
+// checkObjHeaderLeadingWhitespace performs a direct raw-byte scan of every
+// indirect object header in the xref table. The existing validateObjectHeaderFormat
+// (called during object resolution) only runs for uncached objects. Objects that
+// were resolved during pdf.Open (before ComplianceMode was enabled) are already
+// cached and skip header validation. This function reads from the underlying
+// io.ReaderAt to check that there is no non-EOL whitespace between the
+// preceding EOL marker and the object number digits (§6.1.8/§6.1.9).
+func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []Result {
+	r := doc.RawReader()
+	if r == nil {
+		return nil
+	}
+
+	rule := objHeaderRule(profile)
+	var results []Result
+
+	for objNum, entry := range doc.Index.Entries {
+		if entry.Free || entry.Type != xref.XRefTypeNormal {
+			continue
+		}
+		if entry.Offset == 0 {
+			continue
+		}
+
+		// Read a small window starting a few bytes before the xref offset
+		// to inspect what's between the preceding EOL and the object number.
+		// Some PDFs have xref offsets pointing to the EOL before the object
+		// number, so we need to look ahead past any EOL chars.
+		const windowSize = 20 //nolint:mnd
+		startOff := max(entry.Offset-1, 0)
+		var buf [windowSize]byte
+		n, _ := r.ReadAt(buf[:], startOff)
+		if n < 2 { //nolint:mnd
+			continue
+		}
+		data := buf[:n]
+
+		// Find the first digit in the window (this is the start of the object number).
+		digitPos := -1
+		for i := range data {
+			if data[i] >= '0' && data[i] <= '9' {
+				digitPos = i
+				break
+			}
+		}
+		if digitPos < 1 {
+			continue
+		}
+
+		// The byte immediately before the first digit must be an EOL (LF or CR).
+		prevByte := data[digitPos-1]
+		if prevByte != '\n' && prevByte != '\r' {
+			results = append(results, Result{
+				Rule:    rule,
+				Context: fmt.Sprintf("compliance: obj header %d: object number not preceded by EOL marker (0x%02X)", objNum, prevByte),
+			})
+		}
+	}
+
+	if len(results) > 0 {
+		slog.Debug("compliance_2: file_structure: obj header leading whitespace violations",
+			"count", len(results))
+	}
+	return results
+}
+
 // checkXRefTableByteFormat validates xref table raw-byte formatting by calling
 // the document's ValidateXRefTableFormat for each recorded xref table offset.
 // Any violations are collected in doc.FormatViolations and then mapped to rules.
@@ -1037,8 +1104,110 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 		results = append(results, checkObjectNumericLimits(obj, objNum, part, profile)...)
 	}
 
+	// Additionally, scan actual content streams for string/integer limits.
+	// Content streams are those referenced by page /Contents entries.
+	results = append(results, checkContentStreamLimits(ctx, doc, part, profile)...)
+
 	if len(results) == 0 {
 		slog.Debug("compliance_2: file_structure: all numeric limits OK")
+	}
+	return results
+}
+
+// checkContentStreamLimits finds all page content streams and Form XObject
+// streams and checks string/integer operands for implementation limit
+// violations. Only actual content streams are scanned — not ICC profiles,
+// font programs, or other binary streams.
+func checkContentStreamLimits(ctx context.Context, doc *document.Document, part int, profile string) []Result {
+	catalog, err := getCatalog(ctx, doc)
+	if err != nil || catalog == nil {
+		return nil
+	}
+	pages := collectPages(ctx, doc, catalog)
+	maxStr := maxStringBytes1
+	if part >= 2 { //nolint:mnd
+		maxStr = maxStringBytes2
+	}
+	var results []Result
+	visited := make(map[int]bool)
+
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		// Page content streams.
+		contentsObj := page["Contents"]
+		if contentsObj == nil {
+			continue
+		}
+		// Contents can be a single stream ref or an array of stream refs.
+		var refs []ast.PdfObject
+		if arr, err := document.ResolveArray(ctx, doc, contentsObj); err == nil && arr != nil {
+			refs = arr
+		} else {
+			refs = []ast.PdfObject{contentsObj}
+		}
+		for _, ref := range refs {
+			objNum := 0
+			if r, ok := ref.(ast.PdfIndirectRef); ok {
+				objNum = r.ObjectNum
+				if visited[objNum] {
+					continue
+				}
+				visited[objNum] = true
+			}
+			stream, sErr := document.ResolveStream(ctx, doc, ref)
+			if sErr != nil {
+				continue
+			}
+			results = append(results, scanStreamOperandLimits(doc, stream, objNum, maxStr, profile)...)
+		}
+	}
+	return results
+}
+
+// scanStreamOperandLimits decodes a content stream and checks string/integer
+// operands for limit violations.
+func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string) []Result {
+	data, err := doc.DecodeStream(stream)
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	ops, err := content.ParseStreamData(data)
+	if err != nil {
+		return nil
+	}
+	var results []Result
+	for _, op := range ops {
+		for _, operand := range op.Operands {
+			switch v := operand.(type) {
+			case ast.PdfString:
+				if len(v) > maxStr {
+					results = append(results, Result{
+						Rule:    stringLengthRule(profile),
+						Context: fmt.Sprintf("object %d (stream content): string length %d exceeds %d", objNum, len(v), maxStr),
+					})
+				}
+			case ast.PdfInt:
+				val := int64(v)
+				if val > maxIntegerValue || val < minIntegerValue {
+					results = append(results, Result{
+						Rule:    integerRangeRule(profile),
+						Context: fmt.Sprintf("object %d (stream content): integer %d out of range", objNum, val),
+					})
+				}
+			case ast.PdfArray:
+				// TJ arrays can contain strings.
+				for _, elem := range v {
+					if s, ok := elem.(ast.PdfString); ok && len(s) > maxStr {
+						results = append(results, Result{
+							Rule:    stringLengthRule(profile),
+							Context: fmt.Sprintf("object %d (stream content): string length %d exceeds %d", objNum, len(s), maxStr),
+						})
+					}
+				}
+			}
+		}
 	}
 	return results
 }

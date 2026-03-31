@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"crypto/md5" //nolint:gosec
 	"fmt"
 	"log/slog"
 
@@ -48,13 +49,14 @@ func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.Pd
 type iccProfileHeader struct {
 	deviceClass string // bytes 12-16
 	colorSpace  string // bytes 16-20
+	version     int    // major version from byte 8
 }
 
 // iccHeaderSize is the minimum number of bytes needed to parse the ICC header.
 const iccHeaderSize = 20
 
-// parseICCHeader extracts the device class and colour space from raw ICC
-// profile data.
+// parseICCHeader extracts the device class, colour space, and version from raw
+// ICC profile data.
 func parseICCHeader(data []byte) (iccProfileHeader, bool) {
 	if len(data) < iccHeaderSize {
 		slog.Debug("compliance_2/color: ICC profile too short", "len", len(data))
@@ -63,10 +65,12 @@ func parseICCHeader(data []byte) (iccProfileHeader, bool) {
 	hdr := iccProfileHeader{
 		deviceClass: string(data[12:16]),
 		colorSpace:  string(data[16:20]),
+		version:     int(data[8]), // Major version byte.
 	}
 	slog.Debug("compliance_2/color: parsed ICC header",
 		"deviceClass", hdr.deviceClass,
 		"colorSpace", hdr.colorSpace,
+		"version", hdr.version,
 	)
 	return hdr, true
 }
@@ -191,6 +195,12 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			hasValidICC = true
 		}
 
+		// Validate ICC profile version (must be 2 or 4, not 5+).
+		if hdr.version != 2 && hdr.version != 4 { //nolint:mnd
+			*results = append(*results, failf(outputIntentICCRule(part),
+				"OutputIntent[%d]: invalid ICC profile version %d (expected 2 or 4)", i, hdr.version)...)
+		}
+
 		// §6.2.2 t2 / §6.2.3 t2: multiple OutputIntents must be consistent.
 		// All DestOutputProfile entries must reference the same indirect object.
 		// The spec requires the same indirect object, not merely identical data.
@@ -252,6 +262,62 @@ func bytesEqual(a, b []byte) bool {
 		}
 	}
 	return true
+}
+
+// iccProfilesEqual compares two decoded ICC profiles for equivalence.
+// If either profile has an all-zero Profile ID (bytes 84–99, meaning "not
+// computed"), the computed MD5 is substituted before a raw byte comparison.
+// This matches VeraPDF's behaviour: a zeroed Profile ID is treated as a
+// placeholder for the correct value, not as a distinct identity.
+func iccProfilesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	const profileIDEnd = 100
+	if len(a) < profileIDEnd {
+		return bytesEqual(a, b)
+	}
+	// Normalise: if either Profile ID is all-zero, compute and fill it.
+	na := normaliseICCProfileID(a)
+	nb := normaliseICCProfileID(b)
+	return bytesEqual(na, nb)
+}
+
+// normaliseICCProfileID returns a copy of the profile with its Profile ID
+// (bytes 84–99) replaced by the computed MD5 if it is currently all zeros.
+// Per the ICC spec, the MD5 is computed over the profile data with bytes
+// 44–47, 64–67, and 84–99 zeroed.
+func normaliseICCProfileID(data []byte) []byte {
+	const profileIDStart = 84
+	const profileIDEnd = 100
+	allZero := true
+	for _, b := range data[profileIDStart:profileIDEnd] {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if !allZero {
+		return data
+	}
+	// Compute the ICC Profile ID (MD5) per ICC spec.
+	buf := make([]byte, len(data))
+	copy(buf, data)
+	// Zero rendering intent (44–47), date/time flags (64–67), profile ID (84–99).
+	for i := 44; i < 48; i++ {
+		buf[i] = 0
+	}
+	for i := 64; i < 68; i++ {
+		buf[i] = 0
+	}
+	for i := profileIDStart; i < profileIDEnd; i++ {
+		buf[i] = 0
+	}
+	h := md5.Sum(buf) //nolint:gosec
+	result := make([]byte, len(data))
+	copy(result, data)
+	copy(result[profileIDStart:profileIDEnd], h[:])
+	return result
 }
 
 // checkDeviceColorSpaces validates that device-dependent colour spaces
@@ -1374,6 +1440,32 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 		}
 
 		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, results)
+
+		// Also scan annotation appearance streams on this page.
+		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annotsArr {
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
+			if apDict == nil {
+				continue
+			}
+			for _, apKey := range []ast.PdfName{"N", "R", "D"} {
+				apStream, err := document.ResolveStream(ctx, doc, apDict[apKey])
+				if err != nil {
+					continue
+				}
+				if apStream.Dict == nil {
+					continue
+				}
+				apRes, _ := document.ResolveDict(ctx, doc, apStream.Dict["Resources"])
+				if apRes != nil {
+					scanSeparationDeviceNInResources(ctx, doc, apRes, part, i, colorantAlternates, colorantTintFuncs, results)
+				}
+			}
+		}
 	}
 
 	slog.Debug("compliance_2/color: Separation/DeviceN check complete",
@@ -1415,7 +1507,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			case "Separation":
 				checkSeparationCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, results)
 			case "DeviceN":
-				checkDeviceNCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, results)
+				checkDeviceNCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, results)
 			}
 		}
 	}
@@ -1616,7 +1708,7 @@ func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObj
 
 // checkDeviceNCS validates a DeviceN colour space array:
 // [/DeviceN [/names...] /AlternateSpace /TintTransform ...]
-func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, results *[]Result) {
+func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result) {
 	if len(arr) < 4 {
 		slog.Debug("compliance_2/color: DeviceN array too short", "page", pageIdx, "cs", csName, "len", len(arr))
 		return
@@ -1730,7 +1822,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 	// consistent with all other Separation arrays with the same colorant name.
 	for cName, cObj := range colorantsDict {
 		cArr, err := document.ResolveArray(ctx, doc, cObj)
-		if err != nil || len(cArr) < 3 {
+		if err != nil || len(cArr) < 4 { //nolint:mnd
 			continue
 		}
 		cType, _ := document.ResolveName(ctx, doc, cArr[0])
@@ -1748,8 +1840,21 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 					"page %d, Colorants dict: Separation %q uses alternate %q but previously used %q",
 					pageIdx+1, name, cAlt, prev)...)
 			}
+			// Also check tint transform consistency.
+			if prevTint, hasPrev := colorantTintFuncs[name]; hasPrev {
+				if !tintTransformEqual(ctx, doc, prevTint, cArr[3]) {
+					*results = append(*results, failf(deviceNConsistencyRule(part),
+						"page %d, Colorants dict: Separation %q has different tintTransform",
+						pageIdx+1, name)...)
+				}
+			} else {
+				// First Colorants dict entry for this colorant — store its tint
+				// transform so subsequent entries with the same name are compared.
+				colorantTintFuncs[name] = cArr[3]
+			}
 		} else {
 			colorantAlternates[name] = cAlt
+			colorantTintFuncs[name] = cArr[3]
 		}
 	}
 }
@@ -1815,17 +1920,24 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 			continue
 		}
 
+		// For page-level OutputIntents (PDF/A-4 allows them), use the page's
+		// OutputIntent ICC info if the catalog-level one is absent.
+		pageOIRef, pageOIHdr, pageOIData := outputIntentRef, outputIntentHdr, outputIntentData
+		if part >= 2 && len(outputIntentData) == 0 {
+			pageOIRef, pageOIHdr, pageOIData = getOutputIntentICCInfo(ctx, doc, page)
+		}
+
 		// Get page blending CS ICC ref for identity comparison.
 		blendingCSRef := getPageBlendingICCRef(ctx, doc, page)
 
 		// Collect CS names actually used by cs/CS operators in the content stream.
 		usedCSNames := collectUsedCSNames(ctx, doc, page)
 
-		checkICCBasedInResources(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, usedCSNames, results)
+		checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
 
 		// Recursively scan Form XObject and annotation sub-resources.
 		visited := make(map[string]bool)
-		scanICCBasedRecursive(ctx, doc, resources, part, i, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, 0, visited)
+		scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited)
 
 		// Scan annotation appearance streams.
 		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
@@ -1850,8 +1962,8 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 				if subRes != nil {
 					formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
-					checkICCBasedInResources(ctx, doc, subRes, part, i, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
-					scanICCBasedRecursive(ctx, doc, subRes, part, i, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, 1, visited)
+					checkICCBasedInResources(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, nil, results)
+					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited)
 				}
 			}
 		}
@@ -1998,7 +2110,33 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 		}
 
 		csType, err := document.ResolveName(ctx, doc, arr[0])
-		if err != nil || csType != "ICCBased" {
+		if err != nil {
+			continue
+		}
+
+		// For Separation/DeviceN, check the alternate colour space for ICCBased.
+		if csType == "Separation" && len(arr) >= 3 { //nolint:mnd
+			altArr, altErr := document.ResolveArray(ctx, doc, arr[2])
+			if altErr == nil && len(altArr) >= 2 {
+				altType, _ := document.ResolveName(ctx, doc, altArr[0])
+				if altType == "ICCBased" {
+					checkSingleICCBased(ctx, doc, altArr[1], part, pageIdx, name, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
+				}
+			}
+			continue
+		}
+		if csType == "DeviceN" && len(arr) >= 4 { //nolint:mnd
+			altArr, altErr := document.ResolveArray(ctx, doc, arr[2])
+			if altErr == nil && len(altArr) >= 2 {
+				altType, _ := document.ResolveName(ctx, doc, altArr[0])
+				if altType == "ICCBased" {
+					checkSingleICCBased(ctx, doc, altArr[1], part, pageIdx, name, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
+				}
+			}
+			continue
+		}
+
+		if csType != "ICCBased" {
 			continue
 		}
 
@@ -2063,7 +2201,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 					iccRef.GenNum == outputIntentRef.GenNum {
 					identical = true
 				}
-				if !identical && bytesEqual(data, outputIntentData) {
+				if !identical && iccProfilesEqual(data, outputIntentData) {
 					identical = true
 				}
 			}
@@ -2080,7 +2218,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 					blendStream, err := document.ResolveStream(ctx, doc, blendingCSRef)
 					if err == nil {
 						blendData, err := doc.DecodeStream(blendStream)
-						if err == nil && bytesEqual(data, blendData) {
+						if err == nil && iccProfilesEqual(data, blendData) {
 							identical = true
 						}
 					}
@@ -2095,6 +2233,61 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 					"page %d, ColorSpace %s: ICCBased profile is identical to OutputIntent", pageIdx+1, name)...)
 			}
 		}
+	}
+}
+
+// checkSingleICCBased validates a single ICCBased profile stream for the CMYK
+// identity restriction (§6.2.4.2 t3). Used for ICCBased profiles found inside
+// Separation/DeviceN alternate colour spaces.
+func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj ast.PdfObject, part int, pageIdx int, csName ast.PdfName, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Result) {
+	if part < 2 { //nolint:mnd
+		return
+	}
+
+	stream, err := document.ResolveStream(ctx, doc, profileObj)
+	if err != nil {
+		return
+	}
+	data, err := doc.DecodeStream(stream)
+	if err != nil {
+		return
+	}
+	hdr, ok := parseICCHeader(data)
+	if !ok || hdr.colorSpace != "CMYK" {
+		return
+	}
+
+	iccRef, _ := profileObj.(ast.PdfIndirectRef)
+	identical := false
+
+	if len(outputIntentData) > 0 && outputIntentHdr.colorSpace == "CMYK" {
+		if iccRef.ObjectNum > 0 && outputIntentRef.ObjectNum > 0 &&
+			iccRef.ObjectNum == outputIntentRef.ObjectNum && iccRef.GenNum == outputIntentRef.GenNum {
+			identical = true
+		}
+		if !identical && iccProfilesEqual(data, outputIntentData) {
+			identical = true
+		}
+	}
+
+	if !identical && blendingCSRef.ObjectNum > 0 {
+		if iccRef.ObjectNum > 0 && iccRef.ObjectNum == blendingCSRef.ObjectNum && iccRef.GenNum == blendingCSRef.GenNum {
+			identical = true
+		}
+		if !identical {
+			blendStream, blendErr := document.ResolveStream(ctx, doc, blendingCSRef)
+			if blendErr == nil {
+				blendData, blendErr := doc.DecodeStream(blendStream)
+				if blendErr == nil && iccProfilesEqual(data, blendData) {
+					identical = true
+				}
+			}
+		}
+	}
+
+	if identical {
+		*results = append(*results, failf(iccBasedIdentityRule(part),
+			"page %d, ColorSpace %s alternate: ICCBased CMYK profile identical to OutputIntent", pageIdx+1, csName)...)
 	}
 }
 

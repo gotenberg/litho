@@ -116,6 +116,11 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 			if part == 1 {
 				results = append(results, checkAnnotOpacity(ctx, doc, annot, loc)...)
 			}
+
+			// 5. 3D stream Subtype must be U3D or PRC (PDF/A-4e).
+			if part == 4 && subtype == "3D" {
+				results = append(results, check3DStreamSubtype(ctx, doc, annot, loc)...)
+			}
 		}
 	}
 
@@ -213,6 +218,26 @@ func forbiddenAnnotTypeRule(part int) Rule {
 		return Rule_19005_4_6_3_1_t01
 	}
 	return Rule_19005_1_6_5_2_t01
+}
+
+// check3DStreamSubtype validates that a 3D annotation's stream has /Subtype
+// of either U3D or PRC (§6.1.6.1 t3, PDF/A-4e).
+func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast.PdfDict, loc string) []Result {
+	// The 3D stream is referenced via /3DD key on the annotation.
+	streamObj, ok := annot["3DD"]
+	if !ok {
+		return nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, streamObj)
+	if err != nil {
+		return nil
+	}
+	subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+	if subtype != "U3D" && subtype != "PRC" {
+		return failf(Rule_19005_4_6_1_6_1_t03,
+			"%s: 3D stream Subtype=%q (must be U3D or PRC)", loc, subtype)
+	}
+	return nil
 }
 
 // checkAnnotFlags validates annotation flag requirements (§6.5.3 for part 1,

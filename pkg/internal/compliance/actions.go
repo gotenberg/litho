@@ -22,7 +22,7 @@ var forbiddenActionTypes = map[ast.PdfName]bool{
 	"JavaScript": true,
 	"Hide":       true,
 	"SetState":   true,
-	"NoOp":       true,
+	"NoOp":       true, "NOP": true,
 }
 
 // forbiddenActionTypesPart23 extends the forbidden set for PDF/A-2 and PDF/A-3
@@ -31,15 +31,15 @@ var forbiddenActionTypes = map[ast.PdfName]bool{
 //
 //nolint:gochecknoglobals // package-level lookup table.
 var forbiddenActionTypesPart23 = map[ast.PdfName]bool{
-	"Launch":      true,
-	"Sound":       true,
-	"Movie":       true,
-	"ResetForm":   true,
-	"ImportData":  true,
-	"JavaScript":  true,
-	"Hide":        true,
-	"SetState":    true,
-	"NoOp":        true,
+	"Launch":     true,
+	"Sound":      true,
+	"Movie":      true,
+	"ResetForm":  true,
+	"ImportData": true,
+	"JavaScript": true,
+	"Hide":       true,
+	"SetState":   true,
+	"NoOp":       true, "NOP": true,
 	"SetOCGState": true,
 	"Rendition":   true,
 	"Trans":       true,
@@ -50,15 +50,15 @@ var forbiddenActionTypesPart23 = map[ast.PdfName]bool{
 //
 //nolint:gochecknoglobals // package-level lookup table.
 var forbiddenActionTypesPart4 = map[ast.PdfName]bool{
-	"Launch":      true,
-	"Sound":       true,
-	"Movie":       true,
-	"ResetForm":   true,
-	"ImportData":  true,
-	"JavaScript":  true,
-	"Hide":        true,
-	"SetState":    true,
-	"NoOp":        true,
+	"Launch":     true,
+	"Sound":      true,
+	"Movie":      true,
+	"ResetForm":  true,
+	"ImportData": true,
+	"JavaScript": true,
+	"Hide":       true,
+	"SetState":   true,
+	"NoOp":       true, "NOP": true,
 	"Rendition":   true,
 	"Trans":       true,
 	"SetOCGState": true,

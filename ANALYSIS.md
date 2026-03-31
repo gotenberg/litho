@@ -6,11 +6,13 @@
 
 ## Results (after all phases)
 
-| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | R11-12 | R13 | R14 | **R15** | Delta |
-|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|--------|-----|------|---------|-------|
-| **Pass** | 1,489 | 1,993 | 2,055 | 2,080 | 2,146 | 2,158 | 2,173 | 2,188 | 2,194 | 2,210 | 2,241 | 2,276 | 2,281 | 2,439 | **2,503** | +1,014 |
-| **FP** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | 4 | 0 | 0 | **0** | -97 |
-| **FN** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | 320 | 320 | 162 | **98** | -916 |
+| Metric | Baseline | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Round 7 | Round 8 | Round 9 | Round 10 | R11-12 | R13 | R14 | R15 | R16 | R17 | R18 | **R19** | Delta |
+|--------|----------|---------|---------|---------|---------|---------|---------|---------|---------|---------|----------|--------|-----|------|---------|---------|---------|---------|---------|-------|
+| **Pass** | 1,489 | 1,993 | 2,055 | 2,080 | 2,146 | 2,158 | 2,173 | 2,188 | 2,194 | 2,210 | 2,241 | 2,276 | 2,281 | 2,439 | 2,503 | 2,575 | 2,583 | 2,592 | **2,596** | +1,107 |
+| **FP** | 97 | ~108 | 75 | 35 | 35 | 35 | 37 | 37 | 37 | 37 | 37 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | **0** | -97 |
+| **FN** | 1,014 | ~500 | 470 | 485 | 419 | 407 | 390 | 375 | 369 | 353 | 322 | 320 | 320 | 162 | 98 | 26 | 18 | 9 | **5** | -1,009 |
+
+**Note:** Round 16 also added infrastructure for: PUA ActualText scanning (structure tree + content stream), ToUnicode encoding dict Differences tightening, namespace standard type remap detection (t04), PUA byte-level detection, Lang in content stream BDC/Properties. These did not fix additional FN in the current corpus but improve coverage for future files.
 
 
 ### Progress by tier
@@ -37,7 +39,11 @@
 | Round 12 (§6.1.x + FP fixes) | 2,276 | 4 | 320 | 87.5% |
 | Round 13 (zero FP) | 2,281 | 0 | 320 | 87.7% |
 | Round 14 (multi-FN push) | 2,439 | 0 | 162 | 93.8% |
-| **Round 15 (systematic FN reduction)** | **2,503** | **0** | **98** | **96.2%** |
+| Round 15 (systematic FN reduction) | 2,503 | 0 | 98 | 96.2% |
+| Round 16 (PDF/UA + JPEG2000 + CMap + structure + misc) | 2,575 | 0 | 26 | 99.0% |
+| Round 17 (tint transform + ICC identity + circular RoleMap + link SD + content stream limits) | 2,583 | 0 | 18 | 99.3% |
+| Round 18 (CID limits + CIDSet CFF + Lang inline BDC + PUA StructTreeRoot + namespace RoleMap) | 2,592 | 0 | 9 | 99.7% |
+| **Round 19 (Type0 Identity-H ToUnicode + Type3 ToUnicode + XMP extension valueType)** | **2,596** | **0** | **5** | **99.8%** |
 
 ### Initial results (before improvements)
 
@@ -818,3 +824,91 @@ Improved XMP property type validation to catch 16 additional FN:
 | **Pass** | 1,489 (57.3%) | 2,439 (93.8%) | +950 (+63.8%) |
 | **False Positives** | 97 | 0 | -97 (-100%) |
 | **False Negatives** | 1,014 | 162 | -852 (-84.0%) |
+
+### Round 15 — Systematic FN Reduction (96.2%)
+
+Device CS OutputIntent filtering, page-level transparency Group, pattern transparency, Type3 CharProc device CS, XMP part-1 property registry, XMP type overrides, CFF ValidCIDs, TrueType EmptyGIDs, Type0 CID odd-length strings, TrueType post-format-3 width heuristic, CFF charCode→GID name mapping, Type3 width checking, CharSet/CIDSet completeness, Differences AGL validation, pdfaid prefix/value/conformance fixes, DocInfo/XMP sync improvements, xref double-EOL, content stream hex strings, non-standard filter names, TransferFunction sub-halftone, inline image rendering intent, annotation BM transparency.
+
+**Result:** 2,503 / 2,601 (96.2%), 0 FP, 98 FN — **+64 files fixed**
+
+### Round 16 — PDF/UA-1 XMP Identification (96.3%)
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 1 | **PDF/UA-1 pdfuaid:part validation** — Extended `checkPDFUAIdentification` from PDF/UA-2-only to all PDF/UA profiles. For PDF/UA-1: validates XMP metadata exists (t01, `Rule_14289_1_5_t01`) and `pdfuaid:part=1` (t02, `Rule_14289_1_5_t02`). Previously returned nil immediately for non-PDF/UA-2 profiles. | `accessibility.go` | **-2 FN** |
+| 2 | **PDF/UA-1 pdfuaid:part prefix check** — Added t03 check to `checkPDFUAIDPrefixes`: validates that the `part` property uses the `pdfuaid` namespace prefix (`Rule_14289_1_5_t03`). Previously only checked `amd` (t04) and `corr` (t05) prefixes for PDF/UA-1. | `accessibility.go` | **-1 FN** |
+| 3 | **Register `checkFormGroup` for PDF/UA-1** — Added `checkFormGroup` to the PDF/UA-1 check group list in check.go. The XFA prohibition check (`Rule_14289_1_7_15_t01`) existed but was never invoked for PDF/UA-1. Removed duplicate `/TU` tooltip check from `checkFormGroup` (already handled more correctly by `checkFormFieldTU` in accessibility.go with Alt-on-structure fallback). | `check.go`, `forms.go` | **-1 FN** |
+| 4 | **Encryption accessibility permission** — PDF/UA-1 §7.16 t01: encrypted files must have `/P` key in `/Encrypt` dict with 10th bit set (accessibility content extraction). Implemented `checkEncryptionPermissions` that reads the Encrypt dict from the trailer and validates bit 9 (0-indexed) of the P value. | `accessibility.go` | **-1 FN** |
+| 5 | **Annotation structure nesting** — PDF/UA-1 §7.18.x: implemented `checkAnnotationNesting` that validates 5 rules in a single pass. Builds `annotObjNum -> enclosing standard type` map by walking the structure tree for OBJR dicts and resolving types through RoleMap. §7.18.1 t01: non-exempt annotations must be in Annot. §7.18.2 t01: TrapNet forbidden. §7.18.4 t01: Widget must be in Form. §7.18.5 t01: Link must be in Link. §7.18.8 t01: PrinterMark must NOT be in structure. All rules share Hidden/CropBox exemptions. | `accessibility.go` | **-5 FN** |
+| 6 | **Media clip Alt validation** — Fixed `checkMediaClipData` for §7.18.6.2 t02: (a) added fallback path `action["C"]` directly when `action["R"]["C"]` doesn't exist (the "-b" variant uses `/C` on the action dict, not nested under `/R`); (b) validate `/Alt` value, not just presence — `/Alt` is an array of `[lang, text, ...]` pairs and must contain at least one non-empty text entry. | `accessibility.go` | **-1 FN** |
+| 7 | **Table Caption count** — PDF/UA-1 §7.2 t39: Table may contain at most one Caption. Added `captionCount` tracking to `validateTableSectionCounts` alongside existing THead/TFoot/TBody counts. | `structure.go` | **-1 FN** |
+| 8 | **TOC child-type validation** — PDF/UA-1 §7.2 t27: TOC may contain only TOC, TOCI, and Caption. Added containment check in `walkElement` alongside existing TOCI-must-be-inside-TOC (t26). | `structure.go` | **-1 FN** |
+| 9 | **Figure empty Alt detection** — PDF/UA-1 §7.3 t01: Figure with empty `/Alt` string now detected. Changed from `hasStringKeyPresent` (presence) to `hasNonEmptyStringKey` for `/Alt`. `/ActualText` presence (even empty) still satisfies the requirement. Also added RoleMap resolution to catch non-standard types mapped to Figure. | `accessibility.go` | **-1 FN** |
+| 10 | **Heading hierarchy first-H1** — PDF/UA-1 §7.4.2 t01: first heading in document must be H1. Removed `maxSeen > 0` guard from the skipped-level check so that H2 as first heading (with maxSeen=0) is flagged. | `structure.go` | **-1 FN** |
+| 11 | **Formula empty Alt detection** — PDF/UA-1 §7.7 t01: Formula with empty `/Alt` now detected. Same asymmetric check: non-empty required for `/Alt`, presence suffices for `/ActualText`. | `structure.go` | **-1 FN** |
+| 12 | **OC config /AS key prohibition** — PDF/UA-1 §7.10 t02: `/AS` key is forbidden in any optional content configuration dictionary. Added check to `checkOCConfigNames` for both default config (/D) and /Configs array entries. | `accessibility.go` | **-1 FN** |
+| 13 | **Reference XObjects forbidden** — PDF/UA-1 §7.20 t01: Form XObjects with `/Ref` key (reference XObjects) are prohibited. Implemented `checkFormXObjectRestrictions` that scans page XObject resources via `ResolveStream` (XObjects are streams, not plain dicts). Handles inherited resources from Pages tree. | `accessibility.go` | **-1 FN** |
+| 14 | **Form XObject multi-reference with MCIDs** — PDF/UA-1 §7.20 t02: Form XObjects containing MCIDs (`/StructParents`) must not be referenced more than once. Parses each page's content stream for `Do` operators, resolves XObject names to object numbers via the resource dict, counts invocations across all pages. Flags Form XObjects with `/StructParents` that have count > 1. | `accessibility.go` | **-1 FN** |
+| 15 | **Predefined CMap name validation** — PDF/UA-1 §7.21.3.3 t01/t03: `isPredefinedCMap` was prefix-matching `"Adobe-Korea1"` against CIDSystemInfo identifiers like `"Adobe-Korea1-2"`. Added rejection of 3-part `"Adobe-*-<digit>"` names (CIDSystemInfo Registry-Ordering-Supplement format) before prefix matching. Fixes both embedding (t01) and usecmap (t03) checks. | `fonts.go` | **-2 FN** |
+| 16 | **CIDSet rule selectors for PDF/UA** — Both `cidSetRule` and `cidSetCompletenessRule` lacked `isPDFUA` branches, returning empty rules for PDF/UA-1. Added `Rule_14289_1_7_21_4_2_t02` for both selectors so CIDSet presence and completeness checks run for PDF/UA-1. | `fonts.go` | **-1 FN** |
+| 17 | **ToUnicode Identity CMap exemption** — PDF/UA-1 §7.21.7 t01: the unconditional Identity-H/Identity-V ToUnicode exemption was too broad for PDF/UA. Narrowed to PDF/A only — PDF/UA fonts with Identity CMap encoding require `/ToUnicode` unless Unicode mapping is available through other means. | `fonts.go` | **-1 FN** |
+| 18 | **CharSet bidirectional completeness** — `checkCharSetCompleteness` only verified font→CharSet (every font glyph must be in CharSet). Added reverse check: every CharSet name must exist in the font program. The fail-b test has `/CharSet` listing glyph `d` not present in the CFF font program. | `fonts.go` | **-2 FN** |
+| 19 | **Width check includes space (0x20)** — `checkSimpleFontWidths` skipped charcodes `<= 0x20`, including space. Changed to `< 0x20` so space (charcode 32) is width-checked. The test file has space width 192 in PDF vs 250 in the TrueType program. | `fonts.go` | **-1 FN** |
+| 20 | **PDF/UA-2 single Document root** — §8.2.5.2 t01: StructTreeRoot must contain exactly one Document child. Implemented `checkSingleDocumentRoot` that counts and validates `/K` children. | `structure.go` | **-1 FN** |
+| 21 | **PDF/UA-2 H type prohibition** — §8.2.5.12 t01: H structure type is entirely forbidden in PDF/UA-2. Added check in `walkElement` when `typeName == "H"` and profile is PDF/UA-2. | `structure.go` | **-1 FN** |
+| 22 | **PDF/A RoleMap validation for level 'a'** — §6.7.3.4 / §6.8.3.4: `checkRoleMap` was only called for PDF/UA, never for PDF/A level 'a'. Added call for PDF/A level 'a'. Added PDF/A-specific rules to `roleMapNonStandardRule` and `roleMapCircularRule` selectors (were returning PDF/UA rules as fallback for PDF/A). | `structure.go` | **-3 FN** |
+| 23 | **PDF/UA-2 embedded file /Desc** — §8.14.1 t01: embedded file specs must have `/Desc` entry. Extended `checkPDFUAFileSpecFUF` from PDF/UA-1-only to all PDF/UA profiles, adding /Desc check for PDF/UA-2. | `accessibility.go` | **-1 FN** |
+| 24 | **PresSteps forbidden (PDF/A-4)** — §6.11 t02: no page may have `/PresSteps` entry. Implemented `checkPresSteps` that scans all pages. | `document.go` | **-1 FN** |
+| 25 | **Embedded file MIME type (PDF/A-4)** — §6.9 t01: embedded file stream `/Subtype` must be a valid MIME type. Implemented `checkEmbeddedFileMIME` that walks the EmbeddedFiles name tree and validates `/Subtype` presence with `/` separator (handles `#2F` encoding). | `document.go` | **-1 FN** |
+| 26 | **JPEG2000 codestream compliance** — §6.2.8.3 (parts 2/3) / §6.2.7.3 (part 4): implemented pure-Go JP2 box structure parser in new `jpx.go`. Parses JP2 container (signature box, jp2h superbox, ihdr, colr, bpcc boxes) and raw J2K codestream (SIZ marker). Validates 5 rules: t1 (channel count 1/3/4), t2 (multiple colr boxes need APPROX=0x01), t3 (METH must be 0x01-0x03), t4 (CIEJab enumCS=19 forbidden), t5 (bit depth 1-38, uniform across channels). Wired into `checkXObject` via stream data access (`stream.Bytes()` gives raw JP2/J2K payload). | `jpx.go`, `xobjects.go` | **-5 FN** |
+| 27 | **CMap embedding for PDF/A** — `checkCMapEmbedding` was PDF/UA-only (early return for PDF/A). Extended to all profiles via `cmapEmbeddingRules` selector returning part-specific rules for PDF/A-2/3/4. Fixes t01 (non-predefined CMap not embedded) and enables t02/t03 checks. | `fonts.go` | **-3 FN** |
+| 28 | **CMap WMode default handling** — CMap t02 check used `streamWMode >= 0` guard which skipped comparison when stream program had no `/WMode` directive. Changed to default streamWMode=0 (per spec) so dict WMode=1 vs absent stream WMode=0 is detected. | `fonts.go` | **-2 FN** |
+| 29 | **UseCMap recursive chain + CMapName extraction** — CMap t03 check missed references to non-predefined CMaps via `/UseCMap` pointing to embedded CMap streams. Added `findNonPredefinedUseCMap` that recursively follows `/UseCMap` chains and extracts `/CMapName` from embedded CMap streams (dict key or program text parsing). `Adobe-Japan1-4` as CMapName of embedded inner CMap now detected. | `fonts.go` | **-2 FN** |
+| 30 | **Inline image Interpolate** — Added `checkInlineImageInterpolate` that scans page content streams for `BI..ID` blocks containing `/I true` or `/Interpolate true`. Handles abbreviated key names and whitespace variants. Added to `checkXObjectGroup` page loop for all PDF/A parts. | `xobjects.go` | **-3 FN** |
+| 31 | **Unmapped structure types in tree** — PDF/A level 'a' §6.8.3.4/§6.7.3.4 t01: `checkRoleMap` only checked types IN the RoleMap, missing types used in the structure tree but NOT in the map. Added `checkUnmappedStructTypes` that walks the structure tree, collects all element type names, and flags non-standard types absent from the RoleMap. | `structure.go` | **-2 FN** |
+| 32 | **PDF/UA-2 ListNumbering attribute** — §8.2.5.25 t01: if any LI child of L has a Lbl descendant, the L element must have a `ListNumbering` attribute not `None`. Added `validateListNumbering` with `liHasLblChild` and `resolveAttributeValue` helpers. | `structure.go` | **-1 FN** |
+| 33 | **3D stream Subtype validation** — PDF/A-4e §6.1.6.1 t03: 3D annotation's stream `/Subtype` must be `U3D` or `PRC`. Added `check3DStreamSubtype` that resolves `/3DD` from 3D annotations. Test file had lowercase `u3d` instead of `U3D`. | `annotations.go` | **-1 FN** |
+| 34 | **OCG Order completeness** — PDF/A-4 §6.10 t03: if OC config has `/Order`, it must reference all OCGs. Added `checkOCGOrderCompleteness` that collects all OCG refs from `/OCProperties/OCGs` and verifies each appears in the Order array (recursively). | `document.go` | **-1 FN** |
+| 35 | **Separation/DeviceN in annotation appearances** — Extended `checkSeparationDeviceN` to scan annotation appearance stream resources (via `/AP` → `/N`/`/R`/`/D` → stream `/Resources`). | `color.go` | **-0 FN** (edge case) |
+| 36 | **ICC profile version validation** — OutputIntent ICC profile version must be 2 or 4. Added version extraction from byte 8 of ICC header and validation in `checkOutputIntentICC`. Test files had ICC v5 profiles. | `color.go` | **-2 FN** |
+| 37 | **Lang validity rule selector** — `pdfaLangValidRule` returned wrong rules for parts 2/3 (`Rule_19005_2_6_7_3_4_t01` = RoleMap rule instead of `Rule_19005_2_6_7_4_t01` = Lang rule). Fixed to return correct `6_7_4` rules. | `structure.go` | **-0 FN** (Lang encoding issue persists) |
+| 38 | **PUA ActualText scan** — PDF/A-4 §6.2.10.8 t01: added `checkActualTextPUA` that walks structure tree for ActualText entries and scans content stream BDC spans for PUA code points (U+E000-U+F8FF, Supplementary PUA-A/B). Includes `containsPUARunes` helper. | `structure.go` | **-0 FN** (encoding edge case) |
+| 39 | **ToUnicode encoding dict Differences** — Tightened `hasStandardBaseEncoding` to return false when encoding dict has `/Differences`. Previously granted ToUnicode exemption for BaseEncoding=WinAnsiEncoding even with non-AGL Differences. Now falls through to the AGL check. | `fonts.go` | **-0 FN** (target file uses different exemption path) |
+| 40 | **Image XObject rendering intent** — Added `/Intent` validation to `checkImageXObject`: if present, value must be a valid rendering intent. Test file had `Custom` intent on an image. | `xobjects.go` | **-1 FN** |
+| 41 | **math type containment** — PDF/UA-2 §8.2.5.29 t01: math structure type must only appear as child of Formula. Added check in `walkElement` with `isMathMLType` helper. | `structure.go` | **-1 FN** |
+| 42 | **PDF/UA-2 Form widget count** — §8.10.1 t02: Form structure element must contain at most one widget annotation. Added `checkPDFUA2FormStructure` with `countOBJRWidgets` that resolves OBJR children to check for Widget subtypes. | `accessibility.go` | **-1 FN** |
+| 43 | **PDF/UA-2 Widget Contents** — §8.10.2.3 t01: Widget annotation without label must have `/Contents`. Added check in `checkPDFUA2FormStructure` scanning page annotations. | `accessibility.go` | **-1 FN** |
+| 44 | **Type0 ToUnicode Identity CMap exemption** — `checkType0ToUnicode` had unconditional Identity CMap + CIDToGIDMap exemption. Narrowed to PDF/A only (`!isPDFUA(profile)`) so PDF/UA still requires ToUnicode for Type0 Identity-encoded fonts. | `fonts.go` | **-1 FN** |
+| 45 | **ICCBased in Separation/DeviceN alternates** — Extended `checkICCBasedInResources` to scan Separation and DeviceN alternate colour spaces for ICCBased profiles. Added `checkSingleICCBased` for the CMYK identity check on alternate profiles. | `color.go` | **-2 FN** |
+| 46 | **NOP action type** — Forbidden action maps had `NoOp` but the PDF action type is `NOP`. Added `NOP` as alias in all three forbidden action type maps (parts 1, 2/3, 4). | `actions.go` | **-2 FN** |
+| 47 | **Structure destinations** — PDF/UA-2 §8.8 t01/t02: implemented `checkStructureDestinations` that walks outline items for `/Dest` and `/A GoTo` action destinations. Checks if destination array starts with a structure element ref (has `/S` key) rather than a page ref. | `accessibility.go` | **-2 FN** |
+| 48 | **Lang in content stream Properties** — Extended `checkPDFALangValid` to scan page `/Properties` resource dicts and inline BDC operators for `/Lang` values. Handles inherited resources from Pages tree. | `structure.go` | **-0 FN** (encoding edge case persists) |
+| 49 | **Obj header preceding-byte EOL check** — Added `checkObjHeaderLeadingWhitespace` that reads the byte immediately before each xref-pointed object number and validates it is an EOL marker (LF or CR). The existing `validateObjectHeaderFormat` in the document package only runs for uncached objects (objects resolved during `pdf.Open` before ComplianceMode are cached and skip the check). This direct raw-byte scan catches leading whitespace (spaces/tabs) between the preceding EOL and the object number, which violates §6.1.8/§6.1.9. Handles xref offsets pointing to EOL chars before the object number by scanning forward to the first digit. | `file_structure.go` | **-2 FN** |
+
+**Result:** 2,575 / 2,601 (99.0%), 0 FP, 26 FN
+
+### Round 17 — Tint transform + ICC identity + circular RoleMap + link SD + content stream limits
+
+See fix entries 50-54 above.
+
+**Result:** 2,583 / 2,601 (99.3%), 0 FP, 18 FN
+
+### Round 18 — CID limits + CIDSet CFF + Lang inline BDC + PUA StructTreeRoot + namespace RoleMap
+
+| # | Fix | Files | Impact |
+|---|-----|-------|--------|
+| 55 | **CID value > 65535 in encoding CMap** — Added `checkCMapCIDValues` that decodes the Type0 font's encoding CMap stream, parses CID mappings via `cmap.ParseCID`, and flags any CID value exceeding 65,535. Rule: §6.1.12 t10 (Part 1) / §6.1.13 t10 (Parts 2/3). | `fonts.go` | **-2 FN** |
+| 56 | **CIDSet completeness for CFF CIDFonts (Part 1)** — Part 1 required CIDSet presence but skipped completeness. Added `checkCIDSetCompletenessCFF` that uses `cff.ValidCIDs` to extract valid CIDs from the CFF font program and checks each against the CIDSet bitfield. Limited to CFF fonts only (TrueType empty-glyph detection is unreliable for Part 1, causing FP). Also handles empty CIDSet streams (Length 0). | `fonts.go` | **-2 FN** |
+| 57 | **Lang validation for inline BDC without Properties** — Content stream scanning for `/Lang` in BDC operators was gated behind `propsDict != nil`. Pages without a `/Properties` resource dict skipped the raw content stream scan entirely. Moved the content stream scan outside the propsDict nil check so inline BDC `/Lang` entries (like UTF-16BE hex strings with Cyrillic characters) are always validated. | `structure.go` | **-2 FN** |
+| 58 | **PUA ActualText for non-level-a PDF/A-4** — `checkActualTextPUA` depended on `structTreeRoot` from `checkStructTreeRoot`, which returns nil for profiles without level 'a' (like plain PDF/A-4). Added independent StructTreeRoot resolution for the Part 4 PUA check so it works regardless of conformance level. | `structure.go` | **-2 FN** |
+| 59 | **Standard type remap in StructTreeRoot RoleMap** — The namespace-based t04 check only examined `/RoleMapNS` inside namespace dicts. PDF 2.0 documents can also have legacy `/RoleMap` entries in the StructTreeRoot. Added a scan of the StructTreeRoot `/RoleMap` that flags standard structure types (e.g., H1) remapped to non-standard types (e.g., Standard). | `accessibility.go` | **-1 FN** |
+
+**Result:** 2,592 / 2,601 (99.7%), 0 FP, 9 FN
+
+### Current: 99.7% (2,592 / 2,601)
+
+| Metric | Baseline | Current | Delta |
+|--------|----------|---------|-------|
+| **Pass** | 1,489 (57.3%) | 2,592 (99.7%) | +1,103 (+74.2%) |
+| **False Positives** | 97 | 0 | -97 (-100%) |
+| **False Negatives** | 1,014 | 9 | -1,005 (-99.1%) |
