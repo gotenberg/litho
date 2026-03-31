@@ -11,7 +11,7 @@ import (
 
 // checkGraphicsGroup validates ExtGState, halftones, rendering intent, and
 // overprint restrictions required by PDF/A parts 1-4.
-func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 	if part == 0 {
 		slog.Debug("compliance_2/graphics: skipping, not a PDF/A profile", "profile", profile)
@@ -22,7 +22,7 @@ func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast
 
 	pages := collectPages(ctx, doc, catalog)
 
-	var results []Result
+	var results []Violation
 	for i, page := range pages {
 		if ctx.Err() != nil {
 			slog.Debug("compliance_2/graphics: context cancelled during page iteration")
@@ -86,7 +86,7 @@ func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast
 // Form XObjects referenced by Do operators on the page. Each Form XObject
 // has its own Resources dict; operators in its content stream must reference
 // resources defined there.
-func checkFormXObjectResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part int, pageNum int, referencedNames map[string]bool) []Result {
+func checkFormXObjectResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part int, pageNum int, referencedNames map[string]bool) []Violation {
 	if pageRes == nil {
 		return nil
 	}
@@ -95,7 +95,7 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	for xoName, xoObj := range xoDict {
 		// Only check Form XObjects that are actually referenced by Do operators.
 		if referencedNames != nil && !referencedNames[string(xoName)] {
@@ -130,7 +130,7 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 // resource references. Type3 CharProcs are content streams that may reference
 // colour spaces, fonts, etc. If they do, the Type3 font dict must have an
 // explicitly associated /Resources entry.
-func checkType3CharProcResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int) []Result {
+func checkType3CharProcResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int) []Violation {
 	if pageRes == nil {
 		return nil
 	}
@@ -138,7 +138,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 	if err != nil || fontDict == nil {
 		return nil
 	}
-	var results []Result
+	var results []Violation
 	for fontName, fontRef := range fontDict {
 		fd, err := document.ResolveDict(ctx, doc, fontRef)
 		if err != nil || fd == nil {
@@ -183,12 +183,12 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 
 // checkAnnotationAppearanceExtGState scans annotation appearance stream
 // resources for ExtGState entries (rendering intent, halftone, etc.).
-func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Document, page ast.PdfDict, profile string, part, pageNum int) []Result {
+func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Document, page ast.PdfDict, profile string, part, pageNum int) []Violation {
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annotsArr) == 0 {
 		return nil
 	}
-	var results []Result
+	var results []Violation
 	for _, annotObj := range annotsArr {
 		annot, _ := document.ResolveDict(ctx, doc, annotObj)
 		if annot == nil {
@@ -235,7 +235,7 @@ func contentReferencesResources(streamData []byte) bool {
 
 // checkFormXObjectExtGState scans Form XObject resources for ExtGState
 // entries (halftone, rendering intent, etc.) that the page-level scan misses.
-func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, profile string, part, pageNum int) []Result {
+func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, profile string, part, pageNum int) []Violation {
 	if pageRes == nil {
 		return nil
 	}
@@ -243,7 +243,7 @@ func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, page
 	if err != nil || xoDict == nil {
 		return nil
 	}
-	var results []Result
+	var results []Violation
 	for _, xoObj := range xoDict {
 		stream, err := document.ResolveStream(ctx, doc, xoObj)
 		if err != nil {
@@ -263,13 +263,13 @@ func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, page
 }
 
 // checkExtGStateGraphics validates all ExtGState entries in a page's resources.
-func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, profile string, part, pageNum int) []Result {
+func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, profile string, part, pageNum int) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	for gsName, gsObj := range gsDict {
 		if ctx.Err() != nil {
 			slog.Debug("compliance_2/graphics: context cancelled during ExtGState iteration")
@@ -327,8 +327,8 @@ func tr2NotDefaultRule(part int) Rule {
 	return Rule{}
 }
 
-func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Result {
-	var results []Result
+func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
+	var results []Violation
 
 	// PDF/A-1: /TR key is completely forbidden.
 	// PDF/A-2+/4: /TR key is also forbidden.
@@ -367,7 +367,7 @@ func htpForbiddenRule(part int) Rule {
 	return Rule{}
 }
 
-func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Result {
+func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
 	// HTP check applies to parts 2+ and 4 only.
 	if part < 2 {
 		return nil
@@ -428,7 +428,7 @@ func halftoneTransferRule(part int) Rule {
 	return Rule{}
 }
 
-func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Result {
+func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
 	// Halftone checks apply to parts 2+ and 4 only.
 	if part < 2 {
 		return nil
@@ -446,7 +446,7 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// HalftoneType must be 1 or 5.
 	htType, err := document.ResolveInt(ctx, doc, ht["HalftoneType"])
@@ -535,7 +535,7 @@ func renderingIntentRule(part int) Rule {
 	return Rule{}
 }
 
-func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Result {
+func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
 	// PDF/A-4 does not define a rendering intent rule.
 	if part == 4 {
 		return nil
@@ -561,7 +561,7 @@ func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.Pd
 
 // --- Overprint mode check ---
 
-func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Result {
+func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
 	// Overprint checks apply to parts 2+ and 4 only.
 	if part < 2 {
 		return nil

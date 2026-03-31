@@ -13,7 +13,7 @@ import (
 // checkXObjectGroup validates XObject restrictions for PDF/A conformance.
 // It checks reference XObjects, form XObject forbidden keys, image /Alternates,
 // image /OPI, and image /Interpolate constraints across all pages.
-func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
 		slog.Debug("compliance_2: xobjects: skipping for PDF/UA profile", "profile", profile)
 		return nil
@@ -28,7 +28,7 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 	slog.Debug("compliance_2: xobjects: starting checks", "profile", profile, "part", part)
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 	visited := make(map[string]bool)
 
 	for i, page := range pages {
@@ -59,7 +59,7 @@ func checkXObjectGroup(ctx context.Context, doc *document.Document, catalog ast.
 // checkInlineImageInterpolate scans a page's content stream for inline images
 // with /I true (Interpolate). Inline images use BI..ID..EI blocks with
 // abbreviated key names: /I for Interpolate.
-func checkInlineImageInterpolate(_ context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int) []Result {
+func checkInlineImageInterpolate(_ context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int) []Violation {
 	streamData, err := getPageContentBytes(context.Background(), doc, page)
 	if err != nil || len(streamData) == 0 {
 		return nil
@@ -140,7 +140,7 @@ func hasInlineImageInterpolateTrue(block []byte) bool {
 // scanXObjectResources iterates XObject resources, validates each, and recurses
 // into Form XObject sub-resources. At depth 0 (page level), only XObjects
 // referenced by Do operators are checked — unreferenced XObjects are skipped.
-func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Result, visited map[string]bool, depth int, referencedNames map[string]bool) {
+func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Violation, visited map[string]bool, depth int, referencedNames map[string]bool) {
 	if depth > 10 || ctx.Err() != nil {
 		return
 	}
@@ -210,8 +210,8 @@ func checkXObject(
 	pageNum int,
 	part int,
 	profile string,
-) []Result {
-	var results []Result
+) []Violation {
+	var results []Violation
 
 	// §6.2.9 — Reference XObjects forbidden (all parts).
 	// A /Ref key in the XObject dict indicates a reference XObject.
@@ -261,8 +261,8 @@ func checkFormXObjectPart1(
 	formDict ast.PdfDict,
 	name ast.PdfName,
 	pageNum int,
-) []Result {
-	var results []Result
+) []Violation {
+	var results []Violation
 
 	// /Subtype2 with value /PS is forbidden.
 	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
@@ -291,8 +291,8 @@ func checkImageXObjectPart1(
 	imgDict ast.PdfDict,
 	name ast.PdfName,
 	pageNum int,
-) []Result {
-	var results []Result
+) []Violation {
+	var results []Violation
 
 	// /Alternates forbidden.
 	if _, hasAlt := imgDict["Alternates"]; hasAlt {
@@ -330,8 +330,8 @@ func checkFormXObject(
 	pageNum int,
 	part int,
 	profile string,
-) []Result {
-	var results []Result
+) []Violation {
+	var results []Violation
 
 	// Select the appropriate rule based on part.
 	var formRule Rule
@@ -376,8 +376,8 @@ func checkImageXObject(
 	name ast.PdfName,
 	pageNum int,
 	part int,
-) []Result {
-	var results []Result
+) []Violation {
+	var results []Violation
 
 	// Select the appropriate rules based on part.
 	var altRule, opiRule, interpRule Rule
@@ -431,7 +431,7 @@ func checkImageXObject(
 
 // refXObjectRule returns the appropriate reference XObject rule violation for
 // the given PDF/A part.
-func refXObjectRule(part int, pageNum int, name ast.PdfName) []Result {
+func refXObjectRule(part int, pageNum int, name ast.PdfName) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_2_6_t01, "page %d, XObject %s", pageNum, name)
@@ -445,7 +445,7 @@ func refXObjectRule(part int, pageNum int, name ast.PdfName) []Result {
 
 // psXObjectRule returns the appropriate PostScript XObject rule violation for
 // the given PDF/A part.
-func psXObjectRule(part int, pageNum int, name ast.PdfName) []Result {
+func psXObjectRule(part int, pageNum int, name ast.PdfName) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_2_7_t01, "page %d, XObject %s", pageNum, name)

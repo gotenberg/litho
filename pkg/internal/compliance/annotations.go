@@ -47,7 +47,7 @@ var standardAnnotTypes2 = map[ast.PdfName]bool{
 // checkAnnotationGroup validates annotation compliance rules for PDF/A profiles.
 // For PDF/UA profiles, annotation checks are handled by the accessibility group,
 // so this function returns nil.
-func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
 		slog.Debug("compliance_2: annotations: skipping for PDF/UA (handled by accessibility group)")
 		return nil
@@ -63,7 +63,7 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 	slog.Debug("compliance_2: annotations: starting checks", "profile", profile, "part", part, "level", level)
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
@@ -130,7 +130,7 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 
 // checkForbiddenAnnotType validates that the annotation subtype is permitted
 // for the given PDF/A part and level (§6.5.2 for part 1, §6.3.1 for parts 2+).
-func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfDict, subtype ast.PdfName, part int, level byte, loc string) []Result {
+func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfDict, subtype ast.PdfName, part int, level byte, loc string) []Violation {
 	forbidden := false
 
 	switch part {
@@ -222,7 +222,7 @@ func forbiddenAnnotTypeRule(part int) Rule {
 
 // check3DStreamSubtype validates that a 3D annotation's stream has /Subtype
 // of either U3D or PRC (§6.1.6.1 t3, PDF/A-4e).
-func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast.PdfDict, loc string) []Result {
+func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast.PdfDict, loc string) []Violation {
 	// The 3D stream is referenced via /3DD key on the annotation.
 	streamObj, ok := annot["3DD"]
 	if !ok {
@@ -247,7 +247,7 @@ func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast
 // Test 2: Print flag must be 1; Hidden, Invisible, NoView must be 0.
 //
 //	In parts 2+, ToggleNoView must also be 0.
-func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfDict, subtype ast.PdfName, part int, loc string) []Result {
+func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfDict, subtype ast.PdfName, part int, loc string) []Violation {
 	fObj, hasF := annot["F"]
 
 	if part == 1 {
@@ -291,7 +291,7 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 }
 
 // checkFlagValues1 checks annotation flag values for PDF/A-1 (§6.5.3 test 2).
-func checkFlagValues1(f int, loc string) []Result {
+func checkFlagValues1(f int, loc string) []Violation {
 	printSet := f&annotFlagPrint != 0
 	hiddenSet := f&annotFlagHidden != 0
 	invisibleSet := f&annotFlagInvisible != 0
@@ -312,7 +312,7 @@ func checkFlagValues1(f int, loc string) []Result {
 }
 
 // checkFlagValues2Plus checks annotation flag values for PDF/A-2+ (§6.3.2 test 2).
-func checkFlagValues2Plus(f, part int, loc string) []Result {
+func checkFlagValues2Plus(f, part int, loc string) []Violation {
 	printSet := f&annotFlagPrint != 0
 	hiddenSet := f&annotFlagHidden != 0
 	invisibleSet := f&annotFlagInvisible != 0
@@ -368,7 +368,7 @@ func flagValueRule(part int) Rule {
 // Test 2: Appearance dict must contain only /N key (parts 2+/4, and part 1 §6.5.3 test 4).
 // Test 3: For Widget/Btn, /N must be a subdictionary.
 // Test 4: For non-Widget or non-Btn, /N must be a stream.
-func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast.PdfDict, subtype ast.PdfName, part int, level byte, loc string) []Result {
+func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast.PdfDict, subtype ast.PdfName, part int, level byte, loc string) []Violation {
 	_ = level // used indirectly via part for rule selection
 
 	isWidget := subtype == "Widget"
@@ -411,7 +411,7 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Test 1: /N must be present in the appearance dict.
 	nObj, hasN := ap["N"]
@@ -495,7 +495,7 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 // checkNValueType validates the type of the /N value in the appearance dictionary.
 // For Widget annotations with FT=Btn, /N must be a subdictionary (test 3).
 // For all other annotations, /N must be a stream (test 4).
-func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string) []Result {
+func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string) []Violation {
 	resolved, err := document.ResolveObject(ctx, doc, nObj)
 	if err != nil {
 		slog.Debug("compliance_2: annotations: failed to resolve /N value", "loc", loc, "error", err)
@@ -605,7 +605,7 @@ func nStreamRule(part int) Rule {
 }
 
 // checkAnnotOpacity validates that /CA is 1.0 if present (§6.5.3 test 1, PDF/A-1 only).
-func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.PdfDict, loc string) []Result {
+func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.PdfDict, loc string) []Violation {
 	caObj, ok := annot["CA"]
 	if !ok {
 		return nil

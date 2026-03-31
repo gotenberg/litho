@@ -826,7 +826,7 @@ func predefinedEncodingNames(name string) map[byte]string {
 // --- Main check group ---
 
 // checkFontGroup validates font-related compliance rules across all pages.
-func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2: fonts: starting font checks", "profile", profile)
 
 	pages := collectPages(ctx, doc, catalog)
@@ -835,7 +835,7 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Track fonts already checked to avoid duplicate violations.
 	checked := make(map[string]bool)
@@ -914,8 +914,8 @@ func checkFontGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 // If isVisible is false, width consistency and embedding checks are skipped
 // (the font is not used for visible rendering). Usage provides per-charCode
 // usage information for ToUnicode exemption checks.
-func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Result {
-	var results []Result
+func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
+	var results []Violation
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 	basefont := fontBaseFont(ctx, doc, fontDict)
@@ -972,7 +972,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 // This is a conservative check: it only fires when there is zero ActualText
 // anywhere, avoiding false positives from ActualText that covers a different
 // span than the PUA character.
-func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict) []Result {
+func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict) []Violation {
 	rule := puaActualTextRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -1095,7 +1095,7 @@ func puaActualTextRule(profile string) Rule {
 // --- Individual check implementations ---
 
 // checkFontEmbedding validates that a font program is embedded (rule 1).
-func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isType3 bool) []Result {
+func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isType3 bool) []Violation {
 	rule := fontEmbeddingRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: embedding check not applicable", "profile", profile)
@@ -1129,7 +1129,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 }
 
 // checkToUnicode validates the ToUnicode mapping requirement (rule 2).
-func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
+func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: ToUnicode check not applicable", "profile", profile)
@@ -1246,8 +1246,8 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 }
 
 // checkTrueTypeEncoding validates TrueType-specific encoding rules (rule 7).
-func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
-	var results []Result
+func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
+	var results []Violation
 
 	fd := findFontDescriptor(ctx, doc, fontDict)
 	symbolic := isSymbolicFont(ctx, doc, fd)
@@ -1350,7 +1350,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 }
 
 // checkFontNameUTF8 validates that the /BaseFont name is valid UTF-8 (rule 8).
-func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := fontNameUTF8Rule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: font name UTF-8 check not applicable", "profile", profile)
@@ -1395,7 +1395,7 @@ const widthTolerance = 1.0
 
 // checkGlyphWidths validates glyph width consistency (rule 5).
 // Compares PDF-declared widths against the embedded font program's binary widths.
-func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
+func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := glyphWidthRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: glyph width check not applicable", "profile", profile)
@@ -1478,7 +1478,7 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
 // charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
-func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Result {
+func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
 		slog.Debug("compliance_2: fonts: font missing /Widths array", "font", fontName, "page", pageNum)
@@ -1539,7 +1539,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 
 // checkType3FontWidths compares /Widths against glyph widths declared by
 // d0/d1 operators in Type3 font CharProcs.
-func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Result {
+func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Violation {
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
 		return nil
@@ -1623,7 +1623,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 }
 
 // checkCIDFontWidths compares /W array against binary widths for CIDFonts.
-func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule) []Result {
+func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule) []Violation {
 	wObj, ok := cidFontDict["W"]
 	if !ok {
 		slog.Debug("compliance_2: fonts: CIDFont has no /W array", "font", fontName)
@@ -1764,8 +1764,8 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 
 // checkType0Font validates composite font properties including descendant
 // CIDFonts, CIDSystemInfo, CIDToGIDMap, and ToUnicode.
-func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
-	results := make([]Result, 0, 4) //nolint:mnd // estimated capacity for composite font checks.
+func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+	results := make([]Violation, 0, 4) //nolint:mnd // estimated capacity for composite font checks.
 
 	basefont := fontBaseFont(ctx, doc, fontDict)
 	slog.Debug("compliance_2: fonts: checking Type0 composite font",
@@ -1847,7 +1847,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 }
 
 // checkCIDToGIDMap validates that Type 2 CIDFonts have a /CIDToGIDMap entry (rule 3).
-func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSubtype, fontName string, pageNum int, profile string) []Result {
+func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSubtype, fontName string, pageNum int, profile string) []Violation {
 	rule := cidToGIDMapRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: CIDToGIDMap check not applicable",
@@ -1898,7 +1898,7 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 
 // checkCIDSystemInfo validates CIDSystemInfo consistency between CIDFont and
 // CMap dictionaries (rule 4).
-func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := cidSystemInfoRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: CIDSystemInfo check not applicable",
@@ -2041,7 +2041,7 @@ func isPredefinedCMap(name string) bool {
 //   - t1: Non-predefined CMaps must be embedded as streams
 //   - t2: Embedded CMap WMode dict value must match stream program value
 //   - t3: Embedded CMap must not reference (usecmap) non-predefined CMaps
-func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	encObj, ok := type0Dict["Encoding"]
 	if !ok {
 		return nil
@@ -2076,7 +2076,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// t2: WMode in dict must match WMode in stream program.
 	// Both default to 0 when absent.
@@ -2108,7 +2108,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 
 // checkCMapCIDValues validates §6.1.12 t10 / §6.1.13 t10: CID values in
 // an embedded encoding CMap must not exceed 65,535.
-func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := cmapCIDRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -2320,7 +2320,7 @@ func parsePredefinedCMapName(name string) (registry, ordering string, supplement
 }
 
 // checkType0ToUnicode validates the ToUnicode requirement for composite fonts (rule 2).
-func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: ToUnicode check not applicable for Type0",
@@ -2359,7 +2359,7 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 // For simple fonts (Type1/TrueType): resolves encoding and checks each used
 // character code. For TrueType with embedded programs: also checks the font's
 // cmap for GID 0 mappings.
-func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
+func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -2458,7 +2458,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 }
 
 // checkNotdefInDifferences checks /Encoding /Differences for explicit ".notdef" entries.
-func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Result {
+func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Violation {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
 		return nil
@@ -2487,7 +2487,7 @@ func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontD
 // (.notdef) in any text operator string, or references a CID that is absent
 // from the embedded font program's charset (also renders as .notdef).
 // For Identity-H/Identity-V encoded fonts, scans raw string bytes for 2-byte CIDs.
-func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Result {
+func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {
 		return nil
@@ -2784,7 +2784,7 @@ func isSubsetFont(basefont string) bool {
 // CIDSet entries in their FontDescriptor.
 // - Type1 subsets: /FontDescriptor must have /CharSet
 // - CIDFont subsets: /FontDescriptor must have /CIDSet
-func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	basefont := fontBaseFont(ctx, doc, fontDict)
 	if !isSubsetFont(basefont) {
 		slog.Debug("compliance_2: fonts: not a subset font, skipping glyph coverage check",
@@ -2841,7 +2841,7 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 // present in the font program. When bidirectional is true, it also checks
 // that every name in /CharSet exists in the font program (required for
 // parts 2/3 but not part 1, which only requires the forward check).
-func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, fontName string, pageNum int, rule Rule, bidirectional bool) []Result {
+func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, fontName string, pageNum int, rule Rule, bidirectional bool) []Violation {
 	charSetNames := make(map[string]bool)
 	for name := range strings.SplitSeq(charSetStr, "/") {
 		if name != "" {
@@ -2885,7 +2885,7 @@ func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, f
 
 // checkCIDFontGlyphCoverage validates that CIDFont subsets have a /CIDSet entry
 // in their FontDescriptor.
-func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	basefont := fontBaseFont(ctx, doc, cidFontDict)
 	if !isSubsetFont(basefont) {
 		slog.Debug("compliance_2: fonts: CIDFont not a subset, skipping CIDSet check",
@@ -2942,7 +2942,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 
 // checkCIDSetCompleteness decodes a CIDSet bitfield stream and verifies
 // it covers all GIDs with non-empty glyph data in the embedded font program.
-func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Result {
+func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
 		return nil
@@ -3012,7 +3012,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 // checkCIDSetCompletenessCFF checks CIDSet completeness for CFF CIDFonts only.
 // This is used for PDF/A-1 where TrueType empty-glyph detection is unreliable
 // but CFF ValidCIDs produces accurate results.
-func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Result {
+func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
 	fd := findFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
 		return nil
@@ -3061,7 +3061,7 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 
 // checkToUnicodeCMapValues validates that a /ToUnicode CMap, if present, is
 // decodable and does not map to invalid Unicode values (U+0000, U+FEFF, U+FFFE).
-func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Result {
+func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := toUnicodeCMapValuesRule(profile)
 	if rule.Specification == "" {
 		slog.Debug("compliance_2: fonts: ToUnicode CMap values check not applicable", "profile", profile)

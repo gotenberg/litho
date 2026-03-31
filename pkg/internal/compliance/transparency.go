@@ -11,7 +11,7 @@ import (
 
 // checkTransparencyGroup validates transparency restrictions required by
 // PDF/A parts 1-4. PDF/UA profiles have no transparency checks.
-func checkTransparencyGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkTransparencyGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 	if part == 0 {
 		slog.Debug("compliance_2/transparency: skipping, not a PDF/A profile", "profile", profile)
@@ -22,7 +22,7 @@ func checkTransparencyGroup(ctx context.Context, doc *document.Document, catalog
 
 	pages := collectPages(ctx, doc, catalog)
 
-	var results []Result
+	var results []Violation
 	if part == 1 {
 		results = checkTransparencyPart1(ctx, doc, pages)
 	} else {
@@ -35,8 +35,8 @@ func checkTransparencyGroup(ctx context.Context, doc *document.Document, catalog
 
 // --- PDF/A-1: transparency is entirely forbidden (§6.4) ---
 
-func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []Result {
-	var results []Result
+func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []Violation {
+	var results []Violation
 	for i, page := range pages {
 		if ctx.Err() != nil {
 			slog.Debug("compliance_2/transparency: context cancelled during page iteration")
@@ -63,7 +63,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 }
 
 // checkPageTransparencyGroup1 checks for forbidden transparency Group on a page (PDF/A-1).
-func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int) []Result {
+func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int) []Violation {
 	groupObj, hasGroup := page["Group"]
 	if !hasGroup {
 		return nil
@@ -85,13 +85,13 @@ func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, pa
 
 // checkExtGStateTransparency1 checks all ExtGState entries for transparency
 // (SMask, BM, CA, ca) which are forbidden in PDF/A-1.
-func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int) []Result {
+func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	for gsName, gsObj := range gsDict {
 		if ctx.Err() != nil {
 			slog.Debug("compliance_2/transparency: context cancelled during ExtGState iteration")
@@ -150,13 +150,13 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 }
 
 // checkXObjectTransparency1 checks XObject entries for forbidden SMask (PDF/A-1).
-func checkXObjectTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int) []Result {
+func checkXObjectTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int) []Violation {
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
 	if err != nil || xobjDict == nil {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	for xoName, xoObj := range xobjDict {
 		if ctx.Err() != nil {
 			slog.Debug("compliance_2/transparency: context cancelled during XObject iteration")
@@ -241,11 +241,11 @@ func blendingCSRule(part int) Rule {
 	return Rule{}
 }
 
-func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, profile string, part int) []Result {
+func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, profile string, part int) []Violation {
 	hasOutputIntent, oiColorSpace := documentOutputIntentInfo(ctx, doc, catalog)
 	slog.Debug("compliance_2/transparency: output intent check", "hasOutputIntent", hasOutputIntent, "oiColorSpace", oiColorSpace)
 
-	var results []Result
+	var results []Violation
 	for i, page := range pages {
 		if ctx.Err() != nil {
 			slog.Debug("compliance_2/transparency: context cancelled during page iteration")
@@ -547,8 +547,8 @@ func resourcesHaveTransparency(ctx context.Context, doc *document.Document, reso
 // checkBlendingCSCompatibility validates that any device CS used as a blending
 // colour space on the page (or in XObjects, annotations, Type 3 fonts) is
 // compatible with the OutputIntent's ICC colour space.
-func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, page ast.PdfDict, resources ast.PdfDict, oiColorSpace string, pageNum int, part int) []Result {
-	var results []Result
+func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, page ast.PdfDict, resources ast.PdfDict, oiColorSpace string, pageNum int, part int) []Violation {
+	var results []Violation
 
 	// Check page-level /Group/CS.
 	pageBlendCS := resolveBlendingDeviceCS(ctx, doc, page)

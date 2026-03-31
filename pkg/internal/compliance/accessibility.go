@@ -14,7 +14,7 @@ import (
 
 // checkAccessibilityGroup validates PDF/UA accessibility requirements.
 // For non-PDF/UA profiles, it returns nil immediately.
-func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !isPDFUA(profile) {
 		slog.Debug("compliance_2/accessibility: skipping for non-PDF/UA profile", "profile", profile)
 		return nil
@@ -22,7 +22,7 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 
 	slog.Debug("compliance_2/accessibility: starting checks", "profile", profile)
 
-	results := make([]Result, 0, 16) //nolint:mnd // estimated capacity for accessibility checks.
+	results := make([]Violation, 0, 16) //nolint:mnd // estimated capacity for accessibility checks.
 
 	// 1. Language (§7.2/§8.2) — /Lang key required in catalog.
 	results = append(results, checkLangRequired(ctx, doc, catalog, profile)...)
@@ -118,7 +118,7 @@ func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalo
 // Rule mapping:
 //   - Missing /Lang or empty /Lang in catalog -> langRequiredRule (t34 for PDF/UA-1, 8.4.4 t01 for PDF/UA-2)
 //   - Present but invalid /Lang format        -> langValidRule (t29 for PDF/UA-1, 8.4.4 t02 for PDF/UA-2)
-func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking /Lang requirement")
 
 	langRule := langRequiredRule(profile)
@@ -171,7 +171,7 @@ func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.P
 // determine their natural language through /Lang inheritance in the structure
 // tree, even when catalog /Lang is absent. An element inherits /Lang from its
 // nearest ancestor that carries a non-empty /Lang value.
-func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Result {
+func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
 		// No structure tree at all — can't determine language for anything.
@@ -203,14 +203,14 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		})
 	}
 
-	var results []Result
+	var results []Violation
 	walkStructureElementsWithLang(ctx, doc, treeRoot, rootLang, func(elem ast.PdfDict, path string, inheritedLang string) {
 		elemLang := resolveNonEmptyLang(ctx, doc, elem)
 		effectiveLang := inheritedLang
 		if elemLang != "" {
 			// Validate format of this element's own /Lang.
 			if !isValidLangTag(elemLang) {
-				results = append(results, Result{Rule: validRule, Context: fmt.Sprintf("lang=%s, %s", elemLang, path)})
+				results = append(results, Violation{Rule: validRule, Context: fmt.Sprintf("lang=%s, %s", elemLang, path)})
 				return
 			}
 			effectiveLang = elemLang
@@ -221,7 +221,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 			// the tree — language is truly not determinable.
 			slog.Debug("compliance_2/accessibility: structure element has no determinable language",
 				"path", path)
-			results = append(results, Result{Rule: langRule, Context: path})
+			results = append(results, Violation{Rule: langRule, Context: path})
 		}
 	})
 
@@ -291,7 +291,7 @@ func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem a
 // natural language. Per PDF/UA-1 §7.2 t2, each outline item's /Title text
 // must have a determinable language: either the item itself has /Lang, or
 // the catalog has /Lang.
-func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
@@ -312,12 +312,12 @@ func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.P
 	}
 
 	// Walk outline items and check for /Lang.
-	var results []Result
+	var results []Violation
 	walkOutlineItemsForLang(ctx, doc, outlines["First"], &results, 0)
 	return results
 }
 
-func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Result, depth int) {
+func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Violation, depth int) {
 	if ctx.Err() != nil || depth > maxStructTreeWalkDepth || itemObj == nil {
 		return
 	}
@@ -344,14 +344,14 @@ func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemOb
 }
 
 // validateStructureLangs walks the structure tree and validates any /Lang entries.
-func validateStructureLangs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, rule Rule) []Result {
+func validateStructureLangs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, rule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
 		slog.Debug("compliance_2/accessibility: no StructTreeRoot for lang validation")
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		langObj, ok := elem["Lang"]
 		if !ok {
@@ -374,7 +374,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		if !isValidLangTag(trimmed) {
 			slog.Debug("compliance_2/accessibility: invalid /Lang in structure element",
 				"lang", trimmed, "path", path)
-			results = append(results, Result{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
+			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})
 
@@ -575,7 +575,7 @@ func isAlphaNumSubtag(s string, min, max int) bool {
 
 // --- 2. DisplayDocTitle ---
 
-func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking /DisplayDocTitle")
 
 	rule := displayDocTitleRule(profile)
@@ -610,7 +610,7 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 
 // --- 3. Suspects ---
 
-func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking /Suspects")
 
 	rule := suspectsRule(profile)
@@ -650,7 +650,7 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 // --- 4. Tab order ---
 
-func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking tab order")
 
 	isPDFUA1 := profile == string("PDF/UA-1")
@@ -663,7 +663,7 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	rule := tabOrderRule(profile)
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
@@ -689,10 +689,10 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			if isPDFUA1 {
 				// PDF/UA-1 §7.18.3: every page with annotations must have /Tabs = /S.
 				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
-				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
+				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			} else if isPDFUA2 {
 				slog.Debug("compliance_2/accessibility: page missing /Tabs", "page", pageIdx)
-				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
+				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			}
 			continue
 		}
@@ -705,10 +705,10 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 		if isPDFUA1 && tabsName != "S" {
 			slog.Debug("compliance_2/accessibility: /Tabs is not /S", "page", pageIdx, "tabs", tabsName)
-			results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
+			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
 		} else if isPDFUA2 && hasAnnots && tabsName != "S" && tabsName != "A" && tabsName != "W" {
 			slog.Debug("compliance_2/accessibility: /Tabs is not /S, /A or /W", "page", pageIdx, "tabs", tabsName)
-			results = append(results, Result{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
+			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
 		}
 	}
 
@@ -717,7 +717,7 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 // --- 5. XMP title ---
 
-func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking XMP dc:title")
 
 	rule := xmpTitleRule(profile)
@@ -739,7 +739,7 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 // --- 6. Figure alt text ---
 
-func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking Figure alt text")
 
 	rule := figureAltRule(profile)
@@ -752,7 +752,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 
 	roleMap := loadRoleMap(ctx, doc, treeRoot)
 
-	var results []Result
+	var results []Violation
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 		// Resolve through RoleMap to catch non-standard types mapped to Figure.
@@ -767,7 +767,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 			if !hasAlt && !hasActualText {
 				slog.Debug("compliance_2/accessibility: Figure missing /Alt and /ActualText", "path", path)
-				results = append(results, Result{Rule: rule, Context: path})
+				results = append(results, Violation{Rule: rule, Context: path})
 			}
 		} else {
 			// PDF/UA-2 §8.2.5.28.2: Figure must have /Alt, /ActualText, or a /Caption child.
@@ -777,7 +777,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			hasCaptionChild := figureHasCaptionChild(ctx, doc, elem)
 			if !hasAlt && !hasActualText && !hasCaptionChild {
 				slog.Debug("compliance_2/accessibility: Figure missing /Alt, /ActualText, or Caption", "path", path)
-				results = append(results, Result{Rule: rule, Context: path})
+				results = append(results, Violation{Rule: rule, Context: path})
 			}
 		}
 	})
@@ -787,7 +787,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 
 // --- 7. Artifact tagging ---
 
-func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Result {
+func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Violation {
 	// Artifact tagging checks require deep content stream analysis to determine
 	// if headers/footers/page numbers are properly marked as Artifact. This is
 	// a heuristic check that cannot be fully validated without rendering. We log
@@ -799,7 +799,7 @@ func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDi
 
 // --- 8. Annotation alt text ---
 
-func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking annotation alt text")
 
 	rule := annotAltRule(profile)
@@ -809,7 +809,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 	structAltMap := buildAnnotStructAltMap(ctx, doc, catalog)
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
@@ -877,7 +877,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 			loc := fmt.Sprintf("page %d, annot %d (/%s)", pageIdx, annotIdx, subtype)
 			slog.Debug("compliance_2/accessibility: annotation missing /Contents and struct /Alt", "loc", loc)
-			results = append(results, Result{Rule: rule, Context: loc})
+			results = append(results, Violation{Rule: rule, Context: loc})
 		}
 	}
 
@@ -1010,11 +1010,11 @@ func resolveRect(ctx context.Context, doc *document.Document, obj ast.PdfObject)
 // checkWidgetAA validates that Widget annotations do not have /AA (additional actions)
 // entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.
 // For PDF/UA-2, if /AA is present, the Widget must have a /Contents entry (§8.10.2.3 t02).
-func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking Widget /AA")
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
@@ -1058,7 +1058,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 				if _, hasContents := annot["Contents"]; !hasContents {
 					slog.Debug("compliance_2/accessibility: Widget has /AA without /Contents",
 						"loc", loc)
-					results = append(results, Result{
+					results = append(results, Violation{
 						Rule:    Rule_14289_2_8_10_2_3_t02,
 						Context: loc,
 					})
@@ -1066,7 +1066,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			} else {
 				// PDF/UA-1: Widget annotations should not have /AA trigger actions.
 				slog.Debug("compliance_2/accessibility: Widget has forbidden /AA", "loc", loc)
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    Rule_14289_1_7_18_1_t03,
 					Context: fmt.Sprintf("widget annotation has /AA at %s", loc),
 				})
@@ -1079,7 +1079,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 // --- 9. OC config names ---
 
-func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2/accessibility: checking OC config names")
 
 	rule := ocConfigNameRule(profile)
@@ -1090,7 +1090,7 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Check default config (/D).
 	dObj, ok := ocProps["D"]
@@ -1099,12 +1099,12 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 		if err == nil && dConfig != nil {
 			if !hasNonEmptyName(ctx, doc, dConfig) {
 				slog.Debug("compliance_2/accessibility: default OC config missing /Name")
-				results = append(results, Result{Rule: rule, Context: "default config (D)"})
+				results = append(results, Violation{Rule: rule, Context: "default config (D)"})
 			}
 			// §7.10 t02 (PDF/UA-1): /AS key forbidden in any OC config dict.
 			if profile == "PDF/UA-1" {
 				if _, hasAS := dConfig["AS"]; hasAS {
-					results = append(results, Result{
+					results = append(results, Violation{
 						Rule: Rule_14289_1_7_10_t02, Context: "default config (D)",
 					})
 				}
@@ -1135,12 +1135,12 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 
 		if !hasNonEmptyName(ctx, doc, cfg) {
 			slog.Debug("compliance_2/accessibility: OC config missing /Name", "index", i)
-			results = append(results, Result{Rule: rule, Context: fmt.Sprintf("config %d", i)})
+			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("config %d", i)})
 		}
 		// §7.10 t02 (PDF/UA-1): /AS key forbidden.
 		if profile == "PDF/UA-1" {
 			if _, hasAS := cfg["AS"]; hasAS {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule: Rule_14289_1_7_10_t02, Context: fmt.Sprintf("config %d", i),
 				})
 			}
@@ -1165,7 +1165,7 @@ func hasNonEmptyName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 
 // --- 10. PDF/UA identification (PDF/UA-2) ---
 
-func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !isPDFUA(profile) {
 		return nil
 	}
@@ -1194,7 +1194,7 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 
 // checkPDFUAIDPrefixes validates that pdfuaid properties use the correct
 // "pdfuaid" namespace prefix and that pdfuaid:rev is a 4-digit year.
-func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !isPDFUA(profile) {
 		return nil
 	}
@@ -1212,7 +1212,7 @@ func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog a
 	pdfuaidPrefix := prefixMap[xmpPdfaIDNamespace]
 	pdfuaPrefix := prefixMap[pdfuaIDNamespace]
 
-	var results []Result
+	var results []Violation
 	raw := string(xmpData)
 
 	if profile == "PDF/UA-1" {
@@ -1309,7 +1309,7 @@ func isFourDigitYear(s string) bool {
 
 // --- 11. Namespaces (PDF/UA-2) ---
 
-func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
@@ -1334,7 +1334,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 		return fail(Rule_14289_2_8_2_4_t01, "Namespaces empty")
 	}
 
-	var results []Result
+	var results []Violation
 	for i, nsEntryObj := range nsArray {
 		if ctx.Err() != nil {
 			return results
@@ -1350,7 +1350,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 		nsURIObj, ok := nsDict["NS"]
 		if !ok {
 			slog.Debug("compliance_2/accessibility: namespace entry missing /NS", "index", i)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    Rule_14289_2_8_2_4_t01,
 				Context: fmt.Sprintf("namespace %d missing /NS", i),
 			})
@@ -1360,7 +1360,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 		nsURI, err := document.ResolveString(ctx, doc, nsURIObj)
 		if err != nil || string(nsURI) == "" {
 			slog.Debug("compliance_2/accessibility: namespace /NS is empty", "index", i)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    Rule_14289_2_8_2_4_t01,
 				Context: fmt.Sprintf("namespace %d has empty /NS", i),
 			})
@@ -1387,7 +1387,7 @@ var standardNamespaceURIs = map[string]bool{
 // checkNamespaceRoleMapping validates PDF/UA-2 §8.2.4:
 // - t1/t4: all structure elements must belong to or be role-mapped to a standard namespace
 // - t3: within a namespace, types shall not be role-mapped to types in the same namespace
-func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
@@ -1419,7 +1419,7 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 	// t3: check each namespace's RoleMapNS. Follow chains through intermediate
 	// namespaces — if the final target resolves back to the source namespace
 	// (directly or indirectly), it's a same-namespace mapping violation.
-	var results []Result
+	var results []Violation
 	for _, nsObj := range nsArr {
 		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
 		if nsDict == nil {
@@ -1488,7 +1488,7 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 }
 
 // walkNSCheck recursively walks structure elements and checks namespace membership.
-func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, results *[]Result) {
+func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, results *[]Violation) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -1616,7 +1616,7 @@ func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcN
 
 // --- 12. Link nesting (PDF/UA-2) ---
 
-func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
@@ -1679,7 +1679,7 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 
 // --- 13. Formula MathML (PDF/UA-2) ---
 
-func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
@@ -1692,7 +1692,7 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 		if typeName != "Formula" {
@@ -1744,7 +1744,7 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		}
 
 		slog.Debug("compliance_2/accessibility: Formula missing /AF, /Alt, /ActualText, and structural children", "path", path)
-		results = append(results, Result{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
+		results = append(results, Violation{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
 	})
 
 	return results
@@ -1781,7 +1781,7 @@ func hasStructuralChildren(ctx context.Context, doc *document.Document, kObj ast
 	return false
 }
 
-func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
@@ -1789,7 +1789,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 	slog.Debug("compliance_2/accessibility: checking invisible annotation artifact requirement")
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
@@ -1837,7 +1837,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 				subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 				loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
 				slog.Debug("compliance_2/accessibility: invisible annotation in structure tree", "loc", loc)
-				results = append(results, Result{Rule: Rule_14289_2_8_9_2_2_t01, Context: loc})
+				results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t01, Context: loc})
 			}
 		}
 	}
@@ -1849,7 +1849,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
 // files contain both /F and /UF keys (ISO 14289-1, §7.11 t01).
-func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !isPDFUA(profile) {
 		return nil
 	}
@@ -1857,7 +1857,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 	slog.Debug("compliance_2/accessibility: checking file specification /F and /UF")
 
 	rule := Rule_14289_1_7_11_t01
-	var results []Result
+	var results []Violation
 
 	// Scan ALL file specification dicts with /EF key (embedded files) for
 	// non-empty /F and /UF. This covers file specs referenced from the
@@ -1889,7 +1889,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 			ufStr, _ := document.ResolveString(ctx, doc, dict["UF"])
 
 			if len(fStr) == 0 || len(ufStr) == 0 {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    rule,
 					Context: fmt.Sprintf("object %d: file spec F=%v UF=%v", objNum, len(fStr) > 0, len(ufStr) > 0),
 				})
@@ -1900,7 +1900,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		if profile == "PDF/UA-2" {
 			descStr, _ := document.ResolveString(ctx, doc, dict["Desc"])
 			if len(descStr) == 0 {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    Rule_14289_2_8_14_1_t01,
 					Context: fmt.Sprintf("object %d: embedded file spec missing /Desc", objNum),
 				})
@@ -2126,7 +2126,7 @@ func containsPDFUAIDPart(xmpData []byte, part string) bool {
 // checkEncryptionPermissions validates PDF/UA-1 §7.16: if encrypted, the
 // /Encrypt dictionary must contain a /P key whose 10th bit is true
 // (accessibility content extraction permitted).
-func checkEncryptionPermissions(doc *document.Document, profile string) []Result {
+func checkEncryptionPermissions(doc *document.Document, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
@@ -2188,7 +2188,7 @@ func checkEncryptionPermissions(doc *document.Document, profile string) []Result
 //   - §7.18.4 t01: Widget annotations must be nested within a Form tag
 //   - §7.18.5 t01: Link annotations must be nested within a Link tag
 //   - §7.18.8 t01: PrinterMark annotations must NOT be in the logical structure
-func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
@@ -2197,7 +2197,7 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 	structParentMap := buildAnnotStructTypeMap(ctx, doc, catalog, profile)
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for _, page := range pages {
 		if ctx.Err() != nil {
@@ -2402,12 +2402,12 @@ func recordOBJRType(ctx context.Context, doc *document.Document, obj ast.PdfObje
 // checkFormXObjectRestrictions validates PDF/UA-1 §7.20:
 //   - t01: Reference XObjects are forbidden (Form XObject with /Ref key)
 //   - t02: Form XObjects with MCIDs must not be referenced more than once
-func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	checkedForRef := make(map[int]bool)
 
 	// Get inherited resources from the Pages tree root (fallback for pages
@@ -2486,7 +2486,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 // scanFormXObjectsUA scans XObject resources for PDF/UA-1 §7.20 t01: /Ref
 // key forbidden. XObjects are streams, so we use ResolveStream.
 // checkedForRef prevents reporting the same object twice.
-func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.PdfDict, results *[]Result, checkedForRef map[int]bool, depth int) {
+func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.PdfDict, results *[]Violation, checkedForRef map[int]bool, depth int) {
 	if depth > 10 || ctx.Err() != nil {
 		return
 	}
@@ -2542,12 +2542,12 @@ func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.Pdf
 // checkPDFUA2FormStructure validates:
 //   - §8.10.1 t02: Form structure element contains at most one widget annotation.
 //   - §8.10.2.3 t01: Widget without label needs /Contents entry.
-func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// §8.10.1 t02: walk structure tree for Form elements with >1 widget OBJR.
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
@@ -2651,12 +2651,12 @@ func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject
 //   - t01: Destinations in outline items, OpenAction, and Link annotations
 //     must be structure destinations (array starting with struct element ref).
 //   - t02: GoTo action destinations must be structure destinations.
-func checkStructureDestinations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkStructureDestinations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Check outline destinations (t01 for /Dest, t02 for /A GoTo).
 	outlinesObj, ok := catalog["Outlines"]
@@ -2693,7 +2693,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 }
 
 // walkOutlineStructDest walks outline items checking destinations.
-func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Result, depth int) {
+func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Violation, depth int) {
 	if depth > 200 || ctx.Err() != nil { //nolint:mnd
 		return
 	}
@@ -2826,13 +2826,13 @@ func annotAltRule(profile string) Rule {
 
 // checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
 // have a non-empty /Contents key providing an alternate description.
-func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 	for _, page := range pages {
 		if ctx.Err() != nil {
 			return results
@@ -2863,12 +2863,12 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 // checkMediaClipData validates PDF/UA-1 §7.18.6.2: media clip data dicts
 // must have /CT (content type, t01) and /Alt (alternative text, t02).
 // Finds media clips via Screen annotation → Rendition action → clip → data.
-func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
@@ -2963,13 +2963,13 @@ const (
 //   - t1: Artifact content must not appear inside tagged content
 //   - t2: Tagged content must not appear inside Artifact
 //   - t3: All painting operators must be inside a marked content span
-func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !isPDFUA(profile) {
 		return nil
 	}
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for _, page := range pages {
 		if ctx.Err() != nil {
@@ -3119,7 +3119,7 @@ func ocConfigNameRule(profile string) Rule {
 // or all its Widget annotations shall have alternative descriptions."
 // This check validates /TU presence and non-emptiness. The alternative
 // (Widget Alt in structure tree) is not checked due to complexity.
-func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
@@ -3134,7 +3134,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	for _, fieldObj := range fields {
 		results = append(results, checkFieldTURecursive(ctx, doc, fieldObj, 0)...)
 	}
@@ -3218,7 +3218,7 @@ func formStructElementHasAlt(ctx context.Context, doc *document.Document, node a
 }
 
 // checkFieldTURecursive checks a form field (and its children) for /TU.
-func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int) []Result {
+func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int) []Violation {
 	if depth > 10 { //nolint:mnd
 		return nil
 	}
@@ -3269,7 +3269,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 	if err != nil {
 		return nil
 	}
-	var results []Result
+	var results []Violation
 	for _, kid := range kids {
 		results = append(results, checkFieldTURecursive(ctx, doc, kid, depth+1)...)
 	}

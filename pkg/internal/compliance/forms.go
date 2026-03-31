@@ -11,7 +11,7 @@ import (
 // checkFormGroup validates interactive form compliance for PDF/A and PDF/UA
 // profiles. It checks form field appearances, XFA prohibition, and form field
 // accessibility tooltips.
-func checkFormGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkFormGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 	ua := isPDFUA(profile)
 
@@ -29,7 +29,7 @@ func checkFormGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// §6.4.2 (parts 2+/4): XFA forbidden.
 	if part >= 2 || ua {
@@ -73,7 +73,7 @@ func checkFormGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 const maxFieldTreeDepth = 100
 
 // checkFormField validates a single form field and recurses into child fields.
-func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, profile string, part int, ua bool, fieldIdx int, results *[]Result, depth int) {
+func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, profile string, part int, ua bool, fieldIdx int, results *[]Violation, depth int) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
 		return
 	}
@@ -116,7 +116,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 }
 
 // checkXFA validates that /AcroForm does not contain the /XFA key.
-func checkXFA(_ context.Context, _ *document.Document, acroForm ast.PdfDict, profile string, part int, ua bool, results *[]Result) {
+func checkXFA(_ context.Context, _ *document.Document, acroForm ast.PdfDict, profile string, part int, ua bool, results *[]Violation) {
 	slog.Debug("compliance_2/forms: checking for /XFA")
 
 	if _, hasXFA := acroForm["XFA"]; !hasXFA {
@@ -131,7 +131,7 @@ func checkXFA(_ context.Context, _ *document.Document, acroForm ast.PdfDict, pro
 }
 
 // checkNeedAppearances validates the NeedAppearances flag is not true.
-func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm ast.PdfDict, part int, results *[]Result) {
+func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm ast.PdfDict, part int, results *[]Violation) {
 	slog.Debug("compliance_2/forms: checking NeedAppearances flag")
 
 	naObj, ok := acroForm["NeedAppearances"]
@@ -154,7 +154,7 @@ func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm 
 
 // checkFieldAppearance validates that a form field has an /AP appearance
 // dictionary.
-func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, fieldIdx int, results *[]Result) {
+func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, fieldIdx int, results *[]Violation) {
 	// Fields with /Kids but no /FT are non-terminal; skip appearance check.
 	if _, hasKids := field["Kids"]; hasKids {
 		if _, hasFT := field["FT"]; !hasFT {
@@ -261,7 +261,7 @@ func resolveNumber(ctx context.Context, doc *document.Document, obj ast.PdfObjec
 
 // checkFieldTooltip validates that a form field has a /TU tooltip entry
 // for accessibility (PDF/UA).
-func checkFieldTooltip(ctx context.Context, doc *document.Document, field ast.PdfDict, profile string, fieldIdx int, results *[]Result) {
+func checkFieldTooltip(ctx context.Context, doc *document.Document, field ast.PdfDict, profile string, fieldIdx int, results *[]Violation) {
 	// Only check terminal fields (those with /FT or without /Kids).
 	if _, hasKids := field["Kids"]; hasKids {
 		if _, hasFT := field["FT"]; !hasFT {

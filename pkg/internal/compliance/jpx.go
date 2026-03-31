@@ -40,7 +40,7 @@ func jpxRulesForPart(part int) jpxRules {
 
 // checkJPXImage validates JPEG2000 data stream constraints for an Image XObject
 // with JPXDecode filter.
-func checkJPXImage(stream ast.PdfStream, name ast.PdfName, pageNum, part int) []Result {
+func checkJPXImage(stream ast.PdfStream, name ast.PdfName, pageNum, part int) []Violation {
 	rules := jpxRulesForPart(part)
 	if rules.t1.Specification == "" {
 		return nil
@@ -131,7 +131,7 @@ func parseCOLR(payload []byte) (colrInfo, bool) {
 	return ci, true
 }
 
-func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Result {
+func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Violation {
 	boxes := parseJP2Boxes(data)
 
 	// Find jp2h superbox.
@@ -174,7 +174,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 		}
 	}
 
-	var results []Result
+	var results []Violation
 
 	// t1: Number of colour channels must be 1, 3, or 4.
 	if numComponents != 1 && numComponents != 3 && numComponents != 4 { //nolint:mnd
@@ -230,13 +230,13 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 
 // --- Raw J2K codestream ---
 
-func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Result {
+func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Violation {
 	numComponents, ssiz, err := parseJ2KSIZMarker(data)
 	if err != nil {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// t1: channels must be 1, 3, or 4.
 	if numComponents != 1 && numComponents != 3 && numComponents != 4 { //nolint:mnd
@@ -295,7 +295,7 @@ func (e *truncatedError) Error() string { return "truncated JPEG2000 data" }
 
 // checkBitDepths validates t5: all channels must have bit depth 1-38 and
 // all channels must have the same bit depth.
-func checkBitDepths(results *[]Result, ssiz []byte, name ast.PdfName, pageNum int, rule Rule) {
+func checkBitDepths(results *[]Violation, ssiz []byte, name ast.PdfName, pageNum int, rule Rule) {
 	if len(ssiz) == 0 {
 		return
 	}

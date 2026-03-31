@@ -77,7 +77,7 @@ var allowedInlineImageFiltersPart4 = map[string]bool{
 // checkContentGroup validates content stream operators for PDF/A conformance.
 // It checks for unknown operators, q/Q nesting depth, and forbidden inline
 // image filters. For PDF/UA profiles, no content stream checks are performed.
-func checkContentGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkContentGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
 		slog.Debug("compliance_2/content: skipping for PDF/UA profile", "profile", profile)
 		return nil
@@ -92,7 +92,7 @@ func checkContentGroup(ctx context.Context, doc *document.Document, catalog ast.
 	slog.Debug("compliance_2/content: starting checks", "profile", profile, "part", part)
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for i, page := range pages {
 		if ctx.Err() != nil {
@@ -111,7 +111,7 @@ func checkContentGroup(ctx context.Context, doc *document.Document, catalog ast.
 }
 
 // checkPageContent validates the content streams of a single page.
-func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int) []Result {
+func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int) []Violation {
 	// Get raw decoded content stream bytes for inline image scanning.
 	streamData, err := getPageContentBytes(ctx, doc, page)
 	if err != nil {
@@ -135,7 +135,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 
 	slog.Debug("compliance_2/content: parsed operations", "page", pageNum, "count", len(ops))
 
-	var results []Result
+	var results []Violation
 
 	// Check operators and q/Q nesting.
 	qDepth := 0
@@ -235,8 +235,8 @@ func getPageContentBytes(ctx context.Context, doc *document.Document, page ast.P
 // Image) operators and checks whether any forbidden filters (LZW, Crypt) are
 // used. The scan looks for the BI keyword followed by inline image dictionary
 // key/value pairs, checking /F and /Filter entries.
-func checkInlineImageFilters(data []byte, part, pageNum int) []Result {
-	var results []Result
+func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
+	var results []Violation
 
 	// Scan for BI tokens in the raw byte stream. BI must appear as a
 	// standalone keyword (preceded by whitespace or start of stream).

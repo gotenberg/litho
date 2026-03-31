@@ -16,7 +16,7 @@ import (
 //   - §6.2.2/6.2.3: OutputIntent ICC profiles
 //   - §6.2.3.3 / §6.2.4.3: device-dependent colour space restrictions
 //   - §6.2.3.2 / §6.2.4.2: ICCBased profile restrictions
-func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 	if part == 0 {
 		slog.Debug("compliance_2/color: skipping color checks for non-PDF/A profile", "profile", profile)
@@ -25,7 +25,7 @@ func checkColorGroup(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 	slog.Debug("compliance_2/color: starting color checks", "profile", profile, "part", part)
 
-	var results []Result
+	var results []Violation
 
 	// --- §6.2.2 / §6.2.3: OutputIntent ICC profile validation ---
 	iccColorSpace, hasICC := checkOutputIntentICC(ctx, doc, catalog, part, &results)
@@ -92,7 +92,7 @@ var validICCColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant
 // checkOutputIntentICC validates OutputIntent ICC profiles per §6.2.2 (part 1)
 // or §6.2.3 (parts 2-4). It returns the ICC colour space string and whether a
 // valid ICC profile was found.
-func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Result) (string, bool) {
+func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) (string, bool) {
 	slog.Debug("compliance_2/color: checking OutputIntent ICC profiles")
 
 	outputIntents, err := document.ResolveArray(ctx, doc, catalog["OutputIntents"])
@@ -322,7 +322,7 @@ func normaliseICCProfileID(data []byte) []byte {
 
 // checkDeviceColorSpaces validates that device-dependent colour spaces
 // (DeviceRGB, DeviceCMYK, DeviceGray) are only used when allowed.
-func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, hasICC bool, iccColorSpace string, results *[]Result) {
+func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
 	slog.Debug("compliance_2/color: checking device-dependent colour spaces")
 
 	pages := collectPages(ctx, doc, catalog)
@@ -1420,7 +1420,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 // checkSeparationDeviceN validates Separation and DeviceN colour space
 // consistency per §6.2.4.4. It ensures that the same colorant name always maps
 // to the same alternate colour space across the entire document.
-func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Result) {
+func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) {
 	slog.Debug("compliance_2/color: checking Separation/DeviceN colour space consistency")
 
 	// colorantAlternates tracks colorant name -> first alternate space seen.
@@ -1474,14 +1474,14 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 
 // scanSeparationDeviceNInResources scans a resources dictionary for Separation
 // and DeviceN colour space arrays and validates colorant-to-alternate consistency.
-func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result) {
+func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
 	visited := make(map[string]bool)
 	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, 0, visited)
 }
 
 // scanSeparationDeviceNRecursive scans resources (and Form XObject sub-resources)
 // for Separation and DeviceN colour space arrays.
-func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result, depth int, visited map[string]bool) {
+func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, depth int, visited map[string]bool) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
@@ -1543,7 +1543,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 
 // checkSeparationCS validates a Separation colour space array:
 // [/Separation /ColorantName /AlternateSpace /TintTransform]
-func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result) {
+func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
 	if len(arr) < 4 { //nolint:mnd
 		return
 	}
@@ -1708,7 +1708,7 @@ func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObj
 
 // checkDeviceNCS validates a DeviceN colour space array:
 // [/DeviceN [/names...] /AlternateSpace /TintTransform ...]
-func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Result) {
+func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
 	if len(arr) < 4 {
 		slog.Debug("compliance_2/color: DeviceN array too short", "page", pageIdx, "cs", csName, "len", len(arr))
 		return
@@ -1898,7 +1898,7 @@ func deviceNConsistencyRule(part int) Rule {
 
 // checkICCBasedProfiles validates ICCBased colour space profiles per
 // §6.2.3.2 (part 1) or §6.2.4.2 (parts 2-4).
-func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Result) {
+func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) {
 	slog.Debug("compliance_2/color: checking ICCBased profiles")
 
 	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).
@@ -1972,7 +1972,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 
 // scanICCBasedRecursive scans Form XObject sub-resources recursively for
 // ICCBased colour spaces.
-func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Result, depth int, visited map[string]bool) {
+func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
@@ -2087,7 +2087,7 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 
 // checkICCBasedInResources scans a page's resources for ICCBased colour spaces
 // and validates them.
-func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, usedCSNames map[string]bool, results *[]Result) {
+func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, usedCSNames map[string]bool, results *[]Violation) {
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err != nil || csDict == nil {
 		return
@@ -2239,7 +2239,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 // checkSingleICCBased validates a single ICCBased profile stream for the CMYK
 // identity restriction (§6.2.4.2 t3). Used for ICCBased profiles found inside
 // Separation/DeviceN alternate colour spaces.
-func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj ast.PdfObject, part int, pageIdx int, csName ast.PdfName, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Result) {
+func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj ast.PdfObject, part int, pageIdx int, csName ast.PdfName, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation) {
 	if part < 2 { //nolint:mnd
 		return
 	}

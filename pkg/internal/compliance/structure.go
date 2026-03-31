@@ -59,7 +59,7 @@ const maxStructTreeDepth = 200
 // PDF/UA profiles. For PDF/A level 'a' it checks MarkInfo and StructTreeRoot.
 // For PDF/UA it additionally validates tag containment, role maps, heading
 // hierarchy, table structure, list structure, captions, and TH scope.
-func checkStructureGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkStructureGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 	level := pdfaLevel(profile)
 	ua := isPDFUA(profile)
@@ -68,7 +68,7 @@ func checkStructureGroup(ctx context.Context, doc *document.Document, catalog as
 		"profile", profile, "part", part, "level", level, "ua", ua,
 	)
 
-	var results []Result
+	var results []Violation
 
 	// MarkInfo is required for PDF/A level 'a' and all PDF/UA profiles.
 	if level == 'a' || ua {
@@ -122,7 +122,7 @@ func checkStructureGroup(ctx context.Context, doc *document.Document, catalog as
 }
 
 // checkMarkInfo validates that the catalog contains /MarkInfo with /Marked=true.
-func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, results *[]Result) {
+func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, results *[]Violation) {
 	slog.Debug("compliance_2/structure: checking MarkInfo")
 
 	markInfoObj, ok := catalog["MarkInfo"]
@@ -155,7 +155,7 @@ func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 // checkStructTreeRoot validates the presence of /StructTreeRoot in the catalog.
 // Returns the resolved StructTreeRoot dict, or nil if absent.
-func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, level byte, ua bool, results *[]Result) ast.PdfDict {
+func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, level byte, ua bool, results *[]Violation) ast.PdfDict {
 	if level != 'a' && !ua {
 		return nil
 	}
@@ -183,7 +183,7 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 // checkRoleMap validates the /RoleMap dictionary in the structure tree root.
 // Non-standard tags must map to standard types, standard tags must not be
 // remapped, and no circular mappings may exist.
-func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Result) {
+func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
 	slog.Debug("compliance_2/structure: checking RoleMap")
 
 	rmObj, ok := structTreeRoot["RoleMap"]
@@ -249,7 +249,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 
 // resolveToStandard follows the role map chain from src and returns true if it
 // terminates at a standard type. Reports circular mappings and unmapped types.
-func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, results *[]Result, profile string) bool {
+func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, results *[]Violation, profile string) bool {
 	visited := map[ast.PdfName]bool{src: true}
 	current := src
 
@@ -287,7 +287,7 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 // walkStructureTree recursively walks the structure tree to validate element
 // containment, heading hierarchy, table structure, list structure, captions,
 // and TH scope attributes.
-func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Result) {
+func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
 	slog.Debug("compliance_2/structure: walking structure tree")
 
 	kidsObj, ok := structTreeRoot["K"]
@@ -319,7 +319,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 type walkState struct {
 	doc     *document.Document
 	profile string
-	results *[]Result
+	results *[]Violation
 
 	// headingLevels tracks all heading levels encountered in document order.
 	headingLevels []int
@@ -1235,8 +1235,8 @@ func resolveAttributeValue(ctx context.Context, doc *document.Document, elem ast
 
 // checkActualTextPUA validates PDF/A-4 §6.2.10.8: ActualText entries shall not
 // contain Unicode PUA values (U+E000-U+F8FF, U+F0000-U+FFFFD, U+100000-U+10FFFD).
-func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, treeRoot ast.PdfDict) []Result {
-	var results []Result
+func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, treeRoot ast.PdfDict) []Violation {
+	var results []Violation
 
 	// Check structure element ActualText and Alt.
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
@@ -1401,7 +1401,7 @@ func isMathMLType(typeName ast.PdfName) bool {
 // checkUnmappedStructTypes walks the structure tree and flags non-standard
 // types that are not in the /RoleMap. This catches types used in the document
 // but never declared in the role mapping.
-func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Result) {
+func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
 	roleMap := loadRoleMap(ctx, doc, structTreeRoot)
 	rule := roleMapNonStandardRule(profile)
 	if rule.Specification == "" {
@@ -1429,7 +1429,7 @@ func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, struc
 
 // checkSingleDocumentRoot validates PDF/UA-2 §8.2.5.2: StructTreeRoot must
 // contain exactly one child with type Document.
-func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, results *[]Result) {
+func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, results *[]Violation) {
 	kObj, ok := structTreeRoot["K"]
 	if !ok {
 		*results = append(*results, fail(Rule_14289_2_8_2_5_2_t01,
@@ -1635,12 +1635,12 @@ func findHeadersInAttributes(ctx context.Context, doc *document.Document, aObj a
 // checkPDFALangValid validates §6.8.4 (PDF/A-1) / §6.7.3.4 (PDF/A-2/3):
 // if a /Lang entry is present in the catalog or structure elements, its value
 // must be a valid RFC 3066 language tag.
-func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	slog.Debug("compliance_2/structure: checking /Lang validity for PDF/A level 'a'", "profile", profile)
 
 	rule := pdfaLangValidRule(part)
 
-	var results []Result
+	var results []Violation
 
 	// Check catalog /Lang.
 	if langObj, ok := catalog["Lang"]; ok {
@@ -1649,7 +1649,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 			if trimmed != "" && !isValidLangTag(trimmed) {
 				slog.Debug("compliance_2/structure: catalog /Lang is invalid", "lang", trimmed)
-				results = append(results, Result{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
+				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
 			}
 		}
 	}
@@ -1673,7 +1673,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		if trimmed != "" && !isValidLangTag(trimmed) {
 			slog.Debug("compliance_2/structure: invalid /Lang in structure element",
 				"lang", trimmed, "path", path)
-			results = append(results, Result{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
+			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})
 
@@ -1736,7 +1736,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 				}
 				trimmed := strings.TrimSpace(langVal)
 				if trimmed != "" && !isValidLangTag(trimmed) {
-					results = append(results, Result{
+					results = append(results, Violation{
 						Rule:    rule,
 						Context: fmt.Sprintf("lang=%s, page %d inline BDC", trimmed, pageIdx+1),
 					})
@@ -1760,7 +1760,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 			}
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 			if trimmed != "" && !isValidLangTag(trimmed) {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    rule,
 					Context: fmt.Sprintf("lang=%s, page %d property %s", trimmed, pageIdx+1, propName),
 				})

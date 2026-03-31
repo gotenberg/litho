@@ -42,10 +42,10 @@ const (
 )
 
 // checkFileStructureGroup validates PDF file structure rules (§6.1).
-func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkFileStructureGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	slog.Debug("compliance_2: file_structure: starting checks", "profile", profile)
 
-	var results []Result
+	var results []Violation
 
 	results = append(results, checkFileHeader(doc, profile)...)
 	results = append(results, checkTrailerID(doc, profile)...)
@@ -339,7 +339,7 @@ func xrefStreamForbiddenRule(_ string) Rule {
 
 // checkFileHeader validates §6.1.2: file must start with %PDF-x.y and have
 // a binary comment marker.
-func checkFileHeader(doc *document.Document, profile string) []Result {
+func checkFileHeader(doc *document.Document, profile string) []Violation {
 	buf, err := safeReadHeader(doc, headerReadSize)
 	if err != nil {
 		slog.Debug("compliance_2: file_structure: cannot read header", "error", err)
@@ -387,7 +387,7 @@ func checkFileHeader(doc *document.Document, profile string) []Result {
 
 	// After %PDF-x.y, byte 8 must be an EOL marker immediately.
 	// No extra digits, spaces, or other characters between version and EOL.
-	var results []Result
+	var results []Violation
 	if len(buf) <= 8 || (buf[8] != '\n' && buf[8] != '\r') { //nolint:mnd
 		slog.Debug("compliance_2: file_structure: byte after version is not EOL",
 			"byte", buf[8])
@@ -426,7 +426,7 @@ func checkFileHeader(doc *document.Document, profile string) []Result {
 		if b <= 127 { //nolint:mnd // PDF spec: each byte > 127
 			slog.Debug("compliance_2: file_structure: binary comment byte not > 127",
 				"index", i, "value", b)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    fileBinaryCommentRule(profile),
 				Context: fmt.Sprintf("binary comment byte %d has value %d (must be > 127)", i, b),
 			})
@@ -439,7 +439,7 @@ func checkFileHeader(doc *document.Document, profile string) []Result {
 }
 
 // checkTrailerID validates §6.1.3: trailer must contain /ID key.
-func checkTrailerID(doc *document.Document, profile string) []Result {
+func checkTrailerID(doc *document.Document, profile string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		slog.Debug("compliance_2: file_structure: no trailer dictionary")
@@ -486,7 +486,7 @@ func checkTrailerID(doc *document.Document, profile string) []Result {
 // ID and the modified file ID — they legitimately differ in linearized PDFs
 // (the second entry is updated during linearization), so we only verify
 // presence, not equality.
-func checkLinearizedID(doc *document.Document, _ string) []Result {
+func checkLinearizedID(doc *document.Document, _ string) []Violation {
 	trailer := doc.Index.Trailer
 	idObj, hasID := trailer["ID"]
 	if !hasID {
@@ -505,7 +505,7 @@ func checkLinearizedID(doc *document.Document, _ string) []Result {
 }
 
 // checkEncryptionForbidden validates §6.1.3: /Encrypt must not be in trailer.
-func checkEncryptionForbidden(doc *document.Document, profile string) []Result {
+func checkEncryptionForbidden(doc *document.Document, profile string) []Violation {
 	if doc.IsEncrypted {
 		slog.Debug("compliance_2: file_structure: document is encrypted")
 		return fail(encryptRule(profile), "document is encrypted")
@@ -525,7 +525,7 @@ func checkEncryptionForbidden(doc *document.Document, profile string) []Result {
 
 // checkPostEOFData validates §6.1.3: no data after the last %%EOF marker,
 // except an optional single EOL.
-func checkPostEOFData(doc *document.Document, profile string) []Result {
+func checkPostEOFData(doc *document.Document, profile string) []Violation {
 	fileSize := doc.FileSize()
 	if fileSize <= 0 {
 		slog.Debug("compliance_2: file_structure: unknown file size, skipping post-EOF check")
@@ -580,9 +580,9 @@ func checkPostEOFData(doc *document.Document, profile string) []Result {
 
 // checkStreamExternalKeys validates §6.1.7: stream dicts must not contain
 // /F, /FFilter, or /FDecodeParms.
-func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profile string) []Result {
+func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profile string) []Violation {
 	forbiddenKeys := []ast.PdfName{"F", "FFilter", "FDecodeParms"}
-	var results []Result
+	var results []Violation
 
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
@@ -607,7 +607,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 		if len(found) > 0 {
 			slog.Debug("compliance_2: file_structure: stream has forbidden external keys",
 				"object", objNum, "keys", found)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    streamExternalKeysRule(profile),
 				Context: fmt.Sprintf("object %d: stream dict contains %v", objNum, found),
 			})
@@ -621,8 +621,8 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 }
 
 // checkStreamLZW validates §6.1.10: LZWDecode filter is not permitted.
-func checkStreamLZW(ctx context.Context, doc *document.Document, profile string) []Result {
-	var results []Result
+func checkStreamLZW(ctx context.Context, doc *document.Document, profile string) []Violation {
+	var results []Violation
 
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
@@ -641,7 +641,7 @@ func checkStreamLZW(ctx context.Context, doc *document.Document, profile string)
 		if hasLZWFilter(ctx, doc, stream.Dict) {
 			slog.Debug("compliance_2: file_structure: LZW filter found",
 				"object", objNum)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    lzwFilterRule(profile),
 				Context: fmt.Sprintf("object %d uses LZWDecode filter", objNum),
 			})
@@ -700,13 +700,13 @@ var standardFilters = map[string]bool{
 // checkNonStandardFilters validates that all stream /Filter names are
 // from the standard set (case-sensitive). Non-standard filter names
 // like /Flatedecode (wrong case) are forbidden.
-func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string) []Result {
+func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string) []Violation {
 	rule := streamFilterRule(profile)
 	if rule.Specification == "" {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
 			return results
@@ -725,7 +725,7 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 		// Single filter name.
 		if name, err := document.ResolveName(ctx, doc, filterObj); err == nil && name != "" {
 			if !standardFilters[string(name)] {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    rule,
 					Context: fmt.Sprintf("object %d uses non-standard filter /%s", objNum, name),
 				})
@@ -737,7 +737,7 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 			for _, elem := range arr {
 				if n, err := document.ResolveName(ctx, doc, elem); err == nil && n != "" {
 					if !standardFilters[string(n)] {
-						results = append(results, Result{
+						results = append(results, Violation{
 							Rule:    rule,
 							Context: fmt.Sprintf("object %d uses non-standard filter /%s", objNum, n),
 						})
@@ -762,7 +762,7 @@ func streamFilterRule(profile string) Rule {
 // checkContentStreamHexStrings parses page content streams with format
 // checking enabled to detect hex string violations: odd digit count
 // (§6.1.6 t1) and non-hex characters (§6.1.6 t2).
-func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	oddRule := hexStringRule(profile)
 	if oddRule.Specification == "" {
 		return nil
@@ -770,7 +770,7 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 	charRule := hexStringInvalidCharRule(profile)
 
 	pages := collectPages(ctx, doc, catalog)
-	var results []Result
+	var results []Violation
 
 	for i, page := range pages {
 		if ctx.Err() != nil {
@@ -788,7 +788,7 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 			if bytes.Contains([]byte(msg), []byte("invalid character")) {
 				rule = charRule
 			}
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("page %d: %s", i+1, msg),
 			})
@@ -799,13 +799,13 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 }
 
 // checkEmbeddedFiles validates §6.1.11: embedded files are forbidden in PDF/A-1.
-func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if pdfaPart(profile) != 1 {
 		slog.Debug("compliance_2: file_structure: embedded files check skipped (not PDF/A-1)")
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Check for /EmbeddedFiles in the Names dictionary.
 	namesObj, ok := catalog["Names"]
@@ -842,7 +842,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 		if _, hasEF := dict["EF"]; hasEF {
 			slog.Debug("compliance_2: file_structure: file spec dict has /EF key",
 				"object", objNum)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    embeddedFilesEFRule(profile),
 				Context: fmt.Sprintf("object %d: file specification contains EF key", objNum),
 			})
@@ -859,13 +859,13 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 // resolveAllObjects. These include hex string format issues (§6.1.6) and
 // object header format issues (§6.1.8/§6.1.9) detected by the parser when
 // ComplianceMode is enabled.
-func checkFormatViolations(doc *document.Document, profile string) []Result {
+func checkFormatViolations(doc *document.Document, profile string) []Violation {
 	if len(doc.FormatViolations) == 0 {
 		slog.Debug("compliance_2: file_structure: no parser format violations")
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	hexRule := hexStringRule(profile)
 	objRule := objHeaderRule(profile)
 	streamRule := streamFormatRule(profile)
@@ -891,7 +891,7 @@ func checkFormatViolations(doc *document.Document, profile string) []Result {
 			rule = hexStringInvalidCharRule(profile)
 		}
 
-		results = append(results, Result{
+		results = append(results, Violation{
 			Rule:    rule,
 			Context: msg,
 		})
@@ -932,14 +932,14 @@ func containsObjHeaderPattern(msg string) bool {
 // cached and skip header validation. This function reads from the underlying
 // io.ReaderAt to check that there is no non-EOL whitespace between the
 // preceding EOL marker and the object number digits (§6.1.8/§6.1.9).
-func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []Result {
+func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []Violation {
 	r := doc.RawReader()
 	if r == nil {
 		return nil
 	}
 
 	rule := objHeaderRule(profile)
-	var results []Result
+	var results []Violation
 
 	for objNum, entry := range doc.Index.Entries {
 		if entry.Free || entry.Type != xref.XRefTypeNormal {
@@ -977,7 +977,7 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []R
 		// The byte immediately before the first digit must be an EOL (LF or CR).
 		prevByte := data[digitPos-1]
 		if prevByte != '\n' && prevByte != '\r' {
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("compliance: obj header %d: object number not preceded by EOL marker (0x%02X)", objNum, prevByte),
 			})
@@ -994,7 +994,7 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []R
 // checkXRefTableByteFormat validates xref table raw-byte formatting by calling
 // the document's ValidateXRefTableFormat for each recorded xref table offset.
 // Any violations are collected in doc.FormatViolations and then mapped to rules.
-func checkXRefTableByteFormat(doc *document.Document, profile string) []Result {
+func checkXRefTableByteFormat(doc *document.Document, profile string) []Violation {
 	if len(doc.XRefTableOffsets) == 0 {
 		return nil
 	}
@@ -1011,7 +1011,7 @@ func checkXRefTableByteFormat(doc *document.Document, profile string) []Result {
 	}
 
 	// Map new violations to rules.
-	var results []Result
+	var results []Violation
 	for _, v := range doc.FormatViolations[prevCount:] {
 		rule := xrefFormatRule(profile)
 		// PDF/A-1 distinguishes t01 (subsection header spacing) from
@@ -1019,7 +1019,7 @@ func checkXRefTableByteFormat(doc *document.Document, profile string) []Result {
 		if pdfaPart(profile) == 1 && isXrefEOLViolation(v.Error()) {
 			rule = Rule_19005_1_6_1_4_t02
 		}
-		results = append(results, Result{
+		results = append(results, Violation{
 			Rule:    rule,
 			Context: v.Error(),
 		})
@@ -1068,16 +1068,16 @@ func streamFormatRule(profile string) Rule {
 
 // checkNumericLimits validates §6.1.12/6.1.13: numeric value limits for
 // names, strings, integers, reals, arrays, dicts, and indirect objects.
-func checkNumericLimits(ctx context.Context, doc *document.Document, profile string) []Result {
+func checkNumericLimits(ctx context.Context, doc *document.Document, profile string) []Violation {
 	part := pdfaPart(profile)
-	var results []Result
+	var results []Violation
 
 	// Check indirect object count.
 	objCount := len(doc.Index.Entries)
 	if objCount > maxIndirectObjs {
 		slog.Debug("compliance_2: file_structure: too many indirect objects",
 			"count", objCount)
-		results = append(results, Result{
+		results = append(results, Violation{
 			Rule:    indirectObjCountRule(profile),
 			Context: fmt.Sprintf("indirect object count %d exceeds %d", objCount, maxIndirectObjs),
 		})
@@ -1118,7 +1118,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 // streams and checks string/integer operands for implementation limit
 // violations. Only actual content streams are scanned — not ICC profiles,
 // font programs, or other binary streams.
-func checkContentStreamLimits(ctx context.Context, doc *document.Document, part int, profile string) []Result {
+func checkContentStreamLimits(ctx context.Context, doc *document.Document, part int, profile string) []Violation {
 	catalog, err := getCatalog(ctx, doc)
 	if err != nil || catalog == nil {
 		return nil
@@ -1128,7 +1128,7 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 	if part >= 2 { //nolint:mnd
 		maxStr = maxStringBytes2
 	}
-	var results []Result
+	var results []Violation
 	visited := make(map[int]bool)
 
 	for _, page := range pages {
@@ -1168,7 +1168,7 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 
 // scanStreamOperandLimits decodes a content stream and checks string/integer
 // operands for limit violations.
-func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string) []Result {
+func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string) []Violation {
 	data, err := doc.DecodeStream(stream)
 	if err != nil || len(data) == 0 {
 		return nil
@@ -1177,13 +1177,13 @@ func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNu
 	if err != nil {
 		return nil
 	}
-	var results []Result
+	var results []Violation
 	for _, op := range ops {
 		for _, operand := range op.Operands {
 			switch v := operand.(type) {
 			case ast.PdfString:
 				if len(v) > maxStr {
-					results = append(results, Result{
+					results = append(results, Violation{
 						Rule:    stringLengthRule(profile),
 						Context: fmt.Sprintf("object %d (stream content): string length %d exceeds %d", objNum, len(v), maxStr),
 					})
@@ -1191,7 +1191,7 @@ func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNu
 			case ast.PdfInt:
 				val := int64(v)
 				if val > maxIntegerValue || val < minIntegerValue {
-					results = append(results, Result{
+					results = append(results, Violation{
 						Rule:    integerRangeRule(profile),
 						Context: fmt.Sprintf("object %d (stream content): integer %d out of range", objNum, val),
 					})
@@ -1200,7 +1200,7 @@ func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNu
 				// TJ arrays can contain strings.
 				for _, elem := range v {
 					if s, ok := elem.(ast.PdfString); ok && len(s) > maxStr {
-						results = append(results, Result{
+						results = append(results, Violation{
 							Rule:    stringLengthRule(profile),
 							Context: fmt.Sprintf("object %d (stream content): string length %d exceeds %d", objNum, len(s), maxStr),
 						})
@@ -1214,14 +1214,14 @@ func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNu
 
 // checkObjectNumericLimits checks a single resolved object for numeric limit
 // violations. It handles nested dicts and arrays recursively.
-func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile string) []Result {
-	var results []Result
+func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile string) []Violation {
+	var results []Violation
 
 	switch v := obj.(type) {
 	case ast.PdfInt:
 		val := int64(v)
 		if val > maxIntegerValue || val < minIntegerValue {
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    integerRangeRule(profile),
 				Context: fmt.Sprintf("object %d: integer %d out of range", objNum, val),
 			})
@@ -1232,14 +1232,14 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		switch part {
 		case 1:
 			if math.Abs(fval) > maxRealAbs1 {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    realRangeRule(profile),
 					Context: fmt.Sprintf("object %d: real %g exceeds +/-%g", objNum, fval, maxRealAbs1),
 				})
 			}
 		case 2, 3: //nolint:mnd
 			if math.Abs(fval) > maxRealAbs2 {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    realRangeRule(profile),
 					Context: fmt.Sprintf("object %d: real %g exceeds +/-%g", objNum, fval, maxRealAbs2),
 				})
@@ -1252,7 +1252,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 			maxStr = maxStringBytes2
 		}
 		if len(v) > maxStr {
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    stringLengthRule(profile),
 				Context: fmt.Sprintf("object %d: string length %d exceeds %d", objNum, len(v), maxStr),
 			})
@@ -1263,7 +1263,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		// to the decoded byte length, not the encoded representation.
 		decodedLen := decodedNameLength(string(v))
 		if decodedLen > maxNameBytes {
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    nameLengthRule(profile),
 				Context: fmt.Sprintf("object %d: name length %d exceeds %d", objNum, decodedLen, maxNameBytes),
 			})
@@ -1272,7 +1272,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 	case ast.PdfArray:
 		// PDF/A-1: array capacity limit.
 		if part == 1 && len(v) > maxArrayCap1 {
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    Rule_19005_1_6_1_12_t05,
 				Context: fmt.Sprintf("object %d: array capacity %d exceeds %d", objNum, len(v), maxArrayCap1),
 			})
@@ -1284,7 +1284,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 	case ast.PdfDict:
 		// PDF/A-1: dictionary capacity limit.
 		if part == 1 && len(v) > maxDictCap1 {
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    Rule_19005_1_6_1_12_t06,
 				Context: fmt.Sprintf("object %d: dict capacity %d exceeds %d", objNum, len(v), maxDictCap1),
 			})
@@ -1328,7 +1328,7 @@ func isHexDigit(c byte) bool {
 }
 
 // checkXRefFormat validates §6.1.4: xref streams are forbidden in PDF/A-1.
-func checkXRefFormat(doc *document.Document, profile string) []Result {
+func checkXRefFormat(doc *document.Document, profile string) []Violation {
 	if pdfaPart(profile) != 1 {
 		slog.Debug("compliance_2: file_structure: xref format check skipped (not PDF/A-1)")
 		return nil
@@ -1359,8 +1359,8 @@ func checkXRefFormat(doc *document.Document, profile string) []Result {
 // checkStreamLengths validates §6.1.7.1 t1 / §6.1.6.1 t1: the declared /Length
 // in a stream dictionary must match the actual byte count between the stream
 // keyword and endstream keyword.
-func checkStreamLengths(ctx context.Context, doc *document.Document, profile string) []Result { //nolint:unused // kept for future re-enablement
-	var results []Result
+func checkStreamLengths(ctx context.Context, doc *document.Document, profile string) []Violation { //nolint:unused // kept for future re-enablement
+	var results []Violation
 
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
@@ -1453,7 +1453,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 			if absDiff > 2 && absDiff < maxDrift { //nolint:mnd // EOL tolerance
 				slog.Debug("compliance_2: file_structure: stream length mismatch",
 					"object", objNum, "declared", declaredLen, "actual", rawLen)
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    streamLengthRule(profile),
 					Context: fmt.Sprintf("object %d: declared Length=%d but actual=%d", objNum, declaredLen, rawLen),
 				})
@@ -1484,7 +1484,7 @@ var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox
 
 // checkPageBoundaries validates §6.1.13 t11: page boundary box dimensions must
 // be within [3, 14400] units in both directions.
-func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 	// Page boundary size limits apply to PDF/A-2, -3, and -4.
 	if part < 2 { //nolint:mnd // PDF/A-1 does not have this rule.
@@ -1495,7 +1495,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 	slog.Debug("compliance_2: file_structure: checking page boundaries", "profile", profile)
 
 	rule := pageBoundRule(profile)
-	var results []Result
+	var results []Violation
 
 	// Also check the Pages tree root for inherited boundary boxes.
 	// Only flag root boundaries that are NOT overridden by individual pages.
@@ -1534,7 +1534,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 			width := math.Abs(x2 - x1)
 			height := math.Abs(y2 - y1)
 			if width < minPageBound || width > maxPageBound || height < minPageBound || height > maxPageBound {
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    rule,
 					Context: fmt.Sprintf("Pages tree /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", key, width, height, minPageBound, maxPageBound),
 				})
@@ -1573,7 +1573,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 					"page", pageIdx+1, "box", string(key),
 					"width", width, "height", height,
 				)
-				results = append(results, Result{
+				results = append(results, Violation{
 					Rule:    rule,
 					Context: fmt.Sprintf("page %d /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", pageIdx+1, key, width, height, minPageBound, maxPageBound),
 				})
@@ -1605,7 +1605,7 @@ func resolveFloat(ctx context.Context, doc *document.Document, obj ast.PdfObject
 
 // checkPDFA4TrailerInfo validates PDF/A-4 §6.1.3 t04/t05: /Info key
 // restrictions in PDF/A-4.
-func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		return nil
@@ -1648,7 +1648,7 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile 
 // checkSignatureReferences validates §6.1.12 t02 (PDF/A-2+): if /Perms/DocMDP
 // is present, the Signature References dictionary shall not contain
 // DigestLocation, DigestMethod, or DigestValue keys.
-func checkSignatureReferences(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkSignatureReferences(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	permsObj, ok := catalog["Perms"]
 	if !ok {
 		return nil
@@ -1674,7 +1674,7 @@ func checkSignatureReferences(ctx context.Context, doc *document.Document, catal
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	part := pdfaPart(profile)
 	forbidden := []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"}
 
@@ -1723,8 +1723,8 @@ func utf8NameRule(profile string) Rule {
 // checkUTF8Names validates §6.1.7 (PDF/A-4) / §6.1.8 (PDF/A-2/3): font names,
 // colorant names in Separation/DeviceN colour spaces, and structure type names
 // must be valid UTF-8 after #XX hex escape expansion.
-func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
-	var results []Result
+func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	var results []Violation
 	seen := make(map[string]bool) // Avoid duplicate reports for the same name.
 	rule := utf8NameRule(profile)
 
@@ -1808,7 +1808,7 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 // checkStructureTypeUTF8 recursively walks the structure tree and validates
 // that each element's /S type name is valid UTF-8.
-func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root ast.PdfDict, rule Rule, seen map[string]bool, results *[]Result) {
+func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root ast.PdfDict, rule Rule, seen map[string]bool, results *[]Violation) {
 	walkStructureElements(ctx, doc, root, func(elem ast.PdfDict, _ string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 		if typeName != "" {
@@ -1819,7 +1819,7 @@ func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root as
 
 // checkNameUTF8 validates that a PDF name, after #XX hex escape expansion,
 // is a valid UTF-8 string. Reports a violation if not.
-func checkNameUTF8(name, context string, rule Rule, seen map[string]bool, results *[]Result) {
+func checkNameUTF8(name, context string, rule Rule, seen map[string]bool, results *[]Violation) {
 	if seen[name] {
 		return
 	}

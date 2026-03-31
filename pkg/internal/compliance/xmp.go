@@ -141,7 +141,7 @@ const xmpPacketHeaderSize = 200
 
 // checkXMPGroup validates XMP metadata compliance for PDF/A profiles.
 // For PDF/UA profiles, it returns nil (XMP checks are not applicable).
-func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
 		slog.Debug("compliance_2/xmp: skipping XMP checks for PDF/UA profile", "profile", profile)
 		return nil
@@ -155,7 +155,7 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	slog.Debug("compliance_2/xmp: starting XMP checks", "profile", profile, "part", part)
 
-	var results []Result
+	var results []Violation
 
 	// 1. Catalog /Metadata required (§6.7.2 / §6.6.1).
 	xmpData, metaStream := xmpLoadMetadata(ctx, doc, catalog, part, &results)
@@ -232,7 +232,7 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 // xmpLoadMetadata retrieves and decodes the XMP metadata stream from the
 // catalog. It validates that the stream dict has /Type Metadata and /Subtype XML.
-func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Result) ([]byte, ast.PdfStream) {
+func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) ([]byte, ast.PdfStream) {
 	mdObj, ok := catalog["Metadata"]
 	if !ok {
 		slog.Debug("compliance_2/xmp: catalog missing /Metadata key")
@@ -294,7 +294,7 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 // xmpMetadataRule returns the correct rule for the missing/invalid metadata
 // stream based on the PDF/A part number.
-func xmpMetadataRule(part, test int) []Result {
+func xmpMetadataRule(part, test int) []Violation {
 	_ = test
 	switch part {
 	case 1:
@@ -313,7 +313,7 @@ func xmpMetadataRule(part, test int) []Result {
 
 // xmpCheckPacketHeader checks that the XMP packet header does not use the
 // forbidden 'bytes' or 'encoding' attributes.
-func xmpCheckPacketHeader(data []byte, part int, results *[]Result) {
+func xmpCheckPacketHeader(data []byte, part int, results *[]Violation) {
 	header := data
 	if len(header) > xmpPacketHeaderSize {
 		header = header[:xmpPacketHeaderSize]
@@ -341,7 +341,7 @@ func xmpCheckPacketHeader(data []byte, part int, results *[]Result) {
 	}
 }
 
-func xmpPacketHeaderBytesRule(part int) []Result {
+func xmpPacketHeaderBytesRule(part int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_5_t01, "")
@@ -355,7 +355,7 @@ func xmpPacketHeaderBytesRule(part int) []Result {
 	return nil
 }
 
-func xmpPacketHeaderEncodingRule(part int) []Result {
+func xmpPacketHeaderEncodingRule(part int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_5_t02, "")
@@ -373,7 +373,7 @@ func xmpPacketHeaderEncodingRule(part int) []Result {
 
 // xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
 // For PDF/A-4 (§6.7.2.1 t05), UTF-16 encoding is a violation.
-func xmpCheckEncoding(data []byte, _ int, results *[]Result) {
+func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
 	slog.Debug("compliance_2/xmp: checking XMP encoding")
 
 	// Check for UTF-16 BOM: FE FF (BE) or FF FE (LE).
@@ -404,7 +404,7 @@ func xmpCheckEncoding(data []byte, _ int, results *[]Result) {
 // xmpCheckNamespaces walks the XMP XML and verifies that every namespace URI
 // used by properties is either a predefined XMP schema or is declared in a
 // PDF/A extension schema within the same XMP packet.
-func xmpCheckNamespaces(data []byte, part int, results *[]Result) {
+func xmpCheckNamespaces(data []byte, part int, results *[]Violation) {
 	slog.Debug("compliance_2/xmp: checking XMP namespace schemas")
 
 	usedNamespaces, extensionNamespaces := xmpExtractNamespaces(data)
@@ -522,7 +522,7 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 	return used, extensions
 }
 
-func xmpSchemaRule(part int, ns string) []Result {
+func xmpSchemaRule(part int, ns string) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_7_9_t02, "namespace %s not predefined or in extension schema", ns)
@@ -540,7 +540,7 @@ func xmpSchemaRule(part int, ns string) []Result {
 
 // xmpCheckPDFAIdentification verifies that the XMP contains pdfaid:part and
 // pdfaid:conformance entries with correct values matching the declared profile.
-func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *[]Result) {
+func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *[]Violation) {
 	slog.Debug("compliance_2/xmp: checking PDF/A identification", "profile", profile, "part", part)
 
 	var partValue, confValue, revValue string
@@ -731,7 +731,7 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 //   - PDF/A-4 (plain): conformance must be absent or empty.
 //   - PDF/A-4e: conformance must be absent/empty or "E".
 //   - PDF/A-4f: conformance must be absent/empty or "F".
-func xmpCheckPart4Conformance(profile string, hasConf bool, confValue string, results *[]Result) {
+func xmpCheckPart4Conformance(profile string, hasConf bool, confValue string, results *[]Violation) {
 	confUpper := strings.ToUpper(strings.TrimSpace(confValue))
 
 	slog.Debug("compliance_2/xmp: checking part 4 conformance",
@@ -805,7 +805,7 @@ func isASCIILetter(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
-func xmpPDFAIdMissingRule(part int) []Result {
+func xmpPDFAIdMissingRule(part int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_11_t01, "missing PDF/A Identification Schema")
@@ -819,7 +819,7 @@ func xmpPDFAIdMissingRule(part int) []Result {
 	return nil
 }
 
-func xmpPDFAPartRule(part int, actual string) []Result {
+func xmpPDFAPartRule(part int, actual string) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_7_11_t02, "pdfaid:part=%s", actual)
@@ -833,7 +833,7 @@ func xmpPDFAPartRule(part int, actual string) []Result {
 	return nil
 }
 
-func xmpPDFAConformanceRule(part int, actual string) []Result {
+func xmpPDFAConformanceRule(part int, actual string) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_7_11_t03, "pdfaid:conformance=%s", actual)
@@ -849,7 +849,7 @@ func xmpPDFAConformanceRule(part int, actual string) []Result {
 
 // xmpPDFAIdPrefixRule returns the appropriate rule for a pdfaid field that uses
 // the wrong namespace prefix. The field parameter is "part", "conformance", or "rev".
-func xmpPDFAIdPrefixRule(part int, field string) []Result {
+func xmpPDFAIdPrefixRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("pdfaid:%s uses wrong namespace prefix", field)
 	switch field {
 	case "part":
@@ -944,7 +944,7 @@ func xmpExtractPrefixMap(data []byte) map[string]string {
 // Each missing field emits a specific rule (t02–t18).
 // It also validates that extension schema elements use the expected namespace
 // prefix names (e.g., "pdfaSchema" not "nonpdfaSchema").
-func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
+func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 	slog.Debug("compliance_2/xmp: checking extension schema structure")
 
 	// Extract prefix→URI map to check prefix name correctness.
@@ -1283,7 +1283,7 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Result) {
 
 // xmpExtSchemaRule returns the rule for a missing field in a schema definition.
 // Mapping: schema->t02, namespaceURI->t03, prefix->t04, property->t05.
-func xmpExtSchemaRule(part int, field string) []Result {
+func xmpExtSchemaRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension schema missing required field '%s'", field)
 	switch part {
 	case 1:
@@ -1328,7 +1328,7 @@ func xmpExtSchemaRule(part int, field string) []Result {
 
 // xmpExtPropertyRule returns the rule for a missing field in a property definition.
 // Mapping: name->t07, valueType->t08, category->t09, description->t10.
-func xmpExtPropertyRule(part int, field string) []Result {
+func xmpExtPropertyRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension property missing required field '%s'", field)
 	switch part {
 	case 1:
@@ -1372,7 +1372,7 @@ func xmpExtPropertyRule(part int, field string) []Result {
 
 // xmpExtValueTypeRule returns the rule for a missing field in a valueType definition.
 // Mapping: type->t11, namespaceURI->t12, prefix->t13, description->t14.
-func xmpExtValueTypeRule(part int, field string) []Result {
+func xmpExtValueTypeRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension valueType missing required field '%s'", field)
 	switch part {
 	case 1:
@@ -1416,7 +1416,7 @@ func xmpExtValueTypeRule(part int, field string) []Result {
 
 // xmpExtFieldRule returns the rule for a missing field in a field definition.
 // Mapping: name->t16, valueType->t17, description->t18.
-func xmpExtFieldRule(part int, field string) []Result {
+func xmpExtFieldRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension field missing required field '%s'", field)
 	switch part {
 	case 1:
@@ -1490,7 +1490,7 @@ var xmpPredefinedValueTypes = map[string]bool{
 // value types with proper field definitions.  If a property uses a custom
 // valueType that has no field definitions in the extension schema, the property
 // "does not correspond to" its declared type (clause 6.6.2.3.1 test 2).
-func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Result) {
+func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) {
 	slog.Debug("compliance_2/xmp: checking extension property valueType correspondence")
 
 	// Parse the extension schema to build:
@@ -1645,7 +1645,7 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Result) {
 
 // xmpCheckDocInfoSync verifies that document info dict entries are consistent
 // with their XMP equivalents (§6.7.3).
-func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []byte, part int, results *[]Result) {
+func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []byte, part int, results *[]Violation) {
 	slog.Debug("compliance_2/xmp: checking DocInfo ↔ XMP consistency")
 
 	infoObj, ok := doc.Index.Trailer["Info"]
@@ -1746,7 +1746,7 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 	}
 }
 
-func xmpDocInfoSyncRule(part, testNum int, infoKey, infoVal, xmpKey, xmpVal string) []Result {
+func xmpDocInfoSyncRule(part, testNum int, infoKey, infoVal, xmpKey, xmpVal string) []Violation {
 	ctx := fmt.Sprintf("/%s=%q vs %s=%q", infoKey, infoVal, xmpKey, xmpVal)
 	switch part {
 	case 1:
@@ -1759,7 +1759,7 @@ func xmpDocInfoSyncRule(part, testNum int, infoKey, infoVal, xmpKey, xmpVal stri
 	return nil
 }
 
-func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Result {
+func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Violation {
 	switch testNum {
 	case 1:
 		return fail(Rule_19005_1_6_7_3_t01, ctx)
@@ -1781,7 +1781,7 @@ func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Result {
 	return nil
 }
 
-func xmpDocInfoSyncRulePart4(testNum int, ctx string) []Result {
+func xmpDocInfoSyncRulePart4(testNum int, ctx string) []Violation {
 	// Part 4 uses Rule_19005_4_6_7_3_t07 for value mismatches and t08
 	// for missing XMP properties corresponding to Info dict entries.
 	// We use t07 for all sync mismatches uniformly.
@@ -2159,7 +2159,7 @@ var xmpContainerElementType = map[string]map[string]xmpPropType{
 // simple property value formats, container item value formats, Alt container
 // lang attributes, and struct property structure. It flags unknown property
 // names in known (predefined) schemas.
-func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Result) {
+func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Violation) {
 	slog.Debug("compliance_2/xmp: checking XMP property types")
 
 	observed := xmpExtractPropertyValues(data)
@@ -2354,7 +2354,7 @@ func propTypeToContainerType(t xmpPropType) xmpContainerType {
 
 // xmpPropertyTypeRule returns the appropriate violation for a property type
 // mismatch in the given part.
-func xmpPropertyTypeRule(part int, ns, prop, detail string) []Result {
+func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 	ctx := fmt.Sprintf("%s:%s %s", ns, prop, detail)
 	switch part {
 	case 1:

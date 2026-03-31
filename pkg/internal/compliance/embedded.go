@@ -33,7 +33,7 @@ var validAFRelationships = map[ast.PdfName]bool{
 //   - PDF/A-2/3: embedded files must be PDF/A compliant, must have /AFRelationship (part 3+).
 //   - PDF/A-4/4e/4f: embedded files must be PDF/A compliant, must have /AFRelationship,
 //     /F and /UF keys, and PDF/A-4f requires /EmbeddedFiles in /Names.
-func checkEmbeddedGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkEmbeddedGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
 		return nil
 	}
@@ -46,7 +46,7 @@ func checkEmbeddedGroup(ctx context.Context, doc *document.Document, catalog ast
 
 	slog.Debug("compliance_2/embedded: starting embedded file checks", "profile", profile, "part", part)
 
-	var results []Result
+	var results []Violation
 
 	// Resolve /Names dictionary from catalog.
 	namesDict, hasNames := resolveNamesDict(ctx, doc, catalog)
@@ -111,8 +111,8 @@ func resolveNamesDict(ctx context.Context, doc *document.Document, catalog ast.P
 // checkEmbeddedForbiddenPart1 validates that PDF/A-1 documents do not contain
 // embedded files (§6.1.11). /EmbeddedFiles key is forbidden in /Names, and
 // file specification dicts must not contain /EF.
-func checkEmbeddedForbiddenPart1(ctx context.Context, doc *document.Document, _ ast.PdfDict, namesDict ast.PdfDict, hasNames bool) []Result {
-	var results []Result
+func checkEmbeddedForbiddenPart1(ctx context.Context, doc *document.Document, _ ast.PdfDict, namesDict ast.PdfDict, hasNames bool) []Violation {
+	var results []Violation
 
 	// Check /EmbeddedFiles in /Names.
 	if hasNames {
@@ -144,7 +144,7 @@ func checkEmbeddedForbiddenPart1(ctx context.Context, doc *document.Document, _ 
 
 		if _, hasEF := dict["EF"]; hasEF {
 			slog.Debug("compliance_2/embedded: PDF/A-1 file spec has /EF key", "object", objNum)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    Rule_19005_1_6_1_11_t01,
 				Context: fmt.Sprintf("object %d: file specification contains EF key", objNum),
 			})
@@ -195,7 +195,7 @@ func collectFileSpecs(ctx context.Context, doc *document.Document) []fileSpecEnt
 }
 
 // checkFileSpecFUF validates that a file specification dict contains both /F and /UF keys.
-func checkFileSpecFUF(_ context.Context, _ *document.Document, fs fileSpecEntry, part int) []Result {
+func checkFileSpecFUF(_ context.Context, _ *document.Document, fs fileSpecEntry, part int) []Violation {
 	_, hasF := fs.dict["F"]
 	_, hasUF := fs.dict["UF"]
 
@@ -213,7 +213,7 @@ func checkFileSpecFUF(_ context.Context, _ *document.Document, fs fileSpecEntry,
 
 // checkAFRelationship validates that a file specification dict has a valid
 // /AFRelationship key. Required for parts 3+ and part 4.
-func checkAFRelationship(ctx context.Context, doc *document.Document, fs fileSpecEntry, part int, _ string) []Result {
+func checkAFRelationship(ctx context.Context, doc *document.Document, fs fileSpecEntry, part int, _ string) []Violation {
 	// Parts 2 does not require /AFRelationship.
 	if part < 3 {
 		return nil
@@ -275,7 +275,7 @@ func afRelationshipRule(part int) Rule {
 // checkCatalogAF validates §6.8 t4: for PDF/A-3+, each file specification dict
 // with an /EF key must be referenced from the catalog's /AF array. This ensures
 // the associated files are properly declared at the document level.
-func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fileSpecs []fileSpecEntry, part int) []Result {
+func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fileSpecs []fileSpecEntry, part int) []Violation {
 	if len(fileSpecs) == 0 {
 		slog.Debug("compliance_2/embedded: no file specs to check for catalog /AF")
 		return nil
@@ -365,12 +365,12 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return failf(rule, "no /AF array found but %d embedded file(s) with /AFRelationship exist", len(associatedSpecs))
 	}
 
-	var results []Result
+	var results []Violation
 	for _, fs := range associatedSpecs {
 		if !afRefs[fs.objNum] {
 			slog.Debug("compliance_2/embedded: file spec not referenced in any /AF",
 				"object", fs.objNum)
-			results = append(results, Result{
+			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("object %d: file specification with /AFRelationship not referenced in any /AF array", fs.objNum),
 			})

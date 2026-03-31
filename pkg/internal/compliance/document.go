@@ -17,13 +17,13 @@ import (
 //   - PDF/A parts 2+/4: /OCProperties must have /AS array if /OCGs present.
 //   - PDF/A-4: /Info dict restrictions, /Perms dict restrictions.
 //   - PDF/UA-2: PDF version must be 2.0.
-func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := pdfaPart(profile)
 
 	slog.Debug("compliance_2/document: starting document checks",
 		"profile", profile, "part", part, "isPDFUA", isPDFUA(profile))
 
-	var results []Result
+	var results []Violation
 
 	// --- PDF/UA-2: version must be 2.0 ---
 	if isPDFUA(profile) {
@@ -93,7 +93,7 @@ func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast
 // checkVersionPart1 validates that the PDF header format is correct for PDF/A-1.
 // Per §6.1.2, the rule checks that the header is `%PDF-x.y` format, NOT the
 // version number value. VeraPDF does not enforce a maximum version here.
-func checkVersionPart1(_ *document.Document, _ ast.PdfDict) []Result {
+func checkVersionPart1(_ *document.Document, _ ast.PdfDict) []Violation {
 	// The header format is validated at parse time by the lexer.
 	// §6.1.2 does not restrict the version number for PDF/A-1.
 	return nil
@@ -101,12 +101,12 @@ func checkVersionPart1(_ *document.Document, _ ast.PdfDict) []Result {
 
 // checkVersionPart4 validates that PDF/A-4 documents have PDF version 2.0.
 // Checks catalog /Version first, then falls back to the file header.
-func checkVersionPart4(doc *document.Document, catalog ast.PdfDict) []Result {
+func checkVersionPart4(doc *document.Document, catalog ast.PdfDict) []Violation {
 	return checkVersionIs2(doc, catalog, Rule_19005_4_6_1_12_t01)
 }
 
 // checkVersionIs2 validates that the document uses PDF 2.0 version.
-func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule) []Result {
+func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule) []Violation {
 	version := catalogVersion(catalog)
 	if version == "" {
 		version = doc.Version
@@ -180,7 +180,7 @@ func unhex(c byte) int {
 
 // checkAlternatePresentations validates that /AlternatePresentations is not
 // present in the /Names dictionary (parts 2+/4).
-func checkAlternatePresentations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Result {
+func checkAlternatePresentations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	namesObj, ok := catalog["Names"]
 	if !ok {
 		slog.Debug("compliance_2/document: no /Names dict in catalog")
@@ -205,7 +205,7 @@ func checkAlternatePresentations(ctx context.Context, doc *document.Document, ca
 
 // checkRequirementsKey validates that the /Requirements key is not present in
 // the document catalog (parts 2+/4).
-func checkRequirementsKey(catalog ast.PdfDict, part int) []Result {
+func checkRequirementsKey(catalog ast.PdfDict, part int) []Violation {
 	if _, hasReq := catalog["Requirements"]; hasReq {
 		slog.Debug("compliance_2/document: /Requirements key found in catalog")
 		rule := requirementsRule(part)
@@ -218,7 +218,7 @@ func checkRequirementsKey(catalog ast.PdfDict, part int) []Result {
 
 // checkOCGUsageApplication validates that /OCProperties contains the /AS array
 // when /OCGs are present (parts 2+/4).
-func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Result {
+func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	ocPropsObj, ok := catalog["OCProperties"]
 	if !ok {
 		slog.Debug("compliance_2/document: no /OCProperties in catalog")
@@ -292,7 +292,7 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 // checkInfoDictPart4 validates Info dict restrictions for PDF/A-4:
 //   - /Info key forbidden in trailer unless /PieceInfo exists in catalog.
 //   - If /Info exists, only /ModDate key allowed.
-func checkInfoDictPart4(doc *document.Document, catalog ast.PdfDict) []Result {
+func checkInfoDictPart4(doc *document.Document, catalog ast.PdfDict) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		return nil
@@ -332,7 +332,7 @@ func checkInfoDictPart4(doc *document.Document, catalog ast.PdfDict) []Result {
 
 // checkPermissionsDict validates that the /Perms dict only contains /UR3 and
 // /DocMDP keys (parts 2+/4).
-func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Result {
+func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	permsObj, ok := catalog["Perms"]
 	if !ok {
 		slog.Debug("compliance_2/document: no /Perms in catalog")
@@ -421,7 +421,7 @@ func permsDictRule(part int) Rule {
 
 // checkOCConfigNamesPDFA validates that OC configuration dictionaries in
 // /OCProperties have /Name entries and that names are unique (PDF/A-4, §6.10).
-func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	ocPropsObj, ok := catalog["OCProperties"]
 	if !ok {
 		return nil
@@ -432,7 +432,7 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	var names []string
 
 	// Check default config (/D).
@@ -519,7 +519,7 @@ func configName(ctx context.Context, doc *document.Document, cfg ast.PdfDict) st
 }
 
 // checkPresSteps validates PDF/A-4 §6.11 t2: no page may have /PresSteps.
-func checkPresSteps(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+func checkPresSteps(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 	for i, page := range pages {
 		if _, has := page["PresSteps"]; has {
@@ -531,7 +531,7 @@ func checkPresSteps(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 // checkEmbeddedFileMIME validates PDF/A-4 §6.9 t1: embedded file streams must
 // have a valid /Subtype MIME type.
-func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	// Walk the /Names/EmbeddedFiles name tree.
 	names, err := document.ResolveDict(ctx, doc, catalog["Names"])
 	if err != nil || names == nil {
@@ -546,7 +546,7 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog 
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	// Names array is [name1, filespec1, name2, filespec2, ...]
 	for i := 1; i < len(namesArr); i += 2 {
 		fileSpec, err := document.ResolveDict(ctx, doc, namesArr[i])
@@ -592,7 +592,7 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog 
 
 // checkOCGOrderCompleteness validates PDF/A-4 §6.10 t3: if an OC config dict
 // has an /Order key, the Order array must reference all OCGs in the document.
-func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Result {
+func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])
 	if err != nil || ocProps == nil {
 		return nil

@@ -10,11 +10,11 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// Result records a single rule violation with context about where it occurred.
+// Violation records a single rule violation with context about where it occurred.
 // It implements the error interface so callers receive typed violations.
 //
-//nolint:errname // Result is the domain name; "ResultError" would be redundant.
-type Result struct {
+//nolint:errname // Violation is the domain name; "ViolationError" would be redundant.
+type Violation struct {
 	// Rule is the VeraPDF validation rule that was violated.
 	Rule Rule
 
@@ -23,9 +23,9 @@ type Result struct {
 	Context string
 }
 
-// Error implements the error interface so that Result can be returned directly
+// Error implements the error interface so that Violation can be returned directly
 // as an error value in ([]error, error) signatures.
-func (r Result) Error() string {
+func (r Violation) Error() string {
 	if r.Context != "" {
 		return fmt.Sprintf("clause %s test %d: %s [%s]", r.Rule.Clause, r.Rule.TestNumber, r.Rule.Description, r.Context)
 	}
@@ -33,18 +33,18 @@ func (r Result) Error() string {
 }
 
 // String returns a human-readable description of the violation.
-func (r Result) String() string {
+func (r Violation) String() string {
 	return r.Error()
 }
 
 // checkGroup is a function that validates a group of related rules against a
 // document. It returns all violations found (empty slice = pass).
-type checkGroup func(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result
+type checkGroup func(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation
 
 // --- Profile entry points ---
 
 // ValidatePDFA audits the document against a specific PDF/A profile, returning
-// all compliance violations found as errors. Each error is a [Result] value
+// all compliance violations found as errors. Each error is a [Violation] value
 // that can be type-asserted to access the structured Rule and Context fields.
 // An empty slice means the document passes.
 func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) ([]error, error) {
@@ -66,18 +66,18 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 	doc.ComplianceMode = true
 	resolveAllObjects(ctx, doc)
 
-	results := runCheckGroups(ctx, doc, catalog, string(profile), groups)
+	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
 
 	slog.Debug("compliance_2: PDF/A validation complete",
 		"profile", profile,
-		"violations", len(results),
+		"violations", len(violations),
 	)
-	return resultsToErrors(results), nil
+	return violationsToErrors(violations), nil
 }
 
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
 // returning all compliance violations found as errors. Each error is a
-// [Result] value that can be type-asserted to access the structured Rule
+// [Violation] value that can be type-asserted to access the structured Rule
 // and Context fields. An empty slice means the document passes.
 func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) ([]error, error) {
 	slog.Debug("compliance_2: starting PDF/UA validation", "profile", profile)
@@ -97,36 +97,36 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 	doc.ComplianceMode = true
 	resolveAllObjects(ctx, doc)
 
-	results := runCheckGroups(ctx, doc, catalog, string(profile), groups)
+	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
 
 	slog.Debug("compliance_2: PDF/UA validation complete",
 		"profile", profile,
-		"violations", len(results),
+		"violations", len(violations),
 	)
-	return resultsToErrors(results), nil
+	return violationsToErrors(violations), nil
 }
 
 // runCheckGroups executes all check groups against the document, collecting
-// results until context cancellation or all groups complete.
-func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) []Result {
-	var results []Result
+// violations until context cancellation or all groups complete.
+func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) []Violation {
+	var violations []Violation
 	for _, group := range groups {
 		if ctx.Err() != nil {
 			slog.Debug("compliance_2: context cancelled, stopping validation")
-			return results
+			return violations
 		}
-		results = append(results, group(ctx, doc, catalog, profile)...)
+		violations = append(violations, group(ctx, doc, catalog, profile)...)
 	}
-	return results
+	return violations
 }
 
-// resultsToErrors converts a slice of Result into a slice of error.
-func resultsToErrors(results []Result) []error {
-	if len(results) == 0 {
+// violationsToErrors converts a slice of Violation into a slice of error.
+func violationsToErrors(violations []Violation) []error {
+	if len(violations) == 0 {
 		return nil
 	}
-	errs := make([]error, len(results))
-	for i, r := range results {
+	errs := make([]error, len(violations))
+	for i, r := range violations {
 		errs[i] = r
 	}
 	return errs
@@ -276,14 +276,14 @@ func getResources(ctx context.Context, doc *document.Document, page ast.PdfDict)
 	return res
 }
 
-// fail creates a single-element Result slice for a rule violation.
-func fail(rule Rule, context string) []Result {
-	return []Result{{Rule: rule, Context: context}}
+// fail creates a single-element Violation slice for a rule violation.
+func fail(rule Rule, context string) []Violation {
+	return []Violation{{Rule: rule, Context: context}}
 }
 
-// failf creates a single-element Result slice with a formatted context string.
-func failf(rule Rule, format string, args ...any) []Result {
-	return []Result{{Rule: rule, Context: fmt.Sprintf(format, args...)}}
+// failf creates a single-element Violation slice with a formatted context string.
+func failf(rule Rule, format string, args ...any) []Violation {
+	return []Violation{{Rule: rule, Context: fmt.Sprintf(format, args...)}}
 }
 
 // pdfaPart returns the numeric part (1, 2, 3, 4) from a profile string.

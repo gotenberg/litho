@@ -37,7 +37,7 @@ type contentStateChecker struct {
 	// Resolved color space cache: resource name → resolved type string.
 	csCache map[string]string
 
-	results []Result
+	results []Violation
 
 	// Track whether we've already reported a violation per type to avoid
 	// flooding results with one violation per painting operator.
@@ -55,7 +55,7 @@ func checkContentStreamState(
 	resources ast.PdfDict,
 	part int,
 	pageNum int,
-) []Result {
+) []Violation {
 	if part < 2 {
 		// OPM check only applies to parts 2+.
 		return nil
@@ -330,7 +330,7 @@ func checkContentStreamResources(
 	resources ast.PdfDict,
 	part int,
 	pageNum int,
-) []Result {
+) []Violation {
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
 		return nil
@@ -340,7 +340,7 @@ func checkContentStreamResources(
 	resourceRule := missingResourceRule(part)
 	realRule := realRangeRuleByPart(part)
 
-	var results []Result
+	var results []Violation
 	reported := make(map[string]bool) // avoid duplicate violations
 	reportedRealLimit := false
 
@@ -370,7 +370,7 @@ func checkContentStreamResources(
 			for _, operand := range op.Operands {
 				if r, ok := operand.(ast.PdfReal); ok {
 					if math.Abs(float64(r)) > maxRealAbs1 {
-						results = append(results, Result{
+						results = append(results, Violation{
 							Rule:    realRule,
 							Context: fmt.Sprintf("page %d: content stream real %g exceeds +/-%g", pageNum, float64(r), maxRealAbs1),
 						})
@@ -453,13 +453,13 @@ func checkContentStreamResources(
 
 // checkInlineImageIntent scans raw content stream bytes for inline image
 // dictionaries (BI ... ID) containing an /Intent key with an invalid value.
-func checkInlineImageIntent(data []byte, part int, pageNum int) []Result {
+func checkInlineImageIntent(data []byte, part int, pageNum int) []Violation {
 	riRule := renderingIntentRule(part)
 	if riRule.Specification == "" {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 	for i := 0; i < len(data)-2; i++ { //nolint:mnd
 		// Look for "BI" followed by whitespace (start of inline image).
 		if data[i] != 'B' || data[i+1] != 'I' {

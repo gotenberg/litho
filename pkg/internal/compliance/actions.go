@@ -94,7 +94,7 @@ const maxActionChainDepth = 200
 
 // checkActionGroup validates action restrictions for PDF/A (§6.6.1, §6.6.2,
 // §6.6.3, §6.4.1). For PDF/UA profiles this check is not applicable.
-func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Result {
+func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if isPDFUA(profile) {
 		return nil
 	}
@@ -107,7 +107,7 @@ func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.P
 
 	slog.Debug("compliance_2/actions: starting action checks", "profile", profile, "part", part)
 
-	results := make([]Result, 0, 8) //nolint:mnd // estimated capacity for action checks.
+	results := make([]Violation, 0, 8) //nolint:mnd // estimated capacity for action checks.
 
 	// Check catalog /OpenAction.
 	results = append(results, checkCatalogOpenAction(ctx, doc, catalog, profile, part)...)
@@ -140,7 +140,7 @@ func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.P
 
 // checkCatalogOpenAction checks the catalog /OpenAction entry for forbidden
 // action types and invalid named actions.
-func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	openAction, ok := catalog["OpenAction"]
 	if !ok {
 		slog.Debug("compliance_2/actions: catalog has no /OpenAction")
@@ -159,7 +159,7 @@ func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog
 }
 
 // checkCatalogAA checks the catalog /AA dictionary.
-func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	aaObj, ok := catalog["AA"]
 	if !ok {
 		slog.Debug("compliance_2/actions: catalog has no /AA")
@@ -188,7 +188,7 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Part 4: check AA key restrictions (§6.6.3).
 	if part == 4 {
@@ -212,10 +212,10 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 }
 
 // checkPageActions checks /AA dicts on all pages.
-func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 
-	var results []Result
+	var results []Violation
 	for i, page := range pages {
 		if ctx.Err() != nil {
 			return results
@@ -268,10 +268,10 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 
 // checkAnnotationActions checks /A and /AA entries on all annotations across
 // all pages.
-func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 
-	var results []Result
+	var results []Violation
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
 			return results
@@ -352,8 +352,8 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 
 // checkWidgetActions validates action restrictions specific to Widget
 // annotations.
-func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, profile string, part int, location string) []Result {
-	var results []Result
+func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, profile string, part int, location string) []Violation {
+	var results []Violation
 
 	_, hasA := annotDict["A"]
 	_, hasAA := annotDict["AA"]
@@ -433,7 +433,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 
 // walkActionChain recursively checks an action dict and its /Next chain for
 // forbidden action types and invalid named actions.
-func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int) []Result {
+func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int) []Violation {
 	if ctx.Err() != nil || depth > maxActionChainDepth {
 		if depth > maxActionChainDepth {
 			slog.Debug("compliance_2/actions: max action chain depth reached", "location", location)
@@ -441,7 +441,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Check the action type (/S).
 	actionType, _ := document.ResolveName(ctx, doc, action["S"])
@@ -509,7 +509,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 
 // checkAAKeyRestrictions checks that an /AA dictionary only contains permitted
 // keys (§6.6.3, part 4).
-func checkAAKeyRestrictions(_ context.Context, _ *document.Document, aaDict ast.PdfDict, location string) []Result {
+func checkAAKeyRestrictions(_ context.Context, _ *document.Document, aaDict ast.PdfDict, location string) []Violation {
 	var forbidden []ast.PdfName
 	for key := range aaDict {
 		if !allowedAAKeys[key] {
@@ -551,7 +551,7 @@ func namedActionRule(part int) Rule {
 
 // checkJavaScriptNameTree checks for JavaScript actions in the /Names/JavaScript
 // name tree, which is forbidden by §6.6.1.
-func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Result {
+func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	namesObj, ok := catalog["Names"]
 	if !ok {
 		return nil
@@ -576,7 +576,7 @@ func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalo
 
 // checkOutlineActions walks the document outline (bookmarks) and checks
 // /A entries on outline items for forbidden action types.
-func checkOutlineActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+func checkOutlineActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	outlinesObj, ok := catalog["Outlines"]
 	if !ok {
 		return nil
@@ -589,13 +589,13 @@ func checkOutlineActions(ctx context.Context, doc *document.Document, catalog as
 
 	slog.Debug("compliance_2/actions: checking outline actions")
 
-	var results []Result
+	var results []Violation
 	walkOutlineItems(ctx, doc, outlines["First"], profile, part, &results, 0)
 	return results
 }
 
 // walkOutlineItems recursively walks outline items and checks for forbidden actions.
-func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, profile string, part int, results *[]Result, depth int) {
+func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, profile string, part int, results *[]Violation, depth int) {
 	if ctx.Err() != nil || depth > maxActionChainDepth || itemObj == nil {
 		return
 	}
@@ -661,13 +661,13 @@ var outlineExemptActionsPart4e = map[ast.PdfName]bool{
 
 // checkOutlineActionPDFA checks an outline item action for PDF/A, using the
 // standard forbidden set minus outline-exempt types.
-func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int) []Result {
+func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int) []Violation {
 	actionType, _ := document.ResolveName(ctx, doc, action["S"])
 	if actionType == "" {
 		return nil
 	}
 
-	var results []Result
+	var results []Violation
 
 	// Determine outline-exempt actions based on profile.
 	var exempt map[ast.PdfName]bool
@@ -708,7 +708,7 @@ func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action 
 
 // checkFormFieldActions walks the AcroForm /Fields array and checks form field
 // dicts for forbidden actions (/A and /AA keys).
-func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Result {
+func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	acroFormObj, ok := catalog["AcroForm"]
 	if !ok {
 		return nil
@@ -727,13 +727,13 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 	}
 
 	slog.Debug("compliance_2/actions: checking AcroForm field actions", "fields", len(fields))
-	var results []Result
+	var results []Violation
 	walkFormFields(ctx, doc, fields, profile, part, &results, 0)
 	return results
 }
 
 // walkFormFields recursively checks form field dicts for forbidden actions.
-func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Result, depth int) {
+func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int) {
 	if depth > maxActionChainDepth {
 		return
 	}
