@@ -381,7 +381,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		pageHasOI := false
 		pageOICS := ""
 		if part == 4 { //nolint:mnd
-			pageHasOI, pageOICS = checkPageOutputIntentTransparency(ctx, doc, page)
+			pageHasOI, pageOICS = checkPageOutputIntent(ctx, doc, page)
 		}
 		effectiveHasOI := hasOutputIntent || pageHasOI
 		effectiveOICS := oiColorSpace
@@ -408,44 +408,6 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		}
 	}
 	return results
-}
-
-// checkPageOutputIntentTransparency checks for page-level OutputIntents (PDF 2.0).
-func checkPageOutputIntentTransparency(ctx context.Context, doc *document.Document, page ast.PdfDict) (bool, string) {
-	oiObj, ok := page["OutputIntents"]
-	if !ok {
-		return false, ""
-	}
-	arr, err := document.ResolveArray(ctx, doc, oiObj)
-	if err != nil || len(arr) == 0 {
-		return false, ""
-	}
-	for _, intentObj := range arr {
-		intent, err := document.ResolveDict(ctx, doc, intentObj)
-		if err != nil || intent == nil {
-			continue
-		}
-		// Only accept PDF/A OutputIntents.
-		s, _ := document.ResolveName(ctx, doc, intent["S"])
-		if s != "GTS_PDFA" && s != "GTS_PDFA1" {
-			continue
-		}
-		destObj, ok := intent["DestOutputProfile"]
-		if !ok {
-			continue
-		}
-		stream, err := document.ResolveStream(ctx, doc, destObj)
-		if err != nil {
-			slog.Debug("compliance.transparency: cannot resolve output profile stream", "error", err)
-			continue
-		}
-		data, err := doc.DecodeStream(stream)
-		if err != nil || len(data) < 20 { //nolint:mnd
-			return true, ""
-		}
-		return true, string(data[16:20])
-	}
-	return false, ""
 }
 
 // checkAnnotationTransparency checks whether any annotation on the page

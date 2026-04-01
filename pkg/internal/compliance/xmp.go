@@ -556,78 +556,79 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 		if err != nil {
 			break
 		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			// Check attributes (inline form).
-			for _, attr := range t.Attr {
-				if attr.Name.Space == xmpPdfaIDNamespace {
-					slog.Debug("compliance.xmp: pdfaid attr found",
-						"local", attr.Name.Local, "value", attr.Value)
-					switch attr.Name.Local {
+		t, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		// Check attributes (inline form).
+		for _, attr := range t.Attr {
+			if attr.Name.Space == xmpPdfaIDNamespace {
+				slog.Debug("compliance.xmp: pdfaid attr found",
+					"local", attr.Name.Local, "value", attr.Value)
+				switch attr.Name.Local {
+				case "part":
+					hasPart = true
+					partValue = attr.Value
+				case "conformance":
+					hasConf = true
+					confValue = attr.Value
+				case "rev":
+					revValue = attr.Value
+				}
+			} else if attr.Name.Space != "" && attr.Name.Space != xmpPdfaIDNamespace {
+				// Attribute with matching local name but wrong namespace prefix.
+				switch attr.Name.Local {
+				case "part":
+					slog.Debug("compliance.xmp: pdfaid:part attr has wrong namespace prefix",
+						"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
+					wrongPrefixPart = true
+				case "conformance":
+					slog.Debug("compliance.xmp: pdfaid:conformance attr has wrong namespace prefix",
+						"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
+					wrongPrefixConf = true
+				case "rev":
+					slog.Debug("compliance.xmp: pdfaid:rev attr has wrong namespace prefix",
+						"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
+					wrongPrefixRev = true
+				}
+			}
+		}
+		// Check element form — read text content.
+		if t.Name.Space == xmpPdfaIDNamespace {
+			slog.Debug("compliance.xmp: pdfaid element found", "local", t.Name.Local)
+			if charTok, charErr := decoder.Token(); charErr == nil {
+				if charData, ok := charTok.(xml.CharData); ok {
+					val := strings.TrimSpace(string(charData))
+					slog.Debug("compliance.xmp: pdfaid element value",
+						"local", t.Name.Local, "value", val)
+					switch t.Name.Local {
 					case "part":
 						hasPart = true
-						partValue = attr.Value
+						partValue = val
 					case "conformance":
 						hasConf = true
-						confValue = attr.Value
+						confValue = val
 					case "rev":
-						revValue = attr.Value
-					}
-				} else if attr.Name.Space != "" && attr.Name.Space != xmpPdfaIDNamespace {
-					// Attribute with matching local name but wrong namespace prefix.
-					switch attr.Name.Local {
-					case "part":
-						slog.Debug("compliance.xmp: pdfaid:part attr has wrong namespace prefix",
-							"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
-						wrongPrefixPart = true
-					case "conformance":
-						slog.Debug("compliance.xmp: pdfaid:conformance attr has wrong namespace prefix",
-							"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
-						wrongPrefixConf = true
-					case "rev":
-						slog.Debug("compliance.xmp: pdfaid:rev attr has wrong namespace prefix",
-							"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
-						wrongPrefixRev = true
+						revValue = val
 					}
 				}
 			}
-			// Check element form — read text content.
-			if t.Name.Space == xmpPdfaIDNamespace {
-				slog.Debug("compliance.xmp: pdfaid element found", "local", t.Name.Local)
-				if charTok, charErr := decoder.Token(); charErr == nil {
-					if charData, ok := charTok.(xml.CharData); ok {
-						val := strings.TrimSpace(string(charData))
-						slog.Debug("compliance.xmp: pdfaid element value",
-							"local", t.Name.Local, "value", val)
-						switch t.Name.Local {
-						case "part":
-							hasPart = true
-							partValue = val
-						case "conformance":
-							hasConf = true
-							confValue = val
-						case "rev":
-							revValue = val
-						}
-					}
-				}
-			} else if t.Name.Space != "" && t.Name.Space != xmpPdfaIDNamespace &&
-				t.Name.Space != xmpRDFNamespace {
-				// Element with matching local name but wrong namespace prefix.
-				switch t.Name.Local {
-				case "part":
-					slog.Debug("compliance.xmp: pdfaid:part element has wrong namespace prefix",
-						"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
-					wrongPrefixPart = true
-				case "conformance":
-					slog.Debug("compliance.xmp: pdfaid:conformance element has wrong namespace prefix",
-						"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
-					wrongPrefixConf = true
-				case "rev":
-					slog.Debug("compliance.xmp: pdfaid:rev element has wrong namespace prefix",
-						"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
-					wrongPrefixRev = true
-				}
+		} else if t.Name.Space != "" && t.Name.Space != xmpPdfaIDNamespace &&
+			t.Name.Space != xmpRDFNamespace {
+			// Element with matching local name but wrong namespace prefix.
+			switch t.Name.Local {
+			case "part":
+				slog.Debug("compliance.xmp: pdfaid:part element has wrong namespace prefix",
+					"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
+				wrongPrefixPart = true
+			case "conformance":
+				slog.Debug("compliance.xmp: pdfaid:conformance element has wrong namespace prefix",
+					"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
+				wrongPrefixConf = true
+			case "rev":
+				slog.Debug("compliance.xmp: pdfaid:rev element has wrong namespace prefix",
+					"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
+				wrongPrefixRev = true
 			}
 		}
 	}
@@ -1051,7 +1052,7 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 
 			// When we see rdf:li, push the appropriate level.
 			if t.Name.Local == "li" {
-				if hasPending {
+				if hasPending { //nolint:gocritic // compound conditions with state mutation
 					levelStack = append(levelStack, pendingLevel)
 					hasPending = false
 				} else if inSeqBag {

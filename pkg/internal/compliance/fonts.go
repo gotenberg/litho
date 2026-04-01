@@ -1074,9 +1074,9 @@ func isPUAHex(token string) bool {
 		val <<= 4
 		switch {
 		case c >= '0' && c <= '9':
-			val |= uint32(c - '0')
+			val |= uint32(c - '0') //nolint:gosec // G115: c is guaranteed to be in ['0','9'] by the case guard.
 		case c >= 'A' && c <= 'F':
-			val |= uint32(c-'A') + 10 //nolint:mnd
+			val |= uint32(c-'A') + 10 //nolint:mnd,gosec // G115: c is guaranteed to be in ['A','F'] by the case guard.
 		default:
 			return false
 		}
@@ -1289,15 +1289,12 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 			} else {
 				// Check if encoding is a name (direct) or dict with BaseEncoding.
 				encName, _ := document.ResolveName(ctx, doc, encObj)
-				if encName == "MacRomanEncoding" || encName == "WinAnsiEncoding" {
+				switch encName {
+				case "MacRomanEncoding", "WinAnsiEncoding":
 					slog.Debug("compliance: fonts: non-symbolic TrueType has valid encoding",
 						"font", fontName, "encoding", encName)
-				} else if encName != "" {
-					// Invalid encoding name.
-					slog.Debug("compliance: fonts: non-symbolic TrueType has invalid encoding name",
-						"font", fontName, "encoding", encName, "page", pageNum)
-					results = append(results, failf(rule, "font %s on page %d encoding=%s", fontName, pageNum, encName)...)
-				} else {
+				case "":
+					// encName is empty — fall through to check encoding dictionary.
 					// Encoding is a dictionary — check BaseEncoding.
 					encDict, err := document.ResolveDict(ctx, doc, encObj)
 					if err != nil || encDict == nil {
@@ -1343,6 +1340,11 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 							}
 						}
 					}
+				default:
+					// Invalid encoding name.
+					slog.Debug("compliance: fonts: non-symbolic TrueType has invalid encoding name",
+						"font", fontName, "encoding", encName, "page", pageNum)
+					results = append(results, failf(rule, "font %s on page %d encoding=%s", fontName, pageNum, encName)...)
 				}
 			}
 		}

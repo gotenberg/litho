@@ -85,7 +85,7 @@ var validICCDeviceClasses = map[string]bool{ //nolint:gochecknoglobals // consta
 // Note: ICC colour space signatures are exactly 4 bytes; "RGB " has a trailing space.
 var validICCColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant set.
 	"GRAY": true,
-	"RGB ": true,
+	"RGB ": true, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes; trailing space is correct.
 	"CMYK": true,
 }
 

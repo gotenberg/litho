@@ -259,33 +259,6 @@ func resolveNumber(ctx context.Context, doc *document.Document, obj ast.PdfObjec
 	}
 }
 
-// checkFieldTooltip validates that a form field has a /TU tooltip entry
-// for accessibility (PDF/UA).
-func checkFieldTooltip(ctx context.Context, doc *document.Document, field ast.PdfDict, profile string, fieldIdx int, results *[]Violation) {
-	// Only check terminal fields (those with /FT or without /Kids).
-	if _, hasKids := field["Kids"]; hasKids {
-		if _, hasFT := field["FT"]; !hasFT {
-			return
-		}
-	}
-
-	if _, hasTU := field["TU"]; hasTU {
-		slog.Debug("compliance.forms: field has /TU", "index", fieldIdx)
-		return
-	}
-
-	// For PDF/UA-2, the requirement is different (Contents entry on widget).
-	if len(profile) >= 7 && profile[6] == '2' {
-		slog.Debug("compliance.forms: PDF/UA-2 field missing widget description", "index", fieldIdx)
-		return
-	}
-
-	slog.Debug("compliance.forms: field missing /TU tooltip", "index", fieldIdx)
-	*results = append(*results, failf(Rule_14289_1_7_2_t25, "field %d: missing /TU tooltip", fieldIdx)...)
-
-	_ = ctx // consumed above in related checks
-}
-
 // --- Rule selectors ---
 
 // xfaRule selects the XFA prohibition rule based on profile.

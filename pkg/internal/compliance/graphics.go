@@ -124,7 +124,6 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, part, pageNum)...)
 	}
 	return results
-	return results
 }
 
 // checkType3CharProcResources checks Type3 font CharProc content streams for

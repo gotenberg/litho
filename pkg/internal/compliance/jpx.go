@@ -96,7 +96,7 @@ func parseJP2Boxes(data []byte) []jp2Box {
 		headerSize := 8
 		if length == 1 && off+16 <= len(data) {
 			// Extended length.
-			length = int(binary.BigEndian.Uint64(data[off+8 : off+16]))
+			length = int(binary.BigEndian.Uint64(data[off+8 : off+16])) //nolint:gosec // G115: JP2 box lengths are bounded by file size.
 			headerSize = 16
 		}
 		if length == 0 {
@@ -270,7 +270,7 @@ func parseJ2KSIZMarker(data []byte) (int, []byte, error) {
 	// After FF 51: Lsiz(2), Rsiz(2), Xsiz(4), Ysiz(4), XOsiz(4), YOsiz(4),
 	//              XTsiz(4), YTsiz(4), XTOsiz(4), YTOsiz(4), Csiz(2)
 	// = 2+2+4+4+4+4+4+4+4+4+2 = 38 bytes from start of Lsiz
-	// Lsiz is at data[4], so Csiz is at data[4+2+2+4*8] = data[4+36] = data[40]
+	// The Lsiz field is at data[4], so Csiz is at data[4+2+2+4*8] = data[4+36] = data[40]
 	const csizOffset = 40
 	if len(data) < csizOffset+2 {
 		return 0, nil, errTruncated

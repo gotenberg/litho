@@ -718,42 +718,6 @@ func collectRowsFrom(ctx context.Context, doc *document.Document, elem ast.PdfDi
 	}
 }
 
-// countRowColumnsWithSpan counts the number of columns in a TR row (ColSpan-
-// adjusted) and reports whether any cell has RowSpan > 1.
-func countRowColumnsWithSpan(ctx context.Context, doc *document.Document, trElem ast.PdfDict) (int, bool) {
-	kObj := trElem["K"]
-	if kObj == nil {
-		return 0, false
-	}
-	cols := 0
-	hasRowSpan := false
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		dict, _ := document.ResolveDict(ctx, doc, kObj)
-		if dict != nil {
-			cols += cellColSpan(ctx, doc, dict)
-			if cellRowSpan(ctx, doc, dict) > 1 {
-				hasRowSpan = true
-			}
-		}
-		return cols, hasRowSpan
-	}
-	for _, item := range arr {
-		dict, _ := document.ResolveDict(ctx, doc, item)
-		if dict == nil {
-			continue
-		}
-		typeName, _ := document.ResolveName(ctx, doc, dict["S"])
-		if typeName == "TD" || typeName == "TH" {
-			cols += cellColSpan(ctx, doc, dict)
-			if cellRowSpan(ctx, doc, dict) > 1 {
-				hasRowSpan = true
-			}
-		}
-	}
-	return cols, hasRowSpan
-}
-
 // cellColSpan returns the ColSpan value for a TD/TH cell (default 1).
 func cellColSpan(ctx context.Context, doc *document.Document, cell ast.PdfDict) int {
 	// ColSpan is in the cell's attribute dict /A or table attribute array.
@@ -1329,7 +1293,8 @@ func containsPUAInContentStreamActualText(data []byte) bool {
 			return false
 		}
 		// Extract string value (parenthesized or hex).
-		if rest[0] == '(' {
+		switch rest[0] {
+		case '(':
 			// Find matching close paren (handle nesting).
 			depth := 1
 			i := 1
@@ -1350,7 +1315,7 @@ func containsPUAInContentStreamActualText(data []byte) bool {
 			if containsPUARunes(decoded) {
 				return true
 			}
-		} else if rest[0] == '<' {
+		case '<':
 			// Hex string — find closing >.
 			end := strings.Index(rest, ">")
 			if end > 0 {

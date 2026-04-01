@@ -7408,7 +7408,7 @@ func PDFA2bRules() []Rule {
 }
 
 // PDFA2uRules returns the PDF/A-2u rule set (ISO 19005-2:2011, Level U, 146 rules).
-func PDFA2uRules() []Rule {
+func PDFA2uRules() []Rule { //nolint:dupl // PDF/A profiles share overlapping rule sets by design.
 	return []Rule{
 		Rule_19005_2_6_1_2_t01,
 		Rule_19005_2_6_1_2_t02,
@@ -7721,7 +7721,7 @@ func PDFA3aRules() []Rule {
 }
 
 // PDFA3bRules returns the PDF/A-3b rule set (ISO 19005-3:2012, Level B, 146 rules).
-func PDFA3bRules() []Rule {
+func PDFA3bRules() []Rule { //nolint:dupl // PDF/A profiles share overlapping rule sets by design.
 	return []Rule{
 		Rule_19005_3_6_1_2_t01,
 		Rule_19005_3_6_1_2_t02,

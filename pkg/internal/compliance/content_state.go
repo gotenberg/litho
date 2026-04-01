@@ -262,48 +262,6 @@ func (c *contentStateChecker) resolveCSType(name string) string {
 	return resolved
 }
 
-// knownPDFOperators is the set of valid content stream operators per ISO 32000.
-//
-//nolint:gochecknoglobals // static lookup table
-var knownPDFOperators = map[string]bool{
-	// General graphics state
-	"w": true, "J": true, "j": true, "M": true, "d": true, "ri": true,
-	"i": true, "gs": true,
-	// Special graphics state
-	"q": true, "Q": true, "cm": true,
-	// Path construction
-	"m": true, "l": true, "c": true, "v": true, "y": true, "h": true, "re": true,
-	// Path painting
-	"S": true, "s": true, "f": true, "F": true, "f*": true,
-	"B": true, "B*": true, "b": true, "b*": true, "n": true,
-	// Clipping
-	"W": true, "W*": true,
-	// Text objects
-	"BT": true, "ET": true,
-	// Text state
-	"Tc": true, "Tw": true, "Tz": true, "TL": true, "Tf": true, "Tr": true, "Ts": true,
-	// Text positioning
-	"Td": true, "TD": true, "Tm": true, "T*": true,
-	// Text showing
-	"Tj": true, "TJ": true, "'": true, "\"": true,
-	// Type 3 font
-	"d0": true, "d1": true,
-	// Color
-	"CS": true, "cs": true, "SC": true, "SCN": true, "sc": true, "scn": true,
-	"G": true, "g": true, "RG": true, "rg": true, "K": true, "k": true,
-	// Shading
-	"sh": true,
-	// External objects
-	"Do": true,
-	// Inline images
-	"BI": true, "ID": true, "EI": true,
-	// XObject
-	// Marked content
-	"MP": true, "DP": true, "BMC": true, "BDC": true, "EMC": true,
-	// Compatibility
-	"BX": true, "EX": true,
-}
-
 // operatorResourceCategory maps content stream operators to the Resources
 // sub-dictionary key they reference. Only operators with a named resource
 // operand (first operand is a PdfName) are listed.
@@ -383,7 +341,7 @@ func checkContentStreamResources(
 		}
 
 		// Test 1: check for undefined operators.
-		if !knownPDFOperators[op.Operator] && undefinedRule.Specification != "" {
+		if !validPDFOperators[op.Operator] && undefinedRule.Specification != "" {
 			key := "op:" + op.Operator
 			if !reported[key] {
 				reported[key] = true
@@ -515,8 +473,7 @@ func checkInlineImageIntent(data []byte, part int, pageNum int) []Violation {
 }
 
 func realRangeRuleByPart(part int) Rule {
-	switch part {
-	case 1:
+	if part == 1 {
 		return Rule_19005_1_6_1_12_t02
 	}
 	return Rule{}

@@ -1,0 +1,235 @@
+package compliance
+
+import (
+	"context"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+)
+
+// --- 23. PDF/UA-2 form structure checks ---
+
+// checkPDFUA2FormStructure validates:
+//   - §8.10.1 t02: Form structure element contains at most one widget annotation.
+//   - §8.10.2.3 t01: Widget without label needs /Contents entry.
+func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+
+	var results []Violation
+
+	// §8.10.1 t02: walk structure tree for Form elements with >1 widget OBJR.
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err == nil && treeRoot != nil {
+		walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
+			typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+			if typeName != "Form" {
+				return
+			}
+			// Count OBJR children pointing to widget annotations.
+			widgetCount := countOBJRWidgets(ctx, doc, elem)
+			if widgetCount > 1 {
+				results = append(results, failf(Rule_14289_2_8_10_1_t02,
+					"Form structure element at %s contains %d widget annotations", path, widgetCount)...)
+			}
+		})
+	}
+
+	// §8.10.2.3 t01: Widget annotations without label need /Contents.
+	pages := collectPages(ctx, doc, catalog)
+	for _, page := range pages {
+		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annotsArr {
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if subtype != "Widget" {
+				continue
+			}
+			if isAnnotHidden(ctx, doc, annot) {
+				continue
+			}
+			// Check if widget has a /Contents entry.
+			if contentsObj, ok := annot["Contents"]; ok {
+				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
+				if err == nil && len(contentsStr) > 0 {
+					continue // has Contents
+				}
+			}
+			// Check if the widget's parent field has a label (via /TU or sibling text).
+			// For simplicity, we only check /Contents presence on the widget itself.
+			results = append(results, fail(Rule_14289_2_8_10_2_3_t01,
+				"Widget annotation has no label and no /Contents entry")...)
+		}
+	}
+
+	return results
+}
+
+// countOBJRWidgets counts OBJR children of a structure element that point to
+// Widget annotations.
+func countOBJRWidgets(ctx context.Context, doc *document.Document, elem ast.PdfDict) int {
+	kObj, ok := elem["K"]
+	if !ok {
+		return 0
+	}
+	count := 0
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		// Single child.
+		if isWidgetOBJR(ctx, doc, kObj) {
+			return 1
+		}
+		return 0
+	}
+	for _, item := range arr {
+		if isWidgetOBJR(ctx, doc, item) {
+			count++
+		}
+	}
+	return count
+}
+
+func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
+	d, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || d == nil {
+		return false
+	}
+	typeName, _ := document.ResolveName(ctx, doc, d["Type"])
+	if typeName != "OBJR" {
+		return false
+	}
+	// Resolve the referenced object and check if it's a Widget.
+	ref, ok := d["Obj"].(ast.PdfIndirectRef)
+	if !ok {
+		return false
+	}
+	annot, err := document.ResolveDict(ctx, doc, ref)
+	if err != nil || annot == nil {
+		return false
+	}
+	subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+	return subtype == "Widget"
+}
+
+// --- 24. Structure destinations (PDF/UA-2 §8.8) ---
+
+// checkStructureDestinations validates PDF/UA-2 §8.8:
+//   - t01: Destinations in outline items, OpenAction, and Link annotations
+//     must be structure destinations (array starting with struct element ref).
+//   - t02: GoTo action destinations must be structure destinations.
+func checkStructureDestinations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+
+	var results []Violation
+
+	// Check outline destinations (t01 for /Dest, t02 for /A GoTo).
+	outlinesObj, ok := catalog["Outlines"]
+	if ok {
+		outlines, _ := document.ResolveDict(ctx, doc, outlinesObj)
+		if outlines != nil {
+			walkOutlineStructDest(ctx, doc, outlines["First"], &results, 0)
+		}
+	}
+
+	// Check catalog /OpenAction (t01).
+	if oaObj, ok := catalog["OpenAction"]; ok {
+		if !isStructureDestination(ctx, doc, oaObj) {
+			// Could be an action dict — check if GoTo.
+			oaDict, _ := document.ResolveDict(ctx, doc, oaObj)
+			if oaDict != nil {
+				if s, _ := document.ResolveName(ctx, doc, oaDict["S"]); s == "GoTo" {
+					if dObj, hasDest := oaDict["D"]; hasDest {
+						if !isStructureDestination(ctx, doc, dObj) {
+							results = append(results, fail(Rule_14289_2_8_8_t02,
+								"OpenAction GoTo destination is not a structure destination")...)
+						}
+					}
+				}
+			} else {
+				// Direct destination array.
+				results = append(results, fail(Rule_14289_2_8_8_t01,
+					"OpenAction destination is not a structure destination")...)
+			}
+		}
+	}
+
+	return results
+}
+
+// walkOutlineStructDest walks outline items checking destinations.
+func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Violation, depth int) {
+	if depth > 200 || ctx.Err() != nil { //nolint:mnd
+		return
+	}
+	item, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || item == nil {
+		return
+	}
+
+	// Check /Dest on outline item (t01).
+	if destObj, hasDest := item["Dest"]; hasDest {
+		if !isStructureDestination(ctx, doc, destObj) {
+			*results = append(*results, fail(Rule_14289_2_8_8_t01,
+				"Outline item destination is not a structure destination")...)
+		}
+	}
+
+	// Check /A action on outline item.
+	if aObj, hasA := item["A"]; hasA {
+		aDict, _ := document.ResolveDict(ctx, doc, aObj)
+		if aDict != nil {
+			s, _ := document.ResolveName(ctx, doc, aDict["S"])
+			if s == "GoTo" {
+				if dObj, hasDest := aDict["D"]; hasDest {
+					if !isStructureDestination(ctx, doc, dObj) {
+						*results = append(*results, fail(Rule_14289_2_8_8_t02,
+							"Outline GoTo action destination is not a structure destination")...)
+					}
+				}
+			}
+		}
+	}
+
+	// Recurse: children then siblings.
+	walkOutlineStructDest(ctx, doc, item["First"], results, depth+1)
+	walkOutlineStructDest(ctx, doc, item["Next"], results, depth)
+}
+
+// isStructureDestination checks if a destination object is a "structure
+// destination" per PDF 2.0 — an array whose first element references a
+// structure element (has /Type /StructElem or /S key) rather than a page.
+func isStructureDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject) bool {
+	// Resolve named destination if it's a string/name.
+	if nameObj, err := document.ResolveName(ctx, doc, destObj); err == nil && nameObj != "" {
+		// Named destination — look up in /Names/Dests.
+		// For simplicity, assume named destinations are not structure destinations.
+		return false
+	}
+
+	arr, err := document.ResolveArray(ctx, doc, destObj)
+	if err != nil || len(arr) == 0 {
+		return false
+	}
+
+	// The first element of a structure destination is a reference to a
+	// structure element dict (has /S key), not a page dict (has /Type /Page).
+	firstDict, err := document.ResolveDict(ctx, doc, arr[0])
+	if err != nil || firstDict == nil {
+		return false
+	}
+
+	// Structure elements have /S key.
+	if _, hasS := firstDict["S"]; hasS {
+		return true
+	}
+
+	// Also check /Type /StructElem explicitly.
+	typeName, _ := document.ResolveName(ctx, doc, firstDict["Type"])
+	return typeName == "StructElem"
+}
