@@ -2,10 +2,11 @@
 
 ## Metrics
 
-- 42 source files, ~27k lines of Go code
+- 43 source files, ~27k lines of Go code
 - 11 test files, ~1,500 lines of test code
 - 751 rules across 6 ISO standards (19005-1 through 19005-4, 14289-1, 14289-2)
 - 2,598 / 2,601 VeraPDF agreement (99.9%), 0 false positives
+- rules.go generated from VeraPDF XML profiles via `go generate`
 
 ## Remaining False Negatives (3)
 
@@ -16,10 +17,6 @@
 | `PDF_UA-2/5-t05-fail-b.pdf` | 5 t5 | Corpus anomaly: VeraPDF itself reports this file as compliant. |
 
 ## Remaining Improvements
-
-### Code generation for rules.go
-
-VeraPDF publishes machine-readable validation profiles as XML. A generator could produce rules and rule tables from these profiles, eliminating the risk of copy-paste errors in the 7,800-line manually maintained rules.go.
 
 ### Extend unit test coverage (Tier 3)
 
