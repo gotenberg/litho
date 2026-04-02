@@ -2,9 +2,11 @@ package content
 
 import (
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-func TestParseStreamData_SkipsInlineImage(t *testing.T) {
+func TestParseStreamData_EmitsInlineImageOp(t *testing.T) {
 	// Content stream with text, an inline image, then more text.
 	// The binary data between ID and EI contains arbitrary bytes.
 	stream := []byte("BT /F1 12 Tf (Hello) Tj ET BI /W 10 /H 5 /BPC 8 /CS /RGB ID \x00\x01\x02\xFF\xFE\xFD \nEI BT (World) Tj ET")
@@ -14,8 +16,8 @@ func TestParseStreamData_SkipsInlineImage(t *testing.T) {
 		t.Fatalf("ParseStreamData failed: %v", err)
 	}
 
-	// Expected operators: BT, Tf, Tj, ET, BT, Tj, ET (BI/ID/EI skipped).
-	expected := []string{"BT", "Tf", "Tj", "ET", "BT", "Tj", "ET"}
+	// Expected operators: BT, Tf, Tj, ET, BI, BT, Tj, ET.
+	expected := []string{"BT", "Tf", "Tj", "ET", "BI", "BT", "Tj", "ET"}
 	if len(ops) != len(expected) {
 		var got []string
 		for _, op := range ops {
@@ -28,6 +30,28 @@ func TestParseStreamData_SkipsInlineImage(t *testing.T) {
 			t.Errorf("op[%d]: got %q, want %q", i, ops[i].Operator, want)
 		}
 	}
+
+	// Verify the BI operation contains the inline image dict.
+	biOp := ops[4]
+	if len(biOp.Operands) != 1 {
+		t.Fatalf("BI op: expected 1 operand, got %d", len(biOp.Operands))
+	}
+	dict, ok := biOp.Operands[0].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("BI op: expected PdfDict operand, got %T", biOp.Operands[0])
+	}
+	// Check /W = 10.
+	if w, ok := dict["W"]; !ok {
+		t.Error("BI dict missing /W key")
+	} else if wInt, ok := w.(ast.PdfInt); !ok || int(wInt) != 10 {
+		t.Errorf("BI dict /W: got %v (%T), want 10", w, w)
+	}
+	// Check /CS = /RGB.
+	if cs, ok := dict["CS"]; !ok {
+		t.Error("BI dict missing /CS key")
+	} else if csName, ok := cs.(ast.PdfName); !ok || string(csName) != "RGB" {
+		t.Errorf("BI dict /CS: got %v (%T), want RGB", cs, cs)
+	}
 }
 
 func TestParseStreamData_InlineImageAtEnd(t *testing.T) {
@@ -39,9 +63,13 @@ func TestParseStreamData_InlineImageAtEnd(t *testing.T) {
 		t.Fatalf("ParseStreamData failed: %v", err)
 	}
 
-	expected := []string{"BT", "Tj", "ET"}
+	expected := []string{"BT", "Tj", "ET", "BI"}
 	if len(ops) != len(expected) {
-		t.Fatalf("expected %d ops, got %d", len(expected), len(ops))
+		var got []string
+		for _, op := range ops {
+			got = append(got, op.Operator)
+		}
+		t.Fatalf("expected %d ops %v, got %d ops %v", len(expected), expected, len(ops), got)
 	}
 	for i, want := range expected {
 		if ops[i].Operator != want {
@@ -61,7 +89,7 @@ func TestParseStreamData_InlineImageWithFalseEI(t *testing.T) {
 		t.Fatalf("ParseStreamData failed: %v", err)
 	}
 
-	expected := []string{"BT", "Tj", "ET", "BT", "Tj", "ET"}
+	expected := []string{"BT", "Tj", "ET", "BI", "BT", "Tj", "ET"}
 	if len(ops) != len(expected) {
 		var got []string
 		for _, op := range ops {
@@ -80,7 +108,7 @@ func TestParseStreamData_MultipleInlineImages(t *testing.T) {
 		t.Fatalf("ParseStreamData failed: %v", err)
 	}
 
-	expected := []string{"BT", "Tj", "ET", "BT", "Tj", "ET", "BT", "Tj", "ET"}
+	expected := []string{"BT", "Tj", "ET", "BI", "BT", "Tj", "ET", "BI", "BT", "Tj", "ET"}
 	if len(ops) != len(expected) {
 		var got []string
 		for _, op := range ops {
@@ -100,9 +128,13 @@ func TestParseStreamData_InlineImageEmptyData(t *testing.T) {
 		t.Fatalf("ParseStreamData failed: %v", err)
 	}
 
-	expected := []string{"BT", "Tj", "ET"}
+	expected := []string{"BI", "BT", "Tj", "ET"}
 	if len(ops) != len(expected) {
-		t.Fatalf("expected %d ops, got %d", len(expected), len(ops))
+		var got []string
+		for _, op := range ops {
+			got = append(got, op.Operator)
+		}
+		t.Fatalf("expected %d ops %v, got %d ops %v", len(expected), expected, len(ops), got)
 	}
 }
 
@@ -130,12 +162,18 @@ func TestParseStreamData_InlineImageWithArrayValue(t *testing.T) {
 		t.Fatalf("ParseStreamData failed: %v", err)
 	}
 
-	expected := []string{"BT", "Tj", "ET"}
+	expected := []string{"BI", "BT", "Tj", "ET"}
 	if len(ops) != len(expected) {
 		var got []string
 		for _, op := range ops {
 			got = append(got, op.Operator)
 		}
 		t.Fatalf("expected %d ops %v, got %d ops %v", len(expected), expected, len(ops), got)
+	}
+	// Verify array value was parsed.
+	biOp := ops[0]
+	dict := biOp.Operands[0].(ast.PdfDict)
+	if _, ok := dict["D"]; !ok {
+		t.Error("BI dict missing /D key")
 	}
 }

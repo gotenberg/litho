@@ -1,13 +1,13 @@
 package compliance
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // checkXObjectGroup validates XObject restrictions for PDF/A conformance.
@@ -48,19 +48,18 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
 
 		// Check inline images for Interpolate = true.
-		results = append(results, checkInlineImageInterpolate(ctx, doc, page, i+1, part)...)
+		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(), i+1, part)...)
 	}
 
 	slog.Debug("compliance.xobjects: checks complete", "violations", len(results))
 	return results
 }
 
-// checkInlineImageInterpolate scans a page's content stream for inline images
-// with /I true (Interpolate). Inline images use BI..ID..EI blocks with
-// abbreviated key names: /I for Interpolate.
-func checkInlineImageInterpolate(_ context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int) []Violation {
-	streamData, err := getPageContentBytes(context.Background(), doc, page)
-	if err != nil || len(streamData) == 0 {
+// checkInlineImageInterpolate checks parsed BI operations for inline images
+// with /I true or /Interpolate true. Uses parsed operations instead of raw
+// byte scanning.
+func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []Violation {
+	if len(ops) == 0 {
 		return nil
 	}
 
@@ -77,63 +76,26 @@ func checkInlineImageInterpolate(_ context.Context, doc *document.Document, page
 		return nil
 	}
 
-	// Scan for BI blocks and check /I or /Interpolate key.
-	data := streamData
-	for i := 0; i < len(data)-2; i++ {
-		if data[i] != 'B' || data[i+1] != 'I' {
+	for _, op := range ops {
+		if op.Operator != "BI" || len(op.Operands) == 0 {
 			continue
 		}
-		if i > 0 && !isWhitespace(data[i-1]) {
+		dict, ok := op.Operands[0].(ast.PdfDict)
+		if !ok {
 			continue
 		}
-		if i+2 >= len(data) || !isWhitespace(data[i+2]) {
-			continue
-		}
-		// Found BI — scan for ID marker to delimit the dict area.
-		end := bytes.Index(data[i:], []byte("\nID"))
-		if end < 0 {
-			end = bytes.Index(data[i:], []byte(" ID"))
-		}
-		if end < 0 {
-			end = bytes.Index(data[i:], []byte("\rID"))
-		}
-		if end < 0 {
-			continue
-		}
-		block := data[i : i+end]
-		// Check for /I true or /Interpolate true.
-		if hasInlineImageInterpolateTrue(block) {
-			return failf(rule, "page %d: inline image has Interpolate=true", pageNum)
+		// Check /I (abbreviated) and /Interpolate (full name).
+		for _, key := range []ast.PdfName{"I", "Interpolate"} {
+			val, exists := dict[key]
+			if !exists {
+				continue
+			}
+			if b, ok := val.(ast.PdfBool); ok && bool(b) {
+				return failf(rule, "page %d: inline image has Interpolate=true", pageNum)
+			}
 		}
 	}
 	return nil
-}
-
-// hasInlineImageInterpolateTrue checks if an inline image BI block contains
-// /I true or /Interpolate true.
-func hasInlineImageInterpolateTrue(block []byte) bool {
-	// Check /Interpolate true (full name).
-	if _, after, ok := bytes.Cut(block, []byte("/Interpolate")); ok {
-		rest := bytes.TrimLeft(after, " \t\r\n")
-		if bytes.HasPrefix(rest, []byte("true")) {
-			return true
-		}
-	}
-	// Check /I true (abbreviated name). Must be followed by whitespace to
-	// distinguish from other keys like /IM, /Intent, etc.
-	for j := 0; j < len(block)-1; j++ {
-		if block[j] == '/' && block[j+1] == 'I' {
-			// Ensure /I is not part of a longer key name.
-			if j+2 < len(block) && !isWhitespace(block[j+2]) {
-				continue
-			}
-			rest := bytes.TrimLeft(block[j+2:], " \t\r\n")
-			if bytes.HasPrefix(rest, []byte("true")) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // scanXObjectResources iterates XObject resources, validates each, and recurses

@@ -1,12 +1,14 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // validAFRelationships lists the valid values for /AFRelationship (ISO 32000-2,
@@ -81,6 +83,12 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Check /AFRelationship (required for part 3+ and part 4).
 		results = append(results, checkAFRelationship(ctx, doc, fs, part, profile)...)
+	}
+
+	// --- PDF/A-4: embedded files must themselves be PDF/A-compliant (§6.9 t3) ---
+	// This rule applies only to base PDF/A-4 (level '4'), not PDF/A-4e or PDF/A-4f.
+	if part == 4 && vctx.level == '4' {
+		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, fileSpecs)...)
 	}
 
 	// --- §6.8 t4: Catalog /AF array must reference file spec dicts (parts 3+) ---
@@ -416,4 +424,153 @@ func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, a
 
 func catalogAFRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule{}, Rule_19005_3_6_8_t04, Rule_19005_4_6_9_t04)
+}
+
+// embeddedDepthKey is a context key for tracking recursive embedded PDF validation depth.
+type embeddedDepthKey struct{}
+
+// maxEmbeddedDepth is the maximum recursion depth for embedded PDF validation.
+// An embedded PDF containing another embedded PDF would be depth 2.
+const maxEmbeddedDepth = 2
+
+// maxEmbeddedFileSize is the maximum size of a decoded embedded file stream
+// that will be validated (50 MB). Larger files are skipped to prevent OOM.
+const maxEmbeddedFileSize = 50 * 1024 * 1024
+
+// checkEmbeddedFileCompliance validates that all embedded PDF files within a
+// PDF/A-4 document are themselves PDF/A-compliant (ISO 19005-4 §6.9 t3).
+//
+// For each file specification with an /EF entry, the function decodes the
+// embedded stream, attempts to parse it as a PDF, and validates it against
+// PDF/A-4, then PDF/A-2b, then PDF/A-1b. If none pass, a violation is reported.
+//
+// Safety limits prevent abuse: maximum 50 MB per file, maximum recursion depth
+// of 2, and context cancellation is checked per file.
+func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fileSpecs []fileSpecEntry) []Violation {
+	if len(fileSpecs) == 0 {
+		return nil
+	}
+
+	// Check recursion depth.
+	depth, _ := ctx.Value(embeddedDepthKey{}).(int)
+	if depth >= maxEmbeddedDepth {
+		slog.Debug("compliance.embedded: max recursion depth reached, skipping embedded file compliance check",
+			"depth", depth)
+		return nil
+	}
+
+	childCtx := context.WithValue(ctx, embeddedDepthKey{}, depth+1)
+
+	var results []Violation
+
+	for _, fs := range fileSpecs {
+		if ctx.Err() != nil {
+			return results
+		}
+
+		violations := validateEmbeddedFileSpec(childCtx, doc, fs)
+		results = append(results, violations...)
+	}
+
+	return results
+}
+
+// validateEmbeddedFileSpec extracts and validates a single embedded file stream
+// from a file specification dictionary.
+func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fileSpecEntry) []Violation {
+	efObj, ok := fs.dict["EF"]
+	if !ok {
+		return nil
+	}
+
+	efDict, err := document.ResolveDict(ctx, doc, efObj)
+	if err != nil || efDict == nil {
+		return nil
+	}
+
+	// The /EF dict maps /F, /UF, etc. to embedded file streams.
+	// Check /F first (most common), then /UF.
+	var streamObj ast.PdfObject
+	if f, ok := efDict["F"]; ok {
+		streamObj = f
+	} else if uf, ok := efDict["UF"]; ok {
+		streamObj = uf
+	}
+
+	if streamObj == nil {
+		return nil
+	}
+
+	stream, err := document.ResolveStream(ctx, doc, streamObj)
+	if err != nil || stream.Dict == nil {
+		return nil
+	}
+
+	// Decode the stream.
+	data, err := doc.DecodeStream(stream)
+	if err != nil {
+		slog.Debug("compliance.embedded: cannot decode embedded stream",
+			"object", fs.objNum, "error", err)
+		return nil
+	}
+
+	if len(data) > maxEmbeddedFileSize {
+		slog.Debug("compliance.embedded: embedded file too large, skipping",
+			"object", fs.objNum, "size", len(data))
+		return nil
+	}
+
+	// Check if this looks like a PDF. Non-PDF embedded files cannot be
+	// PDF/A-compliant by definition.
+	if !bytes.Contains(data[:min(len(data), 1024)], []byte("%PDF-")) {
+		return failf(Rule_19005_4_6_9_t03,
+			"object %d: embedded file is not a PDF document", fs.objNum)
+	}
+
+	slog.Debug("compliance.embedded: validating embedded PDF",
+		"object", fs.objNum, "size", len(data))
+
+	// Parse the embedded PDF.
+	embDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		slog.Debug("compliance.embedded: cannot parse embedded PDF",
+			"object", fs.objNum, "error", err)
+		// If we can't parse it, it's certainly not PDF/A-compliant.
+		return failf(Rule_19005_4_6_9_t03,
+			"object %d: embedded file is not a valid PDF", fs.objNum)
+	}
+
+	// Try PDF/A-4 first, then PDF/A-2b, then PDF/A-1b.
+	// The spec says embedded files shall comply with ISO 19005-1, 19005-2, or 19005-4.
+	profiles := []models.PDFAProfile{
+		models.PDFA4,
+		models.PDFA2b,
+		models.PDFA1b,
+	}
+
+	for _, profile := range profiles {
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		violations, err := ValidatePDFA(ctx, embDoc, profile)
+		if err != nil {
+			slog.Debug("compliance.embedded: validation error for embedded PDF",
+				"object", fs.objNum, "profile", profile, "error", err)
+			continue
+		}
+
+		if len(violations) == 0 {
+			slog.Debug("compliance.embedded: embedded PDF passes",
+				"object", fs.objNum, "profile", profile)
+			return nil // Passes at least one profile — compliant.
+		}
+
+		slog.Debug("compliance.embedded: embedded PDF fails profile",
+			"object", fs.objNum, "profile", profile, "violations", len(violations))
+	}
+
+	// Failed all profiles.
+	return failf(Rule_19005_4_6_9_t03,
+		"object %d: embedded file is not compliant with ISO 19005-1, 19005-2, or 19005-4", fs.objNum)
 }

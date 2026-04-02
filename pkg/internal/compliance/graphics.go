@@ -44,8 +44,8 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			if res != nil && ops != nil {
 				// Content stream resource completeness.
 				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, res, part, i+1)...)
-				// BI...ID blocks are skipped by the parser; scan raw bytes.
-				results = append(results, checkInlineImageIntent(p.content, part, i+1)...)
+				// Check inline image /Intent values from parsed BI operations.
+				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 			}
 		}
 

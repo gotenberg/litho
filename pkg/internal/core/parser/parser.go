@@ -580,6 +580,86 @@ func (p *Parser) SkipInlineImage() error {
 	return scanToEI(reader)
 }
 
+// ParseInlineImageDict reads an inline image's dictionary key/value pairs
+// (between BI and ID), skips the binary image data (ID to EI), and returns
+// the properties as a PdfDict. Called after the BI operator has been consumed.
+// Dictionary keys are PDF names (e.g., /W, /H, /BPC, /CS) and values are
+// parsed as normal PDF objects.
+func (p *Parser) ParseInlineImageDict() (ast.PdfDict, error) {
+	dict := ast.PdfDict{}
+
+	// Phase 1: Parse key/value pairs until the ID keyword.
+	for {
+		tok, err := p.Peek(0)
+		if err != nil && tok.Type == lexer.TokenError {
+			return nil, fmt.Errorf("inline image dict: %w", err)
+		}
+		if tok.Type == lexer.TokenEOF {
+			return nil, fmt.Errorf("unexpected EOF in inline image dictionary")
+		}
+		// ID marks the end of the dictionary and start of raw image data.
+		if tok.Type == lexer.TokenKeyword && tok.Value == "ID" {
+			if _, err := p.Consume(); err != nil {
+				return nil, fmt.Errorf("failed to consume ID: %w", err)
+			}
+			break
+		}
+
+		// Expect a name token as the key.
+		if tok.Type != lexer.TokenName {
+			// Tolerate unexpected tokens by skipping them.
+			if _, err := p.Consume(); err != nil {
+				return nil, fmt.Errorf("inline image dict key: %w", err)
+			}
+			continue
+		}
+
+		keyName := ast.PdfName(strings.TrimPrefix(tok.Value, "/"))
+		if _, err := p.Consume(); err != nil {
+			return nil, fmt.Errorf("inline image dict key consume: %w", err)
+		}
+
+		// Peek at the next token; if it's ID or another name key, this was
+		// a valueless entry (shouldn't happen per spec, but be defensive).
+		nextTok, _ := p.Peek(0)
+		if nextTok.Type == lexer.TokenKeyword && nextTok.Value == "ID" {
+			break
+		}
+		if nextTok.Type == lexer.TokenEOF {
+			return nil, fmt.Errorf("unexpected EOF after inline image key %q", keyName)
+		}
+
+		// Parse the value.
+		val, err := p.ParseObject()
+		if err != nil {
+			// Tolerate malformed values by consuming the bad token.
+			if _, consumeErr := p.Consume(); consumeErr != nil {
+				return nil, fmt.Errorf("inline image dict value for %q: %w", keyName, err)
+			}
+			continue
+		}
+		dict[keyName] = val
+	}
+
+	// Ensure no lookahead tokens remain before switching to raw byte reading.
+	if len(p.tokens) > 0 {
+		return nil, fmt.Errorf("parser read ahead too far before inline image data")
+	}
+
+	// Phase 2: Skip the single whitespace byte that follows ID (per PDF spec).
+	reader := p.lex.GetReader()
+	if _, err := reader.ReadByte(); err != nil {
+		return nil, fmt.Errorf("failed to read post-ID whitespace: %w", err)
+	}
+
+	// Phase 3: Scan forward for the EI terminator.
+	if err := scanToEI(reader); err != nil {
+		return nil, err
+	}
+
+	return dict, nil
+}
+
 // scanToEI scans forward through raw binary image data looking for the
 // EI end-of-inline-image marker. Uses a state machine: the marker must be
 // preceded by whitespace and followed by whitespace, a delimiter, or EOF.

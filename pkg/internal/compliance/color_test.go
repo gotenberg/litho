@@ -125,22 +125,6 @@ func TestMarkDeviceCS(t *testing.T) {
 	})
 }
 
-func TestIsWhitespace(t *testing.T) {
-	t.Parallel()
-	whitespace := []byte{' ', '\n', '\r', '\t', '\x00', '\x0c'}
-	for _, b := range whitespace {
-		if !isWhitespace(b) {
-			t.Errorf("expected isWhitespace(%q) = true", b)
-		}
-	}
-	nonWS := []byte{'a', '1', '.', '/', '('}
-	for _, b := range nonWS {
-		if isWhitespace(b) {
-			t.Errorf("expected isWhitespace(%q) = false", b)
-		}
-	}
-}
-
 func TestBytesEqual(t *testing.T) {
 	t.Parallel()
 

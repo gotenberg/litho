@@ -246,10 +246,6 @@ func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObj
 	return false
 }
 
-func isWhitespace(b byte) bool {
-	return b == ' ' || b == '\n' || b == '\r' || b == '\t' || b == '\x00' || b == '\x0c'
-}
-
 // formatDictAddr returns a stable string key for cycle detection on a PdfDict.
 func formatDictAddr(d ast.PdfDict) string {
 	return fmt.Sprintf("%p", d)

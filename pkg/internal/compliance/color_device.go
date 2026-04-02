@@ -1,7 +1,6 @@
 package compliance
 
 import (
-	"bytes"
 	"context"
 	"log/slog"
 
@@ -416,9 +415,6 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		return usage
 	}
 
-	// Pre-scan raw bytes for inline image colour spaces.
-	scanInlineImageCS(data, &usage)
-
 	// Track Do operator targets so we only scan referenced nested XObjects.
 	nestedXObjects := make(map[string]bool)
 	formFillCSSet := false
@@ -429,6 +425,8 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		if err != nil {
 			slog.Debug("compliance.color: cannot parse Form XObject content stream", "error", err)
 		} else {
+			// Check inline image colour spaces from parsed BI operations.
+			scanInlineImageCSOps(ops, &usage)
 			for idx, op := range ops {
 				if idx%100 == 0 && ctx.Err() != nil {
 					return usage
@@ -736,17 +734,15 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 		return usage, referencedXObjects
 	}
 
-	// Pre-scan raw bytes for inline image colour spaces. The content stream
-	// parser skips BI...ID...EI blocks, so we detect inline image device CS
-	// usage via byte pattern matching before parsing.
-	scanInlineImageCS(streamData, &usage)
-
 	ops, err := content.ParseStreamData(streamData)
 	if err != nil {
 		slog.Debug("compliance.color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)
 		return usage, referencedXObjects
 	}
+
+	// Check inline image colour spaces from parsed BI operations.
+	scanInlineImageCSOps(ops, &usage)
 
 	// Track whether fill/stroke CS has been explicitly set. If a painting
 	// operator runs without any prior CS setting, DeviceGray is implicitly used.
@@ -841,54 +837,30 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 	return usage, referencedXObjects
 }
 
-// scanInlineImageCS scans raw content stream bytes for inline image colour
-// spaces. Inline images (BI...ID...EI) are skipped by the content stream
-// parser, so we detect device CS usage via byte pattern matching.
+// scanInlineImageCSOps checks parsed BI operations for inline image colour
+// space usage. Inline images use abbreviated key names: /CS for ColorSpace.
 // Abbreviations: /CS /G = DeviceGray, /CS /RGB = DeviceRGB, /CS /CMYK = DeviceCMYK.
 // Also handles /CS /DeviceRGB etc. and /ColorSpace variants.
-func scanInlineImageCS(data []byte, usage *deviceCSUsage) {
-	// Find all BI...ID blocks and check /CS parameter.
-	for i := 0; i < len(data)-2; i++ {
-		// Match "BI" preceded by whitespace (or start of data) followed by whitespace.
-		if data[i] != 'B' || data[i+1] != 'I' {
+func scanInlineImageCSOps(ops []content.Operation, usage *deviceCSUsage) {
+	for _, op := range ops {
+		if op.Operator != "BI" || len(op.Operands) == 0 {
 			continue
 		}
-		if i > 0 && !isWhitespace(data[i-1]) {
+		dict, ok := op.Operands[0].(ast.PdfDict)
+		if !ok {
 			continue
 		}
-		if i+2 >= len(data) || !isWhitespace(data[i+2]) {
-			continue
-		}
-		// Found BI — scan ahead for /CS or /ColorSpace before ID.
-		end := bytes.Index(data[i:], []byte("\nID"))
-		if end < 0 {
-			end = bytes.Index(data[i:], []byte(" ID"))
-		}
-		if end < 0 {
-			continue
-		}
-		block := data[i : i+end]
-		// Look for /CS or /ColorSpace followed by a name.
-		for _, key := range [][]byte{[]byte("/CS"), []byte("/ColorSpace")} {
-			_, after, ok := bytes.Cut(block, key)
+		// Check /CS (abbreviated) and /ColorSpace (full name).
+		for _, key := range []ast.PdfName{"CS", "ColorSpace"} {
+			val, exists := dict[key]
+			if !exists {
+				continue
+			}
+			csName, ok := val.(ast.PdfName)
 			if !ok {
 				continue
 			}
-			// Skip whitespace after key, then read the name.
-			rest := after
-			for len(rest) > 0 && isWhitespace(rest[0]) {
-				rest = rest[1:]
-			}
-			if len(rest) == 0 || rest[0] != '/' {
-				continue
-			}
-			// Extract name token (up to whitespace or /).
-			nameEnd := 1
-			for nameEnd < len(rest) && !isWhitespace(rest[nameEnd]) && rest[nameEnd] != '/' {
-				nameEnd++
-			}
-			csName := string(rest[1:nameEnd])
-			switch csName {
+			switch string(csName) {
 			case "G", "DeviceGray":
 				usage.gray = true
 			case "RGB", "DeviceRGB":

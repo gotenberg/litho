@@ -44,9 +44,14 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 				if _, err := p.Consume(); err != nil {
 					return nil, fmt.Errorf("failed to consume BI: %w", err)
 				}
-				if err := p.SkipInlineImage(); err != nil {
+				dict, err := p.ParseInlineImageDict()
+				if err != nil {
 					return nil, fmt.Errorf("inline image: %w", err)
 				}
+				ops = append(ops, Operation{
+					Operator: "BI",
+					Operands: []ast.PdfObject{dict},
+				})
 				operands = nil
 				continue
 			}
