@@ -11,15 +11,15 @@ import (
 // checkFormGroup validates interactive form compliance for PDF/A and PDF/UA
 // profiles. It checks form field appearances, XFA prohibition, and form field
 // accessibility tooltips.
-func checkFormGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	part := pdfaPart(profile)
-	ua := isPDFUA(profile)
+func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
+	part := vctx.part
+	ua := vctx.ua
 
 	slog.Debug("compliance.forms: starting form checks", "profile", profile, "part", part, "ua", ua)
 
 	acroFormObj, ok := catalog["AcroForm"]
 	if !ok {
-		slog.Debug("compliance.forms: no /AcroForm in catalog, skipping form checks")
 		return nil
 	}
 
@@ -44,7 +44,6 @@ func checkFormGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	// Iterate form fields.
 	fieldsObj, ok := acroForm["Fields"]
 	if !ok {
-		slog.Debug("compliance.forms: /AcroForm has no /Fields")
 		return results
 	}
 
@@ -54,11 +53,8 @@ func checkFormGroup(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return results
 	}
 
-	slog.Debug("compliance.forms: checking form fields", "count", len(fields))
-
 	for i, fieldObj := range fields {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.forms: context cancelled, stopping field checks")
 			return results
 		}
 
@@ -83,8 +79,6 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 		slog.Debug("compliance.forms: cannot resolve field dict", "index", fieldIdx, "error", err)
 		return
 	}
-
-	slog.Debug("compliance.forms: checking field", "index", fieldIdx, "depth", depth)
 
 	// §6.9/6.4: Form field appearances — every field must have /AP.
 	if part > 0 {
@@ -117,14 +111,9 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 
 // checkXFA validates that /AcroForm does not contain the /XFA key.
 func checkXFA(_ context.Context, _ *document.Document, acroForm ast.PdfDict, profile string, part int, ua bool, results *[]Violation) {
-	slog.Debug("compliance.forms: checking for /XFA")
-
 	if _, hasXFA := acroForm["XFA"]; !hasXFA {
-		slog.Debug("compliance.forms: no /XFA found")
 		return
 	}
-
-	slog.Debug("compliance.forms: /XFA key present in /AcroForm")
 
 	rule := xfaRule(profile, part, ua)
 	*results = append(*results, fail(rule, "/AcroForm contains /XFA key")...)
@@ -132,11 +121,8 @@ func checkXFA(_ context.Context, _ *document.Document, acroForm ast.PdfDict, pro
 
 // checkNeedAppearances validates the NeedAppearances flag is not true.
 func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm ast.PdfDict, part int, results *[]Violation) {
-	slog.Debug("compliance.forms: checking NeedAppearances flag")
-
 	naObj, ok := acroForm["NeedAppearances"]
 	if !ok {
-		slog.Debug("compliance.forms: no /NeedAppearances flag")
 		return
 	}
 
@@ -147,7 +133,6 @@ func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm 
 	}
 
 	if bool(na) {
-		slog.Debug("compliance.forms: /NeedAppearances is true")
 		*results = append(*results, fail(needAppearancesRule(part), "/NeedAppearances is true")...)
 	}
 }
@@ -163,24 +148,20 @@ func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast
 	}
 
 	if _, hasAP := field["AP"]; hasAP {
-		slog.Debug("compliance.forms: field has /AP", "index", fieldIdx)
 		return
 	}
 
 	// Form fields can inherit /AP from their widget annotation children.
 	// Check /Kids for widget annotations that carry /AP.
 	if widgetHasAppearance(ctx, doc, field) {
-		slog.Debug("compliance.forms: field widget child has /AP", "index", fieldIdx)
 		return
 	}
 
 	// Check if this is a zero-area widget (Rect where x1==x3 and y1==y4).
 	if isZeroAreaRect(ctx, doc, field) {
-		slog.Debug("compliance.forms: field has zero-area Rect, skipping /AP check", "index", fieldIdx)
 		return
 	}
 
-	slog.Debug("compliance.forms: field missing /AP", "index", fieldIdx)
 	*results = append(*results, failf(fieldAppearanceRule(part), "field %d: missing /AP appearance dictionary", fieldIdx)...)
 }
 
@@ -233,7 +214,6 @@ func widgetHasAppearance(ctx context.Context, doc *document.Document, field ast.
 		}
 		// Widget annotations have /Subtype /Widget or lack /FT (terminal field indicator).
 		if _, hasAP := kid["AP"]; hasAP {
-			slog.Debug("compliance.forms: found /AP on widget child")
 			return true
 		}
 	}
@@ -283,18 +263,7 @@ func xfaRule(profile string, part int, ua bool) Rule {
 
 // needAppearancesRule selects the NeedAppearances rule based on PDF/A part.
 func needAppearancesRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_9_t01
-	case 2:
-		return Rule_19005_2_6_4_1_t03
-	case 3:
-		return Rule_19005_3_6_4_1_t03
-	case 4:
-		return Rule_19005_4_6_4_1_t02
-	default:
-		return Rule_19005_1_6_9_t01
-	}
+	return ruleByPart(part, Rule_19005_1_6_9_t01, Rule_19005_2_6_4_1_t03, Rule_19005_3_6_4_1_t03, Rule_19005_4_6_4_1_t02)
 }
 
 // fieldAppearanceRule selects the field appearance rule based on PDF/A part.

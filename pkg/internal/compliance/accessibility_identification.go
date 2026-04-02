@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -13,13 +12,10 @@ import (
 // --- 9. OC config names ---
 
 func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking OC config names")
-
 	rule := ocConfigNameRule(profile)
 
 	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])
 	if err != nil || ocProps == nil {
-		slog.Debug("compliance.accessibility: no /OCProperties, skipping OC check")
 		return nil
 	}
 
@@ -31,7 +27,6 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 		dConfig, err := document.ResolveDict(ctx, doc, dObj)
 		if err == nil && dConfig != nil {
 			if !hasNonEmptyName(ctx, doc, dConfig) {
-				slog.Debug("compliance.accessibility: default OC config missing /Name")
 				results = append(results, Violation{Rule: rule, Context: "default config (D)"})
 			}
 			// §7.10 t02 (PDF/UA-1): /AS key forbidden in any OC config dict.
@@ -67,7 +62,6 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 		}
 
 		if !hasNonEmptyName(ctx, doc, cfg) {
-			slog.Debug("compliance.accessibility: OC config missing /Name", "index", i)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("config %d", i)})
 		}
 		// §7.10 t02 (PDF/UA-1): /AS key forbidden.
@@ -229,7 +223,7 @@ func extractXMPPropertyValue(raw, prefix, localName string) string {
 }
 
 func isFourDigitYear(s string) bool {
-	if len(s) != 4 { //nolint:mnd
+	if len(s) != 4 {
 		return false
 	}
 	for _, c := range s {

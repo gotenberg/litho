@@ -11,22 +11,27 @@ import (
 
 // checkTransparencyGroup validates transparency restrictions required by
 // PDF/A parts 1-4. PDF/UA profiles have no transparency checks.
-func checkTransparencyGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	part := pdfaPart(profile)
+func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
+	part := vctx.part
+
 	if part == 0 {
-		slog.Debug("compliance.transparency: skipping, not a PDF/A profile", "profile", profile)
 		return nil
 	}
 
 	slog.Debug("compliance.transparency: starting checks", "profile", profile, "part", part)
 
-	pages := collectPages(ctx, doc, catalog)
+	// Extract raw page dicts for sub-functions that expect []ast.PdfDict.
+	rawPages := make([]ast.PdfDict, len(vctx.pages))
+	for i, p := range vctx.pages {
+		rawPages[i] = p.dict
+	}
 
 	var results []Violation
 	if part == 1 {
-		results = checkTransparencyPart1(ctx, doc, pages)
+		results = checkTransparencyPart1(ctx, doc, rawPages)
 	} else {
-		results = checkTransparencyParts2Plus(ctx, doc, catalog, pages, profile, part)
+		results = checkTransparencyParts2Plus(ctx, doc, catalog, rawPages, profile, part)
 	}
 
 	slog.Debug("compliance.transparency: checks complete", "violations", len(results))
@@ -39,11 +44,8 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 	var results []Violation
 	for i, page := range pages {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.transparency: context cancelled during page iteration")
 			return results
 		}
-
-		slog.Debug("compliance.transparency: checking page (part 1)", "page", i+1)
 
 		// Check page-level transparency group.
 		results = append(results, checkPageTransparencyGroup1(ctx, doc, page, i+1)...)
@@ -76,8 +78,6 @@ func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, pa
 
 	sName, _ := document.ResolveName(ctx, doc, group["S"])
 	if sName == "Transparency" {
-		slog.Debug("compliance.transparency: page has transparency group (forbidden in part 1)",
-			"page", pageNum)
 		return failf(Rule_19005_1_6_4_t03, "page %d", pageNum)
 	}
 	return nil
@@ -94,7 +94,6 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 	var results []Violation
 	for gsName, gsObj := range gsDict {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.transparency: context cancelled during ExtGState iteration")
 			return results
 		}
 
@@ -103,15 +102,10 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 			continue
 		}
 
-		slog.Debug("compliance.transparency: checking ExtGState (part 1)",
-			"name", string(gsName), "page", pageNum)
-
 		// SMask must be None or absent.
 		if smaskObj, hasSMask := gs["SMask"]; hasSMask {
 			smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
 			if smaskName != "None" {
-				slog.Debug("compliance.transparency: ExtGState has SMask other than None",
-					"name", string(gsName), "page", pageNum)
 				results = append(results, failf(Rule_19005_1_6_4_t01, "page %d, ExtGState %s", pageNum, string(gsName))...)
 			}
 		}
@@ -120,8 +114,6 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		if bmObj, hasBM := gs["BM"]; hasBM {
 			bm := resolveBlendMode(ctx, doc, bmObj)
 			if bm != "" && bm != "Normal" && bm != "Compatible" {
-				slog.Debug("compliance.transparency: ExtGState has non-Normal/Compatible BM",
-					"name", string(gsName), "page", pageNum, "bm", bm)
 				results = append(results, failf(Rule_19005_1_6_4_t04, "page %d, ExtGState %s, BM=%s", pageNum, string(gsName), bm)...)
 			}
 		}
@@ -130,8 +122,6 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		if caObj, hasCA := gs["CA"]; hasCA {
 			ca := document.GetFloat(caObj)
 			if !floatEquals1(ca) {
-				slog.Debug("compliance.transparency: ExtGState has CA != 1.0",
-					"name", string(gsName), "page", pageNum, "CA", ca)
 				results = append(results, failf(Rule_19005_1_6_4_t05, "page %d, ExtGState %s, CA=%g", pageNum, string(gsName), ca)...)
 			}
 		}
@@ -140,8 +130,6 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		if caObj, hasCa := gs["ca"]; hasCa {
 			ca := document.GetFloat(caObj)
 			if !floatEquals1(ca) {
-				slog.Debug("compliance.transparency: ExtGState has ca != 1.0",
-					"name", string(gsName), "page", pageNum, "ca", ca)
 				results = append(results, failf(Rule_19005_1_6_4_t06, "page %d, ExtGState %s, ca=%g", pageNum, string(gsName), ca)...)
 			}
 		}
@@ -159,7 +147,6 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 	var results []Violation
 	for xoName, xoObj := range xobjDict {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.transparency: context cancelled during XObject iteration")
 			return results
 		}
 
@@ -170,8 +157,6 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 
 		// SMask key must not be present on XObjects.
 		if _, hasSMask := xo["SMask"]; hasSMask {
-			slog.Debug("compliance.transparency: XObject has SMask key (forbidden in part 1)",
-				"name", string(xoName), "page", pageNum)
 			results = append(results, failf(Rule_19005_1_6_4_t02, "page %d, XObject %s", pageNum, string(xoName))...)
 		}
 
@@ -181,8 +166,6 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 			if err == nil && group != nil {
 				sName, _ := document.ResolveName(ctx, doc, group["S"])
 				if sName == "Transparency" {
-					slog.Debug("compliance.transparency: form XObject has transparency group (forbidden in part 1)",
-						"name", string(xoName), "page", pageNum)
 					results = append(results, failf(Rule_19005_1_6_4_t03, "page %d, XObject %s", pageNum, string(xoName))...)
 				}
 			}
@@ -216,43 +199,23 @@ var standardBlendModes = map[string]bool{ //nolint:gochecknoglobals // constant 
 
 // blendModeRule returns the rule for invalid blend mode, varying by part.
 func blendModeRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_2_10_t01
-	case 3:
-		return Rule_19005_3_6_2_10_t01
-	case 4:
-		return Rule_19005_4_6_2_9_t01
-	}
-	return Rule{}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_10_t01, Rule_19005_3_6_2_10_t01, Rule_19005_4_6_2_9_t01)
 }
 
 // blendingCSRule returns the rule for missing blending color space on
 // transparent pages.
 func blendingCSRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_2_10_t02
-	case 3:
-		return Rule_19005_3_6_2_10_t02
-	case 4:
-		return Rule_19005_4_6_2_9_t02
-	}
-	return Rule{}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_10_t02, Rule_19005_3_6_2_10_t02, Rule_19005_4_6_2_9_t02)
 }
 
 func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, profile string, part int) []Violation {
 	hasOutputIntent, oiColorSpace := documentOutputIntentInfo(ctx, doc, catalog)
-	slog.Debug("compliance.transparency: output intent check", "hasOutputIntent", hasOutputIntent, "oiColorSpace", oiColorSpace)
 
 	var results []Violation
 	for i, page := range pages {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.transparency: context cancelled during page iteration")
 			return results
 		}
-
-		slog.Debug("compliance.transparency: checking page (parts 2+)", "page", i+1)
 
 		res := getResources(ctx, doc, page)
 		if res == nil {
@@ -285,15 +248,10 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					continue
 				}
 
-				slog.Debug("compliance.transparency: checking ExtGState (parts 2+)",
-					"name", string(gsName), "page", i+1)
-
 				// Validate blend mode.
 				if bmObj, hasBM := gs["BM"]; hasBM {
 					bm := resolveBlendMode(ctx, doc, bmObj)
 					if bm != "" && !standardBlendModes[bm] {
-						slog.Debug("compliance.transparency: non-standard blend mode",
-							"name", string(gsName), "page", i+1, "bm", bm)
 						results = append(results, failf(blendModeRule(part), "page %d, ExtGState %s, BM=%s", i+1, string(gsName), bm)...)
 					}
 					if bm != "" && bm != "Normal" && bm != "Compatible" {
@@ -380,7 +338,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// PDF/A-4: page-level OutputIntents supplement catalog-level.
 		pageHasOI := false
 		pageOICS := ""
-		if part == 4 { //nolint:mnd
+		if part == 4 {
 			pageHasOI, pageOICS = checkPageOutputIntent(ctx, doc, page)
 		}
 		effectiveHasOI := hasOutputIntent || pageHasOI
@@ -395,8 +353,6 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// when an OutputIntent exists.
 		if pageUsesTransparency && !effectiveHasOI {
 			if !pageHasBlendingCS(ctx, doc, page) {
-				slog.Debug("compliance.transparency: page uses transparency without blending CS",
-					"page", i+1)
 				results = append(results, failf(blendingCSRule(part), "page %d", i+1)...)
 			}
 		}

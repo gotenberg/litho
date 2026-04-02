@@ -286,11 +286,11 @@ func resolveRect(ctx context.Context, doc *document.Document, obj ast.PdfObject)
 		return nil
 	}
 	arr, err := document.ResolveArray(ctx, doc, obj)
-	if err != nil || len(arr) < 4 { //nolint:mnd // rectangle has 4 elements
+	if err != nil || len(arr) < 4 {
 		return nil
 	}
-	r := make([]float64, 4) //nolint:mnd // rectangle has 4 elements
-	for i := range 4 {      //nolint:mnd // rectangle has 4 elements
+	r := make([]float64, 4)
+	for i := range 4 {
 		r[i] = document.GetFloat(arr[i])
 	}
 	// Normalize: ensure [0]<[2] and [1]<[3].

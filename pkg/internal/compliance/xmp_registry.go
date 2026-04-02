@@ -404,67 +404,67 @@ func isValidXMPRealOrRational(s string) bool {
 // write PDF-format dates into XMP properties.
 func isValidXMPDate(s string) bool {
 	s = strings.TrimSpace(s)
-	if len(s) < 4 { //nolint:mnd
+	if len(s) < 4 {
 		return false
 	}
 
 	// Accept PDF date format: D:YYYY...
-	if strings.HasPrefix(s, "D:") && len(s) >= 6 { //nolint:mnd
+	if strings.HasPrefix(s, "D:") && len(s) >= 6 {
 		return true
 	}
 
 	// Must start with 4 digits (year).
-	for i := range 4 { //nolint:mnd
+	for i := range 4 {
 		if s[i] < '0' || s[i] > '9' {
 			return false
 		}
 	}
 
-	if len(s) == 4 { //nolint:mnd
+	if len(s) == 4 {
 		return true // YYYY
 	}
 
 	// YYYY-MM
-	if s[4] != '-' { //nolint:mnd
+	if s[4] != '-' {
 		return false
 	}
-	if len(s) < 7 || !isDigit(s[5]) || !isDigit(s[6]) { //nolint:mnd
+	if len(s) < 7 || !isDigit(s[5]) || !isDigit(s[6]) {
 		return false
 	}
-	if len(s) == 7 { //nolint:mnd
+	if len(s) == 7 {
 		return true // YYYY-MM
 	}
 
 	// YYYY-MM-DD
-	if s[7] != '-' { //nolint:mnd
+	if s[7] != '-' {
 		return false
 	}
-	if len(s) < 10 || !isDigit(s[8]) || !isDigit(s[9]) { //nolint:mnd
+	if len(s) < 10 || !isDigit(s[8]) || !isDigit(s[9]) {
 		return false
 	}
-	if len(s) == 10 { //nolint:mnd
+	if len(s) == 10 {
 		return true // YYYY-MM-DD
 	}
 
 	// Time component requires 'T' separator.
-	if s[10] != 'T' { //nolint:mnd
+	if s[10] != 'T' {
 		return false
 	}
 	// At minimum: YYYY-MM-DDThh:mm (length 16).
-	if len(s) < 16 { //nolint:mnd
+	if len(s) < 16 {
 		return false
 	}
-	if !isDigit(s[11]) || !isDigit(s[12]) || s[13] != ':' || !isDigit(s[14]) || !isDigit(s[15]) { //nolint:mnd
+	if !isDigit(s[11]) || !isDigit(s[12]) || s[13] != ':' || !isDigit(s[14]) || !isDigit(s[15]) {
 		return false
 	}
 
-	rest := s[16:] //nolint:mnd
+	rest := s[16:]
 	// Optional :ss
 	if len(rest) > 0 && rest[0] == ':' {
-		if len(rest) < 3 || !isDigit(rest[1]) || !isDigit(rest[2]) { //nolint:mnd
+		if len(rest) < 3 || !isDigit(rest[1]) || !isDigit(rest[2]) {
 			return false
 		}
-		rest = rest[3:] //nolint:mnd
+		rest = rest[3:]
 	}
 	// Optional fractional seconds (.digits).
 	if len(rest) > 0 && rest[0] == '.' {
@@ -489,9 +489,9 @@ func isValidXMPDate(s string) bool {
 	}
 	// +hh:mm or +hh (abbreviated).
 	switch len(rest) {
-	case 3: //nolint:mnd
+	case 3:
 		return isDigit(rest[1]) && isDigit(rest[2])
-	case 6: //nolint:mnd
+	case 6:
 		return isDigit(rest[1]) && isDigit(rest[2]) && rest[3] == ':' && isDigit(rest[4]) && isDigit(rest[5])
 	}
 	return false
@@ -512,7 +512,7 @@ func isValidXMPRational(s string) bool {
 	s = strings.TrimSpace(s)
 	parts := strings.Split(s, "/")
 
-	if len(parts) != 2 { //nolint:mnd
+	if len(parts) != 2 {
 		return false
 	}
 
@@ -525,7 +525,7 @@ func isValidXMPRational(s string) bool {
 //nolint:unused // API for EXIF GPS validation; used indirectly via container element checks.
 func isValidXMPGPSCoordinate(s string) bool {
 	s = strings.TrimSpace(s)
-	if len(s) < 5 { //nolint:mnd
+	if len(s) < 5 {
 		return false
 	}
 

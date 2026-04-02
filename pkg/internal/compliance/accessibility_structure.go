@@ -17,17 +17,13 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 		return nil
 	}
 
-	slog.Debug("compliance.accessibility: checking /Namespaces in StructTreeRoot")
-
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance.accessibility: no StructTreeRoot for namespace check")
 		return nil
 	}
 
 	nsObj, ok := treeRoot["Namespaces"]
 	if !ok {
-		slog.Debug("compliance.accessibility: StructTreeRoot missing /Namespaces")
 		return fail(Rule_14289_2_8_2_4_t01, "Namespaces missing from StructTreeRoot")
 	}
 
@@ -52,7 +48,6 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 		// Each namespace dict must have /NS (URI).
 		nsURIObj, ok := nsDict["NS"]
 		if !ok {
-			slog.Debug("compliance.accessibility: namespace entry missing /NS", "index", i)
 			results = append(results, Violation{
 				Rule:    Rule_14289_2_8_2_4_t01,
 				Context: fmt.Sprintf("namespace %d missing /NS", i),
@@ -62,13 +57,10 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 		nsURI, err := document.ResolveString(ctx, doc, nsURIObj)
 		if err != nil || string(nsURI) == "" {
-			slog.Debug("compliance.accessibility: namespace /NS is empty", "index", i)
 			results = append(results, Violation{
 				Rule:    Rule_14289_2_8_2_4_t01,
 				Context: fmt.Sprintf("namespace %d has empty /NS", i),
 			})
-		} else {
-			slog.Debug("compliance.accessibility: namespace entry valid", "index", i, "ns", string(nsURI))
 		}
 	}
 
@@ -144,7 +136,7 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 			if standardNamespaceURIs[string(srcURI)] && isStandardStructType(typeName, "PDF/UA-2") {
 				// Check if the target is also in a standard namespace type.
 				targetArr, _ := document.ResolveArray(ctx, doc, mappingObj)
-				if len(targetArr) >= 2 { //nolint:mnd
+				if len(targetArr) >= 2 {
 					targetNSDict, _ := document.ResolveDict(ctx, doc, targetArr[1])
 					if targetNSDict != nil {
 						targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
@@ -260,7 +252,7 @@ func typeMapsToStandardNS(ctx context.Context, doc *document.Document, typeName,
 			return false
 		}
 		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
-		if len(arr) < 2 { //nolint:mnd
+		if len(arr) < 2 {
 			return false
 		}
 		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
@@ -281,7 +273,7 @@ func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcN
 	currentNS := srcNSURI
 	visited := map[string]bool{currentNS + ":" + currentType: true}
 
-	for range 10 { //nolint:mnd // max chain depth
+	for range 10 {
 		rmns, ok := nsByURI[currentNS]
 		if !ok {
 			return false
@@ -291,7 +283,7 @@ func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcN
 			return false
 		}
 		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
-		if len(arr) < 2 { //nolint:mnd
+		if len(arr) < 2 {
 			return false
 		}
 		targetType, _ := document.ResolveName(ctx, doc, arr[0])
@@ -324,11 +316,8 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 		return nil
 	}
 
-	slog.Debug("compliance.accessibility: checking link nesting in structure tree")
-
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance.accessibility: no StructTreeRoot for link nesting check")
 		return nil
 	}
 
@@ -358,7 +347,6 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 	}
 
 	if linkAnnotCount == 0 {
-		slog.Debug("compliance.accessibility: no link annotations found")
 		return nil
 	}
 
@@ -370,9 +358,6 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 			linkStructCount++
 		}
 	})
-
-	slog.Debug("compliance.accessibility: link annotation/structure counts",
-		"annotations", linkAnnotCount, "structElements", linkStructCount)
 
 	if linkStructCount == 0 && linkAnnotCount > 0 {
 		return fail(Rule_14289_2_8_2_5_20_t01, "link annotations exist but no Link/Reference structure elements found")
@@ -388,11 +373,8 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 
-	slog.Debug("compliance.accessibility: checking Formula structure elements for /AF (MathML)")
-
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance.accessibility: no StructTreeRoot for Formula check")
 		return nil
 	}
 
@@ -411,14 +393,12 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		if altObj, hasAlt := elem["Alt"]; hasAlt {
 			altStr, err := document.ResolveString(ctx, doc, altObj)
 			if err == nil && strings.TrimSpace(string(altStr)) != "" {
-				slog.Debug("compliance.accessibility: Formula has /Alt text", "path", path)
 				return
 			}
 		}
 		if atObj, hasAT := elem["ActualText"]; hasAT {
 			atStr, err := document.ResolveString(ctx, doc, atObj)
 			if err == nil && strings.TrimSpace(string(atStr)) != "" {
-				slog.Debug("compliance.accessibility: Formula has /ActualText", "path", path)
 				return
 			}
 		}
@@ -442,12 +422,10 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 		// formula content directly and do not require /AF or /Alt.
 		if kObj, hasK := elem["K"]; hasK {
 			if hasStructuralChildren(ctx, doc, kObj) {
-				slog.Debug("compliance.accessibility: Formula has structural children", "path", path)
 				return
 			}
 		}
 
-		slog.Debug("compliance.accessibility: Formula missing /AF, /Alt, /ActualText, and structural children", "path", path)
 		results = append(results, Violation{Rule: Rule_14289_2_8_2_5_29_t01, Context: path})
 	})
 
@@ -489,8 +467,6 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 	if profile != "PDF/UA-2" {
 		return nil
 	}
-
-	slog.Debug("compliance.accessibility: checking invisible annotation artifact requirement")
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
@@ -542,7 +518,6 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 			if _, hasStructParent := annot["StructParent"]; hasStructParent {
 				subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 				loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
-				slog.Debug("compliance.accessibility: invisible annotation in structure tree", "loc", loc)
 				results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t01, Context: loc})
 			}
 		}

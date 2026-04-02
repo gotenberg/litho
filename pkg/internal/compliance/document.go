@@ -17,16 +17,17 @@ import (
 //   - PDF/A parts 2+/4: /OCProperties must have /AS array if /OCGs present.
 //   - PDF/A-4: /Info dict restrictions, /Perms dict restrictions.
 //   - PDF/UA-2: PDF version must be 2.0.
-func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	part := pdfaPart(profile)
+func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
+	part := vctx.part
 
 	slog.Debug("compliance.document: starting document checks",
-		"profile", profile, "part", part, "isPDFUA", isPDFUA(profile))
+		"profile", profile, "part", part, "isPDFUA", vctx.ua)
 
 	var results []Violation
 
 	// --- PDF/UA-2: version must be 2.0 ---
-	if isPDFUA(profile) {
+	if vctx.ua {
 		if profile == "PDF/UA-2" {
 			results = append(results, checkVersionIs2(doc, catalog, Rule_14289_2_6_2_t01)...)
 		}
@@ -35,7 +36,6 @@ func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	if part == 0 {
-		slog.Debug("compliance.document: skipping document checks for unknown profile", "profile", profile)
 		return nil
 	}
 
@@ -68,7 +68,7 @@ func checkDocumentGroup(ctx context.Context, doc *document.Document, catalog ast
 
 	// --- Info dict restrictions (part 4) ---
 	if part == 4 {
-		results = append(results, checkInfoDictPart4(doc, catalog)...)
+		results = append(results, checkInfoDictPart4(ctx, doc, catalog)...)
 	}
 
 	// --- Permissions dict ---
@@ -112,19 +112,15 @@ func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule) []V
 		version = doc.Version
 	}
 
-	slog.Debug("compliance.document: checking PDF 2.0 version requirement", "version", version)
-
 	if version == "" {
 		return nil
 	}
 
 	// Must be exactly "2.n" (3 characters) where n is a digit.
-	if len(version) == 3 && version[0] == '2' && version[1] == '.' && version[2] >= '0' && version[2] <= '9' { //nolint:mnd
-		slog.Debug("compliance.document: PDF 2.0 version OK", "version", version)
+	if len(version) == 3 && version[0] == '2' && version[1] == '.' && version[2] >= '0' && version[2] <= '9' {
 		return nil
 	}
 
-	slog.Debug("compliance.document: version is not 2.x", "version", version)
 	return failf(rule, "PDF version %s is not 2.0", version)
 }
 
@@ -154,7 +150,7 @@ func decodePdfName(name string) string {
 			hi := unhex(name[i+1])
 			lo := unhex(name[i+2])
 			if hi >= 0 && lo >= 0 {
-				buf.WriteByte(byte(hi<<4 | lo)) //nolint:mnd,gosec // hex decode; values bounded 0-15
+				buf.WriteByte(byte(hi<<4 | lo)) //nolint:gosec // hex decode; values bounded 0-15
 				i += 2
 				continue
 			}
@@ -170,9 +166,9 @@ func unhex(c byte) int {
 	case c >= '0' && c <= '9':
 		return int(c - '0')
 	case c >= 'a' && c <= 'f':
-		return int(c-'a') + 10 //nolint:mnd // hex offset
+		return int(c-'a') + 10
 	case c >= 'A' && c <= 'F':
-		return int(c-'A') + 10 //nolint:mnd // hex offset
+		return int(c-'A') + 10
 	default:
 		return -1
 	}
@@ -183,7 +179,6 @@ func unhex(c byte) int {
 func checkAlternatePresentations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	namesObj, ok := catalog["Names"]
 	if !ok {
-		slog.Debug("compliance.document: no /Names dict in catalog")
 		return nil
 	}
 
@@ -194,12 +189,10 @@ func checkAlternatePresentations(ctx context.Context, doc *document.Document, ca
 	}
 
 	if _, hasAP := namesDict["AlternatePresentations"]; hasAP {
-		slog.Debug("compliance.document: /AlternatePresentations found in /Names")
 		rule := alternatePresentationsRule(part)
 		return fail(rule, "AlternatePresentations key present in Names dictionary")
 	}
 
-	slog.Debug("compliance.document: no /AlternatePresentations — pass")
 	return nil
 }
 
@@ -207,12 +200,10 @@ func checkAlternatePresentations(ctx context.Context, doc *document.Document, ca
 // the document catalog (parts 2+/4).
 func checkRequirementsKey(catalog ast.PdfDict, part int) []Violation {
 	if _, hasReq := catalog["Requirements"]; hasReq {
-		slog.Debug("compliance.document: /Requirements key found in catalog")
 		rule := requirementsRule(part)
 		return fail(rule, "Requirements key present in document catalog")
 	}
 
-	slog.Debug("compliance.document: no /Requirements key — pass")
 	return nil
 }
 
@@ -221,7 +212,6 @@ func checkRequirementsKey(catalog ast.PdfDict, part int) []Violation {
 func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	ocPropsObj, ok := catalog["OCProperties"]
 	if !ok {
-		slog.Debug("compliance.document: no /OCProperties in catalog")
 		return nil
 	}
 
@@ -234,7 +224,6 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 	// Check if /OCGs array exists.
 	ocgsObj, hasOCGs := ocProps["OCGs"]
 	if !hasOCGs {
-		slog.Debug("compliance.document: no /OCGs in /OCProperties")
 		return nil
 	}
 
@@ -262,14 +251,12 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 	}
 
 	if !hasUsage {
-		slog.Debug("compliance.document: no OCG has /Usage dictionary, /AS not required")
 		return nil
 	}
 
 	// /D dict must exist and should have /AS array.
 	dObj, hasD := ocProps["D"]
 	if !hasD {
-		slog.Debug("compliance.document: /OCProperties missing /D entry")
 		return nil
 	}
 
@@ -280,19 +267,17 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 	}
 
 	if _, hasAS := dDict["AS"]; !hasAS {
-		slog.Debug("compliance.document: /D dict missing /AS array with OCGs having /Usage")
 		rule := ocgASRule(part)
 		return fail(rule, "OCProperties /D dictionary missing AS array while OCGs with /Usage are present")
 	}
 
-	slog.Debug("compliance.document: OCG /AS array present — pass")
 	return nil
 }
 
 // checkInfoDictPart4 validates Info dict restrictions for PDF/A-4:
 //   - /Info key forbidden in trailer unless /PieceInfo exists in catalog.
 //   - If /Info exists, only /ModDate key allowed.
-func checkInfoDictPart4(doc *document.Document, catalog ast.PdfDict) []Violation {
+func checkInfoDictPart4(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		return nil
@@ -300,19 +285,23 @@ func checkInfoDictPart4(doc *document.Document, catalog ast.PdfDict) []Violation
 
 	infoObj, hasInfo := trailer["Info"]
 	if !hasInfo {
-		slog.Debug("compliance.document: no /Info in trailer — pass (PDF/A-4)")
 		return nil
 	}
 
 	// /Info is only allowed if /PieceInfo exists in catalog.
 	_, hasPieceInfo := catalog["PieceInfo"]
 	if !hasPieceInfo {
-		slog.Debug("compliance.document: /Info present without /PieceInfo in catalog")
 		return fail(Rule_19005_4_6_1_3_t04, "Info key present in trailer but PieceInfo not in catalog")
 	}
 
 	// If Info dict is present, it may only contain /ModDate.
-	if infoDict, ok := infoObj.(ast.PdfDict); ok {
+	// Use ResolveDict to handle indirect references.
+	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
+	if err != nil {
+		slog.Debug("compliance.document: cannot resolve Info dict", "error", err)
+		return nil
+	}
+	if infoDict != nil {
 		var badKeys []string
 		for key := range infoDict {
 			if key != "ModDate" {
@@ -320,13 +309,11 @@ func checkInfoDictPart4(doc *document.Document, catalog ast.PdfDict) []Violation
 			}
 		}
 		if len(badKeys) > 0 {
-			slog.Debug("compliance.document: Info dict has non-ModDate keys", "keys", badKeys)
 			return failf(Rule_19005_4_6_1_3_t05,
 				"Info dictionary contains keys [%s] (only ModDate allowed)", strings.Join(badKeys, ", "))
 		}
 	}
 
-	slog.Debug("compliance.document: PDF/A-4 Info dict OK")
 	return nil
 }
 
@@ -335,7 +322,6 @@ func checkInfoDictPart4(doc *document.Document, catalog ast.PdfDict) []Violation
 func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	permsObj, ok := catalog["Perms"]
 	if !ok {
-		slog.Debug("compliance.document: no /Perms in catalog")
 		return nil
 	}
 
@@ -353,70 +339,32 @@ func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog a
 	}
 
 	if len(badKeys) > 0 {
-		slog.Debug("compliance.document: /Perms dict has invalid keys", "keys", badKeys)
 		rule := permsDictRule(part)
 		return failf(rule,
 			"Perms dictionary contains keys [%s] other than UR3 and DocMDP",
 			strings.Join(badKeys, ", "))
 	}
 
-	slog.Debug("compliance.document: /Perms dict OK")
 	return nil
 }
 
 // --- Rule selectors ---
 
 func alternatePresentationsRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_10_t01
-	case 3:
-		return Rule_19005_3_6_10_t01
-	case 4:
-		return Rule_19005_4_6_11_t01
-	default:
-		return Rule_19005_2_6_10_t01
-	}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_10_t01, Rule_19005_3_6_10_t01, Rule_19005_4_6_11_t01)
 }
 
 func requirementsRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_11_t01
-	case 3:
-		return Rule_19005_3_6_11_t01
-	case 4:
-		return Rule_19005_4_6_12_t01
-	default:
-		return Rule_19005_2_6_11_t01
-	}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_11_t01, Rule_19005_3_6_11_t01, Rule_19005_4_6_12_t01)
 }
 
 func ocgASRule(part int) Rule {
 	// The AS key rule in OC config dicts — used here for the /AS array check.
-	switch part {
-	case 2:
-		return Rule_19005_2_6_9_t04
-	case 3:
-		return Rule_19005_3_6_9_t04
-	case 4:
-		return Rule_19005_4_6_10_t01
-	default:
-		return Rule_19005_2_6_9_t04
-	}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_9_t04, Rule_19005_3_6_9_t04, Rule_19005_4_6_10_t01)
 }
 
 func permsDictRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_1_12_t01
-	case 3:
-		return Rule_19005_3_6_1_12_t01
-	case 4:
-		return Rule_19005_4_6_1_11_t01
-	default:
-		return Rule_19005_2_6_1_12_t01
-	}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_1_12_t01, Rule_19005_3_6_1_12_t01, Rule_19005_4_6_1_11_t01)
 }
 
 // checkOCConfigNamesPDFA validates that OC configuration dictionaries in
@@ -441,7 +389,6 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 		dConfig, err := document.ResolveDict(ctx, doc, dObj)
 		if err == nil && dConfig != nil {
 			if !configHasName(dConfig) {
-				slog.Debug("compliance.document: PDF/A-4 default OC config missing /Name")
 				results = append(results, fail(Rule_19005_4_6_10_t01, "default config (D)")...)
 			} else {
 				name := configName(ctx, doc, dConfig)
@@ -466,7 +413,6 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 					continue
 				}
 				if !configHasName(cfg) {
-					slog.Debug("compliance.document: PDF/A-4 OC config missing /Name", "index", i)
 					results = append(results, failf(Rule_19005_4_6_10_t01, "config %d", i)...)
 				} else {
 					name := configName(ctx, doc, cfg)
@@ -482,7 +428,6 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 	seen := make(map[string]bool, len(names))
 	for _, n := range names {
 		if seen[n] {
-			slog.Debug("compliance.document: PDF/A-4 OC config duplicate /Name", "name", n)
 			results = append(results, failf(Rule_19005_4_6_10_t02, "duplicate name %q", n)...)
 		}
 		seen[n] = true
@@ -641,7 +586,7 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 
 // collectOrderOCGRefs recursively collects OCG indirect refs from an Order array.
 func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, result map[int]bool, depth int) {
-	if depth > 20 { //nolint:mnd
+	if depth > 20 {
 		return
 	}
 	// Direct indirect ref = OCG.

@@ -12,13 +12,10 @@ import (
 // --- 2. DisplayDocTitle ---
 
 func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking /DisplayDocTitle")
-
 	rule := displayDocTitleRule(profile)
 
 	vpObj, ok := catalog["ViewerPreferences"]
 	if !ok {
-		slog.Debug("compliance.accessibility: catalog missing /ViewerPreferences")
 		return fail(rule, "ViewerPreferences missing")
 	}
 
@@ -30,30 +27,24 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 
 	ddtObj, ok := vp["DisplayDocTitle"]
 	if !ok {
-		slog.Debug("compliance.accessibility: /DisplayDocTitle not present")
 		return fail(rule, "DisplayDocTitle missing")
 	}
 
 	ddt, err := document.ResolveBool(ctx, doc, ddtObj)
 	if err != nil || !bool(ddt) {
-		slog.Debug("compliance.accessibility: /DisplayDocTitle is not true", "value", ddt)
 		return fail(rule, "DisplayDocTitle=false")
 	}
 
-	slog.Debug("compliance.accessibility: /DisplayDocTitle is true")
 	return nil
 }
 
 // --- 3. Suspects ---
 
 func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking /Suspects")
-
 	rule := suspectsRule(profile)
 
 	miObj, ok := catalog["MarkInfo"]
 	if !ok {
-		slog.Debug("compliance.accessibility: catalog missing /MarkInfo (Suspects check passes)")
 		return nil
 	}
 
@@ -65,7 +56,6 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	susObj, ok := mi["Suspects"]
 	if !ok {
-		slog.Debug("compliance.accessibility: /Suspects absent (OK)")
 		return nil
 	}
 
@@ -76,19 +66,15 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	}
 
 	if bool(sus) {
-		slog.Debug("compliance.accessibility: /Suspects is true")
 		return fail(rule, "Suspects=true")
 	}
 
-	slog.Debug("compliance.accessibility: /Suspects is false (OK)")
 	return nil
 }
 
 // --- 4. Tab order ---
 
 func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking tab order")
-
 	isPDFUA1 := profile == string("PDF/UA-1")
 	isPDFUA2 := profile == string("PDF/UA-2")
 
@@ -124,10 +110,8 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		if !ok {
 			if isPDFUA1 {
 				// PDF/UA-1 §7.18.3: every page with annotations must have /Tabs = /S.
-				slog.Debug("compliance.accessibility: page missing /Tabs", "page", pageIdx)
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			} else if isPDFUA2 {
-				slog.Debug("compliance.accessibility: page missing /Tabs", "page", pageIdx)
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs missing", pageIdx)})
 			}
 			continue
@@ -140,10 +124,8 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		}
 
 		if isPDFUA1 && tabsName != "S" {
-			slog.Debug("compliance.accessibility: /Tabs is not /S", "page", pageIdx, "tabs", tabsName)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
 		} else if isPDFUA2 && hasAnnots && tabsName != "S" && tabsName != "A" && tabsName != "W" {
-			slog.Debug("compliance.accessibility: /Tabs is not /S, /A or /W", "page", pageIdx, "tabs", tabsName)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("page %d, Tabs=%s", pageIdx, tabsName)})
 		}
 	}
@@ -154,21 +136,16 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 // --- 5. XMP title ---
 
 func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking XMP dc:title")
-
 	rule := xmpTitleRule(profile)
 
 	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
 	if !ok {
-		slog.Debug("compliance.accessibility: no XMP metadata available")
 		return fail(rule, "no XMP metadata")
 	}
 
 	if !containsDCTitle(xmpData) {
-		slog.Debug("compliance.accessibility: XMP does not contain dc:title")
 		return fail(rule, "")
 	}
 
-	slog.Debug("compliance.accessibility: XMP contains dc:title")
 	return nil
 }

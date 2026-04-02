@@ -94,20 +94,21 @@ const maxActionChainDepth = 200
 
 // checkActionGroup validates action restrictions for PDF/A (§6.6.1, §6.6.2,
 // §6.6.3, §6.4.1). For PDF/UA profiles this check is not applicable.
-func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if isPDFUA(profile) {
+func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
+	part := vctx.part
+
+	if vctx.ua {
 		return nil
 	}
 
-	part := pdfaPart(profile)
 	if part == 0 {
-		slog.Debug("compliance.actions: unknown profile, skipping", "profile", profile)
 		return nil
 	}
 
 	slog.Debug("compliance.actions: starting action checks", "profile", profile, "part", part)
 
-	results := make([]Violation, 0, 8) //nolint:mnd // estimated capacity for action checks.
+	results := make([]Violation, 0, 8)
 
 	// Check catalog /OpenAction.
 	results = append(results, checkCatalogOpenAction(ctx, doc, catalog, profile, part)...)
@@ -130,11 +131,6 @@ func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.P
 	// Check AcroForm field actions.
 	results = append(results, checkFormFieldActions(ctx, doc, catalog, profile, part)...)
 
-	slog.Debug("compliance.actions: completed action checks",
-		"profile", profile,
-		"violations", len(results),
-	)
-
 	return results
 }
 
@@ -143,18 +139,15 @@ func checkActionGroup(ctx context.Context, doc *document.Document, catalog ast.P
 func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	openAction, ok := catalog["OpenAction"]
 	if !ok {
-		slog.Debug("compliance.actions: catalog has no /OpenAction")
 		return nil
 	}
 
 	// /OpenAction may be an array (destination) or a dict (action).
 	actionDict, err := document.ResolveDict(ctx, doc, openAction)
 	if err != nil || actionDict == nil {
-		slog.Debug("compliance.actions: /OpenAction is not a dict (likely a destination array)")
 		return nil
 	}
 
-	slog.Debug("compliance.actions: checking catalog /OpenAction")
 	return walkActionChain(ctx, doc, actionDict, profile, part, "catalog /OpenAction", 0)
 }
 
@@ -162,23 +155,19 @@ func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog
 func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	aaObj, ok := catalog["AA"]
 	if !ok {
-		slog.Debug("compliance.actions: catalog has no /AA")
 		return nil
 	}
 
 	// Part 1: catalog /AA is entirely forbidden (§6.6.2).
 	if part == 1 {
-		slog.Debug("compliance.actions: catalog /AA forbidden for part 1")
 		return fail(Rule_19005_1_6_6_2_t03, "catalog")
 	}
 
 	// Parts 2/3: catalog /AA is also forbidden (§6.5.2 t01).
 	if part == 2 {
-		slog.Debug("compliance.actions: catalog /AA forbidden for part 2")
 		return fail(Rule_19005_2_6_5_2_t01, "catalog")
 	}
 	if part == 3 {
-		slog.Debug("compliance.actions: catalog /AA forbidden for part 3")
 		return fail(Rule_19005_3_6_5_2_t01, "catalog")
 	}
 
@@ -204,7 +193,6 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		if err != nil || actionDict == nil {
 			continue
 		}
-		slog.Debug("compliance.actions: checking catalog /AA action", "key", key)
 		results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("catalog /AA/%s", key), 0)...)
 	}
 
@@ -228,12 +216,10 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 
 		// Parts 2/3: page /AA is entirely forbidden (§6.5.2 t02).
 		if part == 2 {
-			slog.Debug("compliance.actions: page /AA forbidden for part 2", "page", i+1)
 			results = append(results, failf(Rule_19005_2_6_5_2_t02, "page %d", i+1)...)
 			continue
 		}
 		if part == 3 {
-			slog.Debug("compliance.actions: page /AA forbidden for part 3", "page", i+1)
 			results = append(results, failf(Rule_19005_3_6_5_2_t02, "page %d", i+1)...)
 			continue
 		}
@@ -242,8 +228,6 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 		if err != nil || aaDict == nil {
 			continue
 		}
-
-		slog.Debug("compliance.actions: checking page /AA", "page", i+1)
 
 		// Part 4: check AA key restrictions (§6.6.3).
 		if part == 4 {
@@ -311,7 +295,6 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 				if aObj, hasA := annotDict["A"]; hasA {
 					aDict, err := document.ResolveDict(ctx, doc, aObj)
 					if err == nil && aDict != nil {
-						slog.Debug("compliance.actions: checking annotation /A", "location", location)
 						results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0)...)
 					}
 				}
@@ -338,8 +321,6 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 						if err != nil || actionDict == nil {
 							continue
 						}
-						slog.Debug("compliance.actions: checking annotation /AA action",
-							"location", location, "key", key)
 						results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0)...)
 					}
 				}
@@ -362,34 +343,27 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	case 1:
 		// §6.6.1 test 3: Widget annotations must not perform actions (/A).
 		if hasA {
-			slog.Debug("compliance.actions: widget has /A in part 1", "location", location)
 			results = append(results, fail(Rule_19005_1_6_6_1_t03, location)...)
 		}
 		// §6.6.2 test 1: Widget must not have /AA.
 		if hasAA {
-			slog.Debug("compliance.actions: widget has /AA in part 1", "location", location)
 			results = append(results, fail(Rule_19005_1_6_6_2_t01, location)...)
 		}
 	case 2:
 		// §6.4.1 test 1: Widget must not contain /A or /AA.
 		if hasA || hasAA {
 			keys := actionKeysPresent(hasA, hasAA)
-			slog.Debug("compliance.actions: widget has forbidden keys in part 2",
-				"location", location, "keys", keys)
 			results = append(results, failf(Rule_19005_2_6_4_1_t01, "%s", keys)...)
 		}
 	case 3:
 		// §6.4.1 test 1: Widget must not contain /A or /AA.
 		if hasA || hasAA {
 			keys := actionKeysPresent(hasA, hasAA)
-			slog.Debug("compliance.actions: widget has forbidden keys in part 3",
-				"location", location, "keys", keys)
 			results = append(results, failf(Rule_19005_3_6_4_1_t01, "%s", keys)...)
 		}
 	case 4:
 		// §6.4.1 test 1: Widget must not contain /A (AA is allowed in part 4).
 		if hasA {
-			slog.Debug("compliance.actions: widget has /A in part 4", "location", location)
 			results = append(results, fail(Rule_19005_4_6_4_1_t01, location)...)
 		}
 	}
@@ -421,8 +395,6 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 				if err != nil || actionDict == nil {
 					continue
 				}
-				slog.Debug("compliance.actions: checking widget /AA action",
-					"location", location, "key", key)
 				results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0)...)
 			}
 		}
@@ -435,9 +407,6 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 // forbidden action types and invalid named actions.
 func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int) []Violation {
 	if ctx.Err() != nil || depth > maxActionChainDepth {
-		if depth > maxActionChainDepth {
-			slog.Debug("compliance.actions: max action chain depth reached", "location", location)
-		}
 		return nil
 	}
 
@@ -446,21 +415,16 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 	// Check the action type (/S).
 	actionType, _ := document.ResolveName(ctx, doc, action["S"])
 	if actionType != "" {
-		slog.Debug("compliance.actions: checking action type",
-			"type", actionType, "location", location)
-
 		forbidden := forbiddenActionTypes
 		switch part {
-		case 2, 3: //nolint:mnd // PDF/A-2 and PDF/A-3.
+		case 2, 3:
 			forbidden = forbiddenActionTypesPart23
-		case 4: //nolint:mnd // PDF/A-4.
+		case 4:
 			forbidden = forbiddenActionTypesPart4
 		}
 
 		if forbidden[actionType] {
 			rule := forbiddenActionTypeRule(part)
-			slog.Debug("compliance.actions: forbidden action type found",
-				"type", actionType, "location", location)
 			results = append(results, failf(rule, "%s at %s", actionType, location)...)
 		}
 
@@ -469,8 +433,6 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 			actionName, _ := document.ResolveName(ctx, doc, action["N"])
 			if actionName != "" && !allowedNamedActions[actionName] {
 				rule := namedActionRule(part)
-				slog.Debug("compliance.actions: forbidden named action",
-					"name", actionName, "location", location)
 				results = append(results, failf(rule, "%s at %s", actionName, location)...)
 			}
 		}
@@ -520,8 +482,6 @@ func checkAAKeyRestrictions(_ context.Context, _ *document.Document, aaDict ast.
 		return nil
 	}
 
-	slog.Debug("compliance.actions: forbidden AA keys found",
-		"location", location, "keys", forbidden)
 	return failf(Rule_19005_4_6_6_3_t01, "%v at %s", forbidden, location)
 }
 
@@ -568,7 +528,6 @@ func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalo
 	}
 
 	// The presence of a /JavaScript name tree means JavaScript actions exist.
-	slog.Debug("compliance.actions: /Names/JavaScript tree found (forbidden)")
 	rule := forbiddenActionTypeRule(part)
 	_ = jsObj // value unused, presence is sufficient
 	return failf(rule, "JavaScript at catalog /Names/JavaScript")
@@ -586,8 +545,6 @@ func checkOutlineActions(ctx context.Context, doc *document.Document, catalog as
 	if err != nil || outlines == nil {
 		return nil
 	}
-
-	slog.Debug("compliance.actions: checking outline actions")
 
 	var results []Violation
 	walkOutlineItems(ctx, doc, outlines["First"], profile, part, &results, 0)
@@ -682,9 +639,9 @@ func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action 
 	if !exempt[actionType] {
 		forbidden := forbiddenActionTypes
 		switch part {
-		case 2, 3: //nolint:mnd // PDF/A-2 and PDF/A-3.
+		case 2, 3:
 			forbidden = forbiddenActionTypesPart23
-		case 4: //nolint:mnd // PDF/A-4.
+		case 4:
 			forbidden = forbiddenActionTypesPart4
 		}
 
@@ -727,7 +684,6 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 		return nil
 	}
 
-	slog.Debug("compliance.actions: checking AcroForm field actions", "fields", len(fields))
 	var results []Violation
 	walkFormFields(ctx, doc, fields, profile, part, &results, 0)
 	return results

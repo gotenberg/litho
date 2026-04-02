@@ -17,8 +17,6 @@ import (
 //   - Missing /Lang or empty /Lang in catalog -> langRequiredRule (t34 for PDF/UA-1, 8.4.4 t01 for PDF/UA-2)
 //   - Present but invalid /Lang format        -> langValidRule (t29 for PDF/UA-1, 8.4.4 t02 for PDF/UA-2)
 func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking /Lang requirement")
-
 	langRule := langRequiredRule(profile)
 	validRule := langValidRule(profile)
 
@@ -27,25 +25,18 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 	if catalogLang == "" {
 		// PDF/UA-2 §8.4.4 requires catalog /Lang explicitly.
 		if profile == "PDF/UA-2" {
-			slog.Debug("compliance.accessibility: catalog missing /Lang key (required for PDF/UA-2)")
 			return fail(langRule, "catalog")
 		}
 
 		// PDF/UA-1 §7.2 t34: natural language must be determinable. If catalog
 		// /Lang is absent, the language can still be determined through the
 		// structure tree — the tree root or individual elements may carry /Lang.
-		slog.Debug("compliance.accessibility: catalog missing /Lang, checking structure tree inheritance")
 		return checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
 	}
 
-	slog.Debug("compliance.accessibility: catalog /Lang value", "lang", catalogLang)
-
 	if !isValidLangTag(catalogLang) {
-		slog.Debug("compliance.accessibility: catalog /Lang is invalid BCP 47", "lang", catalogLang)
 		return failf(validRule, "lang=%s", catalogLang)
 	}
-
-	slog.Debug("compliance.accessibility: catalog /Lang is valid, checking structure elements")
 
 	// Catalog provides global /Lang — validate /Lang format in structure elements.
 	return validateStructureLangs(ctx, doc, catalog, validRule)
@@ -73,7 +64,6 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
 		// No structure tree at all — can't determine language for anything.
-		slog.Debug("compliance.accessibility: no StructTreeRoot, language cannot be determined")
 		return fail(langRule, "catalog")
 	}
 
@@ -117,8 +107,6 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		if effectiveLang == "" && !anyLangFound {
 			// No /Lang from self or any ancestor, and no /Lang anywhere in
 			// the tree — language is truly not determinable.
-			slog.Debug("compliance.accessibility: structure element has no determinable language",
-				"path", path)
 			results = append(results, Violation{Rule: langRule, Context: path})
 		}
 	})
@@ -247,7 +235,6 @@ func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemOb
 func validateStructureLangs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, rule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance.accessibility: no StructTreeRoot for lang validation")
 		return nil
 	}
 
@@ -267,13 +254,9 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		if trimmed == "" {
 			// Empty /Lang in structure element — not an invalid-format error.
 			// The "language not determined" checks (t21-t24, t30-t34) handle this case separately.
-			slog.Debug("compliance.accessibility: empty /Lang in structure element, skipping format check",
-				"path", path)
 			return
 		}
 		if !isValidLangTag(trimmed) {
-			slog.Debug("compliance.accessibility: invalid /Lang in structure element",
-				"lang", trimmed, "path", path)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})
@@ -319,11 +302,11 @@ func isValidLangTag(tag string) bool {
 	// Grandfathered/IANA: i-...
 	if len(parts[0]) == 1 && (parts[0][0] == 'i' || parts[0][0] == 'I') {
 		// "i" followed by at least one subtag of 1-8 alphanum.
-		if n < 2 { //nolint:mnd // grandfathered tags require at least one subtag after "i"
+		if n < 2 {
 			return false
 		}
 		for _, sub := range parts[1:] {
-			if !isAlphaNumSubtag(sub, 1, 8) { //nolint:mnd // BCP 47 subtag length bounds
+			if !isAlphaNumSubtag(sub, 1, 8) {
 				return false
 			}
 		}
@@ -337,16 +320,16 @@ func isValidLangTag(tag string) bool {
 		return false
 	}
 	pLen := len(primary)
-	if pLen < 1 || pLen > 8 { //nolint:mnd // RFC 3066: primary language is 1-8 alpha
+	if pLen < 1 || pLen > 8 {
 		return false
 	}
 
 	i := 1 // current index into parts
 
 	// Optional extlang: up to 3 sequences of exactly 3 ALPHA, only after 2-3 char primary.
-	if pLen <= 3 { //nolint:mnd // extlang only valid after 2-3 char primary
-		for extCount := 0; extCount < 3 && i < n; extCount++ { //nolint:mnd // up to 3 extlang subtags
-			if len(parts[i]) == 3 && isAlphaStr(parts[i]) { //nolint:mnd // extlang is exactly 3 ALPHA
+	if pLen <= 3 {
+		for extCount := 0; extCount < 3 && i < n; extCount++ {
+			if len(parts[i]) == 3 && isAlphaStr(parts[i]) {
 				i++
 			} else {
 				break
@@ -355,14 +338,14 @@ func isValidLangTag(tag string) bool {
 	}
 
 	// Optional script: exactly 4 ALPHA.
-	if i < n && len(parts[i]) == 4 && isAlphaStr(parts[i]) { //nolint:mnd // script is exactly 4 ALPHA
+	if i < n && len(parts[i]) == 4 && isAlphaStr(parts[i]) {
 		i++
 	}
 
 	// Optional region: 2 ALPHA or 3 DIGIT.
 	if i < n {
 		sub := parts[i]
-		if (len(sub) == 2 && isAlphaStr(sub)) || (len(sub) == 3 && isDigitStr(sub)) { //nolint:mnd // region: 2 ALPHA or 3 DIGIT
+		if (len(sub) == 2 && isAlphaStr(sub)) || (len(sub) == 3 && isDigitStr(sub)) {
 			i++
 		}
 	}
@@ -372,9 +355,9 @@ func isValidLangTag(tag string) bool {
 		sub := parts[i]
 		sLen := len(sub)
 		//nolint:gocritic // variant subtag parsing requires compound conditions incompatible with switch.
-		if sLen >= 5 && sLen <= 8 && isAlphaNumStr(sub) { //nolint:mnd // variant: 5-8 alphanum
+		if sLen >= 5 && sLen <= 8 && isAlphaNumStr(sub) {
 			i++
-		} else if sLen == 4 && isDigit(sub[0]) && isAlphaNumStr(sub[1:]) { //nolint:mnd // variant: DIGIT 3alphanum
+		} else if sLen == 4 && isDigit(sub[0]) && isAlphaNumStr(sub[1:]) {
 			i++
 		} else {
 			break
@@ -395,7 +378,7 @@ func isValidLangTag(tag string) bool {
 			return false // singleton must have at least one subtag
 		}
 		consumed := false
-		for i < n && isAlphaNumSubtag(parts[i], 2, 8) { //nolint:mnd // extension subtag: 2-8 alphanum
+		for i < n && isAlphaNumSubtag(parts[i], 2, 8) {
 			i++
 			consumed = true
 		}
@@ -417,11 +400,11 @@ func isValidLangTag(tag string) bool {
 
 // validPrivateUse checks that parts is ["x", sub1, sub2, ...] with each sub being 1-8 alphanum.
 func validPrivateUse(parts []string) bool {
-	if len(parts) < 2 { //nolint:mnd // "x" must be followed by at least one subtag
+	if len(parts) < 2 {
 		return false
 	}
 	for _, sub := range parts[1:] {
-		if !isAlphaNumSubtag(sub, 1, 8) { //nolint:mnd // private-use subtag: 1-8 alphanum
+		if !isAlphaNumSubtag(sub, 1, 8) {
 			return false
 		}
 	}

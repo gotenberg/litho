@@ -127,7 +127,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 				return markerArtifact
 			}
 			// Check for MCID in the properties dict (second operand).
-			if len(op.Operands) >= 2 { //nolint:mnd
+			if len(op.Operands) >= 2 {
 				if d, ok := op.Operands[1].(ast.PdfDict); ok {
 					if _, hasMCID := d["MCID"]; hasMCID {
 						return markerTaggedMCID

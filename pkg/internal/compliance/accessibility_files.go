@@ -19,8 +19,6 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		return nil
 	}
 
-	slog.Debug("compliance.accessibility: checking file specification /F and /UF")
-
 	rule := Rule_14289_1_7_11_t01
 	var results []Violation
 
@@ -237,7 +235,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 // annotation is not visible on the page.
 func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
 	rect, err := document.ResolveArray(ctx, doc, annot["Rect"])
-	if err != nil || len(rect) < 4 { //nolint:mnd
+	if err != nil || len(rect) < 4 {
 		return false
 	}
 	// Resolve the page to get CropBox/MediaBox.
@@ -250,9 +248,9 @@ func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot 
 		return false
 	}
 	box, err := document.ResolveArray(ctx, doc, page["CropBox"])
-	if err != nil || len(box) < 4 { //nolint:mnd
+	if err != nil || len(box) < 4 {
 		box, err = document.ResolveArray(ctx, doc, page["MediaBox"])
-		if err != nil || len(box) < 4 { //nolint:mnd
+		if err != nil || len(box) < 4 {
 			return false
 		}
 	}
@@ -281,7 +279,7 @@ func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot 
 // formStructElementHasAlt walks the structure tree looking for a Form element
 // with a non-empty /Alt entry. This is the alternative to /TU per §7.18.1 t3.
 func formStructElementHasAlt(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) bool {
-	if depth > 30 { //nolint:mnd
+	if depth > 30 {
 		return false
 	}
 	sType, _ := document.ResolveName(ctx, doc, node["S"])
@@ -310,7 +308,7 @@ func formStructElementHasAlt(ctx context.Context, doc *document.Document, node a
 
 // checkFieldTURecursive checks a form field (and its children) for /TU.
 func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int) []Violation {
-	if depth > 10 { //nolint:mnd
+	if depth > 10 {
 		return nil
 	}
 	field, err := document.ResolveDict(ctx, doc, fieldObj)

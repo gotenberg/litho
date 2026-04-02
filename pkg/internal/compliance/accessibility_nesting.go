@@ -180,7 +180,7 @@ func resolveStandardType(name ast.PdfName, roleMap map[ast.PdfName]ast.PdfName, 
 	}
 	visited := map[ast.PdfName]bool{name: true}
 	current := name
-	for range 50 { //nolint:mnd // depth limit for role map chain
+	for range 50 {
 		target, ok := roleMap[current]
 		if !ok {
 			return current

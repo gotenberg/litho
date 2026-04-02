@@ -11,27 +11,24 @@ import (
 
 // checkGraphicsGroup validates ExtGState, halftones, rendering intent, and
 // overprint restrictions required by PDF/A parts 1-4.
-func checkGraphicsGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	part := pdfaPart(profile)
+func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, profile := vctx.doc, vctx.profile
+	part := vctx.part
+
 	if part == 0 {
-		slog.Debug("compliance.graphics: skipping, not a PDF/A profile", "profile", profile)
 		return nil
 	}
 
 	slog.Debug("compliance.graphics: starting checks", "profile", profile, "part", part)
 
-	pages := collectPages(ctx, doc, catalog)
-
 	var results []Violation
-	for i, page := range pages {
+	for i, p := range vctx.pages {
+		page := p.dict
 		if ctx.Err() != nil {
-			slog.Debug("compliance.graphics: context cancelled during page iteration")
 			return results
 		}
 
-		slog.Debug("compliance.graphics: checking page", "page", i+1)
-
-		res := getResources(ctx, doc, page)
+		res := p.resources
 
 		// §6.2.2: check content stream resource completeness even when
 		// the page has no Resources (the absence itself may be a violation).
@@ -275,19 +272,13 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 	var results []Violation
 	for gsName, gsObj := range gsDict {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.graphics: context cancelled during ExtGState iteration")
 			return results
 		}
 
 		gs, err := document.ResolveDict(ctx, doc, gsObj)
 		if err != nil || gs == nil {
-			slog.Debug("compliance.graphics: failed to resolve ExtGState entry",
-				"name", string(gsName), "page", pageNum)
 			continue
 		}
-
-		slog.Debug("compliance.graphics: checking ExtGState",
-			"name", string(gsName), "page", pageNum)
 
 		results = append(results, checkTransferFunction(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
 		results = append(results, checkHTPKey(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
@@ -302,32 +293,12 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 
 // trForbiddenRule returns the rule for TR key being forbidden, varying by part.
 func trForbiddenRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_2_8_t01
-	case 2:
-		return Rule_19005_2_6_2_5_t01
-	case 3:
-		return Rule_19005_3_6_2_5_t01
-	case 4:
-		return Rule_19005_4_6_2_5_t01
-	}
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_2_8_t01, Rule_19005_2_6_2_5_t01, Rule_19005_3_6_2_5_t01, Rule_19005_4_6_2_5_t01)
 }
 
 // tr2NotDefaultRule returns the rule for TR2 not being /Default.
 func tr2NotDefaultRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_2_8_t02
-	case 2:
-		return Rule_19005_2_6_2_5_t02
-	case 3:
-		return Rule_19005_3_6_2_5_t02
-	case 4:
-		return Rule_19005_4_6_2_5_t02
-	}
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_2_8_t02, Rule_19005_2_6_2_5_t02, Rule_19005_3_6_2_5_t02, Rule_19005_4_6_2_5_t02)
 }
 
 func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
@@ -336,8 +307,6 @@ func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.P
 	// PDF/A-1: /TR key is completely forbidden.
 	// PDF/A-2+/4: /TR key is also forbidden.
 	if _, hasTR := gs["TR"]; hasTR {
-		slog.Debug("compliance.graphics: ExtGState contains forbidden TR key",
-			"gs", gsName, "page", pageNum)
 		results = append(results, failf(trForbiddenRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
 	}
 
@@ -346,8 +315,6 @@ func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.P
 	if tr2Obj, hasTR2 := gs["TR2"]; hasTR2 {
 		tr2Name, _ := document.ResolveName(ctx, doc, tr2Obj)
 		if tr2Name != "Default" {
-			slog.Debug("compliance.graphics: ExtGState TR2 is not Default",
-				"gs", gsName, "page", pageNum, "value", tr2Name)
 			results = append(results, failf(tr2NotDefaultRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
 		}
 	}
@@ -359,15 +326,7 @@ func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.P
 
 // htpForbiddenRule returns the rule for HTP key being forbidden.
 func htpForbiddenRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_2_5_t03
-	case 3:
-		return Rule_19005_3_6_2_5_t03
-	case 4:
-		return Rule_19005_4_6_2_5_t03
-	}
-	return Rule{}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_5_t03, Rule_19005_3_6_2_5_t03, Rule_19005_4_6_2_5_t03)
 }
 
 func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
@@ -377,14 +336,10 @@ func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ stri
 	}
 
 	if _, hasHTP := gs["HTP"]; hasHTP {
-		slog.Debug("compliance.graphics: ExtGState contains forbidden HTP key",
-			"gs", gsName, "page", pageNum)
 		return failf(htpForbiddenRule(part), "page %d, ExtGState %s", pageNum, gsName)
 	}
 	// HTO key is also forbidden (PDF/A-4 §6.2.5 t3).
 	if _, hasHTO := gs["HTO"]; hasHTO {
-		slog.Debug("compliance.graphics: ExtGState contains forbidden HTO key",
-			"gs", gsName, "page", pageNum)
 		return failf(htpForbiddenRule(part), "page %d, ExtGState %s: HTO key forbidden", pageNum, gsName)
 	}
 	return nil
@@ -394,41 +349,17 @@ func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ stri
 
 // halftoneTypeRule returns the rule for invalid HalftoneType.
 func halftoneTypeRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_2_5_t04
-	case 3:
-		return Rule_19005_3_6_2_5_t04
-	case 4:
-		return Rule_19005_4_6_2_5_t04
-	}
-	return Rule{}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_5_t04, Rule_19005_3_6_2_5_t04, Rule_19005_4_6_2_5_t04)
 }
 
 // halftoneNameRule returns the rule for forbidden HalftoneName.
 func halftoneNameRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_2_5_t05
-	case 3:
-		return Rule_19005_3_6_2_5_t05
-	case 4:
-		return Rule_19005_4_6_2_5_t05
-	}
-	return Rule{}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_5_t05, Rule_19005_3_6_2_5_t05, Rule_19005_4_6_2_5_t05)
 }
 
 // halftoneTransferRule returns the rule for non-Default TransferFunction.
 func halftoneTransferRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_2_5_t06
-	case 3:
-		return Rule_19005_3_6_2_5_t06
-	case 4:
-		return Rule_19005_4_6_2_5_t06
-	}
-	return Rule{}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_5_t06, Rule_19005_3_6_2_5_t06, Rule_19005_4_6_2_5_t06)
 }
 
 func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
@@ -444,8 +375,6 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 
 	ht, err := document.ResolveDict(ctx, doc, htObj)
 	if err != nil || ht == nil {
-		slog.Debug("compliance.graphics: failed to resolve HT dict",
-			"gs", gsName, "page", pageNum)
 		return nil
 	}
 
@@ -455,16 +384,12 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 	htType, err := document.ResolveInt(ctx, doc, ht["HalftoneType"])
 	if err == nil {
 		if htType != 1 && htType != 5 {
-			slog.Debug("compliance.graphics: invalid HalftoneType",
-				"gs", gsName, "page", pageNum, "type", htType)
 			results = append(results, failf(halftoneTypeRule(part), "page %d, ExtGState %s, HalftoneType %d", pageNum, gsName, htType)...)
 		}
 	}
 
 	// HalftoneName forbidden.
 	if _, hasHTName := ht["HalftoneName"]; hasHTName {
-		slog.Debug("compliance.graphics: halftone contains forbidden HalftoneName",
-			"gs", gsName, "page", pageNum)
 		results = append(results, failf(halftoneNameRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
 	}
 
@@ -472,8 +397,6 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 	if tfObj, hasTF := ht["TransferFunction"]; hasTF {
 		tfName, _ := document.ResolveName(ctx, doc, tfObj)
 		if tfName != "Default" {
-			slog.Debug("compliance.graphics: halftone has non-Default TransferFunction",
-				"gs", gsName, "page", pageNum)
 			results = append(results, failf(halftoneTransferRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
 		}
 	}
@@ -483,7 +406,7 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 	//   - Default: always exempt
 	//   - CMYK primaries (Cyan/Magenta/Yellow/Black): TF must be absent
 	//   - Non-primary colorants (Red/Green/Blue/spots): TF must be present
-	if htType == 5 && part >= 2 { //nolint:mnd
+	if htType == 5 && part >= 2 {
 		cmykPrimaries := map[ast.PdfName]bool{
 			"Cyan": true, "Magenta": true, "Yellow": true, "Black": true,
 		}
@@ -526,16 +449,8 @@ var validRenderingIntents = map[string]bool{ //nolint:gochecknoglobals // consta
 
 // renderingIntentRule returns the rule for invalid rendering intent.
 func renderingIntentRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_2_9_t01
-	case 2:
-		return Rule_19005_2_6_2_6_t01
-	case 3:
-		return Rule_19005_3_6_2_6_t01
-	}
 	// PDF/A-4 has no separate rendering intent rule.
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_2_9_t01, Rule_19005_2_6_2_6_t01, Rule_19005_3_6_2_6_t01, Rule{})
 }
 
 func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
@@ -555,8 +470,6 @@ func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.Pd
 	}
 
 	if !validRenderingIntents[string(ri)] {
-		slog.Debug("compliance.graphics: invalid rendering intent",
-			"gs", gsName, "page", pageNum, "intent", ri)
 		return failf(renderingIntentRule(part), "page %d, ExtGState %s, intent %s", pageNum, gsName, ri)
 	}
 	return nil
@@ -595,15 +508,10 @@ func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict,
 		return nil
 	}
 
-	slog.Debug("compliance.graphics: OPM is 1 with overprint enabled",
-		"gs", gsName, "page", pageNum)
-
 	// There is no dedicated VeraPDF rule variable for OPM alone in parts 2-4.
 	// This is typically caught as part of color-space-specific overprint
 	// validation. Log the condition for debugging but do not emit a violation
 	// without a matching rule, to avoid false positives.
-	slog.Debug("compliance.graphics: OPM=1 with overprint noted (no dedicated rule)",
-		"gs", gsName, "page", pageNum)
 
 	return nil
 }

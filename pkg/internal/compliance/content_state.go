@@ -78,7 +78,7 @@ func checkContentStreamState(
 	}
 
 	for idx, op := range ops {
-		if idx%200 == 0 && ctx.Err() != nil { //nolint:mnd // context check interval
+		if idx%200 == 0 && ctx.Err() != nil {
 			return c.results
 		}
 		c.processOp(op)
@@ -248,9 +248,9 @@ func (c *contentStateChecker) resolveCSType(name string) string {
 		if err == nil {
 			n, _ := document.ResolveInt(c.ctx, c.doc, stream.Dict["N"])
 			switch n {
-			case 4: //nolint:mnd // CMYK = 4 components
+			case 4:
 				resolved = "ICCBased-CMYK"
-			case 3: //nolint:mnd // RGB = 3 components
+			case 3:
 				resolved = "ICCBased-RGB"
 			case 1:
 				resolved = "ICCBased-Gray"
@@ -304,7 +304,7 @@ func checkContentStreamResources(
 	reportedRealLimit := false
 
 	for idx, op := range ops {
-		if idx%200 == 0 && ctx.Err() != nil { //nolint:mnd
+		if idx%200 == 0 && ctx.Err() != nil {
 			return results
 		}
 
@@ -374,7 +374,7 @@ func checkContentStreamResources(
 		// For BDC/DP: the first operand is a tag name, the second is
 		// properties (name or dict). Only check if second operand is a name.
 		if op.Operator == "BDC" || op.Operator == "DP" {
-			if len(op.Operands) < 2 { //nolint:mnd
+			if len(op.Operands) < 2 {
 				continue
 			}
 			propName, ok := op.Operands[1].(ast.PdfName)
@@ -419,7 +419,7 @@ func checkInlineImageIntent(data []byte, part int, pageNum int) []Violation {
 	}
 
 	var results []Violation
-	for i := 0; i < len(data)-2; i++ { //nolint:mnd
+	for i := 0; i < len(data)-2; i++ {
 		// Look for "BI" followed by whitespace (start of inline image).
 		if data[i] != 'B' || data[i+1] != 'I' {
 			continue
@@ -429,7 +429,7 @@ func checkInlineImageIntent(data []byte, part int, pageNum int) []Violation {
 		}
 		// Scan until "ID" keyword (preceded and followed by whitespace).
 		end := -1
-		for k := i + 3; k < len(data)-2; k++ { //nolint:mnd
+		for k := i + 3; k < len(data)-2; k++ {
 			if data[k] == 'I' && data[k+1] == 'D' &&
 				(data[k-1] == ' ' || data[k-1] == '\n' || data[k-1] == '\r' || data[k-1] == '\t') &&
 				(data[k+2] == ' ' || data[k+2] == '\n' || data[k+2] == '\r') {
@@ -480,31 +480,11 @@ func realRangeRuleByPart(part int) Rule {
 }
 
 func undefinedOperatorRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_2_2_t01
-	case 2: //nolint:mnd
-		return Rule_19005_2_6_2_2_t01
-	case 3: //nolint:mnd
-		return Rule_19005_3_6_2_2_t01
-	case 4: //nolint:mnd
-		return Rule_19005_4_6_2_2_t01
-	}
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_2_2_t01, Rule_19005_2_6_2_2_t01, Rule_19005_3_6_2_2_t01, Rule_19005_4_6_2_2_t01)
 }
 
 func missingResourceRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_2_2_t02
-	case 2: //nolint:mnd
-		return Rule_19005_2_6_2_2_t02
-	case 3: //nolint:mnd
-		return Rule_19005_3_6_2_2_t02
-	case 4: //nolint:mnd
-		return Rule_19005_4_6_2_2_t02
-	}
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_2_2_t02, Rule_19005_2_6_2_2_t02, Rule_19005_3_6_2_2_t02, Rule_19005_4_6_2_2_t02)
 }
 
 // checkAtPaintingOp checks state-dependent compliance rules when a painting
@@ -519,8 +499,6 @@ func (c *contentStateChecker) checkAtPaintingOp(op string, isFill, isStroke bool
 
 	if isFill && c.state.overprintFill && c.state.fillCS == "ICCBased-CMYK" && !c.reportedOverprintFill {
 		c.reportedOverprintFill = true
-		slog.Debug("compliance.content: OPM=1 with fill overprint and ICCBased CMYK",
-			"page", c.pageNum, "op", op)
 		c.results = append(c.results, failf(overprintModeRule(c.part),
 			"page %d: OPM=1 with fill overprint and ICCBased CMYK colour space",
 			c.pageNum)...)
@@ -528,8 +506,6 @@ func (c *contentStateChecker) checkAtPaintingOp(op string, isFill, isStroke bool
 
 	if isStroke && c.state.overprintStr && c.state.strokeCS == "ICCBased-CMYK" && !c.reportedOverprintStroke {
 		c.reportedOverprintStroke = true
-		slog.Debug("compliance.content: OPM=1 with stroke overprint and ICCBased CMYK",
-			"page", c.pageNum, "op", op)
 		c.results = append(c.results, failf(overprintModeRule(c.part),
 			"page %d: OPM=1 with stroke overprint and ICCBased CMYK colour space",
 			c.pageNum)...)
@@ -538,13 +514,5 @@ func (c *contentStateChecker) checkAtPaintingOp(op string, isFill, isStroke bool
 
 // overprintModeRule returns the rule for OPM=1 with ICCBased CMYK overprint.
 func overprintModeRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_2_4_2_t02
-	case 3:
-		return Rule_19005_3_6_2_4_2_t02
-	case 4:
-		return Rule_19005_4_6_2_4_2_t02
-	}
-	return Rule{}
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_4_2_t02, Rule_19005_3_6_2_4_2_t02, Rule_19005_4_6_2_4_2_t02)
 }

@@ -77,32 +77,28 @@ var allowedInlineImageFiltersPart4 = map[string]bool{
 // checkContentGroup validates content stream operators for PDF/A conformance.
 // It checks for unknown operators, q/Q nesting depth, and forbidden inline
 // image filters. For PDF/UA profiles, no content stream checks are performed.
-func checkContentGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if isPDFUA(profile) {
-		slog.Debug("compliance.content: skipping for PDF/UA profile", "profile", profile)
+func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, profile := vctx.doc, vctx.profile
+
+	if vctx.ua {
 		return nil
 	}
 
-	part := pdfaPart(profile)
+	part := vctx.part
 	if part == 0 {
-		slog.Debug("compliance.content: unknown profile part", "profile", profile)
 		return nil
 	}
 
 	slog.Debug("compliance.content: starting checks", "profile", profile, "part", part)
 
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
-	for i, page := range pages {
+	for i, p := range vctx.pages {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.content: context cancelled during page iteration")
 			return results
 		}
 
-		slog.Debug("compliance.content: checking page", "page", i+1)
-
-		pageResults := checkPageContent(ctx, doc, page, part, i+1)
+		pageResults := checkPageContent(ctx, doc, p.dict, part, i+1)
 		results = append(results, pageResults...)
 	}
 
@@ -121,7 +117,6 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 	}
 
 	if len(streamData) == 0 {
-		slog.Debug("compliance.content: empty content stream", "page", pageNum)
 		return nil
 	}
 
@@ -133,8 +128,6 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 		return nil
 	}
 
-	slog.Debug("compliance.content: parsed operations", "page", pageNum, "count", len(ops))
-
 	var results []Violation
 
 	// Check operators and q/Q nesting.
@@ -143,16 +136,12 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 
 	for idx, op := range ops {
 		// Check context every ~100 operators.
-		if idx%100 == 0 && ctx.Err() != nil { //nolint:mnd // per-spec checkpoint interval
-			slog.Debug("compliance.content: context cancelled during operator walk",
-				"page", pageNum, "operator_index", idx)
+		if idx%100 == 0 && ctx.Err() != nil {
 			return results
 		}
 
 		// Check for unknown operators.
 		if !validPDFOperators[op.Operator] {
-			slog.Debug("compliance.content: unknown operator",
-				"page", pageNum, "operator", op.Operator)
 			results = append(results, failf(unknownOperatorRule(part),
 				"page %d: operator %q", pageNum, op.Operator)...)
 		}
@@ -175,8 +164,6 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 	if maxDepthSeen > maxQNesting {
 		rule := qNestingRule(part)
 		if rule.Clause != "" {
-			slog.Debug("compliance.content: q/Q nesting exceeded",
-				"page", pageNum, "depth", maxDepthSeen)
 			results = append(results, failf(rule,
 				"page %d: q/Q nesting depth %d exceeds %d", pageNum, maxDepthSeen, maxQNesting)...)
 		}
@@ -269,7 +256,7 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 		filterVal := extractInlineImageFilter(dictBytes)
 		if filterVal != "" {
 			forbidden := false
-			if part == 4 { //nolint:mnd // PDF/A-4 uses allowlist
+			if part == 4 {
 				allowed, known := allowedInlineImageFiltersPart4[filterVal]
 				if !known || !allowed {
 					forbidden = true
@@ -278,8 +265,6 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 				forbidden = forbiddenInlineImageFilters[filterVal]
 			}
 			if forbidden {
-				slog.Debug("compliance.content: forbidden inline image filter",
-					"page", pageNum, "filter", filterVal)
 				results = append(results, failf(inlineImageFilterRule(part),
 					"page %d: inline image uses forbidden filter %q", pageNum, filterVal)...)
 			}
@@ -380,46 +365,18 @@ func isPDFWhitespace(b byte) bool {
 // unknownOperatorRule returns the correct rule for unknown content stream
 // operators based on the PDF/A part.
 func unknownOperatorRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_2_2_t01
-	case 2:
-		return Rule_19005_2_6_2_2_t01
-	case 3:
-		return Rule_19005_3_6_2_2_t01
-	case 4:
-		return Rule_19005_4_6_2_2_t01
-	}
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_2_2_t01, Rule_19005_2_6_2_2_t01, Rule_19005_3_6_2_2_t01, Rule_19005_4_6_2_2_t01)
 }
 
 // qNestingRule returns the correct rule for q/Q nesting depth violations
 // based on the PDF/A part. PDF/A-4 does not define a q/Q nesting limit,
 // so an empty rule is returned.
 func qNestingRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_1_12_t08
-	case 2:
-		return Rule_19005_2_6_1_13_t08
-	case 3:
-		return Rule_19005_3_6_1_13_t08
-	}
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_1_12_t08, Rule_19005_2_6_1_13_t08, Rule_19005_3_6_1_13_t08, Rule{})
 }
 
 // inlineImageFilterRule returns the correct rule for forbidden inline image
 // filters based on the PDF/A part.
 func inlineImageFilterRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_1_10_t02
-	case 2:
-		return Rule_19005_2_6_1_10_t01
-	case 3:
-		return Rule_19005_3_6_1_10_t01
-	case 4:
-		return Rule_19005_4_6_1_9_t01
-	}
-	return Rule{}
+	return ruleByPart(part, Rule_19005_1_6_1_10_t02, Rule_19005_2_6_1_10_t01, Rule_19005_3_6_1_10_t01, Rule_19005_4_6_1_9_t01)
 }

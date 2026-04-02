@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -141,15 +142,15 @@ const xmpPacketHeaderSize = 200
 
 // checkXMPGroup validates XMP metadata compliance for PDF/A profiles.
 // For PDF/UA profiles, it returns nil (XMP checks are not applicable).
-func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if isPDFUA(profile) {
-		slog.Debug("compliance.xmp: skipping XMP checks for PDF/UA profile", "profile", profile)
+func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
+	part := vctx.part
+
+	if vctx.ua {
 		return nil
 	}
 
-	part := pdfaPart(profile)
 	if part == 0 {
-		slog.Debug("compliance.xmp: skipping XMP checks for unknown profile", "profile", profile)
 		return nil
 	}
 
@@ -160,7 +161,6 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	// 1. Catalog /Metadata required (§6.7.2 / §6.6.1).
 	xmpData, metaStream := xmpLoadMetadata(ctx, doc, catalog, part, &results)
 	if xmpData == nil {
-		slog.Debug("compliance.xmp: no XMP data available, stopping checks")
 		return results
 	}
 
@@ -169,7 +169,7 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	}
 
 	// 1b. XMP encoding must be UTF-8 for part 4 (§6.7.2.1 t05).
-	if part == 4 { //nolint:mnd // PDF/A-4.
+	if part == 4 {
 		xmpCheckEncoding(xmpData, part, &results)
 	}
 
@@ -213,7 +213,7 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	}
 
 	// 6. DocInfo ↔ XMP consistency (§6.7.3) — parts 1 and 4 only.
-	if part == 1 || part == 4 { //nolint:mnd // PDF/A parts with DocInfo sync requirement
+	if part == 1 || part == 4 {
 		xmpCheckDocInfoSync(ctx, doc, xmpData, part, &results)
 	}
 
@@ -235,12 +235,10 @@ func checkXMPGroup(ctx context.Context, doc *document.Document, catalog ast.PdfD
 func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) ([]byte, ast.PdfStream) {
 	mdObj, ok := catalog["Metadata"]
 	if !ok {
-		slog.Debug("compliance.xmp: catalog missing /Metadata key")
 		*results = append(*results, xmpMetadataRule(part, 1)...)
 		return nil, ast.PdfStream{}
 	}
 
-	slog.Debug("compliance.xmp: resolving /Metadata stream")
 	stream, err := document.ResolveStream(ctx, doc, mdObj)
 	if err != nil || stream.Dict == nil {
 		slog.Debug("compliance.xmp: failed to resolve /Metadata stream", "error", err)
@@ -251,11 +249,8 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	// Validate stream dict entries: Type=Metadata, Subtype=XML.
 	typeName, _ := document.ResolveName(ctx, doc, stream.Dict["Type"])
 	subtypeName, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-	slog.Debug("compliance.xmp: metadata stream dict",
-		"Type", typeName, "Subtype", subtypeName)
 
 	if typeName != "Metadata" || subtypeName != "XML" {
-		slog.Debug("compliance.xmp: metadata stream has wrong Type/Subtype")
 		*results = append(*results, xmpMetadataRule(part, 1)...)
 		return nil, ast.PdfStream{}
 	}
@@ -263,19 +258,15 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	// For part 1, the metadata stream must not have a /Filter key.
 	if part == 1 {
 		if _, hasFilter := stream.Dict["Filter"]; hasFilter {
-			slog.Debug("compliance.xmp: metadata stream has /Filter (forbidden in part 1)")
 			*results = append(*results, fail(Rule_19005_1_6_7_2_t02, "catalog metadata stream has Filter key")...)
 		}
 	}
 
 	// Decode the stream content.
-	slog.Debug("compliance.xmp: decoding metadata stream bytes")
 	xmpData, err := stream.Bytes()
 	if err != nil || len(xmpData) == 0 {
-		slog.Debug("compliance.xmp: Bytes() returned empty, trying doc.DecodeStream")
 		decoded, decErr := doc.DecodeStream(stream)
 		if decErr != nil {
-			slog.Debug("compliance.xmp: DecodeStream failed", "error", decErr)
 			*results = append(*results, xmpMetadataRule(part, 1)...)
 			return nil, ast.PdfStream{}
 		}
@@ -283,12 +274,10 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	}
 
 	if len(xmpData) == 0 {
-		slog.Debug("compliance.xmp: metadata stream is empty")
 		*results = append(*results, xmpMetadataRule(part, 1)...)
 		return nil, ast.PdfStream{}
 	}
 
-	slog.Debug("compliance.xmp: loaded XMP data", "size", len(xmpData))
 	return xmpData, stream
 }
 
@@ -299,11 +288,11 @@ func xmpMetadataRule(part, test int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_2_t01, "catalog missing or invalid /Metadata stream")
-	case 2: //nolint:mnd
+	case 2:
 		return fail(Rule_19005_2_6_6_2_1_t01, "catalog missing or invalid /Metadata stream")
-	case 3: //nolint:mnd
+	case 3:
 		return fail(Rule_19005_3_6_6_2_1_t01, "catalog missing or invalid /Metadata stream")
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_7_2_1_t01, "catalog missing or invalid /Metadata stream")
 	}
 	return nil
@@ -319,24 +308,17 @@ func xmpCheckPacketHeader(data []byte, part int, results *[]Violation) {
 		header = header[:xmpPacketHeaderSize]
 	}
 
-	slog.Debug("compliance.xmp: checking XMP packet header", "headerLen", len(header))
-
 	before, _, ok := bytes.Cut(header, []byte("?>"))
 	if !ok {
-		slog.Debug("compliance.xmp: no processing instruction found in header")
 		return
 	}
 	pi := before
 
-	slog.Debug("compliance.xmp: found processing instruction", "pi", string(pi))
-
 	if bytes.Contains(pi, []byte("bytes=")) {
-		slog.Debug("compliance.xmp: XMP packet header contains 'bytes' attribute")
 		*results = append(*results, xmpPacketHeaderBytesRule(part)...)
 	}
 
 	if bytes.Contains(pi, []byte("encoding=")) {
-		slog.Debug("compliance.xmp: XMP packet header contains 'encoding' attribute")
 		*results = append(*results, xmpPacketHeaderEncodingRule(part)...)
 	}
 }
@@ -345,11 +327,11 @@ func xmpPacketHeaderBytesRule(part int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_5_t01, "")
-	case 2: //nolint:mnd
+	case 2:
 		return fail(Rule_19005_2_6_6_2_1_t02, "")
-	case 3: //nolint:mnd
+	case 3:
 		return fail(Rule_19005_3_6_6_2_1_t02, "")
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_7_2_1_t02, "")
 	}
 	return nil
@@ -359,11 +341,11 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_5_t02, "")
-	case 2: //nolint:mnd
+	case 2:
 		return fail(Rule_19005_2_6_6_2_1_t03, "")
-	case 3: //nolint:mnd
+	case 3:
 		return fail(Rule_19005_3_6_6_2_1_t03, "")
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_7_2_1_t03, "")
 	}
 	return nil
@@ -374,17 +356,13 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 // xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
 // For PDF/A-4 (§6.7.2.1 t05), UTF-16 encoding is a violation.
 func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
-	slog.Debug("compliance.xmp: checking XMP encoding")
-
 	// Check for UTF-16 BOM: FE FF (BE) or FF FE (LE).
-	if len(data) >= 2 { //nolint:mnd // BOM is 2 bytes.
+	if len(data) >= 2 {
 		if data[0] == 0xFE && data[1] == 0xFF {
-			slog.Debug("compliance.xmp: UTF-16BE BOM detected")
 			*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16BE")...)
 			return
 		}
 		if data[0] == 0xFF && data[1] == 0xFE {
-			slog.Debug("compliance.xmp: UTF-16LE BOM detected")
 			*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16LE")...)
 			return
 		}
@@ -394,7 +372,6 @@ func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
 	headerLen := min(len(data), xmpPacketHeaderSize)
 	header := strings.ToLower(string(data[:headerLen]))
 	if strings.Contains(header, "encoding=\"utf-16") || strings.Contains(header, "encoding='utf-16") {
-		slog.Debug("compliance.xmp: UTF-16 declared in XML processing instruction")
 		*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16")...)
 	}
 }
@@ -405,18 +382,12 @@ func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
 // used by properties is either a predefined XMP schema or is declared in a
 // PDF/A extension schema within the same XMP packet.
 func xmpCheckNamespaces(data []byte, part int, results *[]Violation) {
-	slog.Debug("compliance.xmp: checking XMP namespace schemas")
-
 	usedNamespaces, extensionNamespaces := xmpExtractNamespaces(data)
-
-	slog.Debug("compliance.xmp: extracted namespaces",
-		"used", len(usedNamespaces), "extensions", len(extensionNamespaces))
 
 	for ns := range usedNamespaces {
 		if knownXMPNamespaces[ns] || extensionNamespaces[ns] {
 			continue
 		}
-		slog.Debug("compliance.xmp: unknown namespace without extension schema", "ns", ns)
 		*results = append(*results, xmpSchemaRule(part, ns)...)
 	}
 }
@@ -430,8 +401,6 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
-
-	slog.Debug("compliance.xmp: starting namespace extraction")
 
 	// ignoredNS lists structural namespaces that should not be counted as
 	// property namespaces.
@@ -456,15 +425,12 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			slog.Debug("compliance.xmp: start element",
-				"space", t.Name.Space, "local", t.Name.Local)
 
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
 				descDepth++
 				// Record namespaces from attributes on rdf:Description.
 				for _, attr := range t.Attr {
 					if !ignoredNS[attr.Name.Space] {
-						slog.Debug("compliance.xmp: attr namespace used on Description", "ns", attr.Name.Space)
 						used[attr.Name.Space] = true
 					}
 				}
@@ -475,7 +441,6 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 			// regardless of nesting depth. This catches properties nested
 			// inside rdf:Bag, rdf:Seq, rdf:Alt, and structured value types.
 			if descDepth > 0 && !ignoredNS[t.Name.Space] {
-				slog.Debug("compliance.xmp: property namespace used", "ns", t.Name.Space, "local", t.Name.Local, "depth", descDepth)
 				used[t.Name.Space] = true
 			}
 
@@ -484,7 +449,6 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 			if descDepth > 0 {
 				for _, attr := range t.Attr {
 					if !ignoredNS[attr.Name.Space] {
-						slog.Debug("compliance.xmp: nested attr namespace used", "ns", attr.Name.Space, "local", attr.Name.Local)
 						used[attr.Name.Space] = true
 					}
 				}
@@ -492,7 +456,6 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 
 			// Track extension schema namespace declarations.
 			if t.Name.Local == "schemas" && strings.Contains(t.Name.Space, "pdfa/ns/extension") {
-				slog.Debug("compliance.xmp: entering extension schema block")
 				inExtensionSchema = true
 			}
 			if inExtensionSchema && t.Name.Local == "namespaceURI" {
@@ -500,7 +463,6 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 					if charData, ok := charTok.(xml.CharData); ok {
 						ns := strings.TrimSpace(string(charData))
 						if ns != "" {
-							slog.Debug("compliance.xmp: extension schema namespace", "ns", ns)
 							extensions[ns] = true
 						}
 					}
@@ -526,11 +488,11 @@ func xmpSchemaRule(part int, ns string) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_7_9_t02, "namespace %s not predefined or in extension schema", ns)
-	case 2: //nolint:mnd
+	case 2:
 		return failf(Rule_19005_2_6_6_2_3_1_t01, "namespace %s not predefined or in extension schema", ns)
-	case 3: //nolint:mnd
+	case 3:
 		return failf(Rule_19005_3_6_6_2_3_1_t01, "namespace %s not predefined or in extension schema", ns)
-	case 4: //nolint:mnd
+	case 4:
 		return failf(Rule_19005_4_6_6_1_t01, "namespace %s not predefined or in extension schema", ns)
 	}
 	return nil
@@ -541,8 +503,6 @@ func xmpSchemaRule(part int, ns string) []Violation {
 // xmpCheckPDFAIdentification verifies that the XMP contains pdfaid:part and
 // pdfaid:conformance entries with correct values matching the declared profile.
 func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *[]Violation) {
-	slog.Debug("compliance.xmp: checking PDF/A identification", "profile", profile, "part", part)
-
 	var partValue, confValue, revValue string
 	hasPart := false
 	hasConf := false
@@ -563,8 +523,6 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 		// Check attributes (inline form).
 		for _, attr := range t.Attr {
 			if attr.Name.Space == xmpPdfaIDNamespace {
-				slog.Debug("compliance.xmp: pdfaid attr found",
-					"local", attr.Name.Local, "value", attr.Value)
 				switch attr.Name.Local {
 				case "part":
 					hasPart = true
@@ -579,28 +537,19 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 				// Attribute with matching local name but wrong namespace prefix.
 				switch attr.Name.Local {
 				case "part":
-					slog.Debug("compliance.xmp: pdfaid:part attr has wrong namespace prefix",
-						"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
 					wrongPrefixPart = true
 				case "conformance":
-					slog.Debug("compliance.xmp: pdfaid:conformance attr has wrong namespace prefix",
-						"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
 					wrongPrefixConf = true
 				case "rev":
-					slog.Debug("compliance.xmp: pdfaid:rev attr has wrong namespace prefix",
-						"space", attr.Name.Space, "expected", xmpPdfaIDNamespace)
 					wrongPrefixRev = true
 				}
 			}
 		}
 		// Check element form — read text content.
 		if t.Name.Space == xmpPdfaIDNamespace {
-			slog.Debug("compliance.xmp: pdfaid element found", "local", t.Name.Local)
 			if charTok, charErr := decoder.Token(); charErr == nil {
 				if charData, ok := charTok.(xml.CharData); ok {
 					val := strings.TrimSpace(string(charData))
-					slog.Debug("compliance.xmp: pdfaid element value",
-						"local", t.Name.Local, "value", val)
 					switch t.Name.Local {
 					case "part":
 						hasPart = true
@@ -618,28 +567,14 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 			// Element with matching local name but wrong namespace prefix.
 			switch t.Name.Local {
 			case "part":
-				slog.Debug("compliance.xmp: pdfaid:part element has wrong namespace prefix",
-					"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
 				wrongPrefixPart = true
 			case "conformance":
-				slog.Debug("compliance.xmp: pdfaid:conformance element has wrong namespace prefix",
-					"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
 				wrongPrefixConf = true
 			case "rev":
-				slog.Debug("compliance.xmp: pdfaid:rev element has wrong namespace prefix",
-					"space", t.Name.Space, "expected", xmpPdfaIDNamespace)
 				wrongPrefixRev = true
 			}
 		}
 	}
-
-	slog.Debug("compliance.xmp: pdfaid parsed",
-		"hasPart", hasPart, "partValue", partValue,
-		"hasConf", hasConf, "confValue", confValue,
-		"revValue", revValue,
-		"wrongPrefixPart", wrongPrefixPart,
-		"wrongPrefixConf", wrongPrefixConf,
-		"wrongPrefixRev", wrongPrefixRev)
 
 	// Detect wrong prefix via raw byte scan. The XML parser resolves
 	// namespaces by URI, so "pdfa:part" with the correct URI appears correct
@@ -672,7 +607,6 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 		hasPart = bytes.Contains(data, []byte("pdfaid:part")) ||
 			bytes.Contains(data, []byte("pdfa/ns/id"))
 		if !hasPart {
-			slog.Debug("compliance.xmp: no pdfaid identification found at all")
 			return
 		}
 		hasConf = bytes.Contains(data, []byte("pdfaid:conformance"))
@@ -683,46 +617,38 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 
 	// Check: pdfaid:part must exist.
 	if !hasPart {
-		slog.Debug("compliance.xmp: pdfaid:part missing")
 		*results = append(*results, xmpPDFAIdMissingRule(part)...)
 		return
 	}
 
 	// For parts 1-3, pdfaid:conformance must exist (unless level is 0 for part 4).
-	if part < 4 && !hasConf { //nolint:mnd
-		slog.Debug("compliance.xmp: pdfaid:conformance missing for part < 4")
+	if part < 4 && !hasConf {
 		*results = append(*results, xmpPDFAIdMissingRule(part)...)
 		return
 	}
 
 	// Validate pdfaid:part value.
 	if partValue != "" && partValue != expectedPart {
-		slog.Debug("compliance.xmp: pdfaid:part mismatch",
-			"actual", partValue, "expected", expectedPart)
 		*results = append(*results, xmpPDFAPartRule(part, partValue)...)
 	}
 
 	// Validate pdfaid:conformance value (parts 1-3).
 	// Must be uppercase (A, B, U) — case-sensitive comparison.
-	if part < 4 && level != 0 { //nolint:mnd
+	if part < 4 && level != 0 {
 		expectedConf := strings.ToUpper(string(rune(level)))
 		if confValue != expectedConf {
-			slog.Debug("compliance.xmp: pdfaid:conformance mismatch",
-				"actual", confValue, "expected", expectedConf)
 			*results = append(*results, xmpPDFAConformanceRule(part, confValue)...)
 		}
 	}
 
 	// Part 4 conformance validation depends on the sub-profile.
-	if part == 4 { //nolint:mnd
+	if part == 4 {
 		xmpCheckPart4Conformance(profile, hasConf, confValue, results)
 
 		// Part 4: validate pdfaid:rev (must be present and "2020").
 		if revValue == "" {
-			slog.Debug("compliance.xmp: pdfaid:rev missing for part 4")
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t05, "rev missing (must be 2020)")...)
 		} else if revValue != "2020" {
-			slog.Debug("compliance.xmp: pdfaid:rev invalid", "rev", revValue)
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t05, "rev=%s", revValue)...)
 		}
 	}
@@ -733,31 +659,21 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 //   - PDF/A-4e: conformance must be absent/empty or "E".
 //   - PDF/A-4f: conformance must be absent/empty or "F".
 func xmpCheckPart4Conformance(profile string, hasConf bool, confValue string, results *[]Violation) {
-	confUpper := strings.ToUpper(strings.TrimSpace(confValue))
-
-	slog.Debug("compliance.xmp: checking part 4 conformance",
-		"profile", profile, "hasConf", hasConf, "confValue", confValue, "confUpper", confUpper)
-
 	switch profile {
 	case "PDF/A-4":
 		// Plain PDF/A-4: conformance must be absent entirely.
 		// An empty conformance attribute is still a violation.
 		if hasConf {
-			slog.Debug("compliance.xmp: pdfaid:conformance present for plain PDF/A-4")
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%q but must be absent for plain PDF/A-4", confValue)...)
 		}
 	case "PDF/A-4e":
 		// PDF/A-4e: conformance MUST be exactly "E" (case-sensitive).
 		if confValue != "E" {
-			slog.Debug("compliance.xmp: pdfaid:conformance wrong for PDF/A-4e",
-				"actual", confValue)
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%q but must be 'E' for PDF/A-4e", confValue)...)
 		}
 	case "PDF/A-4f":
 		// PDF/A-4f: conformance MUST be exactly "F" (case-sensitive).
 		if confValue != "F" {
-			slog.Debug("compliance.xmp: pdfaid:conformance wrong for PDF/A-4f",
-				"actual", confValue)
 			*results = append(*results, failf(Rule_19005_4_6_7_3_t03, "conformance=%q but must be 'F' for PDF/A-4f", confValue)...)
 		}
 	}
@@ -780,7 +696,7 @@ func xmpHasWrongPdfaidPrefix(data []byte, field string) bool {
 		pos := off + idx
 		// Check if exactly "pdfaid" precedes the colon (not a longer prefix
 		// containing "pdfaid" as a substring, e.g., "nonpdfaid").
-		prefixStart := pos - 6 //nolint:mnd // len("pdfaid") == 6
+		prefixStart := pos - 6
 		if prefixStart >= 0 && bytes.Equal(data[prefixStart:prefixStart+len(validPrefix)], validPrefix) {
 			// Verify the prefix boundary: character before "pdfaid" must not be a letter.
 			if prefixStart == 0 || !isASCIILetter(data[prefixStart-1]) {
@@ -810,11 +726,11 @@ func xmpPDFAIdMissingRule(part int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_11_t01, "missing PDF/A Identification Schema")
-	case 2: //nolint:mnd
+	case 2:
 		return fail(Rule_19005_2_6_6_4_t01, "missing PDF/A Identification Schema")
-	case 3: //nolint:mnd
+	case 3:
 		return fail(Rule_19005_3_6_6_4_t01, "missing PDF/A Identification Schema")
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_7_3_t01, "missing PDF/A Identification Schema")
 	}
 	return nil
@@ -824,11 +740,11 @@ func xmpPDFAPartRule(part int, actual string) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_7_11_t02, "pdfaid:part=%s", actual)
-	case 2: //nolint:mnd
+	case 2:
 		return failf(Rule_19005_2_6_6_4_t02, "pdfaid:part=%s", actual)
-	case 3: //nolint:mnd
+	case 3:
 		return failf(Rule_19005_3_6_6_4_t02, "pdfaid:part=%s", actual)
-	case 4: //nolint:mnd
+	case 4:
 		return failf(Rule_19005_4_6_7_3_t02, "pdfaid:part=%s", actual)
 	}
 	return nil
@@ -838,11 +754,11 @@ func xmpPDFAConformanceRule(part int, actual string) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_7_11_t03, "pdfaid:conformance=%s", actual)
-	case 2: //nolint:mnd
+	case 2:
 		return failf(Rule_19005_2_6_6_4_t03, "pdfaid:conformance=%s", actual)
-	case 3: //nolint:mnd
+	case 3:
 		return failf(Rule_19005_3_6_6_4_t03, "pdfaid:conformance=%s", actual)
-	case 4: //nolint:mnd
+	case 4:
 		return failf(Rule_19005_4_6_7_3_t03, "pdfaid:conformance=%s", actual)
 	}
 	return nil
@@ -857,24 +773,24 @@ func xmpPDFAIdPrefixRule(part int, field string) []Violation {
 		switch part {
 		case 1:
 			return fail(Rule_19005_1_6_7_11_t04, ctx)
-		case 2: //nolint:mnd
+		case 2:
 			return fail(Rule_19005_2_6_6_4_t04, ctx)
-		case 3: //nolint:mnd
+		case 3:
 			return fail(Rule_19005_3_6_6_4_t04, ctx)
-		case 4: //nolint:mnd
+		case 4:
 			return fail(Rule_19005_4_6_7_3_t04, ctx)
 		}
 	case "conformance":
 		switch part {
 		case 1:
 			return fail(Rule_19005_1_6_7_11_t05, ctx)
-		case 2: //nolint:mnd
+		case 2:
 			return fail(Rule_19005_2_6_6_4_t05, ctx)
-		case 3: //nolint:mnd
+		case 3:
 			return fail(Rule_19005_3_6_6_4_t05, ctx)
 		}
 	case "rev":
-		if part == 4 { //nolint:mnd
+		if part == 4 {
 			return fail(Rule_19005_4_6_7_3_t06, ctx)
 		}
 	}
@@ -946,16 +862,12 @@ func xmpExtractPrefixMap(data []byte) map[string]string {
 // It also validates that extension schema elements use the expected namespace
 // prefix names (e.g., "pdfaSchema" not "nonpdfaSchema").
 func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
-	slog.Debug("compliance.xmp: checking extension schema structure")
-
 	// Extract prefix→URI map to check prefix name correctness.
 	prefixMap := xmpExtractPrefixMap(data)
 
 	// Check that pdfa extension schema namespace URIs use the expected prefix names.
 	for uri, expectedPrefix := range xmpExpectedPrefix {
 		if actualPrefix, ok := prefixMap[uri]; ok && actualPrefix != expectedPrefix {
-			slog.Debug("compliance.xmp: wrong namespace prefix for extension schema namespace",
-				"uri", uri, "expected", expectedPrefix, "actual", actualPrefix)
 			switch uri {
 			case xmpPdfaSchemaPrefix:
 				*results = append(*results, xmpExtSchemaRule(part, "schema")...)
@@ -1033,7 +945,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
-				slog.Debug("compliance.xmp: entering extension schemas block")
 				inSchemas = true
 				continue
 			}
@@ -1061,8 +972,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				} else if len(levelStack) == 0 {
 					levelStack = append(levelStack, xmpExtLevelSchema)
 				}
-				slog.Debug("compliance.xmp: pushed extension level",
-					"level", currentLevel(), "depth", len(levelStack))
 				continue
 			}
 
@@ -1073,7 +982,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 			// namespace prefix correctness).
 			switch {
 			case t.Name.Space == xmpPdfaSchemaPrefix:
-				slog.Debug("compliance.xmp: pdfaSchema element", "local", t.Name.Local)
 				switch t.Name.Local {
 				case "schema":
 					currentSchema.hasSchema = true
@@ -1093,19 +1001,13 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				// Wrong namespace prefix for a schema-level field.
 				switch t.Name.Local {
 				case "schema", "namespaceURI", "prefix", "property":
-					slog.Debug("compliance.xmp: schema field has wrong namespace prefix",
-						"local", t.Name.Local, "space", t.Name.Space,
-						"expected", xmpPdfaSchemaPrefix)
 					*results = append(*results, xmpExtSchemaRule(part, t.Name.Local)...)
 				case "valueType":
-					slog.Debug("compliance.xmp: schema valueType has wrong namespace prefix",
-						"space", t.Name.Space, "expected", xmpPdfaSchemaPrefix)
 					// Still need to set up pending level for child parsing.
 					pendingLevel = xmpExtLevelValueType
 					hasPending = true
 				}
 			case t.Name.Space == xmpPdfaPropertyPrefix && currentLevel() == xmpExtLevelProperty:
-				slog.Debug("compliance.xmp: pdfaProperty element", "local", t.Name.Local)
 				switch t.Name.Local {
 				case "name":
 					currentProp.hasName = true
@@ -1120,13 +1022,9 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				// Wrong namespace prefix for a property-level field.
 				switch t.Name.Local {
 				case "name", "valueType", "category", "description":
-					slog.Debug("compliance.xmp: property field has wrong namespace prefix",
-						"local", t.Name.Local, "space", t.Name.Space,
-						"expected", xmpPdfaPropertyPrefix)
 					*results = append(*results, xmpExtPropertyRule(part, t.Name.Local)...)
 				}
 			case t.Name.Space == xmpPdfaTypePrefix && currentLevel() == xmpExtLevelValueType:
-				slog.Debug("compliance.xmp: pdfaType element", "local", t.Name.Local)
 				switch t.Name.Local {
 				case "type":
 					currentValueType.hasType = true
@@ -1144,19 +1042,13 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				// Wrong namespace prefix for a valueType-level field.
 				switch t.Name.Local {
 				case "type", "namespaceURI", "prefix", "description":
-					slog.Debug("compliance.xmp: valueType field has wrong namespace prefix",
-						"local", t.Name.Local, "space", t.Name.Space,
-						"expected", xmpPdfaTypePrefix)
 					*results = append(*results, xmpExtValueTypeRule(part, t.Name.Local)...)
 				case "field":
-					slog.Debug("compliance.xmp: valueType field element has wrong namespace prefix",
-						"space", t.Name.Space, "expected", xmpPdfaTypePrefix)
 					// Still need to set up pending level for child parsing.
 					pendingLevel = xmpExtLevelField
 					hasPending = true
 				}
 			case t.Name.Space == xmpPdfaFieldPrefix && currentLevel() == xmpExtLevelField:
-				slog.Debug("compliance.xmp: pdfaField element", "local", t.Name.Local)
 				switch t.Name.Local {
 				case "name":
 					currentField.hasName = true
@@ -1169,9 +1061,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				// Wrong namespace prefix for a field-level field.
 				switch t.Name.Local {
 				case "name", "valueType", "description":
-					slog.Debug("compliance.xmp: pdfaField element has wrong namespace prefix",
-						"local", t.Name.Local, "space", t.Name.Space,
-						"expected", xmpPdfaFieldPrefix)
 					*results = append(*results, xmpExtFieldRule(part, t.Name.Local)...)
 				}
 			}
@@ -1187,7 +1076,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 			}
 
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
-				slog.Debug("compliance.xmp: leaving extension schemas block")
 				inSchemas = false
 				continue
 			}
@@ -1200,15 +1088,8 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 			level := levelStack[len(levelStack)-1]
 			levelStack = levelStack[:len(levelStack)-1]
 
-			slog.Debug("compliance.xmp: popped extension level",
-				"level", level, "remaining", len(levelStack))
-
 			switch level {
 			case xmpExtLevelField:
-				slog.Debug("compliance.xmp: validating field definition",
-					"hasName", currentField.hasName,
-					"hasValueType", currentField.hasValueType,
-					"hasDesc", currentField.hasDescription)
 				if !currentField.hasName {
 					*results = append(*results, xmpExtFieldRule(part, "name")...)
 				}
@@ -1220,11 +1101,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				}
 				currentField = fieldInfo{}
 			case xmpExtLevelValueType:
-				slog.Debug("compliance.xmp: validating valueType definition",
-					"hasType", currentValueType.hasType,
-					"hasNS", currentValueType.hasNamespaceURI,
-					"hasPrefix", currentValueType.hasPrefix,
-					"hasDesc", currentValueType.hasDescription)
 				if !currentValueType.hasType {
 					*results = append(*results, xmpExtValueTypeRule(part, "type")...)
 				}
@@ -1239,11 +1115,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				}
 				currentValueType = valueTypeInfo{}
 			case xmpExtLevelProperty:
-				slog.Debug("compliance.xmp: validating property definition",
-					"hasName", currentProp.hasName,
-					"hasValueType", currentProp.hasValueType,
-					"hasCategory", currentProp.hasCategory,
-					"hasDesc", currentProp.hasDescription)
 				if !currentProp.hasName {
 					*results = append(*results, xmpExtPropertyRule(part, "name")...)
 				}
@@ -1258,11 +1129,6 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				}
 				currentProp = propInfo{}
 			case xmpExtLevelSchema:
-				slog.Debug("compliance.xmp: validating schema definition",
-					"hasSchema", currentSchema.hasSchema,
-					"hasNS", currentSchema.hasNamespaceURI,
-					"hasPrefix", currentSchema.hasPrefix,
-					"hasProperty", currentSchema.hasProperty)
 				if !currentSchema.hasSchema {
 					*results = append(*results, xmpExtSchemaRule(part, "schema")...)
 				}
@@ -1298,7 +1164,7 @@ func xmpExtSchemaRule(part int, field string) []Violation {
 		case "property":
 			return fail(Rule_19005_1_6_7_8_t06, ctx)
 		}
-	case 2: //nolint:mnd
+	case 2:
 		switch field {
 		case "schema":
 			return fail(Rule_19005_2_6_6_2_3_3_t02, ctx)
@@ -1309,7 +1175,7 @@ func xmpExtSchemaRule(part int, field string) []Violation {
 		case "property":
 			return fail(Rule_19005_2_6_6_2_3_3_t05, ctx)
 		}
-	case 3: //nolint:mnd
+	case 3:
 		switch field {
 		case "schema":
 			return fail(Rule_19005_3_6_6_2_3_3_t02, ctx)
@@ -1320,7 +1186,7 @@ func xmpExtSchemaRule(part int, field string) []Violation {
 		case "property":
 			return fail(Rule_19005_3_6_6_2_3_3_t05, ctx)
 		}
-	case 4: //nolint:mnd
+	case 4:
 		// Part 4 uses the general extension schema rule from 6.6.1.
 		return fail(Rule_19005_4_6_6_1_t01, ctx)
 	}
@@ -1343,7 +1209,7 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_1_6_7_8_t11, ctx)
 		}
-	case 2: //nolint:mnd
+	case 2:
 		switch field {
 		case "name":
 			return fail(Rule_19005_2_6_6_2_3_3_t07, ctx)
@@ -1354,7 +1220,7 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_2_6_6_2_3_3_t10, ctx)
 		}
-	case 3: //nolint:mnd
+	case 3:
 		switch field {
 		case "name":
 			return fail(Rule_19005_3_6_6_2_3_3_t07, ctx)
@@ -1365,7 +1231,7 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_3_6_6_2_3_3_t10, ctx)
 		}
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_6_1_t01, ctx)
 	}
 	return nil
@@ -1387,7 +1253,7 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_1_6_7_8_t15, ctx)
 		}
-	case 2: //nolint:mnd
+	case 2:
 		switch field {
 		case "type":
 			return fail(Rule_19005_2_6_6_2_3_3_t11, ctx)
@@ -1398,7 +1264,7 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_2_6_6_2_3_3_t14, ctx)
 		}
-	case 3: //nolint:mnd
+	case 3:
 		switch field {
 		case "type":
 			return fail(Rule_19005_3_6_6_2_3_3_t11, ctx)
@@ -1409,7 +1275,7 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_3_6_6_2_3_3_t14, ctx)
 		}
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_6_1_t01, ctx)
 	}
 	return nil
@@ -1429,7 +1295,7 @@ func xmpExtFieldRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_1_6_7_8_t19, ctx)
 		}
-	case 2: //nolint:mnd
+	case 2:
 		switch field {
 		case "name":
 			return fail(Rule_19005_2_6_6_2_3_3_t16, ctx)
@@ -1438,7 +1304,7 @@ func xmpExtFieldRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_2_6_6_2_3_3_t18, ctx)
 		}
-	case 3: //nolint:mnd
+	case 3:
 		switch field {
 		case "name":
 			return fail(Rule_19005_3_6_6_2_3_3_t16, ctx)
@@ -1447,7 +1313,7 @@ func xmpExtFieldRule(part int, field string) []Violation {
 		case "description":
 			return fail(Rule_19005_3_6_6_2_3_3_t18, ctx)
 		}
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_6_1_t01, ctx)
 	}
 	return nil
@@ -1492,8 +1358,6 @@ var xmpPredefinedValueTypes = map[string]bool{
 // valueType that has no field definitions in the extension schema, the property
 // "does not correspond to" its declared type (clause 6.6.2.3.1 test 2).
 func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) {
-	slog.Debug("compliance.xmp: checking extension property valueType correspondence")
-
 	// Parse the extension schema to build:
 	//   propValueTypes:  map[schemaURI]map[propName]valueType
 	//   customTypes:     map[typeName]hasFields
@@ -1632,9 +1496,6 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 			}
 			hasFields, defined := s.typeFields[vt]
 			if !defined || !hasFields {
-				slog.Debug("compliance.xmp: extension property valueType not properly defined",
-					"ns", s.nsURI, "prop", pName, "valueType", vt,
-					"defined", defined, "hasFields", hasFields)
 				*results = append(*results, xmpPropertyTypeRule(part, s.nsURI, pName,
 					fmt.Sprintf("does not correspond to type %s", vt))...)
 			}
@@ -1647,11 +1508,8 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 // xmpCheckDocInfoSync verifies that document info dict entries are consistent
 // with their XMP equivalents (§6.7.3).
 func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []byte, part int, results *[]Violation) {
-	slog.Debug("compliance.xmp: checking DocInfo ↔ XMP consistency")
-
 	infoObj, ok := doc.Index.Trailer["Info"]
 	if !ok {
-		slog.Debug("compliance.xmp: no Info dict in trailer, skipping sync check")
 		return
 	}
 	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
@@ -1662,11 +1520,8 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 
 	syncResult := xmpParseForSync(xmpData)
 	if syncResult == nil {
-		slog.Debug("compliance.xmp: failed to parse XMP for sync")
 		return
 	}
-
-	slog.Debug("compliance.xmp: parsed XMP sync values", "count", len(syncResult.values))
 
 	syncPairs := []struct {
 		infoKey string
@@ -1704,8 +1559,6 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		// If Info dict has a non-empty entry but XMP is missing the
 		// corresponding property, that is a sync violation.
 		if !hasXMP || xmpVal == "" {
-			slog.Debug("compliance.xmp: DocInfo present but XMP missing",
-				"infoKey", pair.infoKey, "xmpKey", pair.xmpKey, "infoVal", infoVal)
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, "")...)
 			continue
 		}
@@ -1714,8 +1567,6 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		// when /Author is present.
 		if part == 1 && pair.infoKey == "Author" {
 			if count, ok := syncResult.entryCounts[pair.xmpKey]; ok && count > 1 {
-				slog.Debug("compliance.xmp: dc:creator has multiple entries",
-					"count", count)
 				*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey,
 					fmt.Sprintf("%d entries", count))...)
 				continue
@@ -1740,8 +1591,6 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		normXMP = xmpNormalizeISO8601(normXMP)
 
 		if normInfo != normXMP {
-			slog.Debug("compliance.xmp: DocInfo/XMP mismatch",
-				"key", pair.infoKey, "info", infoVal, "xmp", xmpVal)
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
 		}
 	}
@@ -1752,7 +1601,7 @@ func xmpDocInfoSyncRule(part, testNum int, infoKey, infoVal, xmpKey, xmpVal stri
 	switch part {
 	case 1:
 		return xmpDocInfoSyncRulePart1(testNum, ctx)
-	case 4: //nolint:mnd
+	case 4:
 		// Part 4 uses 6.7.3.3/6.7.3.4 clause numbering — map test numbers
 		// to the appropriate rules.
 		return xmpDocInfoSyncRulePart4(testNum, ctx)
@@ -1764,19 +1613,19 @@ func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Violation {
 	switch testNum {
 	case 1:
 		return fail(Rule_19005_1_6_7_3_t01, ctx)
-	case 2: //nolint:mnd
+	case 2:
 		return fail(Rule_19005_1_6_7_3_t02, ctx)
-	case 3: //nolint:mnd
+	case 3:
 		return fail(Rule_19005_1_6_7_3_t03, ctx)
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_1_6_7_3_t04, ctx)
-	case 5: //nolint:mnd
+	case 5:
 		return fail(Rule_19005_1_6_7_3_t05, ctx)
-	case 6: //nolint:mnd
+	case 6:
 		return fail(Rule_19005_1_6_7_3_t06, ctx)
-	case 7: //nolint:mnd
+	case 7:
 		return fail(Rule_19005_1_6_7_3_t07, ctx)
-	case 8: //nolint:mnd
+	case 8:
 		return fail(Rule_19005_1_6_7_3_t08, ctx)
 	}
 	return nil
@@ -1789,19 +1638,19 @@ func xmpDocInfoSyncRulePart4(testNum int, ctx string) []Violation {
 	switch testNum {
 	case 1:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 2: //nolint:mnd
+	case 2:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 3: //nolint:mnd
+	case 3:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 5: //nolint:mnd
+	case 5:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 6: //nolint:mnd
+	case 6:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 7: //nolint:mnd
+	case 7:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 8: //nolint:mnd
+	case 8:
 		return fail(Rule_19005_4_6_7_3_t08, ctx)
 	}
 	return nil
@@ -1859,8 +1708,6 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
-	slog.Debug("compliance.xmp: parsing XMP for DocInfo sync")
-
 	var propNS, propLocal string
 	var inAlt, inSeqOrBag, inLI bool
 	var liLang string // xml:lang attribute on current rdf:li
@@ -1905,7 +1752,6 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 						attr.Name.Space != xmpRDFNamespace &&
 						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" {
 						key := makeKey(attr.Name.Space, attr.Name.Local)
-						slog.Debug("compliance.xmp: sync attr", "key", key, "value", attr.Value)
 						result[key] = attr.Value
 					}
 				}
@@ -1916,19 +1762,13 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 				if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
 					propNS = t.Name.Space
 					propLocal = t.Name.Local
-					slog.Debug("compliance.xmp: sync entering property",
-						"ns", propNS, "local", propLocal, "depth", depth)
 				}
-				if depth == 2 && t.Name.Space == xmpRDFNamespace { //nolint:mnd
+				if depth == 2 && t.Name.Space == xmpRDFNamespace {
 					switch t.Name.Local {
 					case "Alt":
 						inAlt = true
-						slog.Debug("compliance.xmp: sync entering rdf:Alt",
-							"prop", makeKey(propNS, propLocal))
 					case "Seq", "Bag":
 						inSeqOrBag = true
-						slog.Debug("compliance.xmp: sync entering rdf:Seq/Bag",
-							"prop", makeKey(propNS, propLocal), "type", t.Name.Local)
 					}
 				}
 				if (inAlt || inSeqOrBag) && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
@@ -1939,8 +1779,6 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 						if attr.Name.Local == "lang" &&
 							(attr.Name.Space == "http://www.w3.org/XML/1998/namespace" || attr.Name.Space == "xml") {
 							liLang = attr.Value
-							slog.Debug("compliance.xmp: sync rdf:li lang",
-								"lang", liLang, "prop", makeKey(propNS, propLocal))
 						}
 					}
 				}
@@ -1958,27 +1796,20 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 				if inAlt {
 					// For Alt containers, track x-default and first entries separately.
 					if liLang == "x-default" {
-						slog.Debug("compliance.xmp: sync Alt x-default value",
-							"key", key, "value", text)
 						altDefaults[key] = text
 					}
 					if _, exists := altFirst[key]; !exists {
-						slog.Debug("compliance.xmp: sync Alt first value",
-							"key", key, "value", text, "lang", liLang)
 						altFirst[key] = text
 					}
 				} else {
 					// Seq/Bag: take the first entry; count all entries.
 					entryCounts[key]++
 					if _, exists := result[key]; !exists {
-						slog.Debug("compliance.xmp: sync Seq/Bag li value",
-							"key", key, "value", text)
 						result[key] = text
 					}
 				}
 			} else if depth == 1 && propNS != "" {
 				key := makeKey(propNS, propLocal)
-				slog.Debug("compliance.xmp: sync text value", "key", key, "value", text)
 				result[key] = text
 			}
 		case xml.EndElement:
@@ -1996,7 +1827,7 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 					inLI = false
 					liLang = ""
 				}
-				if depth == 2 && t.Name.Space == xmpRDFNamespace { //nolint:mnd
+				if depth == 2 && t.Name.Space == xmpRDFNamespace {
 					switch t.Name.Local {
 					case "Alt":
 						inAlt = false
@@ -2014,14 +1845,9 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	}
 
 	// Merge Alt container values: prefer x-default, fall back to first entry.
-	for key, val := range altDefaults {
-		slog.Debug("compliance.xmp: sync using Alt x-default", "key", key, "value", val)
-		result[key] = val
-	}
+	maps.Copy(result, altDefaults)
 	for key, val := range altFirst {
 		if _, exists := result[key]; !exists {
-			slog.Debug("compliance.xmp: sync using Alt first entry (no x-default)",
-				"key", key, "value", val)
 			result[key] = val
 		}
 	}
@@ -2034,7 +1860,7 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 // to ISO 8601 format for comparison with XMP dates.
 func xmpNormalizePDFDate(pdfDate string) string {
 	s := strings.TrimPrefix(pdfDate, "D:")
-	if len(s) < 4 { //nolint:mnd // minimum: YYYY
+	if len(s) < 4 {
 		return pdfDate
 	}
 
@@ -2042,7 +1868,7 @@ func xmpNormalizePDFDate(pdfDate string) string {
 	s = s[4:]
 
 	get2 := func(def string) string {
-		if len(s) < 2 { //nolint:mnd
+		if len(s) < 2 {
 			return def
 		}
 		val := s[:2]
@@ -2067,20 +1893,17 @@ func xmpNormalizePDFDate(pdfDate string) string {
 			s = s[1:]
 			tzH := "00"
 			tzM := "00"
-			if len(s) >= 2 { //nolint:mnd
+			if len(s) >= 2 {
 				tzH = s[:2]
 				s = s[2:]
 			}
 			s = strings.TrimPrefix(s, "'")
-			if len(s) >= 2 { //nolint:mnd
+			if len(s) >= 2 {
 				tzM = s[:2]
 			}
 			tz = sign + tzH + ":" + tzM
 		}
 	}
-
-	slog.Debug("compliance.xmp: normalized PDF date",
-		"input", pdfDate, "tz", tz)
 
 	return year + "-" + month + "-" + day + "T" + hour + ":" + min + ":" + sec + tz
 }
@@ -2161,37 +1984,28 @@ var xmpContainerElementType = map[string]map[string]xmpPropType{
 // lang attributes, and struct property structure. It flags unknown property
 // names in known (predefined) schemas.
 func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Violation) {
-	slog.Debug("compliance.xmp: checking XMP property types")
-
 	observed := xmpExtractPropertyValues(data)
 	_, extensionNS := xmpExtractNamespaces(data)
-
-	slog.Debug("compliance.xmp: extracted property values",
-		"namespaces", len(observed), "extensionNS", len(extensionNS))
 
 	for ns, props := range observed {
 		// Skip structural namespaces.
 		if ns == xmpRDFNamespace || ns == "adobe:ns:meta/" || ns == "http://www.w3.org/XML/1998/namespace" {
-			slog.Debug("compliance.xmp: skipping structural namespace", "ns", ns)
 			continue
 		}
 		// Skip extension-declared namespaces — their types are defined by the extension.
 		if extensionNS[ns] {
-			slog.Debug("compliance.xmp: skipping extension-declared namespace", "ns", ns)
 			continue
 		}
 		// Skip PDF/A extension schema machinery namespaces.
 		if ns == xmpPdfaSchemaPrefix || ns == xmpPdfaPropertyPrefix ||
 			ns == xmpPdfaTypePrefix || ns == xmpPdfaFieldPrefix ||
 			ns == "http://www.aiim.org/pdfa/ns/extension/" {
-			slog.Debug("compliance.xmp: skipping pdfa extension machinery namespace", "ns", ns)
 			continue
 		}
 
 		registry, hasSchema := xmpPropertyRegistry[ns]
 		if !hasSchema {
 			// Namespace not in registry — already handled by xmpCheckNamespaces.
-			slog.Debug("compliance.xmp: namespace not in property registry, skipping", "ns", ns)
 			continue
 		}
 
@@ -2217,16 +2031,12 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 			}
 			if !known {
 				// Property name not defined in predefined schema — violation.
-				slog.Debug("compliance.xmp: unknown property in predefined schema",
-					"ns", ns, "prop", prop)
 				*results = append(*results, xmpPropertyTypeRule(part, ns, prop, "unknown property name")...)
 				continue
 			}
 
 			// xmpPropAny matches anything.
 			if expectedType == xmpPropAny {
-				slog.Debug("compliance.xmp: property type is Any, skipping validation",
-					"ns", ns, "prop", prop)
 				continue
 			}
 
@@ -2240,10 +2050,6 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 						pv.containerType == xmpContSimple &&
 						prop == "SupplementalCategories"
 					if !exemptSimpleAsBag {
-						slog.Debug("compliance.xmp: container type mismatch",
-							"ns", ns, "prop", prop,
-							"observed", xmpContainerTypeName(pv.containerType),
-							"expected", xmpContainerTypeName(expectedCont))
 						*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 							fmt.Sprintf("observed=%s expected=%s",
 								xmpContainerTypeName(pv.containerType),
@@ -2254,8 +2060,6 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 				// Validate Alt container items have xml:lang attribute.
 				// Struct-valued Alt items (e.g., xmp:Thumbnails) don't need xml:lang.
 				if expectedType == xmpPropAlt && !pv.hasLangAttr && !pv.isStructured {
-					slog.Debug("compliance.xmp: Alt container missing xml:lang on items",
-						"ns", ns, "prop", prop)
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						"Alt container items missing xml:lang attribute")...)
 				}
@@ -2263,12 +2067,8 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 				// Validate container item value formats using the element type registry.
 				if elemTypes, nsOK := xmpContainerElementType[ns]; nsOK {
 					if elemType, propOK := elemTypes[prop]; propOK {
-						slog.Debug("compliance.xmp: validating container item values",
-							"ns", ns, "prop", prop, "items", len(pv.items), "elemType", elemType)
 						for i, item := range pv.items {
 							if !validateXMPValue(elemType, item) {
-								slog.Debug("compliance.xmp: container item value format mismatch",
-									"ns", ns, "prop", prop, "index", i, "value", item, "expectedType", elemType)
 								*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 									fmt.Sprintf("item[%d] value %q does not match expected type", i, item))...)
 							}
@@ -2283,10 +2083,6 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 			if isSimplePropType(expectedType) {
 				// Expected simple value — should NOT be in a container.
 				if pv.containerType != xmpContSimple {
-					slog.Debug("compliance.xmp: simple property wrapped in container",
-						"ns", ns, "prop", prop,
-						"observed", xmpContainerTypeName(pv.containerType),
-						"expected", "Simple")
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						fmt.Sprintf("observed=%s expected=Simple",
 							xmpContainerTypeName(pv.containerType)))...)
@@ -2300,13 +2096,8 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 						valid = isValidXMPRealOrRational(pv.value)
 					}
 					if !valid {
-						slog.Debug("compliance.xmp: simple value format mismatch",
-							"ns", ns, "prop", prop, "value", pv.value, "expectedType", expectedType)
 						*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 							fmt.Sprintf("value %q does not match expected type", pv.value))...)
-					} else {
-						slog.Debug("compliance.xmp: simple value format OK",
-							"ns", ns, "prop", prop, "expectedType", expectedType)
 					}
 				}
 
@@ -2317,10 +2108,6 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 			if expectedType == xmpPropStruct {
 				// Expected struct — should NOT be in a container.
 				if pv.containerType != xmpContSimple {
-					slog.Debug("compliance.xmp: struct property wrapped in container",
-						"ns", ns, "prop", prop,
-						"observed", xmpContainerTypeName(pv.containerType),
-						"expected", "Simple")
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						fmt.Sprintf("observed=%s expected=Simple",
 							xmpContainerTypeName(pv.containerType)))...)
@@ -2328,8 +2115,6 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 
 				// Verify struct property has sub-elements, not plain text.
 				if !pv.isStructured && pv.containerType == xmpContSimple {
-					slog.Debug("compliance.xmp: struct property has plain text instead of sub-elements",
-						"ns", ns, "prop", prop, "value", pv.value)
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						"struct property has plain text value instead of sub-elements")...)
 				}
@@ -2360,11 +2145,11 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_9_t03, ctx)
-	case 2: //nolint:mnd
+	case 2:
 		return fail(Rule_19005_2_6_6_2_3_1_t02, ctx)
-	case 3: //nolint:mnd
+	case 3:
 		return fail(Rule_19005_3_6_6_2_3_1_t02, ctx)
-	case 4: //nolint:mnd
+	case 4:
 		return fail(Rule_19005_4_6_6_1_t01, ctx)
 	}
 	return nil
@@ -2385,8 +2170,6 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 	result := make(map[string]map[string]xmpPropertyValue)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
-
-	slog.Debug("compliance.xmp: extracting property values")
 
 	inDescription := false
 	depth := 0
@@ -2425,8 +2208,6 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 						attr.Name.Space != xmpRDFNamespace &&
 						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" &&
 						attr.Name.Space != "http://www.w3.org/2000/xmlns/" {
-						slog.Debug("compliance.xmp: attribute-form property value",
-							"ns", attr.Name.Space, "local", attr.Name.Local, "value", attr.Value)
 						record(attr.Name.Space, attr.Name.Local, xmpPropertyValue{
 							containerType: xmpContSimple,
 							value:         attr.Value,
@@ -2449,10 +2230,8 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					pv := getOrCreate(currentNS, currentLocal)
 					pv.containerType = xmpContSimple
 					record(currentNS, currentLocal, pv)
-					slog.Debug("compliance.xmp: entering property element",
-						"ns", currentNS, "local", currentLocal)
 				}
-				if depth == 2 && currentNS != "" { //nolint:mnd
+				if depth == 2 && currentNS != "" {
 					if t.Name.Space == xmpRDFNamespace {
 						switch t.Name.Local {
 						case "Alt":
@@ -2460,39 +2239,31 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 							pv.containerType = xmpContAlt
 							record(currentNS, currentLocal, pv)
 							inContainer = true
-							slog.Debug("compliance.xmp: found Alt container",
-								"ns", currentNS, "local", currentLocal)
 						case "Seq":
 							pv := getOrCreate(currentNS, currentLocal)
 							pv.containerType = xmpContSeq
 							record(currentNS, currentLocal, pv)
 							inContainer = true
-							slog.Debug("compliance.xmp: found Seq container",
-								"ns", currentNS, "local", currentLocal)
 						case "Bag":
 							pv := getOrCreate(currentNS, currentLocal)
 							pv.containerType = xmpContBag
 							record(currentNS, currentLocal, pv)
 							inContainer = true
-							slog.Debug("compliance.xmp: found Bag container",
-								"ns", currentNS, "local", currentLocal)
 						}
 					} else {
 						// Child element that is not an rdf container → structured.
 						pv := getOrCreate(currentNS, currentLocal)
 						pv.isStructured = true
 						record(currentNS, currentLocal, pv)
-						slog.Debug("compliance.xmp: property has structured sub-element",
-							"ns", currentNS, "local", currentLocal, "child", t.Name.Local)
 					}
 				}
 				// Inside an rdf:li, a non-rdf sub-element indicates structured content.
-				if depth > 3 && inLi && t.Name.Space != xmpRDFNamespace { //nolint:mnd
+				if depth > 3 && inLi && t.Name.Space != xmpRDFNamespace {
 					pv := getOrCreate(currentNS, currentLocal)
 					pv.isStructured = true
 					record(currentNS, currentLocal, pv)
 				}
-				if depth == 3 && inContainer && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" { //nolint:mnd
+				if depth == 3 && inContainer && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
 					inLi = true
 					currentCharData = ""
 					// Check for xml:lang attribute.
@@ -2501,8 +2272,6 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 							pv := getOrCreate(currentNS, currentLocal)
 							pv.hasLangAttr = true
 							record(currentNS, currentLocal, pv)
-							slog.Debug("compliance.xmp: rdf:li has xml:lang attribute",
-								"ns", currentNS, "local", currentLocal, "lang", attr.Value)
 							break
 						}
 					}
@@ -2524,8 +2293,6 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 						pv := getOrCreate(currentNS, currentLocal)
 						pv.value = trimmed
 						record(currentNS, currentLocal, pv)
-						slog.Debug("compliance.xmp: captured simple element text",
-							"ns", currentNS, "local", currentLocal, "value", trimmed)
 					}
 					currentNS = ""
 					currentLocal = ""
@@ -2536,15 +2303,13 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					inContainer = false
 					inLi = false
 				}
-				if depth == 3 && inLi { //nolint:mnd
+				if depth == 3 && inLi {
 					// End of rdf:li — capture accumulated text as an item.
 					trimmed := strings.TrimSpace(currentCharData)
 					if currentNS != "" {
 						pv := getOrCreate(currentNS, currentLocal)
 						pv.items = append(pv.items, trimmed)
 						record(currentNS, currentLocal, pv)
-						slog.Debug("compliance.xmp: captured container item",
-							"ns", currentNS, "local", currentLocal, "item", trimmed)
 					}
 					inLi = false
 					currentCharData = ""
@@ -2557,7 +2322,7 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					// CharData at depth 1 (simple property text).
 					currentCharData += string(t)
 				}
-				if depth == 3 && inLi { //nolint:mnd
+				if depth == 3 && inLi {
 					// CharData inside rdf:li.
 					currentCharData += string(t)
 				}
@@ -2565,7 +2330,6 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 		}
 	}
 
-	slog.Debug("compliance.xmp: extracted property values", "namespaces", len(result))
 	return result
 }
 

@@ -34,68 +34,23 @@ const (
 // --- Rule selectors for numeric limit checks ---
 
 func integerRangeRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_12_t01
-	case 2:
-		return Rule_19005_2_6_1_13_t01
-	case 3:
-		return Rule_19005_3_6_1_13_t01
-	default:
-		return Rule_19005_1_6_1_12_t01
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t01, Rule_19005_2_6_1_13_t01, Rule_19005_3_6_1_13_t01, Rule{})
 }
 
 func realRangeRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_12_t02
-	case 2:
-		return Rule_19005_2_6_1_13_t02
-	case 3:
-		return Rule_19005_3_6_1_13_t02
-	default:
-		return Rule_19005_1_6_1_12_t02
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t02, Rule_19005_2_6_1_13_t02, Rule_19005_3_6_1_13_t02, Rule{})
 }
 
 func stringLengthRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_12_t03
-	case 2:
-		return Rule_19005_2_6_1_13_t03
-	case 3:
-		return Rule_19005_3_6_1_13_t03
-	default:
-		return Rule_19005_1_6_1_12_t03
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t03, Rule_19005_2_6_1_13_t03, Rule_19005_3_6_1_13_t03, Rule{})
 }
 
 func nameLengthRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_12_t04
-	case 2:
-		return Rule_19005_2_6_1_13_t04
-	case 3:
-		return Rule_19005_3_6_1_13_t04
-	default:
-		return Rule_19005_1_6_1_12_t04
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t04, Rule_19005_2_6_1_13_t04, Rule_19005_3_6_1_13_t04, Rule{})
 }
 
 func indirectObjCountRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_12_t07
-	case 2:
-		return Rule_19005_2_6_1_13_t07
-	case 3:
-		return Rule_19005_3_6_1_13_t07
-	default:
-		return Rule_19005_1_6_1_12_t07
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t07, Rule_19005_2_6_1_13_t07, Rule_19005_3_6_1_13_t07, Rule{})
 }
 
 // --- Check implementations ---
@@ -109,21 +64,15 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// Check indirect object count.
 	objCount := len(doc.Index.Entries)
 	if objCount > maxIndirectObjs {
-		slog.Debug("compliance.file_structure: too many indirect objects",
-			"count", objCount)
 		results = append(results, Violation{
 			Rule:    indirectObjCountRule(profile),
 			Context: fmt.Sprintf("indirect object count %d exceeds %d", objCount, maxIndirectObjs),
 		})
-	} else {
-		slog.Debug("compliance.file_structure: indirect object count OK",
-			"count", objCount)
 	}
 
 	// Walk all objects checking names, strings, integers, reals, arrays, dicts.
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
-			slog.Debug("compliance.file_structure: context cancelled in numeric limits check")
 			return results
 		}
 		if entry.Free {
@@ -143,9 +92,6 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// Content streams are those referenced by page /Contents entries.
 	results = append(results, checkContentStreamLimits(ctx, doc, part, profile)...)
 
-	if len(results) == 0 {
-		slog.Debug("compliance.file_structure: all numeric limits OK")
-	}
 	return results
 }
 
@@ -160,7 +106,7 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 	}
 	pages := collectPages(ctx, doc, catalog)
 	maxStr := maxStringBytes1
-	if part >= 2 { //nolint:mnd
+	if part >= 2 {
 		maxStr = maxStringBytes2
 	}
 	var results []Violation
@@ -273,7 +219,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 					Context: fmt.Sprintf("object %d: real %g exceeds +/-%g", objNum, fval, maxRealAbs1),
 				})
 			}
-		case 2, 3: //nolint:mnd
+		case 2, 3:
 			if math.Abs(fval) > maxRealAbs2 {
 				results = append(results, Violation{
 					Rule:    realRangeRule(profile),
@@ -284,7 +230,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 
 	case ast.PdfString:
 		maxStr := maxStringBytes1
-		if part >= 2 { //nolint:mnd
+		if part >= 2 {
 			maxStr = maxStringBytes2
 		}
 		if len(v) > maxStr {
@@ -349,7 +295,7 @@ func decodedNameLength(name string) int {
 	for i < len(name) {
 		if name[i] == '#' && i+2 < len(name) && isHexDigit(name[i+1]) && isHexDigit(name[i+2]) {
 			decoded++
-			i += 3 //nolint:mnd // #XX is 3 characters encoding 1 byte.
+			i += 3
 		} else {
 			decoded++
 			i++

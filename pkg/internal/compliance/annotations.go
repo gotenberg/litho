@@ -47,27 +47,26 @@ var standardAnnotTypes2 = map[ast.PdfName]bool{
 // checkAnnotationGroup validates annotation compliance rules for PDF/A profiles.
 // For PDF/UA profiles, annotation checks are handled by the accessibility group,
 // so this function returns nil.
-func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if isPDFUA(profile) {
-		slog.Debug("compliance: annotations: skipping for PDF/UA (handled by accessibility group)")
+func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, profile := vctx.doc, vctx.profile
+	part := vctx.part
+	level := vctx.level
+
+	if vctx.ua {
 		return nil
 	}
 
-	part := pdfaPart(profile)
-	level := pdfaLevel(profile)
 	if part == 0 {
-		slog.Debug("compliance: annotations: unknown profile, skipping", "profile", profile)
 		return nil
 	}
 
 	slog.Debug("compliance: annotations: starting checks", "profile", profile, "part", part, "level", level)
 
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
-	for pageIdx, page := range pages {
+	for pageIdx, p := range vctx.pages {
+		page := p.dict
 		if ctx.Err() != nil {
-			slog.Debug("compliance: annotations: context cancelled")
 			return results
 		}
 
@@ -83,8 +82,6 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 			continue
 		}
 
-		slog.Debug("compliance: annotations: processing page", "page", pageIdx, "count", len(annots))
-
 		for annotIdx, annotObj := range annots {
 			if ctx.Err() != nil {
 				return results
@@ -99,9 +96,6 @@ func checkAnnotationGroup(ctx context.Context, doc *document.Document, catalog a
 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx, annotIdx, subtype)
-
-			slog.Debug("compliance: annotations: checking annotation",
-				"page", pageIdx, "annot", annotIdx, "subtype", subtype)
 
 			// 1. Forbidden annotation types.
 			results = append(results, checkForbiddenAnnotType(ctx, doc, annot, subtype, part, level, loc)...)
@@ -200,24 +194,13 @@ func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfD
 	}
 
 	rule := forbiddenAnnotTypeRule(part)
-	slog.Debug("compliance: annotations: forbidden type", "subtype", subtype, "loc", loc)
 	return failf(rule, "%s: forbidden annotation type %s", loc, subtype)
 }
 
 // forbiddenAnnotTypeRule returns the appropriate Rule for forbidden annotation
 // type violations based on the PDF/A part number.
 func forbiddenAnnotTypeRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_5_2_t01
-	case 2:
-		return Rule_19005_2_6_3_1_t01
-	case 3:
-		return Rule_19005_3_6_3_1_t01
-	case 4:
-		return Rule_19005_4_6_3_1_t01
-	}
-	return Rule_19005_1_6_5_2_t01
+	return ruleByPart(part, Rule_19005_1_6_5_2_t01, Rule_19005_2_6_3_1_t01, Rule_19005_3_6_3_1_t01, Rule_19005_4_6_3_1_t01)
 }
 
 // check3DStreamSubtype validates that a 3D annotation's stream has /Subtype
@@ -254,7 +237,6 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 	if part == 1 {
 		// PDF/A-1: /F key is mandatory, combined with flag value check.
 		if !hasF {
-			slog.Debug("compliance: annotations: missing /F key", "loc", loc)
 			return failf(Rule_19005_1_6_5_3_t02,
 				"%s: annotation flags missing (F absent)", loc)
 		}
@@ -272,12 +254,10 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 	// Parts 2, 3, 4: Popup annotations may omit /F.
 	if !hasF {
 		if subtype == "Popup" {
-			slog.Debug("compliance: annotations: Popup without /F, allowed in parts 2+", "loc", loc)
 			return nil
 		}
 
 		rule := flagFKeyRule(part)
-		slog.Debug("compliance: annotations: missing /F key", "loc", loc)
 		return failf(rule, "%s: annotation missing /F key", loc)
 	}
 
@@ -302,11 +282,6 @@ func checkFlagValues1(f int, loc string) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance: annotations: invalid flags",
-		"loc", loc, "F", f,
-		"Print", printSet, "Hidden", hiddenSet,
-		"Invisible", invisibleSet, "NoView", noViewSet)
-
 	return failf(Rule_19005_1_6_5_3_t02,
 		"%s: invalid annotation flags (F=%d, Print=%t, Hidden=%t, Invisible=%t, NoView=%t)",
 		loc, f, printSet, hiddenSet, invisibleSet, noViewSet)
@@ -324,12 +299,6 @@ func checkFlagValues2Plus(f, part int, loc string) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance: annotations: invalid flags",
-		"loc", loc, "F", f,
-		"Print", printSet, "Hidden", hiddenSet,
-		"Invisible", invisibleSet, "NoView", noViewSet,
-		"ToggleNoView", toggleNoViewSet)
-
 	rule := flagValueRule(part)
 	return failf(rule,
 		"%s: invalid annotation flags (F=%d, Print=%t, Hidden=%t, Invisible=%t, NoView=%t, ToggleNoView=%t)",
@@ -338,28 +307,12 @@ func checkFlagValues2Plus(f, part int, loc string) []Violation {
 
 // flagFKeyRule returns the Rule for missing /F key based on part.
 func flagFKeyRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_3_2_t01
-	case 3:
-		return Rule_19005_3_6_3_2_t01
-	case 4:
-		return Rule_19005_4_6_3_2_t01
-	}
-	return Rule_19005_2_6_3_2_t01
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_3_2_t01, Rule_19005_3_6_3_2_t01, Rule_19005_4_6_3_2_t01)
 }
 
 // flagValueRule returns the Rule for invalid flag values based on part.
 func flagValueRule(part int) Rule {
-	switch part {
-	case 2:
-		return Rule_19005_2_6_3_2_t02
-	case 3:
-		return Rule_19005_3_6_3_2_t02
-	case 4:
-		return Rule_19005_4_6_3_2_t02
-	}
-	return Rule_19005_2_6_3_2_t02
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_3_2_t02, Rule_19005_3_6_3_2_t02, Rule_19005_4_6_3_2_t02)
 }
 
 // checkAnnotAppearance validates annotation appearance dictionary requirements
@@ -384,25 +337,20 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	if !hasAP {
 		// Check if this annotation is exempt from requiring /AP.
 		if linkExemptFromAP(subtype, part) {
-			slog.Debug("compliance: annotations: Link exempt from /AP", "loc", loc)
 			return nil
 		}
 		if subtype == "Popup" {
-			slog.Debug("compliance: annotations: Popup exempt from /AP", "loc", loc)
 			return nil
 		}
 		if isZeroRect(ctx, doc, annot) {
-			slog.Debug("compliance: annotations: zero-area rect, exempt from /AP", "loc", loc)
 			return nil
 		}
 		// PDF/A-4: Projection annotations are also exempt.
 		if part == 4 && subtype == "Projection" {
-			slog.Debug("compliance: annotations: Projection exempt from /AP", "loc", loc)
 			return nil
 		}
 
 		rule := apRequiredRule(part)
-		slog.Debug("compliance: annotations: missing /AP", "loc", loc)
 		return failf(rule, "%s: annotation missing appearance dictionary (/AP)", loc)
 	}
 
@@ -418,7 +366,6 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	nObj, hasN := ap["N"]
 	if !hasN {
 		rule := apRequiredRule(part)
-		slog.Debug("compliance: annotations: /AP missing /N entry", "loc", loc)
 		results = append(results, failf(rule, "%s: appearance dictionary missing /N entry", loc)...)
 		return results
 	}
@@ -427,7 +374,6 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	if len(ap) > 1 {
 		extras := apExtraKeys(ap)
 		rule := apOnlyNRule(part)
-		slog.Debug("compliance: annotations: /AP has extra keys", "loc", loc, "extras", extras)
 		results = append(results, failf(rule, "%s: appearance dictionary contains extra entries: %s", loc, extras)...)
 	}
 
@@ -508,8 +454,6 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 		if _, ok := resolved.(ast.PdfDict); !ok {
 			rule := nSubdictRule(part)
 			typeName := fmt.Sprintf("%T", resolved)
-			slog.Debug("compliance: annotations: Widget/Btn /N is not a subdictionary",
-				"loc", loc, "type", typeName)
 			return failf(rule, "%s: Widget/Btn /N is %s instead of subdictionary", loc, typeName)
 		}
 		return nil
@@ -525,84 +469,38 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 		if isWidget {
 			// Widget with non-Btn FT: /N should still be a stream.
 			rule := nStreamRule(part)
-			slog.Debug("compliance: annotations: Widget (non-Btn) /N is not a stream",
-				"loc", loc, "ft", ft)
 			return failf(rule, "%s: Widget/FT=%s /N is not an appearance stream", loc, ft)
 		}
 		rule := nStreamRule(part)
-		slog.Debug("compliance: annotations: non-Widget /N is not a stream",
-			"loc", loc, "subtype", "non-Widget")
 		return failf(rule, "%s: /N is dict instead of appearance stream", loc)
 	default:
 		rule := nStreamRule(part)
 		typeName := fmt.Sprintf("%T", resolved)
-		slog.Debug("compliance: annotations: /N has unexpected type",
-			"loc", loc, "type", typeName)
 		return failf(rule, "%s: /N has unexpected type %s", loc, typeName)
 	}
 }
 
 // apRequiredRule returns the Rule for missing /AP based on part.
 func apRequiredRule(part int) Rule {
-	switch part {
-	case 1:
-		// PDF/A-1 uses 6.5.3 for appearance checks; the closest rule is the
-		// appearance stream type rule. Part 1 doesn't have a separate "AP required"
-		// test number — we use the combined test 6 (non-Widget stream).
-		return Rule_19005_1_6_5_3_t06
-	case 2:
-		return Rule_19005_2_6_3_3_t01
-	case 3:
-		return Rule_19005_3_6_3_3_t01
-	case 4:
-		return Rule_19005_4_6_3_3_t01
-	}
-	return Rule_19005_2_6_3_3_t01
+	// PDF/A-1 uses 6.5.3 for appearance checks; the closest rule is the
+	// appearance stream type rule. Part 1 doesn't have a separate "AP required"
+	// test number — we use the combined test 6 (non-Widget stream).
+	return ruleByPart(part, Rule_19005_1_6_5_3_t06, Rule_19005_2_6_3_3_t01, Rule_19005_3_6_3_3_t01, Rule_19005_4_6_3_3_t01)
 }
 
 // apOnlyNRule returns the Rule for appearance dicts containing extra keys.
 func apOnlyNRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_5_3_t04
-	case 2:
-		return Rule_19005_2_6_3_3_t02
-	case 3:
-		return Rule_19005_3_6_3_3_t02
-	case 4:
-		return Rule_19005_4_6_3_3_t02
-	}
-	return Rule_19005_2_6_3_3_t02
+	return ruleByPart(part, Rule_19005_1_6_5_3_t04, Rule_19005_2_6_3_3_t02, Rule_19005_3_6_3_3_t02, Rule_19005_4_6_3_3_t02)
 }
 
 // nSubdictRule returns the Rule for Widget/Btn /N not being a subdictionary.
 func nSubdictRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_5_3_t05
-	case 2:
-		return Rule_19005_2_6_3_3_t03
-	case 3:
-		return Rule_19005_3_6_3_3_t03
-	case 4:
-		return Rule_19005_4_6_3_3_t03
-	}
-	return Rule_19005_2_6_3_3_t03
+	return ruleByPart(part, Rule_19005_1_6_5_3_t05, Rule_19005_2_6_3_3_t03, Rule_19005_3_6_3_3_t03, Rule_19005_4_6_3_3_t03)
 }
 
 // nStreamRule returns the Rule for non-Widget/non-Btn /N not being a stream.
 func nStreamRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_5_3_t06
-	case 2:
-		return Rule_19005_2_6_3_3_t04
-	case 3:
-		return Rule_19005_3_6_3_3_t04
-	case 4:
-		return Rule_19005_4_6_3_3_t04
-	}
-	return Rule_19005_2_6_3_3_t04
+	return ruleByPart(part, Rule_19005_1_6_5_3_t06, Rule_19005_2_6_3_3_t04, Rule_19005_3_6_3_3_t04, Rule_19005_4_6_3_3_t04)
 }
 
 // checkAnnotOpacity validates that /CA is 1.0 if present (§6.5.3 test 1, PDF/A-1 only).
@@ -623,7 +521,6 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 		return nil
 	}
 
-	slog.Debug("compliance: annotations: /CA is not 1.0", "loc", loc, "ca", ca)
 	return failf(Rule_19005_1_6_5_3_t01, "%s: annotation /CA is %g instead of 1.0", loc, ca)
 }
 

@@ -37,9 +37,27 @@ func (r Violation) String() string {
 	return r.Error()
 }
 
+// validationCtx holds pre-computed document data shared across all check groups.
+// It eliminates redundant page tree traversals and resource resolution.
+type validationCtx struct {
+	doc     *document.Document
+	catalog ast.PdfDict
+	profile string
+	part    int  // pdfaPart(profile), computed once
+	level   byte // pdfaLevel(profile), computed once
+	ua      bool // isPDFUA(profile), computed once
+	pages   []pageCtx
+}
+
+// pageCtx holds pre-resolved data for a single page.
+type pageCtx struct {
+	dict      ast.PdfDict
+	resources ast.PdfDict // resolved, with inherited fallback from Pages tree
+}
+
 // checkGroup is a function that validates a group of related rules against a
 // document. It returns all violations found (empty slice = pass).
-type checkGroup func(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation
+type checkGroup func(ctx context.Context, vctx *validationCtx) []Violation
 
 // --- Profile entry points ---
 
@@ -106,16 +124,55 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 	return violationsToErrors(violations), nil
 }
 
+// buildValidationCtx pre-computes the shared validation context from the
+// document catalog. Pages are collected once and resources resolved with
+// inherited fallback from the Pages tree root.
+func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) *validationCtx {
+	vctx := &validationCtx{
+		doc:     doc,
+		catalog: catalog,
+		profile: profile,
+		part:    pdfaPart(profile),
+		level:   pdfaLevel(profile),
+		ua:      isPDFUA(profile),
+	}
+
+	// Resolve inherited resources from Pages tree root.
+	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
+	var inheritedRes ast.PdfDict
+	if pagesDict != nil {
+		inheritedRes = getResources(ctx, doc, pagesDict)
+	}
+
+	// Collect pages once and resolve resources per page.
+	rawPages := collectPages(ctx, doc, catalog)
+	vctx.pages = make([]pageCtx, len(rawPages))
+	for i, page := range rawPages {
+		res := getResources(ctx, doc, page)
+		if res == nil {
+			res = inheritedRes
+		}
+		vctx.pages[i] = pageCtx{
+			dict:      page,
+			resources: res,
+		}
+	}
+
+	return vctx
+}
+
 // runCheckGroups executes all check groups against the document, collecting
 // violations until context cancellation or all groups complete.
 func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) []Violation {
+	vctx := buildValidationCtx(ctx, doc, catalog, profile)
+
 	var violations []Violation
 	for _, group := range groups {
 		if ctx.Err() != nil {
 			slog.Debug("compliance: context cancelled, stopping validation")
 			return violations
 		}
-		violations = append(violations, group(ctx, doc, catalog, profile)...)
+		violations = append(violations, group(ctx, vctx)...)
 	}
 	return violations
 }
@@ -287,6 +344,22 @@ func failf(rule Rule, format string, args ...any) []Violation {
 	return []Violation{{Rule: rule, Context: fmt.Sprintf(format, args...)}}
 }
 
+// ruleByPart selects a Rule from up to four part-specific variants.
+// part must be 1..4; any other value returns a zero Rule.
+func ruleByPart(part int, r1, r2, r3, r4 Rule) Rule {
+	switch part {
+	case 1:
+		return r1
+	case 2:
+		return r2
+	case 3:
+		return r3
+	case 4:
+		return r4
+	}
+	return Rule{}
+}
+
 // pdfaPart returns the numeric part (1, 2, 3, 4) from a profile string.
 func pdfaPart(profile string) int {
 	switch profile {
@@ -315,13 +388,11 @@ func isPDFUA(profile string) bool {
 	return len(profile) >= 6 && profile[:6] == "PDF/UA"
 }
 
-// safeReadHeader reads the first n bytes from the document file, recovering
-// from panics caused by nil io.ReaderAt.
-func safeReadHeader(doc *document.Document, n int64) (buf []byte, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("cannot read header: %v", r)
-		}
-	}()
+// safeReadHeader reads the first n bytes from the document file.
+// Returns an error if the underlying reader is nil.
+func safeReadHeader(doc *document.Document, n int64) ([]byte, error) {
+	if doc.RawReader() == nil {
+		return nil, fmt.Errorf("cannot read header: nil reader")
+	}
 	return doc.ReadFileBytes(0, n)
 }

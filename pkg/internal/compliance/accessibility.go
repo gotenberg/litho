@@ -3,22 +3,20 @@ package compliance
 import (
 	"context"
 	"log/slog"
-
-	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
 // checkAccessibilityGroup validates PDF/UA accessibility requirements.
 // For non-PDF/UA profiles, it returns nil immediately.
-func checkAccessibilityGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if !isPDFUA(profile) {
-		slog.Debug("compliance.accessibility: skipping for non-PDF/UA profile", "profile", profile)
+func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
+
+	if !vctx.ua {
 		return nil
 	}
 
 	slog.Debug("compliance.accessibility: starting checks", "profile", profile)
 
-	results := make([]Violation, 0, 16) //nolint:mnd // estimated capacity for accessibility checks.
+	results := make([]Violation, 0, 16)
 
 	// 1. Language (§7.2/§8.2) — /Lang key required in catalog.
 	results = append(results, checkLangRequired(ctx, doc, catalog, profile)...)

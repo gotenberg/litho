@@ -59,10 +59,11 @@ const maxStructTreeDepth = 200
 // PDF/UA profiles. For PDF/A level 'a' it checks MarkInfo and StructTreeRoot.
 // For PDF/UA it additionally validates tag containment, role maps, heading
 // hierarchy, table structure, list structure, captions, and TH scope.
-func checkStructureGroup(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	part := pdfaPart(profile)
-	level := pdfaLevel(profile)
-	ua := isPDFUA(profile)
+func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
+	part := vctx.part
+	level := vctx.level
+	ua := vctx.ua
 
 	slog.Debug("compliance.structure: starting structure checks",
 		"profile", profile, "part", part, "level", level, "ua", ua,
@@ -85,7 +86,7 @@ func checkStructureGroup(ctx context.Context, doc *document.Document, catalog as
 
 	// PDF/A-4 §6.2.10.8: ActualText shall not contain PUA values.
 	// Resolve StructTreeRoot independently when the level-based check returned nil.
-	if part == 4 { //nolint:mnd
+	if part == 4 {
 		puaTreeRoot := structTreeRoot
 		if puaTreeRoot == nil {
 			puaTreeRoot, _ = document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
@@ -123,11 +124,8 @@ func checkStructureGroup(ctx context.Context, doc *document.Document, catalog as
 
 // checkMarkInfo validates that the catalog contains /MarkInfo with /Marked=true.
 func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, results *[]Violation) {
-	slog.Debug("compliance.structure: checking MarkInfo")
-
 	markInfoObj, ok := catalog["MarkInfo"]
 	if !ok {
-		slog.Debug("compliance.structure: catalog missing /MarkInfo")
 		*results = append(*results, fail(markInfoRule(profile, part), "catalog missing /MarkInfo")...)
 		return
 	}
@@ -141,7 +139,6 @@ func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	markedObj, ok := markInfo["Marked"]
 	if !ok {
-		slog.Debug("compliance.structure: /MarkInfo missing /Marked entry")
 		*results = append(*results, fail(markInfoRule(profile, part), "/MarkInfo missing /Marked entry")...)
 		return
 	}
@@ -160,11 +157,8 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 		return nil
 	}
 
-	slog.Debug("compliance.structure: checking StructTreeRoot")
-
 	stObj, ok := catalog["StructTreeRoot"]
 	if !ok {
-		slog.Debug("compliance.structure: catalog missing /StructTreeRoot")
 		*results = append(*results, fail(structTreeRootRule(profile, part), "catalog missing /StructTreeRoot")...)
 		return nil
 	}
@@ -176,7 +170,6 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 		return nil
 	}
 
-	slog.Debug("compliance.structure: /StructTreeRoot found")
 	return st
 }
 
@@ -184,11 +177,8 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 // Non-standard tags must map to standard types, standard tags must not be
 // remapped, and no circular mappings may exist.
 func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
-	slog.Debug("compliance.structure: checking RoleMap")
-
 	rmObj, ok := structTreeRoot["RoleMap"]
 	if !ok {
-		slog.Debug("compliance.structure: no /RoleMap present")
 		return
 	}
 
@@ -216,7 +206,6 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	if !isPDFUA(profile) || profile == "PDF/UA-1" {
 		for src := range mapping {
 			if isStandardStructType(src, profile) {
-				slog.Debug("compliance.structure: standard type remapped", "type", src)
 				*results = append(*results, failf(roleMapStandardRemapRule(profile), "standard type %s is remapped", src)...)
 			}
 		}
@@ -225,25 +214,20 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	// Check for self-mappings (A→A) which are always circular.
 	for src, target := range mapping {
 		if src == target {
-			slog.Debug("compliance.structure: self-mapping detected", "type", src)
 			*results = append(*results, failf(roleMapCircularRule(profile),
 				"circular mapping for %s", src)...)
 		}
 	}
 
 	// Check non-standard types resolve to standard type (no circularity).
-	for src, target := range mapping {
+	for src := range mapping {
 		if ctx.Err() != nil {
 			return
 		}
 		if isStandardStructType(src, profile) {
 			continue
 		}
-		if !resolveToStandard(src, mapping, results, profile) {
-			slog.Debug("compliance.structure: non-standard type not mapped to standard",
-				"type", src, "target", target,
-			)
-		}
+		resolveToStandard(src, mapping, results, profile)
 	}
 }
 
@@ -288,11 +272,8 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 // containment, heading hierarchy, table structure, list structure, captions,
 // and TH scope attributes.
 func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
-	slog.Debug("compliance.structure: walking structure tree")
-
 	kidsObj, ok := structTreeRoot["K"]
 	if !ok {
-		slog.Debug("compliance.structure: StructTreeRoot has no /K entry")
 		return
 	}
 
@@ -407,8 +388,6 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	if err != nil || typeName == "" {
 		return
 	}
-
-	slog.Debug("compliance.structure: visiting element", "type", typeName, "parent", parentType, "depth", depth)
 
 	// Table and list structure validation.
 	validateTableContainment(state, typeName, parentType)
@@ -557,7 +536,7 @@ func validateTableContainment(state *walkState, typeName ast.PdfName, parentType
 // PDF/UA-1 §7.2 t43 and PDF/UA-2 §8.2.5.26 t3/t4.
 func validateTableColumnConsistency(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
 	rows := collectTableRows(ctx, state.doc, tableElem)
-	if len(rows) < 2 { //nolint:mnd
+	if len(rows) < 2 {
 		return
 	}
 
@@ -565,7 +544,7 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 	// RowSpan causes a cell to occupy column positions in subsequent rows.
 	// We track which columns are "occupied" by RowSpan carry-over.
 	effectiveCols := computeEffectiveColumns(ctx, state.doc, rows)
-	if len(effectiveCols) < 2 || effectiveCols[0] == 0 { //nolint:mnd
+	if len(effectiveCols) < 2 || effectiveCols[0] == 0 {
 		return
 	}
 
@@ -797,17 +776,11 @@ func validateTableChildren(state *walkState, typeName ast.PdfName, parentType as
 		case "TR", "THead", "TBody", "TFoot", "Caption":
 			// Valid Table children.
 		default:
-			slog.Debug("compliance.structure: invalid child of Table",
-				"parent", parentType, "child", typeName,
-			)
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t03, "Table contains %s instead of TR/THead/TBody/TFoot/Caption", typeName)...)
 		}
 	case "THead", "TBody", "TFoot":
 		if typeName != "TR" && typeName != "Caption" {
-			slog.Debug("compliance.structure: invalid child of table section",
-				"parent", parentType, "child", typeName,
-			)
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t03, "%s contains %s instead of TR", parentType, typeName)...)
 		}
@@ -816,9 +789,6 @@ func validateTableChildren(state *walkState, typeName ast.PdfName, parentType as
 		case "TH", "TD":
 			// Valid TR children.
 		default:
-			slog.Debug("compliance.structure: invalid child of TR",
-				"parent", parentType, "child", typeName,
-			)
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t10, "TR contains %s instead of TH/TD", typeName)...)
 		}
@@ -904,7 +874,6 @@ func validateListContainment(ctx context.Context, state *walkState, elem ast.Pdf
 		case "Lbl", "LBody":
 			// OK
 		default:
-			slog.Debug("compliance.structure: LI contains unexpected child", "child", typeName)
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t10, "LI contains %s instead of Lbl/LBody", typeName)...)
 		}
@@ -1078,18 +1047,11 @@ func checkHeadingHierarchy(state *walkState) {
 		return
 	}
 
-	slog.Debug("compliance.structure: checking heading hierarchy",
-		"count", len(state.headingLevels),
-	)
-
 	maxSeen := 0
 	for _, level := range state.headingLevels {
 		// If the level jumps forward by more than 1, a level was skipped.
 		// When maxSeen == 0 (first heading), the first heading must be H1.
 		if level > maxSeen+1 {
-			slog.Debug("compliance.structure: heading level skipped",
-				"expected", maxSeen+1, "got", level,
-			)
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_4_2_t01,
 					"heading level H%d skipped (previous max H%d)", level, maxSeen)...)
@@ -1442,12 +1404,9 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 // When the table uses ID-based header association (TH has /ID attribute),
 // /Scope is not required per ISO 14289-1, 7.5.
 func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
-	slog.Debug("compliance.structure: checking TH scope")
-
 	// If the enclosing table uses the Headers+IDs association model
 	// (any TD references TH via /Headers), /Scope is not required on any TH.
 	if state.tableUsesHeaderIDs {
-		slog.Debug("compliance.structure: table uses Headers+IDs, skipping /Scope requirement")
 		return
 	}
 
@@ -1455,7 +1414,6 @@ func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
 	// association (TD elements reference TH via /Headers). In that case,
 	// /Scope is not required.
 	if _, hasID := elem["ID"]; hasID {
-		slog.Debug("compliance.structure: TH has /ID, skipping /Scope requirement (ID-based header association)")
 		return
 	}
 
@@ -1602,8 +1560,6 @@ func findHeadersInAttributes(ctx context.Context, doc *document.Document, aObj a
 // if a /Lang entry is present in the catalog or structure elements, its value
 // must be a valid RFC 3066 language tag.
 func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
-	slog.Debug("compliance.structure: checking /Lang validity for PDF/A level 'a'", "profile", profile)
-
 	rule := pdfaLangValidRule(part)
 
 	var results []Violation
@@ -1614,7 +1570,6 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		if err == nil {
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 			if trimmed != "" && !isValidLangTag(trimmed) {
-				slog.Debug("compliance.structure: catalog /Lang is invalid", "lang", trimmed)
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
 			}
 		}
@@ -1637,8 +1592,6 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		}
 		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 		if trimmed != "" && !isValidLangTag(trimmed) {
-			slog.Debug("compliance.structure: invalid /Lang in structure element",
-				"lang", trimmed, "path", path)
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})
@@ -1735,24 +1688,12 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		}
 	}
 
-	if len(results) == 0 {
-		slog.Debug("compliance.structure: all /Lang values valid for PDF/A level 'a'")
-	}
 	return results
 }
 
 // pdfaLangValidRule returns the Lang validity rule for PDF/A level 'a' profiles.
 func pdfaLangValidRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_8_4_t01
-	case 2: //nolint:mnd
-		return Rule_19005_2_6_7_4_t01
-	case 3: //nolint:mnd
-		return Rule_19005_3_6_7_4_t01
-	default:
-		return Rule_19005_1_6_8_4_t01
-	}
+	return ruleByPart(part, Rule_19005_1_6_8_4_t01, Rule_19005_2_6_7_4_t01, Rule_19005_3_6_7_4_t01, Rule{})
 }
 
 // --- Rule selectors ---
@@ -1765,16 +1706,7 @@ func markInfoRule(profile string, part int) Rule {
 		}
 		return Rule_14289_1_6_2_t01
 	}
-	switch part {
-	case 1:
-		return Rule_19005_1_6_8_2_2_t01
-	case 2:
-		return Rule_19005_2_6_7_2_2_t01
-	case 3:
-		return Rule_19005_3_6_7_2_2_t01
-	default:
-		return Rule_19005_1_6_8_2_2_t01
-	}
+	return ruleByPart(part, Rule_19005_1_6_8_2_2_t01, Rule_19005_2_6_7_2_2_t01, Rule_19005_3_6_7_2_2_t01, Rule{})
 }
 
 // structTreeRootRule selects the StructTreeRoot rule based on profile.
@@ -1785,16 +1717,7 @@ func structTreeRootRule(profile string, part int) Rule {
 		}
 		return Rule_14289_1_7_1_t11
 	}
-	switch part {
-	case 1:
-		return Rule_19005_1_6_8_3_3_t01
-	case 2:
-		return Rule_19005_2_6_7_3_3_t01
-	case 3:
-		return Rule_19005_3_6_7_3_3_t01
-	default:
-		return Rule_19005_1_6_8_3_3_t01
-	}
+	return ruleByPart(part, Rule_19005_1_6_8_3_3_t01, Rule_19005_2_6_7_3_3_t01, Rule_19005_3_6_7_3_3_t01, Rule{})
 }
 
 // roleMapNonStandardRule returns the rule for non-standard types not mapped.
@@ -1805,15 +1728,7 @@ func roleMapNonStandardRule(profile string) Rule {
 		}
 		return Rule_14289_1_7_1_t05
 	}
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_8_3_4_t01
-	case 2: //nolint:mnd
-		return Rule_19005_2_6_7_3_4_t01
-	case 3: //nolint:mnd
-		return Rule_19005_3_6_7_3_4_t01
-	}
-	return Rule{}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_8_3_4_t01, Rule_19005_2_6_7_3_4_t01, Rule_19005_3_6_7_3_4_t01, Rule{})
 }
 
 // roleMapCircularRule returns the rule for circular role mappings.
@@ -1827,9 +1742,9 @@ func roleMapCircularRule(profile string) Rule {
 	switch pdfaPart(profile) {
 	case 1:
 		return Rule_19005_1_6_8_3_4_t02
-	case 2: //nolint:mnd
+	case 2:
 		return Rule_19005_2_6_7_3_4_t02
-	case 3: //nolint:mnd
+	case 3:
 		return Rule_19005_3_6_7_3_4_t02
 	}
 	return Rule{}

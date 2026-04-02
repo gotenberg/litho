@@ -164,7 +164,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 
 // walkOutlineStructDest walks outline items checking destinations.
 func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Violation, depth int) {
-	if depth > 200 || ctx.Err() != nil { //nolint:mnd
+	if depth > 200 || ctx.Err() != nil {
 		return
 	}
 	item, err := document.ResolveDict(ctx, doc, obj)

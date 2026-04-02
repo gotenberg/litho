@@ -16,19 +16,19 @@ type jpxRules struct{ t1, t2, t3, t4, t5 Rule }
 
 func jpxRulesForPart(part int) jpxRules {
 	switch part {
-	case 2: //nolint:mnd
+	case 2:
 		return jpxRules{
 			Rule_19005_2_6_2_8_3_t01, Rule_19005_2_6_2_8_3_t02,
 			Rule_19005_2_6_2_8_3_t03, Rule_19005_2_6_2_8_3_t04,
 			Rule_19005_2_6_2_8_3_t05,
 		}
-	case 3: //nolint:mnd
+	case 3:
 		return jpxRules{
 			Rule_19005_3_6_2_8_3_t01, Rule_19005_3_6_2_8_3_t02,
 			Rule_19005_3_6_2_8_3_t03, Rule_19005_3_6_2_8_3_t04,
 			Rule_19005_3_6_2_8_3_t05,
 		}
-	case 4: //nolint:mnd
+	case 4:
 		return jpxRules{
 			Rule_19005_4_6_2_7_3_t01, Rule_19005_4_6_2_7_3_t02,
 			Rule_19005_4_6_2_7_3_t03, Rule_19005_4_6_2_7_3_t04,
@@ -47,7 +47,7 @@ func checkJPXImage(stream ast.PdfStream, name ast.PdfName, pageNum, part int) []
 	}
 
 	data, err := stream.Bytes()
-	if err != nil || len(data) < 12 { //nolint:mnd
+	if err != nil || len(data) < 12 {
 		return nil
 	}
 
@@ -59,7 +59,6 @@ func checkJPXImage(stream ast.PdfStream, name ast.PdfName, pageNum, part int) []
 		return checkRawJ2K(data, name, pageNum, rules)
 	}
 
-	slog.Debug("compliance.jpx: unrecognised JPEG2000 format", "page", pageNum, "name", name)
 	return nil
 }
 
@@ -121,11 +120,11 @@ type colrInfo struct {
 }
 
 func parseCOLR(payload []byte) (colrInfo, bool) {
-	if len(payload) < 3 { //nolint:mnd
+	if len(payload) < 3 {
 		return colrInfo{}, false
 	}
 	ci := colrInfo{meth: payload[0], approx: payload[2]}
-	if ci.meth == 0x01 && len(payload) >= 7 { //nolint:mnd
+	if ci.meth == 0x01 && len(payload) >= 7 {
 		ci.enumCS = binary.BigEndian.Uint32(payload[3:7])
 	}
 	return ci, true
@@ -155,7 +154,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 	for _, b := range inner {
 		switch b.boxType {
 		case boxTypeIHDR:
-			if len(b.payload) >= 14 { //nolint:mnd
+			if len(b.payload) >= 14 {
 				numComponents = int(binary.BigEndian.Uint16(b.payload[8:10]))
 				ihdrBPC = b.payload[10]
 			}
@@ -177,7 +176,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 	var results []Violation
 
 	// t1: Number of colour channels must be 1, 3, or 4.
-	if numComponents != 1 && numComponents != 3 && numComponents != 4 { //nolint:mnd
+	if numComponents != 1 && numComponents != 3 && numComponents != 4 {
 		results = append(results, failf(rules.t1,
 			"page %d, XObject %s: JPEG2000 has %d colour channels", pageNum, name, numComponents)...)
 	}
@@ -207,7 +206,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 
 	// t4: Enumerated colour space 19 (CIEJab) forbidden.
 	for _, c := range colrBoxes {
-		if c.meth == 0x01 && c.enumCS == 19 { //nolint:mnd
+		if c.meth == 0x01 && c.enumCS == 19 {
 			results = append(results, failf(rules.t4,
 				"page %d, XObject %s: CIEJab colour space", pageNum, name)...)
 			break
@@ -219,7 +218,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 		checkBitDepths(&results, bpccSsiz, name, pageNum, rules.t5)
 	} else if ihdrBPC != 0xFF {
 		bd := int(ihdrBPC&0x7F) + 1
-		if bd < 1 || bd > 38 { //nolint:mnd
+		if bd < 1 || bd > 38 {
 			results = append(results, failf(rules.t5,
 				"page %d, XObject %s: bit depth %d out of range 1-38", pageNum, name, bd)...)
 		}
@@ -240,7 +239,7 @@ func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []V
 	var results []Violation
 
 	// t1: channels must be 1, 3, or 4.
-	if numComponents != 1 && numComponents != 3 && numComponents != 4 { //nolint:mnd
+	if numComponents != 1 && numComponents != 3 && numComponents != 4 {
 		results = append(results, failf(rules.t1,
 			"page %d, XObject %s: JPEG2000 has %d colour channels", pageNum, name, numComponents)...)
 	}
@@ -303,7 +302,7 @@ func checkBitDepths(results *[]Violation, ssiz []byte, name ast.PdfName, pageNum
 	firstBD := int(ssiz[0]&0x7F) + 1
 	for _, s := range ssiz {
 		bd := int(s&0x7F) + 1
-		if bd < 1 || bd > 38 { //nolint:mnd
+		if bd < 1 || bd > 38 {
 			*results = append(*results, failf(rule,
 				"page %d, XObject %s: bit depth %d out of range 1-38", pageNum, name, bd)...)
 			return

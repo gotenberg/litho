@@ -13,13 +13,10 @@ import (
 // --- 6. Figure alt text ---
 
 func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking Figure alt text")
-
 	rule := figureAltRule(profile)
 
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		slog.Debug("compliance.accessibility: no StructTreeRoot for Figure alt check")
 		return nil
 	}
 
@@ -39,7 +36,6 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			hasAlt := hasNonEmptyStringKey(ctx, doc, elem, "Alt")
 			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 			if !hasAlt && !hasActualText {
-				slog.Debug("compliance.accessibility: Figure missing /Alt and /ActualText", "path", path)
 				results = append(results, Violation{Rule: rule, Context: path})
 			}
 		} else {
@@ -49,7 +45,6 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
 			hasCaptionChild := figureHasCaptionChild(ctx, doc, elem)
 			if !hasAlt && !hasActualText && !hasCaptionChild {
-				slog.Debug("compliance.accessibility: Figure missing /Alt, /ActualText, or Caption", "path", path)
 				results = append(results, Violation{Rule: rule, Context: path})
 			}
 		}
@@ -66,15 +61,12 @@ func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDi
 	// a heuristic check that cannot be fully validated without rendering. We log
 	// the check but return no violations — a future enhancement may add
 	// heuristic detection of repeated header/footer content.
-	slog.Debug("compliance.accessibility: artifact tagging check (heuristic, not enforced)")
 	return nil
 }
 
 // --- 8. Annotation alt text ---
 
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking annotation alt text")
-
 	rule := annotAltRule(profile)
 
 	// Build a map from annotation object number to whether the enclosing
@@ -122,8 +114,6 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			// Popup annotations are explicitly exempt — they inherit content
 			// from their parent annotation and do not need /Contents or /Alt.
 			if subtype == "Link" || subtype == "Widget" || subtype == "Popup" {
-				slog.Debug("compliance.accessibility: skipping exempt annotation subtype",
-					"page", pageIdx, "annot", annotIdx, "subtype", string(subtype))
 				continue
 			}
 
@@ -138,19 +128,14 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				if err == nil && strings.TrimSpace(string(contentsStr)) != "" {
 					continue
 				}
-				slog.Debug("compliance.accessibility: annotation has empty /Contents",
-					"page", pageIdx, "annot", annotIdx, "subtype", string(subtype))
 			}
 
 			// Annotation lacks /Contents — check the enclosing structure element for /Alt.
 			if annotObjNum > 0 && structAltMap[annotObjNum] {
-				slog.Debug("compliance.accessibility: annotation has /Alt via structure element",
-					"page", pageIdx, "annot", annotIdx, "objNum", annotObjNum)
 				continue
 			}
 
 			loc := fmt.Sprintf("page %d, annot %d (/%s)", pageIdx, annotIdx, subtype)
-			slog.Debug("compliance.accessibility: annotation missing /Contents and struct /Alt", "loc", loc)
 			results = append(results, Violation{Rule: rule, Context: loc})
 		}
 	}
@@ -223,8 +208,6 @@ func checkOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject, d
 // entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.
 // For PDF/UA-2, if /AA is present, the Widget must have a /Contents entry (§8.10.2.3 t02).
 func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	slog.Debug("compliance.accessibility: checking Widget /AA")
-
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
@@ -269,8 +252,6 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			if profile == "PDF/UA-2" {
 				// PDF/UA-2 §8.10.2.3 t02: if Widget has /AA, /Contents must be present.
 				if _, hasContents := annot["Contents"]; !hasContents {
-					slog.Debug("compliance.accessibility: Widget has /AA without /Contents",
-						"loc", loc)
 					results = append(results, Violation{
 						Rule:    Rule_14289_2_8_10_2_3_t02,
 						Context: loc,
@@ -278,7 +259,6 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 				}
 			} else {
 				// PDF/UA-1: Widget annotations should not have /AA trigger actions.
-				slog.Debug("compliance.accessibility: Widget has forbidden /AA", "loc", loc)
 				results = append(results, Violation{
 					Rule:    Rule_14289_1_7_18_1_t03,
 					Context: fmt.Sprintf("widget annotation has /AA at %s", loc),

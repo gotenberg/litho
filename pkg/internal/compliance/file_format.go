@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -15,48 +14,15 @@ import (
 // --- Rule selectors for format checks ---
 
 func objHeaderRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_8_t01
-	case 2:
-		return Rule_19005_2_6_1_9_t01
-	case 3:
-		return Rule_19005_3_6_1_9_t01
-	case 4:
-		return Rule_19005_4_6_1_8_t01
-	default:
-		return Rule_19005_1_6_1_8_t01
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_8_t01, Rule_19005_2_6_1_9_t01, Rule_19005_3_6_1_9_t01, Rule_19005_4_6_1_8_t01)
 }
 
 func hexStringRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_6_t01
-	case 2:
-		return Rule_19005_2_6_1_6_t01
-	case 3:
-		return Rule_19005_3_6_1_6_t01
-	case 4:
-		return Rule_19005_4_6_1_5_t01
-	default:
-		return Rule_19005_1_6_1_6_t01
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_6_t01, Rule_19005_2_6_1_6_t01, Rule_19005_3_6_1_6_t01, Rule_19005_4_6_1_5_t01)
 }
 
 func hexStringInvalidCharRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_6_t02
-	case 2: //nolint:mnd
-		return Rule_19005_2_6_1_6_t02
-	case 3: //nolint:mnd
-		return Rule_19005_3_6_1_6_t02
-	case 4: //nolint:mnd
-		return Rule_19005_4_6_1_5_t02
-	default:
-		return Rule_19005_1_6_1_6_t02
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_6_t02, Rule_19005_2_6_1_6_t02, Rule_19005_3_6_1_6_t02, Rule_19005_4_6_1_5_t02)
 }
 
 func xrefStreamForbiddenRule(_ string) Rule {
@@ -65,35 +31,13 @@ func xrefStreamForbiddenRule(_ string) Rule {
 
 // xrefFormatRule returns the rule for xref table format violations.
 func xrefFormatRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_4_t01
-	case 2:
-		return Rule_19005_2_6_1_4_t02
-	case 3:
-		return Rule_19005_3_6_1_4_t02
-	case 4:
-		return Rule_19005_4_6_1_4_t01
-	default:
-		return Rule_19005_1_6_1_4_t01
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_4_t01, Rule_19005_2_6_1_4_t02, Rule_19005_3_6_1_4_t02, Rule_19005_4_6_1_4_t01)
 }
 
 // streamFormatRule returns the rule for stream format violations
 // (/Length mismatch, EOL after stream keyword, indirect /Length).
 func streamFormatRule(profile string) Rule {
-	switch pdfaPart(profile) {
-	case 1:
-		return Rule_19005_1_6_1_7_t01
-	case 2:
-		return Rule_19005_2_6_1_8_t01
-	case 3:
-		return Rule_19005_3_6_1_8_t01
-	case 4:
-		return Rule_19005_4_6_1_6_1_t01
-	default:
-		return Rule_19005_1_6_1_7_t01
-	}
+	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_8_t01, Rule_19005_3_6_1_8_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
 // --- Check implementations ---
@@ -143,7 +87,6 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 // ComplianceMode is enabled.
 func checkFormatViolations(doc *document.Document, profile string) []Violation {
 	if len(doc.FormatViolations) == 0 {
-		slog.Debug("compliance.file_structure: no parser format violations")
 		return nil
 	}
 
@@ -155,8 +98,6 @@ func checkFormatViolations(doc *document.Document, profile string) []Violation {
 
 	for _, violation := range doc.FormatViolations {
 		msg := violation.Error()
-		slog.Debug("compliance.file_structure: parser format violation",
-			"error", msg)
 
 		rule := hexRule
 		//nolint:gocritic // if-else chain uses function-call predicates; switch is not applicable.
@@ -180,8 +121,6 @@ func checkFormatViolations(doc *document.Document, profile string) []Violation {
 		})
 	}
 
-	slog.Debug("compliance.file_structure: parser format violations reported",
-		"count", len(results))
 	return results
 }
 
@@ -242,11 +181,11 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []V
 		// to inspect what's between the preceding EOL and the object number.
 		// Some PDFs have xref offsets pointing to the EOL before the object
 		// number, so we need to look ahead past any EOL chars.
-		const windowSize = 20 //nolint:mnd
+		const windowSize = 20
 		startOff := max(entry.Offset-1, 0)
 		var buf [windowSize]byte
 		n, _ := r.ReadAt(buf[:], startOff)
-		if n < 2 { //nolint:mnd
+		if n < 2 {
 			continue
 		}
 		data := buf[:n]
@@ -273,10 +212,6 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []V
 		}
 	}
 
-	if len(results) > 0 {
-		slog.Debug("compliance.file_structure: obj header leading whitespace violations",
-			"count", len(results))
-	}
 	return results
 }
 
