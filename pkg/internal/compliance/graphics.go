@@ -22,26 +22,30 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	slog.Debug("compliance.graphics: starting checks", "profile", profile, "part", part)
 
 	var results []Violation
-	for i, p := range vctx.pages {
+	for i := range vctx.pages {
+		p := &vctx.pages[i]
 		page := p.dict
 		if ctx.Err() != nil {
 			return results
 		}
 
 		res := p.resources
+		hasContent := len(p.content) > 0
 
 		// §6.2.2: check content stream resource completeness even when
 		// the page has no Resources (the absence itself may be a violation).
-		streamData, err := getPageContentBytes(ctx, doc, page)
-		if err == nil && len(streamData) > 0 {
+		if hasContent {
+			ops := p.parsedOps()
 			_, hasOwnRes := page["Resources"]
-			if !hasOwnRes && contentReferencesResources(streamData) {
+			if !hasOwnRes && ops != nil && opsReferenceResources(ops) {
 				results = append(results, failf(missingResourceRule(part),
 					"page %d: content stream references resources but page has no explicitly associated Resources dictionary", i+1)...)
 			}
-			if res != nil {
+			if res != nil && ops != nil {
 				// Content stream resource completeness.
-				results = append(results, checkContentStreamResources(ctx, doc, streamData, res, part, i+1)...)
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, res, part, i+1)...)
+				// BI...ID blocks are skipped by the parser; scan raw bytes.
+				results = append(results, checkInlineImageIntent(p.content, part, i+1)...)
 			}
 		}
 
@@ -51,16 +55,16 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1)...)
 
-		if err == nil && len(streamData) > 0 {
+		if hasContent {
 			if part >= 2 {
-				results = append(results, checkContentStreamState(ctx, doc, streamData, res, part, i+1)...)
+				results = append(results, checkContentStreamStateOps(ctx, doc, p.parsedOps(), res, part, i+1)...)
 			}
 		}
 
 		// Also check Form XObject content streams for resource completeness.
 		// Only scan Forms referenced by Do operators in the page content.
 		var referencedXObjects map[string]bool
-		if streamData != nil {
+		if hasContent {
 			_, referencedXObjects = scanContentStreamDeviceCS(ctx, doc, page, i)
 		}
 		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects)...)
@@ -215,13 +219,9 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 	return results
 }
 
-// contentReferencesResources checks if a content stream has any operators
+// opsReferenceResources checks if parsed operations contain any operators
 // that reference named resources (Tf, cs/CS, Do, gs, sh, BDC/DP).
-func contentReferencesResources(streamData []byte) bool {
-	ops, err := content.ParseStreamData(streamData)
-	if err != nil {
-		return false
-	}
+func opsReferenceResources(ops []content.Operation) bool {
 	for _, op := range ops {
 		if _, ok := operatorResourceCategory[op.Operator]; ok && len(op.Operands) >= 1 {
 			if _, isName := op.Operands[0].(ast.PdfName); isName {
@@ -230,6 +230,16 @@ func contentReferencesResources(streamData []byte) bool {
 		}
 	}
 	return false
+}
+
+// contentReferencesResources parses a raw content stream and checks if it has
+// any operators that reference named resources.
+func contentReferencesResources(streamData []byte) bool {
+	ops, err := content.ParseStreamData(streamData)
+	if err != nil {
+		return false
+	}
+	return opsReferenceResources(ops)
 }
 
 // checkFormXObjectExtGState scans Form XObject resources for ExtGState

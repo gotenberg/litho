@@ -93,16 +93,6 @@ func postEOFRule(profile string) Rule {
 	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_3_t03, Rule_19005_2_6_1_3_t03, Rule_19005_3_6_1_3_t03, Rule_19005_4_6_1_3_t03)
 }
 
-// linearizedIDRule returns the linearized ID consistency rule.
-// Currently the check only validates presence, not equality, so this selector
-// is kept for reference.
-var _ = linearizedIDRule //nolint:gochecknoglobals // keep rule selector reachable.
-
-func linearizedIDRule(_ string) Rule {
-	// Only PDF/A-1 has a dedicated linearized ID rule (6.1.3 t04).
-	return Rule_19005_1_6_1_3_t04
-}
-
 func streamExternalKeysRule(profile string) Rule {
 	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_7_t03, Rule_19005_2_6_1_7_1_t03, Rule_19005_3_6_1_7_1_t03, Rule_19005_4_6_1_6_1_t02)
 }

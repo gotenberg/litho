@@ -9,11 +9,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// forbiddenActionTypes lists action /S values forbidden by §6.6.1 across all
+// forbiddenActionsBase lists action /S values forbidden by §6.6.1 across all
 // PDF/A parts.
 //
 //nolint:gochecknoglobals // package-level lookup table.
-var forbiddenActionTypes = map[ast.PdfName]bool{
+var forbiddenActionsBase = map[ast.PdfName]bool{
 	"Launch":     true,
 	"Sound":      true,
 	"Movie":      true,
@@ -22,47 +22,33 @@ var forbiddenActionTypes = map[ast.PdfName]bool{
 	"JavaScript": true,
 	"Hide":       true,
 	"SetState":   true,
-	"NoOp":       true, "NOP": true,
+	"NoOp":       true,
+	"NOP":        true,
 }
 
-// forbiddenActionTypesPart23 extends the forbidden set for PDF/A-2 and PDF/A-3
-// (§6.6.1). These parts additionally forbid SetOCGState, Rendition, Trans,
-// and GoTo3DView actions.
+// forbiddenActionsPart2Plus lists additional action types forbidden for PDF/A-2
+// and later (§6.6.1). These extend the base set with SetOCGState, Rendition,
+// Trans, and GoTo3DView.
 //
 //nolint:gochecknoglobals // package-level lookup table.
-var forbiddenActionTypesPart23 = map[ast.PdfName]bool{
-	"Launch":     true,
-	"Sound":      true,
-	"Movie":      true,
-	"ResetForm":  true,
-	"ImportData": true,
-	"JavaScript": true,
-	"Hide":       true,
-	"SetState":   true,
-	"NoOp":       true, "NOP": true,
+var forbiddenActionsPart2Plus = map[ast.PdfName]bool{
 	"SetOCGState": true,
 	"Rendition":   true,
 	"Trans":       true,
 	"GoTo3DView":  true,
 }
 
-// forbiddenActionTypesPart4 extends the forbidden set for PDF/A-4 (§6.6.1).
-//
-//nolint:gochecknoglobals // package-level lookup table.
-var forbiddenActionTypesPart4 = map[ast.PdfName]bool{
-	"Launch":     true,
-	"Sound":      true,
-	"Movie":      true,
-	"ResetForm":  true,
-	"ImportData": true,
-	"JavaScript": true,
-	"Hide":       true,
-	"SetState":   true,
-	"NoOp":       true, "NOP": true,
-	"Rendition":   true,
-	"Trans":       true,
-	"SetOCGState": true,
-	"GoTo3DView":  true,
+// isForbiddenAction reports whether the given action type is forbidden for the
+// specified PDF/A part. Part 1 forbids the base set; parts 2+ additionally
+// forbid SetOCGState, Rendition, Trans, and GoTo3DView.
+func isForbiddenAction(actionType ast.PdfName, part int) bool {
+	if forbiddenActionsBase[actionType] {
+		return true
+	}
+	if part >= 2 && forbiddenActionsPart2Plus[actionType] {
+		return true
+	}
+	return false
 }
 
 // allowedNamedActions lists the named actions permitted by §6.6.1.
@@ -89,7 +75,8 @@ var allowedAAKeys = map[ast.PdfName]bool{
 }
 
 // maxActionChainDepth limits traversal of /Next action chains to prevent
-// infinite loops from circular references.
+// infinite loops from circular references. Action chains can be long in
+// complex interactive documents, so 200 provides headroom.
 const maxActionChainDepth = 200
 
 // checkActionGroup validates action restrictions for PDF/A (§6.6.1, §6.6.2,
@@ -415,15 +402,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 	// Check the action type (/S).
 	actionType, _ := document.ResolveName(ctx, doc, action["S"])
 	if actionType != "" {
-		forbidden := forbiddenActionTypes
-		switch part {
-		case 2, 3:
-			forbidden = forbiddenActionTypesPart23
-		case 4:
-			forbidden = forbiddenActionTypesPart4
-		}
-
-		if forbidden[actionType] {
+		if isForbiddenAction(actionType, part) {
 			rule := forbiddenActionTypeRule(part)
 			results = append(results, failf(rule, "%s at %s", actionType, location)...)
 		}
@@ -636,19 +615,9 @@ func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action 
 	}
 
 	// Check forbidden action types, skipping outline-exempt types.
-	if !exempt[actionType] {
-		forbidden := forbiddenActionTypes
-		switch part {
-		case 2, 3:
-			forbidden = forbiddenActionTypesPart23
-		case 4:
-			forbidden = forbiddenActionTypesPart4
-		}
-
-		if forbidden[actionType] {
-			rule := forbiddenActionTypeRule(part)
-			results = append(results, failf(rule, "%s at outline item", actionType)...)
-		}
+	if !exempt[actionType] && isForbiddenAction(actionType, part) {
+		rule := forbiddenActionTypeRule(part)
+		results = append(results, failf(rule, "%s at outline item", actionType)...)
 	}
 
 	// Also check named actions (§6.6.1 test 2 / §6.5.1 test 2).

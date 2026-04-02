@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // --- Rule selectors ---
@@ -61,7 +62,12 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		blendingCSRef := getPageBlendingICCRef(ctx, doc, page)
 
 		// Collect CS names actually used by cs/CS operators in the content stream.
-		usedCSNames := collectUsedCSNames(ctx, doc, page)
+		pageContent, _ := getPageContentBytes(ctx, doc, page)
+		var pageOps []content.Operation
+		if len(pageContent) > 0 {
+			pageOps, _ = content.ParseStreamData(pageContent)
+		}
+		usedCSNames := collectUsedCSNames(pageOps)
 
 		checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
 

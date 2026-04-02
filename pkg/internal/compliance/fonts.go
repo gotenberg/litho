@@ -18,19 +18,12 @@ type fontUsageInfo struct {
 	rawStrings []ast.PdfString // raw string operands from text operators (for CID .notdef detection)
 }
 
-// collectFontUsage parses the page content stream and returns usage
-// information for each font: whether it's used for visible rendering and
-// which character codes are referenced. Returns nil if the content stream
-// can't be parsed (in which case all fonts should be checked).
-func collectFontUsage(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]*fontUsageInfo {
-	streamData, err := getPageContentBytes(ctx, doc, page)
-	if err != nil || len(streamData) == 0 {
-		return nil
-	}
-
-	ops, err := content.ParseStreamData(streamData)
-	if err != nil {
-		slog.Debug("compliance: cannot parse content stream", "error", err)
+// collectFontUsage returns usage information for each font referenced in the
+// page content stream: whether it's used for visible rendering and which
+// character codes are referenced. Returns nil if ops is nil or empty (in which
+// case all fonts should be checked).
+func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
+	if len(ops) == 0 {
 		return nil
 	}
 
@@ -128,7 +121,8 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Track fonts already checked to avoid duplicate violations.
 	checked := make(map[string]bool)
 
-	for pageIdx, p := range vctx.pages {
+	for pageIdx := range vctx.pages {
+		p := &vctx.pages[pageIdx]
 		page := p.dict
 		if ctx.Err() != nil {
 			return results
@@ -153,7 +147,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Collect font usage from the page content stream: which fonts are
 		// visible (rendering mode != 3) and which character codes are used.
-		fontUsage := collectFontUsage(ctx, doc, page)
+		fontUsage := collectFontUsage(p.parsedOps())
 
 		for fontName, fontRef := range fontDict {
 			if ctx.Err() != nil {

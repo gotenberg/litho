@@ -227,17 +227,10 @@ func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, reso
 	return ds
 }
 
-// collectUsedCSNames parses the page content stream and returns the set of
-// colour space names referenced by cs/CS operators. Returns nil if the
-// content stream can't be parsed.
-func collectUsedCSNames(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]bool {
-	streamData, err := getPageContentBytes(ctx, doc, page)
-	if err != nil || len(streamData) == 0 {
-		return nil
-	}
-	ops, err := content.ParseStreamData(streamData)
-	if err != nil {
-		slog.Debug("compliance.color: cannot parse page content stream", "error", err)
+// collectUsedCSNames returns the set of colour space names referenced by
+// cs/CS operators in the pre-parsed operations. Returns nil if ops is empty.
+func collectUsedCSNames(ops []content.Operation) map[string]bool {
+	if len(ops) == 0 {
 		return nil
 	}
 	used := make(map[string]bool)

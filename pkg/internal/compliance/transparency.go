@@ -23,8 +23,8 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 
 	// Extract raw page dicts for sub-functions that expect []ast.PdfDict.
 	rawPages := make([]ast.PdfDict, len(vctx.pages))
-	for i, p := range vctx.pages {
-		rawPages[i] = p.dict
+	for i := range vctx.pages {
+		rawPages[i] = vctx.pages[i].dict
 	}
 
 	var results []Violation

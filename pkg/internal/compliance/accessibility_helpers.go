@@ -70,8 +70,9 @@ func annotAltRule(profile string) Rule {
 
 // --- Structure tree walker ---
 
-// maxStructTreeWalkDepth limits recursion in structure tree traversal.
-const maxStructTreeWalkDepth = 200
+// maxStructTreeWalkDepth is an alias for maxStructTreeDepth (structure.go).
+// Both limit structure tree recursion to the same depth.
+const maxStructTreeWalkDepth = maxStructTreeDepth
 
 // walkStructureElements recursively walks the structure tree, calling fn for
 // each structure element dict encountered.

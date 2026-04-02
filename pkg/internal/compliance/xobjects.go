@@ -30,13 +30,13 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	var results []Violation
 	visited := make(map[string]bool)
 
-	for i, p := range vctx.pages {
-		page := p.dict
+	for i := range vctx.pages {
+		page := vctx.pages[i].dict
 		if ctx.Err() != nil {
 			return results
 		}
 
-		res := p.resources
+		res := vctx.pages[i].resources
 		if res == nil {
 			continue
 		}

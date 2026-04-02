@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -53,6 +55,21 @@ type validationCtx struct {
 type pageCtx struct {
 	dict      ast.PdfDict
 	resources ast.PdfDict // resolved, with inherited fallback from Pages tree
+	content   []byte      // decoded content stream bytes (nil if decode fails)
+	ops       []content.Operation
+	opsOnce   sync.Once
+}
+
+// parsedOps returns the lazily-parsed content stream operations. The result is
+// cached so that multiple check groups sharing the same pageCtx avoid redundant
+// ParseStreamData calls. Returns nil if content is empty or parsing fails.
+func (p *pageCtx) parsedOps() []content.Operation {
+	p.opsOnce.Do(func() {
+		if len(p.content) > 0 {
+			p.ops, _ = content.ParseStreamData(p.content)
+		}
+	})
+	return p.ops
 }
 
 // checkGroup is a function that validates a group of related rules against a
@@ -152,27 +169,46 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 		if res == nil {
 			res = inheritedRes
 		}
+		contentBytes, _ := getPageContentBytes(ctx, doc, page)
 		vctx.pages[i] = pageCtx{
 			dict:      page,
 			resources: res,
+			content:   contentBytes,
 		}
 	}
 
 	return vctx
 }
 
-// runCheckGroups executes all check groups against the document, collecting
-// violations until context cancellation or all groups complete.
+// runCheckGroups executes all check groups concurrently against the document,
+// collecting violations until context cancellation or all groups complete.
+// The document resolver is safe for concurrent use, and the validation context
+// is read-only during check execution (pageCtx.parsedOps uses sync.Once).
 func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) []Violation {
 	vctx := buildValidationCtx(ctx, doc, catalog, profile)
 
+	type result struct {
+		index      int
+		violations []Violation
+	}
+
+	ch := make(chan result, len(groups))
+	for i, g := range groups {
+		go func() {
+			ch <- result{index: i, violations: g(ctx, vctx)}
+		}()
+	}
+
+	// Collect results in submission order for deterministic output.
+	collected := make([][]Violation, len(groups))
+	for range groups {
+		r := <-ch
+		collected[r.index] = r.violations
+	}
+
 	var violations []Violation
-	for _, group := range groups {
-		if ctx.Err() != nil {
-			slog.Debug("compliance: context cancelled, stopping validation")
-			return violations
-		}
-		violations = append(violations, group(ctx, vctx)...)
+	for _, vs := range collected {
+		violations = append(violations, vs...)
 	}
 	return violations
 }
@@ -286,6 +322,8 @@ func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDi
 	return pages
 }
 
+// maxPageTreeDepth limits recursion when walking the page tree. Page trees are
+// typically shallow (a few levels deep), so 100 is conservative.
 const maxPageTreeDepth = 100
 
 func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, pages *[]ast.PdfDict, depth int) {

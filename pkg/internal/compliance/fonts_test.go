@@ -20,24 +20,25 @@ func TestCheckSimpleFontWidths_SkipsControlChars(t *testing.T) {
 	}
 	var unitsPerEm uint16 = 1000
 
-	t.Run("space_charcode_mismatch_skipped", func(t *testing.T) {
+	t.Run("space_charcode_mismatch_reported", func(t *testing.T) {
 		t.Parallel()
 		// FirstChar=32, Widths=[226] → char 32 has PDF width 226 vs binary 488.
-		// Should be skipped because charCode ≤ 0x20.
+		// Space (0x20) IS checked for width consistency (VeraPDF checks it).
+		// Only control chars below 0x20 are skipped.
 		fontDict := ast.PdfDict{
 			"FirstChar": ast.PdfInt(32),
 			"Widths":    ast.PdfArray{ast.PdfReal(226.0)},
 		}
 		results := checkSimpleFontWidths(ctx, nil, fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, nil)
-		if len(results) != 0 {
-			t.Errorf("expected no violations for space char, got %d: %v", len(results), results)
+		if len(results) == 0 {
+			t.Errorf("expected violation for space char width mismatch (226 vs 488), got none")
 		}
 	})
 
 	t.Run("notdef_charcode_mismatch_skipped", func(t *testing.T) {
 		t.Parallel()
 		// FirstChar=0, Widths=[250] → char 0 has PDF width 250 vs binary 500.
-		// Should be skipped because charCode ≤ 0x20.
+		// Should be skipped because charCode < 0x20 (control character).
 		fontDict := ast.PdfDict{
 			"FirstChar": ast.PdfInt(0),
 			"Widths":    ast.PdfArray{ast.PdfReal(250.0)},

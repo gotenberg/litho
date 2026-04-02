@@ -45,26 +45,18 @@ type contentStateChecker struct {
 	reportedOverprintStroke bool
 }
 
-// checkContentStreamState walks a content stream's operator sequence with a
-// minimal graphics state machine and checks state-dependent compliance rules
-// at painting operator boundaries.
-func checkContentStreamState(
+// checkContentStreamStateOps walks a content stream's pre-parsed operator
+// sequence with a minimal graphics state machine and checks state-dependent
+// compliance rules at painting operator boundaries.
+func checkContentStreamStateOps(
 	ctx context.Context,
 	doc *document.Document,
-	streamData []byte,
+	ops []content.Operation,
 	resources ast.PdfDict,
 	part int,
 	pageNum int,
 ) []Violation {
-	if part < 2 {
-		// OPM check only applies to parts 2+.
-		return nil
-	}
-
-	ops, err := content.ParseStreamData(streamData)
-	if err != nil {
-		slog.Debug("compliance.content: failed to parse content stream",
-			"page", pageNum, "error", err)
+	if part < 2 || ops == nil {
 		return nil
 	}
 
@@ -295,6 +287,30 @@ func checkContentStreamResources(
 		return nil
 	}
 
+	results := checkContentStreamResourcesOps(ctx, doc, ops, resources, part, pageNum)
+
+	// BI ... ID blocks are skipped by the parser, so scan raw bytes for
+	// inline image /Intent values.
+	results = append(results, checkInlineImageIntent(streamData, part, pageNum)...)
+
+	return results
+}
+
+// checkContentStreamResourcesOps is like checkContentStreamResources but
+// accepts pre-parsed operations. It does NOT check inline image intents
+// (which require raw bytes); callers must handle that separately if needed.
+func checkContentStreamResourcesOps(
+	ctx context.Context,
+	doc *document.Document,
+	ops []content.Operation,
+	resources ast.PdfDict,
+	part int,
+	pageNum int,
+) []Violation {
+	if ops == nil {
+		return nil
+	}
+
 	undefinedRule := undefinedOperatorRule(part)
 	resourceRule := missingResourceRule(part)
 	realRule := realRangeRuleByPart(part)
@@ -402,10 +418,6 @@ func checkContentStreamResources(
 			}
 		}
 	}
-
-	// Check inline image /Intent values for invalid rendering intents.
-	// BI ... ID blocks are skipped by the parser, so we scan raw bytes.
-	results = append(results, checkInlineImageIntent(streamData, part, pageNum)...)
 
 	return results
 }

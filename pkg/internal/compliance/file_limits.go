@@ -24,7 +24,6 @@ const (
 	maxDictCap1     = 4095
 	maxRealAbs1     = 32767.0
 	maxRealAbs2     = 3.403e38
-	minRealNonZero2 = 1.175e-38 //nolint:unused // reserved for future PDF/A-2+ real range check.
 	maxDeviceN1     = 8
 	maxDeviceN2     = 32
 	maxQNesting     = 28

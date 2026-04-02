@@ -1,6 +1,11 @@
 package compliance
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+)
 
 func TestPdfaPart(t *testing.T) {
 	t.Parallel()
@@ -161,6 +166,115 @@ func TestViolationsToErrors(t *testing.T) {
 		errs := violationsToErrors(vs)
 		if len(errs) != 2 {
 			t.Fatalf("expected 2 errors, got %d", len(errs))
+		}
+	})
+}
+
+func TestViolationString(t *testing.T) {
+	t.Parallel()
+	v := Violation{
+		Rule:    Rule{Clause: "6.1", TestNumber: 1, Description: "test desc"},
+		Context: "page 1",
+	}
+	if v.String() != v.Error() {
+		t.Errorf("String() = %q, want same as Error() = %q", v.String(), v.Error())
+	}
+}
+
+func TestFailHelpers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("fail", func(t *testing.T) {
+		t.Parallel()
+		r := Rule{Clause: "6.1", TestNumber: 1}
+		vs := fail(r, "ctx")
+		if len(vs) != 1 || vs[0].Context != "ctx" || vs[0].Rule.Clause != "6.1" {
+			t.Errorf("unexpected fail result: %v", vs)
+		}
+	})
+
+	t.Run("failf", func(t *testing.T) {
+		t.Parallel()
+		r := Rule{Clause: "6.2", TestNumber: 2}
+		vs := failf(r, "page %d", 5)
+		if len(vs) != 1 || vs[0].Context != "page 5" {
+			t.Errorf("unexpected failf result: %v", vs)
+		}
+	})
+}
+
+func TestOpsReferenceResources(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty ops", func(t *testing.T) {
+		t.Parallel()
+		if opsReferenceResources(nil) {
+			t.Error("expected false for nil ops")
+		}
+	})
+
+	t.Run("no resource references", func(t *testing.T) {
+		t.Parallel()
+		ops := []content.Operation{
+			{Operator: "q"},
+			{Operator: "Q"},
+			{Operator: "m", Operands: []ast.PdfObject{ast.PdfReal(0), ast.PdfReal(0)}},
+		}
+		if opsReferenceResources(ops) {
+			t.Error("expected false for non-resource ops")
+		}
+	})
+
+	t.Run("has Tf reference", func(t *testing.T) {
+		t.Parallel()
+		ops := []content.Operation{
+			{Operator: "Tf", Operands: []ast.PdfObject{ast.PdfName("F1"), ast.PdfInt(12)}},
+		}
+		if !opsReferenceResources(ops) {
+			t.Error("expected true for Tf with name operand")
+		}
+	})
+
+	t.Run("has Do reference", func(t *testing.T) {
+		t.Parallel()
+		ops := []content.Operation{
+			{Operator: "Do", Operands: []ast.PdfObject{ast.PdfName("Im1")}},
+		}
+		if !opsReferenceResources(ops) {
+			t.Error("expected true for Do with name operand")
+		}
+	})
+
+	t.Run("has cs reference", func(t *testing.T) {
+		t.Parallel()
+		ops := []content.Operation{
+			{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("DeviceRGB")}},
+		}
+		if !opsReferenceResources(ops) {
+			t.Error("expected true for cs with name operand")
+		}
+	})
+}
+
+func TestPageCtxParsedOps(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil content", func(t *testing.T) {
+		t.Parallel()
+		p := &pageCtx{}
+		ops := p.parsedOps()
+		if ops != nil {
+			t.Errorf("expected nil ops for empty content, got %d", len(ops))
+		}
+	})
+
+	t.Run("cached result", func(t *testing.T) {
+		t.Parallel()
+		p := &pageCtx{content: []byte("q Q")}
+		ops1 := p.parsedOps()
+		ops2 := p.parsedOps()
+		if len(ops1) != len(ops2) {
+			t.Error("expected same result on repeated calls")
 		}
 	})
 }

@@ -64,8 +64,8 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 
 	var results []Violation
 
-	for pageIdx, p := range vctx.pages {
-		page := p.dict
+	for pageIdx := range vctx.pages {
+		page := vctx.pages[pageIdx].dict
 		if ctx.Err() != nil {
 			return results
 		}

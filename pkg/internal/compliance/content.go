@@ -8,7 +8,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // validPDFOperators is the set of all operators defined in ISO 32000.
@@ -78,7 +77,7 @@ var allowedInlineImageFiltersPart4 = map[string]bool{
 // It checks for unknown operators, q/Q nesting depth, and forbidden inline
 // image filters. For PDF/UA profiles, no content stream checks are performed.
 func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
-	doc, profile := vctx.doc, vctx.profile
+	profile := vctx.profile
 
 	if vctx.ua {
 		return nil
@@ -93,12 +92,12 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	var results []Violation
 
-	for i, p := range vctx.pages {
+	for i := range vctx.pages {
 		if ctx.Err() != nil {
 			return results
 		}
 
-		pageResults := checkPageContent(ctx, doc, p.dict, part, i+1)
+		pageResults := checkPageContent(ctx, &vctx.pages[i], part, i+1)
 		results = append(results, pageResults...)
 	}
 
@@ -107,24 +106,16 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 }
 
 // checkPageContent validates the content streams of a single page.
-func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int) []Violation {
-	// Get raw decoded content stream bytes for inline image scanning.
-	streamData, err := getPageContentBytes(ctx, doc, page)
-	if err != nil {
-		slog.Debug("compliance.content: failed to get content stream bytes",
-			"page", pageNum, "error", err)
+func checkPageContent(ctx context.Context, page *pageCtx, part, pageNum int) []Violation {
+	if len(page.content) == 0 {
 		return nil
 	}
 
-	if len(streamData) == 0 {
-		return nil
-	}
-
-	// Parse into operations for operator validation and q/Q nesting.
-	ops, err := content.ParseStreamData(streamData)
-	if err != nil {
+	// Use lazily-parsed operations for operator validation and q/Q nesting.
+	ops := page.parsedOps()
+	if ops == nil {
 		slog.Debug("compliance.content: failed to parse content stream",
-			"page", pageNum, "error", err)
+			"page", pageNum)
 		return nil
 	}
 
@@ -170,7 +161,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page ast.PdfD
 	}
 
 	// Check inline image filters in raw bytes.
-	results = append(results, checkInlineImageFilters(streamData, part, pageNum)...)
+	results = append(results, checkInlineImageFilters(page.content, part, pageNum)...)
 
 	return results
 }

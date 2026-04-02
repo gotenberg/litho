@@ -1,6 +1,10 @@
 package compliance
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+)
 
 func TestParseICCHeader(t *testing.T) {
 	t.Parallel()
@@ -79,4 +83,151 @@ func TestExpectedComponentCount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMarkDeviceCS(t *testing.T) {
+	t.Parallel()
+
+	t.Run("DeviceRGB", func(t *testing.T) {
+		t.Parallel()
+		var u deviceCSUsage
+		markDeviceCS("DeviceRGB", &u)
+		if !u.rgb || u.cmyk || u.gray {
+			t.Errorf("unexpected usage: %+v", u)
+		}
+	})
+
+	t.Run("DeviceCMYK", func(t *testing.T) {
+		t.Parallel()
+		var u deviceCSUsage
+		markDeviceCS("DeviceCMYK", &u)
+		if u.rgb || !u.cmyk || u.gray {
+			t.Errorf("unexpected usage: %+v", u)
+		}
+	})
+
+	t.Run("DeviceGray", func(t *testing.T) {
+		t.Parallel()
+		var u deviceCSUsage
+		markDeviceCS("DeviceGray", &u)
+		if u.rgb || u.cmyk || !u.gray {
+			t.Errorf("unexpected usage: %+v", u)
+		}
+	})
+
+	t.Run("other", func(t *testing.T) {
+		t.Parallel()
+		var u deviceCSUsage
+		markDeviceCS("ICCBased", &u)
+		if u.rgb || u.cmyk || u.gray {
+			t.Errorf("unexpected usage for non-device CS: %+v", u)
+		}
+	})
+}
+
+func TestIsWhitespace(t *testing.T) {
+	t.Parallel()
+	whitespace := []byte{' ', '\n', '\r', '\t', '\x00', '\x0c'}
+	for _, b := range whitespace {
+		if !isWhitespace(b) {
+			t.Errorf("expected isWhitespace(%q) = true", b)
+		}
+	}
+	nonWS := []byte{'a', '1', '.', '/', '('}
+	for _, b := range nonWS {
+		if isWhitespace(b) {
+			t.Errorf("expected isWhitespace(%q) = false", b)
+		}
+	}
+}
+
+func TestBytesEqual(t *testing.T) {
+	t.Parallel()
+
+	t.Run("equal", func(t *testing.T) {
+		t.Parallel()
+		if !bytesEqual([]byte{1, 2, 3}, []byte{1, 2, 3}) {
+			t.Error("expected true for identical slices")
+		}
+	})
+
+	t.Run("different length", func(t *testing.T) {
+		t.Parallel()
+		if bytesEqual([]byte{1, 2}, []byte{1, 2, 3}) {
+			t.Error("expected false for different lengths")
+		}
+	})
+
+	t.Run("different content", func(t *testing.T) {
+		t.Parallel()
+		if bytesEqual([]byte{1, 2, 3}, []byte{1, 2, 4}) {
+			t.Error("expected false for different content")
+		}
+	})
+
+	t.Run("both nil", func(t *testing.T) {
+		t.Parallel()
+		if !bytesEqual(nil, nil) {
+			t.Error("expected true for nil slices")
+		}
+	})
+}
+
+func TestICCProfilesEqual(t *testing.T) {
+	t.Parallel()
+
+	t.Run("different lengths", func(t *testing.T) {
+		t.Parallel()
+		if iccProfilesEqual(make([]byte, 100), make([]byte, 101)) {
+			t.Error("expected false for different lengths")
+		}
+	})
+
+	t.Run("short profiles compared as bytes", func(t *testing.T) {
+		t.Parallel()
+		a := []byte{1, 2, 3}
+		b := []byte{1, 2, 3}
+		if !iccProfilesEqual(a, b) {
+			t.Error("expected true for identical short profiles")
+		}
+	})
+
+	t.Run("identical profiles with zeroed ID", func(t *testing.T) {
+		t.Parallel()
+		a := make([]byte, 128)
+		b := make([]byte, 128)
+		copy(a, b)
+		if !iccProfilesEqual(a, b) {
+			t.Error("expected true for identical profiles")
+		}
+	})
+}
+
+func TestSameIndirectRef(t *testing.T) {
+	t.Parallel()
+
+	t.Run("same ref", func(t *testing.T) {
+		t.Parallel()
+		a := ast.PdfIndirectRef{ObjectNum: 10, GenNum: 0}
+		b := ast.PdfIndirectRef{ObjectNum: 10, GenNum: 0}
+		if !sameIndirectRef(a, b) {
+			t.Error("expected true for same ref")
+		}
+	})
+
+	t.Run("different ref", func(t *testing.T) {
+		t.Parallel()
+		a := ast.PdfIndirectRef{ObjectNum: 10}
+		b := ast.PdfIndirectRef{ObjectNum: 11}
+		if sameIndirectRef(a, b) {
+			t.Error("expected false for different refs")
+		}
+	})
+
+	t.Run("non-ref objects", func(t *testing.T) {
+		t.Parallel()
+		if sameIndirectRef(ast.PdfName("X"), ast.PdfName("X")) {
+			t.Error("expected false for non-ref objects")
+		}
+	})
 }
