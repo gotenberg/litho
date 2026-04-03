@@ -8,7 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 21. Annotation structure nesting ---
+// --- Annotation structure nesting ---
 
 // checkAnnotationNesting validates PDF/UA-1 §7.18.x annotation nesting rules:
 //   - §7.18.1 t01: Non-exempt annotations must be nested within an Annot tag

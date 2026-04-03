@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 6. Figure alt text ---
+// --- Figure alt text ---
 
 func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := figureAltRule(profile)
@@ -53,7 +53,7 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
-// --- 7. Artifact tagging ---
+// --- Artifact tagging ---
 
 func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Violation {
 	// Artifact tagging checks require deep content stream analysis to determine
@@ -64,7 +64,7 @@ func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDi
 	return nil
 }
 
-// --- 8. Annotation alt text ---
+// --- Annotation alt text ---
 
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := annotAltRule(profile)
@@ -117,7 +117,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				continue
 			}
 
-			// Check if annotation is hidden or has Rect outside the crop-box.
+			// Skip hidden annotations or those outside the crop box.
 			if isAnnotHidden(ctx, doc, annot) || isAnnotOutsideCropBox(ctx, doc, annot, page) {
 				continue
 			}
@@ -155,7 +155,7 @@ func buildAnnotStructAltMap(ctx context.Context, doc *document.Document, catalog
 
 	result := make(map[int]bool)
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
-		// Check if this structure element has a non-empty /Alt.
+		// Only process elements with non-empty /Alt.
 		if !hasNonEmptyStringKey(ctx, doc, elem, "Alt") {
 			return
 		}
@@ -202,7 +202,7 @@ func checkOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject, d
 	}
 }
 
-// --- 8b. Widget /AA ---
+// --- Widget /AA ---
 
 // checkWidgetAA validates that Widget annotations do not have /AA (additional actions)
 // entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.

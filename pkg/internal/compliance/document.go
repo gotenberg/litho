@@ -221,7 +221,7 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 		return nil
 	}
 
-	// Check if /OCGs array exists.
+	// /OCGs array is required when /OCProperties is present.
 	ocgsObj, hasOCGs := ocProps["OCGs"]
 	if !hasOCGs {
 		return nil

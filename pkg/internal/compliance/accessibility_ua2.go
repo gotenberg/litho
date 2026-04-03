@@ -7,7 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 23. PDF/UA-2 form structure checks ---
+// --- PDF/UA-2 form structure checks ---
 
 // checkPDFUA2FormStructure validates:
 //   - §8.10.1 t02: Form structure element contains at most one widget annotation.
@@ -52,15 +52,14 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			if isAnnotHidden(ctx, doc, annot) {
 				continue
 			}
-			// Check if widget has a /Contents entry.
+			// Widget has /Contents — satisfies labelling requirement.
 			if contentsObj, ok := annot["Contents"]; ok {
 				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
 				if err == nil && len(contentsStr) > 0 {
 					continue // has Contents
 				}
 			}
-			// Check if the widget's parent field has a label (via /TU or sibling text).
-			// For simplicity, we only check /Contents presence on the widget itself.
+			// No label and no /Contents — violation.
 			results = append(results, fail(Rule_14289_2_8_10_2_3_t01,
 				"Widget annotation has no label and no /Contents entry")...)
 		}
@@ -115,7 +114,7 @@ func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject
 	return subtype == "Widget"
 }
 
-// --- 24. Structure destinations (PDF/UA-2 §8.8) ---
+// --- Structure destinations (PDF/UA-2 §8.8) ---
 
 // checkStructureDestinations validates PDF/UA-2 §8.8:
 //   - t01: Destinations in outline items, OpenAction, and Link annotations

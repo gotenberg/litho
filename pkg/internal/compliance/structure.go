@@ -542,7 +542,7 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 
 	// Build effective column count per row using a proper grid model.
 	// RowSpan causes a cell to occupy column positions in subsequent rows.
-	// We track which columns are "occupied" by RowSpan carry-over.
+	// Columns "occupied" by RowSpan carry-over affect effective counts.
 	effectiveCols := computeEffectiveColumns(ctx, state.doc, rows)
 	if len(effectiveCols) < 2 || effectiveCols[0] == 0 {
 		return
@@ -1065,7 +1065,7 @@ func checkHeadingHierarchy(state *walkState) {
 // validateListNumbering checks PDF/UA-2 §8.2.5.25: if any LI child of L has
 // a Lbl descendant, the L element must have a ListNumbering attribute not "None".
 func validateListNumbering(ctx context.Context, state *walkState, lElem ast.PdfDict) {
-	// Check if any child LI has a Lbl child.
+	// Determine whether any child LI has a Lbl child.
 	kObj, ok := lElem["K"]
 	if !ok {
 		return
@@ -1345,7 +1345,7 @@ func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, struc
 		if isStandardStructType(typeName, profile) {
 			return
 		}
-		// Check if the type is in the RoleMap.
+		// Types in the RoleMap are mapped to standard types.
 		if _, inMap := roleMap[typeName]; inMap {
 			return
 		}
@@ -1512,7 +1512,7 @@ func elemHasHeaders(ctx context.Context, doc *document.Document, elem ast.PdfDic
 		return false
 	}
 
-	// Check if this TD or TH has /Headers directly or in /A attributes.
+	// TD or TH with /Headers (direct or in /A attributes) indicates header use.
 	if typeName == "TD" || typeName == "TH" {
 		if _, ok := elem["Headers"]; ok {
 			return true

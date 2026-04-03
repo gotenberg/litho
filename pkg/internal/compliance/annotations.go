@@ -97,21 +97,21 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx, annotIdx, subtype)
 
-			// 1. Forbidden annotation types.
+			// Forbidden annotation types.
 			results = append(results, checkForbiddenAnnotType(ctx, doc, annot, subtype, part, level, loc)...)
 
-			// 2. Annotation flags.
+			// Annotation flags.
 			results = append(results, checkAnnotFlags(ctx, doc, annot, subtype, part, loc)...)
 
-			// 3. Annotation appearance.
+			// Annotation appearance.
 			results = append(results, checkAnnotAppearance(ctx, doc, annot, subtype, part, level, loc)...)
 
-			// 4. Annotation opacity (PDF/A-1 only).
+			// Annotation opacity (PDF/A-1 only).
 			if part == 1 {
 				results = append(results, checkAnnotOpacity(ctx, doc, annot, loc)...)
 			}
 
-			// 5. 3D stream Subtype must be U3D or PRC (PDF/A-4e).
+			// 3D stream Subtype must be U3D or PRC (PDF/A-4e).
 			if part == 4 && subtype == "3D" {
 				results = append(results, check3DStreamSubtype(ctx, doc, annot, loc)...)
 			}
@@ -335,7 +335,7 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 
 	apObj, hasAP := annot["AP"]
 	if !hasAP {
-		// Check if this annotation is exempt from requiring /AP.
+		// Some annotation types are exempt from requiring /AP.
 		if linkExemptFromAP(subtype, part) {
 			return nil
 		}

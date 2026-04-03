@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// --- 20. Encryption permissions ---
+// --- Encryption permissions ---
 
 // checkEncryptionPermissions validates PDF/UA-1 §7.16: if encrypted, the
 // /Encrypt dictionary must contain a /P key whose 10th bit is true
@@ -69,7 +69,7 @@ func checkEncryptionPermissions(doc *document.Document, profile string) []Violat
 	return nil
 }
 
-// --- 19. Content marking ---
+// --- Content marking ---
 
 // markerKind tracks whether a BMC/BDC span is Artifact or tagged content.
 type markerKind int

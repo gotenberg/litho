@@ -9,7 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// --- 22. Form XObject restrictions (PDF/UA-1 §7.20) ---
+// --- Form XObject restrictions (PDF/UA-1 §7.20) ---
 
 // checkFormXObjectRestrictions validates PDF/UA-1 §7.20:
 //   - t01: Reference XObjects are forbidden (Form XObject with /Ref key)
@@ -83,7 +83,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		if count <= 1 {
 			continue
 		}
-		// Check if this Form XObject contains MCIDs (has /StructParents).
+		// Form XObjects with /StructParents contain MCIDs.
 		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil {
 			slog.Debug("compliance.accessibility: cannot resolve form XObject stream", "error", err)

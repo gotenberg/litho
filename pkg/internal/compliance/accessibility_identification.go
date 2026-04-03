@@ -9,7 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 9. OC config names ---
+// --- OC config names ---
 
 func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := ocConfigNameRule(profile)
@@ -90,7 +90,7 @@ func hasNonEmptyName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	return string(nameStr) != ""
 }
 
-// --- 10. PDF/UA identification (PDF/UA-2) ---
+// --- PDF/UA identification ---
 
 func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !isPDFUA(profile) {
@@ -145,7 +145,7 @@ func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog a
 	if profile == "PDF/UA-1" {
 		// t3: "part" property must use "pdfuaid" prefix.
 		if !strings.Contains(raw, "pdfuaid:part") {
-			// Check if "part" exists under a different prefix.
+			// "part" may exist under a different prefix.
 			if pdfuaidPrefix != "" && pdfuaidPrefix != "pdfuaid" && strings.Contains(raw, pdfuaidPrefix+":part") {
 				results = append(results, failf(Rule_14289_1_5_t03,
 					"property 'part' uses prefix %q instead of 'pdfuaid'", pdfuaidPrefix)...)

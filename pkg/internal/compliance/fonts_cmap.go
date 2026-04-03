@@ -77,7 +77,7 @@ func isPredefinedCMap(name string) bool {
 	// match the pattern "Adobe-<Registry>-<Supplement>" (ending in a digit).
 	// These are NOT predefined CMap names from Table 118.
 	if len(name) > 0 && name[len(name)-1] >= '0' && name[len(name)-1] <= '9' {
-		// Check if it looks like a CIDSystemInfo name (Registry-Ordering-Supplement).
+		// CIDSystemInfo names follow the pattern Adobe-<Registry>-<Supplement>.
 		parts := strings.Split(name, "-")
 		if len(parts) == 3 && parts[0] == "Adobe" {
 			return false
@@ -259,7 +259,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		return nil
 	}
 
-	// Check if encoding is a name (not embedded) vs stream (embedded).
+	// Encoding is either a name (predefined) or a stream (embedded CMap).
 	encName, _ := document.ResolveName(ctx, doc, encObj)
 	encStream, streamErr := document.ResolveStream(ctx, doc, encObj)
 

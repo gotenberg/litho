@@ -50,5 +50,3 @@ Records a single rule violation with context about where it occurred (page numbe
 ## Testing
 
 Unit tests use the `mockDocBuilder` pattern to construct minimal PDF structures. Integration tests compare litho's pass/fail verdicts against VeraPDF's reference results across 2,601 test PDFs.
-
-Current accuracy: 99.8% agreement with VeraPDF (2,596 / 2,601), 0 false positives.

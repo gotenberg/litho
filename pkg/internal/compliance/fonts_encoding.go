@@ -494,8 +494,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 		}
 
 		// Symbolic TrueType cmap subtable check — requires font program parsing.
-		// We flag the rule but cannot fully verify without parsing the embedded
-		// TrueType program. This is a structural check placeholder.
+		// Full verification requires parsing the embedded TrueType program.
 		_ = trueTypeSymbolicCmapRule(profile)
 	} else {
 		// Non-symbolic TrueType must use MacRomanEncoding or WinAnsiEncoding.
@@ -505,7 +504,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 			if !hasEnc {
 				results = append(results, failf(rule, "font %s on page %d has no Encoding", fontName, pageNum)...)
 			} else {
-				// Check if encoding is a name (direct) or dict with BaseEncoding.
+				// Encoding may be a name (direct) or dict with BaseEncoding.
 				encName, _ := document.ResolveName(ctx, doc, encObj)
 				switch encName {
 				case "MacRomanEncoding", "WinAnsiEncoding":

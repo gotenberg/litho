@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 15. File specification /F and /UF (PDF/UA-1 §7.11) ---
+// --- File specification /F and /UF (PDF/UA-1 §7.11) ---
 
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
 // files contain both /F and /UF keys (ISO 14289-1, §7.11 t01).
@@ -74,7 +74,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 	return results
 }
 
-// --- 17. Link annotation Contents ---
+// --- Link annotation Contents ---
 
 // checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
 // have a non-empty /Contents key providing an alternate description.
@@ -110,7 +110,7 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 	return results
 }
 
-// --- 18. Media clip data ---
+// --- Media clip data ---
 
 // checkMediaClipData validates PDF/UA-1 §7.18.6.2: media clip data dicts
 // must have /CT (content type, t01) and /Alt (alternative text, t02).
@@ -200,7 +200,7 @@ func hasValidMediaClipAlt(ctx context.Context, doc *document.Document, clipDict 
 	return false
 }
 
-// --- 16. Form field TU key ---
+// --- Form field TU key ---
 
 // checkFormFieldTU validates that form fields have a non-empty /TU key.
 // Per PDF/UA-1 §7.18.1 test 3: "A form field shall have a TU key present
@@ -316,7 +316,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 		return nil
 	}
 
-	// Check if this is a terminal field (has /FT or /Subtype Widget).
+	// Terminal fields have /FT or Widget /Subtype.
 	_, hasFT := field["FT"]
 	subtype, _ := document.ResolveName(ctx, doc, field["Subtype"])
 	isTerminal := hasFT || subtype == "Widget"

@@ -781,7 +781,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 			if !ok {
 				continue
 			}
-			// Check if ALL pages override this key — if any page inherits it, validate.
+			// Only validate if at least one page inherits this key.
 			anyInherits := false
 			for _, page := range pages {
 				if _, has := page[key]; !has {

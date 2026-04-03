@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 1. Language ---
+// --- Language ---
 
 // checkLangRequired ensures the catalog has a /Lang key with a valid RFC 3066 tag.
 // Rule mapping:
@@ -67,7 +67,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		return fail(langRule, "catalog")
 	}
 
-	// Check if the structure tree root itself has /Lang.
+	// Structure tree root /Lang provides fallback for all elements.
 	rootLang := resolveNonEmptyLang(ctx, doc, treeRoot)
 	if rootLang != "" && !isValidLangTag(rootLang) {
 		return failf(validRule, "lang=%s, StructTreeRoot", rootLang)
@@ -173,7 +173,7 @@ func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem a
 	}
 }
 
-// --- 1b. Outline language ---
+// --- Outline language ---
 
 // checkOutlineLang verifies that outline entries (bookmarks) have a determinable
 // natural language. Per PDF/UA-1 §7.2 t2, each outline item's /Title text
@@ -220,7 +220,7 @@ func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemOb
 		return
 	}
 
-	// Check if this outline item has /Lang.
+	// Outline items need /Lang when catalog /Lang is absent.
 	lang := resolveNonEmptyLang(ctx, doc, item)
 	if lang == "" {
 		*results = append(*results, fail(Rule_14289_1_7_2_t02, "outline item")...)

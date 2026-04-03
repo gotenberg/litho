@@ -9,7 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 2. DisplayDocTitle ---
+// --- DisplayDocTitle ---
 
 func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := displayDocTitleRule(profile)
@@ -38,7 +38,7 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 	return nil
 }
 
-// --- 3. Suspects ---
+// --- Suspects ---
 
 func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := suspectsRule(profile)
@@ -72,7 +72,7 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	return nil
 }
 
-// --- 4. Tab order ---
+// --- Tab order ---
 
 func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	isPDFUA1 := profile == string("PDF/UA-1")
@@ -92,7 +92,7 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			return results
 		}
 
-		// Check if page has annotations.
+		// Skip pages without annotations.
 		annotsObj, hasAnnots := page["Annots"]
 		if hasAnnots {
 			annots, err := document.ResolveArray(ctx, doc, annotsObj)
@@ -133,7 +133,7 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	return results
 }
 
-// --- 5. XMP title ---
+// --- XMP title ---
 
 func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := xmpTitleRule(profile)

@@ -149,7 +149,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		if subtype != "Type3" {
 			continue
 		}
-		// Check if CharProc content streams reference named resources.
+		// CharProc content streams may reference named resources.
 		_, hasOwnRes := fd["Resources"]
 		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
 		if err != nil || charProcs == nil {
@@ -505,7 +505,7 @@ func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict,
 	}
 
 	// OPM shall not be 1 when overprint is enabled in certain conditions.
-	// Check if overprint stroke (OP) or overprint fill (op) is true.
+	// Only flag when overprint stroke (OP) or overprint fill (op) is true.
 	if opm != 1 {
 		return nil
 	}

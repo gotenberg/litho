@@ -158,7 +158,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	var results []Violation
 
-	// 1. Catalog /Metadata required (§6.7.2 / §6.6.1).
+	// Catalog /Metadata required (§6.7.2 / §6.6.1).
 	xmpData, metaStream := xmpLoadMetadata(ctx, doc, catalog, part, &results)
 	if xmpData == nil {
 		return results
@@ -168,7 +168,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
-	// 1b. XMP encoding must be UTF-8 for part 4 (§6.7.2.1 t05).
+	// XMP encoding must be UTF-8 for part 4 (§6.7.2.1 t05).
 	if part == 4 {
 		xmpCheckEncoding(xmpData, part, &results)
 	}
@@ -177,42 +177,42 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
-	// 2. XMP packet header (§6.7.2.1 / §6.6.2.1).
+	// XMP packet header (§6.7.2.1 / §6.6.2.1).
 	xmpCheckPacketHeader(xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
 	}
 
-	// 3. XMP schema validation (§6.7.9 / §6.6.2.3.1).
+	// XMP schema validation (§6.7.9 / §6.6.2.3.1).
 	xmpCheckNamespaces(xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
 	}
 
-	// 4. PDF/A identification (§6.7.11 / §6.6.4 / §6.7.3).
+	// PDF/A identification (§6.7.11 / §6.6.4 / §6.7.3).
 	xmpCheckPDFAIdentification(xmpData, profile, part, &results)
 
 	if ctx.Err() != nil {
 		return results
 	}
 
-	// 5. Extension schema structure (§6.7.8 / §6.6.2.3.3).
+	// Extension schema structure (§6.7.8 / §6.6.2.3.3).
 	xmpCheckExtensionSchemas(xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
 	}
 
-	// 5b. Extension property valueType correspondence (§6.6.2.3.1 t02).
+	// Extension property valueType correspondence (§6.6.2.3.1 t02).
 	xmpCheckExtensionPropertyTypes(xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
 	}
 
-	// 6. DocInfo ↔ XMP consistency (§6.7.3) — parts 1 and 4 only.
+	// DocInfo to XMP consistency (§6.7.3) — parts 1 and 4 only.
 	if part == 1 || part == 4 {
 		xmpCheckDocInfoSync(ctx, doc, xmpData, part, &results)
 	}
@@ -221,14 +221,14 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
-	// 7. XMP property types (§6.7.2 / §6.6.2.3.1).
+	// XMP property types (§6.7.2 / §6.6.2.3.1).
 	xmpCheckPropertyTypes(xmpData, part, metaStream, &results)
 
 	slog.Debug("compliance.xmp: XMP checks complete", "violations", len(results))
 	return results
 }
 
-// --- 1. Catalog /Metadata required ---
+// --- Catalog /Metadata required ---
 
 // xmpLoadMetadata retrieves and decodes the XMP metadata stream from the
 // catalog. It validates that the stream dict has /Type Metadata and /Subtype XML.
@@ -298,7 +298,7 @@ func xmpMetadataRule(part, test int) []Violation {
 	return nil
 }
 
-// --- 2. XMP packet header ---
+// --- XMP packet header ---
 
 // xmpCheckPacketHeader checks that the XMP packet header does not use the
 // forbidden 'bytes' or 'encoding' attributes.
@@ -351,7 +351,7 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 	return nil
 }
 
-// --- 1b. XMP encoding check ---
+// --- XMP encoding check ---
 
 // xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
 // For PDF/A-4 (§6.7.2.1 t05), UTF-16 encoding is a violation.
@@ -376,7 +376,7 @@ func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
 	}
 }
 
-// --- 3. XMP schema validation ---
+// --- XMP schema validation ---
 
 // xmpCheckNamespaces walks the XMP XML and verifies that every namespace URI
 // used by properties is either a predefined XMP schema or is declared in a
@@ -498,7 +498,7 @@ func xmpSchemaRule(part int, ns string) []Violation {
 	return nil
 }
 
-// --- 4. PDF/A identification ---
+// --- PDF/A identification ---
 
 // xmpCheckPDFAIdentification verifies that the XMP contains pdfaid:part and
 // pdfaid:conformance entries with correct values matching the declared profile.
@@ -694,7 +694,7 @@ func xmpHasWrongPdfaidPrefix(data []byte, field string) bool {
 			break
 		}
 		pos := off + idx
-		// Check if exactly "pdfaid" precedes the colon (not a longer prefix
+		// Verify exactly "pdfaid" precedes the colon (not a longer prefix
 		// containing "pdfaid" as a substring, e.g., "nonpdfaid").
 		prefixStart := pos - 6
 		if prefixStart >= 0 && bytes.Equal(data[prefixStart:prefixStart+len(validPrefix)], validPrefix) {
@@ -797,7 +797,7 @@ func xmpPDFAIdPrefixRule(part int, field string) []Violation {
 	return nil
 }
 
-// --- 5. Extension schema structure ---
+// --- Extension schema structure ---
 
 // xmpExtSchemaLevel identifies the nesting context within an extension schema.
 type xmpExtSchemaLevel int
@@ -1503,7 +1503,7 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 	}
 }
 
-// --- 6. DocInfo ↔ XMP consistency ---
+// --- DocInfo to XMP consistency ---
 
 // xmpCheckDocInfoSync verifies that document info dict entries are consistent
 // with their XMP equivalents (§6.7.3).
@@ -1634,7 +1634,7 @@ func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Violation {
 func xmpDocInfoSyncRulePart4(testNum int, ctx string) []Violation {
 	// Part 4 uses Rule_19005_4_6_7_3_t07 for value mismatches and t08
 	// for missing XMP properties corresponding to Info dict entries.
-	// We use t07 for all sync mismatches uniformly.
+	// Rule t07 covers all sync mismatches uniformly.
 	switch testNum {
 	case 1:
 		return fail(Rule_19005_4_6_7_3_t07, ctx)
@@ -1943,7 +1943,7 @@ func xmpNormalizeISO8601(s string) string {
 	return s[:tIdx+1] + timePart + tzSuffix
 }
 
-// --- 7. XMP container types ---
+// --- XMP container types ---
 
 // xmpContainerType represents observed XMP container types.
 type xmpContainerType int

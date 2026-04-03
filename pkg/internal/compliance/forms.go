@@ -157,7 +157,7 @@ func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast
 		return
 	}
 
-	// Check if this is a zero-area widget (Rect where x1==x3 and y1==y4).
+	// Zero-area widgets are exempt from appearance requirements.
 	if isZeroAreaRect(ctx, doc, field) {
 		return
 	}

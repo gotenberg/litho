@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- 11. Namespaces (PDF/UA-2) ---
+// --- Namespaces (PDF/UA-2) ---
 
 func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
@@ -67,7 +67,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 	return results
 }
 
-// --- 11b. Namespace role mapping (PDF/UA-2 §8.2.4) ---
+// --- Namespace role mapping (PDF/UA-2 §8.2.4) ---
 
 // standardNamespaceURIs lists the namespace URIs that are "standard" per
 // ISO 32000-2:2020, 14.8.6.
@@ -134,7 +134,7 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 			}
 			// t04: standard type remapped to non-standard.
 			if standardNamespaceURIs[string(srcURI)] && isStandardStructType(typeName, "PDF/UA-2") {
-				// Check if the target is also in a standard namespace type.
+				// Verify the target is also in a standard namespace type.
 				targetArr, _ := document.ResolveArray(ctx, doc, mappingObj)
 				if len(targetArr) >= 2 {
 					targetNSDict, _ := document.ResolveDict(ctx, doc, targetArr[1])
@@ -202,9 +202,9 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			}
 		}
 
-		// Check if the element's namespace (or role-mapped target) is standard.
+		// Verify the element's namespace (or role-mapped target) is standard.
 		if !standardNamespaceURIs[elemNSURI] {
-			// Check if the namespace has a RoleMapNS that maps to a standard NS.
+			// Namespace may have a RoleMapNS that maps to a standard NS.
 			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in namespace %q is not mapped to a standard namespace",
@@ -309,7 +309,7 @@ func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcN
 	return false
 }
 
-// --- 12. Link nesting (PDF/UA-2) ---
+// --- Link nesting (PDF/UA-2) ---
 
 func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
@@ -366,7 +366,7 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 	return nil
 }
 
-// --- 13. Formula MathML (PDF/UA-2) ---
+// --- Formula MathML (PDF/UA-2) ---
 
 func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
@@ -432,12 +432,13 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
-// --- 14. Invisible annotations in structure (PDF/UA-2) ---
+// --- Invisible annotations in structure (PDF/UA-2) ---
 
 // checkInvisibleAnnotArtifact validates that annotations with the Invisible flag
 // set are not included in the logical structure tree (they must be artifacts).
 // Rule: ISO 14289-2, 8.9.2.2, test 1.
-// hasStructuralChildren checks if /K contains at least one child dict with an /S key
+
+// hasStructuralChildren reports whether /K contains at least one child dict with an /S key
 // (a structure element), as opposed to only MCR/OBJR/integer references.
 func hasStructuralChildren(ctx context.Context, doc *document.Document, kObj ast.PdfObject) bool {
 	// Try as array first.
@@ -497,7 +498,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 				continue
 			}
 
-			// Check if annotation has the Invisible flag set.
+			// Only invisible annotations need this check.
 			fObj, ok := annot["F"]
 			if !ok {
 				continue

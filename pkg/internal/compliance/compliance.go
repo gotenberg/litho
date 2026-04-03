@@ -1,9 +1,3 @@
-// Package compliance validates PDFs against ISO 19005 (PDF/A) and
-// ISO 14289 (PDF/UA) using rules derived from the VeraPDF validation profiles.
-//
-// Entry points are [ValidatePDFA] and [ValidatePDFUA]. Both return violations
-// as []error where each element is a [Violation] value that can be
-// type-asserted to access the structured [Rule] and Context fields.
 package compliance
 
 import (

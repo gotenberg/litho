@@ -382,7 +382,7 @@ func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, a
 		return
 	}
 
-	// 1. /Assets name tree.
+	// /Assets name tree.
 	assetsDict, err := document.ResolveDict(ctx, doc, rmDict["Assets"])
 	if err == nil && assetsDict != nil {
 		namesArr, err := document.ResolveArray(ctx, doc, assetsDict["Names"])
@@ -395,7 +395,7 @@ func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, a
 		}
 	}
 
-	// 2. /Configurations → instances → /Asset.
+	// /Configurations → instances → /Asset.
 	configs, err := document.ResolveArray(ctx, doc, rmDict["Configurations"])
 	if err != nil {
 		return
@@ -520,8 +520,7 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 		return nil
 	}
 
-	// Check if this looks like a PDF. Non-PDF embedded files cannot be
-	// PDF/A-compliant by definition.
+	// Non-PDF embedded files cannot be PDF/A-compliant.
 	if !bytes.Contains(data[:min(len(data), 1024)], []byte("%PDF-")) {
 		return failf(Rule_19005_4_6_9_t03,
 			"object %d: embedded file is not a PDF document", fs.objNum)

@@ -204,36 +204,34 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 		return results
 	}
 
-	// --- 1. Font embedding check ---
-	// Only for fonts used for visible rendering.
+	// Font embedding — only for fonts used for visible rendering.
 	if isVisible {
 		results = append(results, checkFontEmbedding(ctx, doc, fontDict, fontName, pageNum, profile, isType3)...)
 	}
 
-	// --- 2. ToUnicode mapping check ---
+	// ToUnicode mapping.
 	results = append(results, checkToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
-	// --- 7. TrueType encoding check ---
+	// TrueType encoding.
 	if subtype == "TrueType" {
 		results = append(results, checkTrueTypeEncoding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 	}
 
-	// --- 8. Font name UTF-8 check ---
+	// Font name UTF-8.
 	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// --- 5. Glyph width consistency ---
-	// Only for fonts used for visible rendering.
+	// Glyph width consistency — only for fonts used for visible rendering.
 	if isVisible {
 		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 	}
 
-	// --- 6. .notdef glyph check ---
+	// .notdef glyph.
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
-	// --- 9. Glyph coverage (CharSet for Type1 subsets) ---
+	// Glyph coverage (CharSet for Type1 subsets).
 	results = append(results, checkGlyphCoverage(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// --- 10. ToUnicode CMap values ---
+	// ToUnicode CMap values.
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
 	return results
@@ -331,32 +329,32 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 
 	cidSubtype := fontSubtype(ctx, doc, cidFontDict)
 
-	// --- Font embedding for the CIDFont ---
+	// Font embedding for the CIDFont.
 	results = append(results, checkFontEmbedding(ctx, doc, cidFontDict, fontName, pageNum, profile, false)...)
 
-	// --- Font name UTF-8 for the Type0 font ---
+	// Font name UTF-8 for the Type0 font.
 	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// --- 3. CIDToGIDMap check ---
+	// CIDToGIDMap.
 	results = append(results, checkCIDToGIDMap(ctx, doc, cidFontDict, cidSubtype, fontName, pageNum, profile)...)
 
-	// --- 4. CIDSystemInfo consistency check ---
+	// CIDSystemInfo consistency.
 	results = append(results, checkCIDSystemInfo(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
-	// --- 2. ToUnicode for composite fonts ---
+	// ToUnicode for composite fonts.
 	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
-	// --- CMap embedding and WMode checks ---
+	// CMap embedding and WMode.
 	results = append(results, checkCMapEmbedding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// --- CID value limit check (t10: max CID 65535) ---
+	// CID value limit (t10: max CID 65535).
 	results = append(results, checkCMapCIDValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// --- 6. .notdef check ---
+	// .notdef glyph.
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, nil)...)
 	results = append(results, checkType0NotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
-	// --- 5. Glyph width consistency for CIDFont ---
+	// Glyph width consistency for CIDFont.
 	cidFd := findFontDescriptor(ctx, doc, cidFontDict)
 	if cidFd != nil {
 		fontData := extractFontProgramData(ctx, doc, cidFd)
@@ -375,10 +373,10 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		}
 	}
 
-	// --- 9. CIDFont glyph coverage (CIDSet for CIDFont subsets) ---
+	// CIDFont glyph coverage (CIDSet for CIDFont subsets).
 	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile)...)
 
-	// --- 10. ToUnicode CMap values ---
+	// ToUnicode CMap values.
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
 	return results
@@ -529,8 +527,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		return failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
 	}
 
-	// Check if referenced CIDs are present in the embedded font program.
-	// Resolve descendant CIDFont to get the font program.
+	// Resolve descendant CIDFont to verify referenced CIDs exist in the font program.
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
 		return nil
