@@ -12,33 +12,6 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// Violation records a single rule violation with context about where it occurred.
-// It implements the error interface so callers receive typed violations.
-//
-//nolint:errname // Violation is the domain name; "ViolationError" would be redundant.
-type Violation struct {
-	// Rule is the VeraPDF validation rule that was violated.
-	Rule Rule
-
-	// Context describes where the violation occurred (e.g., page number,
-	// object reference, font name).
-	Context string
-}
-
-// Error implements the error interface so that Violation can be returned directly
-// as an error value in ([]error, error) signatures.
-func (r Violation) Error() string {
-	if r.Context != "" {
-		return fmt.Sprintf("clause %s test %d: %s [%s]", r.Rule.Clause, r.Rule.TestNumber, r.Rule.Description, r.Context)
-	}
-	return fmt.Sprintf("clause %s test %d: %s", r.Rule.Clause, r.Rule.TestNumber, r.Rule.Description)
-}
-
-// String returns a human-readable description of the violation.
-func (r Violation) String() string {
-	return r.Error()
-}
-
 // validationCtx holds pre-computed document data shared across all check groups.
 // It eliminates redundant page tree traversals and resource resolution.
 type validationCtx struct {
@@ -76,70 +49,62 @@ func (p *pageCtx) parsedOps() []content.Operation {
 // document. It returns all violations found (empty slice = pass).
 type checkGroup func(ctx context.Context, vctx *validationCtx) []Violation
 
-// --- Profile entry points ---
+// --- Profile to check group mappings ---
 
-// ValidatePDFA audits the document against a specific PDF/A profile, returning
-// all compliance violations found as errors. Each error is a [Violation] value
-// that can be type-asserted to access the structured Rule and Context fields.
-// An empty slice means the document passes.
-func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) ([]error, error) {
-	slog.Debug("compliance: starting PDF/A validation", "profile", profile)
+//nolint:gochecknoglobals // package-level rule tables are the core design.
+var pdfaCheckGroups map[models.PDFAProfile][]checkGroup
 
-	groups, ok := pdfaCheckGroups[profile]
-	if !ok {
-		slog.Error("compliance: unknown PDF/A profile", "profile", profile)
-		return nil, fmt.Errorf("compliance: unknown PDF/A profile: %s", profile)
+//nolint:gochecknoglobals // package-level rule tables are the core design.
+var pdfuaCheckGroups map[models.PDFUAProfile][]checkGroup
+
+func init() { //nolint:gochecknoinits // breaks initialization cycle.
+	allPDFA := []checkGroup{
+		checkFileStructureGroup,
+		checkColorGroup,
+		checkFontGroup,
+		checkGraphicsGroup,
+		checkTransparencyGroup,
+		checkXObjectGroup,
+		checkAnnotationGroup,
+		checkActionGroup,
+		checkXMPGroup,
+		checkStructureGroup,
+		checkFormGroup,
+		checkEmbeddedGroup,
+		checkDocumentGroup,
+		checkContentGroup,
 	}
 
-	catalog, err := getCatalog(ctx, doc)
-	if err != nil {
-		slog.Error("compliance: failed to get catalog", "error", err)
-		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
+	pdfaCheckGroups = map[models.PDFAProfile][]checkGroup{
+		models.PDFA1b: allPDFA,
+		models.PDFA1a: allPDFA,
+		models.PDFA2b: allPDFA,
+		models.PDFA2u: allPDFA,
+		models.PDFA2a: allPDFA,
+		models.PDFA3b: allPDFA,
+		models.PDFA3u: allPDFA,
+		models.PDFA3a: allPDFA,
+		models.PDFA4:  allPDFA,
+		models.PDFA4e: allPDFA,
+		models.PDFA4f: allPDFA,
 	}
 
-	// Enable parser-level format checking and resolve all objects upfront.
-	doc.ComplianceMode = true
-	resolveAllObjects(ctx, doc)
-
-	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
-
-	slog.Debug("compliance: PDF/A validation complete",
-		"profile", profile,
-		"violations", len(violations),
-	)
-	return violationsToErrors(violations), nil
+	pdfuaCheckGroups = map[models.PDFUAProfile][]checkGroup{
+		models.PDFUA1: {
+			checkFontGroup,
+			checkStructureGroup,
+			checkAccessibilityGroup,
+			checkFormGroup,
+		},
+		models.PDFUA2: {
+			checkFontGroup,
+			checkStructureGroup,
+			checkAccessibilityGroup,
+		},
+	}
 }
 
-// ValidatePDFUA audits the document against a specific PDF/UA profile,
-// returning all compliance violations found as errors. Each error is a
-// [Violation] value that can be type-asserted to access the structured Rule
-// and Context fields. An empty slice means the document passes.
-func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) ([]error, error) {
-	slog.Debug("compliance: starting PDF/UA validation", "profile", profile)
-
-	groups, ok := pdfuaCheckGroups[profile]
-	if !ok {
-		slog.Error("compliance: unknown PDF/UA profile", "profile", profile)
-		return nil, fmt.Errorf("compliance: unknown PDF/UA profile: %s", profile)
-	}
-
-	catalog, err := getCatalog(ctx, doc)
-	if err != nil {
-		slog.Error("compliance: failed to get catalog", "error", err)
-		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
-	}
-
-	doc.ComplianceMode = true
-	resolveAllObjects(ctx, doc)
-
-	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
-
-	slog.Debug("compliance: PDF/UA validation complete",
-		"profile", profile,
-		"violations", len(violations),
-	)
-	return violationsToErrors(violations), nil
-}
+// --- Internal orchestration ---
 
 // buildValidationCtx pre-computes the shared validation context from the
 // document catalog. Pages are collected once and resources resolved with
@@ -223,61 +188,6 @@ func violationsToErrors(violations []Violation) []error {
 		errs[i] = r
 	}
 	return errs
-}
-
-// --- Profile → check group mappings ---
-
-//nolint:gochecknoglobals // package-level rule tables are the core design.
-var pdfaCheckGroups map[models.PDFAProfile][]checkGroup
-
-//nolint:gochecknoglobals // package-level rule tables are the core design.
-var pdfuaCheckGroups map[models.PDFUAProfile][]checkGroup
-
-func init() { //nolint:gochecknoinits // breaks initialization cycle.
-	allPDFA := []checkGroup{
-		checkFileStructureGroup,
-		checkColorGroup,
-		checkFontGroup,
-		checkGraphicsGroup,
-		checkTransparencyGroup,
-		checkXObjectGroup,
-		checkAnnotationGroup,
-		checkActionGroup,
-		checkXMPGroup,
-		checkStructureGroup,
-		checkFormGroup,
-		checkEmbeddedGroup,
-		checkDocumentGroup,
-		checkContentGroup,
-	}
-
-	pdfaCheckGroups = map[models.PDFAProfile][]checkGroup{
-		models.PDFA1b: allPDFA,
-		models.PDFA1a: allPDFA,
-		models.PDFA2b: allPDFA,
-		models.PDFA2u: allPDFA,
-		models.PDFA2a: allPDFA,
-		models.PDFA3b: allPDFA,
-		models.PDFA3u: allPDFA,
-		models.PDFA3a: allPDFA,
-		models.PDFA4:  allPDFA,
-		models.PDFA4e: allPDFA,
-		models.PDFA4f: allPDFA,
-	}
-
-	pdfuaCheckGroups = map[models.PDFUAProfile][]checkGroup{
-		models.PDFUA1: {
-			checkFontGroup,
-			checkStructureGroup,
-			checkAccessibilityGroup,
-			checkFormGroup,
-		},
-		models.PDFUA2: {
-			checkFontGroup,
-			checkStructureGroup,
-			checkAccessibilityGroup,
-		},
-	}
 }
 
 // --- Shared helpers ---
@@ -433,4 +343,17 @@ func safeReadHeader(doc *document.Document, n int64) ([]byte, error) {
 		return nil, fmt.Errorf("cannot read header: nil reader")
 	}
 	return doc.ReadFileBytes(0, n)
+}
+
+// resolveNumber resolves a PdfObject to a float64, handling both PdfInt and
+// PdfReal types. Returns (0, error) if the object is neither type.
+func resolveNumber(obj ast.PdfObject) (float64, error) {
+	switch v := obj.(type) {
+	case ast.PdfInt:
+		return float64(v), nil
+	case ast.PdfReal:
+		return float64(v), nil
+	default:
+		return 0, fmt.Errorf("expected number, got %T", obj)
+	}
 }

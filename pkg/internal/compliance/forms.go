@@ -180,7 +180,7 @@ func isZeroAreaRect(ctx context.Context, doc *document.Document, field ast.PdfDi
 
 	var vals [4]float64
 	for i, obj := range rect {
-		v, err := resolveNumber(ctx, doc, obj)
+		v, err := resolveNumber(obj)
 		if err != nil {
 			return false
 		}
@@ -219,24 +219,6 @@ func widgetHasAppearance(ctx context.Context, doc *document.Document, field ast.
 	}
 
 	return false
-}
-
-// resolveNumber resolves a PDF object to a float64 (handles both PdfInt and
-// PdfReal).
-func resolveNumber(ctx context.Context, doc *document.Document, obj ast.PdfObject) (float64, error) {
-	resolved, err := document.ResolveObject(ctx, doc, obj)
-	if err != nil {
-		return 0, err
-	}
-
-	switch v := resolved.(type) {
-	case ast.PdfInt:
-		return float64(v), nil
-	case ast.PdfReal:
-		return float64(v), nil
-	default:
-		return 0, err
-	}
 }
 
 // --- Rule selectors ---
