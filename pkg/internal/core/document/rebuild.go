@@ -66,14 +66,12 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 				continue
 			}
 
-			// Only keep the first occurrence (highest precedence for incremental updates
-			// when scanning forward; callers may refine later).
-			if _, exists := entries[objNum]; !exists {
-				entries[objNum] = xref.XRefEntry{
-					Offset:     absOffset,
-					Generation: genNum,
-					Type:       1,
-				}
+			// Keep the last occurrence: in incrementally updated PDFs,
+			// later definitions override earlier ones.
+			entries[objNum] = xref.XRefEntry{
+				Offset:     absOffset,
+				Generation: genNum,
+				Type:       1,
 			}
 		}
 
