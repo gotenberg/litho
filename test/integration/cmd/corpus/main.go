@@ -593,7 +593,8 @@ type refItem struct {
 }
 
 var pdfjsKnownSkips = map[string]string{
-	"bug1393476": "infinite loop in xref parsing",
+	"bug1393476":                       "infinite loop in xref parsing",
+	"bomb_giant_contents_image_stream": "JBIG2 decompression bomb: CGO call blocks ~20s, cannot be cancelled by context",
 }
 
 func shouldSkipPDFJS(id string) (string, bool) {
