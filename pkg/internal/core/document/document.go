@@ -28,7 +28,9 @@ type Document struct {
 	Index         xref.Index
 	objectCache   map[int]ast.PdfObject
 	fontCache     map[int]any
-	mu            sync.RWMutex // protects objectCache and fontCache
+	cmapCache     map[int]any  // parsed CMap by ToUnicode stream object number
+	mu            sync.RWMutex // protects objectCache, fontCache, cmapCache
+	maxCacheSize  int          // evict all objects when cache exceeds this size
 	Crypto        *crypto.Handler
 	OCConfig      *OCConfig
 	IsEncrypted   bool
@@ -130,13 +132,15 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	}
 
 	doc := &Document{
-		r:           r,
-		size:        size,
-		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
-		objectCache: make(map[int]ast.PdfObject),
-		fontCache:   make(map[int]any),
-		Logger:      logger,
-		Version:     version,
+		r:            r,
+		size:         size,
+		Index:        xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		objectCache:  make(map[int]ast.PdfObject),
+		fontCache:    make(map[int]any),
+		cmapCache:    make(map[int]any),
+		maxCacheSize: 50_000, // evict when cache exceeds 50k objects
+		Logger:       logger,
+		Version:      version,
 	}
 
 	// Probe for linearization before seeking to the end of the file.
@@ -273,7 +277,26 @@ func (d *Document) ClearCaches() {
 	d.mu.Lock()
 	d.objectCache = make(map[int]ast.PdfObject)
 	d.fontCache = make(map[int]any)
+	d.cmapCache = make(map[int]any)
 	d.mu.Unlock()
+}
+
+// GetCachedCMap returns a previously cached parsed CMap for the given stream
+// object number. Returns nil, false if not cached.
+func (d *Document) GetCachedCMap(objNum int) (any, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	c, ok := d.cmapCache[objNum]
+	return c, ok
+}
+
+// CacheCMap stores a parsed CMap keyed by its stream object number.
+func (d *Document) CacheCMap(objNum int, cm any) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if _, ok := d.cmapCache[objNum]; !ok {
+		d.cmapCache[objNum] = cm
+	}
 }
 
 // GetCachedFont returns a previously cached font for the given object number.

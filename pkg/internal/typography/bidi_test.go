@@ -8,53 +8,60 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-func TestReorderBidiLine_LTROnly(t *testing.T) {
+// reorderTexts is a test helper that applies reorderBidiIndices and returns
+// the reordered text strings for easy assertion.
+func reorderTexts(input []string) []string {
+	indices := make([]int, len(input))
+	for i := range indices {
+		indices[i] = i
+	}
+	reordered := reorderBidiIndices(input, indices)
+	result := make([]string, len(reordered))
+	for i, idx := range reordered {
+		result[i] = input[idx]
+	}
+	return result
+}
+
+func TestReorderBidiIndices_LTROnly(t *testing.T) {
 	input := []string{"H", "e", "l", "l", "o"}
-	got := reorderBidiLine(input)
+	got := reorderTexts(input)
 	want := "Hello"
 	if join(got) != want {
 		t.Errorf("LTR only: got %q, want %q", join(got), want)
 	}
 }
 
-func TestReorderBidiLine_RTLOnly(t *testing.T) {
-	// Hebrew: שלום (Shin, Lamed, Vav, Mem)
-	// In PDF visual order they are stored left-to-right as drawn,
-	// but logical order is right-to-left, so we must reverse.
+func TestReorderBidiIndices_RTLOnly(t *testing.T) {
 	input := []string{"ם", "ו", "ל", "ש"}
-	got := reorderBidiLine(input)
+	got := reorderTexts(input)
 	want := "שלום"
 	if join(got) != want {
 		t.Errorf("RTL only: got %q, want %q", join(got), want)
 	}
 }
 
-func TestReorderBidiLine_Mixed(t *testing.T) {
-	// "Hello שלום World" in visual PDF order:
-	// H e l l o [space] ם ו ל ש [space] W o r l d
+func TestReorderBidiIndices_Mixed(t *testing.T) {
 	input := []string{"H", "e", "l", "l", "o", " ", "ם", "ו", "ל", "ש", " ", "W", "o", "r", "l", "d"}
-	got := reorderBidiLine(input)
+	got := reorderTexts(input)
 	result := join(got)
-	// The RTL run should be reversed to שלום
 	want := "Hello שלום World"
 	if result != want {
 		t.Errorf("Mixed: got %q, want %q", result, want)
 	}
 }
 
-func TestReorderBidiLine_Arabic(t *testing.T) {
-	// Arabic: مرحبا (Meem, Ra, Ha, Ba, Alef)
-	// Visual order (as drawn left-to-right): ا ب ح ر م
+func TestReorderBidiIndices_Arabic(t *testing.T) {
 	input := []string{"ا", "ب", "ح", "ر", "م"}
-	got := reorderBidiLine(input)
+	got := reorderTexts(input)
 	want := "مرحبا"
 	if join(got) != want {
 		t.Errorf("Arabic: got %q, want %q", join(got), want)
 	}
 }
 
-func TestReorderBidiLine_Empty(t *testing.T) {
-	got := reorderBidiLine(nil)
+func TestReorderBidiIndices_Empty(t *testing.T) {
+	got := reorderBidiIndices(nil, nil)
 	if len(got) != 0 {
 		t.Errorf("empty: got %v, want nil/empty", got)
 	}
@@ -104,9 +111,6 @@ func TestNormalizeSoftHyphens(t *testing.T) {
 }
 
 func TestReconstructText_BidiLine(t *testing.T) {
-	// Simulate a line with Hebrew characters in visual (PDF) order.
-	// They should be reversed to logical order in the output.
-	// X spacing: each char at prev.X + 0.5*fontSize to avoid gap detection.
 	elements := []models.TextElement{
 		{Text: "ם", X: 10, Y: 100, FontSize: 12},
 		{Text: "ו", X: 16, Y: 100, FontSize: 12},
@@ -122,8 +126,6 @@ func TestReconstructText_BidiLine(t *testing.T) {
 }
 
 func TestReconstructText_SoftHyphenAcrossLines(t *testing.T) {
-	// "docu-" on line 1, "ment" on line 2, with a soft hyphen.
-	// X spacing: 6pt apart with fontSize 12 → gap = 6-6=0, no space inserted.
 	elements := []models.TextElement{
 		{Text: "d", X: 10, Y: 100, FontSize: 12},
 		{Text: "o", X: 16, Y: 100, FontSize: 12},

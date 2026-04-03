@@ -276,10 +276,15 @@ func decompressFlate(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	const maxDecompressed = 256 << 20 // 256 MB
 	var buf bytes.Buffer
-	_, copyErr := io.Copy(&buf, r) //nolint:gosec // Need full read
+	limited := io.LimitReader(r, maxDecompressed+1)
+	_, copyErr := io.Copy(&buf, limited)
 	if closeErr := r.Close(); closeErr != nil {
 		return nil, fmt.Errorf("failed to close zlib reader: %w", closeErr)
+	}
+	if buf.Len() > maxDecompressed {
+		return nil, fmt.Errorf("decompressed hint stream exceeds %d MB limit", maxDecompressed>>20)
 	}
 	if copyErr != nil && copyErr != io.EOF && copyErr != io.ErrUnexpectedEOF {
 		return nil, copyErr

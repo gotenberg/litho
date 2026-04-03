@@ -52,7 +52,7 @@ func GetCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 
 	catalogDict, err := ResolveDict(ctx, doc, rootObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve catalog: %v", err)
+		return nil, fmt.Errorf("failed to resolve catalog: %w", err)
 	}
 	if catalogDict == nil {
 		return nil, fmt.Errorf("catalog is not a dictionary")
@@ -70,7 +70,7 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 
 	pagesDict, err := ResolveDict(ctx, doc, pagesObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve pages root: %v", err)
+		return nil, fmt.Errorf("failed to resolve pages root: %w", err)
 	}
 	if pagesDict == nil {
 		return nil, fmt.Errorf("pages root is not a dictionary")
@@ -174,7 +174,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 
 	typeStr, err := ResolveName(ctx, doc, typeObj)
 	if err != nil {
-		return fmt.Errorf("failed to resolve node type: %v", err)
+		return fmt.Errorf("failed to resolve node type: %w", err)
 	}
 	if typeStr == "" {
 		return fmt.Errorf("node /Type is not a name")
@@ -189,7 +189,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 
 		kidsArr, err := ResolveArray(ctx, doc, kidsObj)
 		if err != nil {
-			return fmt.Errorf("failed to resolve /Kids array: %v", err)
+			return fmt.Errorf("failed to resolve /Kids array: %w", err)
 		}
 		if kidsArr == nil {
 			return fmt.Errorf("/Kids is not an array")
@@ -202,7 +202,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 			kidDict, err := ResolveDict(ctx, doc, kidObj)
 			if err != nil {
-				return fmt.Errorf("failed to resolve kid: %v", err)
+				return fmt.Errorf("failed to resolve kid: %w", err)
 			}
 			if kidDict == nil {
 				return fmt.Errorf("kid is not a dictionary")

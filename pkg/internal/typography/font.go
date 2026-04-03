@@ -282,267 +282,35 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		// mandate a default). CIDFont /DW defaults to 1000 per spec and is set below.
 	}
 
-	// Try to extract ToUnicode CMap
+	// Try to extract ToUnicode CMap. Cache by stream object number so fonts
+	// sharing the same ToUnicode stream avoid redundant decode+parse.
 	if tuObj, ok := fontDict["ToUnicode"]; ok {
-		stream, err := document.ResolveStream(ctx, doc, tuObj)
-		if err == nil {
-			if stream.Dict != nil {
-				decoded, err := doc.DecodeStream(stream)
-				if err == nil {
-					c, err := cmap.Parse(decoded)
-					if err == nil {
-						font.ToUnicode = c
-					}
+		if ref, isRef := tuObj.(ast.PdfIndirectRef); isRef {
+			if cached, hit := doc.GetCachedCMap(ref.ObjectNum); hit {
+				if c, ok := cached.(*cmap.CMap); ok {
+					font.ToUnicode = c
 				}
+			} else {
+				font.ToUnicode = parseAndCacheToUnicode(ctx, doc, tuObj, ref.ObjectNum)
 			}
+		} else {
+			font.ToUnicode = parseToUnicode(ctx, doc, tuObj)
 		}
 	}
 
-	// Try to extract Encoding
-	if encObj, ok := fontDict["Encoding"]; ok {
-		encResolved, err := document.ResolveObject(ctx, doc, encObj)
-		if err == nil {
-			switch enc := encResolved.(type) {
-			case ast.PdfName:
-				switch enc {
-				case "WinAnsiEncoding":
-					font.Encoding = copyEncoding(encodings.WinAnsiEncoding)
-				case "MacRomanEncoding":
-					font.Encoding = copyEncoding(encodings.MacRomanEncoding)
-				case "StandardEncoding":
-					font.Encoding = copyEncoding(encodings.StandardEncoding)
-				case "MacExpertEncoding":
-					font.Encoding = copyEncoding(encodings.MacExpertEncoding)
-				}
-			case ast.PdfDict:
-				// Dictionary-based Encoding
-				baseMap := encodings.WinAnsiEncoding // Default fallback
-				if baseObj, ok := enc["BaseEncoding"]; ok {
-					baseName, err := document.ResolveName(ctx, doc, baseObj)
-					if err != nil {
-						doc.Logger.Debug("resolving font BaseEncoding name", slog.Any("err", err))
-					}
-					if baseName != "" {
-						switch baseName {
-						case "WinAnsiEncoding":
-							baseMap = encodings.WinAnsiEncoding
-						case "MacRomanEncoding":
-							baseMap = encodings.MacRomanEncoding
-						case "StandardEncoding":
-							baseMap = encodings.StandardEncoding
-						case "MacExpertEncoding":
-							baseMap = encodings.MacExpertEncoding
-						}
-					}
-				}
-				font.Encoding = copyEncoding(baseMap)
-
-				// Process Differences array
-				if diffObj, ok := enc["Differences"]; ok {
-					diffArr, err := document.ResolveArray(ctx, doc, diffObj)
-					if err != nil {
-						doc.Logger.Debug("resolving font Differences array", slog.Any("err", err))
-					}
-					if diffArr != nil {
-						currentIndex := 0
-						for _, item := range diffArr {
-							itemRes, err := document.ResolveObject(ctx, doc, item)
-							if err != nil {
-								doc.Logger.Debug("resolving Differences item", slog.Any("err", err))
-							}
-							switch v := itemRes.(type) {
-							case ast.PdfInt:
-								currentIndex = int(v)
-							case ast.PdfName:
-								if r, ok := resolveGlyphRune(string(v), isDingbatsFont, isSymbolFont); ok {
-									font.Encoding[byte(currentIndex)] = r
-								}
-								currentIndex++
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+	resolveEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
 
 	// Type 3 fonts: extract widths from /CharProcs streams via d0/d1 operators.
 	if subtypeName == "Type3" {
-		// /FontMatrix maps glyph space → text space. Default is [0.001 0 0 0.001 0 0].
-		font.FontMatrix = [6]float64{0.001, 0, 0, 0.001, 0, 0}
-		if fmObj, ok := fontDict["FontMatrix"]; ok {
-			fmArr, err := document.ResolveArray(ctx, doc, fmObj)
-			if err != nil {
-				doc.Logger.Debug("resolving Type3 FontMatrix", slog.Any("err", err))
-			}
-			if len(fmArr) == 6 {
-				for i := range 6 {
-					font.FontMatrix[i] = document.GetFloat(fmArr[i])
-				}
-			}
-		}
-
-		// /CharProcs maps glyph names → streams containing d0/d1 width operators.
-		if cpObj, ok := fontDict["CharProcs"]; ok {
-			cpDict, err := document.ResolveDict(ctx, doc, cpObj)
-			if err != nil {
-				doc.Logger.Debug("resolving Type3 CharProcs", slog.Any("err", err))
-			}
-			if cpDict != nil {
-				font.Type3Widths = make(map[string]float64, len(cpDict))
-				for name, streamObj := range cpDict {
-					stream, err := document.ResolveStream(ctx, doc, streamObj)
-					if err != nil {
-						continue
-					}
-					if stream.Dict == nil {
-						continue
-					}
-					w, err := extractType3GlyphWidth(doc, stream)
-					if err != nil {
-						continue
-					}
-					font.Type3Widths[string(name)] = w
-				}
-			}
-		}
-
-		// Also extract /FirstChar, /LastChar, /Widths as fallback.
-		if fcObj, ok := fontDict["FirstChar"]; ok {
-			font.FirstChar = int(document.GetFloat(fcObj))
-		}
-		if lcObj, ok := fontDict["LastChar"]; ok {
-			font.LastChar = int(document.GetFloat(lcObj))
-		}
-		if wObj, ok := fontDict["Widths"]; ok {
-			wArr, err := document.ResolveArray(ctx, doc, wObj)
-			if err != nil {
-				doc.Logger.Debug("resolving Type3 Widths array", slog.Any("err", err))
-			}
-			if wArr != nil {
-				font.Widths = make([]float64, len(wArr))
-				for i, item := range wArr {
-					font.Widths[i] = document.GetFloat(item)
-				}
-			}
-		}
-
+		resolveType3Font(ctx, doc, fontDict, font)
 		return font, nil
 	}
 
-	// Extract glyph width metrics.
+	// Extract glyph width metrics (subtype-specific).
 	if subtypeName == "Type0" {
-		// Default vertical metrics per PDF spec Table 117.
-		font.DW2 = [2]float64{880, -1000}
-
-		// CIDFont metrics live in the first element of /DescendantFonts.
-		if dfObj, ok := fontDict["DescendantFonts"]; ok {
-			dfArr, err := document.ResolveArray(ctx, doc, dfObj)
-			if err != nil {
-				doc.Logger.Debug("resolving DescendantFonts array", slog.Any("err", err))
-			}
-			if len(dfArr) > 0 {
-				cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
-				if err != nil {
-					doc.Logger.Debug("resolving CIDFont dict", slog.Any("err", err))
-				}
-				if cidDict != nil {
-					// /DW is the default glyph width for CIDFonts (default 1000 per spec).
-					font.MissingWidth = 1000.0
-					if dwObj, ok := cidDict["DW"]; ok {
-						font.MissingWidth = document.GetFloat(dwObj)
-					}
-					// /W encodes per-CID or range widths.
-					if wObj, ok := cidDict["W"]; ok {
-						wArr, err := document.ResolveArray(ctx, doc, wObj)
-						if err != nil {
-							doc.Logger.Debug("resolving CIDFont /W array", slog.Any("err", err))
-						}
-						if wArr != nil {
-							font.CIDWidths = parseCIDWidths(wArr)
-						}
-					}
-					// /WMode: 0 = horizontal, 1 = vertical.
-					if wmObj, ok := cidDict["WMode"]; ok {
-						font.WMode = int(document.GetFloat(wmObj))
-					}
-					// /DW2: default vertical displacement [vY w1].
-					if dw2Obj, ok := cidDict["DW2"]; ok {
-						dw2Arr, err := document.ResolveArray(ctx, doc, dw2Obj)
-						if err != nil {
-							doc.Logger.Debug("resolving CIDFont /DW2 array", slog.Any("err", err))
-						}
-						if len(dw2Arr) == 2 {
-							font.DW2 = [2]float64{document.GetFloat(dw2Arr[0]), document.GetFloat(dw2Arr[1])}
-						}
-					}
-					// /W2: per-CID vertical metrics [w1Y vX vY].
-					if w2Obj, ok := cidDict["W2"]; ok {
-						w2Arr, err := document.ResolveArray(ctx, doc, w2Obj)
-						if err != nil {
-							doc.Logger.Debug("resolving CIDFont /W2 array", slog.Any("err", err))
-						}
-						if w2Arr != nil {
-							font.CIDVerticalMetrics = parseCIDVerticalWidths(w2Arr)
-						}
-					}
-				}
-			}
-		}
-
-		// Also check /WMode on the font dictionary itself (some producers put it here).
-		if font.WMode == 0 {
-			if wmObj, ok := fontDict["WMode"]; ok {
-				font.WMode = int(document.GetFloat(wmObj))
-			}
-		}
+		resolveType0Metrics(ctx, doc, fontDict, font)
 	} else {
-		// Simple fonts (Type1, TrueType, Type3, MMType1): /FirstChar, /LastChar, /Widths.
-		if fcObj, ok := fontDict["FirstChar"]; ok {
-			font.FirstChar = int(document.GetFloat(fcObj))
-		}
-		if lcObj, ok := fontDict["LastChar"]; ok {
-			font.LastChar = int(document.GetFloat(lcObj))
-		}
-		if wObj, ok := fontDict["Widths"]; ok {
-			wArr, err := document.ResolveArray(ctx, doc, wObj)
-			if err != nil {
-				doc.Logger.Debug("resolving simple font Widths array", slog.Any("err", err))
-			}
-			if wArr != nil {
-				font.Widths = make([]float64, len(wArr))
-				for i, item := range wArr {
-					font.Widths[i] = document.GetFloat(item)
-				}
-			}
-		}
-		// /MissingWidth from /FontDescriptor overrides the 1000 default.
-		if fdObj, ok := fontDict["FontDescriptor"]; ok {
-			fdDict, err := document.ResolveDict(ctx, doc, fdObj)
-			if err != nil {
-				doc.Logger.Debug("resolving FontDescriptor dict", slog.Any("err", err))
-			}
-			if fdDict != nil {
-				if mwObj, ok := fdDict["MissingWidth"]; ok {
-					font.MissingWidth = document.GetFloat(mwObj)
-				}
-			}
-		}
-
-		// Standard 14 fallback: if /Widths is missing and the /BaseFont
-		// matches one of the 14 standard fonts, inject the hardcoded
-		// Adobe Font Metrics so spatial text reconstruction succeeds.
-		if len(font.Widths) == 0 {
-			if bfObj, ok := fontDict["BaseFont"]; ok {
-				bfName, err := document.ResolveName(ctx, doc, bfObj)
-				if err != nil {
-					doc.Logger.Debug("resolving BaseFont for Standard 14 fallback", slog.Any("err", err))
-				}
-				if bfName != "" {
-					injectStandard14Widths(font, string(bfName))
-				}
-			}
-		}
+		resolveSimpleFontMetrics(ctx, doc, fontDict, font)
 	}
 
 	// Type1 font program encoding fallback: when the PDF-level /Encoding is
@@ -603,6 +371,293 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	)
 
 	return font, nil
+}
+
+// parseAndCacheToUnicode parses a ToUnicode CMap stream and caches the result
+// by object number for reuse by other fonts referencing the same stream.
+func parseAndCacheToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfObject, objNum int) *cmap.CMap {
+	c := parseToUnicode(ctx, doc, tuObj)
+	if c != nil {
+		doc.CacheCMap(objNum, c)
+	}
+	return c
+}
+
+// parseToUnicode resolves and parses a ToUnicode CMap stream.
+func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfObject) *cmap.CMap {
+	stream, err := document.ResolveStream(ctx, doc, tuObj)
+	if err != nil || stream.Dict == nil {
+		return nil
+	}
+	decoded, err := doc.DecodeStream(stream)
+	if err != nil {
+		return nil
+	}
+	c, err := cmap.Parse(decoded)
+	if err != nil {
+		return nil
+	}
+	return c
+}
+
+// resolveEncoding resolves the /Encoding entry from the font dictionary into
+// the font's encoding map. Handles both named encodings (WinAnsiEncoding, etc.)
+// and dictionary-based encodings with /BaseEncoding and /Differences.
+func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return
+	}
+	encResolved, err := document.ResolveObject(ctx, doc, encObj)
+	if err != nil {
+		return
+	}
+	switch enc := encResolved.(type) {
+	case ast.PdfName:
+		switch enc {
+		case "WinAnsiEncoding":
+			font.Encoding = copyEncoding(encodings.WinAnsiEncoding)
+		case "MacRomanEncoding":
+			font.Encoding = copyEncoding(encodings.MacRomanEncoding)
+		case "StandardEncoding":
+			font.Encoding = copyEncoding(encodings.StandardEncoding)
+		case "MacExpertEncoding":
+			font.Encoding = copyEncoding(encodings.MacExpertEncoding)
+		}
+	case ast.PdfDict:
+		// Dictionary-based Encoding
+		baseMap := encodings.WinAnsiEncoding // Default fallback
+		if baseObj, ok := enc["BaseEncoding"]; ok {
+			baseName, err := document.ResolveName(ctx, doc, baseObj)
+			if err != nil {
+				doc.Logger.Debug("resolving font BaseEncoding name", slog.Any("err", err))
+			}
+			if baseName != "" {
+				switch baseName {
+				case "WinAnsiEncoding":
+					baseMap = encodings.WinAnsiEncoding
+				case "MacRomanEncoding":
+					baseMap = encodings.MacRomanEncoding
+				case "StandardEncoding":
+					baseMap = encodings.StandardEncoding
+				case "MacExpertEncoding":
+					baseMap = encodings.MacExpertEncoding
+				}
+			}
+		}
+		font.Encoding = copyEncoding(baseMap)
+
+		// Process Differences array
+		if diffObj, ok := enc["Differences"]; ok {
+			diffArr, err := document.ResolveArray(ctx, doc, diffObj)
+			if err != nil {
+				doc.Logger.Debug("resolving font Differences array", slog.Any("err", err))
+			}
+			if diffArr != nil {
+				currentIndex := 0
+				for _, item := range diffArr {
+					itemRes, err := document.ResolveObject(ctx, doc, item)
+					if err != nil {
+						doc.Logger.Debug("resolving Differences item", slog.Any("err", err))
+					}
+					switch v := itemRes.(type) {
+					case ast.PdfInt:
+						currentIndex = int(v)
+					case ast.PdfName:
+						if r, ok := resolveGlyphRune(string(v), isDingbats, isSymbol); ok {
+							font.Encoding[byte(currentIndex)] = r
+						}
+						currentIndex++
+					}
+				}
+			}
+		}
+	}
+}
+
+// resolveType3Font extracts Type 3 font metrics: /FontMatrix, /CharProcs
+// glyph widths from d0/d1 operators, and /FirstChar, /LastChar, /Widths
+// as a fallback.
+func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	// /FontMatrix maps glyph space → text space. Default is [0.001 0 0 0.001 0 0].
+	font.FontMatrix = [6]float64{0.001, 0, 0, 0.001, 0, 0}
+	if fmObj, ok := fontDict["FontMatrix"]; ok {
+		fmArr, err := document.ResolveArray(ctx, doc, fmObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Type3 FontMatrix", slog.Any("err", err))
+		}
+		if len(fmArr) == 6 {
+			for i := range 6 {
+				font.FontMatrix[i] = document.GetFloat(fmArr[i])
+			}
+		}
+	}
+
+	// /CharProcs maps glyph names → streams containing d0/d1 width operators.
+	if cpObj, ok := fontDict["CharProcs"]; ok {
+		cpDict, err := document.ResolveDict(ctx, doc, cpObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Type3 CharProcs", slog.Any("err", err))
+		}
+		if cpDict != nil {
+			font.Type3Widths = make(map[string]float64, len(cpDict))
+			for name, streamObj := range cpDict {
+				stream, err := document.ResolveStream(ctx, doc, streamObj)
+				if err != nil {
+					continue
+				}
+				if stream.Dict == nil {
+					continue
+				}
+				w, err := extractType3GlyphWidth(doc, stream)
+				if err != nil {
+					continue
+				}
+				font.Type3Widths[string(name)] = w
+			}
+		}
+	}
+
+	// Also extract /FirstChar, /LastChar, /Widths as fallback.
+	if fcObj, ok := fontDict["FirstChar"]; ok {
+		font.FirstChar = int(document.GetFloat(fcObj))
+	}
+	if lcObj, ok := fontDict["LastChar"]; ok {
+		font.LastChar = int(document.GetFloat(lcObj))
+	}
+	if wObj, ok := fontDict["Widths"]; ok {
+		wArr, err := document.ResolveArray(ctx, doc, wObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Type3 Widths array", slog.Any("err", err))
+		}
+		if wArr != nil {
+			font.Widths = make([]float64, len(wArr))
+			for i, item := range wArr {
+				font.Widths[i] = document.GetFloat(item)
+			}
+		}
+	}
+}
+
+// resolveType0Metrics extracts CIDFont metrics from the /DescendantFonts
+// array: /DW (default width), /W (per-CID widths), /WMode, /DW2
+// (default vertical metrics), and /W2 (per-CID vertical metrics).
+func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	// Default vertical metrics per PDF spec Table 117.
+	font.DW2 = [2]float64{880, -1000}
+
+	// CIDFont metrics live in the first element of /DescendantFonts.
+	if dfObj, ok := fontDict["DescendantFonts"]; ok {
+		dfArr, err := document.ResolveArray(ctx, doc, dfObj)
+		if err != nil {
+			doc.Logger.Debug("resolving DescendantFonts array", slog.Any("err", err))
+		}
+		if len(dfArr) > 0 {
+			cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+			if err != nil {
+				doc.Logger.Debug("resolving CIDFont dict", slog.Any("err", err))
+			}
+			if cidDict != nil {
+				// /DW is the default glyph width for CIDFonts (default 1000 per spec).
+				font.MissingWidth = 1000.0
+				if dwObj, ok := cidDict["DW"]; ok {
+					font.MissingWidth = document.GetFloat(dwObj)
+				}
+				// /W encodes per-CID or range widths.
+				if wObj, ok := cidDict["W"]; ok {
+					wArr, err := document.ResolveArray(ctx, doc, wObj)
+					if err != nil {
+						doc.Logger.Debug("resolving CIDFont /W array", slog.Any("err", err))
+					}
+					if wArr != nil {
+						font.CIDWidths = parseCIDWidths(wArr)
+					}
+				}
+				// /WMode: 0 = horizontal, 1 = vertical.
+				if wmObj, ok := cidDict["WMode"]; ok {
+					font.WMode = int(document.GetFloat(wmObj))
+				}
+				// /DW2: default vertical displacement [vY w1].
+				if dw2Obj, ok := cidDict["DW2"]; ok {
+					dw2Arr, err := document.ResolveArray(ctx, doc, dw2Obj)
+					if err != nil {
+						doc.Logger.Debug("resolving CIDFont /DW2 array", slog.Any("err", err))
+					}
+					if len(dw2Arr) == 2 {
+						font.DW2 = [2]float64{document.GetFloat(dw2Arr[0]), document.GetFloat(dw2Arr[1])}
+					}
+				}
+				// /W2: per-CID vertical metrics [w1Y vX vY].
+				if w2Obj, ok := cidDict["W2"]; ok {
+					w2Arr, err := document.ResolveArray(ctx, doc, w2Obj)
+					if err != nil {
+						doc.Logger.Debug("resolving CIDFont /W2 array", slog.Any("err", err))
+					}
+					if w2Arr != nil {
+						font.CIDVerticalMetrics = parseCIDVerticalWidths(w2Arr)
+					}
+				}
+			}
+		}
+	}
+
+	// Also check /WMode on the font dictionary itself (some producers put it here).
+	if font.WMode == 0 {
+		if wmObj, ok := fontDict["WMode"]; ok {
+			font.WMode = int(document.GetFloat(wmObj))
+		}
+	}
+}
+
+// resolveSimpleFontMetrics extracts metrics for simple fonts (Type1, TrueType,
+// MMType1): /FirstChar, /LastChar, /Widths array, /MissingWidth from the
+// /FontDescriptor, and Standard 14 width fallback.
+func resolveSimpleFontMetrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	if fcObj, ok := fontDict["FirstChar"]; ok {
+		font.FirstChar = int(document.GetFloat(fcObj))
+	}
+	if lcObj, ok := fontDict["LastChar"]; ok {
+		font.LastChar = int(document.GetFloat(lcObj))
+	}
+	if wObj, ok := fontDict["Widths"]; ok {
+		wArr, err := document.ResolveArray(ctx, doc, wObj)
+		if err != nil {
+			doc.Logger.Debug("resolving simple font Widths array", slog.Any("err", err))
+		}
+		if wArr != nil {
+			font.Widths = make([]float64, len(wArr))
+			for i, item := range wArr {
+				font.Widths[i] = document.GetFloat(item)
+			}
+		}
+	}
+	// /MissingWidth from /FontDescriptor overrides the 1000 default.
+	if fdObj, ok := fontDict["FontDescriptor"]; ok {
+		fdDict, err := document.ResolveDict(ctx, doc, fdObj)
+		if err != nil {
+			doc.Logger.Debug("resolving FontDescriptor dict", slog.Any("err", err))
+		}
+		if fdDict != nil {
+			if mwObj, ok := fdDict["MissingWidth"]; ok {
+				font.MissingWidth = document.GetFloat(mwObj)
+			}
+		}
+	}
+
+	// Standard 14 fallback: if /Widths is missing and the /BaseFont
+	// matches one of the 14 standard fonts, inject the hardcoded
+	// Adobe Font Metrics so spatial text reconstruction succeeds.
+	if len(font.Widths) == 0 {
+		if bfObj, ok := fontDict["BaseFont"]; ok {
+			bfName, err := document.ResolveName(ctx, doc, bfObj)
+			if err != nil {
+				doc.Logger.Debug("resolving BaseFont for Standard 14 fallback", slog.Any("err", err))
+			}
+			if bfName != "" {
+				injectStandard14Widths(font, string(bfName))
+			}
+		}
+	}
 }
 
 // extractFontDescriptorMetrics populates /FontBBox and TrueType hmtx widths
@@ -1090,7 +1145,7 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	if err != nil {
 		doc.Logger.Debug("resolving CIDToGIDMap name", slog.Any("err", err))
 	}
-	if mapName == "" || mapName != "Identity" {
+	if mapName != "Identity" {
 		return
 	}
 

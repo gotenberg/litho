@@ -130,7 +130,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 					if err != nil {
 						doc.Logger.Debug("resolving OCG type name", slog.Any("err", err))
 					}
-					if subtypeName != "" && subtypeName == "OCG" {
+					if subtypeName == "OCG" {
 						// Determine visibility using Off -> On -> BaseState priority.
 						visible := true
 						if ref, ok := v.(ast.PdfIndirectRef); ok {
@@ -163,7 +163,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		}
 		// Errors from Execute are non-fatal: unknown/unsupported operators return errors
 		// but must not abort extraction of the remaining content stream.
-		_ = machine.Execute([]content.Operation{op}) //nolint:errcheck
+		_ = machine.ExecuteOne(op) //nolint:errcheck
 
 		state := machine.Current()
 
@@ -507,18 +507,7 @@ func boxRectFromArray(arr ast.PdfArray) [4]float64 {
 	if len(arr) < 4 {
 		return [4]float64{}
 	}
-	return [4]float64{pdfFloat(arr[0]), pdfFloat(arr[1]), pdfFloat(arr[2]), pdfFloat(arr[3])}
-}
-
-// pdfFloat extracts a float64 from a PdfInt or PdfReal.
-func pdfFloat(obj ast.PdfObject) float64 {
-	switch v := obj.(type) {
-	case ast.PdfReal:
-		return float64(v)
-	case ast.PdfInt:
-		return float64(v)
-	}
-	return 0
+	return [4]float64{document.GetFloat(arr[0]), document.GetFloat(arr[1]), document.GetFloat(arr[2]), document.GetFloat(arr[3])}
 }
 
 // ExtractText extracts the text from a page's content operations and reconstructs it.

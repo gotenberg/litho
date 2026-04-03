@@ -66,24 +66,27 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 			sb.WriteString("\n")
 		}
 
-		// Bidi reorder within the line.
-		chars := make([]string, len(ln.elems))
+		// Bidi reorder: reorder element indices so spacing is computed from
+		// the correct spatial positions in logical reading order.
+		texts := make([]string, len(ln.elems))
+		indices := make([]int, len(ln.elems))
 		for i, el := range ln.elems {
-			chars[i] = el.Text
+			texts[i] = el.Text
+			indices[i] = i
 		}
-		reordered := reorderBidiLine(chars)
+		indices = reorderBidiIndices(texts, indices)
 
-		for i, ch := range reordered {
+		for i, idx := range indices {
 			if i > 0 {
-				prev := ln.elems[i-1]
-				curr := ln.elems[i]
+				prevIdx := indices[i-1]
+				prev := ln.elems[prevIdx]
+				curr := ln.elems[idx]
 				switch {
 				case curr.Vertical || isOrthogonalRotation(curr.Angle):
 					if needsSpace(curr.Y-prev.Y, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
 				case isRotated(curr.Angle):
-					// For rotated text, measure distance along the text direction.
 					if needsSpace(alongDist(prev, curr), prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
@@ -93,7 +96,7 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 					}
 				}
 			}
-			sb.WriteString(ch)
+			sb.WriteString(ln.elems[idx].Text)
 		}
 	}
 
@@ -216,11 +219,13 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 
 	var sb strings.Builder
 	for lineIdx, line := range lines {
-		chars := make([]string, len(line.elements))
+		texts := make([]string, len(line.elements))
+		indices := make([]int, len(line.elements))
 		for i, el := range line.elements {
-			chars[i] = el.Text
+			texts[i] = el.Text
+			indices[i] = i
 		}
-		reordered := reorderBidiLine(chars)
+		indices = reorderBidiIndices(texts, indices)
 
 		if lineIdx > 0 {
 			prevLine := lines[lineIdx-1]
@@ -233,10 +238,11 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 			}
 		}
 
-		for i, ch := range reordered {
+		for i, idx := range indices {
 			if i > 0 {
-				prev := line.elements[i-1]
-				curr := line.elements[i]
+				prevIdx := indices[i-1]
+				prev := line.elements[prevIdx]
+				curr := line.elements[idx]
 				if isVerticalPage {
 					if needsSpace(prev.Y-curr.Y, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
@@ -247,7 +253,7 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 					}
 				}
 			}
-			sb.WriteString(ch)
+			sb.WriteString(line.elements[idx].Text)
 		}
 	}
 

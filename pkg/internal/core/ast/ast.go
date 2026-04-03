@@ -2,6 +2,7 @@ package ast
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -105,17 +106,25 @@ type PdfDict map[PdfName]PdfObject
 // IsPdfObject marks PdfDict as a PDF object.
 func (PdfDict) IsPdfObject() {}
 
-// String returns the string representation of PdfDict.
+// String returns the string representation of PdfDict with sorted keys
+// for deterministic output.
 func (d PdfDict) String() string {
+	keys := make([]string, 0, len(d))
+	for k := range d {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+
 	parts := make([]string, 0, len(d))
-	for k, v := range d {
+	for _, k := range keys {
+		v := d[PdfName(k)]
 		var valStr string
 		if v == nil {
 			valStr = "null"
 		} else {
 			valStr = v.String()
 		}
-		parts = append(parts, fmt.Sprintf("%s %s", k.String(), valStr))
+		parts = append(parts, fmt.Sprintf("/%s %s", k, valStr))
 	}
 	return fmt.Sprintf("<<%s>>", strings.Join(parts, " "))
 }

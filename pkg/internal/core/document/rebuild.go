@@ -87,7 +87,7 @@ func (d *Document) rebuildXRef() error {
 	// Find the last trailer dictionary in the file.
 	trailer, err := d.findLastTrailer()
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDamagedXRef, err)
+		return fmt.Errorf("%w: %w", ErrDamagedXRef, err)
 	}
 
 	d.Index.Entries = entries

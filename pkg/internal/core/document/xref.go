@@ -53,7 +53,7 @@ func findStartXRef(r io.ReaderAt, size int64) (int64, error) {
 func (d *Document) parseXRefChain() error {
 	currentOffset, err := findStartXRef(d.r, d.size)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDamagedXRef, err)
+		return fmt.Errorf("%w: %w", ErrDamagedXRef, err)
 	}
 
 	for currentOffset != 0 {

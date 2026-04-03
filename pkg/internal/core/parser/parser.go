@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ type DecryptFunc func([]byte) ([]byte, error)
 // which guarantees bufPos > 0 and UnreadByte cannot fail.
 type Parser struct {
 	lex       *lexer.Lexer
+	ctx       context.Context
 	tokens    []lexer.Token
 	err       error
 	decryptFn DecryptFunc
@@ -37,6 +39,15 @@ type Parser struct {
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
 func NewParser(lex *lexer.Lexer) *Parser {
 	return &Parser{lex: lex}
+}
+
+// WithContext attaches a context for cancellation checks during parsing.
+// The parser checks ctx.Err() at natural checkpoints (per dict key, per
+// array element, per stream scan iteration) without adding overhead to
+// the per-token lexer loop.
+func (p *Parser) WithContext(ctx context.Context) *Parser {
+	p.ctx = ctx
+	return p
 }
 
 func (p *Parser) WithDecryption(fn DecryptFunc) *Parser {
@@ -56,6 +67,15 @@ func (p *Parser) recordViolation(msg string) {
 	if p.checkFormat {
 		p.FormatViolations = append(p.FormatViolations, fmt.Errorf("compliance: %s", msg))
 	}
+}
+
+// checkCtx returns the context error if cancellation or deadline has fired.
+// Returns nil when no context is set or the context is still active.
+func (p *Parser) checkCtx() error {
+	if p.ctx != nil {
+		return p.ctx.Err()
+	}
+	return nil
 }
 
 func (p *Parser) Peek(n int) (lexer.Token, error) {
@@ -221,6 +241,9 @@ func (p *Parser) parseIndirectObject() (ast.PdfObject, error) {
 func (p *Parser) parseDict() (ast.PdfObject, error) {
 	dict := make(ast.PdfDict)
 	for {
+		if err := p.checkCtx(); err != nil {
+			return nil, fmt.Errorf("parsing dict: %w", err)
+		}
 		t, err := p.Peek(0)
 		if err != nil && t.Type == lexer.TokenError {
 			return nil, err
@@ -346,6 +369,10 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 			endMarker := []byte("endstream")
 			matchLen := 0
 			dataLen = 0
+			// Check context every 64KB of scanned data to avoid hanging on
+			// malformed streams without adding per-byte overhead.
+			const ctxCheckInterval = 64 * 1024
+			sinceLastCheck := 0
 			for {
 				c, err := reader.ReadByte()
 				if err != nil {
@@ -355,6 +382,13 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 						break
 					}
 					return nil, err
+				}
+				sinceLastCheck++
+				if sinceLastCheck >= ctxCheckInterval {
+					sinceLastCheck = 0
+					if err := p.checkCtx(); err != nil {
+						return nil, fmt.Errorf("scanning for endstream: %w", err)
+					}
 				}
 				if c == endMarker[matchLen] {
 					matchLen++
@@ -453,6 +487,9 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 func (p *Parser) parseArray() (ast.PdfObject, error) {
 	var arr ast.PdfArray
 	for {
+		if err := p.checkCtx(); err != nil {
+			return nil, fmt.Errorf("parsing array: %w", err)
+		}
 		t, err := p.Peek(0)
 		if err != nil && t.Type == lexer.TokenError {
 			return nil, err
@@ -578,7 +615,7 @@ func (p *Parser) SkipInlineImage() error {
 	// followed by "EI" followed by whitespace, a delimiter, or EOF.
 	// Raw bytes 'E' and 'I' can occur inside image data, so we must
 	// validate the trailing context to avoid false matches.
-	return scanToEI(reader)
+	return scanToEI(reader, p.ctx)
 }
 
 // ParseInlineImageDict reads an inline image's dictionary key/value pairs
@@ -654,7 +691,7 @@ func (p *Parser) ParseInlineImageDict() (ast.PdfDict, error) {
 	}
 
 	// Phase 3: Scan forward for the EI terminator.
-	if err := scanToEI(reader); err != nil {
+	if err := scanToEI(reader, p.ctx); err != nil {
 		return nil, err
 	}
 
@@ -664,12 +701,17 @@ func (p *Parser) ParseInlineImageDict() (ast.PdfDict, error) {
 // scanToEI scans forward through raw binary image data looking for the
 // EI end-of-inline-image marker. Uses a state machine: the marker must be
 // preceded by whitespace and followed by whitespace, a delimiter, or EOF.
-func scanToEI(reader io.Reader) error {
+// The optional ctx enables cancellation during long scans of malformed data.
+func scanToEI(reader io.Reader, ctx context.Context) error {
 	type readByteFunc interface {
 		ReadByte() (byte, error)
 		UnreadByte() error
 	}
 	r := reader.(readByteFunc)
+
+	// Check context every 64KB to avoid hanging on malformed inline images.
+	const ctxCheckInterval = 64 * 1024
+	sinceLastCheck := 0
 
 	// State machine: 0=scanning, 1=saw whitespace, 2=saw ws+E.
 	state := 0
@@ -680,6 +722,16 @@ func scanToEI(reader io.Reader) error {
 				return fmt.Errorf("unexpected EOF scanning for EI in inline image")
 			}
 			return err
+		}
+
+		sinceLastCheck++
+		if sinceLastCheck >= ctxCheckInterval {
+			sinceLastCheck = 0
+			if ctx != nil {
+				if err := ctx.Err(); err != nil {
+					return fmt.Errorf("scanning for EI: %w", err)
+				}
+			}
 		}
 
 		switch state {

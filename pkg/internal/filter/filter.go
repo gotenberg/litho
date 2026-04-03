@@ -16,6 +16,25 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+// maxDecompressedSize caps the output of any single stream decompression to
+// 256 MB. Prevents decompression bomb attacks where a small compressed stream
+// expands into gigabytes.
+const maxDecompressedSize = 256 << 20 // 256 MB
+
+// ErrDecompressionBomb is returned when a stream exceeds maxDecompressedSize.
+var ErrDecompressionBomb = fmt.Errorf("decompressed stream exceeds %d MB limit", maxDecompressedSize>>20)
+
+// limitedCopy copies from r to buf up to maxDecompressedSize bytes.
+// Returns ErrDecompressionBomb if the limit is exceeded.
+func limitedCopy(buf *bytes.Buffer, r io.Reader) error {
+	limited := io.LimitReader(r, maxDecompressedSize+1)
+	_, err := io.Copy(buf, limited)
+	if buf.Len() > maxDecompressedSize {
+		return ErrDecompressionBomb
+	}
+	return err
+}
+
 // bufPool reuses bytes.Buffer instances across stream decompression calls
 // to reduce GC pressure from repeated allocations.
 var bufPool = sync.Pool{
@@ -157,7 +176,7 @@ func decodeFlateDecode(data []byte) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	_, copyErr := io.Copy(buf, r) //nolint:gosec // Need full read
+	copyErr := limitedCopy(buf, r)
 	closeErr := r.Close()
 
 	// Tolerate read errors that leave valid partial data. Damaged PDFs
@@ -194,7 +213,7 @@ func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	_, err := io.Copy(buf, r) //nolint:gosec // Need full read
+	err := limitedCopy(buf, r)
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}
@@ -307,7 +326,7 @@ func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	_, err := io.Copy(buf, r) //nolint:gosec // Need full read
+	err := limitedCopy(buf, r)
 	if err != nil {
 		return nil, fmt.Errorf("ccitt decode: %w", err)
 	}
@@ -321,7 +340,7 @@ func decodeBrotli(data []byte) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	_, err := io.Copy(buf, r) //nolint:gosec // Need full read
+	err := limitedCopy(buf, r)
 	if err != nil {
 		return nil, fmt.Errorf("brotli decode: %w", err)
 	}

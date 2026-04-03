@@ -285,9 +285,14 @@ func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, 
 		return nil, 0, fmt.Errorf("%w: expected trailer dictionary, got %T", ErrMalformedXRef, trailerObj)
 	}
 
-	var prev int64 = 0
+	var prev int64
 	if prevObj, ok := trailerDict["Prev"]; ok {
-		prev = int64(prevObj.(ast.PdfInt))
+		switch v := prevObj.(type) {
+		case ast.PdfInt:
+			prev = int64(v)
+		case ast.PdfReal:
+			prev = int64(v)
+		}
 	}
 
 	return trailerDict, prev, nil

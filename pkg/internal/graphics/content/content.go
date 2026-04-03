@@ -156,7 +156,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 	)
 
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(allData), int64(len(allData)), 0))
-	p := parser.NewParser(lex)
+	p := parser.NewParser(lex).WithContext(ctx)
 	ops, err := parseOperations(p)
 	if err != nil {
 		return nil, err

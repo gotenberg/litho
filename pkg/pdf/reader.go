@@ -431,18 +431,16 @@ func (r *Reader) IsPortfolio(ctx context.Context) (bool, error) {
 	return semantics.IsPortfolio(ctx, r.doc)
 }
 
-// ExtractPortfolioItems returns every file embedded in a PDF Portfolio.
-// Each item includes the original filename, MIME type, and a lazy Open
+// GetEmbeddedFiles returns all files from the document's /EmbeddedFiles name
+// tree. Each item includes the original filename, MIME type, and a lazy Open
 // accessor. Callers can recursively pass embedded PDFs back into pdf.Open.
-func (r *Reader) ExtractPortfolioItems(ctx context.Context) ([]models.EmbeddedFile, error) {
+func (r *Reader) GetEmbeddedFiles(ctx context.Context) ([]models.EmbeddedFile, error) {
 	return semantics.ExtractPortfolioItems(ctx, r.doc)
 }
 
-// GetEmbeddedFiles returns all files from the document's /EmbeddedFiles
-// name tree. Unlike ExtractPortfolioItems, this works on any PDF with
-// embedded files, not just Portfolios.
-func (r *Reader) GetEmbeddedFiles(ctx context.Context) ([]models.EmbeddedFile, error) {
-	return semantics.ExtractPortfolioItems(ctx, r.doc)
+// Deprecated: ExtractPortfolioItems is an alias for [GetEmbeddedFiles].
+func (r *Reader) ExtractPortfolioItems(ctx context.Context) ([]models.EmbeddedFile, error) {
+	return r.GetEmbeddedFiles(ctx)
 }
 
 // ExtractAnnotations extracts annotations from the given 1-based page number.
@@ -717,10 +715,10 @@ func mediaBoxDimensions(mb ast.PdfArray) (float64, float64) {
 	if len(mb) < 4 {
 		return 0, 0
 	}
-	llx := astFloat(mb[0])
-	lly := astFloat(mb[1])
-	urx := astFloat(mb[2])
-	ury := astFloat(mb[3])
+	llx := document.GetFloat(mb[0])
+	lly := document.GetFloat(mb[1])
+	urx := document.GetFloat(mb[2])
+	ury := document.GetFloat(mb[3])
 
 	w := urx - llx
 	h := ury - lly
@@ -738,18 +736,7 @@ func boxToRect(arr ast.PdfArray) [4]float64 {
 	if len(arr) < 4 {
 		return [4]float64{}
 	}
-	return [4]float64{astFloat(arr[0]), astFloat(arr[1]), astFloat(arr[2]), astFloat(arr[3])}
-}
-
-// astFloat extracts a float64 from a PdfObject (PdfInt or PdfReal).
-func astFloat(obj ast.PdfObject) float64 {
-	switch v := obj.(type) {
-	case ast.PdfReal:
-		return float64(v)
-	case ast.PdfInt:
-		return float64(v)
-	}
-	return 0
+	return [4]float64{document.GetFloat(arr[0]), document.GetFloat(arr[1]), document.GetFloat(arr[2]), document.GetFloat(arr[3])}
 }
 
 // runOCR extracts the largest image from the page, decodes it, and passes it

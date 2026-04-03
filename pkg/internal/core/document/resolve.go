@@ -215,7 +215,7 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
 	obj, err := d.resolveWith(ctx, objStmRef, visited)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve object stream %d: %v", objStmNum, err)
+		return nil, fmt.Errorf("failed to resolve object stream %d: %w", objStmNum, err)
 	}
 
 	stream, ok := obj.(ast.PdfStream)
@@ -226,7 +226,7 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 	// Decompress the stream using the filter package
 	decodedData, err := filter.DecodeStream(stream)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode object stream %d: %v", objStmNum, err)
+		return nil, fmt.Errorf("failed to decode object stream %d: %w", objStmNum, err)
 	}
 
 	// 2. Extract /N and /First
@@ -286,7 +286,7 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 
 	// 5. Seek reader to absoluteOffset and parse
 	lex = lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), absoluteOffset))
-	p := parser.NewParser(lex)
+	p := parser.NewParser(lex).WithContext(ctx)
 
 	return p.ParseObject()
 }
@@ -352,7 +352,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		}
 
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
-		p := parser.NewParser(lex)
+		p := parser.NewParser(lex).WithContext(ctx)
 		if d.Crypto != nil {
 			p.WithDecryption(d.Crypto.GetDecryptFunc(ref.ObjectNum, ref.GenNum))
 		}
@@ -362,7 +362,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 
 		obj, err = p.ParseObject()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse object %d at offset %d: %v", ref.ObjectNum, entry.Offset, err)
+			return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
 		}
 
 		// Collect parser-level format violations.
@@ -382,7 +382,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	case xref.XRefTypeCompressed:
 		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, visited)
 		if err != nil {
-			return nil, fmt.Errorf("failed to extract object %d from stream %d: %v", ref.ObjectNum, entry.ObjStmNum, err)
+			return nil, fmt.Errorf("failed to extract object %d from stream %d: %w", ref.ObjectNum, entry.ObjStmNum, err)
 		}
 
 		d.Logger.Debug("resolve object from object stream",
@@ -402,6 +402,12 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	if existing, ok := d.objectCache[ref.ObjectNum]; ok {
 		d.mu.Unlock()
 		return existing, nil
+	}
+	// Evict all cached objects when the cache exceeds the size limit.
+	// This prevents unbounded memory growth on very large PDFs while
+	// maintaining cache benefits for typical access patterns.
+	if d.maxCacheSize > 0 && len(d.objectCache) >= d.maxCacheSize {
+		d.objectCache = make(map[int]ast.PdfObject)
 	}
 	d.objectCache[ref.ObjectNum] = obj
 	d.mu.Unlock()

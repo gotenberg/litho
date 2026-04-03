@@ -1,11 +1,18 @@
 package lexer
 
 import (
+	"fmt"
 	"io"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 )
+
+// maxStringAccum is the maximum number of bytes the lexer accumulates for a
+// single string literal or hex string token. Malformed PDFs can contain
+// unterminated strings that would otherwise cause the lexer to scan the
+// entire file into memory. 10 MB is well above any legitimate string size.
+const maxStringAccum = 10 << 20 // 10 MB
 
 // TokenType represents the category of a lexed PDF token.
 type TokenType int
@@ -194,6 +201,9 @@ func (l *Lexer) NextToken() (Token, error) {
 					return Token{Type: TokenError, Value: "unexpected EOF in string literal"}, err
 				}
 				buf.WriteByte(cc)
+				if buf.Len() > maxStringAccum {
+					return Token{Type: TokenError, Value: "string literal exceeds maximum size"}, fmt.Errorf("string literal exceeds %d bytes", maxStringAccum)
+				}
 				if cc == '\\' {
 					nextC, err := l.reader.ReadByte()
 					if err != nil {
@@ -240,6 +250,9 @@ func (l *Lexer) NextToken() (Token, error) {
 				buf.WriteByte(cc)
 				if cc == '>' {
 					break
+				}
+				if buf.Len() > maxStringAccum {
+					return Token{Type: TokenError, Value: "hex string exceeds maximum size"}, fmt.Errorf("hex string exceeds %d bytes", maxStringAccum)
 				}
 			}
 			return Token{Type: TokenHexString, Value: buf.String()}, nil
