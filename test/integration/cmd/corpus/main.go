@@ -605,6 +605,8 @@ func shouldSkipPDFJS(id string) (string, bool) {
 
 type pdfjsSummary struct {
 	Total           int `json:"total"`
+	Survived        int `json:"survived"`
+	Panics          int `json:"panics"`
 	WithReferences  int `json:"with_references"`
 	SurvivalOnly    int `json:"survival_only"`
 	TextMatches     int `json:"text_matches"`
@@ -645,6 +647,7 @@ type pdfjsResult struct {
 	SkipReason         string
 	Error              string
 	Timeout            bool
+	Panicked           bool
 	TextMatch          bool
 	MetadataMatch      bool
 	TextMismatches     []pdfjsTextMismatch
@@ -782,6 +785,10 @@ func comparePDFJS(corpusPath string, showProgress bool) pdfjsReport {
 		}
 
 		rpt.Summary.Total++
+		if res.Panicked {
+			rpt.Summary.Panics++
+			continue
+		}
 		if res.Skipped {
 			rpt.Summary.Skipped++
 			continue
@@ -816,6 +823,8 @@ func comparePDFJS(corpusPath string, showProgress bool) pdfjsReport {
 		fmt.Fprintf(os.Stderr, "\r  processed %d/%d\n", processed, len(entries))
 	}
 
+	rpt.Summary.Survived = rpt.Summary.Total - rpt.Summary.Panics
+
 	sort.Slice(rpt.TextMismatches, func(i, j int) bool {
 		if rpt.TextMismatches[i].File != rpt.TextMismatches[j].File {
 			return rpt.TextMismatches[i].File < rpt.TextMismatches[j].File
@@ -830,8 +839,14 @@ func comparePDFJS(corpusPath string, showProgress bool) pdfjsReport {
 }
 
 // processPDFJSEntry handles a single manifest entry.
-func processPDFJSEntry(corpusPath, refsDir string, entry manifestEntry, hasRef bool) pdfjsResult {
-	res := pdfjsResult{ID: entry.ID, HasRef: hasRef}
+func processPDFJSEntry(corpusPath, refsDir string, entry manifestEntry, hasRef bool) (res pdfjsResult) {
+	res = pdfjsResult{ID: entry.ID, HasRef: hasRef}
+
+	defer func() {
+		if r := recover(); r != nil {
+			res.Panicked = true
+		}
+	}()
 
 	if reason, skip := shouldSkipPDFJS(entry.ID); skip {
 		res.Skipped = true
@@ -1175,7 +1190,12 @@ func printPDFJSText(rpt pdfjsReport) {
 	fmt.Println("========================")
 
 	s := rpt.Summary
+	survivalPct := 0.0
+	if s.Total > 0 {
+		survivalPct = float64(s.Survived) / float64(s.Total) * 100
+	}
 	fmt.Printf("Total: %d  With refs: %d  Survival only: %d\n", s.Total, s.WithReferences, s.SurvivalOnly)
+	fmt.Printf("Survival: %d/%d (%.1f%%)  Panics: %d\n", s.Survived, s.Total, survivalPct, s.Panics)
 
 	textPct := 0.0
 	metaPct := 0.0
