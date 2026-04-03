@@ -6,7 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// ResolveNamedDest looks up a named destination by name, searching the catalog's
+// ResolveNamedDest looks up a named destination by name, searching the [Catalog]
 // /Names -> /Dests name tree first, then the legacy /Dests dictionary.
 // Returns nil if the destination is not found.
 func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfArray, error) {

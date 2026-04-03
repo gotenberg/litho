@@ -10,7 +10,7 @@ import (
 )
 
 // GetDPartMap traverses the /DPartRoot tree and returns a mapping from
-// Page Object Number to the inherited Document Part Metadata (DPM).
+// [Page] object number to the inherited Document Part Metadata (DPM).
 func GetDPartMap(ctx context.Context, doc *Document) (map[int]map[string]string, error) {
 	catalog, err := GetCatalog(ctx, doc)
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 
 // OCREngine is an integration interface for Optical Character Recognition.
 // Developers can inject a wrapper for Tesseract, Google Cloud Vision, or any
-// other OCR backend into the pdf.Reader so the engine can automatically
+// other OCR backend via [pdf.WithOCREngine] so the engine can automatically
 // extract text from scanned image pages.
 type OCREngine interface {
 	Extract(img image.Image) (string, error)
@@ -72,9 +72,9 @@ type Annotation struct {
 	QuadPoints [][8]float64 `json:"quadPoints,omitempty"`
 }
 
-// ImageMeta represents metadata for an extracted image XObject.
+// ImageMeta represents metadata for an extracted Image XObject.
 // The raw encoded stream can be accessed lazily via Open, which returns an
-// io.ReadCloser that decodes through the PDF filter pipeline on read. The
+// [io.ReadCloser] that decodes through the PDF filter pipeline on read. The
 // caller must close the returned reader.
 type ImageMeta struct {
 	Filename         string                                           `json:"filename"`
@@ -100,7 +100,7 @@ type Table struct {
 }
 
 // EmbeddedFile represents a file embedded within a PDF document.
-// Content is accessed lazily: call Open to obtain an io.ReadCloser that
+// Content is accessed lazily: call Open to obtain an [io.ReadCloser] that
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
 type EmbeddedFile struct {
@@ -217,7 +217,7 @@ type Measurement struct {
 }
 
 // Model3D represents a 3D model stream embedded in a PDF annotation.
-// Content is accessed lazily: call Open to obtain an io.ReadCloser that
+// Content is accessed lazily: call Open to obtain an [io.ReadCloser] that
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
 type Model3D struct {

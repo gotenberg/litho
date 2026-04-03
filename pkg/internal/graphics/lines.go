@@ -8,9 +8,9 @@ import (
 
 type pathPoint struct{ x, y float64 }
 
-// ExtractLines processes content stream operations and returns all stroked
-// line segments in absolute page coordinates. It tracks the CTM so that
-// lines inside transformed Form XObjects are correctly mapped.
+// ExtractLines processes content stream [content.Operation] values and returns
+// all stroked line segments in absolute page coordinates. It tracks the CTM so
+// that lines inside transformed Form XObjects are correctly mapped.
 func ExtractLines(ops []content.Operation) []models.Line {
 	var (
 		ctmStack [][6]float64

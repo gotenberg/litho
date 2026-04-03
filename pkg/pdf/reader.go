@@ -31,7 +31,7 @@ import (
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
-// OpenOption configures optional behavior when opening a PDF document.
+// OpenOption configures optional behavior when opening a PDF document via [Open] or [OpenFile].
 type OpenOption func(*openOpts)
 
 type openOpts struct {
@@ -60,15 +60,15 @@ func WithPassword(password string) OpenOption {
 }
 
 // WithOCREngine injects an OCR backend (e.g., Tesseract, Google Cloud Vision).
-// When set, ExtractText automatically hands off scanned image pages to the
-// OCR engine instead of returning ErrRequiresOCR.
+// When set, [Reader.ExtractText] automatically hands off scanned image pages to the
+// OCR engine instead of returning [ErrRequiresOCR].
 func WithOCREngine(engine models.OCREngine) OpenOption {
 	return func(o *openOpts) {
 		o.ocr = engine
 	}
 }
 
-// WithFilterPlugin registers a filter decoder plugin for stream
+// WithFilterPlugin registers a [plugins.FilterDecoder] plugin for stream
 // decompression. Multiple plugins can be registered; each handles the
 // filter name returned by its FilterName method.
 //
@@ -83,13 +83,13 @@ func WithFilterPlugin(p plugins.FilterDecoder) OpenOption {
 }
 
 // Reader is the high-level API facade for the PDF parsing engine.
-// When opened via OpenFile, the Reader holds a reference to the underlying
-// file; call Close to release it.
+// When opened via [OpenFile], the Reader holds a reference to the underlying
+// file; call [Reader.Close] to release it.
 //
 // Reader is safe for concurrent use by multiple goroutines. All extraction
-// methods (ExtractText, GetMetadata, etc.) may be called concurrently on the
-// same Reader. Close and ClearCache must not be called concurrently with
-// other Reader methods.
+// methods ([Reader.ExtractText], [Reader.GetMetadata], etc.) may be called
+// concurrently on the same Reader. [Reader.Close] and [Reader.ClearCache]
+// must not be called concurrently with other Reader methods.
 type Reader struct {
 	doc         *document.Document
 	ocr         models.OCREngine
@@ -99,9 +99,9 @@ type Reader struct {
 	pagesErr    error
 }
 
-// Close releases any resources held by the Reader. When the Reader was
-// created via OpenFile, Close closes the underlying file. For Readers
-// created via Open, Close is a no-op.
+// Close releases any resources held by the [Reader]. When the Reader was
+// created via [OpenFile], Close closes the underlying file. For Readers
+// created via [Open], Close is a no-op.
 func (r *Reader) Close() error {
 	if r.closer != nil {
 		return r.closer.Close()
@@ -137,8 +137,8 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 	return compliance.ValidatePDFUA(ctx, r.doc, profile)
 }
 
-// Open initializes a new Reader from an io.ReaderAt and its total size.
-// Pass functional options (e.g., WithLogger, WithPassword) to customize behavior.
+// Open initializes a new [Reader] from an [io.ReaderAt] and its total size.
+// Pass functional options (e.g., [WithLogger], [WithPassword]) to customize behavior.
 func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*Reader, error) {
 	var o openOpts
 	for _, opt := range opts {
@@ -180,9 +180,9 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 	return &Reader{doc: doc, ocr: o.ocr}, nil
 }
 
-// OpenFile opens a PDF directly from the filesystem. The returned Reader
+// OpenFile opens a PDF directly from the filesystem. The returned [Reader]
 // holds a reference to the underlying file; the caller must call
-// Reader.Close when done.
+// [Reader.Close] when done.
 func OpenFile(ctx context.Context, path string, opts ...OpenOption) (*Reader, error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
@@ -222,7 +222,7 @@ func (r *Reader) NumPages(ctx context.Context) (int, error) {
 	return len(pages), nil
 }
 
-// ExtractTextOption configures the behavior of ExtractText.
+// ExtractTextOption configures the behavior of [Reader.ExtractText].
 type ExtractTextOption func(*extractTextOpts)
 
 type extractTextOpts struct {
@@ -233,8 +233,8 @@ type extractTextOpts struct {
 }
 
 // WithHiddenText includes all normally-stripped text: invisible, clipped,
-// and artifact text. This is a shortcut that enables WithInvisibleText,
-// WithClippedText, and WithArtifacts simultaneously.
+// and artifact text. This is a shortcut that enables [WithInvisibleText],
+// [WithClippedText], and [WithArtifacts] simultaneously.
 func WithHiddenText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeHidden = true
@@ -271,7 +271,7 @@ func WithArtifacts() ExtractTextOption {
 //
 // By default, invisible text (rendering mode 3, white-on-white colors),
 // text outside the clipping path and CropBox, and artifact text (headers,
-// footers, page numbers) are silently dropped. Pass WithHiddenText() to
+// footers, page numbers) are silently dropped. Pass [WithHiddenText] to
 // include all text regardless of visibility.
 func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (string, error) {
 	var o extractTextOpts
@@ -336,7 +336,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 
 // ExtractAllText extracts and concatenates text from every page in the
 // document, separated by newlines. This is a convenience wrapper around
-// ExtractText for the common "give me all the text" use case.
+// [Reader.ExtractText] for the common "give me all the text" use case.
 func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) (string, error) {
 	pages, err := r.resolvePages(ctx)
 	if err != nil {
@@ -371,8 +371,8 @@ func (r *Reader) GetBookmarks(ctx context.Context) ([]models.Bookmark, error) {
 }
 
 // GetFormData extracts user-typed values from interactive AcroForms as a
-// simple name→value map. It automatically evaluates any PDF JavaScript
-// calculation scripts. For richer field metadata, use GetFormFields.
+// simple name-to-value map. It automatically evaluates any PDF JavaScript
+// calculation scripts. For richer field metadata, use [Reader.GetFormFields].
 func (r *Reader) GetFormData(ctx context.Context) (map[string]string, error) {
 	fields, err := annotation.ExtractFormData(ctx, r.doc)
 	if err != nil {
@@ -438,7 +438,7 @@ func (r *Reader) GetEmbeddedFiles(ctx context.Context) ([]models.EmbeddedFile, e
 	return semantics.ExtractPortfolioItems(ctx, r.doc)
 }
 
-// Deprecated: ExtractPortfolioItems is an alias for [GetEmbeddedFiles].
+// Deprecated: ExtractPortfolioItems is an alias for [Reader.GetEmbeddedFiles].
 func (r *Reader) ExtractPortfolioItems(ctx context.Context) ([]models.EmbeddedFile, error) {
 	return r.GetEmbeddedFiles(ctx)
 }

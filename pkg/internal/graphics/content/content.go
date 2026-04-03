@@ -15,6 +15,7 @@ import (
 )
 
 // Operation represents a drawing or state operation in a PDF content stream.
+// Each Operation pairs an operator keyword with its [ast.PdfObject] operands.
 type Operation struct {
 	Operator string
 	Operands []ast.PdfObject
@@ -83,7 +84,7 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 	return ops, nil
 }
 
-// ParseStreamData parses raw content stream bytes into a sequence of operations.
+// ParseStreamData parses raw content stream bytes into a sequence of [Operation] values.
 // This is used for parsing individual glyph procedures (CharProcs) in Type 3 fonts.
 func ParseStreamData(data []byte) ([]Operation, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
@@ -92,8 +93,8 @@ func ParseStreamData(data []byte) ([]Operation, error) {
 }
 
 // ParseStreamDataFormatChecked parses content stream data with PDF/A format
-// checking enabled. Returns operations and any hex string format violations
-// detected by the parser.
+// checking enabled. Returns [Operation] values and any hex string format
+// violations detected by the parser.
 func ParseStreamDataFormatChecked(data []byte) ([]Operation, []error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex).WithFormatChecking()

@@ -40,7 +40,7 @@ type LinearizationParams struct {
 }
 
 // PageOffsetEntry holds the per-page data decoded from the hint stream's
-// Page Offset Hint Table (Table F.3 in ISO 32000-1).
+// Page Offset Hint Table. Per ISO 32000-1, Table F.3.
 type PageOffsetEntry struct {
 	// ObjCount is the number of objects in this page's group.
 	ObjCount int

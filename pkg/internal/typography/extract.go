@@ -449,7 +449,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	return nil
 }
 
-// ExtractionConfig holds options for text extraction behavior
+// ExtractionConfig holds options for text extraction behavior.
 type ExtractionConfig struct {
 	StripInvisible bool // If true, completely omits text matched by invisibility heuristics (Tr=3, white-on-white)
 	StripHidden    bool // If true, completely omits text outside the graphics state clipping path (W/W*)
@@ -457,7 +457,7 @@ type ExtractionConfig struct {
 	StripArtifacts bool // If true, discards text inside /Artifact marked content (headers, footers, page numbers)
 }
 
-// ExtractElements extracts the text from a page's content operations as raw spatial elements.
+// ExtractElements extracts text from a page's content [content.Operation] values as raw spatial [models.TextElement] entries.
 func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
 	// Collect annotation appearance object numbers so we can skip them during
 	// text extraction — annotation appearances are visual overlays, not page content.
@@ -510,7 +510,7 @@ func boxRectFromArray(arr ast.PdfArray) [4]float64 {
 	return [4]float64{document.GetFloat(arr[0]), document.GetFloat(arr[1]), document.GetFloat(arr[2]), document.GetFloat(arr[3])}
 }
 
-// ExtractText extracts the text from a page's content operations and reconstructs it.
+// ExtractText extracts text from a page's content operations and reconstructs it via [ReconstructText].
 func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (string, error) {
 	machine.StripArtifacts = config.StripArtifacts
 

@@ -143,36 +143,35 @@ func (r PdfIndirectRef) String() string {
 	return fmt.Sprintf("%d %d R", r.ObjectNum, r.GenNum)
 }
 
-// PdfStream represents a PDF stream object. Stream data is loaded lazily —
-// the raw bytes are only read from the underlying PDF file when Bytes() is
-// called for the first time and cached via sync.Once for subsequent calls.
+// PdfStream represents a PDF stream object. Stream data is loaded lazily:
+// the raw bytes are only read from the underlying PDF file when [PdfStream.Bytes]
+// is called for the first time and cached for subsequent calls.
 //
 // PdfStream is a value type, but it is safe to copy: the lazy loader closure
-// captures its caching state (sync.Once, cached bytes, cached error) as
-// pointer-like variables in the enclosing scope, so all copies share the
-// same cache. Do not refactor the closure construction in NewLazyStream
-// without preserving this shared-state guarantee.
+// captures its caching state as pointer-like variables in the enclosing scope,
+// so all copies share the same cache. Do not refactor the closure construction
+// in [NewLazyStream] without preserving this shared-state guarantee.
 type PdfStream struct {
 	Dict PdfDict
 	open func() ([]byte, error) // lazy loader, returns raw (possibly encrypted) stream bytes
 }
 
-// NewStream creates a PdfStream with pre-loaded data. Use this in tests and
+// NewStream creates a [PdfStream] with pre-loaded data. Use this in tests and
 // for synthetically constructed streams (e.g., object streams, encoding).
 func NewStream(dict PdfDict, data []byte) PdfStream {
 	return PdfStream{Dict: dict, open: func() ([]byte, error) { return data, nil }}
 }
 
-// NewLazyStream creates a PdfStream with a lazy loader that reads the raw
+// NewLazyStream creates a [PdfStream] with a lazy loader that reads the raw
 // bytes on first access and caches the result. The loader function is called
-// at most once; subsequent calls to Bytes() return the cached result.
+// at most once; subsequent calls to [PdfStream.Bytes] return the cached result.
 func NewLazyStream(dict PdfDict, loader func() ([]byte, error)) PdfStream {
 	return PdfStream{Dict: dict, open: loader}
 }
 
 // Bytes returns the raw stream bytes (after decryption, before filter
 // decoding). The data is read lazily on first call and cached for subsequent
-// calls if the stream was created with NewLazyStream.
+// calls if the stream was created with [NewLazyStream].
 func (s PdfStream) Bytes() ([]byte, error) {
 	if s.open == nil {
 		return nil, nil

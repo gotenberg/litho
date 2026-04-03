@@ -236,7 +236,7 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 	return dst
 }
 
-// GetFont extracts and resolves a font from a font dictionary.
+// GetFont extracts and resolves a [Font] from a PDF font dictionary.
 func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (*Font, error) {
 	subtypeObj, ok := fontDict["Subtype"]
 	if !ok {

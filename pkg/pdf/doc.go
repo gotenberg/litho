@@ -9,7 +9,7 @@
 //
 // litho's text extraction pipeline, CMap parser, and font resolution logic were
 // heavily inspired by Mozilla's PDF.js (https://github.com/mozilla/pdf.js).
-// We are grateful to the PDF.js contributors for their pioneering work on
+// Grateful acknowledgment to the PDF.js contributors for their pioneering work on
 // open-source PDF parsing.
 //
 // # Example Usage

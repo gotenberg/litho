@@ -16,8 +16,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
-// GetFloat safely extracts a float64 from a PdfObject.
-// Returns 0 if the object is neither a PdfInt nor a PdfReal.
+// GetFloat safely extracts a float64 from a [ast.PdfObject].
+// Returns 0 if the object is neither a [ast.PdfInt] nor a [ast.PdfReal].
 func GetFloat(obj ast.PdfObject) float64 {
 	switch v := obj.(type) {
 	case ast.PdfReal:
@@ -28,9 +28,9 @@ func GetFloat(obj ast.PdfObject) float64 {
 	return 0
 }
 
-// ResolveObject resolves an indirect reference through the Document's Resolve
+// ResolveObject resolves an indirect reference through the [Document.Resolve]
 // method, which provides circular-reference protection and object caching.
-// If obj is not an indirect reference, it is returned as-is.
+// If obj is not an [ast.PdfIndirectRef], it is returned as-is.
 //
 // This is the single authorised way to chase indirect refs across all internal
 // packages. Callers must never re-implement this logic locally.
@@ -51,8 +51,8 @@ func isNullOrNil(obj ast.PdfObject) bool {
 	return isNull
 }
 
-// ResolveDict resolves obj and returns it as a PdfDict. Returns (nil, error)
-// when the resolved object is a non-null type other than PdfDict.
+// ResolveDict resolves obj and returns it as a [ast.PdfDict]. Returns (nil, error)
+// when the resolved object is a non-null type other than [ast.PdfDict].
 func ResolveDict(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfDict, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
@@ -68,7 +68,7 @@ func ResolveDict(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.Pdf
 	return dict, nil
 }
 
-// ResolveDictRequired resolves obj and returns it as a PdfDict, returning an
+// ResolveDictRequired resolves obj and returns it as a [ast.PdfDict], returning an
 // error if the resolved object is not a dictionary.
 func ResolveDictRequired(ctx context.Context, doc *Document, obj ast.PdfObject, context string) (ast.PdfDict, error) {
 	dict, err := ResolveDict(ctx, doc, obj)
@@ -81,8 +81,8 @@ func ResolveDictRequired(ctx context.Context, doc *Document, obj ast.PdfObject, 
 	return dict, nil
 }
 
-// ResolveArray resolves obj and returns it as a PdfArray. Returns (nil, error)
-// when the resolved object is a non-null type other than PdfArray.
+// ResolveArray resolves obj and returns it as a [ast.PdfArray]. Returns (nil, error)
+// when the resolved object is a non-null type other than [ast.PdfArray].
 func ResolveArray(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
@@ -98,8 +98,8 @@ func ResolveArray(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.Pd
 	return arr, nil
 }
 
-// ResolveName resolves obj and returns it as a PdfName. Returns ("", error)
-// when the resolved object is a non-null type other than PdfName.
+// ResolveName resolves obj and returns it as a [ast.PdfName]. Returns ("", error)
+// when the resolved object is a non-null type other than [ast.PdfName].
 func ResolveName(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfName, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
@@ -115,8 +115,8 @@ func ResolveName(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.Pdf
 	return name, nil
 }
 
-// ResolveStream resolves obj and returns it as a PdfStream. Returns (zero, error)
-// when the resolved object is a non-null type other than PdfStream.
+// ResolveStream resolves obj and returns it as a [ast.PdfStream]. Returns (zero, error)
+// when the resolved object is a non-null type other than [ast.PdfStream].
 func ResolveStream(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfStream, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
@@ -132,8 +132,8 @@ func ResolveStream(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.P
 	return stream, nil
 }
 
-// ResolveString resolves obj and returns it as a PdfString. Returns ("", error)
-// when the resolved object is a non-null type other than PdfString.
+// ResolveString resolves obj and returns it as a [ast.PdfString]. Returns ("", error)
+// when the resolved object is a non-null type other than [ast.PdfString].
 func ResolveString(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfString, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
@@ -149,8 +149,8 @@ func ResolveString(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.P
 	return s, nil
 }
 
-// ResolveInt resolves obj and returns it as a PdfInt. Returns (0, error)
-// when the resolved object is a non-null type other than PdfInt.
+// ResolveInt resolves obj and returns it as a [ast.PdfInt]. Returns (0, error)
+// when the resolved object is a non-null type other than [ast.PdfInt].
 func ResolveInt(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfInt, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
@@ -166,8 +166,8 @@ func ResolveInt(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfI
 	return i, nil
 }
 
-// ResolveBool resolves obj and returns it as a PdfBool. Returns (false, error)
-// when the resolved object is a non-null type other than PdfBool.
+// ResolveBool resolves obj and returns it as a [ast.PdfBool]. Returns (false, error)
+// when the resolved object is a non-null type other than [ast.PdfBool].
 func ResolveBool(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfBool, error) {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
@@ -189,13 +189,13 @@ const (
 	utf16BEBom1 = 0xFF
 )
 
-// DecodePdfString converts a raw PDF string to a Go string, handling the
+// DecodePdfString converts a raw [ast.PdfString] to a Go string, handling the
 // UTF-16BE BOM (0xFE 0xFF) encoding used by many PDF producers.
 //
-// This function operates on already-decrypted string data. Decryption is
+// DecodePdfString operates on already-decrypted string data. Decryption is
 // handled transparently by the parser's crypto pipeline during object
-// resolution, so by the time a PdfString reaches this function the cleartext
-// bytes are guaranteed.
+// resolution, so by the time a [ast.PdfString] reaches this function the
+// cleartext bytes are guaranteed.
 func DecodePdfString(s ast.PdfString) string {
 	b := []byte(s)
 	if len(b) >= 2 && b[0] == utf16BEBom0 && b[1] == utf16BEBom1 {
@@ -291,8 +291,9 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 	return p.ParseObject()
 }
 
-// Resolve looks up an indirect reference in the document's cross-reference index
-// and parses the object from the underlying stream if it hasn't been cached yet.
+// Resolve looks up an [ast.PdfIndirectRef] in the document's cross-reference
+// index and parses the object from the underlying stream if it hasn't been
+// cached yet.
 //
 // Resolve is safe for concurrent use by multiple goroutines.
 func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfObject, error) {

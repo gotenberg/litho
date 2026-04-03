@@ -166,6 +166,16 @@ func ValidatePDFA(ctx context.Context, ...) ([]error, error)
 
 Each package should have a `doc.go` with a `// Package foo ...` comment.
 
+Reference other identifiers with square brackets so pkg.go.dev renders them as links:
+
+```go
+// ValidatePDFA returns violations as []error where each element is a
+// [Violation] value. See [Rule] for the structured rule fields.
+// The document must be opened via [pdf.Open] with an [io.ReaderAt].
+```
+
+This works for same-package identifiers (`[Violation]`), other packages (`[io.Reader]`), and methods (`[Reader.Open]`).
+
 ### Code Comments
 
 - Explain *why*, not *what*. The code shows what; the comment explains the non-obvious reasoning.

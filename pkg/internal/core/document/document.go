@@ -79,9 +79,9 @@ type Document struct {
 	Filters *filter.Decoder
 }
 
-// DecodeStream decodes a PDF stream using the document's filter decoder
+// DecodeStream decodes a [ast.PdfStream] using the document's filter decoder
 // (which may include registered plugins). If no custom decoder is set,
-// falls back to the package-level filter.DecodeStream.
+// falls back to the package-level filter decoder.
 func (d *Document) DecodeStream(stream ast.PdfStream) ([]byte, error) {
 	if d.Filters != nil {
 		return d.Filters.DecodeStream(stream)
@@ -89,7 +89,7 @@ func (d *Document) DecodeStream(stream ast.PdfStream) ([]byte, error) {
 	return filter.DecodeStream(stream)
 }
 
-// NewStreamReader returns a lazy reader using the document's filter decoder.
+// NewStreamReader returns a lazy [io.ReadCloser] using the document's filter decoder.
 func (d *Document) NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 	if d.Filters != nil {
 		return d.Filters.NewStreamReader(stream)
@@ -102,7 +102,7 @@ func NopLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-// NewDocument creates a new Document instance by parsing the XRef chains.
+// NewDocument creates a new [Document] by parsing the XRef chains.
 // If logger is nil, a no-op logger is used.
 func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger) (*Document, error) {
 	// Validate PDF Header
@@ -224,7 +224,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 }
 
 // Authenticate attempts to authenticate an encrypted document with the given password.
-// Authenticate must be called during setup, before the Document is used concurrently.
+// Authenticate must be called during setup, before the [Document] is used concurrently.
 func (d *Document) Authenticate(password string) error {
 	if !d.IsEncrypted || d.Crypto == nil {
 		return nil
@@ -272,7 +272,7 @@ func (d *Document) IsLinearized() bool {
 // ClearCaches releases the object cache and font cache to free memory.
 // Caches are transparently rebuilt on the next access.
 //
-// ClearCaches must not be called concurrently with other Document methods.
+// ClearCaches must not be called concurrently with other [Document] methods.
 func (d *Document) ClearCaches() {
 	d.mu.Lock()
 	d.objectCache = make(map[int]ast.PdfObject)
@@ -323,13 +323,13 @@ func (d *Document) FileSize() int64 {
 	return d.size
 }
 
-// RawReader returns the underlying io.ReaderAt for low-level byte access.
+// RawReader returns the underlying [io.ReaderAt] for low-level byte access.
 func (d *Document) RawReader() io.ReaderAt {
 	return d.r
 }
 
-// SetRawReader sets the underlying io.ReaderAt. This is intended for test
-// code that needs to construct a Document with raw file bytes without
+// SetRawReader sets the underlying [io.ReaderAt]. This is intended for test
+// code that needs to construct a [Document] with raw file bytes without
 // going through the full parsing pipeline.
 func (d *Document) SetRawReader(r io.ReaderAt) {
 	d.r = r

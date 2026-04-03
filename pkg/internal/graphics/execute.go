@@ -14,14 +14,14 @@ var emptyBoundingBox = BoundingBox{
 	MaxX: -math.MaxFloat64, MaxY: -math.MaxFloat64,
 }
 
-// Execute processes a sequence of content operations and updates the graphics state.
-// ExecuteOne processes a single content stream operation. Avoids the slice
-// allocation overhead of Execute for per-operator dispatch in hot paths.
+// ExecuteOne processes a single content stream [content.Operation]. Avoids the
+// slice allocation overhead of [Machine.Execute] for per-operator dispatch in
+// hot paths.
 func (m *Machine) ExecuteOne(op content.Operation) error {
 	return m.executeOp(op)
 }
 
-// Execute processes a sequence of content stream operations.
+// Execute processes a sequence of content stream [content.Operation] values and updates the graphics state.
 func (m *Machine) Execute(ops []content.Operation) error {
 	for _, op := range ops {
 		if err := m.executeOp(op); err != nil {

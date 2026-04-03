@@ -32,7 +32,7 @@ type Page struct {
 	DPM       map[string]string // Document Part Metadata
 }
 
-// BuildPageMap constructs a reverse-lookup map from each page's indirect reference
+// BuildPageMap constructs a reverse-lookup map from each page's [ast.PdfIndirectRef]
 // to its 1-based page number, enabling clean destination resolution without
 // mutating any struct fields.
 func BuildPageMap(pages []*Page) map[ast.PdfIndirectRef]int {
@@ -43,7 +43,7 @@ func BuildPageMap(pages []*Page) map[ast.PdfIndirectRef]int {
 	return m
 }
 
-// GetCatalog retrieves the Document Catalog from the trailer.
+// GetCatalog retrieves the [Catalog] from the document trailer.
 func GetCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
@@ -61,7 +61,7 @@ func GetCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 	return &Catalog{Dict: catalogDict}, nil
 }
 
-// GetPages extracts all pages from the Catalog by traversing the page tree.
+// GetPages extracts all [Page] entries from the [Catalog] by traversing the page tree.
 func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, error) {
 	pagesObj, ok := catalog.Dict["Pages"]
 	if !ok {

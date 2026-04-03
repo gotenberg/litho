@@ -20,15 +20,15 @@ type TextState struct {
 	Tlm   [6]float64 // Text line matrix
 }
 
-// Point represents a 2D coordinate
+// Point represents a 2D coordinate.
 type Point struct {
 	X, Y float64
 }
 
-// Path represents a sequence of drawing operations
+// Path represents a sequence of drawing operations.
 type Path []Point
 
-// BoundingBox represents a rectangular region
+// BoundingBox represents a rectangular region.
 type BoundingBox struct {
 	MinX, MinY, MaxX, MaxY float64
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// OCConfig holds the state of Optional Content Groups (Layers)
+// OCConfig holds the state of Optional Content Groups (Layers).
 type OCConfig struct {
 	On        map[int]bool
 	Off       map[int]bool
