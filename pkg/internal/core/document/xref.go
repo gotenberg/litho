@@ -76,6 +76,8 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			prev = p
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = trailerDict
+			} else {
+				mergeTrailerKeys(d.Index.Trailer, trailerDict)
 			}
 
 			// Hybrid-Reference (PDF 1.5): the trailer may contain /XRefStm
@@ -106,6 +108,8 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			prev = pVal
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = stream.Dict
+			} else {
+				mergeTrailerKeys(d.Index.Trailer, stream.Dict)
 			}
 		default:
 			return fmt.Errorf("unexpected token at xref offset: %v", tok.Value)
@@ -115,6 +119,21 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// mergeTrailerKeys copies /Root and /Info from an older trailer into the
+// primary trailer when they are missing. This handles linearized PDFs where
+// these keys may only appear in the linearization hint trailer.
+// /ID and /Encrypt are NOT merged because their presence/absence in the
+// primary trailer is compliance-significant (PDF/A 6.1.3).
+func mergeTrailerKeys(dst, src ast.PdfDict) {
+	for _, k := range []ast.PdfName{"Root", "Info"} {
+		if _, exists := dst[k]; !exists {
+			if v, ok := src[k]; ok {
+				dst[k] = v
+			}
+		}
+	}
 }
 
 // parseHybridXRefStream parses a compressed XRef stream embedded in a hybrid-

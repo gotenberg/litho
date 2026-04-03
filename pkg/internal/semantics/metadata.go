@@ -214,10 +214,6 @@ func GetMetadata(ctx context.Context, doc *document.Document) (map[string]string
 	info := getInfoMetadata(ctx, doc)
 	xmp := getXMPMetadata(ctx, doc)
 
-	if info == nil && xmp == nil {
-		return nil, fmt.Errorf("no metadata found (neither /Info dictionary nor XMP stream)")
-	}
-
 	metadata := make(map[string]string)
 
 	// Start with legacy /Info values.
@@ -239,6 +235,10 @@ func GetMetadata(ctx context.Context, doc *document.Document) (map[string]string
 		if lang := getCatalogLang(ctx, doc); lang != "" {
 			metadata["Language"] = lang
 		}
+	}
+
+	if len(metadata) == 0 {
+		return nil, fmt.Errorf("no metadata found (neither /Info dictionary nor XMP stream)")
 	}
 
 	return metadata, nil

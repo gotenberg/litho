@@ -1285,6 +1285,14 @@ func parsePDFDate(s string) (time.Time, bool) {
 	raw := strings.TrimPrefix(s, "D:")
 	raw = strings.ReplaceAll(raw, "'", "")
 
+	// Normalise the redundant-but-valid "Z0000" suffix that some producers emit.
+	// After quote removal, "Z00'00'" becomes "Z0000". Go's Z0700 layout treats Z
+	// and a numeric offset as mutually exclusive, so "Z0000" fails to parse.
+	// Strip the trailing zero-offset digits when preceded by a literal Z.
+	if idx := strings.Index(raw, "Z"); idx != -1 && idx == len(raw)-5 {
+		raw = raw[:idx+1]
+	}
+
 	// Try progressively shorter formats.
 	layouts := []string{
 		"20060102150405-0700",
