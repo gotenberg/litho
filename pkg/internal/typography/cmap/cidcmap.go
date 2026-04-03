@@ -54,7 +54,8 @@ func ParseCID(data []byte) (*CIDCMap, error) {
 			break
 		}
 
-		if tok.Type == lexer.TokenKeyword && tok.Value == "begincidchar" {
+		switch {
+		case tok.Type == lexer.TokenKeyword && tok.Value == "begincidchar":
 			if _, err := p.Consume(); err != nil {
 				return nil, err
 			}
@@ -84,7 +85,7 @@ func ParseCID(data []byte) (*CIDCMap, error) {
 					c.Mapping[strToInt(srcStr)] = int(dstInt)
 				}
 			}
-		} else if tok.Type == lexer.TokenKeyword && tok.Value == "begincidrange" {
+		case tok.Type == lexer.TokenKeyword && tok.Value == "begincidrange":
 			if _, err := p.Consume(); err != nil {
 				return nil, err
 			}
@@ -128,7 +129,7 @@ func ParseCID(data []byte) (*CIDCMap, error) {
 					}
 				}
 			}
-		} else {
+		default:
 			if _, err := p.Consume(); err != nil {
 				return nil, err
 			}

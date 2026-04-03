@@ -113,7 +113,7 @@ func decode(data []byte, globals []byte) ([]byte, error) {
 		(*C.uchar)(unsafe.Pointer(&data[0])),
 		C.size_t(len(data)),
 		&outBuf, &outLen,
-		&outW, &outH,
+		&outW, &outH, //nolint:gocritic // false positive: separate C output parameters
 	)
 	if rc != 0 {
 		return nil, fmt.Errorf("jbig2 decode: libjbig2dec decoding failed")

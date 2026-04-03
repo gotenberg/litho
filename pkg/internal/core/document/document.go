@@ -97,7 +97,7 @@ func (d *Document) NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) 
 
 // NopLogger returns a logger that discards all output.
 func NopLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 // NewDocument creates a new Document instance by parsing the XRef chains.

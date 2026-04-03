@@ -149,7 +149,7 @@ func downloadProfiles(baseURL, tag, destDir string) {
 			fatalf("reading response from %s: %v", url, err)
 		}
 
-		if err := os.WriteFile(destPath, data, 0o644); err != nil {
+		if err := os.WriteFile(destPath, data, 0o600); err != nil {
 			fatalf("writing %s: %v", destPath, err)
 		}
 

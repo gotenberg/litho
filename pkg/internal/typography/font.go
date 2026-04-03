@@ -670,43 +670,66 @@ func isCFFFont(data []byte) bool {
 	return string(data[:4]) == "OTTO"
 }
 
+// fontFormat identifies the binary format of embedded font data.
+type fontFormat int
+
+const (
+	fontFormatTrueType fontFormat = iota
+	fontFormatOTTO
+	fontFormatBareCFF
+	fontFormatUnknown
+)
+
+// detectFontFormat classifies the font binary by its leading signature bytes.
+func detectFontFormat(data []byte) fontFormat {
+	if len(data) < 4 {
+		return fontFormatUnknown
+	}
+	sig := data[:4]
+	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) || string(sig) == "true" {
+		return fontFormatTrueType
+	}
+	if string(sig) == "OTTO" {
+		return fontFormatOTTO
+	}
+	if sig[0] == 1 && sig[1] == 0 {
+		return fontFormatBareCFF
+	}
+	return fontFormatUnknown
+}
+
+// extractCFFFromOTTO extracts the "CFF " table from an OpenType (OTTO) font.
+func extractCFFFromOTTO(fontData []byte) ([]byte, error) {
+	records, err := truetype.ParseTableDirectory(fontData)
+	if err != nil {
+		return nil, err
+	}
+	return truetype.TableData(fontData, records, "CFF ")
+}
+
 // ExtractBinaryWidths dispatches to TrueType or CFF width extraction based
 // on the font data signature.
 func ExtractBinaryWidths(fontData []byte) map[uint16]uint16 {
-	if len(fontData) < 4 {
-		return nil
-	}
-	sig := fontData[:4]
-
-	// TrueType
-	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) || string(sig) == "true" {
+	switch detectFontFormat(fontData) {
+	case fontFormatTrueType:
 		w, _ := truetype.GlyphWidths(fontData)
 		return w
-	}
-
-	// OTTO — extract CFF table and get widths
-	if string(sig) == "OTTO" {
-		records, err := truetype.ParseTableDirectory(fontData)
-		if err != nil {
-			return nil
-		}
-		cffData, err := truetype.TableData(fontData, records, "CFF ")
+	case fontFormatOTTO:
+		cffData, err := extractCFFFromOTTO(fontData)
 		if err != nil {
 			return nil
 		}
 		w, _ := cff.GlyphWidths(cffData)
 		return w
-	}
-
-	// Bare CFF
-	if sig[0] == 1 && sig[1] == 0 {
+	case fontFormatBareCFF:
 		w, _ := cff.GlyphWidths(fontData)
 		return w
+	case fontFormatUnknown:
+		// Try TrueType as fallback.
+		w, _ := truetype.GlyphWidths(fontData)
+		return w
 	}
-
-	// Fallback: try TrueType
-	w, _ := truetype.GlyphWidths(fontData)
-	return w
+	return nil
 }
 
 // ExtractCharCodeToGID returns a charCode → GID mapping for TrueType fonts.
@@ -944,43 +967,26 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 // extractGIDToUnicode dispatches font data to the appropriate parser
 // (TrueType or CFF) based on the font signature.
 func extractGIDToUnicode(fontData []byte) map[uint16]rune {
-	if len(fontData) < 4 {
-		return nil
-	}
-
-	sig := fontData[:4]
-
-	// TrueType: signature 00 01 00 00 or "true"
-	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
-		string(sig) == "true" {
+	switch detectFontFormat(fontData) {
+	case fontFormatTrueType:
 		gidMap, _ := truetype.GlyphToUnicode(fontData)
 		return gidMap
-	}
-
-	// OpenType/CFF (OTTO): has a TrueType table directory wrapping CFF data.
-	// Extract the "CFF " table and parse it.
-	if string(sig) == "OTTO" {
-		records, err := truetype.ParseTableDirectory(fontData)
-		if err != nil {
-			return nil
-		}
-		cffData, err := truetype.TableData(fontData, records, "CFF ")
+	case fontFormatOTTO:
+		cffData, err := extractCFFFromOTTO(fontData)
 		if err != nil {
 			return nil
 		}
 		gidMap, _ := cff.GlyphToUnicode(cffData)
 		return gidMap
-	}
-
-	// Bare CFF: starts with major version 1.
-	if sig[0] == 1 && sig[1] == 0 {
+	case fontFormatBareCFF:
 		gidMap, _ := cff.GlyphToUnicode(fontData)
 		return gidMap
+	case fontFormatUnknown:
+		// Try TrueType as fallback.
+		gidMap, _ := truetype.GlyphToUnicode(fontData)
+		return gidMap
 	}
-
-	// Unknown format — try TrueType as fallback.
-	gidMap, _ := truetype.GlyphToUnicode(fontData)
-	return gidMap
+	return nil
 }
 
 // applyAdobeCIDFallback checks the CIDSystemInfo of a Type0 font's descendant

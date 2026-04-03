@@ -70,36 +70,8 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 			// fall through to the Encoding table below.
 			if r, ok := font.Encoding[data[0]]; ok {
 				char = string(r)
-			} else if font.GIDToUnicode != nil {
-				// Fallback: use the embedded TrueType/OpenType cmap to map
-				// the raw character code (treated as a glyph ID) to a Unicode rune.
-				// For CIDFonts (Type0), try 2-byte big-endian code first.
-				mapped := false
-				if font.CIDWidths != nil && len(data) >= 2 {
-					gid := uint16(data[0])<<8 | uint16(data[1])
-					if r, ok := font.GIDToUnicode[gid]; ok {
-						char = string(r)
-						n = 2
-						mapped = true
-					}
-				}
-				if !mapped {
-					if r, ok := font.GIDToUnicode[uint16(data[0])]; ok {
-						char = string(r)
-					} else {
-						char = "?"
-					}
-				}
-			} else if font.CIDIdentityFallback && len(data) >= 2 {
-				// CIDToGIDMap /Identity without embedded font: treat the
-				// 2-byte character code as a direct Unicode code point.
-				cp := rune(uint16(data[0])<<8 | uint16(data[1]))
-				if cp > 0 {
-					char = string(cp)
-				}
-				n = 2
 			} else {
-				char = "?"
+				char = resolveGlyphFallback(font, data, &n)
 			}
 			if n == 0 {
 				n = 1
@@ -267,5 +239,38 @@ func decomposeLigature(s string) string {
 		return "ffl"
 	default:
 		return s
+	}
+}
+
+// resolveGlyphFallback resolves a character from font fallback tables when the
+// Encoding table has no mapping. It modifies *n if a multi-byte code is consumed.
+func resolveGlyphFallback(font *Font, data []byte, n *int) string {
+	switch {
+	case font.GIDToUnicode != nil:
+		// Use the embedded TrueType/OpenType cmap to map the raw character
+		// code (treated as a glyph ID) to a Unicode rune.
+		// For CIDFonts (Type0), try 2-byte big-endian code first.
+		if font.CIDWidths != nil && len(data) >= 2 {
+			gid := uint16(data[0])<<8 | uint16(data[1])
+			if r, ok := font.GIDToUnicode[gid]; ok {
+				*n = 2
+				return string(r)
+			}
+		}
+		if r, ok := font.GIDToUnicode[uint16(data[0])]; ok {
+			return string(r)
+		}
+		return "?"
+	case font.CIDIdentityFallback && len(data) >= 2:
+		// CIDToGIDMap /Identity without embedded font: treat the
+		// 2-byte character code as a direct Unicode code point.
+		cp := rune(uint16(data[0])<<8 | uint16(data[1]))
+		*n = 2
+		if cp > 0 {
+			return string(cp)
+		}
+		return ""
+	default:
+		return "?"
 	}
 }

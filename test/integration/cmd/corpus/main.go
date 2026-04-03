@@ -201,18 +201,25 @@ func findCorpusPath() string {
 
 // provisionVeraPDF provisions the VeraPDF corpus via Docker.
 func provisionVeraPDF(corpusPath string) error {
+	return provisionCorpus(corpusPath, "verapdf", "litho-verapdf-corpus")
+}
+
+// provisionCorpus provisions a corpus via Docker. name is the corpus directory
+// name (e.g., "verapdf", "pdf.js") and imageName is the Docker image tag.
+func provisionCorpus(corpusPath, name, imageName string) error {
 	refsDir := filepath.Join(corpusPath, "references")
 	entries, err := os.ReadDir(refsDir)
 	if err == nil && len(entries) > 0 {
-		fmt.Println("Corpus already provisioned. Delete testdata/verapdf to force regeneration.")
+		fmt.Printf("Corpus already provisioned. Delete testdata/%s to force regeneration.\n", name)
 		return nil
 	}
 
-	dockerCtx := findDockerContext("verapdf")
+	dockerCtx := findDockerContext(name)
 	if dockerCtx == "" {
-		fmt.Fprintln(os.Stderr, "Cannot locate corpus/verapdf/Dockerfile.")
+		fmt.Fprintf(os.Stderr, "Cannot locate corpus/%s/Dockerfile.\n", name)
 		fmt.Fprintln(os.Stderr, "Provision manually:")
-		fmt.Fprintln(os.Stderr, "  cd test/integration && docker build -t litho-verapdf corpus/verapdf && docker run --rm -v $(pwd)/testdata/verapdf:/output litho-verapdf")
+		fmt.Fprintf(os.Stderr, "  cd test/integration && docker build -t %s corpus/%s && docker run --rm -v $(pwd)/testdata/%s:/output %s\n",
+			imageName, name, name, imageName)
 		return fmt.Errorf("docker context not found")
 	}
 
@@ -226,7 +233,7 @@ func provisionVeraPDF(corpusPath string) error {
 	}
 
 	fmt.Println("Building Docker image...")
-	build := exec.Command("docker", "build", "-t", "litho-verapdf-corpus", dockerCtx)
+	build := exec.Command("docker", "build", "-t", imageName, dockerCtx)
 	build.Stdout = os.Stdout
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -234,9 +241,9 @@ func provisionVeraPDF(corpusPath string) error {
 	}
 
 	fmt.Println("Running corpus generation container...")
-	run := exec.Command("docker", "run", "--rm",
+	run := exec.Command("docker", "run", "--rm", //nolint:gosec // paths come from CLI flags, not untrusted input
 		"-v", absOutput+":/output",
-		"litho-verapdf-corpus",
+		imageName,
 	)
 	run.Stdout = os.Stdout
 	run.Stderr = os.Stderr
@@ -497,10 +504,6 @@ func checkThresholds(rpt report, maxFN, maxFP int) int {
 
 // --- PDF.js ---
 
-// coordTolerance is the maximum allowed difference in coordinate values
-// between PDF.js and litho.
-const coordTolerance = 2.0
-
 type manifestEntry struct {
 	ID       string `json:"id"`
 	File     string `json:"file"`
@@ -695,51 +698,7 @@ func findPDFJSCorpusPath() string {
 
 // provisionPDFJS provisions the PDF.js corpus via Docker.
 func provisionPDFJS(corpusPath string) error {
-	refsDir := filepath.Join(corpusPath, "references")
-	entries, err := os.ReadDir(refsDir)
-	if err == nil && len(entries) > 0 {
-		fmt.Println("Corpus already provisioned. Delete testdata/pdf.js to force regeneration.")
-		return nil
-	}
-
-	dockerCtx := findDockerContext("pdf.js")
-	if dockerCtx == "" {
-		fmt.Fprintln(os.Stderr, "Cannot locate corpus/pdf.js/Dockerfile.")
-		fmt.Fprintln(os.Stderr, "Provision manually:")
-		fmt.Fprintln(os.Stderr, "  cd test/integration && docker build -t litho-pdfjs corpus/pdf.js && docker run --rm -v $(pwd)/testdata/pdf.js:/output litho-pdfjs")
-		return fmt.Errorf("docker context not found")
-	}
-
-	absOutput, err := filepath.Abs(corpusPath)
-	if err != nil {
-		return fmt.Errorf("resolving corpus path: %w", err)
-	}
-
-	if err := os.MkdirAll(absOutput, 0o755); err != nil {
-		return fmt.Errorf("creating output dir: %w", err)
-	}
-
-	fmt.Println("Building Docker image...")
-	build := exec.Command("docker", "build", "-t", "litho-pdfjs-corpus", dockerCtx)
-	build.Stdout = os.Stdout
-	build.Stderr = os.Stderr
-	if err := build.Run(); err != nil {
-		return fmt.Errorf("docker build: %w", err)
-	}
-
-	fmt.Println("Running corpus generation container...")
-	run := exec.Command("docker", "run", "--rm",
-		"-v", absOutput+":/output",
-		"litho-pdfjs-corpus",
-	)
-	run.Stdout = os.Stdout
-	run.Stderr = os.Stderr
-	if err := run.Run(); err != nil {
-		return fmt.Errorf("docker run: %w", err)
-	}
-
-	fmt.Println("Corpus provisioned successfully.")
-	return nil
+	return provisionCorpus(corpusPath, "pdf.js", "litho-pdfjs-corpus")
 }
 
 func comparePDFJS(corpusPath string) pdfjsReport {

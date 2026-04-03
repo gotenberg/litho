@@ -90,14 +90,15 @@ func isNumber(s string) bool {
 	hasDot := false
 	hasDigit := false
 	for ; i < len(s); i++ {
-		if s[i] == '.' {
+		switch {
+		case s[i] == '.':
 			if hasDot {
 				return false
 			}
 			hasDot = true
-		} else if s[i] >= '0' && s[i] <= '9' {
+		case s[i] >= '0' && s[i] <= '9':
 			hasDigit = true
-		} else {
+		default:
 			return false
 		}
 	}

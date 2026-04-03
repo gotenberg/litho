@@ -272,26 +272,26 @@ func GlyphToRuneFull(name string) (rune, bool) {
 	// "uniXXXX" — 4 hex digits after "uni"
 	if len(name) == 7 && name[:3] == "uni" {
 		if r, err := strconv.ParseUint(name[3:], 16, 32); err == nil {
-			return rune(r), true
+			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
 	// "uXXXXXXXX" — variable hex after "u" (Unicode scalar)
 	if len(name) >= 5 && len(name) <= 9 && name[0] == 'u' && name[1] != 'n' {
 		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil {
-			return rune(r), true
+			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
 	// Non-standard glyph name patterns used by some PDF generators:
 	// "Gxx" — 2 hex digits (e.g., "G4F" → U+004F)
 	if len(name) == 3 && name[0] == 'G' {
 		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil && r > 0 {
-			return rune(r), true
+			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
 	// "g00xx" — 4 hex digits after "g" (e.g., "g0053" → U+0053)
 	if len(name) == 5 && name[0] == 'g' {
 		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil && r > 0 {
-			return rune(r), true
+			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
 	// "Cdd" / "Cddd" — decimal charcode (e.g., "C141" → rune(141))

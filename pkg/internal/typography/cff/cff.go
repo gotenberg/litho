@@ -293,7 +293,7 @@ func parseTopDict(data []byte) topDictInfo {
 	for i := 0; i < len(data); {
 		b := data[i]
 		switch {
-		case b >= 0 && b <= 21:
+		case b <= 21:
 			// Operator.
 			op := int(b)
 			if b == 12 && i+1 < len(data) {
@@ -338,13 +338,13 @@ func parseTopDict(data []byte) topDictInfo {
 			if i+2 >= len(data) {
 				return info
 			}
-			operands = append(operands, int32(int16(binary.BigEndian.Uint16(data[i+1:i+3]))))
+			operands = append(operands, int32(int16(binary.BigEndian.Uint16(data[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion for CFF binary parsing
 			i += 3
 		case b == 29:
 			if i+4 >= len(data) {
 				return info
 			}
-			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5])))
+			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5]))) //nolint:gosec // intentional two's-complement conversion for CFF binary parsing
 			i += 5
 		case b == 30:
 			// Real number — skip (not needed for our operators).
@@ -477,7 +477,7 @@ func parseFontMatrixScale(dictData []byte) float64 {
 	for i := 0; i < len(dictData); {
 		b := dictData[i]
 		switch {
-		case b >= 0 && b <= 21:
+		case b <= 21:
 			op := int(b)
 			if b == 12 && i+1 < len(dictData) {
 				i++
@@ -507,13 +507,13 @@ func parseFontMatrixScale(dictData []byte) float64 {
 			if i+2 >= len(dictData) {
 				return 0
 			}
-			operands = append(operands, float64(int16(binary.BigEndian.Uint16(dictData[i+1:i+3]))))
+			operands = append(operands, float64(int16(binary.BigEndian.Uint16(dictData[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
 			i += 3
 		case b == 29: //nolint:mnd
 			if i+4 >= len(dictData) {
 				return 0
 			}
-			operands = append(operands, float64(int32(binary.BigEndian.Uint32(dictData[i+1:i+5]))))
+			operands = append(operands, float64(int32(binary.BigEndian.Uint32(dictData[i+1:i+5])))) //nolint:gosec // intentional two's-complement conversion
 			i += 5
 		case b == 30: //nolint:mnd
 			// Real number: nibble-encoded.
@@ -545,7 +545,7 @@ func parseRealNumber(data []byte, pos int) (float64, int) {
 			}
 			switch {
 			case nibble <= 9: //nolint:mnd
-				buf[n] = '0' + byte(nibble)
+				buf[n] = '0' + nibble
 				n++
 			case nibble == 0x0A: //nolint:mnd
 				buf[n] = '.'
@@ -693,7 +693,7 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX int32) {
 	for i := 0; i < len(data); {
 		b := data[i]
 		switch {
-		case b >= 0 && b <= 21:
+		case b <= 21:
 			op := int(b)
 			if b == 12 && i+1 < len(data) {
 				i++
@@ -730,13 +730,13 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX int32) {
 			if i+2 >= len(data) {
 				return
 			}
-			operands = append(operands, int32(int16(binary.BigEndian.Uint16(data[i+1:i+3]))))
+			operands = append(operands, int32(int16(binary.BigEndian.Uint16(data[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
 			i += 3
 		case b == 29:
 			if i+4 >= len(data) {
 				return
 			}
-			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5])))
+			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5]))) //nolint:gosec // intentional two's-complement conversion
 			i += 5
 		case b == 30:
 			i++
@@ -780,7 +780,7 @@ func extractCharstringWidth(cs []byte) *int32 {
 			if i+2 >= len(cs) {
 				return nil
 			}
-			stack = append(stack, int32(int16(binary.BigEndian.Uint16(cs[i+1:i+3]))))
+			stack = append(stack, int32(int16(binary.BigEndian.Uint16(cs[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
 			i += 3
 		case b >= 32 && b <= 246:
 			stack = append(stack, int32(b)-139)

@@ -64,7 +64,8 @@ func (d *Document) parseXRefChain() error {
 		}
 
 		var prev int64
-		if tok.Type == lexer.TokenKeyword && tok.Value == "xref" {
+		switch {
+		case tok.Type == lexer.TokenKeyword && tok.Value == "xref":
 			d.XRefTableOffsets = append(d.XRefTableOffsets, currentOffset)
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
 			trailerDict, p, err := xref.ParseXRefTable(lex, d.Index.Entries)
@@ -86,7 +87,7 @@ func (d *Document) parseXRefChain() error {
 					}
 				}
 			}
-		} else if tok.Type == lexer.TokenNumber {
+		case tok.Type == lexer.TokenNumber:
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
 			p := parser.NewParser(lex)
 			obj, err := p.ParseObject()
@@ -105,7 +106,7 @@ func (d *Document) parseXRefChain() error {
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = stream.Dict
 			}
-		} else {
+		default:
 			return fmt.Errorf("unexpected token at xref offset: %v", tok.Value)
 		}
 
@@ -266,7 +267,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 	}
 
 	// Check that endobj is preceded by EOL (LF or CR).
-	prevByte := data[endobjIdx-1]
+	prevByte := data[endobjIdx-1] //nolint:gosec // endobjIdx >= 2 guaranteed by the check above
 	if prevByte != '\n' && prevByte != '\r' {
 		d.mu.Lock()
 		d.FormatViolations = append(d.FormatViolations,

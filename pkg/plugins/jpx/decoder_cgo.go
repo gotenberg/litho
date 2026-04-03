@@ -168,7 +168,7 @@ func decode(data []byte) ([]byte, error) {
 		(*C.uchar)(unsafe.Pointer(&data[0])),
 		C.size_t(len(data)),
 		&outBuf, &outLen,
-		&outW, &outH, &outComps,
+		&outW, &outH, &outComps, //nolint:gocritic // false positive: separate C output parameters
 	)
 	if rc != 0 {
 		return nil, fmt.Errorf("jpx decode: libopenjp2 decoding failed")

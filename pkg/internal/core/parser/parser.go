@@ -402,16 +402,17 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 				tailN = trimLen
 			}
 			_, _ = reader.ReaderAt().ReadAt(tail[:tailN], streamStart+trimLen-tailN) //nolint:errcheck // on failure tail stays zeroed, no trim — harmless
-			if tailN == 2 && tail[1] == '\n' {
+			switch {
+			case tailN == 2 && tail[1] == '\n':
 				trimLen--
 				if tail[0] == '\r' {
 					trimLen--
 				}
-			} else if tailN == 2 && tail[1] == '\r' {
+			case tailN == 2 && tail[1] == '\r':
 				trimLen--
-			} else if tailN == 1 && tail[0] == '\n' {
+			case tailN == 1 && tail[0] == '\n':
 				trimLen--
-			} else if tailN == 1 && tail[0] == '\r' {
+			case tailN == 1 && tail[0] == '\r':
 				trimLen--
 			}
 		}
@@ -687,15 +688,17 @@ func scanToEI(reader io.Reader) error {
 				state = 1
 			}
 		case 1:
-			if c == 'E' {
+			switch {
+			case c == 'E':
 				state = 2
-			} else if isInlineWS(c) {
+			case isInlineWS(c):
 				// Stay in state 1.
-			} else {
+			default:
 				state = 0
 			}
 		case 2:
-			if c == 'I' {
+			switch {
+			case c == 'I':
 				// Verify the byte after EI is whitespace, delimiter, or EOF.
 				next, err := r.ReadByte()
 				if err != nil {
@@ -714,9 +717,9 @@ func scanToEI(reader io.Reader) error {
 				} else {
 					state = 0
 				}
-			} else if isInlineWS(c) {
+			case isInlineWS(c):
 				state = 1
-			} else {
+			default:
 				state = 0
 			}
 		}

@@ -319,7 +319,7 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		if n == 0 {
 			break
 		}
-		j = j % n
+		j %= n
 		if j < 0 {
 			j += n
 		}

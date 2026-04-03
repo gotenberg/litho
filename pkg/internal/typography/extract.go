@@ -135,11 +135,12 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 						visible := true
 						if ref, ok := v.(ast.PdfIndirectRef); ok {
 							if doc.OCConfig != nil {
-								if doc.OCConfig.Off[ref.ObjectNum] {
+								switch {
+								case doc.OCConfig.Off[ref.ObjectNum]:
 									visible = false
-								} else if doc.OCConfig.On[ref.ObjectNum] {
+								case doc.OCConfig.On[ref.ObjectNum]:
 									visible = true
-								} else {
+								default:
 									// Not in either explicit list: fall back to BaseState.
 									visible = doc.OCConfig.BaseState != "OFF"
 								}

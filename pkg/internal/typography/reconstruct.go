@@ -35,17 +35,18 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 		prev := elements[i-1]
 		el := elements[i]
 		newLine := false
-		if el.Vertical || isOrthogonalRotation(el.Angle) {
+		switch {
+		case el.Vertical || isOrthogonalRotation(el.Angle):
 			// Vertical WMode or 90°/270° rotated text: characters progress
 			// along Y, so line breaks are detected by X changes.
 			if math.Abs(prev.X-el.X) > 2.0 {
 				newLine = true
 			}
-		} else if isRotated(el.Angle) {
+		case isRotated(el.Angle):
 			// For arbitrarily rotated text, project positions onto the
 			// perpendicular axis of the text direction to detect line breaks.
 			newLine = perpDist(prev, el) > 2.0
-		} else {
+		default:
 			if math.Abs(prev.Y-el.Y) > 2.0 {
 				newLine = true
 			}
@@ -76,16 +77,17 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 			if i > 0 {
 				prev := ln.elems[i-1]
 				curr := ln.elems[i]
-				if curr.Vertical || isOrthogonalRotation(curr.Angle) {
+				switch {
+				case curr.Vertical || isOrthogonalRotation(curr.Angle):
 					if needsSpace(curr.Y-prev.Y, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
-				} else if isRotated(curr.Angle) {
+				case isRotated(curr.Angle):
 					// For rotated text, measure distance along the text direction.
 					if needsSpace(alongDist(prev, curr), prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
-				} else {
+				default:
 					if needsSpace(curr.X-prev.X, prev.Width, curr.FontSize) {
 						sb.WriteString(" ")
 					}
@@ -188,14 +190,15 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 		curr := ewb[i]
 
 		isNewLine := false
-		if prev.BeadIndex != curr.BeadIndex {
+		switch {
+		case prev.BeadIndex != curr.BeadIndex:
 			isNewLine = true
-		} else if isVerticalPage {
+		case isVerticalPage:
 			dx := prev.X - curr.X
 			if dx > 0.5*curr.FontSize || dx < -0.5*curr.FontSize {
 				isNewLine = true
 			}
-		} else {
+		default:
 			dy := prev.Y - curr.Y
 			if dy > 0.5*curr.FontSize || dy < -0.5*curr.FontSize {
 				isNewLine = true

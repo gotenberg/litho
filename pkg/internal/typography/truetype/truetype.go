@@ -120,7 +120,7 @@ func EmptyGIDs(data []byte) (map[uint16]bool, error) {
 	if len(headData) < 54 { //nolint:mnd
 		return nil, fmt.Errorf("%w: head table too short", ErrInvalidFont)
 	}
-	indexToLocFormat := int16(binary.BigEndian.Uint16(headData[50:52]))
+	indexToLocFormat := int16(binary.BigEndian.Uint16(headData[50:52])) //nolint:gosec // intentional two's-complement conversion
 
 	locaData, err := TableData(data, records, "loca")
 	if err != nil {
@@ -352,7 +352,7 @@ func parseCmapFormat6(data []byte) (map[uint16]rune, error) {
 		if gid != 0 {
 			code := firstCode + i
 			if _, exists := result[gid]; !exists {
-				result[gid] = rune(code)
+				result[gid] = rune(code) //nolint:gosec // code is within Unicode range
 			}
 		}
 	}
