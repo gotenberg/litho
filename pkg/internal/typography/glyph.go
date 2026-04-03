@@ -66,9 +66,12 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 				data = data[n:]
 				continue
 			}
-			// Single-byte codespace match with no mapping (n==0 or n==1):
-			// fall through to the Encoding table below.
-			if r, ok := font.Encoding[data[0]]; ok {
+			// Type0/CID fonts with Identity fallback use 2-byte character
+			// codes as direct Unicode values. Skip the single-byte Encoding
+			// table to avoid misinterpreting the high byte of a 2-byte code.
+			if font.Subtype == "Type0" && font.CIDIdentityFallback {
+				char = resolveGlyphFallback(font, data, &n)
+			} else if r, ok := font.Encoding[data[0]]; ok {
 				char = string(r)
 			} else {
 				char = resolveGlyphFallback(font, data, &n)

@@ -294,10 +294,25 @@ func GlyphToRuneFull(name string) (rune, bool) {
 			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
-	// "Cdd" / "Cddd" — decimal charcode (e.g., "C141" → rune(141))
+	// "Cdd" / "Cddd" — decimal charcode (e.g., "C141" → rune(141)).
+	// Reject C0/C1 control ranges (1-31, 127-159) since those are never
+	// valid glyph Unicode values and would override real base encodings.
 	if len(name) >= 3 && len(name) <= 4 && (name[0] == 'C' || name[0] == 'c') {
 		if r, err := strconv.Atoi(name[1:]); err == nil && r > 0 && r <= 0xFFFF {
-			return rune(r), true
+			if r >= 0x20 && r != 0x7F && (r < 0x80 || r > 0x9F) {
+				return rune(r), true
+			}
+		}
+	}
+	// "Cxx" — hex digits after C/c, only when the suffix contains at least
+	// one hex-only letter (a-f/A-F). Handles names like "C2c" (0x2C = ',')
+	// and "C4b" (0x4B = 'K'). Pure-decimal names like "C128" are handled
+	// by the decimal pattern above; hex fallback would misinterpret them.
+	if len(name) >= 3 && len(name) <= 5 && (name[0] == 'C' || name[0] == 'c') && hasHexLetter(name[1:]) {
+		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil && r >= 0x20 && r != 0x7F && r <= 0xFFFF {
+			if r < 0x80 || r > 0x9F {
+				return rune(r), true //nolint:gosec // value constrained by 32-bit parse
+			}
 		}
 	}
 	// Try RecoverGlyphName (strip suffixes like ".001", ".alt", etc.)
@@ -306,6 +321,16 @@ func GlyphToRuneFull(name string) (rune, bool) {
 		return GlyphToRuneSimple(recovered)
 	}
 	return 0, false
+}
+
+// hasHexLetter reports whether s contains at least one hex-only letter (a-f/A-F).
+func hasHexLetter(s string) bool {
+	for _, c := range s {
+		if (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
+			return true
+		}
+	}
+	return false
 }
 
 // GlyphToRuneSimple resolves a glyph name without RecoverGlyphName fallback.

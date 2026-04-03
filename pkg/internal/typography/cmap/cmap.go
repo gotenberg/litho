@@ -262,8 +262,21 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 		if val, ok := c.Mapping[string(candidate)]; ok {
 			return n, val, true
 		}
-		// Code is in codespace but has no mapping — still consume n bytes
-		// to avoid misinterpreting multi-byte codes as single bytes.
+		// Code is in codespace but has no mapping. Some malformed PDFs
+		// declare a 2-byte codespace but populate bfchar entries with
+		// 1-byte keys. Try shorter prefixes from the mapping before
+		// consuming the full codespace width as unmapped.
+		if n > 1 {
+			for shorter := n - 1; shorter >= 1; shorter-- {
+				if shorter > len(data) {
+					continue
+				}
+				if val, ok := c.Mapping[string(data[:shorter])]; ok {
+					return shorter, val, true
+				}
+			}
+		}
+		// No shorter match found — consume the codespace width as unmapped.
 		return n, "", false
 	}
 

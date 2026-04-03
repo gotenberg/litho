@@ -296,6 +296,14 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		} else {
 			font.ToUnicode = parseToUnicode(ctx, doc, tuObj)
 		}
+		// When /ToUnicode is a name like /Identity-H (not a valid CMap stream),
+		// the PDF producer intends character codes to be direct Unicode values.
+		// Set the Identity fallback for Type0 fonts in this case.
+		if font.ToUnicode == nil && subtypeName == "Type0" {
+			if tuName, ok := tuObj.(ast.PdfName); ok && (tuName == "Identity-H" || tuName == "Identity-V") {
+				font.CIDIdentityFallback = true
+			}
+		}
 	}
 
 	resolveEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
@@ -313,20 +321,46 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		resolveSimpleFontMetrics(ctx, doc, fontDict, font)
 	}
 
-	// Type1 font program encoding fallback: when the PDF-level /Encoding is
-	// missing or incomplete, parse the encoding from the embedded Type1 font
-	// program (/FontFile). This is essential for fonts like CMR10 that place
-	// ligatures (fi, fl) at non-standard byte positions.
-	extractType1Encoding(ctx, doc, fontDict, font)
+	// Type1 font program encoding: parse the encoding vector from the
+	// embedded Type1 font program (/FontFile). When the PDF-level /Encoding
+	// is absent, the font program's encoding is authoritative and overrides
+	// the default WinAnsiEncoding. When /Encoding IS present, the font
+	// program only fills holes (codes not covered by Differences).
+	_, hasExplicitEncoding := fontDict["Encoding"]
+	extractType1Encoding(ctx, doc, fontDict, font, !hasExplicitEncoding)
 
 	// Extract /FontBBox and embedded font metrics from the FontDescriptor.
 	extractFontDescriptorMetrics(ctx, doc, fontDict, font)
 
+	// Type0 fonts with Identity-H/V encoding and no ToUnicode CMap: the 2-byte
+	// character codes are CIDs that typically equal Unicode codepoints. The
+	// embedded font's cmap table maps GID→Unicode, but without a CIDToGIDMap
+	// we cannot reliably map CID→GID for subset fonts. Prefer treating CIDs
+	// as direct Unicode codepoints (the Identity fallback).
+	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback {
+		if isIdentityEncoding(ctx, doc, fontDict) {
+			font.CIDIdentityFallback = true
+		}
+	}
+
+	// Predefined CJK encoding CMap fallback for Type0 fonts: when the
+	// /Encoding is a predefined CMap name (e.g., GBK-EUC-H, EUC-H), load
+	// the byte→CID mapping from the embedded bcmap and compose with the
+	// Adobe CID→Unicode table to synthesize a ToUnicode CMap.
+	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback {
+		if encName := encodingCMapName(ctx, doc, fontDict); encName != "" {
+			if cm := cmap.LoadPredefinedCMap(encName); cm != nil {
+				font.ToUnicode = cm
+			}
+		}
+	}
+
 	// Embedded TrueType/OpenType cmap fallback: extract the glyph-to-Unicode
-	// mapping from the embedded font binary when no ToUnicode CMap exists.
-	// When ToUnicode IS present, it is authoritative — the embedded cmap may
-	// disagree because subset fonts remap GIDs.
-	if font.ToUnicode == nil {
+	// mapping from the embedded font binary when no ToUnicode CMap exists and
+	// no Identity fallback is active. When ToUnicode IS present, it is
+	// authoritative. When Identity fallback is active, the embedded cmap's
+	// GID→Unicode would require a CID→GID mapping we don't have.
+	if font.ToUnicode == nil && !font.CIDIdentityFallback {
 		extractEmbeddedCmap(ctx, doc, fontDict, font)
 	}
 
@@ -335,7 +369,7 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	// CNS1, Korea1), use the predefined CID→Unicode map from the Adobe CMap
 	// resources. This handles CJK fonts that have no ToUnicode CMap and no
 	// embedded font program.
-	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil {
+	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
 		applyAdobeCIDFallback(ctx, doc, fontDict, font)
 	}
 
@@ -343,7 +377,7 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	// CIDToGIDMap as /Identity (CID = GID) and has no ToUnicode CMap and no
 	// embedded font program, treat character codes as direct Unicode code points.
 	// This is common for CJK fonts that rely on system font access.
-	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil {
+	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
 		applyCIDToGIDIdentityFallback(ctx, doc, fontDict, font)
 	}
 
@@ -919,7 +953,7 @@ var type1EncodingRe = regexp.MustCompile(`dup\s+(\d+)\s+/(\S+)\s+put`)
 // (/FontFile) and fills any holes in font.Encoding. This is needed when the
 // PDF font dictionary has no /Encoding or an incomplete /Differences array,
 // because the font program itself defines the authoritative encoding.
-func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, overwrite bool) {
 	fdDict := findFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
@@ -948,9 +982,12 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 			continue
 		}
 		glyphName := string(match[2])
-		// Only fill holes — don't overwrite existing PDF-level encoding.
-		if _, exists := font.Encoding[byte(code)]; exists {
-			continue
+		// When overwrite is false, only fill holes (PDF-level /Encoding
+		// takes precedence). When true, the font program is authoritative.
+		if !overwrite {
+			if _, exists := font.Encoding[byte(code)]; exists {
+				continue
+			}
 		}
 		if r, ok := encodings.GlyphToRuneFull(glyphName); ok {
 			if font.Encoding == nil {
@@ -1163,6 +1200,34 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	font.CIDIdentityFallback = true
 }
 
+// encodingCMapName returns the predefined CMap name from a Type0 font's
+// /Encoding entry, or empty string if the encoding is not a recognized name.
+func encodingCMapName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) string {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return ""
+	}
+	encName, err := document.ResolveName(ctx, doc, encObj)
+	if err != nil || encName == "" {
+		return ""
+	}
+	return string(encName)
+}
+
+// isIdentityEncoding checks whether a Type0 font uses Identity-H or Identity-V
+// encoding, which means character codes are direct CIDs.
+func isIdentityEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return false
+	}
+	encName, err := document.ResolveName(ctx, doc, encObj)
+	if err != nil {
+		return false
+	}
+	return encName == "Identity-H" || encName == "Identity-V"
+}
+
 // findFontDescriptor locates the /FontDescriptor dictionary. For Type0 fonts,
 // it is inside the first element of /DescendantFonts.
 func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
@@ -1322,18 +1387,23 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 		}
 	}
 	if r, ok := encodings.GlyphToRuneFull(name); ok {
+		// The extended AGL includes ZapfDingbats "aNN" glyph names that
+		// map to the Dingbats range (U+2700-U+27BF). For non-Dingbats
+		// fonts, these are false matches from font-internal identifiers.
+		if !isDingbats && isDingbatsRange(r) {
+			return 0, false
+		}
 		return r, ok
 	}
-	// Last resort: check Symbol and Dingbats tables for all fonts.
-	if !isSymbol {
-		if r, ok := encodings.SymbolGlyphsUnicode[name]; ok {
-			return r, true
-		}
-	}
-	if !isDingbats {
-		if r, ok := encodings.DingbatsGlyphsUnicode[name]; ok {
-			return r, true
-		}
-	}
 	return 0, false
+}
+
+// isDingbatsRange returns true if the rune falls in a Unicode range
+// specific to ZapfDingbats (Dingbats block and related ornaments).
+func isDingbatsRange(r rune) bool {
+	return (r >= 0x2700 && r <= 0x27BF) || // Dingbats
+		(r >= 0x2764 && r <= 0x2767) || // Heavy hearts (subset)
+		(r >= 0x2605 && r <= 0x2606) || // Stars
+		(r >= 0x260E && r <= 0x260F) || // Telephone
+		(r >= 0x2660 && r <= 0x2666) // Card suits
 }
