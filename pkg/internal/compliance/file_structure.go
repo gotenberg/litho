@@ -43,10 +43,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
 	results = append(results, checkFormatViolations(doc, profile)...)
 	results = append(results, checkObjHeaderLeadingWhitespace(doc, profile)...)
-	// TODO: checkStreamLengths produces FPs on some linearized/complex PDFs
-	// where raw-byte scanning finds endstream at wrong offset. Disabled until
-	// a more robust approach is available (e.g., using xref offsets directly).
-	// results = append(results, checkStreamLengths(ctx, doc, profile)...)
+	results = append(results, checkStreamLengths(ctx, doc, profile)...)
 	results = append(results, checkContentStreamHexStrings(ctx, doc, catalog, profile)...)
 	results = append(results, checkNonStandardFilters(ctx, doc, profile)...)
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
@@ -573,111 +570,187 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 // checkStreamLengths validates §6.1.7.1 t1 / §6.1.6.1 t1: the declared /Length
 // in a stream dictionary must match the actual byte count between the stream
 // keyword and endstream keyword.
-func checkStreamLengths(ctx context.Context, doc *document.Document, profile string) []Violation { //nolint:unused // kept for future re-enablement
+//
+// Approach: for each uncompressed stream object, use the xref offset to read
+// the object header and locate the "stream" keyword. Then use the declared
+// /Length to seek directly to where "endstream" should appear. If "endstream"
+// is not found at the expected position, the declared /Length is wrong.
+//
+// This avoids scanning the entire stream data for "endstream", which was
+// fragile due to binary data containing the keyword or EOL normalization
+// differences between producers.
+func checkStreamLengths(ctx context.Context, doc *document.Document, profile string) []Violation {
 	var results []Violation
+	rule := streamLengthRule(profile)
 
 	for objNum, entry := range doc.Index.Entries {
 		if ctx.Err() != nil {
 			return results
 		}
-		if entry.Free || entry.Type != 1 { // only check uncompressed objects
+		if entry.Free || entry.Type != xref.XRefTypeNormal {
 			continue
 		}
 
+		// Resolve the object to check if it's a stream with a /Length key.
 		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil || stream.Dict == nil {
 			continue
 		}
 
-		// Get declared /Length.
 		lengthObj, ok := stream.Dict["Length"]
 		if !ok {
 			continue
 		}
+
 		declaredLen, err := document.ResolveInt(ctx, doc, lengthObj)
 		if err != nil {
 			slog.Debug("compliance.file_structure: cannot resolve stream length", "error", err)
 			continue
 		}
 
-		// Read raw bytes around the object to find stream/endstream markers.
-		// Read enough to cover the object header + dict + stream data.
-		readSize := int64(declaredLen) + 4096
-		if readSize > 1<<20 {
+		if declaredLen < 0 {
+			results = append(results, Violation{
+				Rule:    rule,
+				Context: fmt.Sprintf("object %d: negative /Length=%d", objNum, declaredLen),
+			})
 			continue
 		}
-		rawData, err := doc.ReadFileBytes(entry.Offset, readSize)
+
+		// Phase 1: Read a small header window (up to 4 KiB) from the xref
+		// offset to find the "stream" keyword position within the object.
+		const headerBufSize = 4096
+		headerBuf, err := doc.ReadFileBytes(entry.Offset, headerBufSize)
 		if err != nil {
-			slog.Debug("compliance.file_structure: cannot read raw stream bytes", "error", err)
 			continue
 		}
 
-		// Find "stream" keyword.
-		streamIdx := bytes.Index(rawData, []byte("stream"))
-		if streamIdx < 0 {
+		// Find the "stream" keyword that is NOT part of "endstream".
+		streamDataStart := findStreamDataStart(headerBuf)
+		if streamDataStart < 0 {
+			continue // not a stream, or header too small to find it
+		}
+
+		// Phase 2: Read a small window at where "endstream" should appear.
+		// The absolute file position of stream data start:
+		absDataStart := entry.Offset + int64(streamDataStart)
+		// The expected end of stream data:
+		absExpectedEnd := absDataStart + int64(declaredLen)
+
+		// Read enough bytes to find "endstream" after optional EOL.
+		// "endstream" is 9 bytes, plus up to 2 EOL bytes = 11 bytes needed.
+		const tailBufSize = 32
+		tailBuf, err := doc.ReadFileBytes(absExpectedEnd, tailBufSize)
+		if err != nil {
 			continue
 		}
 
-		// Skip past "stream" + EOL marker (CR+LF or LF).
-		dataStart := streamIdx + len("stream")
-		if dataStart < len(rawData) && rawData[dataStart] == '\r' {
-			dataStart++
-		}
-		if dataStart < len(rawData) && rawData[dataStart] == '\n' {
-			dataStart++
-		}
-
-		// Use the declared Length to find where the stream data should end.
-		// Then check if "endstream" follows (possibly after EOL).
-		expectedEnd := dataStart + int(declaredLen)
-		if expectedEnd > len(rawData) {
-			continue // not enough data read
-		}
-
-		// At expectedEnd, there should be an optional EOL then "endstream".
-		tail := rawData[expectedEnd:]
-		trimmed := tail
-		// Skip optional CR and/or LF.
-		if len(trimmed) > 0 && trimmed[0] == '\r' {
-			trimmed = trimmed[1:]
-		}
-		if len(trimmed) > 0 && trimmed[0] == '\n' {
-			trimmed = trimmed[1:]
-		}
-
-		if !bytes.HasPrefix(trimmed, []byte("endstream")) {
-			// endstream not found at declared Length — the declared Length is wrong.
-			// Only report if we can find endstream nearby to confirm the mismatch
-			// is real and not a scanning artifact.
-			endIdx := bytes.Index(rawData[dataStart:], []byte("endstream"))
-			if endIdx < 0 {
-				continue
-			}
-			rawLen := endIdx
-			// Only flag if the mismatch is significant (> 2 bytes for EOL tolerance)
-			// but not too large (> 10% suggests a scanning issue, not a real violation).
-			diff := rawLen - int(declaredLen)
-			absDiff := diff
-			if absDiff < 0 {
-				absDiff = -absDiff
-			}
-			maxDrift := max(
-				int(declaredLen)/10,
-				10)
-			if absDiff > 2 && absDiff < maxDrift {
-				results = append(results, Violation{
-					Rule:    streamLengthRule(profile),
-					Context: fmt.Sprintf("object %d: declared Length=%d but actual=%d", objNum, declaredLen, rawLen),
-				})
-			}
+		if !hasEndstreamAt(tailBuf) {
+			results = append(results, Violation{
+				Rule:    rule,
+				Context: fmt.Sprintf("object %d: declared /Length=%d does not match actual stream data extent", objNum, declaredLen),
+			})
 		}
 	}
 
 	return results
 }
 
+// findStreamDataStart locates the byte offset within buf where stream data
+// begins (immediately after the "stream" keyword and its required EOL).
+// Returns -1 if the "stream" keyword is not found in buf.
+func findStreamDataStart(buf []byte) int {
+	// Scan for the "stream" keyword. We must skip occurrences that are:
+	//   1. Part of "endstream".
+	//   2. Part of a PDF name or other token (e.g., /application#2Foctet-stream).
+	// Per ISO 32000, the stream keyword is a standalone keyword preceded by
+	// whitespace or a delimiter (typically ">>" closing the stream dictionary)
+	// and followed immediately by a single EOL (CR+LF or LF).
+	searchFrom := 0
+	for {
+		idx := bytes.Index(buf[searchFrom:], []byte("stream"))
+		if idx < 0 {
+			return -1
+		}
+		absIdx := searchFrom + idx
+
+		// Skip "endstream".
+		if absIdx >= 3 && bytes.Equal(buf[absIdx-3:absIdx], []byte("end")) {
+			searchFrom = absIdx + 6
+			continue
+		}
+
+		// The stream keyword must be preceded by whitespace or a PDF delimiter
+		// to be a real keyword (not embedded in a name like /octet-stream).
+		if absIdx > 0 && !isPdfWhitespaceOrDelim(buf[absIdx-1]) {
+			searchFrom = absIdx + 6
+			continue
+		}
+
+		afterKeyword := absIdx + 6 // position right after "stream"
+
+		// The stream keyword must be followed by an EOL character (\r or \n).
+		if afterKeyword < len(buf) && buf[afterKeyword] != '\r' && buf[afterKeyword] != '\n' {
+			searchFrom = afterKeyword
+			continue
+		}
+
+		// The data starts after "stream" + required EOL.
+		pos := afterKeyword
+		if pos < len(buf) && buf[pos] == '\r' {
+			pos++
+		}
+		if pos < len(buf) && buf[pos] == '\n' {
+			pos++
+		}
+		return pos
+	}
+}
+
+// isPdfWhitespaceOrDelim reports whether b is a PDF whitespace character
+// (NUL, TAB, LF, FF, CR, SPACE) or a PDF delimiter character
+// ( ) < > [ ] { } / % per ISO 32000-1 §7.2).
+func isPdfWhitespaceOrDelim(b byte) bool {
+	switch b {
+	case 0, '\t', '\n', '\f', '\r', ' ', // whitespace
+		'(', ')', '<', '>', '[', ']', '{', '}', '/', '%': // delimiters
+		return true
+	}
+	return false
+}
+
+// hasEndstreamAt checks whether buf (read from the expected stream-data end
+// position) contains an "endstream" keyword, optionally preceded by EOL bytes.
+// Per the PDF spec, the stream data may be followed by an optional EOL (CR,
+// LF, or CRLF) before "endstream".
+func hasEndstreamAt(buf []byte) bool {
+	endstream := []byte("endstream")
+
+	// Try: "endstream" immediately at position 0.
+	if bytes.HasPrefix(buf, endstream) {
+		return true
+	}
+
+	// Try: optional EOL then "endstream".
+	off := 0
+	if off < len(buf) && buf[off] == '\r' {
+		off++
+	}
+	if off < len(buf) && buf[off] == '\n' {
+		off++
+	}
+	if off > 0 && bytes.HasPrefix(buf[off:], endstream) {
+		return true
+	}
+
+	// Try: single \n then "endstream" (already covered above if \r was absent).
+	// Try: single \r then "endstream" (some producers omit \n).
+	// Both cases are covered by the logic above.
+
+	return false
+}
+
 // streamLengthRule returns the rule for stream length mismatch.
-func streamLengthRule(profile string) Rule { //nolint:unused // kept for future re-enablement
+func streamLengthRule(profile string) Rule {
 	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
 }
 

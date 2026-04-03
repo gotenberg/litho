@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -142,4 +143,405 @@ func TestIsStandardStructType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCheckMarkInfo(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("missing MarkInfo", func(t *testing.T) {
+		t.Parallel()
+		catalog := ast.PdfDict{}
+		var results []Violation
+		checkMarkInfo(ctx, nil, catalog, "PDF/A-1a", 1, &results)
+		if len(results) == 0 {
+			t.Error("expected violation for missing /MarkInfo")
+		}
+	})
+
+	t.Run("MarkInfo missing Marked key", func(t *testing.T) {
+		t.Parallel()
+		catalog := ast.PdfDict{
+			"MarkInfo": ast.PdfDict{},
+		}
+		var results []Violation
+		checkMarkInfo(ctx, nil, catalog, "PDF/UA-1", 0, &results)
+		if len(results) == 0 {
+			t.Error("expected violation for /MarkInfo missing /Marked")
+		}
+	})
+
+	t.Run("Marked is false", func(t *testing.T) {
+		t.Parallel()
+		catalog := ast.PdfDict{
+			"MarkInfo": ast.PdfDict{
+				"Marked": ast.PdfBool(false),
+			},
+		}
+		var results []Violation
+		checkMarkInfo(ctx, nil, catalog, "PDF/UA-2", 0, &results)
+		if len(results) == 0 {
+			t.Error("expected violation for /Marked=false")
+		}
+	})
+
+	t.Run("Marked is true", func(t *testing.T) {
+		t.Parallel()
+		catalog := ast.PdfDict{
+			"MarkInfo": ast.PdfDict{
+				"Marked": ast.PdfBool(true),
+			},
+		}
+		var results []Violation
+		checkMarkInfo(ctx, nil, catalog, "PDF/A-1a", 1, &results)
+		if len(results) != 0 {
+			t.Errorf("expected no violations, got %d: %v", len(results), results)
+		}
+	})
+}
+
+func TestCheckStructTreeRoot(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("not required for non-a level", func(t *testing.T) {
+		t.Parallel()
+		catalog := ast.PdfDict{}
+		var results []Violation
+		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/A-1b", 1, 'b', false, &results)
+		if st != nil {
+			t.Error("expected nil StructTreeRoot for level 'b'")
+		}
+		if len(results) != 0 {
+			t.Errorf("expected no violations for level 'b', got %d", len(results))
+		}
+	})
+
+	t.Run("missing for level a", func(t *testing.T) {
+		t.Parallel()
+		catalog := ast.PdfDict{}
+		var results []Violation
+		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/A-1a", 1, 'a', false, &results)
+		if st != nil {
+			t.Error("expected nil StructTreeRoot when missing")
+		}
+		if len(results) == 0 {
+			t.Error("expected violation for missing /StructTreeRoot")
+		}
+	})
+
+	t.Run("missing for PDF/UA", func(t *testing.T) {
+		t.Parallel()
+		catalog := ast.PdfDict{}
+		var results []Violation
+		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/UA-1", 0, 0, true, &results)
+		if st != nil {
+			t.Error("expected nil StructTreeRoot when missing")
+		}
+		if len(results) == 0 {
+			t.Error("expected violation for missing /StructTreeRoot in PDF/UA")
+		}
+	})
+
+	t.Run("present and valid", func(t *testing.T) {
+		t.Parallel()
+		stDict := ast.PdfDict{"Type": ast.PdfName("StructTreeRoot")}
+		catalog := ast.PdfDict{
+			"StructTreeRoot": stDict,
+		}
+		var results []Violation
+		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/A-2a", 2, 'a', false, &results)
+		if st == nil {
+			t.Error("expected non-nil StructTreeRoot")
+		}
+		if len(results) != 0 {
+			t.Errorf("expected no violations, got %d: %v", len(results), results)
+		}
+	})
+}
+
+func TestCheckHeadingHierarchy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty headings", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		state := &walkState{results: &results, profile: "PDF/UA-1"}
+		checkHeadingHierarchy(state)
+		if len(results) != 0 {
+			t.Errorf("expected no violations for empty headings, got %d", len(results))
+		}
+	})
+
+	t.Run("valid H1 H2 H3", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		state := &walkState{
+			results:       &results,
+			profile:       "PDF/UA-1",
+			headingLevels: []int{1, 2, 3},
+		}
+		checkHeadingHierarchy(state)
+		if len(results) != 0 {
+			t.Errorf("expected no violations for H1-H2-H3, got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("skipped level H1 to H3", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		state := &walkState{
+			results:       &results,
+			profile:       "PDF/UA-1",
+			headingLevels: []int{1, 3},
+		}
+		checkHeadingHierarchy(state)
+		if len(results) == 0 {
+			t.Error("expected violation for skipped heading level H1->H3")
+		}
+	})
+
+	t.Run("first heading not H1", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		state := &walkState{
+			results:       &results,
+			profile:       "PDF/UA-1",
+			headingLevels: []int{2},
+		}
+		checkHeadingHierarchy(state)
+		if len(results) == 0 {
+			t.Error("expected violation when first heading is H2")
+		}
+	})
+
+	t.Run("descending then ascending is ok", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		state := &walkState{
+			results:       &results,
+			profile:       "PDF/UA-1",
+			headingLevels: []int{1, 2, 3, 2, 1},
+		}
+		checkHeadingHierarchy(state)
+		if len(results) != 0 {
+			t.Errorf("expected no violations for H1-H2-H3-H2-H1, got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("multiple skips", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		state := &walkState{
+			results:       &results,
+			profile:       "PDF/UA-1",
+			headingLevels: []int{1, 4, 6},
+		}
+		checkHeadingHierarchy(state)
+		if len(results) < 2 {
+			t.Errorf("expected at least 2 violations for H1->H4->H6, got %d", len(results))
+		}
+	})
+}
+
+func TestValidateTableContainment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		typeName   ast.PdfName
+		parentType ast.PdfName
+		wantFail   bool
+	}{
+		{"TR inside Table", "TR", "Table", false},
+		{"TR inside THead", "TR", "THead", false},
+		{"TR inside TBody", "TR", "TBody", false},
+		{"TR inside TFoot", "TR", "TFoot", false},
+		{"TR inside Div", "TR", "Div", true},
+		{"THead inside Table", "THead", "Table", false},
+		{"THead inside Div", "THead", "Div", true},
+		{"TBody inside Table", "TBody", "Table", false},
+		{"TBody inside Div", "TBody", "Div", true},
+		{"TFoot inside Table", "TFoot", "Table", false},
+		{"TFoot inside Div", "TFoot", "Div", true},
+		{"TD inside TR", "TD", "TR", false},
+		{"TD inside Table", "TD", "Table", true},
+		{"TH inside TR", "TH", "TR", false},
+		{"TH inside Div", "TH", "Div", true},
+		{"P inside Div", "P", "Div", false},
+		// Empty parent means root context, should not produce violations.
+		{"TR at root", "TR", "", false},
+		{"TH at root", "TH", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var results []Violation
+			state := &walkState{results: &results, profile: "PDF/UA-1"}
+			validateTableContainment(state, tc.typeName, tc.parentType)
+			gotFail := len(results) > 0
+			if gotFail != tc.wantFail {
+				t.Errorf("validateTableContainment(%s, %s): got %d violations, wantFail=%v",
+					tc.typeName, tc.parentType, len(results), tc.wantFail)
+			}
+		})
+	}
+}
+
+func TestValidateTableChildren(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		typeName   ast.PdfName
+		parentType ast.PdfName
+		wantFail   bool
+	}{
+		{"TR in Table", "TR", "Table", false},
+		{"THead in Table", "THead", "Table", false},
+		{"Caption in Table", "Caption", "Table", false},
+		{"P in Table", "P", "Table", true},
+		{"Div in Table", "Div", "Table", true},
+		{"TR in THead", "TR", "THead", false},
+		{"Caption in TBody", "Caption", "TBody", false},
+		{"P in THead", "P", "THead", true},
+		{"TH in TR", "TH", "TR", false},
+		{"TD in TR", "TD", "TR", false},
+		{"P in TR", "P", "TR", true},
+		// Non-table parent should not produce violations.
+		{"P in Div", "P", "Div", false},
+		{"TR in empty parent", "TR", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var results []Violation
+			state := &walkState{results: &results, profile: "PDF/UA-1"}
+			validateTableChildren(state, tc.typeName, tc.parentType)
+			gotFail := len(results) > 0
+			if gotFail != tc.wantFail {
+				t.Errorf("validateTableChildren(%s, %s): got %d violations, wantFail=%v",
+					tc.typeName, tc.parentType, len(results), tc.wantFail)
+			}
+		})
+	}
+}
+
+func TestValidateListContainment(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name       string
+		typeName   ast.PdfName
+		parentType ast.PdfName
+		wantFail   bool
+	}{
+		{"LI in L", "LI", "L", false},
+		{"LI in Div", "LI", "Div", true},
+		{"LBody in LI", "LBody", "LI", false},
+		{"LBody in Div", "LBody", "Div", true},
+		{"P in L", "P", "L", true},
+		{"Caption in L", "Caption", "L", false},
+		{"nested L in L", "L", "L", false},
+		{"Lbl in LI", "Lbl", "LI", false},
+		{"LBody in LI", "LBody", "LI", false},
+		{"P in LI", "P", "LI", true},
+		// Empty parent should not produce violations.
+		{"LI at root", "LI", "", false},
+		{"LBody at root", "LBody", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var results []Violation
+			state := &walkState{results: &results, profile: "PDF/UA-1"}
+			elem := ast.PdfDict{"S": ast.PdfName(tc.typeName)}
+			validateListContainment(ctx, state, elem, tc.typeName, tc.parentType)
+			gotFail := len(results) > 0
+			if gotFail != tc.wantFail {
+				t.Errorf("validateListContainment(%s, %s): got %d violations, wantFail=%v",
+					tc.typeName, tc.parentType, len(results), tc.wantFail)
+			}
+		})
+	}
+}
+
+func TestResolveToStandard(t *testing.T) {
+	t.Parallel()
+
+	t.Run("direct standard target", func(t *testing.T) {
+		t.Parallel()
+		mapping := map[ast.PdfName]ast.PdfName{
+			"MyTag": "P",
+		}
+		var results []Violation
+		ok := resolveToStandard("MyTag", mapping, &results, "PDF/UA-1")
+		if !ok {
+			t.Error("expected true for mapping to standard type")
+		}
+		if len(results) != 0 {
+			t.Errorf("expected no violations, got %d", len(results))
+		}
+	})
+
+	t.Run("chain to standard", func(t *testing.T) {
+		t.Parallel()
+		mapping := map[ast.PdfName]ast.PdfName{
+			"Custom1": "Custom2",
+			"Custom2": "Table",
+		}
+		var results []Violation
+		ok := resolveToStandard("Custom1", mapping, &results, "PDF/UA-1")
+		if !ok {
+			t.Error("expected true for chain resolving to standard type")
+		}
+		if len(results) != 0 {
+			t.Errorf("expected no violations, got %d", len(results))
+		}
+	})
+
+	t.Run("circular mapping", func(t *testing.T) {
+		t.Parallel()
+		mapping := map[ast.PdfName]ast.PdfName{
+			"A": "B",
+			"B": "A",
+		}
+		var results []Violation
+		ok := resolveToStandard("A", mapping, &results, "PDF/UA-1")
+		if ok {
+			t.Error("expected false for circular mapping")
+		}
+		if len(results) == 0 {
+			t.Error("expected violation for circular mapping")
+		}
+	})
+
+	t.Run("unmapped non-standard", func(t *testing.T) {
+		t.Parallel()
+		mapping := map[ast.PdfName]ast.PdfName{
+			"Custom": "AlsoCustom",
+		}
+		var results []Violation
+		ok := resolveToStandard("Custom", mapping, &results, "PDF/UA-1")
+		if ok {
+			t.Error("expected false for unmapped non-standard type")
+		}
+		if len(results) == 0 {
+			t.Error("expected violation for non-standard type not resolving to standard")
+		}
+	})
+
+	t.Run("self-mapping handled by caller", func(t *testing.T) {
+		// resolveToStandard sees A→A as a circular mapping.
+		t.Parallel()
+		mapping := map[ast.PdfName]ast.PdfName{
+			"Custom": "Custom",
+		}
+		var results []Violation
+		ok := resolveToStandard("Custom", mapping, &results, "PDF/UA-1")
+		if ok {
+			t.Error("expected false for self-mapping")
+		}
+	})
 }
