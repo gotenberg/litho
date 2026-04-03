@@ -3,6 +3,7 @@ package filter
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"errors"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestDecoder_NilDelegatesToPackageLevel(t *testing.T) {
 
 	// Unfiltered stream should return raw bytes.
 	stream := ast.NewStream(ast.PdfDict{}, []byte("hello"))
-	got, err := d.DecodeStream(stream)
+	got, err := d.DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestDecoder_PluginCalledForRegisteredFilter(t *testing.T) {
 		"Filter": ast.PdfName("TestFilter"),
 	}, []byte("raw"))
 
-	got, err := d.DecodeStream(stream)
+	got, err := d.DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -79,7 +80,7 @@ func TestDecoder_FallsBackToBuiltinForUnregisteredFilter(t *testing.T) {
 		"Filter": ast.PdfName("FlateDecode"),
 	}, buf.Bytes())
 
-	got, err := d.DecodeStream(stream)
+	got, err := d.DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestDecoder_PluginErrorPropagated(t *testing.T) {
 		"Filter": ast.PdfName("FailFilter"),
 	}, []byte("data"))
 
-	_, err := d.DecodeStream(stream)
+	_, err := d.DecodeStream(context.Background(), stream)
 	if !errors.Is(err, testErr) {
 		t.Errorf("expected %v, got %v", testErr, err)
 	}
@@ -120,7 +121,7 @@ func TestDecoder_MarshalParmsConvertsTypes(t *testing.T) {
 		},
 	}, []byte("data"))
 
-	_, err := d.DecodeStream(stream)
+	_, err := d.DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestDecoder_NewStreamReaderDelegatesToPackageLevelForBuiltins(t *testing.T)
 		"Filter": ast.PdfName("FlateDecode"),
 	}, buf.Bytes())
 
-	rc, err := d.NewStreamReader(stream)
+	rc, err := d.NewStreamReader(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

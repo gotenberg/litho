@@ -134,7 +134,7 @@ func resolveDSSStreamArray(ctx context.Context, doc *document.Document, dict ast
 		if stream.Dict == nil {
 			continue
 		}
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			continue
 		}

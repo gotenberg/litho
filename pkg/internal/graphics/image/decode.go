@@ -89,7 +89,7 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	}
 
 	// Decode stream data (FlateDecode, etc.).
-	decodedData, err := doc.DecodeStream(stream)
+	decodedData, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode stream: %w", err)
 	}

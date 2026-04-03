@@ -48,7 +48,7 @@ func extractXFAData(ctx context.Context, doc *document.Document, acroFormDict as
 func assembleXFAXML(ctx context.Context, doc *document.Document, xfaObj ast.PdfObject) ([]byte, error) {
 	switch v := xfaObj.(type) {
 	case ast.PdfStream:
-		data, err := doc.DecodeStream(v)
+		data, err := doc.DecodeStream(ctx, v)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode XFA stream: %w", err)
 		}
@@ -79,7 +79,7 @@ func assembleXFAArray(ctx context.Context, doc *document.Document, arr ast.PdfAr
 			continue
 		}
 
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			continue
 		}

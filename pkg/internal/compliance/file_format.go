@@ -64,7 +64,7 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 			continue
 		}
 
-		_, violations := content.ParseStreamDataFormatChecked(streamData)
+		_, violations := content.ParseStreamDataFormatChecked(ctx, streamData)
 		for _, v := range violations {
 			msg := v.Error()
 			rule := oddRule

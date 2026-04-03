@@ -83,7 +83,7 @@ func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfO
 									if str, ok := jsRes.(ast.PdfString); ok {
 										*scripts = append(*scripts, document.DecodePdfString(str))
 									} else if stream, ok := jsRes.(ast.PdfStream); ok {
-										data, err := doc.DecodeStream(stream)
+										data, err := doc.DecodeStream(ctx, stream)
 										if err == nil {
 											*scripts = append(*scripts, string(data))
 										}

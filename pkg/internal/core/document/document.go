@@ -79,22 +79,21 @@ type Document struct {
 	Filters *filter.Decoder
 }
 
-// DecodeStream decodes a [ast.PdfStream] using the document's filter decoder
-// (which may include registered plugins). If no custom decoder is set,
-// falls back to the package-level filter decoder.
-func (d *Document) DecodeStream(stream ast.PdfStream) ([]byte, error) {
+// DecodeStream decodes a [ast.PdfStream] through the document's filter pipeline.
+// Context is checked between decompression chunks to allow cancellation.
+func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	if d.Filters != nil {
-		return d.Filters.DecodeStream(stream)
+		return d.Filters.DecodeStream(ctx, stream)
 	}
-	return filter.DecodeStream(stream)
+	return filter.DecodeStream(ctx, stream)
 }
 
 // NewStreamReader returns a lazy [io.ReadCloser] using the document's filter decoder.
-func (d *Document) NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
+func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	if d.Filters != nil {
-		return d.Filters.NewStreamReader(stream)
+		return d.Filters.NewStreamReader(ctx, stream)
 	}
-	return filter.NewStreamReader(stream)
+	return filter.NewStreamReader(ctx, stream)
 }
 
 // NopLogger returns a logger that discards all output.
@@ -153,7 +152,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		}
 	}
 
-	if err := doc.parseXRefChain(); err != nil {
+	if err := doc.parseXRefChain(ctx); err != nil {
 		doc.Logger.Debug("xref chain parse failed, attempting rebuild",
 			slog.String("error", err.Error()),
 		)

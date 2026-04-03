@@ -119,7 +119,7 @@ func extractNamesTree(ctx context.Context, doc *document.Document, nodeObj ast.P
 									filename = filepath.Base(filename)
 
 									// Decode and save stream
-									data, err := doc.DecodeStream(stream)
+									data, err := doc.DecodeStream(ctx, stream)
 									if err == nil {
 										outPath := filepath.Join(outputDir, filename)
 										err = os.WriteFile(outPath, data, 0o600)

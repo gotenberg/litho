@@ -65,7 +65,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		pageContent, _ := getPageContentBytes(ctx, doc, page)
 		var pageOps []content.Operation
 		if len(pageContent) > 0 {
-			pageOps, _ = content.ParseStreamData(pageContent)
+			pageOps, _ = content.ParseStreamData(ctx, pageContent)
 		}
 		usedCSNames := collectUsedCSNames(pageOps)
 
@@ -247,7 +247,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			continue
 		}
 
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			slog.Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),
@@ -300,7 +300,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 					// Compare by decoded data if references differ.
 					blendStream, err := document.ResolveStream(ctx, doc, blendingCSRef)
 					if err == nil {
-						blendData, err := doc.DecodeStream(blendStream)
+						blendData, err := doc.DecodeStream(ctx, blendStream)
 						if err == nil && iccProfilesEqual(data, blendData) {
 							identical = true
 						}
@@ -328,7 +328,7 @@ func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj
 	if err != nil {
 		return
 	}
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return
 	}
@@ -357,7 +357,7 @@ func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj
 		if !identical {
 			blendStream, blendErr := document.ResolveStream(ctx, doc, blendingCSRef)
 			if blendErr == nil {
-				blendData, blendErr := doc.DecodeStream(blendStream)
+				blendData, blendErr := doc.DecodeStream(ctx, blendStream)
 				if blendErr == nil && iccProfilesEqual(data, blendData) {
 					identical = true
 				}

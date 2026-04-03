@@ -48,7 +48,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
 
 		// Check inline images for Interpolate = true.
-		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(), i+1, part)...)
+		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
 	}
 
 	slog.Debug("compliance.xobjects: checks complete", "violations", len(results))

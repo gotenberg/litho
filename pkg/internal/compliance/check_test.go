@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -262,7 +263,7 @@ func TestPageCtxParsedOps(t *testing.T) {
 	t.Run("nil content", func(t *testing.T) {
 		t.Parallel()
 		p := &pageCtx{}
-		ops := p.parsedOps()
+		ops := p.parsedOps(context.Background())
 		if ops != nil {
 			t.Errorf("expected nil ops for empty content, got %d", len(ops))
 		}
@@ -271,8 +272,8 @@ func TestPageCtxParsedOps(t *testing.T) {
 	t.Run("cached result", func(t *testing.T) {
 		t.Parallel()
 		p := &pageCtx{content: []byte("q Q")}
-		ops1 := p.parsedOps()
-		ops2 := p.parsedOps()
+		ops1 := p.parsedOps(context.Background())
+		ops2 := p.parsedOps(context.Background())
 		if len(ops1) != len(ops2) {
 			t.Error("expected same result on repeated calls")
 		}

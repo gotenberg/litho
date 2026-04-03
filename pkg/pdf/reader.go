@@ -438,11 +438,6 @@ func (r *Reader) GetEmbeddedFiles(ctx context.Context) ([]models.EmbeddedFile, e
 	return semantics.ExtractPortfolioItems(ctx, r.doc)
 }
 
-// Deprecated: ExtractPortfolioItems is an alias for [Reader.GetEmbeddedFiles].
-func (r *Reader) ExtractPortfolioItems(ctx context.Context) ([]models.EmbeddedFile, error) {
-	return r.GetEmbeddedFiles(ctx)
-}
-
 // ExtractAnnotations extracts annotations from the given 1-based page number.
 func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) ([]models.Annotation, error) {
 	pages, err := r.resolvePages(ctx)

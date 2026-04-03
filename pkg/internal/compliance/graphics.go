@@ -35,7 +35,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// §6.2.2: check content stream resource completeness even when
 		// the page has no Resources (the absence itself may be a violation).
 		if hasContent {
-			ops := p.parsedOps()
+			ops := p.parsedOps(ctx)
 			_, hasOwnRes := page["Resources"]
 			if !hasOwnRes && ops != nil && opsReferenceResources(ops) {
 				results = append(results, failf(missingResourceRule(part),
@@ -57,7 +57,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		if hasContent {
 			if part >= 2 {
-				results = append(results, checkContentStreamStateOps(ctx, doc, p.parsedOps(), res, part, i+1)...)
+				results = append(results, checkContentStreamStateOps(ctx, doc, p.parsedOps(ctx), res, part, i+1)...)
 			}
 		}
 
@@ -114,7 +114,7 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		if subtype != "Form" {
 			continue
 		}
-		formData, err := doc.DecodeStream(stream)
+		formData, err := doc.DecodeStream(ctx, stream)
 		if err != nil || len(formData) == 0 {
 			continue
 		}
@@ -161,11 +161,11 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 				slog.Debug("compliance.graphics: cannot resolve CharProc stream", "error", err)
 				continue
 			}
-			data, err := doc.DecodeStream(stream)
+			data, err := doc.DecodeStream(ctx, stream)
 			if err != nil || len(data) == 0 {
 				continue
 			}
-			if !hasOwnRes && contentReferencesResources(data) {
+			if !hasOwnRes && contentReferencesResources(ctx, data) {
 				results = append(results, failf(missingResourceRule(part),
 					"page %d: Type3 font %s CharProc references resources without explicit Resources dictionary",
 					pageNum, fontName)...)
@@ -234,8 +234,8 @@ func opsReferenceResources(ops []content.Operation) bool {
 
 // contentReferencesResources parses a raw content stream and checks if it has
 // any operators that reference named resources.
-func contentReferencesResources(streamData []byte) bool {
-	ops, err := content.ParseStreamData(streamData)
+func contentReferencesResources(ctx context.Context, streamData []byte) bool {
+	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
 		return false
 	}

@@ -78,6 +78,12 @@ func (p *Parser) checkCtx() error {
 	return nil
 }
 
+// CheckContext returns the context error if a context was set via [Parser.WithContext].
+// Returns nil if no context is set or the context is not cancelled.
+func (p *Parser) CheckContext() error {
+	return p.checkCtx()
+}
+
 func (p *Parser) Peek(n int) (lexer.Token, error) {
 	for len(p.tokens) <= n {
 		if p.err != nil {

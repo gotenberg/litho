@@ -215,7 +215,7 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 											if jsStr, ok := jsRes.(ast.PdfString); ok {
 												calcScripts[fullName] = document.DecodePdfString(jsStr)
 											} else if jsStream, ok := jsRes.(ast.PdfStream); ok {
-												data, err := doc.DecodeStream(jsStream)
+												data, err := doc.DecodeStream(ctx, jsStream)
 												if err == nil {
 													calcScripts[fullName] = string(data)
 												}

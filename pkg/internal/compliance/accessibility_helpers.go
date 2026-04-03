@@ -199,7 +199,7 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil, false
 	}
 
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		// Fallback to raw bytes if decode fails (metadata streams are often uncompressed).
 		slog.Debug("compliance.accessibility: doc.DecodeStream failed, trying raw", "error", err)

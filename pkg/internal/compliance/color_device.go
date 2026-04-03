@@ -185,7 +185,7 @@ func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page as
 		if err != nil {
 			return ""
 		}
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			return ""
 		}
@@ -275,7 +275,7 @@ func checkPageOutputIntent(ctx context.Context, doc *document.Document, page ast
 			slog.Debug("compliance.color: cannot resolve output profile stream", "error", err)
 			continue
 		}
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil || len(data) < 20 {
 			return true, ""
 		}
@@ -409,7 +409,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	visited[dictAddr] = true
 
 	// Decode and scan the content stream for device CS operators.
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		slog.Debug("compliance.color: cannot decode Form XObject stream", "error", err)
 		return usage
@@ -421,7 +421,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	formStrokeCSSet := false
 
 	if len(data) > 0 {
-		ops, err := content.ParseStreamData(data)
+		ops, err := content.ParseStreamData(ctx, data)
 		if err != nil {
 			slog.Debug("compliance.color: cannot parse Form XObject content stream", "error", err)
 		} else {
@@ -624,7 +624,7 @@ func formGroupICCColorSpace(ctx context.Context, doc *document.Document, stream 
 		if err != nil {
 			return ""
 		}
-		data, err := doc.DecodeStream(iccStream)
+		data, err := doc.DecodeStream(ctx, iccStream)
 		if err != nil || len(data) < 20 {
 			return ""
 		}
@@ -667,12 +667,12 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 					slog.Debug("compliance.color: cannot resolve CharProc stream", "error", err)
 					continue
 				}
-				streamData, err := doc.DecodeStream(stream)
+				streamData, err := doc.DecodeStream(ctx, stream)
 				if err != nil {
 					slog.Debug("compliance.color: cannot decode CharProc stream", "error", err)
 					continue
 				}
-				ops, err := content.ParseStreamData(streamData)
+				ops, err := content.ParseStreamData(ctx, streamData)
 				if err != nil {
 					slog.Debug("compliance.color: cannot parse CharProc stream", "error", err)
 					continue
@@ -734,7 +734,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 		return usage, referencedXObjects
 	}
 
-	ops, err := content.ParseStreamData(streamData)
+	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
 		slog.Debug("compliance.color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)

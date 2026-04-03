@@ -389,7 +389,7 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 	if err != nil || stream.Dict == nil {
 		return nil
 	}
-	decoded, err := doc.DecodeStream(stream)
+	decoded, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil
 	}
@@ -509,7 +509,7 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 				if stream.Dict == nil {
 					continue
 				}
-				w, err := extractType3GlyphWidth(doc, stream)
+				w, err := extractType3GlyphWidth(ctx, doc, stream)
 				if err != nil {
 					continue
 				}
@@ -1218,7 +1218,7 @@ func decodeFontStream(ctx context.Context, doc *document.Document, fdDict ast.Pd
 	if stream.Dict == nil {
 		return nil
 	}
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil
 	}
@@ -1278,13 +1278,13 @@ func injectStandard14Widths(font *Font, baseFont string) {
 // d1 (setcachedevice): wx wy llx lly urx ury d1 — sets width and cache bbox.
 //
 // The first operand (wx) is the horizontal advance width in glyph space units.
-func extractType3GlyphWidth(doc *document.Document, stream ast.PdfStream) (float64, error) {
-	data, err := doc.DecodeStream(stream)
+func extractType3GlyphWidth(ctx context.Context, doc *document.Document, stream ast.PdfStream) (float64, error) {
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return 0, err
 	}
 
-	ops, err := content.ParseStreamData(data)
+	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
 		return 0, err
 	}

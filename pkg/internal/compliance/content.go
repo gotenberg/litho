@@ -112,7 +112,7 @@ func checkPageContent(ctx context.Context, page *pageCtx, part, pageNum int) []V
 	}
 
 	// Use lazily-parsed operations for operator validation and q/Q nesting.
-	ops := page.parsedOps()
+	ops := page.parsedOps(ctx)
 	if ops == nil {
 		slog.Debug("compliance.content: failed to parse content stream",
 			"page", pageNum)
@@ -198,7 +198,7 @@ func getPageContentBytes(ctx context.Context, doc *document.Document, page ast.P
 
 	var allData []byte
 	for _, s := range streams {
-		data, err := doc.DecodeStream(s)
+		data, err := doc.DecodeStream(ctx, s)
 		if err != nil {
 			return nil, fmt.Errorf("decoding content stream: %w", err)
 		}

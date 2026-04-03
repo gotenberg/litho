@@ -87,7 +87,7 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			continue
 		}
 
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			slog.Debug("compliance.color: cannot decode ICC profile stream", "index", i, "error", err)
 			*results = append(*results, failf(outputIntentICCRule(part), "OutputIntent[%d]: failed to decode ICC profile", i)...)
@@ -183,7 +183,7 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			slog.Debug("compliance.color: cannot decode output profile stream", "error", err)
 			continue

@@ -293,7 +293,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 	// t2: WMode in dict must match WMode in stream program.
 	// Both default to 0 when absent.
 	dictWMode, _ := document.ResolveInt(ctx, doc, encStream.Dict["WMode"])
-	data, err := doc.DecodeStream(encStream)
+	data, err := doc.DecodeStream(ctx, encStream)
 	if err == nil && len(data) > 0 {
 		streamWMode := max(extractCMapStreamWMode(data),
 			// default WMode per spec
@@ -337,7 +337,7 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 		return nil
 	}
 
-	data, err := doc.DecodeStream(encStream)
+	data, err := doc.DecodeStream(ctx, encStream)
 	if err != nil || len(data) == 0 {
 		return nil
 	}
@@ -387,7 +387,7 @@ func findNonPredefinedUseCMap(ctx context.Context, doc *document.Document, data 
 				// If no name found, also recurse to check the inner CMap's
 				// own /UseCMap references.
 				if usedCMap == "" {
-					innerData, _ := doc.DecodeStream(ucStream)
+					innerData, _ := doc.DecodeStream(ctx, ucStream)
 					if inner := findNonPredefinedUseCMap(ctx, doc, innerData, ucStream.Dict, profile, depth+1); inner != "" {
 						return inner
 					}
@@ -422,7 +422,7 @@ func extractCMapName(ctx context.Context, doc *document.Document, stream ast.Pdf
 		}
 	}
 	// Parse stream program text.
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(data) == 0 {
 		return ""
 	}

@@ -168,7 +168,7 @@ func getXMPMetadata(ctx context.Context, doc *document.Document) map[string]stri
 		return nil
 	}
 
-	decoded, err := doc.DecodeStream(stream)
+	decoded, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil
 	}

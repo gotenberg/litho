@@ -36,10 +36,10 @@ type pageCtx struct {
 // parsedOps returns the lazily-parsed content stream operations. The result is
 // cached so that multiple check groups sharing the same pageCtx avoid redundant
 // ParseStreamData calls. Returns nil if content is empty or parsing fails.
-func (p *pageCtx) parsedOps() []content.Operation {
+func (p *pageCtx) parsedOps(ctx context.Context) []content.Operation {
 	p.opsOnce.Do(func() {
 		if len(p.content) > 0 {
-			p.ops, _ = content.ParseStreamData(p.content)
+			p.ops, _ = content.ParseStreamData(ctx, p.content)
 		}
 	})
 	return p.ops

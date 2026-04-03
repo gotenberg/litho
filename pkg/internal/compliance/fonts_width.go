@@ -195,12 +195,12 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 			slog.Debug("compliance: cannot resolve CharProc stream", "error", err)
 			continue
 		}
-		streamData, err := doc.DecodeStream(stream)
+		streamData, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			slog.Debug("compliance: cannot decode CharProc stream", "error", err)
 			continue
 		}
-		ops, err := content.ParseStreamData(streamData)
+		ops, err := content.ParseStreamData(ctx, streamData)
 		if err != nil {
 			slog.Debug("compliance: cannot parse CharProc stream", "error", err)
 			continue
@@ -351,7 +351,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		if stream.Dict == nil {
 			continue
 		}
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			// Fall back to raw data.
 			rawData, rawErr := stream.Bytes()

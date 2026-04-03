@@ -147,7 +147,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Collect font usage from the page content stream: which fonts are
 		// visible (rendering mode != 3) and which character codes are used.
-		fontUsage := collectFontUsage(p.parsedOps())
+		fontUsage := collectFontUsage(p.parsedOps(ctx))
 
 		for fontName, fontRef := range fontDict {
 			if ctx.Err() != nil {
@@ -257,7 +257,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 		slog.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
 		return nil
 	}
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil || !containsPUAMapping(string(data)) {
 		return nil
 	}

@@ -224,7 +224,7 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 	}
 
 	// Decompress the stream using the filter package
-	decodedData, err := filter.DecodeStream(stream)
+	decodedData, err := filter.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode object stream %d: %w", objStmNum, err)
 	}

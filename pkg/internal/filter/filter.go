@@ -3,6 +3,7 @@ package filter
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/ascii85"
 	"encoding/hex"
 	"fmt"
@@ -24,15 +25,28 @@ const maxDecompressedSize = 256 << 20 // 256 MB
 // ErrDecompressionBomb is returned when a stream exceeds maxDecompressedSize.
 var ErrDecompressionBomb = fmt.Errorf("decompressed stream exceeds %d MB limit", maxDecompressedSize>>20)
 
-// limitedCopy copies from r to buf up to maxDecompressedSize bytes.
-// Returns ErrDecompressionBomb if the limit is exceeded.
-func limitedCopy(buf *bytes.Buffer, r io.Reader) error {
-	limited := io.LimitReader(r, maxDecompressedSize+1)
-	_, err := io.Copy(buf, limited)
-	if buf.Len() > maxDecompressedSize {
-		return ErrDecompressionBomb
+// limitedCopy copies from r to buf in 1 MB chunks up to maxDecompressedSize.
+// Context is checked between chunks so callers can cancel long decompression.
+func limitedCopy(ctx context.Context, buf *bytes.Buffer, r io.Reader) error {
+	const chunk = 1 << 20 // 1 MB
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		_, err := io.CopyN(buf, r, chunk)
+		if buf.Len() > maxDecompressedSize {
+			return ErrDecompressionBomb
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			if buf.Len() > 0 {
+				return nil // partial data is usable
+			}
+			return err
+		}
 	}
-	return err
 }
 
 // bufPool reuses bytes.Buffer instances across stream decompression calls
@@ -44,7 +58,8 @@ var bufPool = sync.Pool{
 // DecodeStream decodes a PDF stream based on its /Filter dictionary entry.
 // It supports applying multiple filters sequentially if an array is provided.
 // /DecodeParms are extracted and passed per filter for predictor processing.
-func DecodeStream(stream ast.PdfStream) ([]byte, error) {
+// Context is checked between decompression chunks to allow cancellation.
+func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
 		return stream.Bytes()
@@ -73,7 +88,7 @@ func DecodeStream(stream ast.PdfStream) ([]byte, error) {
 		return nil, err
 	}
 	for i, f := range filters {
-		decoded, err := applyDecodeFilter(data, f, parms[i])
+		decoded, err := applyDecodeFilter(ctx, data, f, parms[i])
 		if err != nil {
 			return nil, err
 		}
@@ -114,17 +129,17 @@ func extractDecodeParms(dict ast.PdfDict, numFilters int) []ast.PdfDict {
 }
 
 // applyDecodeFilter applies a single decoding filter with optional DecodeParms.
-func applyDecodeFilter(data []byte, filterName ast.PdfName, parms ast.PdfDict) ([]byte, error) {
+func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms ast.PdfDict) ([]byte, error) {
 	switch filterName {
 	case "FlateDecode", "Fl":
-		decoded, err := decodeFlateDecode(data)
+		decoded, err := decodeFlateDecode(ctx, data)
 		if err != nil {
 			return nil, err
 		}
 		return applyPredictor(decoded, extractPredictorParams(parms))
 
 	case "LZWDecode", "LZW":
-		decoded, err := decodeLZW(data, parms)
+		decoded, err := decodeLZW(ctx, data, parms)
 		if err != nil {
 			return nil, err
 		}
@@ -137,10 +152,10 @@ func applyDecodeFilter(data []byte, filterName ast.PdfName, parms ast.PdfDict) (
 		return decodeASCII85(data)
 
 	case "CCITTFaxDecode", "CCF":
-		return decodeCCITTFax(data, parms)
+		return decodeCCITTFax(ctx, data, parms)
 
 	case "BrotliDecode":
-		return decodeBrotli(data)
+		return decodeBrotli(ctx, data)
 
 	case "RunLengthDecode", "RL":
 		return decodeRunLength(data)
@@ -162,13 +177,7 @@ func applyDecodeFilter(data []byte, filterName ast.PdfName, parms ast.PdfDict) (
 	}
 }
 
-// ApplyDecodeFilter applies a single decoding filter to the given byte slice.
-// This is the public API that does not accept DecodeParms (for backward compatibility).
-func ApplyDecodeFilter(data []byte, filterName ast.PdfName) ([]byte, error) {
-	return applyDecodeFilter(data, filterName, nil)
-}
-
-func decodeFlateDecode(data []byte) ([]byte, error) {
+func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 	r, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -176,7 +185,7 @@ func decodeFlateDecode(data []byte) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	copyErr := limitedCopy(buf, r)
+	copyErr := limitedCopy(ctx, buf, r)
 	closeErr := r.Close()
 
 	// Tolerate read errors that leave valid partial data. Damaged PDFs
@@ -199,7 +208,7 @@ func decodeFlateDecode(data []byte) ([]byte, error) {
 	return result, nil
 }
 
-func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
+func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
 	// PDF spec: LZW uses MSB-first order, literal width 8 (codes 0–255),
 	// ClearTable=256, EOD=257. /EarlyChange defaults to 1.
 	earlyChange := 1
@@ -213,7 +222,7 @@ func decodeLZW(data []byte, parms ast.PdfDict) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	err := limitedCopy(buf, r)
+	err := limitedCopy(ctx, buf, r)
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}
@@ -270,7 +279,7 @@ func decodeASCII85(data []byte) ([]byte, error) {
 	return dst[:ndst], nil
 }
 
-func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
+func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
 	// Extract parameters from /DecodeParms (PDF spec Table 11).
 	k := 0          // /K: <0 = Group 4, 0 = Group 3 1D, >0 = Group 3 mixed
 	columns := 1728 // /Columns: image width in pixels
@@ -326,7 +335,7 @@ func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	err := limitedCopy(buf, r)
+	err := limitedCopy(ctx, buf, r)
 	if err != nil {
 		return nil, fmt.Errorf("ccitt decode: %w", err)
 	}
@@ -335,12 +344,12 @@ func decodeCCITTFax(data []byte, parms ast.PdfDict) ([]byte, error) {
 	return result, nil
 }
 
-func decodeBrotli(data []byte) ([]byte, error) {
+func decodeBrotli(ctx context.Context, data []byte) ([]byte, error) {
 	r := brotli.NewReader(bytes.NewReader(data))
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	err := limitedCopy(buf, r)
+	err := limitedCopy(ctx, buf, r)
 	if err != nil {
 		return nil, fmt.Errorf("brotli decode: %w", err)
 	}
@@ -356,7 +365,7 @@ func decodeBrotli(data []byte) ([]byte, error) {
 // into a buffer on the first call.
 //
 // The caller must close the returned reader when done.
-func NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
+func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
 		data, err := stream.Bytes()
@@ -413,7 +422,7 @@ func NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 	}
 
 	// Slow path: decode fully and wrap in a reader.
-	data, err := DecodeStream(stream)
+	data, err := DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, err
 	}

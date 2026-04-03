@@ -221,8 +221,8 @@ func tintTransformEqual(ctx context.Context, doc *document.Document, a, b ast.Pd
 // functionStreamEqual compares two function streams (Type 4 PostScript).
 func functionStreamEqual(ctx context.Context, doc *document.Document, a, b ast.PdfStream) bool {
 	// Compare decoded stream bytes.
-	dataA, errA := doc.DecodeStream(a)
-	dataB, errB := doc.DecodeStream(b)
+	dataA, errA := doc.DecodeStream(ctx, a)
+	dataB, errB := doc.DecodeStream(ctx, b)
 	if errA != nil || errB != nil {
 		return false
 	}

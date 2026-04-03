@@ -204,7 +204,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 		slog.Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
-	cidSetData, err := doc.DecodeStream(stream)
+	cidSetData, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(cidSetData) == 0 {
 		return nil
 	}
@@ -290,7 +290,7 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 		slog.Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
-	cidSetData, err := doc.DecodeStream(stream)
+	cidSetData, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		slog.Debug("compliance: cannot decode CIDSet stream", "error", err)
 		return nil

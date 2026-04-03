@@ -2,6 +2,7 @@ package filter
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 
@@ -32,9 +33,9 @@ func NewDecoder(pp []plugins.FilterDecoder) *Decoder {
 
 // DecodeStream decodes a PDF stream, consulting registered plugins for
 // filter names they handle before falling back to built-in decoders.
-func (d *Decoder) DecodeStream(stream ast.PdfStream) ([]byte, error) {
+func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	if d == nil {
-		return DecodeStream(stream)
+		return DecodeStream(ctx, stream)
 	}
 
 	filterObj, hasFilter := stream.Dict["Filter"]
@@ -63,7 +64,7 @@ func (d *Decoder) DecodeStream(stream ast.PdfStream) ([]byte, error) {
 		return nil, err
 	}
 	for i, f := range filters {
-		decoded, err := d.applyDecodeFilter(data, f, parms[i])
+		decoded, err := d.applyDecodeFilter(ctx, data, f, parms[i])
 		if err != nil {
 			return nil, err
 		}
@@ -75,16 +76,16 @@ func (d *Decoder) DecodeStream(stream ast.PdfStream) ([]byte, error) {
 
 // NewStreamReader returns an io.ReadCloser that lazily decodes a PDF stream,
 // consulting registered plugins for filter names they handle.
-func (d *Decoder) NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
+func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	if d == nil {
-		return NewStreamReader(stream)
+		return NewStreamReader(ctx, stream)
 	}
 
 	// Check if any filter in the chain requires a plugin. If not, delegate
 	// to the package-level function which has streaming fast paths.
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return NewStreamReader(stream)
+		return NewStreamReader(ctx, stream)
 	}
 
 	needsPlugin := false
@@ -103,11 +104,11 @@ func (d *Decoder) NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 	}
 
 	if !needsPlugin {
-		return NewStreamReader(stream)
+		return NewStreamReader(ctx, stream)
 	}
 
 	// Plugin path: eager decode, then wrap in a reader.
-	data, err := d.DecodeStream(stream)
+	data, err := d.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, err
 	}
@@ -115,9 +116,9 @@ func (d *Decoder) NewStreamReader(stream ast.PdfStream) (io.ReadCloser, error) {
 }
 
 // applyDecodeFilter applies a single filter, checking plugins first.
-func (d *Decoder) applyDecodeFilter(data []byte, filterName ast.PdfName, parms ast.PdfDict) ([]byte, error) {
+func (d *Decoder) applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms ast.PdfDict) ([]byte, error) {
 	if p, ok := d.plugins[filterName]; ok {
-		pubParms, err := d.marshalParms(filterName, parms)
+		pubParms, err := d.marshalParms(ctx, filterName, parms)
 		if err != nil {
 			return nil, err
 		}
@@ -125,13 +126,13 @@ func (d *Decoder) applyDecodeFilter(data []byte, filterName ast.PdfName, parms a
 	}
 
 	// Fall back to built-in decoder.
-	return applyDecodeFilter(data, filterName, parms)
+	return applyDecodeFilter(ctx, data, filterName, parms)
 }
 
 // marshalParms converts an internal ast.PdfDict to a public map[string]any
 // suitable for the plugin interface. Stream-valued entries (like JBIG2Globals)
 // are pre-decoded into []byte.
-func (d *Decoder) marshalParms(filterName ast.PdfName, dict ast.PdfDict) (map[string]any, error) {
+func (d *Decoder) marshalParms(ctx context.Context, filterName ast.PdfName, dict ast.PdfDict) (map[string]any, error) {
 	if dict == nil {
 		return nil, nil
 	}
@@ -143,7 +144,7 @@ func (d *Decoder) marshalParms(filterName ast.PdfName, dict ast.PdfDict) (map[st
 		// Pre-decode stream-valued parameters (e.g., JBIG2Globals).
 		if filterName == "JBIG2Decode" && key == "JBIG2Globals" {
 			if stream, ok := v.(ast.PdfStream); ok {
-				decoded, err := DecodeStream(stream)
+				decoded, err := DecodeStream(ctx, stream)
 				if err != nil {
 					return nil, fmt.Errorf("decoding JBIG2Globals: %w", err)
 				}

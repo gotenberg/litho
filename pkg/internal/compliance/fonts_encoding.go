@@ -352,7 +352,7 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 		if fontFileObj, ok := fd["FontFile"]; ok {
 			stream, err := document.ResolveStream(ctx, doc, fontFileObj)
 			if err == nil {
-				data, err := doc.DecodeStream(stream)
+				data, err := doc.DecodeStream(ctx, stream)
 				if err == nil {
 					return typography.ExtractType1EncodingNames(data)
 				}
@@ -607,7 +607,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		return failf(rule, "font %s on page %d: /ToUnicode stream has no dictionary", fontName, pageNum)
 	}
 
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		// Fall back to raw data.
 		data, err = stream.Bytes()

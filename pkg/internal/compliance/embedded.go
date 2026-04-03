@@ -507,7 +507,7 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 	}
 
 	// Decode the stream.
-	data, err := doc.DecodeStream(stream)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		slog.Debug("compliance.embedded: cannot decode embedded stream",
 			"object", fs.objNum, "error", err)

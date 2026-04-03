@@ -12,7 +12,7 @@ import (
 // through its filter pipeline on demand. The returned io.ReadCloser streams
 // decoded data without buffering the entire resource at parse time.
 func openStreamFunc(doc *document.Document, stream ast.PdfStream) func(ctx context.Context) (io.ReadCloser, error) {
-	return func(_ context.Context) (io.ReadCloser, error) {
-		return doc.NewStreamReader(stream)
+	return func(ctx context.Context) (io.ReadCloser, error) {
+		return doc.NewStreamReader(ctx, stream)
 	}
 }

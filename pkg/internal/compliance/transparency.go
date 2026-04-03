@@ -605,7 +605,7 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 			slog.Debug("compliance.transparency: cannot resolve output profile stream", "error", err)
 			continue
 		}
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil || len(data) < 20 {
 			return true, "" // Has OutputIntent but can't read color space
 		}

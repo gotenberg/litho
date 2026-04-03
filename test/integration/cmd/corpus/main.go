@@ -133,6 +133,7 @@ type summary struct {
 
 type report struct {
 	Summary        summary        `json:"summary"`
+	Elapsed        string         `json:"elapsed"`
 	FalseNegatives []disagreement `json:"false_negatives"`
 	FalsePositives []disagreement `json:"false_positives"`
 }
@@ -173,7 +174,10 @@ func runVeraPDF(args []string) int {
 		return 1
 	}
 
-	rpt := compareVeraPDF(corpusPath, refs, *profile)
+	showProgress := *format != "json"
+	start := time.Now()
+	rpt := compareVeraPDF(corpusPath, refs, *profile, showProgress)
+	rpt.Elapsed = time.Since(start).Round(time.Millisecond).String()
 
 	switch *format {
 	case "json":
@@ -270,9 +274,27 @@ func findDockerContext(name string) string {
 }
 
 // compareVeraPDF loads all reference files and compares litho's verdicts.
-func compareVeraPDF(corpusPath string, refs []string, filterProfile string) report {
+func compareVeraPDF(corpusPath string, refs []string, filterProfile string, showProgress bool) report {
 	var rpt report
+	totalJobs := 0
+	if showProgress {
+		for _, refPath := range refs {
+			profileDir := strings.TrimSuffix(filepath.Base(refPath), ".json")
+			if filterProfile != "" && profileDir != filterProfile {
+				continue
+			}
+			data, err := os.ReadFile(refPath)
+			if err != nil {
+				continue
+			}
+			var vr verapdfReport
+			if err := json.Unmarshal(data, &vr); err == nil {
+				totalJobs += len(vr.Report.Jobs)
+			}
+		}
+	}
 
+	processed := 0
 	for _, refPath := range refs {
 		profileDir := strings.TrimSuffix(filepath.Base(refPath), ".json")
 		if filterProfile != "" && profileDir != filterProfile {
@@ -292,6 +314,11 @@ func compareVeraPDF(corpusPath string, refs []string, filterProfile string) repo
 		}
 
 		for _, job := range vReport.Report.Jobs {
+			processed++
+			if showProgress && processed%50 == 0 {
+				fmt.Fprintf(os.Stderr, "\r  processed %d/%d", processed, totalJobs)
+			}
+
 			localPath := pdfPathFromJobName(job.ItemDetails.Name, corpusPath)
 			baseName := filepath.Base(localPath)
 
@@ -337,6 +364,10 @@ func compareVeraPDF(corpusPath string, refs []string, filterProfile string) repo
 				})
 			}
 		}
+	}
+
+	if showProgress {
+		fmt.Fprintf(os.Stderr, "\r  processed %d/%d\n", processed, totalJobs)
 	}
 
 	sort.Slice(rpt.FalseNegatives, func(i, j int) bool {
@@ -443,10 +474,10 @@ func printText(rpt report, filterProfile string) {
 		profileLabel = filterProfile
 	}
 	fmt.Printf("Profile: %s\n", profileLabel)
-	fmt.Printf("Total: %d  Agree: %d  FN: %d  FP: %d  Skipped: %d\n\n",
+	fmt.Printf("Total: %d  Agree: %d  FN: %d  FP: %d  Skipped: %d  Elapsed: %s\n\n",
 		rpt.Summary.Total, rpt.Summary.Agree,
 		rpt.Summary.FalseNegatives, rpt.Summary.FalsePositives,
-		rpt.Summary.Skipped)
+		rpt.Summary.Skipped, rpt.Elapsed)
 
 	if len(rpt.FalseNegatives) > 0 {
 		fmt.Printf("False Negatives (%d):\n", len(rpt.FalseNegatives))
@@ -615,6 +646,7 @@ type pdfjsMetadataMismatch struct {
 
 type pdfjsReport struct {
 	Summary            pdfjsSummary            `json:"summary"`
+	Elapsed            string                  `json:"elapsed"`
 	TextMismatches     []pdfjsTextMismatch     `json:"text_mismatches"`
 	MetadataMismatches []pdfjsMetadataMismatch `json:"metadata_mismatches"`
 }
@@ -664,7 +696,10 @@ func runPDFJS(args []string) {
 		os.Exit(1)
 	}
 
-	rpt := comparePDFJS(corpusPath)
+	showProgress := *format != "json"
+	start := time.Now()
+	rpt := comparePDFJS(corpusPath, showProgress)
+	rpt.Elapsed = time.Since(start).Round(time.Millisecond).String()
 
 	switch *format {
 	case "json":
@@ -701,7 +736,7 @@ func provisionPDFJS(corpusPath string) error {
 	return provisionCorpus(corpusPath, "pdf.js", "litho-pdfjs-corpus")
 }
 
-func comparePDFJS(corpusPath string) pdfjsReport {
+func comparePDFJS(corpusPath string, showProgress bool) pdfjsReport {
 	manifestPath := filepath.Join(corpusPath, "test_manifest.json")
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -756,7 +791,7 @@ func comparePDFJS(corpusPath string) pdfjsReport {
 	processed := 0
 	for res := range results {
 		processed++
-		if processed%50 == 0 {
+		if showProgress && processed%50 == 0 {
 			fmt.Fprintf(os.Stderr, "\r  processed %d/%d", processed, len(entries))
 		}
 
@@ -791,7 +826,9 @@ func comparePDFJS(corpusPath string) pdfjsReport {
 			rpt.Summary.SurvivalOnly++
 		}
 	}
-	fmt.Fprintf(os.Stderr, "\r  processed %d/%d\n", processed, len(entries))
+	if showProgress {
+		fmt.Fprintf(os.Stderr, "\r  processed %d/%d\n", processed, len(entries))
+	}
 
 	sort.Slice(rpt.TextMismatches, func(i, j int) bool {
 		if rpt.TextMismatches[i].File != rpt.TextMismatches[j].File {
@@ -1163,7 +1200,7 @@ func printPDFJSText(rpt pdfjsReport) {
 	fmt.Printf("Text match: %d/%d (%.1f%%)  Metadata match: %d/%d (%.1f%%)\n",
 		s.TextMatches, s.WithReferences, textPct,
 		s.MetadataMatches, s.WithReferences, metaPct)
-	fmt.Printf("Errors: %d  Skipped: %d  Timeouts: %d\n\n", s.Errors, s.Skipped, s.Timeouts)
+	fmt.Printf("Errors: %d  Skipped: %d  Timeouts: %d  Elapsed: %s\n\n", s.Errors, s.Skipped, s.Timeouts, rpt.Elapsed)
 
 	if len(rpt.TextMismatches) > 0 {
 		fmt.Printf("Text Mismatches (%d):\n", len(rpt.TextMismatches))

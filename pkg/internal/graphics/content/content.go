@@ -28,8 +28,16 @@ type Operation struct {
 func parseOperations(p *parser.Parser) ([]Operation, error) {
 	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
 	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
+	tokenCount := 0
 
 	for {
+		tokenCount++
+		if tokenCount%500 == 0 {
+			if err := p.CheckContext(); err != nil {
+				return ops, err
+			}
+		}
+
 		tok, err := p.Peek(0)
 		if err != nil && err != io.EOF && tok.Type == lexer.TokenError {
 			return nil, fmt.Errorf("lexer error: %v", err)
@@ -85,19 +93,20 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 }
 
 // ParseStreamData parses raw content stream bytes into a sequence of [Operation] values.
-// This is used for parsing individual glyph procedures (CharProcs) in Type 3 fonts.
-func ParseStreamData(data []byte) ([]Operation, error) {
+// The parser checks ctx at regular intervals, allowing large or pathological
+// content streams to be interrupted by deadline.
+func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex)
+	p := parser.NewParser(lex).WithContext(ctx)
 	return parseOperations(p)
 }
 
 // ParseStreamDataFormatChecked parses content stream data with PDF/A format
 // checking enabled. Returns [Operation] values and any hex string format
 // violations detected by the parser.
-func ParseStreamDataFormatChecked(data []byte) ([]Operation, []error) {
+func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex).WithFormatChecking()
+	p := parser.NewParser(lex).WithContext(ctx).WithFormatChecking()
 	ops, _ := parseOperations(p)
 	return ops, p.FormatViolations
 }
@@ -141,14 +150,21 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		return nil, fmt.Errorf("invalid node type for ParsePageContent: %T", node)
 	}
 
+	const maxContentStreamSize = 32 << 20 // 32 MB: no legitimate page needs more
 	var allData []byte
 	for _, s := range streams {
-		data, err := doc.DecodeStream(s)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		data, err := doc.DecodeStream(ctx, s)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode content stream: %v", err)
 		}
 		allData = append(allData, data...)
-		allData = append(allData, '\n') // Ensure tokens from separate streams don't merge
+		allData = append(allData, '\n')
+		if len(allData) > maxContentStreamSize {
+			return nil, fmt.Errorf("content stream exceeds %d MB limit", maxContentStreamSize>>20)
+		}
 	}
 
 	doc.Logger.Debug("content stream decoded",

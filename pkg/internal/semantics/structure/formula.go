@@ -187,7 +187,7 @@ func extractMathMLFromAF(ctx context.Context, doc *document.Document, dict ast.P
 			}
 		}
 
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			continue
 		}

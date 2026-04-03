@@ -101,7 +101,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		if err != nil || len(data) == 0 {
 			continue
 		}
-		ops, err := content.ParseStreamData(data)
+		ops, err := content.ParseStreamData(ctx, data)
 		if err != nil {
 			slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue

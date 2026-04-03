@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/lzw"
 	"compress/zlib"
+	"context"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -50,7 +51,7 @@ func TestDecodeStream_FlateWithPredictor(t *testing.T) {
 		},
 	}, zlibCompress(raw))
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestDecodeStream_FlateNoPredictor(t *testing.T) {
 		"Filter": ast.PdfName("FlateDecode"),
 	}, zlibCompress(raw))
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestDecodeStream_LZW(t *testing.T) {
 		"Filter": ast.PdfName("LZWDecode"),
 	}, lzwCompress(raw))
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -108,7 +109,7 @@ func TestDecodeStream_LZWWithPredictor(t *testing.T) {
 		},
 	}, lzwCompress(raw))
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -123,7 +124,7 @@ func TestDecodeStream_NoFilter(t *testing.T) {
 	raw := []byte("unfiltered data")
 	stream := ast.NewStream(ast.PdfDict{}, raw)
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestDecodeStream_FilterArray(t *testing.T) {
 		},
 	}, []byte(hexEncoded))
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -175,7 +176,7 @@ func TestDecodeStream_FilterArrayWithParms(t *testing.T) {
 		},
 	}, zlibCompress(raw))
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -191,14 +192,14 @@ func TestDecodeStream_UnsupportedFilter(t *testing.T) {
 		"Filter": ast.PdfName("NoSuchFilter"),
 	}, []byte{0})
 
-	_, err := DecodeStream(stream)
+	_, err := DecodeStream(context.Background(), stream)
 	if !errors.Is(err, ErrUnsupportedFilter) {
 		t.Errorf("expected ErrUnsupportedFilter, got: %v", err)
 	}
 }
 
 func TestApplyDecodeFilter_ASCIIHex(t *testing.T) {
-	result, err := ApplyDecodeFilter([]byte("48656c6c6f>"), "ASCIIHexDecode")
+	result, err := applyDecodeFilter(context.Background(), []byte("48656c6c6f>"), "ASCIIHexDecode", nil)
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -251,7 +252,7 @@ func TestDecodeASCII85(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCII85(t *testing.T) {
-	result, err := ApplyDecodeFilter([]byte("87cURD]i,\"Ebo7~>"), "ASCII85Decode")
+	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "ASCII85Decode", nil)
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -261,7 +262,7 @@ func TestApplyDecodeFilter_ASCII85(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCII85_Abbreviation(t *testing.T) {
-	result, err := ApplyDecodeFilter([]byte("87cURD]i,\"Ebo7~>"), "A85")
+	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "A85", nil)
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -286,7 +287,7 @@ func TestDecodeStream_TIFFPredictor(t *testing.T) {
 		},
 	}, zlibCompress(raw))
 
-	result, err := DecodeStream(stream)
+	result, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream failed: %v", err)
 	}
@@ -563,7 +564,7 @@ func TestDecodeLZW_EarlyChange0_Roundtrip(t *testing.T) {
 	encoded := lzwEncode(input, 0)
 
 	// Decode with our custom decoder (EarlyChange=0).
-	decoded, err := decodeLZW(encoded, ast.PdfDict{
+	decoded, err := decodeLZW(context.Background(), encoded, ast.PdfDict{
 		"EarlyChange": ast.PdfInt(0),
 	})
 	if err != nil {
@@ -587,7 +588,7 @@ func TestDecodeLZW_EarlyChange0_HardcodedStream(t *testing.T) {
 	input := []byte("ABCABCABCABC")
 	encoded := lzwEncode(input, 0)
 
-	decoded, err := decodeLZW(encoded, ast.PdfDict{
+	decoded, err := decodeLZW(context.Background(), encoded, ast.PdfDict{
 		"EarlyChange": ast.PdfInt(0),
 	})
 	if err != nil {
@@ -609,7 +610,7 @@ func TestDecodeLZW_EarlyChange1_Roundtrip(t *testing.T) {
 
 	encoded := lzwEncode(input, 1)
 
-	decoded, err := decodeLZW(encoded, ast.PdfDict{
+	decoded, err := decodeLZW(context.Background(), encoded, ast.PdfDict{
 		"EarlyChange": ast.PdfInt(1),
 	})
 	if err != nil {
@@ -631,7 +632,7 @@ func TestDecodeLZW_EarlyChange0_LargeStream(t *testing.T) {
 
 	encoded := lzwEncode(input, 0)
 
-	decoded, err := decodeLZW(encoded, ast.PdfDict{
+	decoded, err := decodeLZW(context.Background(), encoded, ast.PdfDict{
 		"EarlyChange": ast.PdfInt(0),
 	})
 	if err != nil {
@@ -647,7 +648,7 @@ func TestNewStreamReader_NoFilter(t *testing.T) {
 	raw := []byte("unfiltered content")
 	stream := ast.NewStream(ast.PdfDict{}, raw)
 
-	rc, err := NewStreamReader(stream)
+	rc, err := NewStreamReader(context.Background(), stream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,7 +669,7 @@ func TestNewStreamReader_Flate(t *testing.T) {
 		"Filter": ast.PdfName("FlateDecode"),
 	}, zlibCompress(raw))
 
-	rc, err := NewStreamReader(stream)
+	rc, err := NewStreamReader(context.Background(), stream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -689,7 +690,7 @@ func TestNewStreamReader_LZW(t *testing.T) {
 		"Filter": ast.PdfName("LZWDecode"),
 	}, lzwCompress(raw))
 
-	rc, err := NewStreamReader(stream)
+	rc, err := NewStreamReader(context.Background(), stream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -718,7 +719,7 @@ func TestNewStreamReader_FlateWithPredictor(t *testing.T) {
 		},
 	}, zlibCompress(raw))
 
-	rc, err := NewStreamReader(stream)
+	rc, err := NewStreamReader(context.Background(), stream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,7 +752,7 @@ func TestDecodeLZW_EarlyChange0vs1_Differ(t *testing.T) {
 	}
 
 	// Decoding an EC=0 stream with EC=1 should produce different (wrong) output.
-	wrong, err := decodeLZW(encoded0, ast.PdfDict{
+	wrong, err := decodeLZW(context.Background(), encoded0, ast.PdfDict{
 		"EarlyChange": ast.PdfInt(1),
 	})
 	// It may error or produce wrong output — either proves they differ.
@@ -773,7 +774,7 @@ func TestDecodeCCITTFax_Group4_AllWhite(t *testing.T) {
 		"Rows":    ast.PdfInt(1),
 	}
 
-	decoded, err := decodeCCITTFax(data, parms)
+	decoded, err := decodeCCITTFax(context.Background(), data, parms)
 	if err != nil {
 		t.Fatalf("decodeCCITTFax Group4 all-white failed: %v", err)
 	}
@@ -798,7 +799,7 @@ func TestDecodeCCITTFax_Group4_TwoRows(t *testing.T) {
 		"Rows":    ast.PdfInt(2),
 	}
 
-	decoded, err := decodeCCITTFax(data, parms)
+	decoded, err := decodeCCITTFax(context.Background(), data, parms)
 	if err != nil {
 		t.Fatalf("decodeCCITTFax Group4 2-row all-white failed: %v", err)
 	}
@@ -823,7 +824,7 @@ func TestDecodeCCITTFax_Group4_WhiteThenBlack(t *testing.T) {
 		"Rows":    ast.PdfInt(2),
 	}
 
-	decoded, err := decodeCCITTFax(data, parms)
+	decoded, err := decodeCCITTFax(context.Background(), data, parms)
 	if err != nil {
 		t.Fatalf("decodeCCITTFax Group4 white+black failed: %v", err)
 	}
@@ -846,7 +847,7 @@ func TestApplyDecodeFilter_CCITTFax(t *testing.T) {
 		},
 	}, data)
 
-	decoded, err := DecodeStream(stream)
+	decoded, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream CCITTFaxDecode failed: %v", err)
 	}
@@ -869,7 +870,7 @@ func TestApplyDecodeFilter_CCF_Abbreviation(t *testing.T) {
 		},
 	}, data)
 
-	decoded, err := DecodeStream(stream)
+	decoded, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream CCF failed: %v", err)
 	}
@@ -896,7 +897,7 @@ func TestDecodeStream_Brotli(t *testing.T) {
 		"Filter": ast.PdfName("BrotliDecode"),
 	}, compressed)
 
-	decoded, err := DecodeStream(stream)
+	decoded, err := DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("DecodeStream brotli failed: %v", err)
 	}
@@ -913,7 +914,7 @@ func TestBrotli_RoundTrip(t *testing.T) {
 		t.Fatalf("encode failed: %v", err)
 	}
 
-	decoded, err := applyDecodeFilter(encoded, "BrotliDecode", nil)
+	decoded, err := applyDecodeFilter(context.Background(), encoded, "BrotliDecode", nil)
 	if err != nil {
 		t.Fatalf("decode failed: %v", err)
 	}
@@ -931,7 +932,7 @@ func TestNewStreamReader_Brotli(t *testing.T) {
 		"Filter": ast.PdfName("BrotliDecode"),
 	}, compressed)
 
-	rc, err := NewStreamReader(stream)
+	rc, err := NewStreamReader(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("NewStreamReader failed: %v", err)
 	}

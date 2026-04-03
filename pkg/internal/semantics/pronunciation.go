@@ -41,7 +41,7 @@ func ExtractPronunciationLexicons(ctx context.Context, doc *document.Document) (
 			continue
 		}
 
-		data, err := doc.DecodeStream(stream)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			continue
 		}

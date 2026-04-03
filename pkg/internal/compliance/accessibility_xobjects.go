@@ -56,7 +56,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		if err != nil || len(streamData) == 0 {
 			continue
 		}
-		ops, err := content.ParseStreamData(streamData)
+		ops, err := content.ParseStreamData(ctx, streamData)
 		if err != nil {
 			slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue

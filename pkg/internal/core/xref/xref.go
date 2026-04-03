@@ -1,6 +1,7 @@
 package xref
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -45,8 +46,8 @@ func readInt(data []byte, width int) int64 {
 	return result
 }
 
-func decodeStreamData(stream ast.PdfStream) ([]byte, error) {
-	data, err := filter.DecodeStream(stream)
+func decodeStreamData(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
+	data, err := filter.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedXRef, err)
 	}
@@ -56,7 +57,7 @@ func decodeStreamData(stream ast.PdfStream) ([]byte, error) {
 // ParseXRefStream parses a PDF 1.5+ compressed cross-reference stream and
 // populates indexMap with the decoded entries. It returns the byte offset of
 // the previous cross-reference section (from the /Prev key), or 0 if none.
-func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, error) {
+func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, error) {
 	wObj, ok := stream.Dict["W"]
 	if !ok {
 		return 0, fmt.Errorf("%w: missing /W array", ErrMalformedXRef)
@@ -103,7 +104,7 @@ func ParseXRefStream(stream ast.PdfStream, indexMap map[int]XRefEntry) (int64, e
 		indexArray = ast.PdfArray{ast.PdfInt(0), ast.PdfInt(size)}
 	}
 
-	data, err := decodeStreamData(stream)
+	data, err := decodeStreamData(ctx, stream)
 	if err != nil {
 		return 0, fmt.Errorf("%w: failed to decode stream: %v", ErrMalformedXRef, err)
 	}

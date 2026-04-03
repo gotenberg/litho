@@ -140,7 +140,7 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 			if sErr != nil {
 				continue
 			}
-			results = append(results, scanStreamOperandLimits(doc, stream, objNum, maxStr, profile)...)
+			results = append(results, scanStreamOperandLimits(ctx, doc, stream, objNum, maxStr, profile)...)
 		}
 	}
 	return results
@@ -148,12 +148,12 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 
 // scanStreamOperandLimits decodes a content stream and checks string/integer
 // operands for limit violations.
-func scanStreamOperandLimits(doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string) []Violation {
-	data, err := doc.DecodeStream(stream)
+func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string) []Violation {
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(data) == 0 {
 		return nil
 	}
-	ops, err := content.ParseStreamData(data)
+	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
 		slog.Debug("compliance.file_structure: cannot parse content stream", "error", err)
 		return nil

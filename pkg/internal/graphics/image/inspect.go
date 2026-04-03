@@ -73,7 +73,7 @@ func InspectImages(ctx context.Context, doc *document.Document, page *document.P
 
 // openImageStream returns a lazy Open function for an image XObject stream.
 func openImageStream(doc *document.Document, stream ast.PdfStream) func(ctx context.Context) (io.ReadCloser, error) {
-	return func(_ context.Context) (io.ReadCloser, error) {
-		return doc.NewStreamReader(stream)
+	return func(ctx context.Context) (io.ReadCloser, error) {
+		return doc.NewStreamReader(ctx, stream)
 	}
 }
