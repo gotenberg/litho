@@ -2,6 +2,8 @@ package cmap
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
@@ -42,13 +44,16 @@ func (c *CIDCMap) LookupCID(charCode int) int {
 
 // ParseCID extracts CID mapping data from a CMap stream payload.
 // It handles begincidchar/endcidchar and begincidrange/endcidrange sections.
-func ParseCID(data []byte) (*CIDCMap, error) {
+func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
 
 	c := &CIDCMap{Mapping: make(map[int]int)}
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("parsing CID CMap: %w", err)
+		}
 		tok, err := p.Peek(0)
 		if err != nil || tok.Type == lexer.TokenEOF {
 			break

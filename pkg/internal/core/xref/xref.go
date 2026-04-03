@@ -186,7 +186,7 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 // trailer dictionary. It populates indexMap with the parsed entries and returns
 // the trailer dictionary, the byte offset of the previous xref section, and
 // any error encountered.
-func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, error) {
+func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, error) {
 	tok, err := lex.NextToken()
 	if err != nil {
 		return nil, 0, err
@@ -196,6 +196,7 @@ func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, 
 		return nil, 0, fmt.Errorf("%w: expected 'xref', got %v", ErrMalformedXRef, tok.Value)
 	}
 
+	entryCount := 0
 	for {
 		tok1, err := lex.NextToken()
 		if err != nil {
@@ -228,6 +229,13 @@ func ParseXRefTable(lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, 
 		}
 
 		for i := range count {
+			if entryCount%100 == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, 0, fmt.Errorf("parsing xref table: %w", err)
+				}
+			}
+			entryCount++
+
 			tokOff, err := lex.NextToken()
 			if err != nil {
 				return nil, 0, err

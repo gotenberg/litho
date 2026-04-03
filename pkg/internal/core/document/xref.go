@@ -69,7 +69,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 		case tok.Type == lexer.TokenKeyword && tok.Value == "xref":
 			d.XRefTableOffsets = append(d.XRefTableOffsets, currentOffset)
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
-			trailerDict, p, err := xref.ParseXRefTable(lex, d.Index.Entries)
+			trailerDict, p, err := xref.ParseXRefTable(ctx, lex, d.Index.Entries)
 			if err != nil {
 				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
 			}

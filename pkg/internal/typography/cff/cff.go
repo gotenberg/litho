@@ -109,7 +109,7 @@ func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 
 // GlyphNames extracts a GID → glyph name mapping from CFF font data.
 // Returns nil for CID-keyed fonts (which use CIDs, not glyph names).
-func GlyphNames(data []byte) (map[uint16]string, error) {
+func GlyphNames(ctx context.Context, data []byte) (map[uint16]string, error) {
 	if len(data) < 4 || data[0] != 1 {
 		return nil, fmt.Errorf("%w: invalid CFF header", ErrInvalidCFF)
 	}
@@ -152,6 +152,11 @@ func GlyphNames(data []byte) (map[uint16]string, error) {
 
 	result := make(map[uint16]string, len(sids))
 	for gid, sid := range sids {
+		if gid%500 == 0 && gid > 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		name := strings.get(sid)
 		if name != "" {
 			result[uint16(gid)] = name //nolint:gosec
@@ -634,7 +639,7 @@ done:
 // It parses each CharString to find the optional width operand, then applies
 // the nominalWidthX/defaultWidthX from the Private DICT.
 // Returns a GID → width map in 1/1000 units (like TrueType).
-func GlyphWidths(data []byte) (map[uint16]uint16, error) {
+func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	if len(data) < 4 || data[0] != 1 {
 		return nil, fmt.Errorf("%w: not a CFF font", ErrInvalidCFF)
 	}
@@ -676,6 +681,11 @@ func GlyphWidths(data []byte) (map[uint16]uint16, error) {
 
 	result := make(map[uint16]uint16, len(csEntries))
 	for gid, cs := range csEntries {
+		if gid%500 == 0 && gid > 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		w := extractCharstringWidth(cs)
 		var width int32
 		if w != nil {

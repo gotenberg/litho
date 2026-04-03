@@ -1,6 +1,7 @@
 package typography
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -118,7 +119,7 @@ func TestReconstructText_BidiLine(t *testing.T) {
 		{Text: "ש", X: 28, Y: 100, FontSize: 12},
 	}
 
-	got := ReconstructText(elements, nil)
+	got := ReconstructText(context.Background(), elements, nil)
 	want := "שלום"
 	if got != want {
 		t.Errorf("ReconstructText bidi: got %q, want %q", got, want)
@@ -138,7 +139,7 @@ func TestReconstructText_SoftHyphenAcrossLines(t *testing.T) {
 		{Text: "t", X: 28, Y: 80, FontSize: 12},
 	}
 
-	got := ReconstructText(elements, nil)
+	got := ReconstructText(context.Background(), elements, nil)
 	want := "document"
 	if got != want {
 		t.Errorf("ReconstructText soft hyphen: got %q, want %q", got, want)

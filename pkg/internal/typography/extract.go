@@ -563,5 +563,5 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 		}
 	}
 
-	return ReconstructText(filtered, pageBeads), nil
+	return ReconstructText(ctx, filtered, pageBeads), nil
 }

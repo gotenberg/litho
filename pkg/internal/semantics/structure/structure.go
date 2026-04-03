@@ -79,6 +79,9 @@ func GetStructTree(ctx context.Context, doc *document.Document) (*StructElem, er
 }
 
 func parseStructElem(ctx context.Context, doc *document.Document, obj ast.PdfObject) *StructElem {
+	if ctx.Err() != nil {
+		return nil
+	}
 	res, err := resolve(ctx, doc, obj)
 	if err != nil {
 		return nil
@@ -145,7 +148,7 @@ func parseStructElem(ctx context.Context, doc *document.Document, obj ast.PdfObj
 
 // ExtractSemanticData marries the spatial TextElements with the logical Structure Tree
 // to produce structurally valid HTML output.
-func ExtractSemanticData(root *StructElem, elements []models.TextElement) string {
+func ExtractSemanticData(ctx context.Context, root *StructElem, elements []models.TextElement) string {
 	// Group elements by MCID
 	mcidGroups := make(map[int][]models.TextElement)
 	for _, el := range elements {
@@ -157,7 +160,7 @@ func ExtractSemanticData(root *StructElem, elements []models.TextElement) string
 	// Reconstruct the text block for each MCID using the spatial heuristic
 	mcidTextMap := make(map[int]string)
 	for mcid, group := range mcidGroups {
-		mcidTextMap[mcid] = typography.ReconstructText(group, nil)
+		mcidTextMap[mcid] = typography.ReconstructText(ctx, group, nil)
 	}
 
 	var sb strings.Builder

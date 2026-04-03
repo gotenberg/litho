@@ -120,7 +120,7 @@ func TestRebuildXRef_ObjectOffsets(t *testing.T) {
 		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
 	}
 
-	if err := doc.rebuildXRef(); err != nil {
+	if err := doc.rebuildXRef(context.Background()); err != nil {
 		t.Fatalf("rebuildXRef failed: %v", err)
 	}
 
@@ -150,7 +150,7 @@ func TestRebuildXRef_TrailerHasRoot(t *testing.T) {
 		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
 	}
 
-	if err := doc.rebuildXRef(); err != nil {
+	if err := doc.rebuildXRef(context.Background()); err != nil {
 		t.Fatalf("rebuildXRef failed: %v", err)
 	}
 
@@ -174,7 +174,7 @@ func TestRebuildXRef_NoObjects(t *testing.T) {
 		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
 	}
 
-	err := doc.rebuildXRef()
+	err := doc.rebuildXRef(context.Background())
 	if err == nil {
 		t.Fatal("expected error for empty PDF")
 	}
@@ -192,7 +192,7 @@ func TestRebuildXRef_NoTrailer(t *testing.T) {
 		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
 	}
 
-	err := doc.rebuildXRef()
+	err := doc.rebuildXRef(context.Background())
 	if err == nil {
 		t.Fatal("expected error when trailer is missing")
 	}

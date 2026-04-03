@@ -2,6 +2,7 @@ package document
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"regexp"
@@ -25,7 +26,7 @@ var objHeaderRe = regexp.MustCompile(`(\d+)\s+(\d+)\s+obj\b`)
 // a cross-reference table when the original xref data is damaged or missing.
 // It finds every "N G obj" header, records its byte offset, and locates the
 // trailer dictionary. The resulting xref.Index is written into doc.Index.
-func (d *Document) rebuildXRef() error {
+func (d *Document) rebuildXRef(ctx context.Context) error {
 	entries := make(map[int]xref.XRefEntry)
 
 	// Scan the file in overlapping chunks to avoid missing headers that
@@ -37,6 +38,10 @@ func (d *Document) rebuildXRef() error {
 	var filePos int64
 
 	for filePos < d.size {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("rebuild xref at %d: %w", filePos, err)
+		}
+
 		readLen := min(int64(len(buf)), d.size-filePos)
 		n, err := d.r.ReadAt(buf[:readLen], filePos)
 		if err != nil && err != io.EOF {

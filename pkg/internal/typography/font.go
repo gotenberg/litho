@@ -819,10 +819,10 @@ func ExtractBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16
 		if err != nil {
 			return nil
 		}
-		w, _ := cff.GlyphWidths(cffData)
+		w, _ := cff.GlyphWidths(ctx, cffData)
 		return w
 	case fontFormatBareCFF:
-		w, _ := cff.GlyphWidths(fontData)
+		w, _ := cff.GlyphWidths(ctx, fontData)
 		return w
 	case fontFormatUnknown:
 		// Try TrueType as fallback.
@@ -869,7 +869,7 @@ func ExtractGlyphNames(ctx context.Context, fontData []byte) map[uint16]string {
 
 	// Bare CFF font.
 	if sig[0] == 1 && sig[1] == 0 {
-		m, _ := cff.GlyphNames(fontData)
+		m, _ := cff.GlyphNames(ctx, fontData)
 		return m
 	}
 

@@ -46,6 +46,9 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 	currentObj := itemObj
 
 	for currentObj != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("parsing outline items: %w", err)
+		}
 		dict, err := document.ResolveDict(ctx, doc, currentObj)
 		if err != nil {
 			break

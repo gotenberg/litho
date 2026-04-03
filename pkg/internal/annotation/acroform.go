@@ -136,6 +136,9 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 
 func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string) error {
 	for _, fieldObj := range fields {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("traversing form fields: %w", err)
+		}
 		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil || fieldDict == nil {
 			continue

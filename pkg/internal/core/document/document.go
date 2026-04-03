@@ -159,7 +159,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		// Fallback: brute-force rebuild by scanning for object headers.
 		doc.Index.Entries = make(map[int]xref.XRefEntry)
 		doc.Index.Trailer = nil
-		if rebuildErr := doc.rebuildXRef(); rebuildErr != nil {
+		if rebuildErr := doc.rebuildXRef(ctx); rebuildErr != nil {
 			return nil, fmt.Errorf("%w: %v (rebuild also failed: %v)", ErrDamagedXRef, err, rebuildErr)
 		}
 		doc.Rebuilt = true

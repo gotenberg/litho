@@ -342,7 +342,7 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 		return nil
 	}
 
-	cidCMap, err := cmap.ParseCID(data)
+	cidCMap, err := cmap.ParseCID(ctx, data)
 	if err != nil || cidCMap == nil {
 		return nil
 	}

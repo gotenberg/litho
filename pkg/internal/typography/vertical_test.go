@@ -1,6 +1,7 @@
 package typography
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -101,7 +102,7 @@ func TestReconstructText_VerticalCJK(t *testing.T) {
 		{Text: "字", X: 80, Y: 194, FontSize: 12, Vertical: true},
 	}
 
-	got := ReconstructText(elements, nil)
+	got := ReconstructText(context.Background(), elements, nil)
 	want := "漢字\n文字"
 	if got != want {
 		t.Errorf("vertical CJK: got %q, want %q", got, want)
@@ -117,7 +118,7 @@ func TestReconstructText_VerticalSingleColumn(t *testing.T) {
 		{Text: "語", X: 50, Y: 288, FontSize: 12, Vertical: true},
 	}
 
-	got := ReconstructText(elements, nil)
+	got := ReconstructText(context.Background(), elements, nil)
 	want := "日本語"
 	if got != want {
 		t.Errorf("vertical single column: got %q, want %q", got, want)

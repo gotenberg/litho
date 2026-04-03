@@ -207,8 +207,10 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 	slog.Debug("compliance: resolving all objects for format checks")
 	count := 0
 	for objNum, entry := range doc.Index.Entries {
-		if ctx.Err() != nil {
-			return
+		if count%100 == 0 {
+			if ctx.Err() != nil {
+				return
+			}
 		}
 		if entry.Free {
 			continue

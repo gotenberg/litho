@@ -1,6 +1,7 @@
 package typography
 
 import (
+	"context"
 	"math"
 	"sort"
 	"strings"
@@ -13,14 +14,14 @@ import (
 // When no article thread beads are provided, it preserves content stream order
 // for maximum fidelity to the original document layout. When beads are provided,
 // it sorts elements by bead index to respect explicit multi-column reading order.
-func ReconstructText(elements []models.TextElement, beads []semantics.Bead) string {
+func ReconstructText(ctx context.Context, elements []models.TextElement, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
 	}
 
 	// When beads are present, use bead-aware spatial sorting.
 	if len(beads) > 0 {
-		return reconstructWithBeads(elements, beads)
+		return reconstructWithBeads(ctx, elements, beads)
 	}
 
 	// Content stream order: group elements into lines, apply bidi reordering
@@ -32,6 +33,11 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 	cur := line{elems: []models.TextElement{elements[0]}}
 
 	for i := 1; i < len(elements); i++ {
+		if i%500 == 0 {
+			if ctx.Err() != nil {
+				return ""
+			}
+		}
 		prev := elements[i-1]
 		el := elements[i]
 		newLine := false
@@ -105,7 +111,7 @@ func ReconstructText(elements []models.TextElement, beads []semantics.Bead) stri
 
 // reconstructWithBeads handles the bead-aware spatial sorting path for PDFs
 // that have article threads defining explicit reading order.
-func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead) string {
+func reconstructWithBeads(ctx context.Context, elements []models.TextElement, beads []semantics.Bead) string {
 	type elementWithBead struct {
 		models.TextElement
 		BeadIndex int
@@ -189,6 +195,11 @@ func reconstructWithBeads(elements []models.TextElement, beads []semantics.Bead)
 	currentLine := lineGroup{elements: []elementWithBead{ewb[0]}}
 
 	for i := 1; i < len(ewb); i++ {
+		if i%500 == 0 {
+			if ctx.Err() != nil {
+				return ""
+			}
+		}
 		prev := ewb[i-1]
 		curr := ewb[i]
 
