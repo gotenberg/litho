@@ -23,7 +23,9 @@ go build ./cmd/litho
 
 ```bash
 make fmt                 # gofmt + gofumpt + gci + goimports + go mod tidy
+make prettify            # Prettier formatting for non-Go files (markdown, YAML, JSON)
 make lint                # golangci-lint (strict, see .golangci.yml)
+make lint-prettier       # Prettier check for non-Go files
 make lint-todo           # Find TODO comments via godox
 make test-unit           # Unit tests only (go test -race ./...)
 make corpus-verapdf      # VeraPDF corpus comparison (text output)
@@ -35,7 +37,7 @@ make corpus-pdfjs-init   # Provision PDF.js corpus via Docker, then compare
 make clean-corpus        # Remove all corpus data (forces re-provisioning)
 ```
 
-Run `make fmt && make lint` before submitting code. Zero warnings policy.
+Run `make fmt && make lint` before submitting code. Run `make prettify && make lint-prettier` for non-Go files. Zero warnings policy.
 
 ## Submitting a Pull Request
 
