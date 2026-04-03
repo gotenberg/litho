@@ -206,6 +206,14 @@ func DecodePdfString(s ast.PdfString) string {
 		}
 		return string(utf16.Decode(u16s))
 	}
+	// UTF-16LE BOM (0xFF 0xFE): little-endian byte order.
+	if len(b) >= 2 && b[0] == utf16BEBom1 && b[1] == utf16BEBom0 {
+		u16s := make([]uint16, (len(b)-2)/2)
+		for i := range u16s {
+			u16s[i] = uint16(b[2+i*2+1])<<8 | uint16(b[2+i*2])
+		}
+		return string(utf16.Decode(u16s))
+	}
 	// PDFDocEncoding / Windows-1252: bytes 0x80-0x9F have specific Unicode
 	// mappings; bytes 0xA0-0xFF map to the same Unicode code point.
 	// All bytes > 0x7F must be converted to proper UTF-8 runes since Go

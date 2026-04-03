@@ -9,3 +9,5 @@ Remaining 68 files with metadata mismatches:
 - CreationDate/ModDate (37): Date format edge cases or XMP vs Info dict disagreements
 - Producer/Creator (20): XMP metadata differs from Info dict (PDF.js reads XMP, litho reads Info then overlays XMP)
 - Other (6): Title, Keywords, Author, Language edge cases
+
+-- NO PDF.JS comments in CORE LIB

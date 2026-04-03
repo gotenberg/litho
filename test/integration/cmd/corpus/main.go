@@ -1032,9 +1032,7 @@ func lithoReference(ctx context.Context, r *pdf.Reader, id string, lastPage int)
 		fixture.Metadata.Info.Language = meta["Language"]
 	}
 
-	if formData, err := r.GetFormData(ctx); err == nil {
-		fixture.Metadata.Info.IsAcroFormPresent = len(formData) > 0
-	}
+	fixture.Metadata.Info.IsAcroFormPresent = r.HasAcroForm(ctx)
 
 	if isPortfolio, err := r.IsPortfolio(ctx); err == nil {
 		fixture.Metadata.Info.IsCollectionPresent = isPortfolio
@@ -1254,22 +1252,57 @@ func comparePageText(file string, pageNum int, pdfjsText, lithoText string) *pdf
 	}
 }
 
-// normalizePDFDate converts PDF date strings to a comparable form.
-// Handles both "D:YYYYMMDDHHmmSS+HH'MM'" (raw PDF) and ISO 8601 variants.
+// normalizePDFDate parses a PDF date string (either raw "D:YYYYMMDDHHmmSS+HH'MM'"
+// or ISO 8601) into UTC and returns it in a canonical form for comparison.
+// Returns the original string unchanged if parsing fails.
 func normalizePDFDate(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return ""
 	}
-	// Strip "D:" prefix.
+	if t, ok := parsePDFDate(s); ok {
+		return t.UTC().Format(time.RFC3339)
+	}
+	return s
+}
+
+// parsePDFDate attempts to parse a date string in either PDF format
+// ("D:YYYYMMDDHHmmSS+HH'MM'") or ISO 8601.
+func parsePDFDate(s string) (time.Time, bool) {
+	// Try ISO 8601 first.
+	for _, layout := range []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05-07:00",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02T15:04:05",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+
+	// PDF date format: D:YYYYMMDDHHmmSS+HH'MM' (all parts after YYYY are optional).
 	raw := strings.TrimPrefix(s, "D:")
-	// Remove apostrophes from timezone offset (e.g., +01'00' → +0100).
 	raw = strings.ReplaceAll(raw, "'", "")
-	// Remove dashes, colons, T to get pure digits+timezone.
-	raw = strings.ReplaceAll(raw, "-", "")
-	raw = strings.ReplaceAll(raw, ":", "")
-	raw = strings.ReplaceAll(raw, "T", "")
-	return raw
+
+	// Try progressively shorter formats.
+	layouts := []string{
+		"20060102150405-0700",
+		"20060102150405Z0700",
+		"20060102150405Z",
+		"20060102150405",
+		"200601021504",
+		"2006010215",
+		"20060102",
+		"200601",
+		"2006",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func normalizeWhitespace(s string) string {

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"strings"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -223,7 +224,15 @@ func GetMetadata(ctx context.Context, doc *document.Document) (map[string]string
 	maps.Copy(metadata, info)
 
 	// Overlay XMP values — XMP takes precedence per PDF 2.0.
-	maps.Copy(metadata, xmp)
+	// Exception: for date fields, keep the most recent date since many
+	// PDF tools update the Info dict without updating XMP.
+	for k, v := range xmp {
+		if (k == "CreationDate" || k == "ModDate") && metadata[k] != "" {
+			metadata[k] = newerDate(metadata[k], v)
+		} else {
+			metadata[k] = v
+		}
+	}
 
 	// Catalog /Lang: the document-level language tag (per ISO 32000-2, 14.9.2).
 	if _, hasLang := metadata["Language"]; !hasLang {
@@ -233,6 +242,52 @@ func GetMetadata(ctx context.Context, doc *document.Document) (map[string]string
 	}
 
 	return metadata, nil
+}
+
+// newerDate returns whichever of two date strings represents the more recent
+// time. Falls back to b if parsing fails.
+func newerDate(a, b string) string {
+	ta, okA := parseAnyDate(a)
+	tb, okB := parseAnyDate(b)
+	if okA && okB {
+		if ta.After(tb) {
+			return a
+		}
+		return b
+	}
+	if okA {
+		return a
+	}
+	return b
+}
+
+// parseAnyDate attempts to parse a PDF date string ("D:YYYYMMDD..." or ISO 8601).
+func parseAnyDate(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	raw := strings.TrimPrefix(s, "D:")
+	raw = strings.ReplaceAll(raw, "'", "")
+
+	for _, layout := range []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05-07:00",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02T15:04:05",
+		"20060102150405-0700",
+		"20060102150405Z0700",
+		"20060102150405Z",
+		"20060102150405",
+		"200601021504",
+		"2006010215",
+		"20060102",
+	} {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t, true
+		}
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 // getCatalogLang reads the /Lang entry from the document catalog.
