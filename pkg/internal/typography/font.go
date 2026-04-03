@@ -332,17 +332,6 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	// Extract /FontBBox and embedded font metrics from the FontDescriptor.
 	extractFontDescriptorMetrics(ctx, doc, fontDict, font)
 
-	// Type0 fonts with Identity-H/V encoding and no ToUnicode CMap: the 2-byte
-	// character codes are CIDs that typically equal Unicode codepoints. The
-	// embedded font's cmap table maps GID→Unicode, but without a CIDToGIDMap
-	// we cannot reliably map CID→GID for subset fonts. Prefer treating CIDs
-	// as direct Unicode codepoints (the Identity fallback).
-	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback {
-		if isIdentityEncoding(ctx, doc, fontDict) {
-			font.CIDIdentityFallback = true
-		}
-	}
-
 	// Predefined CJK encoding CMap fallback for Type0 fonts: when the
 	// /Encoding is a predefined CMap name (e.g., GBK-EUC-H, EUC-H), load
 	// the byte→CID mapping from the embedded bcmap and compose with the
@@ -355,30 +344,49 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 		}
 	}
 
+	// CIDToGIDMap handling for Type0 fonts. When CIDToGIDMap is a stream,
+	// parse it to build CID→GID mapping and combine with the embedded font's
+	// GID→Unicode cmap to create a synthetic ToUnicode. When it's /Identity,
+	// CID=GID and the Identity fallback is used as a last resort below.
+	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback {
+		applyCIDToGIDIdentityFallback(ctx, doc, fontDict, font)
+	}
+
 	// Embedded TrueType/OpenType cmap fallback: extract the glyph-to-Unicode
-	// mapping from the embedded font binary when no ToUnicode CMap exists and
-	// no Identity fallback is active. When ToUnicode IS present, it is
-	// authoritative. When Identity fallback is active, the embedded cmap's
-	// GID→Unicode would require a CID→GID mapping we don't have.
-	if font.ToUnicode == nil && !font.CIDIdentityFallback {
+	// mapping from the embedded font binary when no ToUnicode CMap exists.
+	// For Type0 fonts, only use the embedded cmap when a CIDToGIDMap stream
+	// was parsed (font.ToUnicode set above), since without CIDToGIDMap the
+	// CID→GID mapping is unreliable for subset fonts.
+	if font.ToUnicode == nil && !font.CIDIdentityFallback && subtypeName != "Type0" {
 		extractEmbeddedCmap(ctx, doc, fontDict, font)
 	}
 
-	// Adobe predefined CID→Unicode fallback for Type0 fonts: when the font's
-	// CIDSystemInfo references a known Adobe character collection (Japan1, GB1,
-	// CNS1, Korea1), use the predefined CID→Unicode map from the Adobe CMap
-	// resources. This handles CJK fonts that have no ToUnicode CMap and no
-	// embedded font program.
+	// Adobe predefined CID→Unicode fallback for Type0 fonts.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
 		applyAdobeCIDFallback(ctx, doc, fontDict, font)
 	}
 
-	// CIDToGIDMap /Identity fallback for Type0 fonts: when a CIDFont declares
-	// CIDToGIDMap as /Identity (CID = GID) and has no ToUnicode CMap and no
-	// embedded font program, treat character codes as direct Unicode code points.
-	// This is common for CJK fonts that rely on system font access.
+	// Identity-H/V fallback: last resort for Type0 fonts with no other
+	// mapping. Treats 2-byte character codes as direct Unicode codepoints.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
-		applyCIDToGIDIdentityFallback(ctx, doc, fontDict, font)
+		if isIdentityEncoding(ctx, doc, fontDict) {
+			font.CIDIdentityFallback = true
+		}
+	}
+
+	// CJK heuristic for simple fonts: when a TrueType or Type1 font has no
+	// ToUnicode CMap and the BaseFont name contains CJK characters, the font
+	// is likely mis-declared with WinAnsiEncoding but actually uses GBK byte
+	// encoding. Load the GBK-EUC-H predefined CMap as a ToUnicode substitute.
+	if font.ToUnicode == nil && (subtypeName == "TrueType" || subtypeName == "Type1") {
+		if bfObj, ok := fontDict["BaseFont"]; ok {
+			bfName, _ := document.ResolveName(ctx, doc, bfObj)
+			if hasCJKFontName(string(bfName)) {
+				if cm := cmap.LoadPredefinedCMap("GBK-EUC-H"); cm != nil {
+					font.ToUnicode = cm
+				}
+			}
+		}
 	}
 
 	// Determine the font name for logging.
@@ -1178,26 +1186,96 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return
 	}
-	mapName, err := document.ResolveName(ctx, doc, mapObj)
-	if err != nil {
-		doc.Logger.Debug("resolving CIDToGIDMap name", slog.Any("err", err))
-	}
-	if mapName != "Identity" {
+
+	// /CIDToGIDMap /Identity: CID = GID, treat as direct Unicode.
+	mapName, _ := document.ResolveName(ctx, doc, mapObj)
+	if mapName == "Identity" {
+		font.CIDIdentityFallback = true
 		return
 	}
 
-	// Build a synthetic GIDToUnicode table for BMP range.
-	// Most CJK text uses code points in the BMP (U+0000–U+FFFF).
-	font.GIDToUnicode = make(map[uint16]rune, 256)
-	// We don't pre-populate all 65536 entries; instead the text extraction
-	// path will use this as a signal. Let's populate the common ranges.
-	// CJK Unified Ideographs: U+4E00–U+9FFF
-	// CJK Compat: U+F900–U+FAFF
-	// Hangul: U+AC00–U+D7AF
-	// Hiragana: U+3040–U+309F, Katakana: U+30A0–U+30FF
-	// Latin: U+0020–U+007E
-	// Rather than populating huge ranges, set a flag and handle in text.go.
-	font.CIDIdentityFallback = true
+	// /CIDToGIDMap stream: 2-byte big-endian GIDs indexed by CID.
+	// Parse the stream and combine with the embedded font's GID→Unicode
+	// cmap to build a CID→Unicode mapping.
+	applyCIDToGIDStream(ctx, doc, fontDict, font, mapObj)
+}
+
+// applyCIDToGIDStream parses a CIDToGIDMap stream and combines it with the
+// embedded font's GID→Unicode cmap to build a synthetic ToUnicode CMap.
+func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, mapObj ast.PdfObject) {
+	stream, err := document.ResolveStream(ctx, doc, mapObj)
+	if err != nil || stream.Dict == nil {
+		return
+	}
+	mapData, err := doc.DecodeStream(ctx, stream)
+	if err != nil || len(mapData) < 2 {
+		return
+	}
+
+	// Extract GID→Unicode from the embedded font.
+	gidToUni := extractGIDToUnicode(decodeFontStreamFromDescriptor(ctx, doc, fontDict))
+	if len(gidToUni) == 0 {
+		return
+	}
+
+	// Build CID→Unicode: CIDToGIDMap[CID] → GID, gidToUni[GID] → Unicode.
+	mapping := make(map[string]string, 4096) //nolint:mnd
+	numCIDs := len(mapData) / 2
+	for cid := range numCIDs {
+		gid := uint16(mapData[cid*2])<<8 | uint16(mapData[cid*2+1])
+		if gid == 0 {
+			continue
+		}
+		uni, ok := gidToUni[gid]
+		if !ok || uni == 0 {
+			continue
+		}
+		key := string([]byte{byte(cid >> 8), byte(cid)}) //nolint:gosec
+		mapping[key] = string(uni)
+	}
+
+	if len(mapping) == 0 {
+		return
+	}
+
+	font.ToUnicode = &cmap.CMap{
+		Mapping: mapping,
+		CodeSpaceRanges: []cmap.CodeSpaceRange{
+			{Low: []byte{0x00, 0x00}, High: []byte{0xFF, 0xFF}},
+		},
+	}
+}
+
+// decodeFontStreamFromDescriptor extracts and decodes the embedded font binary
+// from the FontDescriptor, looking in DescendantFonts for Type0 fonts.
+func decodeFontStreamFromDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) []byte {
+	fdDict := findFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return nil
+	}
+	if data := decodeFontStream(ctx, doc, fdDict, "FontFile2"); data != nil {
+		return data
+	}
+	return decodeFontStream(ctx, doc, fdDict, "FontFile3")
+}
+
+// hasCJKFontName reports whether a BaseFont name indicates a CJK font.
+// Detects GBK/GB2312-encoded names (e.g., 黑体 = bytes 0xBA 0xDA 0xCC 0xE5)
+// that appear as raw high bytes after PDF name hex decoding (#BA#DA#CC#E5).
+func hasCJKFontName(s string) bool {
+	highByteCount := 0
+	for i := range len(s) {
+		b := s[i]
+		if b >= 0x80 {
+			highByteCount++
+		} else {
+			highByteCount = 0
+		}
+		if highByteCount >= 2 {
+			return true
+		}
+	}
+	return false
 }
 
 // encodingCMapName returns the predefined CMap name from a Type0 font's
@@ -1387,10 +1465,10 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 		}
 	}
 	if r, ok := encodings.GlyphToRuneFull(name); ok {
-		// The extended AGL includes ZapfDingbats "aNN" glyph names that
-		// map to the Dingbats range (U+2700-U+27BF). For non-Dingbats
-		// fonts, these are false matches from font-internal identifiers.
-		if !isDingbats && isDingbatsRange(r) {
+		// The extended AGL includes ZapfDingbats "aNN" glyph names (e.g.,
+		// a45→✲, a100→❞) that map to symbol ranges. For non-Dingbats fonts,
+		// these are false matches from font-internal identifiers.
+		if !isDingbats && isDingbatsGlyphName(name) {
 			return 0, false
 		}
 		return r, ok
@@ -1398,12 +1476,16 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 	return 0, false
 }
 
-// isDingbatsRange returns true if the rune falls in a Unicode range
-// specific to ZapfDingbats (Dingbats block and related ornaments).
-func isDingbatsRange(r rune) bool {
-	return (r >= 0x2700 && r <= 0x27BF) || // Dingbats
-		(r >= 0x2764 && r <= 0x2767) || // Heavy hearts (subset)
-		(r >= 0x2605 && r <= 0x2606) || // Stars
-		(r >= 0x260E && r <= 0x260F) || // Telephone
-		(r >= 0x2660 && r <= 0x2666) // Card suits
+// isDingbatsGlyphName returns true if the name matches the ZapfDingbats
+// "aNN"/"aNNN" naming convention (letter 'a' followed by 1-3 digits).
+func isDingbatsGlyphName(name string) bool {
+	if len(name) < 2 || len(name) > 4 || name[0] != 'a' {
+		return false
+	}
+	for _, c := range name[1:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }

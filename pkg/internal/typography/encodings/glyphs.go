@@ -315,6 +315,13 @@ func GlyphToRuneFull(name string) (rune, bool) {
 			}
 		}
 	}
+	// "iSQPXXXX" — 4 hex digits after "iSQP" prefix (e.g., "iSQP0041" → U+0041 = 'A').
+	// Used by some PDF generators as font-internal Unicode references.
+	if len(name) == 8 && name[:4] == "iSQP" {
+		if r, err := strconv.ParseUint(name[4:], 16, 32); err == nil && r > 0 {
+			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
+		}
+	}
 	// Try RecoverGlyphName (strip suffixes like ".001", ".alt", etc.)
 	recovered := RecoverGlyphName(name)
 	if recovered != name {

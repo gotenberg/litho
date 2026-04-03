@@ -61,23 +61,35 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		if !ok {
 			if n > 1 {
 				// Multi-byte codespace consumed n>1 bytes but found no
-				// mapping. Consume those bytes without trying single-byte
-				// fallback to avoid misinterpreting multi-byte codes.
-				data = data[n:]
-				continue
-			}
-			// Type0/CID fonts with Identity fallback use 2-byte character
-			// codes as direct Unicode values. Skip the single-byte Encoding
-			// table to avoid misinterpreting the high byte of a 2-byte code.
-			if font.Subtype == "Type0" && font.CIDIdentityFallback {
-				char = resolveGlyphFallback(font, data, &n)
-			} else if r, ok := font.Encoding[data[0]]; ok {
-				char = string(r)
+				// mapping. For Type0 fonts, treat the unmapped 2-byte code
+				// as a direct Unicode codepoint (common with Identity-H
+				// fonts that have incomplete ToUnicode CMaps).
+				if font.Subtype == "Type0" && n == 2 && len(data) >= 2 {
+					cp := rune(uint16(data[0])<<8 | uint16(data[1]))
+					if cp > 0x1F {
+						char = string(cp)
+					} else {
+						data = data[n:]
+						continue
+					}
+				} else {
+					data = data[n:]
+					continue
+				}
 			} else {
-				char = resolveGlyphFallback(font, data, &n)
-			}
-			if n == 0 {
-				n = 1
+				// Type0/CID fonts with Identity fallback use 2-byte character
+				// codes as direct Unicode values. Skip the single-byte Encoding
+				// table to avoid misinterpreting the high byte of a 2-byte code.
+				if font.Subtype == "Type0" && font.CIDIdentityFallback {
+					char = resolveGlyphFallback(font, data, &n)
+				} else if r, ok := font.Encoding[data[0]]; ok {
+					char = string(r)
+				} else {
+					char = resolveGlyphFallback(font, data, &n)
+				}
+				if n == 0 {
+					n = 1
+				}
 			}
 		}
 

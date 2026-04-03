@@ -20,14 +20,15 @@ Comparison of litho against Mozilla PDF.js reference fixtures (958 files with re
 
 Text diverges at position 0: litho produces entirely different output from the first character. All tractable common patterns have been fixed (see changelog below). The remaining ~75 files have diverse, font-specific root causes:
 
-- **Type0 Identity-H with offset CIDs (~23 files).** CID values don't equal Unicode codepoints. Fonts use custom CID numbering (e.g., `arial_unicode_en_cidfont.pdf` has a -31 CID offset). Requires CIDToGIDMap stream parsing or heuristic offset detection.
-- **Custom Differences with unresolvable glyph names (~18 files).** Font-internal identifiers (random prefixes, numeric codes) that don't map to Unicode via the Adobe Glyph List. Without a ToUnicode CMap, these are unrecoverable.
-- **Content stream ordering (~25 files).** Missing form XObject text, wrong page region extracted first, mis-declared font subtypes, or corrupt/truncated streams.
-- **Incomplete ToUnicode (~3 files).** CMap stream exists but doesn't cover all character codes.
-- **Embedded Type1 custom encodings (~2 files).** Font program encoding not fully resolved.
-- **Garbled CJK (~4 files).** Simple TrueType fonts mis-declared as WinAnsiEncoding but using GBK byte data. Requires heuristic encoding detection.
+- **Type0 Identity-H with offset CIDs (~22 remaining, was ~23).** Partially fixed: `applyCIDToGIDStream` now parses CIDToGIDMap streams (2-byte GID lookup table) and combines with the embedded font's GID→Unicode cmap. Fixed `arial_unicode_en_cidfont.pdf` (was -31 CID offset, now correct text). Remaining ~22 files have no CIDToGIDMap and no embedded font, so the CID→Unicode mapping is unrecoverable. Identity-H fallback (CID = Unicode) is the only option but gives wrong results for fonts with offset CID numbering (typically -29 from Windows TrueType glyph ordering).
+- **Custom Differences with unresolvable glyph names (~16 files, was ~18).** Partially fixed: `aNN` Dingbats name filter now rejects false matches on non-Dingbats fonts (`issue918.pdf` improved from 0 to 127+ matching chars). Added `iSQPXXXX` hex pattern and `CXX` hex fallback. Remaining files have truly opaque font-internal identifiers.
+- **Content stream ordering (~3 true cases, was ~25).** Most files originally in this category were actually encoding issues (reclassified above). The remaining 3 (`issue7855.pdf`, `issue7454.pdf`, `issue1350.pdf`) are spatial layout differences where litho and PDF.js reconstruct text in different reading order. No common fix: these are inherent to the `ReconstructText` spatial sorting algorithm.
+- **~~Incomplete ToUnicode (was ~3, now ~0).~~** Fixed: for Type0 fonts, when ToUnicode matches the codespace but has no mapping for a 2-byte code, the code is now treated as a direct Unicode codepoint instead of being discarded. `issue5994.pdf` now extracts Lao characters correctly. Remaining files are broken references (`issue11922_reduced.pdf`) or content ordering issues (`issue19624.pdf`, `issue7855.pdf`).
+- **~~Embedded Type1 custom encodings (was ~2, now 0).~~** Investigated: `TAMReview.pdf` page 2 has a broken reference (PDF.js also outputs control characters, not real text). `annotation-text-without-popup.pdf` is a content visibility issue (litho extracts annotation text that PDF.js skips), not encoding.
+- **~~Garbled CJK (~4 files).~~** Fixed. Simple TrueType fonts with GBK-encoded BaseFont names (e.g., `/#BA#DA#CC#E5` = 黑体) now trigger a GBK-EUC-H ToUnicode heuristic. Litho now correctly extracts Chinese text (`全世界无产者，联合起来`). Files still show as corpus "mismatches" because PDF.js also couldn't extract the CJK text.
 
 **Changelog (39 files fixed across all A1 sub-categories):**
+
 - ToUnicode codespace byte-length mismatch: +26 files (2-byte codespace with 1-byte bfchar keys).
 - Type0 Identity-H fallback: +10 files (`/ToUnicode /Identity-H` name, predefined CJK CMaps).
 - Type1 font program encoding override: +2 files (no `/Encoding` in font dict).
@@ -86,13 +87,13 @@ Known skip in the corpus configuration (e.g., a file explicitly excluded).
 
 ## Priority Ranking
 
-| Priority | Category                       | Files | Impact                                          |
-| -------- | ------------------------------ | ----- | ----------------------------------------------- |
+| Priority | Category                       | Files | Impact                                           |
+| -------- | ------------------------------ | ----- | ------------------------------------------------ |
 | P1       | Font encoding (pos-0 failures) | ~75   | Entire text output wrong (39 fixed this session) |
-| P2       | Truncation (incomplete text)   | ~65   | Missing tail of page content                    |
-| P3       | Character encoding (late)      | ~53   | Partial text correct, then wrong glyphs         |
-| P4       | Spacing heuristic              | ~41   | Cosmetic: text readable but spaces shift        |
-| ~~P5~~   | ~~CJK/garbled encoding~~       |       | Merged into P1                                  |
-| ~~P6~~   | ~~Metadata version parsing~~   |       | FIXED (4/4)                                     |
-| P7       | Bidi reordering                | ~3    | Arabic/Hebrew text order                        |
-| Low      | Errors (open failures)         | 206   | Need per-file investigation                     |
+| P2       | Truncation (incomplete text)   | ~65   | Missing tail of page content                     |
+| P3       | Character encoding (late)      | ~53   | Partial text correct, then wrong glyphs          |
+| P4       | Spacing heuristic              | ~41   | Cosmetic: text readable but spaces shift         |
+| ~~P5~~   | ~~CJK/garbled encoding~~       |       | Merged into P1                                   |
+| ~~P6~~   | ~~Metadata version parsing~~   |       | FIXED (4/4)                                      |
+| P7       | Bidi reordering                | ~3    | Arabic/Hebrew text order                         |
+| Low      | Errors (open failures)         | 206   | Need per-file investigation                      |
