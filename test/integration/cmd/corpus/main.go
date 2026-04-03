@@ -599,11 +599,7 @@ var pdfjsKnownSkips = map[string]string{
 var pdfjsKnownSkipPrefixes = []struct {
 	prefix string
 	reason string
-}{
-	{"jbig2", "JBIG2Decode not supported"},
-	{"JBIG2", "JBIG2Decode not supported"},
-	{"jpx", "JPXDecode (JPEG2000) not supported"},
-}
+}{}
 
 func shouldSkipPDFJS(id string) (string, bool) {
 	if reason, ok := pdfjsKnownSkips[id]; ok {
