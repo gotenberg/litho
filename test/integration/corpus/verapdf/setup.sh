@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — VeraPDF corpus generation entrypoint for the testcontainer.
+# setup.sh: VeraPDF corpus generation entrypoint.
 #
 # Clones the veraPDF test corpus, then runs the veraPDF CLI against each
 # profile directory to produce JSON validation references.

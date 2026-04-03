@@ -4,7 +4,7 @@
  *
  * Generates reference JSON fixtures from the PDF.js corpus using a locally
  * built pdf.js library. Each fixture contains metadata, outline, and per-page
- * text content — used as ground truth for litho comparison tests.
+ * text content: used as ground truth for litho comparison tests.
  *
  * Requires a local pdf.js clone with `npx gulp generic` already run.
  *
@@ -17,10 +17,8 @@
 
 import fs from "fs";
 import path from "path";
-
-// ---------------------------------------------------------------------------
 // CLI args
-// ---------------------------------------------------------------------------
+
 const args = process.argv.slice(2);
 let pdfjsDir = "";
 let manifestPath = "";
@@ -46,10 +44,8 @@ if (!pdfjsDir || !manifestPath || !outDir) {
   );
   process.exit(1);
 }
-
-// ---------------------------------------------------------------------------
 // Load pdf.js from the local build
-// ---------------------------------------------------------------------------
+
 const buildPath = path.resolve(
   pdfjsDir,
   "build",
@@ -66,19 +62,15 @@ if (!fs.existsSync(buildPath)) {
 }
 
 const pdfjsLib = await import("file://" + buildPath);
-
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
+
 function round(val, decimals) {
   if (typeof val !== "number" || isNaN(val)) return 0;
   const factor = Math.pow(10, decimals);
   return Math.round(val * factor) / factor;
 }
-
-// ---------------------------------------------------------------------------
 // Main
-// ---------------------------------------------------------------------------
+
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 const corpusDir = path.dirname(manifestPath);
 
@@ -129,7 +121,7 @@ for (const entry of entries) {
         contentDispositionFilename: meta.contentDispositionFilename || null,
       };
     } catch {
-      // Some PDFs have broken metadata — skip silently.
+      // Some PDFs have broken metadata: skip silently.
     }
 
     // Outline (bookmarks).

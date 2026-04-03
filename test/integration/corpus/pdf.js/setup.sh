@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — Corpus generation entrypoint for the testcontainer.
+# setup.sh: PDF.js corpus generation entrypoint.
 #
 # Clones Mozilla PDF.js, downloads test PDFs, builds PDF.js, and generates
 # reference JSON fixtures. Output is written to /output (bind-mounted from host).
@@ -13,7 +13,7 @@ git clone --depth 1 https://github.com/mozilla/pdf.js.git /tmp/pdf.js
 echo "==> Installing dependencies..."
 (cd /tmp/pdf.js && npm install)
 
-echo "==> Downloading test PDFs (Tier 2 — external URLs)..."
+echo "==> Downloading test PDFs (Tier 2: external URLs)..."
 node /work/download-pdfjs-pdfs.mjs --test-dir /tmp/pdf.js/test \
   || echo "WARN: download step had failures (some dead links are expected)"
 

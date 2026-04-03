@@ -596,19 +596,9 @@ var pdfjsKnownSkips = map[string]string{
 	"bug1393476": "infinite loop in xref parsing",
 }
 
-var pdfjsKnownSkipPrefixes = []struct {
-	prefix string
-	reason string
-}{}
-
 func shouldSkipPDFJS(id string) (string, bool) {
 	if reason, ok := pdfjsKnownSkips[id]; ok {
 		return reason, true
-	}
-	for _, sp := range pdfjsKnownSkipPrefixes {
-		if strings.HasPrefix(id, sp.prefix) {
-			return sp.reason, true
-		}
 	}
 	return "", false
 }

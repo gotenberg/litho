@@ -11,7 +11,7 @@
  * Features:
  *   - Concurrent downloads (default 8)
  *   - 30s per-file timeout to prevent hangs from dead links
- *   - MD5 verification — files with mismatched checksums are deleted
+ *   - MD5 verification: files with mismatched checksums are deleted
  *
  * Usage:
  *   node scripts/download-pdfjs-pdfs.mjs --test-dir tmp/pdf.js/test
@@ -22,10 +22,8 @@ import fs from "fs";
 import http from "http";
 import https from "https";
 import path from "path";
-
-// ---------------------------------------------------------------------------
 // CLI args
-// ---------------------------------------------------------------------------
+
 const args = process.argv.slice(2);
 let testDir = "";
 
@@ -39,17 +37,13 @@ if (!testDir) {
   console.error("Usage: node download-pdfjs-pdfs.mjs --test-dir <pdf.js/test>");
   process.exit(1);
 }
-
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
+
 const CONCURRENCY = 8;
 const TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 10;
-
-// ---------------------------------------------------------------------------
 // Read manifest
-// ---------------------------------------------------------------------------
+
 const manifestPath = path.join(testDir, "test_manifest.json");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 
@@ -77,10 +71,8 @@ for (const entry of manifest) {
 console.log(
   `  ${toDownload.length} files to download (${CONCURRENCY} concurrent)...`,
 );
-
-// ---------------------------------------------------------------------------
 // Download helpers
-// ---------------------------------------------------------------------------
+
 function download(url, dest, redirects = 0) {
   return new Promise((resolve, reject) => {
     if (redirects > MAX_REDIRECTS) {
@@ -124,10 +116,8 @@ function md5File(filePath) {
     rs.on("error", reject);
   });
 }
-
-// ---------------------------------------------------------------------------
 // Concurrency-limited pool
-// ---------------------------------------------------------------------------
+
 let ok = 0;
 let fail = 0;
 let md5Fail = 0;
@@ -138,7 +128,7 @@ async function worker() {
     const { file, filePath, url } = toDownload[idx++];
     try {
       await download(url, filePath);
-      // Verify MD5 if the manifest specifies one — delete on mismatch.
+      // Verify MD5 if the manifest specifies one: delete on mismatch.
       const expected = md5Map.get(file);
       if (expected) {
         const actual = await md5File(filePath);
