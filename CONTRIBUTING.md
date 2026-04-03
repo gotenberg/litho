@@ -22,17 +22,17 @@ go build ./cmd/litho
 ### Development Loop
 
 ```bash
-make fmt                                   # gofmt + gofumpt + gci + goimports + go mod tidy
-make lint                                  # golangci-lint (strict, see .golangci.yml)
-make lint-todo                             # Find TODO comments via godox
-make test-unit                             # Unit tests only (go test -race ./...)
-make corpus-verapdf                        # VeraPDF corpus comparison (text output)
-make corpus-verapdf-json                   # VeraPDF corpus comparison (JSON output)
-make corpus-verapdf-init                   # Provision VeraPDF corpus via Docker, then compare
-make corpus-pdfjs                          # PDF.js corpus comparison (text output)
-make corpus-pdfjs-json                     # PDF.js corpus comparison (JSON output)
-make corpus-pdfjs-init                     # Provision PDF.js corpus via Docker, then compare
-make clean-corpus                          # Remove all corpus data (forces re-provisioning)
+make fmt                 # gofmt + gofumpt + gci + goimports + go mod tidy
+make lint                # golangci-lint (strict, see .golangci.yml)
+make lint-todo           # Find TODO comments via godox
+make test-unit           # Unit tests only (go test -race ./...)
+make corpus-verapdf      # VeraPDF corpus comparison (text output)
+make corpus-verapdf-json # VeraPDF corpus comparison (JSON output)
+make corpus-verapdf-init # Provision VeraPDF corpus via Docker, then compare
+make corpus-pdfjs        # PDF.js corpus comparison (text output)
+make corpus-pdfjs-json   # PDF.js corpus comparison (JSON output)
+make corpus-pdfjs-init   # Provision PDF.js corpus via Docker, then compare
+make clean-corpus        # Remove all corpus data (forces re-provisioning)
 ```
 
 Run `make fmt && make lint` before submitting code. Zero warnings policy.
@@ -75,6 +75,7 @@ Every public method that performs I/O, loops, or recursion must accept `context.
 Never store `ctx` in a struct field. Pass it through function parameters, per Go convention.
 
 Check `ctx.Err()` at natural checkpoints in internal loops:
+
 - Content stream operator dispatch (every ~100 operators).
 - Page tree traversal (before processing each node).
 - Object resolution (on each step, alongside cycle detection).
@@ -178,7 +179,7 @@ This works for same-package identifiers (`[Violation]`), other packages (`[io.Re
 
 ### Code Comments
 
-- Explain *why*, not *what*. The code shows what; the comment explains the non-obvious reasoning.
+- Explain _why_, not _what_. The code shows what; the comment explains the non-obvious reasoning.
 - No numbered step comments (`// 1. Do X`, `// 2. Do Y`).
 - No section dividers with numbers (`// --- 8. Foo ---`). Plain dividers are fine for major boundaries (`// --- VeraPDF ---`).
 - No noise comments that restate the code (`// Check if err is nil`, `// Return results`).
@@ -226,11 +227,11 @@ See [test/integration/README.md](test/integration/README.md) for full flag refer
 
 Minimal by design, pure Go with few direct dependencies:
 
-| Dependency | Purpose |
-|---|---|
-| `github.com/dop251/goja` | JavaScript VM for dynamic form field evaluation |
-| `github.com/andybalholm/brotli` | Brotli stream decompression |
-| `golang.org/x/text` | Unicode text processing |
+| Dependency                      | Purpose                                         |
+| ------------------------------- | ----------------------------------------------- |
+| `github.com/dop251/goja`        | JavaScript VM for dynamic form field evaluation |
+| `github.com/andybalholm/brotli` | Brotli stream decompression                     |
+| `golang.org/x/text`             | Unicode text processing                         |
 
 ## Scoped Guidelines
 

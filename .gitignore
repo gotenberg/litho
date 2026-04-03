@@ -3,3 +3,4 @@
 /test/integration/testdata/pdf.js/
 /test/integration/testdata/verapdf/
 /corpus
+/node_modules/

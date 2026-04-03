@@ -8,6 +8,10 @@ fmt: ## Format Golang codebase and "optimize" the dependencies
 	golangci-lint fmt
 	go mod tidy
 
+.PHONY: prettify
+prettify: ## Format non-Golang codebase
+	npx prettier --write .
+
 .PHONY: lint
 lint: ## Lint Golang codebase
 	golangci-lint run
@@ -15,6 +19,16 @@ lint: ## Lint Golang codebase
 .PHONY: lint-todo
 lint-todo: ## Find TODOs in Golang codebase
 	golangci-lint run --no-config --enable godox
+
+.PHONY: lint-prettier
+lint-prettier: ## Lint non-Golang codebase
+	npx prettier --check .
+
+# go install golang.org/x/tools/cmd/godoc@latest
+.PHONY: godoc
+godoc: ## Run a webserver with Gotenberg godoc
+	$(info http://localhost:6060/pkg/github.com/gotenberg/gotenberg/v8)
+	godoc -http=:6060
 
 .PHONY: test-unit
 test-unit: ## Run unit tests

@@ -42,7 +42,7 @@ for (let i = 0; i < args.length; i++) {
 
 if (!pdfjsDir || !manifestPath || !outDir) {
   console.error(
-    "Usage: node gen-pdfjs-reference.mjs --pdfjs-dir <dir> --manifest <path> --out <dir>"
+    "Usage: node gen-pdfjs-reference.mjs --pdfjs-dir <dir> --manifest <path> --out <dir>",
   );
   process.exit(1);
 }
@@ -55,12 +55,12 @@ const buildPath = path.resolve(
   "build",
   "generic-legacy",
   "build",
-  "pdf.mjs"
+  "pdf.mjs",
 );
 if (!fs.existsSync(buildPath)) {
   console.error(
     `pdf.js build not found at ${buildPath}.\n` +
-      `Run 'npx gulp generic-legacy' in ${pdfjsDir} first.`
+      `Run 'npx gulp generic-legacy' in ${pdfjsDir} first.`,
   );
   process.exit(1);
 }

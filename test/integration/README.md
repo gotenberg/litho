@@ -32,14 +32,14 @@ go run ./test/integration/cmd/corpus verapdf --corpus /path/to/testdata/verapdf
 
 Flags:
 
-| Flag | Default | Description |
-|---|---|---|
-| `--init` | false | Provision corpus via Docker before comparison |
-| `--format` | text | Output format: `text` or `json` |
-| `--profile` | (all) | Filter to a single profile directory |
-| `--max-fn` | -1 | Maximum false negatives (-1 = no limit) |
-| `--max-fp` | 0 | Maximum false positives |
-| `--corpus` | auto | Path to corpus testdata directory |
+| Flag        | Default | Description                                   |
+| ----------- | ------- | --------------------------------------------- |
+| `--init`    | false   | Provision corpus via Docker before comparison |
+| `--format`  | text    | Output format: `text` or `json`               |
+| `--profile` | (all)   | Filter to a single profile directory          |
+| `--max-fn`  | -1      | Maximum false negatives (-1 = no limit)       |
+| `--max-fp`  | 0       | Maximum false positives                       |
+| `--corpus`  | auto    | Path to corpus testdata directory             |
 
 Exit codes: 0 = within thresholds, 1 = exceeded or error.
 
@@ -66,12 +66,12 @@ go run ./test/integration/cmd/corpus pdfjs --corpus /path/to/testdata/pdf.js
 
 Flags:
 
-| Flag | Default | Description |
-|---|---|---|
-| `--init` | false | Provision corpus via Docker before comparison |
-| `--format` | text | Output format: `text` or `json` |
-| `--max-text-errors` | -1 | Maximum text mismatch percentage (-1 = no limit) |
-| `--corpus` | auto | Path to corpus testdata directory |
+| Flag                | Default | Description                                      |
+| ------------------- | ------- | ------------------------------------------------ |
+| `--init`            | false   | Provision corpus via Docker before comparison    |
+| `--format`          | text    | Output format: `text` or `json`                  |
+| `--max-text-errors` | -1      | Maximum text mismatch percentage (-1 = no limit) |
+| `--corpus`          | auto    | Path to corpus testdata directory                |
 
 Exit codes: 0 = within thresholds, 1 = exceeded or error.
 
@@ -80,5 +80,5 @@ Exit codes: 0 = within thresholds, 1 = exceeded or error.
 Corpus data is cached in `testdata/` (gitignored). Delete the relevant directory to force regeneration:
 
 ```bash
-make clean-corpus  # Remove all corpus data
+make clean-corpus # Remove all corpus data
 ```

@@ -75,7 +75,7 @@ for (const entry of manifest) {
 }
 
 console.log(
-  `  ${toDownload.length} files to download (${CONCURRENCY} concurrent)...`
+  `  ${toDownload.length} files to download (${CONCURRENCY} concurrent)...`,
 );
 
 // ---------------------------------------------------------------------------
@@ -160,5 +160,5 @@ async function worker() {
 
 await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 console.log(
-  `  downloads complete: ${ok} ok, ${fail} failed, ${md5Fail} md5 mismatch (deleted)`
+  `  downloads complete: ${ok} ok, ${fail} failed, ${md5Fail} md5 mismatch (deleted)`,
 );
