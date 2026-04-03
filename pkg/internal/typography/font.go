@@ -435,7 +435,7 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 	if err != nil {
 		return nil
 	}
-	c, err := cmap.Parse(decoded)
+	c, err := cmap.Parse(ctx, decoded)
 	if err != nil {
 		return nil
 	}
@@ -544,6 +544,9 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 		if cpDict != nil {
 			font.Type3Widths = make(map[string]float64, len(cpDict))
 			for name, streamObj := range cpDict {
+				if err := ctx.Err(); err != nil {
+					return
+				}
 				stream, err := document.ResolveStream(ctx, doc, streamObj)
 				if err != nil {
 					continue
@@ -736,7 +739,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 	// OS/2 xAvgCharWidth — a better fallback than FontBBox or 1000.
 	font.AvgWidth = readOS2AvgWidth(fontData)
 
-	widths := ExtractBinaryWidths(fontData)
+	widths := ExtractBinaryWidths(ctx, fontData)
 	if len(widths) == 0 {
 		return
 	}
@@ -806,10 +809,10 @@ func extractCFFFromOTTO(fontData []byte) ([]byte, error) {
 
 // ExtractBinaryWidths dispatches to TrueType or CFF width extraction based
 // on the font data signature.
-func ExtractBinaryWidths(fontData []byte) map[uint16]uint16 {
+func ExtractBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16 {
 	switch detectFontFormat(fontData) {
 	case fontFormatTrueType:
-		w, _ := truetype.GlyphWidths(fontData)
+		w, _ := truetype.GlyphWidths(ctx, fontData)
 		return w
 	case fontFormatOTTO:
 		cffData, err := extractCFFFromOTTO(fontData)
@@ -823,7 +826,7 @@ func ExtractBinaryWidths(fontData []byte) map[uint16]uint16 {
 		return w
 	case fontFormatUnknown:
 		// Try TrueType as fallback.
-		w, _ := truetype.GlyphWidths(fontData)
+		w, _ := truetype.GlyphWidths(ctx, fontData)
 		return w
 	}
 	return nil
@@ -831,7 +834,7 @@ func ExtractBinaryWidths(fontData []byte) map[uint16]uint16 {
 
 // ExtractCharCodeToGID returns a charCode → GID mapping for TrueType fonts.
 // Returns nil for non-TrueType fonts (CFF/Type1).
-func ExtractCharCodeToGID(fontData []byte) map[uint16]uint16 {
+func ExtractCharCodeToGID(ctx context.Context, fontData []byte) map[uint16]uint16 {
 	if len(fontData) < 4 {
 		return nil
 	}
@@ -840,7 +843,7 @@ func ExtractCharCodeToGID(fontData []byte) map[uint16]uint16 {
 	// TrueType or OTTO with cmap table.
 	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
 		string(sig) == "true" || string(sig) == "OTTO" {
-		m, _ := truetype.CharCodeToGID(fontData)
+		m, _ := truetype.CharCodeToGID(ctx, fontData)
 		return m
 	}
 
@@ -851,7 +854,7 @@ func ExtractCharCodeToGID(fontData []byte) map[uint16]uint16 {
 // For TrueType/OpenType: uses the post table.
 // For CFF: uses the charset + string table.
 // Returns nil if the font type is unrecognized or has no glyph names.
-func ExtractGlyphNames(fontData []byte) map[uint16]string {
+func ExtractGlyphNames(ctx context.Context, fontData []byte) map[uint16]string {
 	if len(fontData) < 4 {
 		return nil
 	}
@@ -860,7 +863,7 @@ func ExtractGlyphNames(fontData []byte) map[uint16]string {
 	// TrueType or OTTO: use post table.
 	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
 		string(sig) == "true" || string(sig) == "OTTO" {
-		m, _ := truetype.PostGlyphNames(fontData)
+		m, _ := truetype.PostGlyphNames(ctx, fontData)
 		return m
 	}
 
@@ -875,14 +878,14 @@ func ExtractGlyphNames(fontData []byte) map[uint16]string {
 
 // ExtractEmptyGIDs returns the set of GIDs with empty glyph data in a
 // TrueType font (where loca[gid] == loca[gid+1]). Returns nil for non-TrueType.
-func ExtractEmptyGIDs(fontData []byte) map[uint16]bool {
+func ExtractEmptyGIDs(ctx context.Context, fontData []byte) map[uint16]bool {
 	if len(fontData) < 4 {
 		return nil
 	}
 	sig := fontData[:4]
 	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
 		string(sig) == "true" {
-		m, _ := truetype.EmptyGIDs(fontData)
+		m, _ := truetype.EmptyGIDs(ctx, fontData)
 		return m
 	}
 	return nil
@@ -1056,7 +1059,7 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 		return
 	}
 
-	gidMap := extractGIDToUnicode(fontData)
+	gidMap := extractGIDToUnicode(ctx, fontData)
 	if len(gidMap) == 0 {
 		return
 	}
@@ -1066,24 +1069,24 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 
 // extractGIDToUnicode dispatches font data to the appropriate parser
 // (TrueType or CFF) based on the font signature.
-func extractGIDToUnicode(fontData []byte) map[uint16]rune {
+func extractGIDToUnicode(ctx context.Context, fontData []byte) map[uint16]rune {
 	switch detectFontFormat(fontData) {
 	case fontFormatTrueType:
-		gidMap, _ := truetype.GlyphToUnicode(fontData)
+		gidMap, _ := truetype.GlyphToUnicode(ctx, fontData)
 		return gidMap
 	case fontFormatOTTO:
 		cffData, err := extractCFFFromOTTO(fontData)
 		if err != nil {
 			return nil
 		}
-		gidMap, _ := cff.GlyphToUnicode(cffData)
+		gidMap, _ := cff.GlyphToUnicode(ctx, cffData)
 		return gidMap
 	case fontFormatBareCFF:
-		gidMap, _ := cff.GlyphToUnicode(fontData)
+		gidMap, _ := cff.GlyphToUnicode(ctx, fontData)
 		return gidMap
 	case fontFormatUnknown:
 		// Try TrueType as fallback.
-		gidMap, _ := truetype.GlyphToUnicode(fontData)
+		gidMap, _ := truetype.GlyphToUnicode(ctx, fontData)
 		return gidMap
 	}
 	return nil
@@ -1213,7 +1216,7 @@ func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict a
 	}
 
 	// Extract GID→Unicode from the embedded font.
-	gidToUni := extractGIDToUnicode(decodeFontStreamFromDescriptor(ctx, doc, fontDict))
+	gidToUni := extractGIDToUnicode(ctx, decodeFontStreamFromDescriptor(ctx, doc, fontDict))
 	if len(gidToUni) == 0 {
 		return
 	}

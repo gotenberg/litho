@@ -359,7 +359,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	if cidFd != nil {
 		fontData := extractFontProgramData(ctx, doc, cidFd)
 		if fontData != nil {
-			binaryWidths := typography.ExtractBinaryWidths(fontData)
+			binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
 			if binaryWidths != nil {
 				unitsPerEm := typography.ReadUnitsPerEm(fontData)
 				if unitsPerEm == 0 {
@@ -433,7 +433,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 		if fd != nil {
 			fontData := extractFontProgramData(ctx, doc, fd)
 			if fontData != nil {
-				glyphNames := typography.ExtractGlyphNames(fontData)
+				glyphNames := typography.ExtractGlyphNames(ctx, fontData)
 				if glyphNames != nil {
 					// Build glyphName→GID reverse map.
 					nameToGID := make(map[string]uint16, len(glyphNames))
@@ -454,14 +454,14 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					}
 				} else {
 					// No post table glyph names — use cmap + loca + /Widths.
-					charToGID := typography.ExtractCharCodeToGID(fontData)
+					charToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 					if charToGID != nil {
 						// GID 0 is always .notdef.
 						if usage.charCodes[0] && charToGID[0] == 0 {
 							return failf(rule, "font %s on page %d: charCode 0 maps to GID 0 (.notdef)", fontName, pageNum)
 						}
 						// For non-zero GIDs: empty glyph data + PDF width=0 → .notdef.
-						emptyGIDs := typography.ExtractEmptyGIDs(fontData)
+						emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
 						if emptyGIDs != nil {
 							firstChar, widths := simpleFontWidths(ctx, doc, fontDict)
 							for code := range usage.charCodes {
@@ -569,7 +569,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		}
 		// Empty glyph data + PDF width=0 → .notdef.
 		// Empty glyph data + PDF width>0 → valid invisible glyph (space, etc.).
-		emptyGIDs := typography.ExtractEmptyGIDs(fontData)
+		emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
 		if emptyGIDs != nil {
 			for cid := range usedCIDs {
 				if emptyGIDs[cid] && lookupCIDWidth(ctx, doc, cidFontDict, cid) == 0 {

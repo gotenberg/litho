@@ -1,6 +1,7 @@
 package cmap
 
 import (
+	"context"
 	"testing"
 )
 
@@ -62,7 +63,7 @@ func TestParse_BfChar(t *testing.T) {
 endbfchar
 end
 `)
-	cm, err := Parse(data)
+	cm, err := Parse(context.Background(), data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestParse_BfRange(t *testing.T) {
 <01> <03> <0041>
 endbfrange
 `)
-	cm, err := Parse(data)
+	cm, err := Parse(context.Background(), data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +106,7 @@ func TestParse_BfRangeWithArray(t *testing.T) {
 <01> <02> [<0058> <0059>]
 endbfrange
 `)
-	cm, err := Parse(data)
+	cm, err := Parse(context.Background(), data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +122,7 @@ endbfrange
 }
 
 func TestParse_Empty(t *testing.T) {
-	cm, err := Parse([]byte{})
+	cm, err := Parse(context.Background(), []byte{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +140,7 @@ endbfchar
 <20> <22> <0058>
 endbfrange
 `)
-	cm, err := Parse(data)
+	cm, err := Parse(context.Background(), data)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -290,7 +290,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			}
 			if len(op.Operands) == 1 && currentFont != nil {
 				if str, ok := op.Operands[0].(ast.PdfString); ok {
-					processText(str, currentFont, machine, elements)
+					if err := processText(ctx, str, currentFont, machine, elements); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -300,7 +302,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			}
 			if len(op.Operands) == 1 && currentFont != nil {
 				if str, ok := op.Operands[0].(ast.PdfString); ok {
-					processText(str, currentFont, machine, elements)
+					if err := processText(ctx, str, currentFont, machine, elements); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -310,7 +314,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			}
 			if len(op.Operands) == 3 && currentFont != nil {
 				if str, ok := op.Operands[2].(ast.PdfString); ok {
-					processText(str, currentFont, machine, elements)
+					if err := processText(ctx, str, currentFont, machine, elements); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -322,7 +328,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 				if arr, ok := op.Operands[0].(ast.PdfArray); ok {
 					for _, item := range arr {
 						if str, ok := item.(ast.PdfString); ok {
-							processText(str, currentFont, machine, elements)
+							if err := processText(ctx, str, currentFont, machine, elements); err != nil {
+								return err
+							}
 						} else {
 							var numVal float64
 							switch num := item.(type) {

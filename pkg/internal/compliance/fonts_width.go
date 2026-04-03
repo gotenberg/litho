@@ -38,7 +38,7 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 		return nil
 	}
 
-	binaryWidths := typography.ExtractBinaryWidths(fontData)
+	binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
 	if binaryWidths == nil {
 		return nil
 	}
@@ -49,12 +49,12 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 	}
 
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
-	charCodeToGID := typography.ExtractCharCodeToGID(fontData)
+	charCodeToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 
 	// For fonts without a cmap (Type1/CFF), build charCode→GID via glyph names:
 	// PDF encoding maps charCode→glyphName; font program maps GID→glyphName.
 	if charCodeToGID == nil {
-		glyphNames := typography.ExtractGlyphNames(fontData)
+		glyphNames := typography.ExtractGlyphNames(ctx, fontData)
 		if glyphNames != nil {
 			enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 			if len(enc) > 0 {

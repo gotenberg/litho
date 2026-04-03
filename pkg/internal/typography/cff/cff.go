@@ -1,6 +1,7 @@
 package cff
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -17,7 +18,7 @@ var (
 // It parses the charset to get GID → SID, resolves SIDs to glyph names via
 // the standard + custom string tables, then maps glyph names to Unicode via
 // the Adobe Glyph List.
-func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
+func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	if len(data) < 4 {
 		return nil, fmt.Errorf("%w: too short", ErrInvalidCFF)
 	}
@@ -84,6 +85,11 @@ func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
 	// Build GID → Unicode: GID → SID → glyph name → Unicode.
 	result := make(map[uint16]rune, len(sids))
 	for gid, sid := range sids {
+		if gid%1000 == 0 && gid > 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if gid == 0 {
 			continue // skip .notdef
 		}

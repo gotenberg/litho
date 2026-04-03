@@ -5,6 +5,7 @@
 package truetype
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -58,7 +59,7 @@ func TableData(data []byte, records []TableRecord, tag string) ([]byte, error) {
 // GlyphWidths extracts advance widths from the hmtx (Horizontal Metrics)
 // table using the numberOfHMetrics field from the hhea (Horizontal Header)
 // table. Returns a GID → advance width map in font design units.
-func GlyphWidths(data []byte) (map[uint16]uint16, error) {
+func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	records, err := ParseTableDirectory(data)
 	if err != nil {
 		return nil, err
@@ -107,7 +108,7 @@ func GlyphWidths(data []byte) (map[uint16]uint16, error) {
 // a TrueType font. It parses the loca table (using the indexToLocFormat
 // from the head table) to find GIDs where loca[gid] == loca[gid+1],
 // indicating an empty/absent glyph outline (renders as .notdef).
-func EmptyGIDs(data []byte) (map[uint16]bool, error) {
+func EmptyGIDs(ctx context.Context, data []byte) (map[uint16]bool, error) {
 	records, err := ParseTableDirectory(data)
 	if err != nil {
 		return nil, err
@@ -167,8 +168,8 @@ func EmptyGIDs(data []byte) (map[uint16]bool, error) {
 // CharCodeToGID extracts a character code → glyph ID mapping from the cmap
 // table. This is the inverse of GlyphToUnicode: it maps Unicode code points
 // (used as character codes in PDF TrueType fonts) to glyph IDs.
-func CharCodeToGID(data []byte) (map[uint16]uint16, error) {
-	gidToRune, err := GlyphToUnicode(data)
+func CharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, error) {
+	gidToRune, err := GlyphToUnicode(ctx, data)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +193,7 @@ func CharCodeToGID(data []byte) (map[uint16]uint16, error) {
 // platform 3/encoding 10 Format 12, or platform 0 subtables).
 //
 // The returned map keys are glyph IDs (GIDs) and values are Unicode runes.
-func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
+func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	records, err := ParseTableDirectory(data)
 	if err != nil {
 		return nil, err
@@ -203,13 +204,13 @@ func GlyphToUnicode(data []byte) (map[uint16]rune, error) {
 		return nil, err
 	}
 
-	return parseCmap(cmapData)
+	return parseCmap(ctx, cmapData)
 }
 
 // PostGlyphNames extracts glyph names from the post (PostScript) table.
 // Returns a map of glyph ID → glyph name. Only post table formats 1.0 and
 // 2.0 are supported; other formats return an empty map.
-func PostGlyphNames(data []byte) (map[uint16]string, error) {
+func PostGlyphNames(ctx context.Context, data []byte) (map[uint16]string, error) {
 	records, err := ParseTableDirectory(data)
 	if err != nil {
 		return nil, err
@@ -228,7 +229,7 @@ func PostGlyphNames(data []byte) (map[uint16]string, error) {
 }
 
 // parseCmap processes the cmap table and returns a GID → rune map.
-func parseCmap(data []byte) (map[uint16]rune, error) {
+func parseCmap(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	if len(data) < 4 {
 		return nil, fmt.Errorf("%w: cmap table too short", ErrInvalidFont)
 	}
@@ -298,11 +299,11 @@ func parseCmap(data []byte) (map[uint16]rune, error) {
 	case 0:
 		return parseCmapFormat0(subtable)
 	case 4:
-		return parseCmapFormat4(subtable)
+		return parseCmapFormat4(ctx, subtable)
 	case 6:
 		return parseCmapFormat6(subtable)
 	case 12:
-		return parseCmapFormat12(subtable)
+		return parseCmapFormat12(ctx, subtable)
 	default:
 		return nil, fmt.Errorf("%w: unsupported cmap format %d", ErrInvalidFont, format)
 	}
@@ -361,7 +362,7 @@ func parseCmapFormat6(data []byte) (map[uint16]rune, error) {
 
 // parseCmapFormat4 decodes a Format 4 "Segment mapping to delta values" subtable.
 // This maps BMP character codes (U+0000–U+FFFF) to glyph IDs.
-func parseCmapFormat4(data []byte) (map[uint16]rune, error) {
+func parseCmapFormat4(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	if len(data) < 14 {
 		return nil, fmt.Errorf("%w: format 4 header too short", ErrInvalidFont)
 	}
@@ -382,6 +383,9 @@ func parseCmapFormat4(data []byte) (map[uint16]rune, error) {
 	result := make(map[uint16]rune)
 
 	for i := range segCount {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		endCode := binary.BigEndian.Uint16(data[endCountOff+i*2 : endCountOff+i*2+2])
 		startCode := binary.BigEndian.Uint16(data[startCountOff+i*2 : startCountOff+i*2+2])
 		idDelta := int16(binary.BigEndian.Uint16(data[idDeltaOff+i*2 : idDeltaOff+i*2+2])) //nolint:gosec // TrueType spec: delta is signed
@@ -423,7 +427,7 @@ func parseCmapFormat4(data []byte) (map[uint16]rune, error) {
 
 // parseCmapFormat12 decodes a Format 12 "Segmented coverage" subtable.
 // This handles the full Unicode range (beyond BMP).
-func parseCmapFormat12(data []byte) (map[uint16]rune, error) {
+func parseCmapFormat12(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	if len(data) < 16 {
 		return nil, fmt.Errorf("%w: format 12 header too short", ErrInvalidFont)
 	}
@@ -436,6 +440,9 @@ func parseCmapFormat12(data []byte) (map[uint16]rune, error) {
 	result := make(map[uint16]rune)
 
 	for i := range numGroups {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		off := 16 + i*12
 		startCharCode := binary.BigEndian.Uint32(data[off : off+4])
 		endCharCode := binary.BigEndian.Uint32(data[off+4 : off+8])

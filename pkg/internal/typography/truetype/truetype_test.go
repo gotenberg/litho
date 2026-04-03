@@ -1,6 +1,7 @@
 package truetype
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"testing"
@@ -112,7 +113,7 @@ func TestGlyphToUnicode_Format4(t *testing.T) {
 		"cmap": cmapTable,
 	})
 
-	gidMap, err := GlyphToUnicode(fontData)
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
 	if err != nil {
 		t.Fatalf("GlyphToUnicode failed: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestGlyphToUnicode_Format12(t *testing.T) {
 		"cmap": cmapTable,
 	})
 
-	gidMap, err := GlyphToUnicode(fontData)
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
 	if err != nil {
 		t.Fatalf("GlyphToUnicode failed: %v", err)
 	}
@@ -200,7 +201,7 @@ func TestGlyphToUnicode_PreferFormat12(t *testing.T) {
 
 	fontData := buildTableDirectory(map[string][]byte{"cmap": cmapData})
 
-	gidMap, err := GlyphToUnicode(fontData)
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
 	if err != nil {
 		t.Fatalf("GlyphToUnicode failed: %v", err)
 	}
@@ -216,14 +217,14 @@ func TestGlyphToUnicode_NoCmap(t *testing.T) {
 		"post": make([]byte, 32), // no cmap table
 	})
 
-	_, err := GlyphToUnicode(fontData)
+	_, err := GlyphToUnicode(context.Background(), fontData)
 	if !errors.Is(err, ErrTableNotFound) {
 		t.Errorf("expected ErrTableNotFound, got: %v", err)
 	}
 }
 
 func TestGlyphToUnicode_InvalidData(t *testing.T) {
-	_, err := GlyphToUnicode([]byte{0, 1, 2})
+	_, err := GlyphToUnicode(context.Background(), []byte{0, 1, 2})
 	if !errors.Is(err, ErrInvalidFont) {
 		t.Errorf("expected ErrInvalidFont, got: %v", err)
 	}
@@ -237,7 +238,7 @@ func TestPostGlyphNames_Format1(t *testing.T) {
 
 	fontData := buildTableDirectory(map[string][]byte{"post": postData})
 
-	names, err := PostGlyphNames(fontData)
+	names, err := PostGlyphNames(context.Background(), fontData)
 	if err != nil {
 		t.Fatalf("PostGlyphNames failed: %v", err)
 	}
@@ -280,7 +281,7 @@ func TestPostGlyphNames_Format2(t *testing.T) {
 
 	fontData := buildTableDirectory(map[string][]byte{"post": postData})
 
-	names, err := PostGlyphNames(fontData)
+	names, err := PostGlyphNames(context.Background(), fontData)
 	if err != nil {
 		t.Fatalf("PostGlyphNames failed: %v", err)
 	}
@@ -298,7 +299,7 @@ func TestPostGlyphNames_NoPostTable(t *testing.T) {
 		"cmap": make([]byte, 4), // no post table
 	})
 
-	names, err := PostGlyphNames(fontData)
+	names, err := PostGlyphNames(context.Background(), fontData)
 	if err != nil {
 		t.Fatalf("PostGlyphNames failed: %v", err)
 	}
@@ -336,7 +337,7 @@ func TestGlyphToUnicode_Format4_RangeSegment(t *testing.T) {
 	cmapTable := buildCmapTable(3, 1, data)
 	fontData := buildTableDirectory(map[string][]byte{"cmap": cmapTable})
 
-	gidMap, err := GlyphToUnicode(fontData)
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
 	if err != nil {
 		t.Fatalf("GlyphToUnicode failed: %v", err)
 	}

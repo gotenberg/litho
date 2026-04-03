@@ -85,7 +85,7 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			if completenessRule.Specification != "" {
 				fontData := extractFontProgramData(ctx, doc, fd)
 				if fontData != nil {
-					glyphNames := typography.ExtractGlyphNames(fontData)
+					glyphNames := typography.ExtractGlyphNames(ctx, fontData)
 					if glyphNames != nil {
 						return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
 					}
@@ -233,7 +233,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	// Check CIDToGIDMap to determine CID→GID mapping.
 	cidToGIDName, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"])
 
-	emptyGIDs := typography.ExtractEmptyGIDs(fontData)
+	emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
 	if emptyGIDs == nil {
 		// Not a TrueType font or can't parse loca — try CFF.
 		validCIDs := typography.ExtractValidCIDs(fontData)

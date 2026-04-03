@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"bytes"
+	"context"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -51,13 +52,16 @@ func incrementBytes(b []byte) {
 }
 
 // Parse extracts mapping data from a CMap stream payload.
-func Parse(data []byte) (*CMap, error) {
+func Parse(ctx context.Context, data []byte) (*CMap, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
 
 	c := &CMap{Mapping: make(map[string]string)}
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		tok, err := p.Peek(0)
 		if err != nil || tok.Type == lexer.TokenEOF {
 			break
@@ -179,6 +183,11 @@ func Parse(data []byte) (*CMap, error) {
 							// malformed CMap ranges (e.g., wrap-around).
 							const maxRangeEntries = 1 << 16
 							for n := 0; n < maxRangeEntries && bytes.Compare(current, endBytes) <= 0; n++ {
+								if n%1000 == 0 && n > 0 {
+									if err := ctx.Err(); err != nil {
+										return nil, err
+									}
+								}
 								c.Mapping[string(current)] = decodeUTF16BE(currDst)
 								prev := make([]byte, len(current))
 								copy(prev, current)

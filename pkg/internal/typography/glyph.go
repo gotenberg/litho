@@ -1,6 +1,7 @@
 package typography
 
 import (
+	"context"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -9,7 +10,7 @@ import (
 )
 
 // processText maps the raw bytes of a PDF string to UTF-8 and generates models.TextElements.
-func processText(str ast.PdfString, font *Font, machine *graphics.Machine, elements *[]models.TextElement) {
+func processText(ctx context.Context, str ast.PdfString, font *Font, machine *graphics.Machine, elements *[]models.TextElement) error {
 	data := []byte(str)
 	state := machine.Current()
 	fontSize := state.Text.Tfs
@@ -49,7 +50,14 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 		}
 	}
 
+	charCount := 0
 	for len(data) > 0 {
+		charCount++
+		if charCount%500 == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		var char string
 		var n int
 		var ok bool
@@ -233,6 +241,7 @@ func processText(str ast.PdfString, font *Font, machine *graphics.Machine, eleme
 
 		data = data[n:]
 	}
+	return nil
 }
 
 // decomposeLigature replaces Unicode ligature characters with their component

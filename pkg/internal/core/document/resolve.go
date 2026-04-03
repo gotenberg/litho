@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -205,7 +206,66 @@ func DecodePdfString(s ast.PdfString) string {
 		}
 		return string(utf16.Decode(u16s))
 	}
-	return string(b)
+	// PDFDocEncoding / Windows-1252: bytes 0x80-0x9F have specific Unicode
+	// mappings; bytes 0xA0-0xFF map to the same Unicode code point.
+	// All bytes > 0x7F must be converted to proper UTF-8 runes since Go
+	// strings are UTF-8 and raw high bytes are invalid sequences.
+	needsDecode := false
+	for _, c := range b {
+		if c > 0x7F {
+			needsDecode = true
+			break
+		}
+	}
+	if !needsDecode {
+		return string(b)
+	}
+	var buf strings.Builder
+	buf.Grow(len(b))
+	for _, c := range b {
+		if r, ok := pdfDocEncoding[c]; ok {
+			buf.WriteRune(r)
+		} else if c > 0x7F {
+			// Bytes 0xA0-0xFF: same Unicode code point as byte value.
+			buf.WriteRune(rune(c))
+		} else {
+			buf.WriteByte(c)
+		}
+	}
+	return buf.String()
+}
+
+// pdfDocEncoding maps bytes in the 0x80-0x9F range to their Unicode
+// equivalents. Uses Windows-1252 mappings for this range, matching the
+// behavior of PDF.js and most PDF producers in practice.
+var pdfDocEncoding = map[byte]rune{
+	0x80: 0x20AC, // EURO SIGN
+	0x82: 0x201A, // SINGLE LOW-9 QUOTATION MARK
+	0x83: 0x0192, // LATIN SMALL LETTER F WITH HOOK
+	0x84: 0x201E, // DOUBLE LOW-9 QUOTATION MARK
+	0x85: 0x2026, // HORIZONTAL ELLIPSIS
+	0x86: 0x2020, // DAGGER
+	0x87: 0x2021, // DOUBLE DAGGER
+	0x88: 0x02C6, // MODIFIER LETTER CIRCUMFLEX ACCENT
+	0x89: 0x2030, // PER MILLE SIGN
+	0x8A: 0x0160, // LATIN CAPITAL LETTER S WITH CARON
+	0x8B: 0x2039, // SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+	0x8C: 0x0152, // LATIN CAPITAL LIGATURE OE
+	0x8E: 0x017D, // LATIN CAPITAL LETTER Z WITH CARON
+	0x91: 0x2018, // LEFT SINGLE QUOTATION MARK
+	0x92: 0x2019, // RIGHT SINGLE QUOTATION MARK
+	0x93: 0x201C, // LEFT DOUBLE QUOTATION MARK
+	0x94: 0x201D, // RIGHT DOUBLE QUOTATION MARK
+	0x95: 0x2022, // BULLET
+	0x96: 0x2013, // EN DASH
+	0x97: 0x2014, // EM DASH
+	0x98: 0x02DC, // SMALL TILDE
+	0x99: 0x2122, // TRADE MARK SIGN
+	0x9A: 0x0161, // LATIN SMALL LETTER S WITH CARON
+	0x9B: 0x203A, // SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+	0x9C: 0x0153, // LATIN SMALL LIGATURE OE
+	0x9E: 0x017E, // LATIN SMALL LETTER Z WITH CARON
+	0x9F: 0x0178, // LATIN CAPITAL LETTER Y WITH DIAERESIS
 }
 
 // extractFromObjectStream extracts an object from an Object Stream.

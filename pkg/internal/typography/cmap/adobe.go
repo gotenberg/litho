@@ -104,11 +104,25 @@ var encodingToOrdering = map[string]string{
 	"KSCpc-EUC-V":  "Korea1",
 }
 
+// predefinedCMapCache caches loaded predefined CMaps by name.
+var predefinedCMapCache sync.Map
+
 // LoadPredefinedCMap loads a predefined CMap encoding by name (e.g., "GBK-EUC-H")
 // and composes it with the corresponding Adobe CID→Unicode table to produce a
 // ToUnicode-style CMap that maps byte sequences directly to Unicode strings.
-// Returns nil if the encoding name is not recognized.
+// Results are cached. Returns nil if the encoding name is not recognized.
 func LoadPredefinedCMap(name string) *CMap {
+	if cached, ok := predefinedCMapCache.Load(name); ok {
+		cm, _ := cached.(*CMap)
+		return cm
+	}
+
+	cm := loadPredefinedCMapUncached(name)
+	predefinedCMapCache.Store(name, cm)
+	return cm
+}
+
+func loadPredefinedCMapUncached(name string) *CMap {
 	ordering, ok := encodingToOrdering[name]
 	if !ok {
 		return nil
@@ -137,7 +151,6 @@ func LoadPredefinedCMap(name string) *CMap {
 		if !ok {
 			continue
 		}
-		// Determine byte length from the codespace ranges.
 		byteLen := byteLength(charCode, codespaces)
 		key := intToBytes(charCode, byteLen)
 		mapping[string(key)] = string(uni)

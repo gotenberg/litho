@@ -26,8 +26,8 @@ lint-prettier: ## Lint non-Golang codebase
 
 # go install golang.org/x/tools/cmd/godoc@latest
 .PHONY: godoc
-godoc: ## Run a webserver with Gotenberg godoc
-	$(info http://localhost:6060/pkg/github.com/gotenberg/gotenberg/v8)
+godoc: ## Run a webserver with litho godoc
+	$(info http://localhost:6060/pkg/github.com/gotenberg/litho)
 	godoc -http=:6060
 
 .PHONY: test-unit

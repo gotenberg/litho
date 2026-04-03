@@ -191,7 +191,7 @@ func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]str
 	}
 
 	metadata := make(map[string]string)
-	keys := []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate"}
+	keys := []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate", "ModDate"}
 	for _, key := range keys {
 		if valObj, ok := infoDict[ast.PdfName(key)]; ok {
 			strVal, err := document.ResolveString(ctx, doc, valObj)
@@ -225,5 +225,33 @@ func GetMetadata(ctx context.Context, doc *document.Document) (map[string]string
 	// Overlay XMP values — XMP takes precedence per PDF 2.0.
 	maps.Copy(metadata, xmp)
 
+	// Catalog /Lang: the document-level language tag (per ISO 32000-2, 14.9.2).
+	if _, hasLang := metadata["Language"]; !hasLang {
+		if lang := getCatalogLang(ctx, doc); lang != "" {
+			metadata["Language"] = lang
+		}
+	}
+
 	return metadata, nil
+}
+
+// getCatalogLang reads the /Lang entry from the document catalog.
+func getCatalogLang(ctx context.Context, doc *document.Document) string {
+	rootObj, ok := doc.Index.Trailer["Root"]
+	if !ok {
+		return ""
+	}
+	catalog, err := document.ResolveDict(ctx, doc, rootObj)
+	if err != nil || catalog == nil {
+		return ""
+	}
+	langObj, ok := catalog["Lang"]
+	if !ok {
+		return ""
+	}
+	lang, err := document.ResolveString(ctx, doc, langObj)
+	if err != nil {
+		return ""
+	}
+	return document.DecodePdfString(lang)
 }
