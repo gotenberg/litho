@@ -83,6 +83,30 @@ func isDelimiter(c byte) bool {
 	return c == '(' || c == ')' || c == '<' || c == '>' || c == '[' || c == ']' || c == '{' || c == '}' || c == '/' || c == '%'
 }
 
+// decodeHexPair converts two ASCII hex digit bytes into the byte they
+// represent. Returns false if either byte is not a valid hex digit.
+func decodeHexPair(hi, lo byte) (byte, bool) {
+	h, ok1 := hexVal(hi)
+	l, ok2 := hexVal(lo)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	return h<<4 | l, true
+}
+
+func hexVal(c byte) (byte, bool) {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0', true
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10, true
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10, true
+	default:
+		return 0, false
+	}
+}
+
 func isNumber(s string) bool {
 	if len(s) == 0 {
 		return false
@@ -186,6 +210,27 @@ func (l *Lexer) NextToken() (Token, error) {
 				if isWhitespace(cc) || isDelimiter(cc) {
 					_ = l.reader.UnreadByte()
 					break
+				}
+				// Per ISO 32000-2 §7.3.5, # introduces a two-digit hex code.
+				if cc == '#' {
+					hi, errHi := l.reader.ReadByte()
+					if errHi != nil {
+						break
+					}
+					lo, errLo := l.reader.ReadByte()
+					if errLo != nil {
+						buf.WriteByte(hi)
+						break
+					}
+					decoded, ok := decodeHexPair(hi, lo)
+					if ok {
+						buf.WriteByte(decoded)
+					} else {
+						buf.WriteByte('#')
+						buf.WriteByte(hi)
+						buf.WriteByte(lo)
+					}
+					continue
 				}
 				buf.WriteByte(cc)
 			}

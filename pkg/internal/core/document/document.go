@@ -120,7 +120,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	vStart := pdfIdx + len("%PDF-")
 	if vStart < len(headerBuf) {
 		vEnd := vStart
-		for vEnd < len(headerBuf) && headerBuf[vEnd] != '\n' && headerBuf[vEnd] != '\r' && headerBuf[vEnd] != ' ' {
+		for vEnd < len(headerBuf) && headerBuf[vEnd] != '\n' && headerBuf[vEnd] != '\r' && headerBuf[vEnd] != ' ' && headerBuf[vEnd] != 0x00 {
 			vEnd++
 		}
 		version = string(headerBuf[vStart:vEnd])
