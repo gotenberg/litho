@@ -1,3 +1,7 @@
+.PHONY: help
+help: ## Show the help
+	@grep -hE '^[A-Za-z0-9_ \-]*?:.*##.*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
 .PHONY: fmt
 fmt: ## Format Golang codebase and "optimize" the dependencies
 	go fix ./...
@@ -16,11 +20,29 @@ lint-todo: ## Find TODOs in Golang codebase
 test-unit: ## Run unit tests
 	go test -race ./...
 
-TAGS=pdf.js,verapdf
+.PHONY: corpus-verapdf
+corpus-verapdf: ## Run VeraPDF corpus comparison (text output)
+	go run ./test/integration/cmd/corpus verapdf
 
-.PHONY: test-integration
-test-integration: ## Run integration tests. Use TAGS=pdf.js,verapdf to select corpus (default: all)
-	LITHO_CORPUS_TAGS=$(TAGS) go test -timeout 25m -tags=integration -v github.com/gotenberg/litho/test/integration
+.PHONY: corpus-verapdf-json
+corpus-verapdf-json: ## Run VeraPDF corpus comparison (JSON output)
+	go run ./test/integration/cmd/corpus verapdf --format json
+
+.PHONY: corpus-verapdf-init
+corpus-verapdf-init: ## Provision VeraPDF corpus via Docker, then compare
+	go run ./test/integration/cmd/corpus verapdf --init
+
+.PHONY: corpus-pdfjs
+corpus-pdfjs: ## Run PDF.js corpus comparison (text output)
+	go run ./test/integration/cmd/corpus pdfjs
+
+.PHONY: corpus-pdfjs-json
+corpus-pdfjs-json: ## Run PDF.js corpus comparison (JSON output)
+	go run ./test/integration/cmd/corpus pdfjs --format json
+
+.PHONY: corpus-pdfjs-init
+corpus-pdfjs-init: ## Provision PDF.js corpus via Docker, then compare
+	go run ./test/integration/cmd/corpus pdfjs --init
 
 .PHONY: clean-corpus
 clean-corpus: ## Remove all corpus data (forces regeneration on next test-integration)

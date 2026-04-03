@@ -10,7 +10,7 @@
 ### Prerequisites
 
 - Go 1.26.0+
-- Docker (for integration tests)
+- Docker (for corpus provisioning)
 - CGO + libopenjp2 (optional, for JPXDecode filter support)
 
 ### Build and Run
@@ -26,11 +26,13 @@ make fmt                                   # gofmt + gofumpt + gci + goimports +
 make lint                                  # golangci-lint (strict, see .golangci.yml)
 make lint-todo                             # Find TODO comments via godox
 make test-unit                             # Unit tests only (go test -race ./...)
-make test-integration                      # All integration/corpus tests (requires Docker)
-make test-integration TAGS=pdf.js          # PDF.js corpus only
-make test-integration TAGS=verapdf         # VeraPDF corpus only
-make test-integration TAGS=pdf.js,verapdf  # Explicit list (same as default)
-make clean-corpus                          # Remove all corpus data (forces regeneration)
+make corpus-verapdf                        # VeraPDF corpus comparison (text output)
+make corpus-verapdf-json                   # VeraPDF corpus comparison (JSON output)
+make corpus-verapdf-init                   # Provision VeraPDF corpus via Docker, then compare
+make corpus-pdfjs                          # PDF.js corpus comparison (text output)
+make corpus-pdfjs-json                     # PDF.js corpus comparison (JSON output)
+make corpus-pdfjs-init                     # Provision PDF.js corpus via Docker, then compare
+make clean-corpus                          # Remove all corpus data (forces re-provisioning)
 ```
 
 Run `make fmt && make lint` before submitting code. Zero warnings policy.
@@ -123,20 +125,55 @@ Within `pkg/internal`, the same rule applies: internal helpers that enumerate re
 ## Project Layout
 
 ```
-cmd/litho/              CLI binary
-pkg/pdf/                Public API facade (io.ReaderAt + size)
-pkg/models/             Public model types returned to callers
-pkg/plugins/            Filter plugins (jpx, jbig2)
+cmd/litho/                       CLI binary
+cmd/gen-rules/                   Code generator for compliance rules
+pkg/pdf/                         Public API facade (io.ReaderAt + size)
+pkg/models/                      Public model types returned to callers
+pkg/plugins/                     Filter plugins (jpx, jbig2)
 pkg/internal/
-  core/ast/             PDF object AST types
-  core/document/        Document resolution, object access
-  core/parser/          PDF lexer/parser
-  compliance/           PDF/A and PDF/UA compliance engine
-  graphics/             Content stream parsing
-  typography/           Font program parsing (TrueType, CFF, Type1)
-  text/                 Text extraction
-test/integration/       Corpus-based integration tests (Docker)
+  core/ast/                      PDF object AST types
+  core/document/                 Document resolution, object access
+  core/parser/                   PDF lexer/parser
+  compliance/                    PDF/A and PDF/UA compliance engine
+  graphics/                      Content stream parsing
+  typography/                    Font program parsing (TrueType, CFF, Type1)
+  text/                          Text extraction
+test/integration/cmd/corpus/     Corpus comparison CLI (VeraPDF, PDF.js)
+test/integration/corpus/         Docker setup for corpus provisioning
 ```
+
+## Documentation
+
+### Writing Style
+
+- **Short, declarative sentences.** Say what it does, then stop.
+- **Lead with the action.** "Validates font embedding" not "This function validates font embedding".
+- **Active voice.** "litho checks the profile" not "The profile is checked by litho".
+- **No em dashes.** Use a period, colon, or comma instead.
+- **No "we" hedging.** "Don't..." not "We do not recommend...".
+
+### Godoc
+
+All exported types and functions require Godoc comments. Start with the identifier name:
+
+```go
+// Violation records a single rule violation with context.
+type Violation struct { ... }
+
+// ValidatePDFA audits the document against a PDF/A profile.
+func ValidatePDFA(ctx context.Context, ...) ([]error, error)
+```
+
+Each package should have a `doc.go` with a `// Package foo ...` comment.
+
+### Code Comments
+
+- Explain *why*, not *what*. The code shows what; the comment explains the non-obvious reasoning.
+- No numbered step comments (`// 1. Do X`, `// 2. Do Y`).
+- No section dividers with numbers (`// --- 8. Foo ---`). Plain dividers are fine for major boundaries (`// --- VeraPDF ---`).
+- No noise comments that restate the code (`// Check if err is nil`, `// Return results`).
+- Reference spec clauses where relevant (`// Per ISO 32000-2, Table 116...`).
+- Mark technical debt with `// TODO: [context]`.
 
 ## Formatting and Imports
 
@@ -146,16 +183,34 @@ Run `make fmt` to enforce formatting (gofmt, gofumpt, goimports, gci). Import or
 
 ### Unit Tests
 
-Tests use `_test.go` convention in the same package. Live under `pkg/` and `cmd/` alongside the code they test. Run with `make test-unit`. The compliance package uses a `mockDocBuilder` pattern to construct test PDF documents. Fuzz tests exist for parser and lexer (`_fuzz_test.go`).
+Tests use `_test.go` convention in the same package. Live under `pkg/` and `cmd/` alongside the code they test. Run with `make test-unit`. Fuzz tests exist for parser and lexer (`_fuzz_test.go`).
 
-### Integration Tests
+### Corpus Testing
 
-Live in `test/integration/`. Run with `make test-integration` (requires Docker for corpus provisioning via testcontainers). Corpus data is auto-generated on first run and cached in `test/integration/testdata/` (not checked into Git).
+A CLI tool at `test/integration/cmd/corpus/` compares litho against reference corpus results. Corpus data is cached in `test/integration/testdata/` (not checked into Git). Provision via Docker on first use with `--init`.
 
-Use `TAGS=` to select specific corpus: `make test-integration TAGS=pdf.js` or `TAGS=verapdf`. Set `LITHO_REGEN_CORPUS=1` to force corpus regeneration.
+- **VeraPDF corpus:** compares PDF/A and PDF/UA compliance verdicts against VeraPDF's reference results (2,601 test PDFs).
+- **PDF.js corpus:** compares text extraction, metadata, and coordinates against Mozilla's PDF.js test suite (~1,000 PDFs).
 
-- **PDF.js corpus:** validates text extraction, metadata, and coordinates against Mozilla's PDF.js test suite (~1000 PDFs).
-- **VeraPDF corpus:** validates PDF/A and PDF/UA compliance against the VeraPDF test corpus, comparing litho's pass/fail verdicts against VeraPDF's reference results.
+```bash
+# Provision and run VeraPDF corpus
+go run ./test/integration/cmd/corpus verapdf --init
+
+# Run comparison only (corpus already provisioned)
+go run ./test/integration/cmd/corpus verapdf
+
+# JSON output, filter to one profile
+go run ./test/integration/cmd/corpus verapdf --format json --profile PDF_A-4
+
+# CI threshold enforcement (exit 1 if exceeded)
+go run ./test/integration/cmd/corpus verapdf --max-fn 3 --max-fp 0
+
+# PDF.js corpus
+go run ./test/integration/cmd/corpus pdfjs --init
+go run ./test/integration/cmd/corpus pdfjs --format json
+```
+
+See [test/integration/README.md](test/integration/README.md) for full flag reference.
 
 ## Dependencies
 
@@ -170,3 +225,4 @@ Minimal by design, pure Go with few direct dependencies:
 ## Scoped Guidelines
 
 - [Compliance engine](pkg/internal/compliance/README.md): PDF/A and PDF/UA validation architecture.
+- [Corpus testing](test/integration/README.md): corpus CLI tool usage and flag reference.

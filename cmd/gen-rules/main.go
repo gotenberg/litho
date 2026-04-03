@@ -2,20 +2,30 @@
 //
 // Usage:
 //
-//	go run ./cmd/gen-rules
+//	go run ./cmd/gen-rules                          # use local profiles/
+//	go run ./cmd/gen-rules --download               # download latest profiles first
+//	go run ./cmd/gen-rules --download --tag v1.28.2  # download specific release
 //	go generate ./pkg/internal/compliance/...
 package main
 
 import (
 	"bytes"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"go/format"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+)
+
+const (
+	defaultRepo = "https://raw.githubusercontent.com/veraPDF/veraPDF-validation-profiles"
+	defaultTag  = "integration"
 )
 
 // --- XML schema types matching VeraPDF validation profiles ---
@@ -38,14 +48,12 @@ type xmlRuleID struct {
 	TestNumber    int    `xml:"testNumber,attr"`
 }
 
-// ruleKey uniquely identifies a rule across profiles.
 type ruleKey struct {
 	Specification string
 	Clause        string
 	TestNumber    int
 }
 
-// ruleData holds the parsed data for a single rule.
 type ruleData struct {
 	Key         ruleKey
 	Object      string
@@ -53,7 +61,6 @@ type ruleData struct {
 	VarName     string
 }
 
-// profileEntry maps a flavour to its ordered list of rule keys.
 type profileEntry struct {
 	Flavour  string
 	FuncName string
@@ -62,8 +69,8 @@ type profileEntry struct {
 
 // profileFiles defines the XML files to parse and their order.
 var profileFiles = []struct {
-	Path    string // relative to profiles dir
-	Flavour string // expected flavour (for validation)
+	Path    string // relative to profiles dir (and raw URL path)
+	Flavour string // expected flavour attribute
 }{
 	{"PDF_A/PDFA-1A.xml", "PDFA_1_A"},
 	{"PDF_A/PDFA-1B.xml", "PDFA_1_B"},
@@ -80,7 +87,6 @@ var profileFiles = []struct {
 	{"PDF_UA/PDFUA-2.xml", "PDFUA_2"},
 }
 
-// flavourToFuncName maps VeraPDF flavour strings to Go function names.
 var flavourToFuncName = map[string]string{
 	"PDFA_1_A": "PDFA1aRules",
 	"PDFA_1_B": "PDFA1bRules",
@@ -100,12 +106,61 @@ var flavourToFuncName = map[string]string{
 var whitespaceRE = regexp.MustCompile(`\s+`)
 
 func main() {
-	// Locate profiles directory relative to this command.
-	// When run via go:generate from pkg/internal/compliance/, the working
-	// directory is that package. We look for profiles/ there.
+	download := flag.Bool("download", false, "download profiles from the VeraPDF GitHub repository before generating")
+	tag := flag.String("tag", defaultTag, "Git ref (branch, tag, or commit) to download from")
+	repo := flag.String("repo", defaultRepo, "base URL for raw profile downloads")
+	flag.Parse()
+
 	profilesDir := findProfilesDir()
 
-	// Parse all profiles and collect rules.
+	if *download {
+		downloadProfiles(*repo, *tag, profilesDir)
+	}
+
+	allRules, profiles := parseProfiles(profilesDir)
+	generate(allRules, profiles)
+}
+
+// downloadProfiles fetches all 13 XML profiles from the VeraPDF repository.
+func downloadProfiles(baseURL, tag, destDir string) {
+	fmt.Printf("Downloading profiles from %s (ref: %s)\n", baseURL, tag)
+
+	for _, pf := range profileFiles {
+		url := fmt.Sprintf("%s/%s/%s", baseURL, tag, pf.Path)
+		destPath := filepath.Join(destDir, pf.Path)
+
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			fatalf("creating directory for %s: %v", destPath, err)
+		}
+
+		resp, err := http.Get(url) //nolint:gosec // URL is built from trusted constants + user flag
+		if err != nil {
+			fatalf("downloading %s: %v", url, err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			fatalf("downloading %s: HTTP %d", url, resp.StatusCode)
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			fatalf("reading response from %s: %v", url, err)
+		}
+
+		if err := os.WriteFile(destPath, data, 0o644); err != nil {
+			fatalf("writing %s: %v", destPath, err)
+		}
+
+		fmt.Printf("  %s (%d bytes)\n", pf.Path, len(data))
+	}
+
+	fmt.Println("Download complete.")
+}
+
+// parseProfiles reads all XML profile files and collects rules.
+func parseProfiles(profilesDir string) (map[ruleKey]*ruleData, []profileEntry) {
 	allRules := make(map[ruleKey]*ruleData)
 	profiles := make([]profileEntry, 0, len(profileFiles))
 
@@ -145,18 +200,16 @@ func main() {
 			desc := normalizeWhitespace(r.Description)
 
 			if existing, ok := allRules[key]; ok {
-				// Verify consistency: same rule should have same object and description.
 				if existing.Object != r.Object {
 					fmt.Fprintf(os.Stderr, "WARNING: rule %s has different objects: %q vs %q\n",
 						existing.VarName, existing.Object, r.Object)
 				}
 			} else {
-				varName := makeVarName(key)
 				allRules[key] = &ruleData{
 					Key:         key,
 					Object:      r.Object,
 					Description: desc,
-					VarName:     varName,
+					VarName:     makeVarName(key),
 				}
 			}
 
@@ -166,7 +219,11 @@ func main() {
 		profiles = append(profiles, entry)
 	}
 
-	// Sort all rules by variable name for deterministic output.
+	return allRules, profiles
+}
+
+// generate writes the rules.go file from parsed profile data.
+func generate(allRules map[ruleKey]*ruleData, profiles []profileEntry) {
 	sortedRules := make([]*ruleData, 0, len(allRules))
 	for _, r := range allRules {
 		sortedRules = append(sortedRules, r)
@@ -175,12 +232,10 @@ func main() {
 		return sortedRules[i].VarName < sortedRules[j].VarName
 	})
 
-	// Generate output.
 	var buf bytes.Buffer
 	buf.WriteString("// Code generated by cmd/gen-rules; DO NOT EDIT.\n\n")
 	buf.WriteString("package compliance\n\n")
 
-	// Rule struct definition.
 	buf.WriteString("// Rule represents a single VeraPDF validation rule.\n")
 	buf.WriteString("type Rule struct {\n")
 	buf.WriteString("\t// Specification is the ISO standard identifier (e.g., \"ISO_19005_1\").\n")
@@ -189,13 +244,12 @@ func main() {
 	buf.WriteString("\tClause string\n\n")
 	buf.WriteString("\t// TestNumber identifies the specific test within a clause.\n")
 	buf.WriteString("\tTestNumber int\n\n")
-	buf.WriteString("\t// Object is the VeraPDF object type this rule applies to (e.g., \"CosDocument\").\n")
+	buf.WriteString("\t// Object is the VeraPDF object type (e.g., \"CosDocument\").\n")
 	buf.WriteString("\tObject string\n\n")
 	buf.WriteString("\t// Description is the normative requirement text from the ISO standard.\n")
 	buf.WriteString("\tDescription string\n")
 	buf.WriteString("}\n\n")
 
-	// Rule declarations.
 	buf.WriteString("//nolint:gochecknoglobals // package-level rule definitions are the core design.\n")
 	buf.WriteString("var (\n")
 
@@ -211,10 +265,8 @@ func main() {
 
 	buf.WriteString(")\n\n")
 
-	// Profile functions.
 	for _, p := range profiles {
-		ruleCount := len(p.RuleKeys)
-		fmt.Fprintf(&buf, "// %s returns the rule set for %s (%d rules).\n", p.FuncName, flavourLabel(p.Flavour), ruleCount)
+		fmt.Fprintf(&buf, "// %s returns the rule set for %s (%d rules).\n", p.FuncName, flavourLabel(p.Flavour), len(p.RuleKeys))
 		fmt.Fprintf(&buf, "func %s() []Rule {\n", p.FuncName)
 		buf.WriteString("\treturn []Rule{\n")
 		for _, key := range p.RuleKeys {
@@ -225,17 +277,14 @@ func main() {
 		buf.WriteString("}\n\n")
 	}
 
-	// Format with gofmt.
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		// Write unformatted for debugging.
 		if wErr := os.WriteFile("rules_gen_debug.go", buf.Bytes(), 0o600); wErr != nil {
 			fatalf("gofmt failed: %v (could not write debug file: %v)", err, wErr)
 		}
 		fatalf("gofmt failed: %v (unformatted output written to rules_gen_debug.go)", err)
 	}
 
-	// Determine output path.
 	outPath := filepath.Join(findComplianceDir(), "rules.go")
 	if err := os.WriteFile(outPath, formatted, 0o600); err != nil {
 		fatalf("writing %s: %v", outPath, err)
@@ -244,35 +293,23 @@ func main() {
 	fmt.Printf("Generated %s (%d rules, %d profiles)\n", outPath, len(sortedRules), len(profiles))
 }
 
-// makeVarName generates the Go variable name for a rule.
-// Convention: Rule_{spec_without_ISO_}_{clause_dots_to_underscores}_t{testNumber:02d}
 func makeVarName(key ruleKey) string {
 	spec := strings.TrimPrefix(key.Specification, "ISO_")
 	clause := strings.ReplaceAll(key.Clause, ".", "_")
 	return fmt.Sprintf("Rule_%s_%s_t%02d", spec, clause, key.TestNumber)
 }
 
-// normalizeWhitespace collapses runs of whitespace to a single space and trims.
 func normalizeWhitespace(s string) string {
 	return strings.TrimSpace(whitespaceRE.ReplaceAllString(s, " "))
 }
 
-// flavourLabel returns a human-readable label for a flavour string.
 func flavourLabel(flavour string) string {
 	labels := map[string]string{
-		"PDFA_1_A": "PDF/A-1a",
-		"PDFA_1_B": "PDF/A-1b",
-		"PDFA_2_A": "PDF/A-2a",
-		"PDFA_2_B": "PDF/A-2b",
-		"PDFA_2_U": "PDF/A-2u",
-		"PDFA_3_A": "PDF/A-3a",
-		"PDFA_3_B": "PDF/A-3b",
-		"PDFA_3_U": "PDF/A-3u",
-		"PDFA_4":   "PDF/A-4",
-		"PDFA_4_E": "PDF/A-4e",
-		"PDFA_4_F": "PDF/A-4f",
-		"PDFUA_1":  "PDF/UA-1",
-		"PDFUA_2":  "PDF/UA-2",
+		"PDFA_1_A": "PDF/A-1a", "PDFA_1_B": "PDF/A-1b",
+		"PDFA_2_A": "PDF/A-2a", "PDFA_2_B": "PDF/A-2b", "PDFA_2_U": "PDF/A-2u",
+		"PDFA_3_A": "PDF/A-3a", "PDFA_3_B": "PDF/A-3b", "PDFA_3_U": "PDF/A-3u",
+		"PDFA_4": "PDF/A-4", "PDFA_4_E": "PDF/A-4e", "PDFA_4_F": "PDF/A-4f",
+		"PDFUA_1": "PDF/UA-1", "PDFUA_2": "PDF/UA-2",
 	}
 	if l, ok := labels[flavour]; ok {
 		return l
@@ -280,15 +317,8 @@ func flavourLabel(flavour string) string {
 	return flavour
 }
 
-// findProfilesDir locates the profiles directory. It tries:
-// 1. ./profiles/ (when run from pkg/internal/compliance/ via go:generate)
-// 2. pkg/internal/compliance/profiles/ (when run from repo root)
 func findProfilesDir() string {
-	candidates := []string{
-		"profiles",
-		"pkg/internal/compliance/profiles",
-	}
-	for _, c := range candidates {
+	for _, c := range []string{"profiles", "pkg/internal/compliance/profiles"} {
 		if info, err := os.Stat(c); err == nil && info.IsDir() {
 			return c
 		}
@@ -297,15 +327,9 @@ func findProfilesDir() string {
 	return ""
 }
 
-// findComplianceDir locates the compliance package directory.
 func findComplianceDir() string {
-	candidates := []string{
-		".",
-		"pkg/internal/compliance",
-	}
-	for _, c := range candidates {
-		path := filepath.Join(c, "check.go")
-		if _, err := os.Stat(path); err == nil {
+	for _, c := range []string{".", "pkg/internal/compliance"} {
+		if _, err := os.Stat(filepath.Join(c, "check.go")); err == nil {
 			return c
 		}
 	}

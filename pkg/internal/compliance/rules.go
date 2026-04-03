@@ -13,7 +13,7 @@ type Rule struct {
 	// TestNumber identifies the specific test within a clause.
 	TestNumber int
 
-	// Object is the VeraPDF object type this rule applies to (e.g., "CosDocument").
+	// Object is the VeraPDF object type (e.g., "CosDocument").
 	Object string
 
 	// Description is the normative requirement text from the ISO standard.
