@@ -7,6 +7,7 @@ import (
 	"io"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
@@ -99,14 +100,20 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 	return nil
 }
 
-// findLastTrailer scans the file backwards for the last "trailer" keyword
-// and parses the dictionary that follows it.
+// findLastTrailer locates the document's authoritative trailer dictionary.
+// It first tries to follow the last startxref pointer (which may point to a
+// cross-reference stream whose dict IS the trailer). Falls back to scanning
+// for the last "trailer" keyword.
 func (d *Document) findLastTrailer() (ast.PdfDict, error) {
-	// Read the file in reverse chunks looking for "trailer".
+	// Try 1: follow the last startxref pointer.
+	if dict := d.findTrailerViaStartXRef(); dict != nil {
+		return dict, nil
+	}
+
+	// Try 2: scan backwards for the last "trailer" keyword.
 	const searchBuf = 4096
 	searchSize := min(d.size, int64(searchBuf))
 
-	// Try progressively larger windows from the end of the file.
 	for window := searchSize; window <= d.size; window = min(window*2, d.size) {
 		buf := make([]byte, window)
 		offset := d.size - window
@@ -123,7 +130,6 @@ func (d *Document) findLastTrailer() (ast.PdfDict, error) {
 			continue
 		}
 
-		// Parse the dictionary starting right after "trailer".
 		dictStart := offset + int64(idx) + int64(len("trailer"))
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, dictStart))
 		p := parser.NewParser(lex)
@@ -140,4 +146,121 @@ func (d *Document) findLastTrailer() (ast.PdfDict, error) {
 	}
 
 	return nil, fmt.Errorf("trailer keyword not found in file")
+}
+
+// findTrailerViaStartXRef scans backwards through all %%EOF markers and tries
+// each startxref pointer. Returns the trailer from the first valid one found
+// (cross-reference stream dict or traditional xref trailer).
+func (d *Document) findTrailerViaStartXRef() ast.PdfDict {
+	// Read the last portion of the file to find %%EOF markers.
+	// Use a large window to cover incremental updates that may add
+	// significant data between the second-to-last and last %%EOF.
+	searchSize := min(d.size, 65536)
+	buf := make([]byte, searchSize)
+	baseOffset := d.size - searchSize
+	if _, err := d.r.ReadAt(buf, baseOffset); err != nil && err != io.EOF {
+		return nil
+	}
+
+	// Find all %%EOF markers (last one first).
+	eofPattern := []byte("%%EOF")
+	var eofPositions []int
+	pos := len(buf)
+	for {
+		idx := bytes.LastIndex(buf[:pos], eofPattern)
+		if idx == -1 {
+			break
+		}
+		eofPositions = append(eofPositions, idx)
+		pos = idx
+	}
+
+	// Try each %%EOF's startxref, newest first.
+	for _, eofIdx := range eofPositions {
+		region := buf[max(0, eofIdx-60):eofIdx]
+		sxrIdx := bytes.LastIndex(region, []byte("startxref"))
+		if sxrIdx == -1 {
+			continue
+		}
+		after := strings.TrimSpace(string(region[sxrIdx+len("startxref"):]))
+		var xrefOffset int64
+		if _, err := fmt.Sscanf(after, "%d", &xrefOffset); err != nil {
+			continue
+		}
+		if xrefOffset <= 0 || xrefOffset >= d.size {
+			continue
+		}
+
+		// Check what's at the offset.
+		probe := make([]byte, 16)
+		if _, err := d.r.ReadAt(probe, xrefOffset); err != nil {
+			continue
+		}
+		trimmed := bytes.TrimSpace(probe)
+
+		// Traditional xref table: parse the trailer after the table.
+		if bytes.HasPrefix(trimmed, []byte("xref")) {
+			if dict := d.parseTrailerAfterXRef(xrefOffset); dict != nil {
+				return dict
+			}
+			continue
+		}
+
+		// Cross-reference stream: parse the object.
+		if dict := d.parseXRefStreamDict(xrefOffset); dict != nil {
+			return dict
+		}
+	}
+
+	return nil
+}
+
+// parseTrailerAfterXRef reads an xref table at offset and returns its
+// trailer dictionary. The xref entries themselves are discarded.
+func (d *Document) parseTrailerAfterXRef(offset int64) ast.PdfDict {
+	// Scan for "trailer" keyword after the xref table.
+	readLen := min(d.size-offset, 65536)
+	buf := make([]byte, readLen)
+	if _, err := d.r.ReadAt(buf, offset); err != nil && err != io.EOF {
+		return nil
+	}
+	idx := bytes.Index(buf, []byte("trailer"))
+	if idx == -1 {
+		return nil
+	}
+	dictStart := offset + int64(idx) + int64(len("trailer"))
+	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, dictStart))
+	p := parser.NewParser(lex)
+	obj, err := p.ParseObject()
+	if err != nil {
+		return nil
+	}
+	dict, ok := obj.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	return dict
+}
+
+// parseXRefStreamDict parses a cross-reference stream and returns its dict.
+func (d *Document) parseXRefStreamDict(offset int64) ast.PdfDict {
+	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, offset))
+	p := parser.NewParser(lex)
+	obj, err := p.ParseObject()
+	if err != nil {
+		return nil
+	}
+	stream, ok := obj.(ast.PdfStream)
+	if !ok {
+		return nil
+	}
+	if stream.Dict == nil {
+		return nil
+	}
+	if typeObj, ok := stream.Dict["Type"]; ok {
+		if typeName, ok := typeObj.(ast.PdfName); ok && typeName == "XRef" {
+			return stream.Dict
+		}
+	}
+	return nil
 }
