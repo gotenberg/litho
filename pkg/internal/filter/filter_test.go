@@ -6,7 +6,6 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/hex"
-	"errors"
 	"io"
 	"testing"
 
@@ -188,13 +187,18 @@ func TestDecodeStream_FilterArrayWithParms(t *testing.T) {
 }
 
 func TestDecodeStream_UnsupportedFilter(t *testing.T) {
+	raw := []byte{0x42}
 	stream := ast.NewStream(ast.PdfDict{
 		"Filter": ast.PdfName("NoSuchFilter"),
-	}, []byte{0})
+	}, raw)
 
-	_, err := DecodeStream(context.Background(), stream)
-	if !errors.Is(err, ErrUnsupportedFilter) {
-		t.Errorf("expected ErrUnsupportedFilter, got: %v", err)
+	// Unsupported filters are skipped, returning the raw data.
+	data, err := DecodeStream(context.Background(), stream)
+	if err != nil {
+		t.Errorf("expected nil error (skip unsupported), got: %v", err)
+	}
+	if len(data) != 1 || data[0] != 0x42 {
+		t.Errorf("expected raw data, got: %v", data)
 	}
 }
 

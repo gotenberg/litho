@@ -5,6 +5,7 @@ import (
 	"compress/flate"
 	"compress/zlib"
 	"context"
+	"errors"
 	"encoding/ascii85"
 	"encoding/hex"
 	"fmt"
@@ -91,6 +92,13 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	for i, f := range filters {
 		decoded, err := applyDecodeFilter(ctx, data, f, parms[i])
 		if err != nil {
+			if errors.Is(err, ErrUnsupportedFilter) {
+				// Skip unsupported filters and continue with the
+				// current data. This allows text extraction from
+				// streams where only some filters in a chain are
+				// unsupported (e.g., a plugin not loaded).
+				continue
+			}
 			return nil, err
 		}
 		data = decoded
