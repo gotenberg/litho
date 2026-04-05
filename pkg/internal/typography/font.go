@@ -42,6 +42,7 @@ type Font struct {
 	CIDVerticalMetrics map[int][3]float64 // CID → [w1Y vX vY] from /W2 array
 
 	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
+	CIDOffset           int  // Offset to add to CID values before treating as Unicode (detected from /W array)
 }
 
 // GetGlyphWidth returns the advance width (in 1/1000 text-space units) for the
@@ -371,6 +372,11 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
 		if isIdentityEncoding(ctx, doc, fontDict) {
 			font.CIDIdentityFallback = true
+			// Detect CID offset from the /W array. Many non-embedded fonts
+			// use GIDs where the first printable character (space, U+0020)
+			// starts at GID 3 (offset 29). If /W starts at CID 3, assume
+			// CID + 29 = Unicode.
+			font.CIDOffset = detectCIDOffset(font.CIDWidths)
 		}
 	}
 
@@ -1279,6 +1285,29 @@ func hasCJKFontName(s string) bool {
 		}
 	}
 	return false
+}
+
+// detectCIDOffset infers the CID-to-Unicode offset from the /W (widths) map.
+// Non-embedded TrueType fonts commonly use GIDs starting at 29 for space
+// (U+0020), meaning CID + 29 = Unicode. Detection requires:
+//   - CID 3 has a space-like width (200-350 units)
+//   - CIDs 0-2 are absent from the widths map
+//   - The lowest CID is 3 (no CIDs below 3 have widths)
+func detectCIDOffset(cidWidths map[int]float64) int {
+	if cidWidths == nil || len(cidWidths) < 5 {
+		return 0
+	}
+	w3, has3 := cidWidths[3]
+	if !has3 || w3 < 200 || w3 > 300 {
+		return 0
+	}
+	// CID 3 must be the lowest CID in the widths map.
+	for cid := range cidWidths {
+		if cid < 3 {
+			return 0
+		}
+	}
+	return 29
 }
 
 // encodingCMapName returns the predefined CMap name from a Type0 font's

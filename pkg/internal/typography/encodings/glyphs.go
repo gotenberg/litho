@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // GlyphToRune maps Adobe standard glyph names to UTF-8 runes.
@@ -233,6 +235,30 @@ var GlyphToRune = map[string]rune{
 	"ff":  0xFB00,
 	"ffi": 0xFB03,
 	"ffl": 0xFB04,
+
+	// Central/Eastern European, Turkish, and miscellaneous (Adobe Glyph List)
+	"lslash":       0x0142, // ł
+	"Lslash":       0x0141, // Ł
+	"dotlessi":     0x0131, // ı (Turkish dotless i)
+	"Dcroat":       0x0110, // Đ
+	"dcroat":       0x0111, // đ
+	"minus":        0x2212, // − (math minus sign)
+	"fraction":     0x2044, // ⁄ (fraction slash)
+	"Euro":         0x20AC, // €
+	"Hbar":         0x0126, // Ħ
+	"hbar":         0x0127, // ħ
+	"Eng":          0x014A, // Ŋ
+	"eng":          0x014B, // ŋ
+	"Tbar":         0x0166, // Ŧ
+	"tbar":         0x0167, // ŧ
+	"IJ":           0x0132, // Ĳ
+	"ij":           0x0133, // ĳ
+	"napostrophe":  0x0149, // ŉ
+	"kgreenlandic": 0x0138, // ĸ
+	"Ohorn":        0x01A0, // Ơ
+	"ohorn":        0x01A1, // ơ
+	"Uhorn":        0x01AF, // Ư
+	"uhorn":        0x01B0, // ư
 }
 
 // runeToGlyph is the reverse mapping, built lazily and thread-safely.
@@ -326,6 +352,67 @@ func GlyphToRuneFull(name string) (rune, bool) {
 	recovered := RecoverGlyphName(name)
 	if recovered != name {
 		return GlyphToRuneSimple(recovered)
+	}
+	// Try decomposing "<base><modifier>" names like "ccaron" → c + caron → č.
+	// The base is a known glyph and the modifier is a combining diacritical.
+	if r, ok := resolveBaseModifier(name); ok {
+		return r, true
+	}
+	return 0, false
+}
+
+// diacriticalModifiers maps modifier suffixes to their Unicode combining
+// diacritical marks. Used by resolveBaseModifier to decompose glyph names
+// like "ccaron" → c + combining caron → č (after NFC normalization).
+var diacriticalModifiers = map[string]rune{
+	"acute":        0x0301, // combining acute accent
+	"breve":        0x0306, // combining breve
+	"caron":        0x030C, // combining caron (háček)
+	"cedilla":      0x0327, // combining cedilla
+	"circumflex":   0x0302, // combining circumflex
+	"dieresis":     0x0308, // combining diaeresis (umlaut)
+	"dotaccent":    0x0307, // combining dot above
+	"grave":        0x0300, // combining grave accent
+	"macron":       0x0304, // combining macron
+	"ogonek":       0x0328, // combining ogonek
+	"ring":         0x030A, // combining ring above
+	"tilde":        0x0303, // combining tilde
+	"hungarumlaut": 0x030B, // combining double acute accent
+	"commaaccent":  0x0326, // combining comma below
+	"stroke":       0x0335, // combining short stroke overlay
+}
+
+// resolveBaseModifier tries to decompose a glyph name into a base letter
+// plus a diacritical modifier. For example, "ccaron" → 'c' + combining caron
+// → NFC normalized to 'č' (U+010D).
+func resolveBaseModifier(name string) (rune, bool) {
+	// Try each known modifier suffix, longest first isn't needed since
+	// modifiers don't overlap in practice.
+	for suffix, combiner := range diacriticalModifiers {
+		if !strings.HasSuffix(strings.ToLower(name), suffix) {
+			continue
+		}
+		baseName := name[:len(name)-len(suffix)]
+		if len(baseName) == 0 {
+			continue
+		}
+		// Resolve the base letter.
+		var baseRune rune
+		if len(baseName) == 1 {
+			baseRune = rune(baseName[0])
+		} else {
+			r, ok := GlyphToRuneSimple(baseName)
+			if !ok {
+				continue
+			}
+			baseRune = r
+		}
+		// Compose base + combining diacritical and normalize to NFC.
+		composed := norm.NFC.String(string(baseRune) + string(combiner))
+		runes := []rune(composed)
+		if len(runes) == 1 {
+			return runes[0], true
+		}
 	}
 	return 0, false
 }
