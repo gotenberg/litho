@@ -145,10 +145,12 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 				if len(state.FillColor) == 4 && state.FillColor[0] == 0 && state.FillColor[1] == 0 && state.FillColor[2] == 0 && state.FillColor[3] == 0 {
 					isInvisible = true
 				}
-			default: // DeviceGray and any named space treated as single-channel gray
+			case "DeviceGray":
 				if len(state.FillColor) == 1 && state.FillColor[0] == 1 {
 					isInvisible = true
 				}
+				// Named/custom color spaces (Separation, DeviceN, ICCBased, etc.)
+				// are not checked — their component values don't map to white.
 			}
 		}
 

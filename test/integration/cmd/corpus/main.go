@@ -617,15 +617,15 @@ type pdfjsSummary struct {
 	Timeouts       int `json:"timeouts"`
 
 	// Dimension-level match counts (out of WithReferences).
-	PageCountMatch      int `json:"page_count_match"`
-	PageCountMismatch   int `json:"page_count_mismatch"`
-	MetadataMatches     int `json:"metadata_matches"`
-	TextContentMatch    int `json:"text_content_match"`
-	TextContentMismatch int `json:"text_content_mismatch"`
-	TextMatches         int `json:"text_matches"`
-	TextMismatches      int `json:"text_mismatches"`
-	ItemCountMatch      int `json:"item_count_match"`
-	ItemCountMismatch   int `json:"item_count_mismatch"`
+	PageCountMatch    int `json:"page_count_match"`
+	PageCountMismatch int `json:"page_count_mismatch"`
+	MetadataMatches   int `json:"metadata_matches"`
+	TextCharsMatch    int `json:"text_chars_match"`
+	TextCharsMismatch int `json:"text_chars_mismatch"`
+	TextWordsMatch    int `json:"text_words_match"`
+	TextWordsMismatch int `json:"text_words_mismatch"`
+	ItemCountMatch    int `json:"item_count_match"`
+	ItemCountMismatch int `json:"item_count_mismatch"`
 }
 
 type pdfjsTextMismatch struct {
@@ -685,8 +685,8 @@ type pdfjsResult struct {
 	Panicked            bool
 	PageCountMatch      bool
 	MetadataMatch       bool
-	TextContentMatch    bool
-	TextMatch           bool
+	TextCharsMatch      bool
+	TextWordsMatch      bool
 	ItemCountMatch      bool
 	PageCountMismatch   *pdfjsPageCountMismatch
 	MetadataMismatches  []pdfjsMetadataMismatch
@@ -738,7 +738,7 @@ func runPDFJS(args []string) {
 	}
 
 	if *maxTextErrors >= 0 && rpt.Summary.WithReferences > 0 {
-		pct := float64(rpt.Summary.TextMismatches) / float64(rpt.Summary.WithReferences) * 100
+		pct := float64(rpt.Summary.TextWordsMismatch) / float64(rpt.Summary.WithReferences) * 100
 		if pct > float64(*maxTextErrors) {
 			fmt.Fprintf(os.Stderr, "FAIL: text mismatch %.1f%% > max %d%%\n", pct, *maxTextErrors)
 			os.Exit(1)
@@ -864,17 +864,17 @@ func comparePDFJS(corpusPath string, showProgress bool) pdfjsReport {
 			}
 
 			// Text content (no spaces).
-			if res.TextContentMatch {
-				rpt.Summary.TextContentMatch++
+			if res.TextCharsMatch {
+				rpt.Summary.TextCharsMatch++
 			} else {
-				rpt.Summary.TextContentMismatch++
+				rpt.Summary.TextCharsMismatch++
 			}
 
 			// Text (with word boundaries).
-			if res.TextMatch {
-				rpt.Summary.TextMatches++
+			if res.TextWordsMatch {
+				rpt.Summary.TextWordsMatch++
 			} else {
-				rpt.Summary.TextMismatches++
+				rpt.Summary.TextWordsMismatch++
 				rpt.TextMismatches = append(rpt.TextMismatches, res.TextMismatches...)
 			}
 
@@ -991,8 +991,8 @@ func processPDFJSEntry(corpusPath, refsDir string, entry manifestEntry, hasRef b
 		res.PageCountMismatch = cmp.PageCountMismatch
 		res.MetadataMatch = cmp.MetadataMatch
 		res.MetadataMismatches = cmp.MetadataMismatches
-		res.TextContentMatch = cmp.TextContentMatch
-		res.TextMatch = cmp.TextMatch
+		res.TextCharsMatch = cmp.TextCharsMatch
+		res.TextWordsMatch = cmp.TextWordsMatch
 		res.TextMismatches = cmp.TextMismatches
 		res.ItemCountMatch = cmp.ItemCountMatch
 		res.ItemCountMismatches = cmp.ItemCountMismatches
@@ -1127,11 +1127,11 @@ func groupGlyphsIntoRuns(elems []models.TextElement) []refItem {
 // across all comparison dimensions.
 func compareFixtures(file string, pdfjs *referenceFixture, litho *referenceFixture) pdfjsResult {
 	res := pdfjsResult{
-		PageCountMatch:   true,
-		MetadataMatch:    true,
-		TextContentMatch: true,
-		TextMatch:        true,
-		ItemCountMatch:   true,
+		PageCountMatch: true,
+		MetadataMatch:  true,
+		TextCharsMatch: true,
+		TextWordsMatch: true,
+		ItemCountMatch: true,
 	}
 
 	// Page count.
@@ -1165,8 +1165,8 @@ func compareFixtures(file string, pdfjs *referenceFixture, litho *referenceFixtu
 		}
 
 		if lithoPage == nil {
-			res.TextContentMatch = false
-			res.TextMatch = false
+			res.TextCharsMatch = false
+			res.TextWordsMatch = false
 			res.ItemCountMatch = false
 			res.TextMismatches = append(res.TextMismatches, pdfjsTextMismatch{
 				File:     file,
@@ -1180,8 +1180,8 @@ func compareFixtures(file string, pdfjs *referenceFixture, litho *referenceFixtu
 
 		if lithoPage.Error != "" {
 			if strings.TrimSpace(pdfjsPage.Text) != "" {
-				res.TextContentMatch = false
-				res.TextMatch = false
+				res.TextCharsMatch = false
+				res.TextWordsMatch = false
 				res.TextMismatches = append(res.TextMismatches, pdfjsTextMismatch{
 					File:     file,
 					Page:     pdfjsPage.PageNumber,
@@ -1195,12 +1195,12 @@ func compareFixtures(file string, pdfjs *referenceFixture, litho *referenceFixtu
 
 		// Text content comparison (ignoring word boundaries).
 		if !comparePageTextContent(pdfjsPage.Text, lithoPage.Text) {
-			res.TextContentMatch = false
+			res.TextCharsMatch = false
 		}
 
 		// Text comparison (with word boundaries).
 		if mm := comparePageText(file, pdfjsPage.PageNumber, pdfjsPage.Text, lithoPage.Text); mm != nil {
-			res.TextMatch = false
+			res.TextWordsMatch = false
 			res.TextMismatches = append(res.TextMismatches, *mm)
 		}
 
@@ -1436,14 +1436,7 @@ func printPDFJSText(rpt pdfjsReport) {
 	fmt.Printf("Survival: %d/%d (%.1f%%)  Panics: %d\n", s.Survived, s.Total, pct(s.Survived, s.Total), s.Panics)
 	fmt.Printf("Errors: %d  Skipped: %d  Timeouts: %d  Elapsed: %s\n\n", s.Errors, s.Skipped, s.Timeouts, rpt.Elapsed)
 
-	w := s.WithReferences
-	fmt.Println("Dimension Matches (out of files with references):")
-	fmt.Printf("  Page count:    %d/%d (%.1f%%)\n", s.PageCountMatch, w, pct(s.PageCountMatch, w))
-	fmt.Printf("  Metadata:      %d/%d (%.1f%%)\n", s.MetadataMatches, w, pct(s.MetadataMatches, w))
-	fmt.Printf("  Text content:  %d/%d (%.1f%%)\n", s.TextContentMatch, w, pct(s.TextContentMatch, w))
-	fmt.Printf("  Text (spatial): %d/%d (%.1f%%)\n", s.TextMatches, w, pct(s.TextMatches, w))
-	fmt.Printf("  Item count:    %d/%d (%.1f%%)\n\n", s.ItemCountMatch, w, pct(s.ItemCountMatch, w))
-
+	// Details.
 	if len(rpt.PageCountMismatches) > 0 {
 		fmt.Printf("Page Count Mismatches (%d):\n", len(rpt.PageCountMismatches))
 		for _, m := range rpt.PageCountMismatches {
@@ -1474,7 +1467,17 @@ func printPDFJSText(rpt pdfjsReport) {
 		for _, m := range rpt.ItemCountMismatches {
 			fmt.Printf("  %s (page %d): litho=%d pdfjs=%d\n", m.File, m.Page, m.Litho, m.PDFJS)
 		}
+		fmt.Println()
 	}
+
+	// Summary at the bottom for easy reading.
+	w := s.WithReferences
+	fmt.Println("Results:")
+	fmt.Printf("  Page count:  %d/%d (%.1f%%)\n", s.PageCountMatch, w, pct(s.PageCountMatch, w))
+	fmt.Printf("  Metadata:    %d/%d (%.1f%%)\n", s.MetadataMatches, w, pct(s.MetadataMatches, w))
+	fmt.Printf("  Text (chars): %d/%d (%.1f%%)\n", s.TextCharsMatch, w, pct(s.TextCharsMatch, w))
+	fmt.Printf("  Text (words): %d/%d (%.1f%%)\n", s.TextWordsMatch, w, pct(s.TextWordsMatch, w))
+	fmt.Printf("  Item count:  %d/%d (%.1f%%)\n", s.ItemCountMatch, w, pct(s.ItemCountMatch, w))
 }
 
 func printPDFJSJSON(rpt pdfjsReport) {

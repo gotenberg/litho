@@ -516,8 +516,12 @@ func (p *Parser) parseArray() (ast.PdfObject, error) {
 
 		obj, err := p.ParseObject()
 		if err != nil {
-			// If we can't parse an element, close with what we have.
-			break
+			// Tolerate malformed array elements (e.g., operators inside
+			// TJ arrays): skip the bad token and continue parsing.
+			if _, consumeErr := p.Consume(); consumeErr != nil {
+				break
+			}
+			continue
 		}
 		arr = append(arr, obj)
 	}
