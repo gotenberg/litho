@@ -165,6 +165,26 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		doc.Rebuilt = true
 	}
 
+	// Verify the catalog /Root is reachable. Broken xref chains from
+	// incremental updates can parse without error but miss the catalog
+	// object. If /Root can't be resolved, rebuild the xref from scratch.
+	if !doc.Rebuilt {
+		if rootRef, ok := doc.Index.Trailer["Root"]; ok {
+			if ref, ok := rootRef.(ast.PdfIndirectRef); ok {
+				if _, exists := doc.Index.Entries[ref.ObjectNum]; !exists {
+					doc.Logger.Debug("catalog object missing from xref, rebuilding",
+						slog.Int("root_obj", ref.ObjectNum),
+					)
+					doc.Index.Entries = make(map[int]xref.XRefEntry)
+					doc.Index.Trailer = nil
+					if rebuildErr := doc.rebuildXRef(ctx); rebuildErr == nil {
+						doc.Rebuilt = true
+					}
+				}
+			}
+		}
+	}
+
 	doc.Logger.Debug("xref parsed",
 		slog.Int("entries", len(doc.Index.Entries)),
 		slog.Bool("rebuilt", doc.Rebuilt),

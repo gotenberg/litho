@@ -134,10 +134,12 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 			for _, item := range c {
 				stream, err := document.ResolveStream(ctx, doc, item)
 				if err != nil {
-					return nil, fmt.Errorf("failed to resolve item in /Contents array: %v", err)
+					// Tolerate missing or unresolvable content streams:
+					// skip the bad item and continue with the rest.
+					continue
 				}
 				if stream.Dict == nil {
-					return nil, fmt.Errorf("expected stream in /Contents array")
+					continue
 				}
 				streams = append(streams, stream)
 			}

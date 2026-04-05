@@ -2,6 +2,7 @@ package filter
 
 import (
 	"bytes"
+	"compress/flate"
 	"compress/zlib"
 	"context"
 	"encoding/ascii85"
@@ -180,7 +181,18 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 	r, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		// Fallback: try raw deflate (no zlib header). Some corrupt PDFs
+		// have damaged headers but valid deflate data.
+		r = flate.NewReader(bytes.NewReader(data))
+		// Verify we can read at least some data.
+		probe := make([]byte, 1)
+		if _, probeErr := r.Read(probe); probeErr != nil {
+			r.Close()
+			return nil, err // return original zlib error
+		}
+		// Reset: re-create reader to include the probed byte.
+		r.Close()
+		r = flate.NewReader(bytes.NewReader(data))
 	}
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
