@@ -14,6 +14,112 @@ var (
 	ErrTruncated  = errors.New("cff: data truncated")
 )
 
+// ExtractEncoding extracts the CFF encoding as a byte code → glyph name map.
+// For fonts with a custom encoding (like TeX OT1), this maps byte positions
+// to their glyph names, enabling correct text extraction when no PDF-level
+// /Encoding is present. Returns nil for predefined encodings (0=Standard, 1=Expert).
+func ExtractEncoding(data []byte) map[byte]string {
+	if len(data) < 4 || data[0] != 1 {
+		return nil
+	}
+	hdrSize := max(int(data[2]), 4)
+	nameEnd, err := skipINDEX(data, hdrSize)
+	if err != nil {
+		return nil
+	}
+	topDictEnd, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return nil
+	}
+	info := parseTopDict(topDictEntries[0])
+
+	// Predefined encodings (0=Standard, 1=Expert) — handled by the caller.
+	if info.encodingOffset <= 1 {
+		return nil
+	}
+
+	// Parse custom strings.
+	_, stringEntries, err := parseINDEX(data, topDictEnd)
+	if err != nil {
+		return nil
+	}
+	strings := &stringTable{custom: stringEntries}
+
+	// Get number of glyphs for charset parsing.
+	numGlyphs := 0
+	if info.charStringsOffset > 0 && int(info.charStringsOffset) < len(data) {
+		_, csEntries, err := parseINDEX(data, int(info.charStringsOffset))
+		if err == nil {
+			numGlyphs = len(csEntries)
+		}
+	}
+	if numGlyphs == 0 {
+		return nil
+	}
+
+	// Parse charset: GID → SID.
+	sids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
+	if err != nil {
+		return nil
+	}
+
+	// Parse CFF Encoding at encodingOffset.
+	// Format 0: nCodes(1), code[nCodes](1 each) — code[i] maps to GID i+1.
+	// Format 1: nRanges(1), {first(1), nLeft(1)}[nRanges] — range mappings.
+	encOff := int(info.encodingOffset)
+	if encOff >= len(data) {
+		return nil
+	}
+	format := data[encOff] & 0x7F // high bit is supplement flag
+	encOff++
+
+	result := make(map[byte]string)
+
+	switch format {
+	case 0:
+		if encOff >= len(data) {
+			return nil
+		}
+		nCodes := int(data[encOff])
+		encOff++
+		for i := 0; i < nCodes && encOff < len(data); i++ {
+			code := data[encOff]
+			encOff++
+			gid := i + 1 // GID 0 = .notdef
+			if gid < len(sids) {
+				name := strings.get(sids[gid])
+				if name != "" && name != ".notdef" {
+					result[code] = name
+				}
+			}
+		}
+	case 1:
+		if encOff >= len(data) {
+			return nil
+		}
+		nRanges := int(data[encOff])
+		encOff++
+		gid := 1 // start after .notdef
+		for i := 0; i < nRanges && encOff+1 < len(data); i++ {
+			first := data[encOff]
+			nLeft := int(data[encOff+1])
+			encOff += 2
+			for j := 0; j <= nLeft; j++ {
+				code := first + byte(j) //nolint:gosec // j bounded by nLeft < 256
+				if gid < len(sids) {
+					name := strings.get(sids[gid])
+					if name != "" && name != ".notdef" {
+						result[code] = name
+					}
+				}
+				gid++
+			}
+		}
+	}
+
+	return result
+}
+
 // GlyphToUnicode extracts a GID → Unicode rune mapping from CFF font data.
 // It parses the charset to get GID → SID, resolves SIDs to glyph names via
 // the standard + custom string tables, then maps glyph names to Unicode via
@@ -290,6 +396,7 @@ func readOffset(data []byte, size int) int {
 // topDictInfo holds key offsets extracted from the CFF Top DICT.
 type topDictInfo struct {
 	charsetOffset     int32
+	encodingOffset    int32 // CFF Encoding (byte code → GID)
 	charStringsOffset int32
 	privateDictOffset int32
 	privateDictSize   int32
@@ -315,6 +422,10 @@ func parseTopDict(data []byte) topDictInfo {
 			case 15: // charset
 				if len(operands) > 0 {
 					info.charsetOffset = operands[len(operands)-1]
+				}
+			case 16: // Encoding
+				if len(operands) > 0 {
+					info.encodingOffset = operands[len(operands)-1]
 				}
 			case 17: // CharStrings
 				if len(operands) > 0 {

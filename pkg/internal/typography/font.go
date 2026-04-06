@@ -323,12 +323,15 @@ func GetFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) 
 	}
 
 	// Type1 font program encoding: parse the encoding vector from the
-	// embedded Type1 font program (/FontFile). When the PDF-level /Encoding
-	// is absent, the font program's encoding is authoritative and overrides
-	// the default WinAnsiEncoding. When /Encoding IS present, the font
-	// program only fills holes (codes not covered by Differences).
+	// Embedded font program encoding. When the PDF-level /Encoding is absent,
+	// the font program's encoding is authoritative and overrides the default.
 	_, hasExplicitEncoding := fontDict["Encoding"]
 	extractType1Encoding(ctx, doc, fontDict, font, !hasExplicitEncoding)
+	// Also try CFF/Type1C encoding from /FontFile3 for fonts like TeX CMR
+	// that use OT1 encoding internally.
+	if !hasExplicitEncoding {
+		extractCFFEncoding(ctx, doc, fontDict, font)
+	}
 
 	// Extract /FontBBox and embedded font metrics from the FontDescriptor.
 	extractFontDescriptorMetrics(ctx, doc, fontDict, font)
@@ -1301,13 +1304,39 @@ func detectCIDOffset(cidWidths map[int]float64) int {
 	if !has3 || w3 < 200 || w3 > 300 {
 		return 0
 	}
-	// CID 3 must be the lowest CID in the widths map.
-	for cid := range cidWidths {
-		if cid < 3 {
+	// CIDs below 3 must be absent or have negligible width (< 10 units).
+	// GIDs 0-2 are typically .notdef and control characters with zero/tiny widths.
+	for cid := range 3 {
+		if w, ok := cidWidths[cid]; ok && w >= 10 {
 			return 0
 		}
 	}
 	return 29
+}
+
+// extractCFFEncoding reads the CFF encoding from a /FontFile3 (Type1C) font
+// and populates font.Encoding. This is needed for TeX fonts (CMR, CMSY, etc.)
+// that use OT1 encoding internally — the byte→glyph mapping differs from
+// StandardEncoding/WinAnsiEncoding.
+func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	fdDict := findFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return
+	}
+	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile3")
+	if fontData == nil {
+		return
+	}
+	encMap := cff.ExtractEncoding(fontData)
+	if len(encMap) == 0 {
+		return
+	}
+	// Convert glyph names to runes and overwrite the encoding table.
+	for code, name := range encMap {
+		if r, ok := encodings.GlyphToRuneFull(name); ok {
+			font.Encoding[code] = r
+		}
+	}
 }
 
 // encodingCMapName returns the predefined CMap name from a Type0 font's

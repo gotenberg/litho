@@ -9,36 +9,75 @@ Comparison of litho against Mozilla PDF.js reference fixtures.
 | Survival     | 1166    | 100.0% |
 | Page count   | 960/960 | 100.0% |
 | Metadata     | 951/960 | 99.1%  |
-| Text (chars) | 804/960 | 83.8%  |
+| Text (chars) | 808/960 | 84.2%  |
 | Text (words) | 729/960 | 75.9%  |
 | Item count   | 550/960 | 57.3%  |
 | Errors       | 204     |        |
 | Skipped      | 2       |        |
 
-## Text (chars) Mismatches (156 files)
+## Litho vs PDF.js: Architectural Differences
+
+### Space Inference (accounts for 56 files in chars-vs-words gap)
+
+| Aspect          | Litho                              | PDF.js                                 |
+| --------------- | ---------------------------------- | -------------------------------------- |
+| Granularity     | Per-glyph                          | Per-item (multi-glyph)                 |
+| With width      | `gap > 0.15 × fontSize`           | `gap > spaceWidth × 0.35`             |
+| Without width   | `gap > 0.3 × fontSize`            | Uses font's actual space char width    |
+| Approach        | Fixed fraction of font size        | Font-specific space width              |
+
+Litho uses a universal 15% font-size threshold. PDF.js adapts to each font's
+space character width. This is the single largest source of word-level
+disagreements.
+
+### Visibility Filtering
+
+| Filter                 | Litho                     | PDF.js       |
+| ---------------------- | ------------------------- | ------------ |
+| Tr=3 (invisible text)  | Flagged, optionally strip | Always shown |
+| White-on-white         | Detected (RGB/CMYK/Gray) | Not checked  |
+| CropBox clipping       | Checked                   | Not checked  |
+| Artifacts              | Stripped by default        | Included     |
+| Annotation appearances | Excluded                  | Included     |
+| OCG layers             | Respected                 | Respected    |
+
+### Other Differences
+
+| Area                    | Litho                                       | PDF.js                          |
+| ----------------------- | ------------------------------------------- | ------------------------------- |
+| Bidi reordering         | Simplified per-line RTL reversal            | Not performed in text extraction |
+| Ligature decomposition  | Always decomposes ff/fi/fl/ffi/ffl          | Relies on ToUnicode CMap        |
+| Newline detection       | `\|deltaY\| > 2.0`, handles vertical/rotated | `\|deltaY\| > 2` on Y only     |
+| CIDOffset heuristic     | Detects +29 offset from /W array            | Not applicable                  |
+| CJK font name heuristic | GBK for non-embedded CJK TrueType           | Not applicable                  |
+| Symbol table fallback   | Math glyph names for all fonts              | Symbol table for Symbol fonts    |
+| CFF encoding extraction | Reads Type1C encoding for TeX fonts         | Built-in encoding tables         |
+| Base+modifier glyphs    | ccaron→č, uring→ů via NFC                  | Pre-built glyph table            |
+
+## Text (chars) Mismatches (152 files)
 
 ### Breakdown
 
 | Category                           | Files | Notes                                    |
 | ---------------------------------- | ----- | ---------------------------------------- |
-| Pos-0 total failure                | ~31   | Font encoding failure from first char    |
-| Mid-text divergence                | ~42   | Diverse: bidi, ordering, encoding        |
-| Litho unmapped (outputs ?)         | ~13   | Font has no mapping for specific glyphs  |
-| Litho better than PDF.js reference | ~17   | PDF.js ref is garbled or wrong           |
-| Near-end divergence                | ~7    | Minor tail differences                   |
-| Offset CIDs (no embedded font)     | ~18   | Heuristic fixes 4, rest need system font |
-| Extract errors                     | ~7    | Structural: corrupt, missing objects     |
-| Litho empty                        | ~2    | No text elements (GIS map, metadata)     |
+| Pos-0 total failure                | ~30   | Font encoding failure from first char    |
+| Spacing-like char shift            | ~40   | Same chars but reordered by spacing      |
+| Litho better than PDF.js reference | ~20   | Litho extracts more/correct text         |
+| TeX OT1 font encoding             | ~10   | TeX CMR fonts with OT1-specific encoding |
+| Bidi/RTL ordering                  | ~6    | Arabic/Hebrew text in different order    |
+| Offset CIDs (no embedded font)     | ~14   | Heuristic fixes 4, rest need system font |
+| Broken ToUnicode CMap              | ~8    | Deliberately wrong or incomplete         |
+| Extract errors                     | ~7    | Corrupt streams, missing objects         |
 | OCR-required                       | ~5    | Scanned images, no digital text          |
-| RC4 decryption bug                 | ~2    | Garbled tail of long encrypted strings   |
-| Case diff                          | ~1    | Small caps rendering                     |
+| Litho empty                        | ~2    | No text elements                         |
+| RC4 decryption                     | ~2    | Garbled tail of long encrypted strings   |
+| Unique per-file                    | ~8    | Each has a different root cause          |
 
 ### Not fixable
 
-Each remaining file has a unique root cause. No common pattern remains.
-Math symbol glyph names (asteriskmath, radical, etc.) were investigated but
-adding them globally causes VeraPDF compliance regressions. They remain in
-the Symbol font table only.
+All common patterns have been exhausted. Each remaining file has a unique root
+cause. Math symbol glyph names are resolved via Symbol font table fallback
+without affecting compliance checks.
 
 ## Metadata Mismatches (9 files)
 

@@ -35,6 +35,11 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		effectiveFontSize = fontSize // Last resort: use raw.
 	}
 
+	// Compute the font's space character advance in page-space units.
+	// Used by ReconstructText for font-aware space inference.
+	spaceGlyphWidth := font.GetGlyphWidth(0x20) // 1/1000 text-space units
+	spaceAdvance := (spaceGlyphWidth / 1000.0) * fontSize * math.Sqrt(dx*dx+dy*dy) * (state.Text.Tz / 100.0)
+
 	mcid := -1
 	var mcLang, mcExpansion string
 	for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
@@ -205,6 +210,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Y:             y,
 			Width:         pageWidth,
 			FontSize:      effectiveFontSize,
+			SpaceWidth:    spaceAdvance,
 			MCID:          mcid,
 			Hidden:        isHidden,
 			Invisible:     isInvisible,

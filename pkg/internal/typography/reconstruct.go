@@ -82,24 +82,16 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 		}
 		indices = reorderBidiIndices(texts, indices)
 
+		// Compute adaptive space threshold from the gap histogram.
+		spaceThreshold := computeSpaceThreshold(ln.elems, indices)
+
 		for i, idx := range indices {
 			if i > 0 {
-				prevIdx := indices[i-1]
-				prev := ln.elems[prevIdx]
+				prev := ln.elems[indices[i-1]]
 				curr := ln.elems[idx]
-				switch {
-				case curr.Vertical || isOrthogonalRotation(curr.Angle):
-					if needsSpace(curr.Y-prev.Y, prev.Width, curr.FontSize) {
-						sb.WriteString(" ")
-					}
-				case isRotated(curr.Angle):
-					if needsSpace(alongDist(prev, curr), prev.Width, curr.FontSize) {
-						sb.WriteString(" ")
-					}
-				default:
-					if needsSpace(curr.X-prev.X, prev.Width, curr.FontSize) {
-						sb.WriteString(" ")
-					}
+				gap := computeLineGap(prev, curr)
+				if needsSpace(gap, spaceThreshold) {
+					sb.WriteString(" ")
 				}
 			}
 			sb.WriteString(ln.elems[idx].Text)
@@ -249,19 +241,20 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 			}
 		}
 
+		// Extract TextElements for threshold computation.
+		lineElems := make([]models.TextElement, len(line.elements))
+		for j, e := range line.elements {
+			lineElems[j] = e.TextElement
+		}
+		spaceThreshold := computeSpaceThreshold(lineElems, indices)
+
 		for i, idx := range indices {
 			if i > 0 {
-				prevIdx := indices[i-1]
-				prev := line.elements[prevIdx]
-				curr := line.elements[idx]
-				if isVerticalPage {
-					if needsSpace(prev.Y-curr.Y, prev.Width, curr.FontSize) {
-						sb.WriteString(" ")
-					}
-				} else {
-					if needsSpace(curr.X-prev.X, prev.Width, curr.FontSize) {
-						sb.WriteString(" ")
-					}
+				prev := line.elements[indices[i-1]].TextElement
+				curr := line.elements[idx].TextElement
+				gap := computeLineGap(prev, curr)
+				if needsSpace(gap, spaceThreshold) {
+					sb.WriteString(" ")
 				}
 			}
 			sb.WriteString(line.elements[idx].Text)
@@ -271,30 +264,91 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 	return normalizeSoftHyphens(sb.String())
 }
 
+// computeLineGap computes the inter-glyph gap (delta - prevWidth) for a pair.
+func computeLineGap(prev, curr models.TextElement) float64 {
+	var delta float64
+	switch {
+	case curr.Vertical || isOrthogonalRotation(curr.Angle):
+		delta = curr.Y - prev.Y
+	case isRotated(curr.Angle):
+		delta = alongDist(prev, curr)
+	default:
+		delta = curr.X - prev.X
+	}
+	if prev.Width > 0 {
+		return delta - prev.Width
+	}
+	return delta - 0.5*curr.FontSize
+}
+
+// computeSpaceThreshold analyzes inter-glyph gaps on a line to find the
+// optimal split between kerning adjustments and word spaces using the
+// largest-jump method. Sorted gaps are scanned for the biggest consecutive
+// jump; when that jump is significantly larger than the median of the gaps
+// below it, the midpoint is used as the threshold.
+// Falls back to 0.15 * avgFontSize when no clear split exists.
+func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
+	if len(indices) < 3 {
+		if len(elems) > 0 {
+			return 0.15 * math.Abs(elems[0].FontSize)
+		}
+		return 1.0
+	}
+
+	// Collect all inter-glyph gaps.
+	gaps := make([]float64, 0, len(indices)-1)
+	var totalFontSize float64
+	for i := 1; i < len(indices); i++ {
+		prev := elems[indices[i-1]]
+		curr := elems[indices[i]]
+		totalFontSize += curr.FontSize
+		gap := computeLineGap(prev, curr)
+		if gap > 0 {
+			gaps = append(gaps, gap)
+		}
+	}
+
+	avgFontSize := math.Abs(totalFontSize / float64(len(indices)-1))
+	fixedThreshold := 0.15 * avgFontSize
+
+	// Need at least 4 gaps to form two meaningful clusters.
+	if len(gaps) < 4 {
+		return fixedThreshold
+	}
+
+	sort.Float64s(gaps)
+
+	// Largest-jump method: find the biggest consecutive jump in the sorted
+	// gap list. If the jump is at least 2× the median of the gaps below it,
+	// use the midpoint as the threshold.
+	bestJump := 0.0
+	bestIdx := 0
+	for i := 1; i < len(gaps); i++ {
+		jump := gaps[i] - gaps[i-1]
+		if jump > bestJump {
+			bestJump = jump
+			bestIdx = i
+		}
+	}
+
+	// Require at least 2 gaps on each side for a meaningful split.
+	if bestIdx >= 2 && bestIdx < len(gaps)-1 {
+		// Median of the gaps below the jump.
+		medianBelow := gaps[bestIdx/2]
+		threshold := (gaps[bestIdx-1] + gaps[bestIdx]) / 2.0
+
+		if bestJump > 2*medianBelow &&
+			threshold > 0.05*avgFontSize && threshold < 0.5*avgFontSize {
+			return threshold
+		}
+	}
+
+	return fixedThreshold
+}
+
 // needsSpace decides whether to insert a space between two consecutive glyphs.
-// delta is the distance between the two glyphs along the reading direction
-// (curr.X - prev.X for horizontal, prev.Y - curr.Y for vertical).
-// prevWidth is the advance width of the previous glyph (0 if unknown).
-// fontSize is the effective font size in page-space units (same coordinate
-// system as delta and prevWidth).
-func needsSpace(delta, prevWidth, fontSize float64) bool {
-	if fontSize <= 0 {
-		return false
-	}
-	if prevWidth > 0 {
-		// Use actual glyph width: space exists when the gap after the glyph
-		// exceeds a fraction of the font size. A typical inter-word space is
-		// ~0.25 em; TJ kerning adjustments rarely exceed 0.1 em in practice.
-		// Use 0.15 em as the threshold to catch word gaps while absorbing kerning.
-		gap := delta - prevWidth
-		return gap > 0.15*fontSize
-	}
-	// Fallback when Width is not set: use a heuristic.
-	// Expected advance is ~0.5*fontSize; a gap well beyond that is a space.
-	// Use a higher threshold (0.3) to avoid false positives from kerning.
-	expectedAdvance := 0.5 * fontSize
-	gap := delta - expectedAdvance
-	return gap > 0.3*fontSize
+func needsSpace(gap, threshold float64) bool {
+	return gap > threshold
 }
 
 // isOrthogonalRotation returns true when the text angle is close to 90° or

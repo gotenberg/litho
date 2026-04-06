@@ -36,6 +36,7 @@ type TextElement struct {
 	Y             float64 `json:"y"`
 	Width         float64 `json:"width"`
 	FontSize      float64 `json:"fontSize"`
+	SpaceWidth    float64 `json:"-"` // font's space char advance in page-space units (internal, not serialized)
 	MCID          int     `json:"mcid"`
 	Hidden        bool    `json:"hidden,omitempty"`
 	Invisible     bool    `json:"invisible,omitempty"`
