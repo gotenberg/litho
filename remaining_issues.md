@@ -45,7 +45,7 @@ disagreements.
 
 | Area                    | Litho                                       | PDF.js                          |
 | ----------------------- | ------------------------------------------- | ------------------------------- |
-| Bidi reordering         | Simplified per-line RTL reversal            | Not performed in text extraction |
+| Bidi reordering         | X-position heuristic: reverses only visual-order RTL runs | Not performed in text extraction |
 | Ligature decomposition  | Always decomposes ff/fi/fl/ffi/ffl          | Relies on ToUnicode CMap        |
 | Newline detection       | `\|deltaY\| > 2.0`, handles vertical/rotated | `\|deltaY\| > 2` on Y only     |
 | CIDOffset heuristic     | Detects +29 offset from /W array            | Not applicable                  |

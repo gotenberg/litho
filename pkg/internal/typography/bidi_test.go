@@ -9,60 +9,89 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// reorderTexts is a test helper that applies reorderBidiIndices and returns
-// the reordered text strings for easy assertion.
-func reorderTexts(input []string) []string {
+func TestReorderBidiIndices_LTROnly(t *testing.T) {
+	input := []string{"H", "e", "l", "l", "o"}
+	xPos := []float64{10, 16, 22, 28, 34}
 	indices := make([]int, len(input))
 	for i := range indices {
 		indices[i] = i
 	}
-	reordered := reorderBidiIndices(input, indices)
-	result := make([]string, len(reordered))
-	for i, idx := range reordered {
-		result[i] = input[idx]
-	}
-	return result
-}
-
-func TestReorderBidiIndices_LTROnly(t *testing.T) {
-	input := []string{"H", "e", "l", "l", "o"}
-	got := reorderTexts(input)
+	reordered := reorderBidiIndices(input, indices, xPos)
+	got := joinByIndices(input, reordered)
 	want := "Hello"
-	if join(got) != want {
-		t.Errorf("LTR only: got %q, want %q", join(got), want)
+	if got != want {
+		t.Errorf("LTR only: got %q, want %q", got, want)
 	}
 }
 
-func TestReorderBidiIndices_RTLOnly(t *testing.T) {
+func TestReorderBidiIndices_RTLVisualOrder(t *testing.T) {
+	// Visual order: leftmost glyph first in stream (X increasing for RTL
+	// = last logical character first). Should reverse.
 	input := []string{"ם", "ו", "ל", "ש"}
-	got := reorderTexts(input)
+	xPos := []float64{10, 16, 22, 28} // X increasing = visual order for RTL
+	indices := make([]int, len(input))
+	for i := range indices {
+		indices[i] = i
+	}
+	reordered := reorderBidiIndices(input, indices, xPos)
+	got := joinByIndices(input, reordered)
 	want := "שלום"
-	if join(got) != want {
-		t.Errorf("RTL only: got %q, want %q", join(got), want)
+	if got != want {
+		t.Errorf("RTL visual order: got %q, want %q", got, want)
+	}
+}
+
+func TestReorderBidiIndices_RTLLogicalOrder(t *testing.T) {
+	// Logical order: first logical character first (X decreasing for RTL
+	// = rightmost character first in reading order). Should NOT reverse.
+	input := []string{"ש", "ל", "ו", "ם"}
+	xPos := []float64{28, 22, 16, 10} // X decreasing = logical order for RTL
+	indices := make([]int, len(input))
+	for i := range indices {
+		indices[i] = i
+	}
+	reordered := reorderBidiIndices(input, indices, xPos)
+	got := joinByIndices(input, reordered)
+	want := "שלום" // Already correct, not reversed
+	if got != want {
+		t.Errorf("RTL logical order: got %q, want %q", got, want)
 	}
 }
 
 func TestReorderBidiIndices_Mixed(t *testing.T) {
+	// Visual order RTL embedded in LTR: Hebrew glyphs have increasing X.
 	input := []string{"H", "e", "l", "l", "o", " ", "ם", "ו", "ל", "ש", " ", "W", "o", "r", "l", "d"}
-	got := reorderTexts(input)
-	result := join(got)
+	xPos := []float64{10, 16, 22, 28, 34, 40, 52, 58, 64, 70, 76, 82, 88, 94, 100, 106}
+	indices := make([]int, len(input))
+	for i := range indices {
+		indices[i] = i
+	}
+	reordered := reorderBidiIndices(input, indices, xPos)
+	got := joinByIndices(input, reordered)
 	want := "Hello שלום World"
-	if result != want {
-		t.Errorf("Mixed: got %q, want %q", result, want)
+	if got != want {
+		t.Errorf("Mixed: got %q, want %q", got, want)
 	}
 }
 
-func TestReorderBidiIndices_Arabic(t *testing.T) {
+func TestReorderBidiIndices_ArabicVisualOrder(t *testing.T) {
+	// Visual order: leftmost glyph first (X increasing).
 	input := []string{"ا", "ب", "ح", "ر", "م"}
-	got := reorderTexts(input)
+	xPos := []float64{10, 16, 22, 28, 34} // X increasing = visual order for RTL
+	indices := make([]int, len(input))
+	for i := range indices {
+		indices[i] = i
+	}
+	reordered := reorderBidiIndices(input, indices, xPos)
+	got := joinByIndices(input, reordered)
 	want := "مرحبا"
-	if join(got) != want {
-		t.Errorf("Arabic: got %q, want %q", join(got), want)
+	if got != want {
+		t.Errorf("Arabic visual: got %q, want %q", got, want)
 	}
 }
 
 func TestReorderBidiIndices_Empty(t *testing.T) {
-	got := reorderBidiIndices(nil, nil)
+	got := reorderBidiIndices(nil, nil, nil)
 	if len(got) != 0 {
 		t.Errorf("empty: got %v, want nil/empty", got)
 	}
@@ -112,6 +141,7 @@ func TestNormalizeSoftHyphens(t *testing.T) {
 }
 
 func TestReconstructText_BidiLine(t *testing.T) {
+	// Visual order: Hebrew glyphs with X increasing (leftmost first in stream).
 	elements := []models.TextElement{
 		{Text: "ם", X: 10, Y: 100, FontSize: 12},
 		{Text: "ו", X: 16, Y: 100, FontSize: 12},
@@ -149,10 +179,10 @@ func TestReconstructText_SoftHyphenAcrossLines(t *testing.T) {
 // Ensure the beads parameter is unused here but compiles.
 var _ = []semantics.Bead{}
 
-func join(ss []string) string {
-	var result strings.Builder
-	for _, s := range ss {
-		result.WriteString(s)
+func joinByIndices(texts []string, indices []int) string {
+	var sb strings.Builder
+	for _, idx := range indices {
+		sb.WriteString(texts[idx])
 	}
-	return result.String()
+	return sb.String()
 }

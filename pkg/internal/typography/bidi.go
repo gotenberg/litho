@@ -35,11 +35,12 @@ func isNeutralOrWeak(r rune) bool {
 		c == bidi.CS || c == bidi.NSM || c == bidi.BN || c == bidi.EN
 }
 
-// reorderBidiIndices reorders element indices using the same RTL-run detection
-// as reorderBidiLine. The caller uses the reordered indices to look up both
-// text (in logical order) and spatial positions (for correct spacing).
-// The texts slice provides the text content for each index position.
-func reorderBidiIndices(texts []string, indices []int) []int {
+// reorderBidiIndices reorders element indices so that RTL runs stored in
+// visual order (X decreasing in content-stream order) are reversed to
+// logical order. RTL runs already in logical order (X increasing) are
+// left untouched. The xPositions slice provides the X coordinate for
+// each element so the heuristic can detect visual vs logical order.
+func reorderBidiIndices(texts []string, indices []int, xPositions []float64) []int {
 	if len(indices) == 0 {
 		return indices
 	}
@@ -84,7 +85,18 @@ func reorderBidiIndices(texts []string, indices []int) []int {
 					break
 				}
 			}
-			reverseInts(result[i:j])
+			// Only reverse if the run is in visual order. RTL text reads
+			// right-to-left, so logical order has decreasing X (first
+			// logical char is rightmost). Visual order has increasing X
+			// (leftmost glyph first in stream, which is the last
+			// logical character). Reverse when X increases across the run.
+			if len(xPositions) > 0 {
+				firstX := xPositions[result[i]]
+				lastX := xPositions[result[j-1]]
+				if firstX < lastX {
+					reverseInts(result[i:j])
+				}
+			}
 			i = j
 		} else {
 			i++
