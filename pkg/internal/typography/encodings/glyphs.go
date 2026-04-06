@@ -240,6 +240,7 @@ var GlyphToRune = map[string]rune{
 	"lslash":       0x0142, // ł
 	"Lslash":       0x0141, // Ł
 	"dotlessi":     0x0131, // ı (Turkish dotless i)
+	"Idotaccent":   0x0130, // İ (Turkish capital I with dot above; canonical AGL name)
 	"Dcroat":       0x0110, // Đ
 	"dcroat":       0x0111, // đ
 	"minus":        0x2212, // − (math minus sign)
@@ -259,6 +260,16 @@ var GlyphToRune = map[string]rune{
 	"ohorn":        0x01A1, // ơ
 	"Uhorn":        0x01AF, // Ư
 	"uhorn":        0x01B0, // ư
+
+	// Additional common names
+	"dotlessj":     0x0237, // ȷ (dotless j)
+	"Idot":         0x0130, // İ (Turkish dotted I)
+	"circlecopyrt": 0x00A9, // © (copyright sign; TeX name)
+
+	// Math symbols and Greek letters are NOT included here. They live
+	// in the Symbol font table (SymbolGlyphsUnicode). Adding them
+	// globally causes VeraPDF compliance regressions on test files that
+	// verify Unicode mapping completeness (6-3-8, 6-2-11-7-2).
 }
 
 // runeToGlyph is the reverse mapping, built lazily and thread-safely.

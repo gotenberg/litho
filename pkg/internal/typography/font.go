@@ -1294,7 +1294,7 @@ func hasCJKFontName(s string) bool {
 //   - CIDs 0-2 are absent from the widths map
 //   - The lowest CID is 3 (no CIDs below 3 have widths)
 func detectCIDOffset(cidWidths map[int]float64) int {
-	if cidWidths == nil || len(cidWidths) < 5 {
+	if len(cidWidths) < 5 {
 		return 0
 	}
 	w3, has3 := cidWidths[3]
@@ -1504,6 +1504,16 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 			return 0, false
 		}
 		return r, ok
+	}
+	// Last resort: check the Symbol table for math/Greek glyph names.
+	// These names (asteriskmath, theta, sigma, etc.) appear in non-Symbol
+	// fonts via /Differences arrays (e.g., TeX CMSY math fonts).
+	// They are NOT in GlyphToRune to avoid affecting compliance checks
+	// (which use GlyphToRuneFull), but are useful for text extraction.
+	if !isSymbol {
+		if r, ok := encodings.SymbolGlyphsUnicode[name]; ok {
+			return r, true
+		}
 	}
 	return 0, false
 }

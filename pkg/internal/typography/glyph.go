@@ -73,7 +73,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 				// as a direct Unicode codepoint (common with Identity-H
 				// fonts that have incomplete ToUnicode CMaps).
 				if font.Subtype == "Type0" && n == 2 && len(data) >= 2 {
-					cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset)
+					cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset) //nolint:gosec // CIDOffset is 0 or 29, no overflow
 					if cp > 0x1F {
 						char = string(cp)
 					} else {
@@ -291,7 +291,7 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 		// CIDToGIDMap /Identity without embedded font: treat the
 		// 2-byte character code as a direct Unicode code point,
 		// applying any detected CID offset.
-		cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset)
+		cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset) //nolint:gosec // CIDOffset is 0 or 29, no overflow
 		*n = 2
 		if cp > 0 {
 			return string(cp)
