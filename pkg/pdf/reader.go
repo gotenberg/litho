@@ -616,22 +616,41 @@ func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Mod
 }
 
 // GetPage returns the geometry and metadata for the given 1-based page number.
+// Width and Height are derived from the CropBox (the visible area) and account
+// for the page's /Rotate entry.
 func (r *Reader) GetPage(ctx context.Context, pageNum int) (models.Page, error) {
 	p, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return models.Page{}, err
 	}
-	w, h := mediaBoxDimensions(p.MediaBox)
+
+	box := p.CropBox
+	if box == nil {
+		box = p.MediaBox
+	}
+	w, h := mediaBoxDimensions(box)
+
+	// /Rotate swaps the effective dimensions for 90° and 270°.
+	rot := p.Rotate % 360
+	if rot < 0 {
+		rot += 360
+	}
+	if rot == 90 || rot == 270 {
+		w, h = h, w
+	}
+
 	return models.Page{
-		PageNumber: pageNum,
-		Width:      w,
-		Height:     h,
-		DPM:        p.DPM,
-		MediaBox:   boxToRect(p.MediaBox),
-		CropBox:    boxToRect(p.CropBox),
-		BleedBox:   boxToRect(p.BleedBox),
-		TrimBox:    boxToRect(p.TrimBox),
-		ArtBox:     boxToRect(p.ArtBox),
+		PageNumber:  pageNum,
+		Width:       w,
+		Height:      h,
+		Rotate:      p.Rotate,
+		IsLandscape: w > h,
+		DPM:         p.DPM,
+		MediaBox:    boxToRect(p.MediaBox),
+		CropBox:     boxToRect(p.CropBox),
+		BleedBox:    boxToRect(p.BleedBox),
+		TrimBox:     boxToRect(p.TrimBox),
+		ArtBox:      boxToRect(p.ArtBox),
 	}, nil
 }
 

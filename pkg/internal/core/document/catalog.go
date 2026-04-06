@@ -29,6 +29,7 @@ type Page struct {
 	BleedBox  ast.PdfArray      // Non-inherited; defaults to CropBox
 	TrimBox   ast.PdfArray      // Non-inherited; defaults to CropBox
 	ArtBox    ast.PdfArray      // Non-inherited; defaults to CropBox
+	Rotate    int               // Inherited; clockwise degrees (0, 90, 180, 270)
 	DPM       map[string]string // Document Part Metadata
 }
 
@@ -79,7 +80,7 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 	var pages []*Page
 	// The root Pages node itself usually doesn't have a useful page reference for a single page,
 	// but we start the traversal here.
-	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, &pages)
+	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, 0, &pages)
 	if err != nil {
 		return nil, fmt.Errorf("traversing page tree: %w", err)
 	}
@@ -133,7 +134,7 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 	return pages, nil
 }
 
-func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, pages *[]*Page) error {
+func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("page tree traversal canceled: %w", err)
 	}
@@ -164,6 +165,14 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			if cbArr != nil {
 				currentCropBox = cbArr
 			}
+		}
+	}
+
+	// Inherit or override Rotate (inheritable per PDF spec §7.7.3.3)
+	currentRotate := inheritedRotate
+	if rotObj, ok := node["Rotate"]; ok {
+		if rotInt, ok := rotObj.(ast.PdfInt); ok {
+			currentRotate = int(rotInt)
 		}
 	}
 
@@ -208,7 +217,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 				return fmt.Errorf("kid is not a dictionary")
 			}
 
-			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, pages)
+			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, currentRotate, pages)
 			if err != nil {
 				return fmt.Errorf("traversing page tree kid: %w", err)
 			}
@@ -234,6 +243,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			BleedBox:  bleedBox,
 			TrimBox:   trimBox,
 			ArtBox:    artBox,
+			Rotate:    currentRotate,
 		})
 	}
 

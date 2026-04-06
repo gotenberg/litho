@@ -17,16 +17,21 @@ type OCREngine interface {
 }
 
 // Page represents a decoupled, public view of a PDF page.
+// Width and Height are in PDF points (1/72 inch), consistent with all other
+// coordinates in the API. They account for the page's /Rotate entry, so a
+// portrait MediaBox with /Rotate 90 reports landscape dimensions.
 type Page struct {
-	PageNumber int               `json:"pageNumber"`
-	Width      float64           `json:"width"`
-	Height     float64           `json:"height"`
-	DPM        map[string]string `json:"dpm,omitempty"`
-	MediaBox   [4]float64        `json:"mediaBox"`
-	CropBox    [4]float64        `json:"cropBox"`
-	BleedBox   [4]float64        `json:"bleedBox"`
-	TrimBox    [4]float64        `json:"trimBox"`
-	ArtBox     [4]float64        `json:"artBox"`
+	PageNumber  int               `json:"pageNumber"`
+	Width       float64           `json:"width"`
+	Height      float64           `json:"height"`
+	Rotate      int               `json:"rotate"`
+	IsLandscape bool              `json:"isLandscape"`
+	DPM         map[string]string `json:"dpm,omitempty"`
+	MediaBox    [4]float64        `json:"mediaBox"`
+	CropBox     [4]float64        `json:"cropBox"`
+	BleedBox    [4]float64        `json:"bleedBox"`
+	TrimBox     [4]float64        `json:"trimBox"`
+	ArtBox      [4]float64        `json:"artBox"`
 }
 
 // TextElement represents a spatially positioned piece of text on a page.
