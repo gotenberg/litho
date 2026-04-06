@@ -426,7 +426,7 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) ([]models.Table
 
 // HasAcroForm reports whether the document has interactive form fields.
 // Checks that the catalog /AcroForm dictionary has a non-empty /Fields array
-// with at least one non-signature field, matching PDF.js behavior.
+// with at least one non-signature field.
 func (r *Reader) HasAcroForm(ctx context.Context) bool {
 	rootObj, ok := r.doc.Index.Trailer["Root"]
 	if !ok {
@@ -616,8 +616,8 @@ func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Mod
 }
 
 // GetPage returns the geometry and metadata for the given 1-based page number.
-// Width and Height are derived from the CropBox (the visible area) and account
-// for the page's /Rotate entry.
+// Width and Height are effective dimensions in PDF points, derived from the
+// CropBox (the visible area) and accounting for /Rotate and /UserUnit.
 func (r *Reader) GetPage(ctx context.Context, pageNum int) (models.Page, error) {
 	p, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -629,6 +629,12 @@ func (r *Reader) GetPage(ctx context.Context, pageNum int) (models.Page, error) 
 		box = p.MediaBox
 	}
 	w, h := mediaBoxDimensions(box)
+
+	// /UserUnit (PDF 1.6+): scale raw coordinates to standard points.
+	if p.UserUnit > 0 && p.UserUnit != 1.0 {
+		w *= p.UserUnit
+		h *= p.UserUnit
+	}
 
 	// /Rotate swaps the effective dimensions for 90° and 270°.
 	rot := p.Rotate % 360
@@ -644,6 +650,7 @@ func (r *Reader) GetPage(ctx context.Context, pageNum int) (models.Page, error) 
 		Width:       w,
 		Height:      h,
 		Rotate:      p.Rotate,
+		UserUnit:    p.UserUnit,
 		IsLandscape: w > h,
 		DPM:         p.DPM,
 		MediaBox:    boxToRect(p.MediaBox),

@@ -153,6 +153,45 @@ func TestGetPage_CropBox(t *testing.T) {
 	}
 }
 
+// userUnitPDF builds a PDF with /UserUnit 2.0 and a half-size MediaBox.
+// Effective dimensions: 306*2 x 396*2 = 612x792 pt (US Letter).
+func userUnitPDF() []byte {
+	return []byte(
+		"%PDF-1.6\n" +
+			"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+			"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 306 396] /UserUnit 2.0 >>\nendobj\n" +
+			"xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n" +
+			"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n215\n%%EOF\n")
+}
+
+func TestGetPage_UserUnit(t *testing.T) {
+	data := userUnitPDF()
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	p, err := r.GetPage(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetPage: %v", err)
+	}
+
+	// 306 * 2.0 = 612, 396 * 2.0 = 792
+	if !almostEqual(p.Width, 612, 0.01) {
+		t.Errorf("width: got %f, want 612", p.Width)
+	}
+	if !almostEqual(p.Height, 792, 0.01) {
+		t.Errorf("height: got %f, want 792", p.Height)
+	}
+	if !almostEqual(p.UserUnit, 2.0, 0.001) {
+		t.Errorf("userUnit: got %f, want 2.0", p.UserUnit)
+	}
+	if p.IsLandscape {
+		t.Error("expected portrait, got landscape")
+	}
+}
+
 func TestGetPage_InvalidPage(t *testing.T) {
 	data := letterPDF()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))

@@ -30,6 +30,7 @@ type Page struct {
 	TrimBox   ast.PdfArray      // Non-inherited; defaults to CropBox
 	ArtBox    ast.PdfArray      // Non-inherited; defaults to CropBox
 	Rotate    int               // Inherited; clockwise degrees (0, 90, 180, 270)
+	UserUnit  float64           // Non-inherited; default 1.0 (PDF 1.6+, §7.7.3.3)
 	DPM       map[string]string // Document Part Metadata
 }
 
@@ -234,6 +235,15 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		trimBox := resolveBoxArray(ctx, doc, node, "TrimBox", effectiveCropBox)
 		artBox := resolveBoxArray(ctx, doc, node, "ArtBox", effectiveCropBox)
 
+		// UserUnit (PDF 1.6+, §7.7.3.3): non-inheritable scaling factor.
+		// Default is 1.0 (1 unit = 1/72 inch).
+		userUnit := 1.0
+		if uuObj, ok := node["UserUnit"]; ok {
+			if v := GetFloat(uuObj); v > 0 {
+				userUnit = v
+			}
+		}
+
 		*pages = append(*pages, &Page{
 			Ref:       nodeRef,
 			Dict:      node,
@@ -244,6 +254,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			TrimBox:   trimBox,
 			ArtBox:    artBox,
 			Rotate:    currentRotate,
+			UserUnit:  userUnit,
 		})
 	}
 

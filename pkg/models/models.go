@@ -17,14 +17,16 @@ type OCREngine interface {
 }
 
 // Page represents a decoupled, public view of a PDF page.
-// Width and Height are in PDF points (1/72 inch), consistent with all other
-// coordinates in the API. They account for the page's /Rotate entry, so a
-// portrait MediaBox with /Rotate 90 reports landscape dimensions.
+// Width and Height are effective dimensions in PDF points (1/72 inch),
+// consistent with all other coordinates in the API. They account for both
+// /Rotate (swapping width/height at 90°/270°) and /UserUnit (scaling factor;
+// default 1.0). A portrait MediaBox with /Rotate 90 reports landscape dimensions.
 type Page struct {
 	PageNumber  int               `json:"pageNumber"`
 	Width       float64           `json:"width"`
 	Height      float64           `json:"height"`
 	Rotate      int               `json:"rotate"`
+	UserUnit    float64           `json:"userUnit"`
 	IsLandscape bool              `json:"isLandscape"`
 	DPM         map[string]string `json:"dpm,omitempty"`
 	MediaBox    [4]float64        `json:"mediaBox"`
