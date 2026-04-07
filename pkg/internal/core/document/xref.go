@@ -15,7 +15,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
-func findStartXRef(r io.ReaderAt, size int64) (int64, error) {
+// FindStartXRef scans the last 1024 bytes of the PDF for the startxref
+// pointer and returns the byte offset it references.
+func FindStartXRef(r io.ReaderAt, size int64) (int64, error) {
 	bufSize := min(size, int64(1024))
 
 	buf := make([]byte, bufSize)
@@ -52,7 +54,7 @@ func findStartXRef(r io.ReaderAt, size int64) (int64, error) {
 // parseXRefChain locates the startxref pointer and walks the chain of xref
 // tables/streams (via /Prev links) to populate d.Index.
 func (d *Document) parseXRefChain(ctx context.Context) error {
-	currentOffset, err := findStartXRef(d.r, d.size)
+	currentOffset, err := FindStartXRef(d.r, d.size)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrDamagedXRef, err)
 	}

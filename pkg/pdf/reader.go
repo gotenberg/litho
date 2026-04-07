@@ -213,6 +213,11 @@ func (r *Reader) Version() string {
 	return r.doc.Version
 }
 
+// IsEncrypted reports whether the document uses password-based encryption.
+func (r *Reader) IsEncrypted() bool {
+	return r.doc.IsEncrypted
+}
+
 // NumPages returns the total number of pages in the document.
 func (r *Reader) NumPages(ctx context.Context) (int, error) {
 	pages, err := r.resolvePages(ctx)
@@ -557,6 +562,12 @@ func (r *Reader) HintTable() []models.PageOffsetEntry {
 		}
 	}
 	return result
+}
+
+// ExtractSignatures returns the digital signatures present in the document
+// without performing chain validation.
+func (r *Reader) ExtractSignatures(ctx context.Context) ([]models.Signature, error) {
+	return signature.ExtractSignatures(ctx, r.doc)
 }
 
 // VerifySignatures validates every digital signature in the document by

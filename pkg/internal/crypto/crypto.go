@@ -334,32 +334,15 @@ func (h *Handler) GetDecryptFunc(objNum, genNum int) func([]byte) ([]byte, error
 			return data, nil
 		}
 
+		// V=5 (AES-256): use the file encryption key directly.
+		if h.V == 5 {
+			return aesDecrypt(h.EncryptionKey, data)
+		}
+
 		key := h.GetObjKey(objNum, genNum)
 
-		if h.V >= 4 && h.CFM == "AESV2" {
-			block, err := aes.NewCipher(key)
-			if err != nil {
-				return nil, fmt.Errorf("creating AES cipher for AESV2 decryption: %w", err)
-			}
-			if len(data) < aes.BlockSize {
-				return data, nil
-			}
-			iv := data[:aes.BlockSize]
-			ciphertext := data[aes.BlockSize:]
-			if len(ciphertext)%aes.BlockSize != 0 {
-				return data, nil // Malformed
-			}
-			mode := cipher.NewCBCDecrypter(block, iv)
-			mode.CryptBlocks(ciphertext, ciphertext)
-
-			// Remove PKCS7 padding
-			if len(ciphertext) > 0 {
-				padLen := int(ciphertext[len(ciphertext)-1])
-				if padLen > 0 && padLen <= aes.BlockSize && padLen <= len(ciphertext) {
-					ciphertext = ciphertext[:len(ciphertext)-padLen]
-				}
-			}
-			return ciphertext, nil
+		if h.V >= 4 && (h.CFM == "AESV2" || h.CFM == "AESV3") {
+			return aesDecrypt(key, data)
 		}
 
 		c, err := rc4.NewCipher(key) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
@@ -370,4 +353,32 @@ func (h *Handler) GetDecryptFunc(objNum, genNum int) func([]byte) ([]byte, error
 		c.XORKeyStream(out, data)
 		return out, nil
 	}
+}
+
+// aesDecrypt performs AES-CBC decryption with PKCS7 unpadding.
+// The IV is the first 16 bytes of data.
+func aesDecrypt(key, data []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating AES cipher for decryption: %w", err)
+	}
+	if len(data) < aes.BlockSize {
+		return data, nil
+	}
+	iv := data[:aes.BlockSize]
+	ciphertext := data[aes.BlockSize:]
+	if len(ciphertext)%aes.BlockSize != 0 {
+		return data, nil // Malformed
+	}
+	mode := cipher.NewCBCDecrypter(block, iv)
+	mode.CryptBlocks(ciphertext, ciphertext)
+
+	// Remove PKCS7 padding.
+	if len(ciphertext) > 0 {
+		padLen := int(ciphertext[len(ciphertext)-1])
+		if padLen > 0 && padLen <= aes.BlockSize && padLen <= len(ciphertext) {
+			ciphertext = ciphertext[:len(ciphertext)-padLen]
+		}
+	}
+	return ciphertext, nil
 }
