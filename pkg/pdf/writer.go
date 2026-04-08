@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -141,6 +142,65 @@ func (w *Writer) AddAttachment(_ context.Context, name string, data []byte, mime
 			return applyAddAttachment(ctx, alloc, doc, name, data, mimeType)
 		},
 	})
+}
+
+// RemediatePDFA validates the document against the given PDF/A profile,
+// applies targeted fixes, and queues the result for writing. The report
+// describes what was fixed and what could not be fixed automatically.
+// Forces a full rewrite.
+func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (*RemediationReport, error) {
+	cfg := remediateOpts{lang: "en"}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	remOpts := remediation.Options{Lang: cfg.lang}
+	return w.remediate(ctx, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts)
+	})
+}
+
+// RemediatePDFUA validates the document against the given PDF/UA profile,
+// applies targeted fixes, and queues the result for writing.
+func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (*RemediationReport, error) {
+	cfg := remediateOpts{lang: "en"}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	remOpts := remediation.Options{Lang: cfg.lang}
+	return w.remediate(ctx, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+		return remediation.RemediatePDFUA(ctx, doc, alloc, profile, remOpts)
+	})
+}
+
+func (w *Writer) remediate(ctx context.Context, run func(context.Context, *writer.ObjAllocator, *document.Document) (*remediation.Report, error)) (*RemediationReport, error) {
+	doc := w.reader.doc
+	maxObjNum := 0
+	for objNum := range doc.Index.Entries {
+		if objNum > maxObjNum {
+			maxObjNum = objNum
+		}
+	}
+	alloc := writer.NewObjAllocator(maxObjNum)
+
+	report, err := run(ctx, alloc, doc)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(alloc.Pending()) > 0 {
+		pending := alloc.Pending()
+		w.forceRewrite = true
+		w.mutations = append(w.mutations, mutation{
+			apply: func(_ context.Context, writeAlloc *writer.ObjAllocator, _ *document.Document) error {
+				for objNum, obj := range pending {
+					writeAlloc.AllocAt(objNum, obj)
+				}
+				return nil
+			},
+		})
+	}
+
+	return &RemediationReport{Fixed: report.Fixed, Residual: report.Residual}, nil
 }
 
 // WriteTo serializes the modified document to dst. By default, it uses an
