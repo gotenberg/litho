@@ -37,6 +37,7 @@ var registry = []fixer{
 	{name: "annotations", matches: matchAnnotations, apply: fixAnnotations},
 	{name: "javascript", matches: matchJavaScript, apply: fixJavaScript},
 	{name: "xfa", matches: matchXFA, apply: fixXFA},
+	{name: "fonts", matches: matchFontFixes, apply: fixFontIssues},
 	{name: "lzw", matches: matchLZW, apply: fixLZW},
 	{name: "af-relationship", matches: matchAFRelationship, apply: fixAFRelationship},
 	// Tier 2: aggressive (content-modifying, gated on PreserveContent=false).

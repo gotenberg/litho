@@ -166,7 +166,13 @@ func main() {
 	fmt.Printf("Elapsed: %s\n", time.Since(start).Round(time.Millisecond))
 
 	// Detailed breakdown requested via --detail flag.
-	if len(os.Args) > 1 && os.Args[1] == "--detail" {
+	detail := false
+	for _, arg := range os.Args[1:] {
+		if arg == "--detail" {
+			detail = true
+		}
+	}
+	if detail {
 		printResidualBreakdown(ctx, corpusRoot, profiles)
 	}
 }
