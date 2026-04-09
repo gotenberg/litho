@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -41,6 +42,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 
 	// Execute fixers in registry order.
 	var fixed []string
+	var needsRewrite bool
 	handled := make(map[int]bool) // indices of handled violations
 
 	for _, entry := range plan {
@@ -56,6 +58,9 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		for _, idx := range entry.indices {
 			handled[idx] = true
 		}
+		if entry.f.name == "file-structure" && len(descriptions) > 0 {
+			needsRewrite = true
+		}
 	}
 
 	// Collect residual violations (not handled by any fixer).
@@ -66,7 +71,13 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		}
 	}
 
-	return &Report{Fixed: fixed, Residual: residual}, nil
+	// PDF/A-4 requires PDF version 2.0.
+	var requiredVersion string
+	if strings.HasPrefix(profile, "PDF/A-4") {
+		requiredVersion = "2.0"
+	}
+
+	return &Report{Fixed: fixed, Residual: residual, NeedsFullRewrite: needsRewrite, RequiredVersion: requiredVersion}, nil
 }
 
 type planEntry struct {

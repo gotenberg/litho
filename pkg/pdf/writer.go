@@ -31,12 +31,13 @@ type Metadata struct {
 // Writer applies content-preserving modifications to a PDF document.
 // Mutations are batched and written atomically via [Writer.WriteTo].
 type Writer struct {
-	reader       *Reader
-	mutations    []mutation
-	encryptCfg   *crypto.EncryptConfig
-	decrypt      bool
-	forceRewrite bool
-	signer       Signer
+	reader          *Reader
+	mutations       []mutation
+	encryptCfg      *crypto.EncryptConfig
+	decrypt         bool
+	forceRewrite    bool
+	signer          Signer
+	requiredVersion string
 }
 
 // mutation is a deferred modification applied during WriteTo.
@@ -147,13 +148,13 @@ func (w *Writer) AddAttachment(_ context.Context, name string, data []byte, mime
 // RemediatePDFA validates the document against the given PDF/A profile,
 // applies targeted fixes, and queues the result for writing. The report
 // describes what was fixed and what could not be fixed automatically.
-// Forces a full rewrite.
+// Uses incremental update to preserve existing document structure.
 func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (*RemediationReport, error) {
-	cfg := remediateOpts{lang: "en"}
+	cfg := remediateOpts{lang: "en", preserveContent: true}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	remOpts := remediation.Options{Lang: cfg.lang}
+	remOpts := remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
 	return w.remediate(ctx, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
 		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts)
 	})
@@ -162,11 +163,11 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // RemediatePDFUA validates the document against the given PDF/UA profile,
 // applies targeted fixes, and queues the result for writing.
 func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (*RemediationReport, error) {
-	cfg := remediateOpts{lang: "en"}
+	cfg := remediateOpts{lang: "en", preserveContent: true}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	remOpts := remediation.Options{Lang: cfg.lang}
+	remOpts := remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
 	return w.remediate(ctx, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
 		return remediation.RemediatePDFUA(ctx, doc, alloc, profile, remOpts)
 	})
@@ -187,9 +188,8 @@ func (w *Writer) remediate(ctx context.Context, run func(context.Context, *write
 		return nil, err
 	}
 
-	if len(alloc.Pending()) > 0 {
+	if len(alloc.Pending()) > 0 || report.NeedsFullRewrite {
 		pending := alloc.Pending()
-		w.forceRewrite = true
 		w.mutations = append(w.mutations, mutation{
 			apply: func(_ context.Context, writeAlloc *writer.ObjAllocator, _ *document.Document) error {
 				for objNum, obj := range pending {
@@ -198,6 +198,13 @@ func (w *Writer) remediate(ctx context.Context, run func(context.Context, *write
 				return nil
 			},
 		})
+	}
+
+	if report.NeedsFullRewrite {
+		w.forceRewrite = true
+	}
+	if report.RequiredVersion != "" {
+		w.requiredVersion = report.RequiredVersion
 	}
 
 	return &RemediationReport{Fixed: report.Fixed, Residual: report.Residual}, nil
@@ -512,6 +519,9 @@ func (w *Writer) writeFullRewrite(ctx context.Context, dst io.Writer, cfg writeO
 	// trailer (which we already did by not copying it).
 
 	version := cfg.version
+	if version == "" && w.requiredVersion != "" {
+		version = w.requiredVersion
+	}
 	if version == "" {
 		version = doc.Version
 	}

@@ -11,7 +11,9 @@ import (
 )
 
 func matchTrailerID(v compliance.Violation) bool {
-	return descriptionContains(v, "file trailer dictionary shall contain the ID")
+	// Clause 6.1.3 t01/t04: trailer /ID requirement.
+	// Exclude t02 (Encrypt) which is handled by catalog-cleanup.
+	return v.Rule.Clause == "6.1.3" && v.Rule.TestNumber != 2
 }
 
 func fixTrailerID(_ context.Context, _ *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {

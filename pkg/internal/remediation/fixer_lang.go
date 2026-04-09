@@ -12,7 +12,7 @@ import (
 )
 
 func matchCatalogLang(v compliance.Violation) bool {
-	return descriptionContains(v, "Lang") && (descriptionContains(v, "natural language") || descriptionContains(v, "lang entry") || descriptionContains(v, "primary language"))
+	return clausePrefix(v, "6.7.4", "6.8.4", "7.2", "8.4.4") // catalog /Lang across specs
 }
 
 func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {

@@ -4,3 +4,4 @@
 /test/integration/testdata/verapdf/
 /corpus
 /node_modules/
+/.claude/

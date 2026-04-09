@@ -12,7 +12,7 @@ import (
 )
 
 func matchMarkInfo(v compliance.Violation) bool {
-	return descriptionContains(v, "MarkInfo") && descriptionContains(v, "Marked")
+	return descriptionContains(v, "MarkInfo")
 }
 
 func fixMarkInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {

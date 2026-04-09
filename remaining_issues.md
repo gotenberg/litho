@@ -19,12 +19,12 @@ Comparison of litho against Mozilla PDF.js reference fixtures.
 
 ### Space Inference (accounts for 56 files in chars-vs-words gap)
 
-| Aspect          | Litho                              | PDF.js                                 |
-| --------------- | ---------------------------------- | -------------------------------------- |
-| Granularity     | Per-glyph                          | Per-item (multi-glyph)                 |
-| With width      | `gap > 0.15 × fontSize`           | `gap > spaceWidth × 0.35`             |
-| Without width   | `gap > 0.3 × fontSize`            | Uses font's actual space char width    |
-| Approach        | Fixed fraction of font size        | Font-specific space width              |
+| Aspect        | Litho                       | PDF.js                              |
+| ------------- | --------------------------- | ----------------------------------- |
+| Granularity   | Per-glyph                   | Per-item (multi-glyph)              |
+| With width    | `gap > 0.15 × fontSize`     | `gap > spaceWidth × 0.35`           |
+| Without width | `gap > 0.3 × fontSize`      | Uses font's actual space char width |
+| Approach      | Fixed fraction of font size | Font-specific space width           |
 
 Litho uses a universal 15% font-size threshold. PDF.js adapts to each font's
 space character width. This is the single largest source of word-level
@@ -35,24 +35,24 @@ disagreements.
 | Filter                 | Litho                     | PDF.js       |
 | ---------------------- | ------------------------- | ------------ |
 | Tr=3 (invisible text)  | Flagged, optionally strip | Always shown |
-| White-on-white         | Detected (RGB/CMYK/Gray) | Not checked  |
+| White-on-white         | Detected (RGB/CMYK/Gray)  | Not checked  |
 | CropBox clipping       | Checked                   | Not checked  |
-| Artifacts              | Stripped by default        | Included     |
+| Artifacts              | Stripped by default       | Included     |
 | Annotation appearances | Excluded                  | Included     |
 | OCG layers             | Respected                 | Respected    |
 
 ### Other Differences
 
-| Area                    | Litho                                       | PDF.js                          |
-| ----------------------- | ------------------------------------------- | ------------------------------- |
+| Area                    | Litho                                                     | PDF.js                           |
+| ----------------------- | --------------------------------------------------------- | -------------------------------- |
 | Bidi reordering         | X-position heuristic: reverses only visual-order RTL runs | Not performed in text extraction |
-| Ligature decomposition  | Always decomposes ff/fi/fl/ffi/ffl          | Relies on ToUnicode CMap        |
-| Newline detection       | `\|deltaY\| > 2.0`, handles vertical/rotated | `\|deltaY\| > 2` on Y only     |
-| CIDOffset heuristic     | Detects +29 offset from /W array            | Not applicable                  |
-| CJK font name heuristic | GBK for non-embedded CJK TrueType           | Not applicable                  |
-| Symbol table fallback   | Math glyph names for all fonts              | Symbol table for Symbol fonts    |
-| CFF encoding extraction | Reads Type1C encoding for TeX fonts         | Built-in encoding tables         |
-| Base+modifier glyphs    | ccaron→č, uring→ů via NFC                  | Pre-built glyph table            |
+| Ligature decomposition  | Always decomposes ff/fi/fl/ffi/ffl                        | Relies on ToUnicode CMap         |
+| Newline detection       | `\|deltaY\| > 2.0`, handles vertical/rotated              | `\|deltaY\| > 2` on Y only       |
+| CIDOffset heuristic     | Detects +29 offset from /W array                          | Not applicable                   |
+| CJK font name heuristic | GBK for non-embedded CJK TrueType                         | Not applicable                   |
+| Symbol table fallback   | Math glyph names for all fonts                            | Symbol table for Symbol fonts    |
+| CFF encoding extraction | Reads Type1C encoding for TeX fonts                       | Built-in encoding tables         |
+| Base+modifier glyphs    | ccaron→č, uring→ů via NFC                                 | Pre-built glyph table            |
 
 ## Text (chars) Mismatches (152 files)
 
@@ -63,7 +63,7 @@ disagreements.
 | Pos-0 total failure                | ~30   | Font encoding failure from first char    |
 | Spacing-like char shift            | ~40   | Same chars but reordered by spacing      |
 | Litho better than PDF.js reference | ~20   | Litho extracts more/correct text         |
-| TeX OT1 font encoding             | ~10   | TeX CMR fonts with OT1-specific encoding |
+| TeX OT1 font encoding              | ~10   | TeX CMR fonts with OT1-specific encoding |
 | Bidi/RTL ordering                  | ~6    | Arabic/Hebrew text in different order    |
 | Offset CIDs (no embedded font)     | ~14   | Heuristic fixes 4, rest need system font |
 | Broken ToUnicode CMap              | ~8    | Deliberately wrong or incomplete         |

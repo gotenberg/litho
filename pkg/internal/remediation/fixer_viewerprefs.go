@@ -12,7 +12,7 @@ import (
 )
 
 func matchViewerPrefs(v compliance.Violation) bool {
-	return descriptionContains(v, "DisplayDocTitle")
+	return descriptionContains(v, "DisplayDocTitle") || descriptionContains(v, "ViewerPreferences")
 }
 
 func fixViewerPrefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {

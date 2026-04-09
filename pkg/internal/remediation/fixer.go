@@ -17,18 +17,40 @@ type fixer struct {
 }
 
 // registry lists all fixers in priority order.
-// Catalog-level fixers run first, then resource-level.
+// Tier 1 (content-preserving) fixers run first, then Tier 2 (aggressive).
 var registry = []fixer{
+	// Tier 1: catalog and metadata.
 	{name: "trailer-id", matches: matchTrailerID, apply: fixTrailerID},
 	{name: "xmp-metadata", matches: matchXMP, apply: fixXMP},
 	{name: "output-intent", matches: matchOutputIntent, apply: fixOutputIntent},
+	{name: "corrupt-icc", matches: matchCorruptICC, apply: fixCorruptICC},
 	{name: "mark-info", matches: matchMarkInfo, apply: fixMarkInfo},
 	{name: "struct-tree", matches: matchStructTree, apply: fixStructTree},
 	{name: "viewer-prefs", matches: matchViewerPrefs, apply: fixViewerPrefs},
 	{name: "catalog-lang", matches: matchCatalogLang, apply: fixCatalogLang},
 	{name: "need-appearances", matches: matchNeedAppearances, apply: fixNeedAppearances},
+	// Tier 1: resource-level.
+	{name: "graphics", matches: matchGraphics, apply: fixGraphics},
+	{name: "transparency", matches: matchTransparency, apply: fixTransparency},
+	{name: "file-structure", matches: matchFileStructure, apply: fixFileStructure},
+	{name: "catalog-cleanup", matches: matchCatalogCleanup, apply: fixCatalogCleanup},
+	{name: "annotations", matches: matchAnnotations, apply: fixAnnotations},
 	{name: "javascript", matches: matchJavaScript, apply: fixJavaScript},
 	{name: "xfa", matches: matchXFA, apply: fixXFA},
+	{name: "lzw", matches: matchLZW, apply: fixLZW},
+	{name: "af-relationship", matches: matchAFRelationship, apply: fixAFRelationship},
+	// Tier 2: aggressive (content-modifying, gated on PreserveContent=false).
+	{name: "aggressive", matches: matchAggressive, apply: fixAggressive},
+}
+
+// clausePrefix checks if a violation's rule clause starts with any of the given prefixes.
+func clausePrefix(v compliance.Violation, prefixes ...string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(v.Rule.Clause, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // descriptionContains checks if a violation's description contains a substring (case-insensitive).

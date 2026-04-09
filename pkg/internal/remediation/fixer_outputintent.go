@@ -16,14 +16,14 @@ import (
 //go:embed srgb.icc
 var sRGBICCProfile []byte
 
+//go:embed cmyk.icc
+var cmykICCProfile []byte
+
 func matchOutputIntent(v compliance.Violation) bool {
-	return descriptionContains(v, "OutputIntent") ||
-		(descriptionContains(v, "DeviceRGB") && descriptionContains(v, "without")) ||
-		(descriptionContains(v, "DeviceCMYK") && descriptionContains(v, "without")) ||
-		(descriptionContains(v, "DeviceGray") && descriptionContains(v, "without"))
+	return clausePrefix(v, "6.2.3.2", "6.2.3.3", "6.2.4.3") // device CS without OutputIntent
 }
 
-func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
@@ -40,10 +40,33 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		}
 	}
 
+	// Detect whether the document uses CMYK based on violations.
+	needsCMYK := false
+	for _, v := range violations {
+		if descriptionContains(v, "DeviceCMYK") {
+			needsCMYK = true
+			break
+		}
+	}
+
+	// Select ICC profile and parameters.
+	var iccData []byte
+	var nComponents int
+	var conditionID string
+	if needsCMYK {
+		iccData = cmykICCProfile
+		nComponents = 4
+		conditionID = "US Web Coated (SWOP) v2"
+	} else {
+		iccData = sRGBICCProfile
+		nComponents = 3
+		conditionID = "sRGB IEC61966-2.1"
+	}
+
 	// Create the ICC profile stream.
 	iccStream := ast.NewStream(ast.PdfDict{
-		"N": ast.PdfInt(3), // RGB = 3 components
-	}, sRGBICCProfile)
+		"N": ast.PdfInt(nComponents),
+	}, iccData)
 	iccRef := alloc.Alloc(iccStream)
 
 	// Determine the /S value based on profile.
@@ -56,7 +79,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	outputIntent := ast.PdfDict{
 		"Type":                      ast.PdfName("OutputIntent"),
 		"S":                         ast.PdfName(sValue),
-		"OutputConditionIdentifier": ast.PdfString("sRGB IEC61966-2.1"),
+		"OutputConditionIdentifier": ast.PdfString(conditionID),
 		"DestOutputProfile":         iccRef,
 	}
 	oiRef := alloc.Alloc(outputIntent)
@@ -67,5 +90,8 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	newCatalog["OutputIntents"] = ast.PdfArray{oiRef}
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
+	if needsCMYK {
+		return []string{"added CMYK OutputIntent to catalog"}, nil
+	}
 	return []string{"added sRGB OutputIntent to catalog"}, nil
 }
