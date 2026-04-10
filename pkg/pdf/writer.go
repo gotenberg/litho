@@ -185,6 +185,65 @@ func (w *Writer) SetBookmarks(bookmarks []models.Bookmark) {
 	})
 }
 
+// BookmarkMergeMode controls how auto-generated bookmarks are combined with
+// any existing document outline.
+type BookmarkMergeMode int
+
+const (
+	// BookmarkReplace replaces the existing outline with the generated
+	// bookmarks. This is the default.
+	BookmarkReplace BookmarkMergeMode = iota
+	// BookmarkPrepend inserts generated bookmarks before any existing entries.
+	BookmarkPrepend
+	// BookmarkAppend inserts generated bookmarks after any existing entries.
+	BookmarkAppend
+)
+
+// GenerateBookmarks auto-detects headings in the document and queues a
+// mutation that replaces the outline with the generated bookmark tree.
+// The merge mode controls whether existing bookmarks are preserved. The
+// mutation is queued and applied when [Writer.WriteTo] is called.
+func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) {
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			generated, err := w.reader.GenerateBookmarks(ctx, opts)
+			if err != nil {
+				return fmt.Errorf("generating bookmarks: %w", err)
+			}
+			if len(generated) == 0 {
+				return nil
+			}
+
+			final := generated
+			switch mode {
+			case BookmarkReplace:
+				// nothing to merge
+			case BookmarkPrepend, BookmarkAppend:
+				existing, err := w.reader.GetBookmarks(ctx)
+				if err == nil && len(existing) > 0 {
+					if mode == BookmarkPrepend {
+						merged := make([]models.Bookmark, 0, len(generated)+len(existing))
+						merged = append(merged, generated...)
+						merged = append(merged, existing...)
+						final = merged
+					} else {
+						merged := make([]models.Bookmark, 0, len(existing)+len(generated))
+						merged = append(merged, existing...)
+						merged = append(merged, generated...)
+						final = merged
+					}
+				}
+			}
+
+			resolvedPages, err := w.reader.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving pages for bookmarks: %w", err)
+			}
+			return mutations.SetBookmarks(ctx, alloc, doc, resolvedPages, final)
+		},
+	})
+}
+
 // Encrypt applies password-based encryption to the output document. Forces a
 // full rewrite since every string and stream must be encrypted.
 func (w *Writer) Encrypt(cfg crypto.EncryptConfig) {

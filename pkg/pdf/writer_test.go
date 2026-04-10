@@ -328,6 +328,108 @@ func TestWriter_MultipleMutations(t *testing.T) {
 	}
 }
 
+// headingPDF builds a 2-page PDF with distinct font sizes for heading detection.
+// Uses 24pt for main headings, 18pt for subheadings, and 10pt for body text.
+func headingPDF() []byte {
+	return []byte(
+		"%PDF-1.4\n" +
+			"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+			"2 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj\n" +
+			"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+			"6 0 obj\n<< /Font << /F1 5 0 R >> >>\nendobj\n" +
+			// Page 1: "Introduction" at 24pt, body at 10pt, "Overview" at 18pt
+			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 6 0 R /Contents 7 0 R >>\nendobj\n" +
+			"7 0 obj\n<< /Length 276 >>\nstream\n" +
+			"BT /F1 24 Tf 100 750 Td (Introduction) Tj ET\n" +
+			"BT /F1 10 Tf 100 720 Td (This body text appears many times across the document) Tj ET\n" +
+			"BT /F1 10 Tf 100 700 Td (More body content here to establish the common size) Tj ET\n" +
+			"BT /F1 18 Tf 100 660 Td (Overview) Tj ET\n" +
+			"endstream\nendobj\n" +
+			// Page 2: "Details" at 24pt, body at 10pt
+			"4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 6 0 R /Contents 8 0 R >>\nendobj\n" +
+			"8 0 obj\n<< /Length 200 >>\nstream\n" +
+			"BT /F1 24 Tf 100 750 Td (Details) Tj ET\n" +
+			"BT /F1 10 Tf 100 720 Td (Detailed content here and here and here) Tj ET\n" +
+			"BT /F1 10 Tf 100 700 Td (Even more detailed body content text) Tj ET\n" +
+			"endstream\nendobj\n" +
+			"xref\n0 9\n" +
+			"0000000000 65535 f \r\n" +
+			"0000000009 00000 n \r\n" +
+			"0000000058 00000 n \r\n" +
+			"0000000179 00000 n \r\n" +
+			"0000000435 00000 n \r\n" +
+			"0000000111 00000 n \r\n" +
+			"0000000172 00000 n \r\n" +
+			"0000000262 00000 n \r\n" +
+			"0000000520 00000 n \r\n" +
+			"trailer\n<< /Size 9 /Root 1 0 R >>\n" +
+			"startxref\n690\n%%EOF\n")
+}
+
+func TestReader_GenerateBookmarks(t *testing.T) {
+	data := headingPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	bms, err := r.GenerateBookmarks(ctx, BookmarkGenerationOptions{})
+	if err != nil {
+		t.Fatalf("GenerateBookmarks: %v", err)
+	}
+
+	if len(bms) == 0 {
+		t.Fatal("expected at least one bookmark")
+	}
+
+	// "Introduction" (24pt) should be level 1.
+	if bms[0].Title != "Introduction" {
+		t.Errorf("first bookmark: got %q, want %q", bms[0].Title, "Introduction")
+	}
+	if bms[0].PageNumber != 1 {
+		t.Errorf("first bookmark page: got %d, want 1", bms[0].PageNumber)
+	}
+}
+
+func TestWriter_GenerateBookmarks(t *testing.T) {
+	data := headingPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	w := NewWriter(r)
+	w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkReplace)
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open modified: %v", err)
+	}
+
+	bms, err := r2.GetBookmarks(ctx)
+	if err != nil {
+		t.Fatalf("GetBookmarks: %v", err)
+	}
+
+	if len(bms) == 0 {
+		t.Fatal("expected at least one generated bookmark")
+	}
+
+	// Verify the first generated bookmark is the largest heading.
+	if bms[0].Title != "Introduction" {
+		t.Errorf("first bookmark: got %q, want %q", bms[0].Title, "Introduction")
+	}
+}
+
 func TestWriter_AddAttachment(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()

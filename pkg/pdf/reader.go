@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/annotation"
+	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -373,6 +374,79 @@ func (r *Reader) GetMetadata(ctx context.Context) (map[string]string, error) {
 // GetBookmarks extracts the hierarchical outline (table of contents) from the document.
 func (r *Reader) GetBookmarks(ctx context.Context) ([]models.Bookmark, error) {
 	return semantics.GetOutline(ctx, r.doc)
+}
+
+// BookmarkGenerationOptions controls auto-generated bookmark behavior.
+// See [Reader.GenerateBookmarks] and [Writer.GenerateBookmarks].
+type BookmarkGenerationOptions struct {
+	// MaxDepth limits how many heading levels are included. Default 3.
+	MaxDepth int
+	// MinFontSizeRatio sets the minimum font size (relative to body text)
+	// for an element to be considered a heading. Default 1.15 (15% larger).
+	MinFontSizeRatio float64
+	// SkipHeaderFooter filters out text that appears as a running header or
+	// footer on many pages. Default true.
+	SkipHeaderFooter bool
+	// MaxTitleLength truncates long headings. Default 200.
+	MaxTitleLength int
+	// PreferStructureTree uses the PDF's structure tree (tagged PDFs) when
+	// available, falling back to font heuristics otherwise. Default true.
+	PreferStructureTree bool
+}
+
+// GenerateBookmarks analyzes the document content and returns an
+// auto-generated bookmark tree based on heading detection. This is a
+// read-only operation that does not modify the document; use
+// [Writer.GenerateBookmarks] to apply the result.
+//
+// When the document has a structure tree and PreferStructureTree is true
+// (default), bookmarks are extracted from tagged H1-H6 elements. Otherwise,
+// bookmarks are inferred from font size relative to body text.
+func (r *Reader) GenerateBookmarks(ctx context.Context, opts BookmarkGenerationOptions) ([]models.Bookmark, error) {
+	input, err := r.buildBookmarkInput(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return bookmarks.Generate(ctx, input, bookmarks.Options{
+		MaxDepth:            opts.MaxDepth,
+		MinFontSizeRatio:    opts.MinFontSizeRatio,
+		SkipHeaderFooter:    opts.SkipHeaderFooter,
+		MaxTitleLength:      opts.MaxTitleLength,
+		PreferStructureTree: opts.PreferStructureTree,
+	})
+}
+
+// buildBookmarkInput prepares the data needed by the bookmarks package:
+// resolved pages, page ref → page number map, and per-page text elements.
+func (r *Reader) buildBookmarkInput(ctx context.Context) (bookmarks.Input, error) {
+	resolvedPages, err := r.resolvePages(ctx)
+	if err != nil {
+		return bookmarks.Input{}, err
+	}
+
+	pageRefToNum := make(map[ast.PdfIndirectRef]int, len(resolvedPages))
+	pageTexts := make([]bookmarks.PageTextElements, 0, len(resolvedPages))
+
+	for i, p := range resolvedPages {
+		pageNum := i + 1
+		pageRefToNum[p.Ref] = pageNum
+
+		elements, err := r.ExtractTextElements(ctx, pageNum)
+		if err != nil {
+			// Skip pages that fail to extract; don't abort the whole operation.
+			continue
+		}
+		pageTexts = append(pageTexts, bookmarks.PageTextElements{
+			PageNum:  pageNum,
+			Elements: elements,
+		})
+	}
+
+	return bookmarks.Input{
+		Doc:          r.doc,
+		PageRefToNum: pageRefToNum,
+		Pages:        pageTexts,
+	}, nil
 }
 
 // GetFormData extracts user-typed values from interactive AcroForms as a
