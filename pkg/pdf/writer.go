@@ -20,11 +20,12 @@ import (
 type WriteOption func(*writeOpts)
 
 type writeOpts struct {
-	fullRewrite bool
-	version     string
-	xrefStream  bool
-	logger      *slog.Logger
-	bookmarks   *BookmarkOptions
+	fullRewrite     bool
+	version         string
+	xrefStream      bool
+	logger          *slog.Logger
+	bookmarks       *BookmarkOptions
+	pipelineTempDir string
 }
 
 // WithFullRewrite forces a clean rewrite of the entire file instead of an
@@ -58,6 +59,21 @@ func WithWriteLogger(logger *slog.Logger) WriteOption {
 		o.logger = logger
 	}
 }
+
+// WithPipelineTempDir directs a [Pipeline] to place intermediate temp files
+// in dir instead of [os.TempDir]. Useful in sandboxed environments where the
+// default temp directory is not writable. Has no effect outside of a
+// pipeline.
+func WithPipelineTempDir(dir string) WriteOption {
+	return func(o *writeOpts) {
+		o.pipelineTempDir = dir
+	}
+}
+
+// fullRewriteForced reports whether any queued mutation has forced a full
+// rewrite (FlattenForm, Encrypt, Decrypt, or a remediation stage that
+// required it). Used by the pipeline to reject Sign + full-rewrite combinations.
+func (w *Writer) fullRewriteForced() bool { return w.forceRewrite }
 
 // WithBookmarks configures how [Split] and [Merge] handle the document
 // outline. When omitted, the operation uses sensible defaults
