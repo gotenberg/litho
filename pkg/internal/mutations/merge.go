@@ -1,4 +1,4 @@
-package pdf
+package mutations
 
 import (
 	"context"
@@ -6,27 +6,27 @@ import (
 	"io"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// MergeSource represents one input document for a merge operation.
+type MergeSource struct {
+	Doc   *document.Document
+	Pages []*document.Page
+}
+
 // Merge combines multiple PDF documents into a single output written to dst.
-// Pages are concatenated in order: all pages from sources[0], then all from
-// sources[1], etc. Each source Reader must remain valid until Merge returns.
-func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteOption) error {
+// Pages are concatenated in order.
+func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool) error {
 	if len(sources) == 0 {
 		return fmt.Errorf("no sources to merge")
-	}
-
-	cfg := writeOpts{}
-	for _, o := range opts {
-		o(&cfg)
 	}
 
 	alloc := writer.NewObjAllocator(0)
 	var allPageRefs []ast.PdfObject
 	var firstInfoRef ast.PdfIndirectRef
 	var hasInfo bool
-	version := cfg.version
 
 	for srcIdx, src := range sources {
 		if err := ctx.Err(); err != nil {
@@ -34,19 +34,13 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 		}
 
 		// Track the highest version across sources.
-		if version == "" || src.doc.Version > version {
-			version = src.doc.Version
+		if version == "" || src.Doc.Version > version {
+			version = src.Doc.Version
 		}
 
-		copier := writer.NewCopier(src.doc, alloc)
+		copier := writer.NewCopier(src.Doc, alloc)
 
-		// Copy all pages from this source.
-		pages, err := src.resolvePages(ctx)
-		if err != nil {
-			return fmt.Errorf("resolving pages from source %d: %w", srcIdx, err)
-		}
-
-		for pageNum, page := range pages {
+		for pageNum, page := range src.Pages {
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("merge canceled: %w", err)
 			}
@@ -60,7 +54,7 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 
 		// Copy /Info from the first source that has one.
 		if !hasInfo {
-			if infoObj, ok := src.doc.Index.Trailer["Info"]; ok {
+			if infoObj, ok := src.Doc.Index.Trailer["Info"]; ok {
 				if infoRef, ok := infoObj.(ast.PdfIndirectRef); ok {
 					ref, err := copier.CopyRef(ctx, infoRef)
 					if err == nil {
@@ -101,8 +95,8 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 
 	// Copy catalog-level entries from the first source.
 	if len(sources) > 0 {
-		firstCopier := writer.NewCopier(sources[0].doc, alloc)
-		if err := copyCatalogEntries(ctx, sources[0].doc, firstCopier, catalogDict); err != nil {
+		firstCopier := writer.NewCopier(sources[0].Doc, alloc)
+		if err := copyCatalogEntries(ctx, sources[0].Doc, firstCopier, catalogDict); err != nil {
 			// best effort, don't fail the merge
 			_ = err
 		}
@@ -126,8 +120,6 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 		Version:       version,
 		Allocator:     alloc,
 		Trailer:       trailer,
-		UseXRefStream: cfg.xrefStream,
+		UseXRefStream: xrefStream,
 	})
 }
-
-// copyCatalogEntries is defined in split.go and shared by both Split and Merge.

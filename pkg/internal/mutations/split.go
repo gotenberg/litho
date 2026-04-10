@@ -1,4 +1,4 @@
-package pdf
+package mutations
 
 import (
 	"context"
@@ -10,23 +10,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// Split extracts the specified 1-based pages from src into a new PDF document
-// written to dst. Pages are included in the order given; duplicates are
-// allowed to repeat a page.
-func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) error {
+// Split extracts the specified 1-based pages from a document into a new PDF
+// written to dst. Pages are included in the order given; duplicates are allowed.
+func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("no pages specified")
-	}
-
-	cfg := writeOpts{}
-	for _, o := range opts {
-		o(&cfg)
-	}
-
-	// Resolve all source pages.
-	allPages, err := src.resolvePages(ctx)
-	if err != nil {
-		return fmt.Errorf("resolving source pages: %w", err)
 	}
 
 	// Validate page numbers.
@@ -37,7 +25,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	}
 
 	alloc := writer.NewObjAllocator(0)
-	copier := writer.NewCopier(src.doc, alloc)
+	copier := writer.NewCopier(doc, alloc)
 
 	// Copy each selected page, building new page refs.
 	pageRefs := make([]ast.PdfObject, 0, len(pages))
@@ -86,7 +74,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	}
 
 	// Copy catalog-level entries that should survive split.
-	if err := copyCatalogEntries(ctx, src.doc, copier, catalogDict); err != nil {
+	if err := copyCatalogEntries(ctx, doc, copier, catalogDict); err != nil {
 		return fmt.Errorf("copying catalog entries: %w", err)
 	}
 
@@ -98,7 +86,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	}
 
 	// Copy /Info if present.
-	if infoObj, ok := src.doc.Index.Trailer["Info"]; ok {
+	if infoObj, ok := doc.Index.Trailer["Info"]; ok {
 		if infoRef, ok := infoObj.(ast.PdfIndirectRef); ok {
 			newInfoRef, err := copier.CopyRef(ctx, infoRef)
 			if err == nil {
@@ -107,17 +95,15 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 		}
 	}
 
-	// Determine version and xref format.
-	version := cfg.version
 	if version == "" {
-		version = src.doc.Version
+		version = doc.Version
 	}
 
 	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
 		Version:       version,
 		Allocator:     alloc,
 		Trailer:       trailer,
-		UseXRefStream: cfg.xrefStream,
+		UseXRefStream: xrefStream,
 	})
 }
 

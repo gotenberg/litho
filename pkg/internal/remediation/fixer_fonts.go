@@ -296,8 +296,8 @@ func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfA
 	return newW, modified
 }
 
-func fixCharSet(_ context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
-	glyphNames := typography.ExtractGlyphNames(context.Background(), fontData)
+func fixCharSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
+	glyphNames := typography.ExtractGlyphNames(ctx, fontData)
 	if len(glyphNames) == 0 {
 		return false
 	}
@@ -321,7 +321,10 @@ func fixCharSet(_ context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfDic
 	return true
 }
 
-func fixCIDSet(_ context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
+func fixCIDSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
+	if err := ctx.Err(); err != nil {
+		return false
+	}
 	validCIDs := typography.ExtractValidCIDs(fontData)
 	if len(validCIDs) == 0 {
 		return false

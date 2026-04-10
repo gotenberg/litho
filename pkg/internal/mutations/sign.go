@@ -1,4 +1,4 @@
-package pdf
+package mutations
 
 import (
 	"bytes"
@@ -16,8 +16,7 @@ import (
 )
 
 // Signer produces a PKCS#7/CMS signature for the given digest. Implementations
-// control key material and signing algorithms. litho calls [Signer.Sign] during
-// [Writer.WriteTo] with the SHA-256 hash of the ByteRange regions.
+// control key material and signing algorithms.
 type Signer interface {
 	// Sign computes a PKCS#7/CMS signature over the given SHA-256 digest.
 	Sign(digest []byte) ([]byte, error)
@@ -25,27 +24,18 @@ type Signer interface {
 	// signature field's /Cert entry.
 	Certificate() *x509.Certificate
 	// EstimatedSize returns the maximum expected signature byte count.
-	// The writer reserves this many hex-encoded bytes in the /Contents
-	// placeholder. Overestimating is safe; underestimating truncates
-	// the signature.
 	EstimatedSize() int
 }
 
-// Sign applies a digital signature using the given signer. Signing always uses
-// incremental update (required for ByteRange integrity). Must be the last
-// mutation before WriteTo.
-func (w *Writer) Sign(_ context.Context, signer Signer) {
-	w.signer = signer
-}
+// MutationFunc is the signature of a deferred mutation applied during writing.
+type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
 
-// writeWithSignature performs the two-pass incremental signing flow:
+// WriteWithSignature performs the two-pass incremental signing flow:
 //  1. Write the incremental update with a placeholder /Contents hex string.
 //  2. Compute SHA-256 over the ByteRange (everything except the placeholder).
 //  3. Call Signer.Sign to get the PKCS#7 blob.
 //  4. Patch the placeholder with the actual signature bytes.
-func (w *Writer) writeWithSignature(ctx context.Context, dst io.Writer, cfg writeOpts) error {
-	doc := w.reader.doc
-
+func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, mutations []MutationFunc, xrefStream bool) error {
 	// Find max object number for the allocator.
 	maxObjNum := 0
 	for objNum := range doc.Index.Entries {
@@ -56,15 +46,15 @@ func (w *Writer) writeWithSignature(ctx context.Context, dst io.Writer, cfg writ
 	alloc := writer.NewObjAllocator(maxObjNum)
 
 	// Apply non-signature mutations first.
-	for _, m := range w.mutations {
-		if err := m.apply(ctx, alloc, doc); err != nil {
+	for _, m := range mutations {
+		if err := m(ctx, alloc, doc); err != nil {
 			return fmt.Errorf("applying mutation: %w", err)
 		}
 	}
 
 	// Reserve space for the signature. The /Contents value is a hex string
 	// of estimatedSize bytes, which requires estimatedSize*2 hex chars.
-	estimatedSize := max(w.signer.EstimatedSize(), 8192)
+	estimatedSize := max(signer.EstimatedSize(), 8192)
 	placeholderHexLen := estimatedSize * 2
 
 	// Create the signature dictionary with a placeholder /Contents.
@@ -97,7 +87,7 @@ func (w *Writer) writeWithSignature(ctx context.Context, dst io.Writer, cfg writ
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}
-	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	catalogDict := ResolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
 	if catalogDict == nil {
 		return fmt.Errorf("resolving catalog")
 	}
@@ -108,7 +98,7 @@ func (w *Writer) writeWithSignature(ctx context.Context, dst io.Writer, cfg writ
 	if afObj, ok := catalogDict["AcroForm"]; ok {
 		if ref, ok := afObj.(ast.PdfIndirectRef); ok {
 			acroFormRef = ref
-			if d := resolveFromAllocOrDoc(ctx, alloc, doc, ref); d != nil {
+			if d := ResolveFromAllocOrDoc(ctx, alloc, doc, ref); d != nil {
 				acroFormDict = make(ast.PdfDict, len(d)+1)
 				maps.Copy(acroFormDict, d)
 			}
@@ -161,7 +151,7 @@ func (w *Writer) writeWithSignature(ctx context.Context, dst io.Writer, cfg writ
 		trailer[k] = v
 	}
 
-	useXRefStream := cfg.xrefStream
+	useXRefStream := xrefStream
 	if _, ok := doc.Index.Trailer["Type"]; ok {
 		useXRefStream = true
 	}
@@ -203,7 +193,7 @@ func (w *Writer) writeWithSignature(ctx context.Context, dst io.Writer, cfg writ
 	digest := h.Sum(nil)
 
 	// Get the PKCS#7 signature.
-	sigBytes, err := w.signer.Sign(digest)
+	sigBytes, err := signer.Sign(digest)
 	if err != nil {
 		return fmt.Errorf("signing: %w", err)
 	}
