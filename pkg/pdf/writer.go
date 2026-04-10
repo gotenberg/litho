@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -13,6 +14,85 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/models"
 )
+
+// WriteOption configures the behavior of [Writer.WriteTo].
+type WriteOption func(*writeOpts)
+
+type writeOpts struct {
+	fullRewrite bool
+	version     string
+	xrefStream  bool
+	logger      *slog.Logger
+}
+
+// WithFullRewrite forces a clean rewrite of the entire file instead of an
+// incremental update. Required for operations that touch every object
+// (encrypt, decrypt, flatten).
+func WithFullRewrite() WriteOption {
+	return func(o *writeOpts) {
+		o.fullRewrite = true
+	}
+}
+
+// WithVersion sets the PDF version in the output header (e.g., "2.0").
+// Only applies to full rewrites.
+func WithVersion(version string) WriteOption {
+	return func(o *writeOpts) {
+		o.version = version
+	}
+}
+
+// WithXRefStream forces cross-reference stream format (PDF 1.5+) instead
+// of a traditional xref table.
+func WithXRefStream() WriteOption {
+	return func(o *writeOpts) {
+		o.xrefStream = true
+	}
+}
+
+// WithWriteLogger injects a structured logger for write-phase diagnostics.
+func WithWriteLogger(logger *slog.Logger) WriteOption {
+	return func(o *writeOpts) {
+		o.logger = logger
+	}
+}
+
+// RemediateOption configures the behavior of [Writer.RemediatePDFA] and
+// [Writer.RemediatePDFUA].
+type RemediateOption func(*remediateOpts)
+
+type remediateOpts struct {
+	lang            string
+	preserveContent bool
+}
+
+// WithLanguage sets the BCP 47 language tag for the catalog /Lang entry.
+// Defaults to "en" if not specified.
+func WithLanguage(lang string) RemediateOption {
+	return func(o *remediateOpts) {
+		o.lang = lang
+	}
+}
+
+// WithAggressiveFixes enables fixers that may alter visible page content in
+// exchange for better compliance. This includes stripping unknown content
+// stream operators, clamping out-of-range integers, generating empty
+// annotation appearances, and re-encoding LZW streams as FlateDecode.
+func WithAggressiveFixes() RemediateOption {
+	return func(o *remediateOpts) {
+		o.preserveContent = false
+	}
+}
+
+// RemediationReport describes what the remediation engine fixed and what it
+// could not fix automatically.
+type RemediationReport struct {
+	// Fixed lists human-readable descriptions of applied fixes.
+	Fixed []string
+	// Residual contains violations that could not be fixed automatically.
+	// Each element is a compliance.Violation.
+	Residual []error
+}
 
 // Metadata holds document information dictionary fields for [Writer.SetMetadata].
 type Metadata struct {
