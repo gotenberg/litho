@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -63,6 +64,11 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 					if err == nil {
 						firstInfoRef = ref
 						hasInfo = true
+					} else {
+						src.Doc.Logger.Debug("copying /Info from source failed",
+							slog.Int("source", srcIdx),
+							slog.Any("err", err),
+						)
 					}
 				}
 			}
@@ -96,12 +102,15 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		"Pages": pagesRef,
 	}
 
-	// Copy catalog-level entries from the first source.
+	// Copy catalog-level entries from the first source. Best effort: if
+	// something fails here we still produce a valid merged document without
+	// the viewer preferences or language tags from the first source.
 	if len(sources) > 0 {
 		firstCopier := writer.NewCopier(sources[0].Doc, alloc)
 		if err := copyCatalogEntries(ctx, sources[0].Doc, firstCopier, catalogDict); err != nil {
-			// best effort, don't fail the merge
-			_ = err
+			sources[0].Doc.Logger.Debug("copying catalog entries from first source failed",
+				slog.Any("err", err),
+			)
 		}
 	}
 

@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -33,12 +34,21 @@ func RemediatePDFUA(ctx context.Context, doc *document.Document, alloc *writer.O
 
 func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile string, opts Options, violations []error) (*Report, error) {
 	if len(violations) == 0 {
+		doc.Logger.Debug("remediate: no violations",
+			slog.String("profile", profile),
+		)
 		return &Report{}, nil
 	}
 
 	// Classify violations by fixer.
 	typed := toViolations(violations)
 	plan := classify(typed)
+
+	doc.Logger.Debug("remediate started",
+		slog.String("profile", profile),
+		slog.Int("violations", len(violations)),
+		slog.Int("plan_entries", len(plan)),
+	)
 
 	// Execute fixers in registry order.
 	var fixed []string
@@ -50,10 +60,22 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 			return nil, fmt.Errorf("remediation canceled: %w", err)
 		}
 
+		doc.Logger.Debug("fixer starting",
+			slog.String("fixer", entry.f.name),
+			slog.Int("violations", len(entry.violations)),
+		)
 		descriptions, err := entry.f.apply(ctx, alloc, doc, opts, entry.violations, profile)
 		if err != nil {
+			doc.Logger.Debug("fixer failed",
+				slog.String("fixer", entry.f.name),
+				slog.Any("err", err),
+			)
 			return nil, fmt.Errorf("fixer %s: %w", entry.f.name, err)
 		}
+		doc.Logger.Debug("fixer completed",
+			slog.String("fixer", entry.f.name),
+			slog.Int("descriptions", len(descriptions)),
+		)
 		fixed = append(fixed, descriptions...)
 		for _, idx := range entry.indices {
 			handled[idx] = true
@@ -77,6 +99,13 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		requiredVersion = "2.0"
 	}
 
+	doc.Logger.Debug("remediate completed",
+		slog.String("profile", profile),
+		slog.Int("fixed", len(fixed)),
+		slog.Int("residual", len(residual)),
+		slog.Bool("needs_rewrite", needsRewrite),
+		slog.String("required_version", requiredVersion),
+	)
 	return &Report{Fixed: fixed, Residual: residual, NeedsFullRewrite: needsRewrite, RequiredVersion: requiredVersion}, nil
 }
 

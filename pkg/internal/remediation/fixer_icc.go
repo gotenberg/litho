@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -46,6 +47,10 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 		oiDict, err := document.ResolveDict(ctx, doc, oiEntry)
 		if err != nil || oiDict == nil {
+			doc.Logger.Debug("resolving OutputIntent dict failed",
+				slog.Int("index", i),
+				slog.Any("err", err),
+			)
 			newOIArr[i] = oiEntry
 			continue
 		}
@@ -53,12 +58,17 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// Check if DestOutputProfile exists and is valid.
 		dpObj, ok := oiDict["DestOutputProfile"]
 		if !ok {
+			doc.Logger.Debug("OutputIntent missing DestOutputProfile", slog.Int("index", i))
 			newOIArr[i] = oiEntry
 			continue
 		}
 
 		stream, err := document.ResolveStream(ctx, doc, dpObj)
 		if err != nil {
+			doc.Logger.Debug("resolving DestOutputProfile stream failed",
+				slog.Int("index", i),
+				slog.Any("err", err),
+			)
 			newOIArr[i] = oiEntry
 			continue
 		}

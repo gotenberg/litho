@@ -3,8 +3,10 @@ package pdf
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/models"
@@ -13,12 +15,14 @@ import (
 // Pipeline chains write operations against a single PDF state that evolves
 // from stage to stage. Call [Pipeline.Open] to seed the pipeline, queue
 // stages in declaration order, then call [Pipeline.WriteTo] to execute the
-// pipeline atomically (nothing is written to dst until the final stage).
+// pipeline. Nothing is written to dst until the last stage has produced
+// output.
 //
-// Pure transforms (SetMetadata, RemediatePDFA, etc.) accumulate on the
-// current document. Restructuring stages (Split, Merge) materialize the
-// current state to an intermediate temp file and reopen it as a new Reader
-// for the next stage. Temp files are cleaned up automatically on both the
+// Pure transforms ([Pipeline.SetMetadata], [Pipeline.RemediatePDFA], ...)
+// accumulate on the current document. Restructuring stages ([Pipeline.Split],
+// [Pipeline.Merge]) materialize the current state to an intermediate temp
+// file and reopen it as a new [Reader] for the next stage. Temp files are
+// backed by [os.CreateTemp] and cleaned up automatically on both the
 // success and failure paths.
 //
 // The first validation error recorded while building the pipeline is
@@ -35,8 +39,8 @@ type Pipeline struct {
 type PipelineResult struct {
 	// Stages reports one entry per executed stage in declaration order.
 	Stages []StageReport
-	// RemediationReports holds one entry per Remediate* stage that ran,
-	// in declaration order.
+	// RemediationReports holds one entry per [Pipeline.RemediatePDFA] or
+	// [Pipeline.RemediatePDFUA] stage that ran, in declaration order.
 	RemediationReports []*RemediationReport
 }
 
@@ -54,7 +58,7 @@ type StageReport struct {
 	BytesOut int64
 }
 
-// NewPipeline creates an empty Pipeline. Seed it with [Pipeline.Open].
+// NewPipeline creates an empty [Pipeline]. Seed it with [Pipeline.Open].
 func NewPipeline() *Pipeline { return &Pipeline{} }
 
 // Err returns the first build-time validation error recorded during chain
@@ -78,7 +82,8 @@ func (p *Pipeline) append(s stage) *Pipeline {
 }
 
 // Open sets the initial source document. Must be the first stage. The
-// caller retains ownership of src and is responsible for closing it.
+// caller retains ownership of src and is responsible for calling
+// [Reader.Close] on it.
 func (p *Pipeline) Open(src *Reader) *Pipeline {
 	return p.append(&openStage{src: src})
 }
@@ -101,13 +106,15 @@ func (p *Pipeline) Merge(others []*Reader, opts ...WriteOption) *Pipeline {
 	return p.append(&mergeStage{others: othersCopy, opts: opts})
 }
 
-// SetMetadata queues a metadata update.
+// SetMetadata queues a metadata update on the current document. Mirrors
+// [Writer.SetMetadata].
 func (p *Pipeline) SetMetadata(meta Metadata) *Pipeline {
 	return p.append(&setMetadataStage{meta: meta})
 }
 
 // RotatePages queues a rotation for the given 1-based pages. Rotation must
-// be a multiple of 90.
+// be a multiple of 90; otherwise [Pipeline.Err] reports
+// [ErrPipelineInvalidRotation].
 func (p *Pipeline) RotatePages(rotation int, pages ...int) *Pipeline {
 	if rotation%90 != 0 {
 		p.setErr("rotate-pages", len(p.stages), ErrPipelineInvalidRotation)
@@ -117,69 +124,76 @@ func (p *Pipeline) RotatePages(rotation int, pages ...int) *Pipeline {
 	return p.append(&rotatePagesStage{rotation: rotation, pages: pagesCopy})
 }
 
-// SetBookmarks queues a direct bookmark replacement.
+// SetBookmarks queues a direct bookmark replacement. Mirrors
+// [Writer.SetBookmarks].
 func (p *Pipeline) SetBookmarks(bms []models.Bookmark) *Pipeline {
 	bmsCopy := append([]models.Bookmark(nil), bms...)
 	return p.append(&setBookmarksStage{bms: bmsCopy})
 }
 
-// GenerateBookmarks queues auto-generation of the outline.
+// GenerateBookmarks queues auto-generation of the outline. Mirrors
+// [Writer.GenerateBookmarks].
 func (p *Pipeline) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) *Pipeline {
 	return p.append(&generateBookmarksStage{opts: opts, mode: mode})
 }
 
 // StampText queues a text overlay on the specified 1-based pages. If no
-// pages are given, the stamp is applied to all pages.
+// pages are given, the stamp is applied to all pages. Mirrors
+// [Writer.StampText].
 func (p *Pipeline) StampText(stamp TextStamp, pages ...int) *Pipeline {
 	pagesCopy := append([]int(nil), pages...)
 	return p.append(&stampTextStage{stamp: stamp, pages: pagesCopy})
 }
 
-// AddAttachment queues an embedded file addition.
+// AddAttachment queues an embedded file addition. Mirrors
+// [Writer.AddAttachment].
 func (p *Pipeline) AddAttachment(name string, data []byte, mimeType string) *Pipeline {
 	dataCopy := append([]byte(nil), data...)
 	return p.append(&addAttachmentStage{fileName: name, data: dataCopy, mimeType: mimeType})
 }
 
-// SetFormField queues a form field value update.
+// SetFormField queues a form field value update. Mirrors
+// [Writer.SetFormField].
 func (p *Pipeline) SetFormField(name, value string) *Pipeline {
 	return p.append(&setFormFieldStage{fieldName: name, value: value})
 }
 
 // FlattenForm queues a form flattening operation. Forces a full rewrite of
-// the current document segment.
+// the current document segment. Mirrors [Writer.FlattenForm].
 func (p *Pipeline) FlattenForm() *Pipeline {
 	return p.append(&flattenFormStage{})
 }
 
 // Encrypt queues password-based encryption on the current document segment.
 // Forces a full rewrite. Rejected by [Pipeline.Validate] when combined with
-// any RemediatePDFA* stage in the same pipeline.
+// any [Pipeline.RemediatePDFA] stage in the same pipeline.
 func (p *Pipeline) Encrypt(cfg crypto.EncryptConfig) *Pipeline {
 	return p.append(&encryptStage{cfg: cfg})
 }
 
 // Decrypt queues removal of encryption on the current document segment.
-// Forces a full rewrite.
+// Forces a full rewrite. Mirrors [Writer.Decrypt].
 func (p *Pipeline) Decrypt() *Pipeline {
 	return p.append(&decryptStage{})
 }
 
 // Sign queues a digital signature. Must be the final stage in the pipeline.
-// Rejected at validation time if combined with [Pipeline.Encrypt], and at
-// execution time if a preceding stage forces a full rewrite.
+// Rejected by [Pipeline.Validate] if combined with [Pipeline.Encrypt], and
+// at execution time if a preceding stage forces a full rewrite (the sentinel
+// in that case is [ErrPipelineSignWithFullRewrite]).
 func (p *Pipeline) Sign(signer Signer) *Pipeline {
 	return p.append(&signStage{signer: signer})
 }
 
 // RemediatePDFA queues PDF/A remediation for the given profile. The report
 // for this stage appears in [PipelineResult.RemediationReports] in
-// declaration order after a successful run.
+// declaration order after a successful run. Mirrors [Writer.RemediatePDFA].
 func (p *Pipeline) RemediatePDFA(profile models.PDFAProfile, opts ...RemediateOption) *Pipeline {
 	return p.append(&remediatePDFAStage{profile: profile, opts: opts})
 }
 
-// RemediatePDFUA queues PDF/UA remediation for the given profile.
+// RemediatePDFUA queues PDF/UA remediation for the given profile. Mirrors
+// [Writer.RemediatePDFUA].
 func (p *Pipeline) RemediatePDFUA(profile models.PDFUAProfile, opts ...RemediateOption) *Pipeline {
 	return p.append(&remediatePDFUAStage{profile: profile, opts: opts})
 }
@@ -201,9 +215,127 @@ func (p *Pipeline) Validate() error {
 	return errors.Join(errs...)
 }
 
+// buildValidationErrors evaluates the compatibility matrix against the
+// declared stages and returns one [*PipelineStageError] per violated rule.
+func (p *Pipeline) buildValidationErrors() []error {
+	var errs []error
+
+	if len(p.stages) == 0 {
+		errs = append(errs, &PipelineStageError{
+			Index: 0,
+			Name:  "pipeline",
+			Err:   ErrPipelineEmpty,
+		})
+		return errs
+	}
+
+	// Structural flags accumulated while walking the stages.
+	var (
+		hasSource  bool
+		hasFlatten bool
+		hasEncrypt bool
+		hasPDFA    bool
+		signIdx    = -1
+	)
+
+	for i, s := range p.stages {
+		if s.kind() == kindOpen {
+			if i != 0 {
+				// Open is only valid as the first stage.
+				errs = append(errs, &PipelineStageError{
+					Index: i,
+					Name:  s.name(),
+					Err:   ErrPipelineNoSource,
+				})
+			}
+			hasSource = true
+		} else if !hasSource {
+			errs = append(errs, &PipelineStageError{
+				Index: i,
+				Name:  s.name(),
+				Err:   ErrPipelineNoSource,
+			})
+		}
+
+		switch st := s.(type) {
+		case *splitStage:
+			if len(st.pages) == 0 {
+				errs = append(errs, &PipelineStageError{
+					Index: i,
+					Name:  s.name(),
+					Err:   ErrPipelineEmptyPageList,
+				})
+			}
+			// A restructure resets the form-flatten flag because the new
+			// document can carry its own form state.
+			hasFlatten = false
+		case *mergeStage:
+			if len(st.others) == 0 {
+				errs = append(errs, &PipelineStageError{
+					Index: i,
+					Name:  s.name(),
+					Err:   ErrPipelineNothingToMerge,
+				})
+			}
+			hasFlatten = false
+		case *flattenFormStage:
+			hasFlatten = true
+		case *setFormFieldStage:
+			if hasFlatten {
+				errs = append(errs, &PipelineStageError{
+					Index: i,
+					Name:  s.name(),
+					Err:   ErrPipelineFormAfterFlatten,
+				})
+			}
+		case *encryptStage:
+			hasEncrypt = true
+			if hasPDFA {
+				errs = append(errs, &PipelineStageError{
+					Index: i,
+					Name:  s.name(),
+					Err:   ErrPipelineEncryptWithPDFA,
+				})
+			}
+		case *remediatePDFAStage:
+			hasPDFA = true
+			if hasEncrypt {
+				errs = append(errs, &PipelineStageError{
+					Index: i,
+					Name:  s.name(),
+					Err:   ErrPipelineEncryptWithPDFA,
+				})
+			}
+		case *signStage:
+			signIdx = i
+		}
+	}
+
+	if signIdx >= 0 && signIdx != len(p.stages)-1 {
+		errs = append(errs, &PipelineStageError{
+			Index: signIdx,
+			Name:  "sign",
+			Err:   ErrPipelineSignNotLast,
+		})
+	}
+	if signIdx >= 0 && hasEncrypt {
+		errs = append(errs, &PipelineStageError{
+			Index: signIdx,
+			Name:  "sign",
+			Err:   ErrPipelineSignWithEncrypt,
+		})
+	}
+
+	return errs
+}
+
 // WriteTo executes the pipeline and writes the final document to dst. The
 // provided options are applied only at the final stage write. Nothing is
 // written to dst until the last stage has produced output.
+//
+// Pass [WithWriteLogger] to receive structured debug logs for every stage
+// transition, temp-file flush, and cleanup action. Pass [WithPipelineTempDir]
+// to redirect intermediate temp files away from [os.TempDir].
 func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (*PipelineResult, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -229,12 +361,31 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 	}
 	defer ex.cleanup()
 
+	logger.Debug("pipeline started",
+		slog.Int("stages", len(p.stages)),
+		slog.String("temp_dir", cfg.pipelineTempDir),
+	)
+
 	for i, s := range p.stages {
 		if err := ctx.Err(); err != nil {
+			logger.Debug("pipeline canceled",
+				slog.Int("stage", i),
+				slog.String("name", s.name()),
+				slog.Any("err", err),
+			)
 			return nil, &PipelineStageError{Index: i, Name: s.name(), Err: err}
 		}
 		ex.stageIdx = i
+		logger.Debug("stage starting",
+			slog.Int("stage", i),
+			slog.String("name", s.name()),
+		)
 		if err := s.apply(ctx, ex); err != nil {
+			logger.Debug("stage failed",
+				slog.Int("stage", i),
+				slog.String("name", s.name()),
+				slog.Any("err", err),
+			)
 			return nil, &PipelineStageError{Index: i, Name: s.name(), Err: err}
 		}
 	}
@@ -245,7 +396,9 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 		if ex.writer == nil {
 			ex.writer = NewWriter(ex.cur)
 		}
+		logger.Debug("terminal flush to dst")
 		if err := ex.writer.WriteTo(ctx, dst, opts...); err != nil {
+			logger.Debug("terminal flush failed", slog.Any("err", err))
 			return nil, &PipelineStageError{
 				Index: len(p.stages) - 1,
 				Name:  "write",
@@ -254,5 +407,521 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 		}
 	}
 
+	logger.Debug("pipeline completed",
+		slog.Int("stages_executed", len(ex.result.Stages)),
+		slog.Int("remediation_reports", len(ex.result.RemediationReports)),
+	)
 	return ex.result, nil
+}
+
+// --- Internal: stages and executor ---
+
+// stageKind identifies the category of a pipeline stage. Used by
+// [Pipeline.buildValidationErrors] to apply the compatibility matrix.
+type stageKind int
+
+const (
+	kindOpen stageKind = iota
+	kindSplit
+	kindMerge
+	kindSetMetadata
+	kindRotatePages
+	kindSetBookmarks
+	kindGenerateBookmarks
+	kindStampText
+	kindAddAttachment
+	kindSetFormField
+	kindFlattenForm
+	kindEncrypt
+	kindDecrypt
+	kindSign
+	kindRemediatePDFA
+	kindRemediatePDFUA
+)
+
+// stage is the internal unit of work in a [Pipeline]. Concrete stages are
+// small value types that hold the arguments of the call that created them.
+type stage interface {
+	kind() stageKind
+	name() string
+	apply(ctx context.Context, ex *executor) error
+}
+
+// executor drives the sequential execution of a pipeline's stages. It owns
+// the current in-flight [Reader], the active pending-mutation [Writer], and
+// the intermediate temp files that back restructuring boundaries.
+type executor struct {
+	ctx context.Context
+
+	// cur is the current document state. Either the original source (owned
+	// by the caller) or a reader the executor opened over an intermediate
+	// temp file.
+	cur *Reader
+	// curOwned indicates whether the executor must close cur on cleanup.
+	// True for every reader opened from a temp file; false for the initial
+	// source passed by the caller.
+	curOwned bool
+
+	// writer holds mutations queued against cur. Created lazily on the first
+	// pure-transform stage and reset to nil after every [executor.flushToTempFile].
+	writer *Writer
+
+	// tmpFiles are the intermediate PDF temp files created by flushes and
+	// restructuring stages. Retained so the reopened readers stay valid for
+	// the lifetime of the run. Cleaned up by [executor.cleanup] regardless
+	// of outcome.
+	tmpFiles []*os.File
+	tempDir  string
+
+	// finalOpts are the options passed to [Pipeline.WriteTo]. Applied only
+	// at the final stage write (either a pure-transform terminal flush or a
+	// restructuring stage that happens to be last).
+	finalOpts []WriteOption
+	finalDst  io.Writer
+
+	// dstWritten indicates a stage has already written the final output.
+	// Set by restructuring stages that target finalDst directly. When true,
+	// the terminal flush at the end of [Pipeline.WriteTo] is skipped.
+	dstWritten bool
+
+	// stageIdx and totalStages track progress for logging and error wrapping.
+	stageIdx    int
+	totalStages int
+
+	logger *slog.Logger
+	result *PipelineResult
+}
+
+// isLastStage reports whether the currently running stage is the last one
+// in the pipeline.
+func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 }
+
+// ensureWriter creates a [Writer] on the current reader if none exists.
+// Called by every pure-transform stage before it queues a mutation.
+func (ex *executor) ensureWriter() {
+	if ex.writer == nil {
+		ex.writer = NewWriter(ex.cur)
+	}
+}
+
+// flushToTempFile materializes any pending mutations to a new temp file and
+// reopens it as the current reader. Called immediately before a restructuring
+// stage that is not the terminal stage. If there are no pending mutations,
+// it is a no-op.
+func (ex *executor) flushToTempFile() error {
+	if ex.writer == nil {
+		return nil
+	}
+	f, err := os.CreateTemp(ex.tempDir, "litho-pipeline-*.pdf")
+	if err != nil {
+		return fmt.Errorf("creating intermediate temp file: %w", err)
+	}
+	// Track the file even on error so [executor.cleanup] removes it.
+	ex.tmpFiles = append(ex.tmpFiles, f)
+	ex.logger.Debug("flushing pending mutations to temp file",
+		slog.String("path", f.Name()),
+		slog.Int("stage", ex.stageIdx),
+	)
+	if err := ex.writer.WriteTo(ex.ctx, f); err != nil {
+		return fmt.Errorf("flushing pending mutations: %w", err)
+	}
+	return ex.reopenAsCurrent(f)
+}
+
+// reopenAsCurrent takes a temp file that just received a PDF write, seeks
+// it to zero, opens it as a new [Reader], and installs it as cur. The
+// previous owned reader is closed.
+func (ex *executor) reopenAsCurrent(f *os.File) error {
+	stat, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat intermediate file: %w", err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("seeking intermediate file: %w", err)
+	}
+	next, err := Open(ex.ctx, f, stat.Size())
+	if err != nil {
+		return fmt.Errorf("reopening intermediate file: %w", err)
+	}
+	if ex.curOwned && ex.cur != nil {
+		if closeErr := ex.cur.Close(); closeErr != nil {
+			ex.logger.Debug("closing previous intermediate reader failed",
+				slog.Any("err", closeErr),
+			)
+		}
+	}
+	ex.cur = next
+	ex.curOwned = true
+	ex.writer = nil
+	ex.logger.Debug("reopened intermediate file as current reader",
+		slog.String("path", f.Name()),
+		slog.Int64("size", stat.Size()),
+	)
+	return nil
+}
+
+// newTempFile allocates and tracks a new temp file without opening it.
+func (ex *executor) newTempFile() (*os.File, error) {
+	f, err := os.CreateTemp(ex.tempDir, "litho-pipeline-*.pdf")
+	if err != nil {
+		return nil, fmt.Errorf("creating intermediate temp file: %w", err)
+	}
+	ex.tmpFiles = append(ex.tmpFiles, f)
+	return f, nil
+}
+
+// cleanup releases every resource the executor owns. Safe to call on both
+// the success and failure paths.
+func (ex *executor) cleanup() {
+	if ex.curOwned && ex.cur != nil {
+		if err := ex.cur.Close(); err != nil {
+			ex.logger.Debug("closing current reader failed",
+				slog.Any("err", err),
+			)
+		}
+	}
+	for _, f := range ex.tmpFiles {
+		name := f.Name()
+		if err := f.Close(); err != nil {
+			ex.logger.Debug("closing temp file failed",
+				slog.String("path", name),
+				slog.Any("err", err),
+			)
+		}
+		if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+			ex.logger.Debug("removing temp file failed",
+				slog.String("path", name),
+				slog.Any("err", err),
+			)
+		}
+	}
+}
+
+// recordStage appends a [StageReport] to the result.
+func (ex *executor) recordStage(name string, materialized bool, bytesOut int64) {
+	ex.result.Stages = append(ex.result.Stages, StageReport{
+		Index:        ex.stageIdx,
+		Name:         name,
+		Materialized: materialized,
+		BytesOut:     bytesOut,
+	})
+}
+
+// openStage seeds the pipeline with its initial source. Must be the first
+// stage; validated by [Pipeline.buildValidationErrors].
+type openStage struct {
+	src *Reader
+}
+
+func (s *openStage) kind() stageKind { return kindOpen }
+func (s *openStage) name() string    { return "open" }
+func (s *openStage) apply(_ context.Context, ex *executor) error {
+	ex.cur = s.src
+	ex.curOwned = false
+	ex.writer = nil
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// splitStage extracts the given 1-based pages. See [Pipeline.Split].
+type splitStage struct {
+	pages []int
+	opts  []WriteOption
+}
+
+func (s *splitStage) kind() stageKind { return kindSplit }
+func (s *splitStage) name() string    { return "split" }
+func (s *splitStage) apply(ctx context.Context, ex *executor) error {
+	if err := ex.flushToTempFile(); err != nil {
+		return err
+	}
+	// Combine per-stage opts with finalOpts when this stage is the terminal
+	// one. Stage opts come last so they win on conflicts.
+	var opts []WriteOption
+	if ex.isLastStage() {
+		opts = append(opts, ex.finalOpts...)
+	}
+	opts = append(opts, s.opts...)
+
+	if ex.isLastStage() {
+		if err := Split(ctx, ex.cur, s.pages, ex.finalDst, opts...); err != nil {
+			return err
+		}
+		ex.dstWritten = true
+		ex.recordStage(s.name(), true, 0)
+		return nil
+	}
+	f, err := ex.newTempFile()
+	if err != nil {
+		return err
+	}
+	if err := Split(ctx, ex.cur, s.pages, f, opts...); err != nil {
+		return err
+	}
+	if err := ex.reopenAsCurrent(f); err != nil {
+		return err
+	}
+	var size int64
+	if stat, statErr := f.Stat(); statErr == nil {
+		size = stat.Size()
+	}
+	ex.recordStage(s.name(), true, size)
+	return nil
+}
+
+// mergeStage appends other sources after the current document. See
+// [Pipeline.Merge].
+type mergeStage struct {
+	others []*Reader
+	opts   []WriteOption
+}
+
+func (s *mergeStage) kind() stageKind { return kindMerge }
+func (s *mergeStage) name() string    { return "merge" }
+func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
+	if err := ex.flushToTempFile(); err != nil {
+		return err
+	}
+	sources := make([]*Reader, 0, len(s.others)+1)
+	sources = append(sources, ex.cur)
+	sources = append(sources, s.others...)
+
+	var opts []WriteOption
+	if ex.isLastStage() {
+		opts = append(opts, ex.finalOpts...)
+	}
+	opts = append(opts, s.opts...)
+
+	if ex.isLastStage() {
+		if err := Merge(ctx, sources, ex.finalDst, opts...); err != nil {
+			return err
+		}
+		ex.dstWritten = true
+		ex.recordStage(s.name(), true, 0)
+		return nil
+	}
+	f, err := ex.newTempFile()
+	if err != nil {
+		return err
+	}
+	if err := Merge(ctx, sources, f, opts...); err != nil {
+		return err
+	}
+	if err := ex.reopenAsCurrent(f); err != nil {
+		return err
+	}
+	var size int64
+	if stat, statErr := f.Stat(); statErr == nil {
+		size = stat.Size()
+	}
+	ex.recordStage(s.name(), true, size)
+	return nil
+}
+
+// setMetadataStage queues a metadata update. See [Pipeline.SetMetadata].
+type setMetadataStage struct {
+	meta Metadata
+}
+
+func (s *setMetadataStage) kind() stageKind { return kindSetMetadata }
+func (s *setMetadataStage) name() string    { return "set-metadata" }
+func (s *setMetadataStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.SetMetadata(s.meta)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// rotatePagesStage queues a page rotation mutation. See [Pipeline.RotatePages].
+type rotatePagesStage struct {
+	rotation int
+	pages    []int
+}
+
+func (s *rotatePagesStage) kind() stageKind { return kindRotatePages }
+func (s *rotatePagesStage) name() string    { return "rotate-pages" }
+func (s *rotatePagesStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	if err := ex.writer.RotatePages(s.rotation, s.pages...); err != nil {
+		return err
+	}
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// setBookmarksStage queues a direct bookmark replacement. See
+// [Pipeline.SetBookmarks].
+type setBookmarksStage struct {
+	bms []models.Bookmark
+}
+
+func (s *setBookmarksStage) kind() stageKind { return kindSetBookmarks }
+func (s *setBookmarksStage) name() string    { return "set-bookmarks" }
+func (s *setBookmarksStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.SetBookmarks(s.bms)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// generateBookmarksStage queues auto-generation of the outline. See
+// [Pipeline.GenerateBookmarks].
+type generateBookmarksStage struct {
+	opts BookmarkGenerationOptions
+	mode BookmarkMergeMode
+}
+
+func (s *generateBookmarksStage) kind() stageKind { return kindGenerateBookmarks }
+func (s *generateBookmarksStage) name() string    { return "generate-bookmarks" }
+func (s *generateBookmarksStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.GenerateBookmarks(s.opts, s.mode)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// stampTextStage queues a text overlay. See [Pipeline.StampText].
+type stampTextStage struct {
+	stamp TextStamp
+	pages []int
+}
+
+func (s *stampTextStage) kind() stageKind { return kindStampText }
+func (s *stampTextStage) name() string    { return "stamp-text" }
+func (s *stampTextStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.StampText(s.stamp, s.pages...)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// addAttachmentStage queues an embedded file addition. See
+// [Pipeline.AddAttachment].
+type addAttachmentStage struct {
+	fileName string
+	data     []byte
+	mimeType string
+}
+
+func (s *addAttachmentStage) kind() stageKind { return kindAddAttachment }
+func (s *addAttachmentStage) name() string    { return "add-attachment" }
+func (s *addAttachmentStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.AddAttachment(s.fileName, s.data, s.mimeType)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// setFormFieldStage queues a form field value update. See
+// [Pipeline.SetFormField].
+type setFormFieldStage struct {
+	fieldName string
+	value     string
+}
+
+func (s *setFormFieldStage) kind() stageKind { return kindSetFormField }
+func (s *setFormFieldStage) name() string    { return "set-form-field" }
+func (s *setFormFieldStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.SetFormField(s.fieldName, s.value)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// flattenFormStage queues a form flattening operation. See
+// [Pipeline.FlattenForm].
+type flattenFormStage struct{}
+
+func (s *flattenFormStage) kind() stageKind { return kindFlattenForm }
+func (s *flattenFormStage) name() string    { return "flatten-form" }
+func (s *flattenFormStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.FlattenForm()
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// encryptStage queues an encryption operation. See [Pipeline.Encrypt].
+type encryptStage struct {
+	cfg crypto.EncryptConfig
+}
+
+func (s *encryptStage) kind() stageKind { return kindEncrypt }
+func (s *encryptStage) name() string    { return "encrypt" }
+func (s *encryptStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.Encrypt(s.cfg)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// decryptStage queues a decryption operation. See [Pipeline.Decrypt].
+type decryptStage struct{}
+
+func (s *decryptStage) kind() stageKind { return kindDecrypt }
+func (s *decryptStage) name() string    { return "decrypt" }
+func (s *decryptStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	ex.writer.Decrypt()
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// signStage queues a digital signature. Must be the terminal stage; rejected
+// at execution time if the current writer has forced a full rewrite. See
+// [Pipeline.Sign].
+type signStage struct {
+	signer Signer
+}
+
+func (s *signStage) kind() stageKind { return kindSign }
+func (s *signStage) name() string    { return "sign" }
+func (s *signStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	if ex.writer.fullRewriteForced() {
+		return ErrPipelineSignWithFullRewrite
+	}
+	ex.writer.Sign(s.signer)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// remediatePDFAStage runs PDF/A remediation at execution time. See
+// [Pipeline.RemediatePDFA].
+type remediatePDFAStage struct {
+	profile models.PDFAProfile
+	opts    []RemediateOption
+}
+
+func (s *remediatePDFAStage) kind() stageKind { return kindRemediatePDFA }
+func (s *remediatePDFAStage) name() string    { return "remediate-pdfa" }
+func (s *remediatePDFAStage) apply(ctx context.Context, ex *executor) error {
+	ex.ensureWriter()
+	report, err := ex.writer.RemediatePDFA(ctx, s.profile, s.opts...)
+	if err != nil {
+		return err
+	}
+	ex.result.RemediationReports = append(ex.result.RemediationReports, report)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// remediatePDFUAStage runs PDF/UA remediation at execution time. See
+// [Pipeline.RemediatePDFUA].
+type remediatePDFUAStage struct {
+	profile models.PDFUAProfile
+	opts    []RemediateOption
+}
+
+func (s *remediatePDFUAStage) kind() stageKind { return kindRemediatePDFUA }
+func (s *remediatePDFUAStage) name() string    { return "remediate-pdfua" }
+func (s *remediatePDFUAStage) apply(ctx context.Context, ex *executor) error {
+	ex.ensureWriter()
+	report, err := ex.writer.RemediatePDFUA(ctx, s.profile, s.opts...)
+	if err != nil {
+		return err
+	}
+	ex.result.RemediationReports = append(ex.result.RemediationReports, report)
+	ex.recordStage(s.name(), false, 0)
+	return nil
 }

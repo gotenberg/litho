@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -82,6 +83,11 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	// Handle bookmarks for the output.
 	if bookmarkCfg.Handling != BookmarkNone {
 		newBookmarks, err := resolveSplitBookmarks(ctx, doc, allPages, pages, bookmarkCfg)
+		if err != nil {
+			doc.Logger.Debug("resolving split bookmarks failed",
+				slog.Any("err", err),
+			)
+		}
 		if err == nil && len(newBookmarks) > 0 {
 			// Build the new-page-number → new-page-ref map from the
 			// allocator's pageRefs slice.
@@ -111,6 +117,10 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 			newInfoRef, err := copier.CopyRef(ctx, infoRef)
 			if err == nil {
 				trailer["Info"] = newInfoRef
+			} else {
+				doc.Logger.Debug("copying /Info for split failed",
+					slog.Any("err", err),
+				)
 			}
 		}
 	}
@@ -136,6 +146,9 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	}
 	catalogDict, err := document.ResolveDict(ctx, doc, catalogRef)
 	if err != nil {
+		doc.Logger.Debug("resolving catalog for entry copy failed",
+			slog.Any("err", err),
+		)
 		return nil
 	}
 
@@ -146,7 +159,11 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 		if val, ok := catalogDict[key]; ok {
 			copied, err := copier.CopyObject(ctx, val)
 			if err != nil {
-				continue // best effort
+				doc.Logger.Debug("copying catalog entry failed",
+					slog.String("key", string(key)),
+					slog.Any("err", err),
+				)
+				continue
 			}
 			dst[key] = copied
 		}

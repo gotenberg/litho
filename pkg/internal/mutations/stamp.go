@@ -3,6 +3,7 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -52,6 +53,10 @@ func StampText(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 
 	for _, pageNum := range pageNums {
 		if pageNum < 1 || pageNum > len(pages) {
+			doc.Logger.Debug("skipping out-of-range stamp page",
+				slog.Int("page", pageNum),
+				slog.Int("total", len(pages)),
+			)
 			continue
 		}
 		page := pages[pageNum-1]

@@ -71,14 +71,15 @@ func WithPipelineTempDir(dir string) WriteOption {
 }
 
 // fullRewriteForced reports whether any queued mutation has forced a full
-// rewrite (FlattenForm, Encrypt, Decrypt, or a remediation stage that
-// required it). Used by the pipeline to reject Sign + full-rewrite combinations.
+// rewrite ([Writer.FlattenForm], [Writer.Encrypt], [Writer.Decrypt], or a
+// remediation stage that required it). Used by [Pipeline] to reject
+// [Pipeline.Sign] combined with a full-rewrite stage.
 func (w *Writer) fullRewriteForced() bool { return w.forceRewrite }
 
 // WithBookmarks configures how [Split] and [Merge] handle the document
 // outline. When omitted, the operation uses sensible defaults
-// (BookmarkUpdate with OrphanDrop and PromoteOrphanChildren=true for Split,
-// BookmarkUpdate with no wrapping for Merge).
+// ([BookmarkUpdate] with [OrphanDrop] and PromoteOrphanChildren=true for
+// [Split]; [BookmarkUpdate] with no wrapping for [Merge]).
 func WithBookmarks(opts BookmarkOptions) WriteOption {
 	return func(o *writeOpts) {
 		copy := opts
@@ -467,12 +468,33 @@ func (w *Writer) remediate(ctx context.Context, run func(context.Context, *write
 
 // WriteTo serializes the modified document to dst. By default, it uses an
 // incremental update (appending to the original file). Pass [WithFullRewrite]
-// to force a clean rewrite.
+// to force a clean rewrite. Pass [WithWriteLogger] to receive structured
+// debug logs for every mutation, best-effort fallback, and write-engine
+// decision.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) error {
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
 	}
+
+	// Swap the document logger for the duration of the write so every
+	// internal call site that uses doc.Logger (mutations, copier, remediation)
+	// routes through the caller's logger. The previous logger is restored on
+	// return. The Reader is not safe for concurrent writes, so there is no
+	// race here.
+	if cfg.logger != nil {
+		prev := w.reader.doc.Logger
+		w.reader.doc.Logger = cfg.logger
+		defer func() { w.reader.doc.Logger = prev }()
+	}
+	logger := w.reader.doc.Logger
+
+	logger.Debug("writer.WriteTo started",
+		slog.Int("mutations", len(w.mutations)),
+		slog.Bool("full_rewrite", cfg.fullRewrite || w.forceRewrite),
+		slog.Bool("signer", w.signer != nil),
+		slog.Bool("xref_stream", cfg.xrefStream),
+	)
 
 	// Signing requires its own two-pass incremental flow.
 	if w.signer != nil {
@@ -512,19 +534,23 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	alloc := writer.NewObjAllocator(maxObjNum)
 
 	// Apply all batched mutations.
-	for _, m := range w.mutations {
+	for i, m := range w.mutations {
 		if err := m.apply(ctx, alloc, doc); err != nil {
-			return fmt.Errorf("applying mutation: %w", err)
+			return fmt.Errorf("applying mutation %d: %w", i, err)
 		}
+		logger.Debug("mutation applied", slog.Int("index", i))
 	}
 
 	// If no mutations produced pending objects, nothing to write.
 	if len(alloc.Pending()) == 0 {
-		// Just copy the original file as-is.
+		logger.Debug("no pending objects, copying source as-is")
 		src := io.NewSectionReader(doc.RawReader(), 0, doc.FileSize())
 		_, err := io.Copy(dst, src)
 		return err
 	}
+	logger.Debug("incremental update",
+		slog.Int("pending_objects", len(alloc.Pending())),
+	)
 
 	// Find the original startxref offset.
 	startXRef, err := document.FindStartXRef(doc.RawReader(), doc.FileSize())
@@ -562,12 +588,22 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 // written to dst. Pages are included in the order given; duplicates are
 // allowed to repeat a page. Pass [WithBookmarks] to control how the source
 // outline is handled in the output (default: keep and remap existing,
-// drop orphans).
+// drop orphans). Pass [WithWriteLogger] to receive structured debug logs
+// from the split engine.
 func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) error {
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
 	}
+
+	if cfg.logger != nil {
+		prev := src.doc.Logger
+		src.doc.Logger = cfg.logger
+		defer func() { src.doc.Logger = prev }()
+	}
+	src.doc.Logger.Debug("split started",
+		slog.Int("pages", len(pages)),
+	)
 
 	allPages, err := src.resolvePages(ctx)
 	if err != nil {
@@ -581,13 +617,26 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 
 // Merge combines multiple PDF documents into a single output written to dst.
 // Pages are concatenated in order: all pages from sources[0], then all from
-// sources[1], etc. Each source Reader must remain valid until Merge returns.
+// sources[1], etc. Each source [Reader] must remain valid until Merge returns.
 // Pass [WithBookmarks] to control how outlines from the sources are merged
-// (default: concatenate with offset page indexes).
+// (default: concatenate with offset page indexes). Pass [WithWriteLogger] to
+// receive structured debug logs from the merge engine (logs are emitted via
+// the first source's document logger).
 func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteOption) error {
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
+	}
+
+	if len(sources) > 0 && cfg.logger != nil {
+		prev := sources[0].doc.Logger
+		sources[0].doc.Logger = cfg.logger
+		defer func() { sources[0].doc.Logger = prev }()
+	}
+	if len(sources) > 0 {
+		sources[0].doc.Logger.Debug("merge started",
+			slog.Int("sources", len(sources)),
+		)
 	}
 
 	mergeSources := make([]mutations.MergeSource, len(sources))

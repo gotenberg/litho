@@ -2,6 +2,7 @@ package mutations
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -36,14 +37,24 @@ func resolveSplitBookmarks(
 
 	switch cfg.Handling {
 	case BookmarkUpdate:
-		existing, _ := semantics.GetOutline(ctx, doc)
+		existing, err := semantics.GetOutline(ctx, doc)
+		if err != nil {
+			doc.Logger.Debug("reading source outline for split failed",
+				slog.Any("err", err),
+			)
+		}
 		return FilterAndRemap(existing, newPageNum, cfg.OrphanPolicy, cfg.PromoteOrphanChildren, keptPages), nil
 
 	case BookmarkReconstruct:
 		return reconstructFromKeptPages(ctx, doc, allPages, keptPages, cfg)
 
 	case BookmarkMixed:
-		existing, _ := semantics.GetOutline(ctx, doc)
+		existing, err := semantics.GetOutline(ctx, doc)
+		if err != nil {
+			doc.Logger.Debug("reading source outline for mixed split failed",
+				slog.Any("err", err),
+			)
+		}
 		if len(existing) > 0 {
 			return FilterAndRemap(existing, newPageNum, cfg.OrphanPolicy, cfg.PromoteOrphanChildren, keptPages), nil
 		}
@@ -73,6 +84,10 @@ func reconstructFromKeptPages(
 	for newIdx, oldPage := range keptPages {
 		newPageNum := newIdx + 1
 		if oldPage < 1 || oldPage > len(allPages) {
+			doc.Logger.Debug("skipping out-of-range kept page during reconstruct",
+				slog.Int("page", oldPage),
+				slog.Int("total", len(allPages)),
+			)
 			continue
 		}
 		srcPage := allPages[oldPage-1]
@@ -80,6 +95,10 @@ func reconstructFromKeptPages(
 
 		elements, err := cfg.TextElements(ctx, 0, oldPage)
 		if err != nil {
+			doc.Logger.Debug("extracting text elements for reconstruct failed",
+				slog.Int("page", oldPage),
+				slog.Any("err", err),
+			)
 			continue
 		}
 		pageTexts = append(pageTexts, bookmarks.PageTextElements{
@@ -116,19 +135,43 @@ func resolveMergeBookmarks(
 
 		switch cfg.Handling {
 		case BookmarkUpdate:
-			existing, _ := semantics.GetOutline(ctx, src.Doc)
+			existing, err := semantics.GetOutline(ctx, src.Doc)
+			if err != nil {
+				src.Doc.Logger.Debug("reading source outline for merge failed",
+					slog.Int("source", i),
+					slog.Any("err", err),
+				)
+			}
 			perSource[i] = OffsetPages(existing, offset)
 
 		case BookmarkReconstruct:
-			generated, _ := generateForMergeSource(ctx, src, i, offset, cfg)
+			generated, err := generateForMergeSource(ctx, src, i, offset, cfg)
+			if err != nil {
+				src.Doc.Logger.Debug("generating bookmarks for merge source failed",
+					slog.Int("source", i),
+					slog.Any("err", err),
+				)
+			}
 			perSource[i] = generated
 
 		case BookmarkMixed:
-			existing, _ := semantics.GetOutline(ctx, src.Doc)
+			existing, err := semantics.GetOutline(ctx, src.Doc)
+			if err != nil {
+				src.Doc.Logger.Debug("reading source outline for mixed merge failed",
+					slog.Int("source", i),
+					slog.Any("err", err),
+				)
+			}
 			if len(existing) > 0 {
 				perSource[i] = OffsetPages(existing, offset)
 			} else {
-				generated, _ := generateForMergeSource(ctx, src, i, offset, cfg)
+				generated, genErr := generateForMergeSource(ctx, src, i, offset, cfg)
+				if genErr != nil {
+					src.Doc.Logger.Debug("mixed-fallback reconstruct failed",
+						slog.Int("source", i),
+						slog.Any("err", genErr),
+					)
+				}
 				perSource[i] = generated
 			}
 		case BookmarkNone:
@@ -179,6 +222,11 @@ func generateForMergeSource(
 
 		elements, err := cfg.TextElements(ctx, sourceIdx, i+1)
 		if err != nil {
+			src.Doc.Logger.Debug("extracting text elements for merge source failed",
+				slog.Int("source", sourceIdx),
+				slog.Int("page", i+1),
+				slog.Any("err", err),
+			)
 			continue
 		}
 		pageTexts = append(pageTexts, bookmarks.PageTextElements{

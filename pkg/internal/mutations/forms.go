@@ -3,6 +3,7 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -72,6 +73,10 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 
 		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil || fieldDict == nil {
+			doc.Logger.Debug("resolving form field dict failed",
+				slog.String("parent", parentName),
+				slog.Any("err", err),
+			)
 			continue
 		}
 
@@ -179,6 +184,9 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 	for _, annotObj := range annots {
 		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
 		if err != nil || annotDict == nil {
+			doc.Logger.Debug("resolving annotation dict failed during flatten",
+				slog.Any("err", err),
+			)
 			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
 		}
@@ -193,16 +201,19 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		// Get the appearance stream.
 		apObj, ok := annotDict["AP"]
 		if !ok {
-			continue // No appearance, skip
+			doc.Logger.Debug("widget has no /AP, skipping flatten")
+			continue
 		}
 		apDict, err := document.ResolveDict(ctx, doc, apObj)
 		if err != nil || apDict == nil {
+			doc.Logger.Debug("resolving widget /AP failed", slog.Any("err", err))
 			continue
 		}
 
 		// Get /N (normal appearance). Could be a stream or a dict of states.
 		nObj, ok := apDict["N"]
 		if !ok {
+			doc.Logger.Debug("widget /AP has no /N, skipping flatten")
 			continue
 		}
 
@@ -214,6 +225,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			// Could be a dict of states: try the /AS key.
 			resolved, err := document.ResolveObject(ctx, doc, nObj)
 			if err != nil {
+				doc.Logger.Debug("resolving widget /N failed", slog.Any("err", err))
 				continue
 			}
 			if s, ok := resolved.(ast.PdfStream); ok {
@@ -236,12 +248,17 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		}
 
 		if apStream.Dict == nil {
+			doc.Logger.Debug("widget appearance stream unresolved, skipping")
 			continue
 		}
 
 		// Get the annotation /Rect for positioning.
 		rectArr, err := document.ResolveArray(ctx, doc, annotDict["Rect"])
 		if err != nil || len(rectArr) < 4 {
+			doc.Logger.Debug("widget /Rect invalid, skipping",
+				slog.Int("len", len(rectArr)),
+				slog.Any("err", err),
+			)
 			continue
 		}
 		x1 := document.GetFloat(rectArr[0])
