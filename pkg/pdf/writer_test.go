@@ -136,7 +136,7 @@ func TestWriter_SetMetadata(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(ctx, Metadata{
+	w.SetMetadata(Metadata{
 		Title:  "New Title",
 		Author: "John",
 	})
@@ -175,7 +175,7 @@ func TestWriter_RotatePages(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	if err := w.RotatePages(ctx, 90, 1); err != nil {
+	if err := w.RotatePages(90, 1); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 
@@ -208,7 +208,7 @@ func TestWriter_RotatePages_InvalidAngle(t *testing.T) {
 	ctx := context.Background()
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
-	if err := w.RotatePages(ctx, 45, 1); err == nil {
+	if err := w.RotatePages(45, 1); err == nil {
 		t.Error("expected error for non-90° rotation")
 	}
 }
@@ -223,7 +223,7 @@ func TestWriter_SetBookmarks(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetBookmarks(ctx, []models.Bookmark{
+	w.SetBookmarks([]models.Bookmark{
 		{Title: "Chapter 1", PageNumber: 1},
 		{Title: "Chapter 2", PageNumber: 1, Children: []models.Bookmark{
 			{Title: "Section 2.1", PageNumber: 1},
@@ -295,8 +295,8 @@ func TestWriter_MultipleMutations(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(ctx, Metadata{Title: "Combined"})
-	if err := w.RotatePages(ctx, 180, 1); err != nil {
+	w.SetMetadata(Metadata{Title: "Combined"})
+	if err := w.RotatePages(180, 1); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 
@@ -338,7 +338,7 @@ func TestWriter_AddAttachment(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.AddAttachment(ctx, "test.txt", []byte("Hello from attachment"), "text/plain")
+	w.AddAttachment("test.txt", []byte("Hello from attachment"), "text/plain")
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -374,8 +374,8 @@ func TestWriter_AddMultipleAttachments(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.AddAttachment(ctx, "a.txt", []byte("File A"), "text/plain")
-	w.AddAttachment(ctx, "b.csv", []byte("col1,col2"), "text/csv")
+	w.AddAttachment("a.txt", []byte("File A"), "text/plain")
+	w.AddAttachment("b.csv", []byte("col1,col2"), "text/csv")
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -547,7 +547,7 @@ func TestWriter_EncryptAndModify(t *testing.T) {
 
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
-	w.SetMetadata(ctx, Metadata{Title: "Encrypted Doc"})
+	w.SetMetadata(Metadata{Title: "Encrypted Doc"})
 	w.Encrypt(crypto.EncryptConfig{
 		UserPassword: "pw",
 		Algorithm:    crypto.AES_256,
@@ -583,8 +583,8 @@ func TestWriter_SetFormField(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetFormField(ctx, "name", "Jane Doe")
-	w.SetFormField(ctx, "email", "jane@example.com")
+	w.SetFormField("name", "Jane Doe")
+	w.SetFormField("email", "jane@example.com")
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -616,7 +616,7 @@ func TestWriter_SetFormField_NotFound(t *testing.T) {
 
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
-	w.SetFormField(ctx, "nonexistent", "value")
+	w.SetFormField("nonexistent", "value")
 
 	var out bytes.Buffer
 	err := w.WriteTo(ctx, &out)
@@ -635,7 +635,7 @@ func TestWriter_FlattenForm(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.FlattenForm(ctx)
+	w.FlattenForm()
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -886,7 +886,7 @@ func TestWriter_Sign(t *testing.T) {
 
 	signer := &mockSigner{}
 	w := NewWriter(r)
-	w.Sign(ctx, signer)
+	w.Sign(signer)
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -927,8 +927,8 @@ func TestWriter_SignAndModify(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(ctx, Metadata{Title: "Signed Document"})
-	w.Sign(ctx, &mockSigner{})
+	w.SetMetadata(Metadata{Title: "Signed Document"})
+	w.Sign(&mockSigner{})
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -967,7 +967,7 @@ func TestWriter_Sign_ByteRangeValid(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.Sign(ctx, &mockSigner{})
+	w.Sign(&mockSigner{})
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -1142,7 +1142,7 @@ func TestWriter_StampText(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.StampText(ctx, TextStamp{
+	w.StampText(TextStamp{
 		Text:     "CONFIDENTIAL",
 		X:        200,
 		Y:        400,
@@ -1180,7 +1180,7 @@ func TestWriter_StampText_AllPages(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.StampText(ctx, TextStamp{
+	w.StampText(TextStamp{
 		Text:     "DRAFT",
 		X:        100,
 		Y:        100,

@@ -142,8 +142,9 @@ func NewWriter(r *Reader) *Writer {
 }
 
 // SetMetadata sets or replaces document Info dictionary fields. Empty fields
-// in meta are skipped (the existing value is preserved).
-func (w *Writer) SetMetadata(_ context.Context, meta Metadata) {
+// in meta are skipped (the existing value is preserved). The mutation is
+// queued and applied when [Writer.WriteTo] is called.
+func (w *Writer) SetMetadata(meta Metadata) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.SetMetadata(ctx, alloc, doc, mutations.Metadata(meta))
@@ -152,8 +153,9 @@ func (w *Writer) SetMetadata(_ context.Context, meta Metadata) {
 }
 
 // RotatePages sets the /Rotate value for the given 1-based page numbers.
-// Rotation must be a multiple of 90 (0, 90, 180, 270).
-func (w *Writer) RotatePages(ctx context.Context, rotation int, pages ...int) error {
+// Rotation must be a multiple of 90 (0, 90, 180, 270). The mutation is
+// queued and applied when [Writer.WriteTo] is called.
+func (w *Writer) RotatePages(rotation int, pages ...int) error {
 	if rotation%90 != 0 {
 		return fmt.Errorf("rotation must be a multiple of 90, got %d", rotation)
 	}
@@ -170,7 +172,8 @@ func (w *Writer) RotatePages(ctx context.Context, rotation int, pages ...int) er
 }
 
 // SetBookmarks replaces the document outline with the given bookmarks.
-func (w *Writer) SetBookmarks(_ context.Context, bookmarks []models.Bookmark) {
+// The mutation is queued and applied when [Writer.WriteTo] is called.
+func (w *Writer) SetBookmarks(bookmarks []models.Bookmark) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
@@ -198,8 +201,9 @@ func (w *Writer) Decrypt() {
 
 // SetFormField sets the value of an AcroForm field by its fully qualified name.
 // Uses incremental update. Sets /NeedAppearances on the AcroForm so viewers
-// regenerate the visual appearance.
-func (w *Writer) SetFormField(_ context.Context, name, value string) {
+// regenerate the visual appearance. The mutation is queued and applied when
+// [Writer.WriteTo] is called.
+func (w *Writer) SetFormField(name, value string) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.SetFormField(ctx, alloc, doc, name, value)
@@ -208,8 +212,9 @@ func (w *Writer) SetFormField(_ context.Context, name, value string) {
 }
 
 // FlattenForm bakes form field appearances into page content streams and
-// removes the AcroForm dictionary. Forces a full rewrite.
-func (w *Writer) FlattenForm(_ context.Context) {
+// removes the AcroForm dictionary. Forces a full rewrite. The mutation is
+// queued and applied when [Writer.WriteTo] is called.
+func (w *Writer) FlattenForm() {
 	w.forceRewrite = true
 	w.mutations = append(w.mutations, mutation{
 		apply: mutations.FlattenForm,
@@ -218,7 +223,8 @@ func (w *Writer) FlattenForm(_ context.Context) {
 
 // StampText overlays text on the specified 1-based pages. If no pages are
 // specified, the stamp is applied to all pages. Uses incremental update.
-func (w *Writer) StampText(ctx context.Context, stamp TextStamp, pages ...int) {
+// The mutation is queued and applied when [Writer.WriteTo] is called.
+func (w *Writer) StampText(stamp TextStamp, pages ...int) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
@@ -231,8 +237,9 @@ func (w *Writer) StampText(ctx context.Context, stamp TextStamp, pages ...int) {
 }
 
 // AddAttachment embeds a file in the document's /EmbeddedFiles name tree.
-// Uses incremental update.
-func (w *Writer) AddAttachment(_ context.Context, name string, data []byte, mimeType string) {
+// Uses incremental update. The mutation is queued and applied when
+// [Writer.WriteTo] is called.
+func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.AddAttachment(ctx, alloc, doc, name, data, mimeType)
@@ -242,8 +249,8 @@ func (w *Writer) AddAttachment(_ context.Context, name string, data []byte, mime
 
 // Sign applies a digital signature using the given signer. Signing always uses
 // incremental update (required for ByteRange integrity). Must be the last
-// mutation before WriteTo.
-func (w *Writer) Sign(_ context.Context, signer Signer) {
+// mutation before [Writer.WriteTo].
+func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
 
