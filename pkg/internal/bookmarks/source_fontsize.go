@@ -12,10 +12,14 @@ import (
 
 // headingCandidate is a single line of text that may be a heading.
 type headingCandidate struct {
-	text     string
-	fontSize float64
-	pageNum  int
-	yTop     float64 // Y coordinate of the top of the line (for dedup ordering)
+	text           string
+	fontSize       float64
+	pageNum        int
+	yTop           float64 // Y coordinate of the top of the line (for dedup ordering)
+	isBold         bool
+	hasNumbering   bool
+	numberingDepth int
+	score          float64 // assigned by the scorer
 }
 
 // pageTextElements holds the text elements from a single page along with
@@ -50,30 +54,82 @@ func GenerateFromFontSize(ctx context.Context, pages []PageTextElements, opts Op
 		return nil
 	}
 
+	// Detect dominant script and adjust the font-size threshold accordingly.
+	var sampleText strings.Builder
+	for _, el := range allElements {
+		if sampleText.Len() > 4000 {
+			break
+		}
+		sampleText.WriteString(el.Text)
+	}
+	script := detectScript(sampleText.String())
+	ratio := opts.MinFontSizeRatio
+	if scriptRatio := scriptFontSizeRatio(script); scriptRatio > 0 && scriptRatio < ratio {
+		ratio = scriptRatio
+	}
+
 	// Find sizes that qualify as headings (strictly larger than body * ratio).
-	threshold := bodySize * opts.MinFontSizeRatio
+	threshold := bodySize * ratio
 	var candidateSizes []float64
 	for _, s := range collectDistinctSizes(allElements) {
 		if s > threshold {
 			candidateSizes = append(candidateSizes, s)
 		}
 	}
-	if len(candidateSizes) == 0 {
-		return nil
-	}
+	// Even when no font size qualifies, language patterns may still
+	// identify headings. We continue and let the scorer decide.
 
 	// Cluster sizes into heading levels.
 	levels := clusterSizesToLevels(candidateSizes, 0.10, opts.MaxDepth)
 
-	// Build heading candidates by grouping adjacent elements with qualifying
-	// font size into lines (per page).
+	// Build heading candidates by grouping adjacent elements into lines
+	// (per page). The qualifying-size filter is removed; the scorer decides.
 	var candidates []headingCandidate
 	for _, p := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil
 		}
-		candidates = append(candidates, extractPageHeadings(ctx, p, levels, opts.MaxTitleLength)...)
+		candidates = append(candidates, extractPageHeadings(ctx, p, opts.MaxTitleLength, opts.SkipHeaderFooter)...)
 	}
+
+	// Score each candidate. Filter out TOC entries and low-score lines.
+	scored := candidates[:0]
+	for _, c := range candidates {
+		if looksLikeTOCEntry(c.text) {
+			continue
+		}
+
+		// Parse numbering if enabled.
+		var num *numberingMatch
+		if opts.DetectNumbering {
+			num = parseNumbering(c.text)
+			if num != nil {
+				c.hasNumbering = true
+				c.numberingDepth = num.Depth
+				if opts.StripNumberingFromTitle {
+					c.text = num.Title
+				}
+			}
+		}
+
+		hc := HeadingCandidate{
+			Text:           c.text,
+			FontSize:       c.fontSize,
+			BodySize:       bodySize,
+			PageNum:        c.pageNum,
+			CharCount:      len(c.text),
+			IsBold:         c.isBold,
+			HasNumbering:   c.hasNumbering,
+			NumberingDepth: c.numberingDepth,
+			Script:         script,
+		}
+		c.score = opts.Scorer.Score(hc)
+		if c.score < opts.ScoreThreshold {
+			continue
+		}
+		scored = append(scored, c)
+	}
+	candidates = scored
 
 	if opts.SkipHeaderFooter {
 		candidates = filterHeaderFooter(candidates, pages)
@@ -83,13 +139,15 @@ func GenerateFromFontSize(ctx context.Context, pages []PageTextElements, opts Op
 		return nil
 	}
 
-	// Build the hierarchical bookmark tree.
-	return buildBookmarkTree(candidates, levels)
+	// Determine final levels: numbering depth overrides font-size clustering
+	// when both are present.
+	return buildBookmarkTreeWithOverrides(candidates, levels, opts.MaxDepth)
 }
 
-// extractPageHeadings groups same-sized adjacent text elements on a single
-// page into heading candidates.
-func extractPageHeadings(ctx context.Context, page pageTextElements, levels map[float64]int, maxTitleLength int) []headingCandidate {
+// extractPageHeadings groups adjacent text elements on a single page into
+// heading candidate lines. All non-trivial lines are returned; the scorer
+// decides which are headings.
+func extractPageHeadings(ctx context.Context, page pageTextElements, maxTitleLength int, skipHF bool) []headingCandidate {
 	// Sort elements by Y descending (top to bottom in PDF coordinates), then X.
 	sorted := make([]models.TextElement, len(page.Elements))
 	copy(sorted, page.Elements)
@@ -100,6 +158,21 @@ func extractPageHeadings(ctx context.Context, page pageTextElements, levels map[
 		return sorted[i].X < sorted[j].X
 	})
 
+	// Compute the Y range of the page from the elements (a rough proxy for
+	// the CropBox top/bottom). Used for the header/footer Y-position filter.
+	var minY, maxY float64
+	for i, el := range sorted {
+		if i == 0 || el.Y < minY {
+			minY = el.Y
+		}
+		if i == 0 || el.Y > maxY {
+			maxY = el.Y
+		}
+	}
+	pageHeight := maxY - minY
+	headerCutoff := maxY - pageHeight*0.10
+	footerCutoff := minY + pageHeight*0.10
+
 	var candidates []headingCandidate
 	var currentLine []models.TextElement
 	var currentY float64
@@ -109,18 +182,20 @@ func extractPageHeadings(ctx context.Context, page pageTextElements, levels map[
 		if len(currentLine) == 0 {
 			return
 		}
-		// Only emit if the line's size is a heading level.
 		rounded := math.Round(math.Abs(currentSize)*2) / 2
-		level, ok := levels[rounded]
-		if !ok {
-			currentLine = nil
-			return
+		// Skip lines in the header/footer Y zone (running headers/footers).
+		// Only when SkipHeaderFooter is enabled.
+		if skipHF && pageHeight > 100 {
+			if currentY >= headerCutoff || currentY <= footerCutoff {
+				currentLine = nil
+				return
+			}
 		}
 		// Use the typography reconstructor to join adjacent glyphs into
 		// words with proper space inference.
 		reconstructed := typography.ReconstructText(ctx, currentLine, nil)
 		text := normalizeTitle(reconstructed, maxTitleLength)
-		if text != "" && len(text) >= 2 {
+		if text != "" && len([]rune(text)) >= 2 {
 			candidates = append(candidates, headingCandidate{
 				text:     text,
 				fontSize: rounded,
@@ -128,7 +203,6 @@ func extractPageHeadings(ctx context.Context, page pageTextElements, levels map[
 				yTop:     currentY,
 			})
 		}
-		_ = level
 		currentLine = nil
 	}
 
@@ -140,11 +214,7 @@ func extractPageHeadings(ctx context.Context, page pageTextElements, levels map[
 			continue
 		}
 		size := math.Round(math.Abs(el.FontSize)*2) / 2
-		if _, ok := levels[size]; !ok {
-			flush()
-			continue
-		}
-		// Start a new line if size differs or Y drops significantly.
+		// Start a new line when size changes or Y drops significantly.
 		if len(currentLine) == 0 || size != currentSize || math.Abs(el.Y-currentY) > size*0.6 {
 			flush()
 			currentY = el.Y
@@ -204,6 +274,68 @@ func filterHeaderFooter(candidates []headingCandidate, pages []pageTextElements)
 		filtered = append(filtered, c)
 	}
 	return filtered
+}
+
+// buildBookmarkTreeWithOverrides converts candidates into a nested bookmark
+// tree, preferring the numbering depth (when present) over font-size
+// clustering. Levels are capped at maxDepth.
+func buildBookmarkTreeWithOverrides(candidates []headingCandidate, levels map[float64]int, maxDepth int) []models.Bookmark {
+	if maxDepth < 1 {
+		maxDepth = 1
+	}
+	// Build a final level for each candidate.
+	finalLevels := make([]int, len(candidates))
+	for i, c := range candidates {
+		level := levels[c.fontSize]
+		if level == 0 {
+			level = 1
+		}
+		if c.hasNumbering && c.numberingDepth > 0 {
+			level = c.numberingDepth
+		}
+		if level > maxDepth {
+			level = maxDepth
+		}
+		if level < 1 {
+			level = 1
+		}
+		finalLevels[i] = level
+	}
+
+	// Sort by page, then Y descending (top of page first), preserving
+	// original level mapping.
+	type indexed struct {
+		c     headingCandidate
+		level int
+	}
+	idx := make([]indexed, len(candidates))
+	for i, c := range candidates {
+		idx[i] = indexed{c: c, level: finalLevels[i]}
+	}
+	sort.SliceStable(idx, func(i, j int) bool {
+		if idx[i].c.pageNum != idx[j].c.pageNum {
+			return idx[i].c.pageNum < idx[j].c.pageNum
+		}
+		return idx[i].c.yTop > idx[j].c.yTop
+	})
+
+	var roots []models.Bookmark
+	var stack []*models.Bookmark
+	for _, e := range idx {
+		bm := models.Bookmark{Title: e.c.text, PageNumber: e.c.pageNum}
+		for len(stack) >= e.level {
+			stack = stack[:len(stack)-1]
+		}
+		if len(stack) == 0 {
+			roots = append(roots, bm)
+			stack = append(stack, &roots[len(roots)-1])
+		} else {
+			parent := stack[len(stack)-1]
+			parent.Children = append(parent.Children, bm)
+			stack = append(stack, &parent.Children[len(parent.Children)-1])
+		}
+	}
+	return roots
 }
 
 // buildBookmarkTree converts flat heading candidates into a nested bookmark

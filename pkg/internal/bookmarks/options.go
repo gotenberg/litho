@@ -16,6 +16,19 @@ type Options struct {
 	// PreferStructureTree uses the PDF's structure tree (tagged PDFs) when
 	// available. Default true.
 	PreferStructureTree bool
+	// DetectNumbering parses section numbering (1.1, A.1, IV, §2.3, Chapter 5)
+	// to improve heading detection and override font-size clustering with
+	// the numbering depth. Default true.
+	DetectNumbering bool
+	// StripNumberingFromTitle removes the numeric prefix from generated
+	// bookmark titles (so "1.1 Overview" becomes "Overview"). Default false.
+	StripNumberingFromTitle bool
+	// Scorer scores heading candidates. When nil, the default heuristic
+	// scorer is used. Replace this for custom or ML-based heading detection.
+	Scorer HeadingScorer
+	// ScoreThreshold is the minimum score for a candidate to be included
+	// as a heading. Default 0.5.
+	ScoreThreshold float64
 }
 
 // DefaultOptions returns the recommended default options.
@@ -26,6 +39,9 @@ func DefaultOptions() Options {
 		SkipHeaderFooter:    true,
 		MaxTitleLength:      200,
 		PreferStructureTree: true,
+		DetectNumbering:     true,
+		Scorer:              HeuristicScorer{},
+		ScoreThreshold:      0.5,
 	}
 }
 
@@ -40,5 +56,11 @@ func (o *Options) applyDefaults() {
 	}
 	if o.MaxTitleLength == 0 {
 		o.MaxTitleLength = d.MaxTitleLength
+	}
+	if o.Scorer == nil {
+		o.Scorer = d.Scorer
+	}
+	if o.ScoreThreshold == 0 {
+		o.ScoreThreshold = d.ScoreThreshold
 	}
 }

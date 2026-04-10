@@ -392,7 +392,29 @@ type BookmarkGenerationOptions struct {
 	// PreferStructureTree uses the PDF's structure tree (tagged PDFs) when
 	// available, falling back to font heuristics otherwise. Default true.
 	PreferStructureTree bool
+	// DetectNumbering parses section number prefixes (1.1, A.1, IV, §2.3,
+	// Chapter 5) to improve detection and override font-size depth with
+	// the numbering depth. Default true.
+	DetectNumbering bool
+	// StripNumberingFromTitle removes the numeric prefix from generated
+	// titles (e.g., "1.1 Overview" becomes "Overview"). Default false.
+	StripNumberingFromTitle bool
+	// HeadingScorer scores heading candidates. When nil, the default
+	// heuristic scorer is used. Replace this for ML-based or custom
+	// heading detection.
+	HeadingScorer HeadingScorer
+	// HeadingScoreThreshold is the minimum score for a candidate to be
+	// included as a heading. Default 0.5.
+	HeadingScoreThreshold float64
 }
+
+// HeadingScorer is the public alias for the bookmarks heading scorer
+// interface. Implementations score a [HeadingCandidate] in the range [0, 1]
+// where >= 0.5 indicates a heading.
+type HeadingScorer = bookmarks.HeadingScorer
+
+// HeadingCandidate is the input passed to a [HeadingScorer].
+type HeadingCandidate = bookmarks.HeadingCandidate
 
 // GenerateBookmarks analyzes the document content and returns an
 // auto-generated bookmark tree based on heading detection. This is a
@@ -408,11 +430,15 @@ func (r *Reader) GenerateBookmarks(ctx context.Context, opts BookmarkGenerationO
 		return nil, err
 	}
 	return bookmarks.Generate(ctx, input, bookmarks.Options{
-		MaxDepth:            opts.MaxDepth,
-		MinFontSizeRatio:    opts.MinFontSizeRatio,
-		SkipHeaderFooter:    opts.SkipHeaderFooter,
-		MaxTitleLength:      opts.MaxTitleLength,
-		PreferStructureTree: opts.PreferStructureTree,
+		MaxDepth:                opts.MaxDepth,
+		MinFontSizeRatio:        opts.MinFontSizeRatio,
+		SkipHeaderFooter:        opts.SkipHeaderFooter,
+		MaxTitleLength:          opts.MaxTitleLength,
+		PreferStructureTree:     opts.PreferStructureTree,
+		DetectNumbering:         opts.DetectNumbering,
+		StripNumberingFromTitle: opts.StripNumberingFromTitle,
+		Scorer:                  opts.HeadingScorer,
+		ScoreThreshold:          opts.HeadingScoreThreshold,
 	})
 }
 
