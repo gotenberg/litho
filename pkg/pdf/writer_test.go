@@ -1234,6 +1234,200 @@ func TestSplit_EmptyPages(t *testing.T) {
 	}
 }
 
+// pdfWithBookmarks builds a 3-page PDF then uses litho to add an outline.
+// Returns the bytes of the bookmarked PDF.
+func pdfWithBookmarks(t *testing.T, marks []models.Bookmark) []byte {
+	t.Helper()
+	ctx := context.Background()
+
+	src := threePagePDF()
+	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+	if err != nil {
+		t.Fatalf("Open base: %v", err)
+	}
+
+	w := NewWriter(r)
+	w.SetBookmarks(marks)
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	return out.Bytes()
+}
+
+func TestSplit_BookmarkUpdate_DropOrphans(t *testing.T) {
+	ctx := context.Background()
+	// Bookmarks: A→p1, B→p2, C→p3
+	data := pdfWithBookmarks(t, []models.Bookmark{
+		{Title: "A", PageNumber: 1},
+		{Title: "B", PageNumber: 2},
+		{Title: "C", PageNumber: 3},
+	})
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	// Keep only pages 1 and 3 → bookmarks A (new p1) and C (new p2).
+	var out bytes.Buffer
+	if err := Split(ctx, r, []int{1, 3}, &out); err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open split: %v", err)
+	}
+	bms, err := r2.GetBookmarks(ctx)
+	if err != nil {
+		t.Fatalf("GetBookmarks: %v", err)
+	}
+	if len(bms) != 2 {
+		t.Fatalf("got %d bookmarks, want 2 (A, C)", len(bms))
+	}
+	if bms[0].Title != "A" || bms[0].PageNumber != 1 {
+		t.Errorf("first: %+v", bms[0])
+	}
+	if bms[1].Title != "C" || bms[1].PageNumber != 2 {
+		t.Errorf("second: %+v", bms[1])
+	}
+}
+
+func TestSplit_BookmarkNone(t *testing.T) {
+	ctx := context.Background()
+	data := pdfWithBookmarks(t, []models.Bookmark{
+		{Title: "A", PageNumber: 1},
+		{Title: "B", PageNumber: 2},
+	})
+	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
+
+	var out bytes.Buffer
+	if err := Split(ctx, r, []int{1, 2}, &out, WithBookmarks(BookmarkOptions{Handling: BookmarkNone})); err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+
+	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	bms, _ := r2.GetBookmarks(ctx)
+	if len(bms) != 0 {
+		t.Errorf("expected no bookmarks, got %d", len(bms))
+	}
+}
+
+func TestSplit_BookmarkOrphanRemap(t *testing.T) {
+	ctx := context.Background()
+	data := pdfWithBookmarks(t, []models.Bookmark{
+		{Title: "Skipped", PageNumber: 2}, // dropped
+		{Title: "Kept", PageNumber: 3},
+	})
+	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
+
+	var out bytes.Buffer
+	err := Split(ctx, r, []int{1, 3}, &out, WithBookmarks(BookmarkOptions{
+		Handling:     BookmarkUpdate,
+		OrphanPolicy: OrphanRemap,
+	}))
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+
+	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	bms, _ := r2.GetBookmarks(ctx)
+	if len(bms) != 2 {
+		t.Fatalf("got %d, want 2", len(bms))
+	}
+	// "Skipped" remapped to nearest kept (page 1 or 3 → either is acceptable),
+	// "Kept" should be at new page 2.
+	for _, bm := range bms {
+		if bm.PageNumber < 1 || bm.PageNumber > 2 {
+			t.Errorf("page out of range: %+v", bm)
+		}
+	}
+}
+
+func TestMerge_BookmarkUpdate_OffsetPages(t *testing.T) {
+	ctx := context.Background()
+	src1 := pdfWithBookmarks(t, []models.Bookmark{
+		{Title: "Doc1 A", PageNumber: 1},
+		{Title: "Doc1 B", PageNumber: 2},
+	})
+	src2 := pdfWithBookmarks(t, []models.Bookmark{
+		{Title: "Doc2 A", PageNumber: 1},
+	})
+
+	r1, _ := Open(ctx, bytes.NewReader(src1), int64(len(src1)))
+	r2, _ := Open(ctx, bytes.NewReader(src2), int64(len(src2)))
+
+	var out bytes.Buffer
+	if err := Merge(ctx, []*Reader{r1, r2}, &out); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	bms, _ := r3.GetBookmarks(ctx)
+	if len(bms) != 3 {
+		t.Fatalf("got %d, want 3 bookmarks", len(bms))
+	}
+	// Doc2's "A" should now point to page 4 (offset by 3 pages from src1).
+	last := bms[2]
+	if last.Title != "Doc2 A" || last.PageNumber != 4 {
+		t.Errorf("last bookmark: got %+v, want {Doc2 A, page 4}", last)
+	}
+}
+
+func TestMerge_BookmarkWrapEachSource(t *testing.T) {
+	ctx := context.Background()
+	src1 := pdfWithBookmarks(t, []models.Bookmark{
+		{Title: "Section", PageNumber: 1},
+	})
+	src2 := pdfWithBookmarks(t, []models.Bookmark{
+		{Title: "Other", PageNumber: 1},
+	})
+
+	r1, _ := Open(ctx, bytes.NewReader(src1), int64(len(src1)))
+	r2, _ := Open(ctx, bytes.NewReader(src2), int64(len(src2)))
+
+	var out bytes.Buffer
+	err := Merge(ctx, []*Reader{r1, r2}, &out, WithBookmarks(BookmarkOptions{
+		WrapEachSource: true,
+		SourceLabels:   []string{"User Guide", "Reference"},
+	}))
+	if err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	bms, _ := r3.GetBookmarks(ctx)
+	if len(bms) != 2 {
+		t.Fatalf("expected 2 root wrappers, got %d", len(bms))
+	}
+	if bms[0].Title != "User Guide" || bms[1].Title != "Reference" {
+		t.Errorf("wrapper labels wrong: %+v %+v", bms[0], bms[1])
+	}
+	if len(bms[0].Children) != 1 || bms[0].Children[0].Title != "Section" {
+		t.Errorf("first wrapper children: %+v", bms[0].Children)
+	}
+}
+
+func TestMerge_BookmarkNone(t *testing.T) {
+	ctx := context.Background()
+	src := pdfWithBookmarks(t, []models.Bookmark{{Title: "X", PageNumber: 1}})
+	r1, _ := Open(ctx, bytes.NewReader(src), int64(len(src)))
+	r2, _ := Open(ctx, bytes.NewReader(src), int64(len(src)))
+
+	var out bytes.Buffer
+	err := Merge(ctx, []*Reader{r1, r2}, &out, WithBookmarks(BookmarkOptions{Handling: BookmarkNone}))
+	if err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	bms, _ := r3.GetBookmarks(ctx)
+	if len(bms) != 0 {
+		t.Errorf("expected no bookmarks, got %d", len(bms))
+	}
+}
+
 func TestWriter_StampText(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()

@@ -17,8 +17,9 @@ type MergeSource struct {
 }
 
 // Merge combines multiple PDF documents into a single output written to dst.
-// Pages are concatenated in order.
-func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool) error {
+// Pages are concatenated in order. bookmarkCfg controls how bookmarks are
+// produced for the output.
+func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, bookmarkCfg BookmarkConfig) error {
 	if len(sources) == 0 {
 		return fmt.Errorf("no sources to merge")
 	}
@@ -27,8 +28,10 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	var allPageRefs []ast.PdfObject
 	var firstInfoRef ast.PdfIndirectRef
 	var hasInfo bool
+	cumulativeOffsets := make([]int, len(sources))
 
 	for srcIdx, src := range sources {
+		cumulativeOffsets[srcIdx] = len(allPageRefs)
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("merge canceled: %w", err)
 		}
@@ -99,6 +102,23 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		if err := copyCatalogEntries(ctx, sources[0].Doc, firstCopier, catalogDict); err != nil {
 			// best effort, don't fail the merge
 			_ = err
+		}
+	}
+
+	// Handle bookmarks for the merged output.
+	if bookmarkCfg.Handling != BookmarkNone {
+		newBookmarks, err := resolveMergeBookmarks(ctx, sources, cumulativeOffsets, bookmarkCfg)
+		if err == nil && len(newBookmarks) > 0 {
+			newPageRefs := make(map[int]ast.PdfIndirectRef, len(allPageRefs))
+			for i, ref := range allPageRefs {
+				if r, ok := ref.(ast.PdfIndirectRef); ok {
+					newPageRefs[i+1] = r
+				}
+			}
+			outlineRef := BuildOutline(ctx, alloc, newPageRefs, newBookmarks)
+			if outlineRef.ObjectNum > 0 {
+				catalogDict["Outlines"] = outlineRef
+			}
 		}
 	}
 

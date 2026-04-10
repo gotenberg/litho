@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -23,6 +24,7 @@ type writeOpts struct {
 	version     string
 	xrefStream  bool
 	logger      *slog.Logger
+	bookmarks   *BookmarkOptions
 }
 
 // WithFullRewrite forces a clean rewrite of the entire file instead of an
@@ -54,6 +56,17 @@ func WithXRefStream() WriteOption {
 func WithWriteLogger(logger *slog.Logger) WriteOption {
 	return func(o *writeOpts) {
 		o.logger = logger
+	}
+}
+
+// WithBookmarks configures how [Split] and [Merge] handle the document
+// outline. When omitted, the operation uses sensible defaults
+// (BookmarkUpdate with OrphanDrop and PromoteOrphanChildren=true for Split,
+// BookmarkUpdate with no wrapping for Merge).
+func WithBookmarks(opts BookmarkOptions) WriteOption {
+	return func(o *writeOpts) {
+		copy := opts
+		o.bookmarks = &copy
 	}
 }
 
@@ -92,6 +105,64 @@ type RemediationReport struct {
 	// Residual contains violations that could not be fixed automatically.
 	// Each element is a compliance.Violation.
 	Residual []error
+}
+
+// BookmarkHandling controls how bookmarks are produced for the output of
+// [Split] and [Merge].
+type BookmarkHandling int
+
+const (
+	// BookmarkUpdate keeps existing bookmarks and remaps page indexes.
+	// Bookmarks pointing to dropped pages are handled per [OrphanPolicy].
+	// This is the default.
+	BookmarkUpdate BookmarkHandling = iota
+	// BookmarkReconstruct ignores existing bookmarks and auto-generates a
+	// new outline from the output content via the heading detector.
+	BookmarkReconstruct
+	// BookmarkMixed uses existing bookmarks when present, otherwise
+	// auto-generates per source.
+	BookmarkMixed
+	// BookmarkNone produces no outline at all.
+	BookmarkNone
+)
+
+// OrphanPolicy controls what happens to bookmarks whose target page is no
+// longer in the output document (Split only).
+type OrphanPolicy int
+
+const (
+	// OrphanDrop removes the bookmark.
+	OrphanDrop OrphanPolicy = iota
+	// OrphanRemap retargets the bookmark to the nearest kept page.
+	OrphanRemap
+	// OrphanKeep emits the bookmark with no destination so the title
+	// remains visible (no clickable target).
+	OrphanKeep
+)
+
+// BookmarkOptions configures bookmark handling for [Split] and [Merge].
+// Pass to a write call via [WithBookmarks].
+type BookmarkOptions struct {
+	// Handling selects the high-level strategy. Defaults to BookmarkUpdate.
+	Handling BookmarkHandling
+
+	// OrphanPolicy controls what happens to bookmarks for dropped pages
+	// during Split. Defaults to OrphanDrop.
+	OrphanPolicy OrphanPolicy
+	// PromoteOrphanChildren promotes children of dropped bookmarks to the
+	// dropped bookmark's level. Default true for Split.
+	PromoteOrphanChildren bool
+
+	// WrapEachSource wraps each source's bookmarks under a per-source
+	// container labeled by [SourceLabels] (Merge only).
+	WrapEachSource bool
+	// SourceLabels provides custom labels for the WrapEachSource roots.
+	// Missing entries fall back to "Document N".
+	SourceLabels []string
+
+	// Generation controls auto-generation when Handling is
+	// BookmarkReconstruct or BookmarkMixed.
+	Generation BookmarkGenerationOptions
 }
 
 // Metadata holds document information dictionary fields for [Writer.SetMetadata].
@@ -473,7 +544,9 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 
 // Split extracts the specified 1-based pages from src into a new PDF document
 // written to dst. Pages are included in the order given; duplicates are
-// allowed to repeat a page.
+// allowed to repeat a page. Pass [WithBookmarks] to control how the source
+// outline is handled in the output (default: keep and remap existing,
+// drop orphans).
 func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) error {
 	cfg := writeOpts{}
 	for _, o := range opts {
@@ -486,12 +559,15 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	}
 
 	version := cfg.version
-	return mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream)
+	bookmarkCfg := buildSplitBookmarkConfig(src, cfg.bookmarks)
+	return mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, bookmarkCfg)
 }
 
 // Merge combines multiple PDF documents into a single output written to dst.
 // Pages are concatenated in order: all pages from sources[0], then all from
 // sources[1], etc. Each source Reader must remain valid until Merge returns.
+// Pass [WithBookmarks] to control how outlines from the sources are merged
+// (default: concatenate with offset page indexes).
 func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteOption) error {
 	cfg := writeOpts{}
 	for _, o := range opts {
@@ -510,5 +586,68 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 		}
 	}
 
-	return mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream)
+	bookmarkCfg := buildMergeBookmarkConfig(sources, cfg.bookmarks)
+	return mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, bookmarkCfg)
+}
+
+// buildSplitBookmarkConfig translates the public BookmarkOptions into the
+// internal mutations.BookmarkConfig for a Split operation.
+func buildSplitBookmarkConfig(src *Reader, opts *BookmarkOptions) mutations.BookmarkConfig {
+	if opts == nil {
+		cfg := mutations.DefaultSplitBookmarkConfig()
+		cfg.TextElements = func(ctx context.Context, _ int, pageNum int) ([]models.TextElement, error) {
+			return src.ExtractTextElements(ctx, pageNum)
+		}
+		return cfg
+	}
+	cfg := mutations.BookmarkConfig{
+		Handling:              mutations.BookmarkHandling(opts.Handling),
+		OrphanPolicy:          mutations.OrphanHandling(opts.OrphanPolicy),
+		PromoteOrphanChildren: opts.PromoteOrphanChildren,
+		Generation:            generationToInternal(opts.Generation),
+		TextElements: func(ctx context.Context, _ int, pageNum int) ([]models.TextElement, error) {
+			return src.ExtractTextElements(ctx, pageNum)
+		},
+	}
+	return cfg
+}
+
+// generationToInternal translates the public BookmarkGenerationOptions into
+// the internal bookmarks.Options used by the auto-generation engine.
+func generationToInternal(opts BookmarkGenerationOptions) bookmarks.Options {
+	return bookmarks.Options{
+		MaxDepth:                opts.MaxDepth,
+		MinFontSizeRatio:        opts.MinFontSizeRatio,
+		SkipHeaderFooter:        opts.SkipHeaderFooter,
+		MaxTitleLength:          opts.MaxTitleLength,
+		PreferStructureTree:     opts.PreferStructureTree,
+		DetectNumbering:         opts.DetectNumbering,
+		StripNumberingFromTitle: opts.StripNumberingFromTitle,
+		Scorer:                  opts.HeadingScorer,
+		ScoreThreshold:          opts.HeadingScoreThreshold,
+	}
+}
+
+// buildMergeBookmarkConfig translates the public BookmarkOptions into the
+// internal mutations.BookmarkConfig for a Merge operation.
+func buildMergeBookmarkConfig(sources []*Reader, opts *BookmarkOptions) mutations.BookmarkConfig {
+	textProvider := func(ctx context.Context, sourceIdx int, pageNum int) ([]models.TextElement, error) {
+		if sourceIdx < 0 || sourceIdx >= len(sources) {
+			return nil, fmt.Errorf("source index out of range")
+		}
+		return sources[sourceIdx].ExtractTextElements(ctx, pageNum)
+	}
+	if opts == nil {
+		cfg := mutations.DefaultMergeBookmarkConfig()
+		cfg.TextElements = textProvider
+		return cfg
+	}
+	cfg := mutations.BookmarkConfig{
+		Handling:       mutations.BookmarkHandling(opts.Handling),
+		WrapEachSource: opts.WrapEachSource,
+		SourceLabels:   opts.SourceLabels,
+		Generation:     generationToInternal(opts.Generation),
+		TextElements:   textProvider,
+	}
+	return cfg
 }

@@ -12,7 +12,8 @@ import (
 
 // Split extracts the specified 1-based pages from a document into a new PDF
 // written to dst. Pages are included in the order given; duplicates are allowed.
-func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool) error {
+// bookmarkCfg controls how bookmarks are produced for the output.
+func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, bookmarkCfg BookmarkConfig) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("no pages specified")
 	}
@@ -76,6 +77,25 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	// Copy catalog-level entries that should survive split.
 	if err := copyCatalogEntries(ctx, doc, copier, catalogDict); err != nil {
 		return fmt.Errorf("copying catalog entries: %w", err)
+	}
+
+	// Handle bookmarks for the output.
+	if bookmarkCfg.Handling != BookmarkNone {
+		newBookmarks, err := resolveSplitBookmarks(ctx, doc, allPages, pages, bookmarkCfg)
+		if err == nil && len(newBookmarks) > 0 {
+			// Build the new-page-number → new-page-ref map from the
+			// allocator's pageRefs slice.
+			newPageRefs := make(map[int]ast.PdfIndirectRef, len(pageRefs))
+			for i, ref := range pageRefs {
+				if r, ok := ref.(ast.PdfIndirectRef); ok {
+					newPageRefs[i+1] = r
+				}
+			}
+			outlineRef := BuildOutline(ctx, alloc, newPageRefs, newBookmarks)
+			if outlineRef.ObjectNum > 0 {
+				catalogDict["Outlines"] = outlineRef
+			}
+		}
 	}
 
 	catalogRef := alloc.Alloc(catalogDict)

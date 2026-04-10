@@ -24,6 +24,25 @@ func SetBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		pageRefs[i+1] = p.Ref // 1-based
 	}
 
+	return WriteOutline(ctx, alloc, doc, pageRefs, bookmarks)
+}
+
+// WriteOutline writes a bookmark tree to the allocator and patches the
+// catalog's /Outlines entry. pageRefs maps 1-based page numbers in the
+// output to their indirect references in the allocator. This is the
+// low-level entry point used by Split and Merge, which already have the
+// new page refs from their copier.
+func WriteOutline(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	pageRefs map[int]ast.PdfIndirectRef,
+	bookmarks []models.Bookmark,
+) error {
+	if len(bookmarks) == 0 {
+		return nil
+	}
+
 	// Build outline items as a linked list (each item has /Next, /Prev, /Parent).
 	outlineRef := alloc.Alloc(ast.PdfNull{}) // placeholder, will be replaced
 	items := buildOutlineItems(ctx, alloc, bookmarks, outlineRef, pageRefs)
@@ -37,7 +56,7 @@ func SetBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		"Type":  ast.PdfName("Outlines"),
 		"First": items[0],
 		"Last":  items[len(items)-1],
-		"Count": ast.PdfInt(len(bookmarks)),
+		"Count": ast.PdfInt(countTopLevel(bookmarks)),
 	}
 	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 
@@ -46,9 +65,21 @@ func SetBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if !ok {
 		return fmt.Errorf("trailer missing /Root indirect reference")
 	}
-	catalogDict, err := document.ResolveDict(ctx, doc, catalogRef)
-	if err != nil {
-		return fmt.Errorf("resolving catalog: %w", err)
+
+	// Read the current catalog from the allocator if already modified,
+	// otherwise from the document.
+	var catalogDict ast.PdfDict
+	if pending, ok := alloc.Pending()[catalogRef.ObjectNum]; ok {
+		if d, ok := pending.(ast.PdfDict); ok {
+			catalogDict = d
+		}
+	}
+	if catalogDict == nil {
+		d, err := document.ResolveDict(ctx, doc, catalogRef)
+		if err != nil {
+			return fmt.Errorf("resolving catalog: %w", err)
+		}
+		catalogDict = d
 	}
 
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
@@ -58,6 +89,41 @@ func SetBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
 	return nil
+}
+
+// countTopLevel returns the number of top-level bookmarks.
+func countTopLevel(bookmarks []models.Bookmark) int {
+	return len(bookmarks)
+}
+
+// BuildOutline allocates outline objects for the given bookmark tree and
+// returns the ref to the root /Outlines dict (or a zero ref if nothing was
+// written). The caller is responsible for inserting the returned ref into
+// the catalog. Used by Split and Merge which build fresh catalogs.
+func BuildOutline(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	pageRefs map[int]ast.PdfIndirectRef,
+	bookmarks []models.Bookmark,
+) ast.PdfIndirectRef {
+	if len(bookmarks) == 0 {
+		return ast.PdfIndirectRef{}
+	}
+
+	outlineRef := alloc.Alloc(ast.PdfNull{}) // placeholder
+	items := buildOutlineItems(ctx, alloc, bookmarks, outlineRef, pageRefs)
+	if len(items) == 0 {
+		return ast.PdfIndirectRef{}
+	}
+
+	outlineDict := ast.PdfDict{
+		"Type":  ast.PdfName("Outlines"),
+		"First": items[0],
+		"Last":  items[len(items)-1],
+		"Count": ast.PdfInt(countTopLevel(bookmarks)),
+	}
+	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
+	return outlineRef
 }
 
 // buildOutlineItems creates outline item objects and returns their refs.
