@@ -1,11 +1,38 @@
+// Remediation corpus CLI. Applies litho's PDF/A remediation engine to
+// every failing file in the VeraPDF corpus and reports aggregate before /
+// after violation counts, regressions, and residual breakdowns.
+//
+// Usage:
+//
+//	go run ./test/integration/cmd/remediate [flags]
+//
+// Flags (kept consistent with ./test/integration/cmd/corpus where relevant):
+//
+//	--corpus <path>        Path to corpus testdata (auto-detected if empty)
+//	--format text|json     Output format (default: text)
+//	--profile PDF_A-2b     Filter to a single profile directory
+//	--aggressive           Enable content-modifying fixers (Tier 2)
+//	--detail               After the summary, print a residual-violation
+//	                       clause breakdown. Text format only.
+//	--max-regressions N    Exit non-zero if more than N files regress
+//	                       (-1 = no limit). Default 0.
+//	--min-fixed-pct P      Exit non-zero if the aggregate fix percentage
+//	                       drops below P (0-100). Default 0.
+//
+// The corpus must be provisioned beforehand via:
+//
+//	go run ./test/integration/cmd/corpus verapdf --init
 package main
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,169 +45,342 @@ type profileInfo struct {
 	profile models.PDFAProfile
 }
 
-func main() {
-	ctx := context.Background()
-	corpusRoot := "test/integration/testdata/verapdf"
+// allProfiles is the set of VeraPDF profile directories the remediation
+// corpus walks. Order determines the text-report row order.
+var allProfiles = []profileInfo{
+	{"PDF_A-1b", models.PDFA1b},
+	{"PDF_A-2b", models.PDFA2b},
+	{"PDF_A-2u", models.PDFA2u},
+	{"PDF_A-2a", models.PDFA2a},
+	{"PDF_A-3b", models.PDFA3b},
+	{"PDF_A-4", models.PDFA4},
+}
 
-	profiles := []profileInfo{
-		{"PDF_A-1b", models.PDFA1b},
-		{"PDF_A-2b", models.PDFA2b},
-		{"PDF_A-2u", models.PDFA2u},
-		{"PDF_A-2a", models.PDFA2a},
-		{"PDF_A-3b", models.PDFA3b},
-		{"PDF_A-4", models.PDFA4},
+// profileResult holds the per-profile aggregate numbers used by both text
+// and JSON output.
+type profileResult struct {
+	Profile          string `json:"profile"`
+	Files            int    `json:"files"`
+	Failing          int    `json:"failing"`
+	Remediated       int    `json:"remediated"`
+	FullyFixed       int    `json:"fully_fixed"`
+	ViolationsBefore int    `json:"violations_before"`
+	ViolationsAfter  int    `json:"violations_after"`
+}
+
+// regressionEntry describes a file whose remediation made it worse (more
+// post-remediation violations than pre-remediation).
+type regressionEntry struct {
+	File    string   `json:"file"`
+	Profile string   `json:"profile"`
+	Before  int      `json:"before"`
+	After   int      `json:"after"`
+	New     []string `json:"new,omitempty"`
+}
+
+// remediateReport is the aggregate report emitted in text or JSON form.
+type remediateReport struct {
+	Profiles         []profileResult   `json:"profiles"`
+	Files            int               `json:"files"`
+	Failing          int               `json:"failing"`
+	Remediated       int               `json:"remediated"`
+	FullyFixed       int               `json:"fully_fixed"`
+	ViolationsBefore int               `json:"violations_before"`
+	ViolationsAfter  int               `json:"violations_after"`
+	FixedPercent     float64           `json:"fixed_percent"`
+	Regressions      []regressionEntry `json:"regressions"`
+	Elapsed          string            `json:"elapsed"`
+}
+
+func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
+	fs := flag.NewFlagSet("remediate", flag.ExitOnError)
+	corpus := fs.String("corpus", "", "Path to corpus testdata (auto-detected if empty)")
+	format := fs.String("format", "text", "Output format: text or json")
+	profile := fs.String("profile", "", "Filter to a single profile directory (e.g. PDF_A-2b)")
+	aggressive := fs.Bool("aggressive", false, "Enable content-modifying fixers (Tier 2)")
+	detail := fs.Bool("detail", false, "Print residual-violation clause breakdown after the summary")
+	maxRegressions := fs.Int("max-regressions", -1, "Maximum number of files allowed to regress (-1 = no limit)")
+	minFixedPct := fs.Float64("min-fixed-pct", 0, "Minimum aggregate fix percentage (0-100); below this the command exits non-zero")
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
+		return 1
 	}
 
-	aggressive := false
-	for _, arg := range os.Args[1:] {
-		if arg == "--aggressive" {
-			aggressive = true
+	corpusRoot := *corpus
+	if corpusRoot == "" {
+		corpusRoot = findCorpusPath()
+	}
+
+	profiles := allProfiles
+	if *profile != "" {
+		profiles = nil
+		for _, pi := range allProfiles {
+			if pi.dir == *profile {
+				profiles = append(profiles, pi)
+				break
+			}
+		}
+		if len(profiles) == 0 {
+			fmt.Fprintf(os.Stderr, "unknown profile directory %q. Valid: %s\n",
+				*profile, strings.Join(profileDirs(), ", "))
+			return 1
 		}
 	}
 
-	start := time.Now()
+	showProgress := *format == "text"
+	rpt := runCorpus(context.Background(), corpusRoot, profiles, *aggressive, showProgress)
 
-	var totalFiles, totalFail, totalRemediated, totalFullyFixed int
-	var totalViolationsBefore, totalViolationsAfter int
+	switch *format {
+	case "json":
+		printJSON(rpt)
+	default:
+		printText(rpt)
+		if *detail {
+			printResidualBreakdown(context.Background(), corpusRoot, profiles, *aggressive)
+		}
+	}
+
+	return checkThresholds(rpt, *maxRegressions, *minFixedPct)
+}
+
+func profileDirs() []string {
+	out := make([]string, 0, len(allProfiles))
+	for _, pi := range allProfiles {
+		out = append(out, pi.dir)
+	}
+	return out
+}
+
+// findCorpusPath matches [test/integration/cmd/corpus/main.go::findCorpusPath]
+// so both tools locate the same VeraPDF testdata directory without needing
+// a shared helper package.
+func findCorpusPath() string {
+	candidates := []string{
+		"test/integration/testdata/verapdf",
+		"testdata/verapdf",
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c
+		}
+	}
+	return "test/integration/testdata/verapdf"
+}
+
+// runCorpus walks each profile directory, validates the failing PDFs,
+// remediates them, re-validates, and aggregates the results into a
+// [remediateReport]. The function is deliberately side-effect-free on
+// report assembly — output formatting happens in [printText] / [printJSON].
+func runCorpus(ctx context.Context, corpusRoot string, profiles []profileInfo, aggressive, showProgress bool) remediateReport {
+	start := time.Now()
+	var rpt remediateReport
 
 	for _, pi := range profiles {
 		profileDir := filepath.Join(corpusRoot, pi.dir)
 		if _, err := os.Stat(profileDir); os.IsNotExist(err) {
+			if showProgress {
+				fmt.Fprintf(os.Stderr, "  skip %s (no directory)\n", pi.dir)
+			}
 			continue
 		}
 
-		var failFiles []string
-		err := filepath.Walk(profileDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return nil
-			}
-			if !info.IsDir() && strings.HasSuffix(path, ".pdf") && strings.Contains(info.Name(), "fail") {
-				failFiles = append(failFiles, path)
-			}
-			return nil
-		})
+		failFiles, err := collectFailFiles(profileDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "walking %s: %v\n", profileDir, err)
 			continue
 		}
 
-		profileRemediated := 0
-		profileFullyFixed := 0
-		profileViolBefore := 0
-		profileViolAfter := 0
+		pr := profileResult{Profile: string(pi.profile), Files: len(failFiles)}
 
 		for _, path := range failFiles {
-			totalFiles++
-
-			data, err := os.ReadFile(path)
-			if err != nil {
+			rpt.Files++
+			processed := processFile(ctx, path, pi.profile, aggressive, &rpt)
+			if processed.skipped {
 				continue
 			}
+			pr.Failing++
+			rpt.Failing++
 
-			// Open and validate.
-			r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
-			if err != nil {
-				continue
-			}
+			pr.ViolationsBefore += processed.before
+			pr.ViolationsAfter += processed.after
 
-			violations, err := r.ValidatePDFA(ctx, pi.profile)
-			if err != nil {
-				continue
+			if processed.remediated {
+				pr.Remediated++
+				rpt.Remediated++
 			}
-			if len(violations) == 0 {
-				continue // already compliant
+			if processed.fullyFixed {
+				pr.FullyFixed++
+				rpt.FullyFixed++
 			}
-			totalFail++
-			before := len(violations)
-			profileViolBefore += before
-
-			// Remediate.
-			w := pdf.NewWriter(r)
-			var remOpts []pdf.RemediateOption
-			if aggressive {
-				remOpts = append(remOpts, pdf.WithAggressiveFixes())
-			}
-			report, err := w.RemediatePDFA(ctx, pi.profile, remOpts...)
-			if err != nil {
-				continue
-			}
-
-			if len(report.Fixed) == 0 {
-				profileViolAfter += before
-				continue
-			}
-
-			// Write.
-			var out bytes.Buffer
-			if err := w.WriteTo(ctx, &out); err != nil {
-				profileViolAfter += before
-				continue
-			}
-
-			// Re-validate.
-			r2, err := pdf.Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-			if err != nil {
-				profileViolAfter += before
-				continue
-			}
-
-			after, err := r2.ValidatePDFA(ctx, pi.profile)
-			if err != nil {
-				profileViolAfter += before
-				continue
-			}
-
-			profileViolAfter += len(after)
-			profileRemediated++
-			if len(after) == 0 {
-				profileFullyFixed++
-			}
-			if len(after) > before {
+			if processed.after > processed.before {
 				rel, _ := filepath.Rel(corpusRoot, path)
-				fmt.Printf("  REGRESSION %s: %d → %d violations\n", rel, before, len(after))
-				for _, v := range after {
-					if isNew(v, violations) {
-						fmt.Printf("    NEW: %v\n", v)
-					}
-				}
+				rpt.Regressions = append(rpt.Regressions, regressionEntry{
+					File:    rel,
+					Profile: string(pi.profile),
+					Before:  processed.before,
+					After:   processed.after,
+					New:     processed.newMsgs,
+				})
 			}
 		}
 
-		totalRemediated += profileRemediated
-		totalFullyFixed += profileFullyFixed
-		totalViolationsBefore += profileViolBefore
-		totalViolationsAfter += profileViolAfter
-
-		fmt.Printf("%-12s  files=%3d  fail=%3d  remediated=%3d  fully_fixed=%3d  violations: %d → %d\n",
-			pi.profile, len(failFiles), len(failFiles), profileRemediated, profileFullyFixed,
-			profileViolBefore, profileViolAfter)
+		rpt.Profiles = append(rpt.Profiles, pr)
 	}
 
+	for _, pr := range rpt.Profiles {
+		rpt.ViolationsBefore += pr.ViolationsBefore
+		rpt.ViolationsAfter += pr.ViolationsAfter
+	}
+	fixed := rpt.ViolationsBefore - rpt.ViolationsAfter
+	if rpt.ViolationsBefore > 0 {
+		rpt.FixedPercent = float64(fixed) / float64(rpt.ViolationsBefore) * 100
+	}
+	rpt.Elapsed = time.Since(start).Round(time.Millisecond).String()
+	return rpt
+}
+
+// fileResult holds the outcome of remediating a single corpus file.
+// skipped=true means the file could not be parsed, validated, or was
+// already compliant; such files do not contribute to any aggregate.
+type fileResult struct {
+	skipped    bool
+	before     int
+	after      int
+	remediated bool
+	fullyFixed bool
+	newMsgs    []string // violation messages present after remediation but absent before
+}
+
+func processFile(ctx context.Context, path string, profile models.PDFAProfile, aggressive bool, rpt *remediateReport) fileResult {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fileResult{skipped: true}
+	}
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return fileResult{skipped: true}
+	}
+	violations, err := r.ValidatePDFA(ctx, profile)
+	if err != nil {
+		return fileResult{skipped: true}
+	}
+	if len(violations) == 0 {
+		return fileResult{skipped: true}
+	}
+
+	result := fileResult{before: len(violations), after: len(violations)}
+
+	w := pdf.NewWriter(r)
+	var remOpts []pdf.RemediateOption
+	if aggressive {
+		remOpts = append(remOpts, pdf.WithAggressiveFixes())
+	}
+	report, err := w.RemediatePDFA(ctx, profile, remOpts...)
+	if err != nil {
+		return result
+	}
+	if len(report.Fixed) == 0 {
+		return result
+	}
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		return result
+	}
+	r2, err := pdf.Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		return result
+	}
+	after, err := r2.ValidatePDFA(ctx, profile)
+	if err != nil {
+		return result
+	}
+
+	result.after = len(after)
+	result.remediated = true
+	result.fullyFixed = len(after) == 0
+	if len(after) > len(violations) {
+		for _, v := range after {
+			if isNew(v, violations) {
+				result.newMsgs = append(result.newMsgs, v.Error())
+			}
+		}
+	}
+	return result
+}
+
+func collectFailFiles(profileDir string) ([]string, error) {
+	var out []string
+	err := filepath.Walk(profileDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() && strings.HasSuffix(path, ".pdf") && strings.Contains(info.Name(), "fail") {
+			out = append(out, path)
+		}
+		return nil
+	})
+	return out, err
+}
+
+// --- output ---
+
+func printText(rpt remediateReport) {
+	for _, pr := range rpt.Profiles {
+		fmt.Printf("%-12s  files=%3d  fail=%3d  remediated=%3d  fully_fixed=%3d  violations: %d → %d\n",
+			pr.Profile, pr.Files, pr.Failing, pr.Remediated, pr.FullyFixed,
+			pr.ViolationsBefore, pr.ViolationsAfter)
+	}
+	for _, reg := range rpt.Regressions {
+		fmt.Printf("  REGRESSION %s: %d → %d violations\n", reg.File, reg.Before, reg.After)
+		for _, msg := range reg.New {
+			fmt.Printf("    NEW: %s\n", msg)
+		}
+	}
 	fmt.Println()
 	fmt.Printf("Total:  files=%d  failing=%d  remediated=%d  fully_fixed=%d\n",
-		totalFiles, totalFail, totalRemediated, totalFullyFixed)
+		rpt.Files, rpt.Failing, rpt.Remediated, rpt.FullyFixed)
 	fmt.Printf("Violations:  before=%d  after=%d  fixed=%d (%.1f%%)\n",
-		totalViolationsBefore, totalViolationsAfter,
-		totalViolationsBefore-totalViolationsAfter,
-		float64(totalViolationsBefore-totalViolationsAfter)/float64(max(totalViolationsBefore, 1))*100)
-	fmt.Printf("Elapsed: %s\n", time.Since(start).Round(time.Millisecond))
+		rpt.ViolationsBefore, rpt.ViolationsAfter,
+		rpt.ViolationsBefore-rpt.ViolationsAfter, rpt.FixedPercent)
+	fmt.Printf("Elapsed: %s\n", rpt.Elapsed)
+}
 
-	// Detailed breakdown requested via --detail flag.
-	detail := false
-	for _, arg := range os.Args[1:] {
-		if arg == "--detail" {
-			detail = true
-		}
-	}
-	if detail {
-		printResidualBreakdown(ctx, corpusRoot, profiles)
+func printJSON(rpt remediateReport) {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(rpt); err != nil {
+		fmt.Fprintf(os.Stderr, "encoding json: %v\n", err)
 	}
 }
 
-func printResidualBreakdown(ctx context.Context, corpusRoot string, profiles []profileInfo) {
+// checkThresholds enforces CI-style failure thresholds. Returns the exit
+// code that the process should use.
+func checkThresholds(rpt remediateReport, maxRegressions int, minFixedPct float64) int {
+	exit := 0
+	if maxRegressions >= 0 && len(rpt.Regressions) > maxRegressions {
+		fmt.Fprintf(os.Stderr, "\nFAIL: %d regressions exceed threshold %d\n",
+			len(rpt.Regressions), maxRegressions)
+		exit = 1
+	}
+	if rpt.FixedPercent < minFixedPct {
+		fmt.Fprintf(os.Stderr, "\nFAIL: fixed percentage %.1f%% below threshold %.1f%%\n",
+			rpt.FixedPercent, minFixedPct)
+		exit = 1
+	}
+	return exit
+}
+
+// --- residual breakdown ---
+
+func printResidualBreakdown(ctx context.Context, corpusRoot string, profiles []profileInfo, aggressive bool) {
 	fmt.Println("\n=== Residual Violation Breakdown ===")
 
-	// Collect all residual violations across all profiles after remediation.
 	type clauseInfo struct {
 		clause      string
 		description string
@@ -195,17 +395,7 @@ func printResidualBreakdown(ctx context.Context, corpusRoot string, profiles []p
 		if _, err := os.Stat(profileDir); os.IsNotExist(err) {
 			continue
 		}
-
-		var failFiles []string
-		_ = filepath.Walk(profileDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return nil
-			}
-			if !info.IsDir() && strings.HasSuffix(path, ".pdf") && strings.Contains(info.Name(), "fail") {
-				failFiles = append(failFiles, path)
-			}
-			return nil
-		})
+		failFiles, _ := collectFailFiles(profileDir)
 
 		for _, path := range failFiles {
 			data, err := os.ReadFile(path)
@@ -222,40 +412,25 @@ func printResidualBreakdown(ctx context.Context, corpusRoot string, profiles []p
 			}
 
 			w := pdf.NewWriter(r)
-			report, err := w.RemediatePDFA(ctx, pi.profile)
+			var remOpts []pdf.RemediateOption
+			if aggressive {
+				remOpts = append(remOpts, pdf.WithAggressiveFixes())
+			}
+			report, err := w.RemediatePDFA(ctx, pi.profile, remOpts...)
 			if err != nil || len(report.Residual) == 0 {
 				continue
 			}
 
 			for _, v := range report.Residual {
-				// Extract clause from the error string.
-				errStr := v.Error()
-				clause := "unknown"
-				if _, after, ok := strings.Cut(errStr, "clause "); ok {
-					rest := after
-					if before, _, ok := strings.Cut(rest, " "); ok {
-						clause = before
-					}
-				}
-				desc := "unknown"
-				if _, after, ok := strings.Cut(errStr, ": "); ok {
-					rest := after
-					if before, _, ok := strings.Cut(rest, " ["); ok {
-						desc = before
-					} else {
-						desc = rest
-					}
-				}
-
-				key := clause
-				ci, ok := clauseMap[key]
+				clause, desc := parseClauseAndDescription(v.Error())
+				ci, ok := clauseMap[clause]
 				if !ok {
 					ci = &clauseInfo{clause: clause, description: desc, profiles: make(map[string]bool)}
-					clauseMap[key] = ci
+					clauseMap[clause] = ci
 				}
 				ci.count++
 				ci.profiles[string(pi.profile)] = true
-				if len(ci.examples) < 2 {
+				if len(ci.examples) < 2 { //nolint:mnd // two examples is enough for quick triage
 					rel, _ := filepath.Rel(corpusRoot, path)
 					ci.examples = append(ci.examples, rel)
 				}
@@ -263,35 +438,48 @@ func printResidualBreakdown(ctx context.Context, corpusRoot string, profiles []p
 		}
 	}
 
-	// Sort by count descending.
-	type sortEntry struct {
-		key string
-		ci  *clauseInfo
+	entries := make([]*clauseInfo, 0, len(clauseMap))
+	for _, ci := range clauseMap {
+		entries = append(entries, ci)
 	}
-	entries := make([]sortEntry, 0, len(clauseMap))
-	for k, ci := range clauseMap {
-		entries = append(entries, sortEntry{k, ci})
-	}
-	// Sort by count desc.
-	for i := 0; i < len(entries); i++ {
-		for j := i + 1; j < len(entries); j++ {
-			if entries[j].ci.count > entries[i].ci.count {
-				entries[i], entries[j] = entries[j], entries[i]
-			}
-		}
-	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].count > entries[j].count
+	})
 
-	for _, e := range entries {
-		profs := make([]string, 0, len(e.ci.profiles))
-		for p := range e.ci.profiles {
+	for _, ci := range entries {
+		profs := make([]string, 0, len(ci.profiles))
+		for p := range ci.profiles {
 			profs = append(profs, p)
 		}
-		fmt.Printf("\n[%s] count=%d profiles=%v\n", e.ci.clause, e.ci.count, profs)
-		fmt.Printf("  %s\n", e.ci.description)
-		for _, ex := range e.ci.examples {
+		sort.Strings(profs)
+		fmt.Printf("\n[%s] count=%d profiles=%v\n", ci.clause, ci.count, profs)
+		fmt.Printf("  %s\n", ci.description)
+		for _, ex := range ci.examples {
 			fmt.Printf("  e.g. %s\n", ex)
 		}
 	}
+}
+
+// parseClauseAndDescription pulls "clause X.Y.Z" and the free-form
+// description out of a compliance violation error string. Both return
+// "unknown" when the expected prefixes are not present so the output
+// always has a row to display.
+func parseClauseAndDescription(errStr string) (string, string) {
+	clause := "unknown"
+	if _, after, ok := strings.Cut(errStr, "clause "); ok {
+		if before, _, ok := strings.Cut(after, " "); ok {
+			clause = before
+		}
+	}
+	desc := "unknown"
+	if _, after, ok := strings.Cut(errStr, ": "); ok {
+		if before, _, ok := strings.Cut(after, " ["); ok {
+			desc = before
+		} else {
+			desc = after
+		}
+	}
+	return clause, desc
 }
 
 func isNew(v error, before []error) bool {
