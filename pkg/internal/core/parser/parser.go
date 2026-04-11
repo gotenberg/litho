@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 )
 
@@ -244,7 +245,31 @@ func (p *Parser) parseIndirectObject() (ast.PdfObject, error) {
 	return obj, nil
 }
 
+// parseDict reads a <<...>> dictionary and, if the next token is the
+// `stream` keyword, also the following binary stream body. Stream
+// handling is delegated to [Parser.parseStreamAfterDict] so parseDict
+// itself stays small.
 func (p *Parser) parseDict() (ast.PdfObject, error) {
+	dict, err := p.parseDictBody()
+	if err != nil {
+		return nil, err
+	}
+
+	t, err := p.Peek(0)
+	if err != nil {
+		return nil, err
+	}
+	if t.Type != lexer.TokenKeyword || t.Value != "stream" {
+		return dict, nil
+	}
+	return p.parseStreamAfterDict(dict)
+}
+
+// parseDictBody reads the key/value pairs between `<<` and `>>` into an
+// [ast.PdfDict]. It tolerates EOF and a premature `endobj` as implicit
+// close markers so we still return a partial dict for malformed input
+// (the top-level parser continues, lenient by design).
+func (p *Parser) parseDictBody() (ast.PdfDict, error) {
 	dict := make(ast.PdfDict)
 	for {
 		if err := p.checkCtx(); err != nil {
@@ -254,7 +279,6 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 		if err != nil && t.Type == lexer.TokenError {
 			return nil, err
 		}
-		// Tolerate EOF or endobj inside a dictionary: close gracefully.
 		if t.Type == lexer.TokenEOF {
 			break
 		}
@@ -285,209 +309,257 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 		}
 		dict[key] = valObj
 	}
+	return dict, nil
+}
 
-	// Check if stream follows immediately
-	t, err := p.Peek(0)
+// parseStreamAfterDict consumes the `stream` keyword, the stream body
+// (via fast or slow path), and returns a lazy [ast.PdfStream]. The caller
+// has already confirmed the next token is `stream`.
+func (p *Parser) parseStreamAfterDict(dict ast.PdfDict) (ast.PdfObject, error) {
+	if _, err := p.Expect(lexer.TokenKeyword); err != nil {
+		return nil, err
+	}
+
+	// The parser must not have any lookahead tokens at this point: the
+	// next bytes belong to the raw stream body, not the token stream.
+	// Peek(0) of "stream" consumed its token via Expect() above; any
+	// additional tokens in the buffer mean we read past the stream start.
+	if len(p.tokens) > 0 {
+		return nil, fmt.Errorf("parser read ahead too far before stream data")
+	}
+
+	reader := p.lex.GetReader()
+	if err := p.consumeStreamEOL(reader); err != nil {
+		return nil, err
+	}
+
+	streamStart := reader.Position()
+	dataLen, usedLength, err := p.readStreamBody(reader, dict, streamStart)
 	if err != nil {
 		return nil, err
 	}
-	if t.Type == lexer.TokenKeyword && t.Value == "stream" {
-		if _, err := p.Expect(lexer.TokenKeyword); err != nil {
-			return nil, err
-		}
+	p.recordStreamLengthViolations(dict, dataLen, usedLength)
 
-		// Ensure we clear out the token buffer since we are reading directly from the reader next.
-		// A stream keyword cannot be followed by lookahead tokens because we need to read raw bytes.
-		// The peek(0) would have read "stream" into the token buffer, and Expect() removes it.
-		// If there are other tokens in p.tokens, it means we read past the stream data, which is bad!
-		if len(p.tokens) > 0 {
-			return nil, fmt.Errorf("parser read ahead too far before stream data")
-		}
+	trimLen := trimStreamTail(reader.ReaderAt(), streamStart, dataLen)
+	return p.newLazyStream(dict, reader.ReaderAt(), streamStart, trimLen), nil
+}
 
-		reader := p.lex.GetReader()
-		b, err := reader.ReadByte()
+// consumeStreamEOL consumes the end-of-line marker that must follow the
+// `stream` keyword per PDF 32000 §7.3.8.1 (either CRLF or LF). A bare CR
+// or missing EOL is tolerated but recorded as a format violation.
+func (p *Parser) consumeStreamEOL(reader *ioat.Reader) error {
+	b, err := reader.ReadByte()
+	if err != nil {
+		return err
+	}
+	switch b {
+	case '\r':
+		b2, err := reader.ReadByte()
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if b == '\r' {
-			b2, err := reader.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			if b2 != '\n' {
-				_ = reader.UnreadByte()
-				// CR only after stream keyword — invalid per spec.
-				if p.checkFormat {
-					p.recordViolation("stream keyword followed by CR only (must be CR+LF or LF)")
-				}
-			}
-		} else if b != '\n' {
+		if b2 != '\n' {
 			_ = reader.UnreadByte()
 			if p.checkFormat {
-				p.recordViolation("stream keyword not followed by EOL")
+				p.recordViolation("stream keyword followed by CR only (must be CR+LF or LF)")
 			}
 		}
-
-		// Record the start offset of the raw stream data.
-		streamStart := reader.Position()
-
-		// Fast path: if /Length is a direct integer, seek past the stream
-		// data without reading it byte-by-byte. This is critical for large
-		// streams (images, embedded files) where scanning would be wasteful.
-		var dataLen int64
-		usedLength := false
-		if lengthObj, ok := dict["Length"]; ok {
-			if lengthInt, ok := lengthObj.(ast.PdfInt); ok && int64(lengthInt) > 0 {
-				dataLen = int64(lengthInt)
-				// Seek past the stream data.
-				if _, err := reader.Seek(streamStart+dataLen, io.SeekStart); err == nil {
-					// Verify "endstream" follows. Tolerate optional \r\n before it.
-					usedLength = true
-					verify := make([]byte, len("endstream")+2) //nolint:mnd // endstream + optional \r\n
-					n, _ := reader.Read(verify)                //nolint:errcheck // partial read is fine
-					verifyStr := string(verify[:n])
-					// Strip leading whitespace before endstream.
-					for len(verifyStr) > 0 && (verifyStr[0] == '\r' || verifyStr[0] == '\n') {
-						verifyStr = verifyStr[1:]
-					}
-					if !strings.HasPrefix(verifyStr, "endstream") {
-						// /Length was wrong — fall back to byte scanning.
-						usedLength = false
-						if _, err := reader.Seek(streamStart, io.SeekStart); err != nil {
-							return nil, fmt.Errorf("seeking back to stream start: %w", err)
-						}
-					}
-				}
-			}
-		}
-
-		// Record the declared /Length for compliance checking after the
-		// actual length is determined via byte scanning.
-		var declaredLength int64
-		if lengthObj, ok := dict["Length"]; ok {
-			if lengthInt, ok := lengthObj.(ast.PdfInt); ok {
-				declaredLength = int64(lengthInt)
-			}
-		}
-
-		// Slow path: scan byte-by-byte for "endstream" marker.
-		if !usedLength {
-			endMarker := []byte("endstream")
-			matchLen := 0
-			dataLen = 0
-			// Check context every 64KB of scanned data to avoid hanging on
-			// malformed streams without adding per-byte overhead.
-			const ctxCheckInterval = 64 * 1024
-			sinceLastCheck := 0
-			for {
-				c, err := reader.ReadByte()
-				if err != nil {
-					if err == io.EOF {
-						// EOF mid-match: the partial match bytes are data, not the marker.
-						dataLen += int64(matchLen)
-						break
-					}
-					return nil, err
-				}
-				sinceLastCheck++
-				if sinceLastCheck >= ctxCheckInterval {
-					sinceLastCheck = 0
-					if err := p.checkCtx(); err != nil {
-						return nil, fmt.Errorf("scanning for endstream: %w", err)
-					}
-				}
-				if c == endMarker[matchLen] {
-					matchLen++
-					if matchLen == len(endMarker) {
-						break
-					}
-				} else {
-					if matchLen > 0 {
-						dataLen += int64(matchLen)
-						matchLen = 0
-						if c == endMarker[0] {
-							matchLen = 1
-						} else {
-							dataLen++
-						}
-					} else {
-						dataLen++
-					}
-				}
-			}
-		}
-
-		// Compliance check: if the slow path ran, /Length was wrong.
-		// Also check if /Length is missing entirely.
+	case '\n':
+		// canonical case
+	default:
+		_ = reader.UnreadByte()
 		if p.checkFormat {
-			if !usedLength && declaredLength > 0 {
-				// Slow path ran because /Length didn't match actual stream size.
-				p.recordViolation(fmt.Sprintf(
-					"stream /Length %d does not match actual byte count %d",
-					declaredLength, dataLen))
-			} else if declaredLength == 0 {
-				if _, hasLength := dict["Length"]; !hasLength {
-					p.recordViolation("stream missing /Length key")
-				}
-			}
+			p.recordViolation("stream keyword not followed by EOL")
 		}
-
-		// Calculate length after stripping trailing newline before endstream.
-		trimLen := dataLen
-		if trimLen > 0 {
-			// Peek at the last 1-2 bytes to strip \r\n, \n, or \r.
-			var tail [2]byte
-			tailN := int64(2)
-			if trimLen < 2 {
-				tailN = trimLen
-			}
-			_, _ = reader.ReaderAt().ReadAt(tail[:tailN], streamStart+trimLen-tailN) //nolint:errcheck // on failure tail stays zeroed, no trim — harmless
-			switch {
-			case tailN == 2 && tail[1] == '\n':
-				trimLen--
-				if tail[0] == '\r' {
-					trimLen--
-				}
-			case tailN == 2 && tail[1] == '\r':
-				trimLen--
-			case tailN == 1 && tail[0] == '\n':
-				trimLen--
-			case tailN == 1 && tail[0] == '\r':
-				trimLen--
-			}
-		}
-
-		// Capture values for the lazy loader closure.
-		src := reader.ReaderAt()
-		offset := streamStart
-		length := trimLen
-		decryptFn := p.decryptFn
-
-		var once sync.Once
-		var cached []byte
-		var cachedErr error
-
-		stream := ast.NewLazyStream(dict, func() ([]byte, error) {
-			once.Do(func() {
-				buf := make([]byte, length)
-				_, cachedErr = src.ReadAt(buf, offset)
-				if cachedErr != nil {
-					return
-				}
-				if decryptFn != nil {
-					if dec, err := decryptFn(buf); err == nil {
-						buf = dec
-					}
-				}
-				cached = buf
-			})
-			return cached, cachedErr
-		})
-
-		return stream, nil
 	}
+	return nil
+}
 
-	return dict, nil
+// readStreamBody measures the stream body and positions the reader after
+// it. It first tries a fast path using /Length; if /Length is missing or
+// doesn't point at `endstream`, it falls back to a byte scan.
+//
+// The returned usedLength is true if the fast path was taken.
+func (p *Parser) readStreamBody(reader *ioat.Reader, dict ast.PdfDict, streamStart int64) (int64, bool, error) {
+	if dataLen, ok := tryFastStreamLength(reader, dict, streamStart); ok {
+		return dataLen, true, nil
+	}
+	// Fast path failed (missing /Length, indirect /Length, or /Length
+	// disagreed with the actual stream). Rewind to the start and scan
+	// byte-by-byte for the endstream marker.
+	if _, err := reader.Seek(streamStart, io.SeekStart); err != nil {
+		return 0, false, fmt.Errorf("seeking back to stream start: %w", err)
+	}
+	dataLen, err := p.scanEndstream(reader)
+	return dataLen, false, err
+}
+
+// tryFastStreamLength attempts to use a direct /Length integer to seek
+// past the stream body without scanning. Returns the byte count and true
+// on success; zero and false on any mismatch. This is the hot path for
+// well-formed documents with large streams (images, embedded files).
+func tryFastStreamLength(reader *ioat.Reader, dict ast.PdfDict, streamStart int64) (int64, bool) {
+	lengthObj, ok := dict["Length"]
+	if !ok {
+		return 0, false
+	}
+	lengthInt, ok := lengthObj.(ast.PdfInt)
+	if !ok || int64(lengthInt) <= 0 {
+		return 0, false
+	}
+	dataLen := int64(lengthInt)
+
+	if _, err := reader.Seek(streamStart+dataLen, io.SeekStart); err != nil {
+		return 0, false
+	}
+	// Verify "endstream" actually follows. Tolerate an optional leading
+	// \r\n or lone \n.
+	verify := make([]byte, len("endstream")+2) //nolint:mnd // endstream + optional \r\n
+	n, _ := reader.Read(verify)                //nolint:errcheck // partial read is fine; we only care about the prefix
+	verifyStr := string(verify[:n])
+	for len(verifyStr) > 0 && (verifyStr[0] == '\r' || verifyStr[0] == '\n') {
+		verifyStr = verifyStr[1:]
+	}
+	if !strings.HasPrefix(verifyStr, "endstream") {
+		return 0, false
+	}
+	return dataLen, true
+}
+
+// scanEndstream reads byte-by-byte from the current position until it
+// finds the `endstream` keyword, returning the number of stream-body
+// bytes consumed before the marker. This is the fallback used when the
+// /Length hint is missing or wrong.
+func (p *Parser) scanEndstream(reader *ioat.Reader) (int64, error) {
+	endMarker := []byte("endstream")
+	matchLen := 0
+	var dataLen int64
+
+	// Check context every 64KB of scanned data: a per-byte check would
+	// dominate this hot loop, but letting a malformed stream spin without
+	// any bound is worse.
+	const ctxCheckInterval = 64 * 1024
+	sinceLastCheck := 0
+
+	for {
+		c, err := reader.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				// EOF mid-match: the bytes that matched so far are actually
+				// stream data, not part of the marker.
+				dataLen += int64(matchLen)
+				return dataLen, nil
+			}
+			return 0, err
+		}
+		sinceLastCheck++
+		if sinceLastCheck >= ctxCheckInterval {
+			sinceLastCheck = 0
+			if err := p.checkCtx(); err != nil {
+				return 0, fmt.Errorf("scanning for endstream: %w", err)
+			}
+		}
+		if c == endMarker[matchLen] {
+			matchLen++
+			if matchLen == len(endMarker) {
+				return dataLen, nil
+			}
+			continue
+		}
+		// Match broke. Anything we matched so far is stream data.
+		if matchLen > 0 {
+			dataLen += int64(matchLen)
+			matchLen = 0
+			if c == endMarker[0] {
+				matchLen = 1
+				continue
+			}
+		}
+		dataLen++
+	}
+}
+
+// recordStreamLengthViolations emits format-checking violations when the
+// declared /Length doesn't match the actual stream length. Called after
+// [Parser.readStreamBody] has determined the truth.
+func (p *Parser) recordStreamLengthViolations(dict ast.PdfDict, dataLen int64, usedLength bool) {
+	if !p.checkFormat {
+		return
+	}
+	var declaredLength int64
+	if lengthObj, ok := dict["Length"]; ok {
+		if lengthInt, ok := lengthObj.(ast.PdfInt); ok {
+			declaredLength = int64(lengthInt)
+		}
+	}
+	if !usedLength && declaredLength > 0 {
+		p.recordViolation(fmt.Sprintf(
+			"stream /Length %d does not match actual byte count %d",
+			declaredLength, dataLen))
+		return
+	}
+	if declaredLength == 0 {
+		if _, hasLength := dict["Length"]; !hasLength {
+			p.recordViolation("stream missing /Length key")
+		}
+	}
+}
+
+// trimStreamTail returns the stream body length after stripping the
+// optional EOL marker that PDF 32000 §7.3.8.1 allows before `endstream`.
+// Callers use the trimmed length when materializing the stream so the
+// lazy loader never surfaces the spec-optional newline bytes.
+func trimStreamTail(src io.ReaderAt, streamStart, dataLen int64) int64 {
+	if dataLen <= 0 {
+		return dataLen
+	}
+	var tail [2]byte
+	tailN := int64(2)
+	if dataLen < 2 {
+		tailN = dataLen
+	}
+	_, _ = src.ReadAt(tail[:tailN], streamStart+dataLen-tailN) //nolint:errcheck // on read failure tail stays zeroed — we simply don't trim
+	switch {
+	case tailN == 2 && tail[1] == '\n':
+		dataLen--
+		if tail[0] == '\r' {
+			dataLen--
+		}
+	case tailN == 2 && tail[1] == '\r':
+		dataLen--
+	case tailN == 1 && tail[0] == '\n':
+		dataLen--
+	case tailN == 1 && tail[0] == '\r':
+		dataLen--
+	}
+	return dataLen
+}
+
+// newLazyStream builds an [ast.PdfStream] whose bytes are read (and
+// optionally decrypted) on first access. This keeps the parser's hot
+// path cheap: large image and font streams are not materialized until
+// the caller explicitly asks for them.
+func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length int64) ast.PdfStream {
+	decryptFn := p.decryptFn
+	var once sync.Once
+	var cached []byte
+	var cachedErr error
+	return ast.NewLazyStream(dict, func() ([]byte, error) {
+		once.Do(func() {
+			buf := make([]byte, length)
+			_, cachedErr = src.ReadAt(buf, offset)
+			if cachedErr != nil {
+				return
+			}
+			if decryptFn != nil {
+				if dec, err := decryptFn(buf); err == nil {
+					buf = dec
+				}
+			}
+			cached = buf
+		})
+		return cached, cachedErr
+	})
 }
 
 func (p *Parser) parseArray() (ast.PdfObject, error) {

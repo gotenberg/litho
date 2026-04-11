@@ -33,23 +33,23 @@ const (
 // --- Rule selectors for numeric limit checks ---
 
 func integerRangeRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t01, Rule_19005_2_6_1_13_t01, Rule_19005_3_6_1_13_t01, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t01, Rule_19005_2_6_1_13_t01, Rule_19005_3_6_1_13_t01, Rule{})
 }
 
 func realRangeRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t02, Rule_19005_2_6_1_13_t02, Rule_19005_3_6_1_13_t02, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t02, Rule_19005_2_6_1_13_t02, Rule_19005_3_6_1_13_t02, Rule{})
 }
 
 func stringLengthRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t03, Rule_19005_2_6_1_13_t03, Rule_19005_3_6_1_13_t03, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t03, Rule_19005_2_6_1_13_t03, Rule_19005_3_6_1_13_t03, Rule{})
 }
 
 func nameLengthRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t04, Rule_19005_2_6_1_13_t04, Rule_19005_3_6_1_13_t04, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t04, Rule_19005_2_6_1_13_t04, Rule_19005_3_6_1_13_t04, Rule{})
 }
 
 func indirectObjCountRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t07, Rule_19005_2_6_1_13_t07, Rule_19005_3_6_1_13_t07, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t07, Rule_19005_2_6_1_13_t07, Rule_19005_3_6_1_13_t07, Rule{})
 }
 
 // --- Check implementations ---
@@ -57,7 +57,7 @@ func indirectObjCountRule(profile string) Rule {
 // checkNumericLimits validates §6.1.12/6.1.13: numeric value limits for
 // names, strings, integers, reals, arrays, dicts, and indirect objects.
 func checkNumericLimits(ctx context.Context, doc *document.Document, profile string) []Violation {
-	part := pdfaPart(profile)
+	part := PDFAPart(profile)
 	var results []Violation
 
 	// Check indirect object count.

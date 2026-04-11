@@ -3,7 +3,6 @@ package compliance
 import (
 	"bytes"
 	"context"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -110,7 +109,7 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 
-	slog.Debug("compliance: fonts: starting font checks", "profile", profile)
+	doc.Logger.Debug("compliance: fonts: starting font checks", "profile", profile)
 
 	if len(vctx.pages) == 0 {
 		return nil
@@ -140,7 +139,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		fontDict, err := document.ResolveDict(ctx, doc, fontDictObj)
 		if err != nil {
-			slog.Debug("compliance: fonts: failed to resolve /Font dict",
+			doc.Logger.Debug("compliance: fonts: failed to resolve /Font dict",
 				"page", pageIdx+1, "error", err)
 			continue
 		}
@@ -161,7 +160,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 			font, err := document.ResolveDict(ctx, doc, fontRef)
 			if err != nil || font == nil {
-				slog.Debug("compliance: fonts: failed to resolve font dict",
+				doc.Logger.Debug("compliance: fonts: failed to resolve font dict",
 					"font", fontKey, "page", pageIdx+1, "error", err)
 				continue
 			}
@@ -181,7 +180,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 	}
 
-	slog.Debug("compliance: fonts: font checks complete",
+	doc.Logger.Debug("compliance: fonts: font checks complete",
 		"violations", len(results), "fonts_checked", len(checked))
 	return results
 }
@@ -254,7 +253,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 	}
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil {
-		slog.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
+		doc.Logger.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
 		return nil
 	}
 	data, err := doc.DecodeStream(ctx, stream)
@@ -312,7 +311,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// Resolve /DescendantFonts array.
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
-		slog.Debug("compliance: fonts: Type0 font has no DescendantFonts",
+		doc.Logger.Debug("compliance: fonts: Type0 font has no DescendantFonts",
 			"font", fontName, "error", err)
 		// Without descendants we cannot check further, but the font is still
 		// subject to embedding checks at the Type0 level.
@@ -322,7 +321,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// PDF spec requires exactly one descendant CIDFont.
 	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
 	if err != nil || cidFontDict == nil {
-		slog.Debug("compliance: fonts: failed to resolve descendant CIDFont",
+		doc.Logger.Debug("compliance: fonts: failed to resolve descendant CIDFont",
 			"font", fontName, "error", err)
 		return results
 	}

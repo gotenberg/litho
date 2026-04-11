@@ -90,10 +90,16 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 	return result
 }
 
-// extractTextRecursive recursively extracts text from operations, supporting Form XObjects.
-// The visited set tracks indirect reference object numbers to break circular references,
-// and depth guards against non-circular but excessively deep nesting.
-// annotAppearances contains object numbers of annotation appearance streams to skip.
+// extractTextRecursive recursively extracts text from operations, supporting
+// Form XObjects. The visited set tracks indirect reference object numbers to
+// break circular references, and depth guards against non-circular but
+// excessively deep nesting. annotAppearances contains object numbers of
+// annotation appearance streams to skip.
+//
+// This function is a thin dispatcher: the actual per-operator work lives in
+// per-operator helpers (handleTfOp, handleShowTextOp, handleTJOp, handleDoOp)
+// so that each piece of the extraction state machine can be audited in
+// isolation.
 func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool) error {
 	if depth > maxFormXObjectDepth {
 		if doc != nil {
@@ -106,354 +112,430 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	var currentFont *Font
 
 	// Make resources available to the machine for pattern resolution.
 	machine.Ctx = ctx
 	machine.Doc = doc
 	machine.Resources = resources
 
-	// Pre-populate active OCs from resources /Properties
-	if propsObj, ok := resources["Properties"]; ok {
-		propsDict, err := document.ResolveDict(ctx, doc, propsObj)
-		if err != nil {
-			doc.Logger.Debug("resolving Properties dict", slog.Any("err", err))
-		}
-		for k, v := range propsDict {
-			dict, err := document.ResolveDict(ctx, doc, v)
-			if err != nil {
-				doc.Logger.Debug("resolving Properties entry", slog.String("key", string(k)), slog.Any("err", err))
-			}
-			if dict != nil {
-				if subtypeObj, ok := dict["Type"]; ok {
-					subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
-					if err != nil {
-						doc.Logger.Debug("resolving OCG type name", slog.Any("err", err))
-					}
-					if subtypeName == "OCG" {
-						// Determine visibility using Off -> On -> BaseState priority.
-						visible := true
-						if ref, ok := v.(ast.PdfIndirectRef); ok {
-							if doc.OCConfig != nil {
-								switch {
-								case doc.OCConfig.Off[ref.ObjectNum]:
-									visible = false
-								case doc.OCConfig.On[ref.ObjectNum]:
-									visible = true
-								default:
-									// Not in either explicit list: fall back to BaseState.
-									visible = doc.OCConfig.BaseState != "OFF"
-								}
-							}
-						}
-						machine.ActiveOCs[string(k)] = visible
-					}
-				}
-			}
-		}
-	}
+	populateOCsFromResources(ctx, doc, machine, resources)
 
+	var currentFont *Font
 	for opIdx, op := range ops {
-		// Check for context cancellation every 100 operators to respect deadlines
-		// without adding per-operator overhead.
-		if opIdx%100 == 0 && opIdx > 0 { //nolint:mnd // amortized cancellation check — frequent enough to respect deadlines, rare enough to avoid overhead
+		// Check for context cancellation every 100 operators to respect
+		// deadlines without adding per-operator overhead.
+		if opIdx%100 == 0 && opIdx > 0 { //nolint:mnd // amortized cancellation check
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 		}
-		// Errors from Execute are non-fatal: unknown/unsupported operators return errors
-		// but must not abort extraction of the remaining content stream.
+		// Errors from Execute are non-fatal: unknown/unsupported operators
+		// return errors but must not abort extraction of the rest.
 		_ = machine.ExecuteOne(op) //nolint:errcheck
 
 		state := machine.Current()
 
-		// If Marked Content just provided an ActualText cheat-code, render it directly.
+		// If marked content just provided an ActualText cheat-code, render
+		// it directly. The flag is reset unconditionally after rendering so
+		// that `SkipExtraction` still clears it on a hidden layer.
 		if machine.PendingActualText != "" {
 			if !state.SkipExtraction {
-				fontSize := state.Text.Tfs
-				if fontSize == 0 {
-					fontSize = 12
-				}
-
-				mcid := -1
-				var mcLang2, mcExpansion2 string
-				for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
-					mc := &machine.MarkedContent[i]
-					if mcid == -1 && mc.MCID != -1 {
-						mcid = mc.MCID
-					}
-					if mcLang2 == "" && mc.Language != "" {
-						mcLang2 = mc.Language
-					}
-					if mcExpansion2 == "" && mc.ExpansionText != "" {
-						mcExpansion2 = mc.ExpansionText
-					}
-				}
-
-				// Handle UTF-16 BE encoding that might be present in ActualText
-				actualText := document.DecodePdfString(ast.PdfString(machine.PendingActualText))
-
-				for _, r := range actualText {
-					tm := state.Text.Tm
-					ctm := state.CTM
-					tx := tm[4]
-					ty := tm[5]
-					x := tx*ctm[0] + ty*ctm[2] + ctm[4]
-					y := tx*ctm[1] + ty*ctm[3] + ctm[5]
-
-					advance := 0.5 * fontSize
-					dx := advance * tm[0] * ctm[0]
-
-					*elements = append(*elements, models.TextElement{
-						Text:          string(r),
-						X:             x,
-						Y:             y,
-						Width:         math.Abs(dx),
-						FontSize:      fontSize,
-						MCID:          mcid,
-						Language:      mcLang2,
-						ExpansionText: mcExpansion2,
-					})
-
-					state.Text.Tm[4] += advance * state.Text.Tm[0]
-					state.Text.Tm[5] += advance * state.Text.Tm[1]
-				}
+				renderActualText(machine, state, elements)
 			}
 			machine.PendingActualText = ""
 		}
 
 		if state.SkipExtraction {
-			continue // Skip all drawing/text operators if this layer is hidden
+			continue
 		}
 
 		switch op.Operator {
-		case "Tf": // Set text font
-			if len(op.Operands) < 1 {
-				continue
+		case "Tf":
+			currentFont = handleTfOp(ctx, doc, resources, op, currentFont)
+		case "Tj":
+			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements); err != nil {
+				return err
 			}
-			fontName, ok := op.Operands[0].(ast.PdfName)
-			if !ok {
-				continue
+		case "'":
+			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements); err != nil {
+				return err
 			}
-
-			resolved := false
-			if resObj, ok := resources["Font"]; ok {
-				resDictRoot, err := document.ResolveDict(ctx, doc, resObj)
-				if err != nil {
-					doc.Logger.Debug("resolving Font resource dict", slog.Any("err", err))
-				}
-				if resDictRoot != nil {
-					if fontRefObj, ok := resDictRoot[fontName]; ok {
-						// Check font cache by indirect reference object number.
-						if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
-							if cached, ok := doc.GetCachedFont(ref.ObjectNum); ok {
-								if f, ok := cached.(*Font); ok {
-									currentFont = f
-									resolved = true
-								}
-							}
-						}
-						if !resolved {
-							fontDict, err := document.ResolveDict(ctx, doc, fontRefObj)
-							if err == nil {
-								if fontDict != nil {
-									font, err := GetFont(ctx, doc, fontDict)
-									if err == nil {
-										currentFont = font
-										resolved = true
-										// Store in font cache.
-										if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
-											doc.SetCachedFont(ref.ObjectNum, font)
-										}
-									}
-								}
-							}
-						}
-					}
-				}
+		case "\"":
+			if err := handleShowTextOp(ctx, machine, currentFont, op, 2, elements); err != nil {
+				return err
 			}
-			if !resolved {
-				// Fall back to a default font rather than aborting the
-				// entire page. Text may be garbled but extraction continues,
-				// to produce best-effort output rather than aborting the page.
-				if doc != nil {
-					doc.Logger.Debug("font not found, using fallback",
-						slog.String("font", string(fontName)),
-					)
-				}
-				currentFont = fallbackFont()
+		case "TJ":
+			if err := handleTJOp(ctx, machine, currentFont, op, elements); err != nil {
+				return err
 			}
-
-		case "Tj": // Show text
-			if machine.IgnoreTextOps {
-				continue
-			}
-			if len(op.Operands) == 1 && currentFont != nil {
-				if str, ok := op.Operands[0].(ast.PdfString); ok {
-					if err := processText(ctx, str, currentFont, machine, elements); err != nil {
-						return err
-					}
-				}
-			}
-
-		case "'": // Move to next line and show text
-			if machine.IgnoreTextOps {
-				continue
-			}
-			if len(op.Operands) == 1 && currentFont != nil {
-				if str, ok := op.Operands[0].(ast.PdfString); ok {
-					if err := processText(ctx, str, currentFont, machine, elements); err != nil {
-						return err
-					}
-				}
-			}
-
-		case "\"": // Set word/char spacing, move to next line, and show text
-			if machine.IgnoreTextOps {
-				continue
-			}
-			if len(op.Operands) == 3 && currentFont != nil {
-				if str, ok := op.Operands[2].(ast.PdfString); ok {
-					if err := processText(ctx, str, currentFont, machine, elements); err != nil {
-						return err
-					}
-				}
-			}
-
-		case "TJ": // Show text with kerning
-			if machine.IgnoreTextOps {
-				continue
-			}
-			if len(op.Operands) == 1 && currentFont != nil {
-				if arr, ok := op.Operands[0].(ast.PdfArray); ok {
-					for _, item := range arr {
-						if str, ok := item.(ast.PdfString); ok {
-							if err := processText(ctx, str, currentFont, machine, elements); err != nil {
-								return err
-							}
-						} else {
-							var numVal float64
-							switch num := item.(type) {
-							case ast.PdfInt:
-								numVal = float64(num)
-							case ast.PdfReal:
-								numVal = float64(num)
-							default:
-								continue
-							}
-							state := machine.Current()
-							fontSize := state.Text.Tfs
-							if fontSize == 0 {
-								fontSize = 12
-							}
-							adjustment := -(numVal / 1000.0) * fontSize
-							if currentFont.WMode == 1 {
-								// Vertical mode: displace along Y axis.
-								state.Text.Tm[4] += adjustment * state.Text.Tm[2]
-								state.Text.Tm[5] += adjustment * state.Text.Tm[3]
-							} else {
-								// Horizontal mode: displace along X axis.
-								state.Text.Tm[4] += adjustment * state.Text.Tm[0]
-								state.Text.Tm[5] += adjustment * state.Text.Tm[1]
-							}
-						}
-					}
-				}
-			}
-
-		case "Do": // Draw Object (Form XObject)
-			if len(op.Operands) == 1 {
-				if name, ok := op.Operands[0].(ast.PdfName); ok {
-					if xobjObj, ok := resources["XObject"]; ok {
-						xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
-						if err != nil {
-							doc.Logger.Debug("resolving XObject dict for Do", slog.Any("err", err))
-						}
-						if xobjDict != nil {
-							if targetObj, ok := xobjDict[name]; ok {
-								// Track visited Form XObjects by indirect reference to break circular references.
-								objNum := 0
-								if ref, ok := targetObj.(ast.PdfIndirectRef); ok {
-									objNum = ref.ObjectNum
-									if visited[objNum] {
-										continue
-									}
-									// Skip annotation appearance streams — they are visual overlays, not page content.
-									if annotAppearances[objNum] {
-										continue
-									}
-								}
-
-								stream, err := document.ResolveStream(ctx, doc, targetObj)
-								if err != nil {
-									doc.Logger.Debug("resolving Form XObject stream", slog.Any("err", err))
-								}
-								if stream.Dict != nil {
-									if subtypeObj, ok := stream.Dict["Subtype"]; ok {
-										subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
-										if err != nil {
-											doc.Logger.Debug("resolving XObject subtype", slog.Any("err", err))
-										}
-										if subtypeName == "Form" {
-											// Parse the Form XObject stream
-											formOps, err := content.ParsePageContent(ctx, doc, stream)
-											if err == nil {
-												// Determine resources
-												formRes := resources // inherit by default
-												if resObj, ok := stream.Dict["Resources"]; ok {
-													resDict, err := document.ResolveDict(ctx, doc, resObj)
-													if err != nil {
-														doc.Logger.Debug("resolving Form XObject resources", slog.Any("err", err))
-													}
-													if resDict != nil {
-														formRes = resDict
-													}
-												}
-
-												// Graphics state save/restore and matrix transform: these trivial
-												// operators cannot fail in practice, and this function does not
-												// return errors, so suppression is justified.
-												_ = machine.Execute([]content.Operation{{Operator: "q"}}) //nolint:errcheck
-
-												// If there is a Matrix in the Form XObject, apply it
-												if matrixObj, ok := stream.Dict["Matrix"]; ok {
-													matrixArr, err := document.ResolveArray(ctx, doc, matrixObj)
-													if err != nil {
-														return err
-													}
-													if len(matrixArr) == 6 {
-														_ = machine.Execute([]content.Operation{{ //nolint:errcheck
-															Operator: "cm",
-															Operands: matrixArr,
-														}})
-													}
-												}
-
-												// Mark as visited before recursing; unmark after to allow
-												// the same XObject to appear in sibling contexts.
-												if objNum != 0 {
-													visited[objNum] = true
-												}
-												err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances)
-												if objNum != 0 {
-													delete(visited, objNum)
-												}
-												if err != nil {
-													return err
-												}
-
-												_ = machine.Execute([]content.Operation{{Operator: "Q"}}) //nolint:errcheck
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
+		case "Do":
+			if err := handleDoOp(ctx, doc, machine, resources, op, elements, visited, depth, annotAppearances); err != nil {
+				return err
 			}
 		}
 	}
+	return nil
+}
+
+// populateOCsFromResources reads /Properties from the given resource
+// dictionary and populates machine.ActiveOCs with the visibility state of
+// each OCG referenced there. Called at the top of every content-stream
+// recursion level so nested Form XObjects inherit the correct optional-
+// content visibility.
+func populateOCsFromResources(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict) {
+	propsObj, ok := resources["Properties"]
+	if !ok {
+		return
+	}
+	propsDict, err := document.ResolveDict(ctx, doc, propsObj)
+	if err != nil {
+		doc.Logger.Debug("resolving Properties dict", slog.Any("err", err))
+	}
+	for k, v := range propsDict {
+		dict, err := document.ResolveDict(ctx, doc, v)
+		if err != nil {
+			doc.Logger.Debug("resolving Properties entry", slog.String("key", string(k)), slog.Any("err", err))
+		}
+		if dict == nil {
+			continue
+		}
+		subtypeObj, ok := dict["Type"]
+		if !ok {
+			continue
+		}
+		subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
+		if err != nil {
+			doc.Logger.Debug("resolving OCG type name", slog.Any("err", err))
+		}
+		if subtypeName != "OCG" {
+			continue
+		}
+		machine.ActiveOCs[string(k)] = ocgVisible(v, doc.OCConfig)
+	}
+}
+
+// ocgVisible returns the effective visibility of an optional-content group
+// given its indirect reference and the document's OC configuration. The
+// precedence is /Off → /On → /BaseState, matching PDF 32000 §8.11.
+func ocgVisible(v ast.PdfObject, cfg *document.OCConfig) bool {
+	if cfg == nil {
+		return true
+	}
+	ref, ok := v.(ast.PdfIndirectRef)
+	if !ok {
+		return true
+	}
+	switch {
+	case cfg.Off[ref.ObjectNum]:
+		return false
+	case cfg.On[ref.ObjectNum]:
+		return true
+	default:
+		return cfg.BaseState != "OFF"
+	}
+}
+
+// renderActualText emits a synthetic text element per rune of the pending
+// ActualText replacement. Used when a BDC/BMC block provides an
+// /ActualText (or /Alt) entry that overrides the enclosed character
+// sequence — see PDF 32000 §14.9.4.
+func renderActualText(machine *graphics.Machine, state *graphics.State, elements *[]models.TextElement) {
+	fontSize := state.Text.Tfs
+	if fontSize == 0 {
+		fontSize = 12
+	}
+
+	mcid := -1
+	var mcLang, mcExpansion string
+	for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
+		mc := &machine.MarkedContent[i]
+		if mcid == -1 && mc.MCID != -1 {
+			mcid = mc.MCID
+		}
+		if mcLang == "" && mc.Language != "" {
+			mcLang = mc.Language
+		}
+		if mcExpansion == "" && mc.ExpansionText != "" {
+			mcExpansion = mc.ExpansionText
+		}
+	}
+
+	// DecodePdfString handles UTF-16 BE that may be present in ActualText.
+	actualText := document.DecodePdfString(ast.PdfString(machine.PendingActualText))
+
+	for _, r := range actualText {
+		tm := state.Text.Tm
+		ctm := state.CTM
+		tx := tm[4]
+		ty := tm[5]
+		x := tx*ctm[0] + ty*ctm[2] + ctm[4]
+		y := tx*ctm[1] + ty*ctm[3] + ctm[5]
+
+		advance := 0.5 * fontSize
+		dx := advance * tm[0] * ctm[0]
+
+		*elements = append(*elements, models.TextElement{
+			Text:          string(r),
+			X:             x,
+			Y:             y,
+			Width:         math.Abs(dx),
+			FontSize:      fontSize,
+			MCID:          mcid,
+			Language:      mcLang,
+			ExpansionText: mcExpansion,
+		})
+
+		state.Text.Tm[4] += advance * state.Text.Tm[0]
+		state.Text.Tm[5] += advance * state.Text.Tm[1]
+	}
+}
+
+// handleTfOp resolves the font named by a Tf operator through the current
+// page's /Font resource dict and the document-wide font cache. Returns
+// the resolved font, or a best-effort [fallbackFont] if nothing can be
+// found. Never returns an error — extraction always continues.
+func handleTfOp(ctx context.Context, doc *document.Document, resources ast.PdfDict, op content.Operation, prev *Font) *Font {
+	if len(op.Operands) < 1 {
+		return prev
+	}
+	fontName, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		return prev
+	}
+
+	if font := resolveFontFromResources(ctx, doc, resources, fontName); font != nil {
+		return font
+	}
+
+	// Fall back to a default font rather than aborting the page. Text may
+	// be garbled, but extraction continues — best-effort is our contract.
+	if doc != nil {
+		doc.Logger.Debug("font not found, using fallback",
+			slog.String("font", string(fontName)),
+		)
+	}
+	return fallbackFont()
+}
+
+// resolveFontFromResources looks up a font name in the resource dict's
+// /Font sub-dict, consulting the document's font cache first and
+// populating it on cache miss. Returns nil if the font cannot be resolved.
+func resolveFontFromResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, fontName ast.PdfName) *Font {
+	resObj, ok := resources["Font"]
+	if !ok {
+		return nil
+	}
+	resDictRoot, err := document.ResolveDict(ctx, doc, resObj)
+	if err != nil {
+		doc.Logger.Debug("resolving Font resource dict", slog.Any("err", err))
+	}
+	if resDictRoot == nil {
+		return nil
+	}
+	fontRefObj, ok := resDictRoot[fontName]
+	if !ok {
+		return nil
+	}
+
+	// Cache hit by indirect reference object number.
+	if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
+		if cached, ok := doc.GetCachedFont(ref.ObjectNum); ok {
+			if f, ok := cached.(*Font); ok {
+				return f
+			}
+		}
+	}
+
+	// Cache miss — parse the font dict and store it back.
+	fontDict, err := document.ResolveDict(ctx, doc, fontRefObj)
+	if err != nil || fontDict == nil {
+		return nil
+	}
+	font, err := GetFont(ctx, doc, fontDict)
+	if err != nil {
+		return nil
+	}
+	if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
+		doc.SetCachedFont(ref.ObjectNum, font)
+	}
+	return font
+}
+
+// handleShowTextOp processes Tj ("), and " operators. strIndex selects the
+// operand that holds the PdfString — 0 for Tj and ', 2 for the
+// word/char-spacing form ".
+func handleShowTextOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, strIndex int, elements *[]models.TextElement) error {
+	if machine.IgnoreTextOps || currentFont == nil {
+		return nil
+	}
+	if strIndex >= len(op.Operands) {
+		return nil
+	}
+	str, ok := op.Operands[strIndex].(ast.PdfString)
+	if !ok {
+		return nil
+	}
+	return processText(ctx, str, currentFont, machine, elements)
+}
+
+// handleTJOp processes the TJ (show text with kerning) operator. Numeric
+// array elements advance the text matrix instead of drawing a glyph, so
+// they must be dispatched separately from string elements.
+func handleTJOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, elements *[]models.TextElement) error {
+	if machine.IgnoreTextOps || currentFont == nil {
+		return nil
+	}
+	if len(op.Operands) != 1 {
+		return nil
+	}
+	arr, ok := op.Operands[0].(ast.PdfArray)
+	if !ok {
+		return nil
+	}
+	for _, item := range arr {
+		if str, ok := item.(ast.PdfString); ok {
+			if err := processText(ctx, str, currentFont, machine, elements); err != nil {
+				return err
+			}
+			continue
+		}
+		var numVal float64
+		switch num := item.(type) {
+		case ast.PdfInt:
+			numVal = float64(num)
+		case ast.PdfReal:
+			numVal = float64(num)
+		default:
+			continue
+		}
+		applyTJKerning(machine, currentFont, numVal)
+	}
+	return nil
+}
+
+// applyTJKerning shifts the text matrix by a TJ numeric-array adjustment.
+// Horizontal fonts advance along the X axis; vertical fonts (WMode 1)
+// advance along the Y axis.
+func applyTJKerning(machine *graphics.Machine, currentFont *Font, numVal float64) {
+	state := machine.Current()
+	fontSize := state.Text.Tfs
+	if fontSize == 0 {
+		fontSize = 12
+	}
+	adjustment := -(numVal / 1000.0) * fontSize
+	if currentFont.WMode == 1 {
+		state.Text.Tm[4] += adjustment * state.Text.Tm[2]
+		state.Text.Tm[5] += adjustment * state.Text.Tm[3]
+		return
+	}
+	state.Text.Tm[4] += adjustment * state.Text.Tm[0]
+	state.Text.Tm[5] += adjustment * state.Text.Tm[1]
+}
+
+// handleDoOp processes the Do operator, invoking a Form XObject by name
+// from the current resource dict. Non-Form XObjects (images, for example)
+// are silently skipped — only Form streams carry content-stream ops the
+// extractor can recurse into.
+func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, op content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool) error {
+	if len(op.Operands) != 1 {
+		return nil
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		return nil
+	}
+	xobjObj, ok := resources["XObject"]
+	if !ok {
+		return nil
+	}
+	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
+	if err != nil {
+		doc.Logger.Debug("resolving XObject dict for Do", slog.Any("err", err))
+	}
+	if xobjDict == nil {
+		return nil
+	}
+	targetObj, ok := xobjDict[name]
+	if !ok {
+		return nil
+	}
+
+	// Break circular references and skip annotation appearance streams.
+	objNum := 0
+	if ref, ok := targetObj.(ast.PdfIndirectRef); ok {
+		objNum = ref.ObjectNum
+		if visited[objNum] || annotAppearances[objNum] {
+			return nil
+		}
+	}
+
+	stream, err := document.ResolveStream(ctx, doc, targetObj)
+	if err != nil {
+		doc.Logger.Debug("resolving Form XObject stream", slog.Any("err", err))
+	}
+	if stream.Dict == nil {
+		return nil
+	}
+	subtypeObj, ok := stream.Dict["Subtype"]
+	if !ok {
+		return nil
+	}
+	subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
+	if err != nil {
+		doc.Logger.Debug("resolving XObject subtype", slog.Any("err", err))
+	}
+	if subtypeName != "Form" {
+		return nil
+	}
+
+	formOps, err := content.ParsePageContent(ctx, doc, stream)
+	if err != nil {
+		return nil
+	}
+
+	// Determine the Form's own /Resources; inherit the parent's on absence.
+	formRes := resources
+	if resObj, ok := stream.Dict["Resources"]; ok {
+		resDict, err := document.ResolveDict(ctx, doc, resObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Form XObject resources", slog.Any("err", err))
+		}
+		if resDict != nil {
+			formRes = resDict
+		}
+	}
+
+	// q / cm / recurse / Q. These trivial state operators cannot fail in
+	// practice and the machine doesn't use the return values from
+	// Execute, so the errcheck suppressions are intentional.
+	_ = machine.Execute([]content.Operation{{Operator: "q"}}) //nolint:errcheck
+	if matrixObj, ok := stream.Dict["Matrix"]; ok {
+		matrixArr, err := document.ResolveArray(ctx, doc, matrixObj)
+		if err != nil {
+			return err
+		}
+		if len(matrixArr) == 6 {
+			_ = machine.Execute([]content.Operation{{ //nolint:errcheck
+				Operator: "cm",
+				Operands: matrixArr,
+			}})
+		}
+	}
+
+	// Mark as visited before recursing; unmark after so the same XObject
+	// can appear under sibling parents in the same content stream.
+	if objNum != 0 {
+		visited[objNum] = true
+	}
+	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances)
+	if objNum != 0 {
+		delete(visited, objNum)
+	}
+	if err != nil {
+		return err
+	}
+
+	_ = machine.Execute([]content.Operation{{Operator: "Q"}}) //nolint:errcheck
 	return nil
 }
 

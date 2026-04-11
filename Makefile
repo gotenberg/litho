@@ -34,6 +34,10 @@ godoc: ## Run a webserver with litho godoc
 test-unit: ## Run unit tests
 	go test -race ./...
 
+.PHONY: bench
+bench: ## Run all benchmarks
+	go test -run=^$$ -bench=. -benchmem ./...
+
 .PHONY: corpus-verapdf
 corpus-verapdf: ## Run VeraPDF corpus comparison (text output)
 	go run ./test/integration/cmd/corpus verapdf

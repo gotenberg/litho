@@ -15,31 +15,31 @@ import (
 // cidToGIDMapRule returns the CIDToGIDMap rule for the given profile.
 // Returns a zero Rule if the check does not apply (part 1).
 func cidToGIDMapRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_3_2_t01
 	}
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_2_11_3_2_t01, Rule_19005_3_6_2_11_3_2_t01, Rule_19005_4_6_2_10_3_2_t01)
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_3_2_t01, Rule_19005_3_6_2_11_3_2_t01, Rule_19005_4_6_2_10_3_2_t01)
 }
 
 // cidSystemInfoRule returns the CIDSystemInfo consistency rule.
 // Returns a zero Rule if the check does not apply (part 1).
 func cidSystemInfoRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_3_1_t01
 	}
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_3_1_t01, Rule_19005_2_6_2_11_3_1_t01, Rule_19005_3_6_2_11_3_1_t01, Rule_19005_4_6_2_10_3_1_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_3_1_t01, Rule_19005_2_6_2_11_3_1_t01, Rule_19005_3_6_2_11_3_1_t01, Rule_19005_4_6_2_10_3_1_t01)
 }
 
 // cmapEmbeddingRules returns the 3 CMap embedding rules (t1: non-predefined must
 // be embedded, t2: WMode consistency, t3: usecmap non-predefined forbidden).
 func cmapEmbeddingRules(profile string) (t1, t2, t3 Rule) {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		if strings.Contains(profile, "2") {
 			return Rule_14289_2_8_4_5_4_t01, Rule_14289_2_8_4_5_4_t02, Rule_14289_2_8_4_5_4_t03
 		}
 		return Rule_14289_1_7_21_3_3_t01, Rule_14289_1_7_21_3_3_t02, Rule_14289_1_7_21_3_3_t03
 	}
-	switch pdfaPart(profile) {
+	switch PDFAPart(profile) {
 	case 2:
 		return Rule_19005_2_6_2_11_3_3_t01, Rule_19005_2_6_2_11_3_3_t02, Rule_19005_2_6_2_11_3_3_t03
 	case 3:
@@ -52,7 +52,7 @@ func cmapEmbeddingRules(profile string) (t1, t2, t3 Rule) {
 
 // cmapCIDRule returns the rule for CID value > 65535 checks.
 func cmapCIDRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_12_t10, Rule_19005_2_6_1_13_t10, Rule_19005_3_6_1_13_t10, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t10, Rule_19005_2_6_1_13_t10, Rule_19005_3_6_1_13_t10, Rule{})
 }
 
 // predefinedCMapPrefixes lists the predefined CMap name prefixes from
@@ -202,8 +202,8 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 	// CIDFont Supplement must be ≤ CMap Supplement (parts 2+ only;
 	// PDF/A-1 §6.3.3.1 only requires Registry/Ordering match).
 	// PDF/UA profiles also require Supplement check.
-	part := pdfaPart(profile)
-	checkSupplement := part >= 2 || isPDFUA(profile)
+	part := PDFAPart(profile)
+	checkSupplement := part >= 2 || IsPDFUA(profile)
 	if checkSupplement && cidSupplement > cmapSupplement {
 		return failf(rule, "font %s on page %d: CIDFont Supplement (%d) > CMap Supplement (%d)",
 			fontName, pageNum, cidSupplement, cmapSupplement)

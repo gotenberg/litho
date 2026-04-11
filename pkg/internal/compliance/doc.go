@@ -26,6 +26,32 @@
 // holds resolved pages, resources, and decoded content streams. This eliminates
 // redundant page tree traversals across groups.
 //
+// # Silent-skip pattern
+//
+// Many checks begin by resolving an object (a font dict, an XObject, an OCG
+// entry) through [document.ResolveDict] or a typed variant. When the resolve
+// fails — typically because of a dangling indirect reference, a corrupt
+// object stream, or a decryption failure — the check *skips* the affected
+// subtree rather than emitting a [Violation]. The rationale: no PDF/A or
+// PDF/UA rule directly covers "a referenced object could not be parsed",
+// and emitting a synthetic "structural corruption" violation would pollute
+// the report with noise that VeraPDF does not generate.
+//
+// These silent skips always log the underlying error at Debug level so an
+// operator running with [pdf.WithWriteLogger] (or equivalent) can see the
+// context. Structural corruption that makes the entire document unparseable
+// is surfaced earlier, at [pdf.Open] time, via [pdf.ErrDamagedXRef] and
+// related sentinels.
+//
+// When adding a new check, follow this policy:
+//
+//   - Legitimate "not applicable" (e.g. the page has no /Font dict at all):
+//     silently continue, no log.
+//   - Partial corruption (resolve of a referenced object fails): log at
+//     Debug via the document logger and continue, do not emit a violation.
+//   - Infrastructure failure that prevents the whole check from running
+//     (e.g. ctx canceled): propagate the error to the orchestrator.
+//
 // Rules are generated from VeraPDF XML profiles via go generate (see
 // cmd/gen-rules). Each [Rule] maps 1:1 to a VeraPDF validation rule, identified
 // by (Specification, Clause, TestNumber). 751 rules cover 6 ISO standards:

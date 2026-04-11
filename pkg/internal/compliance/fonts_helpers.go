@@ -38,30 +38,30 @@ var standard14Fonts = map[string]bool{
 
 // fontEmbeddingRule returns the font embedding rule for the given profile.
 func fontEmbeddingRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_4_1_t01
 	}
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_4_t01, Rule_19005_2_6_2_11_4_1_t01, Rule_19005_3_6_2_11_4_1_t01, Rule_19005_4_6_2_10_4_1_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_4_t01, Rule_19005_2_6_2_11_4_1_t01, Rule_19005_3_6_2_11_4_1_t01, Rule_19005_4_6_2_10_4_1_t01)
 }
 
 // toUnicodeRule returns the ToUnicode mapping rule for the given profile.
 // Returns a zero Rule if the check does not apply.
 func toUnicodeRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_7_t01
 	}
-	switch pdfaPart(profile) {
+	switch PDFAPart(profile) {
 	case 1:
 		// Part 1: applies to all levels.
 		return Rule_19005_1_6_3_8_t01
 	case 2:
-		level := pdfaLevel(profile)
+		level := PDFALevel(profile)
 		if level == 'u' || level == 'a' {
 			return Rule_19005_2_6_2_11_7_2_t01
 		}
 		return Rule{}
 	case 3:
-		level := pdfaLevel(profile)
+		level := PDFALevel(profile)
 		if level == 'u' || level == 'a' {
 			return Rule_19005_3_6_2_11_7_2_t01
 		}
@@ -75,70 +75,70 @@ func toUnicodeRule(profile string) Rule {
 
 // glyphWidthRule returns the glyph width consistency rule.
 func glyphWidthRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_5_t01
 	}
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_6_t01, Rule_19005_2_6_2_11_5_t01, Rule_19005_3_6_2_11_5_t01, Rule_19005_4_6_2_10_5_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_6_t01, Rule_19005_2_6_2_11_5_t01, Rule_19005_3_6_2_11_5_t01, Rule_19005_4_6_2_10_5_t01)
 }
 
 // notdefRule returns the .notdef glyph rule.
 // Returns a zero Rule for part 1 (not applicable).
 func notdefRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_8_t01
 	}
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_2_11_8_t01, Rule_19005_3_6_2_11_8_t01, Rule_19005_4_6_2_10_9_t01)
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_8_t01, Rule_19005_3_6_2_11_8_t01, Rule_19005_4_6_2_10_9_t01)
 }
 
 // trueTypeEncodingNonSymbolicRule returns the TrueType non-symbolic encoding rule.
 func trueTypeEncodingNonSymbolicRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_6_t02
 	}
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_7_t01, Rule_19005_2_6_2_11_6_t02, Rule_19005_3_6_2_11_6_t02, Rule_19005_4_6_2_10_6_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_7_t01, Rule_19005_2_6_2_11_6_t02, Rule_19005_3_6_2_11_6_t02, Rule_19005_4_6_2_10_6_t02)
 }
 
 // trueTypeEncodingSymbolicNoEncodingRule returns the rule that symbolic TrueType
 // fonts must not specify /Encoding.
 func trueTypeEncodingSymbolicNoEncodingRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_6_t03
 	}
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_7_t02, Rule_19005_2_6_2_11_6_t03, Rule_19005_3_6_2_11_6_t03, Rule_19005_4_6_2_10_6_t03)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_7_t02, Rule_19005_2_6_2_11_6_t03, Rule_19005_3_6_2_11_6_t03, Rule_19005_4_6_2_10_6_t03)
 }
 
 // trueTypeSymbolicCmapRule returns the rule for symbolic TrueType cmap requirements.
 func trueTypeSymbolicCmapRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_6_t04
 	}
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_7_t03, Rule_19005_2_6_2_11_6_t04, Rule_19005_3_6_2_11_6_t04, Rule_19005_4_6_2_10_6_t04)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_7_t03, Rule_19005_2_6_2_11_6_t04, Rule_19005_3_6_2_11_6_t04, Rule_19005_4_6_2_10_6_t04)
 }
 
 // fontNameUTF8Rule returns the font name UTF-8 rule.
 // Only applicable to parts 2+, 4, and PDF/UA.
 func fontNameUTF8Rule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		// PDF/UA reuses the font general rules but there is no specific
 		// BaseFont UTF-8 rule in 14289-1; skip.
 		return Rule{}
 	}
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_2_11_2_t03, Rule_19005_3_6_2_11_2_t03, Rule_19005_4_6_2_10_2_t03)
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_2_t03, Rule_19005_3_6_2_11_2_t03, Rule_19005_4_6_2_10_2_t03)
 }
 
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
 func toUnicodeCMapValuesRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		if strings.Contains(profile, "2") {
 			return Rule_14289_2_8_4_5_8_t02
 		}
 		return Rule_14289_1_7_21_7_t02
 	}
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule_19005_4_6_2_10_7_t01)
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule_19005_4_6_2_10_7_t01)
 }
 
 func puaActualTextRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule{})
 }
 
 // --- Helper functions ---

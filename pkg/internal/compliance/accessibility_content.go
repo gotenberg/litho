@@ -85,7 +85,7 @@ const (
 //   - t2: Tagged content must not appear inside Artifact
 //   - t3: All painting operators must be inside a marked content span
 func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if !isPDFUA(profile) {
+	if !IsPDFUA(profile) {
 		return nil
 	}
 

@@ -71,31 +71,31 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 // --- Rule selectors ---
 
 func fileHeaderRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_2_t01, Rule_19005_2_6_1_2_t01, Rule_19005_3_6_1_2_t01, Rule_19005_4_6_1_2_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_2_t01, Rule_19005_2_6_1_2_t01, Rule_19005_3_6_1_2_t01, Rule_19005_4_6_1_2_t01)
 }
 
 func fileBinaryCommentRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_2_t02, Rule_19005_2_6_1_2_t02, Rule_19005_3_6_1_2_t02, Rule_19005_4_6_1_2_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_2_t02, Rule_19005_2_6_1_2_t02, Rule_19005_3_6_1_2_t02, Rule_19005_4_6_1_2_t02)
 }
 
 func trailerIDRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_3_t01, Rule_19005_2_6_1_3_t01, Rule_19005_3_6_1_3_t01, Rule_19005_4_6_1_3_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_3_t01, Rule_19005_2_6_1_3_t01, Rule_19005_3_6_1_3_t01, Rule_19005_4_6_1_3_t01)
 }
 
 func encryptRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_3_t02, Rule_19005_2_6_1_3_t02, Rule_19005_3_6_1_3_t02, Rule_19005_4_6_1_3_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_3_t02, Rule_19005_2_6_1_3_t02, Rule_19005_3_6_1_3_t02, Rule_19005_4_6_1_3_t02)
 }
 
 func postEOFRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_3_t03, Rule_19005_2_6_1_3_t03, Rule_19005_3_6_1_3_t03, Rule_19005_4_6_1_3_t03)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_3_t03, Rule_19005_2_6_1_3_t03, Rule_19005_3_6_1_3_t03, Rule_19005_4_6_1_3_t03)
 }
 
 func streamExternalKeysRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_7_t03, Rule_19005_2_6_1_7_1_t03, Rule_19005_3_6_1_7_1_t03, Rule_19005_4_6_1_6_1_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t03, Rule_19005_2_6_1_7_1_t03, Rule_19005_3_6_1_7_1_t03, Rule_19005_4_6_1_6_1_t02)
 }
 
 func lzwFilterRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_10_t01, Rule_19005_2_6_1_7_2_t01, Rule_19005_3_6_1_7_2_t01, Rule_19005_4_6_1_6_2_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_10_t01, Rule_19005_2_6_1_7_2_t01, Rule_19005_3_6_1_7_2_t01, Rule_19005_4_6_1_6_2_t01)
 }
 
 func embeddedFilesEFRule(_ string) Rule {
@@ -108,7 +108,7 @@ func embeddedFilesNameRule(_ string) Rule {
 
 func pageBoundRule(profile string) Rule {
 	// PDF/A-1 uses the same clause numbering as part 2 for this check.
-	return ruleByPart(pdfaPart(profile), Rule_19005_2_6_1_13_t11, Rule_19005_2_6_1_13_t11, Rule_19005_3_6_1_13_t11, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_2_6_1_13_t11, Rule_19005_2_6_1_13_t11, Rule_19005_3_6_1_13_t11, Rule{})
 }
 
 // --- Check implementations ---
@@ -122,7 +122,7 @@ func checkFileHeader(doc *document.Document, profile string) []Violation {
 		return nil
 	}
 
-	part := pdfaPart(profile)
+	part := PDFAPart(profile)
 
 	// Check that file starts with %PDF-.
 	if !bytes.HasPrefix(buf, []byte("%PDF-")) {
@@ -228,7 +228,7 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 	}
 
 	// Check linearized ID consistency (§6.1.3 t04) — PDF/A-1 only.
-	if pdfaPart(profile) == 1 && doc.Linearization != nil {
+	if PDFAPart(profile) == 1 && doc.Linearization != nil {
 		results := checkLinearizedID(doc, profile)
 		if len(results) > 0 {
 			return results
@@ -485,7 +485,7 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 
 // streamFilterRule returns the rule for non-standard stream filters.
 func streamFilterRule(profile string) Rule {
-	if pdfaPart(profile) == 4 {
+	if PDFAPart(profile) == 4 {
 		return Rule_19005_4_6_1_6_2_t01
 	}
 	// Parts 1-3 use the LZW/filter clause for non-standard filters.
@@ -494,7 +494,7 @@ func streamFilterRule(profile string) Rule {
 
 // checkEmbeddedFiles validates §6.1.11: embedded files are forbidden in PDF/A-1.
 func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if pdfaPart(profile) != 1 {
+	if PDFAPart(profile) != 1 {
 		return nil
 	}
 
@@ -544,7 +544,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 
 // checkXRefFormat validates §6.1.4: xref streams are forbidden in PDF/A-1.
 func checkXRefFormat(doc *document.Document, profile string) []Violation {
-	if pdfaPart(profile) != 1 {
+	if PDFAPart(profile) != 1 {
 		return nil
 	}
 
@@ -751,7 +751,7 @@ func hasEndstreamAt(buf []byte) bool {
 
 // streamLengthRule returns the rule for stream length mismatch.
 func streamLengthRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
 // pageBoundaryKeys lists all page boundary box keys defined in ISO 32000-1, §14.11.2.
@@ -760,7 +760,7 @@ var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox
 // checkPageBoundaries validates §6.1.13 t11: page boundary box dimensions must
 // be within [3, 14400] units in both directions.
 func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	part := pdfaPart(profile)
+	part := PDFAPart(profile)
 	// Page boundary size limits apply to PDF/A-2, -3, and -4.
 	if part < 2 {
 		return nil
@@ -935,7 +935,7 @@ func checkSignatureReferences(ctx context.Context, doc *document.Document, catal
 	}
 
 	var results []Violation
-	part := pdfaPart(profile)
+	part := PDFAPart(profile)
 	forbidden := []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"}
 
 	for i, refObj := range refArr {
@@ -959,7 +959,7 @@ func sigRefRule(part int) Rule {
 
 // utf8NameRule returns the rule for UTF-8 name validation based on part.
 func utf8NameRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_1_8_t01, Rule_19005_3_6_1_8_t01, Rule_19005_4_6_1_7_t01)
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_1_8_t01, Rule_19005_3_6_1_8_t01, Rule_19005_4_6_1_7_t01)
 }
 
 // checkUTF8Names validates §6.1.7 (PDF/A-4) / §6.1.8 (PDF/A-2/3): font names,

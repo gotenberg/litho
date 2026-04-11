@@ -45,8 +45,11 @@ func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 	structTreeRef := alloc.Alloc(structTreeRoot)
 
-	// Set /Parent on the document element back to the tree root.
-	docElem["ParentTreeRoot"] = structTreeRef
+	// Set /Parent on the document element back to the tree root. Per
+	// ISO 32000-1 §14.7.2 Table 323, a structure element's parent pointer
+	// is the /Parent key, not /ParentTreeRoot (which is a different entry
+	// on StructTreeRoot).
+	docElem["Parent"] = structTreeRef
 	alloc.AllocAt(docElemRef.ObjectNum, docElem)
 
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)

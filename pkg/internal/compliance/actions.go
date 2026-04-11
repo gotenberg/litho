@@ -558,7 +558,7 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 		if err == nil && aDict != nil {
 			// Verify it's actually an action (has /S key), not a destination.
 			if _, hasS := aDict["S"]; hasS {
-				if isPDFUA(profile) {
+				if IsPDFUA(profile) {
 					violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0)
 					*results = append(*results, violations...)
 				} else {

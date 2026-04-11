@@ -40,8 +40,9 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	info := gatherInfoMetadata(ctx, doc)
 
 	// Determine PDF/A part and conformance from profile string.
-	part, conformance := parsePDFAProfile(profile)
-	uaPart := parsePDFUAProfile(profile)
+	part := compliance.PDFAPart(profile)
+	conformance := compliance.PDFAConformance(profile)
+	uaPart := compliance.PDFUAPart(profile)
 
 	// Check if XMP metadata stream already exists.
 	var existingXMP string
@@ -197,25 +198,19 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	var fixes []string
 
 	// PDF/A-4 (plain): remove pdfaid:conformance if present (forbidden).
-	// Skip patching entirely if we can't cleanly remove it — avoid making
-	// already-broken XMP worse.
+	// Uses the byte-range XMP splicer so the removal works regardless of
+	// whether the producer serialized the property as a child element
+	// (`<pdfaid:conformance>B</pdfaid:conformance>`) or as an attribute
+	// on the rdf:Description start tag (`pdfaid:conformance="B"`).
 	if part == 4 && conformance != "E" && conformance != "F" && strings.Contains(xmp, "pdfaid:conformance") {
-		start := strings.Index(xmp, "<pdfaid:conformance>")
-		if start >= 0 {
-			end := strings.Index(xmp[start:], "</pdfaid:conformance>")
-			if end >= 0 {
-				end += start + len("</pdfaid:conformance>")
-				for end < len(xmp) && (xmp[end] == '\n' || xmp[end] == '\r' || xmp[end] == ' ') {
-					end++
-				}
-				xmp = xmp[:start] + xmp[end:]
-				fixes = append(fixes, "removed pdfaid:conformance (forbidden for plain PDF/A-4)")
-			} else {
-				// Can't cleanly remove (attribute form or malformed) — skip.
-				return xmp, nil
-			}
-		} else if strings.Contains(xmp, "pdfaid:conformance=") {
-			// Attribute form — too complex to patch safely.
+		const pdfaidNS = "http://www.aiim.org/pdfa/ns/id/"
+		loc := findXMPProperty([]byte(xmp), pdfaidNS, "conformance")
+		if loc.Form != xmpPropertyNotFound {
+			xmp = string(removeXMPProperty([]byte(xmp), loc))
+			fixes = append(fixes, "removed pdfaid:conformance (forbidden for plain PDF/A-4)")
+		} else {
+			// Malformed XMP that even the XML decoder cannot navigate:
+			// leave it alone rather than trying to patch blindly.
 			return xmp, nil
 		}
 	}
@@ -503,34 +498,6 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 
 	sb.WriteString("    </rdf:Bag>\n  </pdfaExtension:schemas>\n")
 	return sb.String()
-}
-
-func parsePDFAProfile(profile string) (int, string) {
-	// "PDF/A-2b" → part=2, conformance="B"
-	if !strings.HasPrefix(profile, "PDF/A-") {
-		return 0, ""
-	}
-	rest := profile[6:] // "2b", "1a", "4", "4e", etc.
-	if len(rest) == 0 {
-		return 0, ""
-	}
-	part := int(rest[0] - '0')
-	conformance := "B" // default
-	if len(rest) > 1 {
-		conformance = strings.ToUpper(string(rest[1]))
-	}
-	return part, conformance
-}
-
-func parsePDFUAProfile(profile string) int {
-	if !strings.HasPrefix(profile, "PDF/UA-") {
-		return 0
-	}
-	rest := profile[7:]
-	if len(rest) == 0 {
-		return 0
-	}
-	return int(rest[0] - '0')
 }
 
 func xmlEscape(s string) string {

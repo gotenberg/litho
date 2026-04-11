@@ -18,9 +18,9 @@ type validationCtx struct {
 	doc     *document.Document
 	catalog ast.PdfDict
 	profile string
-	part    int  // pdfaPart(profile), computed once
-	level   byte // pdfaLevel(profile), computed once
-	ua      bool // isPDFUA(profile), computed once
+	part    int  // PDFAPart(profile), computed once
+	level   byte // PDFALevel(profile), computed once
+	ua      bool // IsPDFUA(profile), computed once
 	pages   []pageCtx
 }
 
@@ -114,9 +114,9 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 		doc:     doc,
 		catalog: catalog,
 		profile: profile,
-		part:    pdfaPart(profile),
-		level:   pdfaLevel(profile),
-		ua:      isPDFUA(profile),
+		part:    PDFAPart(profile),
+		level:   PDFALevel(profile),
+		ua:      IsPDFUA(profile),
 	}
 
 	// Resolve inherited resources from Pages tree root.
@@ -308,34 +308,6 @@ func ruleByPart(part int, r1, r2, r3, r4 Rule) Rule {
 		return r4
 	}
 	return Rule{}
-}
-
-// pdfaPart returns the numeric part (1, 2, 3, 4) from a profile string.
-func pdfaPart(profile string) int {
-	switch profile {
-	case "PDF/A-1a", "PDF/A-1b":
-		return 1
-	case "PDF/A-2a", "PDF/A-2b", "PDF/A-2u":
-		return 2
-	case "PDF/A-3a", "PDF/A-3b", "PDF/A-3u":
-		return 3
-	case "PDF/A-4", "PDF/A-4e", "PDF/A-4f":
-		return 4
-	}
-	return 0
-}
-
-// pdfaLevel returns the conformance level character from a profile string.
-func pdfaLevel(profile string) byte {
-	if len(profile) == 0 {
-		return 0
-	}
-	return profile[len(profile)-1]
-}
-
-// isPDFUA returns true if the profile string starts with "PDF/UA".
-func isPDFUA(profile string) bool {
-	return len(profile) >= 6 && profile[:6] == "PDF/UA"
 }
 
 // safeReadHeader reads the first n bytes from the document file.

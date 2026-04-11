@@ -15,7 +15,7 @@ import (
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
 // files contain both /F and /UF keys (ISO 14289-1, §7.11 t01).
 func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if !isPDFUA(profile) {
+	if !IsPDFUA(profile) {
 		return nil
 	}
 

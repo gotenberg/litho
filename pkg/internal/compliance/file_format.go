@@ -14,15 +14,15 @@ import (
 // --- Rule selectors for format checks ---
 
 func objHeaderRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_8_t01, Rule_19005_2_6_1_9_t01, Rule_19005_3_6_1_9_t01, Rule_19005_4_6_1_8_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_8_t01, Rule_19005_2_6_1_9_t01, Rule_19005_3_6_1_9_t01, Rule_19005_4_6_1_8_t01)
 }
 
 func hexStringRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_6_t01, Rule_19005_2_6_1_6_t01, Rule_19005_3_6_1_6_t01, Rule_19005_4_6_1_5_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_6_t01, Rule_19005_2_6_1_6_t01, Rule_19005_3_6_1_6_t01, Rule_19005_4_6_1_5_t01)
 }
 
 func hexStringInvalidCharRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_6_t02, Rule_19005_2_6_1_6_t02, Rule_19005_3_6_1_6_t02, Rule_19005_4_6_1_5_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_6_t02, Rule_19005_2_6_1_6_t02, Rule_19005_3_6_1_6_t02, Rule_19005_4_6_1_5_t02)
 }
 
 func xrefStreamForbiddenRule(_ string) Rule {
@@ -31,13 +31,13 @@ func xrefStreamForbiddenRule(_ string) Rule {
 
 // xrefFormatRule returns the rule for xref table format violations.
 func xrefFormatRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_4_t01, Rule_19005_2_6_1_4_t02, Rule_19005_3_6_1_4_t02, Rule_19005_4_6_1_4_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_4_t01, Rule_19005_2_6_1_4_t02, Rule_19005_3_6_1_4_t02, Rule_19005_4_6_1_4_t01)
 }
 
 // streamFormatRule returns the rule for stream format violations
 // (/Length mismatch, EOL after stream keyword, indirect /Length).
 func streamFormatRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_8_t01, Rule_19005_3_6_1_8_t01, Rule_19005_4_6_1_6_1_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_8_t01, Rule_19005_3_6_1_8_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
 // --- Check implementations ---
@@ -104,7 +104,7 @@ func checkFormatViolations(doc *document.Document, profile string) []Violation {
 		if containsXRefPattern(msg) {
 			rule = xrefRule
 			// PDF/A-1 distinguishes t01 (spacing) from t02 (EOL).
-			if pdfaPart(profile) == 1 && isXrefEOLViolation(msg) {
+			if PDFAPart(profile) == 1 && isXrefEOLViolation(msg) {
 				rule = Rule_19005_1_6_1_4_t02
 			}
 		} else if containsStreamPattern(msg) {
@@ -240,7 +240,7 @@ func checkXRefTableByteFormat(doc *document.Document, profile string) []Violatio
 		rule := xrefFormatRule(profile)
 		// PDF/A-1 distinguishes t01 (subsection header spacing) from
 		// t02 (EOL after xref keyword). Other parts use a single rule.
-		if pdfaPart(profile) == 1 && isXrefEOLViolation(v.Error()) {
+		if PDFAPart(profile) == 1 && isXrefEOLViolation(v.Error()) {
 			rule = Rule_19005_1_6_1_4_t02
 		}
 		results = append(results, Violation{

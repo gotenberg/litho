@@ -14,37 +14,37 @@ import (
 
 // charSetRule returns the CharSet rule for Type1 font subsets.
 func charSetRule(profile string) Rule {
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_5_t02, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t02, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
 }
 
 // cidSetRule returns the CIDSet rule for CIDFont subsets.
 func cidSetRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_4_2_t02
 	}
-	return ruleByPart(pdfaPart(profile), Rule_19005_1_6_3_5_t03, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t03, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
 }
 
 // charSetCompletenessRule returns the rule for CharSet completeness
 // (all font program glyphs must be listed in /CharSet).
 func charSetCompletenessRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_4_2_t01
 	}
 	// Part 1 also requires completeness (§6.3.5 t2), but the CFF glyph name
 	// extraction returns unreachable glyphs (e.g., "x") that VeraPDF does not
 	// consider part of the font subset, causing FP on pass-b.
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_2_11_4_2_t01, Rule_19005_3_6_2_11_4_2_t01, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_4_2_t01, Rule_19005_3_6_2_11_4_2_t01, Rule{})
 }
 
 // cidSetCompletenessRule returns the rule for CIDSet completeness
 // (all CIDs in font program must be identified in /CIDSet).
 func cidSetCompletenessRule(profile string) Rule {
-	if isPDFUA(profile) {
+	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_4_2_t02
 	}
 	// Part 1 only requires CIDSet presence, not completeness.
-	return ruleByPart(pdfaPart(profile), Rule{}, Rule_19005_2_6_2_11_4_2_t02, Rule_19005_3_6_2_11_4_2_t02, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_4_2_t02, Rule_19005_3_6_2_11_4_2_t02, Rule{})
 }
 
 // checkGlyphCoverage validates that subset fonts have the required CharSet or
@@ -67,14 +67,14 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 	// Type1 subsets require /CharSet.
 	if subtype == "Type1" || subtype == "MMType1" {
 		rule := charSetRule(profile)
-		if rule.Specification == "" && !isPDFUA(profile) {
+		if rule.Specification == "" && !IsPDFUA(profile) {
 			return nil
 		}
 
 		charSetStr, _ := document.ResolveString(ctx, doc, fd["CharSet"])
 
 		// Part 1: CharSet presence is required.
-		if pdfaPart(profile) == 1 && charSetStr == "" {
+		if PDFAPart(profile) == 1 && charSetStr == "" {
 			return failf(rule, "font %s on page %d: Type1 subset missing /CharSet", fontName, pageNum)
 		}
 
@@ -164,7 +164,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 	}
 
 	// Part 1: CIDSet is required. Parts 2+: only check if present (correctness).
-	if pdfaPart(profile) == 1 {
+	if PDFAPart(profile) == 1 {
 		if _, hasCIDSet := fd["CIDSet"]; !hasCIDSet {
 			return failf(rule, "font %s on page %d: CIDFont subset missing /CIDSet", fontName, pageNum)
 		}
@@ -184,7 +184,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 	// Part 1: also check CIDSet completeness for CFF CIDFonts.
 	// TrueType empty-glyph detection is unreliable for Part 1, so we limit
 	// this to CFF fonts where ValidCIDs produces accurate results.
-	if pdfaPart(profile) == 1 {
+	if PDFAPart(profile) == 1 {
 		cidSetObj, hasCIDSet := fd["CIDSet"]
 		if hasCIDSet {
 			if r := checkCIDSetCompletenessCFF(ctx, doc, cidFontDict, cidSetObj, fontName, pageNum, rule); r != nil {

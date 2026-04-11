@@ -331,6 +331,20 @@ func buildToUnicodeCMap(gidToUnicode map[uint16]rune) ast.PdfStream {
 	return ast.NewStream(ast.PdfDict{}, []byte(b.String()))
 }
 
+// collectUsedGIDs returns the set of glyph IDs referenced by the runes
+// in text, looked up through the font's Unicode→GID map. Used as the
+// keep-set for [subsetTTF]; composite-glyph dependencies are handled
+// by the subsetter itself.
+func collectUsedGIDs(text string, f *embeddedTTF) map[uint16]bool {
+	keep := make(map[uint16]bool, len(text))
+	for _, r := range text {
+		if gid, ok := f.unicodeToGID[r]; ok {
+			keep[gid] = true
+		}
+	}
+	return keep
+}
+
 // encodeTextAsGIDs converts a UTF-8 string into a hex-encoded PDF string
 // literal containing 2-byte big-endian GIDs. Runes not present in the
 // font's cmap fall back to GID 0 (.notdef).

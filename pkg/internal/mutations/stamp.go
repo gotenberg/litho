@@ -77,6 +77,22 @@ func StampText(
 		if err != nil {
 			return fmt.Errorf("parsing TTF for stamp: %w", err)
 		}
+
+		// Subset the raw TTF to just the glyphs referenced by the stamp
+		// text (plus .notdef and any composite-glyph dependencies). The
+		// subsetter reuses the parsed font's Unicode→GID map so text
+		// encoding continues to work with the same embeddedTTF. On any
+		// subsetting failure we fall back to full embedding so the
+		// stamp still renders — correctness over size.
+		keepGIDs := collectUsedGIDs(opts.Text, f)
+		if subsetBytes, subErr := subsetTTF(opts.TTFBytes, keepGIDs); subErr == nil {
+			f.raw = subsetBytes
+		} else if doc != nil {
+			doc.Logger.Debug("TTF subsetting failed, falling back to full embedding",
+				"err", subErr,
+			)
+		}
+
 		fontRef, err = embedTTFFont(ctx, alloc, f)
 		if err != nil {
 			return fmt.Errorf("embedding TTF for stamp: %w", err)

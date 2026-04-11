@@ -612,7 +612,7 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 		hasConf = bytes.Contains(data, []byte("pdfaid:conformance"))
 	}
 
-	level := pdfaLevel(profile)
+	level := PDFALevel(profile)
 	expectedPart := fmt.Sprintf("%d", part)
 
 	// Check: pdfaid:part must exist.

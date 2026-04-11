@@ -398,8 +398,8 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// must have resolvable Unicode mappings — either all glyph names in
 	// /Encoding /Differences are AGL-resolvable or a /ToUnicode CMap is present.
 	if isType3Font(ctx, doc, fontDict) {
-		part := pdfaPart(profile)
-		if part == 4 || isPDFUA(profile) {
+		part := PDFAPart(profile)
+		if part == 4 || IsPDFUA(profile) {
 			return nil
 		}
 		// For parts 1–3: check if all Differences glyph names are AGL-resolvable.
@@ -466,7 +466,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// Exemption (c): Identity-H/Identity-V — only exempt for PDF/A, not PDF/UA.
 	// For PDF/UA, a ToUnicode CMap is required for Identity-encoded Type0 fonts
 	// unless glyph-level Unicode mapping is available through other means.
-	if hasIdentityCMap(ctx, doc, fontDict) && !isPDFUA(profile) {
+	if hasIdentityCMap(ctx, doc, fontDict) && !IsPDFUA(profile) {
 		return nil
 	}
 
@@ -524,7 +524,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 						// Parts 2+: Differences is allowed only if all glyph names
 						// are in the Adobe Glyph List.
 						if diffObj, hasDiff := encDict["Differences"]; hasDiff {
-							if pdfaPart(profile) == 1 {
+							if PDFAPart(profile) == 1 {
 								results = append(results, failf(rule, "font %s on page %d has Differences in encoding dict", fontName, pageNum)...)
 							} else {
 								// Validate all glyph names in Differences against AGL.

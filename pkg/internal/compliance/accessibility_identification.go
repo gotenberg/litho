@@ -93,7 +93,7 @@ func hasNonEmptyName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 // --- PDF/UA identification ---
 
 func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if !isPDFUA(profile) {
+	if !IsPDFUA(profile) {
 		return nil
 	}
 
@@ -122,7 +122,7 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 // checkPDFUAIDPrefixes validates that pdfuaid properties use the correct
 // "pdfuaid" namespace prefix and that pdfuaid:rev is a 4-digit year.
 func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if !isPDFUA(profile) {
+	if !IsPDFUA(profile) {
 		return nil
 	}
 
