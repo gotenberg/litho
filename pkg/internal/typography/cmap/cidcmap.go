@@ -30,18 +30,6 @@ func strToInt(s ast.PdfString) int {
 	return result
 }
 
-// LookupCID maps a character code to its CID. If no mapping exists,
-// the charcode is returned unchanged (identity fallback).
-func (c *CIDCMap) LookupCID(charCode int) int {
-	if c == nil || c.Mapping == nil {
-		return charCode
-	}
-	if cid, ok := c.Mapping[charCode]; ok {
-		return cid
-	}
-	return charCode
-}
-
 // ParseCID extracts CID mapping data from a CMap stream payload.
 // It handles begincidchar/endcidchar and begincidrange/endcidrange sections.
 func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {

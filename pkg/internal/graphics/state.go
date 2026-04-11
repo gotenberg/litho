@@ -117,13 +117,6 @@ func NewMachine(cropBox [4]float64) *Machine {
 	}
 }
 
-// WithOCConfig allows injecting the ON/OFF arrays from the document.
-func (m *Machine) WithOCConfig(on map[int]bool, off map[int]bool) *Machine {
-	m.OCConfigOn = on
-	m.OCConfigOff = off
-	return m
-}
-
 // Current returns a pointer to the current graphics state.
 func (m *Machine) Current() *State {
 	return &m.Stack[len(m.Stack)-1]

@@ -119,8 +119,3 @@ func (c *Copier) copyStream(ctx context.Context, s ast.PdfStream) (ast.PdfStream
 	// lazily from the source document.
 	return ast.NewLazyStream(newDict, s.Bytes), nil
 }
-
-// Mapping returns the source-to-destination object number mapping.
-func (c *Copier) Mapping() map[int]int {
-	return c.mapping
-}

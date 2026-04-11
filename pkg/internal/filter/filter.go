@@ -449,20 +449,6 @@ func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, 
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
-// EncodeStream creates a new PdfStream by applying the specified filter.
-func EncodeStream(data []byte, filter ast.PdfName) (ast.PdfStream, error) {
-	encoded, err := ApplyEncodeFilter(data, filter)
-	if err != nil {
-		return ast.PdfStream{}, err
-	}
-
-	dict := make(ast.PdfDict)
-	dict["Filter"] = filter
-	dict["Length"] = ast.PdfInt(len(encoded))
-
-	return ast.NewStream(dict, encoded), nil
-}
-
 // ApplyEncodeFilter applies a single encoding filter to the byte slice.
 func ApplyEncodeFilter(data []byte, filterName ast.PdfName) ([]byte, error) {
 	switch filterName {

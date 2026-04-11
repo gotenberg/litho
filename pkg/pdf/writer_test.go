@@ -1078,6 +1078,81 @@ func TestWriter_RemediatePDFA_Idempotent(t *testing.T) {
 	t.Logf("second pass fixes: %d, residual: %d", len(report2.Fixed), len(report2.Residual))
 }
 
+func TestWriter_RemediatePDFUA_BasicFixes(t *testing.T) {
+	// writerTestPDF is missing the basic accessibility metadata needed for
+	// PDF/UA conformance: no MarkInfo, no XMP metadata, no document Lang.
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	violationsBefore, err := r.ValidatePDFUA(ctx, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("ValidatePDFUA before: %v", err)
+	}
+	if len(violationsBefore) == 0 {
+		t.Skip("document already PDF/UA-1 compliant, nothing to test")
+	}
+	t.Logf("violations before remediation: %d", len(violationsBefore))
+
+	w := NewWriter(r)
+	report, err := w.RemediatePDFUA(ctx, models.PDFUA1, WithLanguage("en"))
+	if err != nil {
+		t.Fatalf("RemediatePDFUA: %v", err)
+	}
+	for _, fix := range report.Fixed {
+		t.Logf("fixed: %s", fix)
+	}
+	t.Logf("residual violations: %d", len(report.Residual))
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open remediated: %v", err)
+	}
+	violationsAfter, err := r2.ValidatePDFUA(ctx, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("ValidatePDFUA after: %v", err)
+	}
+	t.Logf("violations after remediation: %d", len(violationsAfter))
+	if len(violationsAfter) > len(violationsBefore) {
+		t.Errorf("remediation increased violations: before=%d after=%d",
+			len(violationsBefore), len(violationsAfter))
+	}
+}
+
+func TestPipeline_RemediatePDFUA(t *testing.T) {
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	var out bytes.Buffer
+	result, err := NewPipeline().
+		Open(r).
+		RemediatePDFUA(models.PDFUA1, WithLanguage("en")).
+		WriteTo(ctx, &out)
+	if err != nil {
+		t.Fatalf("Pipeline.WriteTo: %v", err)
+	}
+	if len(result.RemediationReports) != 1 {
+		t.Fatalf("expected 1 remediation report, got %d", len(result.RemediationReports))
+	}
+	if out.Len() == 0 {
+		t.Error("pipeline produced no output")
+	}
+}
+
 func TestWriter_Sign(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()
