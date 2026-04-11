@@ -117,7 +117,7 @@ func (p *Pipeline) SetMetadata(meta Metadata) *Pipeline {
 // [ErrPipelineInvalidRotation].
 func (p *Pipeline) RotatePages(rotation int, pages ...int) *Pipeline {
 	if rotation%90 != 0 {
-		p.setErr("rotate-pages", len(p.stages), ErrPipelineInvalidRotation)
+		p.setErr(stageNameRotatePages, len(p.stages), ErrPipelineInvalidRotation)
 		return p
 	}
 	pagesCopy := append([]int(nil), pages...)
@@ -237,7 +237,7 @@ func (p *Pipeline) buildValidationErrors() []error {
 	if len(p.stages) == 0 {
 		errs = append(errs, &PipelineStageError{
 			Index: 0,
-			Name:  "pipeline",
+			Name:  stageNamePipeline,
 			Err:   ErrPipelineEmpty,
 		})
 		return errs
@@ -328,14 +328,14 @@ func (p *Pipeline) buildValidationErrors() []error {
 	if signIdx >= 0 && signIdx != len(p.stages)-1 {
 		errs = append(errs, &PipelineStageError{
 			Index: signIdx,
-			Name:  "sign",
+			Name:  stageNameSign,
 			Err:   ErrPipelineSignNotLast,
 		})
 	}
 	if signIdx >= 0 && hasEncrypt {
 		errs = append(errs, &PipelineStageError{
 			Index: signIdx,
-			Name:  "sign",
+			Name:  stageNameSign,
 			Err:   ErrPipelineSignWithEncrypt,
 		})
 	}
@@ -415,7 +415,7 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 			logger.Debug("terminal flush failed", slog.Any("err", err))
 			return nil, &PipelineStageError{
 				Index: len(p.stages) - 1,
-				Name:  "write",
+				Name:  stageNameWrite,
 				Err:   err,
 			}
 		}
@@ -453,6 +453,32 @@ const (
 	kindSign
 	kindRemediatePDFA
 	kindRemediatePDFUA
+)
+
+// Stage name constants. Used as the [StageReport.Name] and
+// [PipelineStageError.Name] values so callers can match on them without
+// hard-coding string literals.
+const (
+	stageNamePipeline          = "pipeline"
+	stageNameWrite             = "write"
+	stageNameOpen              = "open"
+	stageNameSplit             = "split"
+	stageNameMerge             = "merge"
+	stageNameSetMetadata       = "set-metadata"
+	stageNameRotatePages       = "rotate-pages"
+	stageNameSetBookmarks      = "set-bookmarks"
+	stageNameGenerateBookmarks = "generate-bookmarks"
+	stageNameStampText         = "stamp-text"
+	stageNameStampImage        = "stamp-image"
+	stageNameStampPDF          = "stamp-pdf"
+	stageNameAddAttachment     = "add-attachment"
+	stageNameSetFormField      = "set-form-field"
+	stageNameFlattenForm       = "flatten-form"
+	stageNameEncrypt           = "encrypt"
+	stageNameDecrypt           = "decrypt"
+	stageNameSign              = "sign"
+	stageNameRemediatePDFA     = "remediate-pdfa"
+	stageNameRemediatePDFUA    = "remediate-pdfua"
 )
 
 // stage is the internal unit of work in a [Pipeline]. Concrete stages are
@@ -630,7 +656,7 @@ type openStage struct {
 }
 
 func (s *openStage) kind() stageKind { return kindOpen }
-func (s *openStage) name() string    { return "open" }
+func (s *openStage) name() string    { return stageNameOpen }
 func (s *openStage) apply(_ context.Context, ex *executor) error {
 	ex.cur = s.src
 	ex.curOwned = false
@@ -646,7 +672,7 @@ type splitStage struct {
 }
 
 func (s *splitStage) kind() stageKind { return kindSplit }
-func (s *splitStage) name() string    { return "split" }
+func (s *splitStage) name() string    { return stageNameSplit }
 func (s *splitStage) apply(ctx context.Context, ex *executor) error {
 	if err := ex.flushToTempFile(); err != nil {
 		return err
@@ -693,7 +719,7 @@ type mergeStage struct {
 }
 
 func (s *mergeStage) kind() stageKind { return kindMerge }
-func (s *mergeStage) name() string    { return "merge" }
+func (s *mergeStage) name() string    { return stageNameMerge }
 func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 	if err := ex.flushToTempFile(); err != nil {
 		return err
@@ -740,7 +766,7 @@ type setMetadataStage struct {
 }
 
 func (s *setMetadataStage) kind() stageKind { return kindSetMetadata }
-func (s *setMetadataStage) name() string    { return "set-metadata" }
+func (s *setMetadataStage) name() string    { return stageNameSetMetadata }
 func (s *setMetadataStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.SetMetadata(s.meta)
@@ -755,7 +781,7 @@ type rotatePagesStage struct {
 }
 
 func (s *rotatePagesStage) kind() stageKind { return kindRotatePages }
-func (s *rotatePagesStage) name() string    { return "rotate-pages" }
+func (s *rotatePagesStage) name() string    { return stageNameRotatePages }
 func (s *rotatePagesStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	if err := ex.writer.RotatePages(s.rotation, s.pages...); err != nil {
@@ -772,7 +798,7 @@ type setBookmarksStage struct {
 }
 
 func (s *setBookmarksStage) kind() stageKind { return kindSetBookmarks }
-func (s *setBookmarksStage) name() string    { return "set-bookmarks" }
+func (s *setBookmarksStage) name() string    { return stageNameSetBookmarks }
 func (s *setBookmarksStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.SetBookmarks(s.bms)
@@ -788,7 +814,7 @@ type generateBookmarksStage struct {
 }
 
 func (s *generateBookmarksStage) kind() stageKind { return kindGenerateBookmarks }
-func (s *generateBookmarksStage) name() string    { return "generate-bookmarks" }
+func (s *generateBookmarksStage) name() string    { return stageNameGenerateBookmarks }
 func (s *generateBookmarksStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.GenerateBookmarks(s.opts, s.mode)
@@ -803,7 +829,7 @@ type stampTextStage struct {
 }
 
 func (s *stampTextStage) kind() stageKind { return kindStampText }
-func (s *stampTextStage) name() string    { return "stamp-text" }
+func (s *stampTextStage) name() string    { return stageNameStampText }
 func (s *stampTextStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.StampText(s.stamp, s.pages...)
@@ -818,7 +844,7 @@ type stampImageStage struct {
 }
 
 func (s *stampImageStage) kind() stageKind { return kindStampImage }
-func (s *stampImageStage) name() string    { return "stamp-image" }
+func (s *stampImageStage) name() string    { return stageNameStampImage }
 func (s *stampImageStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	if err := ex.writer.StampImage(s.stamp, s.pages...); err != nil {
@@ -835,7 +861,7 @@ type stampPDFStage struct {
 }
 
 func (s *stampPDFStage) kind() stageKind { return kindStampPDF }
-func (s *stampPDFStage) name() string    { return "stamp-pdf" }
+func (s *stampPDFStage) name() string    { return stageNameStampPDF }
 func (s *stampPDFStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	if err := ex.writer.StampPDF(s.stamp, s.pages...); err != nil {
@@ -854,7 +880,7 @@ type addAttachmentStage struct {
 }
 
 func (s *addAttachmentStage) kind() stageKind { return kindAddAttachment }
-func (s *addAttachmentStage) name() string    { return "add-attachment" }
+func (s *addAttachmentStage) name() string    { return stageNameAddAttachment }
 func (s *addAttachmentStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.AddAttachment(s.fileName, s.data, s.mimeType)
@@ -870,7 +896,7 @@ type setFormFieldStage struct {
 }
 
 func (s *setFormFieldStage) kind() stageKind { return kindSetFormField }
-func (s *setFormFieldStage) name() string    { return "set-form-field" }
+func (s *setFormFieldStage) name() string    { return stageNameSetFormField }
 func (s *setFormFieldStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.SetFormField(s.fieldName, s.value)
@@ -883,7 +909,7 @@ func (s *setFormFieldStage) apply(_ context.Context, ex *executor) error {
 type flattenFormStage struct{}
 
 func (s *flattenFormStage) kind() stageKind { return kindFlattenForm }
-func (s *flattenFormStage) name() string    { return "flatten-form" }
+func (s *flattenFormStage) name() string    { return stageNameFlattenForm }
 func (s *flattenFormStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.FlattenForm()
@@ -897,7 +923,7 @@ type encryptStage struct {
 }
 
 func (s *encryptStage) kind() stageKind { return kindEncrypt }
-func (s *encryptStage) name() string    { return "encrypt" }
+func (s *encryptStage) name() string    { return stageNameEncrypt }
 func (s *encryptStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.Encrypt(s.cfg)
@@ -909,7 +935,7 @@ func (s *encryptStage) apply(_ context.Context, ex *executor) error {
 type decryptStage struct{}
 
 func (s *decryptStage) kind() stageKind { return kindDecrypt }
-func (s *decryptStage) name() string    { return "decrypt" }
+func (s *decryptStage) name() string    { return stageNameDecrypt }
 func (s *decryptStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.Decrypt()
@@ -925,7 +951,7 @@ type signStage struct {
 }
 
 func (s *signStage) kind() stageKind { return kindSign }
-func (s *signStage) name() string    { return "sign" }
+func (s *signStage) name() string    { return stageNameSign }
 func (s *signStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	if ex.writer.fullRewriteForced() {
@@ -944,7 +970,7 @@ type remediatePDFAStage struct {
 }
 
 func (s *remediatePDFAStage) kind() stageKind { return kindRemediatePDFA }
-func (s *remediatePDFAStage) name() string    { return "remediate-pdfa" }
+func (s *remediatePDFAStage) name() string    { return stageNameRemediatePDFA }
 func (s *remediatePDFAStage) apply(ctx context.Context, ex *executor) error {
 	ex.ensureWriter()
 	report, err := ex.writer.RemediatePDFA(ctx, s.profile, s.opts...)
@@ -964,7 +990,7 @@ type remediatePDFUAStage struct {
 }
 
 func (s *remediatePDFUAStage) kind() stageKind { return kindRemediatePDFUA }
-func (s *remediatePDFUAStage) name() string    { return "remediate-pdfua" }
+func (s *remediatePDFUAStage) name() string    { return stageNameRemediatePDFUA }
 func (s *remediatePDFUAStage) apply(ctx context.Context, ex *executor) error {
 	ex.ensureWriter()
 	report, err := ex.writer.RemediatePDFUA(ctx, s.profile, s.opts...)
