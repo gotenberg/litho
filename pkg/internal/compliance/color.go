@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/md5" //nolint:gosec
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -22,7 +21,7 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance.color: starting color checks", "profile", vctx.profile, "part", part)
+	complog(doc).Debug("compliance.color: starting color checks", "profile", vctx.profile, "part", part)
 
 	var results []Violation
 
@@ -40,7 +39,7 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// parts 2+ need colorant consistency (§6.2.4.4 t01/t02).
 	checkSeparationDeviceN(ctx, doc, catalog, part, &results)
 
-	slog.Debug("compliance.color: color checks complete", "violations", len(results))
+	complog(doc).Debug("compliance.color: color checks complete", "violations", len(results))
 	return results
 }
 

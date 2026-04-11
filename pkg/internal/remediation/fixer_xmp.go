@@ -194,19 +194,31 @@ func generateXMP(part int, conformance string, uaPart int, info infoMetadata) st
 	return sb.String()
 }
 
+// XMP namespace URIs used by the remediation fixer. Kept as package-level
+// constants so the patching paths and tests refer to the same values.
+const (
+	pdfaidNS        = "http://www.aiim.org/pdfa/ns/id/"
+	pdfuaidNS       = "http://www.aiim.org/pdfua/ns/id/"
+	dcNS            = "http://purl.org/dc/elements/1.1/"
+	pdfNS           = "http://ns.adobe.com/pdf/1.3/"
+	xmpNS           = "http://ns.adobe.com/xap/1.0/"
+	pdfaExtensionNS = "http://www.aiim.org/pdfa/ns/extension/"
+	pdfaSchemaNS    = "http://www.aiim.org/pdfa/ns/schema#"
+	pdfaPropertyNS  = "http://www.aiim.org/pdfa/ns/property#"
+)
+
 func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info infoMetadata) (string, []string) {
 	var fixes []string
+	buf := []byte(xmp)
 
 	// PDF/A-4 (plain): remove pdfaid:conformance if present (forbidden).
-	// Uses the byte-range XMP splicer so the removal works regardless of
+	// Uses the byte-range splicer so the removal works regardless of
 	// whether the producer serialized the property as a child element
-	// (`<pdfaid:conformance>B</pdfaid:conformance>`) or as an attribute
-	// on the rdf:Description start tag (`pdfaid:conformance="B"`).
+	// or as an attribute on the rdf:Description start tag.
 	if part == 4 && conformance != "E" && conformance != "F" && strings.Contains(xmp, "pdfaid:conformance") {
-		const pdfaidNS = "http://www.aiim.org/pdfa/ns/id/"
-		loc := findXMPProperty([]byte(xmp), pdfaidNS, "conformance")
+		loc := findXMPProperty(buf, pdfaidNS, "conformance")
 		if loc.Form != xmpPropertyNotFound {
-			xmp = string(removeXMPProperty([]byte(xmp), loc))
+			buf = removeXMPProperty(buf, loc)
 			fixes = append(fixes, "removed pdfaid:conformance (forbidden for plain PDF/A-4)")
 		} else {
 			// Malformed XMP that even the XML decoder cannot navigate:
@@ -215,53 +227,56 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Inject pdfaid if missing.
-	if part > 0 && !strings.Contains(xmp, "pdfaid:part") {
-		injection := fmt.Sprintf(
-			"  xmlns:pdfaid=\"http://www.aiim.org/pdfa/ns/id/\"\n>\n  <pdfaid:part>%d</pdfaid:part>\n  <pdfaid:conformance>%s</pdfaid:conformance>\n",
-			part, conformance)
-		// Insert after the first rdf:Description opening.
-		if idx := strings.Index(xmp, "rdf:about=\"\""); idx >= 0 {
-			// Find the closing > of rdf:Description.
-			closeIdx := strings.Index(xmp[idx:], ">")
-			if closeIdx >= 0 {
-				pos := idx + closeIdx
-				// Replace the existing closing (might be > or />) with namespace + properties.
-				xmp = xmp[:pos] + "\n" + injection + xmp[pos+1:]
-				fixes = append(fixes, "injected pdfaid:part and pdfaid:conformance into XMP")
+	// Inject pdfaid namespace + pdfaid:part [+ pdfaid:conformance] if missing.
+	if part > 0 && findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
+		if out, _, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
+			buf = out
+		}
+		if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:part>%d</pdfaid:part>", part)); err == nil {
+			buf = out
+			fixes = append(fixes, "injected pdfaid:part into XMP")
+		}
+		// For conformance levels other than plain PDF/A-4 (where
+		// conformance is forbidden), also inject the declared level.
+		needConformance := conformance != "" && (part != 4 || conformance == "E" || conformance == "F")
+		if needConformance {
+			if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:conformance>%s</pdfaid:conformance>", conformance)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected pdfaid:conformance into XMP")
 			}
 		}
 	}
 
-	// Inject pdfuaid if missing.
-	if uaPart > 0 && !strings.Contains(xmp, "pdfuaid:part") {
-		injection := fmt.Sprintf(
-			"  xmlns:pdfuaid=\"http://www.aiim.org/pdfua/ns/id/\"\n>\n  <pdfuaid:part>%d</pdfuaid:part>\n",
-			uaPart)
-		if idx := strings.Index(xmp, "rdf:about=\"\""); idx >= 0 {
-			closeIdx := strings.Index(xmp[idx:], ">")
-			if closeIdx >= 0 {
-				pos := idx + closeIdx
-				xmp = xmp[:pos] + "\n" + injection + xmp[pos+1:]
-				fixes = append(fixes, "injected pdfuaid:part into XMP")
-			}
+	// Inject pdfuaid namespace + pdfuaid:part if missing.
+	if uaPart > 0 && findXMPProperty(buf, pdfuaidNS, "part").Form == xmpPropertyNotFound {
+		if out, _, err := ensureNamespaceDecl(buf, "pdfuaid", pdfuaidNS); err == nil {
+			buf = out
+		}
+		if out, err := insertChildElement(buf, fmt.Sprintf("<pdfuaid:part>%d</pdfuaid:part>", uaPart)); err == nil {
+			buf = out
+			fixes = append(fixes, "injected pdfuaid:part into XMP")
 		}
 	}
 
-	// PDF/A-4: inject pdfaid:rev=2020 if missing, but only if pdfaid namespace is declared.
-	if part == 4 && !strings.Contains(xmp, "pdfaid:rev") && strings.Contains(xmp, "pdfaid") {
-		rev := "  <pdfaid:rev>2020</pdfaid:rev>\n"
-		if idx := strings.Index(xmp, "</rdf:Description>"); idx >= 0 {
-			xmp = xmp[:idx] + rev + xmp[idx:]
+	// PDF/A-4: inject pdfaid:rev=2020 if missing.
+	if part == 4 && findXMPProperty(buf, pdfaidNS, "rev").Form == xmpPropertyNotFound {
+		if out, err := insertChildElement(buf, "<pdfaid:rev>2020</pdfaid:rev>"); err == nil {
+			buf = out
 			fixes = append(fixes, "injected pdfaid:rev=2020 into XMP")
 		}
 	}
 
-	// Inject dc:title if missing.
-	if !strings.Contains(xmp, "dc:title") && info.Title != "" {
-		title := fmt.Sprintf("  <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">%s</rdf:li></rdf:Alt></dc:title>\n", xmlEscape(info.Title))
-		if idx := strings.Index(xmp, "</rdf:Description>"); idx >= 0 {
-			xmp = xmp[:idx] + title + xmp[idx:]
+	// Inject dc:title if missing and Info has one.
+	if info.Title != "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
+		if out, _, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
+			buf = out
+		}
+		injection := fmt.Sprintf(
+			`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt></dc:title>`,
+			xmlEscape(info.Title),
+		)
+		if out, err := insertChildElement(buf, injection); err == nil {
+			buf = out
 			fixes = append(fixes, "injected dc:title into XMP")
 		}
 	}
@@ -269,71 +284,79 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	// Sync dc:creator with Info /Author.
 	if info.Author != "" {
 		escaped := xmlEscape(info.Author)
-		if strings.Contains(xmp, "dc:creator") {
-			// Replace existing dc:creator value.
-			if start := strings.Index(xmp, "<dc:creator>"); start >= 0 {
-				if end := strings.Index(xmp[start:], "</dc:creator>"); end >= 0 {
-					end += start + len("</dc:creator>")
-					replacement := fmt.Sprintf("<dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>", escaped)
-					xmp = xmp[:start] + replacement + xmp[end:]
-					fixes = append(fixes, "synced dc:creator with Info /Author")
-				}
+		injection := fmt.Sprintf(
+			`<dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>`,
+			escaped,
+		)
+		if findXMPProperty(buf, dcNS, "creator").Form != xmpPropertyNotFound {
+			// Element exists; try to replace via the splicer. If that
+			// fails (e.g., complex nested structure), we leave the
+			// existing value alone rather than risk a malformed patch.
+			if out, err := replacePropertyValue(buf, dcNS, "creator", fmt.Sprintf(
+				`<rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq>`, escaped)); err == nil {
+				buf = out
+				fixes = append(fixes, "synced dc:creator with Info /Author")
 			}
 		} else {
-			// Inject dc:creator.
-			creator := fmt.Sprintf("  <dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>\n", escaped)
-			if idx := strings.Index(xmp, "</rdf:Description>"); idx >= 0 {
-				xmp = xmp[:idx] + creator + xmp[idx:]
+			if out, _, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, injection); err == nil {
+				buf = out
 				fixes = append(fixes, "injected dc:creator from Info /Author")
 			}
 		}
 	}
 
 	// Sync pdf:Producer with Info /Producer.
-	if info.Producer != "" && !strings.Contains(xmp, "pdf:Producer") {
-		producer := fmt.Sprintf("  <pdf:Producer>%s</pdf:Producer>\n", xmlEscape(info.Producer))
-		if idx := strings.Index(xmp, "</rdf:Description>"); idx >= 0 {
-			xmp = xmp[:idx] + producer + xmp[idx:]
+	if info.Producer != "" && findXMPProperty(buf, pdfNS, "Producer").Form == xmpPropertyNotFound {
+		if out, _, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
+			buf = out
+		}
+		if out, err := insertChildElement(buf, fmt.Sprintf(
+			"<pdf:Producer>%s</pdf:Producer>", xmlEscape(info.Producer))); err == nil {
+			buf = out
 			fixes = append(fixes, "injected pdf:Producer from Info dict")
 		}
 	}
 
 	// Sync xmp:CreatorTool with Info /Creator.
-	if info.Creator != "" && !strings.Contains(xmp, "xmp:CreatorTool") {
-		tool := fmt.Sprintf("  <xmp:CreatorTool>%s</xmp:CreatorTool>\n", xmlEscape(info.Creator))
-		if idx := strings.Index(xmp, "</rdf:Description>"); idx >= 0 {
-			xmp = xmp[:idx] + tool + xmp[idx:]
+	if info.Creator != "" && findXMPProperty(buf, xmpNS, "CreatorTool").Form == xmpPropertyNotFound {
+		if out, _, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+			buf = out
+		}
+		if out, err := insertChildElement(buf, fmt.Sprintf(
+			"<xmp:CreatorTool>%s</xmp:CreatorTool>", xmlEscape(info.Creator))); err == nil {
+			buf = out
 			fixes = append(fixes, "injected xmp:CreatorTool from Info dict")
 		}
 	}
 
 	// Generate extension schema declarations for non-predefined namespaces.
-	if !strings.Contains(xmp, "pdfaExtension:schemas") {
-		schemas := extractUnknownNamespaceProperties([]byte(xmp))
+	// The schema block is a large multi-element XML fragment; it still
+	// uses insertChildElement for placement so the indentation matches
+	// the surrounding rdf:Description.
+	if !strings.Contains(string(buf), "pdfaExtension:schemas") {
+		schemas := extractUnknownNamespaceProperties(buf)
 		if len(schemas) > 0 {
-			block := generateExtensionSchemaBlock(schemas)
-			// Inject before </rdf:Description>.
-			if idx := strings.Index(xmp, "</rdf:Description>"); idx >= 0 {
-				// Also add namespace declarations to rdf:Description.
-				nsDecls := `  xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` + "\n" +
-					`  xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` + "\n" +
-					`  xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#"` + "\n"
-				if descIdx := strings.Index(xmp, "rdf:about=\"\""); descIdx >= 0 {
-					closeIdx := strings.Index(xmp[descIdx:], ">")
-					if closeIdx >= 0 {
-						pos := descIdx + closeIdx
-						xmp = xmp[:pos] + "\n" + nsDecls + xmp[pos:]
-						// Recalculate idx after insertion.
-						idx = strings.Index(xmp, "</rdf:Description>")
-					}
+			for prefix, uri := range map[string]string{
+				"pdfaExtension": pdfaExtensionNS,
+				"pdfaSchema":    pdfaSchemaNS,
+				"pdfaProperty":  pdfaPropertyNS,
+			} {
+				if out, _, err := ensureNamespaceDecl(buf, prefix, uri); err == nil {
+					buf = out
 				}
-				xmp = xmp[:idx] + block + xmp[idx:]
+			}
+			block := generateExtensionSchemaBlock(schemas)
+			if out, err := insertChildElement(buf, strings.TrimSpace(block)); err == nil {
+				buf = out
 				fixes = append(fixes, fmt.Sprintf("generated extension schema declarations for %d custom namespaces", len(schemas)))
 			}
 		}
 	}
 
-	return xmp, fixes
+	return string(buf), fixes
 }
 
 // knownXMPNamespaces mirrors the predefined namespace list from the compliance

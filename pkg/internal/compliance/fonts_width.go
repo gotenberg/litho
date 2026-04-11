@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -101,7 +100,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 
 	widths, err := document.ResolveArray(ctx, doc, widthsObj)
 	if err != nil {
-		slog.Debug("compliance: fonts: cannot resolve /Widths", "font", fontName, "error", err)
+		complog(doc).Debug("compliance: fonts: cannot resolve /Widths", "font", fontName, "error", err)
 		return failf(rule, "font %s on page %d: cannot resolve /Widths", fontName, pageNum)
 	}
 
@@ -162,7 +161,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	}
 	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
 	if err != nil {
-		slog.Debug("compliance: cannot resolve FirstChar", "error", err)
+		complog(doc).Debug("compliance: cannot resolve FirstChar", "error", err)
 		return nil
 	}
 
@@ -192,17 +191,17 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	for glyphName, cpObj := range charProcs {
 		stream, err := document.ResolveStream(ctx, doc, cpObj)
 		if err != nil {
-			slog.Debug("compliance: cannot resolve CharProc stream", "error", err)
+			complog(doc).Debug("compliance: cannot resolve CharProc stream", "error", err)
 			continue
 		}
 		streamData, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
-			slog.Debug("compliance: cannot decode CharProc stream", "error", err)
+			complog(doc).Debug("compliance: cannot decode CharProc stream", "error", err)
 			continue
 		}
 		ops, err := content.ParseStreamData(ctx, streamData)
 		if err != nil {
-			slog.Debug("compliance: cannot parse CharProc stream", "error", err)
+			complog(doc).Debug("compliance: cannot parse CharProc stream", "error", err)
 			continue
 		}
 		for _, op := range ops {
@@ -247,7 +246,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 
 	wArr, err := document.ResolveArray(ctx, doc, wObj)
 	if err != nil {
-		slog.Debug("compliance: fonts: resolving CID width array", "font", fontName, "error", err)
+		complog(doc).Debug("compliance: fonts: resolving CID width array", "font", fontName, "error", err)
 		return nil
 	}
 	if wArr == nil {
@@ -259,7 +258,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 	for i < len(wArr) {
 		cidStartRes, err := document.ResolveObject(ctx, doc, wArr[i])
 		if err != nil {
-			slog.Debug("compliance: fonts: resolving CID start value", "error", err)
+			complog(doc).Debug("compliance: fonts: resolving CID start value", "error", err)
 		}
 		cidStartInt, ok := cidStartRes.(ast.PdfInt)
 		if !ok {
@@ -274,7 +273,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 
 		nextRes, err := document.ResolveObject(ctx, doc, wArr[i])
 		if err != nil {
-			slog.Debug("compliance: fonts: resolving CID width entry", "error", err)
+			complog(doc).Debug("compliance: fonts: resolving CID width entry", "error", err)
 		}
 		switch next := nextRes.(type) {
 		case ast.PdfArray:
@@ -346,7 +345,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		}
 		stream, err := document.ResolveStream(ctx, doc, ffObj)
 		if err != nil {
-			slog.Debug("compliance: fonts: resolving font program stream", "key", key, "error", err)
+			complog(doc).Debug("compliance: fonts: resolving font program stream", "key", key, "error", err)
 		}
 		if stream.Dict == nil {
 			continue
@@ -358,7 +357,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 			if rawErr == nil && len(rawData) > 0 {
 				return rawData
 			}
-			slog.Debug("compliance: fonts: failed to decode font program stream", "key", key, "error", err)
+			complog(doc).Debug("compliance: fonts: failed to decode font program stream", "key", key, "error", err)
 			continue
 		}
 		return data

@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 	"maps"
 	"strings"
 
@@ -599,7 +598,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil {
-		slog.Debug("compliance: fonts: failed to resolve ToUnicode stream",
+		complog(doc).Debug("compliance: fonts: failed to resolve ToUnicode stream",
 			"font", fontName, "error", err)
 		return failf(rule, "font %s on page %d: cannot resolve /ToUnicode stream", fontName, pageNum)
 	}
@@ -612,7 +611,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		// Fall back to raw data.
 		data, err = stream.Bytes()
 		if err != nil || len(data) == 0 {
-			slog.Debug("compliance: fonts: failed to decode ToUnicode CMap",
+			complog(doc).Debug("compliance: fonts: failed to decode ToUnicode CMap",
 				"font", fontName, "error", err)
 			return failf(rule, "font %s on page %d: cannot decode /ToUnicode CMap", fontName, pageNum)
 		}

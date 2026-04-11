@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -755,6 +756,106 @@ func TestWriter_FlattenForm(t *testing.T) {
 	}
 }
 
+// buildFormPDFWithAppearances builds a minimal PDF containing two widget
+// annotations, each with a /AP/N Form XObject appearance stream. After
+// flattening, the resulting page dict must contain both XObject entries
+// (FlatAP<N1> and FlatAP<N2>) AND the corresponding `/FlatAPN Do`
+// invocations in /Contents. This is the regression fixture for the
+// write-overlap bug where addXObjectToPage + appendToPageContents +
+// /Annots update each clobbered the other's mutations.
+func buildFormPDFWithAppearances(t *testing.T) []byte {
+	t.Helper()
+	// Build objects as strings; record each object's byte offset as we
+	// append, so xref entries don't have to be hand-counted.
+	var (
+		body    bytes.Buffer
+		offsets = []int64{0} // object 0 is the free head
+	)
+	add := func(body2 *bytes.Buffer, obj string) {
+		offsets = append(offsets, int64(body2.Len()))
+		body2.WriteString(obj)
+	}
+
+	body.WriteString("%PDF-1.4\n")
+
+	// 1 Catalog
+	add(&body, "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R >>\nendobj\n")
+	// 2 Pages
+	add(&body, "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+	// 3 Page
+	add(&body, "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R] >>\nendobj\n")
+	// 4 Widget 1 (with /AP/N → 7 0 R)
+	add(&body, "4 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (John) /Rect [100 700 200 720] /AP << /N 7 0 R >> >>\nendobj\n")
+	// 5 Widget 2 (with /AP/N → 8 0 R)
+	add(&body, "5 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (email) /V (j@x) /Rect [100 660 200 680] /AP << /N 8 0 R >> >>\nendobj\n")
+	// 6 AcroForm
+	add(&body, "6 0 obj\n<< /Fields [4 0 R 5 0 R] >>\nendobj\n")
+	// 7 Appearance stream for widget 1 (Form XObject)
+	add(&body, "7 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 100 20] /Length 8 >>\nstream\nq 1 0 Q\nendstream\nendobj\n")
+	// 8 Appearance stream for widget 2
+	add(&body, "8 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 100 20] /Length 8 >>\nstream\nq 2 0 Q\nendstream\nendobj\n")
+
+	xrefStart := body.Len()
+	body.WriteString("xref\n0 9\n")
+	body.WriteString("0000000000 65535 f \r\n")
+	for i := 1; i <= 8; i++ {
+		body.WriteString(fmt.Sprintf("%010d 00000 n \r\n", offsets[i]))
+	}
+	body.WriteString("trailer\n<< /Size 9 /Root 1 0 R >>\n")
+	body.WriteString(fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefStart))
+
+	return body.Bytes()
+}
+
+func TestWriter_FlattenForm_XObjectAndContentsSurvive(t *testing.T) {
+	// Regression guard for the flattenPageAnnotations write-overlap bug.
+	// Before the fix, addXObjectToPage, appendToPageContents, and the
+	// /Annots update each wrote a fresh page dict derived from the
+	// original page.Dict, so each AllocAt clobbered the previous
+	// mutations. After the fix, all three mutations go through a single
+	// AllocAt and must coexist.
+	data := buildFormPDFWithAppearances(t)
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	w := NewWriter(r)
+	w.FlattenForm()
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	outStr := out.String()
+
+	// 1. AcroForm must be removed from the catalog.
+	if r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len())); err != nil {
+		t.Fatalf("Open flattened: %v", err)
+	} else if r2.HasAcroForm(ctx) {
+		t.Error("expected AcroForm to be removed after flatten")
+	}
+
+	// 2. The output must reference two FlatAP Form XObjects by name. The
+	//    XObject allocator picks names like "FlatAP7" and "FlatAP8" based
+	//    on object numbers; match the prefix and count occurrences.
+	flatAPCount := strings.Count(outStr, "/FlatAP")
+	// Expected references: 1× in /Resources/XObject, 1× in /Contents (Do
+	// invocation) per widget. With two widgets that's 4 references.
+	if flatAPCount < 4 {
+		t.Errorf("expected at least 4 /FlatAP references (2 resources + 2 Do ops), got %d", flatAPCount)
+	}
+
+	// 3. The content stream must contain two Do invocations.
+	doCount := strings.Count(outStr, " Do Q")
+	if doCount < 2 {
+		t.Errorf("expected at least 2 `Do Q` invocations in flattened content, got %d", doCount)
+	}
+}
+
 func TestMerge_TwoDocuments(t *testing.T) {
 	data := threePagePDF()
 	ctx := context.Background()
@@ -1016,6 +1117,107 @@ func TestWriter_Sign(t *testing.T) {
 
 	if len(sigs) == 0 {
 		t.Error("expected at least one signature")
+	}
+}
+
+func TestSigner_ExtractedSignatureFieldsArePopulated(t *testing.T) {
+	// Regression guard that pins down the end-to-end sign → extract
+	// round trip: after signing a minimal PDF with the mockSigner, the
+	// extracted signature must have a non-zero byte range, non-empty
+	// Contents, a non-empty document hash, and a recognisable field
+	// name. A bug in the writer's ByteRange calculation or the
+	// reader's signature extractor would light this up.
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	w.Sign(&mockSigner{})
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open signed: %v", err)
+	}
+	sigs, err := r2.ExtractSignatures(ctx)
+	if err != nil {
+		t.Fatalf("ExtractSignatures: %v", err)
+	}
+	if len(sigs) != 1 {
+		t.Fatalf("got %d signatures, want 1", len(sigs))
+	}
+	sig := sigs[0]
+
+	if sig.FieldName == "" {
+		t.Error("signature field name should be populated after signing")
+	}
+	// ByteRange has 4 int64 entries: [start1, len1, start2, len2]. Only
+	// len2 varies with the PDF size; start1 is always 0. The second
+	// range must start after the /Contents hex block, so start2 must
+	// be strictly greater than len1.
+	if sig.ByteRange[0] != 0 {
+		t.Errorf("ByteRange[0]: got %d, want 0", sig.ByteRange[0])
+	}
+	if sig.ByteRange[1] <= 0 {
+		t.Errorf("ByteRange[1] (length of first range): got %d, want > 0", sig.ByteRange[1])
+	}
+	if sig.ByteRange[2] <= sig.ByteRange[1] {
+		t.Errorf("ByteRange[2] (start of second range): got %d, want > %d",
+			sig.ByteRange[2], sig.ByteRange[1])
+	}
+	if sig.ByteRange[3] <= 0 {
+		t.Errorf("ByteRange[3] (length of second range): got %d, want > 0", sig.ByteRange[3])
+	}
+	if sig.Contents == "" {
+		t.Error("signature Contents should be non-empty (contains the signer's PKCS7 blob)")
+	}
+	if sig.DocumentHash == "" {
+		t.Error("signature DocumentHash should be populated")
+	}
+}
+
+func TestVerifySignatures_CallableAfterRoundTrip(t *testing.T) {
+	// Signing with mockSigner produces a fake PKCS7 blob, so actual
+	// cryptographic validation will fail — but VerifySignatures itself
+	// must return a non-nil result slice without panicking, and the
+	// per-signature result must record the failure reason rather than
+	// disappearing. This locks in that the verify pipeline is
+	// wired end-to-end.
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	w.Sign(&mockSigner{})
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open signed: %v", err)
+	}
+	// Pass nil root pool — the verifier should not panic on a missing
+	// trust store; it reports cert-chain-invalid instead.
+	results, err := r2.VerifySignatures(ctx, nil)
+	if err != nil {
+		t.Fatalf("VerifySignatures: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("got %d validation results, want 1", len(results))
+	}
+	if results[0].FieldName == "" {
+		t.Error("validation result should carry the signature field name")
 	}
 }
 

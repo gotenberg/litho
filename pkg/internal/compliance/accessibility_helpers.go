@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -195,17 +194,17 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	stream, err := document.ResolveStream(ctx, doc, metaObj)
 	if err != nil {
-		slog.Debug("compliance.accessibility: failed to resolve /Metadata stream", "error", err)
+		complog(doc).Debug("compliance.accessibility: failed to resolve /Metadata stream", "error", err)
 		return nil, false
 	}
 
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		// Fallback to raw bytes if decode fails (metadata streams are often uncompressed).
-		slog.Debug("compliance.accessibility: doc.DecodeStream failed, trying raw", "error", err)
+		complog(doc).Debug("compliance.accessibility: doc.DecodeStream failed, trying raw", "error", err)
 		data, err = stream.Bytes()
 		if err != nil {
-			slog.Debug("compliance.accessibility: failed to read raw metadata stream", "error", err)
+			complog(doc).Debug("compliance.accessibility: failed to read raw metadata stream", "error", err)
 			return nil, false
 		}
 	}

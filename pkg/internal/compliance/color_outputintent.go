@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -24,7 +23,7 @@ func outputIntentConsistencyRule(part int) Rule {
 func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) (string, bool) {
 	outputIntents, err := document.ResolveArray(ctx, doc, catalog["OutputIntents"])
 	if err != nil || len(outputIntents) == 0 {
-		slog.Debug("compliance.color: no OutputIntents found", "error", err)
+		complog(doc).Debug("compliance.color: no OutputIntents found", "error", err)
 		return "", false
 	}
 
@@ -47,7 +46,7 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 
 		intent, err := document.ResolveDict(ctx, doc, intentObj)
 		if err != nil || intent == nil {
-			slog.Debug("compliance.color: cannot resolve OutputIntent dict", "index", i, "error", err)
+			complog(doc).Debug("compliance.color: cannot resolve OutputIntent dict", "index", i, "error", err)
 			continue
 		}
 
@@ -83,13 +82,13 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 
 		stream, err := document.ResolveStream(ctx, doc, destProfileObj)
 		if err != nil {
-			slog.Debug("compliance.color: cannot resolve DestOutputProfile stream", "index", i, "error", err)
+			complog(doc).Debug("compliance.color: cannot resolve DestOutputProfile stream", "index", i, "error", err)
 			continue
 		}
 
 		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
-			slog.Debug("compliance.color: cannot decode ICC profile stream", "index", i, "error", err)
+			complog(doc).Debug("compliance.color: cannot decode ICC profile stream", "index", i, "error", err)
 			*results = append(*results, failf(outputIntentICCRule(part), "OutputIntent[%d]: failed to decode ICC profile", i)...)
 			continue
 		}
@@ -179,13 +178,13 @@ func getOutputIntentICCInfo(ctx context.Context, doc *document.Document, catalog
 
 		stream, err := document.ResolveStream(ctx, doc, destObj)
 		if err != nil {
-			slog.Debug("compliance.color: cannot resolve output profile stream", "error", err)
+			complog(doc).Debug("compliance.color: cannot resolve output profile stream", "error", err)
 			continue
 		}
 
 		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
-			slog.Debug("compliance.color: cannot decode output profile stream", "error", err)
+			complog(doc).Debug("compliance.color: cannot decode output profile stream", "error", err)
 			continue
 		}
 

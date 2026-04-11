@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -219,7 +218,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 
 	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
 	if err != nil {
-		slog.Debug("compliance.accessibility: cannot resolve form fields array", "error", err)
+		complog(doc).Debug("compliance.accessibility: cannot resolve form fields array", "error", err)
 		return nil
 	}
 
@@ -356,7 +355,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 	// Non-terminal: recurse into /Kids.
 	kids, err := document.ResolveArray(ctx, doc, field["Kids"])
 	if err != nil {
-		slog.Debug("compliance.accessibility: cannot resolve field kids array", "error", err)
+		complog(doc).Debug("compliance.accessibility: cannot resolve field kids array", "error", err)
 		return nil
 	}
 	var results []Violation

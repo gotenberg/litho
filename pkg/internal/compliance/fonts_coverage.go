@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -201,7 +200,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
-		slog.Debug("compliance: cannot resolve CIDSet stream", "error", err)
+		complog(doc).Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
 	cidSetData, err := doc.DecodeStream(ctx, stream)
@@ -287,12 +286,12 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
-		slog.Debug("compliance: cannot resolve CIDSet stream", "error", err)
+		complog(doc).Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
 	cidSetData, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		slog.Debug("compliance: cannot decode CIDSet stream", "error", err)
+		complog(doc).Debug("compliance: cannot decode CIDSet stream", "error", err)
 		return nil
 	}
 

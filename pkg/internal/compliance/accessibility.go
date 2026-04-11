@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 )
 
 // checkAccessibilityGroup validates PDF/UA accessibility requirements.
@@ -14,7 +13,7 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 		return nil
 	}
 
-	slog.Debug("compliance.accessibility: starting checks", "profile", profile)
+	complog(doc).Debug("compliance.accessibility: starting checks", "profile", profile)
 
 	results := make([]Violation, 0, 16)
 
@@ -102,6 +101,6 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Structure destinations (PDF/UA-2 §8.8).
 	results = append(results, checkStructureDestinations(ctx, doc, catalog, profile)...)
 
-	slog.Debug("compliance.accessibility: checks complete", "violations", len(results))
+	complog(doc).Debug("compliance.accessibility: checks complete", "violations", len(results))
 	return results
 }

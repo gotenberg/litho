@@ -14,7 +14,7 @@ import (
 // that can be type-asserted to access the structured [Rule] and Context fields.
 // An empty slice means the document passes.
 func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) ([]error, error) {
-	slog.Debug("compliance: starting PDF/A validation", "profile", profile)
+	complog(doc).Debug("compliance: starting PDF/A validation", "profile", profile)
 
 	groups, ok := pdfaCheckGroups[profile]
 	if !ok {
@@ -34,7 +34,7 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 
 	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
 
-	slog.Debug("compliance: PDF/A validation complete",
+	complog(doc).Debug("compliance: PDF/A validation complete",
 		"profile", profile,
 		"violations", len(violations),
 	)
@@ -46,7 +46,7 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 // [Violation] value that can be type-asserted to access the structured [Rule]
 // and Context fields. An empty slice means the document passes.
 func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) ([]error, error) {
-	slog.Debug("compliance: starting PDF/UA validation", "profile", profile)
+	complog(doc).Debug("compliance: starting PDF/UA validation", "profile", profile)
 
 	groups, ok := pdfuaCheckGroups[profile]
 	if !ok {
@@ -65,7 +65,7 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 
 	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
 
-	slog.Debug("compliance: PDF/UA validation complete",
+	complog(doc).Debug("compliance: PDF/UA validation complete",
 		"profile", profile,
 		"violations", len(violations),
 	)

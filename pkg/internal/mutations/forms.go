@@ -166,8 +166,13 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	return nil
 }
 
-// flattenPageAnnotations processes widget annotations on a page, stamping
-// their appearance streams into the page content and removing them from /Annots.
+// flattenPageAnnotations processes widget annotations on a page,
+// stamping their appearance streams into the page content and removing
+// them from /Annots. All page-dict mutations (XObject resource
+// additions, /Contents append, /Annots trim) are accumulated into a
+// single draft and written with exactly one [writer.ObjAllocator.AllocAt]
+// call per page — the same invariant [applyStampToPages] follows — so
+// concurrent mutations cannot clobber each other.
 func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page) error {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
@@ -178,8 +183,16 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		return nil
 	}
 
-	var remainingAnnots ast.PdfArray
-	var stampOps []string
+	// Start from the latest pending version of the page dict so we
+	// compose correctly with any prior mutation that has already
+	// rewritten this page.
+	baseDict := latestPageDict(alloc, page)
+
+	var (
+		remainingAnnots  ast.PdfArray
+		stampOps         []string
+		xobjectAdditions []stampResource
+	)
 
 	for _, annotObj := range annots {
 		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
@@ -191,68 +204,19 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			continue
 		}
 
-		// Only flatten Widget annotations (form fields).
+		// Only flatten Widget annotations (form fields). Non-widget
+		// annotations (Link, Text, Highlight, ...) are preserved.
 		subtypeObj, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
 		if subtypeObj != "Widget" {
 			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
 		}
 
-		// Get the appearance stream.
-		apObj, ok := annotDict["AP"]
+		apStream, ok := resolveWidgetAppearance(ctx, doc, annotDict)
 		if !ok {
-			doc.Logger.Debug("widget has no /AP, skipping flatten")
-			continue
-		}
-		apDict, err := document.ResolveDict(ctx, doc, apObj)
-		if err != nil || apDict == nil {
-			doc.Logger.Debug("resolving widget /AP failed", slog.Any("err", err))
 			continue
 		}
 
-		// Get /N (normal appearance). Could be a stream or a dict of states.
-		nObj, ok := apDict["N"]
-		if !ok {
-			doc.Logger.Debug("widget /AP has no /N, skipping flatten")
-			continue
-		}
-
-		var apStream ast.PdfStream
-		switch v := nObj.(type) {
-		case ast.PdfStream:
-			apStream = v
-		default:
-			// Could be a dict of states: try the /AS key.
-			resolved, err := document.ResolveObject(ctx, doc, nObj)
-			if err != nil {
-				doc.Logger.Debug("resolving widget /N failed", slog.Any("err", err))
-				continue
-			}
-			if s, ok := resolved.(ast.PdfStream); ok {
-				apStream = s
-			} else if stateDict, ok := resolved.(ast.PdfDict); ok {
-				// Look up the current appearance state.
-				asName := ast.PdfName("Off")
-				if as, ok := annotDict["AS"].(ast.PdfName); ok {
-					asName = as
-				}
-				if stateObj, ok := stateDict[asName]; ok {
-					resolved2, err := document.ResolveObject(ctx, doc, stateObj)
-					if err == nil {
-						if s, ok := resolved2.(ast.PdfStream); ok {
-							apStream = s
-						}
-					}
-				}
-			}
-		}
-
-		if apStream.Dict == nil {
-			doc.Logger.Debug("widget appearance stream unresolved, skipping")
-			continue
-		}
-
-		// Get the annotation /Rect for positioning.
 		rectArr, err := document.ResolveArray(ctx, doc, annotDict["Rect"])
 		if err != nil || len(rectArr) < 4 {
 			doc.Logger.Debug("widget /Rect invalid, skipping",
@@ -264,82 +228,113 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		x1 := document.GetFloat(rectArr[0])
 		y1 := document.GetFloat(rectArr[1])
 
-		// Allocate the appearance stream as a Form XObject.
 		apRef := alloc.Alloc(apStream)
-		xobjName := fmt.Sprintf("FlatAP%d", apRef.ObjectNum)
+		xobjName := ast.PdfName(fmt.Sprintf("FlatAP%d", apRef.ObjectNum))
 
-		// Generate content stream commands to stamp the appearance.
 		stampOps = append(stampOps, fmt.Sprintf("\nq 1 0 0 1 %s %s cm /%s Do Q",
 			FormatFloat(x1), FormatFloat(y1), xobjName))
-
-		// Add the XObject to page resources.
-		addXObjectToPage(ctx, doc, alloc, page, xobjName, apRef)
+		xobjectAdditions = append(xobjectAdditions, stampResource{
+			category: "XObject", name: xobjName, ref: apRef,
+		})
 	}
 
-	if len(stampOps) > 0 {
-		// Append stamp operations to page contents.
-		appendToPageContents(doc, alloc, page, stampOps)
+	// No widgets were flattenable — nothing to write.
+	if len(stampOps) == 0 && len(remainingAnnots) == len(annots) {
+		return nil
 	}
 
-	// Update /Annots (remove flattened widgets).
-	if len(remainingAnnots) > 0 {
-		newDict := make(ast.PdfDict, len(page.Dict))
-		maps.Copy(newDict, page.Dict)
-		newDict["Annots"] = remainingAnnots
-		alloc.AllocAt(page.Ref.ObjectNum, newDict)
-	} else if len(annots) > 0 {
-		// All annotations were flattened: remove /Annots.
-		newDict := make(ast.PdfDict, len(page.Dict))
-		for k, v := range page.Dict {
-			if k == "Annots" {
-				continue
-			}
-			newDict[k] = v
+	newDict := make(ast.PdfDict, len(baseDict)+1)
+	maps.Copy(newDict, baseDict)
+
+	// Merge XObject additions into /Resources.
+	if len(xobjectAdditions) > 0 {
+		newResources, err := mergeStampResources(ctx, doc, alloc, baseDict, xobjectAdditions)
+		if err != nil {
+			return fmt.Errorf("merging form xobject resources: %w", err)
 		}
-		alloc.AllocAt(page.Ref.ObjectNum, newDict)
+		newDict["Resources"] = newResources
 	}
 
+	// Append the stamp operations to /Contents as a single new stream.
+	if len(stampOps) > 0 {
+		var content strings.Builder
+		for _, op := range stampOps {
+			content.WriteString(op)
+		}
+		stampStream := ast.NewStream(ast.PdfDict{}, []byte(content.String()))
+		stampRef := alloc.Alloc(stampStream)
+		if existing, ok := baseDict["Contents"]; ok {
+			newDict["Contents"] = ast.PdfArray{existing, stampRef}
+		} else {
+			newDict["Contents"] = stampRef
+		}
+	}
+
+	// Update /Annots: keep non-widget annotations, drop the rest.
+	if len(remainingAnnots) > 0 {
+		newDict["Annots"] = remainingAnnots
+	} else {
+		delete(newDict, "Annots")
+	}
+
+	alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	return nil
 }
 
-// addXObjectToPage adds a Form XObject reference to a page's /Resources/XObject dict.
-func addXObjectToPage(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, name string, ref ast.PdfIndirectRef) {
-	xobjectDict := ast.PdfDict{}
-	if resObj, ok := page.Resources["XObject"]; ok {
-		if existing, err := document.ResolveDict(ctx, doc, resObj); err == nil && existing != nil {
-			maps.Copy(xobjectDict, existing)
+// resolveWidgetAppearance extracts the /N appearance stream from a
+// widget annotation dict. Handles both the direct-stream form and the
+// state-dict form where /N is a dict keyed by /AS name. Returns the
+// resolved stream and ok=true on success; ok=false if any step of the
+// resolution failed (with a debug log explaining why).
+func resolveWidgetAppearance(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (ast.PdfStream, bool) {
+	apObj, ok := annotDict["AP"]
+	if !ok {
+		doc.Logger.Debug("widget has no /AP, skipping flatten")
+		return ast.PdfStream{}, false
+	}
+	apDict, err := document.ResolveDict(ctx, doc, apObj)
+	if err != nil || apDict == nil {
+		doc.Logger.Debug("resolving widget /AP failed", slog.Any("err", err))
+		return ast.PdfStream{}, false
+	}
+	nObj, ok := apDict["N"]
+	if !ok {
+		doc.Logger.Debug("widget /AP has no /N, skipping flatten")
+		return ast.PdfStream{}, false
+	}
+
+	var apStream ast.PdfStream
+	switch v := nObj.(type) {
+	case ast.PdfStream:
+		apStream = v
+	default:
+		// /N is a dict of states, or an indirect reference to one.
+		resolved, err := document.ResolveObject(ctx, doc, nObj)
+		if err != nil {
+			doc.Logger.Debug("resolving widget /N failed", slog.Any("err", err))
+			return ast.PdfStream{}, false
+		}
+		if s, ok := resolved.(ast.PdfStream); ok {
+			apStream = s
+		} else if stateDict, ok := resolved.(ast.PdfDict); ok {
+			asName := ast.PdfName("Off")
+			if as, ok := annotDict["AS"].(ast.PdfName); ok {
+				asName = as
+			}
+			if stateObj, ok := stateDict[asName]; ok {
+				resolved2, err := document.ResolveObject(ctx, doc, stateObj)
+				if err == nil {
+					if s, ok := resolved2.(ast.PdfStream); ok {
+						apStream = s
+					}
+				}
+			}
 		}
 	}
-	xobjectDict[ast.PdfName(name)] = ref
 
-	newResources := make(ast.PdfDict, len(page.Resources)+1)
-	maps.Copy(newResources, page.Resources)
-	newResources["XObject"] = xobjectDict
-
-	newDict := make(ast.PdfDict, len(page.Dict)+1)
-	maps.Copy(newDict, page.Dict)
-	newDict["Resources"] = newResources
-	alloc.AllocAt(page.Ref.ObjectNum, newDict)
-}
-
-// appendToPageContents appends content stream operations to a page.
-func appendToPageContents(_ *document.Document, alloc *writer.ObjAllocator, page *document.Page, ops []string) {
-	// Build new content stream with the stamp operations.
-	var content strings.Builder
-	for _, op := range ops {
-		content.WriteString(op)
+	if apStream.Dict == nil {
+		doc.Logger.Debug("widget appearance stream unresolved, skipping")
+		return ast.PdfStream{}, false
 	}
-	stampStream := ast.NewStream(ast.PdfDict{}, []byte(content.String()))
-	stampRef := alloc.Alloc(stampStream)
-
-	// Wrap existing /Contents + new stream in an array.
-	newDict := make(ast.PdfDict, len(page.Dict)+1)
-	maps.Copy(newDict, page.Dict)
-
-	if existing, ok := page.Dict["Contents"]; ok {
-		newDict["Contents"] = ast.PdfArray{existing, stampRef}
-	} else {
-		newDict["Contents"] = stampRef
-	}
-	alloc.AllocAt(page.Ref.ObjectNum, newDict)
+	return apStream, true
 }

@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -21,7 +20,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 	part := vctx.part
 
-	slog.Debug("compliance.document: starting document checks",
+	complog(doc).Debug("compliance.document: starting document checks",
 		"profile", profile, "part", part, "isPDFUA", vctx.ua)
 
 	var results []Violation
@@ -31,7 +30,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		if profile == "PDF/UA-2" {
 			results = append(results, checkVersionIs2(doc, catalog, Rule_14289_2_6_2_t01)...)
 		}
-		slog.Debug("compliance.document: PDF/UA document checks complete", "violations", len(results))
+		complog(doc).Debug("compliance.document: PDF/UA document checks complete", "violations", len(results))
 		return results
 	}
 
@@ -86,7 +85,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkEmbeddedFileMIME(ctx, doc, catalog)...)
 	}
 
-	slog.Debug("compliance.document: document checks complete", "violations", len(results))
+	complog(doc).Debug("compliance.document: document checks complete", "violations", len(results))
 	return results
 }
 
@@ -184,7 +183,7 @@ func checkAlternatePresentations(ctx context.Context, doc *document.Document, ca
 
 	namesDict, err := document.ResolveDict(ctx, doc, namesObj)
 	if err != nil || namesDict == nil {
-		slog.Debug("compliance.document: cannot resolve /Names dict", "error", err)
+		complog(doc).Debug("compliance.document: cannot resolve /Names dict", "error", err)
 		return nil
 	}
 
@@ -217,7 +216,7 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 
 	ocProps, err := document.ResolveDict(ctx, doc, ocPropsObj)
 	if err != nil || ocProps == nil {
-		slog.Debug("compliance.document: cannot resolve /OCProperties", "error", err)
+		complog(doc).Debug("compliance.document: cannot resolve /OCProperties", "error", err)
 		return nil
 	}
 
@@ -229,7 +228,7 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 
 	ocgs, err := document.ResolveArray(ctx, doc, ocgsObj)
 	if err != nil || len(ocgs) == 0 {
-		slog.Debug("compliance.document: /OCGs array empty or unresolvable", "error", err)
+		complog(doc).Debug("compliance.document: /OCGs array empty or unresolvable", "error", err)
 		return nil
 	}
 
@@ -262,7 +261,7 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 
 	dDict, err := document.ResolveDict(ctx, doc, dObj)
 	if err != nil || dDict == nil {
-		slog.Debug("compliance.document: cannot resolve /D dict", "error", err)
+		complog(doc).Debug("compliance.document: cannot resolve /D dict", "error", err)
 		return nil
 	}
 
@@ -298,7 +297,7 @@ func checkInfoDictPart4(ctx context.Context, doc *document.Document, catalog ast
 	// Use ResolveDict to handle indirect references.
 	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
 	if err != nil {
-		slog.Debug("compliance.document: cannot resolve Info dict", "error", err)
+		complog(doc).Debug("compliance.document: cannot resolve Info dict", "error", err)
 		return nil
 	}
 	if infoDict != nil {
@@ -327,7 +326,7 @@ func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog a
 
 	permsDict, err := document.ResolveDict(ctx, doc, permsObj)
 	if err != nil || permsDict == nil {
-		slog.Debug("compliance.document: cannot resolve /Perms dict", "error", err)
+		complog(doc).Debug("compliance.document: cannot resolve /Perms dict", "error", err)
 		return nil
 	}
 
@@ -510,7 +509,7 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog 
 			}
 			stream, err := document.ResolveStream(ctx, doc, streamObj)
 			if err != nil {
-				slog.Debug("compliance.document: cannot resolve embedded file stream", "error", err)
+				complog(doc).Debug("compliance.document: cannot resolve embedded file stream", "error", err)
 				continue
 			}
 			subtypeObj, hasSubtype := stream.Dict["Subtype"]

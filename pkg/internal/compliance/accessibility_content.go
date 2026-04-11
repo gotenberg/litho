@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -103,7 +102,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		}
 		ops, err := content.ParseStreamData(ctx, data)
 		if err != nil {
-			slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
+			complog(doc).Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue
 		}
 

@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -58,12 +57,12 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		}
 		ops, err := content.ParseStreamData(ctx, streamData)
 		if err != nil {
-			slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
+			complog(doc).Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue
 		}
 		for _, op := range ops {
 			if op.Operator != "Do" || len(op.Operands) < 1 {
-				slog.Debug("compliance.accessibility: cannot parse content stream", "error", err)
+				complog(doc).Debug("compliance.accessibility: cannot parse content stream", "error", err)
 				continue
 			}
 			name, ok := op.Operands[0].(ast.PdfName)
@@ -86,7 +85,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		// Form XObjects with /StructParents contain MCIDs.
 		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil {
-			slog.Debug("compliance.accessibility: cannot resolve form XObject stream", "error", err)
+			complog(doc).Debug("compliance.accessibility: cannot resolve form XObject stream", "error", err)
 			continue
 		}
 		if _, hasSP := stream.Dict["StructParents"]; hasSP {
@@ -123,12 +122,12 @@ func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.Pdf
 
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
-			slog.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
+			complog(doc).Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		xobjDict := stream.Dict
 		if xobjDict == nil {
-			slog.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
+			complog(doc).Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])

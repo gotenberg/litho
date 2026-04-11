@@ -113,7 +113,7 @@ func NewMachine(cropBox [4]float64) *Machine {
 		OCConfigOn:    make(map[int]bool),
 		OCConfigOff:   make(map[int]bool),
 		ActiveOCs:     make(map[string]bool),
-		CurrentPath:   BoundingBox{MinX: 100000, MinY: 100000, MaxX: -100000, MaxY: -100000},
+		CurrentPath:   emptyBoundingBox,
 	}
 }
 

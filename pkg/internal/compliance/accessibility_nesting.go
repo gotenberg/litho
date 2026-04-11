@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -39,7 +38,7 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			slog.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
+			complog(doc).Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 

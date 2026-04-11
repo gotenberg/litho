@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -25,7 +24,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance.xobjects: starting checks", "profile", profile, "part", part)
+	complog(doc).Debug("compliance.xobjects: starting checks", "profile", profile, "part", part)
 
 	var results []Violation
 	visited := make(map[string]bool)
@@ -51,7 +50,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
 	}
 
-	slog.Debug("compliance.xobjects: checks complete", "violations", len(results))
+	complog(doc).Debug("compliance.xobjects: checks complete", "violations", len(results))
 	return results
 }
 

@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -21,7 +20,7 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 
 	vp, err := document.ResolveDict(ctx, doc, vpObj)
 	if err != nil || vp == nil {
-		slog.Debug("compliance.accessibility: cannot resolve /ViewerPreferences", "error", err)
+		complog(doc).Debug("compliance.accessibility: cannot resolve /ViewerPreferences", "error", err)
 		return fail(rule, "ViewerPreferences unresolvable")
 	}
 
@@ -50,7 +49,7 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	mi, err := document.ResolveDict(ctx, doc, miObj)
 	if err != nil || mi == nil {
-		slog.Debug("compliance.accessibility: cannot resolve /MarkInfo", "error", err)
+		complog(doc).Debug("compliance.accessibility: cannot resolve /MarkInfo", "error", err)
 		return nil
 	}
 
@@ -61,7 +60,7 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	sus, err := document.ResolveBool(ctx, doc, susObj)
 	if err != nil {
-		slog.Debug("compliance.accessibility: cannot resolve /Suspects", "error", err)
+		complog(doc).Debug("compliance.accessibility: cannot resolve /Suspects", "error", err)
 		return nil
 	}
 
@@ -119,7 +118,7 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 		tabsName, err := document.ResolveName(ctx, doc, tabsObj)
 		if err != nil {
-			slog.Debug("compliance.accessibility: cannot resolve /Tabs", "page", pageIdx, "error", err)
+			complog(doc).Debug("compliance.accessibility: cannot resolve /Tabs", "page", pageIdx, "error", err)
 			continue
 		}
 

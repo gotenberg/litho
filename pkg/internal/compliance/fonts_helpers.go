@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"unicode/utf8"
 
@@ -165,7 +164,7 @@ func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict as
 	}
 	fd, err := document.ResolveDict(ctx, doc, fdObj)
 	if err != nil {
-		slog.Debug("compliance: fonts: failed to resolve FontDescriptor", "error", err)
+		complog(doc).Debug("compliance: fonts: failed to resolve FontDescriptor", "error", err)
 		return nil
 	}
 	return fd
@@ -181,7 +180,7 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict)
 		if obj, ok := fd[key]; ok {
 			resolved, err := document.ResolveObject(ctx, doc, obj)
 			if err != nil {
-				slog.Debug("compliance: fonts: failed to resolve font file entry",
+				complog(doc).Debug("compliance: fonts: failed to resolve font file entry",
 					"key", key, "error", err)
 				continue
 			}
@@ -208,7 +207,7 @@ func isSymbolicFont(ctx context.Context, doc *document.Document, fd ast.PdfDict)
 	}
 	flags, err := document.ResolveInt(ctx, doc, fd["Flags"])
 	if err != nil {
-		slog.Debug("compliance: fonts: failed to resolve Flags", "error", err)
+		complog(doc).Debug("compliance: fonts: failed to resolve Flags", "error", err)
 		return false
 	}
 	const symbolicBit = 1 << 2 // bit 3 (0-indexed bit 2) = symbolic

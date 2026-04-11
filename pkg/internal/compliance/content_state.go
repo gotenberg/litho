@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -282,7 +281,7 @@ func checkContentStreamResources(
 ) []Violation {
 	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
-		slog.Debug("compliance.content: cannot parse content stream", "error", err)
+		complog(doc).Debug("compliance.content: cannot parse content stream", "error", err)
 		return nil
 	}
 

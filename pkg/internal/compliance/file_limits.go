@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -80,7 +79,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 
 		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil {
-			slog.Debug("compliance.file_structure: cannot resolve object", "error", err)
+			complog(doc).Debug("compliance.file_structure: cannot resolve object", "error", err)
 			continue
 		}
 
@@ -155,7 +154,7 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 	}
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
-		slog.Debug("compliance.file_structure: cannot parse content stream", "error", err)
+		complog(doc).Debug("compliance.file_structure: cannot parse content stream", "error", err)
 		return nil
 	}
 	var results []Violation

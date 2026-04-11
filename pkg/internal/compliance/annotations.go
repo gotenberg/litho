@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -60,7 +59,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 		return nil
 	}
 
-	slog.Debug("compliance: annotations: starting checks", "profile", profile, "part", part, "level", level)
+	complog(doc).Debug("compliance: annotations: starting checks", "profile", profile, "part", part, "level", level)
 
 	var results []Violation
 
@@ -77,7 +76,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			slog.Debug("compliance: annotations: failed to resolve /Annots array",
+			complog(doc).Debug("compliance: annotations: failed to resolve /Annots array",
 				"page", pageIdx, "error", err)
 			continue
 		}
@@ -89,7 +88,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 
 			annot, err := document.ResolveDict(ctx, doc, annotObj)
 			if err != nil || annot == nil {
-				slog.Debug("compliance: annotations: failed to resolve annotation dict",
+				complog(doc).Debug("compliance: annotations: failed to resolve annotation dict",
 					"page", pageIdx, "annot", annotIdx, "error", err)
 				continue
 			}
@@ -118,7 +117,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 		}
 	}
 
-	slog.Debug("compliance: annotations: checks complete", "violations", len(results))
+	complog(doc).Debug("compliance: annotations: checks complete", "violations", len(results))
 	return results
 }
 
@@ -213,7 +212,7 @@ func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast
 	}
 	stream, err := document.ResolveStream(ctx, doc, streamObj)
 	if err != nil {
-		slog.Debug("compliance: cannot resolve 3DD stream", "error", err)
+		complog(doc).Debug("compliance: cannot resolve 3DD stream", "error", err)
 		return nil
 	}
 	subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -243,7 +242,7 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 
 		flags, err := document.ResolveInt(ctx, doc, fObj)
 		if err != nil {
-			slog.Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
+			complog(doc).Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
 			return nil
 		}
 
@@ -263,7 +262,7 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 
 	flags, err := document.ResolveInt(ctx, doc, fObj)
 	if err != nil {
-		slog.Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
+		complog(doc).Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -356,7 +355,7 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 
 	ap, err := document.ResolveDict(ctx, doc, apObj)
 	if err != nil || ap == nil {
-		slog.Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
+		complog(doc).Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -445,7 +444,7 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string) []Violation {
 	resolved, err := document.ResolveObject(ctx, doc, nObj)
 	if err != nil {
-		slog.Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
+		complog(doc).Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -512,7 +511,7 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 
 	resolved, err := document.ResolveObject(ctx, doc, caObj)
 	if err != nil {
-		slog.Debug("compliance: annotations: failed to resolve /CA", "loc", loc, "error", err)
+		complog(doc).Debug("compliance: annotations: failed to resolve /CA", "loc", loc, "error", err)
 		return nil
 	}
 

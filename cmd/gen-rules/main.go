@@ -11,6 +11,7 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"flag"
 	"fmt"
 	"go/format"
@@ -22,6 +23,11 @@ import (
 	"sort"
 	"strings"
 )
+
+// errGofmt signals that the generator produced syntactically invalid Go.
+// main() catches this and writes the unformatted buffer to disk for
+// debugging.
+var errGofmt = errors.New("gofmt rejected generated source")
 
 const (
 	defaultRepo = "https://raw.githubusercontent.com/veraPDF/veraPDF-validation-profiles"
@@ -117,8 +123,30 @@ func main() {
 		downloadProfiles(*repo, *tag, profilesDir)
 	}
 
-	allRules, profiles := parseProfiles(profilesDir)
-	generate(allRules, profiles)
+	allRules, profiles, err := parseProfiles(profilesDir)
+	if err != nil {
+		fatalf("%v", err)
+	}
+
+	formatted, err := generate(allRules, profiles)
+	if err != nil {
+		// Write the unformatted buffer to disk for debugging when gofmt
+		// rejects the generated source.
+		if errors.Is(err, errGofmt) && len(formatted) > 0 {
+			if wErr := os.WriteFile("rules_gen_debug.go", formatted, 0o600); wErr != nil {
+				fatalf("gofmt failed: %v (could not write debug file: %v)", err, wErr)
+			}
+			fatalf("gofmt failed: %v (unformatted output written to rules_gen_debug.go)", err)
+		}
+		fatalf("%v", err)
+	}
+
+	outPath := filepath.Join(findComplianceDir(), "rules.go")
+	if err := os.WriteFile(outPath, formatted, 0o600); err != nil {
+		fatalf("writing %s: %v", outPath, err)
+	}
+
+	fmt.Printf("Generated %s (%d rules, %d profiles)\n", outPath, len(allRules), len(profiles))
 }
 
 // downloadProfiles fetches all 13 XML profiles from the VeraPDF repository.
@@ -159,8 +187,10 @@ func downloadProfiles(baseURL, tag, destDir string) {
 	fmt.Println("Download complete.")
 }
 
-// parseProfiles reads all XML profile files and collects rules.
-func parseProfiles(profilesDir string) (map[ruleKey]*ruleData, []profileEntry) {
+// parseProfiles reads all XML profile files and collects rules. Errors
+// from missing or malformed files are returned rather than printed,
+// so callers (including tests) can react to them.
+func parseProfiles(profilesDir string) (map[ruleKey]*ruleData, []profileEntry, error) {
 	allRules := make(map[ruleKey]*ruleData)
 	profiles := make([]profileEntry, 0, len(profileFiles))
 
@@ -168,21 +198,21 @@ func parseProfiles(profilesDir string) (map[ruleKey]*ruleData, []profileEntry) {
 		path := filepath.Join(profilesDir, pf.Path)
 		data, err := os.ReadFile(path)
 		if err != nil {
-			fatalf("reading %s: %v", path, err)
+			return nil, nil, fmt.Errorf("reading %s: %w", path, err)
 		}
 
 		var profile xmlProfile
 		if err := xml.Unmarshal(data, &profile); err != nil {
-			fatalf("parsing %s: %v", path, err)
+			return nil, nil, fmt.Errorf("parsing %s: %w", path, err)
 		}
 
 		if profile.Flavour != pf.Flavour {
-			fatalf("%s: expected flavour %q, got %q", path, pf.Flavour, profile.Flavour)
+			return nil, nil, fmt.Errorf("%s: expected flavour %q, got %q", path, pf.Flavour, profile.Flavour)
 		}
 
 		funcName, ok := flavourToFuncName[profile.Flavour]
 		if !ok {
-			fatalf("unknown flavour %q in %s", profile.Flavour, path)
+			return nil, nil, fmt.Errorf("unknown flavour %q in %s", profile.Flavour, path)
 		}
 
 		entry := profileEntry{
@@ -219,11 +249,13 @@ func parseProfiles(profilesDir string) (map[ruleKey]*ruleData, []profileEntry) {
 		profiles = append(profiles, entry)
 	}
 
-	return allRules, profiles
+	return allRules, profiles, nil
 }
 
-// generate writes the rules.go file from parsed profile data.
-func generate(allRules map[ruleKey]*ruleData, profiles []profileEntry) {
+// generate produces the rules.go source from parsed profile data.
+// On gofmt failure, it returns the unformatted buffer alongside [errGofmt]
+// so the caller can persist it for debugging.
+func generate(allRules map[ruleKey]*ruleData, profiles []profileEntry) ([]byte, error) {
 	sortedRules := make([]*ruleData, 0, len(allRules))
 	for _, r := range allRules {
 		sortedRules = append(sortedRules, r)
@@ -279,18 +311,9 @@ func generate(allRules map[ruleKey]*ruleData, profiles []profileEntry) {
 
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		if wErr := os.WriteFile("rules_gen_debug.go", buf.Bytes(), 0o600); wErr != nil {
-			fatalf("gofmt failed: %v (could not write debug file: %v)", err, wErr)
-		}
-		fatalf("gofmt failed: %v (unformatted output written to rules_gen_debug.go)", err)
+		return buf.Bytes(), fmt.Errorf("%w: %v", errGofmt, err)
 	}
-
-	outPath := filepath.Join(findComplianceDir(), "rules.go")
-	if err := os.WriteFile(outPath, formatted, 0o600); err != nil {
-		fatalf("writing %s: %v", outPath, err)
-	}
-
-	fmt.Printf("Generated %s (%d rules, %d profiles)\n", outPath, len(sortedRules), len(profiles))
+	return formatted, nil
 }
 
 func makeVarName(key ruleKey) string {

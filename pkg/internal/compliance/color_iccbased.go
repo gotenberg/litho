@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -93,7 +92,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 				}
 				stream, err := document.ResolveStream(ctx, doc, apObj)
 				if err != nil {
-					slog.Debug("compliance.color: cannot resolve appearance stream", "error", err)
+					complog(doc).Debug("compliance.color: cannot resolve appearance stream", "error", err)
 					continue
 				}
 				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
@@ -133,7 +132,7 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		}
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
-			slog.Debug("compliance.color: cannot resolve XObject stream", "error", err)
+			complog(doc).Debug("compliance.color: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -201,7 +200,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		csType, err := document.ResolveName(ctx, doc, arr[0])
 		if err != nil {
-			slog.Debug("compliance.color: cannot resolve color space type name", "error", err)
+			complog(doc).Debug("compliance.color: cannot resolve color space type name", "error", err)
 			continue
 		}
 
@@ -233,7 +232,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		stream, err := document.ResolveStream(ctx, doc, arr[1])
 		if err != nil {
-			slog.Debug("compliance.color: cannot resolve ICCBased stream", "page", pageIdx, "name", name, "error", err)
+			complog(doc).Debug("compliance.color: cannot resolve ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),
 				"page %d, ColorSpace %s: cannot resolve ICCBased profile stream", pageIdx+1, name)...)
 			continue
@@ -249,7 +248,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
-			slog.Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
+			complog(doc).Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),
 				"page %d, ColorSpace %s: cannot decode ICCBased profile", pageIdx+1, name)...)
 			continue

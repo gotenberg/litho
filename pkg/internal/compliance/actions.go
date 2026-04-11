@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -93,7 +92,7 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance.actions: starting action checks", "profile", profile, "part", part)
+	complog(doc).Debug("compliance.actions: starting action checks", "profile", profile, "part", part)
 
 	results := make([]Violation, 0, 8)
 
@@ -160,7 +159,7 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	aaDict, err := document.ResolveDict(ctx, doc, aaObj)
 	if err != nil || aaDict == nil {
-		slog.Debug("compliance.actions: catalog /AA is not a dict", "error", err)
+		complog(doc).Debug("compliance.actions: catalog /AA is not a dict", "error", err)
 		return nil
 	}
 
@@ -254,7 +253,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 		}
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			slog.Debug("compliance.actions: failed to resolve /Annots array", "page", pageIdx+1, "error", err)
+			complog(doc).Debug("compliance.actions: failed to resolve /Annots array", "page", pageIdx+1, "error", err)
 			continue
 		}
 
@@ -649,7 +648,7 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 	}
 	fields, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil {
-		slog.Debug("compliance.actions: cannot resolve form fields array", "error", err)
+		complog(doc).Debug("compliance.actions: cannot resolve form fields array", "error", err)
 		return nil
 	}
 

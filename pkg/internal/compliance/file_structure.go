@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"math"
 	"unicode/utf8"
 
@@ -30,7 +29,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 	part := vctx.part
 
-	slog.Debug("compliance.file_structure: starting checks", "profile", profile)
+	complog(doc).Debug("compliance.file_structure: starting checks", "profile", profile)
 
 	var results []Violation
 
@@ -61,7 +60,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
 	}
 
-	slog.Debug("compliance.file_structure: checks complete",
+	complog(doc).Debug("compliance.file_structure: checks complete",
 		"profile", profile,
 		"violations", len(results),
 	)
@@ -118,7 +117,7 @@ func pageBoundRule(profile string) Rule {
 func checkFileHeader(doc *document.Document, profile string) []Violation {
 	buf, err := safeReadHeader(doc, headerReadSize)
 	if err != nil {
-		slog.Debug("compliance.file_structure: cannot read header", "error", err)
+		complog(doc).Debug("compliance.file_structure: cannot read header", "error", err)
 		return nil
 	}
 
@@ -287,7 +286,7 @@ func checkPostEOFData(doc *document.Document, profile string) []Violation {
 	offset := fileSize - readLen
 	tail, err := doc.ReadFileBytes(offset, readLen)
 	if err != nil {
-		slog.Debug("compliance.file_structure: cannot read file tail", "error", err)
+		complog(doc).Debug("compliance.file_structure: cannot read file tail", "error", err)
 		return nil
 	}
 
@@ -604,7 +603,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 
 		declaredLen, err := document.ResolveInt(ctx, doc, lengthObj)
 		if err != nil {
-			slog.Debug("compliance.file_structure: cannot resolve stream length", "error", err)
+			complog(doc).Debug("compliance.file_structure: cannot resolve stream length", "error", err)
 			continue
 		}
 

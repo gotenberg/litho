@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -77,6 +76,7 @@ var allowedInlineImageFiltersPart4 = map[string]bool{
 // It checks for unknown operators, q/Q nesting depth, and forbidden inline
 // image filters. For PDF/UA profiles, no content stream checks are performed.
 func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
+	doc := vctx.doc
 	profile := vctx.profile
 
 	if vctx.ua {
@@ -88,7 +88,7 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	slog.Debug("compliance.content: starting checks", "profile", profile, "part", part)
+	complog(doc).Debug("compliance.content: starting checks", "profile", profile, "part", part)
 
 	var results []Violation
 
@@ -97,16 +97,16 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			return results
 		}
 
-		pageResults := checkPageContent(ctx, &vctx.pages[i], part, i+1)
+		pageResults := checkPageContent(ctx, doc, &vctx.pages[i], part, i+1)
 		results = append(results, pageResults...)
 	}
 
-	slog.Debug("compliance.content: checks complete", "violations", len(results))
+	complog(doc).Debug("compliance.content: checks complete", "violations", len(results))
 	return results
 }
 
 // checkPageContent validates the content streams of a single page.
-func checkPageContent(ctx context.Context, page *pageCtx, part, pageNum int) []Violation {
+func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx, part, pageNum int) []Violation {
 	if len(page.content) == 0 {
 		return nil
 	}
@@ -114,7 +114,7 @@ func checkPageContent(ctx context.Context, page *pageCtx, part, pageNum int) []V
 	// Use lazily-parsed operations for operator validation and q/Q nesting.
 	ops := page.parsedOps(ctx)
 	if ops == nil {
-		slog.Debug("compliance.content: failed to parse content stream",
+		complog(doc).Debug("compliance.content: failed to parse content stream",
 			"page", pageNum)
 		return nil
 	}

@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"log/slog"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -19,7 +18,7 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 		return nil
 	}
 
-	slog.Debug("compliance.transparency: starting checks", "profile", profile, "part", part)
+	complog(doc).Debug("compliance.transparency: starting checks", "profile", profile, "part", part)
 
 	// Extract raw page dicts for sub-functions that expect []ast.PdfDict.
 	rawPages := make([]ast.PdfDict, len(vctx.pages))
@@ -34,7 +33,7 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 		results = checkTransparencyParts2Plus(ctx, doc, catalog, rawPages, profile, part)
 	}
 
-	slog.Debug("compliance.transparency: checks complete", "violations", len(results))
+	complog(doc).Debug("compliance.transparency: checks complete", "violations", len(results))
 	return results
 }
 
@@ -291,7 +290,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					}
 					stream, err := document.ResolveStream(ctx, doc, xobjObj)
 					if err != nil {
-						slog.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
+						complog(doc).Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
 						continue
 					}
 					subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -401,7 +400,7 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 			}
 			stream, err := document.ResolveStream(ctx, doc, apObj)
 			if err != nil {
-				slog.Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
+				complog(doc).Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
 				continue
 			}
 			// Check for transparency group on the appearance Form XObject.
@@ -484,7 +483,7 @@ func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, p
 		for _, xobjObj := range xobjDict {
 			stream, err := document.ResolveStream(ctx, doc, xobjObj)
 			if err != nil {
-				slog.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
+				complog(doc).Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
 				continue
 			}
 			subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -518,7 +517,7 @@ func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, p
 				}
 				stream, err := document.ResolveStream(ctx, doc, apObj)
 				if err != nil {
-					slog.Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
+					complog(doc).Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
 					continue
 				}
 				apCS := resolveBlendingDeviceCS(ctx, doc, stream.Dict)
@@ -602,7 +601,7 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 		}
 		stream, err := document.ResolveStream(ctx, doc, destObj)
 		if err != nil {
-			slog.Debug("compliance.transparency: cannot resolve output profile stream", "error", err)
+			complog(doc).Debug("compliance.transparency: cannot resolve output profile stream", "error", err)
 			continue
 		}
 		data, err := doc.DecodeStream(ctx, stream)
@@ -628,7 +627,7 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 	for _, patObj := range patDict {
 		stream, err := document.ResolveStream(ctx, doc, patObj)
 		if err != nil {
-			slog.Debug("compliance.transparency: cannot resolve pattern stream", "error", err)
+			complog(doc).Debug("compliance.transparency: cannot resolve pattern stream", "error", err)
 			continue
 		}
 		patRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
@@ -727,7 +726,7 @@ func checkType3FontTransparency(ctx context.Context, doc *document.Document, pag
 			for _, xobjObj := range xobjDict {
 				stream, err := document.ResolveStream(ctx, doc, xobjObj)
 				if err != nil {
-					slog.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
+					complog(doc).Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
 					continue
 				}
 				st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])

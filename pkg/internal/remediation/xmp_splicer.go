@@ -7,6 +7,13 @@ import (
 	"io"
 )
 
+// maxXMPDepth caps the element nesting level while walking XMP. Real
+// packets rarely nest deeper than ~10 levels (x:xmpmeta → rdf:RDF →
+// rdf:Description → property → rdf:Alt → rdf:li). A cap of 1000 leaves
+// two orders of magnitude of headroom and bounds CPU on pathological
+// input from a malicious producer.
+const maxXMPDepth = 1000
+
 // xmpPropertyForm describes how an XMP property is expressed in the
 // serialized XML: as a child element of rdf:Description, or as a
 // namespaced attribute on an rdf:Description start tag.
@@ -241,6 +248,9 @@ func findChildElementRange(dec *xml.Decoder, xmp []byte, descName xml.Name, nsUR
 				return xmpPropertyLocation{}, false
 			}
 			depth++
+			if depth > maxXMPDepth {
+				return xmpPropertyLocation{}, false
+			}
 		case xml.EndElement:
 			depth--
 			if depth == 0 && t.Name == descName {
@@ -252,7 +262,9 @@ func findChildElementRange(dec *xml.Decoder, xmp []byte, descName xml.Name, nsUR
 
 // consumeElement drains tokens from dec until it has consumed the
 // matching EndElement for name. Returns the byte offset immediately
-// after the EndElement, or 0 and false on error.
+// after the EndElement, or 0 and false on error. The nesting depth
+// is capped at [maxXMPDepth] so pathological input cannot block the
+// decoder indefinitely.
 func consumeElement(dec *xml.Decoder, name xml.Name) (int, bool) {
 	depth := 1
 	for {
@@ -263,6 +275,9 @@ func consumeElement(dec *xml.Decoder, name xml.Name) (int, bool) {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			depth++
+			if depth > maxXMPDepth {
+				return 0, false
+			}
 		case xml.EndElement:
 			depth--
 			if depth == 0 && t.Name == name {
@@ -283,6 +298,196 @@ func removeXMPProperty(xmp []byte, loc xmpPropertyLocation) []byte {
 	out = append(out, xmp[:loc.Start]...)
 	out = append(out, xmp[loc.End:]...)
 	return out
+}
+
+// insertChildElement inserts a new child element into the first
+// rdf:Description found in xmp. The content argument is raw XML — the
+// caller is responsible for escaping any user-provided values via
+// [xmlEscape]. Returns a fresh byte slice with the element spliced in
+// just before the closing `</rdf:Description>`, preserving the
+// existing indentation of that closing tag.
+//
+// Returns the original bytes unchanged plus an error if no
+// rdf:Description is found or if the XMP is not parseable.
+func insertChildElement(xmp []byte, elementXML string) ([]byte, error) {
+	descEnd, err := findRDFDescriptionCloseOffset(xmp)
+	if err != nil {
+		return append([]byte(nil), xmp...), err
+	}
+	// Expand backwards to include the whitespace preceding the close
+	// tag so the injected element adopts that indentation.
+	insertAt := descEnd
+	lineStart := descEnd
+	for lineStart > 0 && xmp[lineStart-1] != '\n' {
+		lineStart--
+	}
+	indent := string(xmp[lineStart:descEnd])
+
+	injection := indent + elementXML + "\n"
+	out := make([]byte, 0, len(xmp)+len(injection))
+	out = append(out, xmp[:insertAt]...)
+	out = append(out, []byte(injection)...)
+	out = append(out, xmp[insertAt:]...)
+	return out, nil
+}
+
+// replacePropertyValue rewrites the text content of an existing
+// element-form XMP property to newValue. Attribute-form properties are
+// not currently supported — the caller must fall back to
+// [insertChildElement] if the property is not found.
+//
+// Returns the original bytes unchanged plus an error if the property
+// does not exist in element form.
+func replacePropertyValue(xmp []byte, nsURI, localName, newValue string) ([]byte, error) {
+	loc := findXMPProperty(xmp, nsURI, localName)
+	if loc.Form != xmpPropertyAsElement {
+		return append([]byte(nil), xmp...), errXMPPropertyNotFound
+	}
+	// The element range from findXMPProperty includes leading
+	// indentation and the trailing newline. Re-parse just the slice
+	// to locate the text-content byte range inside the element so we
+	// only replace the value, not the surrounding tags.
+	elementBytes := xmp[loc.Start:loc.End]
+	openStart, openEnd, closeStart, ok := elementTextRange(elementBytes)
+	if !ok {
+		return append([]byte(nil), xmp...), errXMPPropertyNotFound
+	}
+
+	out := make([]byte, 0, len(xmp)+len(newValue))
+	// Absolute byte ranges in the source buffer.
+	absOpenEnd := loc.Start + openEnd
+	absCloseStart := loc.Start + closeStart
+	_ = openStart // captured for potential future use
+	out = append(out, xmp[:absOpenEnd]...)
+	out = append(out, newValue...)
+	out = append(out, xmp[absCloseStart:]...)
+	return out, nil
+}
+
+// ensureNamespaceDecl adds xmlns:prefix="uri" to the first
+// rdf:Description start tag if the namespace is not already declared.
+// Returns the new bytes plus true if a declaration was inserted. A
+// nil-delta result (second return false) is returned unchanged when
+// the namespace is already declared.
+func ensureNamespaceDecl(xmp []byte, prefix, uri string) ([]byte, bool, error) {
+	tagStart, tagEnd, err := findRDFDescriptionOpenRange(xmp)
+	if err != nil {
+		return append([]byte(nil), xmp...), false, err
+	}
+	tagBytes := xmp[tagStart:tagEnd]
+	existing := collectNamespaceDecls(tagBytes)
+	if existing[prefix] == uri {
+		return append([]byte(nil), xmp...), false, nil
+	}
+
+	// Insert just before the closing `>` (or `/>`) of the start tag.
+	closePos := tagEnd - 1
+	for closePos > tagStart && (xmp[closePos] == '>' || xmp[closePos] == '/') {
+		closePos--
+	}
+	// closePos now points at the last non-'>' non-'/' byte. The
+	// injection should happen at closePos+1.
+	insertAt := closePos + 1
+
+	injection := fmt.Sprintf(` xmlns:%s="%s"`, prefix, uri)
+	out := make([]byte, 0, len(xmp)+len(injection))
+	out = append(out, xmp[:insertAt]...)
+	out = append(out, injection...)
+	out = append(out, xmp[insertAt:]...)
+	return out, true, nil
+}
+
+// errXMPPropertyNotFound is returned by the splicer helpers when a
+// property lookup fails. It is kept internal; callers switch on it via
+// [errors.Is].
+var errXMPPropertyNotFound = fmt.Errorf("xmp property not found")
+
+// elementTextRange identifies the byte ranges of the opening-tag body
+// and the closing-tag opening for an element of the form
+// `<ns:local ...>text</ns:local>`. It returns offsets RELATIVE to the
+// passed element slice:
+//
+//	openStart  — byte after `<` of the opening tag
+//	openEnd    — byte after the final `>` of the opening tag
+//	closeStart — byte at the `<` of the closing `</ns:local>` tag
+//
+// Returns ok=false for self-closing elements and for any input that
+// does not contain a matching close tag.
+func elementTextRange(element []byte) (int, int, int, bool) {
+	// Find the opening tag's start.
+	openStart := bytes.IndexByte(element, '<')
+	if openStart < 0 {
+		return 0, 0, 0, false
+	}
+	// Find its closing `>`.
+	openEnd := bytes.IndexByte(element[openStart:], '>')
+	if openEnd < 0 {
+		return 0, 0, 0, false
+	}
+	openEnd += openStart + 1
+	// Self-closing?
+	if openEnd >= 2 && element[openEnd-2] == '/' {
+		return openStart + 1, openEnd, openEnd - 2, true
+	}
+	// Find the matching close tag. A naive reverse search for `</` is
+	// correct because XMP properties are leaves — they do not contain
+	// nested elements of the same name in practice.
+	closeStart := bytes.LastIndex(element, []byte("</"))
+	if closeStart < 0 || closeStart < openEnd {
+		return 0, 0, 0, false
+	}
+	return openStart + 1, openEnd, closeStart, true
+}
+
+// findRDFDescriptionOpenRange returns the byte range of the first
+// `<rdf:Description ...>` start tag in xmp. The range is [start, end)
+// where start is the `<` and end is one past the final `>` / `/>`.
+func findRDFDescriptionOpenRange(xmp []byte) (int, int, error) {
+	dec := xml.NewDecoder(bytes.NewReader(xmp))
+	dec.Strict = false
+	dec.Entity = xml.HTMLEntity
+	for {
+		tokStart := dec.InputOffset()
+		tok, err := dec.Token()
+		if err != nil {
+			return 0, 0, fmt.Errorf("no rdf:Description found: %w", err)
+		}
+		tokEnd := dec.InputOffset()
+		startElem, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if isRDFDescription(startElem.Name) {
+			return int(tokStart), int(tokEnd), nil
+		}
+	}
+}
+
+// findRDFDescriptionCloseOffset returns the byte offset of the `<`
+// starting the first matching `</rdf:Description>` close tag in xmp.
+// This is the insertion point for appending a new child element.
+func findRDFDescriptionCloseOffset(xmp []byte) (int, error) {
+	dec := xml.NewDecoder(bytes.NewReader(xmp))
+	dec.Strict = false
+	dec.Entity = xml.HTMLEntity
+	seenOpen := false
+	for {
+		tokStart := dec.InputOffset()
+		tok, err := dec.Token()
+		if err != nil {
+			return 0, fmt.Errorf("no </rdf:Description> found: %w", err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if isRDFDescription(t.Name) {
+				seenOpen = true
+			}
+		case xml.EndElement:
+			if seenOpen && isRDFDescription(t.Name) {
+				return int(tokStart), nil
+			}
+		}
+	}
 }
 
 // --- small byte helpers ---

@@ -232,6 +232,11 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Violation {
 	numComponents, ssiz, err := parseJ2KSIZMarker(data)
 	if err != nil {
+		// Pure-data helper: no *document.Document in scope, so the
+		// parse-failure log goes to the package-level slog rather than
+		// the document logger. Malformed JPX codestreams produce a
+		// silent skip; a higher-level check will emit a rule violation
+		// if a JPX image is expected to parse.
 		slog.Debug("compliance.jpx: cannot parse J2K SIZ marker", "error", err)
 		return nil
 	}

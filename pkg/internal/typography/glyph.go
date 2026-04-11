@@ -9,7 +9,11 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// processText maps the raw bytes of a PDF string to UTF-8 and generates models.TextElements.
+// processText maps the raw bytes of a PDF string to UTF-8 and generates
+// [models.TextElement] values. It is a thin orchestrator: each per-glyph
+// concern (decoding, MCID inheritance, visibility checks, glyph metrics,
+// matrix advance) lives in its own helper so the main loop reads
+// top-down without deeply nested branches.
 func processText(ctx context.Context, str ast.PdfString, font *Font, machine *graphics.Machine, elements *[]models.TextElement) error {
 	data := []byte(str)
 	state := machine.Current()
@@ -18,42 +22,8 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		fontSize = 12 // Fallback
 	}
 
-	// Compute the effective font size in page-space units by applying the
-	// text matrix and CTM scale. This ensures TextElement.FontSize is in
-	// the same coordinate system as TextElement.Width and positions, which
-	// is critical for correct space inference in ReconstructText.
-	//
-	// The text rendering matrix is Tm × CTM. The horizontal text direction
-	// in page space is (Tm[0]*CTM[0]+Tm[1]*CTM[2], Tm[0]*CTM[1]+Tm[1]*CTM[3]).
-	// The scale factor is the magnitude of this vector × fontSize.
-	ctm := state.CTM
-	tm := state.Text.Tm
-	dx := tm[0]*ctm[0] + tm[1]*ctm[2]
-	dy := tm[0]*ctm[1] + tm[1]*ctm[3]
-	effectiveFontSize := fontSize * math.Sqrt(dx*dx+dy*dy)
-	if effectiveFontSize == 0 {
-		effectiveFontSize = fontSize // Last resort: use raw.
-	}
-
-	// Compute the font's space character advance in page-space units.
-	// Used by ReconstructText for font-aware space inference.
-	spaceGlyphWidth := font.GetGlyphWidth(0x20) // 1/1000 text-space units
-	spaceAdvance := (spaceGlyphWidth / 1000.0) * fontSize * math.Sqrt(dx*dx+dy*dy) * (state.Text.Tz / 100.0)
-
-	mcid := -1
-	var mcLang, mcExpansion string
-	for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
-		mc := &machine.MarkedContent[i]
-		if mcid == -1 && mc.MCID != -1 {
-			mcid = mc.MCID
-		}
-		if mcLang == "" && mc.Language != "" {
-			mcLang = mc.Language
-		}
-		if mcExpansion == "" && mc.ExpansionText != "" {
-			mcExpansion = mc.ExpansionText
-		}
-	}
+	effectiveFontSize, spaceAdvance := computeTextScale(state, font, fontSize)
+	mcid, mcLang, mcExpansion := currentMCIDFromStack(machine.MarkedContent)
 
 	charCount := 0
 	for len(data) > 0 {
@@ -63,143 +33,43 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 				return err
 			}
 		}
-		var char string
-		var n int
-		var ok bool
 
-		if font.ToUnicode != nil {
-			n, char, ok = font.ToUnicode.Map(data)
+		char, n, skip := decodeNextChar(font, data)
+		if skip {
+			data = data[n:]
+			continue
 		}
 
-		if !ok {
-			if n > 1 {
-				// Multi-byte codespace consumed n>1 bytes but found no
-				// mapping. For Type0 fonts, treat the unmapped 2-byte code
-				// as a direct Unicode codepoint (common with Identity-H
-				// fonts that have incomplete ToUnicode CMaps).
-				if font.Subtype == "Type0" && n == 2 && len(data) >= 2 {
-					cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset) //nolint:gosec // CIDOffset is 0 or 29, no overflow
-					if cp > 0x1F {
-						char = string(cp)
-					} else {
-						data = data[n:]
-						continue
-					}
-				} else {
-					data = data[n:]
-					continue
-				}
-			} else {
-				// Type0/CID fonts with Identity fallback use 2-byte character
-				// codes as direct Unicode values. Skip the single-byte Encoding
-				// table to avoid misinterpreting the high byte of a 2-byte code.
-				if font.Subtype == "Type0" && font.CIDIdentityFallback {
-					char = resolveGlyphFallback(font, data, &n)
-				} else if r, ok := font.Encoding[data[0]]; ok {
-					char = string(r)
-				} else {
-					char = resolveGlyphFallback(font, data, &n)
-				}
-				if n == 0 {
-					n = 1
-				}
-			}
-		}
-
-		// Decompose standard ligatures to their component characters so that
-		// text search and comparison works with plain ASCII equivalents.
+		// Decompose standard ligatures to their component characters so
+		// that text search and comparison works with plain ASCII.
 		char = decomposeLigature(char)
 
-		// Skip known non-glyph control characters (NUL, CR, LF) that sometimes
-		// appear in PDF strings. Do NOT skip low byte values in general — PDF
-		// fonts frequently use 0x01–0x1F as valid glyph codes (e.g. ligatures).
+		// Skip known non-glyph control characters (NUL, CR, LF, DEL).
+		// Do NOT skip low byte values in general — PDF fonts frequently
+		// use 0x01–0x1F as valid glyph codes (e.g. ligatures).
 		if char == "?" && len(data) > 0 {
-			b := data[0]
-			if b == 0x00 || b == 0x0a || b == 0x0d || b == 0x7f {
+			if b := data[0]; b == 0x00 || b == 0x0a || b == 0x0d || b == 0x7f {
 				data = data[n:]
 				continue
 			}
 		}
 
-		// Calculate absolute position
 		tm := state.Text.Tm
 		ctm := state.CTM
-		tx := tm[4]
-		ty := tm[5]
+		tx, ty := tm[4], tm[5]
 		x := tx*ctm[0] + ty*ctm[2] + ctm[4]
 		y := tx*ctm[1] + ty*ctm[3] + ctm[5]
 
-		// Visibility heuristics
-		isHidden := false
-		isInvisible := false
-
-		// 1. Text rendering mode 3 is "Neither fill nor stroke text (invisible)"
-		if state.Text.Tmode == 3 {
-			isInvisible = true
-		}
-
-		// 2. Color checks (e.g. white text on white background), interpreted per active color space.
-		// Pattern color spaces are never "invisible" — they paint with a tiled or gradient fill.
-		if state.FillPatternType == "" {
-			switch state.FillColorSpace {
-			case "DeviceRGB":
-				if len(state.FillColor) == 3 && state.FillColor[0] == 1 && state.FillColor[1] == 1 && state.FillColor[2] == 1 {
-					isInvisible = true
-				}
-			case "DeviceCMYK":
-				if len(state.FillColor) == 4 && state.FillColor[0] == 0 && state.FillColor[1] == 0 && state.FillColor[2] == 0 && state.FillColor[3] == 0 {
-					isInvisible = true
-				}
-			case "DeviceGray":
-				if len(state.FillColor) == 1 && state.FillColor[0] == 1 {
-					isInvisible = true
-				}
-				// Named/custom color spaces (Separation, DeviceN, ICCBased, etc.)
-				// are not checked — their component values don't map to white.
-			}
-		}
-
-		// Compute advance width before visibility checks (needed for clipping).
 		charCode := int(data[0])
 		if n == 2 && len(data) >= 2 {
 			charCode = int(data[0])<<8 | int(data[1])
 		}
 
-		var pageWidth float64
-		if font.WMode == 1 {
-			w1, _, _ := font.GetVerticalMetrics(charCode)
-			wordSpace := 0.0
-			if char == " " {
-				wordSpace = state.Text.Tw
-			}
-			advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
-			// Map the vertical advance through the full Tm × CTM matrix.
-			awx := advance * (tm[2]*ctm[0] + tm[3]*ctm[2])
-			awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
-			pageWidth = math.Sqrt(awx*awx + awy*awy)
-		} else {
-			glyphWidth := font.GetGlyphWidth(charCode)
-			wordSpace := 0.0
-			if char == " " {
-				wordSpace = state.Text.Tw
-			}
-			advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
-			// Map the horizontal advance through the full Tm × CTM matrix.
-			awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
-			awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])
-			pageWidth = math.Sqrt(awx*awx + awy*awy)
-		}
+		pageWidth := computeGlyphPageWidth(state, font, fontSize, char, charCode)
 
-		// The graphics state clipping path (W/W*) is intentionally not checked
-		// during text extraction. Only the page CropBox is used to determine
-		// visibility, because W/W* clips are often used for decorative masking
-		// (e.g., rounded corners, image crops) that should not suppress text.
-		// The CropBox-based IsClipped flag is set later in ExtractElements.
-
-		// Compute text direction angle from the effective transform (Tm × CTM).
-		// The text baseline direction (1,0) in text space maps to:
-		//   dx = Tm[0]*CTM[0] + Tm[1]*CTM[2]
-		//   dy = Tm[0]*CTM[1] + Tm[1]*CTM[3]
+		// Compute text direction angle from the effective transform
+		// (Tm × CTM). The text baseline direction (1,0) in text space
+		// maps to (Tm[0]*CTM[0]+Tm[1]*CTM[2], Tm[0]*CTM[1]+Tm[1]*CTM[3]).
 		dirX := tm[0]*ctm[0] + tm[1]*ctm[2]
 		dirY := tm[0]*ctm[1] + tm[1]*ctm[3]
 		angle := math.Atan2(dirY, dirX)
@@ -212,8 +82,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			FontSize:      effectiveFontSize,
 			SpaceWidth:    spaceAdvance,
 			MCID:          mcid,
-			Hidden:        isHidden,
-			Invisible:     isInvisible,
+			Invisible:     textIsInvisible(state),
 			Vertical:      font.WMode == 1,
 			Angle:         angle,
 			PatternType:   state.FillPatternType,
@@ -221,35 +90,169 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			ExpansionText: mcExpansion,
 		})
 
-		// Advance text matrix using exact glyph metrics.
-		if font.WMode == 1 {
-			// Vertical writing mode (PDF spec §9.4.4, Table 108):
-			// Text position advances downward by w1 (vertical advance).
-			w1, _, _ := font.GetVerticalMetrics(charCode)
-			wordSpace := 0.0
-			if char == " " {
-				wordSpace = state.Text.Tw
-			}
-			advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
-			// In vertical mode, advance along Tm's Y axis (column 1).
-			state.Text.Tm[4] += advance * state.Text.Tm[2]
-			state.Text.Tm[5] += advance * state.Text.Tm[3]
-		} else {
-			// Horizontal writing mode.
-			glyphWidth := font.GetGlyphWidth(charCode)
-			wordSpace := 0.0
-			if char == " " {
-				wordSpace = state.Text.Tw
-			}
-			advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
-			// Translate Tm by advance along the text baseline.
-			state.Text.Tm[4] += advance * state.Text.Tm[0]
-			state.Text.Tm[5] += advance * state.Text.Tm[1]
-		}
+		advanceTextMatrix(state, font, fontSize, char, charCode)
 
 		data = data[n:]
 	}
 	return nil
+}
+
+// computeTextScale returns the effective page-space font size and the
+// font-specific space-character advance. These are invariants for the
+// current string and only need to be computed once per [processText] call.
+func computeTextScale(state *graphics.State, font *Font, fontSize float64) (effectiveFontSize, spaceAdvance float64) {
+	// The text rendering matrix is Tm × CTM. The horizontal text
+	// direction in page space is (Tm[0]*CTM[0]+Tm[1]*CTM[2],
+	// Tm[0]*CTM[1]+Tm[1]*CTM[3]). Its magnitude × fontSize is the
+	// effective page-space font size.
+	ctm := state.CTM
+	tm := state.Text.Tm
+	dx := tm[0]*ctm[0] + tm[1]*ctm[2]
+	dy := tm[0]*ctm[1] + tm[1]*ctm[3]
+	scale := math.Sqrt(dx*dx + dy*dy)
+	effectiveFontSize = fontSize * scale
+	if effectiveFontSize == 0 {
+		effectiveFontSize = fontSize // last resort: use raw
+	}
+
+	// Space advance in page-space units, used by ReconstructText for
+	// font-aware space inference.
+	spaceGlyphWidth := font.GetGlyphWidth(0x20)
+	spaceAdvance = (spaceGlyphWidth / 1000.0) * fontSize * scale * (state.Text.Tz / 100.0)
+	return effectiveFontSize, spaceAdvance
+}
+
+// currentMCIDFromStack walks the marked-content stack from innermost to
+// outermost and returns the first MCID, language, and expansion text it
+// finds. Used to inherit PDF/UA tagging metadata into the emitted
+// [models.TextElement] values.
+func currentMCIDFromStack(stack []graphics.MarkedContentState) (mcid int, lang, expansion string) {
+	mcid = -1
+	for i := len(stack) - 1; i >= 0; i-- {
+		mc := &stack[i]
+		if mcid == -1 && mc.MCID != -1 {
+			mcid = mc.MCID
+		}
+		if lang == "" && mc.Language != "" {
+			lang = mc.Language
+		}
+		if expansion == "" && mc.ExpansionText != "" {
+			expansion = mc.ExpansionText
+		}
+	}
+	return mcid, lang, expansion
+}
+
+// decodeNextChar maps the next glyph code in data to a UTF-8 character.
+// Returns the decoded character, the number of bytes consumed, and a
+// skip flag that tells the caller to continue past the consumed bytes
+// without emitting an element (used for unmapped CID fallbacks that
+// should not produce visible output).
+func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
+	var ok bool
+	if font.ToUnicode != nil {
+		n, char, ok = font.ToUnicode.Map(data)
+	}
+	if ok {
+		return char, n, false
+	}
+
+	if n > 1 {
+		// Multi-byte codespace consumed n>1 bytes but found no mapping.
+		// For Type0 Identity-H fonts, treat the unmapped 2-byte code as
+		// a direct Unicode codepoint.
+		if font.Subtype == "Type0" && n == 2 && len(data) >= 2 {
+			cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset) //nolint:gosec // CIDOffset is 0 or 29, no overflow
+			if cp > 0x1F {
+				return string(cp), n, false
+			}
+		}
+		return "", n, true
+	}
+
+	// Single-byte fallback paths.
+	if font.Subtype == "Type0" && font.CIDIdentityFallback {
+		char = resolveGlyphFallback(font, data, &n)
+	} else if r, ok := font.Encoding[data[0]]; ok {
+		char = string(r)
+	} else {
+		char = resolveGlyphFallback(font, data, &n)
+	}
+	if n == 0 {
+		n = 1
+	}
+	return char, n, false
+}
+
+// textIsInvisible combines the two rendering-mode-3 and white-on-white
+// invisibility heuristics into a single predicate. Pattern color spaces
+// are exempt because they paint with a tiled or gradient fill.
+func textIsInvisible(state *graphics.State) bool {
+	if state.Text.Tmode == 3 {
+		return true
+	}
+	if state.FillPatternType != "" {
+		return false
+	}
+	switch state.FillColorSpace {
+	case "DeviceRGB":
+		return len(state.FillColor) == 3 &&
+			state.FillColor[0] == 1 && state.FillColor[1] == 1 && state.FillColor[2] == 1
+	case "DeviceCMYK":
+		return len(state.FillColor) == 4 &&
+			state.FillColor[0] == 0 && state.FillColor[1] == 0 &&
+			state.FillColor[2] == 0 && state.FillColor[3] == 0
+	case "DeviceGray":
+		return len(state.FillColor) == 1 && state.FillColor[0] == 1
+	}
+	return false
+}
+
+// computeGlyphPageWidth returns the advance width of a glyph in
+// page-space units, including character spacing (Tc), word spacing
+// (Tw when the glyph is a space), and horizontal scaling (Tz).
+// Vertical and horizontal writing modes are handled separately.
+func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, char string, charCode int) float64 {
+	tm := state.Text.Tm
+	ctm := state.CTM
+	wordSpace := 0.0
+	if char == " " {
+		wordSpace = state.Text.Tw
+	}
+	if font.WMode == 1 {
+		w1, _, _ := font.GetVerticalMetrics(charCode)
+		advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
+		awx := advance * (tm[2]*ctm[0] + tm[3]*ctm[2])
+		awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
+		return math.Sqrt(awx*awx + awy*awy)
+	}
+	glyphWidth := font.GetGlyphWidth(charCode)
+	advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
+	awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
+	awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])
+	return math.Sqrt(awx*awx + awy*awy)
+}
+
+// advanceTextMatrix shifts the text matrix by the glyph's advance width
+// after emitting its [models.TextElement]. Horizontal and vertical modes
+// both use the same word-/character-spacing terms but push the
+// displacement along different axes (PDF spec §9.4.4, Table 108).
+func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, char string, charCode int) {
+	wordSpace := 0.0
+	if char == " " {
+		wordSpace = state.Text.Tw
+	}
+	if font.WMode == 1 {
+		w1, _, _ := font.GetVerticalMetrics(charCode)
+		advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
+		state.Text.Tm[4] += advance * state.Text.Tm[2]
+		state.Text.Tm[5] += advance * state.Text.Tm[3]
+		return
+	}
+	glyphWidth := font.GetGlyphWidth(charCode)
+	advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
+	state.Text.Tm[4] += advance * state.Text.Tm[0]
+	state.Text.Tm[5] += advance * state.Text.Tm[1]
 }
 
 // decomposeLigature replaces Unicode ligature characters with their component

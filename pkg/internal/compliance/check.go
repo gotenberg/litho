@@ -12,6 +12,18 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
+// complog returns the logger for a compliance-check document, or a
+// no-op logger when doc is nil. Compliance unit tests sometimes pass
+// nil to exercise a specific code path in isolation, so every Debug
+// call site in this package goes through this helper rather than
+// dereferencing doc.Logger directly.
+func complog(doc *document.Document) *slog.Logger {
+	if doc == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return doc.Logger
+}
+
 // validationCtx holds pre-computed document data shared across all check groups.
 // It eliminates redundant page tree traversals and resource resolution.
 type validationCtx struct {
@@ -204,7 +216,7 @@ func getCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, error
 // resolveAllObjects forces resolution of every indirect object in the xref
 // table. This ensures parser-level format checks run on ALL objects.
 func resolveAllObjects(ctx context.Context, doc *document.Document) {
-	slog.Debug("compliance: resolving all objects for format checks")
+	complog(doc).Debug("compliance: resolving all objects for format checks")
 	count := 0
 	for objNum, entry := range doc.Index.Entries {
 		if count%100 == 0 {
@@ -218,19 +230,19 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		count++
 	}
-	slog.Debug("compliance: resolved all objects", "count", count)
+	complog(doc).Debug("compliance: resolved all objects", "count", count)
 }
 
 // collectPages traverses the page tree and returns all leaf page dicts.
 func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []ast.PdfDict {
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
-		slog.Debug("compliance: catalog missing /Pages")
+		complog(doc).Debug("compliance: catalog missing /Pages")
 		return nil
 	}
 	var pages []ast.PdfDict
 	collectPagesRecursive(ctx, doc, pagesObj, &pages, 0)
-	slog.Debug("compliance: collected pages", "count", len(pages))
+	complog(doc).Debug("compliance: collected pages", "count", len(pages))
 	return pages
 }
 
@@ -278,7 +290,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 func getResources(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfDict {
 	res, err := document.ResolveDict(ctx, doc, page["Resources"])
 	if err != nil {
-		slog.Debug("compliance: cannot resolve page resources", "error", err)
+		complog(doc).Debug("compliance: cannot resolve page resources", "error", err)
 		return nil
 	}
 	return res

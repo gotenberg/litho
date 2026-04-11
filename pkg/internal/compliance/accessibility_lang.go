@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -246,7 +245,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		}
 		langStr, err := document.ResolveString(ctx, doc, langObj)
 		if err != nil {
-			slog.Debug("compliance.accessibility: cannot resolve /Lang in structure element",
+			complog(doc).Debug("compliance.accessibility: cannot resolve /Lang in structure element",
 				"path", path, "error", err)
 			return
 		}
