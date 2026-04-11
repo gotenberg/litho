@@ -196,10 +196,109 @@ type Metadata struct {
 
 // TextStamp defines a text overlay to stamp on pages.
 type TextStamp struct {
-	Text     string  // Text content
-	X, Y     float64 // Position in points from bottom-left
-	FontSize float64 // Font size in points
-	Opacity  float64 // 0.0-1.0 (1.0 = fully opaque)
+	// Text is the line to draw.
+	Text string
+	// X and Y position the stamp in points from the page's bottom-left
+	// corner. When Rotation is non-zero, (X, Y) is the rotation origin.
+	X, Y float64
+	// FontSize is the text size in points; zero defaults to 12.
+	FontSize float64
+	// Opacity is 0.0-1.0 (1.0 = fully opaque). Zero is treated as fully
+	// opaque for back-compat with the original API.
+	Opacity float64
+	// Font selects the text font. The zero value uses [FontHelvetica].
+	// Construct with one of the [FontHelvetica], [FontTimesRoman], ...
+	// package variables, or with [NewTTFFont] to embed a custom TrueType
+	// font.
+	Font StampFont
+	// Color is the RGB fill color (0.0-1.0 components). Zero draws black.
+	Color [3]float64
+	// Rotation is the counter-clockwise rotation in degrees around (X, Y).
+	Rotation float64
+}
+
+// StampFont identifies the font used by a [TextStamp]. Construct with one
+// of the package-level [FontHelvetica], [FontTimesRoman], ... variables
+// for the 14 standard PDF fonts (always available, no embedding required),
+// or with [NewTTFFont] to embed a custom TrueType font.
+type StampFont struct {
+	// name holds the /BaseFont name for standard fonts and the derived
+	// PostScript name for custom fonts.
+	name string
+	// ttf holds the parsed bytes for a custom TTF. nil for standard fonts.
+	ttf []byte
+}
+
+// Standard 14 PDF fonts. These are always available in conformant PDF
+// viewers and do not need to be embedded.
+var (
+	FontHelvetica            = StampFont{name: "Helvetica"}
+	FontHelveticaBold        = StampFont{name: "Helvetica-Bold"}
+	FontHelveticaOblique     = StampFont{name: "Helvetica-Oblique"}
+	FontHelveticaBoldOblique = StampFont{name: "Helvetica-BoldOblique"}
+	FontTimesRoman           = StampFont{name: "Times-Roman"}
+	FontTimesBold            = StampFont{name: "Times-Bold"}
+	FontTimesItalic          = StampFont{name: "Times-Italic"}
+	FontTimesBoldItalic      = StampFont{name: "Times-BoldItalic"}
+	FontCourier              = StampFont{name: "Courier"}
+	FontCourierBold          = StampFont{name: "Courier-Bold"}
+	FontCourierOblique       = StampFont{name: "Courier-Oblique"}
+	FontCourierBoldOblique   = StampFont{name: "Courier-BoldOblique"}
+	FontSymbol               = StampFont{name: "Symbol"}
+	FontZapfDingbats         = StampFont{name: "ZapfDingbats"}
+)
+
+// NewTTFFont returns a [StampFont] that embeds the given TrueType font
+// bytes in the output PDF. The bytes are retained by the returned value,
+// so callers may reuse them across multiple stamps. The font is validated
+// (table directory + required tables) at call time; parse errors surface
+// here rather than at write time.
+func NewTTFFont(data []byte) (StampFont, error) {
+	if len(data) < 12 {
+		return StampFont{}, fmt.Errorf("ttf data too short")
+	}
+	if err := mutations.ValidateTTFForStamp(data); err != nil {
+		return StampFont{}, err
+	}
+	// Copy to detach from caller-owned memory.
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	return StampFont{ttf: cp}, nil
+}
+
+// ImageStamp defines an image overlay. Data must be JPEG or PNG bytes.
+type ImageStamp struct {
+	// Data is the raw image file contents.
+	Data []byte
+	// MimeType must be "image/jpeg" or "image/png".
+	MimeType string
+	// X and Y position the bottom-left of the image in points.
+	X, Y float64
+	// Width and Height set the target size in points. Zero for one means
+	// "proportional to the other". Zero for both means "use the image's
+	// natural pixel dimensions as points".
+	Width, Height float64
+	// Opacity is 0.0-1.0; zero treated as fully opaque.
+	Opacity float64
+	// Rotation is the counter-clockwise rotation in degrees around (X, Y).
+	Rotation float64
+}
+
+// PDFStamp draws a page from another PDF document as a stamp.
+type PDFStamp struct {
+	// Source is the stamp document. The caller retains ownership and must
+	// keep it valid until [Writer.WriteTo] is called.
+	Source *Reader
+	// Page is the 1-based source page number. Zero is treated as 1.
+	Page int
+	// X and Y position the bottom-left of the stamp in points.
+	X, Y float64
+	// Scale is the uniform scale factor. Zero is treated as 1.0.
+	Scale float64
+	// Opacity is 0.0-1.0; zero treated as fully opaque.
+	Opacity float64
+	// Rotation is the counter-clockwise rotation in degrees around (X, Y).
+	Rotation float64
 }
 
 // Signer produces a PKCS#7/CMS signature for the given digest. Implementations
@@ -378,9 +477,98 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) {
 			if err != nil {
 				return fmt.Errorf("resolving pages: %w", err)
 			}
-			return mutations.StampText(ctx, alloc, doc, resolvedPages, stamp.Text, stamp.X, stamp.Y, stamp.FontSize, stamp.Opacity, pages)
+			return mutations.StampText(ctx, alloc, doc, resolvedPages, textStampToOptions(stamp), pages)
 		},
 	})
+}
+
+// StampImage overlays a JPEG or PNG image on the specified 1-based pages.
+// If no pages are specified, the stamp is applied to all pages. Uses
+// incremental update. The mutation is queued and applied when
+// [Writer.WriteTo] is called.
+func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
+	if len(stamp.Data) == 0 {
+		return fmt.Errorf("image stamp: empty data")
+	}
+	if stamp.MimeType != "image/jpeg" && stamp.MimeType != "image/png" {
+		return fmt.Errorf("image stamp: unsupported mime type %q", stamp.MimeType)
+	}
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			resolvedPages, err := w.reader.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving pages: %w", err)
+			}
+			return mutations.StampImage(ctx, alloc, doc, resolvedPages, mutations.ImageStampOptions{
+				Data:     stamp.Data,
+				MimeType: stamp.MimeType,
+				X:        stamp.X,
+				Y:        stamp.Y,
+				Width:    stamp.Width,
+				Height:   stamp.Height,
+				Opacity:  stamp.Opacity,
+				Rotation: stamp.Rotation,
+			}, pages)
+		},
+	})
+	return nil
+}
+
+// StampPDF overlays a page from another PDF document on the specified
+// 1-based pages. If no pages are specified, the stamp is applied to all
+// pages. Uses incremental update. The mutation is queued and applied when
+// [Writer.WriteTo] is called.
+func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
+	if stamp.Source == nil {
+		return fmt.Errorf("pdf stamp: source is nil")
+	}
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			resolvedPages, err := w.reader.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving pages: %w", err)
+			}
+			srcPages, err := stamp.Source.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving stamp source pages: %w", err)
+			}
+			return mutations.StampPDF(ctx, alloc, doc, resolvedPages, mutations.PDFStampOptions{
+				SourceDoc:   stamp.Source.doc,
+				SourcePages: srcPages,
+				Page:        stamp.Page,
+				X:           stamp.X,
+				Y:           stamp.Y,
+				Scale:       stamp.Scale,
+				Opacity:     stamp.Opacity,
+				Rotation:    stamp.Rotation,
+			}, pages)
+		},
+	})
+	return nil
+}
+
+// textStampToOptions translates a public [TextStamp] into the internal
+// [mutations.TextStampOptions] the stamp engine consumes.
+func textStampToOptions(s TextStamp) mutations.TextStampOptions {
+	opts := mutations.TextStampOptions{
+		Text:     s.Text,
+		X:        s.X,
+		Y:        s.Y,
+		FontSize: s.FontSize,
+		Opacity:  s.Opacity,
+		Color:    s.Color,
+		Rotation: s.Rotation,
+	}
+	if len(s.Font.ttf) > 0 {
+		opts.TTFBytes = s.Font.ttf
+	} else {
+		name := s.Font.name
+		if name == "" {
+			name = "Helvetica"
+		}
+		opts.StandardFont = ast.PdfName(name)
+	}
+	return opts
 }
 
 // AddAttachment embeds a file in the document's /EmbeddedFiles name tree.

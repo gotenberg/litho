@@ -3,8 +3,6 @@ package mutations
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"maps"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -12,11 +10,48 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// StampText overlays text on the specified pages using a standard font.
-// Pages is the full set of resolved pages; pageNums contains 1-based page
-// numbers to stamp. If pageNums is empty, all pages are stamped.
-func StampText(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page, text string, x, y, fontSize, opacity float64, pageNums []int) error {
-	// If no pages specified, stamp all.
+// TextStampOptions holds everything needed to stamp a line of text on one
+// or more pages. It is the internal form of the public TextStamp API in
+// pkg/pdf.
+type TextStampOptions struct {
+	// Text is the string to draw. It is escaped for PDF literal syntax by
+	// the stamp engine for standard fonts, and hex-encoded via the font's
+	// Unicode→GID map for custom TTF fonts.
+	Text string
+	// X and Y are the position in points from the page's bottom-left
+	// corner. When Rotation is non-zero, (X, Y) is the rotation origin.
+	X, Y float64
+	// FontSize is the text size in points. Zero defaults to 12.
+	FontSize float64
+	// Opacity is 0.0-1.0 where 1.0 is fully opaque. A zero value is
+	// treated as 1.0 for back-compat with the original StampText API.
+	Opacity float64
+	// Color is the RGB fill color (0.0-1.0 components). The zero value
+	// draws in black.
+	Color [3]float64
+	// Rotation is the counter-clockwise rotation in degrees around (X, Y).
+	Rotation float64
+	// StandardFont selects one of the 14 standard PDF Type1 fonts by its
+	// /BaseFont name (e.g., "Helvetica", "Times-Roman"). Ignored if
+	// TTFBytes is set.
+	StandardFont ast.PdfName
+	// TTFBytes embeds a TrueType font file. When set, the stamp uses a
+	// Type0 composite font with Identity-H encoding and a generated
+	// ToUnicode CMap.
+	TTFBytes []byte
+}
+
+// StampText draws a single line of text on the given 1-based page numbers.
+// See [TextStampOptions] for the available parameters. If pageNums is
+// empty, the stamp is applied to every page.
+func StampText(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	pages []*document.Page,
+	opts TextStampOptions,
+	pageNums []int,
+) error {
 	if len(pageNums) == 0 {
 		pageNums = make([]int, len(pages))
 		for i := range pages {
@@ -24,66 +59,87 @@ func StampText(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 		}
 	}
 
-	// Create a Helvetica font resource (standard Type1, always available).
-	fontDict := ast.PdfDict{
-		"Type":     ast.PdfName("Font"),
-		"Subtype":  ast.PdfName("Type1"),
-		"BaseFont": ast.PdfName("Helvetica"),
-	}
-	fontRef := alloc.Alloc(fontDict)
-
-	// Escape parentheses in the text for PDF string literal.
-	escaped := strings.ReplaceAll(text, "\\", "\\\\")
-	escaped = strings.ReplaceAll(escaped, "(", "\\(")
-	escaped = strings.ReplaceAll(escaped, ")", "\\)")
-
+	fontSize := opts.FontSize
 	if fontSize == 0 {
 		fontSize = 12
 	}
 
-	// Build the content stream for the stamp.
-	var ops strings.Builder
-	ops.WriteString("\nq ")
-	fmt.Fprintf(&ops, "BT /StampF1 %s Tf %s %s Td (%s) Tj ET ",
-		FormatFloat(fontSize), FormatFloat(x), FormatFloat(y), escaped)
-	ops.WriteString("Q")
-
-	stampStream := ast.NewStream(ast.PdfDict{}, []byte(ops.String()))
-	stampRef := alloc.Alloc(stampStream)
-
-	for _, pageNum := range pageNums {
-		if pageNum < 1 || pageNum > len(pages) {
-			doc.Logger.Debug("skipping out-of-range stamp page",
-				slog.Int("page", pageNum),
-				slog.Int("total", len(pages)),
-			)
-			continue
+	// Allocate the font resource.
+	var (
+		fontRef     ast.PdfIndirectRef
+		fontResName ast.PdfName
+		encoded     string
+		err         error
+	)
+	if len(opts.TTFBytes) > 0 {
+		var f *embeddedTTF
+		f, err = parseTTF(opts.TTFBytes)
+		if err != nil {
+			return fmt.Errorf("parsing TTF for stamp: %w", err)
 		}
-		page := pages[pageNum-1]
-
-		// Add font to page resources.
-		resources := make(ast.PdfDict, len(page.Resources)+1)
-		maps.Copy(resources, page.Resources)
-		fontResDict := ast.PdfDict{}
-		if existingFonts, ok := page.Resources["Font"]; ok {
-			if fd, err := document.ResolveDict(ctx, doc, existingFonts); err == nil && fd != nil {
-				maps.Copy(fontResDict, fd)
-			}
+		fontRef, err = embedTTFFont(ctx, alloc, f)
+		if err != nil {
+			return fmt.Errorf("embedding TTF for stamp: %w", err)
 		}
-		fontResDict["StampF1"] = fontRef
-		resources["Font"] = fontResDict
-
-		// Append stamp stream to page contents.
-		newDict := make(ast.PdfDict, len(page.Dict)+1)
-		maps.Copy(newDict, page.Dict)
-		newDict["Resources"] = resources
-		if existing, ok := page.Dict["Contents"]; ok {
-			newDict["Contents"] = ast.PdfArray{existing, stampRef}
-		} else {
-			newDict["Contents"] = stampRef
+		encoded = encodeTextAsGIDs(opts.Text, f)
+		fontResName = ast.PdfName(fmt.Sprintf("StampF%d", fontRef.ObjectNum))
+	} else {
+		baseFont := opts.StandardFont
+		if baseFont == "" {
+			baseFont = "Helvetica"
 		}
-		alloc.AllocAt(page.Ref.ObjectNum, newDict)
+		fontDict := ast.PdfDict{
+			"Type":     ast.PdfName("Font"),
+			"Subtype":  ast.PdfName("Type1"),
+			"BaseFont": baseFont,
+		}
+		// Symbol and ZapfDingbats use their built-in encodings; all other
+		// standard fonts use WinAnsiEncoding so extended Latin characters
+		// render correctly.
+		if baseFont != "Symbol" && baseFont != "ZapfDingbats" {
+			fontDict["Encoding"] = ast.PdfName("WinAnsiEncoding")
+		}
+		fontRef = alloc.Alloc(fontDict)
+		fontResName = ast.PdfName(fmt.Sprintf("StampF%d", fontRef.ObjectNum))
+		encoded = "(" + escapePDFString(opts.Text) + ")"
 	}
 
-	return nil
+	extGSName, extGSRef := buildExtGState(alloc, opts.Opacity)
+
+	var ops strings.Builder
+	ops.WriteString("q ")
+	ops.WriteString(extGStateInvocation(extGSName))
+
+	// Fill color: "r g b rg" (defaults to black when all zero).
+	fmt.Fprintf(&ops, "%s %s %s rg ",
+		FormatFloat(opts.Color[0]),
+		FormatFloat(opts.Color[1]),
+		FormatFloat(opts.Color[2]),
+	)
+
+	if opts.Rotation != 0 {
+		// Translate to the rotation origin, rotate, then draw at (0, 0).
+		ops.WriteString(buildTransformMatrix(opts.X, opts.Y, 1, 1, opts.Rotation))
+		fmt.Fprintf(&ops, "BT /%s %s Tf 0 0 Td %s Tj ET ",
+			fontResName, FormatFloat(fontSize), encoded,
+		)
+	} else {
+		fmt.Fprintf(&ops, "BT /%s %s Tf %s %s Td %s Tj ET ",
+			fontResName, FormatFloat(fontSize),
+			FormatFloat(opts.X), FormatFloat(opts.Y),
+			encoded,
+		)
+	}
+	ops.WriteString("Q")
+
+	resources := []stampResource{
+		{category: "Font", name: fontResName, ref: fontRef},
+	}
+	if extGSName != "" {
+		resources = append(resources, stampResource{
+			category: "ExtGState", name: extGSName, ref: extGSRef,
+		})
+	}
+
+	return applyStampToPages(ctx, doc, alloc, pages, pageNums, resources, ops.String())
 }

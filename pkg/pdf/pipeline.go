@@ -145,6 +145,20 @@ func (p *Pipeline) StampText(stamp TextStamp, pages ...int) *Pipeline {
 	return p.append(&stampTextStage{stamp: stamp, pages: pagesCopy})
 }
 
+// StampImage queues an image overlay on the specified 1-based pages.
+// Mirrors [Writer.StampImage].
+func (p *Pipeline) StampImage(stamp ImageStamp, pages ...int) *Pipeline {
+	pagesCopy := append([]int(nil), pages...)
+	return p.append(&stampImageStage{stamp: stamp, pages: pagesCopy})
+}
+
+// StampPDF queues a PDF-page overlay on the specified 1-based pages.
+// Mirrors [Writer.StampPDF].
+func (p *Pipeline) StampPDF(stamp PDFStamp, pages ...int) *Pipeline {
+	pagesCopy := append([]int(nil), pages...)
+	return p.append(&stampPDFStage{stamp: stamp, pages: pagesCopy})
+}
+
 // AddAttachment queues an embedded file addition. Mirrors
 // [Writer.AddAttachment].
 func (p *Pipeline) AddAttachment(name string, data []byte, mimeType string) *Pipeline {
@@ -429,6 +443,8 @@ const (
 	kindSetBookmarks
 	kindGenerateBookmarks
 	kindStampText
+	kindStampImage
+	kindStampPDF
 	kindAddAttachment
 	kindSetFormField
 	kindFlattenForm
@@ -791,6 +807,40 @@ func (s *stampTextStage) name() string    { return "stamp-text" }
 func (s *stampTextStage) apply(_ context.Context, ex *executor) error {
 	ex.ensureWriter()
 	ex.writer.StampText(s.stamp, s.pages...)
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// stampImageStage queues an image overlay. See [Pipeline.StampImage].
+type stampImageStage struct {
+	stamp ImageStamp
+	pages []int
+}
+
+func (s *stampImageStage) kind() stageKind { return kindStampImage }
+func (s *stampImageStage) name() string    { return "stamp-image" }
+func (s *stampImageStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	if err := ex.writer.StampImage(s.stamp, s.pages...); err != nil {
+		return err
+	}
+	ex.recordStage(s.name(), false, 0)
+	return nil
+}
+
+// stampPDFStage queues a PDF-page overlay. See [Pipeline.StampPDF].
+type stampPDFStage struct {
+	stamp PDFStamp
+	pages []int
+}
+
+func (s *stampPDFStage) kind() stageKind { return kindStampPDF }
+func (s *stampPDFStage) name() string    { return "stamp-pdf" }
+func (s *stampPDFStage) apply(_ context.Context, ex *executor) error {
+	ex.ensureWriter()
+	if err := ex.writer.StampPDF(s.stamp, s.pages...); err != nil {
+		return err
+	}
 	ex.recordStage(s.name(), false, 0)
 	return nil
 }
