@@ -305,14 +305,14 @@ func TestConcurrentMixedMethods(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			if _, err := r.NumPages(context.Background()); err != nil {
+			if _, err := r.PageCount(context.Background()); err != nil {
 				errs <- err
 			}
 		}()
 
 		go func() {
 			defer wg.Done()
-			// GetMetadata returns an error for our minimal PDF (no /Info dict);
+			// Metadata returns an error for our minimal PDF (no /Info dict);
 			// we only care that it doesn't panic or race.
 			_, _ = r.Metadata(context.Background())
 		}()
@@ -361,9 +361,9 @@ func TestWithLogger_DebugOutput(t *testing.T) {
 		t.Fatalf("Open failed: %v", err)
 	}
 
-	_, err = r.NumPages(context.Background())
+	_, err = r.PageCount(context.Background())
 	if err != nil {
-		t.Fatalf("NumPages failed: %v", err)
+		t.Fatalf("PageCount failed: %v", err)
 	}
 
 	output := buf.String()
@@ -387,9 +387,9 @@ func TestWithoutLogger_NoOutput(t *testing.T) {
 		t.Fatalf("Open failed: %v", err)
 	}
 
-	_, err = r.NumPages(context.Background())
+	_, err = r.PageCount(context.Background())
 	if err != nil {
-		t.Fatalf("NumPages failed: %v", err)
+		t.Fatalf("PageCount failed: %v", err)
 	}
 }
 

@@ -254,10 +254,10 @@ func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot 
 		}
 	}
 	// Parse rectangles.
-	rx1, ry1 := document.GetFloat(rect[0]), document.GetFloat(rect[1])
-	rx2, ry2 := document.GetFloat(rect[2]), document.GetFloat(rect[3])
-	bx1, by1 := document.GetFloat(box[0]), document.GetFloat(box[1])
-	bx2, by2 := document.GetFloat(box[2]), document.GetFloat(box[3])
+	rx1, ry1 := document.Float(rect[0]), document.Float(rect[1])
+	rx2, ry2 := document.Float(rect[2]), document.Float(rect[3])
+	bx1, by1 := document.Float(box[0]), document.Float(box[1])
+	bx2, by2 := document.Float(box[2]), document.Float(box[3])
 	// Normalise: ensure min < max.
 	if rx1 > rx2 {
 		rx1, rx2 = rx2, rx1
@@ -342,7 +342,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 			return nil
 		}
 		// TU missing or empty — check if widget has Alt in structure tree.
-		catalog, _ := document.GetCatalog(ctx, doc)
+		catalog, _ := document.ResolveCatalog(ctx, doc)
 		treeRoot, _ := document.ResolveDict(ctx, doc, catalog.Dict["StructTreeRoot"])
 		if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, 0) {
 			return nil

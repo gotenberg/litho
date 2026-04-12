@@ -51,7 +51,7 @@ func ExtractAnnotations(ctx context.Context, doc *document.Document, page *docum
 			rectArr, err := document.ResolveArray(ctx, doc, rectObj)
 			if err == nil && rectArr != nil && len(rectArr) == 4 {
 				for i := range 4 {
-					annot.Rect[i] = document.GetFloat(rectArr[i])
+					annot.Rect[i] = document.Float(rectArr[i])
 				}
 			}
 		}
@@ -71,7 +71,7 @@ func ExtractAnnotations(ctx context.Context, doc *document.Document, page *docum
 				for i := 0; i+7 < len(qpArr); i += 8 {
 					var quad [8]float64
 					for j := range 8 {
-						quad[j] = document.GetFloat(qpArr[i+j])
+						quad[j] = document.Float(qpArr[i+j])
 					}
 					annot.QuadPoints = append(annot.QuadPoints, quad)
 				}

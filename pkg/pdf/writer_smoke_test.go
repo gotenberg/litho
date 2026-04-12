@@ -61,7 +61,7 @@ func TestWriter_RoundTrip_SetMetadata_All(t *testing.T) {
 	// decoding, and existing Info dict state vary).
 	for _, key := range []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer"} {
 		if meta[key] == "" {
-			t.Errorf("GetMetadata[%q] empty after round-trip", key)
+			t.Errorf("Metadata[%q] empty after round-trip", key)
 		}
 	}
 }
@@ -309,7 +309,7 @@ func TestWriter_NoMutations_CopiesSource(t *testing.T) {
 		t.Fatalf("Reopen: %v", err)
 	}
 	defer r2.Close()
-	if n, _ := r2.NumPages(ctx); n != 3 {
-		t.Errorf("NumPages after no-op write: got %d, want 3", n)
+	if n, _ := r2.PageCount(ctx); n != 3 {
+		t.Errorf("PageCount after no-op write: got %d, want 3", n)
 	}
 }

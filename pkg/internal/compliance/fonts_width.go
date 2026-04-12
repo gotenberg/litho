@@ -125,7 +125,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		// The spec requires width consistency only for "glyphs referenced
 		// for rendering." Skip charCodes not used in text operators.
 		charUsed := usage != nil && usage.charCodes[byte(charCode)] //nolint:gosec
-		pdfWidth := document.GetFloat(wObj)
+		pdfWidth := document.Float(wObj)
 		if pdfWidth == 0 && !charUsed {
 			continue
 		}
@@ -180,7 +180,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	// in text space (1/1000 of user space unit). Scale = FontMatrix[0] * 1000.
 	fmScale := 1.0
 	if fmArr, err := document.ResolveArray(ctx, doc, fontDict["FontMatrix"]); err == nil && len(fmArr) >= 1 {
-		sx := document.GetFloat(fmArr[0])
+		sx := document.Float(fmArr[0])
 		if sx > 0 {
 			fmScale = sx * 1000.0
 		}
@@ -209,7 +209,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 			// d0: wx wy d0
 			if (op.Operator == "d1" && len(op.Operands) >= 6) ||
 				(op.Operator == "d0" && len(op.Operands) >= 2) {
-				wx := document.GetFloat(op.Operands[0])
+				wx := document.Float(op.Operands[0])
 				charProcWidths[string(glyphName)] = wx
 				break
 			}
@@ -227,7 +227,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		if !ok {
 			continue
 		}
-		pdfWidth := document.GetFloat(wObj)
+		pdfWidth := document.Float(wObj)
 		expectedWidth := cpWidth * fmScale
 		if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
 			return failf(rule, "font %s on page %d: char %d (%s) width mismatch (PDF=%.1f, glyph=%.1f)",
@@ -285,7 +285,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 					continue
 				}
 				gid := uint16(cid) //nolint:gosec
-				pdfWidth := document.GetFloat(wEntry)
+				pdfWidth := document.Float(wEntry)
 				if pdfWidth == 0 {
 					continue
 				}
@@ -307,7 +307,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			if i >= len(wArr) {
 				break
 			}
-			pdfWidth := document.GetFloat(wArr[i])
+			pdfWidth := document.Float(wArr[i])
 			i++
 			if pdfWidth == 0 {
 				continue

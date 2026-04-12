@@ -49,16 +49,16 @@ func TestExtractElements_MinimalPDF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		t.Fatalf("GetCatalog: %v", err)
+		t.Fatalf("ResolveCatalog: %v", err)
 	}
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
-		t.Fatalf("GetPages: %v", err)
+		t.Fatalf("ResolvePages: %v", err)
 	}
 	if len(pages) == 0 {
-		t.Fatal("GetPages: no pages")
+		t.Fatal("ResolvePages: no pages")
 	}
 	page := pages[0]
 
@@ -96,8 +96,8 @@ func TestExtractText_MinimalPDF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	catalog, _ := document.GetCatalog(ctx, doc)
-	pages, _ := document.GetPages(ctx, doc, catalog)
+	catalog, _ := document.ResolveCatalog(ctx, doc)
+	pages, _ := document.ResolvePages(ctx, doc, catalog)
 	page := pages[0]
 	ops, _ := content.ParsePageContent(ctx, doc, page.Dict)
 
@@ -122,8 +122,8 @@ func TestExtractElements_ContextCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, _ := document.GetCatalog(context.Background(), doc)
-	pages, _ := document.GetPages(context.Background(), doc, catalog)
+	catalog, _ := document.ResolveCatalog(context.Background(), doc)
+	pages, _ := document.ResolvePages(context.Background(), doc, catalog)
 	page := pages[0]
 	ops, _ := content.ParsePageContent(context.Background(), doc, page.Dict)
 

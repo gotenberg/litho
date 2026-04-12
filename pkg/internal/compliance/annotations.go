@@ -399,10 +399,10 @@ func isZeroRect(ctx context.Context, doc *document.Document, annot ast.PdfDict) 
 	if err != nil || len(rect) < 4 {
 		return false
 	}
-	x1 := document.GetFloat(rect[0])
-	y1 := document.GetFloat(rect[1])
-	x2 := document.GetFloat(rect[2])
-	y2 := document.GetFloat(rect[3])
+	x1 := document.Float(rect[0])
+	y1 := document.Float(rect[1])
+	x2 := document.Float(rect[2])
+	y2 := document.Float(rect[3])
 	return x1 == x2 && y1 == y2
 }
 
@@ -515,7 +515,7 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 		return nil
 	}
 
-	ca := document.GetFloat(resolved)
+	ca := document.Float(resolved)
 	if ca == 1.0 {
 		return nil
 	}

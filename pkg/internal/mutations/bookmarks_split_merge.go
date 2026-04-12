@@ -37,7 +37,7 @@ func resolveSplitBookmarks(
 
 	switch cfg.Handling {
 	case BookmarkUpdate:
-		existing, err := semantics.GetOutline(ctx, doc)
+		existing, err := semantics.ResolveOutline(ctx, doc)
 		if err != nil {
 			doc.Logger.Debug("reading source outline for split failed",
 				slog.Any("err", err),
@@ -49,7 +49,7 @@ func resolveSplitBookmarks(
 		return reconstructFromKeptPages(ctx, doc, allPages, keptPages, cfg)
 
 	case BookmarkMixed:
-		existing, err := semantics.GetOutline(ctx, doc)
+		existing, err := semantics.ResolveOutline(ctx, doc)
 		if err != nil {
 			doc.Logger.Debug("reading source outline for mixed split failed",
 				slog.Any("err", err),
@@ -135,7 +135,7 @@ func resolveMergeBookmarks(
 
 		switch cfg.Handling {
 		case BookmarkUpdate:
-			existing, err := semantics.GetOutline(ctx, src.Doc)
+			existing, err := semantics.ResolveOutline(ctx, src.Doc)
 			if err != nil {
 				src.Doc.Logger.Debug("reading source outline for merge failed",
 					slog.Int("source", i),
@@ -155,7 +155,7 @@ func resolveMergeBookmarks(
 			perSource[i] = generated
 
 		case BookmarkMixed:
-			existing, err := semantics.GetOutline(ctx, src.Doc)
+			existing, err := semantics.ResolveOutline(ctx, src.Doc)
 			if err != nil {
 				src.Doc.Logger.Debug("reading source outline for mixed merge failed",
 					slog.Int("source", i),

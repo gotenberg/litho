@@ -19,11 +19,11 @@ func matchTransparency(v compliance.Violation) bool {
 }
 
 func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("getting catalog: %w", err)
 	}
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("getting pages: %w", err)
 	}
@@ -123,7 +123,7 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 
 		// CA (stroke alpha): must be 1.0
 		if caObj, ok := gs["CA"]; ok {
-			if ca := document.GetFloat(caObj); !floatEquals1(ca) {
+			if ca := document.Float(caObj); !floatEquals1(ca) {
 				newGS["CA"] = ast.PdfReal(1.0)
 				modified = true
 				fixed++
@@ -132,7 +132,7 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 
 		// ca (fill alpha): must be 1.0
 		if caObj, ok := gs["ca"]; ok {
-			if ca := document.GetFloat(caObj); !floatEquals1(ca) {
+			if ca := document.Float(caObj); !floatEquals1(ca) {
 				newGS["ca"] = ast.PdfReal(1.0)
 				modified = true
 				fixed++

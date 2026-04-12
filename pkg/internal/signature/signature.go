@@ -14,7 +14,7 @@ import (
 // ExtractSignatures locates signature fields, extracts the PKCS#7 payload,
 // and computes the document hash based on the ByteRange.
 func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Signature, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

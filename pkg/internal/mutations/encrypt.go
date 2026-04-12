@@ -26,7 +26,7 @@ func EncryptPendingObjects(ctx context.Context, alloc *writer.ObjAllocator, enc 
 
 // encryptObject recursively encrypts strings and streams within an object.
 func encryptObject(obj ast.PdfObject, enc *crypto.Encryptor, objNum, genNum int) (ast.PdfObject, error) {
-	encFn := enc.GetEncryptFunc(objNum, genNum)
+	encFn := enc.EncryptFunc(objNum, genNum)
 
 	switch v := obj.(type) {
 	case ast.PdfString:

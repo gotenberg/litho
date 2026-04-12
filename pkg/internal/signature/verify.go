@@ -232,9 +232,9 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 	return results, nil
 }
 
-// GetDSSInfo returns a summary of the Document Security Store contents.
+// ResolveDSSInfo returns a summary of the Document Security Store contents.
 // Returns nil if no /DSS dictionary exists.
-func GetDSSInfo(ctx context.Context, doc *document.Document) (*models.DSSInfo, error) {
+func ResolveDSSInfo(ctx context.Context, doc *document.Document) (*models.DSSInfo, error) {
 	dss, err := extractDSS(ctx, doc)
 	if err != nil {
 		return nil, err

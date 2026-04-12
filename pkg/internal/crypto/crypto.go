@@ -318,8 +318,8 @@ func (h *Handler) PermissionFlags() int {
 	return h.pVal
 }
 
-// GetObjKey generates the specific encryption key for an object.
-func (h *Handler) GetObjKey(objNum, genNum int) []byte {
+// ObjKey generates the specific encryption key for an object.
+func (h *Handler) ObjKey(objNum, genNum int) []byte {
 	md := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 	md.Write(h.EncryptionKey)
 	md.Write([]byte{byte(objNum), byte(objNum >> 8), byte(objNum >> 16)}) //nolint:gosec // Expected truncation
@@ -334,8 +334,8 @@ func (h *Handler) GetObjKey(objNum, genNum int) []byte {
 	return key[:keyLen]
 }
 
-// GetDecryptFunc returns a closure that decrypts data for a specific object.
-func (h *Handler) GetDecryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
+// DecryptFunc returns a closure that decrypts data for a specific object.
+func (h *Handler) DecryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
 	return func(data []byte) ([]byte, error) {
 		if len(data) == 0 {
 			return data, nil
@@ -346,7 +346,7 @@ func (h *Handler) GetDecryptFunc(objNum, genNum int) func([]byte) ([]byte, error
 			return aesDecrypt(h.EncryptionKey, data)
 		}
 
-		key := h.GetObjKey(objNum, genNum)
+		key := h.ObjKey(objNum, genNum)
 
 		if h.V >= 4 && (h.CFM == "AESV2" || h.CFM == "AESV3") {
 			return aesDecrypt(key, data)

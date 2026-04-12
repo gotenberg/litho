@@ -46,7 +46,7 @@ type singleResponse struct {
 // extractDSS reads the /DSS dictionary from the document catalog and parses
 // all embedded certificates, CRLs, and OCSP responses.
 func extractDSS(ctx context.Context, doc *document.Document) (*dssData, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

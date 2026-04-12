@@ -188,7 +188,7 @@ func TestDecodeImage_NoXObject(t *testing.T) {
 	}
 }
 
-func TestInspectImages_Basic(t *testing.T) {
+func TestExtractImages_Basic(t *testing.T) {
 	stream := ast.NewStream(ast.PdfDict{
 		"Subtype":          ast.PdfName("Image"),
 		"Width":            ast.PdfInt(100),
@@ -206,7 +206,7 @@ func TestInspectImages_Basic(t *testing.T) {
 		},
 	}
 
-	images := InspectImages(context.Background(), doc, page)
+	images := ExtractImages(context.Background(), doc, page)
 	if len(images) != 1 {
 		t.Fatalf("expected 1 image, got %d", len(images))
 	}
@@ -218,19 +218,19 @@ func TestInspectImages_Basic(t *testing.T) {
 	}
 }
 
-func TestInspectImages_NoXObject(t *testing.T) {
+func TestExtractImages_NoXObject(t *testing.T) {
 	doc := &document.Document{}
 	page := &document.Page{
 		Resources: ast.PdfDict{},
 	}
 
-	images := InspectImages(context.Background(), doc, page)
+	images := ExtractImages(context.Background(), doc, page)
 	if images != nil {
 		t.Errorf("expected nil for no XObjects, got %d", len(images))
 	}
 }
 
-func TestInspectImages_SkipsNonImage(t *testing.T) {
+func TestExtractImages_SkipsNonImage(t *testing.T) {
 	// A Form XObject (not Image) should be skipped.
 	stream := ast.NewStream(ast.PdfDict{
 		"Subtype": ast.PdfName("Form"),
@@ -247,7 +247,7 @@ func TestInspectImages_SkipsNonImage(t *testing.T) {
 		},
 	}
 
-	images := InspectImages(context.Background(), doc, page)
+	images := ExtractImages(context.Background(), doc, page)
 	if len(images) != 0 {
 		t.Errorf("expected 0 images for Form XObject, got %d", len(images))
 	}

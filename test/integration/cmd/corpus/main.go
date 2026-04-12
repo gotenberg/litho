@@ -991,9 +991,9 @@ func processPDFJSEntry(corpusPath, refsDir string, entry manifestEntry, hasRef b
 		res.ItemCountMismatches = cmp.ItemCountMismatches
 	} else {
 		// Survival test: open, count pages, extract text per page.
-		numPages, err := reader.NumPages(ctx)
+		numPages, err := reader.PageCount(ctx)
 		if err != nil {
-			res.Error = fmt.Sprintf("NumPages: %v", err)
+			res.Error = fmt.Sprintf("PageCount: %v", err)
 			return res
 		}
 		lastPage := numPages
@@ -1018,7 +1018,7 @@ func processPDFJSEntry(corpusPath, refsDir string, entry manifestEntry, hasRef b
 func lithoReference(ctx context.Context, r *pdf.Reader, id string, lastPage int) *referenceFixture {
 	fixture := &referenceFixture{ID: id}
 
-	numPages, err := r.NumPages(ctx)
+	numPages, err := r.PageCount(ctx)
 	if err != nil {
 		return nil
 	}

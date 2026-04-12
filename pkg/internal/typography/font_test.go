@@ -41,7 +41,7 @@ func TestExtractType3GlyphWidth_NoOperator(t *testing.T) {
 	}
 }
 
-func TestGetGlyphWidth_Type3(t *testing.T) {
+func TestGlyphWidth_Type3(t *testing.T) {
 	font := &Font{
 		Subtype:      "Type3",
 		Encoding:     map[byte]rune{'A': 'A'},
@@ -51,14 +51,14 @@ func TestGetGlyphWidth_Type3(t *testing.T) {
 	}
 
 	// charCode for 'A' is 65
-	w := font.GetGlyphWidth(65)
+	w := font.GlyphWidth(65)
 	// 500 * 0.001 * 1000 = 500
 	if w != 500 {
 		t.Errorf("got width %v, want 500", w)
 	}
 }
 
-func TestGetGlyphWidth_Type3_CustomMatrix(t *testing.T) {
+func TestGlyphWidth_Type3_CustomMatrix(t *testing.T) {
 	font := &Font{
 		Subtype:      "Type3",
 		Encoding:     map[byte]rune{'B': 'B'},
@@ -67,14 +67,14 @@ func TestGetGlyphWidth_Type3_CustomMatrix(t *testing.T) {
 		Type3Widths:  map[string]float64{"B": 50},
 	}
 
-	w := font.GetGlyphWidth(66)
+	w := font.GlyphWidth(66)
 	// 50 * 0.01 * 1000 = 500
 	if w != 500 {
 		t.Errorf("got width %v, want 500", w)
 	}
 }
 
-func TestGetGlyphWidth_Type3_FallbackToWidths(t *testing.T) {
+func TestGlyphWidth_Type3_FallbackToWidths(t *testing.T) {
 	font := &Font{
 		Subtype:      "Type3",
 		Encoding:     map[byte]rune{'X': 'X'},
@@ -85,14 +85,14 @@ func TestGetGlyphWidth_Type3_FallbackToWidths(t *testing.T) {
 		Widths:       []float64{750},
 	}
 
-	w := font.GetGlyphWidth(88)
+	w := font.GlyphWidth(88)
 	// Falls back to Widths array: 750
 	if w != 750 {
 		t.Errorf("got width %v, want 750", w)
 	}
 }
 
-func TestGetGlyphWidth_Type3_MissingWidth(t *testing.T) {
+func TestGlyphWidth_Type3_MissingWidth(t *testing.T) {
 	font := &Font{
 		Subtype:      "Type3",
 		Encoding:     map[byte]rune{},
@@ -101,7 +101,7 @@ func TestGetGlyphWidth_Type3_MissingWidth(t *testing.T) {
 		Type3Widths:  map[string]float64{},
 	}
 
-	w := font.GetGlyphWidth(99)
+	w := font.GlyphWidth(99)
 	if w != 333 {
 		t.Errorf("got width %v, want 333", w)
 	}

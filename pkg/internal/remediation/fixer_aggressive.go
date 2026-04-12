@@ -87,11 +87,11 @@ func fixAggressive(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // fixAnnotationAppearances generates minimal empty appearance streams for
 // annotations missing /AP.
 func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]string, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -148,11 +148,11 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 // fixContentStreams parses page content streams and fixes rendering intent
 // operators and removes unknown operators between BX/EX markers.
 func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixRI, fixUnknown bool) ([]string, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		return nil, err
 	}

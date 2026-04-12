@@ -9,10 +9,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// GetDPartMap traverses the /DPartRoot tree and returns a mapping from
+// ResolveDPartMap traverses the /DPartRoot tree and returns a mapping from
 // [Page] object number to the inherited Document Part Metadata (DPM).
-func GetDPartMap(ctx context.Context, doc *Document) (map[int]map[string]string, error) {
-	catalog, err := GetCatalog(ctx, doc)
+func ResolveDPartMap(ctx context.Context, doc *Document) (map[int]map[string]string, error) {
+	catalog, err := ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

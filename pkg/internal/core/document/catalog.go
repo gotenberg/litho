@@ -45,8 +45,8 @@ func BuildPageMap(pages []*Page) map[ast.PdfIndirectRef]int {
 	return m
 }
 
-// GetCatalog retrieves the [Catalog] from the document trailer.
-func GetCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
+// ResolveCatalog retrieves the [Catalog] from the document trailer.
+func ResolveCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
@@ -63,8 +63,8 @@ func GetCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 	return &Catalog{Dict: catalogDict}, nil
 }
 
-// GetPages extracts all [Page] entries from the [Catalog] by traversing the page tree.
-func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, error) {
+// ResolvePages extracts all [Page] entries from the [Catalog] by traversing the page tree.
+func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, error) {
 	pagesObj, ok := catalog.Dict["Pages"]
 	if !ok {
 		return nil, fmt.Errorf("catalog missing /Pages")
@@ -91,7 +91,7 @@ func GetPages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, er
 	)
 
 	// Associate Document Parts (PDF 2.0)
-	dpartMap, err := GetDPartMap(ctx, doc)
+	dpartMap, err := ResolveDPartMap(ctx, doc)
 	if err != nil {
 		doc.Logger.Debug("resolving DPart map", slog.Any("err", err))
 	}
@@ -239,7 +239,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		// Default is 1.0 (1 unit = 1/72 inch).
 		userUnit := 1.0
 		if uuObj, ok := node["UserUnit"]; ok {
-			if v := GetFloat(uuObj); v > 0 {
+			if v := Float(uuObj); v > 0 {
 				userUnit = v
 			}
 		}

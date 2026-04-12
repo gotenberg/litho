@@ -152,12 +152,12 @@ func handleConcatMatrix(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 6 {
 		return
 	}
-	a := document.GetFloat(op.Operands[0])
-	b := document.GetFloat(op.Operands[1])
-	c := document.GetFloat(op.Operands[2])
-	d := document.GetFloat(op.Operands[3])
-	e := document.GetFloat(op.Operands[4])
-	f := document.GetFloat(op.Operands[5])
+	a := document.Float(op.Operands[0])
+	b := document.Float(op.Operands[1])
+	c := document.Float(op.Operands[2])
+	d := document.Float(op.Operands[3])
+	e := document.Float(op.Operands[4])
+	f := document.Float(op.Operands[5])
 
 	// New CTM = provided matrix × current CTM.
 	ctm := state.CTM
@@ -185,25 +185,25 @@ func handleEndText(_ *Machine, state *State, _ content.Operation) {
 
 func handleTextCharSpacing(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
-		state.Text.Tc = document.GetFloat(op.Operands[0])
+		state.Text.Tc = document.Float(op.Operands[0])
 	}
 }
 
 func handleTextWordSpacing(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
-		state.Text.Tw = document.GetFloat(op.Operands[0])
+		state.Text.Tw = document.Float(op.Operands[0])
 	}
 }
 
 func handleTextHorizontalScaling(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
-		state.Text.Tz = document.GetFloat(op.Operands[0])
+		state.Text.Tz = document.Float(op.Operands[0])
 	}
 }
 
 func handleTextLeading(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
-		state.Text.Tl = document.GetFloat(op.Operands[0])
+		state.Text.Tl = document.Float(op.Operands[0])
 	}
 }
 
@@ -214,7 +214,7 @@ func handleTextFont(_ *Machine, state *State, op content.Operation) {
 	if name, ok := op.Operands[0].(ast.PdfName); ok {
 		state.Text.Tf = string(name)
 	}
-	state.Text.Tfs = document.GetFloat(op.Operands[1])
+	state.Text.Tfs = document.Float(op.Operands[1])
 }
 
 func handleTextMatrix(_ *Machine, state *State, op content.Operation) {
@@ -222,7 +222,7 @@ func handleTextMatrix(_ *Machine, state *State, op content.Operation) {
 		return
 	}
 	for i := range 6 {
-		state.Text.Tm[i] = document.GetFloat(op.Operands[i])
+		state.Text.Tm[i] = document.Float(op.Operands[i])
 	}
 	state.Text.Tlm = state.Text.Tm
 }
@@ -240,8 +240,8 @@ func handleTextMove(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
-	tx := document.GetFloat(op.Operands[0])
-	ty := document.GetFloat(op.Operands[1])
+	tx := document.Float(op.Operands[0])
+	ty := document.Float(op.Operands[1])
 	applyTextMove(state, tx, ty)
 }
 
@@ -249,8 +249,8 @@ func handleTextMoveSetLeading(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
-	tx := document.GetFloat(op.Operands[0])
-	ty := document.GetFloat(op.Operands[1])
+	tx := document.Float(op.Operands[0])
+	ty := document.Float(op.Operands[1])
 	state.Text.Tl = -ty
 	applyTextMove(state, tx, ty)
 }
@@ -269,14 +269,14 @@ func handleTextSpacingNextLineShow(_ *Machine, state *State, op content.Operatio
 	if len(op.Operands) != 3 {
 		return
 	}
-	state.Text.Tw = document.GetFloat(op.Operands[0])
-	state.Text.Tc = document.GetFloat(op.Operands[1])
+	state.Text.Tw = document.Float(op.Operands[0])
+	state.Text.Tc = document.Float(op.Operands[1])
 	applyTextMove(state, 0, -state.Text.Tl)
 }
 
 func handleTextRenderingMode(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
-		state.Text.Tmode = int(document.GetFloat(op.Operands[0]))
+		state.Text.Tmode = int(document.Float(op.Operands[0]))
 	}
 }
 
@@ -287,9 +287,9 @@ func handleFillRGB(_ *Machine, state *State, op content.Operation) {
 		return
 	}
 	state.FillColor = []float64{
-		document.GetFloat(op.Operands[0]),
-		document.GetFloat(op.Operands[1]),
-		document.GetFloat(op.Operands[2]),
+		document.Float(op.Operands[0]),
+		document.Float(op.Operands[1]),
+		document.Float(op.Operands[2]),
 	}
 	state.FillColorSpace = "DeviceRGB"
 }
@@ -299,9 +299,9 @@ func handleStrokeRGB(_ *Machine, state *State, op content.Operation) {
 		return
 	}
 	state.StrokeColor = []float64{
-		document.GetFloat(op.Operands[0]),
-		document.GetFloat(op.Operands[1]),
-		document.GetFloat(op.Operands[2]),
+		document.Float(op.Operands[0]),
+		document.Float(op.Operands[1]),
+		document.Float(op.Operands[2]),
 	}
 	state.StrokeColorSpace = "DeviceRGB"
 }
@@ -310,7 +310,7 @@ func handleFillGray(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
-	state.FillColor = []float64{document.GetFloat(op.Operands[0])}
+	state.FillColor = []float64{document.Float(op.Operands[0])}
 	state.FillColorSpace = "DeviceGray"
 }
 
@@ -318,7 +318,7 @@ func handleStrokeGray(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
-	state.StrokeColor = []float64{document.GetFloat(op.Operands[0])}
+	state.StrokeColor = []float64{document.Float(op.Operands[0])}
 	state.StrokeColorSpace = "DeviceGray"
 }
 
@@ -327,10 +327,10 @@ func handleFillCMYK(_ *Machine, state *State, op content.Operation) {
 		return
 	}
 	state.FillColor = []float64{
-		document.GetFloat(op.Operands[0]),
-		document.GetFloat(op.Operands[1]),
-		document.GetFloat(op.Operands[2]),
-		document.GetFloat(op.Operands[3]),
+		document.Float(op.Operands[0]),
+		document.Float(op.Operands[1]),
+		document.Float(op.Operands[2]),
+		document.Float(op.Operands[3]),
 	}
 	state.FillColorSpace = "DeviceCMYK"
 }
@@ -340,10 +340,10 @@ func handleStrokeCMYK(_ *Machine, state *State, op content.Operation) {
 		return
 	}
 	state.StrokeColor = []float64{
-		document.GetFloat(op.Operands[0]),
-		document.GetFloat(op.Operands[1]),
-		document.GetFloat(op.Operands[2]),
-		document.GetFloat(op.Operands[3]),
+		document.Float(op.Operands[0]),
+		document.Float(op.Operands[1]),
+		document.Float(op.Operands[2]),
+		document.Float(op.Operands[3]),
 	}
 	state.StrokeColorSpace = "DeviceCMYK"
 }
@@ -378,7 +378,7 @@ func handleFillColorInCurrentSpace(m *Machine, state *State, op content.Operatio
 	for _, operand := range op.Operands {
 		switch v := operand.(type) {
 		case ast.PdfReal, ast.PdfInt:
-			vals = append(vals, document.GetFloat(operand))
+			vals = append(vals, document.Float(operand))
 		case ast.PdfName:
 			patName = string(v)
 		}
@@ -400,7 +400,7 @@ func handleStrokeColorInCurrentSpace(_ *Machine, state *State, op content.Operat
 	for _, operand := range op.Operands {
 		switch operand.(type) {
 		case ast.PdfReal, ast.PdfInt:
-			vals = append(vals, document.GetFloat(operand))
+			vals = append(vals, document.Float(operand))
 		}
 	}
 	if len(vals) > 0 {
@@ -435,8 +435,8 @@ func handlePathMoveTo(m *Machine, state *State, op content.Operation) {
 		return
 	}
 	m.updatePathBounds(state,
-		document.GetFloat(op.Operands[0]),
-		document.GetFloat(op.Operands[1]),
+		document.Float(op.Operands[0]),
+		document.Float(op.Operands[1]),
 	)
 }
 
@@ -445,8 +445,8 @@ func handlePathLineTo(m *Machine, state *State, op content.Operation) {
 		return
 	}
 	m.updatePathBounds(state,
-		document.GetFloat(op.Operands[0]),
-		document.GetFloat(op.Operands[1]),
+		document.Float(op.Operands[0]),
+		document.Float(op.Operands[1]),
 	)
 }
 
@@ -454,10 +454,10 @@ func handlePathRectangle(m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 4 {
 		return
 	}
-	x := document.GetFloat(op.Operands[0])
-	y := document.GetFloat(op.Operands[1])
-	w := document.GetFloat(op.Operands[2])
-	h := document.GetFloat(op.Operands[3])
+	x := document.Float(op.Operands[0])
+	y := document.Float(op.Operands[1])
+	w := document.Float(op.Operands[2])
+	h := document.Float(op.Operands[3])
 	// Each corner of the rectangle must be transformed through the CTM
 	// individually: under a non-identity CTM the axis-aligned input
 	// rectangle can become a rotated parallelogram whose page-space
@@ -474,8 +474,8 @@ func handlePathBezier(m *Machine, state *State, op content.Operation) {
 	// derivative roots; for heuristics this is close enough.
 	for i := 0; i+1 < len(op.Operands); i += 2 {
 		m.updatePathBounds(state,
-			document.GetFloat(op.Operands[i]),
-			document.GetFloat(op.Operands[i+1]),
+			document.Float(op.Operands[i]),
+			document.Float(op.Operands[i+1]),
 		)
 	}
 }

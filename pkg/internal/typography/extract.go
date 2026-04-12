@@ -339,7 +339,7 @@ func resolveFontFromResources(ctx context.Context, doc *document.Document, resou
 
 	// Cache hit by indirect reference object number.
 	if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
-		if cached, ok := doc.GetCachedFont(ref.ObjectNum); ok {
+		if cached, ok := doc.CachedFont(ref.ObjectNum); ok {
 			if f, ok := cached.(*Font); ok {
 				return f
 			}
@@ -351,7 +351,7 @@ func resolveFontFromResources(ctx context.Context, doc *document.Document, resou
 	if err != nil || fontDict == nil {
 		return nil
 	}
-	font, err := GetFont(ctx, doc, fontDict)
+	font, err := ResolveFont(ctx, doc, fontDict)
 	if err != nil {
 		return nil
 	}
@@ -597,7 +597,7 @@ func boxRectFromArray(arr ast.PdfArray) [4]float64 {
 	if len(arr) < 4 {
 		return [4]float64{}
 	}
-	return [4]float64{document.GetFloat(arr[0]), document.GetFloat(arr[1]), document.GetFloat(arr[2]), document.GetFloat(arr[3])}
+	return [4]float64{document.Float(arr[0]), document.Float(arr[1]), document.Float(arr[2]), document.Float(arr[3])}
 }
 
 // ExtractText extracts text from a page's content operations and reconstructs it via [ReconstructText].
@@ -636,7 +636,7 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 	}
 
 	var pageBeads []semantics.Bead
-	allThreads, _ := semantics.GetThreads(ctx, doc) // Non-fatal: proceed without thread reordering on error.
+	allThreads, _ := semantics.ResolveThreads(ctx, doc) // Non-fatal: proceed without thread reordering on error.
 	for _, thread := range allThreads {
 		for _, bead := range thread.Beads {
 			if bead.PageRef.ObjectNum == page.Ref.ObjectNum && bead.PageRef.GenNum == page.Ref.GenNum {

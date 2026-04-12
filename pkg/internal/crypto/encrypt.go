@@ -72,8 +72,8 @@ func NewEncryptor(cfg EncryptConfig, documentID []byte) (*Encryptor, ast.PdfDict
 	return newEncryptorLegacy(cfg.UserPassword, ownerPw, v, r, keyLen, cfm, pVal, documentID)
 }
 
-// GetEncryptFunc returns a closure that encrypts data for a specific object.
-func (e *Encryptor) GetEncryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
+// EncryptFunc returns a closure that encrypts data for a specific object.
+func (e *Encryptor) EncryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
 	return func(data []byte) ([]byte, error) {
 		if len(data) == 0 {
 			return data, nil
@@ -84,7 +84,7 @@ func (e *Encryptor) GetEncryptFunc(objNum, genNum int) func([]byte) ([]byte, err
 			return aesEncrypt(e.handler.EncryptionKey, data)
 		}
 
-		key := e.handler.GetObjKey(objNum, genNum)
+		key := e.handler.ObjKey(objNum, genNum)
 
 		if e.handler.V >= 4 && e.handler.CFM == "AESV2" {
 			return aesEncrypt(key, data)

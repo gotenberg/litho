@@ -21,8 +21,8 @@ type Thread struct {
 	Beads []Bead
 }
 
-// GetThreads extracts article threads from the document.
-func GetThreads(ctx context.Context, doc *document.Document) ([]Thread, error) {
+// ResolveThreads extracts article threads from the document.
+func ResolveThreads(ctx context.Context, doc *document.Document) ([]Thread, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
@@ -156,7 +156,7 @@ func GetThreads(ctx context.Context, doc *document.Document) ([]Thread, error) {
 					}
 					if len(rArr) == 4 {
 						for i := range 4 {
-							bead.Rect[i] = document.GetFloat(rArr[i])
+							bead.Rect[i] = document.Float(rArr[i])
 						}
 					}
 				}

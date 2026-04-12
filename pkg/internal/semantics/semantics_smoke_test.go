@@ -9,7 +9,7 @@ import (
 )
 
 // pdfWithInfo is a minimal PDF with an /Info dict. Exercises the
-// GetMetadata path that reads DocInfo fields.
+// Metadata path that reads DocInfo fields.
 func pdfWithInfo() []byte {
 	return []byte(
 		"%PDF-1.4\n" +
@@ -36,36 +36,36 @@ func newSemanticsDoc(t *testing.T, data []byte) *document.Document {
 	return doc
 }
 
-func TestGetMetadata_InfoDict(t *testing.T) {
+func TestMetadata_InfoDict(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc := newSemanticsDoc(t, pdfWithInfo())
 
-	meta, err := GetMetadata(ctx, doc)
+	meta, err := Metadata(ctx, doc)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	// Behavior contract: every Info field that exists on disk appears
 	// in the returned map with a non-empty value.
 	for _, key := range []string{"Title", "Author", "Subject", "Keywords", "Creator", "Producer"} {
 		if meta[key] == "" {
-			t.Errorf("GetMetadata[%q] empty, want non-empty", key)
+			t.Errorf("Metadata[%q] empty, want non-empty", key)
 		}
 	}
 }
 
-func TestGetOutline_NoOutline(t *testing.T) {
+func TestOutline_NoResolveOutline(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc := newSemanticsDoc(t, pdfWithInfo())
 
 	// No /Outlines in catalog → empty bookmark list, no error.
-	out, err := GetOutline(ctx, doc)
+	out, err := ResolveOutline(ctx, doc)
 	if err != nil {
-		t.Errorf("GetOutline: %v", err)
+		t.Errorf("ResolveOutline: %v", err)
 	}
 	if len(out) != 0 {
-		t.Errorf("GetOutline: got %d bookmarks, want 0", len(out))
+		t.Errorf("ResolveOutline: got %d bookmarks, want 0", len(out))
 	}
 }
 
@@ -111,16 +111,16 @@ func TestExtractPronunciationLexicons_Empty(t *testing.T) {
 	}
 }
 
-func TestGetThreads_Empty(t *testing.T) {
+func TestThreads_Empty(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc := newSemanticsDoc(t, pdfWithInfo())
 
-	threads, err := GetThreads(ctx, doc)
+	threads, err := ResolveThreads(ctx, doc)
 	if err != nil {
-		t.Errorf("GetThreads: %v", err)
+		t.Errorf("ResolveThreads: %v", err)
 	}
 	if len(threads) != 0 {
-		t.Errorf("GetThreads: got %d, want 0", len(threads))
+		t.Errorf("ResolveThreads: got %d, want 0", len(threads))
 	}
 }

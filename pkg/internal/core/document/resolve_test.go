@@ -7,10 +7,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// TestGetFloat covers the object-to-float coercion used across the
-// codebase. It deliberately tests the public [GetFloat] behavior rather
+// TestFloat covers the object-to-float coercion used across the
+// codebase. It deliberately tests the public [Float] behavior rather
 // than any internal branching.
-func TestGetFloat(t *testing.T) {
+func TestFloat(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -27,9 +27,9 @@ func TestGetFloat(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := GetFloat(tc.obj)
+			got := Float(tc.obj)
 			if got != tc.want {
-				t.Errorf("GetFloat(%v) = %v, want %v", tc.obj, got, tc.want)
+				t.Errorf("Float(%v) = %v, want %v", tc.obj, got, tc.want)
 			}
 		})
 	}

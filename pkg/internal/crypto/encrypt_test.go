@@ -41,13 +41,13 @@ func TestNewEncryptor_AES256_RoundTrip(t *testing.T) {
 
 	// Test encrypt → decrypt round-trip on object data.
 	plaintext := []byte("Hello, encrypted world!")
-	encryptFn := enc.GetEncryptFunc(1, 0)
+	encryptFn := enc.EncryptFunc(1, 0)
 	ciphertext, err := encryptFn(plaintext)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	decryptFn := h.GetDecryptFunc(1, 0)
+	decryptFn := h.DecryptFunc(1, 0)
 	decrypted, err := decryptFn(ciphertext)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
@@ -111,13 +111,13 @@ func TestNewEncryptor_AES128_RoundTrip(t *testing.T) {
 	}
 
 	plaintext := []byte("Test data for AES-128")
-	encryptFn := enc.GetEncryptFunc(1, 0)
+	encryptFn := enc.EncryptFunc(1, 0)
 	ciphertext, err := encryptFn(plaintext)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	decryptFn := h.GetDecryptFunc(1, 0)
+	decryptFn := h.DecryptFunc(1, 0)
 	decrypted, err := decryptFn(ciphertext)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
@@ -154,13 +154,13 @@ func TestNewEncryptor_RC4_128_RoundTrip(t *testing.T) {
 	}
 
 	plaintext := []byte("RC4 test data")
-	encryptFn := enc.GetEncryptFunc(1, 0)
+	encryptFn := enc.EncryptFunc(1, 0)
 	ciphertext, err := encryptFn(plaintext)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	decryptFn := h.GetDecryptFunc(1, 0)
+	decryptFn := h.DecryptFunc(1, 0)
 	decrypted, err := decryptFn(ciphertext)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)

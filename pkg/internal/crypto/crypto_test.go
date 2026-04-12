@@ -127,16 +127,16 @@ func TestAuthenticate_InvalidPassword(t *testing.T) {
 	}
 }
 
-func TestGetObjKey(t *testing.T) {
+func TestObjKey(t *testing.T) {
 	h := &Handler{
 		EncryptionKey: []byte{0x01, 0x02, 0x03, 0x04, 0x05},
 		V:             1,
 		Length:        40,
 	}
 
-	key := h.GetObjKey(10, 0)
+	key := h.ObjKey(10, 0)
 	if len(key) == 0 {
-		t.Error("GetObjKey returned empty key")
+		t.Error("ObjKey returned empty key")
 	}
 	// Key length should be min(encKey+5, 16) = min(10, 16) = 10
 	if len(key) != 10 {
@@ -144,30 +144,30 @@ func TestGetObjKey(t *testing.T) {
 	}
 }
 
-func TestGetObjKey_V4_SaltSuffix(t *testing.T) {
+func TestObjKey_V4_SaltSuffix(t *testing.T) {
 	h := &Handler{
 		EncryptionKey: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10},
 		V:             4,
 		Length:        128,
 	}
 
-	key := h.GetObjKey(1, 0)
+	key := h.ObjKey(1, 0)
 	if len(key) != 16 {
 		t.Errorf("V=4 key length = %d, want 16", len(key))
 	}
 }
 
-func TestGetDecryptFunc_RC4(t *testing.T) {
+func TestDecryptFunc_RC4(t *testing.T) {
 	h := &Handler{
 		EncryptionKey: []byte{0x01, 0x02, 0x03, 0x04, 0x05},
 		V:             1,
 		Length:        40,
 	}
 
-	decrypt := h.GetDecryptFunc(1, 0)
+	decrypt := h.DecryptFunc(1, 0)
 
 	// Encrypt some data with the same key, then decrypt.
-	key := h.GetObjKey(1, 0)
+	key := h.ObjKey(1, 0)
 	plaintext := []byte("Hello, PDF!")
 	c, _ := rc4.NewCipher(key) //nolint:gosec
 	encrypted := make([]byte, len(plaintext))
@@ -182,14 +182,14 @@ func TestGetDecryptFunc_RC4(t *testing.T) {
 	}
 }
 
-func TestGetDecryptFunc_EmptyData(t *testing.T) {
+func TestDecryptFunc_EmptyData(t *testing.T) {
 	h := &Handler{
 		EncryptionKey: []byte{0x01, 0x02, 0x03, 0x04, 0x05},
 		V:             1,
 		Length:        40,
 	}
 
-	decrypt := h.GetDecryptFunc(1, 0)
+	decrypt := h.DecryptFunc(1, 0)
 	result, err := decrypt([]byte{})
 	if err != nil {
 		t.Fatal(err)

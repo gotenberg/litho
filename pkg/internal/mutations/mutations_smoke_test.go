@@ -99,13 +99,13 @@ func TestSplit_SinglePage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, _ := newMutationDoc(t, minimalPDFMutations())
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		t.Fatalf("GetCatalog: %v", err)
+		t.Fatalf("ResolveCatalog: %v", err)
 	}
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
-		t.Fatalf("GetPages: %v", err)
+		t.Fatalf("ResolvePages: %v", err)
 	}
 
 	var out bytes.Buffer
@@ -121,8 +121,8 @@ func TestSplit_SinglePage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen split: %v", err)
 	}
-	catalog2, _ := document.GetCatalog(ctx, doc2)
-	pages2, _ := document.GetPages(ctx, doc2, catalog2)
+	catalog2, _ := document.ResolveCatalog(ctx, doc2)
+	pages2, _ := document.ResolvePages(ctx, doc2, catalog2)
 	if len(pages2) != 1 {
 		t.Errorf("split result: got %d pages, want 1", len(pages2))
 	}
@@ -138,10 +138,10 @@ func TestMerge_TwoSources(t *testing.T) {
 	doc1, _ := newMutationDoc(t, data)
 	doc2, _ := newMutationDoc(t, data)
 
-	c1, _ := document.GetCatalog(ctx, doc1)
-	p1, _ := document.GetPages(ctx, doc1, c1)
-	c2, _ := document.GetCatalog(ctx, doc2)
-	p2, _ := document.GetPages(ctx, doc2, c2)
+	c1, _ := document.ResolveCatalog(ctx, doc1)
+	p1, _ := document.ResolvePages(ctx, doc1, c1)
+	c2, _ := document.ResolveCatalog(ctx, doc2)
+	p2, _ := document.ResolvePages(ctx, doc2, c2)
 
 	var out bytes.Buffer
 	err := Merge(ctx, []MergeSource{
@@ -159,8 +159,8 @@ func TestMerge_TwoSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen merged: %v", err)
 	}
-	mc, _ := document.GetCatalog(ctx, merged)
-	mpages, _ := document.GetPages(ctx, merged, mc)
+	mc, _ := document.ResolveCatalog(ctx, merged)
+	mpages, _ := document.ResolvePages(ctx, merged, mc)
 	if len(mpages) != 2 {
 		t.Errorf("merged pages: got %d, want 2", len(mpages))
 	}
@@ -172,8 +172,8 @@ func TestSetBookmarks_AddsOutline(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, alloc := newMutationDoc(t, minimalPDFMutations())
-	catalog, _ := document.GetCatalog(ctx, doc)
-	pages, _ := document.GetPages(ctx, doc, catalog)
+	catalog, _ := document.ResolveCatalog(ctx, doc)
+	pages, _ := document.ResolvePages(ctx, doc, catalog)
 
 	err := SetBookmarks(ctx, alloc, doc, pages, []models.Bookmark{
 		{Title: "First", PageNumber: 1},
@@ -192,8 +192,8 @@ func TestRotatePages_90(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, alloc := newMutationDoc(t, minimalPDFMutations())
-	catalog, _ := document.GetCatalog(ctx, doc)
-	pages, _ := document.GetPages(ctx, doc, catalog)
+	catalog, _ := document.ResolveCatalog(ctx, doc)
+	pages, _ := document.ResolvePages(ctx, doc, catalog)
 
 	err := RotatePages(ctx, alloc, pages, 90, []int{1})
 	if err != nil {
@@ -222,8 +222,8 @@ func TestStampText_Basic(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, alloc := newMutationDoc(t, minimalPDFMutations())
-	catalog, _ := document.GetCatalog(ctx, doc)
-	pages, _ := document.GetPages(ctx, doc, catalog)
+	catalog, _ := document.ResolveCatalog(ctx, doc)
+	pages, _ := document.ResolvePages(ctx, doc, catalog)
 
 	err := StampText(ctx, alloc, doc, pages, TextStampOptions{
 		Text:         "STAMP",

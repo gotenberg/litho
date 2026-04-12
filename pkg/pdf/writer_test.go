@@ -883,9 +883,9 @@ func TestMerge_TwoDocuments(t *testing.T) {
 		t.Fatalf("Open merged: %v", err)
 	}
 
-	n, err := r3.NumPages(ctx)
+	n, err := r3.PageCount(ctx)
 	if err != nil {
-		t.Fatalf("NumPages: %v", err)
+		t.Fatalf("PageCount: %v", err)
 	}
 	if n != 6 {
 		t.Errorf("page count: got %d, want 6", n)
@@ -945,9 +945,9 @@ func TestMerge_SingleDocument(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	n, err := r2.NumPages(ctx)
+	n, err := r2.PageCount(ctx)
 	if err != nil {
-		t.Fatalf("NumPages: %v", err)
+		t.Fatalf("PageCount: %v", err)
 	}
 	if n != 3 {
 		t.Errorf("page count: got %d, want 3", n)
@@ -1406,9 +1406,9 @@ func TestSplit_SinglePage(t *testing.T) {
 		t.Fatalf("Open split: %v", err)
 	}
 
-	n, err := r2.NumPages(ctx)
+	n, err := r2.PageCount(ctx)
 	if err != nil {
-		t.Fatalf("NumPages: %v", err)
+		t.Fatalf("PageCount: %v", err)
 	}
 	if n != 1 {
 		t.Errorf("page count: got %d, want 1", n)
@@ -1442,9 +1442,9 @@ func TestSplit_MultiplePages(t *testing.T) {
 		t.Fatalf("Open split: %v", err)
 	}
 
-	n, err := r2.NumPages(ctx)
+	n, err := r2.PageCount(ctx)
 	if err != nil {
-		t.Fatalf("NumPages: %v", err)
+		t.Fatalf("PageCount: %v", err)
 	}
 	if n != 2 {
 		t.Errorf("page count: got %d, want 2", n)

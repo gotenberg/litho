@@ -72,7 +72,7 @@ func BenchmarkExtractText_AllPages(b *testing.B) {
 	}
 	defer r.Close()
 
-	n, _ := r.NumPages(ctx)
+	n, _ := r.PageCount(ctx)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {

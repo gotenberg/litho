@@ -219,8 +219,8 @@ func (r *Reader) IsEncrypted() bool {
 	return r.doc.IsEncrypted
 }
 
-// NumPages returns the total number of pages in the document.
-func (r *Reader) NumPages(ctx context.Context) (int, error) {
+// PageCount returns the total number of pages in the document.
+func (r *Reader) PageCount(ctx context.Context) (int, error) {
 	pages, err := r.resolvePages(ctx)
 	if err != nil {
 		return 0, err
@@ -328,7 +328,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 	// the sentinel error.
 	if strings.TrimSpace(text) == "" {
 		pageW, pageH := mediaBoxDimensions(targetPage.MediaBox)
-		images := pdfimage.InspectImages(ctx, r.doc, targetPage)
+		images := pdfimage.ExtractImages(ctx, r.doc, targetPage)
 		if heuristics.RequiresOCR(nil, images, pageW, pageH) {
 			if r.ocr != nil {
 				return r.runOCR(ctx, targetPage, images, pageNum)
@@ -408,17 +408,17 @@ func (r *Reader) Permissions() Permissions {
 // Returns nil if no XMP metadata is present. Use [Reader.Metadata] for parsed
 // key-value metadata.
 func (r *Reader) XMPMetadata(ctx context.Context) ([]byte, error) {
-	return semantics.GetRawXMP(ctx, r.doc)
+	return semantics.RawXMP(ctx, r.doc)
 }
 
 // Metadata extracts standard document-level metadata (Title, Author, etc.).
 func (r *Reader) Metadata(ctx context.Context) (map[string]string, error) {
-	return semantics.GetMetadata(ctx, r.doc)
+	return semantics.Metadata(ctx, r.doc)
 }
 
 // Bookmarks extracts the hierarchical outline (table of contents) from the document.
 func (r *Reader) Bookmarks(ctx context.Context) ([]models.Bookmark, error) {
-	return semantics.GetOutline(ctx, r.doc)
+	return semantics.ResolveOutline(ctx, r.doc)
 }
 
 // BookmarkGenerationOptions controls auto-generated bookmark behavior.
@@ -807,7 +807,7 @@ func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) ([]
 // CRLs, OCSP responses) needed for Long-Term Validation. Returns nil if
 // no DSS exists.
 func (r *Reader) DSSInfo(ctx context.Context) (*models.DSSInfo, error) {
-	return signature.GetDSSInfo(ctx, r.doc)
+	return signature.ResolveDSSInfo(ctx, r.doc)
 }
 
 // ExtractGeoData extracts geospatial metadata from the given 1-based page
@@ -924,7 +924,7 @@ func (r *Reader) ExtractImages(ctx context.Context, pageNum int) ([]models.Image
 	if err != nil {
 		return nil, err
 	}
-	return pdfimage.InspectImages(ctx, r.doc, targetPage), nil
+	return pdfimage.ExtractImages(ctx, r.doc, targetPage), nil
 }
 
 // ExtractLines extracts stroked line segments from the content stream of
@@ -962,12 +962,12 @@ func (r *Reader) ExtractFormulas(ctx context.Context) ([]models.FormulaElement, 
 // after Open. Safe for concurrent use.
 func (r *Reader) resolvePages(ctx context.Context) ([]*document.Page, error) {
 	r.pagesOnce.Do(func() {
-		catalog, err := document.GetCatalog(ctx, r.doc)
+		catalog, err := document.ResolveCatalog(ctx, r.doc)
 		if err != nil {
 			r.pagesErr = err
 			return
 		}
-		r.cachedPages, r.pagesErr = document.GetPages(ctx, r.doc, catalog)
+		r.cachedPages, r.pagesErr = document.ResolvePages(ctx, r.doc, catalog)
 	})
 	return r.cachedPages, r.pagesErr
 }
@@ -991,10 +991,10 @@ func mediaBoxDimensions(mb ast.PdfArray) (float64, float64) {
 	if len(mb) < 4 {
 		return 0, 0
 	}
-	llx := document.GetFloat(mb[0])
-	lly := document.GetFloat(mb[1])
-	urx := document.GetFloat(mb[2])
-	ury := document.GetFloat(mb[3])
+	llx := document.Float(mb[0])
+	lly := document.Float(mb[1])
+	urx := document.Float(mb[2])
+	ury := document.Float(mb[3])
 
 	w := urx - llx
 	h := ury - lly
@@ -1012,7 +1012,7 @@ func boxToRect(arr ast.PdfArray) [4]float64 {
 	if len(arr) < 4 {
 		return [4]float64{}
 	}
-	return [4]float64{document.GetFloat(arr[0]), document.GetFloat(arr[1]), document.GetFloat(arr[2]), document.GetFloat(arr[3])}
+	return [4]float64{document.Float(arr[0]), document.Float(arr[1]), document.Float(arr[2]), document.Float(arr[3])}
 }
 
 // runOCR extracts the largest image from the page, decodes it, and passes it

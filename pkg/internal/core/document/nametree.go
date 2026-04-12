@@ -10,7 +10,7 @@ import (
 // /Names -> /Dests name tree first, then the legacy /Dests dictionary.
 // Returns nil if the destination is not found.
 func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfArray, error) {
-	catalog, err := GetCatalog(ctx, doc)
+	catalog, err := ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

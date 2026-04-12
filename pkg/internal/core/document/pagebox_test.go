@@ -81,11 +81,11 @@ func TestPageBoxes_AllFiveExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(ctx, doc)
+	catalog, err := ResolveCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(ctx, doc, catalog)
+	pages, err := ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,11 +113,11 @@ func TestPageBoxes_CropBoxDefaultsToMediaBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(ctx, doc)
+	catalog, err := ResolveCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(ctx, doc, catalog)
+	pages, err := ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,11 +139,11 @@ func TestPageBoxes_InheritedCropBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(ctx, doc)
+	catalog, err := ResolveCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(ctx, doc, catalog)
+	pages, err := ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,11 +170,11 @@ func TestPageBoxes_PageOverridesCropBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(ctx, doc)
+	catalog, err := ResolveCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(ctx, doc, catalog)
+	pages, err := ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,11 +202,11 @@ func TestPageBoxes_NonInheritableDefaultToCropBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := GetCatalog(ctx, doc)
+	catalog, err := ResolveCatalog(ctx, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := GetPages(ctx, doc, catalog)
+	pages, err := ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}

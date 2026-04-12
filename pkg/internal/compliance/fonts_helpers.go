@@ -336,7 +336,7 @@ func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontD
 
 // simpleFontWidths extracts FirstChar and the /Widths array from a simple font dict.
 func simpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (int, []ast.PdfObject) {
-	firstChar := int(document.GetFloat(fontDict["FirstChar"]))
+	firstChar := int(document.Float(fontDict["FirstChar"]))
 	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
 	if err != nil {
 		return firstChar, nil
@@ -350,14 +350,14 @@ func simpleFontWidthIsZero(firstChar int, widths []ast.PdfObject, charCode byte)
 	if idx < 0 || idx >= len(widths) {
 		return false // Not in range — can't determine.
 	}
-	return document.GetFloat(widths[idx]) == 0
+	return document.Float(widths[idx]) == 0
 }
 
 // lookupCIDWidth returns the PDF-declared width for a CID from the /W array
 // and /DW default of a CIDFont dict.
 func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cid uint16) float64 {
 	// Default width.
-	dw := document.GetFloat(cidFontDict["DW"])
+	dw := document.Float(cidFontDict["DW"])
 	if dw == 0 {
 		dw = 1000 // PDF spec default.
 	}
@@ -373,7 +373,7 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 
 	cidInt := int(cid)
 	for i := 0; i < len(wArr); {
-		first := int(document.GetFloat(wArr[i]))
+		first := int(document.Float(wArr[i]))
 		if i+1 >= len(wArr) {
 			break
 		}
@@ -381,7 +381,7 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 		if arr, err := document.ResolveArray(ctx, doc, wArr[i+1]); err == nil && arr != nil {
 			for j, w := range arr {
 				if first+j == cidInt {
-					return document.GetFloat(w)
+					return document.Float(w)
 				}
 			}
 			i += 2
@@ -391,9 +391,9 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 		if i+2 >= len(wArr) {
 			break
 		}
-		last := int(document.GetFloat(wArr[i+1]))
+		last := int(document.Float(wArr[i+1]))
 		if cidInt >= first && cidInt <= last {
-			return document.GetFloat(wArr[i+2])
+			return document.Float(wArr[i+2])
 		}
 		i += 3
 	}

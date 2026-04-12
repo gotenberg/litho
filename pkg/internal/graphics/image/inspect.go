@@ -9,10 +9,10 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// InspectImages scans a page's resources for Image XObjects and returns their
+// ExtractImages scans a page's resources for Image XObjects and returns their
 // metadata without decoding or saving pixel data. This is used by the OCR
 // triage heuristic to quickly evaluate whether a page is a scanned image.
-func InspectImages(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
+func ExtractImages(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
 	xobjObj, ok := page.Resources["XObject"]
 	if !ok {
 		return nil

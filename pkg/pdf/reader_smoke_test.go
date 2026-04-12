@@ -36,12 +36,12 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 	_ = r.HintTable()
 
 	// Document-level getters.
-	n, err := r.NumPages(ctx)
+	n, err := r.PageCount(ctx)
 	if err != nil {
-		t.Fatalf("NumPages: %v", err)
+		t.Fatalf("PageCount: %v", err)
 	}
 	if n != 3 {
-		t.Fatalf("NumPages: got %d, want 3", n)
+		t.Fatalf("PageCount: got %d, want 3", n)
 	}
 
 	if _, err := r.Metadata(ctx); err != nil {

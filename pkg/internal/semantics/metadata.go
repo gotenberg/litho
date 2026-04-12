@@ -230,9 +230,9 @@ func resolveXMPStream(ctx context.Context, doc *document.Document, ref ast.PdfOb
 	return parseXMP(decoded)
 }
 
-// GetRawXMP extracts the raw XMP XML bytes from the catalog /Metadata stream.
+// RawXMP extracts the raw XMP XML bytes from the catalog /Metadata stream.
 // Returns nil if no XMP metadata is present.
-func GetRawXMP(ctx context.Context, doc *document.Document) ([]byte, error) {
+func RawXMP(ctx context.Context, doc *document.Document) ([]byte, error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil, nil
@@ -288,10 +288,10 @@ func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]str
 	return metadata
 }
 
-// GetMetadata extracts document-level metadata. It first reads the legacy /Info
+// Metadata extracts document-level metadata. It first reads the legacy /Info
 // dictionary, then overlays any XMP metadata from the catalog's /Metadata stream.
 // XMP values take precedence over /Info values, following the PDF 2.0 standard.
-func GetMetadata(ctx context.Context, doc *document.Document) (map[string]string, error) {
+func Metadata(ctx context.Context, doc *document.Document) (map[string]string, error) {
 	info := getInfoMetadata(ctx, doc)
 	xmp := getXMPMetadata(ctx, doc)
 

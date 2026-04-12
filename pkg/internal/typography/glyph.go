@@ -117,7 +117,7 @@ func computeTextScale(state *graphics.State, font *Font, fontSize float64) (effe
 
 	// Space advance in page-space units, used by ReconstructText for
 	// font-aware space inference.
-	spaceGlyphWidth := font.GetGlyphWidth(0x20)
+	spaceGlyphWidth := font.GlyphWidth(0x20)
 	spaceAdvance = (spaceGlyphWidth / 1000.0) * fontSize * scale * (state.Text.Tz / 100.0)
 	return effectiveFontSize, spaceAdvance
 }
@@ -220,13 +220,13 @@ func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, 
 		wordSpace = state.Text.Tw
 	}
 	if font.WMode == 1 {
-		w1, _, _ := font.GetVerticalMetrics(charCode)
+		w1, _, _ := font.VerticalMetrics(charCode)
 		advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
 		awx := advance * (tm[2]*ctm[0] + tm[3]*ctm[2])
 		awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
 		return math.Sqrt(awx*awx + awy*awy)
 	}
-	glyphWidth := font.GetGlyphWidth(charCode)
+	glyphWidth := font.GlyphWidth(charCode)
 	advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
 	awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
 	awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])
@@ -243,13 +243,13 @@ func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, char
 		wordSpace = state.Text.Tw
 	}
 	if font.WMode == 1 {
-		w1, _, _ := font.GetVerticalMetrics(charCode)
+		w1, _, _ := font.VerticalMetrics(charCode)
 		advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
 		state.Text.Tm[4] += advance * state.Text.Tm[2]
 		state.Text.Tm[5] += advance * state.Text.Tm[3]
 		return
 	}
-	glyphWidth := font.GetGlyphWidth(charCode)
+	glyphWidth := font.GlyphWidth(charCode)
 	advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
 	state.Text.Tm[4] += advance * state.Text.Tm[0]
 	state.Text.Tm[5] += advance * state.Text.Tm[1]

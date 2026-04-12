@@ -182,15 +182,15 @@ func parseGPTS(ctx context.Context, doc *document.Document, measureDict ast.PdfD
 	}
 
 	for i := 0; i+1 < len(gptsArr); i += 2 {
-		lat := document.GetFloat(gptsArr[i])
-		lon := document.GetFloat(gptsArr[i+1])
+		lat := document.Float(gptsArr[i])
+		lon := document.Float(gptsArr[i+1])
 
 		tp := models.GeoTiePoint{Lat: lat, Lon: lon}
 
 		// Match with LPTS if available.
 		if lptsArr != nil && i+1 < len(lptsArr) {
-			tp.PDFX = document.GetFloat(lptsArr[i])
-			tp.PDFY = document.GetFloat(lptsArr[i+1])
+			tp.PDFX = document.Float(lptsArr[i])
+			tp.PDFY = document.Float(lptsArr[i+1])
 		}
 
 		geo.TiePoints = append(geo.TiePoints, tp)

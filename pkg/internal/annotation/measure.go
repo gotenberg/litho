@@ -50,7 +50,7 @@ func ExtractMeasurements(ctx context.Context, doc *document.Document, page *docu
 					bboxArr, err := document.ResolveArray(ctx, doc, bboxObj)
 					if err == nil && bboxArr != nil && len(bboxArr) >= 4 {
 						for i := range 4 {
-							m.BBox[i] = document.GetFloat(bboxArr[i])
+							m.BBox[i] = document.Float(bboxArr[i])
 						}
 					}
 				}
@@ -101,7 +101,7 @@ func ExtractMeasurements(ctx context.Context, doc *document.Document, page *docu
 					rectArr, err := document.ResolveArray(ctx, doc, rectObj)
 					if err == nil && rectArr != nil && len(rectArr) >= 4 {
 						for i := range 4 {
-							m.BBox[i] = document.GetFloat(rectArr[i])
+							m.BBox[i] = document.Float(rectArr[i])
 						}
 					}
 				}
@@ -189,7 +189,7 @@ func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast
 
 	// /C — conversion factor (float).
 	if cObj, ok := nfDict["C"]; ok {
-		axis.ConversionFactor = document.GetFloat(cObj)
+		axis.ConversionFactor = document.Float(cObj)
 	}
 
 	// /D — decimal places (integer, defaults to 0).

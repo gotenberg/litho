@@ -291,7 +291,7 @@ func resolveRect(ctx context.Context, doc *document.Document, obj ast.PdfObject)
 	}
 	r := make([]float64, 4)
 	for i := range 4 {
-		r[i] = document.GetFloat(arr[i])
+		r[i] = document.Float(arr[i])
 	}
 	// Normalize: ensure [0]<[2] and [1]<[3].
 	if r[0] > r[2] {

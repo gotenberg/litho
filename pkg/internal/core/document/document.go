@@ -366,17 +366,17 @@ func (d *Document) ClearCaches() {
 	d.mu.Unlock()
 }
 
-// GetCachedCMap returns a previously cached parsed CMap for the given stream
+// CachedCMap returns a previously cached parsed CMap for the given stream
 // object number. Returns nil, false if not cached.
-func (d *Document) GetCachedCMap(objNum int) (any, bool) {
+func (d *Document) CachedCMap(objNum int) (any, bool) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	c, ok := d.cmapCache[objNum]
 	return c, ok
 }
 
-// CacheCMap stores a parsed CMap keyed by its stream object number.
-func (d *Document) CacheCMap(objNum int, cm any) {
+// SetCachedCMap stores a parsed CMap keyed by its stream object number.
+func (d *Document) SetCachedCMap(objNum int, cm any) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if _, ok := d.cmapCache[objNum]; !ok {
@@ -384,9 +384,9 @@ func (d *Document) CacheCMap(objNum int, cm any) {
 	}
 }
 
-// GetCachedFont returns a previously cached font for the given object number.
+// CachedFont returns a previously cached font for the given object number.
 // The second return value reports whether the font was found in the cache.
-func (d *Document) GetCachedFont(objNum int) (any, bool) {
+func (d *Document) CachedFont(objNum int) (any, bool) {
 	d.mu.RLock()
 	f, ok := d.fontCache[objNum]
 	d.mu.RUnlock()

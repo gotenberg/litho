@@ -14,7 +14,7 @@ import (
 // IsPortfolio checks whether the document catalog contains a /Collection
 // dictionary, which marks the PDF as a Portfolio (PDF 1.7+).
 func IsPortfolio(ctx context.Context, doc *document.Document) (bool, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return false, err
 	}
@@ -26,7 +26,7 @@ func IsPortfolio(ctx context.Context, doc *document.Document) (bool, error) {
 // returns each embedded file's name, MIME type, and decoded data. This allows
 // callers to recursively open embedded PDFs via pdf.Open.
 func ExtractPortfolioItems(ctx context.Context, doc *document.Document) ([]models.EmbeddedFile, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

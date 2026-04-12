@@ -10,7 +10,7 @@ import (
 // ExtractPronunciationLexicons extracts W3C PLS XML documents from the
 // catalog's /PronunciationLexicon array (PDF 2.0).
 func ExtractPronunciationLexicons(ctx context.Context, doc *document.Document) ([]models.PronunciationLexicon, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

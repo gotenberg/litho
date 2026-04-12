@@ -43,7 +43,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: %s\n", k, v)
 	}
 
-	numPages, err := reader.NumPages(ctx)
+	numPages, err := reader.PageCount(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "Warning: failed to get page count: %v\n", err)
 	}

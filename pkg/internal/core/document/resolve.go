@@ -17,9 +17,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
-// GetFloat safely extracts a float64 from a [ast.PdfObject].
+// Float safely extracts a float64 from a [ast.PdfObject].
 // Returns 0 if the object is neither a [ast.PdfInt] nor a [ast.PdfReal].
-func GetFloat(obj ast.PdfObject) float64 {
+func Float(obj ast.PdfObject) float64 {
 	switch v := obj.(type) {
 	case ast.PdfReal:
 		return float64(v)
@@ -431,7 +431,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
 		p := parser.NewParser(lex).WithContext(ctx)
 		if d.Crypto != nil {
-			p.WithDecryption(d.Crypto.GetDecryptFunc(ref.ObjectNum, ref.GenNum))
+			p.WithDecryption(d.Crypto.DecryptFunc(ref.ObjectNum, ref.GenNum))
 		}
 		if complianceMode {
 			p.WithFormatChecking()

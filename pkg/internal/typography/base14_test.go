@@ -64,15 +64,15 @@ func TestInjectStandard14Widths_Helvetica(t *testing.T) {
 
 	// Verify known character widths.
 	// 'A' (char code 0x41=65) should be 667.
-	if w := font.GetGlyphWidth(65); w != 667 {
+	if w := font.GlyphWidth(65); w != 667 {
 		t.Errorf("Helvetica 'A' width: got %g, want 667", w)
 	}
 	// 'i' (char code 0x69=105) should be 222.
-	if w := font.GetGlyphWidth(105); w != 222 {
+	if w := font.GlyphWidth(105); w != 222 {
 		t.Errorf("Helvetica 'i' width: got %g, want 222", w)
 	}
 	// space (char code 0x20=32) should be 278.
-	if w := font.GetGlyphWidth(32); w != 278 {
+	if w := font.GlyphWidth(32); w != 278 {
 		t.Errorf("Helvetica space width: got %g, want 278", w)
 	}
 }
@@ -107,7 +107,7 @@ func TestInjectStandard14Widths_CourierBold(t *testing.T) {
 	injectStandard14Widths(font, "Courier-Bold")
 
 	// All Courier-Bold widths should be 600 (monospaced).
-	if w := font.GetGlyphWidth(65); w != 600 {
+	if w := font.GlyphWidth(65); w != 600 {
 		t.Errorf("Courier-Bold 'A' width: got %g, want 600", w)
 	}
 }
@@ -125,7 +125,7 @@ func TestInjectStandard14Widths_SubsetPrefix(t *testing.T) {
 	}
 
 	// Helvetica-Bold 'A' (code 65) should be 722.
-	if w := font.GetGlyphWidth(65); w != 722 {
+	if w := font.GlyphWidth(65); w != 722 {
 		t.Errorf("Helvetica-Bold 'A' width: got %g, want 722", w)
 	}
 }
@@ -153,11 +153,11 @@ func TestInjectStandard14Widths_TimesRoman(t *testing.T) {
 	injectStandard14Widths(font, "Times-Roman")
 
 	// Times-Roman 'A' (code 65) should be 722.
-	if w := font.GetGlyphWidth(65); w != 722 {
+	if w := font.GlyphWidth(65); w != 722 {
 		t.Errorf("Times-Roman 'A' width: got %g, want 722", w)
 	}
 	// Times-Roman 'm' (code 109) should be 778.
-	if w := font.GetGlyphWidth(109); w != 778 {
+	if w := font.GlyphWidth(109); w != 778 {
 		t.Errorf("Times-Roman 'm' width: got %g, want 778", w)
 	}
 }
@@ -172,7 +172,7 @@ func TestInjectStandard14Widths_HelveticaOblique(t *testing.T) {
 
 	// Helvetica-Oblique shares widths with Helvetica.
 	// 'A' should be 667.
-	if w := font.GetGlyphWidth(65); w != 667 {
+	if w := font.GlyphWidth(65); w != 667 {
 		t.Errorf("Helvetica-Oblique 'A' width: got %g, want 667", w)
 	}
 }
@@ -199,11 +199,11 @@ func TestInjectStandard14Widths_ExtendedChars(t *testing.T) {
 	injectStandard14Widths(font, "Helvetica")
 
 	// WinAnsiEncoding 0xC4 (196) = Ä (Adieresis) → should be 667.
-	if w := font.GetGlyphWidth(0xC4); w != 667 {
+	if w := font.GlyphWidth(0xC4); w != 667 {
 		t.Errorf("Helvetica Adieresis width: got %g, want 667", w)
 	}
 	// WinAnsiEncoding 0xE9 (233) = é (eacute) → should be 556.
-	if w := font.GetGlyphWidth(0xE9); w != 556 {
+	if w := font.GlyphWidth(0xE9); w != 556 {
 		t.Errorf("Helvetica eacute width: got %g, want 556", w)
 	}
 }

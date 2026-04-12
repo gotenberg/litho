@@ -119,7 +119,7 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 
 		// CA (stroke alpha) must be 1.0.
 		if caObj, hasCA := gs["CA"]; hasCA {
-			ca := document.GetFloat(caObj)
+			ca := document.Float(caObj)
 			if !floatEquals1(ca) {
 				results = append(results, failf(Rule_19005_1_6_4_t05, "page %d, ExtGState %s, CA=%g", pageNum, string(gsName), ca)...)
 			}
@@ -127,7 +127,7 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 
 		// ca (fill alpha) must be 1.0.
 		if caObj, hasCa := gs["ca"]; hasCa {
-			ca := document.GetFloat(caObj)
+			ca := document.Float(caObj)
 			if !floatEquals1(ca) {
 				results = append(results, failf(Rule_19005_1_6_4_t06, "page %d, ExtGState %s, ca=%g", pageNum, string(gsName), ca)...)
 			}
@@ -268,12 +268,12 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 
 				// Non-1.0 alpha values indicate transparency.
 				if caObj, hasCA := gs["CA"]; hasCA {
-					if !floatEquals1(document.GetFloat(caObj)) {
+					if !floatEquals1(document.Float(caObj)) {
 						pageUsesTransparency = true
 					}
 				}
 				if caObj, hasCa := gs["ca"]; hasCa {
-					if !floatEquals1(document.GetFloat(caObj)) {
+					if !floatEquals1(document.Float(caObj)) {
 						pageUsesTransparency = true
 					}
 				}
@@ -451,12 +451,12 @@ func resourcesHaveTransparency(ctx context.Context, doc *document.Document, reso
 			}
 		}
 		if caObj, hasCA := gs["CA"]; hasCA {
-			if !floatEquals1(document.GetFloat(caObj)) {
+			if !floatEquals1(document.Float(caObj)) {
 				return true
 			}
 		}
 		if caObj, hasCa := gs["ca"]; hasCa {
-			if !floatEquals1(document.GetFloat(caObj)) {
+			if !floatEquals1(document.Float(caObj)) {
 				return true
 			}
 		}
@@ -656,12 +656,12 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 				}
 			}
 			if caObj, hasCA := gs["CA"]; hasCA {
-				if !floatEquals1(document.GetFloat(caObj)) {
+				if !floatEquals1(document.Float(caObj)) {
 					return true
 				}
 			}
 			if caObj, hasCa := gs["ca"]; hasCa {
-				if !floatEquals1(document.GetFloat(caObj)) {
+				if !floatEquals1(document.Float(caObj)) {
 					return true
 				}
 			}
@@ -709,12 +709,12 @@ func checkType3FontTransparency(ctx context.Context, doc *document.Document, pag
 					}
 				}
 				if caObj, hasCA := gs["CA"]; hasCA {
-					if !floatEquals1(document.GetFloat(caObj)) {
+					if !floatEquals1(document.Float(caObj)) {
 						return true
 					}
 				}
 				if caObj, hasCa := gs["ca"]; hasCa {
-					if !floatEquals1(document.GetFloat(caObj)) {
+					if !floatEquals1(document.Float(caObj)) {
 						return true
 					}
 				}

@@ -25,11 +25,11 @@ func matchFontFixes(v compliance.Violation) bool {
 }
 
 func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, nil
 	}
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		return nil, nil
 	}
@@ -139,7 +139,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	copy(newWidths, widths)
 
 	for i, wObj := range widths {
-		pdfWidth := document.GetFloat(wObj)
+		pdfWidth := document.Float(wObj)
 		charCode := uint16(firstChar + i) //nolint:gosec // charCode range is bounded by PDF spec
 		gid := charCode
 		if charToGID != nil {
@@ -264,13 +264,13 @@ func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfA
 			break
 		}
 
-		startCID := int(document.GetFloat(wArr[i]))
+		startCID := int(document.Float(wArr[i]))
 		next := wArr[i+1]
 
 		if nextArr, err := document.ResolveArray(ctx, doc, next); err == nil && nextArr != nil {
 			corrected := make(ast.PdfArray, len(nextArr))
 			for j, wObj := range nextArr {
-				pdfWidth := document.GetFloat(wObj)
+				pdfWidth := document.Float(wObj)
 				cid := uint16(startCID + j) //nolint:gosec // CID range bounded
 				if bw, ok := binaryWidths[cid]; ok {
 					expected := float64(bw) * 1000.0 / float64(upm)

@@ -32,12 +32,12 @@ var validRenderingIntents = map[ast.PdfName]bool{
 }
 
 func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("resolving catalog: %w", err)
 	}
 
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("resolving pages: %w", err)
 	}
@@ -137,7 +137,7 @@ func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 		// Fix OPM=1 with ICCBased CMYK (6.2.4.2).
 		if opmObj, ok := newGS["OPM"]; ok {
-			if document.GetFloat(opmObj) == 1 {
+			if document.Float(opmObj) == 1 {
 				newGS["OPM"] = ast.PdfInt(0)
 				modified = true
 				notes = append(notes, fmt.Sprintf("set OPM to 0 in ExtGState %s", string(name)))

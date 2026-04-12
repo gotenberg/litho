@@ -52,7 +52,7 @@ Validate token types with `Expect`. Handle `io.EOF` gracefully. Never panic. Tra
 
 ### No duplication of core logic
 
-`ResolveDict`, `DecodePdfString`, `GetFloat`, and friends live in `internal/core/document`. Do not reimplement them in other packages.
+`ResolveDict`, `DecodePdfString`, `Float`, and friends live in `internal/core/document`. Do not reimplement them in other packages.
 
 ## Documentation rules
 

@@ -53,7 +53,7 @@ func TestParseCIDVerticalWidths_Range(t *testing.T) {
 	}
 }
 
-func TestGetVerticalMetrics_Explicit(t *testing.T) {
+func TestVerticalMetrics_Explicit(t *testing.T) {
 	font := &Font{
 		WMode:        1,
 		DW2:          [2]float64{880, -1000},
@@ -63,20 +63,20 @@ func TestGetVerticalMetrics_Explicit(t *testing.T) {
 			42: {-900, 300, 850},
 		},
 	}
-	w1, vX, vY := font.GetVerticalMetrics(42)
+	w1, vX, vY := font.VerticalMetrics(42)
 	if w1 != -900 || vX != 300 || vY != 850 {
 		t.Errorf("got w1=%v vX=%v vY=%v, want -900, 300, 850", w1, vX, vY)
 	}
 }
 
-func TestGetVerticalMetrics_Default(t *testing.T) {
+func TestVerticalMetrics_Default(t *testing.T) {
 	font := &Font{
 		WMode:        1,
 		DW2:          [2]float64{880, -1000},
 		CIDWidths:    map[int]float64{42: 600},
 		MissingWidth: 1000,
 	}
-	w1, vX, vY := font.GetVerticalMetrics(42)
+	w1, vX, vY := font.VerticalMetrics(42)
 	// Default: w1 = DW2[1] = -1000, vX = half horizontal width = 300, vY = DW2[0] = 880
 	if w1 != -1000 {
 		t.Errorf("w1: got %v, want -1000", w1)

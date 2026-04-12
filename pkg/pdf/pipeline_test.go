@@ -76,7 +76,7 @@ func TestPipeline_OpenAndWrite(t *testing.T) {
 		t.Fatalf("Reopen: %v", err)
 	}
 	defer r2.Close()
-	if n, _ := r2.NumPages(context.Background()); n != 3 {
+	if n, _ := r2.PageCount(context.Background()); n != 3 {
 		t.Errorf("pages: got %d, want 3", n)
 	}
 }
@@ -135,7 +135,7 @@ func TestPipeline_Split_AsFinalStage(t *testing.T) {
 	}
 	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	defer r2.Close()
-	if n, _ := r2.NumPages(ctx); n != 1 {
+	if n, _ := r2.PageCount(ctx); n != 1 {
 		t.Errorf("pages: got %d, want 1", n)
 	}
 	text, _ := r2.ExtractText(ctx, 1)
@@ -163,7 +163,7 @@ func TestPipeline_Split_ThenApply(t *testing.T) {
 	}
 	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	defer r2.Close()
-	if n, _ := r2.NumPages(ctx); n != 2 {
+	if n, _ := r2.PageCount(ctx); n != 2 {
 		t.Errorf("pages: got %d, want 2", n)
 	}
 	meta, _ := r2.Metadata(ctx)
@@ -220,7 +220,7 @@ func TestPipeline_SplitThenMerge(t *testing.T) {
 	}
 	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	defer r3.Close()
-	if n, _ := r3.NumPages(ctx); n != 5 {
+	if n, _ := r3.PageCount(ctx); n != 5 {
 		t.Errorf("pages: got %d, want 5", n)
 	}
 }
@@ -344,7 +344,7 @@ func TestPipeline_MergeWithBookmarks(t *testing.T) {
 	}
 	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	defer r3.Close()
-	if n, _ := r3.NumPages(ctx); n != 6 {
+	if n, _ := r3.PageCount(ctx); n != 6 {
 		t.Errorf("pages: got %d, want 6", n)
 	}
 }

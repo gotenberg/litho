@@ -16,7 +16,7 @@ import (
 // It also executes PDF JavaScript calculation scripts to resolve dynamic fields.
 // It returns a list of FormFields.
 func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.FormField, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("getting catalog for AcroForm: %w", err)
 	}

@@ -10,9 +10,9 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// GetOutline extracts the hierarchical outline (bookmarks) from the document.
-func GetOutline(ctx context.Context, doc *document.Document) ([]models.Bookmark, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+// ResolveOutline extracts the hierarchical outline (bookmarks) from the document.
+func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookmark, error) {
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func GetOutline(ctx context.Context, doc *document.Document) ([]models.Bookmark,
 	}
 
 	// Fetch pages and build a clean ref → 1-based page number map.
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch pages for outline mapping: %v", err)
 	}

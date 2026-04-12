@@ -206,7 +206,7 @@ func violationsToErrors(violations []Violation) []error {
 
 // getCatalog retrieves the document catalog dictionary.
 func getCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, error) {
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

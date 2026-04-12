@@ -66,7 +66,8 @@ type Lexer struct {
 	reader *ioat.Reader
 }
 
-func (l *Lexer) GetReader() *ioat.Reader {
+// Reader returns the underlying [ioat.Reader] used by this lexer.
+func (l *Lexer) Reader() *ioat.Reader {
 	return l.reader
 }
 

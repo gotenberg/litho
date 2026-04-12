@@ -148,11 +148,11 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 	// For each page, find widget annotations with /AP and stamp them into
 	// the content stream, then remove them from /Annots.
-	catalog, err := document.GetCatalog(ctx, doc)
+	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return fmt.Errorf("getting catalog: %w", err)
 	}
-	pages, err := document.GetPages(ctx, doc, catalog)
+	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
 		return fmt.Errorf("getting pages: %w", err)
 	}
@@ -225,8 +225,8 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			)
 			continue
 		}
-		x1 := document.GetFloat(rectArr[0])
-		y1 := document.GetFloat(rectArr[1])
+		x1 := document.Float(rectArr[0])
+		y1 := document.Float(rectArr[1])
 
 		apRef := alloc.Alloc(apStream)
 		xobjName := ast.PdfName(fmt.Sprintf("FlatAP%d", apRef.ObjectNum))

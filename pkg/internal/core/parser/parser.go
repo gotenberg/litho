@@ -328,7 +328,7 @@ func (p *Parser) parseStreamAfterDict(dict ast.PdfDict) (ast.PdfObject, error) {
 		return nil, fmt.Errorf("parser read ahead too far before stream data")
 	}
 
-	reader := p.lex.GetReader()
+	reader := p.lex.Reader()
 	if err := p.consumeStreamEOL(reader); err != nil {
 		return nil, err
 	}
@@ -687,7 +687,7 @@ func (p *Parser) SkipInlineImage() error {
 	}
 
 	// Phase 2: Skip the single whitespace byte that follows ID (per PDF spec).
-	reader := p.lex.GetReader()
+	reader := p.lex.Reader()
 	if _, err := reader.ReadByte(); err != nil {
 		return fmt.Errorf("failed to read post-ID whitespace: %w", err)
 	}
@@ -767,7 +767,7 @@ func (p *Parser) ParseInlineImageDict() (ast.PdfDict, error) {
 	}
 
 	// Phase 2: Skip the single whitespace byte that follows ID (per PDF spec).
-	reader := p.lex.GetReader()
+	reader := p.lex.Reader()
 	if _, err := reader.ReadByte(); err != nil {
 		return nil, fmt.Errorf("failed to read post-ID whitespace: %w", err)
 	}

@@ -34,7 +34,7 @@
 //		defer reader.Close()
 //
 //		// Check page count
-//		pages, _ := reader.NumPages(ctx)
+//		pages, _ := reader.PageCount(ctx)
 //		fmt.Printf("PDF %s — %d pages\n", reader.Version(), pages)
 //
 //		// Extract clean, reconstructed text from the first page
