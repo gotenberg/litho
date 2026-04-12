@@ -50,6 +50,13 @@ Never load embedded files, images, or binary streams into memory during parsing.
 
 Validate token types with `Expect`. Handle `io.EOF` gracefully. Never panic. Track visited nodes in `ResolveObject` to break circular references. Prefer typed resolvers (`ResolveDict`, `ResolveArray`, `ResolveName`) over `ResolveObject`.
 
+### Naming
+
+- No `Get` prefix on accessors: `Metadata()`, not `GetMetadata()`. Go convention.
+- Use `Resolve` for functions that chase indirect references and build typed objects: `ResolveCatalog`, `ResolvePages`, `ResolveFont`, `ResolveOutline`.
+- Use `Extract` for page-scoped data retrieval: `ExtractText`, `ExtractImages`, `ExtractAnnotations`.
+- Use `Set` for setters: `SetMetadata`, `SetCachedCMap`.
+
 ### No duplication of core logic
 
 `ResolveDict`, `DecodePdfString`, `Float`, and friends live in `internal/core/document`. Do not reimplement them in other packages.
@@ -86,12 +93,13 @@ Reference identifiers with `[Name]` brackets for pkg.go.dev linking:
 
 - Explain _why_, not _what_.
 - No numbered step comments. No noise comments that restate the code.
+- No section-separator comments (`// --- Foo ---`). Use whitespace and function grouping instead.
 - Reference spec clauses: `// Per ISO 32000-2, Table 116...`.
 - Mark debt with `// TODO: [context]`.
 
-### Markdown
+### Formatting non-Go files
 
-Run `make prettify && make lint-prettier` for non-Go files (YAML, Markdown, JSON).
+Run `make prettify && make lint-prettier` for YAML, Markdown, and JSON.
 
 ## Testing
 
