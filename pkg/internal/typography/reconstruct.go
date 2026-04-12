@@ -356,7 +356,7 @@ func needsSpace(gap, threshold float64) bool {
 }
 
 // isOrthogonalRotation returns true when the text angle is close to 90° or
-// 270° (±π/2). These are not "rotated" in the arbitrary sense — they are
+// 270° (±π/2). These are not "rotated" in the arbitrary sense. They are
 // orthogonal text that progresses along the Y axis instead of X.
 func isOrthogonalRotation(angle float64) bool {
 	const threshold = math.Pi / 180 // 1 degree

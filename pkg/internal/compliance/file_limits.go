@@ -95,7 +95,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 
 // checkContentStreamLimits finds all page content streams and Form XObject
 // streams and checks string/integer operands for implementation limit
-// violations. Only actual content streams are scanned — not ICC profiles,
+// violations. Only actual content streams are scanned, not ICC profiles,
 // font programs, or other binary streams.
 func checkContentStreamLimits(ctx context.Context, doc *document.Document, part int, profile string) []Violation {
 	catalog, err := getCatalog(ctx, doc)

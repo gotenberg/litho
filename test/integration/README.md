@@ -1,84 +1,70 @@
 # Integration Tests
 
-Corpus-based integration tests for litho. Requires Docker for initial corpus provisioning.
+Corpus-based tests comparing litho against VeraPDF and PDF.js reference results. Requires Docker for initial provisioning.
 
-## Corpus CLI Tool
+## VeraPDF
 
-A standalone binary at `cmd/corpus/` compares litho's output against reference results.
-
-### VeraPDF Subcommand
-
-Compares litho's PDF/A and PDF/UA pass/fail verdicts against the VeraPDF test corpus.
+Compares PDF/A and PDF/UA pass/fail verdicts against 2,601 VeraPDF test PDFs.
 
 ```bash
-# Provision via Docker (first time only), then compare
-go run ./test/integration/cmd/corpus verapdf --init
-
-# Compare only (corpus already provisioned)
-go run ./test/integration/cmd/corpus verapdf
-
-# JSON output
-go run ./test/integration/cmd/corpus verapdf --format json
-
-# Filter to a single profile
-go run ./test/integration/cmd/corpus verapdf --profile PDF_A-4
-
-# CI mode: exit 1 if thresholds exceeded
-go run ./test/integration/cmd/corpus verapdf --max-fn 3 --max-fp 0
-
-# Custom corpus path
-go run ./test/integration/cmd/corpus verapdf --corpus /path/to/testdata/verapdf
+go run ./test/integration/cmd/corpus verapdf --init    # provision + compare
+go run ./test/integration/cmd/corpus verapdf           # compare only
+go run ./test/integration/cmd/corpus verapdf --format json --profile PDF_A-4
+go run ./test/integration/cmd/corpus verapdf --max-fn 3 --max-fp 0  # CI thresholds
 ```
 
-Flags:
+| Flag        | Default | Description                             |
+| ----------- | ------- | --------------------------------------- |
+| `--init`    | false   | Provision corpus via Docker first       |
+| `--format`  | text    | `text` or `json`                        |
+| `--profile` | (all)   | Filter to one profile directory         |
+| `--max-fn`  | -1      | Max false negatives (-1 = no limit)     |
+| `--max-fp`  | 0       | Max false positives                     |
+| `--corpus`  | auto    | Override testdata path                  |
 
-| Flag        | Default | Description                                   |
-| ----------- | ------- | --------------------------------------------- |
-| `--init`    | false   | Provision corpus via Docker before comparison |
-| `--format`  | text    | Output format: `text` or `json`               |
-| `--profile` | (all)   | Filter to a single profile directory          |
-| `--max-fn`  | -1      | Maximum false negatives (-1 = no limit)       |
-| `--max-fp`  | 0       | Maximum false positives                       |
-| `--corpus`  | auto    | Path to corpus testdata directory             |
+## PDF.js
 
-Exit codes: 0 = within thresholds, 1 = exceeded or error.
-
-### PDF.js Subcommand
-
-Compares litho's text extraction, metadata, and coordinates against Mozilla's PDF.js test suite (~1000 PDFs).
+Compares text extraction, metadata, and coordinates against ~1,000 PDF.js test PDFs.
 
 ```bash
-# Provision via Docker (first time only), then compare
 go run ./test/integration/cmd/corpus pdfjs --init
-
-# Compare only (corpus already provisioned)
-go run ./test/integration/cmd/corpus pdfjs
-
-# JSON output
 go run ./test/integration/cmd/corpus pdfjs --format json
-
-# CI mode: exit 1 if text mismatch percentage exceeds threshold
 go run ./test/integration/cmd/corpus pdfjs --max-text-errors 50
-
-# Custom corpus path
-go run ./test/integration/cmd/corpus pdfjs --corpus /path/to/testdata/pdf.js
 ```
 
-Flags:
+| Flag                | Default | Description                                  |
+| ------------------- | ------- | -------------------------------------------- |
+| `--init`            | false   | Provision corpus via Docker first            |
+| `--format`          | text    | `text` or `json`                             |
+| `--max-text-errors` | -1      | Max text mismatch percentage (-1 = no limit) |
+| `--corpus`          | auto    | Override testdata path                       |
 
-| Flag                | Default | Description                                      |
-| ------------------- | ------- | ------------------------------------------------ |
-| `--init`            | false   | Provision corpus via Docker before comparison    |
-| `--format`          | text    | Output format: `text` or `json`                  |
-| `--max-text-errors` | -1      | Maximum text mismatch percentage (-1 = no limit) |
-| `--corpus`          | auto    | Path to corpus testdata directory                |
+## Remediation
 
-Exit codes: 0 = within thresholds, 1 = exceeded or error.
-
-## Corpus Data
-
-Corpus data is cached in `testdata/` (gitignored). Delete the relevant directory to force regeneration:
+Applies the remediation engine to every failing VeraPDF corpus file and reports before/after violation counts.
 
 ```bash
-make clean-corpus # Remove all corpus data
+go run ./test/integration/cmd/remediate
+go run ./test/integration/cmd/remediate --format json --profile PDF_A-4
+go run ./test/integration/cmd/remediate --max-regressions 0 --min-fixed-pct 85
 ```
+
+| Flag                | Default | Description                         |
+| ------------------- | ------- | ----------------------------------- |
+| `--format`          | text    | `text` or `json`                    |
+| `--profile`         | (all)   | Filter to one profile directory     |
+| `--aggressive`      | false   | Enable content-modifying fixers     |
+| `--detail`          | false   | Print residual-violation breakdown  |
+| `--max-regressions` | -1      | Max regressed files (-1 = no limit) |
+| `--min-fixed-pct`   | 0       | Min aggregate fix percentage (0-100)|
+| `--corpus`          | auto    | Override testdata path              |
+
+## Corpus data
+
+Cached in `testdata/` (gitignored). Delete to force re-provisioning:
+
+```bash
+make clean-corpus
+```
+
+Exit codes: 0 = within thresholds, 1 = exceeded or error.

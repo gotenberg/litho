@@ -227,6 +227,11 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 		if entry.Free {
 			continue
 		}
+		// Prefetch: the object is warmed into the resolver cache here.
+		// Individual parse failures are tolerated — the per-group
+		// checks below will surface them as structural violations if
+		// they matter. Aggregate failure would stop compliance mode
+		// from seeing a broken doc at all, which is worse.
 		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		count++
 	}

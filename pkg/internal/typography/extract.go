@@ -238,7 +238,7 @@ func ocgVisible(v ast.PdfObject, cfg *document.OCConfig) bool {
 // renderActualText emits a synthetic text element per rune of the pending
 // ActualText replacement. Used when a BDC/BMC block provides an
 // /ActualText (or /Alt) entry that overrides the enclosed character
-// sequence — see PDF 32000 §14.9.4.
+// sequence. See PDF 32000 §14.9.4.
 func renderActualText(machine *graphics.Machine, state *graphics.State, elements *[]models.TextElement) {
 	fontSize := state.Text.Tfs
 	if fontSize == 0 {
@@ -293,7 +293,7 @@ func renderActualText(machine *graphics.Machine, state *graphics.State, elements
 // handleTfOp resolves the font named by a Tf operator through the current
 // page's /Font resource dict and the document-wide font cache. Returns
 // the resolved font, or a best-effort [fallbackFont] if nothing can be
-// found. Never returns an error — extraction always continues.
+// found. Never returns an error, extraction always continues.
 func handleTfOp(ctx context.Context, doc *document.Document, resources ast.PdfDict, op content.Operation, prev *Font) *Font {
 	if len(op.Operands) < 1 {
 		return prev
@@ -362,7 +362,7 @@ func resolveFontFromResources(ctx context.Context, doc *document.Document, resou
 }
 
 // handleShowTextOp processes Tj ("), and " operators. strIndex selects the
-// operand that holds the PdfString — 0 for Tj and ', 2 for the
+// operand that holds the PdfString: 0 for Tj and ', 2 for the
 // word/char-spacing form ".
 func handleShowTextOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, strIndex int, elements *[]models.TextElement) error {
 	if machine.IgnoreTextOps || currentFont == nil {
@@ -434,7 +434,7 @@ func applyTJKerning(machine *graphics.Machine, currentFont *Font, numVal float64
 
 // handleDoOp processes the Do operator, invoking a Form XObject by name
 // from the current resource dict. Non-Form XObjects (images, for example)
-// are silently skipped — only Form streams carry content-stream ops the
+// are silently skipped. Only Form streams carry content-stream ops the
 // extractor can recurse into.
 func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, op content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool) error {
 	if len(op.Operands) != 1 {

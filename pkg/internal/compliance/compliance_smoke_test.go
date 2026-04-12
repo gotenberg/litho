@@ -148,6 +148,36 @@ func TestValidate_Deterministic(t *testing.T) {
 	}
 }
 
+// TestValidate_Concurrent_SameDocument exercises the document
+// validation-run mutex: multiple goroutines calling [ValidatePDFA] on
+// the same [document.Document] must serialize through
+// [document.Document.LockValidationRun] without tripping the race
+// detector. This test is the regression guard for the contract that
+// "Document is safe for concurrent use after construction."
+func TestValidate_Concurrent_SameDocument(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := minimalPDFForCompliance()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	const goroutines = 8
+	done := make(chan error, goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			_, err := ValidatePDFA(ctx, doc, models.PDFA2b)
+			done <- err
+		}()
+	}
+	for i := 0; i < goroutines; i++ {
+		if err := <-done; err != nil {
+			t.Errorf("goroutine %d: %v", i, err)
+		}
+	}
+}
+
 // TestValidate_ContextCancellation ensures the validation engine
 // honors a cancelled context and returns promptly. This is the
 // observable contract callers rely on for request-scoped deadlines.

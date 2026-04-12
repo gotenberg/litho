@@ -171,7 +171,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // them from /Annots. All page-dict mutations (XObject resource
 // additions, /Contents append, /Annots trim) are accumulated into a
 // single draft and written with exactly one [writer.ObjAllocator.AllocAt]
-// call per page — the same invariant [applyStampToPages] follows — so
+// call per page, the same invariant [applyStampToPages] follows, so
 // concurrent mutations cannot clobber each other.
 func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page) error {
 	annotsObj, ok := page.Dict["Annots"]
@@ -238,7 +238,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		})
 	}
 
-	// No widgets were flattenable — nothing to write.
+	// No widgets were flattenable, nothing to write.
 	if len(stampOps) == 0 && len(remainingAnnots) == len(annots) {
 		return nil
 	}

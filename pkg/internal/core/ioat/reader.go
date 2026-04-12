@@ -2,9 +2,10 @@ package ioat
 
 import "io"
 
-// Reader is a stateful, buffered reader built on an io.ReaderAt. It is NOT
-// safe for concurrent use — each goroutine must create its own Reader from
-// the same io.ReaderAt (which is position-independent and concurrent-safe).
+// Reader is a stateful, buffered reader built on an [io.ReaderAt]. It
+// is NOT safe for concurrent use. Each goroutine must create its own
+// Reader from the same [io.ReaderAt], which is position-independent and
+// concurrent-safe.
 type Reader struct {
 	r      io.ReaderAt
 	size   int64
@@ -14,7 +15,8 @@ type Reader struct {
 	bufLen int
 }
 
-const defaultBufSize = 32768 // 32 KB — balances syscall overhead and memory per Reader
+// defaultBufSize balances syscall overhead and per-Reader memory at 32 KB.
+const defaultBufSize = 32768
 
 // NewReader creates a new concurrent-safe buffered reader.
 func NewReader(r io.ReaderAt, size int64, offset int64) *Reader {

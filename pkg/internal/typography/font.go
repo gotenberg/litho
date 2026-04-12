@@ -1316,7 +1316,7 @@ func detectCIDOffset(cidWidths map[int]float64) int {
 
 // extractCFFEncoding reads the CFF encoding from a /FontFile3 (Type1C) font
 // and populates font.Encoding. This is needed for TeX fonts (CMR, CMSY, etc.)
-// that use OT1 encoding internally — the byte→glyph mapping differs from
+// that use OT1 encoding internally. The byte→glyph mapping differs from
 // StandardEncoding/WinAnsiEncoding.
 func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	fdDict := findFontDescriptor(ctx, doc, fontDict)
@@ -1478,8 +1478,8 @@ func injectStandard14Widths(font *Font, baseFont string) {
 // extractType3GlyphWidth parses a Type 3 CharProc stream and returns the
 // glyph width from the d0 or d1 operator.
 //
-// d0 (setcharwidth): wx wy d0 — sets the glyph width.
-// d1 (setcachedevice): wx wy llx lly urx ury d1 — sets width and cache bbox.
+// d0 (setcharwidth): wx wy d0 sets the glyph width.
+// d1 (setcachedevice): wx wy llx lly urx ury d1 sets width and cache bbox.
 //
 // The first operand (wx) is the horizontal advance width in glyph space units.
 func extractType3GlyphWidth(ctx context.Context, doc *document.Document, stream ast.PdfStream) (float64, error) {

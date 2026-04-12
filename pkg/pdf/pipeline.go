@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -181,7 +180,7 @@ func (p *Pipeline) FlattenForm() *Pipeline {
 // Encrypt queues password-based encryption on the current document segment.
 // Forces a full rewrite. Rejected by [Pipeline.Validate] when combined with
 // any [Pipeline.RemediatePDFA] stage in the same pipeline.
-func (p *Pipeline) Encrypt(cfg crypto.EncryptConfig) *Pipeline {
+func (p *Pipeline) Encrypt(cfg EncryptConfig) *Pipeline {
 	return p.append(&encryptStage{cfg: cfg})
 }
 
@@ -919,7 +918,7 @@ func (s *flattenFormStage) apply(_ context.Context, ex *executor) error {
 
 // encryptStage queues an encryption operation. See [Pipeline.Encrypt].
 type encryptStage struct {
-	cfg crypto.EncryptConfig
+	cfg EncryptConfig
 }
 
 func (s *encryptStage) kind() stageKind { return kindEncrypt }

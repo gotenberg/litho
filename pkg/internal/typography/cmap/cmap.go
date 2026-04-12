@@ -239,7 +239,7 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 // was found.
 //
 // When codespace ranges are defined, they determine which byte lengths are
-// valid — this is critical for multi-byte CMaps (CJK fonts) where a 2-byte
+// valid. This is critical for multi-byte CMaps (CJK fonts) where a 2-byte
 // code like 0x8140 must not be split into two 1-byte lookups.
 //
 // When no codespace ranges are defined, falls back to longest-prefix match

@@ -17,8 +17,8 @@ import (
 // table shrinks to contain only the outlines the stamp actually needs.
 //
 // The tables that change: glyf (payload), loca (offsets), head
-// (checkSumAdjustment). Everything else — cmap, hmtx, maxp, hhea, name,
-// post, OS/2, cvt, fpgm, prep — is copied verbatim.
+// (checkSumAdjustment). Everything else (cmap, hmtx, maxp, hhea, name,
+// post, OS/2, cvt, fpgm, prep) is copied verbatim.
 //
 // Returns the subset bytes. On any parse failure, returns the original
 // bytes unchanged so the caller can fall back to full embedding.
@@ -81,7 +81,7 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 		glyphStart := offsets[gid]
 		glyphEnd := offsets[gid+1]
 		if glyphEnd > glyfLen || glyphStart > glyphEnd {
-			// Corrupt offsets — bail out.
+			// Corrupt offsets, bail out.
 			return raw, fmt.Errorf("corrupt loca offsets at gid %d", gid)
 		}
 		newGlyf = append(newGlyf, glyfData[glyphStart:glyphEnd]...)
@@ -213,7 +213,7 @@ func expandCompositeClosure(keep map[uint16]bool, glyfData []byte, offsets []uin
 			// Each component:
 			//   uint16 flags
 			//   uint16 glyphIndex
-			//   (argument bytes — 1 or 2 based on flags)
+			//   (argument bytes, 1 or 2 based on flags)
 			//   (optional transform bytes)
 			//
 			// We only need to walk components enough to extract

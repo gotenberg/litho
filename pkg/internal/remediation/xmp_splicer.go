@@ -46,7 +46,7 @@ type xmpPropertyLocation struct {
 //
 // When the property is expressed as a child element, Start/End bracket
 // the element including any preceding indentation and the trailing
-// newline — removing those bytes leaves well-formed XML. When the
+// newline. Removing those bytes leaves well-formed XML. When the
 // property is expressed as an attribute, Start/End bracket the attribute
 // including the single leading space separating it from the previous
 // attribute (or tag name).
@@ -56,7 +56,7 @@ type xmpPropertyLocation struct {
 func findXMPProperty(xmp []byte, nsURI, localName string) xmpPropertyLocation {
 	dec := xml.NewDecoder(bytes.NewReader(xmp))
 	dec.Strict = false
-	// Treat unknown entities as literal — some XMP producers emit them
+	// Treat unknown entities as literal. Some XMP producers emit them
 	// around non-ASCII content and strict mode would reject the input.
 	dec.Entity = xml.HTMLEntity
 
@@ -97,7 +97,7 @@ func findXMPProperty(xmp []byte, nsURI, localName string) xmpPropertyLocation {
 		}
 
 		// If neither form was found under this rdf:Description, continue
-		// scanning — the decoder is already positioned past the closing
+		// scanning. The decoder is already positioned past the closing
 		// tag because findChildElementRange consumed tokens until EMC.
 	}
 }
@@ -118,7 +118,7 @@ func findAttributeRange(xmp []byte, tagStart, tagEnd int, nsURI, localName strin
 	// Walk the raw bytes of the start tag looking for attributes whose
 	// expanded name matches (nsURI, localName). We can't directly use
 	// the StartElement.Attr slice because xml.Decoder doesn't expose
-	// per-attribute byte offsets — but the tag text is bounded, so a
+	// per-attribute byte offsets. The tag text is bounded, so a
 	// targeted scan is both cheap and unambiguous.
 	//
 	// Strategy: for each candidate "name=value" pair in the tag bytes,
@@ -128,9 +128,8 @@ func findAttributeRange(xmp []byte, tagStart, tagEnd int, nsURI, localName strin
 
 	nsDecls := collectNamespaceDecls(tagBytes)
 	// Also inherit the element's declared namespaces from the decoder's
-	// view, not just textual xmlns: — though for the attribute case the
-	// prefix must be explicit since default namespaces don't apply to
-	// attributes.
+	// view, not just textual xmlns. For the attribute case the prefix
+	// must be explicit since default namespaces don't apply to attributes.
 
 	pos := 0
 	for pos < len(tagBytes) {
@@ -288,7 +287,7 @@ func consumeElement(dec *xml.Decoder, name xml.Name) (int, bool) {
 }
 
 // removeXMPProperty splices the given byte range out of xmp and returns
-// the result. The returned slice is always a fresh allocation — the
+// the result. The returned slice is always a fresh allocation, so the
 // caller may freely mutate the source afterwards.
 func removeXMPProperty(xmp []byte, loc xmpPropertyLocation) []byte {
 	if loc.Form == xmpPropertyNotFound || loc.End <= loc.Start {
@@ -301,7 +300,7 @@ func removeXMPProperty(xmp []byte, loc xmpPropertyLocation) []byte {
 }
 
 // insertChildElement inserts a new child element into the first
-// rdf:Description found in xmp. The content argument is raw XML — the
+// rdf:Description found in xmp. The content argument is raw XML; the
 // caller is responsible for escaping any user-provided values via
 // [xmlEscape]. Returns a fresh byte slice with the element spliced in
 // just before the closing `</rdf:Description>`, preserving the
@@ -333,7 +332,7 @@ func insertChildElement(xmp []byte, elementXML string) ([]byte, error) {
 
 // replacePropertyValue rewrites the text content of an existing
 // element-form XMP property to newValue. Attribute-form properties are
-// not currently supported — the caller must fall back to
+// not currently supported. The caller must fall back to
 // [insertChildElement] if the property is not found.
 //
 // Returns the original bytes unchanged plus an error if the property
@@ -407,9 +406,9 @@ var errXMPPropertyNotFound = fmt.Errorf("xmp property not found")
 // `<ns:local ...>text</ns:local>`. It returns offsets RELATIVE to the
 // passed element slice:
 //
-//	openStart  — byte after `<` of the opening tag
-//	openEnd    — byte after the final `>` of the opening tag
-//	closeStart — byte at the `<` of the closing `</ns:local>` tag
+//	openStart:  byte after `<` of the opening tag
+//	openEnd:    byte after the final `>` of the opening tag
+//	closeStart: byte at the `<` of the closing `</ns:local>` tag
 //
 // Returns ok=false for self-closing elements and for any input that
 // does not contain a matching close tag.
@@ -430,7 +429,7 @@ func elementTextRange(element []byte) (int, int, int, bool) {
 		return openStart + 1, openEnd, openEnd - 2, true
 	}
 	// Find the matching close tag. A naive reverse search for `</` is
-	// correct because XMP properties are leaves — they do not contain
+	// correct because XMP properties are leaves. They do not contain
 	// nested elements of the same name in practice.
 	closeStart := bytes.LastIndex(element, []byte("</"))
 	if closeStart < 0 || closeStart < openEnd {

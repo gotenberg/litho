@@ -9,10 +9,16 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// ValidatePDFA audits the document against a specific PDF/A profile, returning
-// all compliance violations found as errors. Each error is a [Violation] value
-// that can be type-asserted to access the structured [Rule] and Context fields.
-// An empty slice means the document passes.
+// ValidatePDFA audits the document against a specific PDF/A profile,
+// returning all compliance violations found as errors. Each error is a
+// [Violation] value that can be type-asserted to access the structured
+// [Rule] and Context fields. An empty slice means the document passes.
+//
+// Concurrent calls to ValidatePDFA and ValidatePDFUA on the same
+// [document.Document] are serialized through the document's validation
+// run mutex: only one validator runs at a time so that the parser-level
+// format-checking flag and the accumulated [document.Document.FormatViolations]
+// slice are not corrupted by an overlapping second run.
 func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) ([]error, error) {
 	complog(doc).Debug("compliance: starting PDF/A validation", "profile", profile)
 
@@ -22,29 +28,15 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 		return nil, fmt.Errorf("compliance: unknown PDF/A profile: %s", profile)
 	}
 
-	catalog, err := getCatalog(ctx, doc)
-	if err != nil {
-		slog.Error("compliance: failed to get catalog", "error", err)
-		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
-	}
+	release := doc.LockValidationRun()
+	defer release()
 
-	// Enable parser-level format checking and resolve all objects upfront.
-	doc.ComplianceMode = true
-	resolveAllObjects(ctx, doc)
-
-	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
-
-	complog(doc).Debug("compliance: PDF/A validation complete",
-		"profile", profile,
-		"violations", len(violations),
-	)
-	return violationsToErrors(violations), nil
+	return runValidation(ctx, doc, string(profile), groups)
 }
 
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
-// returning all compliance violations found as errors. Each error is a
-// [Violation] value that can be type-asserted to access the structured [Rule]
-// and Context fields. An empty slice means the document passes.
+// returning all compliance violations found as errors. See [ValidatePDFA]
+// for the concurrency contract.
 func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) ([]error, error) {
 	complog(doc).Debug("compliance: starting PDF/UA validation", "profile", profile)
 
@@ -54,18 +46,35 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 		return nil, fmt.Errorf("compliance: unknown PDF/UA profile: %s", profile)
 	}
 
+	release := doc.LockValidationRun()
+	defer release()
+
+	return runValidation(ctx, doc, string(profile), groups)
+}
+
+// runValidation is the shared body of [ValidatePDFA] and [ValidatePDFUA].
+// The caller must hold the document's validation run mutex.
+func runValidation(ctx context.Context, doc *document.Document, profile string, groups []checkGroup) ([]error, error) {
 	catalog, err := getCatalog(ctx, doc)
 	if err != nil {
 		slog.Error("compliance: failed to get catalog", "error", err)
 		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
 	}
 
-	doc.ComplianceMode = true
+	// Clear any residual format violations from a prior run, enable
+	// parser-level format checking, resolve all objects upfront so the
+	// checks run against a fully-parsed document graph, then disable
+	// compliance mode again so concurrent reads after the run return
+	// to the non-validation hot path.
+	doc.ResetFormatViolations()
+	doc.SetComplianceMode(true)
+	defer doc.SetComplianceMode(false)
+
 	resolveAllObjects(ctx, doc)
 
-	violations := runCheckGroups(ctx, doc, catalog, string(profile), groups)
+	violations := runCheckGroups(ctx, doc, catalog, profile, groups)
 
-	complog(doc).Debug("compliance: PDF/UA validation complete",
+	complog(doc).Debug("compliance: validation complete",
 		"profile", profile,
 		"violations", len(violations),
 	)

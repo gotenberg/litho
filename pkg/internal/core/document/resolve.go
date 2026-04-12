@@ -283,7 +283,7 @@ var pdfDocEncoding = map[byte]rune{
 // extractFromObjectStream extracts an object from an Object Stream.
 // visited is the per-call-chain set for circular-reference detection.
 func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, targetIndex int, visited map[int]bool) (ast.PdfObject, error) {
-	// 1. Resolve the Object Stream itself
+	// Resolve the Object Stream itself.
 	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
 	obj, err := d.resolveWith(ctx, objStmRef, visited)
 	if err != nil {
@@ -301,7 +301,7 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 		return nil, fmt.Errorf("failed to decode object stream %d: %w", objStmNum, err)
 	}
 
-	// 2. Extract /N and /First
+	// Extract /N and /First.
 	nObj, ok := stream.Dict["N"]
 	if !ok {
 		return nil, fmt.Errorf("object stream missing /N")
@@ -322,7 +322,7 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 	}
 	first := int(firstInt)
 
-	// 3. Loop N times to read the header integer pairs
+	// Loop N times to read the header integer pairs.
 	reader := bytes.NewReader(decodedData)
 	lex := lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), 0))
 
@@ -353,10 +353,10 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 		return nil, fmt.Errorf("target index %d out of bounds in object stream %d", targetIndex, objStmNum)
 	}
 
-	// 4. Calculate absolute position
+	// Calculate absolute position.
 	absoluteOffset := int64(first + targetOffset)
 
-	// 5. Seek reader to absoluteOffset and parse
+	// Seek reader to absoluteOffset and parse.
 	lex = lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), absoluteOffset))
 	p := parser.NewParser(lex).WithContext(ctx)
 
@@ -419,8 +419,12 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 
 	switch entry.Type {
 	case xref.XRefTypeNormal:
-		// Compliance: validate raw-byte object header format.
-		if d.ComplianceMode {
+		// Snapshot compliance-mode state once per resolution so all
+		// three decision points agree on the same value. A concurrent
+		// validator toggling the flag mid-resolution cannot change our
+		// branches after we started.
+		complianceMode := d.ComplianceMode()
+		if complianceMode {
 			d.validateObjectHeaderFormat(entry.Offset, ref.ObjectNum)
 		}
 
@@ -429,7 +433,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		if d.Crypto != nil {
 			p.WithDecryption(d.Crypto.GetDecryptFunc(ref.ObjectNum, ref.GenNum))
 		}
-		if d.ComplianceMode {
+		if complianceMode {
 			p.WithFormatChecking()
 		}
 
@@ -438,11 +442,11 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 			return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
 		}
 
-		// Collect parser-level format violations.
-		if d.ComplianceMode && len(p.FormatViolations) > 0 {
-			d.mu.Lock()
-			d.FormatViolations = append(d.FormatViolations, p.FormatViolations...)
-			d.mu.Unlock()
+		// Collect parser-level format violations via the mutex-protected
+		// helper so a concurrent validation snapshot cannot observe a
+		// torn write.
+		if complianceMode && len(p.FormatViolations) > 0 {
+			d.AppendFormatViolations(p.FormatViolations...)
 		}
 
 		d.Logger.Debug("resolve object parsed",

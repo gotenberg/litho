@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -510,10 +509,10 @@ func TestWriter_Encrypt_AES256(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.Encrypt(crypto.EncryptConfig{
+	w.Encrypt(EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     crypto.AES_256,
+		Algorithm:     EncryptAES256,
 		Permissions:   -4, // allow printing
 	})
 
@@ -567,10 +566,10 @@ func TestWriter_Encrypt_AES128(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.Encrypt(crypto.EncryptConfig{
+	w.Encrypt(EncryptConfig{
 		UserPassword:  "test",
 		OwnerPassword: "test",
-		Algorithm:     crypto.AES_128,
+		Algorithm:     EncryptAES128,
 		Permissions:   -4,
 	})
 
@@ -601,9 +600,9 @@ func TestWriter_Decrypt(t *testing.T) {
 	// First, encrypt the document.
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
-	w.Encrypt(crypto.EncryptConfig{
+	w.Encrypt(EncryptConfig{
 		UserPassword: "secret",
-		Algorithm:    crypto.AES_256,
+		Algorithm:    EncryptAES256,
 		Permissions:  -4,
 	})
 	var encrypted bytes.Buffer
@@ -651,9 +650,9 @@ func TestWriter_EncryptAndModify(t *testing.T) {
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
 	w.SetMetadata(Metadata{Title: "Encrypted Doc"})
-	w.Encrypt(crypto.EncryptConfig{
+	w.Encrypt(EncryptConfig{
 		UserPassword: "pw",
-		Algorithm:    crypto.AES_256,
+		Algorithm:    EncryptAES256,
 		Permissions:  -4,
 	})
 

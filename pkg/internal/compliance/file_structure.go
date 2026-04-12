@@ -239,7 +239,7 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 
 // checkLinearizedID validates §6.1.3 t04: in a linearized PDF, the trailer must
 // have an /ID key. The two entries in the ID array represent the original file
-// ID and the modified file ID — they legitimately differ in linearized PDFs
+// ID and the modified file ID. They legitimately differ in linearized PDFs
 // (the second entry is updated during linearization), so we only verify
 // presence, not equality.
 func checkLinearizedID(doc *document.Document, _ string) []Violation {

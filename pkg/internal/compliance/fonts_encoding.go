@@ -283,7 +283,7 @@ func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, 
 }
 
 // usedGlyphNamesResolvable returns true if all glyph names referenced by the
-// used character codes in a Type 1 font are resolvable to Unicode — either
+// used character codes in a Type 1 font are resolvable to Unicode: either
 // via the AGL or the Symbol encoding set.
 func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	encoding := resolveSimpleFontEncoding(ctx, doc, fontDict)
@@ -631,7 +631,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 
 // containsInvalidUnicodeMapping scans CMap bfchar/bfrange sections for
 // destination hex strings mapping to U+0000, U+FEFF, or U+FFFE.
-// Only destination values are checked — source codes may legitimately use
+// Only destination values are checked. Source codes may legitimately use
 // these values.
 func containsInvalidUnicodeMapping(cmapData string) bool {
 	// Normalise line endings: CR+LF and bare CR → LF.

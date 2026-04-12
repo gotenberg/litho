@@ -21,6 +21,9 @@ func fixTrailerID(_ context.Context, _ *writer.ObjAllocator, doc *document.Docum
 		return nil, nil
 	}
 	id := make([]byte, 16)
+	// crypto/rand.Read never fails on supported platforms; the Go
+	// runtime aborts on getrandom/EAGAIN. Suppressing the error here
+	// is the same contract Go's stdlib relies on.
 	_, _ = rand.Read(id)
 	doc.Index.Trailer["ID"] = ast.PdfArray{
 		ast.PdfString(string(id)),

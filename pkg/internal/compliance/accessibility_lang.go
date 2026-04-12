@@ -268,9 +268,10 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 // which allows 1-8 ALPHA for the primary language subtag (RFC 5646 tightened
 // this to 2-8). We accept 1-8 to match VeraPDF's behavior and the spec reference.
 //
-// It does NOT check against the IANA subtag registry — only structural validity.
-// An empty or whitespace-only tag is treated as "not present" rather than invalid —
-// callers should skip validation instead of reporting an invalid-tag violation.
+// It does NOT check against the IANA subtag registry, only structural validity.
+// An empty or whitespace-only tag is treated as "not present" rather than
+// invalid. Callers should skip validation instead of reporting an
+// invalid-tag violation.
 //
 // Grammar (simplified from RFC 5646 §2.1, with RFC 3066 primary language):
 //

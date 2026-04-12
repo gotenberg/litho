@@ -13,8 +13,8 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// PKCS#7 / CMS ASN.1 structures (RFC 5652).
-// We only need enough to extract the embedded X.509 certificates.
+// PKCS#7 / CMS ASN.1 structures (RFC 5652). Only the subset needed to
+// extract the embedded X.509 certificates is modeled here.
 
 // contentInfo is the top-level CMS ContentInfo.
 type contentInfo struct {

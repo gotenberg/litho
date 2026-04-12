@@ -408,13 +408,88 @@ type BookmarkGenerationOptions struct {
 	HeadingScoreThreshold float64
 }
 
-// HeadingScorer is the public alias for the bookmarks heading scorer
-// interface. Implementations score a [HeadingCandidate] in the range [0, 1]
-// where >= 0.5 indicates a heading.
-type HeadingScorer = bookmarks.HeadingScorer
+// HeadingScorer assigns a heading-likelihood score to a candidate line.
+// Scores are in [0, 1]; values >= 0.5 are treated as headings.
+// Implementations may use any algorithm (rule-based, statistical, ML).
+//
+// The interface is owned by the [pdf] package so callers never have to
+// import an internal path. An internal adapter translates candidates
+// from the engine's shape to [HeadingCandidate] before each Score call.
+type HeadingScorer interface {
+	Score(candidate HeadingCandidate) float64
+}
 
-// HeadingCandidate is the input passed to a [HeadingScorer].
-type HeadingCandidate = bookmarks.HeadingCandidate
+// HeadingScript classifies a candidate's dominant script. Scorers can
+// use it to pick script-specific heuristics (for example, CJK headings
+// have different length and punctuation conventions than Latin).
+type HeadingScript string
+
+// Heading-script constants mirror the engine's detected script set.
+const (
+	HeadingScriptLatin      HeadingScript = "Latin"
+	HeadingScriptCJK        HeadingScript = "CJK"
+	HeadingScriptCyrillic   HeadingScript = "Cyrillic"
+	HeadingScriptArabic     HeadingScript = "Arabic"
+	HeadingScriptDevanagari HeadingScript = "Devanagari"
+	HeadingScriptThai       HeadingScript = "Thai"
+	HeadingScriptOther      HeadingScript = "Other"
+)
+
+// HeadingCandidate is the input passed to a [HeadingScorer]. It holds
+// the reconstructed line text plus structural features that distinguish
+// headings from body text.
+type HeadingCandidate struct {
+	// Text is the reconstructed line text.
+	Text string
+	// FontSize is the page-space font size of the line.
+	FontSize float64
+	// BodySize is the detected body text size for the document (or 0
+	// if unknown).
+	BodySize float64
+	// PageNum is the 1-based page number where the line appears.
+	PageNum int
+	// CharCount is the number of characters in Text after normalization.
+	CharCount int
+	// IsBold indicates the line uses a bold font.
+	IsBold bool
+	// HasNumbering indicates the line starts with a section-number prefix.
+	HasNumbering bool
+	// NumberingDepth is the depth implied by the numbering (1 for "1",
+	// 2 for "1.1", etc.). 0 if no numbering.
+	NumberingDepth int
+	// Script is the dominant script of the text.
+	Script HeadingScript
+}
+
+// headingScorerAdapter wraps a public [HeadingScorer] so it satisfies
+// the internal [bookmarks.HeadingScorer] interface. Each Score call
+// translates the internal candidate shape to the public one, so the
+// user's scorer never sees an internal type.
+type headingScorerAdapter struct{ inner HeadingScorer }
+
+func (a headingScorerAdapter) Score(c bookmarks.HeadingCandidate) float64 {
+	return a.inner.Score(HeadingCandidate{
+		Text:           c.Text,
+		FontSize:       c.FontSize,
+		BodySize:       c.BodySize,
+		PageNum:        c.PageNum,
+		CharCount:      c.CharCount,
+		IsBold:         c.IsBold,
+		HasNumbering:   c.HasNumbering,
+		NumberingDepth: c.NumberingDepth,
+		Script:         HeadingScript(bookmarks.ScriptName(c.Script)),
+	})
+}
+
+// adaptHeadingScorer returns the internal scorer interface, or nil if
+// the public scorer is nil so downstream callers fall back to the
+// default heuristic.
+func adaptHeadingScorer(s HeadingScorer) bookmarks.HeadingScorer {
+	if s == nil {
+		return nil
+	}
+	return headingScorerAdapter{inner: s}
+}
 
 // GenerateBookmarks analyzes the document content and returns an
 // auto-generated bookmark tree based on heading detection. This is a
@@ -437,7 +512,7 @@ func (r *Reader) GenerateBookmarks(ctx context.Context, opts BookmarkGenerationO
 		PreferStructureTree:     opts.PreferStructureTree,
 		DetectNumbering:         opts.DetectNumbering,
 		StripNumberingFromTitle: opts.StripNumberingFromTitle,
-		Scorer:                  opts.HeadingScorer,
+		Scorer:                  adaptHeadingScorer(opts.HeadingScorer),
 		ScoreThreshold:          opts.HeadingScoreThreshold,
 	})
 }
@@ -716,7 +791,7 @@ func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) ([]models
 
 // Extract3DModels extracts 3D model streams (U3D or PRC) from /3D annotations
 // on the given 1-based page number. Each returned Model3D carries a lazy Open
-// accessor — the stream data is not decoded until the caller invokes Open.
+// accessor. The stream data is not decoded until the caller invokes Open.
 // The caller must close the reader returned by Open.
 func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Model3D, error) {
 	targetPage, err := r.resolvePage(ctx, pageNum)

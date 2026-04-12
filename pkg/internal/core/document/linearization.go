@@ -168,7 +168,7 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 //	  - Item  3: bits needed for obj count delta     (16 bits)
 //	  - Item  4: min page length                    (32 bits)
 //	  - Item  5: bits needed for page length delta   (16 bits)
-//	  - Item  6: min content stream offset          (32 bits)  — in the page group
+//	  - Item  6: min content stream offset          (32 bits) (in the page group)
 //	  - Item  7: bits needed for content offset delta (16 bits)
 //	  - Item  8: min content stream length          (32 bits)
 //	  - Item  9: bits needed for content length delta (16 bits)

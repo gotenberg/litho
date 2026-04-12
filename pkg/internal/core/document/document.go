@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
@@ -14,14 +15,24 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
-// Document represents a parsed PDF document.
-// It holds a reference to the underlying data stream, the cross-reference index,
-// and a cache of resolved objects to avoid re-parsing.
+// Document represents a parsed PDF document. It holds a reference to the
+// underlying data stream, the cross-reference index, and a cache of
+// resolved objects to avoid re-parsing.
 //
-// Document is safe for concurrent use by multiple goroutines after construction.
-// All mutable caches (ObjectCache, FontCache) are protected by an internal
-// read-write mutex. The Authenticate method must be called before concurrent
-// use begins (it is part of the setup phase in NewDocument / pdf.Open).
+// Concurrent use. Document is safe for concurrent use by multiple
+// goroutines after construction completes. All mutable caches
+// (objectCache, fontCache, cmapCache) and the compliance scratch state
+// (ComplianceMode, FormatViolations) are protected by internal locks.
+// Concurrent read paths ([Resolve], [ResolveDict], [ResolveArray], etc.)
+// run in parallel through a read-write mutex. Concurrent validation
+// runs ([pdf.Reader.ValidatePDFA] / [pdf.Reader.ValidatePDFUA] on the
+// same underlying Document) are serialized through a dedicated run
+// mutex so that one validator cannot observe another's transient
+// compliance-mode state.
+//
+// The [Document.Authenticate] method must be called before concurrent
+// use begins; it is part of the setup phase in [NewDocument] and
+// [pdf.Open] and is not safe to call in parallel with reads.
 type Document struct {
 	r             io.ReaderAt
 	size          int64
@@ -29,7 +40,8 @@ type Document struct {
 	objectCache   map[int]ast.PdfObject
 	fontCache     map[int]any
 	cmapCache     map[int]any  // parsed CMap by ToUnicode stream object number
-	mu            sync.RWMutex // protects objectCache, fontCache, cmapCache
+	mu            sync.RWMutex // protects objectCache, fontCache, cmapCache, FormatViolations
+	runMu         sync.Mutex   // serializes compliance-engine validation runs
 	maxCacheSize  int          // evict all objects when cache exceeds this size
 	Crypto        *crypto.Handler
 	OCConfig      *OCConfig
@@ -58,25 +70,79 @@ type Document struct {
 	// (e.g., "1.4", "1.7", "2.0").
 	Version string
 
-	// ComplianceMode enables parser-level format violation collection.
+	// complianceMode enables parser-level format violation collection.
 	// When true, parsers created during object resolution collect hex
 	// string format issues and other structural violations without
-	// failing the parse. Violations are surfaced via FormatViolations.
-	ComplianceMode bool
+	// failing the parse. Accessed atomically so [Resolve] can check it
+	// without blocking on a mutex on every call. Toggled by
+	// [Document.SetComplianceMode].
+	complianceMode atomic.Bool
 
 	// FormatViolations collects parser-level format violations detected
-	// during object resolution when ComplianceMode is true.
+	// during object resolution when complianceMode is true. Access is
+	// serialized by d.mu. Callers that run a validation pass should
+	// snapshot and clear this slice through [Document.ResetFormatViolations]
+	// so that a later run starts from a clean state.
 	FormatViolations []error
 
 	// XRefTableOffsets records the byte offsets of traditional xref tables
-	// encountered during parsing. Used by the compliance engine for raw-byte
-	// format validation after ComplianceMode is enabled.
+	// encountered during parsing. Written once during construction and
+	// read-only thereafter.
 	XRefTableOffsets []int64
 
 	// Filters holds registered filter plugins for stream decoding.
 	// Nil when no plugins are registered. Set once during construction,
 	// then read-only.
 	Filters *filter.Decoder
+}
+
+// ComplianceMode reports whether parser-level format violation
+// collection is enabled. Reads are lock-free via an atomic load so they
+// can run on the hot [Document.Resolve] path without contention.
+func (d *Document) ComplianceMode() bool {
+	return d.complianceMode.Load()
+}
+
+// SetComplianceMode toggles parser-level format violation collection.
+// The compliance engine turns it on at the start of a validation run
+// and off at the end (through its run mutex), so cross-goroutine
+// observers of [Document.ComplianceMode] may see transient true values
+// only during a concurrent validation.
+func (d *Document) SetComplianceMode(enabled bool) {
+	d.complianceMode.Store(enabled)
+}
+
+// AppendFormatViolations adds violations collected by a parser to the
+// document's format-violation slice under the document mutex.
+func (d *Document) AppendFormatViolations(violations ...error) {
+	if len(violations) == 0 {
+		return
+	}
+	d.mu.Lock()
+	d.FormatViolations = append(d.FormatViolations, violations...)
+	d.mu.Unlock()
+}
+
+// ResetFormatViolations clears the document's format-violation slice
+// and returns the previous contents. Used by validation callers to
+// snapshot the violations from one pass without leaking them into a
+// subsequent pass on the same Document.
+func (d *Document) ResetFormatViolations() []error {
+	d.mu.Lock()
+	out := d.FormatViolations
+	d.FormatViolations = nil
+	d.mu.Unlock()
+	return out
+}
+
+// LockValidationRun acquires the document's validation run mutex and
+// returns a release function. Callers that kick off a compliance
+// validation pass use this to serialize runs on the same Document so
+// that transient per-run state (ComplianceMode, FormatViolations) is
+// not corrupted by a concurrent second validator.
+func (d *Document) LockValidationRun() func() {
+	d.runMu.Lock()
+	return d.runMu.Unlock
 }
 
 // DecodeStream decodes a [ast.PdfStream] through the document's filter pipeline.

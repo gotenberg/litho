@@ -15,7 +15,7 @@ import (
 func ExtractMeasurements(ctx context.Context, doc *document.Document, page *document.Page) ([]models.Measurement, error) {
 	var results []models.Measurement
 
-	// 1. Check page-level /VP (Viewport) array.
+	// Check page-level /VP (Viewport) array.
 	if vpObj, ok := page.Dict["VP"]; ok {
 		vpArr, err := document.ResolveArray(ctx, doc, vpObj)
 		if err == nil && vpArr != nil {
@@ -60,7 +60,7 @@ func ExtractMeasurements(ctx context.Context, doc *document.Document, page *docu
 		}
 	}
 
-	// 2. Check annotations for Line/PolyLine with /Measure.
+	// Check annotations for Line/PolyLine with /Measure.
 	if annotsObj, ok := page.Dict["Annots"]; ok {
 		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err == nil && annotsArr != nil {

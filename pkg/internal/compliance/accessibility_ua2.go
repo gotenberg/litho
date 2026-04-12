@@ -201,7 +201,7 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 }
 
 // isStructureDestination checks if a destination object is a "structure
-// destination" per PDF 2.0 — an array whose first element references a
+// destination" per PDF 2.0: an array whose first element references a
 // structure element (has /Type /StructElem or /S key) rather than a page.
 func isStructureDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject) bool {
 	// Resolve named destination if it's a string/name.

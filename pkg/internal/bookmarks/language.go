@@ -18,6 +18,29 @@ const (
 	scriptOther
 )
 
+// ScriptName returns a stable string identifier for a [scriptKind] so
+// that pkg/pdf (which cannot name [scriptKind] directly) can translate
+// a [HeadingCandidate.Script] value into its own public enum.
+func ScriptName(k scriptKind) string {
+	switch k {
+	case scriptLatin:
+		return "Latin"
+	case scriptCJK:
+		return "CJK"
+	case scriptCyrillic:
+		return "Cyrillic"
+	case scriptArabic:
+		return "Arabic"
+	case scriptDevanagari:
+		return "Devanagari"
+	case scriptThai:
+		return "Thai"
+	case scriptOther:
+		return "Other"
+	}
+	return "Other"
+}
+
 // detectScript returns the dominant script of the given text by counting
 // characters in each Unicode script range. Used to choose language-specific
 // heading patterns and adjust the body-size threshold.

@@ -127,7 +127,7 @@ func isSerifFont(name string) bool {
 		strings.Contains(lower, "bookman")
 }
 
-//nolint:dupl // Font metric data tables — each is unique Adobe-defined data.
+//nolint:dupl // Font metric data tables. Each is unique Adobe-defined data.
 var helveticaWidths = map[string]int{
 	"space": 278, "exclam": 278, "quotedbl": 355, "numbersign": 556, "dollar": 556,
 	"percent": 889, "ampersand": 667, "quoteright": 222, "parenleft": 333, "parenright": 333,
@@ -205,7 +205,7 @@ var helveticaWidths = map[string]int{
 	"Euro": 556,
 }
 
-//nolint:dupl // Font metric data tables — each is unique Adobe-defined data.
+//nolint:dupl // Font metric data tables. Each is unique Adobe-defined data.
 var helveticaBoldWidths = map[string]int{
 	"space": 278, "exclam": 333, "quotedbl": 474, "numbersign": 556, "dollar": 556,
 	"percent": 889, "ampersand": 722, "quoteright": 278, "parenleft": 333, "parenright": 333,
@@ -282,7 +282,7 @@ var helveticaBoldWidths = map[string]int{
 	"Euro": 556,
 }
 
-//nolint:dupl // Font metric data tables — each is unique Adobe-defined data.
+//nolint:dupl // Font metric data tables. Each is unique Adobe-defined data.
 var timesRomanWidths = map[string]int{
 	"space": 250, "exclam": 333, "quotedbl": 408, "numbersign": 500, "dollar": 500,
 	"percent": 833, "ampersand": 778, "quoteright": 333, "parenleft": 333, "parenright": 333,
@@ -359,7 +359,7 @@ var timesRomanWidths = map[string]int{
 	"Euro": 500,
 }
 
-//nolint:dupl // Font metric data tables — each is unique Adobe-defined data.
+//nolint:dupl // Font metric data tables. Each is unique Adobe-defined data.
 var timesBoldWidths = map[string]int{
 	"space": 250, "exclam": 333, "quotedbl": 555, "numbersign": 500, "dollar": 500,
 	"percent": 1000, "ampersand": 833, "quoteright": 333, "parenleft": 333, "parenright": 333,
@@ -436,7 +436,7 @@ var timesBoldWidths = map[string]int{
 	"Euro": 500,
 }
 
-//nolint:dupl // Font metric data tables — each is unique Adobe-defined data.
+//nolint:dupl // Font metric data tables. Each is unique Adobe-defined data.
 var timesItalicWidths = map[string]int{
 	"space": 250, "exclam": 333, "quotedbl": 420, "numbersign": 500, "dollar": 500,
 	"percent": 833, "ampersand": 778, "quoteright": 333, "parenleft": 333, "parenright": 333,
@@ -513,7 +513,7 @@ var timesItalicWidths = map[string]int{
 	"Euro": 500,
 }
 
-//nolint:dupl // Font metric data tables — each is unique Adobe-defined data.
+//nolint:dupl // Font metric data tables. Each is unique Adobe-defined data.
 var timesBoldItalicWidths = map[string]int{
 	"space": 250, "exclam": 389, "quotedbl": 555, "numbersign": 500, "dollar": 500,
 	"percent": 833, "ampersand": 778, "quoteright": 333, "parenleft": 333, "parenright": 333,

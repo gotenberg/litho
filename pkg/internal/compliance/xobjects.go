@@ -99,7 +99,7 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 
 // scanXObjectResources iterates XObject resources, validates each, and recurses
 // into Form XObject sub-resources. At depth 0 (page level), only XObjects
-// referenced by Do operators are checked — unreferenced XObjects are skipped.
+// referenced by Do operators are checked. Unreferenced XObjects are skipped.
 func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Violation, visited map[string]bool, depth int, referencedNames map[string]bool) {
 	if depth > 10 || ctx.Err() != nil {
 		return

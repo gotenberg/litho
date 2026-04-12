@@ -19,7 +19,7 @@ var emptyBoundingBox = BoundingBox{
 // opHandler is the canonical signature for a PDF content-stream operator
 // handler. It receives the machine, the current top-of-stack graphics
 // state, and the parsed operation. Handlers do not return errors: PDF
-// content streams are tolerant by spec — unknown or ill-formed operators
+// content streams are tolerant by spec. Unknown or ill-formed operators
 // leave the graphics state unchanged rather than abort processing.
 type opHandler func(m *Machine, state *State, op content.Operation)
 
@@ -115,7 +115,7 @@ func (m *Machine) Execute(ops []content.Operation) error {
 }
 
 // executeOp dispatches a single operation to its handler. Unknown
-// operators are silently ignored — the PDF spec requires lenient
+// operators are silently ignored. The PDF spec requires lenient
 // tolerance because implementations encode extensions that older
 // readers must skip without failing.
 func (m *Machine) executeOp(op content.Operation) error {

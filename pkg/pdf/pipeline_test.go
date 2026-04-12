@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -69,11 +68,11 @@ func TestPipeline_Validate_EncryptWithPDFA(t *testing.T) {
 	}{
 		{
 			"encrypt before remediate",
-			NewPipeline().Open(r).Encrypt(crypto.EncryptConfig{}).RemediatePDFA(models.PDFA2b),
+			NewPipeline().Open(r).Encrypt(EncryptConfig{}).RemediatePDFA(models.PDFA2b),
 		},
 		{
 			"remediate before encrypt",
-			NewPipeline().Open(r).RemediatePDFA(models.PDFA2b).Encrypt(crypto.EncryptConfig{}),
+			NewPipeline().Open(r).RemediatePDFA(models.PDFA2b).Encrypt(EncryptConfig{}),
 		},
 	}
 	for _, tc := range tests {
@@ -151,7 +150,7 @@ func TestPipeline_Validate_SignWithEncrypt(t *testing.T) {
 	defer r.Close()
 	p := NewPipeline().
 		Open(r).
-		Encrypt(crypto.EncryptConfig{}).
+		Encrypt(EncryptConfig{}).
 		Sign(&mockSigner{})
 	err := p.Validate()
 	if !errors.Is(err, ErrPipelineSignWithEncrypt) {

@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log/slog"
@@ -301,10 +302,35 @@ type PDFStamp struct {
 	Rotation float64
 }
 
-// Signer produces a PKCS#7/CMS signature for the given digest. Implementations
-// control key material and signing algorithms. litho calls [Signer.Sign] during
-// [Writer.WriteTo] with the SHA-256 hash of the ByteRange regions.
-type Signer = mutations.Signer
+// Signer produces a PKCS#7 / CMS signature for the given digest.
+// Implementations control key material and signing algorithms. litho
+// calls [Signer.Sign] during [Writer.WriteTo] with the SHA-256 hash of
+// the ByteRange regions.
+//
+// The interface is owned by the [pdf] package so callers never have to
+// import an internal path. An internal adapter forwards user
+// implementations to the signing engine at write time.
+type Signer interface {
+	// Sign computes a PKCS#7 / CMS signature over the given SHA-256
+	// digest bytes.
+	Sign(digest []byte) ([]byte, error)
+	// Certificate returns the signing certificate for embedding in the
+	// signature field's /Cert entry.
+	Certificate() *x509.Certificate
+	// EstimatedSize returns the maximum expected signature byte count;
+	// used to size the /Contents placeholder in the output PDF.
+	EstimatedSize() int
+}
+
+// signerAdapter wraps a public [Signer] so it satisfies the internal
+// [mutations.Signer] interface. The method sets are identical; this
+// adapter exists only to bridge the two named interface types without
+// leaking the internal one through the public API.
+type signerAdapter struct{ inner Signer }
+
+func (a signerAdapter) Sign(digest []byte) ([]byte, error) { return a.inner.Sign(digest) }
+func (a signerAdapter) Certificate() *x509.Certificate     { return a.inner.Certificate() }
+func (a signerAdapter) EstimatedSize() int                 { return a.inner.EstimatedSize() }
 
 // Writer applies content-preserving modifications to a PDF document.
 // Mutations are batched and written atomically via [Writer.WriteTo].
@@ -431,10 +457,62 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 	})
 }
 
-// Encrypt applies password-based encryption to the output document. Forces a
-// full rewrite since every string and stream must be encrypted.
-func (w *Writer) Encrypt(cfg crypto.EncryptConfig) {
-	w.encryptCfg = &cfg
+// EncryptAlgorithm identifies a PDF standard-security-handler algorithm.
+// Values cover the ISO 32000 V=1..5 security handlers. New code should
+// prefer [EncryptAES256]; the RC4 variants are provided for
+// legacy-compatibility writes only.
+type EncryptAlgorithm int
+
+const (
+	// EncryptRC4_40 uses 40-bit RC4 (V=1, R=2). Weak. Legacy only.
+	EncryptRC4_40 EncryptAlgorithm = iota
+	// EncryptRC4_128 uses 128-bit RC4 (V=2, R=3). Weak. Legacy only.
+	EncryptRC4_128
+	// EncryptAES128 uses 128-bit AES-CBC (V=4, R=4).
+	EncryptAES128
+	// EncryptAES256 uses 256-bit AES-CBC (V=5, R=6). Recommended.
+	EncryptAES256
+)
+
+// EncryptConfig specifies the parameters for password-based encryption.
+// It is the public-API mirror of the internal encryption config: the
+// [pdf] package owns this type so callers never import an internal
+// path.
+type EncryptConfig struct {
+	// UserPassword unlocks the document for reading. Empty string means
+	// the document can be opened without a password, but [Permissions]
+	// still apply to viewers that enforce them.
+	UserPassword string
+	// OwnerPassword grants full access. Writers should pick a different
+	// value from [UserPassword]; callers that supply identical passwords
+	// get the same effective permissions as an empty-user-password doc.
+	OwnerPassword string
+	// Algorithm selects the standard security handler variant.
+	Algorithm EncryptAlgorithm
+	// Permissions is the 32-bit PDF permission mask. Pass -1 for "all
+	// permissions granted".
+	Permissions int32
+}
+
+// toInternal translates an [EncryptConfig] into the internal
+// [crypto.EncryptConfig] consumed by the write engine. Kept
+// lowercase-private so the internal type never appears in a public
+// signature.
+func (c EncryptConfig) toInternal() crypto.EncryptConfig {
+	return crypto.EncryptConfig{
+		UserPassword:  c.UserPassword,
+		OwnerPassword: c.OwnerPassword,
+		Algorithm:     crypto.Algorithm(c.Algorithm),
+		Permissions:   c.Permissions,
+	}
+}
+
+// Encrypt applies password-based encryption to the output document.
+// Forces a full rewrite since every string and stream must be
+// encrypted.
+func (w *Writer) Encrypt(cfg EncryptConfig) {
+	internal := cfg.toInternal()
+	w.encryptCfg = &internal
 	w.forceRewrite = true
 }
 
@@ -690,7 +768,7 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		for i, m := range w.mutations {
 			mutFuncs[i] = m.apply
 		}
-		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, w.signer, mutFuncs, cfg.xrefStream)
+		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, signerAdapter{inner: w.signer}, mutFuncs, cfg.xrefStream)
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {
@@ -876,7 +954,7 @@ func generationToInternal(opts BookmarkGenerationOptions) bookmarks.Options {
 		PreferStructureTree:     opts.PreferStructureTree,
 		DetectNumbering:         opts.DetectNumbering,
 		StripNumberingFromTitle: opts.StripNumberingFromTitle,
-		Scorer:                  opts.HeadingScorer,
+		Scorer:                  adaptHeadingScorer(opts.HeadingScorer),
 		ScoreThreshold:          opts.HeadingScoreThreshold,
 	}
 }

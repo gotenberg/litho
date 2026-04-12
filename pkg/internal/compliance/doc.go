@@ -30,8 +30,8 @@
 //
 // Many checks begin by resolving an object (a font dict, an XObject, an OCG
 // entry) through [document.ResolveDict] or a typed variant. When the resolve
-// fails — typically because of a dangling indirect reference, a corrupt
-// object stream, or a decryption failure — the check *skips* the affected
+// fails, typically because of a dangling indirect reference, a corrupt
+// object stream, or a decryption failure, the check *skips* the affected
 // subtree rather than emitting a [Violation]. The rationale: no PDF/A or
 // PDF/UA rule directly covers "a referenced object could not be parsed",
 // and emitting a synthetic "structural corruption" violation would pollute

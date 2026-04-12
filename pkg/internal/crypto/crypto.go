@@ -240,7 +240,7 @@ func (h *Handler) Authenticate(password string) error {
 			copy(candPadded[len(candBytes):], paddingString[:32-len(candBytes)])
 		}
 
-		// 1. Generate the encryption key (Algorithm 3.1)
+		// Generate the encryption key (Algorithm 3.1).
 		mdC := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 		mdC.Write(candPadded)
 		mdC.Write(h.oVal)
@@ -263,7 +263,7 @@ func (h *Handler) Authenticate(password string) error {
 
 		candidateKey := key[:h.Length/8]
 
-		// 2. Verify the key (Algorithm 3.2 - checking against the U string)
+		// Verify the key (Algorithm 3.2, checking against the U string).
 		var expectedU []byte
 		if h.V >= 3 {
 			// ISO 32000-1 Algorithm 3.4 and 3.5 for V >= 3
