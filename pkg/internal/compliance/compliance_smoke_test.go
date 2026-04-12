@@ -165,13 +165,13 @@ func TestValidate_Concurrent_SameDocument(t *testing.T) {
 
 	const goroutines = 8
 	done := make(chan error, goroutines)
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			_, err := ValidatePDFA(ctx, doc, models.PDFA2b)
 			done <- err
 		}()
 	}
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		if err := <-done; err != nil {
 			t.Errorf("goroutine %d: %v", i, err)
 		}

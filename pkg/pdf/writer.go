@@ -71,12 +71,6 @@ func WithPipelineTempDir(dir string) WriteOption {
 	}
 }
 
-// fullRewriteForced reports whether any queued mutation has forced a full
-// rewrite ([Writer.FlattenForm], [Writer.Encrypt], [Writer.Decrypt], or a
-// remediation stage that required it). Used by [Pipeline] to reject
-// [Pipeline.Sign] combined with a full-rewrite stage.
-func (w *Writer) fullRewriteForced() bool { return w.forceRewrite }
-
 // WithBookmarks configures how [Split] and [Merge] handle the document
 // outline. When omitted, the operation uses sensible defaults
 // ([BookmarkUpdate] with [OrphanDrop] and PromoteOrphanChildren=true for
