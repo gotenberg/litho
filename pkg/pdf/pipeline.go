@@ -172,7 +172,6 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 	}
 
 	ex := &executor{
-		ctx:         ctx,
 		tempDir:     cfg.pipelineTempDir,
 		finalOpts:   opts,
 		finalDst:    dst,
@@ -245,7 +244,6 @@ type stage interface {
 
 // executor drives the sequential execution of pipeline stages.
 type executor struct {
-	ctx         context.Context
 	cur         *Reader
 	curOwned    bool
 	writer      *Writer
@@ -268,7 +266,7 @@ func (ex *executor) ensureWriter() {
 	}
 }
 
-func (ex *executor) flushToTempFile() error {
+func (ex *executor) flushToTempFile(ctx context.Context) error {
 	if ex.writer == nil {
 		return nil
 	}
@@ -277,13 +275,13 @@ func (ex *executor) flushToTempFile() error {
 		return fmt.Errorf("creating intermediate temp file: %w", err)
 	}
 	ex.tmpFiles = append(ex.tmpFiles, f)
-	if err := ex.writer.WriteTo(ex.ctx, f); err != nil {
+	if err := ex.writer.WriteTo(ctx, f); err != nil {
 		return fmt.Errorf("flushing pending mutations: %w", err)
 	}
-	return ex.reopenAsCurrent(f)
+	return ex.reopenAsCurrent(ctx, f)
 }
 
-func (ex *executor) reopenAsCurrent(f *os.File) error {
+func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File) error {
 	stat, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("stat intermediate file: %w", err)
@@ -291,7 +289,7 @@ func (ex *executor) reopenAsCurrent(f *os.File) error {
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seeking intermediate file: %w", err)
 	}
-	next, err := Open(ex.ctx, f, stat.Size())
+	next, err := Open(ctx, f, stat.Size())
 	if err != nil {
 		return fmt.Errorf("reopening intermediate file: %w", err)
 	}
@@ -358,7 +356,7 @@ type splitStage struct {
 func (s *splitStage) kind() stageKind { return kindSplit }
 func (s *splitStage) name() string    { return stageNameSplit }
 func (s *splitStage) apply(ctx context.Context, ex *executor) error {
-	if err := ex.flushToTempFile(); err != nil {
+	if err := ex.flushToTempFile(ctx); err != nil {
 		return err
 	}
 	var opts []WriteOption
@@ -382,7 +380,7 @@ func (s *splitStage) apply(ctx context.Context, ex *executor) error {
 	if err := Split(ctx, ex.cur, s.pages, f, opts...); err != nil {
 		return err
 	}
-	if err := ex.reopenAsCurrent(f); err != nil {
+	if err := ex.reopenAsCurrent(ctx, f); err != nil {
 		return err
 	}
 	var size int64
@@ -401,7 +399,7 @@ type mergeStage struct {
 func (s *mergeStage) kind() stageKind { return kindMerge }
 func (s *mergeStage) name() string    { return stageNameMerge }
 func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
-	if err := ex.flushToTempFile(); err != nil {
+	if err := ex.flushToTempFile(ctx); err != nil {
 		return err
 	}
 	sources := make([]*Reader, 0, len(s.others)+1)
@@ -429,7 +427,7 @@ func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 	if err := Merge(ctx, sources, f, opts...); err != nil {
 		return err
 	}
-	if err := ex.reopenAsCurrent(f); err != nil {
+	if err := ex.reopenAsCurrent(ctx, f); err != nil {
 		return err
 	}
 	var size int64

@@ -15,7 +15,7 @@ func EncryptPendingObjects(ctx context.Context, alloc *writer.ObjAllocator, enc 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		encrypted, err := encryptObject(obj, enc, objNum, 0)
+		encrypted, err := encryptObject(ctx, obj, enc, objNum, 0)
 		if err != nil {
 			return fmt.Errorf("encrypting object %d: %w", objNum, err)
 		}
@@ -25,7 +25,7 @@ func EncryptPendingObjects(ctx context.Context, alloc *writer.ObjAllocator, enc 
 }
 
 // encryptObject recursively encrypts strings and streams within an object.
-func encryptObject(obj ast.PdfObject, enc *crypto.Encryptor, objNum, genNum int) (ast.PdfObject, error) {
+func encryptObject(ctx context.Context, obj ast.PdfObject, enc *crypto.Encryptor, objNum, genNum int) (ast.PdfObject, error) {
 	encFn := enc.EncryptFunc(objNum, genNum)
 
 	switch v := obj.(type) {
@@ -37,7 +37,7 @@ func encryptObject(obj ast.PdfObject, enc *crypto.Encryptor, objNum, genNum int)
 		return ast.PdfString(string(encrypted)), nil
 	case ast.PdfStream:
 		// Encrypt stream data.
-		data, err := v.Bytes()
+		data, err := v.Bytes(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -46,17 +46,17 @@ func encryptObject(obj ast.PdfObject, enc *crypto.Encryptor, objNum, genNum int)
 			return nil, err
 		}
 		// Encrypt strings in the dict (but not /Length, /Filter, /DecodeParms).
-		newDict, err := encryptDict(v.Dict, enc, objNum, genNum)
+		newDict, err := encryptDict(ctx, v.Dict, enc, objNum, genNum)
 		if err != nil {
 			return nil, err
 		}
 		return ast.NewStream(newDict, encrypted), nil
 	case ast.PdfDict:
-		return encryptDict(v, enc, objNum, genNum)
+		return encryptDict(ctx, v, enc, objNum, genNum)
 	case ast.PdfArray:
 		result := make(ast.PdfArray, len(v))
 		for i, elem := range v {
-			encrypted, err := encryptObject(elem, enc, objNum, genNum)
+			encrypted, err := encryptObject(ctx, elem, enc, objNum, genNum)
 			if err != nil {
 				return nil, err
 			}
@@ -69,10 +69,10 @@ func encryptObject(obj ast.PdfObject, enc *crypto.Encryptor, objNum, genNum int)
 }
 
 // encryptDict encrypts string values within a dictionary.
-func encryptDict(d ast.PdfDict, enc *crypto.Encryptor, objNum, genNum int) (ast.PdfDict, error) {
+func encryptDict(ctx context.Context, d ast.PdfDict, enc *crypto.Encryptor, objNum, genNum int) (ast.PdfDict, error) {
 	result := make(ast.PdfDict, len(d))
 	for k, v := range d {
-		encrypted, err := encryptObject(v, enc, objNum, genNum)
+		encrypted, err := encryptObject(ctx, v, enc, objNum, genNum)
 		if err != nil {
 			return nil, err
 		}

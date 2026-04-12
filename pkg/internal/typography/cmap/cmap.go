@@ -82,11 +82,11 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 					}
 					break
 				}
-				lowObj, err := p.ParseObject()
+				lowObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
-				highObj, err := p.ParseObject()
+				highObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
@@ -115,11 +115,11 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 					break
 				}
 
-				srcObj, err := p.ParseObject()
+				srcObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
-				dstObj, err := p.ParseObject()
+				dstObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
@@ -146,15 +146,15 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 					break
 				}
 
-				startObj, err := p.ParseObject()
+				startObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
-				endObj, err := p.ParseObject()
+				endObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
-				dstObj, err := p.ParseObject()
+				dstObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}

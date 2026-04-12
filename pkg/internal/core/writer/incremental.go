@@ -70,7 +70,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 			Offset: offset,
 		})
 
-		written, err := SerializeIndirect(dst, objNum, pending[objNum])
+		written, err := SerializeIndirect(ctx, dst, objNum, pending[objNum])
 		if err != nil {
 			return fmt.Errorf("serializing object %d: %w", objNum, err)
 		}
@@ -87,11 +87,11 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 	xrefOffset := offset
 
 	if cfg.UseXRefStream {
-		if _, err := WriteXRefStream(dst, records, trailer, cfg.Allocator); err != nil {
+		if _, err := WriteXRefStream(ctx, dst, records, trailer, cfg.Allocator); err != nil {
 			return fmt.Errorf("writing xref stream: %w", err)
 		}
 	} else {
-		if _, _, err := WriteXRefTable(dst, records, trailer); err != nil {
+		if _, _, err := WriteXRefTable(ctx, dst, records, trailer); err != nil {
 			return fmt.Errorf("writing xref table: %w", err)
 		}
 	}

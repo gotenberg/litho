@@ -147,8 +147,8 @@ var objectHeaderRe = regexp.MustCompile(`(\d+)\s+\d+\s+obj\b`)
 
 // parseAppendedObjects scans the bytes between signedEnd and fileEnd for
 // indirect object definitions and extracts their /Type values.
-func parseAppendedObjects(_ context.Context, doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, error) {
-	data, err := doc.ReadFileBytes(signedEnd, fileEnd-signedEnd)
+func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, error) {
+	data, err := doc.ReadFileBytes(ctx, signedEnd, fileEnd-signedEnd)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func parseAppendedObjects(_ context.Context, doc *document.Document, signedEnd, 
 		offset := signedEnd + int64(loc[0])
 		lex := lexer.NewLexer(ioat.NewReader(doc.RawReader(), fileEnd, offset))
 		p := parser.NewParser(lex)
-		obj, err := p.ParseObject()
+		obj, err := p.ParseObject(ctx)
 		if err != nil {
 			continue
 		}

@@ -608,7 +608,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		// Fall back to raw data.
-		data, err = stream.Bytes()
+		data, err = stream.Bytes(ctx)
 		if err != nil || len(data) == 0 {
 			complog(doc).Debug("compliance: fonts: failed to decode ToUnicode CMap",
 				"font", fontName, "error", err)

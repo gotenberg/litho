@@ -1,6 +1,7 @@
 package graphics
 
 import (
+	"context"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -17,11 +18,11 @@ var emptyBoundingBox = BoundingBox{
 }
 
 // opHandler is the canonical signature for a PDF content-stream operator
-// handler. It receives the machine, the current top-of-stack graphics
-// state, and the parsed operation. Handlers do not return errors: PDF
-// content streams are tolerant by spec. Unknown or ill-formed operators
+// handler. It receives a context, the machine, the current top-of-stack
+// graphics state, and the parsed operation. Handlers do not return errors:
+// PDF content streams are tolerant by spec. Unknown or ill-formed operators
 // leave the graphics state unchanged rather than abort processing.
-type opHandler func(m *Machine, state *State, op content.Operation)
+type opHandler func(ctx context.Context, m *Machine, state *State, op content.Operation)
 
 // opHandlers is the dispatch table for [Machine.executeOp]. Populated in
 // init() so the map literal stays local to this file and each handler is
@@ -99,15 +100,15 @@ func init() {
 // ExecuteOne processes a single content stream [content.Operation].
 // Avoids the slice-allocation overhead of [Machine.Execute] for
 // per-operator dispatch in hot paths.
-func (m *Machine) ExecuteOne(op content.Operation) error {
-	return m.executeOp(op)
+func (m *Machine) ExecuteOne(ctx context.Context, op content.Operation) error {
+	return m.executeOp(ctx, op)
 }
 
 // Execute processes a sequence of content stream [content.Operation]
 // values and updates the graphics state.
-func (m *Machine) Execute(ops []content.Operation) error {
+func (m *Machine) Execute(ctx context.Context, ops []content.Operation) error {
 	for _, op := range ops {
-		if err := m.executeOp(op); err != nil {
+		if err := m.executeOp(ctx, op); err != nil {
 			return err
 		}
 	}
@@ -118,16 +119,16 @@ func (m *Machine) Execute(ops []content.Operation) error {
 // operators are silently ignored. The PDF spec requires lenient
 // tolerance because implementations encode extensions that older
 // readers must skip without failing.
-func (m *Machine) executeOp(op content.Operation) error {
+func (m *Machine) executeOp(ctx context.Context, op content.Operation) error {
 	h, ok := opHandlers[op.Operator]
 	if !ok {
 		return nil
 	}
-	h(m, m.Current(), op)
+	h(ctx, m, m.Current(), op)
 	return nil
 }
 
-func handleSaveState(m *Machine, state *State, _ content.Operation) {
+func handleSaveState(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	newState := *state
 	// Slice fields must be deep-copied so mutations by subsequent
 	// operators in the new frame don't leak back into the previous one.
@@ -138,7 +139,7 @@ func handleSaveState(m *Machine, state *State, _ content.Operation) {
 	m.Stack = append(m.Stack, newState)
 }
 
-func handleRestoreState(m *Machine, _ *State, _ content.Operation) {
+func handleRestoreState(_ context.Context, m *Machine, _ *State, _ content.Operation) {
 	// The initial state frame is never popped. This matches PDF 32000
 	// §8.4.4, where Q outside any save/restore pair is a no-op.
 	if len(m.Stack) > 1 {
@@ -146,7 +147,7 @@ func handleRestoreState(m *Machine, _ *State, _ content.Operation) {
 	}
 }
 
-func handleConcatMatrix(_ *Machine, state *State, op content.Operation) {
+func handleConcatMatrix(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 6 {
 		return
 	}
@@ -169,41 +170,41 @@ func handleConcatMatrix(_ *Machine, state *State, op content.Operation) {
 
 var identityTextMatrix = [6]float64{1, 0, 0, 1, 0, 0}
 
-func handleBeginText(_ *Machine, state *State, _ content.Operation) {
+func handleBeginText(_ context.Context, _ *Machine, state *State, _ content.Operation) {
 	state.Text.Tm = identityTextMatrix
 	state.Text.Tlm = identityTextMatrix
 }
 
-func handleEndText(_ *Machine, state *State, _ content.Operation) {
+func handleEndText(_ context.Context, _ *Machine, state *State, _ content.Operation) {
 	state.Text.Tm = identityTextMatrix
 	state.Text.Tlm = identityTextMatrix
 }
 
-func handleTextCharSpacing(_ *Machine, state *State, op content.Operation) {
+func handleTextCharSpacing(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
 		state.Text.Tc = document.Float(op.Operands[0])
 	}
 }
 
-func handleTextWordSpacing(_ *Machine, state *State, op content.Operation) {
+func handleTextWordSpacing(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
 		state.Text.Tw = document.Float(op.Operands[0])
 	}
 }
 
-func handleTextHorizontalScaling(_ *Machine, state *State, op content.Operation) {
+func handleTextHorizontalScaling(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
 		state.Text.Tz = document.Float(op.Operands[0])
 	}
 }
 
-func handleTextLeading(_ *Machine, state *State, op content.Operation) {
+func handleTextLeading(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
 		state.Text.Tl = document.Float(op.Operands[0])
 	}
 }
 
-func handleTextFont(_ *Machine, state *State, op content.Operation) {
+func handleTextFont(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
@@ -213,7 +214,7 @@ func handleTextFont(_ *Machine, state *State, op content.Operation) {
 	state.Text.Tfs = document.Float(op.Operands[1])
 }
 
-func handleTextMatrix(_ *Machine, state *State, op content.Operation) {
+func handleTextMatrix(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 6 {
 		return
 	}
@@ -232,7 +233,7 @@ func applyTextMove(state *State, tx, ty float64) {
 	state.Text.Tm = state.Text.Tlm
 }
 
-func handleTextMove(_ *Machine, state *State, op content.Operation) {
+func handleTextMove(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
@@ -241,7 +242,7 @@ func handleTextMove(_ *Machine, state *State, op content.Operation) {
 	applyTextMove(state, tx, ty)
 }
 
-func handleTextMoveSetLeading(_ *Machine, state *State, op content.Operation) {
+func handleTextMoveSetLeading(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
@@ -251,17 +252,17 @@ func handleTextMoveSetLeading(_ *Machine, state *State, op content.Operation) {
 	applyTextMove(state, tx, ty)
 }
 
-func handleTextNextLine(_ *Machine, state *State, _ content.Operation) {
+func handleTextNextLine(_ context.Context, _ *Machine, state *State, _ content.Operation) {
 	applyTextMove(state, 0, -state.Text.Tl)
 }
 
-func handleTextNextLineShow(_ *Machine, state *State, _ content.Operation) {
+func handleTextNextLineShow(_ context.Context, _ *Machine, state *State, _ content.Operation) {
 	// Per spec, ' moves to the next line and shows text. Text rendering
 	// is handled by the extractor layer. Here we only advance the matrix.
 	applyTextMove(state, 0, -state.Text.Tl)
 }
 
-func handleTextSpacingNextLineShow(_ *Machine, state *State, op content.Operation) {
+func handleTextSpacingNextLineShow(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 3 {
 		return
 	}
@@ -270,13 +271,13 @@ func handleTextSpacingNextLineShow(_ *Machine, state *State, op content.Operatio
 	applyTextMove(state, 0, -state.Text.Tl)
 }
 
-func handleTextRenderingMode(_ *Machine, state *State, op content.Operation) {
+func handleTextRenderingMode(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
 		state.Text.Tmode = int(document.Float(op.Operands[0]))
 	}
 }
 
-func handleFillRGB(_ *Machine, state *State, op content.Operation) {
+func handleFillRGB(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 3 {
 		return
 	}
@@ -288,7 +289,7 @@ func handleFillRGB(_ *Machine, state *State, op content.Operation) {
 	state.FillColorSpace = "DeviceRGB"
 }
 
-func handleStrokeRGB(_ *Machine, state *State, op content.Operation) {
+func handleStrokeRGB(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 3 {
 		return
 	}
@@ -300,7 +301,7 @@ func handleStrokeRGB(_ *Machine, state *State, op content.Operation) {
 	state.StrokeColorSpace = "DeviceRGB"
 }
 
-func handleFillGray(_ *Machine, state *State, op content.Operation) {
+func handleFillGray(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
@@ -308,7 +309,7 @@ func handleFillGray(_ *Machine, state *State, op content.Operation) {
 	state.FillColorSpace = "DeviceGray"
 }
 
-func handleStrokeGray(_ *Machine, state *State, op content.Operation) {
+func handleStrokeGray(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
@@ -316,7 +317,7 @@ func handleStrokeGray(_ *Machine, state *State, op content.Operation) {
 	state.StrokeColorSpace = "DeviceGray"
 }
 
-func handleFillCMYK(_ *Machine, state *State, op content.Operation) {
+func handleFillCMYK(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 4 {
 		return
 	}
@@ -329,7 +330,7 @@ func handleFillCMYK(_ *Machine, state *State, op content.Operation) {
 	state.FillColorSpace = "DeviceCMYK"
 }
 
-func handleStrokeCMYK(_ *Machine, state *State, op content.Operation) {
+func handleStrokeCMYK(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 4 {
 		return
 	}
@@ -342,7 +343,7 @@ func handleStrokeCMYK(_ *Machine, state *State, op content.Operation) {
 	state.StrokeColorSpace = "DeviceCMYK"
 }
 
-func handleFillColorSpace(_ *Machine, state *State, op content.Operation) {
+func handleFillColorSpace(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
@@ -357,7 +358,7 @@ func handleFillColorSpace(_ *Machine, state *State, op content.Operation) {
 	}
 }
 
-func handleStrokeColorSpace(_ *Machine, state *State, op content.Operation) {
+func handleStrokeColorSpace(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
@@ -366,7 +367,7 @@ func handleStrokeColorSpace(_ *Machine, state *State, op content.Operation) {
 	}
 }
 
-func handleFillColorInCurrentSpace(m *Machine, state *State, op content.Operation) {
+func handleFillColorInCurrentSpace(ctx context.Context, m *Machine, state *State, op content.Operation) {
 	var vals []float64
 	var patName string
 	for _, operand := range op.Operands {
@@ -379,7 +380,7 @@ func handleFillColorInCurrentSpace(m *Machine, state *State, op content.Operatio
 	}
 	if patName != "" && state.FillColorSpace == "Pattern" {
 		state.FillPatternName = patName
-		state.FillPatternType = m.resolvePatternType(patName)
+		state.FillPatternType = m.resolvePatternType(ctx, patName)
 		return
 	}
 	if len(vals) > 0 {
@@ -389,7 +390,7 @@ func handleFillColorInCurrentSpace(m *Machine, state *State, op content.Operatio
 	}
 }
 
-func handleStrokeColorInCurrentSpace(_ *Machine, state *State, op content.Operation) {
+func handleStrokeColorInCurrentSpace(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	var vals []float64
 	for _, operand := range op.Operands {
 		switch operand.(type) {
@@ -422,7 +423,7 @@ func (m *Machine) updatePathBounds(state *State, x, y float64) {
 	}
 }
 
-func handlePathMoveTo(m *Machine, state *State, op content.Operation) {
+func handlePathMoveTo(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
@@ -432,7 +433,7 @@ func handlePathMoveTo(m *Machine, state *State, op content.Operation) {
 	)
 }
 
-func handlePathLineTo(m *Machine, state *State, op content.Operation) {
+func handlePathLineTo(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
@@ -442,7 +443,7 @@ func handlePathLineTo(m *Machine, state *State, op content.Operation) {
 	)
 }
 
-func handlePathRectangle(m *Machine, state *State, op content.Operation) {
+func handlePathRectangle(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 4 {
 		return
 	}
@@ -460,7 +461,7 @@ func handlePathRectangle(m *Machine, state *State, op content.Operation) {
 	m.updatePathBounds(state, x+w, y+h)
 }
 
-func handlePathBezier(m *Machine, state *State, op content.Operation) {
+func handlePathBezier(_ context.Context, m *Machine, state *State, op content.Operation) {
 	// Use the control points as a simplistic over-approximation of the
 	// curve's bounding box. A proper tight-fit would solve the
 	// derivative roots; for heuristics this is close enough.
@@ -472,16 +473,16 @@ func handlePathBezier(m *Machine, state *State, op content.Operation) {
 	}
 }
 
-func handlePathClose(_ *Machine, _ *State, _ content.Operation) {
+func handlePathClose(_ context.Context, _ *Machine, _ *State, _ content.Operation) {
 	// Closing a path doesn't change the bounding box. The closing
 	// segment cannot extend beyond the existing extent.
 }
 
-func handlePathEndNoPaint(m *Machine, _ *State, _ content.Operation) {
+func handlePathEndNoPaint(_ context.Context, m *Machine, _ *State, _ content.Operation) {
 	m.CurrentPath = emptyBoundingBox
 }
 
-func handleClipPath(m *Machine, state *State, _ content.Operation) {
+func handleClipPath(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	// Intersect the current clipping path with the current path bounds.
 	// Per PDF 32000 §8.5.4, W/W* marks the path for clipping but does
 	// not end it. A subsequent n / S / s / f / F / B / B* / b / b*
@@ -500,12 +501,12 @@ func handleClipPath(m *Machine, state *State, _ content.Operation) {
 	}
 }
 
-func handlePathPaint(m *Machine, _ *State, _ content.Operation) {
+func handlePathPaint(_ context.Context, m *Machine, _ *State, _ content.Operation) {
 	// After any paint operation the current path is consumed.
 	m.CurrentPath = emptyBoundingBox
 }
 
-func handleBDC(m *Machine, state *State, op content.Operation) {
+func handleBDC(_ context.Context, m *Machine, state *State, op content.Operation) {
 	mcState := MarkedContentState{MCID: -1}
 	if len(op.Operands) >= 1 {
 		if tag, ok := op.Operands[0].(ast.PdfName); ok {
@@ -590,7 +591,7 @@ func applyBDCProperties(mcState *MarkedContentState, props ast.PdfDict) {
 	}
 }
 
-func handleBMC(m *Machine, state *State, op content.Operation) {
+func handleBMC(_ context.Context, m *Machine, state *State, op content.Operation) {
 	mcState := MarkedContentState{MCID: -1}
 	if len(op.Operands) >= 1 {
 		if tag, ok := op.Operands[0].(ast.PdfName); ok {
@@ -606,7 +607,7 @@ func handleBMC(m *Machine, state *State, op content.Operation) {
 	m.MarkedContent = append(m.MarkedContent, mcState)
 }
 
-func handleEMC(m *Machine, state *State, _ content.Operation) {
+func handleEMC(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	if len(m.MarkedContent) > 0 {
 		m.MarkedContent = m.MarkedContent[:len(m.MarkedContent)-1]
 	}
@@ -626,7 +627,7 @@ func handleEMC(m *Machine, state *State, _ content.Operation) {
 	}
 }
 
-func handleDesignatedMCPoint(_ *Machine, _ *State, _ content.Operation) {
+func handleDesignatedMCPoint(_ context.Context, _ *Machine, _ *State, _ content.Operation) {
 	// Designated marked-content points (DP) carry no state transition.
 	// they exist only as hooks for external consumers.
 }

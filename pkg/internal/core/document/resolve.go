@@ -358,9 +358,9 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 
 	// Seek reader to absoluteOffset and parse.
 	lex = lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), absoluteOffset))
-	p := parser.NewParser(lex).WithContext(ctx)
+	p := parser.NewParser(lex)
 
-	return p.ParseObject()
+	return p.ParseObject(ctx)
 }
 
 // Resolve looks up an [ast.PdfIndirectRef] in the document's cross-reference
@@ -429,7 +429,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		}
 
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
-		p := parser.NewParser(lex).WithContext(ctx)
+		p := parser.NewParser(lex)
 		if d.Crypto != nil {
 			p.WithDecryption(d.Crypto.DecryptFunc(ref.ObjectNum, ref.GenNum))
 		}
@@ -437,7 +437,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 			p.WithFormatChecking()
 		}
 
-		obj, err = p.ParseObject()
+		obj, err = p.ParseObject(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
 		}

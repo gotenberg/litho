@@ -24,7 +24,6 @@ type DecryptFunc func([]byte) ([]byte, error)
 // which guarantees bufPos > 0 and UnreadByte cannot fail.
 type Parser struct {
 	lex       *lexer.Lexer
-	ctx       context.Context
 	tokens    []lexer.Token
 	err       error
 	decryptFn DecryptFunc
@@ -40,15 +39,6 @@ type Parser struct {
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
 func NewParser(lex *lexer.Lexer) *Parser {
 	return &Parser{lex: lex}
-}
-
-// WithContext attaches a context for cancellation checks during parsing.
-// The parser checks ctx.Err() at natural checkpoints (per dict key, per
-// array element, per stream scan iteration) without adding overhead to
-// the per-token lexer loop.
-func (p *Parser) WithContext(ctx context.Context) *Parser {
-	p.ctx = ctx
-	return p
 }
 
 // WithDecryption configures the parser to apply fn to encrypted string and stream data.
@@ -72,18 +62,15 @@ func (p *Parser) recordViolation(msg string) {
 }
 
 // checkCtx returns the context error if cancellation or deadline has fired.
-// Returns nil when no context is set or the context is still active.
-func (p *Parser) checkCtx() error {
-	if p.ctx != nil {
-		return p.ctx.Err()
-	}
-	return nil
+// Returns nil when the context is still active.
+func checkCtx(ctx context.Context) error {
+	return ctx.Err()
 }
 
-// CheckContext returns the context error if a context was set via [Parser.WithContext].
-// Returns nil if no context is set or the context is not cancelled.
-func (p *Parser) CheckContext() error {
-	return p.checkCtx()
+// CheckContext returns the context error if the context is cancelled or
+// its deadline has expired. Returns nil otherwise.
+func CheckContext(ctx context.Context) error {
+	return checkCtx(ctx)
 }
 
 // Peek returns the token n positions ahead without consuming it.
@@ -123,7 +110,10 @@ func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
 }
 
 // ParseObject reads the next complete PDF object from the token stream.
-func (p *Parser) ParseObject() (ast.PdfObject, error) {
+// The context enables cancellation at natural checkpoints (per dict key,
+// per array element, per stream scan iteration) without adding overhead
+// to the per-token lexer loop.
+func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 	t0, err := p.Peek(0)
 	if err != nil && t0.Type == lexer.TokenError {
 		return nil, err
@@ -164,7 +154,7 @@ func (p *Parser) ParseObject() (ast.PdfObject, error) {
 				return ast.PdfIndirectRef{ObjectNum: objNum, GenNum: genNum}, nil
 			}
 			if t2.Type == lexer.TokenKeyword && t2.Value == "obj" {
-				return p.parseIndirectObject()
+				return p.parseIndirectObject(ctx)
 			}
 		}
 	}
@@ -213,9 +203,9 @@ func (p *Parser) ParseObject() (ast.PdfObject, error) {
 	case lexer.TokenDelimiter:
 		switch t0.Value {
 		case "<<":
-			return p.parseDict()
+			return p.parseDict(ctx)
 		case "[":
-			return p.parseArray()
+			return p.parseArray(ctx)
 		default:
 			return nil, fmt.Errorf("unexpected delimiter: %s", t0.Value)
 		}
@@ -224,7 +214,7 @@ func (p *Parser) ParseObject() (ast.PdfObject, error) {
 	return nil, fmt.Errorf("unexpected token: %v", t0)
 }
 
-func (p *Parser) parseIndirectObject() (ast.PdfObject, error) {
+func (p *Parser) parseIndirectObject(ctx context.Context) (ast.PdfObject, error) {
 	if _, err := p.Expect(lexer.TokenNumber); err != nil {
 		return nil, err
 	}
@@ -235,7 +225,7 @@ func (p *Parser) parseIndirectObject() (ast.PdfObject, error) {
 		return nil, err
 	}
 
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -254,8 +244,8 @@ func (p *Parser) parseIndirectObject() (ast.PdfObject, error) {
 // `stream` keyword, also the following binary stream body. Stream
 // handling is delegated to [Parser.parseStreamAfterDict] so parseDict
 // itself stays small.
-func (p *Parser) parseDict() (ast.PdfObject, error) {
-	dict, err := p.parseDictBody()
+func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
+	dict, err := p.parseDictBody(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -267,17 +257,17 @@ func (p *Parser) parseDict() (ast.PdfObject, error) {
 	if t.Type != lexer.TokenKeyword || t.Value != "stream" {
 		return dict, nil
 	}
-	return p.parseStreamAfterDict(dict)
+	return p.parseStreamAfterDict(ctx, dict)
 }
 
 // parseDictBody reads the key/value pairs between `<<` and `>>` into an
 // [ast.PdfDict]. It tolerates EOF and a premature `endobj` as implicit
 // close markers so we still return a partial dict for malformed input
 // (the top-level parser continues, lenient by design).
-func (p *Parser) parseDictBody() (ast.PdfDict, error) {
+func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 	dict := make(ast.PdfDict)
 	for {
-		if err := p.checkCtx(); err != nil {
+		if err := checkCtx(ctx); err != nil {
 			return nil, fmt.Errorf("parsing dict: %w", err)
 		}
 		t, err := p.Peek(0)
@@ -297,7 +287,7 @@ func (p *Parser) parseDictBody() (ast.PdfDict, error) {
 			break
 		}
 
-		keyObj, err := p.ParseObject()
+		keyObj, err := p.ParseObject(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +297,7 @@ func (p *Parser) parseDictBody() (ast.PdfDict, error) {
 			continue
 		}
 
-		valObj, err := p.ParseObject()
+		valObj, err := p.ParseObject(ctx)
 		if err != nil {
 			// Value missing: close the dict with what we have.
 			break
@@ -320,7 +310,7 @@ func (p *Parser) parseDictBody() (ast.PdfDict, error) {
 // parseStreamAfterDict consumes the `stream` keyword, the stream body
 // (via fast or slow path), and returns a lazy [ast.PdfStream]. The caller
 // has already confirmed the next token is `stream`.
-func (p *Parser) parseStreamAfterDict(dict ast.PdfDict) (ast.PdfObject, error) {
+func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (ast.PdfObject, error) {
 	if _, err := p.Expect(lexer.TokenKeyword); err != nil {
 		return nil, err
 	}
@@ -339,7 +329,7 @@ func (p *Parser) parseStreamAfterDict(dict ast.PdfDict) (ast.PdfObject, error) {
 	}
 
 	streamStart := reader.Position()
-	dataLen, usedLength, err := p.readStreamBody(reader, dict, streamStart)
+	dataLen, usedLength, err := p.readStreamBody(ctx, reader, dict, streamStart)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +375,7 @@ func (p *Parser) consumeStreamEOL(reader *ioat.Reader) error {
 // doesn't point at `endstream`, it falls back to a byte scan.
 //
 // The returned usedLength is true if the fast path was taken.
-func (p *Parser) readStreamBody(reader *ioat.Reader, dict ast.PdfDict, streamStart int64) (int64, bool, error) {
+func (p *Parser) readStreamBody(ctx context.Context, reader *ioat.Reader, dict ast.PdfDict, streamStart int64) (int64, bool, error) {
 	if dataLen, ok := tryFastStreamLength(reader, dict, streamStart); ok {
 		return dataLen, true, nil
 	}
@@ -395,7 +385,7 @@ func (p *Parser) readStreamBody(reader *ioat.Reader, dict ast.PdfDict, streamSta
 	if _, err := reader.Seek(streamStart, io.SeekStart); err != nil {
 		return 0, false, fmt.Errorf("seeking back to stream start: %w", err)
 	}
-	dataLen, err := p.scanEndstream(reader)
+	dataLen, err := p.scanEndstream(ctx, reader)
 	return dataLen, false, err
 }
 
@@ -435,7 +425,7 @@ func tryFastStreamLength(reader *ioat.Reader, dict ast.PdfDict, streamStart int6
 // finds the `endstream` keyword, returning the number of stream-body
 // bytes consumed before the marker. This is the fallback used when the
 // /Length hint is missing or wrong.
-func (p *Parser) scanEndstream(reader *ioat.Reader) (int64, error) {
+func (p *Parser) scanEndstream(ctx context.Context, reader *ioat.Reader) (int64, error) {
 	endMarker := []byte("endstream")
 	matchLen := 0
 	var dataLen int64
@@ -460,7 +450,7 @@ func (p *Parser) scanEndstream(reader *ioat.Reader) (int64, error) {
 		sinceLastCheck++
 		if sinceLastCheck >= ctxCheckInterval {
 			sinceLastCheck = 0
-			if err := p.checkCtx(); err != nil {
+			if err := checkCtx(ctx); err != nil {
 				return 0, fmt.Errorf("scanning for endstream: %w", err)
 			}
 		}
@@ -549,8 +539,12 @@ func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length
 	var once sync.Once
 	var cached []byte
 	var cachedErr error
-	return ast.NewLazyStream(dict, func() ([]byte, error) {
+	return ast.NewLazyStream(dict, func(ctx context.Context) ([]byte, error) {
 		once.Do(func() {
+			if err := checkCtx(ctx); err != nil {
+				cachedErr = err
+				return
+			}
 			buf := make([]byte, length)
 			_, cachedErr = src.ReadAt(buf, offset)
 			if cachedErr != nil {
@@ -567,10 +561,10 @@ func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length
 	})
 }
 
-func (p *Parser) parseArray() (ast.PdfObject, error) {
+func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 	var arr ast.PdfArray
 	for {
-		if err := p.checkCtx(); err != nil {
+		if err := checkCtx(ctx); err != nil {
 			return nil, fmt.Errorf("parsing array: %w", err)
 		}
 		t, err := p.Peek(0)
@@ -591,7 +585,7 @@ func (p *Parser) parseArray() (ast.PdfObject, error) {
 			break
 		}
 
-		obj, err := p.ParseObject()
+		obj, err := p.ParseObject(ctx)
 		if err != nil {
 			// Tolerate malformed array elements (e.g., operators inside
 			// TJ arrays): skip the bad token and continue parsing.
@@ -662,7 +656,7 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 // Called after the BI operator has been consumed. It reads the dictionary
 // key/value pairs until the ID keyword, then scans forward through raw
 // binary image data until the EI terminator is found.
-func (p *Parser) SkipInlineImage() error {
+func (p *Parser) SkipInlineImage(ctx context.Context) error {
 	// Phase 1: Consume inline image dictionary entries until the ID keyword.
 	// Entries are key/value pairs (e.g., /W 100 /H 50 /BPC 8 /CS /RGB).
 	for {
@@ -702,7 +696,7 @@ func (p *Parser) SkipInlineImage() error {
 	// followed by "EI" followed by whitespace, a delimiter, or EOF.
 	// Raw bytes 'E' and 'I' can occur inside image data, so we must
 	// validate the trailing context to avoid false matches.
-	return scanToEI(reader, p.ctx)
+	return scanToEI(reader, ctx)
 }
 
 // ParseInlineImageDict reads an inline image's dictionary key/value pairs
@@ -710,7 +704,7 @@ func (p *Parser) SkipInlineImage() error {
 // the properties as a PdfDict. Called after the BI operator has been consumed.
 // Dictionary keys are PDF names (e.g., /W, /H, /BPC, /CS) and values are
 // parsed as normal PDF objects.
-func (p *Parser) ParseInlineImageDict() (ast.PdfDict, error) {
+func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) {
 	dict := ast.PdfDict{}
 
 	// Phase 1: Parse key/value pairs until the ID keyword.
@@ -755,7 +749,7 @@ func (p *Parser) ParseInlineImageDict() (ast.PdfDict, error) {
 		}
 
 		// Parse the value.
-		val, err := p.ParseObject()
+		val, err := p.ParseObject(ctx)
 		if err != nil {
 			// Tolerate malformed values by consuming the bad token.
 			if _, consumeErr := p.Consume(); consumeErr != nil {
@@ -778,7 +772,7 @@ func (p *Parser) ParseInlineImageDict() (ast.PdfDict, error) {
 	}
 
 	// Phase 3: Scan forward for the EI terminator.
-	if err := scanToEI(reader, p.ctx); err != nil {
+	if err := scanToEI(reader, ctx); err != nil {
 		return nil, err
 	}
 

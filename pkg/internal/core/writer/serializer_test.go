@@ -2,6 +2,7 @@ package writer
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -15,14 +16,14 @@ import (
 func roundTrip(t *testing.T, obj ast.PdfObject) ast.PdfObject {
 	t.Helper()
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, obj)
+	_, err := Serialize(context.Background(), &buf, obj)
 	if err != nil {
 		t.Fatalf("Serialize: %v", err)
 	}
 	r := ioat.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()), 0)
 	lex := lexer.NewLexer(r)
 	p := parser.NewParser(lex)
-	parsed, err := p.ParseObject()
+	parsed, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject(%q): %v", buf.String(), err)
 	}
@@ -31,7 +32,7 @@ func roundTrip(t *testing.T, obj ast.PdfObject) ast.PdfObject {
 
 func TestSerialize_Null(t *testing.T) {
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, ast.PdfNull{})
+	_, err := Serialize(context.Background(), &buf, ast.PdfNull{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +43,7 @@ func TestSerialize_Null(t *testing.T) {
 
 func TestSerialize_NilObject(t *testing.T) {
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, nil)
+	_, err := Serialize(context.Background(), &buf, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestSerialize_Real(t *testing.T) {
 func TestSerialize_Real_Integer(t *testing.T) {
 	// A real that is actually an integer value should serialize cleanly.
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, ast.PdfReal(72.0))
+	_, err := Serialize(context.Background(), &buf, ast.PdfReal(72.0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +103,7 @@ func TestSerialize_Name(t *testing.T) {
 func TestSerialize_Name_Escaping(t *testing.T) {
 	// Name with a space requires hex escaping.
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, ast.PdfName("A B"))
+	_, err := Serialize(context.Background(), &buf, ast.PdfName("A B"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +134,7 @@ func TestSerialize_String_Binary(t *testing.T) {
 	// Binary content should use hex form.
 	data := ast.PdfString(string([]byte{0x00, 0x01, 0xFF}))
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, data)
+	_, err := Serialize(context.Background(), &buf, data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestSerialize_Dict(t *testing.T) {
 
 func TestSerialize_IndirectRef(t *testing.T) {
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, ast.PdfIndirectRef{ObjectNum: 5, GenNum: 0})
+	_, err := Serialize(context.Background(), &buf, ast.PdfIndirectRef{ObjectNum: 5, GenNum: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +185,7 @@ func TestSerialize_Stream(t *testing.T) {
 	stream := ast.NewStream(dict, data)
 
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, stream)
+	_, err := Serialize(context.Background(), &buf, stream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +209,7 @@ func TestSerialize_Stream(t *testing.T) {
 
 func TestSerializeIndirect(t *testing.T) {
 	var buf bytes.Buffer
-	_, err := SerializeIndirect(&buf, 5, ast.PdfInt(42))
+	_, err := SerializeIndirect(context.Background(), &buf, 5, ast.PdfInt(42))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +226,7 @@ func TestSerialize_DictKeySorted(t *testing.T) {
 		"M": ast.PdfInt(3),
 	}
 	var buf bytes.Buffer
-	_, err := Serialize(&buf, d)
+	_, err := Serialize(context.Background(), &buf, d)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -153,30 +154,30 @@ func (r PdfIndirectRef) String() string {
 // in [NewLazyStream] without preserving this shared-state guarantee.
 type PdfStream struct {
 	Dict PdfDict
-	open func() ([]byte, error) // lazy loader, returns raw (possibly encrypted) stream bytes
+	open func(context.Context) ([]byte, error) // lazy loader, returns raw (possibly encrypted) stream bytes
 }
 
 // NewStream creates a [PdfStream] with pre-loaded data. Use this in tests and
 // for synthetically constructed streams (e.g., object streams, encoding).
 func NewStream(dict PdfDict, data []byte) PdfStream {
-	return PdfStream{Dict: dict, open: func() ([]byte, error) { return data, nil }}
+	return PdfStream{Dict: dict, open: func(context.Context) ([]byte, error) { return data, nil }}
 }
 
 // NewLazyStream creates a [PdfStream] with a lazy loader that reads the raw
 // bytes on first access and caches the result. The loader function is called
 // at most once; subsequent calls to [PdfStream.Bytes] return the cached result.
-func NewLazyStream(dict PdfDict, loader func() ([]byte, error)) PdfStream {
+func NewLazyStream(dict PdfDict, loader func(context.Context) ([]byte, error)) PdfStream {
 	return PdfStream{Dict: dict, open: loader}
 }
 
 // Bytes returns the raw stream bytes (after decryption, before filter
 // decoding). The data is read lazily on first call and cached for subsequent
 // calls if the stream was created with [NewLazyStream].
-func (s PdfStream) Bytes() ([]byte, error) {
+func (s PdfStream) Bytes(ctx context.Context) ([]byte, error) {
 	if s.open == nil {
 		return nil, nil
 	}
-	return s.open()
+	return s.open(ctx)
 }
 
 // IsPdfObject marks PdfStream as a PDF object.

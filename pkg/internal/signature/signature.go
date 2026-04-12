@@ -142,8 +142,8 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 
 						// Calculate hash of the physical bytes defined by ByteRange
 						if sig.ByteRange[1] > 0 && sig.ByteRange[3] > 0 {
-							chunk1, err1 := doc.ReadFileBytes(sig.ByteRange[0], sig.ByteRange[1])
-							chunk2, err2 := doc.ReadFileBytes(sig.ByteRange[2], sig.ByteRange[3])
+							chunk1, err1 := doc.ReadFileBytes(ctx, sig.ByteRange[0], sig.ByteRange[1])
+							chunk2, err2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
 
 							if err1 == nil && err2 == nil {
 								h := sha256.New()

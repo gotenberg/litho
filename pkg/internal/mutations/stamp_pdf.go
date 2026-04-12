@@ -166,7 +166,7 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 		if err != nil {
 			return nil, err
 		}
-		data, err := stream.Bytes()
+		data, err := stream.Bytes(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +181,7 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 			if err != nil {
 				return nil, err
 			}
-			data, err := stream.Bytes()
+			data, err := stream.Bytes(ctx)
 			if err != nil {
 				return nil, err
 			}

@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
@@ -15,7 +16,7 @@ func TestSkipInlineImage_Basic(t *testing.T) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := NewParser(lex)
 
-	if err := p.SkipInlineImage(); err != nil {
+	if err := p.SkipInlineImage(context.Background()); err != nil {
 		t.Fatalf("SkipInlineImage failed: %v", err)
 	}
 
@@ -35,7 +36,7 @@ func TestSkipInlineImage_EIAtEOF(t *testing.T) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := NewParser(lex)
 
-	if err := p.SkipInlineImage(); err != nil {
+	if err := p.SkipInlineImage(context.Background()); err != nil {
 		t.Fatalf("SkipInlineImage failed: %v", err)
 	}
 
@@ -52,7 +53,7 @@ func TestSkipInlineImage_FalseEIInData(t *testing.T) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := NewParser(lex)
 
-	if err := p.SkipInlineImage(); err != nil {
+	if err := p.SkipInlineImage(context.Background()); err != nil {
 		t.Fatalf("SkipInlineImage failed: %v", err)
 	}
 
@@ -68,7 +69,7 @@ func TestSkipInlineImage_EmptyDict(t *testing.T) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := NewParser(lex)
 
-	if err := p.SkipInlineImage(); err != nil {
+	if err := p.SkipInlineImage(context.Background()); err != nil {
 		t.Fatalf("SkipInlineImage failed: %v", err)
 	}
 
@@ -84,7 +85,7 @@ func TestSkipInlineImage_EIFollowedByDelimiter(t *testing.T) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := NewParser(lex)
 
-	if err := p.SkipInlineImage(); err != nil {
+	if err := p.SkipInlineImage(context.Background()); err != nil {
 		t.Fatalf("SkipInlineImage failed: %v", err)
 	}
 

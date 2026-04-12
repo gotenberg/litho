@@ -14,7 +14,7 @@ func TestPattern_CsSetsPatternColorSpace(t *testing.T) {
 	ops := []content.Operation{
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("Pattern")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -41,7 +41,7 @@ func TestPattern_ScnSetsTilingPattern(t *testing.T) {
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("Pattern")}},
 		{Operator: "scn", Operands: []ast.PdfObject{ast.PdfName("P1")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,7 +72,7 @@ func TestPattern_ScnSetsShadingPattern(t *testing.T) {
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("Pattern")}},
 		{Operator: "scn", Operands: []ast.PdfObject{ast.PdfName("P2")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +105,7 @@ func TestPattern_ScnWithUnderlyingColor(t *testing.T) {
 			ast.PdfName("P1"),
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -133,7 +133,7 @@ func TestPattern_CsNonPatternClearsState(t *testing.T) {
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("Pattern")}},
 		{Operator: "scn", Operands: []ast.PdfObject{ast.PdfName("P1")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,7 +141,7 @@ func TestPattern_CsNonPatternClearsState(t *testing.T) {
 	ops = []content.Operation{
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("DeviceRGB")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,7 +171,7 @@ func TestPattern_ScNonPatternClearsState(t *testing.T) {
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("DeviceGray")}},
 		{Operator: "sc", Operands: []ast.PdfObject{ast.PdfReal(0.5)}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -195,7 +195,7 @@ func TestPattern_NoResources_FallsBackToPattern(t *testing.T) {
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("Pattern")}},
 		{Operator: "scn", Operands: []ast.PdfObject{ast.PdfName("UnknownPat")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -226,7 +226,7 @@ func TestPattern_SaveRestore(t *testing.T) {
 		{Operator: "sc", Operands: []ast.PdfObject{ast.PdfReal(1), ast.PdfReal(0), ast.PdfReal(0)}},
 		{Operator: "Q"},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 

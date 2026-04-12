@@ -1,6 +1,7 @@
 package writer
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"maps"
@@ -21,7 +22,7 @@ type XRefRecord struct {
 // WriteXRefTable writes a traditional cross-reference table, trailer
 // dictionary, and startxref pointer to w. Returns the byte offset of the
 // "xref" keyword (for use in the startxref line) and the total bytes written.
-func WriteXRefTable(w io.Writer, records []XRefRecord, trailer ast.PdfDict) (xrefOffset int64, written int64, err error) {
+func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict) (xrefOffset int64, written int64, err error) {
 	// Sort records by object number.
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ObjNum < records[j].ObjNum
@@ -61,6 +62,9 @@ func WriteXRefTable(w io.Writer, records []XRefRecord, trailer ast.PdfDict) (xre
 		}
 
 		for _, entry := range sub.entries {
+			if err := ctx.Err(); err != nil {
+				return 0, total, fmt.Errorf("writing xref entry for object %d: %w", entry.ObjNum, err)
+			}
 			var line string
 			if entry.Free {
 				line = fmt.Sprintf("%010d %05d f \r\n", entry.Offset, entry.Generation)
@@ -82,7 +86,7 @@ func WriteXRefTable(w io.Writer, records []XRefRecord, trailer ast.PdfDict) (xre
 		return 0, total, err
 	}
 
-	n2, err := Serialize(w, trailer)
+	n2, err := Serialize(ctx, w, trailer)
 	total += n2
 	if err != nil {
 		return 0, total, err
@@ -100,7 +104,7 @@ func WriteXRefTable(w io.Writer, records []XRefRecord, trailer ast.PdfDict) (xre
 // WriteXRefStream writes a PDF 1.5+ cross-reference stream to w. The stream
 // dict doubles as the trailer. Returns the total bytes written.
 // The allocator is used to assign an object number to the xref stream itself.
-func WriteXRefStream(w io.Writer, records []XRefRecord, trailer ast.PdfDict, allocator *ObjAllocator) (int64, error) {
+func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict, allocator *ObjAllocator) (int64, error) {
 	// Sort records by object number.
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ObjNum < records[j].ObjNum
@@ -129,6 +133,9 @@ func WriteXRefStream(w io.Writer, records []XRefRecord, trailer ast.PdfDict, all
 	entrySize := 1 + w1 + w2
 	data := make([]byte, 0, len(records)*entrySize)
 	for _, rec := range records {
+		if err := ctx.Err(); err != nil {
+			return 0, fmt.Errorf("encoding xref entry for object %d: %w", rec.ObjNum, err)
+		}
 		if rec.Free {
 			data = append(data, 0) // type 0: free
 		} else {
@@ -171,7 +178,7 @@ func WriteXRefStream(w io.Writer, records []XRefRecord, trailer ast.PdfDict, all
 	dict["Filter"] = ast.PdfName("FlateDecode")
 
 	stream := ast.NewStream(dict, compressed)
-	return SerializeIndirect(w, xrefObjNum, stream)
+	return SerializeIndirect(ctx, w, xrefObjNum, stream)
 }
 
 // bytesNeeded returns the minimum number of bytes to represent val in

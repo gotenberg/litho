@@ -1,6 +1,7 @@
 package graphics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -18,7 +19,7 @@ func TestBDC_LangTag(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -41,7 +42,7 @@ func TestBDC_ExpansionTag(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -66,7 +67,7 @@ func TestBDC_LangAndExpansion(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +102,7 @@ func TestBDC_NestedLangInheritance(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -131,7 +132,7 @@ func TestBDC_EMCClearsLang(t *testing.T) {
 		}},
 		{Operator: "EMC"},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,7 +152,7 @@ func TestBDC_NoLangOrExpansion(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,7 +182,7 @@ func TestBDC_NestedLangOverride(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 

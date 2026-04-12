@@ -323,11 +323,11 @@ func ruleByPart(part int, r1, r2, r3, r4 Rule) Rule {
 
 // safeReadHeader reads the first n bytes from the document file.
 // Returns an error if the underlying reader is nil.
-func safeReadHeader(doc *document.Document, n int64) ([]byte, error) {
+func safeReadHeader(ctx context.Context, doc *document.Document, n int64) ([]byte, error) {
 	if doc.RawReader() == nil {
 		return nil, fmt.Errorf("cannot read header: nil reader")
 	}
-	return doc.ReadFileBytes(0, n)
+	return doc.ReadFileBytes(ctx, 0, n)
 }
 
 // resolveNumber resolves a PdfObject to a float64, handling both PdfInt and

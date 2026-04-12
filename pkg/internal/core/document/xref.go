@@ -95,7 +95,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 		case tok.Type == lexer.TokenNumber:
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
 			p := parser.NewParser(lex)
-			obj, err := p.ParseObject()
+			obj, err := p.ParseObject(ctx)
 			if err != nil {
 				return fmt.Errorf("parsing xref stream object at offset %d: %w", currentOffset, err)
 			}
@@ -144,7 +144,7 @@ func mergeTrailerKeys(dst, src ast.PdfDict) {
 func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64) error {
 	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, offset))
 	p := parser.NewParser(lex)
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(ctx)
 	if err != nil {
 		return fmt.Errorf("parsing hybrid xref stream object at offset %d: %w", offset, err)
 	}

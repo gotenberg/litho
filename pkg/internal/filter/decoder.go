@@ -40,7 +40,7 @@ func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byt
 
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return stream.Bytes()
+		return stream.Bytes(ctx)
 	}
 
 	var filters []ast.PdfName
@@ -59,7 +59,7 @@ func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byt
 
 	parms := extractDecodeParms(stream.Dict, len(filters))
 
-	data, err := stream.Bytes()
+	data, err := stream.Bytes(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package graphics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -14,7 +15,7 @@ func TestArtifactBMC_Stripped(t *testing.T) {
 	ops := []content.Operation{
 		{Operator: "BMC", Operands: []ast.PdfObject{ast.PdfName("Artifact")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -30,7 +31,7 @@ func TestArtifactBMC_Stripped(t *testing.T) {
 	ops = []content.Operation{
 		{Operator: "EMC"},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 	state = m.Current()
@@ -49,7 +50,7 @@ func TestArtifactBDC_Stripped(t *testing.T) {
 			ast.PdfDict{"Type": ast.PdfName("Pagination")},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -66,7 +67,7 @@ func TestArtifactBMC_NotStrippedWhenDisabled(t *testing.T) {
 	ops := []content.Operation{
 		{Operator: "BMC", Operands: []ast.PdfObject{ast.PdfName("Artifact")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -88,7 +89,7 @@ func TestArtifactNested_RestoresCorrectly(t *testing.T) {
 		{Operator: "BMC", Operands: []ast.PdfObject{ast.PdfName("P")}},
 		{Operator: "BMC", Operands: []ast.PdfObject{ast.PdfName("Artifact")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 	state := m.Current()
@@ -100,7 +101,7 @@ func TestArtifactNested_RestoresCorrectly(t *testing.T) {
 	ops = []content.Operation{
 		{Operator: "EMC"},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 	state = m.Current()
@@ -112,7 +113,7 @@ func TestArtifactNested_RestoresCorrectly(t *testing.T) {
 	ops = []content.Operation{
 		{Operator: "EMC"},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 	if len(m.MarkedContent) != 0 {
@@ -127,7 +128,7 @@ func TestNonArtifactTag_NotSkipped(t *testing.T) {
 	ops := []content.Operation{
 		{Operator: "BMC", Operands: []ast.PdfObject{ast.PdfName("P")}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 

@@ -58,7 +58,7 @@ func TestFixCorruptICC_ReplacesTruncatedProfile(t *testing.T) {
 	if !ok {
 		t.Fatalf("replacement profile: got %T, want PdfStream", streamObj)
 	}
-	data, err := stream.Bytes()
+	data, err := stream.Bytes(context.Background())
 	if err != nil {
 		t.Fatalf("reading replacement profile bytes: %v", err)
 	}

@@ -2,6 +2,7 @@ package writer
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ func TestWriteXRefTable_Basic(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	_, _, err := WriteXRefTable(&buf, records, trailer)
+	_, _, err := WriteXRefTable(context.Background(), &buf, records, trailer)
 	if err != nil {
 		t.Fatalf("WriteXRefTable: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestWriteXRefTable_NonConsecutive(t *testing.T) {
 	trailer := ast.PdfDict{"Size": ast.PdfInt(6)}
 
 	var buf bytes.Buffer
-	_, _, err := WriteXRefTable(&buf, records, trailer)
+	_, _, err := WriteXRefTable(context.Background(), &buf, records, trailer)
 	if err != nil {
 		t.Fatalf("WriteXRefTable: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestWriteXRefStream_Basic(t *testing.T) {
 	allocator := NewObjAllocator(2)
 
 	var buf bytes.Buffer
-	_, err := WriteXRefStream(&buf, records, trailer, allocator)
+	_, err := WriteXRefStream(context.Background(), &buf, records, trailer, allocator)
 	if err != nil {
 		t.Fatalf("WriteXRefStream: %v", err)
 	}

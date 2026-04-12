@@ -3,6 +3,7 @@ package document
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"fmt"
 	"io"
 
@@ -62,7 +63,7 @@ func probeLinearization(r io.ReaderAt, fileSize int64) *LinearizationParams {
 	lex := lexer.NewLexer(ioat.NewReader(r, fileSize, 0))
 	p := parser.NewParser(lex)
 
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		return nil
 	}
@@ -138,7 +139,7 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 	// The hint stream is a regular PDF stream object at the given offset.
 	lex := lexer.NewLexer(ioat.NewReader(r, size, params.HintStreamOffset))
 	p := parser.NewParser(lex)
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse hint stream object: %w", err)
 	}
@@ -149,7 +150,7 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 	}
 
 	// Decode the stream data (may be FlateDecode compressed).
-	decoded, err := decodeHintStreamData(stream)
+	decoded, err := decodeHintStreamData(context.Background(), stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode hint stream: %w", err)
 	}
@@ -241,10 +242,10 @@ func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) 
 }
 
 // decodeHintStreamData decodes the hint stream, handling FlateDecode.
-func decodeHintStreamData(stream ast.PdfStream) ([]byte, error) {
+func decodeHintStreamData(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return stream.Bytes()
+		return stream.Bytes(ctx)
 	}
 
 	filterName, ok := filterObj.(ast.PdfName)
@@ -262,7 +263,7 @@ func decodeHintStreamData(stream ast.PdfStream) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported hint stream filter: %s", filterName)
 	}
 
-	data, err := stream.Bytes()
+	data, err := stream.Bytes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read hint stream data: %w", err)
 	}

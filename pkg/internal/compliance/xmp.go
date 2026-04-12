@@ -260,7 +260,7 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	}
 
 	// Decode the stream content.
-	xmpData, err := stream.Bytes()
+	xmpData, err := stream.Bytes(ctx)
 	if err != nil || len(xmpData) == 0 {
 		decoded, decErr := doc.DecodeStream(ctx, stream)
 		if decErr != nil {

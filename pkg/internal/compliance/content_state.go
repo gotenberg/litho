@@ -23,7 +23,6 @@ type gfxState struct {
 // contentStateChecker walks a parsed content stream with a graphics state
 // stack, checking compliance rules at painting operator boundaries.
 type contentStateChecker struct {
-	ctx       context.Context
 	doc       *document.Document
 	resources ast.PdfDict
 	part      int
@@ -59,7 +58,6 @@ func checkContentStreamStateOps(
 	}
 
 	c := &contentStateChecker{
-		ctx:       ctx,
 		doc:       doc,
 		resources: resources,
 		part:      part,
@@ -71,14 +69,14 @@ func checkContentStreamStateOps(
 		if idx%200 == 0 && ctx.Err() != nil {
 			return c.results
 		}
-		c.processOp(op)
+		c.processOp(ctx, op)
 	}
 
 	return c.results
 }
 
 // processOp dispatches a single content stream operator.
-func (c *contentStateChecker) processOp(op content.Operation) {
+func (c *contentStateChecker) processOp(ctx context.Context, op content.Operation) {
 	switch op.Operator {
 	case "q":
 		c.stack = append(c.stack, c.state)
@@ -91,21 +89,21 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 	case "gs":
 		if len(op.Operands) >= 1 {
 			if name, ok := op.Operands[0].(ast.PdfName); ok {
-				c.applyExtGState(string(name))
+				c.applyExtGState(ctx, string(name))
 			}
 		}
 
 	case "cs":
 		if len(op.Operands) >= 1 {
 			if name, ok := op.Operands[0].(ast.PdfName); ok {
-				c.state.fillCS = c.resolveCSType(string(name))
+				c.state.fillCS = c.resolveCSType(ctx, string(name))
 			}
 		}
 
 	case "CS":
 		if len(op.Operands) >= 1 {
 			if name, ok := op.Operands[0].(ast.PdfName); ok {
-				c.state.strokeCS = c.resolveCSType(string(name))
+				c.state.strokeCS = c.resolveCSType(ctx, string(name))
 			}
 		}
 
@@ -150,8 +148,8 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 }
 
 // applyExtGState reads OPM, OP, op from a named ExtGState resource.
-func (c *contentStateChecker) applyExtGState(name string) {
-	gsDict, err := document.ResolveDict(c.ctx, c.doc, c.resources["ExtGState"])
+func (c *contentStateChecker) applyExtGState(ctx context.Context, name string) {
+	gsDict, err := document.ResolveDict(ctx, c.doc, c.resources["ExtGState"])
 	if err != nil || gsDict == nil {
 		return
 	}
@@ -159,23 +157,23 @@ func (c *contentStateChecker) applyExtGState(name string) {
 	if !ok {
 		return
 	}
-	gs, err := document.ResolveDict(c.ctx, c.doc, gsObj)
+	gs, err := document.ResolveDict(ctx, c.doc, gsObj)
 	if err != nil || gs == nil {
 		return
 	}
 
 	if opmObj, has := gs["OPM"]; has {
-		if opm, err := document.ResolveInt(c.ctx, c.doc, opmObj); err == nil {
+		if opm, err := document.ResolveInt(ctx, c.doc, opmObj); err == nil {
 			c.state.opm = int(opm)
 		}
 	}
 	if opObj, has := gs["OP"]; has {
-		if b, err := document.ResolveBool(c.ctx, c.doc, opObj); err == nil {
+		if b, err := document.ResolveBool(ctx, c.doc, opObj); err == nil {
 			c.state.overprintStr = bool(b)
 		}
 	}
 	if opObj, has := gs["op"]; has {
-		if b, err := document.ResolveBool(c.ctx, c.doc, opObj); err == nil {
+		if b, err := document.ResolveBool(ctx, c.doc, opObj); err == nil {
 			c.state.overprintFill = bool(b)
 		}
 	}
@@ -183,7 +181,7 @@ func (c *contentStateChecker) applyExtGState(name string) {
 
 // resolveCSType resolves a color space name to a type string.
 // Caches results to avoid repeated ICC profile reads.
-func (c *contentStateChecker) resolveCSType(name string) string {
+func (c *contentStateChecker) resolveCSType(ctx context.Context, name string) string {
 	if cached, ok := c.csCache[name]; ok {
 		return cached
 	}
@@ -196,7 +194,7 @@ func (c *contentStateChecker) resolveCSType(name string) string {
 	}
 
 	// Look up in resources /ColorSpace dict.
-	csDict, err := document.ResolveDict(c.ctx, c.doc, c.resources["ColorSpace"])
+	csDict, err := document.ResolveDict(ctx, c.doc, c.resources["ColorSpace"])
 	if err != nil || csDict == nil {
 		c.csCache[name] = "Unknown"
 		return "Unknown"
@@ -209,27 +207,27 @@ func (c *contentStateChecker) resolveCSType(name string) string {
 	}
 
 	// Direct name reference (e.g., /DeviceRGB).
-	if csName, err := document.ResolveName(c.ctx, c.doc, csObj); err == nil && csName != "" {
+	if csName, err := document.ResolveName(ctx, c.doc, csObj); err == nil && csName != "" {
 		resolved := string(csName)
 		c.csCache[name] = resolved
 		return resolved
 	}
 
 	// Array form: [/ICCBased <stream>], [/Separation ...], etc.
-	arr, err := document.ResolveArray(c.ctx, c.doc, csObj)
+	arr, err := document.ResolveArray(ctx, c.doc, csObj)
 	if err != nil || len(arr) < 1 {
 		c.csCache[name] = "Unknown"
 		return "Unknown"
 	}
 
-	csType, _ := document.ResolveName(c.ctx, c.doc, arr[0])
+	csType, _ := document.ResolveName(ctx, c.doc, arr[0])
 	resolved := string(csType)
 
 	// For ICCBased, determine component count → CMYK/RGB/Gray.
 	if resolved == "ICCBased" && len(arr) >= 2 {
-		stream, err := document.ResolveStream(c.ctx, c.doc, arr[1])
+		stream, err := document.ResolveStream(ctx, c.doc, arr[1])
 		if err == nil {
-			n, _ := document.ResolveInt(c.ctx, c.doc, stream.Dict["N"])
+			n, _ := document.ResolveInt(ctx, c.doc, stream.Dict["N"])
 			switch n {
 			case 4:
 				resolved = "ICCBased-CMYK"

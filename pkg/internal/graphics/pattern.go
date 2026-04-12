@@ -10,7 +10,7 @@ import (
 // resolvePatternType looks up a pattern name in the current resources and
 // returns "Tiling" (PatternType 1) or "Shading" (PatternType 2), or
 // "Pattern" if the type cannot be determined.
-func (m *Machine) resolvePatternType(name string) string {
+func (m *Machine) resolvePatternType(ctx context.Context, name string) string {
 	if m.Resources == nil {
 		return "Pattern"
 	}
@@ -20,7 +20,7 @@ func (m *Machine) resolvePatternType(name string) string {
 		return "Pattern"
 	}
 
-	patDict, err := document.ResolveDict(m.Ctx, m.Doc, patObj)
+	patDict, err := document.ResolveDict(ctx, m.Doc, patObj)
 	if err != nil {
 		return "Pattern"
 	}
@@ -33,7 +33,7 @@ func (m *Machine) resolvePatternType(name string) string {
 		return "Pattern"
 	}
 
-	entryRes, err := document.ResolveObject(m.Ctx, m.Doc, entryObj)
+	entryRes, err := document.ResolveObject(ctx, m.Doc, entryObj)
 	if err != nil {
 		return "Pattern"
 	}
@@ -41,9 +41,9 @@ func (m *Machine) resolvePatternType(name string) string {
 	// Pattern can be a stream (Tiling) or dict (Shading).
 	switch v := entryRes.(type) {
 	case ast.PdfStream:
-		return classifyPattern(m.Ctx, m.Doc, v.Dict)
+		return classifyPattern(ctx, m.Doc, v.Dict)
 	case ast.PdfDict:
-		return classifyPattern(m.Ctx, m.Doc, v)
+		return classifyPattern(ctx, m.Doc, v)
 	}
 
 	return "Pattern"

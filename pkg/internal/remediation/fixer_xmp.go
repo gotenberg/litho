@@ -48,7 +48,7 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	var existingXMP string
 	if metaObj, ok := catalogDict["Metadata"]; ok {
 		if stream, err := document.ResolveStream(ctx, doc, metaObj); err == nil {
-			if data, err := stream.Bytes(); err == nil {
+			if data, err := stream.Bytes(ctx); err == nil {
 				existingXMP = string(data)
 			}
 		}

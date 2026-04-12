@@ -133,7 +133,7 @@ func (d *Document) findLastTrailer() (ast.PdfDict, error) {
 		dictStart := offset + int64(idx) + int64(len("trailer"))
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, dictStart))
 		p := parser.NewParser(lex)
-		obj, err := p.ParseObject()
+		obj, err := p.ParseObject(context.Background())
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse trailer dictionary: %w", err)
 		}
@@ -231,7 +231,7 @@ func (d *Document) parseTrailerAfterXRef(offset int64) ast.PdfDict {
 	dictStart := offset + int64(idx) + int64(len("trailer"))
 	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, dictStart))
 	p := parser.NewParser(lex)
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		return nil
 	}
@@ -246,7 +246,7 @@ func (d *Document) parseTrailerAfterXRef(offset int64) ast.PdfDict {
 func (d *Document) parseXRefStreamDict(offset int64) ast.PdfDict {
 	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, offset))
 	p := parser.NewParser(lex)
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		return nil
 	}

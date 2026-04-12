@@ -63,11 +63,11 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 					break
 				}
 
-				srcObj, err := p.ParseObject()
+				srcObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
-				dstObj, err := p.ParseObject()
+				dstObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
@@ -93,15 +93,15 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 					break
 				}
 
-				lowObj, err := p.ParseObject()
+				lowObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
-				highObj, err := p.ParseObject()
+				highObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}
-				dstObj, err := p.ParseObject()
+				dstObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
 				}

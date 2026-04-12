@@ -28,7 +28,6 @@ func assertRoundTrip[T any](t *testing.T, in T) {
 	}
 }
 
-
 func TestPage_JSONRoundTrip(t *testing.T) {
 	assertRoundTrip(t, Page{
 		PageNumber:  5,
@@ -342,7 +341,6 @@ func TestPageOffsetEntry_JSONRoundTrip(t *testing.T) {
 		ContentStreamOffset: 500,
 	})
 }
-
 
 func TestPDFAProfile_JSONValue(t *testing.T) {
 	tests := []struct {

@@ -284,7 +284,7 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 	}
 
 	p := parser.NewParser(lex)
-	trailerObj, err := p.ParseObject()
+	trailerObj, err := p.ParseObject(ctx)
 	if err != nil {
 		return nil, 0, err
 	}

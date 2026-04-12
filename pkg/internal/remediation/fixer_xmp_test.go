@@ -40,7 +40,7 @@ func TestFixXMP_GeneratesFromScratch_PDFA2b(t *testing.T) {
 		t.Errorf("XMP stream /Subtype: got %v, want XML", metaStream.Dict["Subtype"])
 	}
 
-	xmpBytes, err := metaStream.Bytes()
+	xmpBytes, err := metaStream.Bytes(context.Background())
 	if err != nil {
 		t.Fatalf("reading XMP bytes: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestFixXMP_GeneratesFromScratch_PDFA4(t *testing.T) {
 	newCatalog := pendingDict(t, alloc, 1)
 	metaRef := newCatalog["Metadata"].(ast.PdfIndirectRef)
 	metaStream := alloc.Pending()[metaRef.ObjectNum].(ast.PdfStream)
-	xmpBytes, _ := metaStream.Bytes()
+	xmpBytes, _ := metaStream.Bytes(context.Background())
 	xmpStr := string(xmpBytes)
 
 	if !strings.Contains(xmpStr, "<pdfaid:part>4</pdfaid:part>") {
@@ -87,7 +87,7 @@ func TestFixXMP_GeneratesFromScratch_PDFUA1(t *testing.T) {
 	newCatalog := pendingDict(t, alloc, 1)
 	metaRef := newCatalog["Metadata"].(ast.PdfIndirectRef)
 	metaStream := alloc.Pending()[metaRef.ObjectNum].(ast.PdfStream)
-	xmpBytes, _ := metaStream.Bytes()
+	xmpBytes, _ := metaStream.Bytes(context.Background())
 
 	// Per ISO 14289-1, the UA identifier lives under pdfuaid:part.
 	if !bytes.Contains(xmpBytes, []byte("pdfuaid:part>1")) {

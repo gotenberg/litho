@@ -25,7 +25,7 @@ type Operation struct {
 // and ParsePageContent. It reads tokens from the parser, collecting operands
 // and emitting operations when an operator keyword is encountered. Inline
 // images (BI/ID/EI) are detected and safely skipped.
-func parseOperations(p *parser.Parser) ([]Operation, error) {
+func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error) {
 	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
 	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
 	tokenCount := 0
@@ -33,7 +33,7 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 	for {
 		tokenCount++
 		if tokenCount%500 == 0 {
-			if err := p.CheckContext(); err != nil {
+			if err := parser.CheckContext(ctx); err != nil {
 				return ops, err
 			}
 		}
@@ -53,7 +53,7 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 				if _, err := p.Consume(); err != nil {
 					return nil, fmt.Errorf("failed to consume BI: %w", err)
 				}
-				dict, err := p.ParseInlineImageDict()
+				dict, err := p.ParseInlineImageDict(ctx)
 				if err != nil {
 					return nil, fmt.Errorf("inline image: %w", err)
 				}
@@ -74,7 +74,7 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 				return nil, fmt.Errorf("failed to consume operator token: %w", err)
 			}
 		} else {
-			obj, err := p.ParseObject()
+			obj, err := p.ParseObject(ctx)
 			if err != nil {
 				// Tolerate malformed operands (stray delimiters like ']',
 				// broken references, etc.) by consuming the bad token and
@@ -97,8 +97,8 @@ func parseOperations(p *parser.Parser) ([]Operation, error) {
 // content streams to be interrupted by deadline.
 func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex).WithContext(ctx)
-	return parseOperations(p)
+	p := parser.NewParser(lex)
+	return parseOperations(ctx, p)
 }
 
 // ParseStreamDataFormatChecked parses content stream data with PDF/A format
@@ -106,8 +106,8 @@ func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
 // violations detected by the parser.
 func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex).WithContext(ctx).WithFormatChecking()
-	ops, _ := parseOperations(p)
+	p := parser.NewParser(lex).WithFormatChecking()
+	ops, _ := parseOperations(ctx, p)
 	return ops, p.FormatViolations
 }
 
@@ -175,8 +175,8 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 	)
 
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(allData), int64(len(allData)), 0))
-	p := parser.NewParser(lex).WithContext(ctx)
-	ops, err := parseOperations(p)
+	p := parser.NewParser(lex)
+	ops, err := parseOperations(ctx, p)
 	if err != nil {
 		return nil, err
 	}

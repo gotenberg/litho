@@ -168,8 +168,8 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 			return failf(rule, "font %s on page %d: embedded CMap stream missing CIDSystemInfo",
 				fontName, pageNum)
 		}
-		cmapRegistry, _ = document.ResolveString(ctx, doc, cmapSysInfo["Registry"])     // Best-effort: empty string on failure triggers mismatch below.
-		cmapOrdering, _ = document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])     // Best-effort: empty string on failure triggers mismatch below.
+		cmapRegistry, _ = document.ResolveString(ctx, doc, cmapSysInfo["Registry"])  // Best-effort: empty string on failure triggers mismatch below.
+		cmapOrdering, _ = document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])  // Best-effort: empty string on failure triggers mismatch below.
 		cmapSupplement, _ = document.ResolveInt(ctx, doc, cmapSysInfo["Supplement"]) // Best-effort: zero on failure triggers mismatch below.
 	} else {
 		// Named (predefined) CMap: extract CIDSystemInfo from the name.

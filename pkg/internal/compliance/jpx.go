@@ -38,13 +38,13 @@ func jpxRulesForPart(part int) jpxRules {
 
 // checkJPXImage validates JPEG2000 data stream constraints for an Image XObject
 // with JPXDecode filter.
-func checkJPXImage(stream ast.PdfStream, name ast.PdfName, pageNum, part int) []Violation {
+func checkJPXImage(ctx context.Context, stream ast.PdfStream, name ast.PdfName, pageNum, part int) []Violation {
 	rules := jpxRulesForPart(part)
 	if rules.t1.Specification == "" {
 		return nil
 	}
 
-	data, err := stream.Bytes()
+	data, err := stream.Bytes(ctx)
 	if err != nil || len(data) < 12 {
 		return nil
 	}

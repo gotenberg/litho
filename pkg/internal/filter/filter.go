@@ -24,8 +24,6 @@ import (
 // expands into gigabytes.
 const maxDecompressedSize = 256 << 20 // 256 MB
 
-
-
 // limitedCopy copies from r to buf in 1 MB chunks up to maxDecompressedSize.
 // Context is checked between chunks so callers can cancel long decompression.
 func limitedCopy(ctx context.Context, buf *bytes.Buffer, r io.Reader) error {
@@ -63,7 +61,7 @@ var bufPool = sync.Pool{
 func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return stream.Bytes()
+		return stream.Bytes(ctx)
 	}
 
 	var filters []ast.PdfName
@@ -84,7 +82,7 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	// to the single filter) or an array of dicts matching the filter array.
 	parms := extractDecodeParms(stream.Dict, len(filters))
 
-	data, err := stream.Bytes()
+	data, err := stream.Bytes(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +385,7 @@ func decodeBrotli(ctx context.Context, data []byte) ([]byte, error) {
 func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		data, err := stream.Bytes()
+		data, err := stream.Bytes(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -414,7 +412,7 @@ func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, 
 	if len(filters) == 1 && extractPredictorParams(parms[0]) == nil {
 		switch filters[0] {
 		case "FlateDecode", "Fl":
-			raw, err := stream.Bytes()
+			raw, err := stream.Bytes(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -426,13 +424,13 @@ func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, 
 					earlyChange = pdfInt(ec)
 				}
 			}
-			raw, err := stream.Bytes()
+			raw, err := stream.Bytes(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return io.NopCloser(newLZWReader(bytes.NewReader(raw), earlyChange)), nil
 		case "BrotliDecode":
-			raw, err := stream.Bytes()
+			raw, err := stream.Bytes(ctx)
 			if err != nil {
 				return nil, err
 			}

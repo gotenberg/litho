@@ -31,10 +31,10 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 
 	var results []Violation
 
-	results = append(results, checkFileHeader(doc, profile)...)
+	results = append(results, checkFileHeader(ctx, doc, profile)...)
 	results = append(results, checkTrailerID(doc, profile)...)
 	results = append(results, checkEncryptionForbidden(doc, profile)...)
-	results = append(results, checkPostEOFData(doc, profile)...)
+	results = append(results, checkPostEOFData(ctx, doc, profile)...)
 	results = append(results, checkStreamExternalKeys(ctx, doc, profile)...)
 	results = append(results, checkStreamLZW(ctx, doc, profile)...)
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
@@ -108,8 +108,8 @@ func pageBoundRule(profile string) Rule {
 
 // checkFileHeader validates §6.1.2: file must start with %PDF-x.y and have
 // a binary comment marker.
-func checkFileHeader(doc *document.Document, profile string) []Violation {
-	buf, err := safeReadHeader(doc, headerReadSize)
+func checkFileHeader(ctx context.Context, doc *document.Document, profile string) []Violation {
+	buf, err := safeReadHeader(ctx, doc, headerReadSize)
 	if err != nil {
 		complog(doc).Debug("compliance.file_structure: cannot read header", "error", err)
 		return nil
@@ -269,7 +269,7 @@ func checkEncryptionForbidden(doc *document.Document, profile string) []Violatio
 
 // checkPostEOFData validates §6.1.3: no data after the last %%EOF marker,
 // except an optional single EOL.
-func checkPostEOFData(doc *document.Document, profile string) []Violation {
+func checkPostEOFData(ctx context.Context, doc *document.Document, profile string) []Violation {
 	fileSize := doc.FileSize()
 	if fileSize <= 0 {
 		return nil
@@ -278,7 +278,7 @@ func checkPostEOFData(doc *document.Document, profile string) []Violation {
 	// Read the tail of the file.
 	readLen := min(int64(tailReadSize), fileSize)
 	offset := fileSize - readLen
-	tail, err := doc.ReadFileBytes(offset, readLen)
+	tail, err := doc.ReadFileBytes(ctx, offset, readLen)
 	if err != nil {
 		complog(doc).Debug("compliance.file_structure: cannot read file tail", "error", err)
 		return nil
@@ -612,7 +612,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		// Phase 1: Read a small header window (up to 4 KiB) from the xref
 		// offset to find the "stream" keyword position within the object.
 		const headerBufSize = 4096
-		headerBuf, err := doc.ReadFileBytes(entry.Offset, headerBufSize)
+		headerBuf, err := doc.ReadFileBytes(ctx, entry.Offset, headerBufSize)
 		if err != nil {
 			continue
 		}
@@ -632,7 +632,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		// Read enough bytes to find "endstream" after optional EOL.
 		// "endstream" is 9 bytes, plus up to 2 EOL bytes = 11 bytes needed.
 		const tailBufSize = 32
-		tailBuf, err := doc.ReadFileBytes(absExpectedEnd, tailBufSize)
+		tailBuf, err := doc.ReadFileBytes(ctx, absExpectedEnd, tailBufSize)
 		if err != nil {
 			continue
 		}

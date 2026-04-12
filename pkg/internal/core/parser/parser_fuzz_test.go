@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
@@ -113,7 +114,7 @@ func FuzzParser(f *testing.F) {
 
 		// Try to parse repeatedly until EOF or error. The parser must never panic.
 		for range 1000 {
-			obj, err := p.ParseObject()
+			obj, err := p.ParseObject(context.Background())
 			if err != nil {
 				break
 			}

@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -18,7 +19,7 @@ func newParser(input string) *Parser {
 func TestParseDict_MissingCloseBracket(t *testing.T) {
 	// Dictionary with no closing >>.
 	p := newParser("<< /Type /Catalog /Pages 2 0 R")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -39,7 +40,7 @@ func TestParseDict_MissingCloseBracket(t *testing.T) {
 func TestParseArray_MissingCloseBracket(t *testing.T) {
 	// Array with no closing ].
 	p := newParser("[1 2 3")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestParseArray_MissingCloseBracket(t *testing.T) {
 func TestParseDict_ClosedByEndobj(t *testing.T) {
 	// Dictionary closed by endobj instead of >>.
 	p := newParser("1 0 obj << /Type /Page endobj")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -75,7 +76,7 @@ func TestParseDict_ClosedByEndobj(t *testing.T) {
 func TestParseArray_ClosedByEndobj(t *testing.T) {
 	// Array closed by endobj instead of ].
 	p := newParser("1 0 obj [10 20 30 endobj")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestParseArray_ClosedByEndobj(t *testing.T) {
 func TestParseDict_NullByteInName(t *testing.T) {
 	// Null byte inside a name should be stripped.
 	p := newParser("<< /Ty\x00pe /Ca\x00talog >>")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestParseDict_NullByteInName(t *testing.T) {
 func TestParseArray_DictWithoutSpace(t *testing.T) {
 	// Array element followed immediately by dict start.
 	p := newParser("[1 2<< /K /V >>]")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestParseArray_DictWithoutSpace(t *testing.T) {
 func TestParseIndirectObject_MissingEndobj(t *testing.T) {
 	// Object with no endobj keyword.
 	p := newParser("5 0 obj << /Type /Font >>")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -167,7 +168,7 @@ func TestParseNestedDict_MissingInnerClose(t *testing.T) {
 	// Here inner is fine, but test: << /Resources << /Font 1 0 R >>
 	// which would close outer dict, leaving Resources with partial inner.
 	p := newParser("<< /A << /B /C >>")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -190,7 +191,7 @@ func TestParseNestedDict_MissingInnerClose(t *testing.T) {
 func TestParseDict_NonNameKey_Skipped(t *testing.T) {
 	// A dict with a non-name key (integer) should skip it and continue parsing.
 	p := newParser("<< 42 /Type /Page >>")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestParseDict_NonNameKey_Skipped(t *testing.T) {
 func TestParseArray_HexStringWithoutSpace(t *testing.T) {
 	// Hex string immediately after a number: "3<ABCD>" should parse as 3 then hex string.
 	p := newParser("[3<ABCD>]")
-	obj, err := p.ParseObject()
+	obj, err := p.ParseObject(context.Background())
 	if err != nil {
 		t.Fatalf("ParseObject failed: %v", err)
 	}

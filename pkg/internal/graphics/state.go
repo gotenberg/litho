@@ -1,8 +1,6 @@
 package graphics
 
 import (
-	"context"
-
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
@@ -62,7 +60,6 @@ type MarkedContentState struct {
 
 // Machine is the graphics state machine that processes content stream operations.
 type Machine struct {
-	Ctx               context.Context //nolint:containedctx // Machine is a short-lived state machine; ctx is set per-page extraction
 	Stack             []State
 	MarkedContent     []MarkedContentState
 	IgnoreTextOps     bool

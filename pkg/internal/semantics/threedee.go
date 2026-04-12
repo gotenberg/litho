@@ -134,7 +134,7 @@ func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.
 			return "PRC", nil
 		case "3D":
 			// Generic /Type /3D. Try to detect from magic bytes.
-			data, err := stream.Bytes()
+			data, err := stream.Bytes(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -143,7 +143,7 @@ func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.
 	}
 
 	// Last resort: check magic bytes of the raw stream data.
-	data, err := stream.Bytes()
+	data, err := stream.Bytes(ctx)
 	if err != nil {
 		return "", err
 	}

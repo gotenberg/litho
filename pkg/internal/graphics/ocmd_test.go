@@ -1,6 +1,7 @@
 package graphics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -22,7 +23,7 @@ func TestOCMD_AnyOn_Visible(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -46,7 +47,7 @@ func TestOCMD_AnyOn_Hidden(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,7 +74,7 @@ func TestOCMD_AllOn_Visible(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,7 +97,7 @@ func TestOCMD_AllOn_Hidden(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -119,7 +120,7 @@ func TestOCMD_AnyOff_Visible(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +143,7 @@ func TestOCMD_AnyOff_Hidden(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,7 +166,7 @@ func TestOCMD_AllOff_Visible(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -188,7 +189,7 @@ func TestOCMD_AllOff_Hidden(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -210,7 +211,7 @@ func TestOCMD_DefaultPolicy_AnyOn(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -233,7 +234,7 @@ func TestOCMD_SingleName(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -255,7 +256,7 @@ func TestOCMD_UnknownLayers_DefaultVisible(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -276,7 +277,7 @@ func TestOCMD_MalformedDict_DefaultVisible(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 
@@ -297,7 +298,7 @@ func TestOCMD_EMC_RestoresVisibility(t *testing.T) {
 			},
 		}},
 	}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 	if !m.Current().SkipExtraction {
@@ -305,7 +306,7 @@ func TestOCMD_EMC_RestoresVisibility(t *testing.T) {
 	}
 
 	ops = []content.Operation{{Operator: "EMC"}}
-	if err := m.Execute(ops); err != nil {
+	if err := m.Execute(context.Background(), ops); err != nil {
 		t.Fatal(err)
 	}
 	if m.Current().SkipExtraction {

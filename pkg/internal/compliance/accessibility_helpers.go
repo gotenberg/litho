@@ -196,7 +196,7 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if err != nil {
 		// Fallback to raw bytes if decode fails (metadata streams are often uncompressed).
 		complog(doc).Debug("compliance.accessibility: doc.DecodeStream failed, trying raw", "error", err)
-		data, err = stream.Bytes()
+		data, err = stream.Bytes(ctx)
 		if err != nil {
 			complog(doc).Debug("compliance.accessibility: failed to read raw metadata stream", "error", err)
 			return nil, false

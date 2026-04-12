@@ -421,7 +421,10 @@ func (d *Document) SetRawReader(r io.ReaderAt) {
 }
 
 // ReadFileBytes reads a specific chunk of raw bytes directly from the underlying file.
-func (d *Document) ReadFileBytes(offset int64, length int64) ([]byte, error) {
+func (d *Document) ReadFileBytes(ctx context.Context, offset int64, length int64) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	buf := make([]byte, length)
 	_, err := d.r.ReadAt(buf, offset)
 	if err != nil && err != io.EOF {

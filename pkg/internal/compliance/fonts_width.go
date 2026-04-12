@@ -353,7 +353,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			// Fall back to raw data.
-			rawData, rawErr := stream.Bytes()
+			rawData, rawErr := stream.Bytes(ctx)
 			if rawErr == nil && len(rawData) > 0 {
 				return rawData
 			}

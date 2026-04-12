@@ -1,6 +1,7 @@
 package writer
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"maps"
@@ -13,7 +14,7 @@ import (
 // Serialize writes a [ast.PdfObject] to w in spec-compliant PDF syntax.
 // Streams write their raw bytes directly (content-preserving). Returns the
 // number of bytes written.
-func Serialize(w io.Writer, obj ast.PdfObject) (int64, error) {
+func Serialize(ctx context.Context, w io.Writer, obj ast.PdfObject) (int64, error) {
 	if obj == nil {
 		n, err := io.WriteString(w, "null")
 		return int64(n), err
@@ -40,15 +41,15 @@ func Serialize(w io.Writer, obj ast.PdfObject) (int64, error) {
 	case ast.PdfString:
 		return serializeString(w, v)
 	case ast.PdfArray:
-		return serializeArray(w, v)
+		return serializeArray(ctx, w, v)
 	case ast.PdfDict:
-		return serializeDict(w, v)
+		return serializeDict(ctx, w, v)
 	case ast.PdfIndirectRef:
 		s := fmt.Sprintf("%d %d R", v.ObjectNum, v.GenNum)
 		n, err := io.WriteString(w, s)
 		return int64(n), err
 	case ast.PdfStream:
-		return serializeStream(w, v)
+		return serializeStream(ctx, w, v)
 	default:
 		return 0, fmt.Errorf("unsupported PDF object type %T", obj)
 	}
@@ -56,7 +57,7 @@ func Serialize(w io.Writer, obj ast.PdfObject) (int64, error) {
 
 // SerializeIndirect writes "N 0 obj\n<object>\nendobj\n" and returns the
 // number of bytes written.
-func SerializeIndirect(w io.Writer, objNum int, obj ast.PdfObject) (int64, error) {
+func SerializeIndirect(ctx context.Context, w io.Writer, objNum int, obj ast.PdfObject) (int64, error) {
 	var total int64
 
 	header := fmt.Sprintf("%d 0 obj\n", objNum)
@@ -66,7 +67,7 @@ func SerializeIndirect(w io.Writer, objNum int, obj ast.PdfObject) (int64, error
 		return total, err
 	}
 
-	n2, err := Serialize(w, obj)
+	n2, err := Serialize(ctx, w, obj)
 	total += n2
 	if err != nil {
 		return total, err
@@ -190,7 +191,7 @@ func serializeHexString(w io.Writer, data []byte) (int64, error) {
 }
 
 // serializeArray writes a PDF array with space-separated elements.
-func serializeArray(w io.Writer, arr ast.PdfArray) (int64, error) {
+func serializeArray(ctx context.Context, w io.Writer, arr ast.PdfArray) (int64, error) {
 	var total int64
 	n, err := io.WriteString(w, "[")
 	total += int64(n)
@@ -198,6 +199,9 @@ func serializeArray(w io.Writer, arr ast.PdfArray) (int64, error) {
 		return total, err
 	}
 	for i, elem := range arr {
+		if err := ctx.Err(); err != nil {
+			return total, fmt.Errorf("serializing array element %d: %w", i, err)
+		}
 		if i > 0 {
 			n, err = io.WriteString(w, " ")
 			total += int64(n)
@@ -205,7 +209,7 @@ func serializeArray(w io.Writer, arr ast.PdfArray) (int64, error) {
 				return total, err
 			}
 		}
-		n2, err := Serialize(w, elem)
+		n2, err := Serialize(ctx, w, elem)
 		total += n2
 		if err != nil {
 			return total, err
@@ -218,7 +222,7 @@ func serializeArray(w io.Writer, arr ast.PdfArray) (int64, error) {
 
 // serializeDict writes a PDF dictionary with sorted keys for deterministic
 // output.
-func serializeDict(w io.Writer, d ast.PdfDict) (int64, error) {
+func serializeDict(ctx context.Context, w io.Writer, d ast.PdfDict) (int64, error) {
 	var total int64
 	n, err := io.WriteString(w, "<<")
 	total += int64(n)
@@ -233,6 +237,9 @@ func serializeDict(w io.Writer, d ast.PdfDict) (int64, error) {
 	sort.Strings(keys)
 
 	for _, k := range keys {
+		if err := ctx.Err(); err != nil {
+			return total, fmt.Errorf("serializing dict key %q: %w", k, err)
+		}
 		v := d[ast.PdfName(k)]
 		n, err = io.WriteString(w, " ")
 		total += int64(n)
@@ -249,7 +256,7 @@ func serializeDict(w io.Writer, d ast.PdfDict) (int64, error) {
 		if err != nil {
 			return total, err
 		}
-		n2, err = Serialize(w, v)
+		n2, err = Serialize(ctx, w, v)
 		total += n2
 		if err != nil {
 			return total, err
@@ -264,8 +271,8 @@ func serializeDict(w io.Writer, d ast.PdfDict) (int64, error) {
 // serializeStream writes a PDF stream: dict, "stream\r\n", raw bytes,
 // "\r\nendstream". The /Length key in the dict is updated to match the
 // actual raw byte count.
-func serializeStream(w io.Writer, s ast.PdfStream) (int64, error) {
-	data, err := s.Bytes()
+func serializeStream(ctx context.Context, w io.Writer, s ast.PdfStream) (int64, error) {
+	data, err := s.Bytes(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("reading stream bytes: %w", err)
 	}
@@ -279,7 +286,7 @@ func serializeStream(w io.Writer, s ast.PdfStream) (int64, error) {
 	dict["Length"] = ast.PdfInt(len(data))
 
 	var total int64
-	n2, err := serializeDict(w, dict)
+	n2, err := serializeDict(ctx, w, dict)
 	total += n2
 	if err != nil {
 		return total, err
