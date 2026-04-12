@@ -88,7 +88,7 @@ func WithFilterPlugin(p plugins.FilterDecoder) OpenOption {
 // file; call [Reader.Close] to release it.
 //
 // Reader is safe for concurrent use by multiple goroutines. All extraction
-// methods ([Reader.ExtractText], [Reader.GetMetadata], etc.) may be called
+// methods ([Reader.ExtractText], [Reader.Metadata], etc.) may be called
 // concurrently on the same Reader. [Reader.Close] and [Reader.ClearCache]
 // must not be called concurrently with other Reader methods.
 type Reader struct {
@@ -366,13 +366,58 @@ func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) 
 	return sb.String(), nil
 }
 
-// GetMetadata extracts standard document-level metadata (Title, Author, etc.).
-func (r *Reader) GetMetadata(ctx context.Context) (map[string]string, error) {
+// Permissions represents the document's permission flags as defined by
+// ISO 32000-2, Table 22. For unencrypted documents, all flags are true.
+type Permissions struct {
+	Print             bool // Bit 3: Print the document.
+	ModifyContent     bool // Bit 4: Modify document contents.
+	ExtractText       bool // Bit 5: Copy or extract text and graphics.
+	ModifyAnnotations bool // Bit 6: Add or modify annotations, fill form fields.
+	FillForms         bool // Bit 9: Fill form fields (even if bit 6 is clear).
+	Assemble          bool // Bit 11: Assemble the document.
+	PrintHighQuality  bool // Bit 12: Print high-quality (bit 3 must also be set).
+}
+
+// Permissions returns the document's permission flags. For unencrypted
+// documents, all permissions are granted.
+func (r *Reader) Permissions() Permissions {
+	if !r.IsEncrypted() {
+		return Permissions{
+			Print:             true,
+			ModifyContent:     true,
+			ExtractText:       true,
+			ModifyAnnotations: true,
+			FillForms:         true,
+			Assemble:          true,
+			PrintHighQuality:  true,
+		}
+	}
+	p := r.doc.Crypto.PermissionFlags()
+	return Permissions{
+		Print:             p&4 != 0,
+		ModifyContent:     p&8 != 0,
+		ExtractText:       p&16 != 0,
+		ModifyAnnotations: p&32 != 0,
+		FillForms:         p&256 != 0,
+		Assemble:          p&1024 != 0,
+		PrintHighQuality:  p&2048 != 0,
+	}
+}
+
+// XMPMetadata returns the raw XMP XML bytes from the catalog /Metadata stream.
+// Returns nil if no XMP metadata is present. Use [Reader.Metadata] for parsed
+// key-value metadata.
+func (r *Reader) XMPMetadata(ctx context.Context) ([]byte, error) {
+	return semantics.GetRawXMP(ctx, r.doc)
+}
+
+// Metadata extracts standard document-level metadata (Title, Author, etc.).
+func (r *Reader) Metadata(ctx context.Context) (map[string]string, error) {
 	return semantics.GetMetadata(ctx, r.doc)
 }
 
-// GetBookmarks extracts the hierarchical outline (table of contents) from the document.
-func (r *Reader) GetBookmarks(ctx context.Context) ([]models.Bookmark, error) {
+// Bookmarks extracts the hierarchical outline (table of contents) from the document.
+func (r *Reader) Bookmarks(ctx context.Context) ([]models.Bookmark, error) {
 	return semantics.GetOutline(ctx, r.doc)
 }
 
@@ -550,10 +595,10 @@ func (r *Reader) buildBookmarkInput(ctx context.Context) (bookmarks.Input, error
 	}, nil
 }
 
-// GetFormData extracts user-typed values from interactive AcroForms as a
+// FormData extracts user-typed values from interactive AcroForms as a
 // simple name-to-value map. It automatically evaluates any PDF JavaScript
-// calculation scripts. For richer field metadata, use [Reader.GetFormFields].
-func (r *Reader) GetFormData(ctx context.Context) (map[string]string, error) {
+// calculation scripts. For richer field metadata, use [Reader.FormFields].
+func (r *Reader) FormData(ctx context.Context) (map[string]string, error) {
 	fields, err := annotation.ExtractFormData(ctx, r.doc)
 	if err != nil {
 		return nil, err
@@ -566,10 +611,10 @@ func (r *Reader) GetFormData(ctx context.Context) (map[string]string, error) {
 	return data, nil
 }
 
-// GetFormFields extracts interactive AcroForm fields with full metadata
+// FormFields extracts interactive AcroForm fields with full metadata
 // (name, value, type, flags). It automatically evaluates any PDF JavaScript
 // calculation scripts.
-func (r *Reader) GetFormFields(ctx context.Context) ([]models.FormField, error) {
+func (r *Reader) FormFields(ctx context.Context) ([]models.FormField, error) {
 	return annotation.ExtractFormData(ctx, r.doc)
 }
 
@@ -635,10 +680,10 @@ func (r *Reader) IsPortfolio(ctx context.Context) (bool, error) {
 	return semantics.IsPortfolio(ctx, r.doc)
 }
 
-// GetEmbeddedFiles returns all files from the document's /EmbeddedFiles name
+// EmbeddedFiles returns all files from the document's /EmbeddedFiles name
 // tree. Each item includes the original filename, MIME type, and a lazy Open
 // accessor. Callers can recursively pass embedded PDFs back into pdf.Open.
-func (r *Reader) GetEmbeddedFiles(ctx context.Context) ([]models.EmbeddedFile, error) {
+func (r *Reader) EmbeddedFiles(ctx context.Context) ([]models.EmbeddedFile, error) {
 	return semantics.ExtractPortfolioItems(ctx, r.doc)
 }
 
@@ -657,9 +702,9 @@ func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) ([]models.
 	return annotation.ExtractAnnotations(ctx, r.doc, pages[pageNum-1], pageMap)
 }
 
-// DetectRedactions extracts text elements from the given 1-based page number
+// ExtractRedactedText extracts text elements from the given 1-based page number
 // and flags any that fall inside unapplied /Redact annotations.
-func (r *Reader) DetectRedactions(ctx context.Context, pageNum int) ([]models.TextElement, error) {
+func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) ([]models.TextElement, error) {
 	pages, err := r.resolvePages(ctx)
 	if err != nil {
 		return nil, err
@@ -757,11 +802,11 @@ func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) ([]
 	return signature.VerifySignatures(ctx, r.doc, roots)
 }
 
-// GetDSSInfo returns a summary of the Document Security Store (/DSS)
+// DSSInfo returns a summary of the Document Security Store (/DSS)
 // contents. The DSS holds the embedded validation materials (certificates,
 // CRLs, OCSP responses) needed for Long-Term Validation. Returns nil if
 // no DSS exists.
-func (r *Reader) GetDSSInfo(ctx context.Context) (*models.DSSInfo, error) {
+func (r *Reader) DSSInfo(ctx context.Context) (*models.DSSInfo, error) {
 	return signature.GetDSSInfo(ctx, r.doc)
 }
 
@@ -801,10 +846,10 @@ func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Mod
 	return semantics.Extract3DModels(ctx, r.doc, targetPage)
 }
 
-// GetPage returns the geometry and metadata for the given 1-based page number.
+// Page returns the geometry and metadata for the given 1-based page number.
 // Width and Height are effective dimensions in PDF points, derived from the
 // CropBox (the visible area) and accounting for /Rotate and /UserUnit.
-func (r *Reader) GetPage(ctx context.Context, pageNum int) (models.Page, error) {
+func (r *Reader) Page(ctx context.Context, pageNum int) (models.Page, error) {
 	p, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return models.Page{}, err
@@ -872,9 +917,9 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) ([]models
 	return elements, nil
 }
 
-// InspectImages returns metadata for Image XObjects on the given 1-based
+// ExtractImages returns metadata for Image XObjects on the given 1-based
 // page number without decoding pixel data.
-func (r *Reader) InspectImages(ctx context.Context, pageNum int) ([]models.ImageMeta, error) {
+func (r *Reader) ExtractImages(ctx context.Context, pageNum int) ([]models.ImageMeta, error) {
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err

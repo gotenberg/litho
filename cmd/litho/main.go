@@ -34,7 +34,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		_ = reader.Close() //nolint:errcheck
 	}()
 
-	metadata, err := reader.GetMetadata(ctx)
+	metadata, err := reader.Metadata(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "Warning: failed to extract metadata: %v\n", err)
 	}
@@ -58,7 +58,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, text)
 	}
 
-	formData, err := reader.GetFormData(ctx)
+	formData, err := reader.FormData(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "Warning: failed to extract form data: %v\n", err)
 	}

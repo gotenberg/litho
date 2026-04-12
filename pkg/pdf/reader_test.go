@@ -58,14 +58,14 @@ func almostEqual(a, b, epsilon float64) bool {
 	return math.Abs(a-b) < epsilon
 }
 
-func TestGetPage_Portrait(t *testing.T) {
+func TestPage_Portrait(t *testing.T) {
 	data := letterPDF()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 
-	p, err := r.GetPage(context.Background(), 1)
+	p, err := r.Page(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetPage: %v", err)
 	}
@@ -85,14 +85,14 @@ func TestGetPage_Portrait(t *testing.T) {
 	}
 }
 
-func TestGetPage_Landscape(t *testing.T) {
+func TestPage_Landscape(t *testing.T) {
 	data := landscapePDF()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 
-	p, err := r.GetPage(context.Background(), 1)
+	p, err := r.Page(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetPage: %v", err)
 	}
@@ -108,14 +108,14 @@ func TestGetPage_Landscape(t *testing.T) {
 	}
 }
 
-func TestGetPage_Rotated90(t *testing.T) {
+func TestPage_Rotated90(t *testing.T) {
 	data := rotatedPDF()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 
-	p, err := r.GetPage(context.Background(), 1)
+	p, err := r.Page(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetPage: %v", err)
 	}
@@ -135,14 +135,14 @@ func TestGetPage_Rotated90(t *testing.T) {
 	}
 }
 
-func TestGetPage_CropBox(t *testing.T) {
+func TestPage_CropBox(t *testing.T) {
 	data := cropBoxPDF()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 
-	p, err := r.GetPage(context.Background(), 1)
+	p, err := r.Page(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetPage: %v", err)
 	}
@@ -168,14 +168,14 @@ func userUnitPDF() []byte {
 			"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n215\n%%EOF\n")
 }
 
-func TestGetPage_UserUnit(t *testing.T) {
+func TestPage_UserUnit(t *testing.T) {
 	data := userUnitPDF()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 
-	p, err := r.GetPage(context.Background(), 1)
+	p, err := r.Page(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetPage: %v", err)
 	}
@@ -195,14 +195,14 @@ func TestGetPage_UserUnit(t *testing.T) {
 	}
 }
 
-func TestGetPage_InvalidPage(t *testing.T) {
+func TestPage_InvalidPage(t *testing.T) {
 	data := letterPDF()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 
-	_, err = r.GetPage(context.Background(), 99)
+	_, err = r.Page(context.Background(), 99)
 	if err == nil {
 		t.Error("expected error for invalid page number")
 	}
@@ -314,7 +314,7 @@ func TestConcurrentMixedMethods(t *testing.T) {
 			defer wg.Done()
 			// GetMetadata returns an error for our minimal PDF (no /Info dict);
 			// we only care that it doesn't panic or race.
-			_, _ = r.GetMetadata(context.Background())
+			_, _ = r.Metadata(context.Background())
 		}()
 
 		go func() {
@@ -326,7 +326,7 @@ func TestConcurrentMixedMethods(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			if _, err := r.GetBookmarks(context.Background()); err != nil {
+			if _, err := r.Bookmarks(context.Background()); err != nil {
 				errs <- err
 			}
 		}()

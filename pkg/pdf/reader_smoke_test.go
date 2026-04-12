@@ -44,30 +44,30 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 		t.Fatalf("NumPages: got %d, want 3", n)
 	}
 
-	if _, err := r.GetMetadata(ctx); err != nil {
-		t.Errorf("GetMetadata: %v", err)
+	if _, err := r.Metadata(ctx); err != nil {
+		t.Errorf("Metadata: %v", err)
 	}
-	if _, err := r.GetBookmarks(ctx); err != nil {
-		t.Errorf("GetBookmarks: %v", err)
+	if _, err := r.Bookmarks(ctx); err != nil {
+		t.Errorf("Bookmarks: %v", err)
 	}
-	if _, err := r.GetFormData(ctx); err != nil {
-		t.Errorf("GetFormData: %v", err)
+	if _, err := r.FormData(ctx); err != nil {
+		t.Errorf("FormData: %v", err)
 	}
-	if _, err := r.GetFormFields(ctx); err != nil {
-		t.Errorf("GetFormFields: %v", err)
+	if _, err := r.FormFields(ctx); err != nil {
+		t.Errorf("FormFields: %v", err)
 	}
 	_ = r.HasAcroForm(ctx)
 	if _, err := r.IsPortfolio(ctx); err != nil {
 		t.Errorf("IsPortfolio: %v", err)
 	}
-	if _, err := r.GetEmbeddedFiles(ctx); err != nil {
-		t.Errorf("GetEmbeddedFiles: %v", err)
+	if _, err := r.EmbeddedFiles(ctx); err != nil {
+		t.Errorf("EmbeddedFiles: %v", err)
 	}
 	if _, err := r.ExtractSignatures(ctx); err != nil {
 		t.Errorf("ExtractSignatures: %v", err)
 	}
-	if _, err := r.GetDSSInfo(ctx); err != nil {
-		t.Errorf("GetDSSInfo: %v", err)
+	if _, err := r.DSSInfo(ctx); err != nil {
+		t.Errorf("DSSInfo: %v", err)
 	}
 	if _, err := r.ExtractPronunciationLexicons(ctx); err != nil {
 		t.Errorf("ExtractPronunciationLexicons: %v", err)
@@ -78,16 +78,16 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 
 	// Per-page getters on every page.
 	for p := 1; p <= n; p++ {
-		page, err := r.GetPage(ctx, p)
+		page, err := r.Page(ctx, p)
 		if err != nil {
-			t.Errorf("GetPage(%d): %v", p, err)
+			t.Errorf("Page(%d): %v", p, err)
 			continue
 		}
 		if page.PageNumber != p {
-			t.Errorf("GetPage(%d).PageNumber = %d", p, page.PageNumber)
+			t.Errorf("Page(%d).PageNumber = %d", p, page.PageNumber)
 		}
 		if page.Width <= 0 || page.Height <= 0 {
-			t.Errorf("GetPage(%d): non-positive dims (%v × %v)", p, page.Width, page.Height)
+			t.Errorf("Page(%d): non-positive dims (%v × %v)", p, page.Width, page.Height)
 		}
 
 		if _, err := r.ExtractText(ctx, p); err != nil {
@@ -102,14 +102,14 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 		if _, err := r.ExtractAnnotations(ctx, p); err != nil {
 			t.Errorf("ExtractAnnotations(%d): %v", p, err)
 		}
-		if _, err := r.InspectImages(ctx, p); err != nil {
-			t.Errorf("InspectImages(%d): %v", p, err)
+		if _, err := r.ExtractImages(ctx, p); err != nil {
+			t.Errorf("ExtractImages(%d): %v", p, err)
 		}
 		if _, err := r.ExtractLines(ctx, p); err != nil {
 			t.Errorf("ExtractLines(%d): %v", p, err)
 		}
-		if _, err := r.DetectRedactions(ctx, p); err != nil {
-			t.Errorf("DetectRedactions(%d): %v", p, err)
+		if _, err := r.ExtractRedactedText(ctx, p); err != nil {
+			t.Errorf("ExtractRedactedText(%d): %v", p, err)
 		}
 		if _, err := r.ExtractGeoData(ctx, p); err != nil {
 			t.Errorf("ExtractGeoData(%d): %v", p, err)
@@ -163,18 +163,18 @@ func TestReader_Smoke_FormPDF(t *testing.T) {
 	if !r.HasAcroForm(ctx) {
 		t.Error("HasAcroForm: got false, want true")
 	}
-	fields, err := r.GetFormFields(ctx)
+	fields, err := r.FormFields(ctx)
 	if err != nil {
-		t.Fatalf("GetFormFields: %v", err)
+		t.Fatalf("FormFields: %v", err)
 	}
 	if len(fields) == 0 {
-		t.Error("GetFormFields: got 0 fields, want >0")
+		t.Error("FormFields: got 0 fields, want >0")
 	}
-	data2, err := r.GetFormData(ctx)
+	data2, err := r.FormData(ctx)
 	if err != nil {
-		t.Fatalf("GetFormData: %v", err)
+		t.Fatalf("FormData: %v", err)
 	}
 	if len(data2) == 0 {
-		t.Error("GetFormData: got empty, want >0 entries")
+		t.Error("FormData: got empty, want >0 entries")
 	}
 }

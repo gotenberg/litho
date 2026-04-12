@@ -62,3 +62,39 @@ func setInfoField(d ast.PdfDict, key, value string) {
 		d[ast.PdfName(key)] = ast.PdfString(value)
 	}
 }
+
+// ClearMetadata removes all document metadata. It empties all /Info dictionary
+// fields and removes the catalog /Metadata stream (XMP).
+func ClearMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+	// Clear /Info dictionary: replace with an empty dict.
+	if infoRef, ok := doc.Index.Trailer["Info"].(ast.PdfIndirectRef); ok {
+		alloc.AllocAt(infoRef.ObjectNum, ast.PdfDict{})
+	} else {
+		ref := alloc.Alloc(ast.PdfDict{})
+		doc.Index.Trailer["Info"] = ref
+	}
+
+	// Remove /Metadata from catalog.
+	rootObj, ok := doc.Index.Trailer["Root"]
+	if !ok {
+		return nil
+	}
+	catalogRef, ok := rootObj.(ast.PdfIndirectRef)
+	if !ok {
+		return nil
+	}
+
+	catalogDict := ResolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return nil
+	}
+
+	if _, hasMetadata := catalogDict["Metadata"]; hasMetadata {
+		newCatalog := make(ast.PdfDict, len(catalogDict))
+		maps.Copy(newCatalog, catalogDict)
+		delete(newCatalog, ast.PdfName("Metadata"))
+		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+	}
+
+	return nil
+}

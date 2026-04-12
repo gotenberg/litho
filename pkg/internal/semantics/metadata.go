@@ -230,6 +230,34 @@ func resolveXMPStream(ctx context.Context, doc *document.Document, ref ast.PdfOb
 	return parseXMP(decoded)
 }
 
+// GetRawXMP extracts the raw XMP XML bytes from the catalog /Metadata stream.
+// Returns nil if no XMP metadata is present.
+func GetRawXMP(ctx context.Context, doc *document.Document) ([]byte, error) {
+	rootObj, ok := doc.Index.Trailer["Root"]
+	if !ok {
+		return nil, nil
+	}
+	catalog, err := document.ResolveDict(ctx, doc, rootObj)
+	if err != nil || catalog == nil {
+		return nil, nil
+	}
+
+	metaRef, ok := catalog["Metadata"]
+	if !ok {
+		return nil, nil
+	}
+
+	stream, err := document.ResolveStream(ctx, doc, metaRef)
+	if err != nil || stream.Dict == nil {
+		return nil, nil
+	}
+	decoded, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil, fmt.Errorf("decoding XMP metadata stream: %w", err)
+	}
+	return decoded, nil
+}
+
 // getInfoMetadata extracts the legacy /Info dictionary metadata.
 func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]string {
 	infoObj, ok := doc.Index.Trailer["Info"]

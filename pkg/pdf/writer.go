@@ -359,6 +359,16 @@ func (w *Writer) SetMetadata(meta Metadata) {
 	})
 }
 
+// ClearMetadata removes all document metadata: the /Info dictionary is emptied
+// and the catalog /Metadata stream (XMP) is removed. Forces a full rewrite.
+// The mutation is queued and applied when [Writer.WriteTo] is called.
+func (w *Writer) ClearMetadata() {
+	w.forceRewrite = true
+	w.mutations = append(w.mutations, mutation{
+		apply: mutations.ClearMetadata,
+	})
+}
+
 // RotatePages sets the /Rotate value for the given 1-based page numbers.
 // Rotation must be a multiple of 90 (0, 90, 180, 270). The mutation is
 // queued and applied when [Writer.WriteTo] is called.
@@ -373,6 +383,52 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 				return fmt.Errorf("resolving pages: %w", err)
 			}
 			return mutations.RotatePages(ctx, alloc, resolvedPages, rotation, pages)
+		},
+	})
+	return nil
+}
+
+// DeletePages removes the specified 1-based pages from the document.
+// Forces a full rewrite. The mutation is queued and applied when
+// [Writer.WriteTo] is called.
+func (w *Writer) DeletePages(pages ...int) error {
+	if len(pages) == 0 {
+		return fmt.Errorf("no pages specified")
+	}
+	w.forceRewrite = true
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			resolvedPages, err := w.reader.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving pages: %w", err)
+			}
+			return mutations.DeletePages(ctx, alloc, doc, resolvedPages, pages)
+		},
+	})
+	return nil
+}
+
+// InsertPages inserts pages from source at the given 0-based position in
+// the document. Position 0 inserts before the first page; position equal
+// to the current page count appends. If sourcePages is empty, all pages
+// from source are inserted. Forces a full rewrite. The mutation is queued
+// and applied when [Writer.WriteTo] is called.
+func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error {
+	if source == nil {
+		return fmt.Errorf("insert pages: source is nil")
+	}
+	w.forceRewrite = true
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			targetPages, err := w.reader.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving target pages: %w", err)
+			}
+			srcPages, err := source.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving source pages: %w", err)
+			}
+			return mutations.InsertPages(ctx, alloc, doc, targetPages, pos, source.doc, srcPages, sourcePages)
 		},
 	})
 	return nil
@@ -426,7 +482,7 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 			case BookmarkReplace:
 				// nothing to merge
 			case BookmarkPrepend, BookmarkAppend:
-				existing, err := w.reader.GetBookmarks(ctx)
+				existing, err := w.reader.Bookmarks(ctx)
 				if err == nil && len(existing) > 0 {
 					if mode == BookmarkPrepend {
 						merged := make([]models.Bookmark, 0, len(generated)+len(existing))
@@ -510,9 +566,9 @@ func (w *Writer) Encrypt(cfg EncryptConfig) {
 	w.forceRewrite = true
 }
 
-// Decrypt removes encryption from the output document. The Reader must have
-// been opened with the correct password. Forces a full rewrite.
-func (w *Writer) Decrypt() {
+// RemoveEncryption removes encryption from the output document. The Reader
+// must have been opened with the correct password. Forces a full rewrite.
+func (w *Writer) RemoveEncryption() {
 	w.decrypt = true
 	w.forceRewrite = true
 }
@@ -542,7 +598,10 @@ func (w *Writer) FlattenForm() {
 // StampText overlays text on the specified 1-based pages. If no pages are
 // specified, the stamp is applied to all pages. Uses incremental update.
 // The mutation is queued and applied when [Writer.WriteTo] is called.
-func (w *Writer) StampText(stamp TextStamp, pages ...int) {
+func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
+	if stamp.Text == "" {
+		return fmt.Errorf("text stamp: empty text")
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
@@ -552,6 +611,7 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) {
 			return mutations.StampText(ctx, alloc, doc, resolvedPages, textStampToOptions(stamp), pages)
 		},
 	})
+	return nil
 }
 
 // StampImage overlays a JPEG or PNG image on the specified 1-based pages.
@@ -650,6 +710,17 @@ func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.AddAttachment(ctx, alloc, doc, name, data, mimeType)
+		},
+	})
+}
+
+// RemoveAttachment removes a file from the document's /EmbeddedFiles name
+// tree by its filename. Uses incremental update. The mutation is queued and
+// applied when [Writer.WriteTo] is called.
+func (w *Writer) RemoveAttachment(name string) {
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			return mutations.RemoveAttachment(ctx, alloc, doc, name)
 		},
 	})
 }

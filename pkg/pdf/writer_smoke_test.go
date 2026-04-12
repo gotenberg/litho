@@ -52,9 +52,9 @@ func TestWriter_RoundTrip_SetMetadata_All(t *testing.T) {
 	})
 	defer r2.Close()
 
-	meta, err := r2.GetMetadata(ctx)
+	meta, err := r2.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	// Behavior contract: keys that were set must be present and non-empty
 	// after round-trip. Exact string equality is too fragile (encoding,
@@ -77,7 +77,7 @@ func TestWriter_RoundTrip_RotatePages(t *testing.T) {
 	defer r2.Close()
 
 	for _, p := range []int{1, 2} {
-		page, err := r2.GetPage(ctx, p)
+		page, err := r2.Page(ctx, p)
 		if err != nil {
 			t.Fatalf("GetPage(%d): %v", p, err)
 		}
@@ -102,9 +102,9 @@ func TestWriter_RoundTrip_SetBookmarks(t *testing.T) {
 	})
 	defer r2.Close()
 
-	got, err := r2.GetBookmarks(ctx)
+	got, err := r2.Bookmarks(ctx)
 	if err != nil {
-		t.Fatalf("GetBookmarks: %v", err)
+		t.Fatalf("Bookmarks: %v", err)
 	}
 	if len(got) < len(want) {
 		t.Fatalf("bookmark count: got %d, want at least %d", len(got), len(want))
@@ -202,7 +202,7 @@ func TestWriter_RoundTrip_EncryptThenDecrypt(t *testing.T) {
 	defer r2.Close()
 
 	w2 := NewWriter(r2)
-	w2.Decrypt()
+	w2.RemoveEncryption()
 	var decrypted bytes.Buffer
 	if err := w2.WriteTo(ctx, &decrypted); err != nil {
 		t.Fatalf("decrypt WriteTo: %v", err)
@@ -226,9 +226,9 @@ func TestWriter_RoundTrip_SetFormField(t *testing.T) {
 	})
 	defer r2.Close()
 
-	data, err := r2.GetFormData(ctx)
+	data, err := r2.FormData(ctx)
 	if err != nil {
-		t.Fatalf("GetFormData: %v", err)
+		t.Fatalf("FormData: %v", err)
 	}
 	if data["name"] != "Round-Trip Value" {
 		t.Errorf("form field name: got %q, want %q", data["name"], "Round-Trip Value")
@@ -239,10 +239,12 @@ func TestWriter_RoundTrip_StampText_Survives(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	r2 := openRewrite(t, threePagePDF(), func(w *Writer) {
-		w.StampText(TextStamp{
+		if err := w.StampText(TextStamp{
 			Text: "STAMPED",
 			X:    100, Y: 500, FontSize: 24,
-		}, 1)
+		}, 1); err != nil {
+			t.Fatalf("StampText: %v", err)
+		}
 	})
 	defer r2.Close()
 
@@ -267,9 +269,9 @@ func TestWriter_RoundTrip_AddAttachment(t *testing.T) {
 	})
 	defer r2.Close()
 
-	files, err := r2.GetEmbeddedFiles(ctx)
+	files, err := r2.EmbeddedFiles(ctx)
 	if err != nil {
-		t.Fatalf("GetEmbeddedFiles: %v", err)
+		t.Fatalf("EmbeddedFiles: %v", err)
 	}
 	var found bool
 	for _, f := range files {

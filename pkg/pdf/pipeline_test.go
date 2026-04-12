@@ -99,7 +99,7 @@ func TestPipeline_Apply_SetMetadata(t *testing.T) {
 	}
 	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	defer r2.Close()
-	meta, _ := r2.GetMetadata(ctx)
+	meta, _ := r2.Metadata(ctx)
 	if meta["Title"] != "Piped" {
 		t.Errorf("title: got %q, want %q", meta["Title"], "Piped")
 	}
@@ -166,7 +166,7 @@ func TestPipeline_Split_ThenApply(t *testing.T) {
 	if n, _ := r2.NumPages(ctx); n != 2 {
 		t.Errorf("pages: got %d, want 2", n)
 	}
-	meta, _ := r2.GetMetadata(ctx)
+	meta, _ := r2.Metadata(ctx)
 	if meta["Title"] != "After Split" {
 		t.Errorf("title: got %q", meta["Title"])
 	}
@@ -191,7 +191,7 @@ func TestPipeline_Apply_ThenSplit(t *testing.T) {
 	}
 	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	defer r2.Close()
-	meta, _ := r2.GetMetadata(ctx)
+	meta, _ := r2.Metadata(ctx)
 	if meta["Title"] != "Before Split" {
 		t.Errorf("title: got %q", meta["Title"])
 	}

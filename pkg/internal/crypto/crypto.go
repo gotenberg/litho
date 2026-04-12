@@ -311,6 +311,13 @@ func (h *Handler) Authenticate(password string) error {
 	return ErrInvalidPassword
 }
 
+// PermissionFlags returns the raw /P value from the encrypt dictionary.
+// The returned integer encodes permission bits as defined by ISO 32000-2,
+// Table 22.
+func (h *Handler) PermissionFlags() int {
+	return h.pVal
+}
+
 // GetObjKey generates the specific encryption key for an object.
 func (h *Handler) GetObjKey(objNum, genNum int) []byte {
 	md := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec

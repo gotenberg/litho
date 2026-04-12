@@ -139,7 +139,7 @@ type SignatureValidation struct {
 	NotAfter       string `json:"notAfter"`
 	SigningTime    string `json:"signingTime,omitempty"`
 	TimestampValid bool   `json:"timestampValid"`
-	Error          string `json:"error,omitempty"`
+	ErrorMessage   string `json:"errorMessage,omitempty"`
 
 	// LTV / PAdES fields
 	HasDSS          bool   `json:"hasDSS,omitempty"`

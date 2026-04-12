@@ -1027,7 +1027,7 @@ func lithoReference(ctx context.Context, r *pdf.Reader, id string, lastPage int)
 	fixture.Metadata.Info.PDFFormatVersion = r.Version()
 	fixture.Metadata.Info.IsLinearized = r.IsLinearized()
 
-	if meta, err := r.GetMetadata(ctx); err == nil {
+	if meta, err := r.Metadata(ctx); err == nil {
 		fixture.Metadata.Info.Author = meta["Author"]
 		fixture.Metadata.Info.Title = meta["Title"]
 		fixture.Metadata.Info.Creator = meta["Creator"]

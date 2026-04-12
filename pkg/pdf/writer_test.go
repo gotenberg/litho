@@ -156,9 +156,9 @@ func TestWriter_SetMetadata(t *testing.T) {
 		t.Fatalf("Open modified: %v", err)
 	}
 
-	meta, err := r2.GetMetadata(ctx)
+	meta, err := r2.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 
 	if meta["Title"] != "New Title" {
@@ -194,9 +194,9 @@ func TestWriter_RotatePages(t *testing.T) {
 		t.Fatalf("Open modified: %v", err)
 	}
 
-	page, err := r2.GetPage(ctx, 1)
+	page, err := r2.Page(ctx, 1)
 	if err != nil {
-		t.Fatalf("GetPage: %v", err)
+		t.Fatalf("Page: %v", err)
 	}
 
 	if page.Rotate != 90 {
@@ -245,9 +245,9 @@ func TestWriter_SetBookmarks(t *testing.T) {
 		t.Fatalf("Open modified: %v", err)
 	}
 
-	bms, err := r2.GetBookmarks(ctx)
+	bms, err := r2.Bookmarks(ctx)
 	if err != nil {
-		t.Fatalf("GetBookmarks: %v", err)
+		t.Fatalf("Bookmarks: %v", err)
 	}
 
 	if len(bms) != 2 {
@@ -315,17 +315,17 @@ func TestWriter_MultipleMutations(t *testing.T) {
 		t.Fatalf("Open modified: %v", err)
 	}
 
-	meta, err := r2.GetMetadata(ctx)
+	meta, err := r2.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Combined" {
 		t.Errorf("Title: got %q, want %q", meta["Title"], "Combined")
 	}
 
-	page, err := r2.GetPage(ctx, 1)
+	page, err := r2.Page(ctx, 1)
 	if err != nil {
-		t.Fatalf("GetPage: %v", err)
+		t.Fatalf("Page: %v", err)
 	}
 	if page.Rotate != 180 {
 		t.Errorf("Rotate: got %d, want 180", page.Rotate)
@@ -419,9 +419,9 @@ func TestWriter_GenerateBookmarks(t *testing.T) {
 		t.Fatalf("Open modified: %v", err)
 	}
 
-	bms, err := r2.GetBookmarks(ctx)
+	bms, err := r2.Bookmarks(ctx)
 	if err != nil {
-		t.Fatalf("GetBookmarks: %v", err)
+		t.Fatalf("Bookmarks: %v", err)
 	}
 
 	if len(bms) == 0 {
@@ -457,7 +457,7 @@ func TestWriter_AddAttachment(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	files, err := r2.GetEmbeddedFiles(ctx)
+	files, err := r2.EmbeddedFiles(ctx)
 	if err != nil {
 		t.Fatalf("ExtractEmbeddedFiles: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestWriter_AddMultipleAttachments(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	files, err := r2.GetEmbeddedFiles(ctx)
+	files, err := r2.EmbeddedFiles(ctx)
 	if err != nil {
 		t.Fatalf("ExtractEmbeddedFiles: %v", err)
 	}
@@ -537,9 +537,9 @@ func TestWriter_Encrypt_AES256(t *testing.T) {
 		t.Fatalf("Open with user password: %v", err)
 	}
 
-	meta, err := r3.GetMetadata(ctx)
+	meta, err := r3.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Original Title" {
 		t.Errorf("Title: got %q, want %q", meta["Title"], "Original Title")
@@ -551,9 +551,9 @@ func TestWriter_Encrypt_AES256(t *testing.T) {
 		t.Fatalf("Open with owner password: %v", err)
 	}
 
-	meta2, err := r4.GetMetadata(ctx)
+	meta2, err := r4.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta2["Title"] != "Original Title" {
 		t.Errorf("Title: got %q, want %q", meta2["Title"], "Original Title")
@@ -588,9 +588,9 @@ func TestWriter_Encrypt_AES128(t *testing.T) {
 		t.Fatalf("Open encrypted: %v", err)
 	}
 
-	meta, err := r2.GetMetadata(ctx)
+	meta, err := r2.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Original Title" {
 		t.Errorf("Title: got %q, want %q", meta["Title"], "Original Title")
@@ -621,7 +621,7 @@ func TestWriter_Decrypt(t *testing.T) {
 	}
 
 	w2 := NewWriter(r2)
-	w2.Decrypt()
+	w2.RemoveEncryption()
 
 	var decrypted bytes.Buffer
 	if err := w2.WriteTo(ctx, &decrypted); err != nil {
@@ -638,9 +638,9 @@ func TestWriter_Decrypt(t *testing.T) {
 		t.Error("expected document to not be encrypted after decrypt")
 	}
 
-	meta, err := r3.GetMetadata(ctx)
+	meta, err := r3.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Original Title" {
 		t.Errorf("Title: got %q, want %q", meta["Title"], "Original Title")
@@ -670,9 +670,9 @@ func TestWriter_EncryptAndModify(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	meta, err := r2.GetMetadata(ctx)
+	meta, err := r2.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Encrypted Doc" {
 		t.Errorf("Title: got %q, want %q", meta["Title"], "Encrypted Doc")
@@ -703,9 +703,9 @@ func TestWriter_SetFormField(t *testing.T) {
 		t.Fatalf("Open modified: %v", err)
 	}
 
-	fieldMap, err := r2.GetFormData(ctx)
+	fieldMap, err := r2.FormData(ctx)
 	if err != nil {
-		t.Fatalf("GetFormData: %v", err)
+		t.Fatalf("FormData: %v", err)
 	}
 
 	if fieldMap["name"] != "Jane Doe" {
@@ -920,9 +920,9 @@ func TestMerge_PreservesMetadata(t *testing.T) {
 		t.Fatalf("Open merged: %v", err)
 	}
 
-	meta, err := r3.GetMetadata(ctx)
+	meta, err := r3.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Three Pages" {
 		t.Errorf("title: got %q, want %q", meta["Title"], "Three Pages")
@@ -1327,9 +1327,9 @@ func TestWriter_SignAndModify(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	meta, err := r2.GetMetadata(ctx)
+	meta, err := r2.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Signed Document" {
 		t.Errorf("Title: got %q, want %q", meta["Title"], "Signed Document")
@@ -1451,7 +1451,7 @@ func TestSplit_MultiplePages(t *testing.T) {
 	}
 
 	// Page 1 of split should be original page 3 (landscape).
-	page, err := r2.GetPage(ctx, 1)
+	page, err := r2.Page(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetPage 1: %v", err)
 	}
@@ -1488,9 +1488,9 @@ func TestSplit_PreservesMetadata(t *testing.T) {
 		t.Fatalf("Open split: %v", err)
 	}
 
-	meta, err := r2.GetMetadata(ctx)
+	meta, err := r2.Metadata(ctx)
 	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
+		t.Fatalf("Metadata: %v", err)
 	}
 	if meta["Title"] != "Three Pages" {
 		t.Errorf("title: got %q, want %q", meta["Title"], "Three Pages")
@@ -1564,9 +1564,9 @@ func TestSplit_BookmarkUpdate_DropOrphans(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open split: %v", err)
 	}
-	bms, err := r2.GetBookmarks(ctx)
+	bms, err := r2.Bookmarks(ctx)
 	if err != nil {
-		t.Fatalf("GetBookmarks: %v", err)
+		t.Fatalf("Bookmarks: %v", err)
 	}
 	if len(bms) != 2 {
 		t.Fatalf("got %d bookmarks, want 2 (A, C)", len(bms))
@@ -1593,7 +1593,7 @@ func TestSplit_BookmarkNone(t *testing.T) {
 	}
 
 	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-	bms, _ := r2.GetBookmarks(ctx)
+	bms, _ := r2.Bookmarks(ctx)
 	if len(bms) != 0 {
 		t.Errorf("expected no bookmarks, got %d", len(bms))
 	}
@@ -1617,7 +1617,7 @@ func TestSplit_BookmarkOrphanRemap(t *testing.T) {
 	}
 
 	r2, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-	bms, _ := r2.GetBookmarks(ctx)
+	bms, _ := r2.Bookmarks(ctx)
 	if len(bms) != 2 {
 		t.Fatalf("got %d, want 2", len(bms))
 	}
@@ -1649,7 +1649,7 @@ func TestMerge_BookmarkUpdate_OffsetPages(t *testing.T) {
 	}
 
 	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-	bms, _ := r3.GetBookmarks(ctx)
+	bms, _ := r3.Bookmarks(ctx)
 	if len(bms) != 3 {
 		t.Fatalf("got %d, want 3 bookmarks", len(bms))
 	}
@@ -1682,7 +1682,7 @@ func TestMerge_BookmarkWrapEachSource(t *testing.T) {
 	}
 
 	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-	bms, _ := r3.GetBookmarks(ctx)
+	bms, _ := r3.Bookmarks(ctx)
 	if len(bms) != 2 {
 		t.Fatalf("expected 2 root wrappers, got %d", len(bms))
 	}
@@ -1707,7 +1707,7 @@ func TestMerge_BookmarkNone(t *testing.T) {
 	}
 
 	r3, _ := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-	bms, _ := r3.GetBookmarks(ctx)
+	bms, _ := r3.Bookmarks(ctx)
 	if len(bms) != 0 {
 		t.Errorf("expected no bookmarks, got %d", len(bms))
 	}
@@ -1723,12 +1723,14 @@ func TestWriter_StampText(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.StampText(TextStamp{
+	if err := w.StampText(TextStamp{
 		Text:     "CONFIDENTIAL",
 		X:        200,
 		Y:        400,
 		FontSize: 36,
-	}, 1)
+	}, 1); err != nil {
+		t.Fatalf("StampText: %v", err)
+	}
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -1761,12 +1763,14 @@ func TestWriter_StampText_AllPages(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.StampText(TextStamp{
+	if err := w.StampText(TextStamp{
 		Text:     "DRAFT",
 		X:        100,
 		Y:        100,
 		FontSize: 24,
-	}) // no pages = all pages
+	}); err != nil { // no pages = all pages
+		t.Fatalf("StampText: %v", err)
+	}
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -1801,13 +1805,15 @@ func TestWriter_StampText_StandardFont(t *testing.T) {
 	defer r.Close()
 
 	w := NewWriter(r)
-	w.StampText(TextStamp{
+	if err := w.StampText(TextStamp{
 		Text:     "DRAFT",
 		X:        100,
 		Y:        500,
 		FontSize: 48,
 		Font:     FontTimesBold,
-	}, 1)
+	}, 1); err != nil {
+		t.Fatalf("StampText: %v", err)
+	}
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -1828,13 +1834,15 @@ func TestWriter_StampText_Opacity_EmitsExtGState(t *testing.T) {
 	defer r.Close()
 
 	w := NewWriter(r)
-	w.StampText(TextStamp{
+	if err := w.StampText(TextStamp{
 		Text:     "CONFIDENTIAL",
 		X:        100,
 		Y:        400,
 		FontSize: 24,
 		Opacity:  0.3,
-	}, 1)
+	}, 1); err != nil {
+		t.Fatalf("StampText: %v", err)
+	}
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -1859,13 +1867,15 @@ func TestWriter_StampText_Rotation(t *testing.T) {
 	defer r.Close()
 
 	w := NewWriter(r)
-	w.StampText(TextStamp{
+	if err := w.StampText(TextStamp{
 		Text:     "ROTATED",
 		X:        300,
 		Y:        400,
 		FontSize: 24,
 		Rotation: 45,
-	}, 1)
+	}, 1); err != nil {
+		t.Fatalf("StampText: %v", err)
+	}
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -1901,13 +1911,15 @@ func TestWriter_StampText_CustomTTF(t *testing.T) {
 	defer r.Close()
 
 	w := NewWriter(r)
-	w.StampText(TextStamp{
+	if err := w.StampText(TextStamp{
 		Text:     "ABC",
 		X:        100,
 		Y:        500,
 		FontSize: 24,
 		Font:     font,
-	}, 1)
+	}, 1); err != nil {
+		t.Fatalf("StampText: %v", err)
+	}
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {

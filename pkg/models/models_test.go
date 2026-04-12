@@ -221,7 +221,7 @@ func TestSignatureValidation_JSONRoundTrip(t *testing.T) {
 		NotAfter:        "2027-01-01",
 		SigningTime:     "2025-06-01",
 		TimestampValid:  true,
-		Error:           "none",
+		ErrorMessage:    "none",
 		HasDSS:          true,
 		HasTimestamp:    true,
 		TimestampTime:   "2025-06-01",

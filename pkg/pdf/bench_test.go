@@ -84,10 +84,10 @@ func BenchmarkExtractText_AllPages(b *testing.B) {
 	}
 }
 
-// BenchmarkGetMetadata measures the cost of extracting document-level
+// BenchmarkMetadata measures the cost of extracting document-level
 // metadata (Info + XMP). This is a fixed-cost operation per document —
 // tracking it catches regressions in catalog resolution or XMP parsing.
-func BenchmarkGetMetadata(b *testing.B) {
+func BenchmarkMetadata(b *testing.B) {
 	data := threePagePDF()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -99,7 +99,7 @@ func BenchmarkGetMetadata(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, err := r.GetMetadata(ctx); err != nil {
+		if _, err := r.Metadata(ctx); err != nil {
 			b.Fatal(err)
 		}
 	}

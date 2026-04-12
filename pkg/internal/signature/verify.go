@@ -128,13 +128,13 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 
 		certs, err := parsePKCS7Certificates(der)
 		if err != nil {
-			result.Error = fmt.Sprintf("failed to parse certificates: %v", err)
+			result.ErrorMessage = fmt.Sprintf("failed to parse certificates: %v", err)
 			results = append(results, result)
 			continue
 		}
 
 		if len(certs) == 0 {
-			result.Error = "no certificates found in signature"
+			result.ErrorMessage = "no certificates found in signature"
 			results = append(results, result)
 			continue
 		}
@@ -190,7 +190,7 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 		if err == nil {
 			result.CertChainValid = true
 		} else {
-			result.Error = fmt.Sprintf("certificate chain validation failed: %v", err)
+			result.ErrorMessage = fmt.Sprintf("certificate chain validation failed: %v", err)
 		}
 
 		// Validate signing time against certificate validity.
