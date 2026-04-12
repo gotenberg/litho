@@ -12,6 +12,7 @@ import (
 // Developers can inject a wrapper for Tesseract, Google Cloud Vision, or any
 // other OCR backend via [pdf.WithOCREngine] so the engine can automatically
 // extract text from scanned image pages.
+// Implementations must be safe for concurrent use.
 type OCREngine interface {
 	Extract(img image.Image) (string, error)
 }
@@ -21,6 +22,7 @@ type OCREngine interface {
 // consistent with all other coordinates in the API. They account for both
 // /Rotate (swapping width/height at 90°/270°) and /UserUnit (scaling factor;
 // default 1.0). A portrait MediaBox with /Rotate 90 reports landscape dimensions.
+// Values must not be shared across goroutines without synchronization.
 type Page struct {
 	PageNumber  int               `json:"pageNumber"`
 	Width       float64           `json:"width"`
@@ -37,6 +39,7 @@ type Page struct {
 }
 
 // TextElement represents a spatially positioned piece of text on a page.
+// Values must not be shared across goroutines without synchronization.
 type TextElement struct {
 	Text          string  `json:"text"`
 	X             float64 `json:"x"`
@@ -58,6 +61,7 @@ type TextElement struct {
 }
 
 // Bookmark represents an item in the document outline.
+// Values must not be shared across goroutines without synchronization.
 type Bookmark struct {
 	Title      string     `json:"title"`
 	PageNumber int        `json:"pageNumber"`
@@ -65,12 +69,14 @@ type Bookmark struct {
 }
 
 // FormField represents an interactive AcroForm field.
+// Values must not be shared across goroutines without synchronization.
 type FormField struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
 
 // Annotation represents a PDF annotation (e.g., Link, Text, Highlight).
+// Values must not be shared across goroutines without synchronization.
 type Annotation struct {
 	Subtype    string       `json:"subtype"`
 	Rect       [4]float64   `json:"rect"`
@@ -84,6 +90,7 @@ type Annotation struct {
 // The raw encoded stream can be accessed lazily via Open, which returns an
 // [io.ReadCloser] that decodes through the PDF filter pipeline on read. The
 // caller must close the returned reader.
+// Values must not be shared across goroutines without synchronization.
 type ImageMeta struct {
 	Filename         string                                           `json:"filename"`
 	Width            int                                              `json:"width"`
@@ -94,6 +101,7 @@ type ImageMeta struct {
 }
 
 // Line represents a stroked line segment on a page, in absolute page coordinates.
+// Values must not be shared across goroutines without synchronization.
 type Line struct {
 	X1 float64 `json:"x1"`
 	Y1 float64 `json:"y1"`
@@ -102,6 +110,7 @@ type Line struct {
 }
 
 // Table represents a table detected from spatial analysis of a PDF page.
+// Values must not be shared across goroutines without synchronization.
 type Table struct {
 	Rows [][]string `json:"rows"`
 	BBox [4]float64 `json:"bbox"`
@@ -111,6 +120,7 @@ type Table struct {
 // Content is accessed lazily: call Open to obtain an [io.ReadCloser] that
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
+// Values must not be shared across goroutines without synchronization.
 type EmbeddedFile struct {
 	Name     string                                           `json:"name"`
 	MIMEType string                                           `json:"mimeType,omitempty"`
@@ -118,6 +128,7 @@ type EmbeddedFile struct {
 }
 
 // Signature represents a cryptographic signature found in the document.
+// Values must not be shared across goroutines without synchronization.
 type Signature struct {
 	FieldName    string   `json:"fieldName"`
 	ByteRange    [4]int64 `json:"byteRange"`
@@ -129,6 +140,7 @@ type Signature struct {
 
 // SignatureValidation holds the result of validating a PDF signature's
 // X.509 certificate chain against a set of trusted root certificates.
+// Values must not be shared across goroutines without synchronization.
 type SignatureValidation struct {
 	FieldName      string `json:"fieldName"`
 	HashValid      bool   `json:"hashValid"`
@@ -158,6 +170,7 @@ type SignatureValidation struct {
 
 // GeoTiePoint represents a single tie point mapping PDF coordinates to
 // GPS coordinates (latitude/longitude).
+// Values must not be shared across goroutines without synchronization.
 type GeoTiePoint struct {
 	PDFX float64 `json:"pdfX"`
 	PDFY float64 `json:"pdfY"`
@@ -167,6 +180,7 @@ type GeoTiePoint struct {
 
 // GeoData holds geospatial metadata extracted from a PDF page or image
 // that contains a /Measure dictionary with /Subtype /GEO.
+// Values must not be shared across goroutines without synchronization.
 type GeoData struct {
 	CoordinateSystem string        `json:"coordinateSystem"`
 	EPSG             string        `json:"epsg,omitempty"`
@@ -205,6 +219,7 @@ func (g *GeoData) ToGeoJSON() string {
 
 // ScaleAxis describes the unit and conversion factor for one axis of a
 // rectilinear measurement scale extracted from a /Measure /RL dictionary.
+// Values must not be shared across goroutines without synchronization.
 type ScaleAxis struct {
 	Unit             string  `json:"unit"`
 	ConversionFactor float64 `json:"conversionFactor"`
@@ -215,6 +230,7 @@ type ScaleAxis struct {
 // (/VP) or a Line/PolyLine annotation that carries a /Measure dictionary with
 // /Subtype /RL (Rectilinear). Developers can use the scale axes to convert
 // raw PDF point coordinates into real-world physical measurements.
+// Values must not be shared across goroutines without synchronization.
 type Measurement struct {
 	Source   string     `json:"source"`
 	Name     string     `json:"name,omitempty"`
@@ -228,6 +244,7 @@ type Measurement struct {
 // Content is accessed lazily: call Open to obtain an [io.ReadCloser] that
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
+// Values must not be shared across goroutines without synchronization.
 type Model3D struct {
 	Name    string                                           `json:"name"`
 	Subtype string                                           `json:"subtype"`
@@ -237,6 +254,7 @@ type Model3D struct {
 // DSSInfo represents the Document Security Store (/DSS) extracted from
 // the document catalog. It contains the embedded validation materials
 // needed for Long-Term Validation (LTV).
+// Values must not be shared across goroutines without synchronization.
 type DSSInfo struct {
 	CertCount int `json:"certCount"`
 	CRLCount  int `json:"crlCount"`
@@ -246,12 +264,14 @@ type DSSInfo struct {
 
 // PronunciationLexicon holds a W3C PLS (Pronunciation Lexicon Specification)
 // XML document extracted from the catalog's /PronunciationLexicon array.
+// Values must not be shared across goroutines without synchronization.
 type PronunciationLexicon struct {
 	XML string `json:"xml"`
 }
 
 // FormulaElement represents a mathematical formula extracted from the
 // structure tree. It carries the MathML markup from the /AF associated file.
+// Values must not be shared across goroutines without synchronization.
 type FormulaElement struct {
 	MathML string `json:"mathML"`
 	MCIDs  []int  `json:"mcids,omitempty"`
@@ -259,6 +279,7 @@ type FormulaElement struct {
 
 // LinearizationParams holds the parameters extracted from a Linearization
 // Dictionary found in the first 1024 bytes of a linearized PDF.
+// Values must not be shared across goroutines without synchronization.
 type LinearizationParams struct {
 	FileLength          int64 `json:"fileLength"`
 	HintStreamOffset    int64 `json:"hintStreamOffset"`
@@ -271,6 +292,7 @@ type LinearizationParams struct {
 
 // PageOffsetEntry holds the per-page data decoded from the hint stream's
 // Page Offset Hint Table.
+// Values must not be shared across goroutines without synchronization.
 type PageOffsetEntry struct {
 	ObjCount            int   `json:"objCount"`
 	PageLength          int64 `json:"pageLength"`

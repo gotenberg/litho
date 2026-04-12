@@ -26,8 +26,6 @@ const (
 	defaultTag  = "integration"
 )
 
-// --- XML schema types matching VeraPDF validation profiles ---
-
 type xmlProfile struct {
 	XMLName xml.Name  `xml:"profile"`
 	Flavour string    `xml:"flavour,attr"`

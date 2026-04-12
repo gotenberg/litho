@@ -227,7 +227,7 @@ func newEncryptorV5(userPw, ownerPw string, pVal, keyLen int, docID []byte) (*En
 
 // newEncryptorLegacy implements V1-V4 encryption setup.
 func newEncryptorLegacy(userPw, ownerPw string, v, r, keyLen int, cfm string, pVal int, docID []byte) (*Encryptor, ast.PdfDict, error) {
-	// Compute O value (Algorithm 3.3 — encryption direction).
+	// Compute O value (Algorithm 3.3, encryption direction).
 	oVal := computeOValue(ownerPw, userPw, v, keyLen)
 
 	// Compute file encryption key (Algorithm 3.1).

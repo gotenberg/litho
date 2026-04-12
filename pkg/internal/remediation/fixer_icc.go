@@ -75,7 +75,7 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 		data, err := stream.Bytes()
 		if err != nil || len(data) < 128 {
-			// Corrupt or too short — replace with a valid profile.
+			// Corrupt or too short. Replace with a valid profile.
 			newOIArr[i] = oiEntry
 			replaceICCProfile(ctx, alloc, oiDict, oiRef, dpObj)
 			fixes = append(fixes, fmt.Sprintf("replaced corrupt ICC profile in OutputIntent[%d]", i))

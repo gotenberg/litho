@@ -16,11 +16,11 @@ const lineTolerance = 1.5
 // reconstruct tables from an untagged PDF page.
 //
 // Strategy:
-//  1. Line-based: look for intersecting horizontal/vertical stroked lines that
-//     form a physical grid, then map text elements into the grid cells.
-//  2. Spatial clustering (fallback): when no drawn grid exists, group text
-//     by Y-coordinate into rows and infer column boundaries from consistent
-//     X-gaps across multiple rows.
+// Line-based: look for intersecting horizontal/vertical stroked lines that
+// form a physical grid, then map text elements into the grid cells.
+// Spatial clustering (fallback): when no drawn grid exists, group text
+// by Y-coordinate into rows and infer column boundaries from consistent
+// X-gaps across multiple rows.
 func DetectTables(elements []models.TextElement, lines []models.Line) ([]models.Table, error) {
 	visible := filterVisible(elements)
 	if len(visible) < 4 {
@@ -49,10 +49,6 @@ func filterVisible(elements []models.TextElement) []models.TextElement {
 	return out
 }
 
-// ---------------------------------------------------------------------------
-// Line-based detection
-// ---------------------------------------------------------------------------
-
 func detectFromLines(elements []models.TextElement, lines []models.Line) []models.Table {
 	if len(lines) == 0 {
 		return nil
@@ -63,7 +59,7 @@ func detectFromLines(elements []models.TextElement, lines []models.Line) []model
 		dy := math.Abs(l.Y2 - l.Y1)
 		dx := math.Abs(l.X2 - l.X1)
 		if dy < lineTolerance && dx > lineTolerance {
-			// Horizontal — normalise so X1 < X2, snap Y.
+			// Horizontal. Normalise so X1 < X2, snap Y.
 			if l.X1 > l.X2 {
 				l.X1, l.X2 = l.X2, l.X1
 			}
@@ -71,7 +67,7 @@ func detectFromLines(elements []models.TextElement, lines []models.Line) []model
 			l.Y1, l.Y2 = avg, avg
 			hLines = append(hLines, l)
 		} else if dx < lineTolerance && dy > lineTolerance {
-			// Vertical — normalise so Y1 < Y2, snap X.
+			// Vertical. Normalise so Y1 < Y2, snap X.
 			if l.Y1 > l.Y2 {
 				l.Y1, l.Y2 = l.Y2, l.Y1
 			}
@@ -151,10 +147,6 @@ func findColAsc(x float64, vXs []float64) int {
 	}
 	return -1
 }
-
-// ---------------------------------------------------------------------------
-// Spatial-clustering detection (no drawn lines)
-// ---------------------------------------------------------------------------
 
 func detectFromClustering(elements []models.TextElement) []models.Table {
 	medFS := medianFontSize(elements)
@@ -301,10 +293,6 @@ func columnFor(x float64, boundaries []float64) int {
 	}
 	return len(boundaries)
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 func makeGrid(rows, cols int) [][]string {
 	grid := make([][]string, rows)

@@ -45,7 +45,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		char = decomposeLigature(char)
 
 		// Skip known non-glyph control characters (NUL, CR, LF, DEL).
-		// Do NOT skip low byte values in general — PDF fonts frequently
+		// Do NOT skip low byte values in general. PDF fonts frequently
 		// use 0x01–0x1F as valid glyph codes (e.g. ligatures).
 		if char == "?" && len(data) > 0 {
 			if b := data[0]; b == 0x00 || b == 0x0a || b == 0x0d || b == 0x7f {

@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// --- Rule selectors ---
-
 func iccBasedProfileRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_3_2_t01, Rule_19005_2_6_2_4_2_t01, Rule_19005_3_6_2_4_2_t01, Rule_19005_4_6_2_4_2_t01)
 }
@@ -25,8 +23,6 @@ func iccBasedIdentityRule(part int) Rule {
 	// Part 1 does not have this rule; return part 2 as fallback.
 	return ruleByPart(part, Rule_19005_2_6_2_4_2_t02, Rule_19005_2_6_2_4_2_t02, Rule_19005_3_6_2_4_2_t02, Rule_19005_4_6_2_4_2_t03)
 }
-
-// --- Check implementations ---
 
 // checkICCBasedProfiles validates ICCBased colour space profiles per
 // §6.2.3.2 (part 1) or §6.2.4.2 (parts 2-4).
@@ -64,7 +60,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		pageContent, _ := getPageContentBytes(ctx, doc, page)
 		var pageOps []content.Operation
 		if len(pageContent) > 0 {
-			pageOps, _ = content.ParseStreamData(ctx, pageContent)
+			pageOps, _ = content.ParseStreamData(ctx, pageContent) // Parse failure yields nil ops; checks run on whatever is available.
 		}
 		usedCSNames := collectUsedCSNames(pageOps)
 

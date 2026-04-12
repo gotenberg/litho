@@ -43,7 +43,7 @@ static int decodeJBIG2C(const unsigned char *globals, size_t globals_len,
 			jbig2_global_ctx_free(gctx);
 			return -1;
 		}
-		// gctx is owned by ctx now — freed when ctx is freed.
+		// gctx is owned by ctx now, freed when ctx is freed.
 	}
 
 	if (jbig2_data_in(ctx, data, data_len) < 0) {

@@ -13,8 +13,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
-// --- File structure constants used only by this file ---
-
 const (
 	headerReadSize = 64
 	minBinaryBytes = 4
@@ -67,8 +65,6 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	return results
 }
 
-// --- Rule selectors ---
-
 func fileHeaderRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_2_t01, Rule_19005_2_6_1_2_t01, Rule_19005_3_6_1_2_t01, Rule_19005_4_6_1_2_t01)
 }
@@ -109,8 +105,6 @@ func pageBoundRule(profile string) Rule {
 	// PDF/A-1 uses the same clause numbering as part 2 for this check.
 	return ruleByPart(PDFAPart(profile), Rule_19005_2_6_1_13_t11, Rule_19005_2_6_1_13_t11, Rule_19005_3_6_1_13_t11, Rule{})
 }
-
-// --- Check implementations ---
 
 // checkFileHeader validates §6.1.2: file must start with %PDF-x.y and have
 // a binary comment marker.
@@ -226,7 +220,7 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 		}
 	}
 
-	// Check linearized ID consistency (§6.1.3 t04) — PDF/A-1 only.
+	// Check linearized ID consistency (§6.1.3 t04). PDF/A-1 only.
 	if PDFAPart(profile) == 1 && doc.Linearization != nil {
 		results := checkLinearizedID(doc, profile)
 		if len(results) > 0 {
@@ -293,7 +287,7 @@ func checkPostEOFData(doc *document.Document, profile string) []Violation {
 	// Find the last occurrence of %%EOF.
 	lastIdx := bytes.LastIndex(tail, []byte(eofMarker))
 	if lastIdx < 0 {
-		// No %%EOF found — this is a structural issue, but we report it as post-EOF
+		// No %%EOF found. This is a structural issue, but we report it as post-EOF
 		// since the rule specifically concerns data after %%EOF.
 		return fail(postEOFRule(profile), "no %%EOF marker found in file")
 	}
@@ -658,9 +652,9 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 // begins (immediately after the "stream" keyword and its required EOL).
 // Returns -1 if the "stream" keyword is not found in buf.
 func findStreamDataStart(buf []byte) int {
-	// Scan for the "stream" keyword. We must skip occurrences that are:
-	//   1. Part of "endstream".
-	//   2. Part of a PDF name or other token (e.g., /application#2Foctet-stream).
+	// Scan for the "stream" keyword. We must skip occurrences that are
+	// part of "endstream" or part of a PDF name or other token
+	// (e.g., /application#2Foctet-stream).
 	// Per ISO 32000, the stream keyword is a standalone keyword preceded by
 	// whitespace or a delimiter (typically ">>" closing the stream dictionary)
 	// and followed immediately by a single EOL (CR+LF or LF).
@@ -789,7 +783,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 				}
 			}
 			if !anyInherits {
-				continue // Every page has its own — tree root value is irrelevant.
+				continue // Every page has its own, so tree root value is irrelevant.
 			}
 			arr, err := document.ResolveArray(ctx, doc, boxObj)
 			if err != nil || len(arr) < 4 {

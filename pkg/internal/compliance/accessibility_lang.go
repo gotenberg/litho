@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- Language ---
-
 // checkLangRequired ensures the catalog has a /Lang key with a valid RFC 3066 tag.
 // Rule mapping:
 //   - Missing /Lang or empty /Lang in catalog -> langRequiredRule (t34 for PDF/UA-1, 8.4.4 t01 for PDF/UA-2)
@@ -29,7 +27,7 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 
 		// PDF/UA-1 §7.2 t34: natural language must be determinable. If catalog
 		// /Lang is absent, the language can still be determined through the
-		// structure tree — the tree root or individual elements may carry /Lang.
+		// structure tree. The tree root or individual elements may carry /Lang.
 		return checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
 	}
 
@@ -37,7 +35,7 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		return failf(validRule, "lang=%s", catalogLang)
 	}
 
-	// Catalog provides global /Lang — validate /Lang format in structure elements.
+	// Catalog provides global /Lang. Validate /Lang format in structure elements.
 	return validateStructureLangs(ctx, doc, catalog, validRule)
 }
 
@@ -62,7 +60,7 @@ func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.P
 func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		// No structure tree at all — can't determine language for anything.
+		// No structure tree at all. Cannot determine language for anything.
 		return fail(langRule, "catalog")
 	}
 
@@ -105,7 +103,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 
 		if effectiveLang == "" && !anyLangFound {
 			// No /Lang from self or any ancestor, and no /Lang anywhere in
-			// the tree — language is truly not determinable.
+			// the tree. Language is truly not determinable.
 			results = append(results, Violation{Rule: langRule, Context: path})
 		}
 	})
@@ -171,8 +169,6 @@ func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem a
 		walkStructKidsWithLang(ctx, doc, kidsObj, elemPath, depth+1, childLang, fn)
 	}
 }
-
-// --- Outline language ---
 
 // checkOutlineLang verifies that outline entries (bookmarks) have a determinable
 // natural language. Per PDF/UA-1 §7.2 t2, each outline item's /Title text
@@ -251,7 +247,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		}
 		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 		if trimmed == "" {
-			// Empty /Lang in structure element — not an invalid-format error.
+			// Empty /Lang in structure element. Not an invalid-format error.
 			// The "language not determined" checks (t21-t24, t30-t34) handle this case separately.
 			return
 		}

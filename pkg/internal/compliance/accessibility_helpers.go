@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- Rule selectors ---
-
 func langRequiredRule(profile string) Rule {
 	if profile == "PDF/UA-2" {
 		return Rule_14289_2_8_4_4_t01
@@ -66,8 +64,6 @@ func annotAltRule(profile string) Rule {
 	}
 	return Rule_14289_1_7_18_1_t02
 }
-
-// --- Structure tree walker ---
 
 // maxStructTreeWalkDepth is an alias for maxStructTreeDepth (structure.go).
 // Both limit structure tree recursion to the same depth.
@@ -183,8 +179,6 @@ func hasNonEmptyStringKey(ctx context.Context, doc *document.Document, dict ast.
 	return strings.TrimSpace(string(str)) != ""
 }
 
-// --- XMP helpers ---
-
 // readCatalogXMP reads and decodes the /Metadata stream from the catalog.
 func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.PdfDict) ([]byte, bool) {
 	metaObj, ok := catalog["Metadata"]
@@ -238,8 +232,6 @@ func containsPDFUAIDPart(xmpData []byte, part string) bool {
 	needle = fmt.Sprintf("pdfuaid:part=\"%s\"", part)
 	return strings.Contains(xmp, needle)
 }
-
-// --- Annotation geometry helpers ---
 
 // isAnnotHidden checks if an annotation has the Hidden flag set.
 func isAnnotHidden(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {

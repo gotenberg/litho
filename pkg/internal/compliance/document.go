@@ -25,7 +25,6 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	var results []Violation
 
-	// --- PDF/UA-2: version must be 2.0 ---
 	if vctx.ua {
 		if profile == "PDF/UA-2" {
 			results = append(results, checkVersionIs2(doc, catalog, Rule_14289_2_6_2_t01)...)
@@ -38,49 +37,42 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	// --- PDF/A-1: version must be 1.4 or lower ---
 	if part == 1 {
 		results = append(results, checkVersionPart1(doc, catalog)...)
 	}
 
-	// --- PDF/A-4: version must be 2.0 ---
 	if part == 4 {
 		results = append(results, checkVersionPart4(doc, catalog)...)
 	}
 
-	// --- Catalog restrictions (parts 2+/4) ---
 	if part >= 2 {
 		results = append(results, checkAlternatePresentations(ctx, doc, catalog, part)...)
 		results = append(results, checkRequirementsKey(catalog, part)...)
 	}
 
-	// --- OCG Usage Application (parts 2+/4) ---
 	if part >= 2 {
 		results = append(results, checkOCGUsageApplication(ctx, doc, catalog, part)...)
 	}
 
-	// --- OCG Config /Name checks (part 4) ---
 	if part == 4 {
 		results = append(results, checkOCConfigNamesPDFA(ctx, doc, catalog)...)
 		results = append(results, checkOCGOrderCompleteness(ctx, doc, catalog)...)
 	}
 
-	// --- Info dict restrictions (part 4) ---
 	if part == 4 {
 		results = append(results, checkInfoDictPart4(ctx, doc, catalog)...)
 	}
 
-	// --- Permissions dict ---
 	if part >= 2 {
 		results = append(results, checkPermissionsDict(ctx, doc, catalog, part)...)
 	}
 
-	// --- PresSteps forbidden (part 4) §6.11 t2 ---
+	// §6.11 t2: PresSteps forbidden.
 	if part == 4 {
 		results = append(results, checkPresSteps(ctx, doc, catalog)...)
 	}
 
-	// --- Embedded file stream /Subtype MIME type (part 4) §6.9 t1 ---
+	// §6.9 t1: embedded file stream /Subtype MIME type.
 	if part == 4 {
 		results = append(results, checkEmbeddedFileMIME(ctx, doc, catalog)...)
 	}
@@ -347,8 +339,6 @@ func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog a
 	return nil
 }
 
-// --- Rule selectors ---
-
 func alternatePresentationsRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_10_t01, Rule_19005_3_6_10_t01, Rule_19005_4_6_11_t01)
 }
@@ -358,7 +348,7 @@ func requirementsRule(part int) Rule {
 }
 
 func ocgASRule(part int) Rule {
-	// The AS key rule in OC config dicts — used here for the /AS array check.
+	// The AS key rule in OC config dicts, used here for the /AS array check.
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_9_t04, Rule_19005_3_6_9_t04, Rule_19005_4_6_10_t01)
 }
 

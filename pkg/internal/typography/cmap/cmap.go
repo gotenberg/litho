@@ -285,11 +285,11 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 				}
 			}
 		}
-		// No shorter match found — consume the codespace width as unmapped.
+		// No shorter match found: consume the codespace width as unmapped.
 		return n, "", false
 	}
 
-	// No codespace matched — fall back to longest prefix.
+	// No codespace matched. Fall back to longest prefix.
 	return c.mapLongestPrefix(data)
 }
 

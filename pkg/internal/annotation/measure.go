@@ -179,7 +179,7 @@ func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast
 
 	var axis models.ScaleAxis
 
-	// /U — unit label string.
+	// /U: unit label string.
 	if uObj, ok := nfDict["U"]; ok {
 		str, err := document.ResolveString(ctx, doc, uObj)
 		if err == nil && str != "" {
@@ -187,12 +187,12 @@ func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast
 		}
 	}
 
-	// /C — conversion factor (float).
+	// /C: conversion factor (float).
 	if cObj, ok := nfDict["C"]; ok {
 		axis.ConversionFactor = document.Float(cObj)
 	}
 
-	// /D — decimal places (integer, defaults to 0).
+	// /D: decimal places (integer, defaults to 0).
 	if dObj, ok := nfDict["D"]; ok {
 		dInt, err := document.ResolveInt(ctx, doc, dObj)
 		if err == nil && dInt != 0 {

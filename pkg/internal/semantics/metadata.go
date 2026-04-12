@@ -300,7 +300,7 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 	// Start with legacy /Info values.
 	maps.Copy(metadata, info)
 
-	// Overlay XMP values — XMP takes precedence per PDF 2.0.
+	// Overlay XMP values. XMP takes precedence per PDF 2.0.
 	// Exceptions for fields that incremental updates commonly modify in the
 	// Info dict without updating XMP:
 	//   - Dates: keep the most recent value.
@@ -358,7 +358,7 @@ func scanRawInfoDates(doc *document.Document, metadata map[string]string) {
 	}
 	raw := buf[:n]
 
-	// Only scan for /ModDate — it's the most commonly dropped field.
+	// Only scan for /ModDate. It is the most commonly dropped field.
 	pattern := []byte("/ModDate")
 	pos := 0
 	for {

@@ -37,7 +37,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 
 	var offset int64
 
-	// Step 1: write header.
+	// Write header.
 	header := fmt.Sprintf("%%PDF-%s\n%%\xe2\xe3\xcf\xd3\n", version)
 	n, err := io.WriteString(dst, header)
 	offset += int64(n)
@@ -45,7 +45,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		return fmt.Errorf("writing header: %w", err)
 	}
 
-	// Step 2: serialize all pending objects in order.
+	// Serialize all pending objects in order.
 	pending := cfg.Allocator.Pending()
 	objNums := make([]int, 0, len(pending))
 	for num := range pending {
@@ -74,7 +74,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		offset += written
 	}
 
-	// Step 3: build trailer.
+	// Build trailer.
 	trailer := make(ast.PdfDict, len(cfg.Trailer)+1)
 	for k, v := range cfg.Trailer {
 		if k == "Prev" || k == "Size" {
@@ -84,7 +84,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	}
 	trailer["Size"] = ast.PdfInt(cfg.Allocator.NextObjNum())
 
-	// Step 4: write xref.
+	// Write xref.
 	xrefOffset := offset
 
 	if cfg.UseXRefStream {
@@ -97,7 +97,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		}
 	}
 
-	// Step 5: write startxref + %%EOF.
+	// Write startxref + %%EOF.
 	tail := fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefOffset)
 	if _, err := io.WriteString(dst, tail); err != nil {
 		return fmt.Errorf("writing startxref: %w", err)

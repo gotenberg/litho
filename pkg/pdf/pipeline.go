@@ -25,6 +25,7 @@ import (
 // variables in the enclosing scope. The pipeline does not inspect
 // closure contents; incompatible-operation checks (e.g., Sign +
 // full-rewrite) are enforced by [Writer.WriteTo] at execution time.
+// Pipeline values must not be modified after being passed to [Pipeline.WriteTo].
 type Pipeline struct {
 	stages   []stage
 	firstErr error
@@ -32,12 +33,14 @@ type Pipeline struct {
 
 // PipelineResult holds per-stage execution info returned from
 // [Pipeline.WriteTo].
+// Values must not be shared across goroutines without synchronization.
 type PipelineResult struct {
 	// Stages reports one entry per executed stage in declaration order.
 	Stages []StageReport
 }
 
 // StageReport summarizes a single pipeline stage.
+// Values must not be shared across goroutines without synchronization.
 type StageReport struct {
 	// Index is the 0-based position of the stage in declaration order.
 	Index int
@@ -216,8 +219,6 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 	return ex.result, nil
 }
 
-// --- Internal: stage types and executor ---
-
 const (
 	stageNamePipeline = "pipeline"
 	stageNameWrite    = "write"
@@ -336,8 +337,6 @@ func (ex *executor) recordStage(name string, materialized bool, bytesOut int64) 
 		Index: ex.stageIdx, Name: name, Materialized: materialized, BytesOut: bytesOut,
 	})
 }
-
-// --- Concrete stages ---
 
 type openStage struct{ src *Reader }
 

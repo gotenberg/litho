@@ -150,7 +150,7 @@ func ResolveThreads(ctx context.Context, doc *document.Document) ([]Thread, erro
 						if err != nil {
 							return nil, fmt.Errorf("failed to resolve bead /R: %w", err)
 						}
-						rArr, _ = res.(ast.PdfArray)
+						rArr, _ = res.(ast.PdfArray) // Type assertion failure yields nil, handled by len check.
 					} else if arr, ok := rObj.(ast.PdfArray); ok {
 						rArr = arr
 					}

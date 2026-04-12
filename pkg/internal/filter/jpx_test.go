@@ -14,7 +14,7 @@ func TestDecodeJPX_NoCGO(t *testing.T) {
 	}
 
 	// In non-CGO builds, it must wrap ErrUnsupportedFilter.
-	// In CGO builds, it returns a different error — both are acceptable.
+	// In CGO builds, it returns a different error. Both are acceptable.
 	_ = errors.Is(err, ErrUnsupportedFilter)
 }
 

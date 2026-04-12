@@ -33,7 +33,7 @@ func ExtractEncoding(data []byte) map[byte]string {
 	}
 	info := parseTopDict(topDictEntries[0])
 
-	// Predefined encodings (0=Standard, 1=Expert) — handled by the caller.
+	// Predefined encodings (0=Standard, 1=Expert), handled by the caller.
 	if info.encodingOffset <= 1 {
 		return nil
 	}
@@ -64,13 +64,13 @@ func ExtractEncoding(data []byte) map[byte]string {
 	}
 
 	// Parse CFF Encoding at encodingOffset.
-	// Format 0: nCodes(1), code[nCodes](1 each) — code[i] maps to GID i+1.
-	// Format 1: nRanges(1), {first(1), nLeft(1)}[nRanges] — range mappings.
+	// Format 0: nCodes(1), code[nCodes](1 each). code[i] maps to GID i+1.
+	// Format 1: nRanges(1), {first(1), nLeft(1)}[nRanges], range mappings.
 	encOff := int(info.encodingOffset)
 	if encOff >= len(data) {
 		return nil
 	}
-	format := data[encOff] & 0x7F // high bit is supplement flag
+	format := data[encOff] & 0x7F // High bit is supplement flag.
 	encOff++
 
 	result := make(map[byte]string)
@@ -318,8 +318,6 @@ func ValidCIDs(data []byte) (map[uint16]bool, error) {
 	return result, nil
 }
 
-// --- INDEX parsing ---
-
 // parseINDEX reads a CFF INDEX structure and returns the end offset and
 // the data entries as byte slices.
 func parseINDEX(data []byte, pos int) (endPos int, entries [][]byte, err error) {
@@ -391,8 +389,6 @@ func readOffset(data []byte, size int) int {
 	return 0
 }
 
-// --- Top DICT parsing ---
-
 // topDictInfo holds key offsets extracted from the CFF Top DICT.
 type topDictInfo struct {
 	charsetOffset     int32
@@ -436,7 +432,7 @@ func parseTopDict(data []byte) topDictInfo {
 					info.privateDictSize = operands[len(operands)-2]
 					info.privateDictOffset = operands[len(operands)-1]
 				}
-			case 1230: // ROS (12 30) — marks CID font
+			case 1230: // ROS (12 30), marks CID font
 				info.isCID = true
 			}
 			operands = operands[:0]
@@ -469,7 +465,7 @@ func parseTopDict(data []byte) topDictInfo {
 			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5]))) //nolint:gosec // intentional two's-complement conversion for CFF binary parsing
 			i += 5
 		case b == 30:
-			// Real number — skip (not needed for our operators).
+			// Real number: skip (not needed for our operators).
 			i++
 			for i < len(data) {
 				nibble := data[i]
@@ -485,14 +481,12 @@ func parseTopDict(data []byte) topDictInfo {
 	return info
 }
 
-// --- Charset parsing ---
-
 // parseCharset reads the charset table and returns a GID → SID slice.
 // GID 0 is always .notdef (SID 0).
 func parseCharset(data []byte, pos int, numGlyphs int) ([]int, error) {
 	if pos < 0 || pos >= len(data) {
 		// Predefined charsets: 0=ISOAdobe, 1=Expert, 2=ExpertSubset.
-		// For our purposes, return empty — these map to standard glyph names
+		// For our purposes, return empty. These map to standard glyph names
 		// which are already in the encoding tables.
 		return nil, nil
 	}
@@ -541,8 +535,6 @@ func parseCharset(data []byte, pos int, numGlyphs int) ([]int, error) {
 
 	return sids, nil
 }
-
-// --- String table ---
 
 // stringTable resolves SIDs to glyph names. SIDs 0-390 are the CFF standard
 // strings; SIDs 391+ index into the custom string INDEX.
@@ -744,8 +736,6 @@ done:
 	return val, pos
 }
 
-// --- Glyph widths ---
-
 // GlyphWidths extracts advance widths from CFF charstring data.
 // It parses each CharString to find the optional width operand, then applies
 // the nominalWidthX/defaultWidthX from the Private DICT.
@@ -768,7 +758,8 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	}
 	info := parseTopDict(topDictEntries[0])
 
-	// Skip String INDEX and Global Subr INDEX.
+	// topDictEnd marks where String INDEX begins; unused because we parse
+	// Private DICT via an absolute offset from the Top DICT.
 	_ = topDictEnd
 
 	// Parse Private DICT for nominalWidthX and defaultWidthX.
@@ -932,14 +923,14 @@ func extractCharstringWidth(cs []byte) *int32 {
 			stack = append(stack, int32(binary.BigEndian.Uint32(cs[i+1:i+5]))>>16) //nolint:gosec
 			i += 5
 		default:
-			// Operator — check if this is a stack-clearing command.
+			// Operator: check if this is a stack-clearing command.
 			op := int(b)
 			if b == 12 {
 				i++
 				if i >= len(cs) {
 					return nil
 				}
-				// Two-byte operators (12 xx) — none are stack-clearing for width.
+				// Two-byte operators (12 xx), none are stack-clearing for width.
 				stack = stack[:0]
 				i++
 				continue
@@ -947,38 +938,38 @@ func extractCharstringWidth(cs []byte) *int32 {
 			i++
 
 			switch op {
-			case 1, 3, 18, 23: // hstem, vstem, hstemhm, vstemhm — even operands
+			case 1, 3, 18, 23: // hstem, vstem, hstemhm, vstemhm, even operands
 				if len(stack)%2 != 0 {
 					w := stack[0]
 					return &w
 				}
 				return nil // no width
-			case 4: // vmoveto — 1 operand
+			case 4: // vmoveto, 1 operand
 				if len(stack) > 1 {
 					w := stack[0]
 					return &w
 				}
 				return nil
-			case 22: // hmoveto — 1 operand
+			case 22: // hmoveto, 1 operand
 				if len(stack) > 1 {
 					w := stack[0]
 					return &w
 				}
 				return nil
-			case 21: // rmoveto — 2 operands
+			case 21: // rmoveto, 2 operands
 				if len(stack) > 2 {
 					w := stack[0]
 					return &w
 				}
 				return nil
-			case 14: // endchar — 0 operands
+			case 14: // endchar, 0 operands
 				if len(stack) > 0 {
 					w := stack[0]
 					return &w
 				}
 				return nil
 			default:
-				// Non-stack-clearing operator — clear stack and continue.
+				// Non-stack-clearing operator: clear stack and continue.
 				stack = stack[:0]
 			}
 		}

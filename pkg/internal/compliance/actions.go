@@ -271,12 +271,10 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 			isWidget := subtype == "Widget"
 			location := fmt.Sprintf("page %d annot %d (/%s)", pageIdx+1, annotIdx, subtype)
 
-			// --- Widget annotation /A check ---
 			if isWidget {
 				results = append(results, checkWidgetActions(ctx, doc, annotDict, profile, part, location)...)
 			}
 
-			// --- Non-widget annotation /A ---
 			if !isWidget {
 				if aObj, hasA := annotDict["A"]; hasA {
 					aDict, err := document.ResolveDict(ctx, doc, aObj)
@@ -286,7 +284,6 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 				}
 			}
 
-			// --- Non-widget annotation /AA ---
 			if !isWidget {
 				if aaObj, hasAA := annotDict["AA"]; hasAA {
 					aaDict, err := document.ResolveDict(ctx, doc, aaObj)
@@ -355,7 +352,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	}
 
 	// Walk widget /A action chain for forbidden types (when /A is present and
-	// not already flagged as structurally forbidden — we still report the type
+	// not already flagged as structurally forbidden. We still report the type
 	// violations for completeness).
 	if hasA {
 		aDict, err := document.ResolveDict(ctx, doc, annotDict["A"])
@@ -368,7 +365,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	// /AA is structurally allowed but individual actions must still be
 	// validated against the forbidden action type list.
 	// Note: Widget annotations have additional allowed AA keys (K, V, F, C)
-	// beyond the standard E, X, D, U, Fo, Bl — do NOT apply the non-widget
+	// beyond the standard E, X, D, U, Fo, Bl. Do NOT apply the non-widget
 	// AA key restriction check here.
 	if hasAA {
 		aaDict, err := document.ResolveDict(ctx, doc, annotDict["AA"])
@@ -572,7 +569,7 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 	// Recurse into children.
 	walkOutlineItems(ctx, doc, item["First"], profile, part, results, depth+1)
 
-	// Recurse to next sibling — use depth (not depth+1) since siblings are at same level.
+	// Recurse to next sibling. Use depth (not depth+1) since siblings are at same level.
 	walkOutlineItems(ctx, doc, item["Next"], profile, part, results, depth)
 }
 

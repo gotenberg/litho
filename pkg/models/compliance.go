@@ -1,6 +1,7 @@
 package models
 
 // PDFAProfile identifies a specific PDF/A conformance level.
+// Values are immutable and safe for concurrent use.
 type PDFAProfile string
 
 // PDF/A profile constants covering all ISO 19005 parts and conformance levels.
@@ -19,6 +20,7 @@ const (
 )
 
 // PDFUAProfile identifies a specific PDF/UA conformance level.
+// Values are immutable and safe for concurrent use.
 type PDFUAProfile string
 
 // PDF/UA profile constants covering ISO 14289 parts.

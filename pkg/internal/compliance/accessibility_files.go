@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- File specification /F and /UF (PDF/UA-1 §7.11) ---
-
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
 // files contain both /F and /UF keys (ISO 14289-1, §7.11 t01).
 func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
@@ -73,8 +71,6 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 	return results
 }
 
-// --- Link annotation Contents ---
-
 // checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
 // have a non-empty /Contents key providing an alternate description.
 func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
@@ -108,8 +104,6 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 	}
 	return results
 }
-
-// --- Media clip data ---
 
 // checkMediaClipData validates PDF/UA-1 §7.18.6.2: media clip data dicts
 // must have /CT (content type, t01) and /Alt (alternative text, t02).
@@ -185,7 +179,7 @@ func hasValidMediaClipAlt(ctx context.Context, doc *document.Document, clipDict 
 	}
 	altArr, err := document.ResolveArray(ctx, doc, altObj)
 	if err != nil {
-		// Not an array — check as string.
+		// Not an array. Check as string.
 		s, err := document.ResolveString(ctx, doc, altObj)
 		return err == nil && strings.TrimSpace(string(s)) != ""
 	}
@@ -198,8 +192,6 @@ func hasValidMediaClipAlt(ctx context.Context, doc *document.Document, clipDict 
 	}
 	return false
 }
-
-// --- Form field TU key ---
 
 // checkFormFieldTU validates that form fields have a non-empty /TU key.
 // Per PDF/UA-1 §7.18.1 test 3: "A form field shall have a TU key present
@@ -341,7 +333,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 		if len(tuStr) > 0 {
 			return nil
 		}
-		// TU missing or empty — check if widget has Alt in structure tree.
+		// TU missing or empty. Check if widget has Alt in structure tree.
 		catalog, _ := document.ResolveCatalog(ctx, doc)
 		treeRoot, _ := document.ResolveDict(ctx, doc, catalog.Dict["StructTreeRoot"])
 		if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, 0) {

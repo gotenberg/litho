@@ -41,7 +41,7 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 
 	fieldsObj, ok := acroFormDict["Fields"]
 	if !ok {
-		// No AcroForm fields — return XFA data if we have it.
+		// No AcroForm fields. Return XFA data if present.
 		if len(xfaData) > 0 {
 			var results []models.FormField
 			for k, v := range xfaData {

@@ -72,7 +72,7 @@ func AddAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			efDict = ResolveFromAllocOrDoc(ctx, alloc, doc, efRef)
 		}
 		if efDict == nil {
-			efDict, _ = document.ResolveDict(ctx, doc, efObj)
+			efDict, _ = document.ResolveDict(ctx, doc, efObj) // Best-effort: nil efDict is handled below.
 		}
 		if efDict != nil {
 			if namesArr, ok := efDict["Names"]; ok {
@@ -148,7 +148,7 @@ func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		efDict = ResolveFromAllocOrDoc(ctx, alloc, doc, efRef)
 	}
 	if efDict == nil {
-		efDict, _ = document.ResolveDict(ctx, doc, efObj)
+		efDict, _ = document.ResolveDict(ctx, doc, efObj) // Best-effort: nil efDict is handled below.
 	}
 	if efDict == nil {
 		return nil

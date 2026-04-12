@@ -133,8 +133,6 @@ type report struct {
 	FalsePositives []disagreement `json:"false_positives"`
 }
 
-// --- VeraPDF ---
-
 func runVeraPDF(args []string) int {
 	fs := flag.NewFlagSet("verapdf", flag.ExitOnError)
 	init := fs.Bool("init", false, "Provision the corpus via Docker before running")
@@ -527,8 +525,6 @@ func checkThresholds(rpt report, maxFN, maxFP int) int {
 	}
 	return 0
 }
-
-// --- PDF.js ---
 
 type manifestEntry struct {
 	ID       string `json:"id"`

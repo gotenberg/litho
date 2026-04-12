@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- Figure alt text ---
-
 func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := figureAltRule(profile)
 
@@ -52,18 +50,14 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
-// --- Artifact tagging ---
-
 func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Violation {
 	// Artifact tagging checks require deep content stream analysis to determine
 	// if headers/footers/page numbers are properly marked as Artifact. This is
 	// a heuristic check that cannot be fully validated without rendering. We log
-	// the check but return no violations — a future enhancement may add
+	// the check but return no violations. A future enhancement may add
 	// heuristic detection of repeated header/footer content.
 	return nil
 }
-
-// --- Annotation alt text ---
 
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := annotAltRule(profile)
@@ -110,7 +104,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
 			// Link, Widget, and Popup annotations are excluded from this check.
-			// Popup annotations are explicitly exempt — they inherit content
+			// Popup annotations are explicitly exempt. They inherit content
 			// from their parent annotation and do not need /Contents or /Alt.
 			if subtype == "Link" || subtype == "Widget" || subtype == "Popup" {
 				continue
@@ -121,7 +115,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				continue
 			}
 
-			// Check /Contents key — must be present and non-empty.
+			// Check /Contents key: must be present and non-empty.
 			if contentsObj, hasContents := annot["Contents"]; hasContents {
 				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
 				if err == nil && strings.TrimSpace(string(contentsStr)) != "" {
@@ -129,7 +123,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				}
 			}
 
-			// Annotation lacks /Contents — check the enclosing structure element for /Alt.
+			// Annotation lacks /Contents. Check the enclosing structure element for /Alt.
 			if annotObjNum > 0 && structAltMap[annotObjNum] {
 				continue
 			}
@@ -200,8 +194,6 @@ func checkOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject, d
 		dest[ref.ObjectNum] = true
 	}
 }
-
-// --- Widget /AA ---
 
 // checkWidgetAA validates that Widget annotations do not have /AA (additional actions)
 // entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.

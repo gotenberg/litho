@@ -351,8 +351,6 @@ func isPDFWhitespace(b byte) bool {
 	return false
 }
 
-// --- Rule selectors by PDF/A part ---
-
 // unknownOperatorRule returns the correct rule for unknown content stream
 // operators based on the PDF/A part.
 func unknownOperatorRule(part int) Rule {

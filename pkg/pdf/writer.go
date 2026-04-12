@@ -18,6 +18,7 @@ import (
 )
 
 // WriteOption configures the behavior of [Writer.WriteTo].
+// WriteOption closures must be safe to call from any goroutine.
 type WriteOption func(*writeOpts)
 
 type writeOpts struct {
@@ -84,6 +85,7 @@ func WithBookmarks(opts BookmarkOptions) WriteOption {
 
 // RemediateOption configures the behavior of [Writer.RemediatePDFA] and
 // [Writer.RemediatePDFUA].
+// RemediateOption closures must be safe to call from any goroutine.
 type RemediateOption func(*remediateOpts)
 
 type remediateOpts struct {
@@ -111,6 +113,7 @@ func WithAggressiveFixes() RemediateOption {
 
 // RemediationReport describes what the remediation engine fixed and what it
 // could not fix automatically.
+// Values must not be shared across goroutines without synchronization.
 type RemediationReport struct {
 	// Fixed lists human-readable descriptions of applied fixes.
 	Fixed []string
@@ -121,6 +124,7 @@ type RemediationReport struct {
 
 // BookmarkHandling controls how bookmarks are produced for the output of
 // [Split] and [Merge].
+// BookmarkHandling values are immutable and safe for concurrent use.
 type BookmarkHandling int
 
 const (
@@ -140,6 +144,7 @@ const (
 
 // OrphanPolicy controls what happens to bookmarks whose target page is no
 // longer in the output document (Split only).
+// OrphanPolicy values are immutable and safe for concurrent use.
 type OrphanPolicy int
 
 const (
@@ -154,6 +159,7 @@ const (
 
 // BookmarkOptions configures bookmark handling for [Split] and [Merge].
 // Pass to a write call via [WithBookmarks].
+// Values must not be shared across goroutines without synchronization.
 type BookmarkOptions struct {
 	// Handling selects the high-level strategy. Defaults to BookmarkUpdate.
 	Handling BookmarkHandling
@@ -178,6 +184,7 @@ type BookmarkOptions struct {
 }
 
 // Metadata holds document information dictionary fields for [Writer.SetMetadata].
+// Values must not be shared across goroutines without synchronization.
 type Metadata struct {
 	Title        string
 	Author       string
@@ -190,6 +197,7 @@ type Metadata struct {
 }
 
 // TextStamp defines a text overlay to stamp on pages.
+// Values must not be shared across goroutines without synchronization.
 type TextStamp struct {
 	// Text is the line to draw.
 	Text string
@@ -216,6 +224,7 @@ type TextStamp struct {
 // of the package-level [FontHelvetica], [FontTimesRoman], ... variables
 // for the 14 standard PDF fonts (always available, no embedding required),
 // or with [NewTTFFont] to embed a custom TrueType font.
+// Values must not be shared across goroutines without synchronization.
 type StampFont struct {
 	// name holds the /BaseFont name for standard fonts and the derived
 	// PostScript name for custom fonts.
@@ -262,6 +271,7 @@ func NewTTFFont(data []byte) (StampFont, error) {
 }
 
 // ImageStamp defines an image overlay. Data must be JPEG or PNG bytes.
+// Values must not be shared across goroutines without synchronization.
 type ImageStamp struct {
 	// Data is the raw image file contents.
 	Data []byte
@@ -280,6 +290,7 @@ type ImageStamp struct {
 }
 
 // PDFStamp draws a page from another PDF document as a stamp.
+// Values must not be shared across goroutines without synchronization.
 type PDFStamp struct {
 	// Source is the stamp document. The caller retains ownership and must
 	// keep it valid until [Writer.WriteTo] is called.
@@ -304,6 +315,7 @@ type PDFStamp struct {
 // The interface is owned by the [pdf] package so callers never have to
 // import an internal path. An internal adapter forwards user
 // implementations to the signing engine at write time.
+// Implementations must be safe for concurrent use.
 type Signer interface {
 	// Sign computes a PKCS#7 / CMS signature over the given SHA-256
 	// digest bytes.
@@ -328,6 +340,7 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 
 // Writer applies content-preserving modifications to a PDF document.
 // Mutations are batched and written atomically via [Writer.WriteTo].
+// Writer is not safe for concurrent use; callers must serialize all method calls.
 type Writer struct {
 	reader          *Reader
 	mutations       []mutation
@@ -450,6 +463,7 @@ func (w *Writer) SetBookmarks(bookmarks []models.Bookmark) {
 
 // BookmarkMergeMode controls how auto-generated bookmarks are combined with
 // any existing document outline.
+// BookmarkMergeMode values are immutable and safe for concurrent use.
 type BookmarkMergeMode int
 
 const (
@@ -511,6 +525,7 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 // Values cover the ISO 32000 V=1..5 security handlers. New code should
 // prefer [EncryptAES256]; the RC4 variants are provided for
 // legacy-compatibility writes only.
+// EncryptAlgorithm values are immutable and safe for concurrent use.
 type EncryptAlgorithm int
 
 const (
@@ -528,6 +543,7 @@ const (
 // It is the public-API mirror of the internal encryption config: the
 // [pdf] package owns this type so callers never import an internal
 // path.
+// Values must not be shared across goroutines without synchronization.
 type EncryptConfig struct {
 	// UserPassword unlocks the document for reading. Empty string means
 	// the document can be opened without a password, but [Permissions]

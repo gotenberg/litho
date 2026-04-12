@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
-// --- Glyph coverage (CharSet / CIDSet) rule selectors ---
-
 // charSetRule returns the CharSet rule for Type1 font subsets.
 func charSetRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t02, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
@@ -234,7 +232,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 
 	emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
 	if emptyGIDs == nil {
-		// Not a TrueType font or can't parse loca — try CFF.
+		// Not a TrueType font or can't parse loca. Try CFF.
 		validCIDs := typography.ExtractValidCIDs(fontData)
 		for cid := range validCIDs {
 			if cid == 0 {
@@ -278,7 +276,7 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 		return nil
 	}
 
-	// Only check CFF fonts — skip TrueType.
+	// Only check CFF fonts. Skip TrueType.
 	validCIDs := typography.ExtractValidCIDs(fontData)
 	if validCIDs == nil {
 		return nil

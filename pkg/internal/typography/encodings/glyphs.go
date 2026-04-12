@@ -306,32 +306,32 @@ func GlyphToRuneFull(name string) (rune, bool) {
 	if r, ok := extendedAGL[name]; ok {
 		return r, true
 	}
-	// "uniXXXX" — 4 hex digits after "uni"
+	// "uniXXXX": 4 hex digits after "uni".
 	if len(name) == 7 && name[:3] == "uni" {
 		if r, err := strconv.ParseUint(name[3:], 16, 32); err == nil {
 			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
-	// "uXXXXXXXX" — variable hex after "u" (Unicode scalar)
+	// "uXXXXXXXX": variable hex after "u" (Unicode scalar).
 	if len(name) >= 5 && len(name) <= 9 && name[0] == 'u' && name[1] != 'n' {
 		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil {
 			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
 	// Non-standard glyph name patterns used by some PDF generators:
-	// "Gxx" — 2 hex digits (e.g., "G4F" → U+004F)
+	// "Gxx": 2 hex digits (e.g., "G4F" = U+004F).
 	if len(name) == 3 && name[0] == 'G' {
 		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil && r > 0 {
 			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
-	// "g00xx" — 4 hex digits after "g" (e.g., "g0053" → U+0053)
+	// "g00xx": 4 hex digits after "g" (e.g., "g0053" = U+0053).
 	if len(name) == 5 && name[0] == 'g' {
 		if r, err := strconv.ParseUint(name[1:], 16, 32); err == nil && r > 0 {
 			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
-	// "Cdd" / "Cddd" — decimal charcode (e.g., "C141" → rune(141)).
+	// "Cdd" / "Cddd": decimal charcode (e.g., "C141" = rune(141)).
 	// Reject C0/C1 control ranges (1-31, 127-159) since those are never
 	// valid glyph Unicode values and would override real base encodings.
 	if len(name) >= 3 && len(name) <= 4 && (name[0] == 'C' || name[0] == 'c') {
@@ -341,7 +341,7 @@ func GlyphToRuneFull(name string) (rune, bool) {
 			}
 		}
 	}
-	// "Cxx" — hex digits after C/c, only when the suffix contains at least
+	// "Cxx": hex digits after C/c, only when the suffix contains at least
 	// one hex-only letter (a-f/A-F). Handles names like "C2c" (0x2C = ',')
 	// and "C4b" (0x4B = 'K'). Pure-decimal names like "C128" are handled
 	// by the decimal pattern above; hex fallback would misinterpret them.
@@ -352,7 +352,7 @@ func GlyphToRuneFull(name string) (rune, bool) {
 			}
 		}
 	}
-	// "iSQPXXXX" — 4 hex digits after "iSQP" prefix (e.g., "iSQP0041" → U+0041 = 'A').
+	// "iSQPXXXX": 4 hex digits after "iSQP" prefix (e.g., "iSQP0041" = U+0041 = 'A').
 	// Used by some PDF generators as font-internal Unicode references.
 	if len(name) == 8 && name[:4] == "iSQP" {
 		if r, err := strconv.ParseUint(name[4:], 16, 32); err == nil && r > 0 {

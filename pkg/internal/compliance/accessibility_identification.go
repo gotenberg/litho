@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- OC config names ---
-
 func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := ocConfigNameRule(profile)
 
@@ -89,8 +87,6 @@ func hasNonEmptyName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	}
 	return string(nameStr) != ""
 }
-
-// --- PDF/UA identification ---
 
 func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {

@@ -13,7 +13,7 @@ import (
 // any future refactor that crashes, returns the wrong error sentinel, or
 // panics on a real (if minimal) PDF will surface here.
 //
-// The test is deliberately lenient on shape — it asserts "no error" and
+// The test is deliberately lenient on shape: it asserts "no error" and
 // "non-nil where expected", not exact values. Exact-value assertions
 // that would lock the implementation live in the dedicated
 // {reader,writer}_test.go files.
@@ -127,7 +127,7 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 		t.Errorf("ExtractAllText: %v", err)
 	}
 
-	// Compliance validators — behavior contract: return a (possibly
+	// Compliance validators. Behavior contract: return a (possibly
 	// non-empty) violation list and no engine-level error.
 	for _, profile := range []models.PDFAProfile{
 		models.PDFA1b, models.PDFA2b, models.PDFA4,

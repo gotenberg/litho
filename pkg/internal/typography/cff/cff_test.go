@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// --- INDEX encoding helpers ---
-
 // encodeINDEX builds a CFF INDEX from a slice of byte entries with the
 // smallest possible offSize.
 func encodeINDEX(t *testing.T, entries [][]byte) []byte {
@@ -89,8 +87,6 @@ func encodeCFFInt(v int32) []byte {
 	}
 }
 
-// --- readOffset ---
-
 func TestReadOffset(t *testing.T) {
 	tests := []struct {
 		name string
@@ -112,8 +108,6 @@ func TestReadOffset(t *testing.T) {
 		})
 	}
 }
-
-// --- parseINDEX ---
 
 func TestParseINDEX_RoundTrip(t *testing.T) {
 	entries := [][]byte{
@@ -180,8 +174,6 @@ func TestParseINDEX_InvalidOffSize(t *testing.T) {
 	}
 }
 
-// --- parseRealNumber ---
-
 func TestParseRealNumber(t *testing.T) {
 	tests := []struct {
 		name string
@@ -208,8 +200,6 @@ func TestParseRealNumber(t *testing.T) {
 	}
 }
 
-// --- parsePrivateDict ---
-
 func TestParsePrivateDict(t *testing.T) {
 	// defaultWidthX (op 20) = 500, nominalWidthX (op 21) = 250
 	dict := []byte{}
@@ -234,8 +224,6 @@ func TestParsePrivateDict_Empty(t *testing.T) {
 	}
 }
 
-// --- parseTopDict ---
-
 func TestParseTopDict_OffsetOperators(t *testing.T) {
 	// charset (op 15) = 100, Encoding (op 16) = 200, CharStrings (op 17) = 300
 	// Private (op 18) = size 50, offset 400
@@ -250,7 +238,7 @@ func TestParseTopDict_OffsetOperators(t *testing.T) {
 	dict = append(dict, encodeCFFInt(50)...)
 	dict = append(dict, encodeCFFInt(400)...)
 	dict = append(dict, 18)
-	// ROS — needs three operands (registry SID, ordering SID, supplement)
+	// ROS: needs three operands (registry SID, ordering SID, supplement)
 	dict = append(dict, encodeCFFInt(391)...)
 	dict = append(dict, encodeCFFInt(392)...)
 	dict = append(dict, encodeCFFInt(0)...)
@@ -277,8 +265,6 @@ func TestParseTopDict_OffsetOperators(t *testing.T) {
 	}
 }
 
-// --- parseFontMatrixScale ---
-
 func TestParseFontMatrixScale_Default(t *testing.T) {
 	// FontMatrix [0.001 0 0 0.001 0 0] → first element 0.001
 	// Real number 0.001 → 0xA0 0x01 0xFF
@@ -302,8 +288,6 @@ func TestParseFontMatrixScale_Missing(t *testing.T) {
 		t.Errorf("expected 0, got %v", got)
 	}
 }
-
-// --- parseCharset ---
 
 func TestParseCharset_Format0(t *testing.T) {
 	// Format 0: array of SIDs (uint16). 3 glyphs (.notdef + 2 entries).
@@ -385,8 +369,6 @@ func TestParseCharset_UnknownFormat(t *testing.T) {
 	}
 }
 
-// --- stringTable ---
-
 func TestStringTable_Standard(t *testing.T) {
 	st := &stringTable{}
 	if got := st.get(0); got != ".notdef" {
@@ -411,8 +393,6 @@ func TestStringTable_OutOfRange(t *testing.T) {
 		t.Errorf("expected empty string for out-of-range SID, got %q", got)
 	}
 }
-
-// --- extractCharstringWidth ---
 
 func TestExtractCharstringWidth_Endchar(t *testing.T) {
 	// width 100, endchar (op 14)
@@ -472,8 +452,6 @@ func TestExtractCharstringWidth_NegativeWidth(t *testing.T) {
 	}
 }
 
-// --- ReadUnitsPerEm ---
-
 func TestReadUnitsPerEm_DefaultOnInvalid(t *testing.T) {
 	if got := ReadUnitsPerEm(nil); got != 0 {
 		t.Errorf("nil data: got %d, want 0", got)
@@ -482,8 +460,6 @@ func TestReadUnitsPerEm_DefaultOnInvalid(t *testing.T) {
 		t.Errorf("bad version: got %d, want 0", got)
 	}
 }
-
-// --- Public API errors ---
 
 func TestGlyphToUnicode_InvalidHeader(t *testing.T) {
 	ctx := context.Background()
@@ -530,8 +506,6 @@ func TestExtractEncoding_PredefinedReturnsNil(t *testing.T) {
 	}
 }
 
-// --- End-to-end with a hand-built minimal CFF font ---
-
 // buildMinimalCFF constructs a minimal but well-formed CFF font with two
 // glyphs (.notdef and "A"). It exercises the public APIs without depending
 // on a binary fixture.
@@ -544,7 +518,7 @@ func buildMinimalCFF(t *testing.T) []byte {
 	//   Top DICT INDEX (referencing offsets we patch in)
 	//   String INDEX (one custom entry: "MyFont")
 	//   Global Subr INDEX (empty)
-	//   CharStrings INDEX (2 entries — minimal endchar charstrings)
+	//   CharStrings INDEX (2 entries, minimal endchar charstrings)
 	//   Charset (format 0, one SID)
 	//   Private DICT
 	//
@@ -604,7 +578,7 @@ func buildMinimalCFF(t *testing.T) []byte {
 		// is risky; instead, append a leading 0 operand and re-emit the
 		// last operator. Simpler: just push extra integer operands that
 		// the operator preceding will overwrite. We append a harmless
-		// integer 0 before the next operator slot — but since the dict
+		// integer 0 before the next operator slot, but since the dict
 		// is already complete, prepend.
 		dict = append([]byte{139}, dict...)
 	}

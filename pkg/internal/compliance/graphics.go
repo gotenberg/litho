@@ -298,8 +298,6 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 	return results
 }
 
-// --- Transfer function checks (§6.2.5) ---
-
 // trForbiddenRule returns the rule for TR key being forbidden, varying by part.
 func trForbiddenRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_8_t01, Rule_19005_2_6_2_5_t01, Rule_19005_3_6_2_5_t01, Rule_19005_4_6_2_5_t01)
@@ -331,8 +329,6 @@ func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.P
 	return results
 }
 
-// --- HTP key check (§6.2.5) ---
-
 // htpForbiddenRule returns the rule for HTP key being forbidden.
 func htpForbiddenRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_5_t03, Rule_19005_3_6_2_5_t03, Rule_19005_4_6_2_5_t03)
@@ -353,8 +349,6 @@ func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ stri
 	}
 	return nil
 }
-
-// --- Halftone checks (§6.2.5) ---
 
 // halftoneTypeRule returns the rule for invalid HalftoneType.
 func halftoneTypeRule(part int) Rule {
@@ -446,8 +440,6 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 	return results
 }
 
-// --- Rendering intent check (§6.2.6) ---
-
 // validRenderingIntents lists the four standard PDF rendering intents.
 var validRenderingIntents = map[string]bool{ //nolint:gochecknoglobals // constant lookup table.
 	"RelativeColorimetric": true,
@@ -483,8 +475,6 @@ func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.Pd
 	}
 	return nil
 }
-
-// --- Overprint mode check ---
 
 func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
 	// Overprint checks apply to parts 2+ and 4 only.

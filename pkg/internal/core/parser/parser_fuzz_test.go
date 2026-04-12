@@ -17,7 +17,7 @@ func newParserFromBytes(data []byte) *Parser {
 }
 
 // FuzzParser feeds arbitrary bytes into the parser and ensures it never panics.
-// The goal is not successful parsing — it is crash-freedom.
+// The goal is not successful parsing. It is crash-freedom.
 func FuzzParser(f *testing.F) {
 	// Seed corpus: valid PDF objects that exercise different parser paths.
 
@@ -103,7 +103,7 @@ func FuzzParser(f *testing.F) {
 	f.Add([]byte("1 0 R extra tokens after ref"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		// Guard against inputs that are too large — the fuzzer can generate
+		// Guard against inputs that are too large. The fuzzer can generate
 		// multi-megabyte inputs that slow down the run without adding coverage.
 		if len(data) > 64*1024 {
 			return
@@ -117,7 +117,7 @@ func FuzzParser(f *testing.F) {
 			if err != nil {
 				break
 			}
-			// Exercise String() on the result — some panics hide in formatters.
+			// Exercise String() on the result. Some panics hide in formatters.
 			if obj != nil {
 				_ = obj.String()
 			}

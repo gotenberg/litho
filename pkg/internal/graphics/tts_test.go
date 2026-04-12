@@ -93,7 +93,7 @@ func TestBDC_NestedLangInheritance(t *testing.T) {
 				"Lang": ast.PdfString("de-DE"),
 			},
 		}},
-		// Inner: set expansion but no language — should inherit outer Lang
+		// Inner: set expansion but no language. Should inherit outer Lang.
 		{Operator: "BDC", Operands: []ast.PdfObject{
 			ast.PdfName("Span"),
 			ast.PdfDict{
@@ -113,7 +113,7 @@ func TestBDC_NestedLangInheritance(t *testing.T) {
 	if m.MarkedContent[1].Language != "" {
 		t.Errorf("inner entry should have empty Language, got %q", m.MarkedContent[1].Language)
 	}
-	// But the outer entry has it — the text extraction walk-back should find it
+	// But the outer entry has it. The text extraction walk-back should find it.
 	if m.MarkedContent[0].Language != "de-DE" {
 		t.Errorf("outer entry Language should be 'de-DE', got %q", m.MarkedContent[0].Language)
 	}

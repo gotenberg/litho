@@ -188,7 +188,7 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 		pos++
 	}
 	if pos == 0 || pos >= len(data) {
-		return // Can't parse — skip.
+		return // Can't parse, skip.
 	}
 
 	// Separator between object number and generation: must be single SP (0x20).
@@ -243,7 +243,7 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 
 	// "obj" keyword.
 	if pos+3 > len(data) || string(data[pos:pos+3]) != "obj" {
-		return // Not a valid object header — skip.
+		return // Not a valid object header, skip.
 	}
 	pos += 3
 
@@ -275,7 +275,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 	}
 	data := buf[:n]
 
-	// Search for "endobj" — scan from the end since we want the LAST one
+	// Search for "endobj". Scan from the end since we want the LAST one
 	// (objects can contain the string "endobj" in string literals).
 	endobjIdx := -1
 	for i := len(data) - 6; i >= 0; i-- { //nolint:mnd
@@ -354,7 +354,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 		return
 	}
 
-	// Check for multiple EOL markers (double LF, etc.) — must be a single EOL.
+	// Check for multiple EOL markers (double LF, etc.). Must be a single EOL.
 	if pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r') {
 		d.mu.Lock()
 		d.FormatViolations = append(d.FormatViolations,
@@ -372,7 +372,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 
 	// Parse subsection headers and validate format.
 	for pos < len(buf) {
-		// Check for "trailer" keyword — end of xref table.
+		// Check for "trailer" keyword, end of xref table.
 		if pos+7 <= len(buf) && string(buf[pos:pos+7]) == "trailer" {
 			break
 		}
@@ -386,7 +386,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 			pos++
 		}
 		if pos == headerStart {
-			break // Not a digit — likely end of table or malformed.
+			break // Not a digit, likely end of table or malformed.
 		}
 
 		// Must be exactly one space (0x20).
@@ -436,7 +436,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 		}
 
 		// Skip past the entries (each is 20 bytes).
-		// Validate individual entries would be ideal but keeping it simple —
+		// Validate individual entries would be ideal but keeping it simple.
 		// the subsection header format check catches the most common violations.
 		entryBytes := count * 20 //nolint:mnd // 20 bytes per xref entry
 		if pos+entryBytes > len(buf) {

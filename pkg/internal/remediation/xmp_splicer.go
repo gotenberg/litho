@@ -489,8 +489,6 @@ func findRDFDescriptionCloseOffset(xmp []byte) (int, error) {
 	}
 }
 
-// --- small byte helpers ---
-
 func isSpace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\r' || b == '\n'
 }

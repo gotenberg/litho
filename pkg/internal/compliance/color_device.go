@@ -8,8 +8,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// --- Rule selectors ---
-
 func deviceRGBRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_3_3_t01, Rule_19005_2_6_2_4_3_t02, Rule_19005_3_6_2_4_3_t02, Rule_19005_4_6_2_4_3_t02)
 }
@@ -21,8 +19,6 @@ func deviceCMYKRule(part int) Rule {
 func deviceGrayRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_3_3_t03, Rule_19005_2_6_2_4_3_t04, Rule_19005_3_6_2_4_3_t04, Rule_19005_4_6_2_4_3_t04)
 }
-
-// --- Types ---
 
 // defaultCS tracks which Default{RGB,CMYK,Gray} colour spaces are set.
 type defaultCS struct {
@@ -39,7 +35,7 @@ type deviceCSUsage struct {
 	// subScope* track device CS usage from sub-scopes (Form XObjects,
 	// tiling patterns) that is NOT covered by the sub-scope's own DefaultCS
 	// or Group CS. This usage cannot be covered by a parent scope's DefaultCS
-	// per ISO 32000-2 §8.6.5.7 — only OutputIntent or blending CS apply.
+	// per ISO 32000-2 §8.6.5.7. Only OutputIntent or blending CS apply.
 	subScopeRGB  bool
 	subScopeCMYK bool
 	subScopeGray bool
@@ -48,8 +44,6 @@ type deviceCSUsage struct {
 // maxFormXObjectDepth is the maximum recursion depth for scanning Form XObject
 // content streams and their nested resources.
 const maxFormXObjectDepth = 10
-
-// --- Check implementation ---
 
 // checkDeviceColorSpaces validates that device-dependent colour spaces
 // (DeviceRGB, DeviceCMYK, DeviceGray) are only used when allowed.

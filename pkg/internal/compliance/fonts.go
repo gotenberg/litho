@@ -103,8 +103,6 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 	return usage
 }
 
-// --- Main check group ---
-
 // checkFontGroup validates font-related compliance rules across all pages.
 func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
@@ -194,7 +192,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 
-	// Type 3 fonts have no font program — skip embedding checks.
+	// Type 3 fonts have no font program, so skip embedding checks.
 	isType3 := isType3Font(ctx, doc, fontDict)
 
 	// Type 0 (composite) fonts: check descendant CIDFonts.
@@ -203,7 +201,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 		return results
 	}
 
-	// Font embedding — only for fonts used for visible rendering.
+	// Font embedding: only for fonts used for visible rendering.
 	if isVisible {
 		results = append(results, checkFontEmbedding(ctx, doc, fontDict, fontName, pageNum, profile, isType3)...)
 	}
@@ -219,7 +217,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	// Font name UTF-8.
 	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// Glyph width consistency — only for fonts used for visible rendering.
+	// Glyph width consistency: only for fonts used for visible rendering.
 	if isVisible {
 		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 	}
@@ -300,8 +298,6 @@ func structTreeHasActualText(ctx context.Context, doc *document.Document, node a
 	}
 	return false
 }
-
-// --- Type 0 (composite) font checks ---
 
 // checkType0Font validates composite font properties including descendant
 // CIDFonts, CIDSystemInfo, CIDToGIDMap, and ToUnicode.
@@ -452,7 +448,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 						}
 					}
 				} else {
-					// No post table glyph names — use cmap + loca + /Widths.
+					// No post table glyph names, so use cmap + loca + /Widths.
 					charToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 					if charToGID != nil {
 						// GID 0 is always .notdef.
@@ -466,7 +462,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 							for code := range usage.charCodes {
 								gid, inCmap := charToGID[uint16(code)]
 								if !inCmap {
-									continue // No cmap entry — can't determine GID.
+									continue // No cmap entry, can't determine GID.
 								}
 								if gid == 0 {
 									return failf(rule, "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
@@ -516,7 +512,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 	}
 
 	// An odd-length string with a 2-byte CMap (Identity-H/V) means the
-	// last byte cannot form a valid CID — the renderer uses .notdef.
+	// last byte cannot form a valid CID. The renderer uses .notdef.
 	if hasOddLengthString {
 		return failf(rule, "font %s on page %d: odd-length string with 2-byte CMap references .notdef", fontName, pageNum)
 	}

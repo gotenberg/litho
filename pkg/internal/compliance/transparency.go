@@ -37,8 +37,6 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 	return results
 }
 
-// --- PDF/A-1: transparency is entirely forbidden (§6.4) ---
-
 func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []Violation {
 	var results []Violation
 	for i, page := range pages {
@@ -172,8 +170,6 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 	}
 	return results
 }
-
-// --- PDF/A-2+/4: blend mode and blending color space checks ---
 
 // standardBlendModes lists all blend modes defined in ISO 32000-1:2008.
 var standardBlendModes = map[string]bool{ //nolint:gochecknoglobals // constant lookup table.
@@ -748,8 +744,6 @@ func checkType3FontTransparency(ctx context.Context, doc *document.Document, pag
 	return false
 }
 
-// --- Helpers ---
-
 // resolveBlendMode resolves a blend mode value which may be a name or the
 // first element of an array of names.
 func resolveBlendMode(ctx context.Context, doc *document.Document, obj ast.PdfObject) string {
@@ -757,7 +751,7 @@ func resolveBlendMode(ctx context.Context, doc *document.Document, obj ast.PdfOb
 	if name, _ := document.ResolveName(ctx, doc, obj); name != "" {
 		return string(name)
 	}
-	// Or an array of names — use the first entry.
+	// Or an array of names. Use the first entry.
 	arr, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil || len(arr) == 0 {
 		return ""

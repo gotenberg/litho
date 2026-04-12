@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// --- parseLocaOffsets ---
-
 func TestParseLocaOffsets_Short(t *testing.T) {
 	// Short loca stores uint16 values that must be doubled on read.
 	// Four entries = three glyphs: offsets 0, 20, 36, 50.
@@ -72,8 +70,6 @@ func TestParseLocaOffsets_InvalidFormat(t *testing.T) {
 	}
 }
 
-// --- encodeLoca ---
-
 func TestEncodeLoca_ShortRoundTrip(t *testing.T) {
 	offsets := []uint32{0, 20, 36, 50}
 	encoded := encodeLoca(offsets, true)
@@ -107,8 +103,6 @@ func TestEncodeLoca_LongRoundTrip(t *testing.T) {
 		}
 	}
 }
-
-// --- expandCompositeClosure ---
 
 // buildSimpleGlyph returns glyf bytes for a simple glyph (non-composite).
 // numberOfContours >= 0 identifies it as simple; the actual contour
@@ -247,8 +241,6 @@ func TestExpandCompositeClosure_MultipleComponents(t *testing.T) {
 	}
 }
 
-// --- encodeTTF / tableChecksum / ttfChecksum / findTableOffset ---
-
 func TestTableChecksum_AlignmentPadding(t *testing.T) {
 	// A 5-byte table is treated as 8 bytes with 3 trailing zeros for
 	// checksum computation. Verify the expected sum matches what we
@@ -344,8 +336,6 @@ func TestTTFChecksum_HeadAdjustment(t *testing.T) {
 		t.Errorf("post-patch file checksum: got %08x, want %08x", got, uint32(0xB1B0AFBA))
 	}
 }
-
-// --- subsetTTF integration ---
 
 func TestSubsetTTF_FallbackOnCorruptInput(t *testing.T) {
 	// Garbage bytes cannot be parsed as a TTF. subsetTTF must return

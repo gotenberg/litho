@@ -6,7 +6,7 @@ import "strings"
 type xmpPropType int
 
 const (
-	// Simple value types — stored as text content or attributes.
+	// Simple value types: stored as text content or attributes.
 	xmpPropText    xmpPropType = iota // Plain text string.
 	xmpPropURI                        // URI string.
 	xmpPropInteger                    // Integer value.
@@ -14,7 +14,7 @@ const (
 	xmpPropBoolean                    // Boolean (True/False).
 	xmpPropDate                       // ISO 8601 date.
 
-	// Container types — wrapped in rdf:Alt, rdf:Seq, or rdf:Bag.
+	// Container types: wrapped in rdf:Alt, rdf:Seq, or rdf:Bag.
 	xmpPropAlt    // rdf:Alt (language alternatives).
 	xmpPropSeq    // rdf:Seq (ordered list).
 	xmpPropBag    // rdf:Bag (unordered set).

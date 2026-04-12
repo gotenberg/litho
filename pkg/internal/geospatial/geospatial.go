@@ -107,7 +107,7 @@ func parseMeasureDict(ctx context.Context, doc *document.Document, measureObj as
 		}
 	}
 
-	// Extract /GPTS (Geospatial Tie Points) — array of lat/lon pairs.
+	// Extract /GPTS (Geospatial Tie Points): array of lat/lon pairs.
 	// Format: [lat1 lon1 lat2 lon2 ... latN lonN]
 	if gptsObj, ok := measureDict["GPTS"]; ok {
 		gptsArr, err := document.ResolveArray(ctx, doc, gptsObj)
@@ -128,7 +128,7 @@ func parseMeasureDict(ctx context.Context, doc *document.Document, measureObj as
 
 // parseGCS extracts coordinate system info from a /GCS dictionary.
 func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, geo *models.GeoData) {
-	// /Type — "GEOGCS", "PROJCS", etc.
+	// /Type: "GEOGCS", "PROJCS", etc.
 	if typeObj, ok := gcsDict["Type"]; ok {
 		name, err := document.ResolveName(ctx, doc, typeObj)
 		if err != nil {
@@ -139,7 +139,7 @@ func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, 
 		}
 	}
 
-	// /EPSG — EPSG code.
+	// /EPSG: EPSG code.
 	if epsgObj, ok := gcsDict["EPSG"]; ok {
 		epsgRes, err := document.ResolveObject(ctx, doc, epsgObj)
 		if err != nil {
@@ -153,7 +153,7 @@ func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, 
 		}
 	}
 
-	// /WKT — Well-Known Text may contain EPSG info.
+	// /WKT: Well-Known Text may contain EPSG info.
 	if geo.EPSG == "" {
 		if wktObj, ok := gcsDict["WKT"]; ok {
 			wktStr, err := document.ResolveString(ctx, doc, wktObj)
@@ -170,7 +170,7 @@ func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, 
 // parseGPTS extracts tie points from the /GPTS array and optionally pairs them
 // with the /LPTS (PDF-space points) array.
 func parseGPTS(ctx context.Context, doc *document.Document, measureDict ast.PdfDict, gptsArr ast.PdfArray, geo *models.GeoData) {
-	// /LPTS (Local Points) — PDF user space coordinates matching GPTS.
+	// /LPTS (Local Points): PDF user space coordinates matching GPTS.
 	var lptsArr ast.PdfArray
 	if lptsObj, ok := measureDict["LPTS"]; ok {
 		arr, err := document.ResolveArray(ctx, doc, lptsObj)

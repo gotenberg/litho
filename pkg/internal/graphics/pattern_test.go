@@ -87,7 +87,7 @@ func TestPattern_ScnSetsShadingPattern(t *testing.T) {
 
 func TestPattern_ScnWithUnderlyingColor(t *testing.T) {
 	// An uncolored tiling pattern can carry underlying color components.
-	// scn 0.5 0.3 0.8 /P1 — three floats + pattern name.
+	// scn 0.5 0.3 0.8 /P1: three floats + pattern name.
 	m := NewMachine([4]float64{0, 0, 612, 792})
 	m.Resources = ast.PdfDict{
 		"Pattern": ast.PdfDict{
@@ -137,7 +137,7 @@ func TestPattern_CsNonPatternClearsState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Now switch to DeviceRGB — should clear pattern fields.
+	// Now switch to DeviceRGB. Should clear pattern fields.
 	ops = []content.Operation{
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("DeviceRGB")}},
 	}
@@ -164,7 +164,7 @@ func TestPattern_ScNonPatternClearsState(t *testing.T) {
 		},
 	}
 
-	// Set Pattern then set numeric color values — should clear pattern fields.
+	// Set Pattern then set numeric color values. Should clear pattern fields.
 	ops := []content.Operation{
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("Pattern")}},
 		{Operator: "scn", Operands: []ast.PdfObject{ast.PdfName("P1")}},
@@ -189,7 +189,7 @@ func TestPattern_ScNonPatternClearsState(t *testing.T) {
 
 func TestPattern_NoResources_FallsBackToPattern(t *testing.T) {
 	m := NewMachine([4]float64{0, 0, 612, 792})
-	// No resources set — pattern type should be "Pattern" (unknown).
+	// No resources set. Pattern type should be "Pattern" (unknown).
 
 	ops := []content.Operation{
 		{Operator: "cs", Operands: []ast.PdfObject{ast.PdfName("Pattern")}},

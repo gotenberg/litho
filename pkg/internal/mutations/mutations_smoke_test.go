@@ -48,8 +48,6 @@ func newMutationDoc(t *testing.T, data []byte) (*document.Document, *writer.ObjA
 	return doc, writer.NewObjAllocator(maxObj)
 }
 
-// --- SetMetadata ---
-
 func TestSetMetadata_AddsAllFields(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newMutationDoc(t, minimalPDFMutations())
@@ -79,8 +77,6 @@ func TestSetMetadata_EmptyOverrides(t *testing.T) {
 	}
 }
 
-// --- AddAttachment ---
-
 func TestAddAttachment_AddsPending(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newMutationDoc(t, minimalPDFMutations())
@@ -92,8 +88,6 @@ func TestAddAttachment_AddsPending(t *testing.T) {
 		t.Error("AddAttachment: no pending allocations")
 	}
 }
-
-// --- Split ---
 
 func TestSplit_SinglePage(t *testing.T) {
 	t.Parallel()
@@ -127,8 +121,6 @@ func TestSplit_SinglePage(t *testing.T) {
 		t.Errorf("split result: got %d pages, want 1", len(pages2))
 	}
 }
-
-// --- Merge ---
 
 func TestMerge_TwoSources(t *testing.T) {
 	t.Parallel()
@@ -166,8 +158,6 @@ func TestMerge_TwoSources(t *testing.T) {
 	}
 }
 
-// --- SetBookmarks ---
-
 func TestSetBookmarks_AddsOutline(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -185,8 +175,6 @@ func TestSetBookmarks_AddsOutline(t *testing.T) {
 		t.Error("SetBookmarks: no pending allocations")
 	}
 }
-
-// --- RotatePages ---
 
 func TestRotatePages_90(t *testing.T) {
 	t.Parallel()
@@ -216,8 +204,6 @@ func TestRotatePages_90(t *testing.T) {
 	}
 }
 
-// --- StampText ---
-
 func TestStampText_Basic(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -240,8 +226,6 @@ func TestStampText_Basic(t *testing.T) {
 	}
 }
 
-// --- ValidateTTFForStamp ---
-
 func TestValidateTTFForStamp_RejectsShort(t *testing.T) {
 	t.Parallel()
 	if err := ValidateTTFForStamp([]byte{0, 1}); err == nil {
@@ -251,8 +235,6 @@ func TestValidateTTFForStamp_RejectsShort(t *testing.T) {
 		t.Error("expected error for nil TTF")
 	}
 }
-
-// --- FormatFloat ---
 
 func TestFormatFloat_TrimsTrailingZeros(t *testing.T) {
 	t.Parallel()
@@ -275,8 +257,6 @@ func TestFormatFloat_TrimsTrailingZeros(t *testing.T) {
 	}
 }
 
-// --- GenerateDocumentID ---
-
 func TestGenerateDocumentID_NonEmpty(t *testing.T) {
 	t.Parallel()
 	id := GenerateDocumentID()
@@ -284,8 +264,6 @@ func TestGenerateDocumentID_NonEmpty(t *testing.T) {
 		t.Error("GenerateDocumentID: empty")
 	}
 }
-
-// --- DefaultSplitBookmarkConfig / DefaultMergeBookmarkConfig ---
 
 func TestDefaultBookmarkConfigs(t *testing.T) {
 	t.Parallel()

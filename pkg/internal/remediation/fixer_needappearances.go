@@ -48,7 +48,7 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if ref, ok := acroFormObj.(ast.PdfIndirectRef); ok {
 		alloc.AllocAt(ref.ObjectNum, newAcroForm)
 	} else {
-		// AcroForm is inline in catalog — update catalog.
+		// AcroForm is inline in catalog. Update catalog.
 		newCatalog := make(ast.PdfDict, len(catalogDict))
 		maps.Copy(newCatalog, catalogDict)
 		newCatalog["AcroForm"] = newAcroForm

@@ -15,7 +15,7 @@ import (
 // LinearizationParams holds the parameters extracted from a Linearization
 // Dictionary found in the first 1024 bytes of a linearized PDF.
 type LinearizationParams struct {
-	// FileLength is the /L value — the total length of the PDF file in bytes.
+	// FileLength is the /L value: the total length of the PDF file in bytes.
 	FileLength int64
 
 	// HintStreamOffset and HintStreamLength are from the /H array.
@@ -23,14 +23,14 @@ type LinearizationParams struct {
 	HintStreamOffset int64
 	HintStreamLength int64
 
-	// FirstPageObjNum is the /O value — the object number of the first page's
+	// FirstPageObjNum is the /O value: the object number of the first page's
 	// page object.
 	FirstPageObjNum int
 
-	// NumPages is the /N value — the total number of pages in the document.
+	// NumPages is the /N value: the total number of pages in the document.
 	NumPages int
 
-	// FirstPageEndOffset is the /E value — the offset of the end of the
+	// FirstPageEndOffset is the /E value: the offset of the end of the
 	// first-page cross-reference section.
 	FirstPageEndOffset int64
 
@@ -85,12 +85,12 @@ func probeLinearization(r io.ReaderAt, fileSize int64) *LinearizationParams {
 
 	params := &LinearizationParams{}
 
-	// /L — file length
+	// /L: file length.
 	if lObj, ok := linDict["L"]; ok {
 		params.FileLength = pdfToInt64(lObj)
 	}
 
-	// /H — hint stream references [offset length]
+	// /H: hint stream references [offset length].
 	if hObj, ok := linDict["H"]; ok {
 		if hArr, ok := hObj.(ast.PdfArray); ok && len(hArr) >= 2 {
 			params.HintStreamOffset = pdfToInt64(hArr[0])
@@ -98,22 +98,22 @@ func probeLinearization(r io.ReaderAt, fileSize int64) *LinearizationParams {
 		}
 	}
 
-	// /O — first page object number
+	// /O: first page object number.
 	if oObj, ok := linDict["O"]; ok {
 		params.FirstPageObjNum = int(pdfToInt64(oObj))
 	}
 
-	// /N — number of pages
+	// /N: number of pages.
 	if nObj, ok := linDict["N"]; ok {
 		params.NumPages = int(pdfToInt64(nObj))
 	}
 
-	// /E — end of first page section
+	// /E: end of first page section.
 	if eObj, ok := linDict["E"]; ok {
 		params.FirstPageEndOffset = pdfToInt64(eObj)
 	}
 
-	// /T — offset of the first-page xref entry (file trailer)
+	// /T: offset of the first-page xref entry (file trailer).
 	if tObj, ok := linDict["T"]; ok {
 		params.FirstPageXRefOffset = pdfToInt64(tObj)
 	}
@@ -177,8 +177,8 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 //	  - Item 12: bits needed for numerator of fraction (16 bits)
 //	  - Item 13: shared object denominator           (16 bits)
 //	Per-page arrays (each N entries, bit-packed):
-//	  1. object count deltas       (item3 bits each)
-//	  2. page length deltas        (item5 bits each)
+//	  - object count deltas       (item3 bits each)
+//	  - page length deltas        (item5 bits each)
 //	  ... (more arrays we skip for now)
 func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) {
 	if len(data) < 28 { // minimum header size

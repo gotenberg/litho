@@ -128,7 +128,7 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 			visited[key] = true
 		}
 
-		// XObjects are streams — resolve as stream to access the dict.
+		// XObjects are streams. Resolve as stream to access the dict.
 		stream, err := document.ResolveStream(ctx, doc, obj)
 		if err != nil {
 			// Fallback: try as plain dict (some producers use dict-only XObjects).
@@ -171,7 +171,7 @@ func checkXObject(
 ) []Violation {
 	var results []Violation
 
-	// §6.2.9 — Reference XObjects forbidden (all parts).
+	// §6.2.9: Reference XObjects forbidden (all parts).
 	// A /Ref key in the XObject dict indicates a reference XObject.
 	if _, hasRef := xobjDict["Ref"]; hasRef {
 		results = append(results, refXObjectRule(part, pageNum, name)...)
@@ -189,7 +189,7 @@ func checkXObject(
 			results = append(results, checkFormXObject(ctx, doc, xobjDict, name, pageNum, part, profile)...)
 		case "Image":
 			results = append(results, checkImageXObject(ctx, doc, xobjDict, name, pageNum, part)...)
-			// §6.2.8.3 / §6.2.7.3 — JPEG2000 codestream constraints.
+			// §6.2.8.3 / §6.2.7.3: JPEG2000 codestream constraints.
 			if hasJPXFilter(ctx, doc, xobjDict) {
 				results = append(results, checkJPXImage(stream, name, pageNum, part)...)
 			}

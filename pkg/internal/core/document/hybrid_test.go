@@ -227,7 +227,7 @@ func buildHybridPDF_Type2() []byte {
 	buf.Write(compXRefBytes)
 	buf.WriteString("\nendstream\nendobj\n")
 
-	// Legacy xref table (does NOT include object 3 — only 0,1,2,4,5).
+	// Legacy xref table (does NOT include object 3, only 0,1,2,4,5).
 	xrefOff := buf.Len()
 	buf.WriteString("xref\n")
 	buf.WriteString("0 3\n")

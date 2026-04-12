@@ -36,7 +36,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		return fmt.Errorf("incremental update canceled: %w", err)
 	}
 
-	// Step 1: copy original file bytes.
+	// Copy original file bytes.
 	src := io.NewSectionReader(cfg.Source, 0, cfg.SourceSize)
 	n, err := io.Copy(dst, src)
 	if err != nil {
@@ -51,7 +51,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		return fmt.Errorf("writing separator: %w", err)
 	}
 
-	// Step 2: serialize each pending object, recording byte offsets.
+	// Serialize each pending object, recording byte offsets.
 	pending := cfg.Allocator.Pending()
 	objNums := make([]int, 0, len(pending))
 	for num := range pending {
@@ -77,13 +77,13 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		offset += written
 	}
 
-	// Step 3: build the new trailer.
+	// Build the new trailer.
 	trailer := make(ast.PdfDict, len(cfg.Trailer)+2)
 	maps.Copy(trailer, cfg.Trailer)
 	trailer["Size"] = ast.PdfInt(cfg.Allocator.NextObjNum())
 	trailer["Prev"] = ast.PdfInt(cfg.StartXRefOffset)
 
-	// Step 4: write xref section.
+	// Write xref section.
 	xrefOffset := offset
 
 	if cfg.UseXRefStream {
@@ -96,7 +96,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		}
 	}
 
-	// Step 5: write startxref + %%EOF.
+	// Write startxref + %%EOF.
 	tail := fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefOffset)
 	_, err = io.WriteString(dst, tail)
 	if err != nil {

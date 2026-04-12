@@ -77,9 +77,8 @@ func hasIdentityCMap(ctx context.Context, doc *document.Document, fontDict ast.P
 
 // allGlyphNamesAGLResolvable returns true if all glyph names used by a Type 1
 // font are resolvable via the Adobe Glyph List. It checks multiple sources:
-//  1. Standard 14 fonts (always AGL-based)
-//  2. /Encoding /Differences array glyph names
-//  3. /FontDescriptor /CharSet (lists glyph names in Type 1 subsets)
+// Standard 14 fonts (always AGL-based), /Encoding /Differences array glyph
+// names, and /FontDescriptor /CharSet (lists glyph names in Type 1 subsets).
 func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	// Standard 14 fonts always use AGL-resolvable names.
 	if isStandard14Font(ctx, doc, fontDict) {
@@ -96,7 +95,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 					for _, item := range diffArr {
 						name, ok := item.(ast.PdfName)
 						if !ok {
-							continue // integer code — skip
+							continue // integer code, skip
 						}
 						if string(name) == ".notdef" {
 							continue
@@ -111,7 +110,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 		}
 	}
 
-	// Check /FontDescriptor /CharSet — a string of slash-separated glyph names.
+	// Check /FontDescriptor /CharSet, a string of slash-separated glyph names.
 	fd := findFontDescriptor(ctx, doc, fontDict)
 	if fd != nil {
 		if charsetObj, ok := fd["CharSet"]; ok {
@@ -160,7 +159,7 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 	for _, item := range diffArr {
 		name, ok := item.(ast.PdfName)
 		if !ok {
-			continue // integer code — skip
+			continue // integer code, skip
 		}
 		if string(name) == ".notdef" {
 			continue
@@ -294,7 +293,7 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 	for code := range usage.charCodes {
 		glyphName, ok := encoding[code]
 		if !ok || glyphName == ".notdef" || glyphName == "" {
-			continue // unmapped or .notdef — skip
+			continue // unmapped or .notdef, skip
 		}
 		if _, resolved := encodings.GlyphToRuneFull(glyphName); resolved {
 			continue
@@ -394,7 +393,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 
 	// Type3 fonts: for PDF/A-4 and PDF/UA, VeraPDF exempts Type3 from
 	// ToUnicode checks. For PDF/A parts 1–3 (levels a/u), Type3 fonts
-	// must have resolvable Unicode mappings — either all glyph names in
+	// must have resolvable Unicode mappings: either all glyph names in
 	// /Encoding /Differences are AGL-resolvable or a /ToUnicode CMap is present.
 	if isType3Font(ctx, doc, fontDict) {
 		part := PDFAPart(profile)
@@ -462,7 +461,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		}
 	}
 
-	// Exemption (c): Identity-H/Identity-V — only exempt for PDF/A, not PDF/UA.
+	// Exemption (c): Identity-H/Identity-V, only exempt for PDF/A, not PDF/UA.
 	// For PDF/UA, a ToUnicode CMap is required for Identity-encoded Type0 fonts
 	// unless glyph-level Unicode mapping is available through other means.
 	if hasIdentityCMap(ctx, doc, fontDict) && !IsPDFUA(profile) {
@@ -492,9 +491,9 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 			}
 		}
 
-		// Symbolic TrueType cmap subtable check — requires font program parsing.
-		// Full verification requires parsing the embedded TrueType program.
-		_ = trueTypeSymbolicCmapRule(profile)
+		// Symbolic TrueType cmap subtable check: full verification requires
+		// parsing the embedded TrueType program. Result unused for now.
+		_ = trueTypeSymbolicCmapRule(profile) // TODO: integrate once TrueType cmap parser is available.
 	} else {
 		// Non-symbolic TrueType must use MacRomanEncoding or WinAnsiEncoding.
 		rule := trueTypeEncodingNonSymbolicRule(profile)
@@ -508,8 +507,8 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 				switch encName {
 				case "MacRomanEncoding", "WinAnsiEncoding":
 				case "":
-					// encName is empty — fall through to check encoding dictionary.
-					// Encoding is a dictionary — check BaseEncoding.
+					// encName is empty. Fall through to check encoding dictionary.
+					// Encoding is a dictionary. Check BaseEncoding.
 					encDict, err := document.ResolveDict(ctx, doc, encObj)
 					if err != nil || encDict == nil {
 						results = append(results, failf(rule, "font %s on page %d has invalid Encoding type", fontName, pageNum)...)

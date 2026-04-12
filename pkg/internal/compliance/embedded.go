@@ -53,14 +53,14 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Resolve /Names dictionary from catalog.
 	namesDict, hasNames := resolveNamesDict(ctx, doc, catalog)
 
-	// --- PDF/A-1: embedded files are completely forbidden (§6.1.11) ---
+	// §6.1.11: PDF/A-1 forbids embedded files.
 	if part == 1 {
 		results = append(results, checkEmbeddedForbiddenPart1(ctx, doc, catalog, namesDict, hasNames)...)
 		complog(doc).Debug("compliance.embedded: part 1 checks complete", "violations", len(results))
 		return results
 	}
 
-	// --- PDF/A-4f: /EmbeddedFiles key required in /Names ---
+	// PDF/A-4f: /EmbeddedFiles key required in /Names.
 	if vctx.level == 'f' && part == 4 {
 		if !hasNames {
 			results = append(results, fail(Rule_19005_4_6_9_t05, "Names dictionary missing from catalog")...)
@@ -69,7 +69,6 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 	}
 
-	// --- Collect file specification dicts with /EF key (parts 2+) ---
 	fileSpecs := collectFileSpecs(ctx, doc)
 
 	for _, fs := range fileSpecs {
@@ -84,13 +83,13 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkAFRelationship(ctx, doc, fs, part, profile)...)
 	}
 
-	// --- PDF/A-4: embedded files must themselves be PDF/A-compliant (§6.9 t3) ---
-	// This rule applies only to base PDF/A-4 (level '4'), not PDF/A-4e or PDF/A-4f.
+	// §6.9 t3: PDF/A-4 embedded files must themselves be PDF/A-compliant.
+	// Applies only to base PDF/A-4 (level '4'), not PDF/A-4e or PDF/A-4f.
 	if part == 4 && vctx.level == '4' {
 		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, fileSpecs)...)
 	}
 
-	// --- §6.8 t4: Catalog /AF array must reference file spec dicts (parts 3+) ---
+	// §6.8 t4: catalog /AF array must reference file spec dicts (parts 3+).
 	if part >= 3 {
 		results = append(results, checkCatalogAF(ctx, doc, catalog, fileSpecs, part)...)
 	}
@@ -240,8 +239,6 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, fs fileSpe
 	return nil
 }
 
-// --- Rule selectors ---
-
 func fileSpecFUFRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_8_t02, Rule_19005_3_6_8_t02, Rule_19005_4_6_9_t02)
 }
@@ -299,7 +296,7 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 					// Annotations with /FS directly reference a file spec
 					// (e.g., FileAttachment). This counts as a valid
-					// association — no separate /AF entry required.
+					// association, so no separate /AF entry required.
 					if fsObj, hasFS := annotDict["FS"]; hasFS {
 						if ref, isRef := fsObj.(ast.PdfIndirectRef); isRef {
 							afRefs[ref.ObjectNum] = true
@@ -561,7 +558,7 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 		if len(violations) == 0 {
 			complog(doc).Debug("compliance.embedded: embedded PDF passes",
 				"object", fs.objNum, "profile", profile)
-			return nil // Passes at least one profile — compliant.
+			return nil // Passes at least one profile, compliant.
 		}
 
 		complog(doc).Debug("compliance.embedded: embedded PDF fails profile",

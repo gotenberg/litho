@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- Standard 14 font names ---
-
 // standard14Fonts is the set of PDF standard 14 font base names.
 // PDF/A does NOT exempt these from embedding, but they are used
 // for certain structural checks.
@@ -32,8 +30,6 @@ var standard14Fonts = map[string]bool{
 	"Symbol":                true,
 	"ZapfDingbats":          true,
 }
-
-// --- Rule selector helpers ---
 
 // fontEmbeddingRule returns the font embedding rule for the given profile.
 func fontEmbeddingRule(profile string) Rule {
@@ -139,8 +135,6 @@ func toUnicodeCMapValuesRule(profile string) Rule {
 func puaActualTextRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule{})
 }
-
-// --- Helper functions ---
 
 // isType3Font returns true if the font subtype is "Type3".
 func isType3Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
@@ -286,7 +280,7 @@ func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.P
 
 	basefontObj, ok := fontDict["BaseFont"]
 	if !ok {
-		// BaseFont key is truly absent — this is not a UTF-8 violation; the
+		// BaseFont key is truly absent. This is not a UTF-8 violation; the
 		// embedding check will catch the missing font program. Do not flag here
 		// to avoid false positives when the key exists but cannot be decoded.
 		return nil
@@ -294,7 +288,7 @@ func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.P
 
 	basefontName, ok := basefontObj.(ast.PdfName)
 	if !ok {
-		// BaseFont resolves to a non-name type — not a UTF-8 violation.
+		// BaseFont resolves to a non-name type. Not a UTF-8 violation.
 		return nil
 	}
 
@@ -302,9 +296,7 @@ func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.P
 		return failf(rule, "font %s on page %d BaseFont=%s", fontName, pageNum, string(basefontName))
 	}
 
-	// Suppress unused warning for doc — used in other check functions via
-	// the same signature pattern.
-	_ = doc
+	_ = doc // Suppress unused warning; doc used in other check functions via this helper.
 	return nil
 }
 
@@ -348,7 +340,7 @@ func simpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.
 func simpleFontWidthIsZero(firstChar int, widths []ast.PdfObject, charCode byte) bool {
 	idx := int(charCode) - firstChar
 	if idx < 0 || idx >= len(widths) {
-		return false // Not in range — can't determine.
+		return false // Not in range, can't determine.
 	}
 	return document.Float(widths[idx]) == 0
 }

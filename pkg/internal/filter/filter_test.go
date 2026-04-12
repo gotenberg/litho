@@ -759,7 +759,7 @@ func TestDecodeLZW_EarlyChange0vs1_Differ(t *testing.T) {
 	wrong, err := decodeLZW(context.Background(), encoded0, ast.PdfDict{
 		"EarlyChange": ast.PdfInt(1),
 	})
-	// It may error or produce wrong output — either proves they differ.
+	// It may error or produce wrong output. Either proves they differ.
 	if err == nil && bytes.Equal(wrong, input) {
 		t.Error("expected EC=0 stream decoded with EC=1 to differ, but got identical output")
 	}
@@ -911,7 +911,7 @@ func TestDecodeStream_Brotli(t *testing.T) {
 }
 
 func TestBrotli_RoundTrip(t *testing.T) {
-	original := []byte("litho PDF engine — Brotli round-trip test")
+	original := []byte("litho PDF engine, Brotli round-trip test")
 
 	encoded, err := ApplyEncodeFilter(original, "BrotliDecode")
 	if err != nil {

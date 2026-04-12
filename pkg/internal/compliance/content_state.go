@@ -80,7 +80,6 @@ func checkContentStreamStateOps(
 // processOp dispatches a single content stream operator.
 func (c *contentStateChecker) processOp(op content.Operation) {
 	switch op.Operator {
-	// --- State stack ---
 	case "q":
 		c.stack = append(c.stack, c.state)
 	case "Q":
@@ -89,7 +88,6 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 			c.stack = c.stack[:len(c.stack)-1]
 		}
 
-	// --- ExtGState application ---
 	case "gs":
 		if len(op.Operands) >= 1 {
 			if name, ok := op.Operands[0].(ast.PdfName); ok {
@@ -97,7 +95,6 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 			}
 		}
 
-	// --- Fill color space (explicit) ---
 	case "cs":
 		if len(op.Operands) >= 1 {
 			if name, ok := op.Operands[0].(ast.PdfName); ok {
@@ -105,7 +102,6 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 			}
 		}
 
-	// --- Stroke color space (explicit) ---
 	case "CS":
 		if len(op.Operands) >= 1 {
 			if name, ok := op.Operands[0].(ast.PdfName); ok {
@@ -113,9 +109,8 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 			}
 		}
 
-	// --- Fill color space (implicit from color operators) ---
 	case "sc", "scn":
-		// These use the current fill CS — no change.
+		// These use the current fill CS, no change.
 	case "rg":
 		c.state.fillCS = "DeviceRGB"
 	case "k":
@@ -123,9 +118,8 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 	case "g":
 		c.state.fillCS = "DeviceGray"
 
-	// --- Stroke color space (implicit from color operators) ---
 	case "SC", "SCN":
-		// These use the current stroke CS — no change.
+		// These use the current stroke CS, no change.
 	case "RG":
 		c.state.strokeCS = "DeviceRGB"
 	case "K":
@@ -133,7 +127,6 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 	case "G":
 		c.state.strokeCS = "DeviceGray"
 
-	// --- Painting operators: check violations ---
 	// Fill-only operations.
 	case "f", "F", "f*":
 		c.checkAtPaintingOp(op.Operator, true, false)
@@ -147,10 +140,10 @@ func (c *contentStateChecker) processOp(op content.Operation) {
 	// Default rendering mode is 0 (fill), so treat as fill.
 	case "Tj", "TJ", "'", "\"":
 		c.checkAtPaintingOp(op.Operator, true, false)
-	// XObject/shading invocation — uses both.
+	// XObject/shading invocation, uses both.
 	case "Do", "sh":
 		c.checkAtPaintingOp(op.Operator, true, true)
-	// Path end without painting — no check needed.
+	// Path end without painting, no check needed.
 	case "n":
 		// no-op
 	}
@@ -436,7 +429,7 @@ func checkInlineImageIntent(ops []content.Operation, part int, pageNum int) []Vi
 		if !ok {
 			continue
 		}
-		// Check /Intent (full name) — inline images don't use /RI abbreviation
+		// Check /Intent (full name). Inline images don't use /RI abbreviation
 		// per the PDF spec, but check both for robustness.
 		for _, key := range []ast.PdfName{"Intent", "RI"} {
 			val, exists := dict[key]

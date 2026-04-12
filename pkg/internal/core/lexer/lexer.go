@@ -28,6 +28,7 @@ const (
 	TokenHexString
 )
 
+// String returns the human-readable name of the token type.
 func (t TokenType) String() string {
 	switch t {
 	case TokenEOF:
@@ -148,7 +149,7 @@ func (l *Lexer) readRegular() (Token, error) {
 			return Token{Type: TokenError, Value: err.Error()}, err
 		}
 		if isWhitespace(c) || isDelimiter(c) {
-			_ = l.reader.UnreadByte()
+			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			break
 		}
 		buf.WriteByte(c)
@@ -161,6 +162,7 @@ func (l *Lexer) readRegular() (Token, error) {
 	return Token{Type: TokenKeyword, Value: val}, nil
 }
 
+// NextToken reads and returns the next PDF token from the input stream.
 func (l *Lexer) NextToken() (Token, error) {
 	for {
 		c, err := l.reader.ReadByte()
@@ -209,7 +211,7 @@ func (l *Lexer) NextToken() (Token, error) {
 					continue
 				}
 				if isWhitespace(cc) || isDelimiter(cc) {
-					_ = l.reader.UnreadByte()
+					_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 					break
 				}
 				// Per ISO 32000-2 §7.3.5, # introduces a two-digit hex code.
@@ -283,7 +285,7 @@ func (l *Lexer) NextToken() (Token, error) {
 			if nextC == '<' {
 				return Token{Type: TokenDelimiter, Value: "<<"}, nil
 			}
-			_ = l.reader.UnreadByte()
+			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 
 			// Hex string
 			var buf strings.Builder
@@ -314,14 +316,14 @@ func (l *Lexer) NextToken() (Token, error) {
 			if nextC == '>' {
 				return Token{Type: TokenDelimiter, Value: ">>"}, nil
 			}
-			_ = l.reader.UnreadByte()
+			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			return Token{Type: TokenDelimiter, Value: ">"}, nil
 
 		case '[', ']', '{', '}':
 			return Token{Type: TokenDelimiter, Value: string(c)}, nil
 
 		default:
-			_ = l.reader.UnreadByte()
+			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			return l.readRegular()
 		}
 	}

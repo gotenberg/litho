@@ -93,8 +93,8 @@ var StandardEncoding = map[byte]rune{
 	0x78: 'x', 0x79: 'y', 0x7A: 'z', 0x7B: '{', 0x7C: '|', 0x7D: '}', 0x7E: '~',
 
 	// StandardEncoding differs from WinAnsi/MacRoman notably here:
-	0x27: 0x2019, // quoteright (U+2019) — NOT apostrophe
-	0x60: 0x2018, // quoteleft (U+2018) — NOT grave accent
+	0x27: 0x2019, // quoteright (U+2019), not apostrophe
+	0x60: 0x2018, // quoteleft (U+2018), not grave accent
 
 	// Upper range (0xA1–0xFF) per PDF spec Table D.1
 	0xA1: 0x00A1, // exclamdown

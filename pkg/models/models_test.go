@@ -28,7 +28,6 @@ func assertRoundTrip[T any](t *testing.T, in T) {
 	}
 }
 
-// --- Per-type round-trip tests -------------------------------------------
 
 func TestPage_JSONRoundTrip(t *testing.T) {
 	assertRoundTrip(t, Page{
@@ -344,7 +343,6 @@ func TestPageOffsetEntry_JSONRoundTrip(t *testing.T) {
 	})
 }
 
-// --- Profile constants ----------------------------------------------------
 
 func TestPDFAProfile_JSONValue(t *testing.T) {
 	tests := []struct {
@@ -397,7 +395,6 @@ func TestPDFUAProfile_JSONValue(t *testing.T) {
 	}
 }
 
-// --- Empty-schema drift guards --------------------------------------------
 //
 // Each case asserts the JSON byte shape of a zero-value instance of the
 // type. Any field rename, tag change, or `omitempty` regression will break

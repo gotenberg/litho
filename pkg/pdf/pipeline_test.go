@@ -19,8 +19,6 @@ func openThreePage(t *testing.T) *Reader {
 	return r
 }
 
-// --- Validation ---
-
 func TestPipeline_Validate_EmptyPipeline(t *testing.T) {
 	err := NewPipeline().Validate()
 	if !errors.Is(err, ErrPipelineEmpty) {
@@ -56,8 +54,6 @@ func TestPipeline_Validate_SplitEmpty(t *testing.T) {
 		t.Fatalf("want ErrPipelineEmptyPageList, got %v", err)
 	}
 }
-
-// --- Execution: pure Apply ---
 
 func TestPipeline_OpenAndWrite(t *testing.T) {
 	r := openThreePage(t)
@@ -120,8 +116,6 @@ func TestPipeline_Apply_Error_Surfaces(t *testing.T) {
 		t.Fatalf("want PipelineStageError wrapping 'boom', got %v", err)
 	}
 }
-
-// --- Execution: Split ---
 
 func TestPipeline_Split_AsFinalStage(t *testing.T) {
 	r := openThreePage(t)
@@ -197,8 +191,6 @@ func TestPipeline_Apply_ThenSplit(t *testing.T) {
 	}
 }
 
-// --- Execution: Split + Merge ---
-
 func TestPipeline_SplitThenMerge(t *testing.T) {
 	r1 := openThreePage(t)
 	defer r1.Close()
@@ -224,8 +216,6 @@ func TestPipeline_SplitThenMerge(t *testing.T) {
 		t.Errorf("pages: got %d, want 5", n)
 	}
 }
-
-// --- Temp-file management ---
 
 func TestPipeline_TempDir_Honored(t *testing.T) {
 	r := openThreePage(t)
@@ -298,8 +288,6 @@ func TestPipeline_PartialFailure_DstUntouched(t *testing.T) {
 	}
 }
 
-// --- Context ---
-
 func TestPipeline_ContextCanceled(t *testing.T) {
 	r := openThreePage(t)
 	defer r.Close()
@@ -322,8 +310,6 @@ func TestPipeline_ContextCanceled(t *testing.T) {
 		t.Errorf("want context.Canceled, got %v", err)
 	}
 }
-
-// --- Merge with bookmarks ---
 
 func TestPipeline_MergeWithBookmarks(t *testing.T) {
 	r1 := openThreePage(t)

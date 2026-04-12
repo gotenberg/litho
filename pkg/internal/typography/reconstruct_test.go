@@ -87,7 +87,7 @@ func TestReconstructText_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Either returns empty (early bail) or a partial string — both are
+	// Either returns empty (early bail) or a partial string, both are
 	// acceptable. The contract is "no panic, no block".
 	_ = ReconstructText(ctx, in, nil)
 }

@@ -33,6 +33,7 @@ import (
 )
 
 // OpenOption configures optional behavior when opening a PDF document via [Open] or [OpenFile].
+// OpenOption closures must be safe to call from any goroutine.
 type OpenOption func(*openOpts)
 
 type openOpts struct {
@@ -229,6 +230,7 @@ func (r *Reader) PageCount(ctx context.Context) (int, error) {
 }
 
 // ExtractTextOption configures the behavior of [Reader.ExtractText].
+// ExtractTextOption closures must be safe to call from any goroutine.
 type ExtractTextOption func(*extractTextOpts)
 
 type extractTextOpts struct {
@@ -368,6 +370,7 @@ func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) 
 
 // Permissions represents the document's permission flags as defined by
 // ISO 32000-2, Table 22. For unencrypted documents, all flags are true.
+// Values must not be shared across goroutines without synchronization.
 type Permissions struct {
 	Print             bool // Bit 3: Print the document.
 	ModifyContent     bool // Bit 4: Modify document contents.
@@ -423,6 +426,7 @@ func (r *Reader) Bookmarks(ctx context.Context) ([]models.Bookmark, error) {
 
 // BookmarkGenerationOptions controls auto-generated bookmark behavior.
 // See [Reader.GenerateBookmarks] and [Writer.GenerateBookmarks].
+// Values must not be shared across goroutines without synchronization.
 type BookmarkGenerationOptions struct {
 	// MaxDepth limits how many heading levels are included. Default 3.
 	MaxDepth int
@@ -460,6 +464,7 @@ type BookmarkGenerationOptions struct {
 // The interface is owned by the [pdf] package so callers never have to
 // import an internal path. An internal adapter translates candidates
 // from the engine's shape to [HeadingCandidate] before each Score call.
+// Implementations must be safe for concurrent use.
 type HeadingScorer interface {
 	Score(candidate HeadingCandidate) float64
 }
@@ -467,6 +472,7 @@ type HeadingScorer interface {
 // HeadingScript classifies a candidate's dominant script. Scorers can
 // use it to pick script-specific heuristics (for example, CJK headings
 // have different length and punctuation conventions than Latin).
+// HeadingScript values are immutable and safe for concurrent use.
 type HeadingScript string
 
 // Heading-script constants mirror the engine's detected script set.
@@ -483,6 +489,7 @@ const (
 // HeadingCandidate is the input passed to a [HeadingScorer]. It holds
 // the reconstructed line text plus structural features that distinguish
 // headings from body text.
+// Values must not be shared across goroutines without synchronization.
 type HeadingCandidate struct {
 	// Text is the reconstructed line text.
 	Text string

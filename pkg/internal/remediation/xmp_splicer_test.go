@@ -59,9 +59,9 @@ func TestFindXMPProperty_AttributeForm(t *testing.T) {
 		t.Errorf("sibling attribute lost:\n%s", removedStr)
 	}
 	// After removal, the document must still be valid XML: find the
-	// conformance attribute again — should be gone, and re-parsing the
+	// conformance attribute again. It should be gone, and re-parsing the
 	// result should succeed (exercised by running findXMPProperty on
-	// it — a parse error would return not-found).
+	// it: a parse error would return not-found).
 	if loc2 := findXMPProperty(removed, pdfaidNS, "conformance"); loc2.Form != xmpPropertyNotFound {
 		t.Errorf("conformance still findable after removal: %v", loc2)
 	}
@@ -153,8 +153,6 @@ func TestRemoveXMPProperty_NoOpWhenNotFound(t *testing.T) {
 	}
 }
 
-// --- insertChildElement ---
-
 func TestInsertChildElement_IntoDescription(t *testing.T) {
 	xmp := []byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -192,8 +190,6 @@ func TestInsertChildElement_NoDescription(t *testing.T) {
 	}
 }
 
-// --- replacePropertyValue ---
-
 func TestReplacePropertyValue_ElementForm(t *testing.T) {
 	xmp := []byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -230,8 +226,6 @@ func TestReplacePropertyValue_NotFound(t *testing.T) {
 		t.Error("expected error when property is not present")
 	}
 }
-
-// --- ensureNamespaceDecl ---
 
 func TestEnsureNamespaceDecl_Adds(t *testing.T) {
 	xmp := []byte(`<?xpacket begin=""?>

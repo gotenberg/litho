@@ -96,7 +96,7 @@ func TestFixStructTree_AddsMinimalStructureTree(t *testing.T) {
 		t.Errorf("document element /S: got %v, want Document", docElem["S"])
 	}
 
-	// --- Regression guard for the ParentTreeRoot bug ---
+	// Regression guard for the ParentTreeRoot bug.
 	//
 	// Per ISO 32000-1 §14.7.2 Table 323, a structure element's parent
 	// pointer is named /Parent. The fixer used to incorrectly set

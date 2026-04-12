@@ -222,7 +222,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		return usage
 	}
 
-	// Check ColorSpace dict in nested resources — including Indexed base
+	// Check ColorSpace dict in nested resources, including Indexed base
 	// spaces. Separation/DeviceN alternate spaces are NOT checked here
 	// because the Form XObject may have its own DefaultCS that covers them.
 	formCSDict, err := document.ResolveDict(ctx, doc, formRes["ColorSpace"])
@@ -708,7 +708,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// Patterns can be streams (tiling) or dicts (shading patterns).
 		stream, err := document.ResolveStream(ctx, doc, patternObj)
 		if err != nil {
-			// Shading pattern (Type 2) — check its /Shading dict for device CS.
+			// Shading pattern (Type 2): check its /Shading dict for device CS.
 			patDict, err := document.ResolveDict(ctx, doc, patternObj)
 			if err == nil && patDict != nil {
 				shadingObj, ok := patDict["Shading"]

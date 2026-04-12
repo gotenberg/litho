@@ -64,7 +64,7 @@ func TestDetectTables_LineBased(t *testing.T) {
 }
 
 func TestDetectTables_SpatialClustering(t *testing.T) {
-	// No lines — rely on spatial gaps to infer a 3-row × 2-column table.
+	// No lines. Rely on spatial gaps to infer a 3-row x 2-column table.
 	//
 	//   Name        Score
 	//   Alice       100
@@ -104,7 +104,7 @@ func TestDetectTables_SpatialClustering(t *testing.T) {
 }
 
 func TestDetectTables_NoTable(t *testing.T) {
-	// Single paragraph of text — no table structure.
+	// Single paragraph of text, no table structure.
 	elements := []models.TextElement{
 		makeElement("Hello", 50, 700, 12),
 		makeElement("world", 90, 700, 12),

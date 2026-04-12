@@ -121,7 +121,7 @@ func ExtractLines(ops []content.Operation) []models.Line {
 		case "b", "b*": // close, fill, and stroke
 			closePath()
 			emitStroked()
-		case "f", "F", "f*": // fill only — no visible stroked lines
+		case "f", "F", "f*": // fill only, no visible stroked lines
 			discardPath()
 		case "n": // end path without painting
 			discardPath()

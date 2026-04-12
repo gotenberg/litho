@@ -7,8 +7,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- PDF/UA-2 form structure checks ---
-
 // checkPDFUA2FormStructure validates:
 //   - §8.10.1 t02: Form structure element contains at most one widget annotation.
 //   - §8.10.2.3 t01: Widget without label needs /Contents entry.
@@ -52,14 +50,14 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			if isAnnotHidden(ctx, doc, annot) {
 				continue
 			}
-			// Widget has /Contents — satisfies labelling requirement.
+			// Widget has /Contents, satisfies labelling requirement.
 			if contentsObj, ok := annot["Contents"]; ok {
 				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
 				if err == nil && len(contentsStr) > 0 {
 					continue // has Contents
 				}
 			}
-			// No label and no /Contents — violation.
+			// No label and no /Contents. Violation.
 			results = append(results, fail(Rule_14289_2_8_10_2_3_t01,
 				"Widget annotation has no label and no /Contents entry")...)
 		}
@@ -114,8 +112,6 @@ func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject
 	return subtype == "Widget"
 }
 
-// --- Structure destinations (PDF/UA-2 §8.8) ---
-
 // checkStructureDestinations validates PDF/UA-2 §8.8:
 //   - t01: Destinations in outline items, OpenAction, and Link annotations
 //     must be structure destinations (array starting with struct element ref).
@@ -139,7 +135,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 	// Check catalog /OpenAction (t01).
 	if oaObj, ok := catalog["OpenAction"]; ok {
 		if !isStructureDestination(ctx, doc, oaObj) {
-			// Could be an action dict — check if GoTo.
+			// Could be an action dict. Check if GoTo.
 			oaDict, _ := document.ResolveDict(ctx, doc, oaObj)
 			if oaDict != nil {
 				if s, _ := document.ResolveName(ctx, doc, oaDict["S"]); s == "GoTo" {
@@ -206,7 +202,7 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 func isStructureDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject) bool {
 	// Resolve named destination if it's a string/name.
 	if nameObj, err := document.ResolveName(ctx, doc, destObj); err == nil && nameObj != "" {
-		// Named destination — look up in /Names/Dests.
+		// Named destination. Look up in /Names/Dests.
 		// For simplicity, assume named destinations are not structure destinations.
 		return false
 	}

@@ -268,18 +268,18 @@ func (h *Handler) Authenticate(password string) error {
 		if h.V >= 3 {
 			// ISO 32000-1 Algorithm 3.4 and 3.5 for V >= 3
 
-			// Step 1: Base hash
+			// Compute base hash.
 			md3 := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			md3.Write(paddingString)
 			md3.Write(h.id)
 			baseHash := md3.Sum(nil)
 
-			// Step 2: Initialize RC4 with EncryptionKey and encrypt the base hash
+			// Initialize RC4 with EncryptionKey and encrypt the base hash.
 			c, _ := rc4.NewCipher(candidateKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			expectedU = make([]byte, 16)
 			c.XORKeyStream(expectedU, baseHash)
 
-			// Step 3: The 19-Pass Loop
+			// Run the 19-pass XOR loop.
 			for i := 1; i <= 19; i++ {
 				tempKey := make([]byte, len(candidateKey))
 				for j := range candidateKey {

@@ -151,7 +151,7 @@ func findCorpusPath() string {
 // runCorpus walks each profile directory, validates the failing PDFs,
 // remediates them, re-validates, and aggregates the results into a
 // [remediateReport]. The function is deliberately side-effect-free on
-// report assembly — output formatting happens in [printText] / [printJSON].
+// report assembly. Output formatting happens in [printText] / [printJSON].
 func runCorpus(ctx context.Context, corpusRoot string, profiles []profileInfo, aggressive, showProgress bool) remediateReport {
 	start := time.Now()
 	var rpt remediateReport
@@ -304,8 +304,6 @@ func collectFailFiles(profileDir string) ([]string, error) {
 	return out, err
 }
 
-// --- output ---
-
 func printText(rpt remediateReport) {
 	for _, pr := range rpt.Profiles {
 		fmt.Printf("%-12s  files=%3d  fail=%3d  remediated=%3d  fully_fixed=%3d  violations: %d → %d\n",
@@ -351,8 +349,6 @@ func checkThresholds(rpt remediateReport, maxRegressions int, minFixedPct float6
 	}
 	return exit
 }
-
-// --- residual breakdown ---
 
 func printResidualBreakdown(ctx context.Context, corpusRoot string, profiles []profileInfo, aggressive bool) {
 	fmt.Println("\n=== Residual Violation Breakdown ===")

@@ -24,8 +24,7 @@ import (
 // expands into gigabytes.
 const maxDecompressedSize = 256 << 20 // 256 MB
 
-// ErrDecompressionBomb is returned when a stream exceeds maxDecompressedSize.
-var ErrDecompressionBomb = fmt.Errorf("decompressed stream exceeds %d MB limit", maxDecompressedSize>>20)
+
 
 // limitedCopy copies from r to buf in 1 MB chunks up to maxDecompressedSize.
 // Context is checked between chunks so callers can cancel long decompression.
@@ -411,7 +410,7 @@ func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, 
 
 	parms := extractDecodeParms(stream.Dict, len(filters))
 
-	// Fast path: single Flate or LZW filter without predictor — true streaming.
+	// Fast path: single Flate or LZW filter without predictor, true streaming.
 	if len(filters) == 1 && extractPredictorParams(parms[0]) == nil {
 		switch filters[0] {
 		case "FlateDecode", "Fl":

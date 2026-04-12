@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- Rule selectors ---
-
 // deviceNComponentRule returns the rule for DeviceN component count limit.
 func deviceNComponentRule(part int) Rule {
 	// PDF/A-1 uses §6.1.12 t09, parts 2+ don't have a separate rule
@@ -27,8 +25,6 @@ func separationConsistencyRule(part int) Rule {
 func deviceNConsistencyRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_4_4_t02, Rule_19005_3_6_2_4_4_t02, Rule_19005_4_6_2_4_4_t02)
 }
-
-// --- Check implementations ---
 
 // checkSeparationDeviceN validates Separation and DeviceN colour space
 // consistency per §6.2.4.4. It ensures that the same colorant name always maps
@@ -335,19 +331,19 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 	var attrsDict ast.PdfDict
 	if len(arr) >= 5 {
-		attrsDict, _ = document.ResolveDict(ctx, doc, arr[4])
+		attrsDict, _ = document.ResolveDict(ctx, doc, arr[4]) // Best-effort: nil dict skips colorant checks.
 	}
 
 	var colorantsDict ast.PdfDict
 	if attrsDict != nil {
-		colorantsDict, _ = document.ResolveDict(ctx, doc, attrsDict["Colorants"])
+		colorantsDict, _ = document.ResolveDict(ctx, doc, attrsDict["Colorants"]) // Best-effort: nil dict skips colorant checks.
 	}
 
 	for _, cName := range colorantNames {
 		if processColors[cName] || cName == "All" || cName == "None" {
 			continue
 		}
-		// Spot colorant — must have a Colorants entry.
+		// Spot colorant: must have a Colorants entry.
 		if colorantsDict == nil {
 			*results = append(*results, failf(separationConsistencyRule(part),
 				"page %d, ColorSpace %s: DeviceN spot colorant %q has no Colorants dictionary",
@@ -391,7 +387,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 						pageIdx+1, name)...)
 				}
 			} else {
-				// First Colorants dict entry for this colorant — store its tint
+				// First Colorants dict entry for this colorant. Store its tint
 				// transform so subsequent entries with the same name are compared.
 				colorantTintFuncs[name] = cArr[3]
 			}

@@ -40,7 +40,7 @@ func minimalFontPDF() []byte {
 // PDF with a known text string. The assertion is behavioral: the
 // returned elements contain "Hello" somewhere in their Text fields,
 // and the element count is non-zero. Exact counts, positions, and
-// widths are not asserted — those vary with the implementation.
+// widths are not asserted. Those vary with the implementation.
 func TestExtractElements_MinimalPDF(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -113,7 +113,7 @@ func TestExtractText_MinimalPDF(t *testing.T) {
 
 // TestExtractElements_ContextCancellation honors a cancelled context.
 // The per-op cancellation check in extractTextRecursive fires every
-// 100 operators — for a 1-op content stream the outer ctx.Err() check
+// 100 operators. For a 1-op content stream the outer ctx.Err() check
 // at function entry is what catches this.
 func TestExtractElements_ContextCancellation(t *testing.T) {
 	t.Parallel()
@@ -131,7 +131,7 @@ func TestExtractElements_ContextCancellation(t *testing.T) {
 	cancel()
 
 	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
-	// May return an error (ctx.Canceled) or partial results — either
-	// is acceptable, the contract is "no panic, no block".
+	// May return an error (ctx.Canceled) or partial results, either
+	// is acceptable. The contract is "no panic, no block".
 	_, _ = ExtractElements(ctx, doc, machine, page, ops)
 }

@@ -70,7 +70,7 @@ func TestDecoder_FallsBackToBuiltinForUnregisteredFilter(t *testing.T) {
 	p := &mockPlugin{name: "TestFilter", result: []byte("decoded")}
 	d := NewDecoder([]plugins.FilterDecoder{p})
 
-	// Use FlateDecode — not registered as a plugin, should use built-in.
+	// Use FlateDecode, not registered as a plugin. Should use built-in.
 	var buf bytes.Buffer
 	w := zlib.NewWriter(&buf)
 	_, _ = w.Write([]byte("hello"))
@@ -144,7 +144,7 @@ func TestDecoder_NewStreamReaderDelegatesToPackageLevelForBuiltins(t *testing.T)
 	p := &mockPlugin{name: "TestFilter", result: []byte("ok")}
 	d := NewDecoder([]plugins.FilterDecoder{p})
 
-	// FlateDecode stream — should use the fast path (no plugin needed).
+	// FlateDecode stream. Should use the fast path (no plugin needed).
 	var buf bytes.Buffer
 	w := zlib.NewWriter(&buf)
 	_, _ = w.Write([]byte("streamed"))

@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
-// --- CMap-related rule selectors ---
-
 // cidToGIDMapRule returns the CIDToGIDMap rule for the given profile.
 // Returns a zero Rule if the check does not apply (part 1).
 func cidToGIDMapRule(profile string) Rule {
@@ -90,8 +88,6 @@ func isPredefinedCMap(name string) bool {
 	return false
 }
 
-// --- CMap check implementations ---
-
 // checkCIDToGIDMap validates that Type 2 CIDFonts have a /CIDToGIDMap entry (rule 3).
 func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSubtype, fontName string, pageNum int, profile string) []Violation {
 	rule := cidToGIDMapRule(profile)
@@ -166,23 +162,23 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 
 	cmapStream, err := document.ResolveStream(ctx, doc, encObj)
 	if err == nil {
-		// Embedded CMap stream — read CIDSystemInfo from the stream dict.
+		// Embedded CMap stream: read CIDSystemInfo from the stream dict.
 		cmapSysInfo, err := document.ResolveDict(ctx, doc, cmapStream.Dict["CIDSystemInfo"])
 		if err != nil || cmapSysInfo == nil {
 			return failf(rule, "font %s on page %d: embedded CMap stream missing CIDSystemInfo",
 				fontName, pageNum)
 		}
-		cmapRegistry, _ = document.ResolveString(ctx, doc, cmapSysInfo["Registry"])
-		cmapOrdering, _ = document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])
-		cmapSupplement, _ = document.ResolveInt(ctx, doc, cmapSysInfo["Supplement"])
+		cmapRegistry, _ = document.ResolveString(ctx, doc, cmapSysInfo["Registry"])     // Best-effort: empty string on failure triggers mismatch below.
+		cmapOrdering, _ = document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])     // Best-effort: empty string on failure triggers mismatch below.
+		cmapSupplement, _ = document.ResolveInt(ctx, doc, cmapSysInfo["Supplement"]) // Best-effort: zero on failure triggers mismatch below.
 	} else {
-		// Named (predefined) CMap — extract CIDSystemInfo from the name.
+		// Named (predefined) CMap: extract CIDSystemInfo from the name.
 		// Predefined CMap names follow the pattern "Registry-Ordering-Supplement"
 		// (e.g., "Adobe-Japan1-2", "Adobe-Korea1-0").
 		encName, _ := document.ResolveName(ctx, doc, encObj)
 		reg, ord, sup := parsePredefinedCMapName(string(encName))
 		if reg == "" {
-			// Non-Identity encoding that can't be resolved — the CIDSystemInfo
+			// Non-Identity encoding that can't be resolved. The CIDSystemInfo
 			// relationship can't be satisfied.
 			return failf(rule, "font %s on page %d: encoding %q is not a valid predefined CMap",
 				fontName, pageNum, string(encName))

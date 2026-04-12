@@ -35,7 +35,7 @@ func TestBitReader_AlignToByte(t *testing.T) {
 	// Read 3 bits.
 	br.readBits(3)
 
-	// Align to byte boundary — should skip remaining 5 bits of byte 0.
+	// Align to byte boundary. Should skip remaining 5 bits of byte 0.
 	br.alignToByte()
 
 	// Next 8 bits should be 0x00.
@@ -49,7 +49,7 @@ func TestBitReader_AlignNoop(t *testing.T) {
 	data := []byte{0xFF, 0xAA}
 	br := newBitReader(data)
 
-	// Read exactly 8 bits — already aligned.
+	// Read exactly 8 bits, already aligned.
 	br.readBits(8)
 	br.alignToByte() // should be a no-op
 
@@ -86,8 +86,8 @@ func TestParsePageOffsetTable(t *testing.T) {
 	//
 	// Then arrays:
 	//   obj count deltas: page0=2 (010), page1=7 (111) → 0101_11xx
-	//   page length deltas: page0=100 (0110_0100), page1=200 (1100_1000) — wait, 4 bits each
-	//   page0=5 (0101), page1=10 (1010) → 0101_1010
+	//   page length deltas: page0=100 (0110_0100), page1=200 (1100_1000), wait, 4 bits each
+	//   page0=5 (0101), page1=10 (1010) = 0101_1010
 
 	// Build header manually with a bitWriter helper.
 	bw := &bitWriter{}
@@ -231,8 +231,6 @@ func TestProbeLinearization_Linearized(t *testing.T) {
 		t.Errorf("FirstPageXRefOffset: got %d, want 50000", params.FirstPageXRefOffset)
 	}
 }
-
-// --- Test helpers ---
 
 // testReaderAt wraps a byte slice as an io.ReaderAt.
 type testReaderAt struct {

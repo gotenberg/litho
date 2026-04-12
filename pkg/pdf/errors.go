@@ -62,6 +62,7 @@ var (
 // pipeline stage. Use [errors.As] to extract it; the wrapped Err matches one
 // of the pipeline sentinel errors for structural problems, or an execution
 // error for runtime failures.
+// Values must not be shared across goroutines without synchronization.
 type PipelineStageError struct {
 	// Index is the 0-based position of the stage in declaration order.
 	Index int

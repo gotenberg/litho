@@ -483,7 +483,7 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 func apRequiredRule(part int) Rule {
 	// PDF/A-1 uses 6.5.3 for appearance checks; the closest rule is the
 	// appearance stream type rule. Part 1 doesn't have a separate "AP required"
-	// test number — we use the combined test 6 (non-Widget stream).
+	// test number, so we use the combined test 6 (non-Widget stream).
 	return ruleByPart(part, Rule_19005_1_6_5_3_t06, Rule_19005_2_6_3_3_t01, Rule_19005_3_6_3_3_t01, Rule_19005_4_6_3_3_t01)
 }
 

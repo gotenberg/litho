@@ -47,7 +47,7 @@ func TestSkipInlineImage_EIAtEOF(t *testing.T) {
 }
 
 func TestSkipInlineImage_FalseEIInData(t *testing.T) {
-	// Binary data contains "EI" without preceding whitespace — not the real terminator.
+	// Binary data contains "EI" without preceding whitespace, not the real terminator.
 	data := []byte("/W 2 /H 1 /BPC 8 /CS /G ID \xAAEI\xBB \nEI\nQ")
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := NewParser(lex)

@@ -30,7 +30,7 @@ type Parser struct {
 	decryptFn DecryptFunc
 
 	// FormatViolations collects PDF/A format compliance issues detected
-	// during parsing. The parser remains lenient — violations are recorded
+	// during parsing. The parser remains lenient: violations are recorded
 	// but do not fail the parse. This is nil unless compliance checking
 	// is enabled via WithFormatChecking.
 	FormatViolations []error
@@ -51,6 +51,7 @@ func (p *Parser) WithContext(ctx context.Context) *Parser {
 	return p
 }
 
+// WithDecryption configures the parser to apply fn to encrypted string and stream data.
 func (p *Parser) WithDecryption(fn DecryptFunc) *Parser {
 	p.decryptFn = fn
 	return p
@@ -85,6 +86,7 @@ func (p *Parser) CheckContext() error {
 	return p.checkCtx()
 }
 
+// Peek returns the token n positions ahead without consuming it.
 func (p *Parser) Peek(n int) (lexer.Token, error) {
 	for len(p.tokens) <= n {
 		if p.err != nil {
@@ -99,6 +101,7 @@ func (p *Parser) Peek(n int) (lexer.Token, error) {
 	return p.tokens[n], nil
 }
 
+// Consume returns the next token and advances the parser position.
 func (p *Parser) Consume() (lexer.Token, error) {
 	tok, err := p.Peek(0)
 	if len(p.tokens) > 0 {
@@ -107,6 +110,7 @@ func (p *Parser) Consume() (lexer.Token, error) {
 	return tok, err
 }
 
+// Expect consumes the next token and returns an error if its type does not match expectedType.
 func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
 	tok, err := p.Consume()
 	if err != nil {
@@ -118,6 +122,7 @@ func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
 	return tok, nil
 }
 
+// ParseObject reads the next complete PDF object from the token stream.
 func (p *Parser) ParseObject() (ast.PdfObject, error) {
 	t0, err := p.Peek(0)
 	if err != nil && t0.Type == lexer.TokenError {
@@ -359,7 +364,7 @@ func (p *Parser) consumeStreamEOL(reader *ioat.Reader) error {
 			return err
 		}
 		if b2 != '\n' {
-			_ = reader.UnreadByte()
+			_ = reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			if p.checkFormat {
 				p.recordViolation("stream keyword followed by CR only (must be CR+LF or LF)")
 			}
@@ -367,7 +372,7 @@ func (p *Parser) consumeStreamEOL(reader *ioat.Reader) error {
 	case '\n':
 		// canonical case
 	default:
-		_ = reader.UnreadByte()
+		_ = reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 		if p.checkFormat {
 			p.recordViolation("stream keyword not followed by EOL")
 		}
@@ -518,7 +523,7 @@ func trimStreamTail(src io.ReaderAt, streamStart, dataLen int64) int64 {
 	if dataLen < 2 {
 		tailN = dataLen
 	}
-	_, _ = src.ReadAt(tail[:tailN], streamStart+dataLen-tailN) //nolint:errcheck // on read failure tail stays zeroed — we simply don't trim
+	_, _ = src.ReadAt(tail[:tailN], streamStart+dataLen-tailN) //nolint:errcheck // on read failure tail stays zeroed, we simply don't trim
 	switch {
 	case tailN == 2 && tail[1] == '\n':
 		dataLen--
@@ -842,10 +847,10 @@ func scanToEI(reader io.Reader, ctx context.Context) error {
 					return err
 				}
 				if isInlineWS(next) || isInlineDelim(next) {
-					_ = r.UnreadByte()
+					_ = r.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 					return nil
 				}
-				// False match — continue scanning.
+				// False match, continue scanning.
 				if isInlineWS(c) {
 					state = 1
 				} else {

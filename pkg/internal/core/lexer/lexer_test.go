@@ -13,7 +13,7 @@ func newLexer(input string) *Lexer {
 }
 
 func TestNullBytesInName(t *testing.T) {
-	// "/Ty\x00pe" should be read as "/Type" — null bytes stripped inside names.
+	// "/Ty\x00pe" should be read as "/Type". Null bytes stripped inside names.
 	lex := newLexer("/Ty\x00pe")
 	tok, err := lex.NextToken()
 	if err != nil {

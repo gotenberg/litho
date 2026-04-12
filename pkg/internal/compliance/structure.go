@@ -88,7 +88,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	if part == 4 {
 		puaTreeRoot := structTreeRoot
 		if puaTreeRoot == nil {
-			puaTreeRoot, _ = document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+			puaTreeRoot, _ = document.ResolveDict(ctx, doc, catalog["StructTreeRoot"]) // Best-effort: nil dict means no structure tree to check.
 		}
 		if puaTreeRoot != nil {
 			results = append(results, checkActualTextPUA(ctx, doc, catalog, puaTreeRoot)...)
@@ -261,7 +261,7 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 		current = target
 	}
 
-	// Depth limit exceeded — treat as circular.
+	// Depth limit exceeded. Treat as circular.
 	*results = append(*results, failf(roleMapCircularRule(profile),
 		"role map chain for %s exceeds depth limit", src)...)
 	return false
@@ -291,7 +291,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 	// or weakly structured (H), not both.
 	if state.hasGenericH && state.hasSpecificH {
 		*results = append(*results, failf(headingMixedRule(profile),
-			"document uses both H (generic) and H1-H6 (specific) headings — must use one or the other")...)
+			"document uses both H (generic) and H1-H6 (specific) headings, must use one or the other")...)
 	}
 }
 
@@ -360,7 +360,7 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		}
 		// Only process structure elements (skip marked content refs, object refs).
 		if _, hasS := dict["S"]; hasS {
-			// Check for H (generic heading) children — §7.4.4 t1.
+			// Check for H (generic heading) children per §7.4.4 t1.
 			childType, _ := document.ResolveName(ctx, state.doc, dict["S"])
 			if childType == "H" {
 				hCount++
@@ -919,7 +919,7 @@ func containsPUAInContentStreamActualText(data []byte) bool {
 				return true
 			}
 		case '<':
-			// Hex string — find closing >.
+			// Hex string: find closing >.
 			end := strings.Index(rest, ">")
 			if end > 0 {
 				hexStr := rest[1:end]
@@ -1009,7 +1009,7 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 	// /K can be a single element or an array.
 	arr, err := document.ResolveArray(ctx, doc, kObj)
 	if err != nil {
-		// Single element — check if it's a Document.
+		// Single element: check if it's a Document.
 		d, err := document.ResolveDict(ctx, doc, kObj)
 		if err != nil || d == nil {
 			return
@@ -1336,8 +1336,6 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 func pdfaLangValidRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_8_4_t01, Rule_19005_2_6_7_4_t01, Rule_19005_3_6_7_4_t01, Rule{})
 }
-
-// --- Rule selectors ---
 
 // markInfoRule selects the MarkInfo rule based on profile.
 func markInfoRule(profile string, part int) Rule {

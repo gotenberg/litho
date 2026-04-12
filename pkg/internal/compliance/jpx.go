@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- JPEG2000 compliance checks (§6.2.8.3 parts 2/3, §6.2.7.3 part 4) ---
-
 // jpxRules holds the 5 rule constants for a given PDF/A part.
 type jpxRules struct{ t1, t2, t3, t4, t5 Rule }
 
@@ -61,8 +59,6 @@ func checkJPXImage(stream ast.PdfStream, name ast.PdfName, pageNum, part int) []
 
 	return nil
 }
-
-// --- JP2 container format ---
 
 // isJP2Container checks for the JP2 signature box: 00 00 00 0C 6A 50 20 20 0D 0A 87 0A.
 func isJP2Container(data []byte) bool {
@@ -226,8 +222,6 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 
 	return results
 }
-
-// --- Raw J2K codestream ---
 
 func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Violation {
 	numComponents, ssiz, err := parseJ2KSIZMarker(data)

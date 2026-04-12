@@ -31,10 +31,10 @@ type Signer interface {
 type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
 
 // WriteWithSignature performs the two-pass incremental signing flow:
-//  1. Write the incremental update with a placeholder /Contents hex string.
-//  2. Compute SHA-256 over the ByteRange (everything except the placeholder).
-//  3. Call Signer.Sign to get the PKCS#7 blob.
-//  4. Patch the placeholder with the actual signature bytes.
+// write the incremental update with a placeholder /Contents hex string,
+// compute SHA-256 over the ByteRange (everything except the placeholder),
+// call Signer.Sign to get the PKCS#7 blob, then patch the placeholder
+// with the actual signature bytes.
 func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, mutations []MutationFunc, xrefStream bool) error {
 	// Find max object number for the allocator.
 	maxObjNum := 0

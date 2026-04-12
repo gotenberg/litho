@@ -77,7 +77,7 @@ var knownXMPNamespaces = map[string]bool{
 //
 //nolint:gochecknoglobals // static lookup table
 var xmpPart1Properties = map[string]map[string]bool{
-	// XMP Basic (xmp:) — 2004 spec defined all except Rating and Label
+	// XMP Basic (xmp:): 2004 spec defined all except Rating and Label
 	// (Rating was introduced in the 2012 XMP spec).
 	"http://ns.adobe.com/xap/1.0/": {
 		"Advisory": true, "BaseURL": true, "CreateDate": true,
@@ -85,25 +85,25 @@ var xmpPart1Properties = map[string]map[string]bool{
 		"ModifyDate": true, "Nickname": true, "Thumbnails": true,
 		// NOT included: Rating, Label (added in later XMP spec versions).
 	},
-	// Adobe PDF (pdf:) — 2004 spec defined these properties.
+	// Adobe PDF (pdf:): 2004 spec defined these properties.
 	// Trapped was in the PDF Info dict but not in the 2004 XMP pdf schema.
 	"http://ns.adobe.com/pdf/1.3/": {
 		"Keywords": true, "PDFVersion": true, "Producer": true,
 		// NOT included: Trapped.
 	},
-	// EXIF Aux — NOT in the 2004 XMP spec. No properties predefined for part 1.
+	// EXIF Aux. NOT in the 2004 XMP spec. No properties predefined for part 1.
 	"http://ns.adobe.com/exif/1.0/aux/": {},
-	// Camera Raw Settings — NOT in the 2004 XMP spec.
+	// Camera Raw Settings. NOT in the 2004 XMP spec.
 	"http://ns.adobe.com/camera-raw-settings/1.0/": {},
-	// XMP Dynamic Media — NOT in the 2004 XMP spec.
+	// XMP Dynamic Media. NOT in the 2004 XMP spec.
 	"http://ns.adobe.com/xmp/1.0/DynamicMedia/": {},
-	// XMP Paged-Text (xmpTPg:) — for PDF/A-1, VeraPDF only accepts
+	// XMP Paged-Text (xmpTPg:): for PDF/A-1, VeraPDF only accepts
 	// MaxPageSize and NPages as predefined. Colorants, Fonts, PlateNames
 	// and SwatchGroups require extension schema declarations.
 	"http://ns.adobe.com/xap/1.0/t/pg/": {
 		"MaxPageSize": true, "NPages": true,
 	},
-	// PDF/A Identification (pdfaid:) — only part, conformance, and amd
+	// PDF/A Identification (pdfaid:): only part, conformance, and amd
 	// existed in PDF/A-1 (ISO 19005-1). corr and rev were added later.
 	"http://www.aiim.org/pdfa/ns/id/": {
 		"part": true, "conformance": true, "amd": true,
@@ -211,7 +211,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
-	// DocInfo to XMP consistency (§6.7.3) — parts 1 and 4 only.
+	// DocInfo to XMP consistency (§6.7.3), parts 1 and 4 only.
 	if part == 1 || part == 4 {
 		xmpCheckDocInfoSync(ctx, doc, xmpData, part, &results)
 	}
@@ -226,8 +226,6 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	complog(doc).Debug("compliance.xmp: XMP checks complete", "violations", len(results))
 	return results
 }
-
-// --- Catalog /Metadata required ---
 
 // xmpLoadMetadata retrieves and decodes the XMP metadata stream from the
 // catalog. It validates that the stream dict has /Type Metadata and /Subtype XML.
@@ -283,7 +281,7 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 // xmpMetadataRule returns the correct rule for the missing/invalid metadata
 // stream based on the PDF/A part number.
 func xmpMetadataRule(part, test int) []Violation {
-	_ = test
+	_ = test // Suppress unused warning; test is used by generated rules.
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_2_t01, "catalog missing or invalid /Metadata stream")
@@ -296,8 +294,6 @@ func xmpMetadataRule(part, test int) []Violation {
 	}
 	return nil
 }
-
-// --- XMP packet header ---
 
 // xmpCheckPacketHeader checks that the XMP packet header does not use the
 // forbidden 'bytes' or 'encoding' attributes.
@@ -350,8 +346,6 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 	return nil
 }
 
-// --- XMP encoding check ---
-
 // xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
 // For PDF/A-4 (§6.7.2.1 t05), UTF-16 encoding is a violation.
 func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
@@ -374,8 +368,6 @@ func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
 		*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16")...)
 	}
 }
-
-// --- XMP schema validation ---
 
 // xmpCheckNamespaces walks the XMP XML and verifies that every namespace URI
 // used by properties is either a predefined XMP schema or is declared in a
@@ -499,8 +491,6 @@ func xmpSchemaRule(part int, ns string) []Violation {
 	return nil
 }
 
-// --- PDF/A identification ---
-
 // xmpCheckPDFAIdentification verifies that the XMP contains pdfaid:part and
 // pdfaid:conformance entries with correct values matching the declared profile.
 func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *[]Violation) {
@@ -546,7 +536,7 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 				}
 			}
 		}
-		// Check element form — read text content.
+		// Check element form: read text content.
 		if t.Name.Space == xmpPdfaIDNamespace {
 			if charTok, charErr := decoder.Token(); charErr == nil {
 				if charData, ok := charTok.(xml.CharData); ok {
@@ -634,7 +624,7 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	}
 
 	// Validate pdfaid:conformance value (parts 1-3).
-	// Must be uppercase (A, B, U) — case-sensitive comparison.
+	// Must be uppercase (A, B, U). Case-sensitive comparison.
 	if part < 4 && level != 0 {
 		expectedConf := strings.ToUpper(string(rune(level)))
 		if confValue != expectedConf {
@@ -701,7 +691,7 @@ func xmpHasWrongPdfaidPrefix(data []byte, field string) bool {
 		if prefixStart >= 0 && bytes.Equal(data[prefixStart:prefixStart+len(validPrefix)], validPrefix) {
 			// Verify the prefix boundary: character before "pdfaid" must not be a letter.
 			if prefixStart == 0 || !isASCIILetter(data[prefixStart-1]) {
-				// Correct prefix — keep searching for other occurrences.
+				// Correct prefix, keep searching for other occurrences.
 				off = pos + len(needle)
 				continue
 			}
@@ -798,8 +788,6 @@ func xmpPDFAIdPrefixRule(part int, field string) []Violation {
 	return nil
 }
 
-// --- Extension schema structure ---
-
 // xmpExtSchemaLevel identifies the nesting context within an extension schema.
 type xmpExtSchemaLevel int
 
@@ -892,7 +880,7 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				*results = append(*results, xmpExtFieldRule(part, "valueType")...)
 				*results = append(*results, xmpExtFieldRule(part, "description")...)
 			}
-			// Skip SAX-based checks — prefix mismatch means Go's XML parser
+			// Skip SAX-based checks. Prefix mismatch means Go's XML parser
 			// resolved the URI correctly but the document uses the wrong prefix.
 			// The SAX parser would see correct URIs and not detect the issue.
 			return
@@ -1139,8 +1127,8 @@ func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
 				if !currentSchema.hasPrefix {
 					*results = append(*results, xmpExtSchemaRule(part, "prefix")...)
 				}
-				// pdfaSchema:property and pdfaSchema:valueType are optional —
-				// a schema may declare only properties, only valueTypes, or both.
+				// pdfaSchema:property and pdfaSchema:valueType are optional.
+				// A schema may declare only properties, only valueTypes, or both.
 				currentSchema = schemaInfo{}
 			}
 		}
@@ -1410,7 +1398,7 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 					current = &schemas[len(schemas)-1]
 				}
 			case t.Name.Local == "Seq" || t.Name.Local == "Bag":
-				// Container inside property or valueType block — ignore.
+				// Container inside property or valueType block, ignore.
 			case t.Name.Space == xmpPdfaSchemaPrefix:
 				switch t.Name.Local {
 				case "namespaceURI":
@@ -1470,7 +1458,7 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 					depth = 0
 				}
 			case t.Name.Space == xmpPdfaSchemaPrefix && t.Name.Local == "property":
-				// End of property block — record accumulated property.
+				// End of property block: record accumulated property.
 				if current != nil && propName != "" && propVT != "" {
 					current.propTypes[propName] = propVT
 				}
@@ -1478,7 +1466,7 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 				propVT = ""
 				inProperty = false
 			case t.Name.Space == xmpPdfaSchemaPrefix && t.Name.Local == "valueType":
-				// End of valueType block — record accumulated type.
+				// End of valueType block: record accumulated type.
 				if current != nil && vtName != "" {
 					current.typeFields[vtName] = vtHasField
 				}
@@ -1504,10 +1492,6 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 		}
 	}
 }
-
-// --- DocInfo to XMP consistency ---
-
-// --- XMP container types ---
 
 // xmpContainerType represents observed XMP container types.
 type xmpContainerType int
@@ -1556,7 +1540,7 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 		if ns == xmpRDFNamespace || ns == "adobe:ns:meta/" || ns == "http://www.w3.org/XML/1998/namespace" {
 			continue
 		}
-		// Skip extension-declared namespaces — their types are defined by the extension.
+		// Skip extension-declared namespaces. Their types are defined by the extension.
 		if extensionNS[ns] {
 			continue
 		}
@@ -1569,7 +1553,7 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 
 		registry, hasSchema := xmpPropertyRegistry[ns]
 		if !hasSchema {
-			// Namespace not in registry — already handled by xmpCheckNamespaces.
+			// Namespace not in registry, already handled by xmpCheckNamespaces.
 			continue
 		}
 
@@ -1594,7 +1578,7 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 				}
 			}
 			if !known {
-				// Property name not defined in predefined schema — violation.
+				// Property name not defined in predefined schema. Violation.
 				*results = append(*results, xmpPropertyTypeRule(part, ns, prop, "unknown property name")...)
 				continue
 			}
@@ -1645,7 +1629,7 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 
 			// Check simple value type properties.
 			if isSimplePropType(expectedType) {
-				// Expected simple value — should NOT be in a container.
+				// Expected simple value. Should NOT be in a container.
 				if pv.containerType != xmpContSimple {
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						fmt.Sprintf("observed=%s expected=Simple",
@@ -1670,7 +1654,7 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 
 			// Check struct type properties.
 			if expectedType == xmpPropStruct {
-				// Expected struct — should NOT be in a container.
+				// Expected struct. Should NOT be in a container.
 				if pv.containerType != xmpContSimple {
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						fmt.Sprintf("observed=%s expected=Simple",
@@ -1868,7 +1852,7 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					inLi = false
 				}
 				if depth == 3 && inLi {
-					// End of rdf:li — capture accumulated text as an item.
+					// End of rdf:li: capture accumulated text as an item.
 					trimmed := strings.TrimSpace(currentCharData)
 					if currentNS != "" {
 						pv := getOrCreate(currentNS, currentLocal)

@@ -51,7 +51,7 @@ type pageCtx struct {
 func (p *pageCtx) parsedOps(ctx context.Context) []content.Operation {
 	p.opsOnce.Do(func() {
 		if len(p.content) > 0 {
-			p.ops, _ = content.ParseStreamData(ctx, p.content)
+			p.ops, _ = content.ParseStreamData(ctx, p.content) // Parse failure yields nil ops; checks run on whatever is available.
 		}
 	})
 	return p.ops
@@ -60,8 +60,6 @@ func (p *pageCtx) parsedOps(ctx context.Context) []content.Operation {
 // checkGroup is a function that validates a group of related rules against a
 // document. It returns all violations found (empty slice = pass).
 type checkGroup func(ctx context.Context, vctx *validationCtx) []Violation
-
-// --- Profile to check group mappings ---
 
 //nolint:gochecknoglobals // package-level rule tables are the core design.
 var pdfaCheckGroups map[models.PDFAProfile][]checkGroup
@@ -115,8 +113,6 @@ func init() { //nolint:gochecknoinits // breaks initialization cycle.
 		},
 	}
 }
-
-// --- Internal orchestration ---
 
 // buildValidationCtx pre-computes the shared validation context from the
 // document catalog. Pages are collected once and resources resolved with
@@ -202,8 +198,6 @@ func violationsToErrors(violations []Violation) []error {
 	return errs
 }
 
-// --- Shared helpers ---
-
 // getCatalog retrieves the document catalog dictionary.
 func getCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
@@ -228,11 +222,11 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 			continue
 		}
 		// Prefetch: the object is warmed into the resolver cache here.
-		// Individual parse failures are tolerated — the per-group
+		// Individual parse failures are tolerated. The per-group
 		// checks below will surface them as structural violations if
 		// they matter. Aggregate failure would stop compliance mode
 		// from seeing a broken doc at all, which is worse.
-		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum}) // Warming the cache; resolve errors are tolerated.
 		count++
 	}
 	complog(doc).Debug("compliance: resolved all objects", "count", count)

@@ -49,7 +49,7 @@ func TestWriteXRefTable_Basic(t *testing.T) {
 }
 
 func TestWriteXRefTable_NonConsecutive(t *testing.T) {
-	// Objects 1 and 5 — should produce two subsections.
+	// Objects 1 and 5, should produce two subsections.
 	records := []XRefRecord{
 		{ObjNum: 1, Offset: 10, Generation: 0},
 		{ObjNum: 5, Offset: 200, Generation: 0},

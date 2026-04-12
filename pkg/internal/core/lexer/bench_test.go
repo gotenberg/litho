@@ -40,7 +40,7 @@ func BenchmarkLexer_Tokenize_Small(b *testing.B) {
 }
 
 // BenchmarkLexer_Tokenize_Strings measures literal-string parsing,
-// including escape handling — the sub-path that has the most per-byte
+// including escape handling. This is the sub-path that has the most per-byte
 // branching.
 func BenchmarkLexer_Tokenize_Strings(b *testing.B) {
 	data := []byte(`

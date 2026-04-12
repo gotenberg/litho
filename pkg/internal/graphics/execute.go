@@ -127,8 +127,6 @@ func (m *Machine) executeOp(op content.Operation) error {
 	return nil
 }
 
-// --- Graphics state stack ---
-
 func handleSaveState(m *Machine, state *State, _ content.Operation) {
 	newState := *state
 	// Slice fields must be deep-copied so mutations by subsequent
@@ -141,7 +139,7 @@ func handleSaveState(m *Machine, state *State, _ content.Operation) {
 }
 
 func handleRestoreState(m *Machine, _ *State, _ content.Operation) {
-	// The initial state frame is never popped — this matches PDF 32000
+	// The initial state frame is never popped. This matches PDF 32000
 	// §8.4.4, where Q outside any save/restore pair is a no-op.
 	if len(m.Stack) > 1 {
 		m.Stack = m.Stack[:len(m.Stack)-1]
@@ -168,8 +166,6 @@ func handleConcatMatrix(_ *Machine, state *State, op content.Operation) {
 	state.CTM[4] = e*ctm[0] + f*ctm[2] + ctm[4]
 	state.CTM[5] = e*ctm[1] + f*ctm[3] + ctm[5]
 }
-
-// --- Text object state ---
 
 var identityTextMatrix = [6]float64{1, 0, 0, 1, 0, 0}
 
@@ -261,7 +257,7 @@ func handleTextNextLine(_ *Machine, state *State, _ content.Operation) {
 
 func handleTextNextLineShow(_ *Machine, state *State, _ content.Operation) {
 	// Per spec, ' moves to the next line and shows text. Text rendering
-	// is handled by the extractor layer — here we only advance the matrix.
+	// is handled by the extractor layer. Here we only advance the matrix.
 	applyTextMove(state, 0, -state.Text.Tl)
 }
 
@@ -279,8 +275,6 @@ func handleTextRenderingMode(_ *Machine, state *State, op content.Operation) {
 		state.Text.Tmode = int(document.Float(op.Operands[0]))
 	}
 }
-
-// --- Color ---
 
 func handleFillRGB(_ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 3 {
@@ -408,8 +402,6 @@ func handleStrokeColorInCurrentSpace(_ *Machine, state *State, op content.Operat
 	}
 }
 
-// --- Path construction and painting ---
-
 // updatePathBounds transforms (x, y) through the current CTM and widens
 // the machine's current bounding box to include the resulting page-space
 // point. Shared by m, l, c, v, y, and re.
@@ -481,7 +473,7 @@ func handlePathBezier(m *Machine, state *State, op content.Operation) {
 }
 
 func handlePathClose(_ *Machine, _ *State, _ content.Operation) {
-	// Closing a path doesn't change the bounding box — the closing
+	// Closing a path doesn't change the bounding box. The closing
 	// segment cannot extend beyond the existing extent.
 }
 
@@ -492,7 +484,7 @@ func handlePathEndNoPaint(m *Machine, _ *State, _ content.Operation) {
 func handleClipPath(m *Machine, state *State, _ content.Operation) {
 	// Intersect the current clipping path with the current path bounds.
 	// Per PDF 32000 §8.5.4, W/W* marks the path for clipping but does
-	// not end it — a subsequent n / S / s / f / F / B / B* / b / b*
+	// not end it. A subsequent n / S / s / f / F / B / B* / b / b*
 	// operator ends the path.
 	if m.CurrentPath.MinX > state.ClippingPath.MinX {
 		state.ClippingPath.MinX = m.CurrentPath.MinX
@@ -512,8 +504,6 @@ func handlePathPaint(m *Machine, _ *State, _ content.Operation) {
 	// After any paint operation the current path is consumed.
 	m.CurrentPath = emptyBoundingBox
 }
-
-// --- Marked content ---
 
 func handleBDC(m *Machine, state *State, op content.Operation) {
 	mcState := MarkedContentState{MCID: -1}
@@ -637,6 +627,6 @@ func handleEMC(m *Machine, state *State, _ content.Operation) {
 }
 
 func handleDesignatedMCPoint(_ *Machine, _ *State, _ content.Operation) {
-	// Designated marked-content points (DP) carry no state transition —
+	// Designated marked-content points (DP) carry no state transition.
 	// they exist only as hooks for external consumers.
 }

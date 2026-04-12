@@ -20,17 +20,17 @@ type numberingMatch struct {
 //
 //nolint:gochecknoglobals // immutable lookup tables
 var (
-	// Decimal: "1", "1.2", "1.2.3" — followed by whitespace and word chars.
+	// Decimal: "1", "1.2", "1.2.3", followed by whitespace and word chars.
 	// Requires the next token to be alphabetic to avoid matching "1.5 kg".
 	reDecimal = regexp.MustCompile(`^(\d+(?:\.\d+)*)[\s\x{00a0}]+([\p{L}].+)$`)
 
-	// Alpha: "A.", "A.1", "B.2.3" — uppercase letter optionally with sub-numbers.
+	// Alpha: "A.", "A.1", "B.2.3", uppercase letter optionally with sub-numbers.
 	reAlpha = regexp.MustCompile(`^([A-Z](?:\.\d+)*)\.[\s\x{00a0}]+([\p{L}].+)$`)
 
-	// Roman: "I.", "IV.", "XII." — must be followed by space and word.
+	// Roman: "I.", "IV.", "XII.", must be followed by space and word.
 	reRoman = regexp.MustCompile(`^([IVXLCDM]+)\.[\s\x{00a0}]+([\p{L}].+)$`)
 
-	// Section symbol: "§2", "§ 2.3" — followed by space and word.
+	// Section symbol: "§2", "§ 2.3", followed by space and word.
 	reSection = regexp.MustCompile(`^§[\s\x{00a0}]*(\d+(?:\.\d+)*)[\s\x{00a0}]+([\p{L}].+)$`)
 
 	// Chapter word: "Chapter 5", "Chapter 5:", "Chapter V."
@@ -40,7 +40,7 @@ var (
 // parseNumbering attempts to parse a section number prefix from the given
 // title. Returns nil if no numbering pattern matches.
 func parseNumbering(title string) *numberingMatch {
-	// Decimal first — most common and most informative for depth.
+	// Decimal first: most common and most informative for depth.
 	if m := reDecimal.FindStringSubmatch(title); m != nil {
 		titleText := strings.TrimSpace(m[2])
 		// Reject likely unit patterns: "1.5 kg" where the title is a single

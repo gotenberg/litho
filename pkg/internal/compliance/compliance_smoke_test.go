@@ -11,7 +11,7 @@ import (
 
 // minimalPDFForCompliance returns a 1-page PDF sufficient to drive every
 // compliance check group. The checks will flag several violations
-// (missing XMP, missing OutputIntent, etc.) which is fine — the
+// (missing XMP, missing OutputIntent, etc.) which is fine. The
 // assertion is that validation runs to completion without returning an
 // engine-level error.
 func minimalPDFForCompliance() []byte {
@@ -40,7 +40,7 @@ func minimalPDFForCompliance() []byte {
 // The goal is regression coverage: any future change that crashes a
 // check group, deadlocks the parallel runner, or returns the wrong
 // error shape fails this test. Exact violation counts and rule
-// identities are not asserted — those vary with rule generation and
+// identities are not asserted. Those vary with rule generation and
 // would lock the implementation.
 func TestValidate_Smoke_AllProfiles(t *testing.T) {
 	t.Parallel()

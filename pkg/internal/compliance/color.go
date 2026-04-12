@@ -25,16 +25,10 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	var results []Violation
 
-	// --- §6.2.2 / §6.2.3: OutputIntent ICC profile validation ---
 	iccColorSpace, hasICC := checkOutputIntentICC(ctx, doc, catalog, part, &results)
-
-	// --- §6.2.3.3 / §6.2.4.3: device-dependent colour space restrictions ---
 	checkDeviceColorSpaces(ctx, doc, catalog, part, hasICC, iccColorSpace, &results)
-
-	// --- §6.2.3.2 / §6.2.4.2: ICCBased profile restrictions ---
 	checkICCBasedProfiles(ctx, doc, catalog, part, &results)
 
-	// --- §6.2.4.4: Separation and DeviceN colour space consistency ---
 	// Run for all parts: part 1 needs DeviceN component limit (§6.1.12 t09),
 	// parts 2+ need colorant consistency (§6.2.4.4 t01/t02).
 	checkSeparationDeviceN(ctx, doc, catalog, part, &results)
@@ -42,8 +36,6 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	complog(doc).Debug("compliance.color: color checks complete", "violations", len(results))
 	return results
 }
-
-// --- Shared colour helpers ---
 
 // iccProfileHeader holds parsed fields from the 128-byte ICC profile header.
 type iccProfileHeader struct {
@@ -197,8 +189,8 @@ func normaliseICCProfileID(data []byte) []byte {
 // resolving indirect references.
 func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObject) bool {
 	// Resolve indirect refs.
-	a, _ = document.ResolveObject(ctx, doc, a)
-	b, _ = document.ResolveObject(ctx, doc, b)
+	a, _ = document.ResolveObject(ctx, doc, a) // Best-effort dereference for comparison; unresolvable objects compare as-is.
+	b, _ = document.ResolveObject(ctx, doc, b) // Best-effort dereference for comparison; unresolvable objects compare as-is.
 
 	switch va := a.(type) {
 	case ast.PdfName:

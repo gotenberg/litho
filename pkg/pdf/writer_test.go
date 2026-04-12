@@ -628,7 +628,7 @@ func TestWriter_Decrypt(t *testing.T) {
 		t.Fatalf("decrypt WriteTo: %v", err)
 	}
 
-	// Re-open without password — should work now.
+	// Re-open without password. Should work now.
 	r3, err := Open(ctx, bytes.NewReader(decrypted.Bytes()), int64(decrypted.Len()))
 	if err != nil {
 		t.Fatalf("Open decrypted: %v", err)
@@ -835,14 +835,14 @@ func TestWriter_FlattenForm_XObjectAndContentsSurvive(t *testing.T) {
 
 	outStr := out.String()
 
-	// 1. AcroForm must be removed from the catalog.
+	// AcroForm must be removed from the catalog.
 	if r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len())); err != nil {
 		t.Fatalf("Open flattened: %v", err)
 	} else if r2.HasAcroForm(ctx) {
 		t.Error("expected AcroForm to be removed after flatten")
 	}
 
-	// 2. The output must reference two FlatAP Form XObjects by name. The
+	// The output must reference two FlatAP Form XObjects by name. The
 	//    XObject allocator picks names like "FlatAP7" and "FlatAP8" based
 	//    on object numbers; match the prefix and count occurrences.
 	flatAPCount := strings.Count(outStr, "/FlatAP")
@@ -852,7 +852,7 @@ func TestWriter_FlattenForm_XObjectAndContentsSurvive(t *testing.T) {
 		t.Errorf("expected at least 4 /FlatAP references (2 resources + 2 Do ops), got %d", flatAPCount)
 	}
 
-	// 3. The content stream must contain two Do invocations.
+	// The content stream must contain two Do invocations.
 	doCount := strings.Count(outStr, " Do Q")
 	if doCount < 2 {
 		t.Errorf("expected at least 2 `Do Q` invocations in flattened content, got %d", doCount)
@@ -1267,7 +1267,7 @@ func TestSigner_ExtractedSignatureFieldsArePopulated(t *testing.T) {
 
 func TestVerifySignatures_CallableAfterRoundTrip(t *testing.T) {
 	// Signing with mockSigner produces a fake PKCS7 blob, so actual
-	// cryptographic validation will fail — but VerifySignatures itself
+	// cryptographic validation will fail, but VerifySignatures itself
 	// must return a non-nil result slice without panicking, and the
 	// per-signature result must record the failure reason rather than
 	// disappearing. This locks in that the verify pipeline is
@@ -1290,7 +1290,7 @@ func TestVerifySignatures_CallableAfterRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open signed: %v", err)
 	}
-	// Pass nil root pool — the verifier should not panic on a missing
+	// Pass nil root pool. The verifier should not panic on a missing
 	// trust store; it reports cert-chain-invalid instead.
 	results, err := r2.VerifySignatures(ctx, nil)
 	if err != nil {
@@ -1793,8 +1793,6 @@ func TestWriter_StampText_AllPages(t *testing.T) {
 	}
 }
 
-// --- TextStamp: font selection, opacity, rotation, color ---
-
 func TestWriter_StampText_StandardFont(t *testing.T) {
 	data := threePagePDF()
 	ctx := context.Background()
@@ -1887,8 +1885,6 @@ func TestWriter_StampText_Rotation(t *testing.T) {
 	}
 }
 
-// --- Custom TTF font ---
-
 func TestNewTTFFont_RejectsShort(t *testing.T) {
 	if _, err := NewTTFFont([]byte{0, 1, 2}); err == nil {
 		t.Error("expected error for short TTF data")
@@ -1939,8 +1935,6 @@ func TestWriter_StampText_CustomTTF(t *testing.T) {
 		t.Error("expected /ToUnicode in output")
 	}
 }
-
-// --- ImageStamp: JPEG + PNG (with and without alpha) ---
 
 func TestWriter_StampImage_JPEG(t *testing.T) {
 	jpeg := minimalJPEG(t)
@@ -2055,8 +2049,6 @@ func TestWriter_StampImage_UnsupportedMime(t *testing.T) {
 	}
 }
 
-// --- PDFStamp ---
-
 func TestWriter_StampPDF(t *testing.T) {
 	// Use a copy of threePagePDF as both the target and the stamp source.
 	targetData := threePagePDF()
@@ -2118,8 +2110,6 @@ func TestWriter_StampPDF_InvalidPage(t *testing.T) {
 		t.Error("expected error for out-of-range PDF stamp page")
 	}
 }
-
-// --- Helpers ---
 
 // minimalJPEG returns a very small valid JPEG for stamp tests. Generated
 // by encoding a 2x2 solid-red image.

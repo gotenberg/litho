@@ -140,7 +140,7 @@ func TestParseStreamData_InlineImageEmptyData(t *testing.T) {
 }
 
 func TestParseStreamData_NoInlineImage(t *testing.T) {
-	// Normal stream with no inline images — ensure no regressions.
+	// Normal stream with no inline images. Ensures no regressions.
 	stream := []byte("BT /F1 12 Tf (Hello World) Tj ET")
 
 	ops, err := ParseStreamData(context.Background(), stream)

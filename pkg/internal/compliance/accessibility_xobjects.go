@@ -8,8 +8,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// --- Form XObject restrictions (PDF/UA-1 §7.20) ---
-
 // checkFormXObjectRestrictions validates PDF/UA-1 §7.20:
 //   - t01: Reference XObjects are forbidden (Form XObject with /Ref key)
 //   - t02: Form XObjects with MCIDs must not be referenced more than once

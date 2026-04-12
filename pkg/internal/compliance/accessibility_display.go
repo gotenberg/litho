@@ -8,8 +8,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- DisplayDocTitle ---
-
 func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := displayDocTitleRule(profile)
 
@@ -36,8 +34,6 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 
 	return nil
 }
-
-// --- Suspects ---
 
 func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := suspectsRule(profile)
@@ -70,8 +66,6 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	return nil
 }
-
-// --- Tab order ---
 
 func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	isPDFUA1 := profile == string("PDF/UA-1")
@@ -131,8 +125,6 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	return results
 }
-
-// --- XMP title ---
 
 func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := xmpTitleRule(profile)

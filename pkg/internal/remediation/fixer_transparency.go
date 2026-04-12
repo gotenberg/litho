@@ -83,7 +83,7 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			}
 		}
 
-		_ = pageModified
+		_ = pageModified // Tracked per-page for future per-page reporting; only totalFixed used today.
 	}
 
 	if totalFixed == 0 {
@@ -166,7 +166,7 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 			if gsRef.ObjectNum > 0 {
 				alloc.AllocAt(gsRef.ObjectNum, newGS)
 			} else {
-				// Inline dict — need to update the parent ExtGState dict.
+				// Inline dict, need to update the parent ExtGState dict.
 				newGSDict := make(ast.PdfDict, len(gsDict))
 				maps.Copy(newGSDict, gsDict)
 				newGSDict[gsName] = newGS

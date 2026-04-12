@@ -44,7 +44,7 @@ func TestRequiresOCR_OnlyHiddenText(t *testing.T) {
 }
 
 func TestRequiresOCR_SmallImage(t *testing.T) {
-	// Page has no text, but the image is a tiny logo — not a scan.
+	// Page has no text, but the image is a tiny logo, not a scan.
 	images := []models.ImageMeta{
 		{Width: 100, Height: 50, ColorSpace: "DeviceRGB"},
 	}

@@ -35,8 +35,6 @@ func openRewrite(t *testing.T, data []byte, mutate func(*Writer), opts ...WriteO
 	return r2
 }
 
-// --- Round-trip: every mutation survives write → reopen ---
-
 func TestWriter_RoundTrip_SetMetadata_All(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -169,7 +167,7 @@ func TestWriter_RoundTrip_Encrypt(t *testing.T) {
 	if err != nil && err != ErrInvalidPassword {
 		// Owner password "owner" may still unlock. If any password string
 		// other than the exact user or owner is accepted, that's a bug
-		// elsewhere — but the behavior contract here is just "no panic".
+		// elsewhere, but the behavior contract here is just "no panic".
 		t.Logf("Reopen with wrong password returned %v (informational)", err)
 	}
 }

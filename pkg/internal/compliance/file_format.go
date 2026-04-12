@@ -11,8 +11,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// --- Rule selectors for format checks ---
-
 func objHeaderRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_8_t01, Rule_19005_2_6_1_9_t01, Rule_19005_3_6_1_9_t01, Rule_19005_4_6_1_8_t01)
 }
@@ -39,8 +37,6 @@ func xrefFormatRule(profile string) Rule {
 func streamFormatRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_8_t01, Rule_19005_3_6_1_8_t01, Rule_19005_4_6_1_6_1_t01)
 }
-
-// --- Check implementations ---
 
 // checkContentStreamHexStrings parses page content streams with format
 // checking enabled to detect hex string violations: odd digit count

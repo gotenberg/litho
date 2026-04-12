@@ -110,7 +110,7 @@ func xmpDocInfoSyncRule(part, testNum int, infoKey, infoVal, xmpKey, xmpVal stri
 	case 1:
 		return xmpDocInfoSyncRulePart1(testNum, ctx)
 	case 4:
-		// Part 4 uses 6.7.3.3/6.7.3.4 clause numbering — map test numbers
+		// Part 4 uses 6.7.3.3/6.7.3.4 clause numbering. Map test numbers
 		// to the appropriate rules.
 		return xmpDocInfoSyncRulePart4(testNum, ctx)
 	}
@@ -431,7 +431,7 @@ func xmpNormalizeISO8601(s string) string {
 	} else if before, ok := strings.CutSuffix(s, "-00:00"); ok {
 		s = before + "Z"
 	}
-	// Do NOT append Z when no timezone is present — an absent timezone
+	// Do NOT append Z when no timezone is present. An absent timezone
 	// means "unknown" and must not compare equal to explicit UTC.
 
 	tIdx := strings.LastIndex(s, "T")

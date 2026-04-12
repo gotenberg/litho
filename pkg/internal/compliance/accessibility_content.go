@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// --- Encryption permissions ---
-
 // checkEncryptionPermissions validates PDF/UA-1 §7.16: if encrypted, the
 // /Encrypt dictionary must contain a /P key whose 10th bit is true
 // (accessibility content extraction permitted).
@@ -62,13 +60,11 @@ func checkEncryptionPermissions(doc *document.Document, profile string) []Violat
 	const accessibilityBit = 1 << 9
 	if int(pVal)&accessibilityBit == 0 {
 		return failf(Rule_14289_1_7_16_t01,
-			"10th bit of /P (%d) is false — accessibility content extraction not permitted", int(pVal))
+			"10th bit of /P (%d) is false, accessibility content extraction not permitted", int(pVal))
 	}
 
 	return nil
 }
-
-// --- Content marking ---
 
 // markerKind tracks whether a BMC/BDC span is Artifact or tagged content.
 type markerKind int

@@ -73,7 +73,7 @@ func extractDSS(ctx context.Context, doc *document.Document) (*dssData, error) {
 	dss.CRLs = parseDSSCRLs(ctx, doc, dssDict)
 	dss.OCSPs = parseDSSOCSPs(ctx, doc, dssDict)
 
-	// /VRI — dictionary keyed by uppercase hex SHA-1 of the signature value,
+	// /VRI: dictionary keyed by uppercase hex SHA-1 of the signature value,
 	// each value is a dictionary with optional /Cert, /CRL, /OCSP arrays.
 	if vriObj, ok := dssDict["VRI"]; ok {
 		vriDict, err := document.ResolveDict(ctx, doc, vriObj)
@@ -178,8 +178,6 @@ func parseDSSOCSPs(ctx context.Context, doc *document.Document, dict ast.PdfDict
 	}
 	return responses
 }
-
-// --- OCSP ASN.1 parsing (minimal, RFC 6960) ---
 
 // OCSPResponse ::= SEQUENCE { responseStatus ENUMERATED, responseBytes [0] EXPLICIT ... }
 type ocspResponseASN1 struct {

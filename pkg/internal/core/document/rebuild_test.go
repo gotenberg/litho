@@ -30,7 +30,7 @@ func corruptedPDF() []byte {
 			"trailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n99999\n%%EOF\n")
 }
 
-// noXRefPDF returns a PDF with no xref table at all — just objects and a trailer.
+// noXRefPDF returns a PDF with no xref table at all, just objects and a trailer.
 func noXRefPDF() []byte {
 	return []byte(
 		"%PDF-1.4\n" +

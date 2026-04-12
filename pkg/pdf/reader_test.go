@@ -313,7 +313,7 @@ func TestConcurrentMixedMethods(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// Metadata returns an error for our minimal PDF (no /Info dict);
-			// we only care that it doesn't panic or race.
+			// Only matters that it doesn't panic or race.
 			_, _ = r.Metadata(context.Background())
 		}()
 
@@ -381,7 +381,7 @@ func TestWithLogger_DebugOutput(t *testing.T) {
 func TestWithoutLogger_NoOutput(t *testing.T) {
 	data := minimalPDF()
 
-	// Open without WithLogger — should produce no output and no errors.
+	// Open without WithLogger. Should produce no output and no errors.
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)

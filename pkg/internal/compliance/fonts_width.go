@@ -130,7 +130,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 			continue
 		}
 		// Skip non-used charCodes when glyph is missing from font program
-		// (GID 0 from name mapping) — only flag if the charCode is used.
+		// (GID 0 from name mapping), only flag if the charCode is used.
 		if gid == 0 && !charUsed {
 			continue
 		}
@@ -280,7 +280,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			// [cidStart [w1 w2 w3 ...]]
 			for j, wEntry := range next {
 				cid := cidStart + j
-				// Skip .notdef (CID 0) — no visible outlines.
+				// Skip .notdef (CID 0), no visible outlines.
 				if cid == 0 {
 					continue
 				}
@@ -313,7 +313,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				continue
 			}
 			for cid := cidStart; cid <= cidEnd; cid++ {
-				// Skip .notdef (CID 0) — no visible outlines.
+				// Skip .notdef (CID 0), no visible outlines.
 				if cid == 0 {
 					continue
 				}

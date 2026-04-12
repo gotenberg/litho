@@ -308,7 +308,7 @@ func handleTfOp(ctx context.Context, doc *document.Document, resources ast.PdfDi
 	}
 
 	// Fall back to a default font rather than aborting the page. Text may
-	// be garbled, but extraction continues — best-effort is our contract.
+	// be garbled, but extraction continues. Best-effort is our contract.
 	if doc != nil {
 		doc.Logger.Debug("font not found, using fallback",
 			slog.String("font", string(fontName)),
@@ -346,7 +346,7 @@ func resolveFontFromResources(ctx context.Context, doc *document.Document, resou
 		}
 	}
 
-	// Cache miss — parse the font dict and store it back.
+	// Cache miss: parse the font dict and store it back.
 	fontDict, err := document.ResolveDict(ctx, doc, fontRefObj)
 	if err != nil || fontDict == nil {
 		return nil
@@ -550,7 +550,7 @@ type ExtractionConfig struct {
 // ExtractElements extracts text from a page's content [content.Operation] values as raw spatial [models.TextElement] entries.
 func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
 	// Collect annotation appearance object numbers so we can skip them during
-	// text extraction — annotation appearances are visual overlays, not page content.
+	// text extraction. Annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
 
 	// Pre-allocate with a capacity estimate: roughly 1 text element per 3 operators.

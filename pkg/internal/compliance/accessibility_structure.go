@@ -9,8 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- Namespaces (PDF/UA-2) ---
-
 func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
@@ -66,8 +64,6 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 	return results
 }
 
-// --- Namespace role mapping (PDF/UA-2 §8.2.4) ---
-
 // standardNamespaceURIs lists the namespace URIs that are "standard" per
 // ISO 32000-2:2020, 14.8.6.
 //
@@ -111,7 +107,7 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 	}
 
 	// t3: check each namespace's RoleMapNS. Follow chains through intermediate
-	// namespaces — if the final target resolves back to the source namespace
+	// namespaces. If the final target resolves back to the source namespace
 	// (directly or indirectly), it's a same-namespace mapping violation.
 	var results []Violation
 	for _, nsObj := range nsArr {
@@ -308,8 +304,6 @@ func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcN
 	return false
 }
 
-// --- Link nesting (PDF/UA-2) ---
-
 func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
@@ -365,8 +359,6 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 	return nil
 }
 
-// --- Formula MathML (PDF/UA-2) ---
-
 func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
@@ -416,7 +408,7 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 			}
 		}
 
-		// Check for child structure elements — Formula elements that contain
+		// Check for child structure elements. Formula elements that contain
 		// structural children (e.g., math content elements) provide the
 		// formula content directly and do not require /AF or /Alt.
 		if kObj, hasK := elem["K"]; hasK {
@@ -430,8 +422,6 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 
 	return results
 }
-
-// --- Invisible annotations in structure (PDF/UA-2) ---
 
 // checkInvisibleAnnotArtifact validates that annotations with the Invisible flag
 // set are not included in the logical structure tree (they must be artifacts).
@@ -513,7 +503,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 				continue
 			}
 
-			// Invisible annotation — it must NOT be in the logical structure
+			// Invisible annotation. It must NOT be in the logical structure
 			// (i.e., it must not have /StructParent).
 			if _, hasStructParent := annot["StructParent"]; hasStructParent {
 				subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])

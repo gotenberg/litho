@@ -123,7 +123,7 @@ func pageToFormXObject(
 	}
 
 	// Copy resources into the destination allocator. When the source
-	// page has no explicit /Resources, emit an empty dict — Form XObjects
+	// page has no explicit /Resources, emit an empty dict. Form XObjects
 	// require a /Resources entry.
 	var resources ast.PdfObject = ast.PdfDict{}
 	if srcRes, ok := srcPage.Dict["Resources"]; ok {

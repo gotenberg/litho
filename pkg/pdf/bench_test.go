@@ -61,7 +61,7 @@ func BenchmarkExtractText_SinglePage(b *testing.B) {
 }
 
 // BenchmarkExtractText_AllPages measures text extraction across every
-// page of a 3-page document — the aggregate case a Gotenberg worker
+// page of a 3-page document. The aggregate case a Gotenberg worker
 // typically encounters per request.
 func BenchmarkExtractText_AllPages(b *testing.B) {
 	data := threePagePDF()
@@ -85,8 +85,8 @@ func BenchmarkExtractText_AllPages(b *testing.B) {
 }
 
 // BenchmarkMetadata measures the cost of extracting document-level
-// metadata (Info + XMP). This is a fixed-cost operation per document —
-// tracking it catches regressions in catalog resolution or XMP parsing.
+// metadata (Info + XMP). This is a fixed-cost operation per document.
+// Tracking it catches regressions in catalog resolution or XMP parsing.
 func BenchmarkMetadata(b *testing.B) {
 	data := threePagePDF()
 	ctx := context.Background()

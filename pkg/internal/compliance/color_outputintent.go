@@ -7,8 +7,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// --- Rule selectors ---
-
 func outputIntentICCRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_2_t01, Rule_19005_2_6_2_3_t01, Rule_19005_3_6_2_3_t01, Rule_19005_4_6_2_3_t01)
 }

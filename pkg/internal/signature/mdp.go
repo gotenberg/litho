@@ -242,7 +242,7 @@ func isAllowedP2(obj appendedObject) bool {
 		if obj.FT == "Sig" || obj.FT == "Tx" || obj.FT == "Btn" || obj.FT == "Ch" {
 			return true
 		}
-		// Typeless objects are conservatively allowed — they may be
+		// Typeless objects are conservatively allowed. They may be
 		// appearance streams or font resources needed for form rendering.
 		return true
 	}

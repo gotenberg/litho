@@ -70,7 +70,7 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 			}
 		}
 
-		// Resolve Dest — may be a direct array or a named destination string/name.
+		// Resolve Dest. May be a direct array or a named destination string/name.
 		if destObj, ok := dict["Dest"]; ok {
 			b.PageNumber = resolveDestination(ctx, doc, destObj, pageMap)
 		} else if aObj, ok := dict["A"]; ok {

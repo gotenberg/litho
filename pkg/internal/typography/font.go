@@ -48,14 +48,12 @@ type Font struct {
 // GlyphWidth returns the advance width (in 1/1000 text-space units) for the
 // given char code using a strict 5-step fallback chain:
 //
-//  1. PDF width arrays: /Widths (simple) or /W (CID). Type 3 uses /CharProcs.
-//  2. CID default width: /DW from the CIDFont (defaults to 1000 per spec).
-//  3. Simple font /MissingWidth from the /FontDescriptor.
-//  4. TrueType binary hmtx: read advance width from the embedded font program.
-//  5. /FontBBox average, then absolute fallback of 1000 (= 1 em).
+//   - PDF width arrays: /Widths (simple) or /W (CID). Type 3 uses /CharProcs.
+//   - CID default width: /DW from the CIDFont (defaults to 1000 per spec).
+//   - Simple font /MissingWidth from the /FontDescriptor.
+//   - TrueType binary hmtx: read advance width from the embedded font program.
+//   - /FontBBox average, then absolute fallback of 1000 (= 1 em).
 func (f *Font) GlyphWidth(charCode int) float64 {
-	// --- Step 1: PDF width arrays ---
-
 	// Type 3 fonts: look up glyph name via encoding, then apply FontMatrix.
 	if f.Type3Widths != nil && charCode >= 0 && charCode <= 255 {
 		if r, ok := f.Encoding[byte(charCode)]; ok { //nolint:gosec // charCode bounds-checked above
@@ -68,7 +66,6 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 		if idx >= 0 && idx < len(f.Widths) && f.Widths[idx] > 0 {
 			return f.Widths[idx]
 		}
-		// --- Step 3: MissingWidth from FontDescriptor ---
 		if f.MissingWidth > 0 {
 			return f.MissingWidth
 		}
@@ -89,7 +86,7 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 				return float64(advance) * 1000.0 / float64(f.UnitsPerEm)
 			}
 		}
-		// --- Step 2: CID default width (/DW, defaults to 1000 per ISO 32000) ---
+		// CID default width (/DW, defaults to 1000 per ISO 32000).
 		if f.MissingWidth > 0 {
 			return f.MissingWidth
 		}
@@ -102,7 +99,6 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 		return f.Widths[idx]
 	}
 
-	// --- Step 3: /MissingWidth from /FontDescriptor ---
 	if f.MissingWidth > 0 {
 		return f.MissingWidth
 	}
@@ -112,7 +108,6 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 
 // resolveWidth implements steps 4-5 of the fallback chain.
 func (f *Font) resolveWidth(charCode int) float64 {
-	// --- Step 4: TrueType binary hmtx table ---
 	if f.HmtxWidths != nil && f.UnitsPerEm > 0 {
 		gid := uint16(charCode) //nolint:gosec // charCode is a glyph index in this context
 		if advance, ok := f.HmtxWidths[gid]; ok && advance > 0 {
@@ -121,7 +116,6 @@ func (f *Font) resolveWidth(charCode int) float64 {
 		}
 	}
 
-	// --- Step 5: /FontBBox width, OS/2 xAvgCharWidth, then absolute fallback ---
 	bboxWidth := f.FontBBox[2] - f.FontBBox[0] // xMax - xMin
 	if bboxWidth > 0 {
 		return bboxWidth
@@ -132,7 +126,7 @@ func (f *Font) resolveWidth(charCode int) float64 {
 		return float64(f.AvgWidth) * 1000.0 / float64(max(f.UnitsPerEm, 1))
 	}
 
-	return 1000 // 1 em — prevents zero-width glyphs
+	return 1000 // 1 em, prevents zero-width glyphs
 }
 
 // VerticalMetrics returns the vertical displacement vector (vX, vY) and the
@@ -723,7 +717,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 		return
 	}
 
-	// /FontBBox [xMin yMin xMax yMax] — Step 5 fallback.
+	// /FontBBox [xMin yMin xMax yMax], used as a width fallback.
 	if bboxObj, ok := fdDict["FontBBox"]; ok {
 		bboxArr, err := document.ResolveArray(ctx, doc, bboxObj)
 		if err != nil {
@@ -736,7 +730,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 		}
 	}
 
-	// Binary font widths — Step 4 fallback.
+	// Binary font widths from the embedded font program.
 	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile2")
 	if fontData == nil {
 		fontData = decodeFontStream(ctx, doc, fdDict, "FontFile3")
@@ -745,7 +739,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 		return
 	}
 
-	// OS/2 xAvgCharWidth — a better fallback than FontBBox or 1000.
+	// OS/2 xAvgCharWidth provides a better fallback than FontBBox or 1000.
 	font.AvgWidth = readOS2AvgWidth(fontData)
 
 	widths := ExtractBinaryWidths(ctx, fontData)
