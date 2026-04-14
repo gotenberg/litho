@@ -27,7 +27,7 @@ func runPages(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

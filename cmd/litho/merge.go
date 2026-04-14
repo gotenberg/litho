@@ -15,7 +15,7 @@ func runMerge(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

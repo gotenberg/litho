@@ -20,7 +20,7 @@ func runStampPDF(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	y := fs.Float64("y", 0, "Y position in points from bottom-left")
 	pages := fs.String("pages", "", "Page range (default: all)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

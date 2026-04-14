@@ -21,7 +21,7 @@ func runSetMetadata(ctx context.Context, args []string, stdout, stderr io.Writer
 	creator := fs.String("creator", "", "Creator application")
 	producer := fs.String("producer", "", "Producer application")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

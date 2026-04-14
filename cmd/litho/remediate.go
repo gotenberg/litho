@@ -25,7 +25,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	aggressive := fs.Bool("aggressive", false, "Enable aggressive fixes that may alter visible content")
 	format := fs.String("f", "text", "Output format: text or json")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

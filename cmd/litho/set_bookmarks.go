@@ -19,7 +19,7 @@ func runSetBookmarks(ctx context.Context, args []string, stdout, stderr io.Write
 	password := fs.String("p", "", "PDF password")
 	fromJSON := fs.String("from-json", "", "JSON file with bookmark definitions (required)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

@@ -16,7 +16,7 @@ func runDelete(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	password := fs.String("p", "", "PDF password")
 	pages := fs.String("pages", "", "Page range (required)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

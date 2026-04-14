@@ -24,7 +24,7 @@ func runEncrypt(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	ownerPwd := fs.String("owner-password", "", "Owner password")
 	algorithm := fs.String("algorithm", "aes256", "Encryption algorithm: rc4-128, aes128, aes256")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

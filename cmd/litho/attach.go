@@ -19,7 +19,7 @@ func runAttach(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	dataPath := fs.String("data", "", "Path to the file to attach (required)")
 	mime := fs.String("mime", "", "MIME type (auto-detected from extension if omitted)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

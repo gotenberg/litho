@@ -25,7 +25,7 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	password := fs.String("p", "", "PDF password")
 	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

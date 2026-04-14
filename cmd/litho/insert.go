@@ -18,7 +18,7 @@ func runInsert(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	pos := fs.Int("pos", -1, "0-based insertion position (required)")
 	sourcePages := fs.String("source-pages", "", "Source page range (default: all)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

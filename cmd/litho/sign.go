@@ -14,7 +14,7 @@ func runSign(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	_ = fs.String("cert", "", "Certificate PEM file")
 	_ = fs.String("key", "", "Private key PEM file")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

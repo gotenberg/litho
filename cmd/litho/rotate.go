@@ -17,7 +17,7 @@ func runRotate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	angle := fs.Int("angle", 0, "Rotation angle in degrees (multiple of 90, required)")
 	pages := fs.String("pages", "", "Page range (default: all)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 

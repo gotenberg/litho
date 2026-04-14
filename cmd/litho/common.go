@@ -100,7 +100,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 
@@ -137,6 +137,45 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	}
 
 	return exitOK
+}
+
+// reorderArgs moves positional arguments to the end so that Go's flag
+// package (which stops at the first non-flag argument) can parse all flags.
+// It uses the FlagSet's registered flags to know which flags take values.
+// This allows users to write:
+//
+//	litho remediate doc.pdf --profile PDF/A-2b -o out.pdf
+//
+// instead of requiring:
+//
+//	litho remediate --profile PDF/A-2b -o out.pdf doc.pdf
+func reorderArgs(fs *flag.FlagSet, args []string) []string {
+	// Build set of flag names that take values (all non-bool flags).
+	valueFlags := make(map[string]bool)
+	fs.VisitAll(func(f *flag.Flag) {
+		if _, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok {
+			valueFlags[f.Name] = true
+		}
+	})
+
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			name := strings.TrimLeft(arg, "-")
+			if strings.Contains(name, "=") {
+				continue
+			}
+			if valueFlags[name] && i+1 < len(args) {
+				i++
+				flags = append(flags, args[i])
+			}
+		} else {
+			positional = append(positional, arg)
+		}
+	}
+	return append(flags, positional...)
 }
 
 // parsePages parses a page range specification into a sorted slice of
