@@ -322,7 +322,6 @@ func flagValueRule(part int) Rule {
 // Test 3: For Widget/Btn, /N must be a subdictionary.
 // Test 4: For non-Widget or non-Btn, /N must be a stream.
 func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast.PdfDict, subtype ast.PdfName, part int, _ byte, loc string) []Violation {
-
 	isWidget := subtype == "Widget"
 
 	// Determine the field type for Widget annotations.

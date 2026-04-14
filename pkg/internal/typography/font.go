@@ -1361,7 +1361,6 @@ func isIdentityEncoding(ctx context.Context, doc *document.Document, fontDict as
 	return encName == "Identity-H" || encName == "Identity-V"
 }
 
-
 // decodeFontStream resolves and decodes an embedded font stream by key name.
 func decodeFontStream(ctx context.Context, doc *document.Document, fdDict ast.PdfDict, key ast.PdfName) []byte {
 	obj, ok := fdDict[key]

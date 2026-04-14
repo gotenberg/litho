@@ -149,7 +149,6 @@ func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.
 	return standard14Fonts[string(basefont)]
 }
 
-
 // isFontEmbedded checks whether the font descriptor contains a FontFile,
 // FontFile2, or FontFile3 stream indicating an embedded font program.
 func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict) bool {

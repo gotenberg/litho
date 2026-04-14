@@ -42,45 +42,135 @@ func writeTempPDF(t *testing.T, data []byte) string {
 func TestRun_NoArgs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	rc := run(context.Background(), nil, &stdout, &stderr)
-	if rc != 1 {
-		t.Errorf("exit code: got %d, want 1", rc)
+	if rc != exitError {
+		t.Errorf("exit code: got %d, want %d", rc, exitError)
 	}
 	if !strings.Contains(stderr.String(), "Usage:") {
-		t.Errorf("expected usage message on stderr, got: %q", stderr.String())
+		t.Errorf("expected usage on stderr, got: %q", stderr.String())
 	}
 }
 
-func TestRun_MissingFile(t *testing.T) {
+func TestRun_Help(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	rc := run(context.Background(), []string{"/nonexistent/file.pdf"}, &stdout, &stderr)
-	if rc != 1 {
-		t.Errorf("exit code: got %d, want 1", rc)
+	rc := run(context.Background(), []string{"--help"}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Errorf("exit code: got %d, want %d", rc, exitOK)
 	}
-	if !strings.Contains(stderr.String(), "Failed to open PDF") {
-		t.Errorf("expected open error on stderr, got: %q", stderr.String())
+	if !strings.Contains(stdout.String(), "Usage:") {
+		t.Errorf("expected usage on stdout, got: %q", stdout.String())
 	}
 }
 
-func TestRun_MinimalPDF(t *testing.T) {
+func TestRun_UnknownCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{"bogus"}, &stdout, &stderr)
+	if rc != exitError {
+		t.Errorf("exit code: got %d, want %d", rc, exitError)
+	}
+	if !strings.Contains(stderr.String(), "unknown command") {
+		t.Errorf("expected unknown command error, got: %q", stderr.String())
+	}
+}
+
+func TestInfo_MinimalPDF(t *testing.T) {
 	path := writeTempPDF(t, minimalPDF())
-
 	var stdout, stderr bytes.Buffer
-	rc := run(context.Background(), []string{path}, &stdout, &stderr)
-	if rc != 0 {
-		t.Errorf("exit code: got %d, want 0. stderr: %s", rc, stderr.String())
+	rc := run(context.Background(), []string{"info", path}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Errorf("exit code: got %d, want %d. stderr: %s", rc, exitOK, stderr.String())
 	}
-
 	out := stdout.String()
-	if !strings.Contains(out, "=== Metadata ===") {
-		t.Error("expected metadata section header")
+	if !strings.Contains(out, "Version:") {
+		t.Errorf("expected Version in output, got: %s", out)
 	}
-	if !strings.Contains(out, "Title: CLI Test Doc") {
-		t.Errorf("expected title in metadata, got: %s", out)
+	if !strings.Contains(out, "Pages:       1") {
+		t.Errorf("expected 1 page, got: %s", out)
 	}
-	if !strings.Contains(out, "=== Pages: 1 ===") {
-		t.Errorf("expected page count, got: %s", out)
+}
+
+func TestInfo_JSON(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{"info", "-f", "json", path}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Errorf("exit code: got %d, want %d. stderr: %s", rc, exitOK, stderr.String())
 	}
-	if !strings.Contains(out, "=== Page 1 Text ===") {
-		t.Error("expected page 1 text section header")
+	if !strings.Contains(stdout.String(), `"pages": 1`) {
+		t.Errorf("expected JSON pages field, got: %s", stdout.String())
+	}
+}
+
+func TestMetadata_MinimalPDF(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{"metadata", path}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Errorf("exit code: got %d, want %d. stderr: %s", rc, exitOK, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Title: CLI Test Doc") {
+		t.Errorf("expected title, got: %s", stdout.String())
+	}
+}
+
+func TestPages_MinimalPDF(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{"pages", path}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Errorf("exit code: got %d, want %d. stderr: %s", rc, exitOK, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "612") {
+		t.Errorf("expected width 612, got: %s", stdout.String())
+	}
+}
+
+func TestText_MinimalPDF(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{"text", path}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Errorf("exit code: got %d, want %d. stderr: %s", rc, exitOK, stderr.String())
+	}
+}
+
+func TestText_MissingFile(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{"text", "/nonexistent/file.pdf"}, &stdout, &stderr)
+	if rc != exitError {
+		t.Errorf("exit code: got %d, want %d", rc, exitError)
+	}
+}
+
+func TestParsePages(t *testing.T) {
+	tests := []struct {
+		spec      string
+		pageCount int
+		want      []int
+		wantErr   bool
+	}{
+		{"1", 5, []int{1}, false},
+		{"1-3", 5, []int{1, 2, 3}, false},
+		{"1,3,5", 5, []int{1, 3, 5}, false},
+		{"1-3,5", 5, []int{1, 2, 3, 5}, false},
+		{"even", 6, []int{2, 4, 6}, false},
+		{"odd", 6, []int{1, 3, 5}, false},
+		{"last", 5, []int{5}, false},
+		{"0", 5, nil, true},
+		{"6", 5, nil, true},
+		{"3-1", 5, nil, true},
+		{"", 5, nil, true},
+		{"abc", 5, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.spec, func(t *testing.T) {
+			got, err := parsePages(tt.spec, tt.pageCount)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parsePages(%q, %d) err=%v, wantErr=%t", tt.spec, tt.pageCount, err, tt.wantErr)
+				return
+			}
+			if err == nil && len(got) != len(tt.want) {
+				t.Errorf("parsePages(%q, %d) = %v, want %v", tt.spec, tt.pageCount, got, tt.want)
+			}
+		})
 	}
 }

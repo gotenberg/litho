@@ -91,7 +91,6 @@ func WriteOutline(
 	return nil
 }
 
-
 // BuildOutline allocates outline objects for the given bookmark tree and
 // returns the ref to the root /Outlines dict (or a zero ref if nothing was
 // written). The caller is responsible for inserting the returned ref into

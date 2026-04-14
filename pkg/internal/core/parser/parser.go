@@ -62,7 +62,6 @@ func (p *Parser) recordViolation(msg string) {
 	}
 }
 
-
 // Peek returns the token n positions ahead without consuming it.
 func (p *Parser) Peek(n int) (lexer.Token, error) {
 	for len(p.tokens) <= n {

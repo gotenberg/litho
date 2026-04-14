@@ -68,4 +68,3 @@ func ExtractImages(ctx context.Context, doc *document.Document, page *document.P
 
 	return images
 }
-
