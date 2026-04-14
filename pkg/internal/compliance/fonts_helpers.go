@@ -149,20 +149,6 @@ func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.
 	return standard14Fonts[string(basefont)]
 }
 
-// findFontDescriptor resolves the /FontDescriptor dictionary from a font dict.
-// Returns nil if no FontDescriptor is present.
-func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
-	fdObj, ok := fontDict["FontDescriptor"]
-	if !ok {
-		return nil
-	}
-	fd, err := document.ResolveDict(ctx, doc, fdObj)
-	if err != nil {
-		complog(doc).Debug("compliance: fonts: failed to resolve FontDescriptor", "error", err)
-		return nil
-	}
-	return fd
-}
 
 // isFontEmbedded checks whether the font descriptor contains a FontFile,
 // FontFile2, or FontFile3 stream indicating an embedded font program.
@@ -174,7 +160,7 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict)
 		if obj, ok := fd[key]; ok {
 			resolved, err := document.ResolveObject(ctx, doc, obj)
 			if err != nil {
-				complog(doc).Debug("compliance: fonts: failed to resolve font file entry",
+				doc.Logger.Debug("compliance: fonts: failed to resolve font file entry",
 					"key", key, "error", err)
 				continue
 			}
@@ -201,7 +187,7 @@ func isSymbolicFont(ctx context.Context, doc *document.Document, fd ast.PdfDict)
 	}
 	flags, err := document.ResolveInt(ctx, doc, fd["Flags"])
 	if err != nil {
-		complog(doc).Debug("compliance: fonts: failed to resolve Flags", "error", err)
+		doc.Logger.Debug("compliance: fonts: failed to resolve Flags", "error", err)
 		return false
 	}
 	const symbolicBit = 1 << 2 // bit 3 (0-indexed bit 2) = symbolic
@@ -257,7 +243,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 		return nil
 	}
 
-	fd := findFontDescriptor(ctx, doc, fontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
 		// No FontDescriptor means not embedded. PDF/A requires embedding even
 		// for the 14 standard fonts.
@@ -272,7 +258,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 }
 
 // checkFontNameUTF8 validates that the /BaseFont name is valid UTF-8 (rule 8).
-func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
+func checkFontNameUTF8(_ context.Context, _ *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := fontNameUTF8Rule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -296,7 +282,6 @@ func checkFontNameUTF8(_ context.Context, doc *document.Document, fontDict ast.P
 		return failf(rule, "font %s on page %d BaseFont=%s", fontName, pageNum, string(basefontName))
 	}
 
-	_ = doc // Suppress unused warning; doc used in other check functions via this helper.
 	return nil
 }
 

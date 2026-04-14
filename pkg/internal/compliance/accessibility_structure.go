@@ -26,7 +26,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 	nsArray, err := document.ResolveArray(ctx, doc, nsObj)
 	if err != nil || len(nsArray) == 0 {
-		complog(doc).Debug("compliance.accessibility: /Namespaces is empty or unresolvable", "error", err)
+		doc.Logger.Debug("compliance.accessibility: /Namespaces is empty or unresolvable", "error", err)
 		return fail(Rule_14289_2_8_2_4_t01, "Namespaces empty")
 	}
 
@@ -38,7 +38,7 @@ func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 		nsDict, err := document.ResolveDict(ctx, doc, nsEntryObj)
 		if err != nil || nsDict == nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve namespace entry", "index", i, "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve namespace entry", "index", i, "error", err)
 			continue
 		}
 
@@ -324,7 +324,7 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 		}
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve annots array", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 		for _, annotObj := range annots {
@@ -473,7 +473,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve annots array", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 
@@ -494,7 +494,7 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 			}
 			flags, err := document.ResolveInt(ctx, doc, fObj)
 			if err != nil {
-				complog(doc).Debug("compliance.accessibility: cannot resolve annotation flags", "error", err)
+				doc.Logger.Debug("compliance.accessibility: cannot resolve annotation flags", "error", err)
 				continue
 			}
 

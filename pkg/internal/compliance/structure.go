@@ -64,7 +64,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	level := vctx.level
 	ua := vctx.ua
 
-	complog(doc).Debug("compliance.structure: starting structure checks",
+	doc.Logger.Debug("compliance.structure: starting structure checks",
 		"profile", profile, "part", part, "level", level, "ua", ua,
 	)
 
@@ -117,7 +117,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 	}
 
-	complog(doc).Debug("compliance.structure: structure checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.structure: structure checks complete", "violations", len(results))
 	return results
 }
 
@@ -131,7 +131,7 @@ func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	markInfo, err := document.ResolveDict(ctx, doc, markInfoObj)
 	if err != nil || markInfo == nil {
-		complog(doc).Debug("compliance.structure: cannot resolve /MarkInfo", "error", err)
+		doc.Logger.Debug("compliance.structure: cannot resolve /MarkInfo", "error", err)
 		*results = append(*results, fail(markInfoRule(profile, part), "cannot resolve /MarkInfo")...)
 		return
 	}
@@ -143,8 +143,8 @@ func checkMarkInfo(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	}
 
 	marked, err := document.ResolveBool(ctx, doc, markedObj)
-	if err != nil || !bool(marked) {
-		complog(doc).Debug("compliance.structure: /Marked is not true", "marked", marked, "error", err)
+	if err != nil || !marked {
+		doc.Logger.Debug("compliance.structure: /Marked is not true", "marked", marked, "error", err)
 		*results = append(*results, fail(markInfoRule(profile, part), "/Marked is not true")...)
 	}
 }
@@ -164,7 +164,7 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 
 	st, err := document.ResolveDict(ctx, doc, stObj)
 	if err != nil || st == nil {
-		complog(doc).Debug("compliance.structure: cannot resolve /StructTreeRoot", "error", err)
+		doc.Logger.Debug("compliance.structure: cannot resolve /StructTreeRoot", "error", err)
 		*results = append(*results, fail(structTreeRootRule(profile, part), "cannot resolve /StructTreeRoot")...)
 		return nil
 	}
@@ -183,7 +183,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 
 	roleMap, err := document.ResolveDict(ctx, doc, rmObj)
 	if err != nil || roleMap == nil {
-		complog(doc).Debug("compliance.structure: cannot resolve /RoleMap", "error", err)
+		doc.Logger.Debug("compliance.structure: cannot resolve /RoleMap", "error", err)
 		return
 	}
 
@@ -195,7 +195,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		}
 		target, err := document.ResolveName(ctx, doc, valObj)
 		if err != nil {
-			complog(doc).Debug("compliance.structure: cannot resolve RoleMap target", "key", key, "error", err)
+			doc.Logger.Debug("compliance.structure: cannot resolve RoleMap target", "key", key, "error", err)
 			continue
 		}
 		mapping[key] = target
@@ -490,7 +490,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 }
 
 // validateListContainment checks PDF/UA list structure rules.
-func validateListContainment(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName, parentType ast.PdfName) {
+func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict, typeName ast.PdfName, parentType ast.PdfName) {
 	// L must contain only LI (and optionally Caption).
 	if parentType == "L" && typeName != "LI" && typeName != "Caption" && typeName != "L" {
 		*state.results = append(*state.results,
@@ -814,7 +814,7 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 			}
 			atStr, err := document.ResolveString(ctx, doc, atObj)
 			if err != nil {
-				complog(doc).Debug("compliance.structure: cannot resolve attribute string", "error", err)
+				doc.Logger.Debug("compliance.structure: cannot resolve attribute string", "error", err)
 				continue
 			}
 			decoded := document.DecodePdfString(atStr)
@@ -832,7 +832,7 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 		if ctx.Err() != nil {
 			return results
 		}
-		streamData, err := getPageContentBytes(ctx, doc, page)
+		streamData, err := resolvePageContentBytes(ctx, doc, page)
 		if err != nil || len(streamData) == 0 {
 			continue
 		}
@@ -1200,7 +1200,7 @@ func findHeadersInAttributes(ctx context.Context, doc *document.Document, aObj a
 // checkPDFALangValid validates §6.8.4 (PDF/A-1) / §6.7.3.4 (PDF/A-2/3):
 // if a /Lang entry is present in the catalog or structure elements, its value
 // must be a valid RFC 3066 language tag.
-func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, _ string, part int) []Violation {
 	rule := pdfaLangValidRule(part)
 
 	var results []Violation
@@ -1239,13 +1239,13 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 
 	// Also scan page /Properties resource dicts for /Lang values (used by BDC operators).
 	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-	inheritedRes := getResources(ctx, doc, pagesDict)
+	inheritedRes := resolveResources(ctx, doc, pagesDict)
 	pages := collectPages(ctx, doc, catalog)
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
-		res := getResources(ctx, doc, page)
+		res := resolveResources(ctx, doc, page)
 		if res == nil {
 			res = inheritedRes
 		}
@@ -1255,7 +1255,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		propsDict, _ := document.ResolveDict(ctx, doc, res["Properties"])
 
 		// Scan raw content stream for inline /Lang in BDC dicts.
-		streamData, _ := getPageContentBytes(ctx, doc, page)
+		streamData, _ := resolvePageContentBytes(ctx, doc, page)
 		if len(streamData) > 0 {
 			s := string(streamData)
 			searchStr := s
@@ -1316,7 +1316,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 			}
 			langStr, err := document.ResolveString(ctx, doc, langObj)
 			if err != nil {
-				complog(doc).Debug("compliance.structure: cannot resolve Lang string", "error", err)
+				doc.Logger.Debug("compliance.structure: cannot resolve Lang string", "error", err)
 				continue
 			}
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))

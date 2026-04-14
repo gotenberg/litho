@@ -227,8 +227,8 @@ func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
 	for off := 0; off+rowBytes <= len(result); off += rowBytes {
 		row := result[off : off+rowBytes]
 		for i := params.Colors; i < numSamples; i++ {
-			cur := getBitSample(row, i, bpc, mask)
-			prev := getBitSample(row, i-params.Colors, bpc, mask)
+			cur := bitSample(row, i, bpc, mask)
+			prev := bitSample(row, i-params.Colors, bpc, mask)
 			setBitSample(row, i, bpc, mask, (cur+prev)&mask)
 		}
 	}
@@ -236,8 +236,8 @@ func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
 	return result, nil
 }
 
-// getBitSample extracts a sub-byte sample at the given sample index.
-func getBitSample(row []byte, sampleIdx, bpc int, mask byte) byte {
+// bitSample extracts a sub-byte sample at the given sample index.
+func bitSample(row []byte, sampleIdx, bpc int, mask byte) byte {
 	bitPos := sampleIdx * bpc
 	byteIdx := bitPos / 8
 	shift := 8 - (bitPos%8 + bpc) // MSB-first packing

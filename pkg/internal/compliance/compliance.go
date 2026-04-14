@@ -20,7 +20,7 @@ import (
 // format-checking flag and the accumulated [document.Document.FormatViolations]
 // slice are not corrupted by an overlapping second run.
 func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PDFAProfile) ([]error, error) {
-	complog(doc).Debug("compliance: starting PDF/A validation", "profile", profile)
+	doc.Logger.Debug("compliance: starting PDF/A validation", "profile", profile)
 
 	groups, ok := pdfaCheckGroups[profile]
 	if !ok {
@@ -38,7 +38,7 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 // returning all compliance violations found as errors. See [ValidatePDFA]
 // for the concurrency contract.
 func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.PDFUAProfile) ([]error, error) {
-	complog(doc).Debug("compliance: starting PDF/UA validation", "profile", profile)
+	doc.Logger.Debug("compliance: starting PDF/UA validation", "profile", profile)
 
 	groups, ok := pdfuaCheckGroups[profile]
 	if !ok {
@@ -55,7 +55,7 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 // runValidation is the shared body of [ValidatePDFA] and [ValidatePDFUA].
 // The caller must hold the document's validation run mutex.
 func runValidation(ctx context.Context, doc *document.Document, profile string, groups []checkGroup) ([]error, error) {
-	catalog, err := getCatalog(ctx, doc)
+	catalog, err := resolveCatalog(ctx, doc)
 	if err != nil {
 		slog.Error("compliance: failed to get catalog", "error", err)
 		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
@@ -74,7 +74,7 @@ func runValidation(ctx context.Context, doc *document.Document, profile string, 
 
 	violations := runCheckGroups(ctx, doc, catalog, profile, groups)
 
-	complog(doc).Debug("compliance: validation complete",
+	doc.Logger.Debug("compliance: validation complete",
 		"profile", profile,
 		"violations", len(violations),
 	)

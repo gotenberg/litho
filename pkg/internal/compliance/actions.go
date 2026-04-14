@@ -92,7 +92,7 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	complog(doc).Debug("compliance.actions: starting action checks", "profile", profile, "part", part)
+	doc.Logger.Debug("compliance.actions: starting action checks", "profile", profile, "part", part)
 
 	results := make([]Violation, 0, 8)
 
@@ -159,7 +159,7 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	aaDict, err := document.ResolveDict(ctx, doc, aaObj)
 	if err != nil || aaDict == nil {
-		complog(doc).Debug("compliance.actions: catalog /AA is not a dict", "error", err)
+		doc.Logger.Debug("compliance.actions: catalog /AA is not a dict", "error", err)
 		return nil
 	}
 
@@ -253,7 +253,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 		}
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			complog(doc).Debug("compliance.actions: failed to resolve /Annots array", "page", pageIdx+1, "error", err)
+			doc.Logger.Debug("compliance.actions: failed to resolve /Annots array", "page", pageIdx+1, "error", err)
 			continue
 		}
 
@@ -497,14 +497,13 @@ func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalo
 		return nil
 	}
 
-	jsObj, ok := namesDict["JavaScript"]
+	_, ok = namesDict["JavaScript"]
 	if !ok {
 		return nil
 	}
 
 	// The presence of a /JavaScript name tree means JavaScript actions exist.
 	rule := forbiddenActionTypeRule(part)
-	_ = jsObj // value unused, presence is sufficient
 	return failf(rule, "JavaScript at catalog /Names/JavaScript")
 }
 
@@ -645,7 +644,7 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 	}
 	fields, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil {
-		complog(doc).Debug("compliance.actions: cannot resolve form fields array", "error", err)
+		doc.Logger.Debug("compliance.actions: cannot resolve form fields array", "error", err)
 		return nil
 	}
 

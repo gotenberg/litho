@@ -92,13 +92,13 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 			return results
 		}
 
-		data, err := getPageContentBytes(ctx, doc, page)
+		data, err := resolvePageContentBytes(ctx, doc, page)
 		if err != nil || len(data) == 0 {
 			continue
 		}
 		ops, err := content.ParseStreamData(ctx, data)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot parse content stream", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue
 		}
 
@@ -108,7 +108,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		allUntaggedIsTaggedDo := true
 		reportedT1 := false
 		reportedT2 := false
-		resources := getResources(ctx, doc, page)
+		resources := resolveResources(ctx, doc, page)
 
 		classifyMarker := func(op content.Operation) markerKind {
 			if len(op.Operands) < 1 {

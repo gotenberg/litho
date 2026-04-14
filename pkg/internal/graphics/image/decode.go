@@ -1,12 +1,12 @@
 package image
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"io"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -43,18 +43,18 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		return nil, fmt.Errorf("image %q is not a stream", name)
 	}
 
-	width, err := getInt(ctx, doc, stream.Dict, "Width")
+	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
 		return nil, err
 	}
 
-	height, err := getInt(ctx, doc, stream.Dict, "Height")
+	height, err := resolveInt(ctx, doc, stream.Dict, "Height")
 	if err != nil {
 		return nil, err
 	}
 
 	colorSpace := resolveColorSpace(ctx, doc, stream.Dict)
-	bitsPerComp, _ := getInt(ctx, doc, stream.Dict, "BitsPerComponent")
+	bitsPerComp, _ := resolveInt(ctx, doc, stream.Dict, "BitsPerComponent")
 	if bitsPerComp == 0 {
 		bitsPerComp = 8
 	}
@@ -76,22 +76,36 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	}
 
 	if filterName == "DCTDecode" {
-		// Raw JPEG. Use Go's image/jpeg decoder.
-		data, err := stream.Bytes(ctx)
+		// Raw JPEG: stream through the filter pipeline without buffering.
+		rc, err := doc.NewStreamReader(ctx, stream)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read JPEG stream data: %w", err)
+			return nil, fmt.Errorf("opening JPEG stream: %w", err)
 		}
-		img, err := jpeg.Decode(bytes.NewReader(data))
+		defer func() {
+			if closeErr := rc.Close(); closeErr != nil {
+				doc.Logger.Debug("closing JPEG stream reader", slog.Any("err", closeErr))
+			}
+		}()
+		img, err := jpeg.Decode(rc)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode JPEG: %w", err)
+			return nil, fmt.Errorf("decoding JPEG: %w", err)
 		}
 		return img, nil
 	}
 
-	// Decode stream data (FlateDecode, etc.).
-	decodedData, err := doc.DecodeStream(ctx, stream)
+	// Non-JPEG: stream through filters and read all decoded bytes for pixel
+	// construction below. Streaming decompression avoids holding both
+	// compressed and decompressed copies in memory simultaneously.
+	rc, err := doc.NewStreamReader(ctx, stream)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode stream: %w", err)
+		return nil, fmt.Errorf("opening image stream: %w", err)
+	}
+	decodedData, err := io.ReadAll(rc)
+	if closeErr := rc.Close(); closeErr != nil {
+		doc.Logger.Debug("closing image stream reader", slog.Any("err", closeErr))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading decoded image stream: %w", err)
 	}
 
 	if bitsPerComp != 8 {

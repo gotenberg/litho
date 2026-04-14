@@ -77,7 +77,7 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		if err != nil || len(data) < 128 {
 			// Corrupt or too short. Replace with a valid profile.
 			newOIArr[i] = oiEntry
-			replaceICCProfile(ctx, alloc, oiDict, oiRef, dpObj)
+			replaceICCProfile(alloc, oiDict, oiRef, dpObj)
 			fixes = append(fixes, fmt.Sprintf("replaced corrupt ICC profile in OutputIntent[%d]", i))
 			continue
 		}
@@ -91,7 +91,7 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		validCS := colorSpace == "GRAY" || colorSpace == "RGB " || colorSpace == "CMYK"
 
 		if !validClass || !validCS {
-			replaceICCProfile(ctx, alloc, oiDict, oiRef, dpObj)
+			replaceICCProfile(alloc, oiDict, oiRef, dpObj)
 			fixes = append(fixes, fmt.Sprintf("replaced invalid ICC profile in OutputIntent[%d] (class=%q, cs=%q)", i, deviceClass, colorSpace))
 		}
 
@@ -103,7 +103,7 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 // replaceICCProfile replaces the DestOutputProfile stream with a valid sRGB
 // profile (or CMYK if the existing profile was CMYK-like).
-func replaceICCProfile(_ context.Context, alloc *writer.ObjAllocator, oiDict ast.PdfDict, oiRef ast.PdfIndirectRef, dpObj ast.PdfObject) {
+func replaceICCProfile(alloc *writer.ObjAllocator, oiDict ast.PdfDict, oiRef ast.PdfIndirectRef, dpObj ast.PdfObject) {
 	// Default to sRGB (most compatible).
 	iccData := sRGBICCProfile
 	nComponents := 3

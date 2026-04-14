@@ -107,7 +107,7 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 
-	complog(doc).Debug("compliance: fonts: starting font checks", "profile", profile)
+	doc.Logger.Debug("compliance: fonts: starting font checks", "profile", profile)
 
 	if len(vctx.pages) == 0 {
 		return nil
@@ -137,7 +137,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		fontDict, err := document.ResolveDict(ctx, doc, fontDictObj)
 		if err != nil {
-			complog(doc).Debug("compliance: fonts: failed to resolve /Font dict",
+			doc.Logger.Debug("compliance: fonts: failed to resolve /Font dict",
 				"page", pageIdx+1, "error", err)
 			continue
 		}
@@ -158,7 +158,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 			font, err := document.ResolveDict(ctx, doc, fontRef)
 			if err != nil || font == nil {
-				complog(doc).Debug("compliance: fonts: failed to resolve font dict",
+				doc.Logger.Debug("compliance: fonts: failed to resolve font dict",
 					"font", fontKey, "page", pageIdx+1, "error", err)
 				continue
 			}
@@ -178,7 +178,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 	}
 
-	complog(doc).Debug("compliance: fonts: font checks complete",
+	doc.Logger.Debug("compliance: fonts: font checks complete",
 		"violations", len(results), "fonts_checked", len(checked))
 	return results
 }
@@ -251,7 +251,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 	}
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil {
-		complog(doc).Debug("compliance: cannot resolve ToUnicode stream", "error", err)
+		doc.Logger.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
 		return nil
 	}
 	data, err := doc.DecodeStream(ctx, stream)
@@ -266,7 +266,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 	}
 
 	// Check for ActualText in content stream (BDC properties).
-	contentData, _ := getPageContentBytes(ctx, doc, page)
+	contentData, _ := resolvePageContentBytes(ctx, doc, page)
 	if len(contentData) > 0 && bytes.Contains(contentData, []byte("ActualText")) {
 		return nil
 	}
@@ -307,7 +307,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// Resolve /DescendantFonts array.
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
-		complog(doc).Debug("compliance: fonts: Type0 font has no DescendantFonts",
+		doc.Logger.Debug("compliance: fonts: Type0 font has no DescendantFonts",
 			"font", fontName, "error", err)
 		// Without descendants we cannot check further, but the font is still
 		// subject to embedding checks at the Type0 level.
@@ -317,7 +317,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// PDF spec requires exactly one descendant CIDFont.
 	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
 	if err != nil || cidFontDict == nil {
-		complog(doc).Debug("compliance: fonts: failed to resolve descendant CIDFont",
+		doc.Logger.Debug("compliance: fonts: failed to resolve descendant CIDFont",
 			"font", fontName, "error", err)
 		return results
 	}
@@ -350,7 +350,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	results = append(results, checkType0NotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// Glyph width consistency for CIDFont.
-	cidFd := findFontDescriptor(ctx, doc, cidFontDict)
+	cidFd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if cidFd != nil {
 		fontData := extractFontProgramData(ctx, doc, cidFd)
 		if fontData != nil {
@@ -424,7 +424,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	// For TrueType: compose PDF encoding → glyph name → GID via post table.
 	// If post table absent, use cmap directly for charCode 0 (always .notdef).
 	if subtype == "TrueType" {
-		fd := findFontDescriptor(ctx, doc, fontDict)
+		fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 		if fd != nil {
 			fontData := extractFontProgramData(ctx, doc, fd)
 			if fontData != nil {
@@ -532,7 +532,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		return nil
 	}
 
-	fd := findFontDescriptor(ctx, doc, cidFontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
 		return nil
 	}

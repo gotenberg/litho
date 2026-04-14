@@ -121,9 +121,9 @@ func resolveMergeBookmarks(
 	sources []MergeSource,
 	cumulativeOffsets []int,
 	cfg BookmarkConfig,
-) ([]models.Bookmark, error) {
+) []models.Bookmark {
 	if cfg.Handling == BookmarkNone {
-		return nil, nil
+		return nil
 	}
 
 	perSource := make([][]models.Bookmark, len(sources))
@@ -189,7 +189,7 @@ func resolveMergeBookmarks(
 			}
 			wrapped = append(wrapped, WrapInRoot(bms, label, firstPageOfSource[i]))
 		}
-		return wrapped, nil
+		return wrapped
 	}
 
 	// Otherwise concatenate.
@@ -197,7 +197,7 @@ func resolveMergeBookmarks(
 	for _, bms := range perSource {
 		all = append(all, bms...)
 	}
-	return all, nil
+	return all
 }
 
 // generateForMergeSource auto-generates bookmarks for one source in a Merge

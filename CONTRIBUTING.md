@@ -4,15 +4,15 @@ litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.26.0+
-- Optional: Docker (corpus provisioning), CGO + libopenjp2 (JPXDecode)
+- Optional: Docker (corpus provisioning), CGO + libopenjp2 (JPXDecode), CGO + libjbig2dec (JBIG2Decode)
 
 ## Quick start
 
 ```bash
 go build ./cmd/litho
-make fmt && make lint       # zero warnings policy
-make test-unit              # go test -race ./...
-make bench                  # go test -bench=. -benchmem ./...
+make fmt && make lint # zero warnings policy
+make test-unit        # go test -race ./...
+make bench            # go test -bench=. -benchmem ./...
 ```
 
 ## Coding rules
@@ -24,6 +24,8 @@ make bench                  # go test -bench=. -benchmem ./...
 ### Error handling
 
 - Never assign errors to `_` without a justification comment. If justified, log at Debug via `doc.Logger`.
+- Do not use `_ = variable` to suppress unused warnings. If a variable is unused, remove it. If a function parameter is unused, prefix it with `_` in the signature. If a multi-return value is unused, capture it as `_` directly in the assignment (e.g., `_, b, err := f()`).
+- Every named parameter must be used in the function body. Never leave a named-but-unused parameter: Go compiles it, but it misleads readers into thinking the value matters. The default fix is to remove the parameter and update callers. Prefix with `_` only when the signature is constrained by an interface, a function type, or a uniform calling convention (see `pkg/internal/compliance/doc.go`). Run `unparam` to catch these before submitting.
 - Wrap and propagate every error: `fmt.Errorf("resolving font on page %d: %w", pageNum, err)`.
 - Match errors with `errors.Is`, never `strings.Contains`.
 - Sentinel errors live in `errors.go` per package.
@@ -52,10 +54,11 @@ Validate token types with `Expect`. Handle `io.EOF` gracefully. Never panic. Tra
 
 ### Naming
 
-- No `Get` prefix on accessors: `Metadata()`, not `GetMetadata()`. Go convention.
+- No `Get` prefix on accessors: `Metadata()`, not `GetMetadata()`. Go convention. This applies to unexported functions too: `resolveResources`, not `getResources`.
 - Use `Resolve` for functions that chase indirect references and build typed objects: `ResolveCatalog`, `ResolvePages`, `ResolveFont`, `ResolveOutline`.
 - Use `Extract` for page-scoped data retrieval: `ExtractText`, `ExtractImages`, `ExtractAnnotations`.
 - Use `Set` for setters: `SetMetadata`, `SetCachedCMap`.
+- For simple dict/struct field accessors that do no ref-chasing, drop the prefix entirely: `dictInt`, not `getInt`.
 
 ### No duplication of core logic
 
@@ -136,9 +139,29 @@ Stage specific files. Never `git add -A`. Do not push unless asked.
 
 ## Dependencies
 
-| Dependency                      | Purpose                                     |
-| ------------------------------- | ------------------------------------------- |
-| `github.com/dop251/goja`        | JavaScript VM for dynamic form fields       |
-| `github.com/andybalholm/brotli` | Brotli stream decompression                 |
-| `golang.org/x/text`             | Unicode text processing                     |
-| `golang.org/x/image`            | PNG decoding for image stamps               |
+| Dependency                      | Purpose                               |
+| ------------------------------- | ------------------------------------- |
+| `github.com/dop251/goja`        | JavaScript VM for dynamic form fields |
+| `github.com/andybalholm/brotli` | Brotli stream decompression           |
+| `golang.org/x/text`             | Unicode text processing               |
+| `golang.org/x/image`            | PNG decoding for image stamps         |
+
+### Optional CGO plugins
+
+Filter plugins in `pkg/plugins/` provide opt-in support for PDF stream filters backed by external C libraries. Without CGO or without the library installed, the plugin's `Decode` method returns `ErrUnsupportedFilter` and litho gracefully skips the filter.
+
+| Plugin              | C library   | Install                 | Filter      |
+| ------------------- | ----------- | ----------------------- | ----------- |
+| `pkg/plugins/jpx`   | libopenjp2  | `brew install openjpeg` | JPXDecode   |
+| `pkg/plugins/jbig2` | libjbig2dec | `brew install jbig2dec` | JBIG2Decode |
+
+Register plugins via `pdf.WithFilterPlugin` when opening a document:
+
+```go
+reader, err := pdf.OpenFile(ctx, "doc.pdf",
+    pdf.WithFilterPlugin(jpx.New()),
+    pdf.WithFilterPlugin(jbig2.New()),
+)
+```
+
+To run tests with CGO plugins enabled: `CGO_ENABLED=1 go test ./pkg/plugins/...`

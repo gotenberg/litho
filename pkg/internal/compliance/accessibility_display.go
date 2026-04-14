@@ -18,7 +18,7 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 
 	vp, err := document.ResolveDict(ctx, doc, vpObj)
 	if err != nil || vp == nil {
-		complog(doc).Debug("compliance.accessibility: cannot resolve /ViewerPreferences", "error", err)
+		doc.Logger.Debug("compliance.accessibility: cannot resolve /ViewerPreferences", "error", err)
 		return fail(rule, "ViewerPreferences unresolvable")
 	}
 
@@ -28,7 +28,7 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 	}
 
 	ddt, err := document.ResolveBool(ctx, doc, ddtObj)
-	if err != nil || !bool(ddt) {
+	if err != nil || !ddt {
 		return fail(rule, "DisplayDocTitle=false")
 	}
 
@@ -45,7 +45,7 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	mi, err := document.ResolveDict(ctx, doc, miObj)
 	if err != nil || mi == nil {
-		complog(doc).Debug("compliance.accessibility: cannot resolve /MarkInfo", "error", err)
+		doc.Logger.Debug("compliance.accessibility: cannot resolve /MarkInfo", "error", err)
 		return nil
 	}
 
@@ -56,11 +56,11 @@ func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	sus, err := document.ResolveBool(ctx, doc, susObj)
 	if err != nil {
-		complog(doc).Debug("compliance.accessibility: cannot resolve /Suspects", "error", err)
+		doc.Logger.Debug("compliance.accessibility: cannot resolve /Suspects", "error", err)
 		return nil
 	}
 
-	if bool(sus) {
+	if sus {
 		return fail(rule, "Suspects=true")
 	}
 
@@ -112,7 +112,7 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 		tabsName, err := document.ResolveName(ctx, doc, tabsObj)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve /Tabs", "page", pageIdx, "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve /Tabs", "page", pageIdx, "error", err)
 			continue
 		}
 

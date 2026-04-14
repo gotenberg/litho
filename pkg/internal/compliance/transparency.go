@@ -18,7 +18,7 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 		return nil
 	}
 
-	complog(doc).Debug("compliance.transparency: starting checks", "profile", profile, "part", part)
+	doc.Logger.Debug("compliance.transparency: starting checks", "profile", profile, "part", part)
 
 	// Extract raw page dicts for sub-functions that expect []ast.PdfDict.
 	rawPages := make([]ast.PdfDict, len(vctx.pages))
@@ -33,7 +33,7 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 		results = checkTransparencyParts2Plus(ctx, doc, catalog, rawPages, profile, part)
 	}
 
-	complog(doc).Debug("compliance.transparency: checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.transparency: checks complete", "violations", len(results))
 	return results
 }
 
@@ -47,7 +47,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 		// Check page-level transparency group.
 		results = append(results, checkPageTransparencyGroup1(ctx, doc, page, i+1)...)
 
-		res := getResources(ctx, doc, page)
+		res := resolveResources(ctx, doc, page)
 		if res == nil {
 			continue
 		}
@@ -203,7 +203,7 @@ func blendingCSRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_10_t02, Rule_19005_3_6_2_10_t02, Rule_19005_4_6_2_9_t02)
 }
 
-func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, profile string, part int) []Violation {
+func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, _ string, part int) []Violation {
 	hasOutputIntent, oiColorSpace := documentOutputIntentInfo(ctx, doc, catalog)
 
 	var results []Violation
@@ -212,7 +212,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			return results
 		}
 
-		res := getResources(ctx, doc, page)
+		res := resolveResources(ctx, doc, page)
 		if res == nil {
 			continue
 		}
@@ -286,7 +286,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					}
 					stream, err := document.ResolveStream(ctx, doc, xobjObj)
 					if err != nil {
-						complog(doc).Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
+						doc.Logger.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
 						continue
 					}
 					subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -396,7 +396,7 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 			}
 			stream, err := document.ResolveStream(ctx, doc, apObj)
 			if err != nil {
-				complog(doc).Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
+				doc.Logger.Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
 				continue
 			}
 			// Check for transparency group on the appearance Form XObject.
@@ -479,7 +479,7 @@ func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, p
 		for _, xobjObj := range xobjDict {
 			stream, err := document.ResolveStream(ctx, doc, xobjObj)
 			if err != nil {
-				complog(doc).Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
+				doc.Logger.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
 				continue
 			}
 			subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -513,7 +513,7 @@ func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, p
 				}
 				stream, err := document.ResolveStream(ctx, doc, apObj)
 				if err != nil {
-					complog(doc).Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
+					doc.Logger.Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
 					continue
 				}
 				apCS := resolveBlendingDeviceCS(ctx, doc, stream.Dict)
@@ -597,7 +597,7 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 		}
 		stream, err := document.ResolveStream(ctx, doc, destObj)
 		if err != nil {
-			complog(doc).Debug("compliance.transparency: cannot resolve output profile stream", "error", err)
+			doc.Logger.Debug("compliance.transparency: cannot resolve output profile stream", "error", err)
 			continue
 		}
 		data, err := doc.DecodeStream(ctx, stream)
@@ -623,7 +623,7 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 	for _, patObj := range patDict {
 		stream, err := document.ResolveStream(ctx, doc, patObj)
 		if err != nil {
-			complog(doc).Debug("compliance.transparency: cannot resolve pattern stream", "error", err)
+			doc.Logger.Debug("compliance.transparency: cannot resolve pattern stream", "error", err)
 			continue
 		}
 		patRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
@@ -722,7 +722,7 @@ func checkType3FontTransparency(ctx context.Context, doc *document.Document, pag
 			for _, xobjObj := range xobjDict {
 				stream, err := document.ResolveStream(ctx, doc, xobjObj)
 				if err != nil {
-					complog(doc).Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
+					doc.Logger.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
 					continue
 				}
 				st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])

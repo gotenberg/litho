@@ -22,7 +22,7 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 	}
 	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
 	if err != nil || infoDict == nil {
-		complog(doc).Debug("compliance.xmp: failed to resolve Info dict", "error", err)
+		doc.Logger.Debug("compliance.xmp: failed to resolve Info dict", "error", err)
 		return
 	}
 

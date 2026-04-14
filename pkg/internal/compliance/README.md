@@ -6,23 +6,23 @@ Validates PDFs against ISO 19005 (PDF/A) and ISO 14289 (PDF/UA) using rules deri
 
 Validation runs 15 concurrent **check groups**, each responsible for one spec domain. Groups share a pre-computed `validationCtx` (resolved pages, resources, content streams) to avoid redundant traversals.
 
-| Group          | Files               | Domain                                    |
-| -------------- | ------------------- | ----------------------------------------- |
-| Color          | `color*.go`         | OutputIntent, device CS, ICCBased, DeviceN|
-| Fonts          | `fonts*.go`         | Embedding, encoding, widths, ToUnicode    |
-| Graphics       | `graphics.go`       | Halftone, rendering intent, ExtGState     |
-| Transparency   | `transparency.go`   | Blending color space, soft masks          |
-| XObjects       | `xobjects.go`       | Image/Form XObject restrictions, JPEG2000 |
-| Annotations    | `annotations.go`    | Types, flags, appearances                 |
-| Actions        | `actions.go`        | Forbidden action types                    |
-| XMP            | `xmp*.go`           | Metadata, extension schemas, DocInfo sync |
-| Structure      | `structure.go`      | StructTreeRoot, RoleMap, heading hierarchy|
-| Forms          | `forms.go`          | XFA prohibition, field appearances        |
-| Document       | `document.go`       | PDF version, OCG, permissions             |
-| File structure | `file_structure.go` | Header, xref, encryption, stream lengths  |
-| Embedded       | `embedded.go`       | Embedded file specs, recursive compliance |
-| Accessibility  | `accessibility*.go` | PDF/UA: lang, alt text, content marking   |
-| Content        | `content*.go`       | Content stream operators, inline images   |
+| Group          | Files               | Domain                                     |
+| -------------- | ------------------- | ------------------------------------------ |
+| Color          | `color*.go`         | OutputIntent, device CS, ICCBased, DeviceN |
+| Fonts          | `fonts*.go`         | Embedding, encoding, widths, ToUnicode     |
+| Graphics       | `graphics.go`       | Halftone, rendering intent, ExtGState      |
+| Transparency   | `transparency.go`   | Blending color space, soft masks           |
+| XObjects       | `xobjects.go`       | Image/Form XObject restrictions, JPEG2000  |
+| Annotations    | `annotations.go`    | Types, flags, appearances                  |
+| Actions        | `actions.go`        | Forbidden action types                     |
+| XMP            | `xmp*.go`           | Metadata, extension schemas, DocInfo sync  |
+| Structure      | `structure.go`      | StructTreeRoot, RoleMap, heading hierarchy |
+| Forms          | `forms.go`          | XFA prohibition, field appearances         |
+| Document       | `document.go`       | PDF version, OCG, permissions              |
+| File structure | `file_structure.go` | Header, xref, encryption, stream lengths   |
+| Embedded       | `embedded.go`       | Embedded file specs, recursive compliance  |
+| Accessibility  | `accessibility*.go` | PDF/UA: lang, alt text, content marking    |
+| Content        | `content*.go`       | Content stream operators, inline images    |
 
 Profile-to-group mappings live in `check.go`.
 
@@ -45,9 +45,9 @@ For rules not in VeraPDF profiles, add to `rules_extra.go`.
 ## Code generation
 
 ```bash
-go generate ./pkg/internal/compliance/           # regenerate from local profiles
-go run ./cmd/gen-rules --download                # download latest profiles first
-go run ./cmd/gen-rules --download --tag v1.28.1  # pin to a release
+go generate ./pkg/internal/compliance/          # regenerate from local profiles
+go run ./cmd/gen-rules --download               # download latest profiles first
+go run ./cmd/gen-rules --download --tag v1.28.1 # pin to a release
 ```
 
 The 13 XML profiles are vendored in `profiles/`. The generator produces `rules.go` (do not edit).

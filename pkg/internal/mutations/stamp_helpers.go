@@ -65,10 +65,7 @@ func applyStampToPages(
 		baseDict := latestPageDict(alloc, page)
 
 		// Merge the requested resources into the current resource tree.
-		newResources, err := mergeStampResources(ctx, doc, alloc, baseDict, resources)
-		if err != nil {
-			return fmt.Errorf("merging stamp resources: %w", err)
-		}
+		newResources := mergeStampResources(ctx, doc, alloc, baseDict, resources)
 
 		newDict := make(ast.PdfDict, len(baseDict)+1)
 		maps.Copy(newDict, baseDict)
@@ -102,10 +99,10 @@ func latestPageDict(alloc *writer.ObjAllocator, page *document.Page) ast.PdfDict
 func mergeStampResources(
 	ctx context.Context,
 	doc *document.Document,
-	alloc *writer.ObjAllocator,
+	_alloc *writer.ObjAllocator,
 	baseDict ast.PdfDict,
 	additions []stampResource,
-) (ast.PdfDict, error) {
+) ast.PdfDict {
 	// Group additions by category so we only rebuild each sub-dict once.
 	byCategory := make(map[ast.PdfName][]stampResource)
 	for _, r := range additions {
@@ -137,7 +134,7 @@ func mergeStampResources(
 		newResources[category] = subDict
 	}
 
-	return newResources, nil
+	return newResources
 }
 
 // buildExtGState allocates an ExtGState dictionary with /ca and /CA set to

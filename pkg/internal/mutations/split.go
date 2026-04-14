@@ -76,9 +76,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	}
 
 	// Copy catalog-level entries that should survive split.
-	if err := copyCatalogEntries(ctx, doc, copier, catalogDict); err != nil {
-		return fmt.Errorf("copying catalog entries: %w", err)
-	}
+	copyCatalogEntries(ctx, doc, copier, catalogDict)
 
 	// Handle bookmarks for the output.
 	if bookmarkCfg.Handling != BookmarkNone {
@@ -139,17 +137,17 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 
 // copyCatalogEntries copies select catalog-level entries that should survive
 // a split operation (ViewerPreferences, PageLayout, PageMode, Lang, MarkInfo).
-func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *writer.Copier, dst ast.PdfDict) error {
+func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *writer.Copier, dst ast.PdfDict) {
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
-		return nil
+		return
 	}
 	catalogDict, err := document.ResolveDict(ctx, doc, catalogRef)
 	if err != nil {
 		doc.Logger.Debug("resolving catalog for entry copy failed",
 			slog.Any("err", err),
 		)
-		return nil
+		return
 	}
 
 	keepKeys := []ast.PdfName{
@@ -168,5 +166,4 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 			dst[key] = copied
 		}
 	}
-	return nil
 }

@@ -13,7 +13,7 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 		return nil
 	}
 
-	complog(doc).Debug("compliance.accessibility: starting checks", "profile", profile)
+	doc.Logger.Debug("compliance.accessibility: starting checks", "profile", profile)
 
 	results := make([]Violation, 0, 16)
 
@@ -101,6 +101,6 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Structure destinations (PDF/UA-2 §8.8).
 	results = append(results, checkStructureDestinations(ctx, doc, catalog, profile)...)
 
-	complog(doc).Debug("compliance.accessibility: checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.accessibility: checks complete", "violations", len(results))
 	return results
 }

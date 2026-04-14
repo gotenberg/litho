@@ -68,11 +68,7 @@ type remediateReport struct {
 	Elapsed          string            `json:"elapsed"`
 }
 
-func main() {
-	os.Exit(run(os.Args[1:]))
-}
-
-func run(args []string) int {
+func runRemediate(args []string) int {
 	fs := flag.NewFlagSet("remediate", flag.ExitOnError)
 	corpus := fs.String("corpus", "", "Path to corpus testdata (auto-detected if empty)")
 	format := fs.String("format", "text", "Output format: text or json")
@@ -113,15 +109,15 @@ func run(args []string) int {
 
 	switch *format {
 	case "json":
-		printJSON(rpt)
+		printRemediateJSON(rpt)
 	default:
-		printText(rpt)
+		printRemediateText(rpt)
 		if *detail {
 			printResidualBreakdown(context.Background(), corpusRoot, profiles, *aggressive)
 		}
 	}
 
-	return checkThresholds(rpt, *maxRegressions, *minFixedPct)
+	return checkRemediateThresholds(rpt, *maxRegressions, *minFixedPct)
 }
 
 func profileDirs() []string {
@@ -132,26 +128,10 @@ func profileDirs() []string {
 	return out
 }
 
-// findCorpusPath matches [test/integration/cmd/corpus/main.go::findCorpusPath]
-// so both tools locate the same VeraPDF testdata directory without needing
-// a shared helper package.
-func findCorpusPath() string {
-	candidates := []string{
-		"test/integration/testdata/verapdf",
-		"testdata/verapdf",
-	}
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && info.IsDir() {
-			return c
-		}
-	}
-	return "test/integration/testdata/verapdf"
-}
-
 // runCorpus walks each profile directory, validates the failing PDFs,
 // remediates them, re-validates, and aggregates the results into a
 // [remediateReport]. The function is deliberately side-effect-free on
-// report assembly. Output formatting happens in [printText] / [printJSON].
+// report assembly. Output formatting happens in [printRemediateText] / [printRemediateJSON].
 func runCorpus(ctx context.Context, corpusRoot string, profiles []profileInfo, aggressive, showProgress bool) remediateReport {
 	start := time.Now()
 	var rpt remediateReport
@@ -304,7 +284,11 @@ func collectFailFiles(profileDir string) ([]string, error) {
 	return out, err
 }
 
-func printText(rpt remediateReport) {
+func printRemediateText(rpt remediateReport) {
+	fmt.Println("VeraPDF Remediation Report")
+	fmt.Println("=========================")
+	fmt.Println()
+
 	for _, pr := range rpt.Profiles {
 		fmt.Printf("%-12s  files=%3d  fail=%3d  remediated=%3d  fully_fixed=%3d  violations: %d → %d\n",
 			pr.Profile, pr.Files, pr.Failing, pr.Remediated, pr.FullyFixed,
@@ -325,7 +309,7 @@ func printText(rpt remediateReport) {
 	fmt.Printf("Elapsed: %s\n", rpt.Elapsed)
 }
 
-func printJSON(rpt remediateReport) {
+func printRemediateJSON(rpt remediateReport) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(rpt); err != nil {
@@ -333,9 +317,9 @@ func printJSON(rpt remediateReport) {
 	}
 }
 
-// checkThresholds enforces CI-style failure thresholds. Returns the exit
+// checkRemediateThresholds enforces CI-style failure thresholds. Returns the exit
 // code that the process should use.
-func checkThresholds(rpt remediateReport, maxRegressions int, minFixedPct float64) int {
+func checkRemediateThresholds(rpt remediateReport, maxRegressions int, minFixedPct float64) int {
 	exit := 0
 	if maxRegressions >= 0 && len(rpt.Regressions) > maxRegressions {
 		fmt.Fprintf(os.Stderr, "\nFAIL: %d regressions exceed threshold %d\n",

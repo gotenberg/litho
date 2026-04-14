@@ -54,7 +54,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 			return
 		}
 
-		resources := getResources(ctx, doc, page)
+		resources := resolveResources(ctx, doc, page)
 		if resources == nil {
 			continue
 		}
@@ -64,7 +64,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		// Scan colour spaces used in the page resources.
 		csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve ColorSpace dict", "page", i, "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve ColorSpace dict", "page", i, "error", err)
 		}
 
 		// Scan content stream operators for device CS usage and collect
@@ -202,7 +202,7 @@ func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, reso
 
 	csDict, err := document.ResolveDict(ctx, doc, csObj)
 	if err != nil || csDict == nil {
-		complog(doc).Debug("compliance.color: cannot resolve ColorSpace dict for defaults", "error", err)
+		doc.Logger.Debug("compliance.color: cannot resolve ColorSpace dict for defaults", "error", err)
 		return defaultCS{}
 	}
 
@@ -265,7 +265,7 @@ func checkPageOutputIntent(ctx context.Context, doc *document.Document, page ast
 		}
 		stream, err := document.ResolveStream(ctx, doc, destObj)
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve output profile stream", "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve output profile stream", "error", err)
 			continue
 		}
 		data, err := doc.DecodeStream(ctx, stream)

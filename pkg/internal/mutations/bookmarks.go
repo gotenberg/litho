@@ -45,7 +45,7 @@ func WriteOutline(
 
 	// Build outline items as a linked list (each item has /Next, /Prev, /Parent).
 	outlineRef := alloc.Alloc(ast.PdfNull{}) // placeholder, will be replaced
-	items := buildOutlineItems(ctx, alloc, bookmarks, outlineRef, pageRefs)
+	items := buildOutlineItems(alloc, bookmarks, outlineRef, pageRefs)
 
 	if len(items) == 0 {
 		return nil
@@ -56,7 +56,7 @@ func WriteOutline(
 		"Type":  ast.PdfName("Outlines"),
 		"First": items[0],
 		"Last":  items[len(items)-1],
-		"Count": ast.PdfInt(countTopLevel(bookmarks)),
+		"Count": ast.PdfInt(len(bookmarks)),
 	}
 	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 
@@ -91,10 +91,6 @@ func WriteOutline(
 	return nil
 }
 
-// countTopLevel returns the number of top-level bookmarks.
-func countTopLevel(bookmarks []models.Bookmark) int {
-	return len(bookmarks)
-}
 
 // BuildOutline allocates outline objects for the given bookmark tree and
 // returns the ref to the root /Outlines dict (or a zero ref if nothing was
@@ -111,7 +107,7 @@ func BuildOutline(
 	}
 
 	outlineRef := alloc.Alloc(ast.PdfNull{}) // placeholder
-	items := buildOutlineItems(ctx, alloc, bookmarks, outlineRef, pageRefs)
+	items := buildOutlineItems(alloc, bookmarks, outlineRef, pageRefs)
 	if len(items) == 0 {
 		return ast.PdfIndirectRef{}
 	}
@@ -120,14 +116,14 @@ func BuildOutline(
 		"Type":  ast.PdfName("Outlines"),
 		"First": items[0],
 		"Last":  items[len(items)-1],
-		"Count": ast.PdfInt(countTopLevel(bookmarks)),
+		"Count": ast.PdfInt(len(bookmarks)),
 	}
 	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 	return outlineRef
 }
 
 // buildOutlineItems creates outline item objects and returns their refs.
-func buildOutlineItems(ctx context.Context, alloc *writer.ObjAllocator, bookmarks []models.Bookmark, parent ast.PdfIndirectRef, pageRefs map[int]ast.PdfIndirectRef) []ast.PdfIndirectRef {
+func buildOutlineItems(alloc *writer.ObjAllocator, bookmarks []models.Bookmark, parent ast.PdfIndirectRef, pageRefs map[int]ast.PdfIndirectRef) []ast.PdfIndirectRef {
 	refs := make([]ast.PdfIndirectRef, len(bookmarks))
 
 	// First pass: allocate refs.
@@ -156,7 +152,7 @@ func buildOutlineItems(ctx context.Context, alloc *writer.ObjAllocator, bookmark
 
 		// Recurse for children.
 		if len(bm.Children) > 0 {
-			childRefs := buildOutlineItems(ctx, alloc, bm.Children, refs[i], pageRefs)
+			childRefs := buildOutlineItems(alloc, bm.Children, refs[i], pageRefs)
 			if len(childRefs) > 0 {
 				d["First"] = childRefs[0]
 				d["Last"] = childRefs[len(childRefs)-1]

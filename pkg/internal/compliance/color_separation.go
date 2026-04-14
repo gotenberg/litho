@@ -41,7 +41,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 			return
 		}
 
-		resources := getResources(ctx, doc, page)
+		resources := resolveResources(ctx, doc, page)
 		if resources == nil {
 			continue
 		}
@@ -62,7 +62,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 			for _, apKey := range []ast.PdfName{"N", "R", "D"} {
 				apStream, err := document.ResolveStream(ctx, doc, apDict[apKey])
 				if err != nil {
-					complog(doc).Debug("compliance.color: cannot resolve appearance stream", "error", err)
+					doc.Logger.Debug("compliance.color: cannot resolve appearance stream", "error", err)
 					continue
 				}
 				if apStream.Dict == nil {
@@ -76,7 +76,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 		}
 	}
 
-	complog(doc).Debug("compliance.color: Separation/DeviceN check complete",
+	doc.Logger.Debug("compliance.color: Separation/DeviceN check complete",
 		"uniqueColorants", len(colorantAlternates))
 }
 
@@ -108,7 +108,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 
 			csType, err := document.ResolveName(ctx, doc, arr[0])
 			if err != nil {
-				complog(doc).Debug("compliance.color: cannot resolve color space type name", "error", err)
+				doc.Logger.Debug("compliance.color: cannot resolve color space type name", "error", err)
 				continue
 			}
 
@@ -137,7 +137,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		}
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve XObject stream", "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -265,7 +265,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 	names, err := document.ResolveArray(ctx, doc, arr[1])
 	if err != nil {
-		complog(doc).Debug("compliance.color: cannot resolve DeviceN names array", "page", pageIdx, "cs", csName, "error", err)
+		doc.Logger.Debug("compliance.color: cannot resolve DeviceN names array", "page", pageIdx, "cs", csName, "error", err)
 		return
 	}
 
@@ -294,7 +294,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 		colorantName, err := document.ResolveName(ctx, doc, nameObj)
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve colorant name", "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve colorant name", "error", err)
 			continue
 		}
 

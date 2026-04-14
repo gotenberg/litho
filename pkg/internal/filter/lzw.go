@@ -81,7 +81,7 @@ func (r *lzwReader) readCode() (int, error) {
 
 // emit reconstructs the byte string for the given code and appends it to buf.
 // Returns the first byte of the emitted string.
-func (r *lzwReader) emit(code int) byte {
+func (r *lzwReader) emit(code int) {
 	n := r.length[code]
 	// Grow buf to hold the new output.
 	start := len(r.buf)
@@ -93,7 +93,6 @@ func (r *lzwReader) emit(code int) byte {
 		out[i] = r.suffix[c]
 		c = r.prefix[c]
 	}
-	return out[0]
 }
 
 // addEntry adds a new dictionary entry: the string for prevCode + the given suffix byte.

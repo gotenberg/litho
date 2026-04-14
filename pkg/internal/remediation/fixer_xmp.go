@@ -229,7 +229,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 
 	// Inject pdfaid namespace + pdfaid:part [+ pdfaid:conformance] if missing.
 	if part > 0 && findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
-		if out, _, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
+		if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
 			buf = out
 		}
 		if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:part>%d</pdfaid:part>", part)); err == nil {
@@ -249,7 +249,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 
 	// Inject pdfuaid namespace + pdfuaid:part if missing.
 	if uaPart > 0 && findXMPProperty(buf, pdfuaidNS, "part").Form == xmpPropertyNotFound {
-		if out, _, err := ensureNamespaceDecl(buf, "pdfuaid", pdfuaidNS); err == nil {
+		if out, err := ensureNamespaceDecl(buf, "pdfuaid", pdfuaidNS); err == nil {
 			buf = out
 		}
 		if out, err := insertChildElement(buf, fmt.Sprintf("<pdfuaid:part>%d</pdfuaid:part>", uaPart)); err == nil {
@@ -268,7 +268,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 
 	// Inject dc:title if missing and Info has one.
 	if info.Title != "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
-		if out, _, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
+		if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
 			buf = out
 		}
 		injection := fmt.Sprintf(
@@ -298,7 +298,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 				fixes = append(fixes, "synced dc:creator with Info /Author")
 			}
 		} else {
-			if out, _, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
+			if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
 				buf = out
 			}
 			if out, err := insertChildElement(buf, injection); err == nil {
@@ -310,7 +310,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 
 	// Sync pdf:Producer with Info /Producer.
 	if info.Producer != "" && findXMPProperty(buf, pdfNS, "Producer").Form == xmpPropertyNotFound {
-		if out, _, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
+		if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
 			buf = out
 		}
 		if out, err := insertChildElement(buf, fmt.Sprintf(
@@ -322,7 +322,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 
 	// Sync xmp:CreatorTool with Info /Creator.
 	if info.Creator != "" && findXMPProperty(buf, xmpNS, "CreatorTool").Form == xmpPropertyNotFound {
-		if out, _, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+		if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
 			buf = out
 		}
 		if out, err := insertChildElement(buf, fmt.Sprintf(
@@ -344,7 +344,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 				"pdfaSchema":    pdfaSchemaNS,
 				"pdfaProperty":  pdfaPropertyNS,
 			} {
-				if out, _, err := ensureNamespaceDecl(buf, prefix, uri); err == nil {
+				if out, err := ensureNamespaceDecl(buf, prefix, uri); err == nil {
 					buf = out
 				}
 			}

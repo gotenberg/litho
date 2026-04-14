@@ -18,7 +18,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	complog(doc).Debug("compliance.graphics: starting checks", "profile", profile, "part", part)
+	doc.Logger.Debug("compliance.graphics: starting checks", "profile", profile, "part", part)
 
 	var results []Violation
 	for i := range vctx.pages {
@@ -78,7 +78,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1)...)
 	}
 
-	complog(doc).Debug("compliance.graphics: checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.graphics: checks complete", "violations", len(results))
 	return results
 }
 
@@ -106,7 +106,7 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		}
 		stream, err := document.ResolveStream(ctx, doc, xoObj)
 		if err != nil {
-			complog(doc).Debug("compliance.graphics: cannot resolve XObject stream", "error", err)
+			doc.Logger.Debug("compliance.graphics: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -157,7 +157,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		for _, cpObj := range charProcs {
 			stream, err := document.ResolveStream(ctx, doc, cpObj)
 			if err != nil {
-				complog(doc).Debug("compliance.graphics: cannot resolve CharProc stream", "error", err)
+				doc.Logger.Debug("compliance.graphics: cannot resolve CharProc stream", "error", err)
 				continue
 			}
 			data, err := doc.DecodeStream(ctx, stream)
@@ -206,7 +206,7 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 			}
 			stream, err := document.ResolveStream(ctx, doc, apObj)
 			if err != nil {
-				complog(doc).Debug("compliance.graphics: cannot resolve appearance stream", "error", err)
+				doc.Logger.Debug("compliance.graphics: cannot resolve appearance stream", "error", err)
 				continue
 			}
 			apRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
@@ -255,7 +255,7 @@ func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, page
 	for _, xoObj := range xoDict {
 		stream, err := document.ResolveStream(ctx, doc, xoObj)
 		if err != nil {
-			complog(doc).Debug("compliance.graphics: cannot resolve XObject stream", "error", err)
+			doc.Logger.Debug("compliance.graphics: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -476,7 +476,7 @@ func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.Pd
 	return nil
 }
 
-func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
+func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, _ int, _ string) []Violation {
 	// Overprint checks apply to parts 2+ and 4 only.
 	if part < 2 {
 		return nil
@@ -489,7 +489,7 @@ func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict,
 
 	opm, err := document.ResolveInt(ctx, doc, opmObj)
 	if err != nil {
-		complog(doc).Debug("compliance.graphics: cannot resolve OPM value", "error", err)
+		doc.Logger.Debug("compliance.graphics: cannot resolve OPM value", "error", err)
 		return nil
 	}
 

@@ -272,7 +272,7 @@ func checkContentStreamResources(
 ) []Violation {
 	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
-		complog(doc).Debug("compliance.content: cannot parse content stream", "error", err)
+		doc.Logger.Debug("compliance.content: cannot parse content stream", "error", err)
 		return nil
 	}
 
@@ -465,7 +465,7 @@ func missingResourceRule(part int) Rule {
 // checkAtPaintingOp checks state-dependent compliance rules when a painting
 // operator executes. The isFill/isStroke flags indicate which colour spaces
 // are active for this operation (fill-only, stroke-only, or both).
-func (c *contentStateChecker) checkAtPaintingOp(op string, isFill, isStroke bool) {
+func (c *contentStateChecker) checkAtPaintingOp(_ string, isFill, isStroke bool) {
 	// §6.2.4.2 t02: OPM shall not be 1 when ICCBased CMYK is active
 	// and overprint is enabled for the operation being performed.
 	if c.state.opm != 1 {

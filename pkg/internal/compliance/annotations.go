@@ -59,7 +59,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 		return nil
 	}
 
-	complog(doc).Debug("compliance: annotations: starting checks", "profile", profile, "part", part, "level", level)
+	doc.Logger.Debug("compliance: annotations: starting checks", "profile", profile, "part", part, "level", level)
 
 	var results []Violation
 
@@ -76,7 +76,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			complog(doc).Debug("compliance: annotations: failed to resolve /Annots array",
+			doc.Logger.Debug("compliance: annotations: failed to resolve /Annots array",
 				"page", pageIdx, "error", err)
 			continue
 		}
@@ -88,7 +88,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 
 			annot, err := document.ResolveDict(ctx, doc, annotObj)
 			if err != nil || annot == nil {
-				complog(doc).Debug("compliance: annotations: failed to resolve annotation dict",
+				doc.Logger.Debug("compliance: annotations: failed to resolve annotation dict",
 					"page", pageIdx, "annot", annotIdx, "error", err)
 				continue
 			}
@@ -117,7 +117,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 		}
 	}
 
-	complog(doc).Debug("compliance: annotations: checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance: annotations: checks complete", "violations", len(results))
 	return results
 }
 
@@ -212,7 +212,7 @@ func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast
 	}
 	stream, err := document.ResolveStream(ctx, doc, streamObj)
 	if err != nil {
-		complog(doc).Debug("compliance: cannot resolve 3DD stream", "error", err)
+		doc.Logger.Debug("compliance: cannot resolve 3DD stream", "error", err)
 		return nil
 	}
 	subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -242,7 +242,7 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 
 		flags, err := document.ResolveInt(ctx, doc, fObj)
 		if err != nil {
-			complog(doc).Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
+			doc.Logger.Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
 			return nil
 		}
 
@@ -262,7 +262,7 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 
 	flags, err := document.ResolveInt(ctx, doc, fObj)
 	if err != nil {
-		complog(doc).Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
+		doc.Logger.Debug("compliance: annotations: failed to resolve /F", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -321,8 +321,7 @@ func flagValueRule(part int) Rule {
 // Test 2: Appearance dict must contain only /N key (parts 2+/4, and part 1 §6.5.3 test 4).
 // Test 3: For Widget/Btn, /N must be a subdictionary.
 // Test 4: For non-Widget or non-Btn, /N must be a stream.
-func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast.PdfDict, subtype ast.PdfName, part int, level byte, loc string) []Violation {
-	_ = level // used indirectly via part for rule selection
+func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast.PdfDict, subtype ast.PdfName, part int, _ byte, loc string) []Violation {
 
 	isWidget := subtype == "Widget"
 
@@ -355,7 +354,7 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 
 	ap, err := document.ResolveDict(ctx, doc, apObj)
 	if err != nil || ap == nil {
-		complog(doc).Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
+		doc.Logger.Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -444,7 +443,7 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string) []Violation {
 	resolved, err := document.ResolveObject(ctx, doc, nObj)
 	if err != nil {
-		complog(doc).Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
+		doc.Logger.Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
 		return nil
 	}
 
@@ -511,7 +510,7 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 
 	resolved, err := document.ResolveObject(ctx, doc, caObj)
 	if err != nil {
-		complog(doc).Debug("compliance: annotations: failed to resolve /CA", "loc", loc, "error", err)
+		doc.Logger.Debug("compliance: annotations: failed to resolve /CA", "loc", loc, "error", err)
 		return nil
 	}
 

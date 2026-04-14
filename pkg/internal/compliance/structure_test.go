@@ -153,7 +153,7 @@ func TestCheckMarkInfo(t *testing.T) {
 		t.Parallel()
 		catalog := ast.PdfDict{}
 		var results []Violation
-		checkMarkInfo(ctx, nil, catalog, "PDF/A-1a", 1, &results)
+		checkMarkInfo(ctx, nopDoc(), catalog, "PDF/A-1a", 1, &results)
 		if len(results) == 0 {
 			t.Error("expected violation for missing /MarkInfo")
 		}
@@ -165,7 +165,7 @@ func TestCheckMarkInfo(t *testing.T) {
 			"MarkInfo": ast.PdfDict{},
 		}
 		var results []Violation
-		checkMarkInfo(ctx, nil, catalog, "PDF/UA-1", 0, &results)
+		checkMarkInfo(ctx, nopDoc(), catalog, "PDF/UA-1", 0, &results)
 		if len(results) == 0 {
 			t.Error("expected violation for /MarkInfo missing /Marked")
 		}
@@ -179,7 +179,7 @@ func TestCheckMarkInfo(t *testing.T) {
 			},
 		}
 		var results []Violation
-		checkMarkInfo(ctx, nil, catalog, "PDF/UA-2", 0, &results)
+		checkMarkInfo(ctx, nopDoc(), catalog, "PDF/UA-2", 0, &results)
 		if len(results) == 0 {
 			t.Error("expected violation for /Marked=false")
 		}
@@ -193,7 +193,7 @@ func TestCheckMarkInfo(t *testing.T) {
 			},
 		}
 		var results []Violation
-		checkMarkInfo(ctx, nil, catalog, "PDF/A-1a", 1, &results)
+		checkMarkInfo(ctx, nopDoc(), catalog, "PDF/A-1a", 1, &results)
 		if len(results) != 0 {
 			t.Errorf("expected no violations, got %d: %v", len(results), results)
 		}
@@ -208,7 +208,7 @@ func TestCheckStructTreeRoot(t *testing.T) {
 		t.Parallel()
 		catalog := ast.PdfDict{}
 		var results []Violation
-		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/A-1b", 1, 'b', false, &results)
+		st := checkStructTreeRoot(ctx, nopDoc(), catalog, "PDF/A-1b", 1, 'b', false, &results)
 		if st != nil {
 			t.Error("expected nil StructTreeRoot for level 'b'")
 		}
@@ -221,7 +221,7 @@ func TestCheckStructTreeRoot(t *testing.T) {
 		t.Parallel()
 		catalog := ast.PdfDict{}
 		var results []Violation
-		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/A-1a", 1, 'a', false, &results)
+		st := checkStructTreeRoot(ctx, nopDoc(), catalog, "PDF/A-1a", 1, 'a', false, &results)
 		if st != nil {
 			t.Error("expected nil StructTreeRoot when missing")
 		}
@@ -234,7 +234,7 @@ func TestCheckStructTreeRoot(t *testing.T) {
 		t.Parallel()
 		catalog := ast.PdfDict{}
 		var results []Violation
-		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/UA-1", 0, 0, true, &results)
+		st := checkStructTreeRoot(ctx, nopDoc(), catalog, "PDF/UA-1", 0, 0, true, &results)
 		if st != nil {
 			t.Error("expected nil StructTreeRoot when missing")
 		}
@@ -250,7 +250,7 @@ func TestCheckStructTreeRoot(t *testing.T) {
 			"StructTreeRoot": stDict,
 		}
 		var results []Violation
-		st := checkStructTreeRoot(ctx, nil, catalog, "PDF/A-2a", 2, 'a', false, &results)
+		st := checkStructTreeRoot(ctx, nopDoc(), catalog, "PDF/A-2a", 2, 'a', false, &results)
 		if st == nil {
 			t.Error("expected non-nil StructTreeRoot")
 		}

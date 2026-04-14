@@ -11,30 +11,30 @@ import (
 
 func TestGetInt_Present(t *testing.T) {
 	d := ast.PdfDict{"V": ast.PdfInt(4)}
-	if got := getInt(d, "V", 0); got != 4 {
-		t.Errorf("getInt = %d, want 4", got)
+	if got := dictInt(d, "V", 0); got != 4 {
+		t.Errorf("dictInt = %d, want 4", got)
 	}
 }
 
 func TestGetInt_Missing(t *testing.T) {
 	d := ast.PdfDict{}
-	if got := getInt(d, "V", 99); got != 99 {
-		t.Errorf("getInt missing = %d, want 99", got)
+	if got := dictInt(d, "V", 99); got != 99 {
+		t.Errorf("dictInt missing = %d, want 99", got)
 	}
 }
 
 func TestGetString_Present(t *testing.T) {
 	d := ast.PdfDict{"O": ast.PdfString("owner")}
-	got := getString(d, "O")
+	got := dictString(d, "O")
 	if string(got) != "owner" {
-		t.Errorf("getString = %q, want %q", got, "owner")
+		t.Errorf("dictString = %q, want %q", got, "owner")
 	}
 }
 
 func TestGetString_Missing(t *testing.T) {
 	d := ast.PdfDict{}
-	if got := getString(d, "O"); got != nil {
-		t.Errorf("getString missing = %v, want nil", got)
+	if got := dictString(d, "O"); got != nil {
+		t.Errorf("dictString missing = %v, want nil", got)
 	}
 }
 

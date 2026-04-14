@@ -108,7 +108,7 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 	// CIDToGIDMap can be the name "Identity" or a stream.
 	resolved, err := document.ResolveObject(ctx, doc, cidToGIDObj)
 	if err != nil {
-		complog(doc).Debug("compliance: fonts: failed to resolve CIDToGIDMap",
+		doc.Logger.Debug("compliance: fonts: failed to resolve CIDToGIDMap",
 			"font", fontName, "error", err)
 		return failf(rule, "font %s on page %d (resolve error)", fontName, pageNum)
 	}
@@ -142,7 +142,7 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 	// Get CIDFont CIDSystemInfo.
 	cidSysInfo, err := document.ResolveDict(ctx, doc, cidFontDict["CIDSystemInfo"])
 	if err != nil || cidSysInfo == nil {
-		complog(doc).Debug("compliance: fonts: CIDFont missing CIDSystemInfo",
+		doc.Logger.Debug("compliance: fonts: CIDFont missing CIDSystemInfo",
 			"font", fontName, "error", err)
 		return nil
 	}

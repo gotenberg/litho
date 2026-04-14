@@ -107,17 +107,13 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	// the viewer preferences or language tags from the first source.
 	if len(sources) > 0 {
 		firstCopier := writer.NewCopier(sources[0].Doc, alloc)
-		if err := copyCatalogEntries(ctx, sources[0].Doc, firstCopier, catalogDict); err != nil {
-			sources[0].Doc.Logger.Debug("copying catalog entries from first source failed",
-				slog.Any("err", err),
-			)
-		}
+		copyCatalogEntries(ctx, sources[0].Doc, firstCopier, catalogDict)
 	}
 
 	// Handle bookmarks for the merged output.
 	if bookmarkCfg.Handling != BookmarkNone {
-		newBookmarks, err := resolveMergeBookmarks(ctx, sources, cumulativeOffsets, bookmarkCfg)
-		if err == nil && len(newBookmarks) > 0 {
+		newBookmarks := resolveMergeBookmarks(ctx, sources, cumulativeOffsets, bookmarkCfg)
+		if len(newBookmarks) > 0 {
 			newPageRefs := make(map[int]ast.PdfIndirectRef, len(allPageRefs))
 			for i, ref := range allPageRefs {
 				if r, ok := ref.(ast.PdfIndirectRef); ok {

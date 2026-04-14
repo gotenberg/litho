@@ -3,6 +3,7 @@ package semantics
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -93,7 +94,7 @@ func Extract3DModels(ctx context.Context, doc *document.Document, page *document
 		results = append(results, models.Model3D{
 			Name:    name,
 			Subtype: subtype,
-			Open:    openStreamFunc(doc, stream),
+			Open:    doc.OpenFunc(stream),
 		})
 		modelIdx++
 	}
@@ -134,33 +135,33 @@ func determine3DSubtype(ctx context.Context, doc *document.Document, stream ast.
 			return "PRC", nil
 		case "3D":
 			// Generic /Type /3D. Try to detect from magic bytes.
-			data, err := stream.Bytes(ctx)
-			if err != nil {
-				return "", err
-			}
-			return detect3DFromMagic(data), nil
+			return detect3DFromStream(ctx, doc, stream)
 		}
 	}
 
 	// Last resort: check magic bytes of the raw stream data.
-	data, err := stream.Bytes(ctx)
-	if err != nil {
-		return "", err
-	}
-	return detect3DFromMagic(data), nil
+	return detect3DFromStream(ctx, doc, stream)
 }
 
-// detect3DFromMagic inspects the first few bytes of 3D data to determine format.
-func detect3DFromMagic(data []byte) string {
-	if len(data) < 4 {
-		return "U3D"
+// detect3DFromStream reads only the first 4 bytes of a 3D stream to determine
+// the format, avoiding loading the entire (potentially large) model into memory.
+func detect3DFromStream(ctx context.Context, doc *document.Document, stream ast.PdfStream) (string, error) {
+	rc, err := doc.NewStreamReader(ctx, stream)
+	if err != nil {
+		return "", fmt.Errorf("opening 3D stream: %w", err)
 	}
-
-	// PRC magic: 0x50 0x52 0x43 (ASCII "PRC")
-	if data[0] == 'P' && data[1] == 'R' && data[2] == 'C' {
-		return "PRC"
+	defer func() {
+		if closeErr := rc.Close(); closeErr != nil {
+			doc.Logger.Debug("closing 3D stream reader", slog.Any("err", closeErr))
+		}
+	}()
+	var header [4]byte
+	n, _ := io.ReadFull(rc, header[:])
+	if n < 3 {
+		return "U3D", nil // Too short to detect; default to U3D.
 	}
-
-	// U3D is the default/legacy format.
-	return "U3D"
+	if header[0] == 'P' && header[1] == 'R' && header[2] == 'C' {
+		return "PRC", nil
+	}
+	return "U3D", nil
 }

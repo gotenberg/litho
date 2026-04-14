@@ -33,7 +33,7 @@ func Generate(ctx context.Context, input Input, opts Options) ([]models.Bookmark
 
 	// Try the structure tree source first if requested.
 	if opts.PreferStructureTree {
-		mcidTextByPage := buildMCIDTextIndex(ctx, input.Pages)
+		mcidTextByPage := buildMCIDTextIndex(input.Pages)
 		bookmarks, err := GenerateFromStructTree(ctx, input.Doc, input.PageRefToNum, mcidTextByPage, opts)
 		if err == nil && len(bookmarks) > 0 {
 			return bookmarks, nil
@@ -46,7 +46,7 @@ func Generate(ctx context.Context, input Input, opts Options) ([]models.Bookmark
 
 // buildMCIDTextIndex groups text elements by (pageNum, MCID) and reconstructs
 // the text for each marked content section.
-func buildMCIDTextIndex(_ context.Context, pages []pageTextElements) map[int]map[int]string {
+func buildMCIDTextIndex(pages []pageTextElements) map[int]map[int]string {
 	result := make(map[int]map[int]string, len(pages))
 	for _, p := range pages {
 		pageMap := make(map[int]string)

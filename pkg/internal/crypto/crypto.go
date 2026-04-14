@@ -36,14 +36,14 @@ type Handler struct {
 	encMeta bool
 }
 
-func getInt(dict ast.PdfDict, key ast.PdfName, defaultVal int) int {
+func dictInt(dict ast.PdfDict, key ast.PdfName, defaultVal int) int {
 	if val, ok := dict[key].(ast.PdfInt); ok {
 		return int(val)
 	}
 	return defaultVal
 }
 
-func getString(dict ast.PdfDict, key ast.PdfName) []byte {
+func dictString(dict ast.PdfDict, key ast.PdfName) []byte {
 	if val, ok := dict[key].(ast.PdfString); ok {
 		return []byte(val)
 	}
@@ -52,13 +52,13 @@ func getString(dict ast.PdfDict, key ast.PdfName) []byte {
 
 // NewHandler initializes a new encryption handler and attempts to authenticate with a blank password.
 func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) {
-	v := getInt(encryptDict, "V", 0)
-	length := getInt(encryptDict, "Length", 40)
-	p := getInt(encryptDict, "P", 0)
-	o := getString(encryptDict, "O")
-	u := getString(encryptDict, "U")
-	oe := getString(encryptDict, "OE")
-	ue := getString(encryptDict, "UE")
+	v := dictInt(encryptDict, "V", 0)
+	length := dictInt(encryptDict, "Length", 40)
+	p := dictInt(encryptDict, "P", 0)
+	o := dictString(encryptDict, "O")
+	u := dictString(encryptDict, "U")
+	oe := dictString(encryptDict, "OE")
+	ue := dictString(encryptDict, "UE")
 
 	var id []byte
 	if idArr, ok := trailer["ID"].(ast.PdfArray); ok && len(idArr) > 0 {
@@ -212,7 +212,10 @@ func (h *Handler) Authenticate(password string) error {
 	copy(decryptedO, h.oVal)
 
 	if h.V < 3 {
-		c, _ := rc4.NewCipher(encKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
+		c, err := rc4.NewCipher(encKey) //nolint:gosec // RC4 required by PDF spec
+		if err != nil {
+			return fmt.Errorf("creating RC4 cipher for owner password recovery: %w", err)
+		}
 		c.XORKeyStream(decryptedO, decryptedO)
 	} else {
 		// 20-pass RC4 decryption loop, XORing the key with 19 - i (so from 19 down to 0)
@@ -221,7 +224,10 @@ func (h *Handler) Authenticate(password string) error {
 			for j := range keyLen {
 				tempKey[j] = encKey[j] ^ byte(i)
 			}
-			c, _ := rc4.NewCipher(tempKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
+			c, err := rc4.NewCipher(tempKey) //nolint:gosec // RC4 required by PDF spec
+			if err != nil {
+				return fmt.Errorf("creating RC4 cipher for owner password recovery pass %d: %w", i, err)
+			}
 			c.XORKeyStream(decryptedO, decryptedO)
 		}
 	}
@@ -275,7 +281,10 @@ func (h *Handler) Authenticate(password string) error {
 			baseHash := md3.Sum(nil)
 
 			// Initialize RC4 with EncryptionKey and encrypt the base hash.
-			c, _ := rc4.NewCipher(candidateKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
+			c, err := rc4.NewCipher(candidateKey) //nolint:gosec // RC4 required by PDF spec
+			if err != nil {
+				return fmt.Errorf("creating RC4 cipher for user verification: %w", err)
+			}
 			expectedU = make([]byte, 16)
 			c.XORKeyStream(expectedU, baseHash)
 
@@ -285,11 +294,17 @@ func (h *Handler) Authenticate(password string) error {
 				for j := range candidateKey {
 					tempKey[j] = candidateKey[j] ^ byte(i)
 				}
-				c, _ = rc4.NewCipher(tempKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
+				c, err = rc4.NewCipher(tempKey) //nolint:gosec // RC4 required by PDF spec
+				if err != nil {
+					return fmt.Errorf("creating RC4 cipher for user verification pass %d: %w", i, err)
+				}
 				c.XORKeyStream(expectedU, expectedU)
 			}
 		} else {
-			c, _ := rc4.NewCipher(candidateKey) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
+			c, err := rc4.NewCipher(candidateKey) //nolint:gosec // RC4 required by PDF spec
+			if err != nil {
+				return fmt.Errorf("creating RC4 cipher for user verification: %w", err)
+			}
 			expectedU = make([]byte, 32)
 			c.XORKeyStream(expectedU, paddingString)
 		}
@@ -352,7 +367,7 @@ func (h *Handler) DecryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
 			return aesDecrypt(key, data)
 		}
 
-		c, err := rc4.NewCipher(key) //nolint:gosec,errcheck // Key length is always >0 per PDF spec
+		c, err := rc4.NewCipher(key) //nolint:gosec // RC4 required by PDF spec
 		if err != nil {
 			return nil, fmt.Errorf("creating RC4 cipher for decryption: %w", err)
 		}

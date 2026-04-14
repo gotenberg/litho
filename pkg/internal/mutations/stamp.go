@@ -93,10 +93,7 @@ func StampText(
 			)
 		}
 
-		fontRef, err = embedTTFFont(ctx, alloc, f)
-		if err != nil {
-			return fmt.Errorf("embedding TTF for stamp: %w", err)
-		}
+		fontRef = embedTTFFont(alloc, f)
 		encoded = encodeTextAsGIDs(opts.Text, f)
 		fontResName = ast.PdfName(fmt.Sprintf("StampF%d", fontRef.ObjectNum))
 	} else {

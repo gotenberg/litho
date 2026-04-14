@@ -24,7 +24,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	complog(doc).Debug("compliance.xobjects: starting checks", "profile", profile, "part", part)
+	doc.Logger.Debug("compliance.xobjects: starting checks", "profile", profile, "part", part)
 
 	var results []Violation
 	visited := make(map[string]bool)
@@ -50,7 +50,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
 	}
 
-	complog(doc).Debug("compliance.xobjects: checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.xobjects: checks complete", "violations", len(results))
 	return results
 }
 
@@ -257,7 +257,7 @@ func checkImageXObjectPart1(
 	// /Interpolate must be false or absent.
 	if interpObj, hasInterp := imgDict["Interpolate"]; hasInterp {
 		interpVal, err := document.ResolveBool(ctx, doc, interpObj)
-		if err == nil && bool(interpVal) {
+		if err == nil && interpVal {
 			results = append(results, failf(Rule_19005_1_6_2_4_t03, "page %d, XObject %s", pageNum, name)...)
 		}
 	}
@@ -273,7 +273,7 @@ func checkFormXObject(
 	name ast.PdfName,
 	pageNum int,
 	part int,
-	profile string,
+	_ string,
 ) []Violation {
 	var results []Violation
 
@@ -343,7 +343,7 @@ func checkImageXObject(
 	// /Interpolate must be false or absent (§6.2.8).
 	if interpObj, hasInterp := imgDict["Interpolate"]; hasInterp {
 		interpVal, err := document.ResolveBool(ctx, doc, interpObj)
-		if err == nil && bool(interpVal) {
+		if err == nil && interpVal {
 			results = append(results, failf(interpRule, "page %d, XObject %s", pageNum, name)...)
 		}
 	}

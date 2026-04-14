@@ -27,7 +27,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 	part := vctx.part
 
-	complog(doc).Debug("compliance.file_structure: starting checks", "profile", profile)
+	doc.Logger.Debug("compliance.file_structure: starting checks", "profile", profile)
 
 	var results []Violation
 
@@ -58,7 +58,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
 	}
 
-	complog(doc).Debug("compliance.file_structure: checks complete",
+	doc.Logger.Debug("compliance.file_structure: checks complete",
 		"profile", profile,
 		"violations", len(results),
 	)
@@ -111,7 +111,7 @@ func pageBoundRule(profile string) Rule {
 func checkFileHeader(ctx context.Context, doc *document.Document, profile string) []Violation {
 	buf, err := safeReadHeader(ctx, doc, headerReadSize)
 	if err != nil {
-		complog(doc).Debug("compliance.file_structure: cannot read header", "error", err)
+		doc.Logger.Debug("compliance.file_structure: cannot read header", "error", err)
 		return nil
 	}
 
@@ -280,7 +280,7 @@ func checkPostEOFData(ctx context.Context, doc *document.Document, profile strin
 	offset := fileSize - readLen
 	tail, err := doc.ReadFileBytes(ctx, offset, readLen)
 	if err != nil {
-		complog(doc).Debug("compliance.file_structure: cannot read file tail", "error", err)
+		doc.Logger.Debug("compliance.file_structure: cannot read file tail", "error", err)
 		return nil
 	}
 
@@ -597,7 +597,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 
 		declaredLen, err := document.ResolveInt(ctx, doc, lengthObj)
 		if err != nil {
-			complog(doc).Debug("compliance.file_structure: cannot resolve stream length", "error", err)
+			doc.Logger.Debug("compliance.file_structure: cannot resolve stream length", "error", err)
 			continue
 		}
 
@@ -863,7 +863,7 @@ func resolveFloat(ctx context.Context, doc *document.Document, obj ast.PdfObject
 
 // checkPDFA4TrailerInfo validates PDF/A-4 §6.1.3 t04/t05: /Info key
 // restrictions in PDF/A-4.
-func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, _ string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		return nil
@@ -968,7 +968,7 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		if ctx.Err() != nil {
 			return results
 		}
-		res := getResources(ctx, doc, page)
+		res := resolveResources(ctx, doc, page)
 		if res == nil {
 			continue
 		}

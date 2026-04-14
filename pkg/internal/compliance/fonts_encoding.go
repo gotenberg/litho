@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
+	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // hasStandardEncoding returns true if the font uses MacRomanEncoding,
@@ -111,7 +112,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	}
 
 	// Check /FontDescriptor /CharSet, a string of slash-separated glyph names.
-	fd := findFontDescriptor(ctx, doc, fontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd != nil {
 		if charsetObj, ok := fd["CharSet"]; ok {
 			charsetStr, err := document.ResolveString(ctx, doc, charsetObj)
@@ -253,7 +254,7 @@ func isSymbolFontByName(ctx context.Context, doc *document.Document, fontDict as
 // allGlyphNamesInSymbolEncoding returns true if all glyph names in a Type 1
 // font's CharSet are from the Symbol font encoding (PDF Reference Appendix D).
 func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
-	fd := findFontDescriptor(ctx, doc, fontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
 		return false
 	}
@@ -345,7 +346,7 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 	}
 
 	// Priority 2: Type 1 font program built-in encoding (/FontFile).
-	fd := findFontDescriptor(ctx, doc, fontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd != nil {
 		if fontFileObj, ok := fd["FontFile"]; ok {
 			stream, err := document.ResolveStream(ctx, doc, fontFileObj)
@@ -425,7 +426,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// Exemption (b): symbolic font with single cmap and an explicit encoding.
 	// Symbolic fonts are only exempt when they define a character mapping via
 	// /Encoding; without it, /ToUnicode is still required.
-	fd := findFontDescriptor(ctx, doc, fontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if isSymbolicFont(ctx, doc, fd) {
 		if _, hasEncoding := fontDict["Encoding"]; hasEncoding {
 			return nil
@@ -479,7 +480,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	var results []Violation
 
-	fd := findFontDescriptor(ctx, doc, fontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	symbolic := isSymbolicFont(ctx, doc, fd)
 
 	if symbolic {
@@ -491,9 +492,17 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 			}
 		}
 
-		// Symbolic TrueType cmap subtable check: full verification requires
-		// parsing the embedded TrueType program. Result unused for now.
-		_ = trueTypeSymbolicCmapRule(profile) // TODO: integrate once TrueType cmap parser is available.
+		// Per ISO 19005-1 §6.3.7, symbolic TrueType fonts must have exactly
+		// one cmap encoding subtable in the embedded font program.
+		cmapRule := trueTypeSymbolicCmapRule(profile)
+		if cmapRule.Specification != "" {
+			fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+			if fontData := extractFontProgramData(ctx, doc, fd); len(fontData) > 0 {
+				if n, err := truetype.CmapSubtableCount(fontData); err == nil && n != 1 {
+					results = append(results, failf(cmapRule, "font %s on page %d has %d cmap subtables (expected 1)", fontName, pageNum, n)...)
+				}
+			}
+		}
 	} else {
 		// Non-symbolic TrueType must use MacRomanEncoding or WinAnsiEncoding.
 		rule := trueTypeEncodingNonSymbolicRule(profile)
@@ -597,7 +606,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil {
-		complog(doc).Debug("compliance: fonts: failed to resolve ToUnicode stream",
+		doc.Logger.Debug("compliance: fonts: failed to resolve ToUnicode stream",
 			"font", fontName, "error", err)
 		return failf(rule, "font %s on page %d: cannot resolve /ToUnicode stream", fontName, pageNum)
 	}
@@ -610,7 +619,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		// Fall back to raw data.
 		data, err = stream.Bytes(ctx)
 		if err != nil || len(data) == 0 {
-			complog(doc).Debug("compliance: fonts: failed to decode ToUnicode CMap",
+			doc.Logger.Debug("compliance: fonts: failed to decode ToUnicode CMap",
 				"font", fontName, "error", err)
 			return failf(rule, "font %s on page %d: cannot decode /ToUnicode CMap", fontName, pageNum)
 		}

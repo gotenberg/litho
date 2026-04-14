@@ -88,7 +88,7 @@ func computeEffectiveColumns(ctx context.Context, doc *document.Document, rows [
 		colPos := 0 // Current column position in the grid.
 
 		// Get cells for this row.
-		cells := getRowCells(ctx, doc, row)
+		cells := resolveRowCells(ctx, doc, row)
 
 		for _, cell := range cells {
 			// Skip columns occupied by RowSpan from previous rows.
@@ -128,8 +128,8 @@ func computeEffectiveColumns(ctx context.Context, doc *document.Document, rows [
 	return result
 }
 
-// getRowCells extracts TD/TH cell dicts from a TR element.
-func getRowCells(ctx context.Context, doc *document.Document, tr ast.PdfDict) []ast.PdfDict {
+// resolveRowCells extracts TD/TH cell dicts from a TR element.
+func resolveRowCells(ctx context.Context, doc *document.Document, tr ast.PdfDict) []ast.PdfDict {
 	kObj := tr["K"]
 	if kObj == nil {
 		return nil

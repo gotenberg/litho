@@ -62,6 +62,22 @@ corpus-pdfjs-json: ## Run PDF.js corpus comparison (JSON output)
 corpus-pdfjs-init: ## Provision PDF.js corpus via Docker, then compare
 	go run ./test/integration/cmd/corpus pdfjs --init
 
+.PHONY: corpus-remediate
+corpus-remediate: ## Run VeraPDF remediation report (text output)
+	go run ./test/integration/cmd/corpus remediate
+
+.PHONY: corpus-remediate-json
+corpus-remediate-json: ## Run VeraPDF remediation report (JSON output)
+	go run ./test/integration/cmd/corpus remediate --format json
+
+.PHONY: corpus-remediate-aggressive
+corpus-remediate-aggressive: ## Run VeraPDF remediation report with aggressive fixers
+	go run ./test/integration/cmd/corpus remediate --aggressive
+
+.PHONY: corpus-remediate-detail
+corpus-remediate-detail: ## Run VeraPDF remediation report with residual breakdown
+	go run ./test/integration/cmd/corpus remediate --detail
+
 .PHONY: clean-corpus
 clean-corpus: ## Remove all corpus data (forces regeneration on next test-integration)
 	rm -rf test/integration/testdata/pdf.js test/integration/testdata/verapdf

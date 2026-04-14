@@ -46,7 +46,7 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	complog(doc).Debug("compliance.embedded: starting embedded file checks", "profile", profile, "part", part)
+	doc.Logger.Debug("compliance.embedded: starting embedded file checks", "profile", profile, "part", part)
 
 	var results []Violation
 
@@ -56,7 +56,7 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// §6.1.11: PDF/A-1 forbids embedded files.
 	if part == 1 {
 		results = append(results, checkEmbeddedForbiddenPart1(ctx, doc, catalog, namesDict, hasNames)...)
-		complog(doc).Debug("compliance.embedded: part 1 checks complete", "violations", len(results))
+		doc.Logger.Debug("compliance.embedded: part 1 checks complete", "violations", len(results))
 		return results
 	}
 
@@ -94,7 +94,7 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkCatalogAF(ctx, doc, catalog, fileSpecs, part)...)
 	}
 
-	complog(doc).Debug("compliance.embedded: embedded file checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.embedded: embedded file checks complete", "violations", len(results))
 	return results
 }
 
@@ -106,7 +106,7 @@ func resolveNamesDict(ctx context.Context, doc *document.Document, catalog ast.P
 	}
 	namesDict, err := document.ResolveDict(ctx, doc, namesObj)
 	if err != nil || namesDict == nil {
-		complog(doc).Debug("compliance.embedded: cannot resolve /Names dict", "error", err)
+		doc.Logger.Debug("compliance.embedded: cannot resolve /Names dict", "error", err)
 		return nil, false
 	}
 	return namesDict, true
@@ -225,7 +225,7 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, fs fileSpe
 	// Validate the value of /AFRelationship.
 	afName, err := document.ResolveName(ctx, doc, afObj)
 	if err != nil || afName == "" {
-		complog(doc).Debug("compliance.embedded: /AFRelationship is not a valid name",
+		doc.Logger.Debug("compliance.embedded: /AFRelationship is not a valid name",
 			"object", fs.objNum, "error", err)
 		rule := afRelationshipRule(part)
 		return failf(rule, "object %d: AFRelationship is not a valid name", fs.objNum)
@@ -311,7 +311,7 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		}
 
 		// XObject resources (Image and Form XObjects can have /AF).
-		res := getResources(ctx, doc, page)
+		res := resolveResources(ctx, doc, page)
 		if res != nil {
 			xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
 			if err == nil && xobjDict != nil {
@@ -403,7 +403,7 @@ func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, a
 		}
 		instances, err := document.ResolveArray(ctx, doc, cfgDict["Instances"])
 		if err != nil {
-			complog(doc).Debug("compliance.embedded: cannot resolve config instances array", "error", err)
+			doc.Logger.Debug("compliance.embedded: cannot resolve config instances array", "error", err)
 			continue
 		}
 		for _, instObj := range instances {
@@ -450,7 +450,7 @@ func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fi
 	// Check recursion depth.
 	depth, _ := ctx.Value(embeddedDepthKey{}).(int)
 	if depth >= maxEmbeddedDepth {
-		complog(doc).Debug("compliance.embedded: max recursion depth reached, skipping embedded file compliance check",
+		doc.Logger.Debug("compliance.embedded: max recursion depth reached, skipping embedded file compliance check",
 			"depth", depth)
 		return nil
 	}
@@ -505,13 +505,13 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 	// Decode the stream.
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		complog(doc).Debug("compliance.embedded: cannot decode embedded stream",
+		doc.Logger.Debug("compliance.embedded: cannot decode embedded stream",
 			"object", fs.objNum, "error", err)
 		return nil
 	}
 
 	if len(data) > maxEmbeddedFileSize {
-		complog(doc).Debug("compliance.embedded: embedded file too large, skipping",
+		doc.Logger.Debug("compliance.embedded: embedded file too large, skipping",
 			"object", fs.objNum, "size", len(data))
 		return nil
 	}
@@ -522,13 +522,13 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 			"object %d: embedded file is not a PDF document", fs.objNum)
 	}
 
-	complog(doc).Debug("compliance.embedded: validating embedded PDF",
+	doc.Logger.Debug("compliance.embedded: validating embedded PDF",
 		"object", fs.objNum, "size", len(data))
 
 	// Parse the embedded PDF.
 	embDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
-		complog(doc).Debug("compliance.embedded: cannot parse embedded PDF",
+		doc.Logger.Debug("compliance.embedded: cannot parse embedded PDF",
 			"object", fs.objNum, "error", err)
 		// If we can't parse it, it's certainly not PDF/A-compliant.
 		return failf(Rule_19005_4_6_9_t03,
@@ -550,18 +550,18 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 
 		violations, err := ValidatePDFA(ctx, embDoc, profile)
 		if err != nil {
-			complog(doc).Debug("compliance.embedded: validation error for embedded PDF",
+			doc.Logger.Debug("compliance.embedded: validation error for embedded PDF",
 				"object", fs.objNum, "profile", profile, "error", err)
 			continue
 		}
 
 		if len(violations) == 0 {
-			complog(doc).Debug("compliance.embedded: embedded PDF passes",
+			doc.Logger.Debug("compliance.embedded: embedded PDF passes",
 				"object", fs.objNum, "profile", profile)
 			return nil // Passes at least one profile, compliant.
 		}
 
-		complog(doc).Debug("compliance.embedded: embedded PDF fails profile",
+		doc.Logger.Debug("compliance.embedded: embedded PDF fails profile",
 			"object", fs.objNum, "profile", profile, "violations", len(violations))
 	}
 

@@ -22,7 +22,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 	// Get inherited resources from the Pages tree root (fallback for pages
 	// without their own /Resources).
 	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-	inheritedRes := getResources(ctx, doc, pagesDict)
+	inheritedRes := resolveResources(ctx, doc, pagesDict)
 
 	// t01: Scan XObject resources for /Ref key (reference XObjects forbidden).
 	// t02: Count Do operator invocations per Form XObject across all pages.
@@ -33,7 +33,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		if ctx.Err() != nil {
 			return results
 		}
-		res := getResources(ctx, doc, page)
+		res := resolveResources(ctx, doc, page)
 		if res == nil {
 			res = inheritedRes
 		}
@@ -49,18 +49,18 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		if xobjDict == nil {
 			continue
 		}
-		streamData, err := getPageContentBytes(ctx, doc, page)
+		streamData, err := resolvePageContentBytes(ctx, doc, page)
 		if err != nil || len(streamData) == 0 {
 			continue
 		}
 		ops, err := content.ParseStreamData(ctx, streamData)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot parse content stream", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue
 		}
 		for _, op := range ops {
 			if op.Operator != "Do" || len(op.Operands) < 1 {
-				complog(doc).Debug("compliance.accessibility: cannot parse content stream", "error", err)
+				doc.Logger.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 				continue
 			}
 			name, ok := op.Operands[0].(ast.PdfName)
@@ -83,7 +83,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 		// Form XObjects with /StructParents contain MCIDs.
 		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve form XObject stream", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve form XObject stream", "error", err)
 			continue
 		}
 		if _, hasSP := stream.Dict["StructParents"]; hasSP {
@@ -120,12 +120,12 @@ func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.Pdf
 
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		xobjDict := stream.Dict
 		if xobjDict == nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])

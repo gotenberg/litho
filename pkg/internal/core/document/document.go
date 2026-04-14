@@ -162,6 +162,16 @@ func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (i
 	return filter.NewStreamReader(ctx, stream)
 }
 
+// OpenFunc returns a lazy Open closure for a PDF stream. The returned
+// function decodes the stream through the filter pipeline on demand.
+// Use this to populate Open fields on model types ([models.ImageMeta],
+// [models.EmbeddedFile], etc.) without loading stream data at parse time.
+func (d *Document) OpenFunc(stream ast.PdfStream) func(ctx context.Context) (io.ReadCloser, error) {
+	return func(ctx context.Context) (io.ReadCloser, error) {
+		return d.NewStreamReader(ctx, stream)
+	}
+}
+
 // NopLogger returns a logger that discards all output.
 func NopLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)

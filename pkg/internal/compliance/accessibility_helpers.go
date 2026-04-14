@@ -188,17 +188,17 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	stream, err := document.ResolveStream(ctx, doc, metaObj)
 	if err != nil {
-		complog(doc).Debug("compliance.accessibility: failed to resolve /Metadata stream", "error", err)
+		doc.Logger.Debug("compliance.accessibility: failed to resolve /Metadata stream", "error", err)
 		return nil, false
 	}
 
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		// Fallback to raw bytes if decode fails (metadata streams are often uncompressed).
-		complog(doc).Debug("compliance.accessibility: doc.DecodeStream failed, trying raw", "error", err)
+		doc.Logger.Debug("compliance.accessibility: doc.DecodeStream failed, trying raw", "error", err)
 		data, err = stream.Bytes(ctx)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: failed to read raw metadata stream", "error", err)
+			doc.Logger.Debug("compliance.accessibility: failed to read raw metadata stream", "error", err)
 			return nil, false
 		}
 	}
@@ -293,43 +293,4 @@ func resolveRect(ctx context.Context, doc *document.Document, obj ast.PdfObject)
 		r[1], r[3] = r[3], r[1]
 	}
 	return r
-}
-
-// collectNameTreeValues walks a name tree node and returns all leaf values.
-func collectNameTreeValues(ctx context.Context, doc *document.Document, obj ast.PdfObject) []ast.PdfObject { //nolint:unused // kept for future use
-	return collectNameTreeValuesRecursive(ctx, doc, obj, 0)
-}
-
-const maxNameTreeDepth = 50 //nolint:unused // kept for future use
-
-func collectNameTreeValuesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, depth int) []ast.PdfObject { //nolint:unused // kept for future use
-	if ctx.Err() != nil || depth > maxNameTreeDepth {
-		return nil
-	}
-
-	dict, err := document.ResolveDict(ctx, doc, obj)
-	if err != nil || dict == nil {
-		return nil
-	}
-
-	var values []ast.PdfObject
-
-	// Check /Names array (leaf node): alternating [name, value, name, value, ...].
-	if namesArr, err := document.ResolveArray(ctx, doc, dict["Names"]); err == nil && len(namesArr) > 0 {
-		for i := 1; i < len(namesArr); i += 2 {
-			values = append(values, namesArr[i])
-		}
-	}
-
-	// Check /Kids array (intermediate node).
-	if kidsArr, err := document.ResolveArray(ctx, doc, dict["Kids"]); err == nil {
-		for _, kid := range kidsArr {
-			if ctx.Err() != nil {
-				return values
-			}
-			values = append(values, collectNameTreeValuesRecursive(ctx, doc, kid, depth+1)...)
-		}
-	}
-
-	return values
 }

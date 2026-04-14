@@ -192,7 +192,7 @@ func sanitizePostScriptName(s string) string {
 // with the given TrueType font: FontFile2 stream → FontDescriptor →
 // CIDFontType2 → Type0 top-level font + ToUnicode CMap. Returns the Type0
 // font ref, which is what a page /Font resource should point at.
-func embedTTFFont(_ context.Context, alloc *writer.ObjAllocator, f *embeddedTTF) (ast.PdfIndirectRef, error) {
+func embedTTFFont(alloc *writer.ObjAllocator, f *embeddedTTF) ast.PdfIndirectRef {
 	// FontFile2 stream: the raw TTF bytes with /Length1 set to their length.
 	// The stream is uncompressed; the core writer writes it verbatim.
 	fontFileDict := ast.PdfDict{
@@ -253,7 +253,7 @@ func embedTTFFont(_ context.Context, alloc *writer.ObjAllocator, f *embeddedTTF)
 		"DescendantFonts": ast.PdfArray{cidFontRef},
 		"ToUnicode":       cmapRef,
 	}
-	return alloc.Alloc(type0), nil
+	return alloc.Alloc(type0)
 }
 
 // buildCIDWidthArray emits the PDF /W array for a CIDFontType2 font. The

@@ -73,7 +73,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 
 		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 		if err != nil {
-			complog(doc).Debug("compliance.file_structure: cannot resolve object", "error", err)
+			doc.Logger.Debug("compliance.file_structure: cannot resolve object", "error", err)
 			continue
 		}
 
@@ -92,7 +92,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 // violations. Only actual content streams are scanned, not ICC profiles,
 // font programs, or other binary streams.
 func checkContentStreamLimits(ctx context.Context, doc *document.Document, part int, profile string) []Violation {
-	catalog, err := getCatalog(ctx, doc)
+	catalog, err := resolveCatalog(ctx, doc)
 	if err != nil || catalog == nil {
 		return nil
 	}
@@ -148,7 +148,7 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 	}
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
-		complog(doc).Debug("compliance.file_structure: cannot parse content stream", "error", err)
+		doc.Logger.Debug("compliance.file_structure: cannot parse content stream", "error", err)
 		return nil
 	}
 	var results []Violation

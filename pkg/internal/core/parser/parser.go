@@ -28,8 +28,9 @@ type Parser struct {
 	err       error
 	decryptFn DecryptFunc
 
-	// FormatViolations collects PDF/A format compliance issues detected
-	// during parsing. The parser remains lenient: violations are recorded
+	// FormatViolations collects PDF format compliance issues (ISO 32000)
+	// detected during parsing. These violations apply to both PDF/A and
+	// PDF/UA validation. The parser remains lenient: violations are recorded
 	// but do not fail the parse. This is nil unless compliance checking
 	// is enabled via WithFormatChecking.
 	FormatViolations []error
@@ -47,9 +48,9 @@ func (p *Parser) WithDecryption(fn DecryptFunc) *Parser {
 	return p
 }
 
-// WithFormatChecking enables PDF/A format violation collection during
+// WithFormatChecking enables PDF format violation collection during
 // parsing. Violations are appended to FormatViolations without failing
-// the parse.
+// the parse. Used by both PDF/A and PDF/UA validation.
 func (p *Parser) WithFormatChecking() *Parser {
 	p.checkFormat = true
 	return p
@@ -61,17 +62,6 @@ func (p *Parser) recordViolation(msg string) {
 	}
 }
 
-// checkCtx returns the context error if cancellation or deadline has fired.
-// Returns nil when the context is still active.
-func checkCtx(ctx context.Context) error {
-	return ctx.Err()
-}
-
-// CheckContext returns the context error if the context is cancelled or
-// its deadline has expired. Returns nil otherwise.
-func CheckContext(ctx context.Context) error {
-	return checkCtx(ctx)
-}
 
 // Peek returns the token n positions ahead without consuming it.
 func (p *Parser) Peek(n int) (lexer.Token, error) {
@@ -115,7 +105,7 @@ func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
 // to the per-token lexer loop.
 func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 	t0, err := p.Peek(0)
-	if err != nil && t0.Type == lexer.TokenError {
+	if err != nil {
 		return nil, err
 	}
 	if t0.Type == lexer.TokenEOF {
@@ -197,7 +187,7 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 		}
 		return ast.PdfInt(i), nil
 	case lexer.TokenString:
-		return p.parseString(t0.Value)
+		return p.parseString(t0.Value), nil
 	case lexer.TokenHexString:
 		return p.parseHexString(t0.Value)
 	case lexer.TokenDelimiter:
@@ -267,11 +257,11 @@ func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
 func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 	dict := make(ast.PdfDict)
 	for {
-		if err := checkCtx(ctx); err != nil {
+		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("parsing dict: %w", err)
 		}
 		t, err := p.Peek(0)
-		if err != nil && t.Type == lexer.TokenError {
+		if err != nil {
 			return nil, err
 		}
 		if t.Type == lexer.TokenEOF {
@@ -450,7 +440,7 @@ func (p *Parser) scanEndstream(ctx context.Context, reader *ioat.Reader) (int64,
 		sinceLastCheck++
 		if sinceLastCheck >= ctxCheckInterval {
 			sinceLastCheck = 0
-			if err := checkCtx(ctx); err != nil {
+			if err := ctx.Err(); err != nil {
 				return 0, fmt.Errorf("scanning for endstream: %w", err)
 			}
 		}
@@ -541,7 +531,7 @@ func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length
 	var cachedErr error
 	return ast.NewLazyStream(dict, func(ctx context.Context) ([]byte, error) {
 		once.Do(func() {
-			if err := checkCtx(ctx); err != nil {
+			if err := ctx.Err(); err != nil {
 				cachedErr = err
 				return
 			}
@@ -564,11 +554,11 @@ func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length
 func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 	var arr ast.PdfArray
 	for {
-		if err := checkCtx(ctx); err != nil {
+		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("parsing array: %w", err)
 		}
 		t, err := p.Peek(0)
-		if err != nil && t.Type == lexer.TokenError {
+		if err != nil {
 			return nil, err
 		}
 		// Tolerate EOF or endobj inside an array: close gracefully.
@@ -599,7 +589,7 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 	return arr, nil
 }
 
-func (p *Parser) parseString(val string) (ast.PdfString, error) {
+func (p *Parser) parseString(val string) ast.PdfString {
 	if len(val) >= 2 && val[0] == '(' && val[len(val)-1] == ')' {
 		val = val[1 : len(val)-1]
 	}
@@ -649,7 +639,7 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 			b = dec
 		}
 	}
-	return ast.PdfString(string(b)), nil
+	return ast.PdfString(string(b))
 }
 
 // SkipInlineImage reads past an inline image in a content stream.
@@ -661,7 +651,7 @@ func (p *Parser) SkipInlineImage(ctx context.Context) error {
 	// Entries are key/value pairs (e.g., /W 100 /H 50 /BPC 8 /CS /RGB).
 	for {
 		tok, err := p.Peek(0)
-		if err != nil && tok.Type == lexer.TokenError {
+		if err != nil {
 			return fmt.Errorf("inline image dict: %w", err)
 		}
 		if tok.Type == lexer.TokenEOF {
@@ -710,7 +700,7 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 	// Phase 1: Parse key/value pairs until the ID keyword.
 	for {
 		tok, err := p.Peek(0)
-		if err != nil && tok.Type == lexer.TokenError {
+		if err != nil {
 			return nil, fmt.Errorf("inline image dict: %w", err)
 		}
 		if tok.Type == lexer.TokenEOF {

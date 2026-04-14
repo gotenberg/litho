@@ -158,9 +158,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	for _, page := range pages {
-		if err := flattenPageAnnotations(ctx, doc, alloc, page); err != nil {
-			return fmt.Errorf("flattening page annotations: %w", err)
-		}
+		flattenPageAnnotations(ctx, doc, alloc, page)
 	}
 
 	return nil
@@ -173,14 +171,14 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // single draft and written with exactly one [writer.ObjAllocator.AllocAt]
 // call per page, the same invariant [applyStampToPages] follows, so
 // concurrent mutations cannot clobber each other.
-func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page) error {
+func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page) {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
-		return nil
+		return
 	}
 	annots, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil || annots == nil {
-		return nil
+		return
 	}
 
 	// Start from the latest pending version of the page dict so we
@@ -240,7 +238,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 
 	// No widgets were flattenable, nothing to write.
 	if len(stampOps) == 0 && len(remainingAnnots) == len(annots) {
-		return nil
+		return
 	}
 
 	newDict := make(ast.PdfDict, len(baseDict)+1)
@@ -248,10 +246,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 
 	// Merge XObject additions into /Resources.
 	if len(xobjectAdditions) > 0 {
-		newResources, err := mergeStampResources(ctx, doc, alloc, baseDict, xobjectAdditions)
-		if err != nil {
-			return fmt.Errorf("merging form xobject resources: %w", err)
-		}
+		newResources := mergeStampResources(ctx, doc, alloc, baseDict, xobjectAdditions)
 		newDict["Resources"] = newResources
 	}
 
@@ -278,7 +273,6 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 	}
 
 	alloc.AllocAt(page.Ref.ObjectNum, newDict)
-	return nil
 }
 
 // resolveWidgetAppearance extracts the /N appearance stream from a

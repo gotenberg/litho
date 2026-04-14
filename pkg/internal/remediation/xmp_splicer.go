@@ -347,7 +347,7 @@ func replacePropertyValue(xmp []byte, nsURI, localName, newValue string) ([]byte
 	// to locate the text-content byte range inside the element so we
 	// only replace the value, not the surrounding tags.
 	elementBytes := xmp[loc.Start:loc.End]
-	openStart, openEnd, closeStart, ok := elementTextRange(elementBytes)
+	_, openEnd, closeStart, ok := elementTextRange(elementBytes)
 	if !ok {
 		return append([]byte(nil), xmp...), errXMPPropertyNotFound
 	}
@@ -356,7 +356,6 @@ func replacePropertyValue(xmp []byte, nsURI, localName, newValue string) ([]byte
 	// Absolute byte ranges in the source buffer.
 	absOpenEnd := loc.Start + openEnd
 	absCloseStart := loc.Start + closeStart
-	_ = openStart // captured for potential future use
 	out = append(out, xmp[:absOpenEnd]...)
 	out = append(out, newValue...)
 	out = append(out, xmp[absCloseStart:]...)
@@ -368,15 +367,15 @@ func replacePropertyValue(xmp []byte, nsURI, localName, newValue string) ([]byte
 // Returns the new bytes plus true if a declaration was inserted. A
 // nil-delta result (second return false) is returned unchanged when
 // the namespace is already declared.
-func ensureNamespaceDecl(xmp []byte, prefix, uri string) ([]byte, bool, error) {
+func ensureNamespaceDecl(xmp []byte, prefix, uri string) ([]byte, error) {
 	tagStart, tagEnd, err := findRDFDescriptionOpenRange(xmp)
 	if err != nil {
-		return append([]byte(nil), xmp...), false, err
+		return append([]byte(nil), xmp...), err
 	}
 	tagBytes := xmp[tagStart:tagEnd]
 	existing := collectNamespaceDecls(tagBytes)
 	if existing[prefix] == uri {
-		return append([]byte(nil), xmp...), false, nil
+		return append([]byte(nil), xmp...), nil
 	}
 
 	// Insert just before the closing `>` (or `/>`) of the start tag.
@@ -393,7 +392,7 @@ func ensureNamespaceDecl(xmp []byte, prefix, uri string) ([]byte, bool, error) {
 	out = append(out, xmp[:insertAt]...)
 	out = append(out, injection...)
 	out = append(out, xmp[insertAt:]...)
-	return out, true, nil
+	return out, nil
 }
 
 // errXMPPropertyNotFound is returned by the splicer helpers when a

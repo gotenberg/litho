@@ -155,11 +155,10 @@ func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	info := parseTopDict(topDictEntries[0])
 
 	// Parse String INDEX (custom strings beyond SID 390).
-	stringEnd, stringEntries, err := parseINDEX(data, topDictEnd)
+	_, stringEntries, err := parseINDEX(data, topDictEnd)
 	if err != nil {
 		return nil, fmt.Errorf("string INDEX: %w", err)
 	}
-	_ = stringEnd // not needed further
 
 	// Build the string resolver.
 	strings := &stringTable{custom: stringEntries}

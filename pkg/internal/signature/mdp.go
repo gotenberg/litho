@@ -178,10 +178,10 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 
 		switch v := obj.(type) {
 		case ast.PdfDict:
-			ao.Type = dictType(v)
+			ao.Type = dictName(v, "Type")
 			ao.FT = dictName(v, "FT")
 		case ast.PdfStream:
-			ao.Type = dictType(v.Dict)
+			ao.Type = dictName(v.Dict, "Type")
 			if ao.Type == "XRef" {
 				ao.IsXRef = true
 			}
@@ -257,11 +257,6 @@ func isAllowedP3(obj appendedObject) bool {
 	}
 	// P=3 additionally allows annotations.
 	return obj.Type == "Annot"
-}
-
-// dictType extracts the /Type name from a dictionary, or returns "".
-func dictType(dict ast.PdfDict) string {
-	return dictName(dict, "Type")
 }
 
 // dictName extracts a named key from a dictionary, or returns "".

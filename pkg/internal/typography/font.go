@@ -712,7 +712,7 @@ func resolveSimpleFontMetrics(ctx context.Context, doc *document.Document, fontD
 // from the /FontDescriptor. These serve as fallbacks when the PDF-level width
 // arrays (/Widths, /W) are missing or incomplete.
 func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
-	fdDict := findFontDescriptor(ctx, doc, fontDict)
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
 	}
@@ -968,7 +968,7 @@ var type1EncodingRe = regexp.MustCompile(`dup\s+(\d+)\s+/(\S+)\s+put`)
 // PDF font dictionary has no /Encoding or an incomplete /Differences array,
 // because the font program itself defines the authoritative encoding.
 func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, overwrite bool) {
-	fdDict := findFontDescriptor(ctx, doc, fontDict)
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
 	}
@@ -1048,7 +1048,7 @@ func ExtractType1EncodingNames(fontData []byte) map[byte]string {
 // embedded TrueType (/FontFile2) or OpenType (/FontFile3) font program.
 // For Type0 fonts the FontDescriptor lives inside the CIDFont descendant.
 func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
-	fdDict := findFontDescriptor(ctx, doc, fontDict)
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
 	}
@@ -1255,7 +1255,7 @@ func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict a
 // decodeFontStreamFromDescriptor extracts and decodes the embedded font binary
 // from the FontDescriptor, looking in DescendantFonts for Type0 fonts.
 func decodeFontStreamFromDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) []byte {
-	fdDict := findFontDescriptor(ctx, doc, fontDict)
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return nil
 	}
@@ -1313,7 +1313,7 @@ func detectCIDOffset(cidWidths map[int]float64) int {
 // that use OT1 encoding internally. The byte→glyph mapping differs from
 // StandardEncoding/WinAnsiEncoding.
 func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
-	fdDict := findFontDescriptor(ctx, doc, fontDict)
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
 	}
@@ -1361,47 +1361,6 @@ func isIdentityEncoding(ctx context.Context, doc *document.Document, fontDict as
 	return encName == "Identity-H" || encName == "Identity-V"
 }
 
-// findFontDescriptor locates the /FontDescriptor dictionary. For Type0 fonts,
-// it is inside the first element of /DescendantFonts.
-func findFontDescriptor(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
-	// Direct /FontDescriptor on the font dict (simple fonts).
-	if fdObj, ok := fontDict["FontDescriptor"]; ok {
-		fdDict, err := document.ResolveDict(ctx, doc, fdObj)
-		if err != nil {
-			doc.Logger.Debug("resolving FontDescriptor dict", slog.Any("err", err))
-		}
-		if fdDict != nil {
-			return fdDict
-		}
-	}
-
-	// For Type0: /DescendantFonts[0]/FontDescriptor.
-	if dfObj, ok := fontDict["DescendantFonts"]; ok {
-		dfArr, err := document.ResolveArray(ctx, doc, dfObj)
-		if err != nil {
-			doc.Logger.Debug("resolving DescendantFonts for FontDescriptor lookup", slog.Any("err", err))
-		}
-		if len(dfArr) > 0 {
-			cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
-			if err != nil {
-				doc.Logger.Debug("resolving CIDFont dict for FontDescriptor lookup", slog.Any("err", err))
-			}
-			if cidDict != nil {
-				if fdObj, ok := cidDict["FontDescriptor"]; ok {
-					fdDict, err := document.ResolveDict(ctx, doc, fdObj)
-					if err != nil {
-						doc.Logger.Debug("resolving CIDFont FontDescriptor dict", slog.Any("err", err))
-					}
-					if fdDict != nil {
-						return fdDict
-					}
-				}
-			}
-		}
-	}
-
-	return nil
-}
 
 // decodeFontStream resolves and decodes an embedded font stream by key name.
 func decodeFontStream(ctx context.Context, doc *document.Document, fdDict ast.PdfDict, key ast.PdfName) []byte {

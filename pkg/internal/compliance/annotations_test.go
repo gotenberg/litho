@@ -62,7 +62,7 @@ func TestCheckForbiddenAnnotType(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			annot := ast.PdfDict{"Subtype": ast.PdfName(tc.subtype)}
-			results := checkForbiddenAnnotType(ctx, nil, annot, tc.subtype, tc.part, tc.level, "test")
+			results := checkForbiddenAnnotType(ctx, nopDoc(), annot, tc.subtype, tc.part, tc.level, "test")
 			gotFail := len(results) > 0
 			if gotFail != tc.wantFail {
 				t.Errorf("checkForbiddenAnnotType(%s, part=%d, level=%c): got %d violations, wantFail=%v",
@@ -134,7 +134,7 @@ func TestCheckAnnotOpacity(t *testing.T) {
 	t.Run("no CA key", func(t *testing.T) {
 		t.Parallel()
 		annot := ast.PdfDict{}
-		results := checkAnnotOpacity(ctx, nil, annot, "test")
+		results := checkAnnotOpacity(ctx, nopDoc(), annot, "test")
 		if len(results) != 0 {
 			t.Errorf("expected no violations when /CA absent, got %d", len(results))
 		}
@@ -143,7 +143,7 @@ func TestCheckAnnotOpacity(t *testing.T) {
 	t.Run("CA is 1.0", func(t *testing.T) {
 		t.Parallel()
 		annot := ast.PdfDict{"CA": ast.PdfReal(1.0)}
-		results := checkAnnotOpacity(ctx, nil, annot, "test")
+		results := checkAnnotOpacity(ctx, nopDoc(), annot, "test")
 		if len(results) != 0 {
 			t.Errorf("expected no violations for CA=1.0, got %d", len(results))
 		}
@@ -152,7 +152,7 @@ func TestCheckAnnotOpacity(t *testing.T) {
 	t.Run("CA is 0.5", func(t *testing.T) {
 		t.Parallel()
 		annot := ast.PdfDict{"CA": ast.PdfReal(0.5)}
-		results := checkAnnotOpacity(ctx, nil, annot, "test")
+		results := checkAnnotOpacity(ctx, nopDoc(), annot, "test")
 		if len(results) == 0 {
 			t.Error("expected violation for CA=0.5")
 		}
@@ -161,7 +161,7 @@ func TestCheckAnnotOpacity(t *testing.T) {
 	t.Run("CA is 0", func(t *testing.T) {
 		t.Parallel()
 		annot := ast.PdfDict{"CA": ast.PdfReal(0)}
-		results := checkAnnotOpacity(ctx, nil, annot, "test")
+		results := checkAnnotOpacity(ctx, nopDoc(), annot, "test")
 		if len(results) == 0 {
 			t.Error("expected violation for CA=0")
 		}

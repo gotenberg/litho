@@ -55,7 +55,7 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 		if ctx.Err() != nil {
 			return results
 		}
-		streamData, err := getPageContentBytes(ctx, doc, page)
+		streamData, err := resolvePageContentBytes(ctx, doc, page)
 		if err != nil || len(streamData) == 0 {
 			continue
 		}

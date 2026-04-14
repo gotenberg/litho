@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -90,8 +91,12 @@ func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 
 	gsDict, err := document.ResolveDict(ctx, doc, gsObj)
-	if err != nil || gsDict == nil {
-		return nil, nil //nolint:nilerr // missing ExtGState is non-fatal
+	if err != nil {
+		doc.Logger.Debug("resolving ExtGState dict", slog.Any("err", err))
+		return nil, nil
+	}
+	if gsDict == nil {
+		return nil, nil
 	}
 
 	var notes []string
@@ -168,8 +173,12 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
-	if err != nil || xobjDict == nil {
-		return nil, nil //nolint:nilerr // missing XObject is non-fatal
+	if err != nil {
+		doc.Logger.Debug("resolving XObject dict", slog.Any("err", err))
+		return nil, nil
+	}
+	if xobjDict == nil {
+		return nil, nil
 	}
 
 	var notes []string

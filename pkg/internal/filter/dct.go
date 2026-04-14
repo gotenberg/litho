@@ -14,7 +14,7 @@ import (
 //   - Gray:        1 byte per pixel
 //   - RGB/YCbCr:   3 bytes per pixel (R, G, B order)
 //   - CMYK:        4 bytes per pixel
-func decodeDCT(data []byte, parms ast.PdfDict) ([]byte, error) {
+func decodeDCT(data []byte, _parms ast.PdfDict) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("dct decode: empty input")
 	}

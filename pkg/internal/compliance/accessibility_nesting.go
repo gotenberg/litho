@@ -36,7 +36,7 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 
 		annots, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve annots array", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
 			continue
 		}
 

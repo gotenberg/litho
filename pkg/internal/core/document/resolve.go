@@ -184,6 +184,50 @@ func ResolveBool(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.Pdf
 	return b, nil
 }
 
+// ResolveFontDescriptor locates the /FontDescriptor dictionary for a font.
+// For simple fonts it reads the direct /FontDescriptor key. For Type0
+// (composite) fonts it traverses /DescendantFonts[0]/FontDescriptor.
+// Returns nil if no descriptor is found.
+func ResolveFontDescriptor(ctx context.Context, doc *Document, fontDict ast.PdfDict) ast.PdfDict {
+	// Direct /FontDescriptor (simple fonts).
+	if fdObj, ok := fontDict["FontDescriptor"]; ok {
+		fdDict, err := ResolveDict(ctx, doc, fdObj)
+		if err != nil {
+			doc.Logger.Debug("resolving FontDescriptor dict", slog.Any("err", err))
+		}
+		if fdDict != nil {
+			return fdDict
+		}
+	}
+
+	// Type0: /DescendantFonts[0]/FontDescriptor.
+	if dfObj, ok := fontDict["DescendantFonts"]; ok {
+		dfArr, err := ResolveArray(ctx, doc, dfObj)
+		if err != nil {
+			doc.Logger.Debug("resolving DescendantFonts for FontDescriptor lookup", slog.Any("err", err))
+		}
+		if len(dfArr) > 0 {
+			cidDict, err := ResolveDict(ctx, doc, dfArr[0])
+			if err != nil {
+				doc.Logger.Debug("resolving CIDFont dict for FontDescriptor lookup", slog.Any("err", err))
+			}
+			if cidDict != nil {
+				if fdObj, ok := cidDict["FontDescriptor"]; ok {
+					fdDict, err := ResolveDict(ctx, doc, fdObj)
+					if err != nil {
+						doc.Logger.Debug("resolving CIDFont FontDescriptor dict", slog.Any("err", err))
+					}
+					if fdDict != nil {
+						return fdDict
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // UTF-16BE byte order mark bytes.
 const (
 	utf16BEBom0 = 0xFE

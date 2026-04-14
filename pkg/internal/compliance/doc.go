@@ -52,6 +52,16 @@
 //   - Infrastructure failure that prevents the whole check from running
 //     (e.g. ctx canceled): propagate the error to the orchestrator.
 //
+// # Function signature convention
+//
+// Check functions that inspect pre-resolved dicts without doing I/O or
+// recursion may not need ctx or doc today, but they accept
+// (_ context.Context, _ *document.Document, ...) anyway. This keeps a
+// uniform call pattern across all checks: the orchestrator passes ctx and
+// doc to every check function without special-casing, and individual
+// checks can start chasing indirect refs or logging without a signature
+// change.
+//
 // Rules are generated from VeraPDF XML profiles via go generate (see
 // cmd/gen-rules). Each [Rule] maps 1:1 to a VeraPDF validation rule, identified
 // by (Specification, Clause, TestNumber). 751 rules cover 6 ISO standards:

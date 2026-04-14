@@ -236,12 +236,9 @@ func TestEnsureNamespaceDecl_Adds(t *testing.T) {
 </x:xmpmeta>
 <?xpacket end="w"?>`)
 
-	out, added, err := ensureNamespaceDecl(xmp, "pdfaid", pdfaidNS)
+	out, err := ensureNamespaceDecl(xmp, "pdfaid", pdfaidNS)
 	if err != nil {
 		t.Fatalf("ensureNamespaceDecl: %v", err)
-	}
-	if !added {
-		t.Error("expected added=true when namespace is new")
 	}
 	if !strings.Contains(string(out), `xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"`) {
 		t.Errorf("namespace declaration missing:\n%s", out)
@@ -257,12 +254,9 @@ func TestEnsureNamespaceDecl_SkipsIfPresent(t *testing.T) {
 </x:xmpmeta>
 <?xpacket end="w"?>`)
 
-	out, added, err := ensureNamespaceDecl(xmp, "pdfaid", pdfaidNS)
+	out, err := ensureNamespaceDecl(xmp, "pdfaid", pdfaidNS)
 	if err != nil {
 		t.Fatalf("ensureNamespaceDecl: %v", err)
-	}
-	if added {
-		t.Error("expected added=false when namespace is already declared")
 	}
 	if !bytes.Equal(out, xmp) {
 		t.Error("output should match input byte-for-byte when no change")

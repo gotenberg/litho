@@ -9,36 +9,32 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// getInt is a helper to extract an integer from a dictionary safely.
-func getInt(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (int, error) {
+// resolveInt extracts an integer from a dictionary key, delegating resolution
+// to [document.ResolveInt]. Returns an error if the key is missing or not an integer.
+func resolveInt(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (int, error) {
 	obj, ok := dict[key]
 	if !ok {
 		return 0, fmt.Errorf("missing key /%s", key)
 	}
-	res, err := document.ResolveObject(ctx, doc, obj)
+	val, err := document.ResolveInt(ctx, doc, obj)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("key /%s: %w", key, err)
 	}
-	if val, ok := res.(ast.PdfInt); ok {
-		return int(val), nil
-	}
-	return 0, fmt.Errorf("key /%s is not an integer", key)
+	return int(val), nil
 }
 
-// getName is a helper to extract a name from a dictionary safely.
-func getName(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string, error) {
+// resolveName extracts a name string from a dictionary key, delegating
+// resolution to [document.ResolveName]. Returns an error if the key is missing.
+func resolveName(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string, error) {
 	obj, ok := dict[key]
 	if !ok {
 		return "", fmt.Errorf("missing key /%s", key)
 	}
-	res, err := document.ResolveObject(ctx, doc, obj)
+	val, err := document.ResolveName(ctx, doc, obj)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("key /%s: %w", key, err)
 	}
-	if val, ok := res.(ast.PdfName); ok {
-		return string(val), nil
-	}
-	return "", fmt.Errorf("key /%s is not a name", key)
+	return string(val), nil
 }
 
 // resolveColorSpace extracts the /ColorSpace from an image XObject dictionary

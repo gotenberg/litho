@@ -567,3 +567,21 @@ func parsePostFormat2(data []byte) (map[uint16]string, error) {
 
 	return result, nil
 }
+
+// CmapSubtableCount returns the number of encoding subtables in the cmap
+// table of a TrueType font program. Per ISO 19005-1 §6.3.7, symbolic
+// TrueType fonts must contain exactly one encoding.
+func CmapSubtableCount(data []byte) (int, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return 0, err
+	}
+	cmapData, err := TableData(data, records, "cmap")
+	if err != nil {
+		return 0, err
+	}
+	if len(cmapData) < 4 {
+		return 0, fmt.Errorf("%w: cmap table too short", ErrInvalidFont)
+	}
+	return int(binary.BigEndian.Uint16(cmapData[2:4])), nil
+}

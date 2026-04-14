@@ -259,7 +259,7 @@ var (
 // here rather than at write time.
 func NewTTFFont(data []byte) (StampFont, error) {
 	if len(data) < 12 {
-		return StampFont{}, fmt.Errorf("ttf data too short")
+		return StampFont{}, fmt.Errorf("%w: data too short (%d bytes)", ErrInvalidFont, len(data))
 	}
 	if err := mutations.ValidateTTFForStamp(data); err != nil {
 		return StampFont{}, err
@@ -387,7 +387,7 @@ func (w *Writer) ClearMetadata() {
 // queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) RotatePages(rotation int, pages ...int) error {
 	if rotation%90 != 0 {
-		return fmt.Errorf("rotation must be a multiple of 90, got %d", rotation)
+		return fmt.Errorf("%w: got %d", ErrInvalidRotation, rotation)
 	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -406,7 +406,7 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // [Writer.WriteTo] is called.
 func (w *Writer) DeletePages(pages ...int) error {
 	if len(pages) == 0 {
-		return fmt.Errorf("no pages specified")
+		return ErrEmptyPageList
 	}
 	w.forceRewrite = true
 	w.mutations = append(w.mutations, mutation{
@@ -428,7 +428,7 @@ func (w *Writer) DeletePages(pages ...int) error {
 // and applied when [Writer.WriteTo] is called.
 func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error {
 	if source == nil {
-		return fmt.Errorf("insert pages: source is nil")
+		return ErrNilSource
 	}
 	w.forceRewrite = true
 	w.mutations = append(w.mutations, mutation{
@@ -616,7 +616,7 @@ func (w *Writer) FlattenForm() {
 // The mutation is queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if stamp.Text == "" {
-		return fmt.Errorf("text stamp: empty text")
+		return ErrEmptyText
 	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -636,10 +636,10 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 // [Writer.WriteTo] is called.
 func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 	if len(stamp.Data) == 0 {
-		return fmt.Errorf("image stamp: empty data")
+		return ErrEmptyData
 	}
 	if stamp.MimeType != "image/jpeg" && stamp.MimeType != "image/png" {
-		return fmt.Errorf("image stamp: unsupported mime type %q", stamp.MimeType)
+		return fmt.Errorf("%w: %q", ErrUnsupportedMimeType, stamp.MimeType)
 	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -668,7 +668,7 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 // [Writer.WriteTo] is called.
 func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
 	if stamp.Source == nil {
-		return fmt.Errorf("pdf stamp: source is nil")
+		return ErrNilSource
 	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -1045,7 +1045,7 @@ func generationToInternal(opts BookmarkGenerationOptions) bookmarks.Options {
 func buildMergeBookmarkConfig(sources []*Reader, opts *BookmarkOptions) mutations.BookmarkConfig {
 	textProvider := func(ctx context.Context, sourceIdx int, pageNum int) ([]models.TextElement, error) {
 		if sourceIdx < 0 || sourceIdx >= len(sources) {
-			return nil, fmt.Errorf("source index out of range")
+			return nil, ErrSourceIndexOutOfRange
 		}
 		return sources[sourceIdx].ExtractTextElements(ctx, pageNum)
 	}

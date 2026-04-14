@@ -15,7 +15,7 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	part := vctx.part
 	ua := vctx.ua
 
-	complog(doc).Debug("compliance.forms: starting form checks", "profile", profile, "part", part, "ua", ua)
+	doc.Logger.Debug("compliance.forms: starting form checks", "profile", profile, "part", part, "ua", ua)
 
 	acroFormObj, ok := catalog["AcroForm"]
 	if !ok {
@@ -24,7 +24,7 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	acroForm, err := document.ResolveDict(ctx, doc, acroFormObj)
 	if err != nil || acroForm == nil {
-		complog(doc).Debug("compliance.forms: cannot resolve /AcroForm", "error", err)
+		doc.Logger.Debug("compliance.forms: cannot resolve /AcroForm", "error", err)
 		return nil
 	}
 
@@ -48,7 +48,7 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	fields, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil {
-		complog(doc).Debug("compliance.forms: cannot resolve /Fields array", "error", err)
+		doc.Logger.Debug("compliance.forms: cannot resolve /Fields array", "error", err)
 		return results
 	}
 
@@ -60,7 +60,7 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		checkFormField(ctx, doc, fieldObj, profile, part, ua, i, &results, 0)
 	}
 
-	complog(doc).Debug("compliance.forms: form checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.forms: form checks complete", "violations", len(results))
 	return results
 }
 
@@ -75,7 +75,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 
 	field, err := document.ResolveDict(ctx, doc, fieldObj)
 	if err != nil || field == nil {
-		complog(doc).Debug("compliance.forms: cannot resolve field dict", "index", fieldIdx, "error", err)
+		doc.Logger.Debug("compliance.forms: cannot resolve field dict", "index", fieldIdx, "error", err)
 		return
 	}
 
@@ -96,7 +96,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 
 	kids, err := document.ResolveArray(ctx, doc, kidsObj)
 	if err != nil {
-		complog(doc).Debug("compliance.forms: cannot resolve /Kids array", "index", fieldIdx, "error", err)
+		doc.Logger.Debug("compliance.forms: cannot resolve /Kids array", "index", fieldIdx, "error", err)
 		return
 	}
 
@@ -127,11 +127,11 @@ func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm 
 
 	na, err := document.ResolveBool(ctx, doc, naObj)
 	if err != nil {
-		complog(doc).Debug("compliance.forms: cannot resolve /NeedAppearances", "error", err)
+		doc.Logger.Debug("compliance.forms: cannot resolve /NeedAppearances", "error", err)
 		return
 	}
 
-	if bool(na) {
+	if na {
 		*results = append(*results, fail(needAppearancesRule(part), "/NeedAppearances is true")...)
 	}
 }

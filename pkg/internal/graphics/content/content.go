@@ -33,7 +33,7 @@ func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error)
 	for {
 		tokenCount++
 		if tokenCount%500 == 0 {
-			if err := parser.CheckContext(ctx); err != nil {
+			if err := ctx.Err(); err != nil {
 				return ops, err
 			}
 		}

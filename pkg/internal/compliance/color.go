@@ -21,7 +21,7 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	complog(doc).Debug("compliance.color: starting color checks", "profile", vctx.profile, "part", part)
+	doc.Logger.Debug("compliance.color: starting color checks", "profile", vctx.profile, "part", part)
 
 	var results []Violation
 
@@ -33,7 +33,7 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// parts 2+ need colorant consistency (§6.2.4.4 t01/t02).
 	checkSeparationDeviceN(ctx, doc, catalog, part, &results)
 
-	complog(doc).Debug("compliance.color: color checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.color: color checks complete", "violations", len(results))
 	return results
 }
 

@@ -35,29 +35,13 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			return nil, err
 		}
 
-		pageModified := false
-
 		// Fix ExtGState entries in page Resources.
 		if page.Resources != nil {
-			gsFixed, err := fixExtGStateDict(ctx, doc, alloc, page.Resources)
-			if err != nil {
-				return nil, err
-			}
-			totalFixed += gsFixed
-			if gsFixed > 0 {
-				pageModified = true
-			}
+			totalFixed += fixExtGStateDict(ctx, doc, alloc, page.Resources)
 		}
 
 		// Fix XObjects in page Resources (SMask on images, Group on forms).
-		xoFixed, err := fixXObjectTransparency(ctx, doc, alloc, page.Resources)
-		if err != nil {
-			return nil, err
-		}
-		totalFixed += xoFixed
-		if xoFixed > 0 {
-			pageModified = true
-		}
+		totalFixed += fixXObjectTransparency(ctx, doc, alloc, page.Resources)
 
 		// Remove page-level transparency group.
 		if groupObj, ok := page.Dict["Group"]; ok {
@@ -66,24 +50,14 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 				maps.Copy(newDict, page.Dict)
 				delete(newDict, "Group")
 				alloc.AllocAt(page.Ref.ObjectNum, newDict)
-				pageModified = true
 				totalFixed++
 			}
 		}
 
 		// Fix annotation appearance stream resources.
 		if annotsObj, ok := page.Dict["Annots"]; ok {
-			annFixed, err := fixAnnotationTransparency(ctx, doc, alloc, annotsObj)
-			if err != nil {
-				return nil, err
-			}
-			totalFixed += annFixed
-			if annFixed > 0 {
-				pageModified = true
-			}
+			totalFixed += fixAnnotationTransparency(ctx, doc, alloc, annotsObj)
 		}
-
-		_ = pageModified // Tracked per-page for future per-page reporting; only totalFixed used today.
 	}
 
 	if totalFixed == 0 {
@@ -94,15 +68,15 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 }
 
 // fixExtGStateDict finds and fixes transparency properties in a Resources/ExtGState dict.
-func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) (int, error) {
+func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) int {
 	gsObj, ok := resources["ExtGState"]
 	if !ok {
-		return 0, nil
+		return 0
 	}
 
 	gsDict, err := document.ResolveDict(ctx, doc, gsObj)
 	if err != nil || gsDict == nil {
-		return 0, nil
+		return 0
 	}
 
 	fixed := 0
@@ -178,23 +152,23 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 		}
 	}
 
-	return fixed, nil
+	return fixed
 }
 
 // fixXObjectTransparency removes SMask from images and Group/Transparency from forms.
-func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) (int, error) {
+func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) int {
 	if resources == nil {
-		return 0, nil
+		return 0
 	}
 
 	xoObj, ok := resources["XObject"]
 	if !ok {
-		return 0, nil
+		return 0
 	}
 
 	xoDict, err := document.ResolveDict(ctx, doc, xoObj)
 	if err != nil || xoDict == nil {
-		return 0, nil
+		return 0
 	}
 
 	fixed := 0
@@ -237,11 +211,7 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 			}
 			// Recurse into Form XObject Resources.
 			if formRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && formRes != nil {
-				gsFixed, err := fixExtGStateDict(ctx, doc, alloc, formRes)
-				if err != nil {
-					return fixed, err
-				}
-				fixed += gsFixed
+				fixed += fixExtGStateDict(ctx, doc, alloc, formRes)
 			}
 		}
 
@@ -250,15 +220,15 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 		}
 	}
 
-	return fixed, nil
+	return fixed
 }
 
 // fixAnnotationTransparency walks page annotations and fixes transparency in
 // their appearance stream resources.
-func fixAnnotationTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotsObj ast.PdfObject) (int, error) {
+func fixAnnotationTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotsObj ast.PdfObject) int {
 	annots, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil || annots == nil {
-		return 0, nil
+		return 0
 	}
 
 	fixed := 0
@@ -284,18 +254,14 @@ func fixAnnotationTransparency(ctx context.Context, doc *document.Document, allo
 			if err == nil {
 				if stream, ok := resolved.(ast.PdfStream); ok {
 					if res, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && res != nil {
-						gsFixed, err := fixExtGStateDict(ctx, doc, alloc, res)
-						if err != nil {
-							return fixed, err
-						}
-						fixed += gsFixed
+						fixed += fixExtGStateDict(ctx, doc, alloc, res)
 					}
 				}
 			}
 		}
 	}
 
-	return fixed, nil
+	return fixed
 }
 
 func isTransparencyGroup(ctx context.Context, doc *document.Document, groupObj ast.PdfObject) bool {

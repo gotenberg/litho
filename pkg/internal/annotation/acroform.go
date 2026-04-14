@@ -79,15 +79,15 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 		// Inject mock this.getField("Name").value API.
 		// goja Set/RunString calls for VM bootstrap are best-effort: these trivial
 		// assignments and object property sets cannot fail in practice.
-		_ = vm.Set("getField", func(call goja.FunctionCall) goja.Value { //nolint:errcheck
+		_ = vm.Set("getField", func(call goja.FunctionCall) goja.Value { //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 			if len(call.Arguments) > 0 {
 				fieldName := call.Arguments[0].String()
 
 				// Create a mock Field object
 				fieldObj := vm.NewObject()
-				_ = fieldObj.Set("value", "") //nolint:errcheck
+				_ = fieldObj.Set("value", "") //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 				if val, exists := formDataMap[fieldName]; exists {
-					_ = fieldObj.Set("value", val) //nolint:errcheck
+					_ = fieldObj.Set("value", val) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 				}
 
 				// Provide a setter to update formData
@@ -97,19 +97,19 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 		})
 
 		// Map 'this.getField' -> global 'getField'
-		_, _ = vm.RunString(`var this = { getField: getField };`) //nolint:errcheck
+		_, _ = vm.RunString(`var this = { getField: getField };`) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 
 		// Inject Document-level scripts first (best-effort: malformed JS is non-fatal)
-		docScripts, _ := ExtractDocumentScripts(ctx, doc) //nolint:errcheck
+		docScripts, _ := ExtractDocumentScripts(ctx, doc) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 		for _, script := range docScripts {
-			_, _ = vm.RunString(script) //nolint:errcheck
+			_, _ = vm.RunString(script) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 		}
 
 		// Execute field calculations
 		for fieldName, script := range calcScripts {
 			// PDF Calculate scripts output to `event.value`
 			// We mock the event object
-			_, _ = vm.RunString(`var event = { value: "" };`) //nolint:errcheck
+			_, _ = vm.RunString(`var event = { value: "" };`) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 
 			// Execute the specific calculation logic
 			_, err := vm.RunString(script)

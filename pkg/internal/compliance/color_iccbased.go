@@ -32,7 +32,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 	var outputIntentHdr iccProfileHeader
 	var outputIntentData []byte
 	if part >= 2 {
-		outputIntentRef, outputIntentHdr, outputIntentData = getOutputIntentICCInfo(ctx, doc, catalog)
+		outputIntentRef, outputIntentHdr, outputIntentData = resolveOutputIntentICCInfo(ctx, doc, catalog)
 	}
 
 	pages := collectPages(ctx, doc, catalog)
@@ -41,7 +41,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 			return
 		}
 
-		resources := getResources(ctx, doc, page)
+		resources := resolveResources(ctx, doc, page)
 		if resources == nil {
 			continue
 		}
@@ -50,14 +50,14 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		// OutputIntent ICC info if the catalog-level one is absent.
 		pageOIRef, pageOIHdr, pageOIData := outputIntentRef, outputIntentHdr, outputIntentData
 		if part >= 2 && len(outputIntentData) == 0 {
-			pageOIRef, pageOIHdr, pageOIData = getOutputIntentICCInfo(ctx, doc, page)
+			pageOIRef, pageOIHdr, pageOIData = resolveOutputIntentICCInfo(ctx, doc, page)
 		}
 
 		// Get page blending CS ICC ref for identity comparison.
-		blendingCSRef := getPageBlendingICCRef(ctx, doc, page)
+		blendingCSRef := resolvePageBlendingICCRef(ctx, doc, page)
 
 		// Collect CS names actually used by cs/CS operators in the content stream.
-		pageContent, _ := getPageContentBytes(ctx, doc, page)
+		pageContent, _ := resolvePageContentBytes(ctx, doc, page)
 		var pageOps []content.Operation
 		if len(pageContent) > 0 {
 			pageOps, _ = content.ParseStreamData(ctx, pageContent) // Parse failure yields nil ops; checks run on whatever is available.
@@ -88,7 +88,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 				}
 				stream, err := document.ResolveStream(ctx, doc, apObj)
 				if err != nil {
-					complog(doc).Debug("compliance.color: cannot resolve appearance stream", "error", err)
+					doc.Logger.Debug("compliance.color: cannot resolve appearance stream", "error", err)
 					continue
 				}
 				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
@@ -128,7 +128,7 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		}
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve XObject stream", "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve XObject stream", "error", err)
 			continue
 		}
 		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
@@ -196,7 +196,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		csType, err := document.ResolveName(ctx, doc, arr[0])
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve color space type name", "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve color space type name", "error", err)
 			continue
 		}
 
@@ -228,7 +228,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		stream, err := document.ResolveStream(ctx, doc, arr[1])
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve ICCBased stream", "page", pageIdx, "name", name, "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),
 				"page %d, ColorSpace %s: cannot resolve ICCBased profile stream", pageIdx+1, name)...)
 			continue
@@ -244,7 +244,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
+			doc.Logger.Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "name", name, "error", err)
 			*results = append(*results, failf(iccBasedProfileRule(part),
 				"page %d, ColorSpace %s: cannot decode ICCBased profile", pageIdx+1, name)...)
 			continue
@@ -366,9 +366,9 @@ func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj
 	}
 }
 
-// getPageBlendingICCRef returns the indirect reference to the ICCBased profile
+// resolvePageBlendingICCRef returns the indirect reference to the ICCBased profile
 // stream used as the page's transparency blending CS, or a zero ref if absent.
-func getPageBlendingICCRef(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfIndirectRef {
+func resolvePageBlendingICCRef(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfIndirectRef {
 	groupObj, ok := page["Group"]
 	if !ok {
 		return ast.PdfIndirectRef{}

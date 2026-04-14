@@ -41,10 +41,7 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 
 	// 6.10: Ensure OCG config dicts have /Name.
 	if ocpObj, ok := catalogDict["OCProperties"]; ok {
-		ocFixes, err := fixOCGConfigs(ctx, alloc, doc, catalogDict, catalogRef, ocpObj)
-		if err != nil {
-			return nil, fmt.Errorf("fixing OCG configs: %w", err)
-		}
+		ocFixes := fixOCGConfigs(ctx, alloc, doc, catalogDict, catalogRef, ocpObj)
 		fixes = append(fixes, ocFixes...)
 		// Re-read catalog in case it was updated.
 		catalogDict = resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
@@ -55,10 +52,7 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 
 	// 6.11: Remove /AlternatePresentations from catalog /Names.
 	if namesObj, ok := catalogDict["Names"]; ok {
-		apFixes, err := fixAlternatePresentations(ctx, alloc, doc, catalogDict, catalogRef, namesObj)
-		if err != nil {
-			return nil, fmt.Errorf("fixing AlternatePresentations: %w", err)
-		}
+		apFixes := fixAlternatePresentations(ctx, alloc, doc, catalogDict, catalogRef, namesObj)
 		fixes = append(fixes, apFixes...)
 		// Re-read catalog in case it was updated.
 		catalogDict = resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
@@ -69,10 +63,7 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 
 	// 6.1.11: Remove non-permitted keys from /Perms dict (keep only /UR3 and /DocMDP).
 	if permsObj, ok := catalogDict["Perms"]; ok {
-		pFixes, err := fixPermsDict(ctx, alloc, doc, catalogDict, catalogRef, permsObj)
-		if err != nil {
-			return nil, fmt.Errorf("fixing Perms dict: %w", err)
-		}
+		pFixes := fixPermsDict(ctx, alloc, doc, catalogDict, catalogRef, permsObj)
 		fixes = append(fixes, pFixes...)
 	}
 
@@ -81,7 +72,7 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 
 // fixOCGConfigs walks /OCProperties /D and /Configs, adding /Name to any
 // config dict that lacks it. Per ISO 32000-2, Table 100.
-func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, ocpObj ast.PdfObject) ([]string, error) {
+func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, ocpObj ast.PdfObject) []string {
 	var ocpDict ast.PdfDict
 	var ocpRef ast.PdfIndirectRef
 	var ocpIsRef bool
@@ -94,7 +85,7 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	if ocpDict == nil {
 		resolved, err := document.ResolveDict(ctx, doc, ocpObj)
 		if err != nil || resolved == nil {
-			return nil, nil
+			return nil
 		}
 		ocpDict = resolved
 	}
@@ -106,10 +97,7 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	// Fix /D (default config).
 	if dObj, ok := newOCP["D"]; ok {
-		fixed, err := ensureOCGConfigName(ctx, alloc, doc, dObj, "D")
-		if err != nil {
-			return nil, err
-		}
+		fixed := ensureOCGConfigName(ctx, alloc, doc, dObj, "D")
 		if fixed {
 			fixes = append(fixes, "added /Name to OCG default config /D")
 			modified = true
@@ -120,13 +108,10 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	if configsObj, ok := newOCP["Configs"]; ok {
 		arr, err := document.ResolveArray(ctx, doc, configsObj)
 		if err != nil || arr == nil {
-			return fixes, nil
+			return fixes
 		}
 		for i, entry := range arr {
-			fixed, err := ensureOCGConfigName(ctx, alloc, doc, entry, fmt.Sprintf("Configs[%d]", i))
-			if err != nil {
-				return nil, err
-			}
+			fixed := ensureOCGConfigName(ctx, alloc, doc, entry, fmt.Sprintf("Configs[%d]", i))
 			if fixed {
 				fixes = append(fixes, fmt.Sprintf("added /Name to OCG config Configs[%d]", i))
 				modified = true
@@ -146,12 +131,12 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 	}
 
-	return fixes, nil
+	return fixes
 }
 
 // ensureOCGConfigName adds /Name to an OCG config dict if missing.
 // Returns true if a modification was made.
-func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, label string) (bool, error) {
+func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, label string) bool {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 
 	var d ast.PdfDict
@@ -161,13 +146,13 @@ func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if d == nil {
 		resolved, err := document.ResolveDict(ctx, doc, obj)
 		if err != nil || resolved == nil {
-			return false, nil
+			return false
 		}
 		d = resolved
 	}
 
 	if _, ok := d["Name"]; ok {
-		return false, nil
+		return false
 	}
 
 	newD := make(ast.PdfDict, len(d)+1)
@@ -178,11 +163,11 @@ func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		alloc.AllocAt(ref.ObjectNum, newD)
 	}
 
-	return true, nil
+	return true
 }
 
 // fixAlternatePresentations removes /AlternatePresentations from catalog /Names.
-func fixAlternatePresentations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, namesObj ast.PdfObject) ([]string, error) {
+func fixAlternatePresentations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, namesObj ast.PdfObject) []string {
 	var namesDict ast.PdfDict
 	var namesRef ast.PdfIndirectRef
 	namesIsRef := false
@@ -195,13 +180,13 @@ func fixAlternatePresentations(ctx context.Context, alloc *writer.ObjAllocator, 
 	if namesDict == nil {
 		resolved, err := document.ResolveDict(ctx, doc, namesObj)
 		if err != nil || resolved == nil {
-			return nil, nil
+			return nil
 		}
 		namesDict = resolved
 	}
 
 	if _, ok := namesDict["AlternatePresentations"]; !ok {
-		return nil, nil
+		return nil
 	}
 
 	newNames := make(ast.PdfDict, len(namesDict))
@@ -217,12 +202,12 @@ func fixAlternatePresentations(ctx context.Context, alloc *writer.ObjAllocator, 
 		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	}
 
-	return []string{"removed /AlternatePresentations from catalog /Names"}, nil
+	return []string{"removed /AlternatePresentations from catalog /Names"}
 }
 
 // fixPermsDict removes all keys except /UR3 and /DocMDP from the /Perms dict.
 // Per ISO 32000-2, 12.8.4, PDF/A restricts the permitted entries.
-func fixPermsDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, permsObj ast.PdfObject) ([]string, error) {
+func fixPermsDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, permsObj ast.PdfObject) []string {
 	var permsDict ast.PdfDict
 	var permsRef ast.PdfIndirectRef
 	permsIsRef := false
@@ -235,7 +220,7 @@ func fixPermsDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if permsDict == nil {
 		resolved, err := document.ResolveDict(ctx, doc, permsObj)
 		if err != nil || resolved == nil {
-			return nil, nil
+			return nil
 		}
 		permsDict = resolved
 	}
@@ -250,7 +235,7 @@ func fixPermsDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	}
 
 	if len(removed) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	newPerms := make(ast.PdfDict, 2)
@@ -270,5 +255,5 @@ func fixPermsDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	}
 
-	return []string{"removed non-permitted keys from /Perms dict"}, nil
+	return []string{"removed non-permitted keys from /Perms dict"}
 }

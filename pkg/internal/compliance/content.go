@@ -88,7 +88,7 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	complog(doc).Debug("compliance.content: starting checks", "profile", profile, "part", part)
+	doc.Logger.Debug("compliance.content: starting checks", "profile", profile, "part", part)
 
 	var results []Violation
 
@@ -101,7 +101,7 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, pageResults...)
 	}
 
-	complog(doc).Debug("compliance.content: checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.content: checks complete", "violations", len(results))
 	return results
 }
 
@@ -114,7 +114,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 	// Use lazily-parsed operations for operator validation and q/Q nesting.
 	ops := page.parsedOps(ctx)
 	if ops == nil {
-		complog(doc).Debug("compliance.content: failed to parse content stream",
+		doc.Logger.Debug("compliance.content: failed to parse content stream",
 			"page", pageNum)
 		return nil
 	}
@@ -166,9 +166,9 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 	return results
 }
 
-// getPageContentBytes decodes and concatenates the content streams of a page,
+// resolvePageContentBytes decodes and concatenates the content streams of a page,
 // returning the raw bytes suitable for both parsing and inline image scanning.
-func getPageContentBytes(ctx context.Context, doc *document.Document, page ast.PdfDict) ([]byte, error) {
+func resolvePageContentBytes(ctx context.Context, doc *document.Document, page ast.PdfDict) ([]byte, error) {
 	contentsObj, ok := page["Contents"]
 	if !ok {
 		return nil, nil

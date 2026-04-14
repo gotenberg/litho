@@ -56,7 +56,7 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 
-	fd := findFontDescriptor(ctx, doc, fontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
 		return nil
 	}
@@ -155,7 +155,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 		return nil
 	}
 
-	fd := findFontDescriptor(ctx, doc, cidFontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
 		return nil
 	}
@@ -198,7 +198,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
-		complog(doc).Debug("compliance: cannot resolve CIDSet stream", "error", err)
+		doc.Logger.Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
 	cidSetData, err := doc.DecodeStream(ctx, stream)
@@ -218,7 +218,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	}
 
 	// Get font program and find non-empty GIDs.
-	fd := findFontDescriptor(ctx, doc, cidFontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
 		return nil
 	}
@@ -267,7 +267,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 // This is used for PDF/A-1 where TrueType empty-glyph detection is unreliable
 // but CFF ValidCIDs produces accurate results.
 func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
-	fd := findFontDescriptor(ctx, doc, cidFontDict)
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
 		return nil
 	}
@@ -284,12 +284,12 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
-		complog(doc).Debug("compliance: cannot resolve CIDSet stream", "error", err)
+		doc.Logger.Debug("compliance: cannot resolve CIDSet stream", "error", err)
 		return nil
 	}
 	cidSetData, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		complog(doc).Debug("compliance: cannot decode CIDSet stream", "error", err)
+		doc.Logger.Debug("compliance: cannot decode CIDSet stream", "error", err)
 		return nil
 	}
 

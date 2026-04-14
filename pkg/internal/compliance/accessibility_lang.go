@@ -241,7 +241,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		}
 		langStr, err := document.ResolveString(ctx, doc, langObj)
 		if err != nil {
-			complog(doc).Debug("compliance.accessibility: cannot resolve /Lang in structure element",
+			doc.Logger.Debug("compliance.accessibility: cannot resolve /Lang in structure element",
 				"path", path, "error", err)
 			return
 		}

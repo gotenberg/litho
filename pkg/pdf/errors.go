@@ -30,6 +30,46 @@ var (
 	// ErrRequiresOCR is returned when a page contains no digital text
 	// and requires optical character recognition.
 	ErrRequiresOCR = errors.New("page contains no digital text and requires optical character recognition")
+
+	// ErrOCRFailed is returned when the OCR engine returns an error
+	// during text extraction. Callers can use [errors.Is] to distinguish
+	// engine failures from other extraction errors and decide whether to
+	// retry with a different engine or skip the page.
+	ErrOCRFailed = errors.New("OCR engine failed")
+
+	// ErrInvalidPageNumber is returned when a page number is outside the
+	// valid range [1, pageCount].
+	ErrInvalidPageNumber = errors.New("page number out of bounds")
+
+	// ErrInvalidRotation is returned when a rotation value is not a
+	// multiple of 90.
+	ErrInvalidRotation = errors.New("rotation must be a multiple of 90")
+
+	// ErrEmptyPageList is returned when a page operation receives an
+	// empty page list.
+	ErrEmptyPageList = errors.New("empty page list")
+
+	// ErrNilSource is returned when a nil [Reader] is passed where a
+	// source document is required.
+	ErrNilSource = errors.New("source reader is nil")
+
+	// ErrEmptyText is returned when a text stamp has an empty string.
+	ErrEmptyText = errors.New("empty text")
+
+	// ErrEmptyData is returned when image stamp data is empty.
+	ErrEmptyData = errors.New("empty data")
+
+	// ErrUnsupportedMimeType is returned when an image stamp uses an
+	// unsupported MIME type.
+	ErrUnsupportedMimeType = errors.New("unsupported MIME type")
+
+	// ErrInvalidFont is returned when font data is too short or
+	// structurally invalid.
+	ErrInvalidFont = errors.New("invalid font data")
+
+	// ErrSourceIndexOutOfRange is returned when a source index exceeds
+	// the number of available sources.
+	ErrSourceIndexOutOfRange = errors.New("source index out of range")
 )
 
 // Pipeline sentinel errors surface structural problems with a [Pipeline]

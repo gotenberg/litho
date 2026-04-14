@@ -11,7 +11,7 @@ import (
 
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
 // files contain both /F and /UF keys (ISO 14289-1, §7.11 t01).
-func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, _ ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
 	}
@@ -210,7 +210,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 
 	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
 	if err != nil {
-		complog(doc).Debug("compliance.accessibility: cannot resolve form fields array", "error", err)
+		doc.Logger.Debug("compliance.accessibility: cannot resolve form fields array", "error", err)
 		return nil
 	}
 
@@ -347,7 +347,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 	// Non-terminal: recurse into /Kids.
 	kids, err := document.ResolveArray(ctx, doc, field["Kids"])
 	if err != nil {
-		complog(doc).Debug("compliance.accessibility: cannot resolve field kids array", "error", err)
+		doc.Logger.Debug("compliance.accessibility: cannot resolve field kids array", "error", err)
 		return nil
 	}
 	var results []Violation

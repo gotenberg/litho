@@ -129,7 +129,7 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 	// The head checksum was computed with a zeroed checkSumAdjustment,
 	// which is what we want. Now patch the final value into the head
 	// table's bytes in-place.
-	adjustment := uint32(0xB1B0AFBA) - ttfChecksum(subset)
+	adjustment := uint32(0xB1B0AFBA) - tableChecksum(subset)
 	headOffset := findTableOffset(subset, "head")
 	if headOffset < 0 || headOffset+12 > len(subset) {
 		return raw, fmt.Errorf("head table not found in subset for checksum adjustment")
@@ -338,14 +338,6 @@ func tableChecksum(data []byte) uint32 {
 		sum += binary.BigEndian.Uint32(tail[:])
 	}
 	return sum
-}
-
-// ttfChecksum computes the whole-file checksum used by
-// head.checkSumAdjustment. It's the sum of every 4-byte big-endian
-// word in the file, with the head table's checkSumAdjustment zeroed
-// (which is the state this function is called with).
-func ttfChecksum(data []byte) uint32 {
-	return tableChecksum(data)
 }
 
 // findTableOffset scans the SFNT table directory of data for a given

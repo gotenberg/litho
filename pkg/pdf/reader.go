@@ -407,11 +407,13 @@ func (r *Reader) Permissions() Permissions {
 	}
 }
 
-// XMPMetadata returns the raw XMP XML bytes from the catalog /Metadata stream.
-// Returns nil if no XMP metadata is present. Use [Reader.Metadata] for parsed
+// XMPMetadata returns a lazy Open function for the catalog /Metadata XMP stream.
+// Returns nil if no XMP metadata is present. The stream data is not read until
+// the caller invokes the returned function. Use [Reader.Metadata] for parsed
 // key-value metadata.
-func (r *Reader) XMPMetadata(ctx context.Context) ([]byte, error) {
-	return semantics.RawXMP(ctx, r.doc)
+// Values must not be shared across goroutines without synchronization.
+func (r *Reader) XMPMetadata(ctx context.Context) (func(context.Context) (io.ReadCloser, error), error) {
+	return semantics.XMPOpen(ctx, r.doc)
 }
 
 // Metadata extracts standard document-level metadata (Title, Author, etc.).
@@ -702,7 +704,7 @@ func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) ([]models.
 	}
 
 	if pageNum < 1 || pageNum > len(pages) {
-		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
+		return nil, fmt.Errorf("%w: %d (document has %d pages)", ErrInvalidPageNumber, pageNum, len(pages))
 	}
 
 	pageMap := document.BuildPageMap(pages)
@@ -718,7 +720,7 @@ func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) ([]models
 	}
 
 	if pageNum < 1 || pageNum > len(pages) {
-		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
+		return nil, fmt.Errorf("%w: %d (document has %d pages)", ErrInvalidPageNumber, pageNum, len(pages))
 	}
 
 	targetPage := pages[pageNum-1]
@@ -987,7 +989,7 @@ func (r *Reader) resolvePage(ctx context.Context, pageNum int) (*document.Page, 
 		return nil, err
 	}
 	if pageNum < 1 || pageNum > len(pages) {
-		return nil, fmt.Errorf("page number %d is out of bounds", pageNum)
+		return nil, fmt.Errorf("%w: %d (document has %d pages)", ErrInvalidPageNumber, pageNum, len(pages))
 	}
 	return pages[pageNum-1], nil
 }
@@ -1042,12 +1044,12 @@ func (r *Reader) runOCR(ctx context.Context, page *document.Page, images []model
 	// Decode the image stream.
 	img, err := pdfimage.DecodeImage(ctx, r.doc, page, ast.PdfName(bestName))
 	if err != nil {
-		return "", fmt.Errorf("page %d: OCR image decode failed: %w", pageNum, err)
+		return "", fmt.Errorf("page %d: %w: image decode failed: %v", pageNum, ErrOCRFailed, err)
 	}
 
 	text, err := r.ocr.Extract(img)
 	if err != nil {
-		return "", fmt.Errorf("page %d: OCR engine failed: %w", pageNum, err)
+		return "", fmt.Errorf("page %d: %w: %v", pageNum, ErrOCRFailed, err)
 	}
 	return text, nil
 }

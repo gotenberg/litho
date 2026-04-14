@@ -153,7 +153,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return nil
 	}
 
-	complog(doc).Debug("compliance.xmp: starting XMP checks", "profile", profile, "part", part)
+	doc.Logger.Debug("compliance.xmp: starting XMP checks", "profile", profile, "part", part)
 
 	var results []Violation
 
@@ -223,7 +223,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// XMP property types (§6.7.2 / §6.6.2.3.1).
 	xmpCheckPropertyTypes(xmpData, part, metaStream, &results)
 
-	complog(doc).Debug("compliance.xmp: XMP checks complete", "violations", len(results))
+	doc.Logger.Debug("compliance.xmp: XMP checks complete", "violations", len(results))
 	return results
 }
 
@@ -232,14 +232,14 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) ([]byte, ast.PdfStream) {
 	mdObj, ok := catalog["Metadata"]
 	if !ok {
-		*results = append(*results, xmpMetadataRule(part, 1)...)
+		*results = append(*results, xmpMetadataRule(part)...)
 		return nil, ast.PdfStream{}
 	}
 
 	stream, err := document.ResolveStream(ctx, doc, mdObj)
 	if err != nil || stream.Dict == nil {
-		complog(doc).Debug("compliance.xmp: failed to resolve /Metadata stream", "error", err)
-		*results = append(*results, xmpMetadataRule(part, 1)...)
+		doc.Logger.Debug("compliance.xmp: failed to resolve /Metadata stream", "error", err)
+		*results = append(*results, xmpMetadataRule(part)...)
 		return nil, ast.PdfStream{}
 	}
 
@@ -248,7 +248,7 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	subtypeName, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 
 	if typeName != "Metadata" || subtypeName != "XML" {
-		*results = append(*results, xmpMetadataRule(part, 1)...)
+		*results = append(*results, xmpMetadataRule(part)...)
 		return nil, ast.PdfStream{}
 	}
 
@@ -264,14 +264,14 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	if err != nil || len(xmpData) == 0 {
 		decoded, decErr := doc.DecodeStream(ctx, stream)
 		if decErr != nil {
-			*results = append(*results, xmpMetadataRule(part, 1)...)
+			*results = append(*results, xmpMetadataRule(part)...)
 			return nil, ast.PdfStream{}
 		}
 		xmpData = decoded
 	}
 
 	if len(xmpData) == 0 {
-		*results = append(*results, xmpMetadataRule(part, 1)...)
+		*results = append(*results, xmpMetadataRule(part)...)
 		return nil, ast.PdfStream{}
 	}
 
@@ -280,8 +280,7 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 
 // xmpMetadataRule returns the correct rule for the missing/invalid metadata
 // stream based on the PDF/A part number.
-func xmpMetadataRule(part, test int) []Violation {
-	_ = test // Suppress unused warning; test is used by generated rules.
+func xmpMetadataRule(part int) []Violation {
 	switch part {
 	case 1:
 		return fail(Rule_19005_1_6_7_2_t01, "catalog missing or invalid /Metadata stream")

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"strings"
@@ -145,10 +146,10 @@ func parseXMP(data []byte) map[string]string {
 	return result
 }
 
-// getXMPMetadata attempts to extract XMP metadata from the document catalog.
+// resolveXMPMetadata attempts to extract XMP metadata from the document catalog.
 // If the current catalog lacks a /Metadata entry (common after incremental
 // updates), it searches for a Metadata stream in the xref object pool.
-func getXMPMetadata(ctx context.Context, doc *document.Document) map[string]string {
+func resolveXMPMetadata(ctx context.Context, doc *document.Document) map[string]string {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil
@@ -187,7 +188,10 @@ func scanRawXMP(doc *document.Document) map[string]string {
 		}
 		readLen := min(int64(chunkSize), fileSize-offset)
 		n, err := r.ReadAt(buf[:readLen], offset)
-		if err != nil && n == 0 {
+		if n == 0 {
+			break
+		}
+		if err != nil && err != io.EOF {
 			break
 		}
 		chunk := buf[:n]
@@ -230,9 +234,10 @@ func resolveXMPStream(ctx context.Context, doc *document.Document, ref ast.PdfOb
 	return parseXMP(decoded)
 }
 
-// RawXMP extracts the raw XMP XML bytes from the catalog /Metadata stream.
-// Returns nil if no XMP metadata is present.
-func RawXMP(ctx context.Context, doc *document.Document) ([]byte, error) {
+// XMPOpen returns a lazy Open function for the catalog /Metadata XMP stream.
+// Returns nil if no XMP metadata stream is present. The stream data is not
+// read until the caller invokes the returned function.
+func XMPOpen(ctx context.Context, doc *document.Document) (func(context.Context) (io.ReadCloser, error), error) {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return nil, nil
@@ -251,15 +256,11 @@ func RawXMP(ctx context.Context, doc *document.Document) ([]byte, error) {
 	if err != nil || stream.Dict == nil {
 		return nil, nil
 	}
-	decoded, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		return nil, fmt.Errorf("decoding XMP metadata stream: %w", err)
-	}
-	return decoded, nil
+	return doc.OpenFunc(stream), nil
 }
 
-// getInfoMetadata extracts the legacy /Info dictionary metadata.
-func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]string {
+// resolveInfoMetadata extracts the legacy /Info dictionary metadata.
+func resolveInfoMetadata(ctx context.Context, doc *document.Document) map[string]string {
 	infoObj, ok := doc.Index.Trailer["Info"]
 	if !ok {
 		return nil
@@ -292,8 +293,8 @@ func getInfoMetadata(ctx context.Context, doc *document.Document) map[string]str
 // dictionary, then overlays any XMP metadata from the catalog's /Metadata stream.
 // XMP values take precedence over /Info values, following the PDF 2.0 standard.
 func Metadata(ctx context.Context, doc *document.Document) (map[string]string, error) {
-	info := getInfoMetadata(ctx, doc)
-	xmp := getXMPMetadata(ctx, doc)
+	info := resolveInfoMetadata(ctx, doc)
+	xmp := resolveXMPMetadata(ctx, doc)
 
 	metadata := make(map[string]string)
 
@@ -329,7 +330,7 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 
 	// Catalog /Lang: the document-level language tag (per ISO 32000-2, 14.9.2).
 	if _, hasLang := metadata["Language"]; !hasLang {
-		if lang := getCatalogLang(ctx, doc); lang != "" {
+		if lang := resolveCatalogLang(ctx, doc); lang != "" {
 			metadata["Language"] = lang
 		}
 	}
@@ -353,7 +354,10 @@ func scanRawInfoDates(doc *document.Document, metadata map[string]string) {
 	}
 	buf := make([]byte, fileSize)
 	n, err := doc.RawReader().ReadAt(buf, 0)
-	if err != nil && n == 0 {
+	if n == 0 {
+		return
+	}
+	if err != nil && err != io.EOF {
 		return
 	}
 	raw := buf[:n]
@@ -449,8 +453,8 @@ func parseAnyDate(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// getCatalogLang reads the /Lang entry from the document catalog.
-func getCatalogLang(ctx context.Context, doc *document.Document) string {
+// resolveCatalogLang reads the /Lang entry from the document catalog.
+func resolveCatalogLang(ctx context.Context, doc *document.Document) string {
 	rootObj, ok := doc.Index.Trailer["Root"]
 	if !ok {
 		return ""

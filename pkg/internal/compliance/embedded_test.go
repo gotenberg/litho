@@ -17,7 +17,7 @@ func TestCheckFileSpecFUF(t *testing.T) {
 			dict:   ast.PdfDict{"F": ast.PdfString("file.pdf"), "UF": ast.PdfString("file.pdf")},
 			objNum: 1,
 		}
-		results := checkFileSpecFUF(ctx, nil, fs, 2)
+		results := checkFileSpecFUF(ctx, nopDoc(), fs, 2)
 		if len(results) != 0 {
 			t.Errorf("expected no violations, got %d: %v", len(results), results)
 		}
@@ -29,7 +29,7 @@ func TestCheckFileSpecFUF(t *testing.T) {
 			dict:   ast.PdfDict{"UF": ast.PdfString("file.pdf")},
 			objNum: 2,
 		}
-		results := checkFileSpecFUF(ctx, nil, fs, 3)
+		results := checkFileSpecFUF(ctx, nopDoc(), fs, 3)
 		if len(results) == 0 {
 			t.Error("expected violation for missing /F key")
 		}
@@ -41,7 +41,7 @@ func TestCheckFileSpecFUF(t *testing.T) {
 			dict:   ast.PdfDict{"F": ast.PdfString("file.pdf")},
 			objNum: 3,
 		}
-		results := checkFileSpecFUF(ctx, nil, fs, 4)
+		results := checkFileSpecFUF(ctx, nopDoc(), fs, 4)
 		if len(results) == 0 {
 			t.Error("expected violation for missing /UF key")
 		}
@@ -53,7 +53,7 @@ func TestCheckFileSpecFUF(t *testing.T) {
 			dict:   ast.PdfDict{},
 			objNum: 4,
 		}
-		results := checkFileSpecFUF(ctx, nil, fs, 2)
+		results := checkFileSpecFUF(ctx, nopDoc(), fs, 2)
 		if len(results) == 0 {
 			t.Error("expected violation for both /F and /UF missing")
 		}
@@ -67,7 +67,7 @@ func TestCheckAFRelationship(t *testing.T) {
 	t.Run("part 2 skips check", func(t *testing.T) {
 		t.Parallel()
 		fs := fileSpecEntry{dict: ast.PdfDict{}, objNum: 1}
-		results := checkAFRelationship(ctx, nil, fs, 2, "PDF/A-2b")
+		results := checkAFRelationship(ctx, nopDoc(), fs, 2, "PDF/A-2b")
 		if len(results) != 0 {
 			t.Errorf("expected no violations for part 2, got %d", len(results))
 		}
@@ -76,7 +76,7 @@ func TestCheckAFRelationship(t *testing.T) {
 	t.Run("part 3 missing AFRelationship", func(t *testing.T) {
 		t.Parallel()
 		fs := fileSpecEntry{dict: ast.PdfDict{}, objNum: 2}
-		results := checkAFRelationship(ctx, nil, fs, 3, "PDF/A-3b")
+		results := checkAFRelationship(ctx, nopDoc(), fs, 3, "PDF/A-3b")
 		if len(results) == 0 {
 			t.Error("expected violation for missing /AFRelationship in part 3")
 		}
@@ -88,7 +88,7 @@ func TestCheckAFRelationship(t *testing.T) {
 			dict:   ast.PdfDict{"AFRelationship": ast.PdfName("Source")},
 			objNum: 3,
 		}
-		results := checkAFRelationship(ctx, nil, fs, 4, "PDF/A-4")
+		results := checkAFRelationship(ctx, nopDoc(), fs, 4, "PDF/A-4")
 		if len(results) != 0 {
 			t.Errorf("expected no violations for valid AFRelationship, got %d: %v", len(results), results)
 		}
@@ -100,7 +100,7 @@ func TestCheckAFRelationship(t *testing.T) {
 			dict:   ast.PdfDict{"AFRelationship": ast.PdfName("InvalidValue")},
 			objNum: 4,
 		}
-		results := checkAFRelationship(ctx, nil, fs, 3, "PDF/A-3b")
+		results := checkAFRelationship(ctx, nopDoc(), fs, 3, "PDF/A-3b")
 		if len(results) == 0 {
 			t.Error("expected violation for invalid AFRelationship value")
 		}
@@ -135,7 +135,7 @@ func TestResolveNamesDict(t *testing.T) {
 	t.Run("missing Names key", func(t *testing.T) {
 		t.Parallel()
 		catalog := ast.PdfDict{}
-		_, has := resolveNamesDict(ctx, nil, catalog)
+		_, has := resolveNamesDict(ctx, nopDoc(), catalog)
 		if has {
 			t.Error("expected has=false when /Names missing")
 		}
@@ -146,7 +146,7 @@ func TestResolveNamesDict(t *testing.T) {
 		catalog := ast.PdfDict{
 			"Names": ast.PdfDict{"EmbeddedFiles": ast.PdfNull{}},
 		}
-		d, has := resolveNamesDict(ctx, nil, catalog)
+		d, has := resolveNamesDict(ctx, nopDoc(), catalog)
 		if !has {
 			t.Error("expected has=true when /Names present")
 		}

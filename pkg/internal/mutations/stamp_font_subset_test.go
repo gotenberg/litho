@@ -328,11 +328,11 @@ func TestTTFChecksum_HeadAdjustment(t *testing.T) {
 	}
 	out := encodeTTF(tables)
 
-	adjustment := uint32(0xB1B0AFBA) - ttfChecksum(out)
+	adjustment := uint32(0xB1B0AFBA) - tableChecksum(out)
 	headOffset := findTableOffset(out, "head")
 	binary.BigEndian.PutUint32(out[headOffset+8:headOffset+12], adjustment)
 
-	if got := ttfChecksum(out); got != 0xB1B0AFBA {
+	if got := tableChecksum(out); got != 0xB1B0AFBA {
 		t.Errorf("post-patch file checksum: got %08x, want %08x", got, uint32(0xB1B0AFBA))
 	}
 }
@@ -373,7 +373,7 @@ func TestSubsetTTF_RoundTripMinimalTTF(t *testing.T) {
 
 func TestSubsetTTF_HeadChecksumAdjustment(t *testing.T) {
 	// After subsetting, the file-level checksum invariant must hold:
-	//   0xB1B0AFBA == ttfChecksum(subset after patching)
+	//   0xB1B0AFBA == tableChecksum(subset after patching)
 	// This is the canonical TTF well-formedness test.
 	raw := buildSubsetTestTTF(t)
 	subset, err := subsetTTF(raw, map[uint16]bool{1: true})
@@ -391,7 +391,7 @@ func TestSubsetTTF_HeadChecksumAdjustment(t *testing.T) {
 	// Rebuild with zero adjustment to compute the base checksum.
 	testBuf := append([]byte(nil), subset...)
 	binary.BigEndian.PutUint32(testBuf[headOff+8:headOff+12], 0)
-	expected := uint32(0xB1B0AFBA) - ttfChecksum(testBuf)
+	expected := uint32(0xB1B0AFBA) - tableChecksum(testBuf)
 	if adjustment != expected {
 		t.Errorf("head.checkSumAdjustment: got %08x, want %08x", adjustment, expected)
 	}

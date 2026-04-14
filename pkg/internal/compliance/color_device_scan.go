@@ -75,7 +75,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 
 		stream, err := document.ResolveStream(ctx, doc, xobjObj)
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve XObject stream", "name", name, "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve XObject stream", "name", name, "error", err)
 			continue
 		}
 
@@ -135,7 +135,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	// Decode and scan the content stream for device CS operators.
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		complog(doc).Debug("compliance.color: cannot decode Form XObject stream", "error", err)
+		doc.Logger.Debug("compliance.color: cannot decode Form XObject stream", "error", err)
 		return usage
 	}
 
@@ -147,7 +147,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(ctx, data)
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot parse Form XObject content stream", "error", err)
+			doc.Logger.Debug("compliance.color: cannot parse Form XObject content stream", "error", err)
 		} else {
 			// Check inline image colour spaces from parsed BI operations.
 			scanInlineImageCSOps(ops, &usage)
@@ -323,7 +323,7 @@ func formGroupICCColorSpace(ctx context.Context, doc *document.Document, stream 
 	// Only isolated transparency groups provide device CS coverage.
 	// Non-isolated groups inherit the parent's colour space.
 	iVal, _ := document.ResolveBool(ctx, doc, group["I"])
-	if !bool(iVal) {
+	if !iVal {
 		return ""
 	}
 	csObj, ok := group["CS"]
@@ -388,17 +388,17 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 			for _, cpObj := range charProcs {
 				stream, err := document.ResolveStream(ctx, doc, cpObj)
 				if err != nil {
-					complog(doc).Debug("compliance.color: cannot resolve CharProc stream", "error", err)
+					doc.Logger.Debug("compliance.color: cannot resolve CharProc stream", "error", err)
 					continue
 				}
 				streamData, err := doc.DecodeStream(ctx, stream)
 				if err != nil {
-					complog(doc).Debug("compliance.color: cannot decode CharProc stream", "error", err)
+					doc.Logger.Debug("compliance.color: cannot decode CharProc stream", "error", err)
 					continue
 				}
 				ops, err := content.ParseStreamData(ctx, streamData)
 				if err != nil {
-					complog(doc).Debug("compliance.color: cannot parse CharProc stream", "error", err)
+					doc.Logger.Debug("compliance.color: cannot parse CharProc stream", "error", err)
 					continue
 				}
 				for _, op := range ops {
@@ -427,7 +427,7 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 		}
 		fontCSDict, err := document.ResolveDict(ctx, doc, fontRes["ColorSpace"])
 		if err != nil {
-			complog(doc).Debug("compliance.color: cannot resolve font ColorSpace dict", "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve font ColorSpace dict", "error", err)
 			continue
 		}
 		for _, csObj := range fontCSDict {
@@ -447,9 +447,9 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)
 
-	streamData, err := getPageContentBytes(ctx, doc, page)
+	streamData, err := resolvePageContentBytes(ctx, doc, page)
 	if err != nil {
-		complog(doc).Debug("compliance.color: failed to get content stream bytes for CS scan",
+		doc.Logger.Debug("compliance.color: failed to get content stream bytes for CS scan",
 			"page", pageIdx, "error", err)
 		return usage, referencedXObjects
 	}
@@ -460,7 +460,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 
 	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
-		complog(doc).Debug("compliance.color: failed to parse content stream for CS scan",
+		doc.Logger.Debug("compliance.color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)
 		return usage, referencedXObjects
 	}
@@ -644,7 +644,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 			for _, subObj := range subDict {
 				subStream, err := document.ResolveStream(ctx, doc, subObj)
 				if err != nil {
-					complog(doc).Debug("compliance.color: cannot resolve sub-XObject stream", "error", err)
+					doc.Logger.Debug("compliance.color: cannot resolve sub-XObject stream", "error", err)
 					continue
 				}
 				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited)
@@ -675,7 +675,7 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 
 		sd, err := document.ResolveDict(ctx, doc, shadingObj)
 		if err != nil || sd == nil {
-			complog(doc).Debug("compliance.color: cannot resolve Shading dict", "name", name, "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve Shading dict", "name", name, "error", err)
 			continue
 		}
 

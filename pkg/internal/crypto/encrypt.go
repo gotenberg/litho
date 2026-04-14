@@ -228,13 +228,19 @@ func newEncryptorV5(userPw, ownerPw string, pVal, keyLen int, docID []byte) (*En
 // newEncryptorLegacy implements V1-V4 encryption setup.
 func newEncryptorLegacy(userPw, ownerPw string, v, r, keyLen int, cfm string, pVal int, docID []byte) (*Encryptor, ast.PdfDict, error) {
 	// Compute O value (Algorithm 3.3, encryption direction).
-	oVal := computeOValue(ownerPw, userPw, v, keyLen)
+	oVal, err := computeOValue(ownerPw, userPw, v, keyLen)
+	if err != nil {
+		return nil, nil, fmt.Errorf("computing O value: %w", err)
+	}
 
 	// Compute file encryption key (Algorithm 3.1).
 	fileKey := computeFileKey(userPw, oVal, pVal, docID, v, keyLen, true)
 
 	// Compute U value (Algorithm 3.4/3.5).
-	uVal := computeUValue(fileKey, docID, v)
+	uVal, err := computeUValue(fileKey, docID, v)
+	if err != nil {
+		return nil, nil, fmt.Errorf("computing U value: %w", err)
+	}
 
 	// Build /Encrypt dictionary.
 	encDict := ast.PdfDict{
@@ -277,7 +283,7 @@ func newEncryptorLegacy(userPw, ownerPw string, v, r, keyLen int, cfm string, pV
 }
 
 // computeOValue computes the O (owner) value per Algorithm 3.3 (encryption direction).
-func computeOValue(ownerPw, userPw string, v, keyLen int) []byte {
+func computeOValue(ownerPw, userPw string, v, keyLen int) ([]byte, error) {
 	// Pad owner password.
 	ownerPadded := padPassword([]byte(ownerPw))
 	md := md5.New() //nolint:gosec // Required for PDF standard
@@ -299,7 +305,10 @@ func computeOValue(ownerPw, userPw string, v, keyLen int) []byte {
 	copy(result, userPadded)
 
 	if v < 3 {
-		c, _ := rc4.NewCipher(encKey) //nolint:gosec // Key length validated
+		c, err := rc4.NewCipher(encKey) //nolint:gosec // RC4 required by PDF spec
+		if err != nil {
+			return nil, fmt.Errorf("creating RC4 cipher for O value computation: %w", err)
+		}
 		c.XORKeyStream(result, result)
 	} else {
 		// 20-pass RC4, XORing key with i (0 to 19).
@@ -308,12 +317,15 @@ func computeOValue(ownerPw, userPw string, v, keyLen int) []byte {
 			for j := range keyLen {
 				tempKey[j] = encKey[j] ^ byte(i)
 			}
-			c, _ := rc4.NewCipher(tempKey) //nolint:gosec // Key length validated
+			c, err := rc4.NewCipher(tempKey) //nolint:gosec // RC4 required by PDF spec
+			if err != nil {
+				return nil, fmt.Errorf("creating RC4 cipher for O value computation pass %d: %w", i, err)
+			}
 			c.XORKeyStream(result, result)
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 // computeFileKey derives the file encryption key per Algorithm 3.1.
@@ -343,7 +355,7 @@ func computeFileKey(userPw string, oVal []byte, pVal int, docID []byte, v, keyLe
 }
 
 // computeUValue computes the U (user) value per Algorithm 3.4/3.5.
-func computeUValue(fileKey, docID []byte, v int) []byte {
+func computeUValue(fileKey, docID []byte, v int) ([]byte, error) {
 	if v >= 3 {
 		// Algorithm 3.5.
 		md := md5.New() //nolint:gosec // Required for PDF standard
@@ -351,7 +363,10 @@ func computeUValue(fileKey, docID []byte, v int) []byte {
 		md.Write(docID)
 		baseHash := md.Sum(nil)
 
-		c, _ := rc4.NewCipher(fileKey) //nolint:gosec // Key length validated
+		c, err := rc4.NewCipher(fileKey) //nolint:gosec // RC4 required by PDF spec
+		if err != nil {
+			return nil, fmt.Errorf("creating RC4 cipher for U value computation: %w", err)
+		}
 		result := make([]byte, 16)
 		c.XORKeyStream(result, baseHash)
 
@@ -360,21 +375,27 @@ func computeUValue(fileKey, docID []byte, v int) []byte {
 			for j := range fileKey {
 				tempKey[j] = fileKey[j] ^ byte(i)
 			}
-			c, _ = rc4.NewCipher(tempKey) //nolint:gosec // Key length validated
+			c, err = rc4.NewCipher(tempKey) //nolint:gosec // RC4 required by PDF spec
+			if err != nil {
+				return nil, fmt.Errorf("creating RC4 cipher for U value computation pass %d: %w", i, err)
+			}
 			c.XORKeyStream(result, result)
 		}
 
 		// Pad to 32 bytes with arbitrary data.
 		uVal := make([]byte, 32)
 		copy(uVal, result)
-		return uVal
+		return uVal, nil
 	}
 
 	// Algorithm 3.4 (V < 3).
-	c, _ := rc4.NewCipher(fileKey) //nolint:gosec // Key length validated
+	c, err := rc4.NewCipher(fileKey) //nolint:gosec // RC4 required by PDF spec
+	if err != nil {
+		return nil, fmt.Errorf("creating RC4 cipher for U value computation: %w", err)
+	}
 	result := make([]byte, 32)
 	c.XORKeyStream(result, paddingString)
-	return result
+	return result, nil
 }
 
 // padPassword pads or truncates a password to exactly 32 bytes using paddingString.
