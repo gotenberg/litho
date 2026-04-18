@@ -19,6 +19,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/type1"
 )
 
 // Font represents a resolved PDF font.
@@ -399,6 +400,17 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// CID→GID mapping is unreliable for subset fonts.
 	if font.ToUnicode == nil && !font.CIDIdentityFallback && subtypeName != "Type0" {
 		extractEmbeddedCmap(ctx, doc, fontDict, font)
+	}
+
+	// Type1 /FontFile fallback: when a simple Type1/MMType1 font has no
+	// /Encoding entry and no /ToUnicode, the byte-to-glyph mapping lives
+	// inside the PostScript /FontFile preamble. Extracting it recovers
+	// text from TeX/Computer-Modern family fonts (CMSY, CMMI, CMR, ...)
+	// whose custom encodings have no standard counterpart.
+	if font.ToUnicode == nil && (subtypeName == "Type1" || subtypeName == "MMType1") {
+		if _, hasEnc := fontDict["Encoding"]; !hasEnc {
+			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
+		}
 	}
 
 	// Adobe predefined CID→Unicode fallback for Type0 fonts.
@@ -1101,6 +1113,76 @@ func ExtractType1EncodingNames(fontData []byte) map[byte]string {
 		return nil
 	}
 	return result
+}
+
+// applyType1FontFileEncoding parses the PostScript /Encoding vector
+// from a Type 1 font's /FontFile stream and populates font.Encoding
+// with the glyph names that resolve through [resolveGlyphRune]. The
+// font dict must not already declare /Encoding; the caller is
+// responsible for honouring the PDF-level override. Predefined
+// encoding references (StandardEncoding, WinAnsiEncoding, and so on)
+// swap in the matching map from [encodings]; explicit "dup N /name
+// put" vectors are applied one byte at a time.
+func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return
+	}
+	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile")
+	if fontData == nil {
+		return
+	}
+	enc := type1.ParseEncoding(fontData)
+	if isType1NamedEncoding(enc) {
+		// Bulk swap on recognised predefined encodings; unrecognised
+		// names fall through without altering the default because a
+		// slot-by-slot fill would repeat the same name across every
+		// byte, which is worse than leaving the caller-set default.
+		swapType1NamedEncoding(font, enc[0])
+		return
+	}
+	for i, name := range enc {
+		if name == "" || name == ".notdef" {
+			continue
+		}
+		if r, ok := resolveGlyphRune(name, isDingbats, isSymbol); ok {
+			font.Encoding[byte(i)] = r //nolint:gosec // i is bounded by 0..255 via the array size
+		}
+	}
+}
+
+// isType1NamedEncoding reports whether the parsed encoding represents
+// a predefined-reference form where every slot carries the same name.
+// [type1.ParseEncoding] signals that shape by repeating the name;
+// detecting it here lets the caller pick between a bulk swap and a
+// slot-by-slot fill.
+func isType1NamedEncoding(enc [256]string) bool {
+	first := enc[0]
+	if first == "" {
+		return false
+	}
+	for _, name := range enc[1:] {
+		if name != first {
+			return false
+		}
+	}
+	return true
+}
+
+// swapType1NamedEncoding replaces font.Encoding with the predefined
+// table that the parsed name references. Unrecognised names are a
+// no-op: the caller's default encoding stays in place.
+func swapType1NamedEncoding(font *Font, name string) {
+	switch name {
+	case "StandardEncoding":
+		font.Encoding = copyEncoding(encodings.StandardEncoding)
+	case "WinAnsiEncoding":
+		font.Encoding = copyEncoding(encodings.WinAnsiEncoding)
+	case "MacRomanEncoding":
+		font.Encoding = copyEncoding(encodings.MacRomanEncoding)
+	case "MacExpertEncoding":
+		font.Encoding = copyEncoding(encodings.MacExpertEncoding)
+	}
 }
 
 // extractEmbeddedCmap attempts to extract a GID→Unicode mapping from the
