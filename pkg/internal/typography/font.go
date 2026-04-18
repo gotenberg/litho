@@ -413,6 +413,17 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		}
 	}
 
+	// Type1 CharStrings width fallback: fill in advance widths that the
+	// PDF-level /Widths array left at zero or did not cover. TeX-subset
+	// Type 1 fonts commonly emit /FirstChar, /LastChar, and a /Widths
+	// array that only spans a narrow range, yet use byte codes outside
+	// that range for math/symbol glyphs. Reading the widths straight
+	// from the embedded font program gives the space-insertion
+	// heuristic in [ReconstructText] accurate per-glyph spans.
+	if subtypeName == "Type1" || subtypeName == "MMType1" {
+		applyType1CharStringWidths(ctx, doc, fontDict, font)
+	}
+
 	// Adobe predefined CID→Unicode fallback for Type0 fonts.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
 		applyAdobeCIDFallback(ctx, doc, fontDict, font)
@@ -1148,6 +1159,48 @@ func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fon
 		if r, ok := resolveGlyphRune(name, isDingbats, isSymbol); ok {
 			font.Encoding[byte(i)] = r //nolint:gosec // i is bounded by 0..255 via the array size
 		}
+	}
+}
+
+// applyType1CharStringWidths fills gaps in font.Widths from the
+// advance widths stored in each glyph's charstring. The byte→glyph
+// name mapping comes from the same Type 1 encoding vector the
+// encoding-fill step uses, so the lookup does not rely on a lossy
+// Unicode round-trip that would miss symbol/dingbats names outside
+// the main Adobe Glyph List. Existing non-zero /Widths entries from
+// the PDF dictionary stay authoritative; only zeros get filled.
+func applyType1CharStringWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return
+	}
+	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile")
+	if fontData == nil {
+		return
+	}
+	widths := type1.ParseCharStringWidths(fontData)
+	if len(widths) == 0 {
+		return
+	}
+	names := type1.ParseEncoding(fontData)
+
+	for code := 0; code <= 255; code++ {
+		name := names[code]
+		if name == "" || name == ".notdef" {
+			continue
+		}
+		idx := code - font.FirstChar
+		if idx < 0 || idx >= len(font.Widths) {
+			continue
+		}
+		if font.Widths[idx] > 0 {
+			continue
+		}
+		w, ok := widths[name]
+		if !ok || w == 0 {
+			continue
+		}
+		font.Widths[idx] = w
 	}
 }
 
