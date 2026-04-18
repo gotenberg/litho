@@ -5,10 +5,13 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -2311,4 +2314,432 @@ func buildCmapTestOnly(platformID, encodingID uint16, subtable []byte) []byte {
 	binary.BigEndian.PutUint16(header[6:], encodingID)
 	binary.BigEndian.PutUint32(header[8:], uint32(len(header)))
 	return append(header, subtable...)
+}
+
+// pages12Fixture loads the 12-page corpus fixture. Skips the test when
+// the file is not present (e.g. sparse checkout without test corpora).
+func pages12Fixture(t *testing.T) []byte {
+	t.Helper()
+	abs, err := filepath.Abs("../../test/integration/testdata/litho/pages_12.pdf")
+	if err != nil {
+		t.Skipf("resolve fixture path: %v", err)
+	}
+	data, err := os.ReadFile(abs) //nolint:gosec // fixed test corpus path.
+	if err != nil {
+		t.Skipf("read fixture %s: %v", abs, err)
+	}
+	return data
+}
+
+// stripRandomID redacts the hex /ID arrays emitted by the trailer-id
+// fixer. Every successful remediation rolls two fresh 16-byte random
+// values; byte-level comparisons must excise them to test everything
+// else for determinism.
+func stripRandomID(pdf []byte) []byte {
+	out := make([]byte, 0, len(pdf))
+	for i := 0; i < len(pdf); {
+		if pdf[i] == '<' && i+33 < len(pdf) && pdf[i+33] == '>' {
+			hex := true
+			for j := i + 1; j < i+33; j++ {
+				c := pdf[j]
+				if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) {
+					hex = false
+					break
+				}
+			}
+			if hex {
+				out = append(out, []byte("<REDACTED_ID>")...)
+				i += 34
+				continue
+			}
+		}
+		out = append(out, pdf[i])
+		i++
+	}
+	return out
+}
+
+func TestEvaluateRegression(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		baseline integritySnap
+		post     integritySnap
+		tol      RegressionTolerance
+		wantOK   bool
+	}{
+		{
+			name:     "identical",
+			baseline: integritySnap{pageCount: 3, textLen: 100, imageCount: 2},
+			post:     integritySnap{pageCount: 3, textLen: 100, imageCount: 2},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   true,
+		},
+		{
+			name:     "page loss forbidden by default",
+			baseline: integritySnap{pageCount: 3, textLen: 100},
+			post:     integritySnap{pageCount: 2, textLen: 100},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   false,
+		},
+		{
+			name:     "page loss allowed when opted in",
+			baseline: integritySnap{pageCount: 3, textLen: 100},
+			post:     integritySnap{pageCount: 2, textLen: 100},
+			tol:      RegressionTolerance{MaxTextDropRatio: 0.1, AllowPageLoss: true},
+			wantOK:   true,
+		},
+		{
+			name:     "text gone entirely",
+			baseline: integritySnap{pageCount: 1, textLen: 100},
+			post:     integritySnap{pageCount: 1, textLen: 0},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   false,
+		},
+		{
+			name:     "text drop within ratio",
+			baseline: integritySnap{pageCount: 1, textLen: 1000},
+			post:     integritySnap{pageCount: 1, textLen: 950},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   true,
+		},
+		{
+			name:     "text drop exceeds ratio",
+			baseline: integritySnap{pageCount: 1, textLen: 1000},
+			post:     integritySnap{pageCount: 1, textLen: 800},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   false,
+		},
+		{
+			name:     "zero baseline text accepts empty post",
+			baseline: integritySnap{pageCount: 1, textLen: 0, imageCount: 0},
+			post:     integritySnap{pageCount: 1, textLen: 0, imageCount: 0},
+			tol:      RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 0.0},
+			wantOK:   true,
+		},
+		{
+			name:     "image drop within tolerance",
+			baseline: integritySnap{pageCount: 1, textLen: 0, imageCount: 4},
+			post:     integritySnap{pageCount: 1, textLen: 0, imageCount: 2},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   true,
+		},
+		{
+			name:     "image drop exceeds tolerance",
+			baseline: integritySnap{pageCount: 1, textLen: 0, imageCount: 4},
+			post:     integritySnap{pageCount: 1, textLen: 0, imageCount: 0},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   false,
+		},
+		{
+			name:     "strict tolerance catches any text drop",
+			baseline: integritySnap{pageCount: 1, textLen: 100},
+			post:     integritySnap{pageCount: 1, textLen: 99},
+			tol:      RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 1.0},
+			wantOK:   false,
+		},
+		{
+			// Unreadable source: baseline is zero across the board. Every
+			// check should skip so post content (legitimately non-zero)
+			// does not register as a regression.
+			name:     "zero baseline skips all checks",
+			baseline: integritySnap{},
+			post:     integritySnap{pageCount: 12, textLen: 4000, imageCount: 3},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reason := evaluateRegression(tc.baseline, tc.post, tc.tol)
+			gotOK := reason == ""
+			if gotOK != tc.wantOK {
+				t.Errorf("ok=%v, reason=%q; want ok=%v", gotOK, reason, tc.wantOK)
+			}
+		})
+	}
+}
+
+// TestWriter_RemediatePDFA_Determinism runs the same remediation many
+// times on the same input and asserts every output parses cleanly with
+// a stable page count. The predecessor of this test flaked roughly 1 in
+// 10 runs because remediation's override map was applied twice during
+// full rewrite (once through the copier, once through a queued mutation
+// that stomped the copier's dst-namespace allocations).
+func TestWriter_RemediatePDFA_Determinism(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := writerTestPDF()
+
+	const runs = 50
+	for i := range runs {
+		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("run %d Open: %v", i, err)
+		}
+		w := NewWriter(r)
+		_, err = w.RemediatePDFA(ctx, models.PDFA2b)
+		if err != nil {
+			r.Close()
+			t.Fatalf("run %d RemediatePDFA: %v", i, err)
+		}
+		var out bytes.Buffer
+		if err := w.WriteTo(ctx, &out); err != nil {
+			r.Close()
+			t.Fatalf("run %d WriteTo: %v", i, err)
+		}
+		r.Close()
+
+		r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+		if err != nil {
+			t.Fatalf("run %d reopen: %v", i, err)
+		}
+		n, err := r2.PageCount(ctx)
+		r2.Close()
+		if err != nil {
+			t.Fatalf("run %d PageCount: %v", i, err)
+		}
+		if n != 1 {
+			t.Fatalf("run %d PageCount: got %d, want 1", i, n)
+		}
+	}
+}
+
+// TestWriter_RemediatePDFA_ByteDeterminism runs the full-rewrite path
+// twice and asserts the two outputs are byte-identical apart from the
+// random trailer /ID. A previous bug left copyDict traversing its input
+// in map iteration order, which produced differently numbered dst
+// objects on every run.
+func TestWriter_RemediatePDFA_ByteDeterminism(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := writerTestPDF()
+
+	render := func() []byte {
+		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer r.Close()
+		w := NewWriter(r)
+		if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
+			t.Fatalf("RemediatePDFA: %v", err)
+		}
+		var out bytes.Buffer
+		if err := w.WriteTo(ctx, &out); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes()
+	}
+
+	a := stripRandomID(render())
+	b := stripRandomID(render())
+	if !bytes.Equal(a, b) {
+		t.Fatalf("full rewrite is non-deterministic (len a=%d b=%d)", len(a), len(b))
+	}
+}
+
+// TestWriter_RemediatePDFA_IntegrityProbe_HappyPath confirms the new
+// baseline probe and post probe do not introduce regressions on
+// documents that never trigger content-tier fixers.
+func TestWriter_RemediatePDFA_IntegrityProbe_HappyPath(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := writerTestPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+
+	w := NewWriter(r)
+	report, err := w.RemediatePDFA(ctx, models.PDFA2b)
+	if err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
+	if len(report.RolledBack) != 0 {
+		t.Errorf("unexpected rollback on structural-only fixture: %v", report.RolledBack)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+}
+
+// TestRemediate_Pages12_PDFA4_then_PDFUA2 pipelines two profiles on the
+// same source and asserts the second pass leaves no residual. Before
+// the validator fix, PDF/A-4's required pdfaid:rev=2020 tripped the
+// PDF/UA-2 rev-prefix check because the check matched any ":rev" local
+// name regardless of namespace URI.
+func TestRemediate_Pages12_PDFA4_then_PDFUA2(t *testing.T) {
+	ctx := context.Background()
+	data := pages12Fixture(t)
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediatePDFA(ctx, models.PDFA4); err != nil {
+		r.Close()
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
+	var a4 bytes.Buffer
+	if err := w.WriteTo(ctx, &a4); err != nil {
+		r.Close()
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r.Close()
+
+	r2, err := Open(ctx, bytes.NewReader(a4.Bytes()), int64(a4.Len()))
+	if err != nil {
+		t.Fatalf("Open remediated: %v", err)
+	}
+	defer r2.Close()
+
+	w2 := NewWriter(r2)
+	report, err := w2.RemediatePDFUA(ctx, models.PDFUA2)
+	if err != nil {
+		t.Fatalf("RemediatePDFUA: %v", err)
+	}
+	if len(report.Residual) != 0 {
+		for _, v := range report.Residual {
+			t.Errorf("unexpected residual: %v", v)
+		}
+	}
+}
+
+// TestWriter_RemediatePDFA_Pages12_NoSilentBreakage is the motivating
+// regression test. Applying PDF/A-4 with aggressive fixes to
+// pages_12.pdf historically left the output unable to yield any
+// extractable text. The safety net must surface that either as a
+// successful remediation with text preserved (rollback may have kicked
+// in) or as ErrRemediationBrokePDF. A successful call that returned no
+// text is not acceptable.
+func TestWriter_RemediatePDFA_Pages12_NoSilentBreakage(t *testing.T) {
+	ctx := context.Background()
+	data := pages12Fixture(t)
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// Extraction errors (missing fonts, OCR-only pages) are acceptable
+	// here; the test only needs whatever text the fixture actually
+	// yields. An empty string is a valid baseline.
+	baselineText, _ := r.ExtractAllText(ctx) //nolint:errcheck // baseline-only.
+	baselinePages, err := r.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	t.Logf("baseline: %d pages, %d text bytes", baselinePages, len(baselineText))
+	r.Close()
+
+	r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r2.Close()
+
+	w := NewWriter(r2)
+	report, remErr := w.RemediatePDFA(ctx, models.PDFA4, WithAggressiveFixes())
+	if remErr != nil {
+		if !errors.Is(remErr, ErrRemediationBrokePDF) {
+			t.Fatalf("RemediatePDFA returned unexpected error: %v", remErr)
+		}
+		t.Logf("hard-failed as expected: %v", remErr)
+		return
+	}
+	t.Logf("fixed: %d, rolled back: %d, residual: %d",
+		len(report.Fixed), len(report.RolledBack), len(report.Residual))
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r3, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen remediated: %v", err)
+	}
+	defer r3.Close()
+
+	postPages, err := r3.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("post PageCount: %v", err)
+	}
+	if postPages != baselinePages {
+		t.Errorf("page count regressed: before=%d after=%d", baselinePages, postPages)
+	}
+	// Tolerate extraction errors on the post side: the test asserts
+	// text is not silently wiped, an empty post string is a valid
+	// comparison input.
+	postText, _ := r3.ExtractAllText(ctx) //nolint:errcheck // post-check only.
+	t.Logf("post: %d pages, %d text bytes", postPages, len(postText))
+
+	if len(baselineText) > 0 && strings.TrimSpace(postText) == "" {
+		t.Fatalf("silent text loss: baseline had %d bytes, post has none; rollback field=%v",
+			len(baselineText), report.RolledBack)
+	}
+}
+
+// TestWriter_RemediatePDFA_Pages12_StrictTolerance exercises the
+// rollback branch: any text drop is treated as regression. The call
+// must either return ErrRemediationBrokePDF or produce an output whose
+// text length is within the strict bound after rolling back
+// content-tier fixes.
+func TestWriter_RemediatePDFA_Pages12_StrictTolerance(t *testing.T) {
+	ctx := context.Background()
+	data := pages12Fixture(t)
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// The test skips on empty baseline, so extraction failure is
+	// treated the same as no text. The err is intentionally ignored.
+	baselineText, _ := r.ExtractAllText(ctx) //nolint:errcheck // baseline-only.
+	r.Close()
+	if len(baselineText) == 0 {
+		t.Skip("fixture has no extractable text; cannot exercise text-drop path")
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r2.Close()
+
+	w := NewWriter(r2)
+	report, remErr := w.RemediatePDFA(ctx, models.PDFA4,
+		WithAggressiveFixes(),
+		WithRegressionTolerance(RegressionTolerance{
+			MaxTextDropRatio:  0.0,
+			MaxImageDropRatio: 1.0,
+		}),
+	)
+	if remErr != nil {
+		if !errors.Is(remErr, ErrRemediationBrokePDF) {
+			t.Fatalf("RemediatePDFA returned unexpected error: %v", remErr)
+		}
+		t.Logf("strict tolerance hard-failed as expected: %v", remErr)
+		return
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r3, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer r3.Close()
+	// Extraction errors count as zero text for the comparison below.
+	postText, _ := r3.ExtractAllText(ctx) //nolint:errcheck // post-check only.
+	if len(postText) < len(baselineText) {
+		t.Errorf("strict tolerance did not enforce text parity: before=%d after=%d rolled_back=%v",
+			len(baselineText), len(postText), report.RolledBack)
+	}
 }

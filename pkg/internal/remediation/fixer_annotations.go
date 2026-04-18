@@ -17,6 +17,19 @@ var forbiddenAnnotSubtypes = map[ast.PdfName]bool{
 	"Sound": true, "Movie": true, "Screen": true, "3D": true,
 }
 
+// permittedAnnotSubtypes lists subtypes defined in ISO 32000-1 that are
+// allowed by PDF/A-2/3/4 §6.3.1. Any subtype outside this set plus any
+// entry in [forbiddenAnnotSubtypes] must be removed.
+var permittedAnnotSubtypes = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
+	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
+	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
+	"FileAttachment": true, "Widget": true, "PrinterMark": true,
+	"TrapNet": true, "Watermark": true, "Redact": true,
+	"Projection": true, // ISO 32000-2 Table 171, re-permitted by PDF/A-4 §6.3.1.
+}
+
 // permittedAAKeys lists the additional-actions keys allowed on catalog, page,
 // and non-widget annotation dicts in PDF/A-4 (ISO 19005-4, section 6.6.3).
 var permittedAAKeys = map[ast.PdfName]bool{
@@ -26,11 +39,9 @@ var permittedAAKeys = map[ast.PdfName]bool{
 func matchAnnotations(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.3.1", // forbidden annotation types
-		"6.3.2", // missing /F key
 		"6.4.1", // widget /A or /AA
 		"6.5.2", // catalog/page /AA (part 1)
 		"6.5.3", // annotation flags (part 1)
-		"6.6.1", // forbidden named actions
 		"6.6.2", // widget /AA
 		"6.6.3", // non-permitted AA keys
 	)
@@ -124,11 +135,13 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				pageDict = currentPage
 			}
 
-			// If /Annots was an inline array, update the page dict.
-			if _, isRef := annotsObj.(ast.PdfIndirectRef); !isRef {
+			rebuilt := rebuildAnnotsArray(annots)
+			if annotsRef, isRef := annotsObj.(ast.PdfIndirectRef); isRef {
+				alloc.AllocAt(annotsRef.ObjectNum, rebuilt)
+			} else {
 				newPage := make(ast.PdfDict, len(pageDict))
 				maps.Copy(newPage, pageDict)
-				newPage["Annots"] = rebuildAnnotsArray(annots)
+				newPage["Annots"] = rebuilt
 				alloc.AllocAt(pe.ref.ObjectNum, newPage)
 			}
 		}
@@ -220,9 +233,12 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 		subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
 
-		// Remove forbidden annotation subtypes (section 6.3.1).
-		if forbiddenAnnotSubtypes[subtype] {
-			annots = append(annots[:i], annots[i+1:]...)
+		// Remove forbidden or non-standard annotation subtypes
+		// (PDF/A-2/3/4 §6.3.1, PDF/A-1 §6.5.2). Mark the slot nil here;
+		// the caller's rebuildAnnotsArray skips nil entries when
+		// rewriting the array.
+		if forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] {
+			annots[i] = nil
 			removed = true
 			fixes = append(fixes, fmt.Sprintf("removed forbidden %s annotation from page %d", subtype, pageNum))
 			continue
@@ -231,15 +247,6 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		changed := false
 		newAnnot := make(ast.PdfDict, len(annotDict))
 		maps.Copy(newAnnot, annotDict)
-
-		// Add /F key with Print flag if missing (section 6.3.2).
-		if subtype != "Popup" {
-			if _, hasF := newAnnot["F"]; !hasF {
-				newAnnot["F"] = ast.PdfInt(4) // Print flag (bit 3).
-				changed = true
-				fixes = append(fixes, fmt.Sprintf("added /F 4 (Print) to annotation on page %d", pageNum))
-			}
-		}
 
 		isWidget := subtype == "Widget"
 

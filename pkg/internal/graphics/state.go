@@ -71,6 +71,13 @@ type Machine struct {
 	CurrentPath       BoundingBox // Tracks the current active path bounds
 	Doc               *document.Document
 	Resources         ast.PdfDict // Current page resources (for resolving Pattern names)
+	// Chunk is a monotonically increasing counter bumped by text
+	// operators that start or reposition a new show-text chain
+	// (BT, ET, Td, TD, Tm, Tf, T*). Glyphs produced while it is
+	// unchanged came from the same operator chain, so downstream
+	// reconstruction can treat them as one logical text run and
+	// suppress gap-based space insertion inside that run.
+	Chunk int
 }
 
 // NewMachine initializes a new graphics state machine with the default state.

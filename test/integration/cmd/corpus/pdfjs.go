@@ -571,8 +571,14 @@ func lithoReference(ctx context.Context, r *pdf.Reader, id string, lastPage int)
 	return fixture
 }
 
-// groupGlyphsIntoRuns groups consecutive per-glyph TextElements into text runs
-// matching the PDF.js item format. Starts a new run when the Y coordinate changes.
+// groupGlyphsIntoRuns maps coalesced [models.TextElement] values to
+// [refItem]s. [ExtractTextElements] already merges glyphs that came
+// from the same text-showing operator; a further merge by Y coordinate
+// collapses adjacent same-baseline runs into one item. PDF.js splits on
+// operator boundaries, so same-Y adjacent runs stay separate there; the
+// collapse here is intentional because litho and PDF.js diverge on how
+// they segment operator boundaries and matching same-Y items is the
+// best available proxy for PDF.js's visual-line grouping.
 func groupGlyphsIntoRuns(elems []models.TextElement) []refItem {
 	if len(elems) == 0 {
 		return nil
@@ -860,23 +866,31 @@ func normalizeWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// textDiffSummary finds the first differing position and returns context snippets.
+// textDiffSummary finds the first differing position and returns context
+// snippets, measured in rune offsets so multi-byte UTF-8 characters
+// (Arabic, CJK, Devanagari, and other non-ASCII scripts that dominate
+// the mismatch set) are never sliced mid-codepoint. Byte-level slicing
+// produced invalid UTF-8 at the snippet edges which serialised as
+// U+FFFD in JSON output and misled later analysis into thinking the
+// actual extraction contained replacement characters.
 func textDiffSummary(expected, got string, maxLen int) (pos int, expSnippet, gotSnippet string) {
-	minLen := min(len(got), len(expected))
+	expRunes := []rune(expected)
+	gotRunes := []rune(got)
+	minLen := min(len(expRunes), len(gotRunes))
 	pos = minLen
 	for i := range minLen {
-		if expected[i] != got[i] {
+		if expRunes[i] != gotRunes[i] {
 			pos = i
 			break
 		}
 	}
 
 	start := max(pos-40, 0)
-	endExp := min(pos+maxLen, len(expected))
-	endGot := min(pos+maxLen, len(got))
+	endExp := min(pos+maxLen, len(expRunes))
+	endGot := min(pos+maxLen, len(gotRunes))
 
-	expSnippet = "..." + expected[start:endExp] + "..."
-	gotSnippet = "..." + got[start:endGot] + "..."
+	expSnippet = "..." + string(expRunes[start:endExp]) + "..."
+	gotSnippet = "..." + string(gotRunes[start:endGot]) + "..."
 
 	if len(got) == 0 {
 		gotSnippet = "(empty)"

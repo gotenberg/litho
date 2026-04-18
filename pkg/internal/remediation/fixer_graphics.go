@@ -158,12 +158,118 @@ func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			}
 		}
 
+		// Strip forbidden transfer-function entries (ISO 19005-2 §6.2.5
+		// forbids /TR; /TR2 is permitted only when set to /Default).
+		if _, ok := newGS["TR"]; ok {
+			delete(newGS, "TR")
+			modified = true
+			notes = append(notes, fmt.Sprintf("removed /TR from ExtGState %s", string(name)))
+		}
+		if tr2, ok := newGS["TR2"]; ok {
+			if name, ok := tr2.(ast.PdfName); !ok || name != "Default" {
+				newGS["TR2"] = ast.PdfName("Default")
+				modified = true
+			}
+		}
+		// §6.2.5 also forbids /HTO and /HTP on ExtGState.
+		for _, key := range []ast.PdfName{"HTO", "HTP"} {
+			if _, ok := newGS[key]; ok {
+				delete(newGS, key)
+				modified = true
+				notes = append(notes, fmt.Sprintf("removed /%s from ExtGState %s", key, string(name)))
+			}
+		}
+		if htObj, ok := newGS["HT"]; ok {
+			if patched, changed := normalizeHalftone(ctx, doc, htObj); changed {
+				newGS["HT"] = patched
+				modified = true
+				notes = append(notes, fmt.Sprintf("normalised /HT in ExtGState %s", string(name)))
+			}
+		}
+
 		if modified && hasRef {
 			alloc.AllocAt(gsRef.ObjectNum, newGS)
 		}
 	}
 
 	return notes, nil
+}
+
+// normalizeHalftone coerces a halftone dict so it complies with
+// ISO 19005-2 §6.2.5: HalftoneType must be 1 or 5, HalftoneName is
+// forbidden, and any non-primary component of a Type-5 halftone needs
+// a TransferFunction (defaulted to /Identity when absent).
+func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.PdfObject) (ast.PdfDict, bool) {
+	htDict, err := document.ResolveDict(ctx, doc, htObj)
+	if err != nil || htDict == nil {
+		return nil, false
+	}
+	newDict := make(ast.PdfDict, len(htDict))
+	maps.Copy(newDict, htDict)
+
+	changed := false
+	if _, ok := newDict["HalftoneName"]; ok {
+		delete(newDict, "HalftoneName")
+		changed = true
+	}
+	htType := 1
+	if htTypeObj, ok := newDict["HalftoneType"]; ok {
+		switch t := htTypeObj.(type) {
+		case ast.PdfInt:
+			htType = int(t)
+		case ast.PdfReal:
+			htType = int(t)
+		}
+	}
+	if htType != 1 && htType != 5 {
+		newDict["HalftoneType"] = ast.PdfInt(1)
+		changed = true
+		htType = 1
+	}
+
+	if htType == 5 {
+		// Halftone Type 5 component rules (ISO 32000-2 §10.6.5.4):
+		// primary CMYK components must not carry a TransferFunction,
+		// non-primary (spot) components must carry one. Normalise
+		// both directions.
+		primaryCMYK := map[ast.PdfName]bool{
+			"Cyan": true, "Magenta": true, "Yellow": true, "Black": true,
+		}
+		for k, v := range newDict {
+			if k == "Type" || k == "HalftoneType" || k == "HalftoneName" {
+				continue
+			}
+			compDict, err := document.ResolveDict(ctx, doc, v)
+			if err != nil || compDict == nil {
+				continue
+			}
+			_, hasTF := compDict["TransferFunction"]
+			if primaryCMYK[k] {
+				if !hasTF {
+					continue
+				}
+				newComp := make(ast.PdfDict, len(compDict))
+				maps.Copy(newComp, compDict)
+				delete(newComp, "TransferFunction")
+				newDict[k] = newComp
+				changed = true
+				continue
+			}
+			if hasTF {
+				continue
+			}
+			newComp := make(ast.PdfDict, len(compDict)+1)
+			maps.Copy(newComp, compDict)
+			newComp["TransferFunction"] = ast.PdfName("Identity")
+			newDict[k] = newComp
+			changed = true
+		}
+	}
+
+	if !changed {
+		return nil, false
+	}
+	return newDict, true
 }
 
 func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool) ([]string, error) {
@@ -237,6 +343,23 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 					notes = append(notes, fmt.Sprintf("set /Interpolate to false in image %s", string(name)))
 				}
 			}
+		}
+
+		if subtype == "PS" {
+			// PDF/A-2+ §6.2.9.3 forbids PostScript XObjects. Convert to
+			// an empty Form XObject so existing Do references still
+			// resolve to a valid no-op.
+			newDict["Subtype"] = ast.PdfName("Form")
+			newDict["FormType"] = ast.PdfInt(1)
+			if _, hasBBox := newDict["BBox"]; !hasBBox {
+				newDict["BBox"] = ast.PdfArray{ast.PdfReal(0), ast.PdfReal(0), ast.PdfReal(1), ast.PdfReal(1)}
+			}
+			for _, k := range []ast.PdfName{"Level1", "PS", "OPI", "Ref"} {
+				delete(newDict, k)
+			}
+			alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, nil))
+			notes = append(notes, fmt.Sprintf("replaced PostScript XObject %s with empty Form", string(name)))
+			continue
 		}
 
 		if subtype == "Form" {

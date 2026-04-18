@@ -1,5 +1,7 @@
 package remediation
 
+import "github.com/gotenberg/litho/pkg/internal/core/writer"
+
 // Report describes what the remediation engine fixed and what it could not fix.
 type Report struct {
 	// Fixed lists human-readable descriptions of applied fixes.
@@ -10,7 +12,23 @@ type Report struct {
 	// NeedsFullRewrite is set when file structure violations require a full
 	// rewrite to fix (clean object serialization, xref tables, headers).
 	NeedsFullRewrite bool
+	// TrailerDirty signals that a fixer mutated the document trailer
+	// without allocating any objects. The writer's incremental fast path
+	// skips writes when nothing is pending, so the caller must force an
+	// incremental emit to persist the updated trailer.
+	TrailerDirty bool
 	// RequiredVersion overrides the PDF version in the output header when
 	// the target profile requires a specific version (e.g., "2.0" for PDF/A-4).
 	RequiredVersion string
+	// ContentSnapshot captures allocator state immediately before the first
+	// content-modifying fixer ran. When nil, no content-tier fixer was
+	// applied and rollback is a no-op. The writer uses this to revert just
+	// the content tier when a post-remediation integrity probe regresses.
+	ContentSnapshot *writer.Snapshot
+	// ContentFixed lists descriptions produced by content-tier fixers. These
+	// entries are the subset of Fixed that rollback would discard.
+	ContentFixed []string
+	// ContentResidual lists violations that content-tier fixers claimed to
+	// handle. On rollback, the writer moves them back into Residual.
+	ContentResidual []error
 }

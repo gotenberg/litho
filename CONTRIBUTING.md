@@ -135,7 +135,7 @@ Plan non-trivial changes before coding. Present problem, approach, affected file
 
 [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
 
-Stage specific files. Never `git add -A`. Do not push unless asked.
+Stage specific files. Never `git add -A`.
 
 ## Dependencies
 

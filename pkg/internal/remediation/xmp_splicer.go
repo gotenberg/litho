@@ -299,6 +299,60 @@ func removeXMPProperty(xmp []byte, loc xmpPropertyLocation) []byte {
 	return out
 }
 
+// insertAttributeAtDescription injects attr onto the first
+// rdf:Description tag whose prefix is declared in its xmlns attributes
+// (ensuring the attribute resolves in scope). Falls back to the first
+// rdf:Description when no match is found.
+func insertAttributeAtDescription(xmp []byte, prefix, attrSuffix string) ([]byte, error) {
+	prefixDecl := fmt.Appendf(nil, `xmlns:%s=`, prefix)
+	offset := 0
+	for offset < len(xmp) {
+		idx := bytes.Index(xmp[offset:], []byte("<rdf:Description"))
+		if idx < 0 {
+			break
+		}
+		tagStart := offset + idx
+		tagEnd := bytes.IndexAny(xmp[tagStart:], ">")
+		if tagEnd < 0 {
+			break
+		}
+		tagEnd += tagStart
+		if bytes.Contains(xmp[tagStart:tagEnd], prefixDecl) {
+			return insertAttrBeforeTagEnd(xmp, tagStart, tagEnd, attrSuffix), nil
+		}
+		offset = tagEnd + 1
+	}
+	idx := bytes.Index(xmp, []byte("<rdf:Description"))
+	if idx < 0 {
+		return append([]byte(nil), xmp...), errXMPPropertyNotFound
+	}
+	tagStart := idx
+	tagEnd := bytes.IndexAny(xmp[tagStart:], ">")
+	if tagEnd < 0 {
+		return append([]byte(nil), xmp...), errXMPPropertyNotFound
+	}
+	tagEnd += tagStart
+	return insertAttrBeforeTagEnd(xmp, tagStart, tagEnd, attrSuffix), nil
+}
+
+// insertAttrBeforeTagEnd writes attrSuffix just before the end of a tag
+// whose start and end byte offsets are tagStart..tagEnd (tagEnd points
+// at the closing '>'). The attribute suffix is the full "name=\"value\""
+// text; a single space prefix is inserted.
+func insertAttrBeforeTagEnd(xmp []byte, tagStart, tagEnd int, attrSuffix string) []byte {
+	_ = tagStart
+	insertAt := tagEnd
+	if tagEnd > 0 && xmp[tagEnd-1] == '/' {
+		insertAt = tagEnd - 1
+	}
+	out := make([]byte, 0, len(xmp)+len(attrSuffix)+1)
+	out = append(out, xmp[:insertAt]...)
+	out = append(out, ' ')
+	out = append(out, []byte(attrSuffix)...)
+	out = append(out, xmp[insertAt:]...)
+	return out
+}
+
 // insertChildElement inserts a new child element into the first
 // rdf:Description found in xmp. The content argument is raw XML; the
 // caller is responsible for escaping any user-provided values via
@@ -339,60 +393,249 @@ func insertChildElement(xmp []byte, elementXML string) ([]byte, error) {
 // does not exist in element form.
 func replacePropertyValue(xmp []byte, nsURI, localName, newValue string) ([]byte, error) {
 	loc := findXMPProperty(xmp, nsURI, localName)
-	if loc.Form != xmpPropertyAsElement {
+	switch loc.Form {
+	case xmpPropertyNotFound:
 		return append([]byte(nil), xmp...), errXMPPropertyNotFound
+	case xmpPropertyAsElement:
+		elementBytes := xmp[loc.Start:loc.End]
+		_, openEnd, closeStart, ok := elementTextRange(elementBytes)
+		if !ok {
+			return append([]byte(nil), xmp...), errXMPPropertyNotFound
+		}
+		out := make([]byte, 0, len(xmp)+len(newValue))
+		absOpenEnd := loc.Start + openEnd
+		absCloseStart := loc.Start + closeStart
+		out = append(out, xmp[:absOpenEnd]...)
+		out = append(out, newValue...)
+		out = append(out, xmp[absCloseStart:]...)
+		return out, nil
+	case xmpPropertyAsAttribute:
+		// Locate the attribute value bracketed by the quote characters
+		// inside xmp[loc.Start:loc.End]. The range includes the leading
+		// whitespace separator and the trailing quote.
+		attrBytes := xmp[loc.Start:loc.End]
+		valStart, valEnd, ok := attrValueRange(attrBytes)
+		if !ok {
+			return append([]byte(nil), xmp...), errXMPPropertyNotFound
+		}
+		out := make([]byte, 0, len(xmp)+len(newValue))
+		absValStart := loc.Start + valStart
+		absValEnd := loc.Start + valEnd
+		out = append(out, xmp[:absValStart]...)
+		out = append(out, newValue...)
+		out = append(out, xmp[absValEnd:]...)
+		return out, nil
 	}
-	// The element range from findXMPProperty includes leading
-	// indentation and the trailing newline. Re-parse just the slice
-	// to locate the text-content byte range inside the element so we
-	// only replace the value, not the surrounding tags.
-	elementBytes := xmp[loc.Start:loc.End]
-	_, openEnd, closeStart, ok := elementTextRange(elementBytes)
-	if !ok {
-		return append([]byte(nil), xmp...), errXMPPropertyNotFound
-	}
+	return append([]byte(nil), xmp...), errXMPPropertyNotFound
+}
 
-	out := make([]byte, 0, len(xmp)+len(newValue))
-	// Absolute byte ranges in the source buffer.
-	absOpenEnd := loc.Start + openEnd
-	absCloseStart := loc.Start + closeStart
-	out = append(out, xmp[:absOpenEnd]...)
-	out = append(out, newValue...)
-	out = append(out, xmp[absCloseStart:]...)
-	return out, nil
+// attrValueRange walks a ` name="value"` attribute slice and returns
+// byte offsets that bracket the inner value (exclusive of the quotes).
+// Returns ok=false when the slice isn't shaped like an attribute.
+func attrValueRange(attr []byte) (int, int, bool) {
+	eq := bytes.IndexByte(attr, '=')
+	if eq < 0 || eq+1 >= len(attr) {
+		return 0, 0, false
+	}
+	pos := eq + 1
+	for pos < len(attr) && isSpace(attr[pos]) {
+		pos++
+	}
+	if pos >= len(attr) {
+		return 0, 0, false
+	}
+	quote := attr[pos]
+	if quote != '"' && quote != '\'' {
+		return 0, 0, false
+	}
+	valStart := pos + 1
+	valEnd := valStart
+	for valEnd < len(attr) && attr[valEnd] != quote {
+		valEnd++
+	}
+	if valEnd >= len(attr) {
+		return 0, 0, false
+	}
+	return valStart, valEnd, true
 }
 
 // ensureNamespaceDecl adds xmlns:prefix="uri" to the first
 // rdf:Description start tag if the namespace is not already declared.
-// Returns the new bytes plus true if a declaration was inserted. A
-// nil-delta result (second return false) is returned unchanged when
-// the namespace is already declared.
+// Also rewrites any wrong-URI bindings for the given prefix across the
+// entire XMP buffer so properties using the canonical prefix (e.g.
+// pdfaid) always bind to the canonical namespace URI.
 func ensureNamespaceDecl(xmp []byte, prefix, uri string) ([]byte, error) {
-	tagStart, tagEnd, err := findRDFDescriptionOpenRange(xmp)
+	// Global rewrite pass: any xmlns:prefix="wrongURI" gets replaced with
+	// xmlns:prefix="uri". Covers the multi-Description case where the
+	// wrong binding lives outside the first start tag.
+	out := rewriteNamespaceURI(xmp, prefix, uri)
+
+	tagStart, tagEnd, err := findRDFDescriptionOpenRange(out)
 	if err != nil {
-		return append([]byte(nil), xmp...), err
+		return out, err
 	}
-	tagBytes := xmp[tagStart:tagEnd]
+	tagBytes := out[tagStart:tagEnd]
 	existing := collectNamespaceDecls(tagBytes)
 	if existing[prefix] == uri {
-		return append([]byte(nil), xmp...), nil
+		return out, nil
 	}
 
 	// Insert just before the closing `>` (or `/>`) of the start tag.
 	closePos := tagEnd - 1
-	for closePos > tagStart && (xmp[closePos] == '>' || xmp[closePos] == '/') {
+	for closePos > tagStart && (out[closePos] == '>' || out[closePos] == '/') {
 		closePos--
 	}
-	// closePos now points at the last non-'>' non-'/' byte. The
-	// injection should happen at closePos+1.
 	insertAt := closePos + 1
 
 	injection := fmt.Sprintf(` xmlns:%s="%s"`, prefix, uri)
-	out := make([]byte, 0, len(xmp)+len(injection))
-	out = append(out, xmp[:insertAt]...)
-	out = append(out, injection...)
-	out = append(out, xmp[insertAt:]...)
-	return out, nil
+	result := make([]byte, 0, len(out)+len(injection))
+	result = append(result, out[:insertAt]...)
+	result = append(result, injection...)
+	result = append(result, out[insertAt:]...)
+	return result, nil
+}
+
+// canonicalizePrefix renames every xmlns:X="uri" binding to
+// xmlns:canonical="uri" and rewrites the corresponding X:local usages
+// to canonical:local across the buffer. This is used when a producer
+// bound the PDF/A-required namespace (e.g.
+// http://www.aiim.org/pdfa/ns/id/) to a non-canonical prefix.
+func canonicalizePrefix(xmp []byte, canonical, uri string) []byte {
+	out := xmp
+	for _, quote := range []byte{'"', '\''} {
+		marker := fmt.Appendf(nil, `="%s"`, uri)
+		altMarker := fmt.Appendf(nil, `='%s'`, uri)
+		if quote == '\'' {
+			marker = altMarker
+		}
+		for {
+			idx := bytes.Index(out, marker)
+			if idx < 0 {
+				break
+			}
+			// Walk backward to locate the prefix in `xmlns:PREFIX=`.
+			nameEnd := idx
+			nameStart := nameEnd - 1
+			for nameStart >= 0 {
+				c := out[nameStart]
+				if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '<' {
+					nameStart++
+					break
+				}
+				nameStart--
+			}
+			if nameStart < 0 {
+				nameStart = 0
+			}
+			declName := out[nameStart:nameEnd]
+			prefix := ""
+			if p := bytes.IndexByte(declName, ':'); p >= 0 && bytes.HasPrefix(declName, []byte("xmlns:")) {
+				prefix = string(declName[p+1:])
+			}
+			if prefix == "" || prefix == canonical {
+				// Either a default-namespace declaration (xmlns=) or
+				// already canonical: advance past this marker and
+				// continue.
+				next := idx + len(marker)
+				if next >= len(out) {
+					break
+				}
+				rewrittenHead := append([]byte(nil), out[:next]...)
+				out = append(rewrittenHead, out[next:]...)
+				break
+			}
+			newDecl := fmt.Appendf(nil, "xmlns:%s", canonical)
+			rewritten := make([]byte, 0, len(out)+len(newDecl)-len(declName))
+			rewritten = append(rewritten, out[:nameStart]...)
+			rewritten = append(rewritten, newDecl...)
+			rewritten = append(rewritten, out[nameEnd:]...)
+			out = rewritten
+
+			// Rewrite uses: prefix:local → canonical:local. Walk the
+			// buffer finding word boundaries.
+			out = rewriteQualifiedName(out, prefix, canonical)
+		}
+	}
+	return out
+}
+
+// rewriteQualifiedName replaces occurrences of `oldPrefix:` with
+// `newPrefix:` when preceded by '<', '/', or a whitespace-like byte so
+// that substrings inside PCDATA or longer identifiers are left alone.
+func rewriteQualifiedName(xmp []byte, oldPrefix, newPrefix string) []byte {
+	old := []byte(oldPrefix + ":")
+	out := make([]byte, 0, len(xmp))
+	i := 0
+	for i < len(xmp) {
+		idx := bytes.Index(xmp[i:], old)
+		if idx < 0 {
+			out = append(out, xmp[i:]...)
+			break
+		}
+		abs := i + idx
+		// Preceding byte must signal a name start: one of < / space tab
+		// newline carriage-return.
+		validPrev := abs == 0
+		if !validPrev {
+			p := xmp[abs-1]
+			validPrev = p == '<' || p == '/' || p == ' ' || p == '\t' || p == '\n' || p == '\r'
+		}
+		if !validPrev {
+			out = append(out, xmp[i:abs+len(old)]...)
+			i = abs + len(old)
+			continue
+		}
+		out = append(out, xmp[i:abs]...)
+		out = append(out, []byte(newPrefix+":")...)
+		i = abs + len(old)
+	}
+	return out
+}
+
+// rewriteNamespaceURI replaces every xmlns:prefix="X" declaration where X
+// differs from the canonical uri with xmlns:prefix="uri". Handles both
+// single- and double-quoted attribute values.
+func rewriteNamespaceURI(xmp []byte, prefix, uri string) []byte {
+	out := xmp
+	for _, quote := range []byte{'"', '\''} {
+		prefixMarker := fmt.Sprintf(`xmlns:%s=%c`, prefix, quote)
+		for {
+			idx := bytes.Index(out, []byte(prefixMarker))
+			if idx < 0 {
+				break
+			}
+			valueStart := idx + len(prefixMarker)
+			end := bytes.IndexByte(out[valueStart:], quote)
+			if end < 0 {
+				break
+			}
+			currentURI := string(out[valueStart : valueStart+end])
+			if currentURI == uri {
+				// Move past this correct binding and keep searching.
+				out = append([]byte(nil), out...)
+				// No replacement, skip past it by searching from after.
+				scanFrom := valueStart + end + 1
+				if scanFrom >= len(out) {
+					break
+				}
+				// Replace only the first occurrence of the marker before
+				// scanFrom with a sentinel that won't match, then restore.
+				// Simpler: reconstruct out so the next search skips past.
+				out = append(append([]byte{}, out[:idx]...),
+					append(fmt.Appendf(nil, `xmlns:%s=%c%s%c`, prefix, quote, currentURI, quote),
+						out[valueStart+end+1:]...)...)
+				// To avoid infinite loop, break scanning on matching URIs.
+				// We handle all mismatches in earlier iterations; if we
+				// reach a match, remaining occurrences are correct too
+				// for the bytes we already scanned, so stop.
+				break
+			}
+			replacement := fmt.Sprintf(`xmlns:%s=%c%s%c`, prefix, quote, uri, quote)
+			out = append(append([]byte{}, out[:idx]...),
+				append([]byte(replacement), out[valueStart+end+1:]...)...)
+		}
+	}
+	return out
 }
 
 // errXMPPropertyNotFound is returned by the splicer helpers when a

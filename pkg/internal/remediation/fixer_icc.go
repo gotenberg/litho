@@ -58,7 +58,18 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// Check if DestOutputProfile exists and is valid.
 		dpObj, ok := oiDict["DestOutputProfile"]
 		if !ok {
-			doc.Logger.Debug("OutputIntent missing DestOutputProfile", slog.Int("index", i))
+			// Missing DestOutputProfile is a spec violation; inject a
+			// stock sRGB profile so the OutputIntent becomes valid.
+			// OutputConditionIdentifier is required too, fill it in
+			// when absent.
+			if _, hasOCI := oiDict["OutputConditionIdentifier"]; !hasOCI {
+				newOI := make(ast.PdfDict, len(oiDict)+1)
+				maps.Copy(newOI, oiDict)
+				newOI["OutputConditionIdentifier"] = ast.PdfString("sRGB IEC61966-2.1")
+				oiDict = newOI
+			}
+			replaceICCProfile(alloc, oiDict, oiRef, nil)
+			fixes = append(fixes, fmt.Sprintf("added DestOutputProfile to OutputIntent[%d]", i))
 			newOIArr[i] = oiEntry
 			continue
 		}

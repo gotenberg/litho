@@ -195,7 +195,10 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 				}
 			}
 
-			if fixUnknown && inCompat > 0 && op.Operator != "BX" && op.Operator != "EX" {
+			if fixUnknown && op.Operator != "BX" && op.Operator != "EX" && op.Operator != "" {
+				// Per ISO 19005-2 §6.2.2, undefined operators are
+				// forbidden even inside BX/EX compatibility brackets,
+				// so strip them wherever they appear.
 				if !validOperators[op.Operator] {
 					ops[i].Operator = ""
 					totalUnknown++

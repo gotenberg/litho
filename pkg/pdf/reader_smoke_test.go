@@ -33,7 +33,6 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 	_ = r.IsEncrypted()
 	_ = r.IsLinearized()
 	_ = r.LinearizationInfo()
-	_ = r.HintTable()
 
 	// Document-level getters.
 	n, err := r.PageCount(ctx)
@@ -69,12 +68,6 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 	if _, err := r.DSSInfo(ctx); err != nil {
 		t.Errorf("DSSInfo: %v", err)
 	}
-	if _, err := r.ExtractPronunciationLexicons(ctx); err != nil {
-		t.Errorf("ExtractPronunciationLexicons: %v", err)
-	}
-	if _, err := r.ExtractFormulas(ctx); err != nil {
-		t.Errorf("ExtractFormulas: %v", err)
-	}
 
 	// Per-page getters on every page.
 	for p := 1; p <= n; p++ {
@@ -108,9 +101,6 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 		if _, err := r.ExtractLines(ctx, p); err != nil {
 			t.Errorf("ExtractLines(%d): %v", p, err)
 		}
-		if _, err := r.ExtractRedactedText(ctx, p); err != nil {
-			t.Errorf("ExtractRedactedText(%d): %v", p, err)
-		}
 		if _, err := r.ExtractGeoData(ctx, p); err != nil {
 			t.Errorf("ExtractGeoData(%d): %v", p, err)
 		}
@@ -120,11 +110,22 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 		if _, err := r.Extract3DModels(ctx, p); err != nil {
 			t.Errorf("Extract3DModels(%d): %v", p, err)
 		}
+		if _, err := r.ExtractRedactedText(ctx, p); err != nil {
+			t.Errorf("ExtractRedactedText(%d): %v", p, err)
+		}
 	}
 
 	// Full-document text extraction.
 	if _, err := r.ExtractAllText(ctx); err != nil {
 		t.Errorf("ExtractAllText: %v", err)
+	}
+
+	// Document-level advanced extractors.
+	if _, err := r.ExtractPronunciationLexicons(ctx); err != nil {
+		t.Errorf("ExtractPronunciationLexicons: %v", err)
+	}
+	if _, err := r.ExtractFormulas(ctx); err != nil {
+		t.Errorf("ExtractFormulas: %v", err)
 	}
 
 	// Compliance validators. Behavior contract: return a (possibly

@@ -10,15 +10,41 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// AttachmentOptions configures an embedded file attachment.
+// AFRelationship and adding to the catalog /AF array are required for
+// PDF/A-3+ and Factur-X / ZUGFeRD compliance.
+type AttachmentOptions struct {
+	// MimeType is the embedded file /Subtype (e.g., "application/xml").
+	// Empty means no /Subtype is set.
+	MimeType string
+	// AFRelationship is the /AFRelationship value on the file specification
+	// dictionary. Valid values per ISO 32000-2 §7.11.3: Source, Data,
+	// Alternative, Supplement, EncryptedPayload, FormData, Schema,
+	// Unspecified. Empty means no /AFRelationship is set.
+	AFRelationship string
+	// AddToCatalogAF adds the filespec reference to the catalog /AF array,
+	// required for PDF/A-3+ associated files.
+	AddToCatalogAF bool
+}
+
 // AddAttachment embeds a file in the document's /Names/EmbeddedFiles tree.
+// Backward-compatible signature; for /AFRelationship and catalog /AF support
+// use [AddAttachmentWithOptions].
 func AddAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string, data []byte, mimeType string) error {
+	return AddAttachmentWithOptions(ctx, alloc, doc, name, data, AttachmentOptions{MimeType: mimeType})
+}
+
+// AddAttachmentWithOptions embeds a file with full control over PDF/A-3+
+// associated-file metadata. Sets /Subtype, /AFRelationship, and optionally
+// adds the filespec to the catalog /AF array.
+func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string, data []byte, opts AttachmentOptions) error {
 	// Create the embedded file stream.
 	streamDict := ast.PdfDict{
 		"Type":   ast.PdfName("EmbeddedFile"),
 		"Params": ast.PdfDict{"Size": ast.PdfInt(len(data))},
 	}
-	if mimeType != "" {
-		streamDict["Subtype"] = ast.PdfName(mimeType)
+	if opts.MimeType != "" {
+		streamDict["Subtype"] = ast.PdfName(opts.MimeType)
 	}
 	fileStream := ast.NewStream(streamDict, data)
 	fileStreamRef := alloc.Alloc(fileStream)
@@ -29,6 +55,9 @@ func AddAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		"F":    ast.PdfString(name),
 		"UF":   ast.PdfString(name),
 		"EF":   ast.PdfDict{"F": fileStreamRef},
+	}
+	if opts.AFRelationship != "" {
+		filespecDict["AFRelationship"] = ast.PdfName(opts.AFRelationship)
 	}
 	filespecRef := alloc.Alloc(filespecDict)
 
@@ -95,9 +124,22 @@ func AddAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	namesRef := alloc.Alloc(namesDict)
 
 	// Update catalog.
-	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
+	newCatalog := make(ast.PdfDict, len(catalogDict)+2)
 	maps.Copy(newCatalog, catalogDict)
 	newCatalog["Names"] = namesRef
+
+	// Add to catalog /AF array if requested (PDF/A-3+ associated files).
+	if opts.AddToCatalogAF {
+		var afArr ast.PdfArray
+		if existing, ok := catalogDict["AF"]; ok {
+			if arr, err := document.ResolveArray(ctx, doc, existing); err == nil {
+				afArr = arr
+			}
+		}
+		afArr = append(afArr, filespecRef)
+		newCatalog["AF"] = afArr
+	}
+
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
 	return nil

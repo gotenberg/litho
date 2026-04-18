@@ -42,6 +42,7 @@ type Document struct {
 	cmapCache     map[int]any  // parsed CMap by ToUnicode stream object number
 	mu            sync.RWMutex // protects objectCache, fontCache, cmapCache, FormatViolations
 	runMu         sync.Mutex   // serializes compliance-engine validation runs
+	xrefAugment   sync.Once    // guards the one-shot raw-bytes augmentation of Index
 	maxCacheSize  int          // evict all objects when cache exceeds this size
 	Crypto        *crypto.Handler
 	OCConfig      *OCConfig
@@ -244,19 +245,27 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	// Verify the catalog /Root is reachable. Broken xref chains from
 	// incremental updates can parse without error but miss the catalog
 	// object. If /Root can't be resolved, rebuild the xref from scratch.
+	// Also rebuild when the parse produced zero entries: some producers
+	// emit a syntactically valid but empty xref table with startxref
+	// pointing at offset 0, which yields no objects. The rebuild path
+	// discovers them by scanning raw bytes.
 	if !doc.Rebuilt {
-		if rootRef, ok := doc.Index.Trailer["Root"]; ok {
-			if ref, ok := rootRef.(ast.PdfIndirectRef); ok {
-				if _, exists := doc.Index.Entries[ref.ObjectNum]; !exists {
-					doc.Logger.Debug("catalog object missing from xref, rebuilding",
-						slog.Int("root_obj", ref.ObjectNum),
-					)
-					doc.Index.Entries = make(map[int]xref.XRefEntry)
-					doc.Index.Trailer = nil
-					if rebuildErr := doc.rebuildXRef(ctx); rebuildErr == nil {
-						doc.Rebuilt = true
+		shouldRebuild := len(doc.Index.Entries) == 0
+		if !shouldRebuild {
+			if rootRef, ok := doc.Index.Trailer["Root"]; ok {
+				if ref, ok := rootRef.(ast.PdfIndirectRef); ok {
+					if _, exists := doc.Index.Entries[ref.ObjectNum]; !exists {
+						shouldRebuild = true
 					}
 				}
+			}
+		}
+		if shouldRebuild {
+			doc.Logger.Debug("xref entries incomplete, rebuilding")
+			doc.Index.Entries = make(map[int]xref.XRefEntry)
+			doc.Index.Trailer = nil
+			if rebuildErr := doc.rebuildXRef(ctx); rebuildErr == nil {
+				doc.Rebuilt = true
 			}
 		}
 	}

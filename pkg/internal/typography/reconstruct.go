@@ -87,16 +87,38 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 		// Compute adaptive space threshold from the gap histogram.
 		spaceThreshold := computeSpaceThreshold(ln.elems, indices)
 
-		for i, idx := range indices {
-			if i > 0 {
-				prev := ln.elems[indices[i-1]]
-				curr := ln.elems[idx]
-				gap := computeLineGap(prev, curr)
-				if needsSpace(gap, spaceThreshold) {
+		// Phantom anchors: unresolved glyphs reach this point with
+		// Text == "". They still occupy layout space, so their
+		// positions and widths anchor the gap computation between the
+		// surrounding resolved runs. Walk the line, tracking the
+		// previous emitted element for the space heuristic, and let
+		// phantoms push that anchor forward without contributing
+		// characters or triggering space insertion.
+		//
+		// Chunk segmentation: elements that share a
+		// [models.TextElement.Chunk] came from the same content-stream
+		// text-operator chain. Small gaps inside a chunk are glyph
+		// advancement or kerning adjustments that viewers do not turn
+		// into spaces. Large gaps inside a chunk (e.g. a sizeable TJ
+		// numeric adjustment) still cross the gap heuristic so the
+		// visible word break survives.
+		prevIdx := -1
+		for _, idx := range indices {
+			el := ln.elems[idx]
+			if el.Text == "" {
+				prevIdx = idx
+				continue
+			}
+			if prevIdx >= 0 {
+				prev := ln.elems[prevIdx]
+				gap := computeLineGap(prev, el)
+				sameChunk := prev.Chunk == el.Chunk && el.Chunk != 0
+				if prev.Text != "" && shouldInsertSpace(prev, gap, spaceThreshold, sameChunk) {
 					sb.WriteString(" ")
 				}
 			}
-			sb.WriteString(ln.elems[idx].Text)
+			sb.WriteString(el.Text)
+			prevIdx = idx
 		}
 	}
 
@@ -256,8 +278,9 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 			if i > 0 {
 				prev := line.elements[indices[i-1]].TextElement
 				curr := line.elements[idx].TextElement
+				sameChunk := prev.Chunk == curr.Chunk && curr.Chunk != 0
 				gap := computeLineGap(prev, curr)
-				if needsSpace(gap, spaceThreshold) {
+				if shouldInsertSpace(prev, gap, spaceThreshold, sameChunk) {
 					sb.WriteString(" ")
 				}
 			}
@@ -353,6 +376,29 @@ func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
 // needsSpace decides whether to insert a space between two consecutive glyphs.
 func needsSpace(gap, threshold float64) bool {
 	return gap > threshold
+}
+
+// chunkKerningLimit returns the maximum gap that still counts as
+// intra-chunk kerning for [ReconstructText]. A same-chunk gap at or
+// below this limit never produces a space; a larger gap falls back to
+// the adaptive space heuristic so big TJ adjustments inside a single
+// operator chain still surface as visible breaks. The ceiling scales
+// with font size; values noticeably above this fraction are too wide
+// to read as kerning and too narrow to swallow a genuine word break.
+func chunkKerningLimit(prev models.TextElement) float64 {
+	const kerningFactor = 0.1
+	return kerningFactor * math.Abs(prev.FontSize)
+}
+
+// shouldInsertSpace combines the adaptive per-line threshold with the
+// chunk-aware kerning floor. Inside a chunk, only gaps above the
+// kerning floor can produce a space; across chunks the threshold
+// alone decides, matching the behaviour before chunk tracking landed.
+func shouldInsertSpace(prev models.TextElement, gap, spaceThreshold float64, sameChunk bool) bool {
+	if sameChunk && gap <= chunkKerningLimit(prev) {
+		return false
+	}
+	return needsSpace(gap, spaceThreshold)
 }
 
 // isOrthogonalRotation returns true when the text angle is close to 90° or

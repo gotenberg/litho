@@ -12,10 +12,21 @@ import (
 )
 
 func matchCatalogCleanup(v compliance.Violation) bool {
-	return (v.Rule.Clause == "6.1.3" && v.Rule.TestNumber == 2) || // Encrypt in trailer
+	if (v.Rule.Clause == "6.1.3" && v.Rule.TestNumber == 2) || // Encrypt in trailer
 		clausePrefix(v, "6.10") || // OCG config
 		clausePrefix(v, "6.11") || // AlternatePresentations
-		clausePrefix(v, "6.1.11") // Perms dict
+		clausePrefix(v, "6.1.11") { // Perms dict (PDF/A-1)
+		return true
+	}
+	// PDF/A-2 §6.1.12 covers Perms and Signature Reference restrictions.
+	if clausePrefix(v, "6.1.12") &&
+		(contextContains(v, "Perms dictionary") ||
+			contextContains(v, "Signature Reference") ||
+			descriptionContains(v, "permissions dictionary") ||
+			descriptionContains(v, "Signature References")) {
+		return true
+	}
+	return false
 }
 
 func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
@@ -65,9 +76,84 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	if permsObj, ok := catalogDict["Perms"]; ok {
 		pFixes := fixPermsDict(ctx, alloc, doc, catalogDict, catalogRef, permsObj)
 		fixes = append(fixes, pFixes...)
+		if sFixes := fixSignatureReferences(ctx, alloc, doc, permsObj); len(sFixes) > 0 {
+			fixes = append(fixes, sFixes...)
+		}
 	}
 
 	return fixes, nil
+}
+
+// fixSignatureReferences strips DigestLocation, DigestMethod and
+// DigestValue from every Reference entry under /Perms /DocMDP and
+// /UR3 Signature dicts. ISO 19005-2/4 §6.1.12 test 2 forbids those
+// keys on signature-reference dicts.
+func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, permsObj ast.PdfObject) []string {
+	permsDict, err := document.ResolveDict(ctx, doc, permsObj)
+	if err != nil || permsDict == nil {
+		return nil
+	}
+	var fixes []string
+	for _, key := range []ast.PdfName{"DocMDP", "UR3"} {
+		sigObj, ok := permsDict[key]
+		if !ok {
+			continue
+		}
+		sigRef, _ := sigObj.(ast.PdfIndirectRef)
+		sigDict, err := document.ResolveDict(ctx, doc, sigObj)
+		if err != nil || sigDict == nil {
+			continue
+		}
+		refsObj, ok := sigDict["Reference"]
+		if !ok {
+			continue
+		}
+		refsArr, err := document.ResolveArray(ctx, doc, refsObj)
+		if err != nil || len(refsArr) == 0 {
+			continue
+		}
+		newRefs := make(ast.PdfArray, len(refsArr))
+		changed := false
+		for i, entry := range refsArr {
+			entryRef, _ := entry.(ast.PdfIndirectRef)
+			entryDict, err := document.ResolveDict(ctx, doc, entry)
+			if err != nil || entryDict == nil {
+				newRefs[i] = entry
+				continue
+			}
+			patched := make(ast.PdfDict, len(entryDict))
+			maps.Copy(patched, entryDict)
+			stripped := false
+			for _, forbidden := range []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"} {
+				if _, ok := patched[forbidden]; ok {
+					delete(patched, forbidden)
+					stripped = true
+				}
+			}
+			if !stripped {
+				newRefs[i] = entry
+				continue
+			}
+			if entryRef.ObjectNum > 0 {
+				alloc.AllocAt(entryRef.ObjectNum, patched)
+				newRefs[i] = entry
+			} else {
+				newRefs[i] = patched
+				changed = true
+			}
+			fixes = append(fixes, fmt.Sprintf("stripped forbidden digest keys from /%s Reference[%d]", key, i))
+		}
+		if !changed {
+			continue
+		}
+		newSig := make(ast.PdfDict, len(sigDict))
+		maps.Copy(newSig, sigDict)
+		newSig["Reference"] = newRefs
+		if sigRef.ObjectNum > 0 {
+			alloc.AllocAt(sigRef.ObjectNum, newSig)
+		}
+	}
+	return fixes
 }
 
 // fixOCGConfigs walks /OCProperties /D and /Configs, adding /Name to any

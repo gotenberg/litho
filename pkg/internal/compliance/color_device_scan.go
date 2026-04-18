@@ -598,6 +598,8 @@ func scanInlineImageCSOps(ops []content.Operation, usage *deviceCSUsage) {
 
 // scanAnnotationAppearanceCS scans annotation appearance streams on a page
 // for device colour space usage. Annotations have /AP << /N <stream/dict> >> etc.
+// 3D annotations also carry a /3DD stream whose own /ColorSpace and
+// /Resources reach device-colour surfaces that the /AP tree does not cover.
 func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, page ast.PdfDict) deviceCSUsage {
 	var usage deviceCSUsage
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
@@ -614,6 +616,14 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 		if err != nil || annot == nil {
 			continue
 		}
+
+		// 3D annotations embed their colour dependencies in the /3DD
+		// stream dict (parallel to how image XObjects expose them). A
+		// DeviceRGB reference there is invisible to the /AP walk.
+		if annotSubtype, err := document.ResolveName(ctx, doc, annot["Subtype"]); err == nil && annotSubtype == "3D" {
+			scan3DAnnotationCS(ctx, doc, annot, &usage)
+		}
+
 		apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
 		if err != nil || apDict == nil {
 			continue
@@ -658,6 +668,46 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 		}
 	}
 	return usage
+}
+
+// scan3DAnnotationCS walks a /Subtype /3D annotation for device colour
+// space usage. The 3D annotation dict references a 3D stream via /3DD
+// (or an /3DV default view); that stream's own dict may declare
+// /ColorSpace directly (image-XObject style) or embed a /Resources
+// dictionary whose /ColorSpace entry carries the actual bindings
+// (form-XObject style). Both shapes land at top-scope device colour
+// usage, since 3D content renders into the page area.
+func scan3DAnnotationCS(ctx context.Context, doc *document.Document, annot ast.PdfDict, usage *deviceCSUsage) {
+	// Primary: /3DD points to the 3D stream that backs the annotation.
+	if stream, err := document.ResolveStream(ctx, doc, annot["3DD"]); err == nil {
+		mark3DStreamCS(ctx, doc, stream, usage)
+	}
+	// Secondary: /3DV default view can name its own resources.
+	if view, err := document.ResolveDict(ctx, doc, annot["3DV"]); err == nil && view != nil {
+		if stream, err := document.ResolveStream(ctx, doc, view["3DD"]); err == nil {
+			mark3DStreamCS(ctx, doc, stream, usage)
+		}
+	}
+}
+
+// mark3DStreamCS checks a 3D stream dict for device colour space
+// references, both in the stream's own /ColorSpace entry and in any
+// nested /Resources/ColorSpace dictionary.
+func mark3DStreamCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, usage *deviceCSUsage) {
+	if csObj, ok := stream.Dict["ColorSpace"]; ok {
+		markDeviceCS(resolveCSName(ctx, doc, csObj), usage)
+	}
+	resources, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if err != nil || resources == nil {
+		return
+	}
+	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
+	if err != nil || csDict == nil {
+		return
+	}
+	for _, csObj := range csDict {
+		markDeviceCS(resolveCSName(ctx, doc, csObj), usage)
+	}
 }
 
 // scanShadingColorSpaces checks Shading resources for device colour space usage.

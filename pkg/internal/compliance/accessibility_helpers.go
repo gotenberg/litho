@@ -210,27 +210,40 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	return data, true
 }
 
-// containsDCTitle checks if XMP data contains a dc:title element.
+// containsDCTitle reports whether the XMP declares the Dublin Core
+// namespace and binds it to a prefix under which a title element or
+// attribute appears. A producer that binds the "dc" literal prefix to a
+// non-DC namespace URI does not satisfy the Dublin Core title
+// requirement, so the check keys off the URI rather than the prefix
+// substring.
 func containsDCTitle(xmpData []byte) bool {
-	// Look for dc:title in XMP (simple substring search).
-	return strings.Contains(string(xmpData), "dc:title") ||
-		strings.Contains(string(xmpData), "<dc:title>") ||
-		strings.Contains(string(xmpData), "dc:title>")
+	const dcNamespace = "http://purl.org/dc/elements/1.1/"
+	prefix := xmpExtractPrefixMap(xmpData)[dcNamespace]
+	if prefix == "" {
+		return false
+	}
+	raw := string(xmpData)
+	return strings.Contains(raw, "<"+prefix+":title>") ||
+		strings.Contains(raw, "<"+prefix+":title ") ||
+		strings.Contains(raw, prefix+":title=")
 }
 
-// containsPDFUAIDPart checks if XMP data contains pdfuaid:part with the given value.
+// containsPDFUAIDPart reports whether the XMP declares the PDF/UA
+// Identification namespace and exposes a part property (element or
+// attribute) bound to that namespace with the requested value. The
+// canonical prefix is "pdfuaid" but XMP allows any prefix provided the
+// namespace URI matches.
 func containsPDFUAIDPart(xmpData []byte, part string) bool {
+	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
+	prefix := xmpExtractPrefixMap(xmpData)[pdfuaIDNamespace]
+	if prefix == "" {
+		return false
+	}
 	xmp := string(xmpData)
-
-	// Look for <pdfuaid:part>N</pdfuaid:part> patterns.
-	needle := fmt.Sprintf("pdfuaid:part>%s<", part)
-	if strings.Contains(xmp, needle) {
+	if strings.Contains(xmp, fmt.Sprintf("%s:part>%s<", prefix, part)) {
 		return true
 	}
-
-	// Also check attribute form: pdfuaid:part="N".
-	needle = fmt.Sprintf("pdfuaid:part=\"%s\"", part)
-	return strings.Contains(xmp, needle)
+	return strings.Contains(xmp, fmt.Sprintf("%s:part=\"%s\"", prefix, part))
 }
 
 // isAnnotHidden checks if an annotation has the Hidden flag set.

@@ -70,6 +70,15 @@ var (
 	// ErrSourceIndexOutOfRange is returned when a source index exceeds
 	// the number of available sources.
 	ErrSourceIndexOutOfRange = errors.New("source index out of range")
+
+	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
+	// [Writer.RemediatePDFUA] when applied fixes cause the output to
+	// regress beyond the configured [RegressionTolerance] and rolling back
+	// content-modifying fixers did not recover the document. The source
+	// [Reader] is left untouched; the caller can retry with a looser
+	// tolerance, disable aggressive fixes, or report the document as
+	// unfixable.
+	ErrRemediationBrokePDF = errors.New("remediation broke the PDF beyond the configured regression tolerance")
 )
 
 // Pipeline sentinel errors surface structural problems with a [Pipeline]

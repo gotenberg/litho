@@ -1,6 +1,10 @@
 package writer
 
-import "github.com/gotenberg/litho/pkg/internal/core/ast"
+import (
+	"maps"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+)
 
 // ObjAllocator assigns object numbers for new and modified objects and
 // maintains a registry of pending objects to be written.
@@ -44,4 +48,36 @@ func (a *ObjAllocator) Pending() map[int]ast.PdfObject {
 // for the xref table).
 func (a *ObjAllocator) NextObjNum() int {
 	return a.nextObjNum
+}
+
+// Snapshot is an opaque point-in-time state of an [ObjAllocator]. Pass it to
+// [ObjAllocator.Restore] to undo allocations queued after the snapshot.
+// Snapshot values are immutable and safe for concurrent reads.
+type Snapshot struct {
+	pending    map[int]ast.PdfObject
+	nextObjNum int
+}
+
+// Snapshot captures the allocator's current state so a caller can roll back
+// later edits. The returned value is independent of subsequent Alloc/AllocAt
+// calls. Values are captured by reference: for Restore to be lossless,
+// callers must replace pending entries via [ObjAllocator.AllocAt] rather
+// than mutating AST objects in place. The in-tree fixers all construct
+// fresh replacements, so a shallow map copy is sufficient today.
+func (a *ObjAllocator) Snapshot() Snapshot {
+	pending := make(map[int]ast.PdfObject, len(a.pending))
+	maps.Copy(pending, a.pending)
+	return Snapshot{pending: pending, nextObjNum: a.nextObjNum}
+}
+
+// Restore reverts the allocator to the state captured by snap. Any objects
+// allocated since the snapshot are discarded. Restore mutates the pending
+// map in place so callers that captured the map reference prior to the
+// snapshot continue to see a coherent view.
+func (a *ObjAllocator) Restore(snap Snapshot) {
+	for k := range a.pending {
+		delete(a.pending, k)
+	}
+	maps.Copy(a.pending, snap.pending)
+	a.nextObjNum = snap.nextObjNum
 }

@@ -19,6 +19,11 @@ func matchTransparency(v compliance.Violation) bool {
 }
 
 func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+	// PDF/A-1 (ISO 19005-1 §6.4) forbids transparency outright. The
+	// only way a flagged file can become compliant is to flatten
+	// alpha, blend modes, and SMask, so this fix runs regardless of
+	// PreserveContent: there is no "preserve" alternative for files
+	// that must conform to part 1.
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("getting catalog: %w", err)

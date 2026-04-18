@@ -98,6 +98,14 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		normInfo = xmpNormalizeISO8601(normInfo)
 		normXMP = xmpNormalizeISO8601(normXMP)
 
+		// Non-date text fields compare exactly. The XMP parser already
+		// trims element-form text per XML rules and preserves attribute
+		// values as-is; the Info dict value is raw. That asymmetry
+		// lines up with how VeraPDF reads these pairs. Trimming the
+		// Info side hides a real §6.7.3 non-equivalence (trailing
+		// whitespace in /Author vs trimmed dc:creator); trimming the
+		// XMP side creates false positives when producers use
+		// attribute-form properties like pdf:Producer="value ".
 		if normInfo != normXMP {
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
 		}

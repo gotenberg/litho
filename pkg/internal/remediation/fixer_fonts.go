@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -18,6 +19,8 @@ func matchFontFixes(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.2.10.5", "6.2.11.5", "6.3.6", // glyph width mismatch
 		"6.2.10.7",                 // ToUnicode maps to U+0000/FEFF/FFFE
+		"6.2.11.7",                 // Unicode mapping required (PDF/A-2)
+		"6.3.8",                    // ToUnicode required (PDF/A-1b)
 		"6.2.10.3.1", "6.2.11.3.1", // CIDSystemInfo mismatch
 		"6.2.11.4.2", // CIDSet incomplete
 		"6.3.5",      // CharSet incomplete
@@ -73,7 +76,7 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			subtype, _ := fd["Subtype"].(ast.PdfName)
 			switch string(subtype) {
 			case "Type0":
-				if f := fixType0Font(ctx, doc, alloc, fd); len(f) > 0 {
+				if f := fixType0Font(ctx, doc, alloc, fd, fontRef); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			case "Type1", "TrueType", "MMType1":
@@ -178,10 +181,54 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 		}
 	}
 
+	// Generate /ToUnicode if missing or invalid.
+	if needsToUnicode(ctx, doc, fontDict) {
+		gidToUnicode := typography.ExtractGIDToUnicode(ctx, fontData)
+		if len(gidToUnicode) > 0 {
+			// Build charcode-to-Unicode: for simple fonts, charcode maps
+			// through encoding or identity.
+			mapping := make(map[uint16]rune)
+			if charToGID != nil {
+				for charCode, gid := range charToGID {
+					if r, ok := gidToUnicode[gid]; ok && isValidUnicodeMapping(r) {
+						mapping[charCode] = r
+					}
+				}
+			} else {
+				// Identity mapping: charcode = GID.
+				for gid, r := range gidToUnicode {
+					if isValidUnicodeMapping(r) {
+						mapping[gid] = r
+					}
+				}
+			}
+			if cmapData := generateToUnicodeCMap(mapping); cmapData != nil {
+				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
+				cmapRef := alloc.Alloc(cmapStream)
+				// Use the latest version of fontDict if already modified.
+				targetFont := fontDict
+				if fontRef.ObjectNum > 0 {
+					if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
+						if d, ok := allocated.(ast.PdfDict); ok {
+							targetFont = d
+						}
+					}
+				}
+				newFont := make(ast.PdfDict, len(targetFont)+1)
+				maps.Copy(newFont, targetFont)
+				newFont["ToUnicode"] = cmapRef
+				if fontRef.ObjectNum > 0 {
+					alloc.AllocAt(fontRef.ObjectNum, newFont)
+				}
+				fixes = append(fixes, fmt.Sprintf("generated /ToUnicode CMap for font %s", baseName))
+			}
+		}
+	}
+
 	return fixes
 }
 
-func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict) []string {
+func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef) []string {
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
 		return nil
@@ -247,6 +294,40 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	if _, ok := fdDict["CIDSet"]; ok {
 		if fixed := fixCIDSet(ctx, alloc, fdDict, fdRef, fontData); fixed {
 			fixes = append(fixes, fmt.Sprintf("regenerated /CIDSet for font %s", baseName))
+		}
+	}
+
+	// Generate /ToUnicode if missing or invalid.
+	if needsToUnicode(ctx, doc, fontDict) {
+		gidToUnicode := typography.ExtractGIDToUnicode(ctx, fontData)
+		if len(gidToUnicode) > 0 {
+			// For Identity-H/Identity-V: charcode = CID = GID.
+			mapping := make(map[uint16]rune)
+			for gid, r := range gidToUnicode {
+				if isValidUnicodeMapping(r) {
+					mapping[gid] = r
+				}
+			}
+			if cmapData := generateToUnicodeCMap(mapping); cmapData != nil {
+				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
+				cmapRef := alloc.Alloc(cmapStream)
+				// Use the latest version of fontDict if already modified.
+				targetFont := fontDict
+				if fontRef.ObjectNum > 0 {
+					if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
+						if d, ok := allocated.(ast.PdfDict); ok {
+							targetFont = d
+						}
+					}
+				}
+				newFont := make(ast.PdfDict, len(targetFont)+1)
+				maps.Copy(newFont, targetFont)
+				newFont["ToUnicode"] = cmapRef
+				if fontRef.ObjectNum > 0 {
+					alloc.AllocAt(fontRef.ObjectNum, newFont)
+				}
+				fixes = append(fixes, fmt.Sprintf("generated /ToUnicode CMap for font %s", baseName))
+			}
 		}
 	}
 
@@ -383,4 +464,101 @@ func fontBaseName(fontDict ast.PdfDict) string {
 		return string(bn)
 	}
 	return "unknown"
+}
+
+// needsToUnicode returns true if the font dict has no /ToUnicode entry or
+// the existing ToUnicode CMap contains forbidden mappings (U+0000, U+FEFF,
+// U+FFFE) that violate PDF/A requirements.
+func needsToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	tuObj, ok := fontDict["ToUnicode"]
+	if !ok {
+		return true
+	}
+	// If an existing ToUnicode is present, check for forbidden values.
+	stream, err := document.ResolveStream(ctx, doc, tuObj)
+	if err != nil {
+		return true
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return true
+	}
+	content := string(data)
+	// Look for mappings to <0000>, <FEFF>, or <FFFE>.
+	return strings.Contains(content, "<0000>") ||
+		strings.Contains(content, "<FEFF>") || strings.Contains(content, "<feff>") ||
+		strings.Contains(content, "<FFFE>") || strings.Contains(content, "<fffe>")
+}
+
+// generateToUnicodeCMap builds a minimal ToUnicode CMap stream from a
+// charcode-to-Unicode mapping. The CMap maps 2-byte character codes to
+// Unicode code points using bfchar entries.
+// isValidUnicodeMapping returns true if r is a valid Unicode code point for
+// a ToUnicode CMap entry. Excludes U+0000, BOM markers, and Private Use
+// Area ranges (PUA mappings trigger clause 6.2.11.7.3 violations).
+func isValidUnicodeMapping(r rune) bool {
+	if r <= 0 || r == 0xFEFF || r == 0xFFFE {
+		return false
+	}
+	// BMP PUA: U+E000–U+F8FF.
+	if r >= 0xE000 && r <= 0xF8FF {
+		return false
+	}
+	// Supplementary PUA-A: U+F0000–U+FFFFD.
+	if r >= 0xF0000 && r <= 0xFFFFD {
+		return false
+	}
+	// Supplementary PUA-B: U+100000–U+10FFFD.
+	if r >= 0x100000 && r <= 0x10FFFD {
+		return false
+	}
+	return true
+}
+
+func generateToUnicodeCMap(mapping map[uint16]rune) []byte {
+	if len(mapping) == 0 {
+		return nil
+	}
+
+	// Sort keys for deterministic output.
+	keys := make([]uint16, 0, len(mapping))
+	for k := range mapping {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	var buf strings.Builder
+	buf.WriteString("/CIDInit /ProcSet findresource begin\n")
+	buf.WriteString("12 dict begin\n")
+	buf.WriteString("begincmap\n")
+	buf.WriteString("/CIDSystemInfo <</Registry (Adobe) /Ordering (UCS) /Supplement 0>> def\n")
+	buf.WriteString("/CMapName /Adobe-Identity-UCS def\n")
+	buf.WriteString("/CMapType 2 def\n")
+	buf.WriteString("1 begincodespacerange\n")
+	buf.WriteString("<0000> <FFFF>\n")
+	buf.WriteString("endcodespacerange\n")
+
+	// Write bfchar entries in chunks of 100 (CMap spec limit).
+	for i := 0; i < len(keys); i += 100 {
+		end := min(i+100, len(keys))
+		chunk := keys[i:end]
+		fmt.Fprintf(&buf, "%d beginbfchar\n", len(chunk))
+		for _, code := range chunk {
+			r := mapping[code]
+			if r <= 0xFFFF {
+				fmt.Fprintf(&buf, "<%04X> <%04X>\n", code, uint16(r)) //nolint:gosec // rune fits in uint16 per guard
+			} else {
+				// Supplementary plane: encode as UTF-16 surrogate pair.
+				hi := uint16(0xD800 + (uint32(r-0x10000) >> 10))   //nolint:gosec // surrogate arithmetic
+				lo := uint16(0xDC00 + (uint32(r-0x10000) & 0x3FF)) //nolint:gosec // surrogate arithmetic
+				fmt.Fprintf(&buf, "<%04X> <%04X%04X>\n", code, hi, lo)
+			}
+		}
+		buf.WriteString("endbfchar\n")
+	}
+
+	buf.WriteString("endcmap\n")
+	buf.WriteString("CMapName currentdict /CMap defineresource pop\n")
+	buf.WriteString("end end\n")
+	return []byte(buf.String())
 }

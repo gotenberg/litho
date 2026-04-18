@@ -9,7 +9,7 @@ import (
 // bfchar/bfrange records. A value of 1 means 2-byte (UCS-2) character codes.
 const ucs2DataSize = 1
 
-// bcmapStream provides sequential reading of a PDF.js binary CMap (.bcmap)
+// bcmapStream provides sequential reading of a binary CMap (.bcmap)
 // file. The format uses VLQ-encoded integers and delta-compressed entries.
 type bcmapStream struct {
 	data []byte
@@ -82,7 +82,7 @@ func (s *bcmapStream) skipString() error {
 	return nil
 }
 
-// parseBCMapCIDToUnicode parses a PDF.js binary CMap (.bcmap) file containing
+// parseBCMapCIDToUnicode parses a binary CMap (.bcmap) file containing
 // Unicode→CID mappings (e.g., UniJIS-UCS2-H) and returns the inverted
 // CID→Unicode map. When multiple Unicode values map to the same CID, the
 // lowest Unicode value wins.
@@ -151,7 +151,7 @@ func parseBCMapCIDToUnicode(data []byte) (map[int]rune, error) {
 	return cid2uni, nil
 }
 
-// parseBCMapCharToCID parses a PDF.js binary CMap (.bcmap) encoding file
+// parseBCMapCharToCID parses a binary CMap (.bcmap) encoding file
 // (e.g., GBK-EUC-H) and returns the character-code→CID map. Codespace
 // ranges are also collected to determine valid byte lengths.
 func parseBCMapCharToCID(data []byte) (charToCID map[int]int, codespaces []CodeSpaceRange, err error) {

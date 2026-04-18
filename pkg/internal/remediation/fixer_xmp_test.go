@@ -94,3 +94,36 @@ func TestFixXMP_GeneratesFromScratch_PDFUA1(t *testing.T) {
 		t.Errorf("XMP missing pdfuaid:part=1:\n%s", xmpBytes)
 	}
 }
+
+// TestPatchExistingXMP_ForeignConformanceDoesNotAbort confirms that a
+// rogue "conformance" local name in a namespace other than PDF/A does
+// not abort the whole patch function. An earlier version short-circuited
+// on `strings.Contains(xmp, "pdfaid:conformance")` paired with a
+// "return xmp, nil" when the actual pdfaid:conformance turned out to be
+// absent, silently dropping every later fix.
+func TestPatchExistingXMP_ForeignConformanceDoesNotAbort(t *testing.T) {
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:foo="http://example.org/foo/">
+  <foo:conformance>anything</foo:conformance>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+
+	// PDF/A-4 plain: triggers the "remove pdfaid:conformance" path AND
+	// expects pdfaid:part + pdfaid:rev to be injected afterward.
+	patched, fixes := patchExistingXMP(xmp, 4, "", 0, infoMetadata{})
+
+	if len(fixes) == 0 {
+		t.Fatalf("expected subsequent fixes to land, got none\npatched:\n%s", patched)
+	}
+	if !strings.Contains(patched, "pdfaid:part") {
+		t.Errorf("expected pdfaid:part injection, missing:\n%s", patched)
+	}
+	if !strings.Contains(patched, "pdfaid:rev") {
+		t.Errorf("expected pdfaid:rev injection, missing:\n%s", patched)
+	}
+}

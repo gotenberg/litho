@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strconv"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
@@ -272,6 +274,17 @@ func DecodePdfString(s ast.PdfString) string {
 	if !needsDecode {
 		return string(b)
 	}
+	// Non-conforming producers (especially older tooling) sometimes write
+	// metadata strings as raw UTF-8 bytes without the UTF-16BE BOM. When
+	// the bytes form a valid UTF-8 sequence with at least one multi-byte
+	// run, prefer UTF-8 over PdfDocEncoding: decoding UTF-8 bytes as
+	// PdfDocEncoding double-encodes smart quotes, em dashes, and other
+	// punctuation into mojibake. Pure PdfDocEncoding byte streams with
+	// values in the 0x80-0x9F mapping range are not valid UTF-8 (they
+	// contain bare continuation bytes), so the ambiguity rarely bites.
+	if utf8.Valid(b) && utf8.RuneCount(b) < len(b) {
+		return string(b)
+	}
 	var buf strings.Builder
 	buf.Grow(len(b))
 	for _, c := range b {
@@ -416,6 +429,202 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 	return d.resolveWith(ctx, ref, nil)
 }
 
+// augmentXrefFromRawScan performs a single linear scan of the document
+// bytes looking for every "N G obj" marker. It runs at most once per
+// Document via d.xrefAugment. The scan is invoked from the
+// object-resolution path, so its cost is paid only on files whose xref
+// is truncated, lies about object offsets, or omits objects inserted
+// by an external editor.
+//
+// For each discovered marker the augmentation inserts the entry when
+// missing, and overrides the stored offset when the xref-declared
+// offset does not contain the expected "N G obj" header. Compressed
+// (type 2) and free (type 0) entries are left alone: a raw scan cannot
+// see into object streams, and free entries intentionally reference no
+// body. All writes to [Index.Entries] run under the sync.Once so
+// concurrent resolves observe a consistent map.
+func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
+	d.xrefAugment.Do(func() {
+		discovered, err := scanIndirectObjects(ctx, d.r, d.size)
+		if err != nil {
+			d.Logger.Debug("xref augmentation scan failed", slog.Any("err", err))
+			return
+		}
+		added, overridden := 0, 0
+		for objNum, entry := range discovered {
+			existing, exists := d.Index.Entries[objNum]
+			if !exists {
+				d.Index.Entries[objNum] = entry
+				added++
+				continue
+			}
+			if existing.Type != xref.XRefTypeNormal {
+				continue
+			}
+			if objectHeaderMatches(d.r, existing.Offset, objNum) {
+				continue
+			}
+			d.Index.Entries[objNum] = entry
+			overridden++
+		}
+		if added > 0 || overridden > 0 {
+			d.Logger.Debug("xref augmented from raw scan",
+				slog.Int("added", added),
+				slog.Int("overridden", overridden),
+			)
+		}
+	})
+}
+
+// objectHeaderMatches reports whether the bytes at offset start with an
+// "N G obj" header matching the expected object number. A negative
+// match triggers the augmentation path because it signals that the
+// xref table misrepresents where the body of the object lives.
+func objectHeaderMatches(r io.ReaderAt, offset int64, expected int) bool {
+	var buf [64]byte
+	n, err := r.ReadAt(buf[:], offset)
+	if n == 0 && err != nil {
+		return false
+	}
+	s := buf[:n]
+	// Skip leading whitespace before the decimal.
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') {
+		i++
+	}
+	objNum, consumed := readDecimal(s, i)
+	if consumed == 0 {
+		return false
+	}
+	if objNum != expected {
+		return false
+	}
+	i += consumed
+	if i >= len(s) || s[i] != ' ' {
+		return false
+	}
+	i++
+	_, consumed = readDecimal(s, i)
+	if consumed == 0 {
+		return false
+	}
+	i += consumed
+	if i+4 > len(s) {
+		return false
+	}
+	return s[i] == ' ' && s[i+1] == 'o' && s[i+2] == 'b' && s[i+3] == 'j'
+}
+
+// scanIndirectObjects returns an xref entry for every "N G obj" header
+// found in the raw document bytes. The scan reads the file in chunks
+// with a small overlap so that markers straddling chunk boundaries are
+// still detected.
+func scanIndirectObjects(ctx context.Context, r io.ReaderAt, size int64) (map[int]xref.XRefEntry, error) {
+	const chunkSize = 256 * 1024
+	const overlap = 32
+	buf := make([]byte, chunkSize+overlap)
+	entries := make(map[int]xref.XRefEntry)
+	var offset int64
+	for offset < size {
+		if err := ctx.Err(); err != nil {
+			return entries, err
+		}
+		readSize := int64(chunkSize + overlap)
+		if remaining := size - offset; remaining < readSize {
+			readSize = remaining
+		}
+		n, err := r.ReadAt(buf[:readSize], offset)
+		if n == 0 {
+			if err != nil {
+				return entries, err
+			}
+			break
+		}
+		recordIndirectObjectOffsets(buf[:n], offset, entries)
+		// Advance by one chunk. A chunk that reached EOF (or returned
+		// fewer bytes than requested) is the last one. Otherwise step
+		// back by overlap so markers straddling the boundary land
+		// inside the next chunk.
+		if offset+int64(n) >= size || int64(n) < readSize {
+			break
+		}
+		offset += int64(n) - overlap
+	}
+	return entries, nil
+}
+
+// recordIndirectObjectOffsets finds every "N G obj" header inside chunk
+// and records its absolute offset (baseOffset + local index) in
+// entries. N and G are non-negative decimal integers separated by
+// single spaces, followed by the literal "obj" keyword and a
+// whitespace character. Malformed candidates are skipped.
+func recordIndirectObjectOffsets(chunk []byte, baseOffset int64, entries map[int]xref.XRefEntry) {
+	i := 0
+	for i < len(chunk) {
+		// A valid marker starts with a newline or is at the beginning
+		// of the buffer. Scan for a digit that could begin N.
+		if i > 0 && chunk[i-1] != '\n' && chunk[i-1] != '\r' {
+			i++
+			continue
+		}
+		j := i
+		objNum, advance := readDecimal(chunk, j)
+		if advance == 0 {
+			i++
+			continue
+		}
+		j += advance
+		if j >= len(chunk) || chunk[j] != ' ' {
+			i++
+			continue
+		}
+		j++
+		genNum, advance := readDecimal(chunk, j)
+		if advance == 0 {
+			i++
+			continue
+		}
+		j += advance
+		if j+4 > len(chunk) || chunk[j] != ' ' || chunk[j+1] != 'o' || chunk[j+2] != 'b' || chunk[j+3] != 'j' {
+			i++
+			continue
+		}
+		if j+4 < len(chunk) {
+			trailer := chunk[j+4]
+			if trailer != '\n' && trailer != '\r' && trailer != ' ' && trailer != '\t' {
+				i++
+				continue
+			}
+		}
+		entry := xref.XRefEntry{
+			Type:       xref.XRefTypeNormal,
+			Offset:     baseOffset + int64(i),
+			Generation: genNum,
+		}
+		if existing, ok := entries[objNum]; !ok || entry.Offset > existing.Offset {
+			entries[objNum] = entry
+		}
+		i = j + 4
+	}
+}
+
+// readDecimal parses a sequence of ASCII digits starting at s[pos] and
+// returns the integer value plus the number of bytes consumed. Zero
+// consumption signals that no digit was present.
+func readDecimal(s []byte, pos int) (int, int) {
+	start := pos
+	n := 0
+	for pos < len(s) {
+		c := s[pos]
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+		pos++
+	}
+	return n, pos - start
+}
+
 // resolveWith is the internal implementation of Resolve. The visited map tracks
 // object numbers in the current call chain to detect circular references. Each
 // goroutine gets its own visited set, so there is no cross-goroutine interference.
@@ -447,8 +656,18 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	visited[ref.ObjectNum] = true
 	defer delete(visited, ref.ObjectNum)
 
-	// Look up the object in the xref table (Index is immutable after construction).
+	// Look up the object in the xref table.
 	entry, ok := d.Index.Entries[ref.ObjectNum]
+	if !ok {
+		// Once per document, augment the xref with entries recovered
+		// from a raw-byte scan of the file. Handles PDFs whose xref
+		// table is truncated or references objects inserted by
+		// external editors that never rewrote the table. The scan is
+		// O(file size) and memoised via sync.Once so subsequent
+		// lookups hit the cached index.
+		d.augmentXrefFromRawScan(ctx)
+		entry, ok = d.Index.Entries[ref.ObjectNum]
+	}
 	if !ok {
 		return nil, fmt.Errorf("%w: object %d", ErrObjectNotFound, ref.ObjectNum)
 	}
@@ -470,6 +689,20 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		complianceMode := d.ComplianceMode()
 		if complianceMode {
 			d.validateObjectHeaderFormat(entry.Offset, ref.ObjectNum)
+		}
+
+		// Verify the object header at the xref-declared offset matches
+		// the expected number. A mismatch typically means the xref table
+		// lies about offsets, which happens on files rewritten by buggy
+		// producers or after truncation. Augment from the raw scan and
+		// retry at the discovered offset before giving up. The override
+		// lives inside augmentXrefFromRawScan so all writes to
+		// Index.Entries stay under the sync.Once.
+		if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
+			d.augmentXrefFromRawScan(ctx)
+			if rescanned, ok := d.Index.Entries[ref.ObjectNum]; ok {
+				entry = rescanned
+			}
 		}
 
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))

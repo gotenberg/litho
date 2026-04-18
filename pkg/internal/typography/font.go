@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -43,6 +44,13 @@ type Font struct {
 
 	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
 	CIDOffset           int  // Offset to add to CID values before treating as Unicode (detected from /W array)
+
+	// LigatureOverrides maps a byte code to a pre-decoded multi-rune
+	// string for /Differences entries that declare composite glyph
+	// names like "f_t" or "T_h". The regular [Font.Encoding] map can
+	// only hold a single rune per byte, so glyph decoding consults this
+	// map first and returns the stored string verbatim when present.
+	LigatureOverrides map[byte]string
 }
 
 // GlyphWidth returns the advance width (in 1/1000 text-space units) for the
@@ -231,6 +239,31 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 	return dst
 }
 
+// standard14Prefixes holds lowercase substrings that identify the
+// non-Symbol, non-Dingbats entries of the PDF standard 14 base fonts.
+// Subset prefixes (e.g. "ABCDEF+Helvetica") still match because the
+// lookup uses Contains.
+var standard14Prefixes = []string{
+	"helvetica",
+	"courier",
+	"times",
+	"timesroman",
+	"timesnewroman",
+}
+
+// isStandard14BaseFont reports whether a lowercased BaseFont name
+// identifies one of the standard 14 Type 1 fonts whose built-in
+// encoding is [encodings.StandardEncoding] when no /Encoding entry is
+// present.
+func isStandard14BaseFont(lowerName string) bool {
+	for _, p := range standard14Prefixes {
+		if strings.Contains(lowerName, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveFont extracts and resolves a [Font] from a PDF font dictionary.
 func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (*Font, error) {
 	subtypeObj, ok := fontDict["Subtype"]
@@ -246,11 +279,16 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		return nil, fmt.Errorf("font /Subtype is not a name")
 	}
 
-	// Detect Symbol and ZapfDingbats fonts by BaseFont name to select
-	// the correct default encoding per the PDF spec (these fonts use
-	// their own built-in encodings, not WinAnsiEncoding).
+	// Detect Symbol, ZapfDingbats, and the other 14 standard Type 1
+	// fonts by BaseFont name to select the correct default encoding
+	// per ISO 32000-1 §9.6.5.4. Symbol and ZapfDingbats use their own
+	// built-in encodings; the remaining standard fonts default to
+	// [encodings.StandardEncoding]. Other simple fonts keep
+	// [encodings.WinAnsiEncoding] as the fallback because most modern
+	// producers target Windows.
 	isSymbolFont := false
 	isDingbatsFont := false
+	isStandardType1 := false
 	if bfObj, ok := fontDict["BaseFont"]; ok {
 		bfName, err := document.ResolveName(ctx, doc, bfObj)
 		if err != nil {
@@ -260,14 +298,18 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			name := strings.ToLower(string(bfName))
 			isSymbolFont = strings.Contains(name, "symbol")
 			isDingbatsFont = strings.Contains(name, "dingbat") || strings.Contains(name, "zapfdingbats")
+			isStandardType1 = isStandard14BaseFont(name)
 		}
 	}
 
 	defaultEncoding := copyEncoding(encodings.WinAnsiEncoding)
-	if isSymbolFont {
+	switch {
+	case isSymbolFont:
 		defaultEncoding = encodings.BuildSymbolEncoding()
-	} else if isDingbatsFont {
+	case isDingbatsFont:
 		defaultEncoding = encodings.BuildZapfDingbatsEncoding()
+	case isStandardType1:
+		defaultEncoding = copyEncoding(encodings.StandardEncoding)
 	}
 
 	font := &Font{
@@ -511,6 +553,23 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 					case ast.PdfName:
 						if r, ok := resolveGlyphRune(string(v), isDingbats, isSymbol); ok {
 							font.Encoding[byte(currentIndex)] = r
+						} else if decomposed, ok := decomposeGlyphName(string(v), isDingbats, isSymbol); ok {
+							// Type1 fonts stack ligature components with
+							// underscores ("f_t", "T_h"). When no single
+							// rune mapping exists the decomposed string
+							// lives in [Font.LigatureOverrides] and beats
+							// the byte's default-encoding rune during
+							// extraction.
+							if font.LigatureOverrides == nil {
+								font.LigatureOverrides = make(map[byte]string)
+							}
+							font.LigatureOverrides[byte(currentIndex)] = decomposed
+							// Anchor the encoding map at the first rune so
+							// width calculation and encoding-derived
+							// fallbacks still have a value.
+							if first, _ := utf8.DecodeRuneInString(decomposed); first != utf8.RuneError {
+								font.Encoding[byte(currentIndex)] = first
+							}
 						}
 						currentIndex++
 					}
@@ -1062,7 +1121,7 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 		return
 	}
 
-	gidMap := extractGIDToUnicode(ctx, fontData)
+	gidMap := ExtractGIDToUnicode(ctx, fontData)
 	if len(gidMap) == 0 {
 		return
 	}
@@ -1070,9 +1129,10 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 	font.GIDToUnicode = gidMap
 }
 
-// extractGIDToUnicode dispatches font data to the appropriate parser
-// (TrueType or CFF) based on the font signature.
-func extractGIDToUnicode(ctx context.Context, fontData []byte) map[uint16]rune {
+// ExtractGIDToUnicode dispatches font data to the appropriate parser
+// (TrueType or CFF) based on the font signature and returns a
+// glyph ID to Unicode rune mapping.
+func ExtractGIDToUnicode(ctx context.Context, fontData []byte) map[uint16]rune {
 	switch detectFontFormat(fontData) {
 	case fontFormatTrueType:
 		gidMap, _ := truetype.GlyphToUnicode(ctx, fontData)
@@ -1219,7 +1279,7 @@ func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict a
 	}
 
 	// Extract GID→Unicode from the embedded font.
-	gidToUni := extractGIDToUnicode(ctx, decodeFontStreamFromDescriptor(ctx, doc, fontDict))
+	gidToUni := ExtractGIDToUnicode(ctx, decodeFontStreamFromDescriptor(ctx, doc, fontDict))
 	if len(gidToUni) == 0 {
 		return
 	}
@@ -1497,6 +1557,36 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 		}
 	}
 	return 0, false
+}
+
+// decomposeGlyphName splits a composite Adobe glyph name of the form
+// "part1_part2[_partN]" and returns the concatenated Unicode runes of
+// each component when every part resolves. Returns ("", false) when
+// the input is not a composite or any part is unresolvable. The
+// decomposition lets /Differences entries that declare Type1 ligature
+// glyph names (e.g. "f_t", "T_h", "c_h") surface as their constituent
+// characters during text extraction.
+func decomposeGlyphName(name string, isDingbats, isSymbol bool) (string, bool) {
+	if !strings.Contains(name, "_") {
+		return "", false
+	}
+	parts := strings.Split(name, "_")
+	if len(parts) < 2 {
+		return "", false
+	}
+	var b strings.Builder
+	b.Grow(len(parts))
+	for _, p := range parts {
+		if p == "" {
+			return "", false
+		}
+		r, ok := resolveGlyphRune(p, isDingbats, isSymbol)
+		if !ok {
+			return "", false
+		}
+		b.WriteRune(r)
+	}
+	return b.String(), true
 }
 
 // isDingbatsGlyphName returns true if the name matches the ZapfDingbats

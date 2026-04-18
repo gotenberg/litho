@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -71,6 +70,14 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 		case tok.Type == lexer.TokenKeyword && tok.Value == "xref":
 			d.XRefTableOffsets = append(d.XRefTableOffsets, currentOffset)
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
+			// Snapshot the object numbers that already belong to newer
+			// xref sections so this section's /XRefStm cannot override
+			// them. Entries added by this section's plain xref table or
+			// /XRefStm remain free to be updated by the stream.
+			preExisting := make(map[int]struct{}, len(d.Index.Entries))
+			for objNum := range d.Index.Entries {
+				preExisting[objNum] = struct{}{}
+			}
 			trailerDict, p, err := xref.ParseXRefTable(ctx, lex, d.Index.Entries)
 			if err != nil {
 				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
@@ -83,11 +90,14 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			}
 
 			// Hybrid-Reference (PDF 1.5): the trailer may contain /XRefStm
-			// pointing to a compressed XRef stream whose entries override
-			// the legacy plain-text table entries.
+			// pointing to a compressed XRef stream whose entries supplement
+			// the legacy plain-text table in the same section. The stream
+			// overrides entries added by this section's plain table but
+			// leaves entries from newer sections (already in preExisting)
+			// untouched so incremental updates keep their latest offsets.
 			if xRefStmObj, ok := trailerDict["XRefStm"]; ok {
 				if xRefStmOffset, ok := xRefStmObj.(ast.PdfInt); ok {
-					if err := d.parseHybridXRefStream(ctx, int64(xRefStmOffset)); err != nil {
+					if err := d.parseHybridXRefStream(ctx, int64(xRefStmOffset), preExisting); err != nil {
 						return fmt.Errorf("hybrid /XRefStm: %w", err)
 					}
 				}
@@ -138,10 +148,14 @@ func mergeTrailerKeys(dst, src ast.PdfDict) {
 	}
 }
 
-// parseHybridXRefStream parses a compressed XRef stream embedded in a hybrid-
-// reference PDF. Entries from the compressed stream override any corresponding
-// entries from the legacy plain-text table.
-func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64) error {
+// parseHybridXRefStream parses a compressed XRef stream embedded in a
+// hybrid-reference PDF. Entries from the stream override entries in
+// the legacy plain-text table from the same xref section so readers
+// that understand compressed object streams always see the complete
+// picture. Entries in skipLocked (object numbers registered by newer
+// xref sections before this section was parsed) stay untouched so
+// incremental updates keep their latest offsets.
+func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64, skipLocked map[int]struct{}) error {
 	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, offset))
 	p := parser.NewParser(lex)
 	obj, err := p.ParseObject(ctx)
@@ -154,14 +168,17 @@ func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64) erro
 		return fmt.Errorf("expected xref stream at /XRefStm offset %d, got %T", offset, obj)
 	}
 
-	// Parse into a temporary map so entries override the legacy table.
 	hybridEntries := make(map[int]xref.XRefEntry)
 	if _, err := xref.ParseXRefStream(ctx, stream, hybridEntries); err != nil {
 		return fmt.Errorf("parsing hybrid xref stream entries at offset %d: %w", offset, err)
 	}
 
-	// Merge: hybrid entries override legacy entries.
-	maps.Copy(d.Index.Entries, hybridEntries)
+	for objNum, entry := range hybridEntries {
+		if _, locked := skipLocked[objNum]; locked {
+			continue
+		}
+		d.Index.Entries[objNum] = entry
+	}
 
 	return nil
 }
@@ -266,17 +283,28 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 // validateEndobjFormat scans the object body starting at offset to find
 // "endobj" and validates it is preceded by an EOL marker.
 func (d *Document) validateEndobjFormat(offset int64, objNum int) {
-	// Read a generous chunk. Most objects are small; 16KB handles most cases.
-	const maxScan = 16384
-	buf := make([]byte, maxScan)
+	// Cap the scan at the next indirect object's offset so "endobj"
+	// literals embedded in a later object's strings cannot be found.
+	scanLimit := int64(16384)
+	for _, entry := range d.Index.Entries {
+		if entry.Type != xref.XRefTypeNormal {
+			continue
+		}
+		if entry.Offset > offset && entry.Offset-offset < scanLimit {
+			scanLimit = entry.Offset - offset
+		}
+	}
+	buf := make([]byte, scanLimit)
 	n, _ := d.r.ReadAt(buf, offset)
 	if n < 10 { //nolint:mnd
 		return
 	}
 	data := buf[:n]
 
-	// Search for "endobj". Scan from the end since we want the LAST one
-	// (objects can contain the string "endobj" in string literals).
+	// Scan backward for "endobj". Since `data` stops at the start of
+	// the next object the last endobj in the buffer belongs to this
+	// object, not a neighbour; embedded string occurrences earlier in
+	// the body are skipped over.
 	endobjIdx := -1
 	for i := len(data) - 6; i >= 0; i-- { //nolint:mnd
 		if string(data[i:i+6]) == "endobj" {

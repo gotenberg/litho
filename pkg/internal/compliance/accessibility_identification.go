@@ -116,73 +116,93 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 }
 
 // checkPDFUAIDPrefixes validates that pdfuaid properties use the correct
-// "pdfuaid" namespace prefix and that pdfuaid:rev is a 4-digit year.
+// "pdfuaid" namespace prefix and that pdfuaid:rev is a 4-digit year. The
+// checks operate only on the PDF/UA Identification namespace
+// (http://www.aiim.org/pdfua/ns/id/); identically named properties from
+// the PDF/A Identification namespace (pdfaid:part, pdfaid:rev, etc.) are
+// unrelated and must not trigger these rules.
 func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
 	}
-
 	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
 	if !ok {
 		return nil
 	}
+	return checkPDFUAIDPrefixesIn(xmpData, profile)
+}
 
-	// Extract the prefix used for the pdfuaid namespace URI.
-	// PDF/UA-2 may use "http://www.aiim.org/pdfua/ns/id/" instead of the
-	// PDF/A ID namespace.
+// checkPDFUAIDPrefixesIn is the pure-logic core of [checkPDFUAIDPrefixes]
+// exposed for unit testing. It takes the decoded XMP bytes and the
+// profile name and returns the same violations the I/O-bound wrapper
+// would.
+func checkPDFUAIDPrefixesIn(xmpData []byte, profile string) []Violation {
 	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
-	prefixMap := xmpExtractPrefixMap(xmpData)
-	pdfuaidPrefix := prefixMap[xmpPdfaIDNamespace]
-	pdfuaPrefix := prefixMap[pdfuaIDNamespace]
+	// Enumerate every prefix bound to the PDF/UA Identification
+	// namespace URI. XMP permits a URI to be aliased to several prefixes
+	// (seen in the wild as dual bindings like pdfuaid + pdfuaia → UA
+	// URI). A single-value lookup would return only one of them and
+	// miss the "wrong-prefix" violation when the document uses a
+	// non-canonical alias for the target property.
+	uaPrefixes := xmpExtractAllPrefixesForURI(xmpData, pdfuaIDNamespace)
 
 	var results []Violation
 	raw := string(xmpData)
 
+	// wrongPrefix reports whether any prefix bound to the PDF/UA URI,
+	// other than the canonical "pdfuaid", carries the named property.
+	// Returns the offending prefix on the first match.
+	wrongPrefix := func(property string) (string, bool) {
+		for _, p := range uaPrefixes {
+			if p == "pdfuaid" {
+				continue
+			}
+			if strings.Contains(raw, p+":"+property) {
+				return p, true
+			}
+		}
+		return "", false
+	}
+
 	if profile == "PDF/UA-1" {
-		// t3: "part" property must use "pdfuaid" prefix.
-		if !strings.Contains(raw, "pdfuaid:part") {
-			// "part" may exist under a different prefix.
-			if pdfuaidPrefix != "" && pdfuaidPrefix != "pdfuaid" && strings.Contains(raw, pdfuaidPrefix+":part") {
-				results = append(results, failf(Rule_14289_1_5_t03,
-					"property 'part' uses prefix %q instead of 'pdfuaid'", pdfuaidPrefix)...)
-			}
+		if prefix, bad := wrongPrefix("part"); bad && !strings.Contains(raw, "pdfuaid:part") {
+			results = append(results, failf(Rule_14289_1_5_t03,
+				"property 'part' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		// t4: "amd" property must use "pdfuaid" prefix.
-		if strings.Contains(raw, ":amd") && pdfuaidPrefix != "pdfuaid" {
-			// Only flag if "amd" appears with a non-pdfuaid prefix.
-			if pdfuaidPrefix != "" && strings.Contains(raw, pdfuaidPrefix+":amd") {
-				// The prefix is wrong but the property exists.
-			} else if !strings.Contains(raw, "pdfuaid:amd") && strings.Contains(raw, ":amd") {
-				results = append(results, failf(Rule_14289_1_5_t04,
-					"property 'amd' does not use 'pdfuaid' prefix")...)
-			}
+		if prefix, bad := wrongPrefix("amd"); bad && !strings.Contains(raw, "pdfuaid:amd") {
+			results = append(results, failf(Rule_14289_1_5_t04,
+				"property 'amd' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		// t5: "corr" property must use "pdfuaid" prefix.
-		if strings.Contains(raw, ":corr") && pdfuaidPrefix != "pdfuaid" {
-			if !strings.Contains(raw, "pdfuaid:corr") && strings.Contains(raw, ":corr") {
-				results = append(results, failf(Rule_14289_1_5_t05,
-					"property 'corr' does not use 'pdfuaid' prefix")...)
-			}
+		if prefix, bad := wrongPrefix("corr"); bad && !strings.Contains(raw, "pdfuaid:corr") {
+			results = append(results, failf(Rule_14289_1_5_t05,
+				"property 'corr' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
 	}
 
 	if profile == "PDF/UA-2" {
-		// t4: "rev" property must use "pdfuaid" prefix.
-		// Check both pdfa and pdfua namespace URIs.
-		effectivePrefix := pdfuaidPrefix
-		if effectivePrefix == "" {
-			effectivePrefix = pdfuaPrefix
+		if prefix, bad := wrongPrefix("part"); bad && !strings.Contains(raw, "pdfuaid:part") {
+			results = append(results, failf(Rule_14289_2_5_t03,
+				"property 'part' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		if effectivePrefix != "" && effectivePrefix != "pdfuaid" {
-			if strings.Contains(raw, effectivePrefix+":rev") {
-				results = append(results, failf(Rule_14289_2_5_t04,
-					"property 'rev' uses prefix %q instead of 'pdfuaid'", effectivePrefix)...)
-			}
+		if prefix, bad := wrongPrefix("rev"); bad && !strings.Contains(raw, "pdfuaid:rev") {
+			results = append(results, failf(Rule_14289_2_5_t04,
+				"property 'rev' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		// t5: pdfuaid:rev must be a 4-digit year.
+		// t5: pdfuaid:rev must be a 4-digit year. Read the value from
+		// the canonical prefix first, then from any other prefix bound
+		// to the PDF/UA URI. The PDF/A pdfaid:rev (under a different
+		// namespace URI) must never be consulted.
 		revValue := extractXMPPropertyValue(raw, "pdfuaid", "rev")
-		if revValue == "" && effectivePrefix != "" {
-			revValue = extractXMPPropertyValue(raw, effectivePrefix, "rev")
+		if revValue == "" {
+			for _, p := range uaPrefixes {
+				if p == "pdfuaid" {
+					continue
+				}
+				revValue = extractXMPPropertyValue(raw, p, "rev")
+				if revValue != "" {
+					break
+				}
+			}
 		}
 		if revValue != "" && !isFourDigitYear(revValue) {
 			results = append(results, failf(Rule_14289_2_5_t05,
@@ -193,8 +213,16 @@ func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog a
 	return results
 }
 
-// extractXMPPropertyValue extracts the value of prefix:localName from raw XMP.
-// Handles both attribute form (prefix:name="value") and element form (<prefix:name>value</prefix:name>).
+// extractXMPPropertyValue extracts the value of prefix:localName from raw
+// XMP. Handles both attribute form (prefix:name="value") and element
+// form (<prefix:name>value</prefix:name>).
+//
+// The function is namespace-blind: it matches a literal prefix:localName
+// substring. Callers must verify that prefix is bound to the intended
+// namespace URI (via [xmpExtractPrefixMap] or equivalent) before calling,
+// or they risk confusing distinct properties that share a local name
+// across namespaces. For example pdfaid:rev (PDF/A) and pdfuaid:rev
+// (PDF/UA) both look like ":rev" under different URIs.
 func extractXMPPropertyValue(raw, prefix, localName string) string {
 	key := prefix + ":" + localName
 	// Attribute form: key="value"

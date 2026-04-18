@@ -36,6 +36,10 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 
 		char, n, skip := decodeNextChar(font, data)
 		if skip {
+			// Multi-byte codespace consumed bytes without a mapping
+			// and the caller opted out of emitting anything. Advance
+			// the byte stream but leave the text matrix and elements
+			// untouched.
 			data = data[n:]
 			continue
 		}
@@ -43,16 +47,6 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		// Decompose standard ligatures to their component characters so
 		// that text search and comparison works with plain ASCII.
 		char = decomposeLigature(char)
-
-		// Skip known non-glyph control characters (NUL, CR, LF, DEL).
-		// Do NOT skip low byte values in general. PDF fonts frequently
-		// use 0x01–0x1F as valid glyph codes (e.g. ligatures).
-		if char == "?" && len(data) > 0 {
-			if b := data[0]; b == 0x00 || b == 0x0a || b == 0x0d || b == 0x7f {
-				data = data[n:]
-				continue
-			}
-		}
 
 		tm := state.Text.Tm
 		ctm := state.CTM
@@ -74,6 +68,12 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		dirY := tm[0]*ctm[1] + tm[1]*ctm[3]
 		angle := math.Atan2(dirY, dirX)
 
+		// Unresolved single-byte glyphs (char == "") still get a
+		// [models.TextElement] so downstream layout code sees the
+		// width they occupy. [CoalesceElements] drops them before the
+		// public API returns, and [ReconstructText] treats them as
+		// phantom anchors for the gap heuristic without emitting
+		// characters or word boundaries.
 		*elements = append(*elements, models.TextElement{
 			Text:          char,
 			X:             x,
@@ -81,6 +81,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Width:         pageWidth,
 			FontSize:      effectiveFontSize,
 			SpaceWidth:    spaceAdvance,
+			Chunk:         machine.Chunk,
 			MCID:          mcid,
 			Invisible:     textIsInvisible(state),
 			Vertical:      font.WMode == 1,
@@ -170,7 +171,13 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		return "", n, true
 	}
 
-	// Single-byte fallback paths.
+	// Single-byte fallback paths. [Font.LigatureOverrides] is checked
+	// before the regular encoding map because composite /Differences
+	// glyph names decompose to multi-rune strings that the byte→rune
+	// encoding cannot represent.
+	if s, ok := font.LigatureOverrides[data[0]]; ok {
+		return s, 1, false
+	}
 	if font.Subtype == "Type0" && font.CIDIdentityFallback {
 		char = resolveGlyphFallback(font, data, &n)
 	} else if r, ok := font.Encoding[data[0]]; ok {
@@ -277,8 +284,12 @@ func decomposeLigature(s string) string {
 	}
 }
 
-// resolveGlyphFallback resolves a character from font fallback tables when the
-// Encoding table has no mapping. It modifies *n if a multi-byte code is consumed.
+// resolveGlyphFallback resolves a character from font fallback tables
+// when the Encoding table has no mapping. It modifies *n if a
+// multi-byte code is consumed. An empty string signals "no mapping
+// available"; callers treat that as an unresolved glyph and drop it
+// from emitted text rather than printing a "?" placeholder that would
+// surface in extracted content.
 func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 	switch {
 	case font.GIDToUnicode != nil:
@@ -295,7 +306,7 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 		if r, ok := font.GIDToUnicode[uint16(data[0])]; ok {
 			return string(r)
 		}
-		return "?"
+		return ""
 	case font.CIDIdentityFallback && len(data) >= 2:
 		// CIDToGIDMap /Identity without embedded font: treat the
 		// 2-byte character code as a direct Unicode code point,
@@ -307,6 +318,6 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 		}
 		return ""
 	default:
-		return "?"
+		return ""
 	}
 }

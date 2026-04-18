@@ -809,9 +809,45 @@ var xmpExpectedPrefix = map[string]string{
 }
 
 // xmpExtractPrefixMap scans raw XMP bytes for xmlns:prefix="uri" declarations
-// and returns a map from namespace URI to the actual prefix name used.
+// and returns a map from namespace URI to the actual prefix name used. When
+// a URI is bound to multiple prefixes, the last occurrence wins; callers
+// that need every binding must use [xmpExtractAllPrefixesForURI] instead.
 func xmpExtractPrefixMap(data []byte) map[string]string {
 	result := make(map[string]string)
+	for _, b := range xmpNamespaceBindings(data) {
+		result[b.uri] = b.prefix
+	}
+	return result
+}
+
+// xmpExtractAllPrefixesForURI returns every prefix bound to targetURI in
+// the XMP bytes. XMP allows multiple xmlns declarations to point at the
+// same URI; some producers deliberately alias the PDF/UA Identification
+// namespace to a non-canonical prefix and then expose identification
+// properties under that alias. ISO 14289 still requires the canonical
+// "pdfuaid" prefix for those properties, so callers need to check every
+// binding rather than whichever one last-write-wins leaves in the map.
+func xmpExtractAllPrefixesForURI(data []byte, targetURI string) []string {
+	var result []string
+	for _, b := range xmpNamespaceBindings(data) {
+		if b.uri == targetURI {
+			result = append(result, b.prefix)
+		}
+	}
+	return result
+}
+
+type xmpNSBinding struct {
+	prefix string
+	uri    string
+}
+
+// xmpNamespaceBindings walks every xmlns:prefix="uri" declaration in the
+// raw XMP bytes and returns them in order of appearance. Duplicates are
+// preserved so callers can distinguish "URI bound to one prefix" from
+// "URI bound to several prefixes".
+func xmpNamespaceBindings(data []byte) []xmpNSBinding {
+	var bindings []xmpNSBinding
 	s := string(data)
 	for {
 		idx := strings.Index(s, "xmlns:")
@@ -837,11 +873,10 @@ func xmpExtractPrefixMap(data []byte) map[string]string {
 		if endIdx < 0 {
 			break
 		}
-		uri := s[:endIdx]
+		bindings = append(bindings, xmpNSBinding{prefix: prefix, uri: s[:endIdx]})
 		s = s[endIdx+1:]
-		result[uri] = prefix
 	}
-	return result
+	return bindings
 }
 
 // xmpCheckExtensionSchemas validates that PDF/A extension schemas have all

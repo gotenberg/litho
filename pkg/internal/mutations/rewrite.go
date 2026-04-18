@@ -20,6 +20,11 @@ type FullRewriteConfig struct {
 	Version         string
 	RequiredVersion string
 	XRefStream      bool
+	// Overrides pre-seeds the copier so remediation patches made against
+	// the source document's object numbers are used in place of the
+	// original objects during the copy pass. Keys are source object
+	// numbers; values are the replacement payloads.
+	Overrides map[int]ast.PdfObject
 }
 
 // FullRewrite performs a complete rewrite of the document, applying all
@@ -28,6 +33,9 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	doc := cfg.Doc
 	alloc := writer.NewObjAllocator(0)
 	copier := writer.NewCopier(doc, alloc)
+	if len(cfg.Overrides) > 0 {
+		copier.WithOverrides(cfg.Overrides)
+	}
 
 	// Copy the catalog (root of the object graph).
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)

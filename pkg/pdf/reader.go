@@ -101,9 +101,9 @@ type Reader struct {
 	pagesErr    error
 }
 
-// Close releases any resources held by the [Reader]. When the Reader was
-// created via [OpenFile], Close closes the underlying file. For Readers
-// created via [Open], Close is a no-op.
+// Close releases any resources held by the [Reader]. When the Reader
+// was created via [OpenFile], Close closes the underlying file. For
+// Readers created via [Open], Close is a no-op.
 func (r *Reader) Close() error {
 	if r.closer != nil {
 		return r.closer.Close()
@@ -407,16 +407,26 @@ func (r *Reader) Permissions() Permissions {
 	}
 }
 
-// XMPMetadata returns a lazy Open function for the catalog /Metadata XMP stream.
-// Returns nil if no XMP metadata is present. The stream data is not read until
-// the caller invokes the returned function. Use [Reader.Metadata] for parsed
-// key-value metadata.
+// XMPMetadata returns a lazy Open function for the catalog /Metadata
+// XMP stream, or nil when the document has no XMP packet. The stream
+// data is not read until the caller invokes the returned function.
+//
+// Most applications want [Reader.Metadata] instead; reach for
+// XMPMetadata only when you need custom XMP namespaces, PDF/A
+// identification fields, or full RDF/XML access.
 // Values must not be shared across goroutines without synchronization.
 func (r *Reader) XMPMetadata(ctx context.Context) (func(context.Context) (io.ReadCloser, error), error) {
 	return semantics.XMPOpen(ctx, r.doc)
 }
 
-// Metadata extracts standard document-level metadata (Title, Author, etc.).
+// Metadata returns the document-level metadata as a flat
+// name-to-value map: Title, Author, Subject, Keywords, Creator,
+// Producer, CreationDate, ModDate. This is the recommended entry
+// point for most applications.
+//
+// For PDF/A-compliant documents with custom XMP namespaces or extended
+// rights/history metadata, use [Reader.XMPMetadata] to read the raw
+// XMP packet.
 func (r *Reader) Metadata(ctx context.Context) (map[string]string, error) {
 	return semantics.Metadata(ctx, r.doc)
 }
@@ -604,9 +614,12 @@ func (r *Reader) buildBookmarkInput(ctx context.Context) (bookmarks.Input, error
 	}, nil
 }
 
-// FormData extracts user-typed values from interactive AcroForms as a
-// simple name-to-value map. It automatically evaluates any PDF JavaScript
-// calculation scripts. For richer field metadata, use [Reader.FormFields].
+// FormData returns filled-in AcroForm values as a name-to-value map,
+// evaluating any PDF JavaScript calculation scripts. Use this when all
+// you need is "what did the user type".
+//
+// For field type, flags, options, and geometry, use
+// [Reader.FormFields] instead.
 func (r *Reader) FormData(ctx context.Context) (map[string]string, error) {
 	fields, err := annotation.ExtractFormData(ctx, r.doc)
 	if err != nil {
@@ -621,8 +634,9 @@ func (r *Reader) FormData(ctx context.Context) (map[string]string, error) {
 }
 
 // FormFields extracts interactive AcroForm fields with full metadata
-// (name, value, type, flags). It automatically evaluates any PDF JavaScript
-// calculation scripts.
+// (name, value, type, flags), evaluating any PDF JavaScript
+// calculation scripts. Use [Reader.FormData] when only the flat
+// name-to-value mapping is needed.
 func (r *Reader) FormFields(ctx context.Context) ([]models.FormField, error) {
 	return annotation.ExtractFormData(ctx, r.doc)
 }
@@ -658,9 +672,13 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) ([]models.Table
 	return heuristics.DetectTables(elements, lines)
 }
 
-// HasAcroForm reports whether the document has interactive form fields.
-// Checks that the catalog /AcroForm dictionary has a non-empty /Fields array
-// with at least one non-signature field.
+// HasAcroForm reports whether the document exposes an interactive
+// AcroForm with at least one field. Catalog-level /NeedsRendering true
+// marks the document as an XFA-rendered form; the AcroForm dictionary
+// on such documents is a vestigial wrapper around XFA data, so
+// HasAcroForm returns false for them. Hybrid documents that declare
+// both /XFA and real widget fields keep returning true, since the
+// widget fields are genuinely interactive under a standard reader.
 func (r *Reader) HasAcroForm(ctx context.Context) bool {
 	rootObj, ok := r.doc.Index.Trailer["Root"]
 	if !ok {
@@ -669,6 +687,11 @@ func (r *Reader) HasAcroForm(ctx context.Context) bool {
 	catalog, err := document.ResolveDict(ctx, r.doc, rootObj)
 	if err != nil || catalog == nil {
 		return false
+	}
+	if nrObj, ok := catalog["NeedsRendering"]; ok {
+		if nr, err := document.ResolveBool(ctx, r.doc, nrObj); err == nil && nr {
+			return false
+		}
 	}
 	acroFormObj, ok := catalog["AcroForm"]
 	if !ok {
@@ -711,59 +734,23 @@ func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) ([]models.
 	return annotation.ExtractAnnotations(ctx, r.doc, pages[pageNum-1], pageMap)
 }
 
-// ExtractRedactedText extracts text elements from the given 1-based page number
-// and flags any that fall inside unapplied /Redact annotations.
-func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) ([]models.TextElement, error) {
-	pages, err := r.resolvePages(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if pageNum < 1 || pageNum > len(pages) {
-		return nil, fmt.Errorf("%w: %d (document has %d pages)", ErrInvalidPageNumber, pageNum, len(pages))
-	}
-
-	targetPage := pages[pageNum-1]
-
-	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
-	if err != nil {
-		return nil, err
-	}
-
-	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
-	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
-	if err != nil {
-		if errors.Is(err, typography.ErrFontNotFound) {
-			return nil, fmt.Errorf("page %d redaction detection halted: %w", pageNum, ErrFontMissing)
-		}
-		return nil, err
-	}
-
-	pageMap := document.BuildPageMap(pages)
-	annots, err := annotation.ExtractAnnotations(ctx, r.doc, targetPage, pageMap)
-	if err != nil {
-		return nil, err
-	}
-
-	return heuristics.DetectUnappliedRedactions(elements, annots), nil
-}
-
-// IsLinearized reports whether the document is linearized (optimized for
-// fast web view / byte-serving). Linearized PDFs place page 1 data at the
-// beginning of the file so it can be rendered before the entire file is
-// downloaded.
+// IsLinearized reports whether the document is linearized (optimised
+// for fast web view / byte-serving). Linearized PDFs place page 1
+// data at the beginning of the file so it can be rendered before the
+// rest of the document has downloaded.
 func (r *Reader) IsLinearized() bool {
 	return r.doc.IsLinearized()
 }
 
-// LinearizationInfo returns the linearization parameters if the document is
-// linearized. Returns nil for non-linearized documents.
+// LinearizationInfo returns the parameters and per-page hint entries
+// decoded from a linearized PDF, or nil when the document is not
+// linearized.
 func (r *Reader) LinearizationInfo() *models.LinearizationParams {
 	lp := r.doc.Linearization
 	if lp == nil {
 		return nil
 	}
-	return &models.LinearizationParams{
+	params := &models.LinearizationParams{
 		FileLength:          lp.FileLength,
 		HintStreamOffset:    lp.HintStreamOffset,
 		HintStreamLength:    lp.HintStreamLength,
@@ -772,25 +759,17 @@ func (r *Reader) LinearizationInfo() *models.LinearizationParams {
 		FirstPageEndOffset:  lp.FirstPageEndOffset,
 		FirstPageXRefOffset: lp.FirstPageXRefOffset,
 	}
-}
-
-// HintTable returns the per-page offset entries decoded from the hint stream
-// of a linearized PDF. Returns nil for non-linearized documents or if the
-// hint stream could not be parsed.
-func (r *Reader) HintTable() []models.PageOffsetEntry {
-	ht := r.doc.HintTable
-	if ht == nil {
-		return nil
-	}
-	result := make([]models.PageOffsetEntry, len(ht))
-	for i, e := range ht {
-		result[i] = models.PageOffsetEntry{
-			ObjCount:            e.ObjCount,
-			PageLength:          e.PageLength,
-			ContentStreamOffset: e.ContentStreamOffset,
+	if ht := r.doc.HintTable; ht != nil {
+		params.Hints = make([]models.PageOffsetEntry, len(ht))
+		for i, e := range ht {
+			params.Hints[i] = models.PageOffsetEntry{
+				ObjCount:            e.ObjCount,
+				PageLength:          e.PageLength,
+				ContentStreamOffset: e.ContentStreamOffset,
+			}
 		}
 	}
-	return result
+	return params
 }
 
 // ExtractSignatures returns the digital signatures present in the document
@@ -817,42 +796,6 @@ func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) ([]
 // no DSS exists.
 func (r *Reader) DSSInfo(ctx context.Context) (*models.DSSInfo, error) {
 	return signature.ResolveDSSInfo(ctx, r.doc)
-}
-
-// ExtractGeoData extracts geospatial metadata from the given 1-based page
-// number. It scans the page's /VP (Viewport) array and Image XObjects for
-// /Measure dictionaries with /Subtype /GEO, returning tie points that map
-// PDF coordinates to GPS (latitude/longitude).
-func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) ([]models.GeoData, error) {
-	targetPage, err := r.resolvePage(ctx, pageNum)
-	if err != nil {
-		return nil, err
-	}
-	return geospatial.ExtractGeoData(ctx, r.doc, targetPage)
-}
-
-// ExtractMeasurements extracts 2D rectilinear measurement scales from the
-// given 1-based page number. It scans the page's /VP (Viewport) array and
-// Line/PolyLine annotations for /Measure dictionaries with /Subtype /RL,
-// returning scale axes that map PDF coordinates to real-world units.
-func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) ([]models.Measurement, error) {
-	targetPage, err := r.resolvePage(ctx, pageNum)
-	if err != nil {
-		return nil, err
-	}
-	return annotation.ExtractMeasurements(ctx, r.doc, targetPage)
-}
-
-// Extract3DModels extracts 3D model streams (U3D or PRC) from /3D annotations
-// on the given 1-based page number. Each returned Model3D carries a lazy Open
-// accessor. The stream data is not decoded until the caller invokes Open.
-// The caller must close the reader returned by Open.
-func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Model3D, error) {
-	targetPage, err := r.resolvePage(ctx, pageNum)
-	if err != nil {
-		return nil, err
-	}
-	return semantics.Extract3DModels(ctx, r.doc, targetPage)
 }
 
 // Page returns the geometry and metadata for the given 1-based page number.
@@ -923,7 +866,7 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) ([]models
 		return nil, err
 	}
 
-	return elements, nil
+	return typography.CoalesceElements(ctx, elements), nil
 }
 
 // ExtractImages returns metadata for Image XObjects on the given 1-based
@@ -952,18 +895,73 @@ func (r *Reader) ExtractLines(ctx context.Context, pageNum int) ([]models.Line, 
 	return graphics.ExtractLines(ops), nil
 }
 
-// ExtractPronunciationLexicons extracts W3C PLS (Pronunciation Lexicon
-// Specification) XML documents from the catalog's /PronunciationLexicon
-// array (PDF 2.0). Returns nil if none are present.
+// ExtractGeoData extracts geospatial metadata from the given 1-based
+// page. Scans the page's /VP (Viewport) array and Image XObjects for
+// /Measure dictionaries with /Subtype /GEO, returning tie points that
+// map PDF coordinates to GPS (latitude/longitude). Returns nil when the
+// page declares no geospatial data.
+func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) ([]models.GeoData, error) {
+	page, err := r.resolvePage(ctx, pageNum)
+	if err != nil {
+		return nil, err
+	}
+	return geospatial.ExtractGeoData(ctx, r.doc, page)
+}
+
+// ExtractMeasurements extracts 2D rectilinear measurement scales from
+// the given 1-based page. Scans the page's /VP (Viewport) array and
+// Line/PolyLine annotations for /Measure dictionaries with
+// /Subtype /RL, returning scale axes that map PDF coordinates to
+// real-world units.
+func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) ([]models.Measurement, error) {
+	page, err := r.resolvePage(ctx, pageNum)
+	if err != nil {
+		return nil, err
+	}
+	return annotation.ExtractMeasurements(ctx, r.doc, page)
+}
+
+// Extract3DModels extracts 3D model streams (U3D or PRC) from /3D
+// annotations on the given 1-based page. Each returned Model3D carries
+// a lazy Open accessor; the stream data is not decoded until the caller
+// invokes Open. The caller must close the reader returned by Open.
+func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Model3D, error) {
+	page, err := r.resolvePage(ctx, pageNum)
+	if err != nil {
+		return nil, err
+	}
+	return semantics.Extract3DModels(ctx, r.doc, page)
+}
+
+// ExtractPronunciationLexicons returns the W3C PLS (Pronunciation
+// Lexicon Specification) XML documents referenced from the catalog's
+// /PronunciationLexicon array (PDF 2.0). Returns nil when none are
+// present.
 func (r *Reader) ExtractPronunciationLexicons(ctx context.Context) ([]models.PronunciationLexicon, error) {
 	return semantics.ExtractPronunciationLexicons(ctx, r.doc)
 }
 
-// ExtractFormulas walks the document structure tree and extracts MathML
+// ExtractFormulas walks the document structure tree and returns MathML
 // from /Formula elements that carry an /AF entry with /AFRelationship
 // /Supplement and MIME type application/mathml+xml (PDF 2.0).
 func (r *Reader) ExtractFormulas(ctx context.Context) ([]models.FormulaElement, error) {
 	return structure.ExtractFormulas(ctx, r.doc)
+}
+
+// ExtractRedactedText extracts text elements from the given 1-based
+// page and flags any that fall inside unapplied /Redact annotations.
+// Use this to detect redactions applied visually but not committed to
+// content streams.
+func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) ([]models.TextElement, error) {
+	elements, err := r.ExtractTextElements(ctx, pageNum)
+	if err != nil {
+		return nil, err
+	}
+	annots, err := r.ExtractAnnotations(ctx, pageNum)
+	if err != nil {
+		return nil, err
+	}
+	return heuristics.DetectUnappliedRedactions(elements, annots), nil
 }
 
 // resolvePages retrieves the catalog and resolves all pages. The result is

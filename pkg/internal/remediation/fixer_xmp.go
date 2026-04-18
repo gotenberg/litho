@@ -37,7 +37,7 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	}
 
 	// Gather metadata from /Info dict for syncing.
-	info := gatherInfoMetadata(ctx, doc)
+	info := gatherInfoMetadata(ctx, alloc, doc)
 
 	// Determine PDF/A part and conformance from profile string.
 	part := compliance.PDFAPart(profile)
@@ -89,30 +89,54 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 }
 
 type infoMetadata struct {
-	Title    string
-	Author   string
-	Subject  string
-	Creator  string
-	Producer string
-	Keywords string
+	Title        string
+	Author       string
+	Subject      string
+	Creator      string
+	Producer     string
+	Keywords     string
+	CreationDate string
+	ModDate      string
 }
 
-func gatherInfoMetadata(ctx context.Context, doc *document.Document) infoMetadata {
+func gatherInfoMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) infoMetadata {
 	var info infoMetadata
 	infoObj, ok := doc.Index.Trailer["Info"]
 	if !ok {
 		return info
 	}
-	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
-	if err != nil || infoDict == nil {
-		return info
+	// Prefer an in-flight patched /Info dict from alloc so earlier
+	// fixers (e.g. info-date) see their changes flow into the XMP sync.
+	var infoDict ast.PdfDict
+	if ref, isRef := infoObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+		if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
+			if d, ok := pending.(ast.PdfDict); ok {
+				infoDict = d
+			}
+		}
+	}
+	if infoDict == nil {
+		resolved, err := document.ResolveDict(ctx, doc, infoObj)
+		if err != nil || resolved == nil {
+			return info
+		}
+		infoDict = resolved
 	}
 
 	readField := func(key ast.PdfName) string {
-		if v, ok := infoDict[key]; ok {
-			if s, ok := v.(ast.PdfString); ok {
-				return document.DecodePdfString(s)
+		v, ok := infoDict[key]
+		if !ok {
+			return ""
+		}
+		if _, isRef := v.(ast.PdfIndirectRef); isRef {
+			resolved, err := document.ResolveObject(ctx, doc, v)
+			if err != nil {
+				return ""
 			}
+			v = resolved
+		}
+		if s, ok := v.(ast.PdfString); ok {
+			return document.DecodePdfString(s)
 		}
 		return ""
 	}
@@ -123,6 +147,8 @@ func gatherInfoMetadata(ctx context.Context, doc *document.Document) infoMetadat
 	info.Creator = readField("Creator")
 	info.Producer = readField("Producer")
 	info.Keywords = readField("Keywords")
+	info.CreationDate = readField("CreationDate")
+	info.ModDate = readField("ModDate")
 	return info
 }
 
@@ -182,6 +208,16 @@ func generateXMP(part int, conformance string, uaPart int, info infoMetadata) st
 		fmt.Fprintf(&sb, "  <dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">%s</rdf:li></rdf:Alt></dc:description>\n", xmlEscape(info.Subject))
 	}
 	fmt.Fprintf(&sb, "  <xmp:CreatorTool>%s</xmp:CreatorTool>\n", creator)
+	if info.CreationDate != "" {
+		if xmpDate := pdfDateToXMP(info.CreationDate); xmpDate != "" {
+			fmt.Fprintf(&sb, "  <xmp:CreateDate>%s</xmp:CreateDate>\n", xmpDate)
+		}
+	}
+	if info.ModDate != "" {
+		if xmpDate := pdfDateToXMP(info.ModDate); xmpDate != "" {
+			fmt.Fprintf(&sb, "  <xmp:ModifyDate>%s</xmp:ModifyDate>\n", xmpDate)
+		}
+	}
 	fmt.Fprintf(&sb, "  <pdf:Producer>%s</pdf:Producer>\n", producer)
 	if info.Keywords != "" {
 		fmt.Fprintf(&sb, "  <pdf:Keywords>%s</pdf:Keywords>\n", xmlEscape(info.Keywords))
@@ -211,38 +247,73 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	var fixes []string
 	buf := []byte(xmp)
 
-	// PDF/A-4 (plain): remove pdfaid:conformance if present (forbidden).
-	// Uses the byte-range splicer so the removal works regardless of
-	// whether the producer serialized the property as a child element
-	// or as an attribute on the rdf:Description start tag.
-	if part == 4 && conformance != "E" && conformance != "F" && strings.Contains(xmp, "pdfaid:conformance") {
-		loc := findXMPProperty(buf, pdfaidNS, "conformance")
-		if loc.Form != xmpPropertyNotFound {
-			buf = removeXMPProperty(buf, loc)
-			fixes = append(fixes, "removed pdfaid:conformance (forbidden for plain PDF/A-4)")
-		} else {
-			// Malformed XMP that even the XML decoder cannot navigate:
-			// leave it alone rather than trying to patch blindly.
-			return xmp, nil
+	// Canonicalize required XMP prefixes. Some producers bind the
+	// PDF/A identification namespace to a non-canonical prefix, e.g.
+	// `xmlns:pdfa="http://www.aiim.org/pdfa/ns/id/"`. ISO 19005 requires
+	// the prefix `pdfaid`.
+	for _, canon := range []struct{ prefix, uri string }{
+		{"pdfaid", pdfaidNS},
+		{"pdfuaid", pdfuaidNS},
+	} {
+		before := len(buf)
+		buf = canonicalizePrefix(buf, canon.prefix, canon.uri)
+		if len(buf) != before {
+			fixes = append(fixes, fmt.Sprintf("canonicalized %s namespace prefix", canon.prefix))
 		}
 	}
 
-	// Inject pdfaid namespace + pdfaid:part [+ pdfaid:conformance] if missing.
-	if part > 0 && findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
-		if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
-			buf = out
+	// Strip the forbidden bytes="..." attribute from the <?xpacket?> header.
+	// Per PDF/A-2+ clause 6.6.2.1, the bytes attribute must not be present.
+	if idx := strings.Index(string(buf), "bytes="); idx != -1 {
+		buf = stripXPacketBytesAttr(buf)
+		fixes = append(fixes, "removed bytes attribute from xpacket header")
+	}
+
+	// PDF/A-4 (plain): remove pdfaid:conformance if present (forbidden).
+	// Uses the byte-range splicer so the removal works regardless of
+	// whether the producer serialized the property as a child element
+	// or as an attribute on the rdf:Description start tag. A missing
+	// property is silently skipped: other namespaces may coincidentally
+	// use the "conformance" local name, and aborting the whole patch
+	// function on that basis would forfeit every later fix.
+	if part == 4 && conformance != "E" && conformance != "F" {
+		if loc := findXMPProperty(buf, pdfaidNS, "conformance"); loc.Form != xmpPropertyNotFound {
+			buf = removeXMPProperty(buf, loc)
+			fixes = append(fixes, "removed pdfaid:conformance (forbidden for plain PDF/A-4)")
 		}
-		if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:part>%d</pdfaid:part>", part)); err == nil {
+	}
+
+	// Inject or correct pdfaid:part + pdfaid:conformance.
+	if part > 0 {
+		partStr := fmt.Sprintf("%d", part)
+		if findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
+			if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:part>%s</pdfaid:part>", partStr)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected pdfaid:part into XMP")
+			}
+		} else if out, err := replacePropertyValue(buf, pdfaidNS, "part", partStr); err == nil {
 			buf = out
-			fixes = append(fixes, "injected pdfaid:part into XMP")
+			fixes = append(fixes, fmt.Sprintf("set pdfaid:part to %d", part))
 		}
 		// For conformance levels other than plain PDF/A-4 (where
-		// conformance is forbidden), also inject the declared level.
+		// conformance is forbidden), also inject or correct the level.
 		needConformance := conformance != "" && (part != 4 || conformance == "E" || conformance == "F")
 		if needConformance {
-			if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:conformance>%s</pdfaid:conformance>", conformance)); err == nil {
+			if findXMPProperty(buf, pdfaidNS, "conformance").Form == xmpPropertyNotFound {
+				// Add as attribute on the rdf:Description that
+				// declares the pdfaid namespace; child-element
+				// insertion lands in the first description, which may
+				// lack the xmlns binding.
+				if out, err := insertAttributeAtDescription(buf, "pdfaid", fmt.Sprintf(`pdfaid:conformance="%s"`, conformance)); err == nil {
+					buf = out
+					fixes = append(fixes, "injected pdfaid:conformance into XMP")
+				}
+			} else if out, err := replacePropertyValue(buf, pdfaidNS, "conformance", conformance); err == nil {
 				buf = out
-				fixes = append(fixes, "injected pdfaid:conformance into XMP")
+				fixes = append(fixes, fmt.Sprintf("set pdfaid:conformance to %s", conformance))
 			}
 		}
 	}
@@ -260,24 +331,33 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 
 	// PDF/A-4: inject pdfaid:rev=2020 if missing.
 	if part == 4 && findXMPProperty(buf, pdfaidNS, "rev").Form == xmpPropertyNotFound {
+		if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
+			buf = out
+		}
 		if out, err := insertChildElement(buf, "<pdfaid:rev>2020</pdfaid:rev>"); err == nil {
 			buf = out
 			fixes = append(fixes, "injected pdfaid:rev=2020 into XMP")
 		}
 	}
 
-	// Inject dc:title if missing and Info has one.
-	if info.Title != "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
-		if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
-			buf = out
-		}
-		injection := fmt.Sprintf(
-			`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt></dc:title>`,
-			xmlEscape(info.Title),
-		)
-		if out, err := insertChildElement(buf, injection); err == nil {
-			buf = out
-			fixes = append(fixes, "injected dc:title into XMP")
+	// Sync dc:title with Info /Title.
+	if info.Title != "" {
+		escaped := xmlEscape(info.Title)
+		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
+		injection := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
+		if findXMPProperty(buf, dcNS, "title").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, dcNS, "title", value); err == nil {
+				buf = out
+				fixes = append(fixes, "synced dc:title with Info /Title")
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, injection); err == nil {
+				buf = out
+				fixes = append(fixes, "injected dc:title from Info /Title")
+			}
 		}
 	}
 
@@ -309,33 +389,144 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	}
 
 	// Sync pdf:Producer with Info /Producer.
-	if info.Producer != "" && findXMPProperty(buf, pdfNS, "Producer").Form == xmpPropertyNotFound {
-		if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
-			buf = out
-		}
-		if out, err := insertChildElement(buf, fmt.Sprintf(
-			"<pdf:Producer>%s</pdf:Producer>", xmlEscape(info.Producer))); err == nil {
-			buf = out
-			fixes = append(fixes, "injected pdf:Producer from Info dict")
+	if info.Producer != "" {
+		escaped := xmlEscape(info.Producer)
+		if findXMPProperty(buf, pdfNS, "Producer").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, pdfNS, "Producer", escaped); err == nil {
+				buf = out
+				fixes = append(fixes, "synced pdf:Producer with Info /Producer")
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf(
+				"<pdf:Producer>%s</pdf:Producer>", escaped)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected pdf:Producer from Info dict")
+			}
 		}
 	}
 
 	// Sync xmp:CreatorTool with Info /Creator.
-	if info.Creator != "" && findXMPProperty(buf, xmpNS, "CreatorTool").Form == xmpPropertyNotFound {
-		if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
-			buf = out
+	if info.Creator != "" {
+		escaped := xmlEscape(info.Creator)
+		if findXMPProperty(buf, xmpNS, "CreatorTool").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, xmpNS, "CreatorTool", escaped); err == nil {
+				buf = out
+				fixes = append(fixes, "synced xmp:CreatorTool with Info /Creator")
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf(
+				"<xmp:CreatorTool>%s</xmp:CreatorTool>", escaped)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected xmp:CreatorTool from Info dict")
+			}
 		}
-		if out, err := insertChildElement(buf, fmt.Sprintf(
-			"<xmp:CreatorTool>%s</xmp:CreatorTool>", xmlEscape(info.Creator))); err == nil {
-			buf = out
-			fixes = append(fixes, "injected xmp:CreatorTool from Info dict")
+	}
+
+	// Sync xmp:CreateDate with Info /CreationDate.
+	if info.CreationDate != "" {
+		xmpDate := pdfDateToXMP(info.CreationDate)
+		if xmpDate != "" {
+			if findXMPProperty(buf, xmpNS, "CreateDate").Form != xmpPropertyNotFound {
+				if out, err := replacePropertyValue(buf, xmpNS, "CreateDate", xmpDate); err == nil {
+					buf = out
+					fixes = append(fixes, "synced xmp:CreateDate with Info /CreationDate")
+				}
+			} else {
+				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+					buf = out
+				}
+				if out, err := insertChildElement(buf, fmt.Sprintf(
+					"<xmp:CreateDate>%s</xmp:CreateDate>", xmpDate)); err == nil {
+					buf = out
+					fixes = append(fixes, "injected xmp:CreateDate from Info /CreationDate")
+				}
+			}
+		}
+	}
+
+	// Sync xmp:ModifyDate with Info /ModDate.
+	if info.ModDate != "" {
+		xmpDate := pdfDateToXMP(info.ModDate)
+		if xmpDate != "" {
+			if findXMPProperty(buf, xmpNS, "ModifyDate").Form != xmpPropertyNotFound {
+				if out, err := replacePropertyValue(buf, xmpNS, "ModifyDate", xmpDate); err == nil {
+					buf = out
+					fixes = append(fixes, "synced xmp:ModifyDate with Info /ModDate")
+				}
+			} else {
+				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+					buf = out
+				}
+				if out, err := insertChildElement(buf, fmt.Sprintf(
+					"<xmp:ModifyDate>%s</xmp:ModifyDate>", xmpDate)); err == nil {
+					buf = out
+					fixes = append(fixes, "injected xmp:ModifyDate from Info /ModDate")
+				}
+			}
+		}
+	}
+
+	// Sync dc:description with Info /Subject.
+	if info.Subject != "" {
+		escaped := xmlEscape(info.Subject)
+		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
+		injection := fmt.Sprintf(`<dc:description>%s</dc:description>`, value)
+		if findXMPProperty(buf, dcNS, "description").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, dcNS, "description", value); err == nil {
+				buf = out
+				fixes = append(fixes, "synced dc:description with Info /Subject")
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, injection); err == nil {
+				buf = out
+				fixes = append(fixes, "injected dc:description from Info /Subject")
+			}
+		}
+	}
+
+	// Sync pdf:Keywords with Info /Keywords.
+	if info.Keywords != "" {
+		escaped := xmlEscape(info.Keywords)
+		if findXMPProperty(buf, pdfNS, "Keywords").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, pdfNS, "Keywords", escaped); err == nil {
+				buf = out
+				fixes = append(fixes, "synced pdf:Keywords with Info /Keywords")
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf(
+				"<pdf:Keywords>%s</pdf:Keywords>", escaped)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected pdf:Keywords from Info dict")
+			}
 		}
 	}
 
 	// Generate extension schema declarations for non-predefined namespaces.
 	// The schema block is a large multi-element XML fragment; it still
 	// uses insertChildElement for placement so the indentation matches
-	// the surrounding rdf:Description.
+	// the surrounding rdf:Description. When the block already exists but
+	// is missing required pdfaSchema fields (§6.6.2.3.3), strip and
+	// regenerate from scratch.
+	if strings.Contains(string(buf), "pdfaExtension:schemas") {
+		if extensionSchemaIncomplete(buf) {
+			if stripped, ok := stripExtensionSchemasBlock(buf); ok {
+				buf = stripped
+				fixes = append(fixes, "stripped incomplete extension schema block")
+			}
+		}
+	}
 	if !strings.Contains(string(buf), "pdfaExtension:schemas") {
 		schemas := extractUnknownNamespaceProperties(buf)
 		if len(schemas) > 0 {
@@ -357,6 +548,125 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	}
 
 	return string(buf), fixes
+}
+
+// extensionSchemaIncomplete reports whether the pdfaExtension:schemas
+// block is missing a field required by ISO 19005-1 §6.7.8 or
+// ISO 19005-2 §6.6.2.3.3. When any nested valueType declares fields but
+// omits pdfaField:name/valueType/description, or the outer schema lacks
+// the three pdfaSchema fields, the block cannot be repaired in place and
+// is regenerated from scratch from the live namespace/property bindings.
+func extensionSchemaIncomplete(xmp []byte) bool {
+	start := bytes.Index(xmp, []byte("<pdfaExtension:schemas"))
+	if start < 0 {
+		return false
+	}
+	end := bytes.Index(xmp[start:], []byte("</pdfaExtension:schemas>"))
+	if end < 0 {
+		return false
+	}
+	block := xmp[start : start+end]
+
+	// Outer schema record: PDF/A-1 §6.7.8 tests 1-3 /
+	// PDF/A-2 §6.6.2.3.3 tests 1-3 require these three fields.
+	schemaRequired := [][]byte{
+		[]byte("<pdfaSchema:namespaceURI"),
+		[]byte("<pdfaSchema:prefix"),
+		[]byte("<pdfaSchema:schema"),
+	}
+	for _, f := range schemaRequired {
+		if !bytes.Contains(block, f) {
+			return true
+		}
+	}
+
+	// Property list: when the block declares pdfaSchema:property it
+	// must expose pdfaProperty:name, pdfaProperty:valueType,
+	// pdfaProperty:category and pdfaProperty:description for each entry.
+	if bytes.Contains(block, []byte("pdfaSchema:property")) {
+		propRequired := [][]byte{
+			[]byte("<pdfaProperty:name"),
+			[]byte("<pdfaProperty:valueType"),
+			[]byte("<pdfaProperty:category"),
+			[]byte("<pdfaProperty:description"),
+		}
+		for _, f := range propRequired {
+			if !bytes.Contains(block, f) {
+				return true
+			}
+		}
+	}
+
+	// ValueType declarations: when pdfaSchema:valueType appears each
+	// entry needs pdfaType:type, pdfaType:namespaceURI, pdfaType:prefix
+	// and pdfaType:description.
+	if bytes.Contains(block, []byte("pdfaSchema:valueType")) {
+		typeRequired := [][]byte{
+			[]byte("<pdfaType:type"),
+			[]byte("<pdfaType:namespaceURI"),
+			[]byte("<pdfaType:prefix"),
+			[]byte("<pdfaType:description"),
+		}
+		for _, f := range typeRequired {
+			if !bytes.Contains(block, f) {
+				return true
+			}
+		}
+	}
+
+	// Field declarations inside pdfaType:field lists: each field needs
+	// pdfaField:name, pdfaField:valueType, pdfaField:description.
+	if bytes.Contains(block, []byte("pdfaType:field")) {
+		fieldRequired := [][]byte{
+			[]byte("<pdfaField:name"),
+			[]byte("<pdfaField:valueType"),
+			[]byte("<pdfaField:description"),
+		}
+		for _, f := range fieldRequired {
+			if !bytes.Contains(block, f) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// stripExtensionSchemasBlock removes the rdf:Description element that
+// hosts pdfaExtension:schemas along with the entire schemas subtree. The
+// enclosing rdf:Description is taken out too because it often declares
+// the specialised pdfaType/pdfaField xmlns bindings that would dangle
+// with no schema to reference them, and validators flag those dangling
+// declarations as part of the PDF/A-1 §6.7.8 / PDF/A-2 §6.6.2.3.3
+// failure modes. Returns ok=false if the surrounding rdf:Description
+// cannot be located cleanly.
+func stripExtensionSchemasBlock(xmp []byte) ([]byte, bool) {
+	anchor := bytes.Index(xmp, []byte("<pdfaExtension:schemas"))
+	if anchor < 0 {
+		return xmp, false
+	}
+
+	descStart := bytes.LastIndex(xmp[:anchor], []byte("<rdf:Description"))
+	if descStart < 0 {
+		return xmp, false
+	}
+	descCloseMark := []byte("</rdf:Description>")
+	closeIdx := bytes.Index(xmp[anchor:], descCloseMark)
+	if closeIdx < 0 {
+		return xmp, false
+	}
+	descEnd := anchor + closeIdx + len(descCloseMark)
+
+	for descEnd < len(xmp) && (xmp[descEnd] == '\n' || xmp[descEnd] == '\r' || xmp[descEnd] == ' ' || xmp[descEnd] == '\t') {
+		descEnd++
+	}
+	for descStart > 0 && (xmp[descStart-1] == '\n' || xmp[descStart-1] == '\r' || xmp[descStart-1] == ' ' || xmp[descStart-1] == '\t') {
+		descStart--
+	}
+
+	out := make([]byte, 0, len(xmp)-(descEnd-descStart))
+	out = append(out, xmp[:descStart]...)
+	out = append(out, xmp[descEnd:]...)
+	return out, true
 }
 
 // knownXMPNamespaces mirrors the predefined namespace list from the compliance
@@ -523,10 +833,96 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 	return sb.String()
 }
 
+// stripXPacketBytesAttr removes bytes="..." from the <?xpacket ...?> header.
+// Handles both single and double quoted values.
+func stripXPacketBytesAttr(data []byte) []byte {
+	s := string(data)
+	idx := strings.Index(s, "bytes=")
+	if idx == -1 {
+		return data
+	}
+	// Find the end of the attribute: bytes="NNN" or bytes='NNN'.
+	rest := s[idx+len("bytes="):]
+	if len(rest) == 0 {
+		return data
+	}
+	quote := rest[0]
+	if quote != '"' && quote != '\'' {
+		return data
+	}
+	endIdx := strings.IndexByte(rest[1:], quote)
+	if endIdx == -1 {
+		return data
+	}
+	// Remove bytes="NNN" including any leading whitespace.
+	start := idx
+	for start > 0 && s[start-1] == ' ' {
+		start--
+	}
+	end := idx + len("bytes=") + 1 + endIdx + 1
+	return []byte(s[:start] + s[end:])
+}
+
 func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	s = strings.ReplaceAll(s, "\"", "&quot;")
 	return s
+}
+
+// pdfDateToXMP converts a PDF date string (D:YYYYMMDDHHmmSSOHH'mm')
+// to an XMP/ISO 8601 date string (YYYY-MM-DDTHH:mm:ss+HH:MM).
+// Returns an empty string if the input is unparseable.
+func pdfDateToXMP(pdfDate string) string {
+	s := strings.TrimPrefix(pdfDate, "D:")
+	if len(s) < 4 {
+		return ""
+	}
+
+	// Extract date/time components with defaults.
+	get := func(offset, length int, fallback string) string {
+		if offset+length > len(s) {
+			return fallback
+		}
+		return s[offset : offset+length]
+	}
+
+	year := get(0, 4, "")
+	if len(year) < 4 {
+		return ""
+	}
+	for _, c := range year {
+		if c < '0' || c > '9' {
+			return ""
+		}
+	}
+
+	month := get(4, 2, "01")
+	day := get(6, 2, "01")
+	hour := get(8, 2, "00")
+	min := get(10, 2, "00")
+	sec := get(12, 2, "00")
+
+	// Parse timezone. Starts at offset 14.
+	tz := "Z"
+	if len(s) > 14 {
+		tzChar := s[14]
+		switch tzChar {
+		case 'Z':
+			tz = "Z"
+		case '+', '-':
+			tzHour := get(15, 2, "00")
+			// Skip the apostrophe between hours and minutes.
+			tzMin := "00"
+			if len(s) > 18 && s[17] == '\'' {
+				tzMin = get(18, 2, "00")
+			} else if len(s) > 17 {
+				tzMin = get(17, 2, "00")
+			}
+			tz = string(tzChar) + tzHour + ":" + tzMin
+		}
+	}
+
+	return year + "-" + month + "-" + day + "T" + hour + ":" + min + ":" + sec + tz
 }

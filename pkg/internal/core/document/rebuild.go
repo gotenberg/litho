@@ -91,13 +91,35 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 	// Find the last trailer dictionary in the file.
 	trailer, err := d.findLastTrailer()
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrDamagedXRef, err)
+		// Last-resort: synthesize a minimal trailer. The file has
+		// parseable objects but no recoverable trailer, so downstream
+		// recovery has to locate /Root by scanning object bodies.
+		// [ResolveCatalog] walks the entry table looking for a
+		// dictionary tagged /Type /Catalog, which does not require a
+		// pre-computed /Root.
+		trailer = synthesizeTrailer(entries)
 	}
 
 	d.Index.Entries = entries
 	d.Index.Trailer = trailer
 
 	return nil
+}
+
+// synthesizeTrailer builds a minimal trailer for documents whose
+// original trailer is unrecoverable. Only /Size is set to the highest
+// object number plus one. /Root is intentionally omitted so the
+// catalog-recovery path sees a missing pointer and performs its scan.
+func synthesizeTrailer(entries map[int]xref.XRefEntry) ast.PdfDict {
+	maxObj := 0
+	for objNum := range entries {
+		if objNum > maxObj {
+			maxObj = objNum
+		}
+	}
+	return ast.PdfDict{
+		"Size": ast.PdfInt(maxObj + 1),
+	}
 }
 
 // findLastTrailer locates the document's authoritative trailer dictionary.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
@@ -184,7 +185,8 @@ func TestRebuildXRef_NoObjects(t *testing.T) {
 }
 
 func TestRebuildXRef_NoTrailer(t *testing.T) {
-	// Objects but no trailer keyword.
+	// Objects exist but no trailer keyword. Rebuild synthesizes a
+	// minimal trailer so the catalog-recovery path can still run.
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")
 	doc := &Document{
 		r:     bytes.NewReader(data),
@@ -192,12 +194,20 @@ func TestRebuildXRef_NoTrailer(t *testing.T) {
 		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
 	}
 
-	err := doc.rebuildXRef(context.Background())
-	if err == nil {
-		t.Fatal("expected error when trailer is missing")
+	if err := doc.rebuildXRef(context.Background()); err != nil {
+		t.Fatalf("rebuild failed: %v", err)
 	}
-	if !errors.Is(err, ErrDamagedXRef) {
-		t.Errorf("expected ErrDamagedXRef, got: %v", err)
+	if _, ok := doc.Index.Entries[1]; !ok {
+		t.Fatal("expected object 1 in rebuilt entries")
+	}
+	if doc.Index.Trailer == nil {
+		t.Fatal("expected a synthesized trailer")
+	}
+	if _, hasRoot := doc.Index.Trailer["Root"]; hasRoot {
+		t.Fatal("synthesized trailer must omit /Root so recovery kicks in")
+	}
+	if size, ok := doc.Index.Trailer["Size"].(ast.PdfInt); !ok || size != 2 {
+		t.Fatalf("expected /Size=2, got %v", doc.Index.Trailer["Size"])
 	}
 }
 

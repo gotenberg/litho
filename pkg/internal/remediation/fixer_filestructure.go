@@ -28,7 +28,19 @@ func matchFileStructure(v compliance.Violation) bool {
 // This fixer exists to classify these violations as "handled" so they don't
 // appear in the residual list.
 func fixFileStructure(_ context.Context, _ *writer.ObjAllocator, _ *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
-	if len(violations) == 0 {
+	// Only trigger a full rewrite for formatting violations (header, spacing,
+	// stream length). Implementation-limit violations (6.1.12, 6.1.13)
+	// cannot be fixed by re-serialization: the out-of-range values persist
+	// and a full rewrite risks corrupting other objects.
+	hasFormatViolation := false
+	for _, v := range violations {
+		c := v.Rule.Clause
+		if c != "6.1.12" && c != "6.1.13" {
+			hasFormatViolation = true
+			break
+		}
+	}
+	if !hasFormatViolation {
 		return nil, nil
 	}
 	return []string{"full rewrite re-serializes all objects with clean formatting"}, nil

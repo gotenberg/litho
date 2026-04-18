@@ -3,12 +3,14 @@ package typography
 import (
 	"bytes"
 	"context"
+	"math"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // minimalFontPDF is a single-page PDF that declares a Helvetica Type1
@@ -133,5 +135,95 @@ func TestExtractElements_ContextCancellation(t *testing.T) {
 	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
 	// May return an error (ctx.Canceled) or partial results, either
 	// is acceptable. The contract is "no panic, no block".
-	_, _ = ExtractElements(ctx, doc, machine, page, ops)
+	_, _ = ExtractElements(ctx, doc, machine, page, ops) //nolint:errcheck // cancelation contract exercised; result irrelevant.
+}
+
+func TestCoalesceElements_MergesSameRun(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "H", X: 0, Y: 0, Width: 7, FontSize: 12, SpaceWidth: 4},
+		{Text: "e", X: 7, Y: 0, Width: 6, FontSize: 12, SpaceWidth: 4},
+		{Text: "l", X: 13, Y: 0, Width: 3, FontSize: 12, SpaceWidth: 4},
+		{Text: "l", X: 16, Y: 0, Width: 3, FontSize: 12, SpaceWidth: 4},
+		{Text: "o", X: 19, Y: 0, Width: 6, FontSize: 12, SpaceWidth: 4},
+	}
+	got := CoalesceElements(context.Background(), in)
+	if len(got) != 1 {
+		t.Fatalf("CoalesceElements: got %d runs, want 1", len(got))
+	}
+	if got[0].Text != "Hello" {
+		t.Errorf("text: got %q, want %q", got[0].Text, "Hello")
+	}
+	if got[0].Width != 25 {
+		t.Errorf("width: got %v, want 25", got[0].Width)
+	}
+}
+
+func TestCoalesceElements_SplitsOnStyleChange(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "H", X: 0, Y: 0, Width: 7, FontSize: 12},
+		{Text: "e", X: 7, Y: 0, Width: 6, FontSize: 14}, // different size
+	}
+	got := CoalesceElements(context.Background(), in)
+	if len(got) != 2 {
+		t.Fatalf("font-size change: got %d runs, want 2", len(got))
+	}
+}
+
+func TestCoalesceElements_SplitsOnGap(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "A", X: 0, Y: 0, Width: 7, FontSize: 12, SpaceWidth: 4},
+		{Text: "B", X: 50, Y: 0, Width: 7, FontSize: 12, SpaceWidth: 4}, // big jump
+	}
+	got := CoalesceElements(context.Background(), in)
+	if len(got) != 2 {
+		t.Fatalf("big gap: got %d runs, want 2", len(got))
+	}
+}
+
+func TestCoalesceElements_DropsWhitespaceRuns(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "Hello", X: 0, Y: 0, Width: 25, FontSize: 12},
+		{Text: "   ", X: 0, Y: 20, Width: 9, FontSize: 12},
+		{Text: "World", X: 0, Y: 40, Width: 30, FontSize: 12},
+	}
+	got := CoalesceElements(context.Background(), in)
+	if len(got) != 2 {
+		t.Fatalf("whitespace drop: got %d runs %+v, want 2", len(got), got)
+	}
+	if got[0].Text != "Hello" || got[1].Text != "World" {
+		t.Errorf("unexpected texts: %q, %q", got[0].Text, got[1].Text)
+	}
+}
+
+func TestCoalesceElements_RotatedText(t *testing.T) {
+	t.Parallel()
+	// 90° rotated text advances along Y instead of X.
+	angle := math.Pi / 2
+	in := []models.TextElement{
+		{Text: "A", X: 0, Y: 0, Width: 8, FontSize: 12, Angle: angle, SpaceWidth: 4},
+		{Text: "B", X: 0, Y: 8, Width: 8, FontSize: 12, Angle: angle, SpaceWidth: 4},
+	}
+	got := CoalesceElements(context.Background(), in)
+	if len(got) != 1 {
+		t.Fatalf("rotated: got %d runs %+v, want 1", len(got), got)
+	}
+	if got[0].Text != "AB" {
+		t.Errorf("text: got %q, want %q", got[0].Text, "AB")
+	}
+}
+
+func TestCoalesceElements_SplitsOnMCIDChange(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "A", X: 0, Y: 0, Width: 8, FontSize: 12, MCID: 1},
+		{Text: "B", X: 8, Y: 0, Width: 8, FontSize: 12, MCID: 2},
+	}
+	got := CoalesceElements(context.Background(), in)
+	if len(got) != 2 {
+		t.Fatalf("MCID change: got %d runs, want 2", len(got))
+	}
 }

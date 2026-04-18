@@ -7,6 +7,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/cff"
+	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
 // charSetRule returns the CharSet rule for Type1 font subsets.
@@ -22,16 +24,23 @@ func cidSetRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t03, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
 }
 
-// charSetCompletenessRule returns the rule for CharSet completeness
-// (all font program glyphs must be listed in /CharSet).
+// charSetCompletenessRule returns the rule for CharSet completeness.
+//
+// Parts 2/3 (§6.2.11.4.2 t1) require CharSet to list every glyph defined
+// in the font subset: a bidirectional check against the full CFF
+// charset. Part 1 (§6.3.5 t2) is narrower. It only requires CharSet to
+// cover the glyphs actually rendered on pages that reference the font.
+// A Type 1 subsetter commonly packs extra glyphs into the subset that
+// the content stream never uses, and VeraPDF treats those unreachable
+// glyphs as outside the "subset" for §6.3.5 purposes. Litho therefore
+// runs the part 1 check one-directional against a rendered-glyph set
+// computed from content-stream usage, and reserves the bidirectional
+// full-charset check for parts 2/3.
 func charSetCompletenessRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_4_2_t01
 	}
-	// Part 1 also requires completeness (§6.3.5 t2), but the CFF glyph name
-	// extraction returns unreachable glyphs (e.g., "x") that VeraPDF does not
-	// consider part of the font subset, causing FP on pass-b.
-	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_4_2_t01, Rule_19005_3_6_2_11_4_2_t01, Rule{})
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t02, Rule_19005_2_6_2_11_4_2_t01, Rule_19005_3_6_2_11_4_2_t01, Rule{})
 }
 
 // cidSetCompletenessRule returns the rule for CIDSet completeness
@@ -48,7 +57,14 @@ func cidSetCompletenessRule(profile string) Rule {
 // CIDSet entries in their FontDescriptor.
 // - Type1 subsets: /FontDescriptor must have /CharSet
 // - CIDFont subsets: /FontDescriptor must have /CIDSet
-func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
+//
+// usage, when non-nil, provides the set of character codes actually
+// referenced by text operators on the page that hosts fontDict. It is
+// consulted for PDF/A-1's one-directional CharSet completeness check
+// (§6.3.5 t2), where CharSet only has to cover rendered glyphs; it is
+// ignored for parts 2/3, whose rule requires the full font-program
+// charset to be listed.
+func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	basefont := fontBaseFont(ctx, doc, fontDict)
 	if !isSubsetFont(basefont) {
 		return nil
@@ -75,25 +91,141 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return failf(rule, "font %s on page %d: Type1 subset missing /CharSet", fontName, pageNum)
 		}
 
-		// §6.2.11.4.2 t1 / PDF/UA-1 §7.21.4.2: if CharSet present, it must
-		// list ALL font program glyphs (parts 2/3 and PDF/UA).
-		if charSetStr != "" {
-			completenessRule := charSetCompletenessRule(profile)
-			if completenessRule.Specification != "" {
-				fontData := extractFontProgramData(ctx, doc, fd)
-				if fontData != nil {
-					glyphNames := typography.ExtractGlyphNames(ctx, fontData)
-					if glyphNames != nil {
-						return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
-					}
-				}
-			}
+		if charSetStr == "" {
+			return nil
 		}
 
-		return nil
+		completenessRule := charSetCompletenessRule(profile)
+		if completenessRule.Specification == "" {
+			return nil
+		}
+
+		fontData := extractFontProgramData(ctx, doc, fd)
+		if fontData == nil {
+			return nil
+		}
+
+		// Parts 2/3 / PDF/UA: strict bidirectional check against the
+		// entire CFF charset. CharSet must equal the font program glyph
+		// set (extras forbidden, missing glyphs forbidden).
+		if PDFAPart(profile) != 1 {
+			glyphNames := typography.ExtractGlyphNames(ctx, fontData)
+			if glyphNames == nil {
+				return nil
+			}
+			return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
+		}
+
+		// Part 1: §6.3.5 t2 requires CharSet to cover every glyph
+		// actually rendered, not every glyph defined in the subset.
+		// Without page-level usage information, rendered and
+		// non-rendered glyphs are indistinguishable; skip the check
+		// rather than risk a false positive on subsets that carry
+		// extra unreachable glyphs.
+		if usage == nil || len(usage.charCodes) == 0 {
+			return nil
+		}
+		codeToName := resolveType1CodeToName(ctx, doc, fontDict, fontData)
+		renderedNames := make(map[uint16]string, len(usage.charCodes))
+		for code := range usage.charCodes {
+			if name := codeToName[code]; name != "" && name != ".notdef" {
+				renderedNames[uint16(code)] = name
+			}
+		}
+		if len(renderedNames) == 0 {
+			return nil
+		}
+		return checkCharSetCompleteness(string(charSetStr), renderedNames, fontName, pageNum, completenessRule, false)
 	}
 
 	return nil
+}
+
+// resolveType1CodeToName builds the effective byte-code → glyph-name
+// table for a Type 1 simple font. It resolves the PDF /Encoding entry
+// (Name form or dict with /BaseEncoding + /Differences), and falls
+// back to the encoding embedded in the CFF/Type1C font program when
+// the PDF dictionary has no explicit encoding.
+func resolveType1CodeToName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontData []byte) map[byte]string {
+	encObj, hasEnc := fontDict["Encoding"]
+
+	var baseName string
+	var differences ast.PdfArray
+
+	if hasEnc {
+		resolved, err := document.ResolveObject(ctx, doc, encObj)
+		if err == nil {
+			switch v := resolved.(type) {
+			case ast.PdfName:
+				baseName = string(v)
+			case ast.PdfDict:
+				if bn, err := document.ResolveName(ctx, doc, v["BaseEncoding"]); err == nil {
+					baseName = string(bn)
+				}
+				if diffs, err := document.ResolveArray(ctx, doc, v["Differences"]); err == nil {
+					differences = diffs
+				}
+			}
+		}
+	}
+
+	baseTable := baseEncodingTable(baseName)
+
+	result := make(map[byte]string, 256)
+	for code, rn := range baseTable {
+		if name := encodings.RuneToGlyph(rn); name != "" {
+			result[code] = name
+		}
+	}
+
+	// Apply /Differences on top of the base encoding.
+	if differences != nil {
+		code := 0
+		for _, item := range differences {
+			resolved, err := document.ResolveObject(ctx, doc, item)
+			if err != nil {
+				continue
+			}
+			switch v := resolved.(type) {
+			case ast.PdfInt:
+				code = int(v)
+			case ast.PdfName:
+				if code >= 0 && code <= 255 {
+					result[byte(code)] = string(v) //nolint:gosec // range-checked above.
+				}
+				code++
+			}
+		}
+	}
+
+	// No explicit /Encoding: fall back to the CFF font program's
+	// embedded encoding. The CFF encoding is authoritative in this
+	// case per ISO 32000-1 §9.6.6.2.
+	if !hasEnc || (baseName == "" && differences == nil) {
+		if cffEnc := cff.ExtractEncoding(fontData); cffEnc != nil {
+			for code, name := range cffEnc {
+				if _, exists := result[code]; !exists {
+					result[code] = name
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// baseEncodingTable returns the byte → rune map for a named base
+// encoding. An unknown or empty name defaults to StandardEncoding per
+// ISO 32000-1 §9.6.6.2.
+func baseEncodingTable(name string) map[byte]rune {
+	switch name {
+	case "WinAnsiEncoding":
+		return encodings.WinAnsiEncoding
+	case "MacRomanEncoding":
+		return encodings.MacRomanEncoding
+	default:
+		return encodings.StandardEncoding
+	}
 }
 
 // checkCharSetCompleteness verifies that /CharSet lists all glyph names

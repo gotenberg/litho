@@ -18,13 +18,14 @@ func runAttach(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	name := fs.String("name", "", "Attachment name as stored in the PDF (required)")
 	dataPath := fs.String("data", "", "Path to the file to attach (required)")
 	mime := fs.String("mime", "", "MIME type (auto-detected from extension if omitted)")
+	relationship := fs.String("relationship", "", "AFRelationship for PDF/A-3+ associated files (Source, Data, Alternative, Supplement, EncryptedPayload, FormData, Schema, Unspecified)")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 
 	if fs.NArg() < 1 || *output == "" || *name == "" || *dataPath == "" {
-		fmt.Fprintln(stderr, "Usage: litho attach <file> --name \"data.csv\" --data data.csv [--mime text/csv] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho attach <file> --name \"data.csv\" --data data.csv [--mime text/csv] [--relationship Alternative] -o out.pdf")
 		return exitError
 	}
 
@@ -47,7 +48,16 @@ func runAttach(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	defer closer()
 
 	w := pdf.NewWriter(r)
-	w.AddAttachment(*name, data, mimeType)
+	if *relationship != "" {
+		w.AddAssociatedFile(pdf.AssociatedFile{
+			Name:         *name,
+			Data:         data,
+			MimeType:     mimeType,
+			Relationship: *relationship,
+		})
+	} else {
+		w.AddAttachment(*name, data, mimeType)
+	}
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {

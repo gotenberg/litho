@@ -226,7 +226,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// Glyph coverage (CharSet for Type1 subsets).
-	results = append(results, checkGlyphCoverage(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	results = append(results, checkGlyphCoverage(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// ToUnicode CMap values.
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)

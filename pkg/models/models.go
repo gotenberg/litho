@@ -41,12 +41,20 @@ type Page struct {
 // TextElement represents a spatially positioned piece of text on a page.
 // Values must not be shared across goroutines without synchronization.
 type TextElement struct {
-	Text          string  `json:"text"`
-	X             float64 `json:"x"`
-	Y             float64 `json:"y"`
-	Width         float64 `json:"width"`
-	FontSize      float64 `json:"fontSize"`
-	SpaceWidth    float64 `json:"-"` // font's space char advance in page-space units (internal, not serialized)
+	Text       string  `json:"text"`
+	X          float64 `json:"x"`
+	Y          float64 `json:"y"`
+	Width      float64 `json:"width"`
+	FontSize   float64 `json:"fontSize"`
+	SpaceWidth float64 `json:"-"` // font's space char advance in page-space units (internal, not serialized)
+	// Chunk is the content-stream chunk ID: a counter that
+	// increments when the content stream crosses a text-object or
+	// text-positioning operator (BT, ET, Td, TD, Tm, Tf, T*). Glyphs
+	// emitted by the same show-text operator chain share one Chunk
+	// value. Reconstruction uses the ID to suppress gap-based space
+	// insertion inside a single chunk, matching the operator-level
+	// segmentation a PDF viewer applies.
+	Chunk         int     `json:"chunk,omitempty"`
 	MCID          int     `json:"mcid"`
 	Hidden        bool    `json:"hidden,omitempty"`
 	Invisible     bool    `json:"invisible,omitempty"`
@@ -288,6 +296,9 @@ type LinearizationParams struct {
 	NumPages            int   `json:"numPages"`
 	FirstPageEndOffset  int64 `json:"firstPageEndOffset"`
 	FirstPageXRefOffset int64 `json:"firstPageXRefOffset"`
+	// Hints is the decoded Page Offset Hint Table, one entry per page,
+	// or nil when the hint stream could not be parsed.
+	Hints []PageOffsetEntry `json:"hints,omitempty"`
 }
 
 // PageOffsetEntry holds the per-page data decoded from the hint stream's

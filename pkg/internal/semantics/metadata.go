@@ -301,32 +301,31 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 	// Start with legacy /Info values.
 	maps.Copy(metadata, info)
 
-	// Overlay XMP values. XMP takes precedence per PDF 2.0.
-	// Exceptions for fields that incremental updates commonly modify in the
-	// Info dict without updating XMP:
-	//   - Dates: keep the most recent value.
-	//   - String fields (Producer, Creator, Author, Title, Subject, Keywords):
-	//     prefer the Info dict value when it exists, since incremental saves
-	//     update Info but often leave XMP stale.
-	infoKeys := map[string]bool{
+	// Overlay XMP values. XMP takes precedence per PDF 2.0 for fields that
+	// are absent from /Info, but Info values are authoritative when
+	// present. Producers that apply incremental saves update the /Info
+	// dict consistently while leaving the XMP stream stale, so trusting
+	// XMP on fields that /Info already defines causes stale dates,
+	// producer strings, and titles to surface in the output.
+	infoAuthoritative := map[string]bool{
 		"Producer": true, "Creator": true, "Author": true,
 		"Title": true, "Subject": true, "Keywords": true,
+		"CreationDate": true, "ModDate": true,
 	}
 	for k, v := range xmp {
-		switch {
-		case (k == "CreationDate" || k == "ModDate") && metadata[k] != "":
-			metadata[k] = newerDate(metadata[k], v)
-		case infoKeys[k] && metadata[k] != "":
-			// Keep Info dict value; it reflects the latest save.
-		default:
-			metadata[k] = v
+		if infoAuthoritative[k] && metadata[k] != "" {
+			continue
 		}
+		metadata[k] = v
 	}
 
-	// Scan the raw file for date values that may exist in older Info dict
-	// versions. Incremental updates often create new Info dicts that drop
-	// ModDate/CreationDate. Use the newest date found across all versions.
-	scanRawInfoDates(doc, metadata)
+	// Scan the raw file for Info fields that may exist in older Info
+	// dict versions. Incremental updates occasionally point /Info at a
+	// stale object (e.g. a number left by a rewriter) or drop fields
+	// entirely; the raw scan recovers Title, Creator, Producer,
+	// Keywords, CreationDate, and ModDate from the bytes of older Info
+	// dicts when the in-memory metadata map is missing them.
+	scanRawInfoFields(doc, metadata)
 
 	// Catalog /Lang: the document-level language tag (per ISO 32000-2, 14.9.2).
 	if _, hasLang := metadata["Language"]; !hasLang {
@@ -342,12 +341,15 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 	return metadata, nil
 }
 
-// scanRawInfoDates searches the raw PDF file for /ModDate values in Info
-// dictionary contexts (near /Producer or /Author keys). Keeps the newest
-// value. Only scans for /ModDate since /CreationDate from Info dict is
-// already reliably extracted, and raw scanning for CreationDate matches
-// too many false positives in XMP and annotation streams.
-func scanRawInfoDates(doc *document.Document, metadata map[string]string) {
+// scanRawInfoFields scans the raw PDF bytes for Info-dict field
+// values and populates [metadata] with recoveries for fields the
+// in-memory Info resolution could not supply. /ModDate keeps its
+// previous "newest wins" semantics; the remaining fields are filled
+// only when missing so authoritative values stay intact. The scan
+// runs against the entire file so incremental updates whose newest
+// trailer points at a stale or non-dict /Info can still expose
+// earlier revisions' values.
+func scanRawInfoFields(doc *document.Document, metadata map[string]string) {
 	fileSize := doc.FileSize()
 	if fileSize > 10*1024*1024 {
 		return
@@ -362,45 +364,222 @@ func scanRawInfoDates(doc *document.Document, metadata map[string]string) {
 	}
 	raw := buf[:n]
 
-	// Only scan for /ModDate. It is the most commonly dropped field.
-	pattern := []byte("/ModDate")
+	scanRawInfoField(raw, "ModDate", func(v string) {
+		metadata["ModDate"] = newerDate(metadata["ModDate"], v)
+	})
+	fillIfMissing := func(key string) {
+		if metadata[key] != "" {
+			return
+		}
+		scanRawInfoField(raw, key, func(v string) {
+			if v != "" && metadata[key] == "" {
+				metadata[key] = v
+			}
+		})
+	}
+	fillIfMissing("Title")
+	fillIfMissing("Author")
+	fillIfMissing("Subject")
+	fillIfMissing("Keywords")
+	fillIfMissing("Creator")
+	fillIfMissing("Producer")
+	fillIfMissing("CreationDate")
+}
+
+// scanRawInfoField walks every occurrence of "/<key>" in raw that sits
+// inside an Info-dict-like context (neighbouring /Producer, /Author, or
+// /Creator keys) and calls visit with the decoded string value. Both
+// literal "(...)" and hex "<...>" syntaxes are supported. The visit
+// callback is responsible for deciding how to combine multiple
+// recoveries (newest wins for dates, first non-empty for strings).
+func scanRawInfoField(raw []byte, key string, visit func(string)) {
+	pattern := []byte("/" + key)
 	pos := 0
 	for {
 		idx := bytes.Index(raw[pos:], pattern)
 		if idx == -1 {
-			break
+			return
 		}
 		absIdx := pos + idx
-		// Verify this is inside an Info dict: check surrounding context
-		// for /Producer, /Author, or /Creator (Info dict markers).
-		contextStart := max(0, absIdx-500)
-		context := raw[contextStart:min(len(raw), absIdx+200)]
-		isInfoDict := bytes.Contains(context, []byte("/Producer")) ||
-			bytes.Contains(context, []byte("/Author")) ||
-			bytes.Contains(context, []byte("/Creator"))
-
-		if !isInfoDict {
-			pos = absIdx + len(pattern)
+		pos = absIdx + len(pattern)
+		// Reject hits where the next byte continues a longer name
+		// (e.g. "/ModDate" inside "/ModDateOther" would be spurious).
+		if pos < len(raw) && isNameContinuation(raw[pos]) {
 			continue
 		}
-
-		// Extract the date value: /ModDate (D:...) or /ModDate<hex>
-		after := raw[absIdx+len(pattern):]
-		// Skip whitespace
+		// The sibling-key check is broad enough to admit Info dicts
+		// whose other entries have been stripped; tightening it would
+		// miss legitimate values on minimalist producers.
+		contextStart := max(0, absIdx-500)
+		context := raw[contextStart:min(len(raw), absIdx+500)]
+		hasSibling := bytes.Contains(context, []byte("/Producer")) ||
+			bytes.Contains(context, []byte("/Author")) ||
+			bytes.Contains(context, []byte("/Creator")) ||
+			bytes.Contains(context, []byte("/Title")) ||
+			bytes.Contains(context, []byte("/CreationDate"))
+		if !hasSibling {
+			continue
+		}
+		// Extract the string value.
+		after := raw[pos:]
 		i := 0
-		for i < len(after) && (after[i] == ' ' || after[i] == '\n' || after[i] == '\r') {
+		for i < len(after) && (after[i] == ' ' || after[i] == '\n' || after[i] == '\r' || after[i] == '\t') {
 			i++
 		}
-		if i < len(after) && after[i] == '(' {
-			end := bytes.IndexByte(after[i+1:], ')')
-			if end != -1 && end < 60 {
-				dateStr := string(after[i+1 : i+1+end])
-				current := metadata["ModDate"]
-				metadata["ModDate"] = newerDate(current, dateStr)
+		if i >= len(after) {
+			continue
+		}
+		switch after[i] {
+		case '(':
+			end := findBalancedParen(after[i+1:])
+			if end == -1 {
+				continue
+			}
+			visit(document.DecodePdfString(ast.PdfString(unescapePdfLiteralString(after[i+1 : i+1+end]))))
+		case '<':
+			end := bytes.IndexByte(after[i+1:], '>')
+			if end == -1 {
+				continue
+			}
+			decoded, ok := decodeHexString(after[i+1 : i+1+end])
+			if !ok {
+				continue
+			}
+			visit(document.DecodePdfString(ast.PdfString(decoded)))
+		}
+	}
+}
+
+// isNameContinuation reports whether a byte is a valid continuation of
+// a PDF name token. Names terminate at whitespace, delimiters, or the
+// end of the stream; anything else means the match is part of a longer
+// name and should be rejected.
+func isNameContinuation(b byte) bool {
+	switch b {
+	case ' ', '\t', '\r', '\n', '\f', 0x00,
+		'(', ')', '<', '>', '[', ']', '{', '}', '/', '%':
+		return false
+	}
+	return true
+}
+
+// findBalancedParen returns the offset of the closing ')' that balances
+// the implicit opening paren before the first character of s, or -1 when
+// the string is unterminated. Backslash escapes are skipped so "\)" does
+// not count as a closer.
+func findBalancedParen(s []byte) int {
+	depth := 1
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
 			}
 		}
-		pos = absIdx + len(pattern)
 	}
+	return -1
+}
+
+// unescapePdfLiteralString decodes the standard literal-string escape
+// sequences (\n, \r, \t, \b, \f, \(, \), \\, octal) into their raw byte
+// values. [document.DecodePdfString] handles the higher-level UTF-16BE
+// conversion afterward.
+func unescapePdfLiteralString(s []byte) []byte {
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			out = append(out, s[i])
+			continue
+		}
+		c := s[i+1]
+		switch c {
+		case 'n':
+			out = append(out, '\n')
+			i++
+		case 'r':
+			out = append(out, '\r')
+			i++
+		case 't':
+			out = append(out, '\t')
+			i++
+		case 'b':
+			out = append(out, '\b')
+			i++
+		case 'f':
+			out = append(out, '\f')
+			i++
+		case '(', ')', '\\':
+			out = append(out, c)
+			i++
+		case '\n':
+			i++
+		case '\r':
+			if i+2 < len(s) && s[i+2] == '\n' {
+				i++
+			}
+			i++
+		default:
+			if c >= '0' && c <= '7' {
+				num := int(c - '0')
+				consumed := 1
+				for consumed < 3 && i+1+consumed < len(s) {
+					d := s[i+1+consumed]
+					if d < '0' || d > '7' {
+						break
+					}
+					num = num*8 + int(d-'0')
+					consumed++
+				}
+				out = append(out, byte(num&0xff))
+				i += consumed
+			} else {
+				out = append(out, c)
+				i++
+			}
+		}
+	}
+	return out
+}
+
+// decodeHexString converts a PDF hex string body (the bytes between "<"
+// and ">") to raw bytes. Whitespace is ignored and an unpaired trailing
+// nibble is treated as if followed by '0', per ISO 32000-1 §7.3.4.3.
+// Returns false when a non-hex, non-whitespace byte is encountered.
+func decodeHexString(s []byte) ([]byte, bool) {
+	out := make([]byte, 0, len(s)/2)
+	var hi byte
+	haveHi := false
+	for _, c := range s {
+		var nibble byte
+		switch {
+		case c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f':
+			continue
+		case c >= '0' && c <= '9':
+			nibble = c - '0'
+		case c >= 'A' && c <= 'F':
+			nibble = c - 'A' + 10
+		case c >= 'a' && c <= 'f':
+			nibble = c - 'a' + 10
+		default:
+			return nil, false
+		}
+		if !haveHi {
+			hi = nibble
+			haveHi = true
+			continue
+		}
+		out = append(out, hi<<4|nibble)
+		haveHi = false
+	}
+	if haveHi {
+		out = append(out, hi<<4)
+	}
+	return out, true
 }
 
 // newerDate returns whichever of two date strings represents the more recent

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"os"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -91,6 +93,38 @@ type RemediateOption func(*remediateOpts)
 type remediateOpts struct {
 	lang            string
 	preserveContent bool
+	tolerance       RegressionTolerance
+}
+
+// RegressionTolerance bounds the integrity probe that runs after
+// remediation. If the probe detects a content drop beyond these bounds,
+// content-modifying fixers are rolled back and, if the output still
+// regresses, remediation fails with [ErrRemediationBrokePDF].
+// Values are immutable and safe for concurrent use.
+type RegressionTolerance struct {
+	// MaxTextDropRatio is the largest acceptable fraction of total
+	// extracted text that remediation may remove. 0.0 forbids any drop;
+	// 1.0 accepts any drop (including going from text to no text). The
+	// ratio is evaluated against the sum of [Reader.ExtractText] lengths
+	// across all pages. Defaults to 0.1 (10%).
+	MaxTextDropRatio float64
+	// MaxImageDropRatio is the largest acceptable fraction of
+	// [Reader.ExtractImages] entries that remediation may remove.
+	// Defaults to 0.5 (50%) to accommodate aggressive image-stream fixers
+	// that legitimately drop corrupt XObjects.
+	MaxImageDropRatio float64
+	// AllowPageLoss permits the page count to decrease. When false (the
+	// default), any change to the page count is treated as a regression.
+	AllowPageLoss bool
+}
+
+// DefaultRegressionTolerance is the tolerance applied when none is set via
+// [WithRegressionTolerance]. Values prioritize catching silent text loss,
+// which is the most common aggressive-fix failure mode.
+var DefaultRegressionTolerance = RegressionTolerance{
+	MaxTextDropRatio:  0.1,
+	MaxImageDropRatio: 0.5,
+	AllowPageLoss:     false,
 }
 
 // WithLanguage sets the BCP 47 language tag for the catalog /Lang entry.
@@ -111,15 +145,33 @@ func WithAggressiveFixes() RemediateOption {
 	}
 }
 
+// WithRegressionTolerance overrides [DefaultRegressionTolerance] for a
+// single remediation call. Use tighter bounds for documents whose textual
+// or visual integrity must be preserved byte-for-byte; use looser bounds
+// when aggressive compliance outranks content fidelity.
+func WithRegressionTolerance(tol RegressionTolerance) RemediateOption {
+	return func(o *remediateOpts) {
+		o.tolerance = tol
+	}
+}
+
 // RemediationReport describes what the remediation engine fixed and what it
 // could not fix automatically.
 // Values must not be shared across goroutines without synchronization.
 type RemediationReport struct {
-	// Fixed lists human-readable descriptions of applied fixes.
+	// Fixed lists human-readable descriptions of applied fixes that were
+	// kept in the output.
 	Fixed []string
 	// Residual contains violations that could not be fixed automatically.
-	// Each element is a compliance.Violation.
+	// Each element is a compliance.Violation. If content-modifying fixers
+	// were rolled back, the violations they had claimed to handle move back
+	// here.
 	Residual []error
+	// RolledBack lists human-readable descriptions of content-modifying
+	// fixes that were applied, failed the post-remediation integrity probe,
+	// and were subsequently discarded. When non-empty, the output preserves
+	// rendering at the cost of leaving the listed violations unfixed.
+	RolledBack []string
 }
 
 // BookmarkHandling controls how bookmarks are produced for the output of
@@ -338,17 +390,42 @@ func (a signerAdapter) Sign(digest []byte) ([]byte, error) { return a.inner.Sign
 func (a signerAdapter) Certificate() *x509.Certificate     { return a.inner.Certificate() }
 func (a signerAdapter) EstimatedSize() int                 { return a.inner.EstimatedSize() }
 
-// Writer applies content-preserving modifications to a PDF document.
-// Mutations are batched and written atomically via [Writer.WriteTo].
-// Writer is not safe for concurrent use; callers must serialize all method calls.
+// Writer queues modifications against an open [Reader] and emits the
+// result through [Writer.WriteTo]. Usage is:
+//
+//  1. Obtain a Reader with [Open] or [OpenFile].
+//  2. Create a Writer with [NewWriter].
+//  3. Call any number of mutation methods (SetMetadata, RotatePages,
+//     Encrypt, Sign, RemediatePDFA, ...). Mutations are queued; nothing
+//     is written yet.
+//  4. Call WriteTo exactly once. It drains the queue, produces the
+//     output, and may mutate the underlying Reader's in-memory state.
+//
+// A Writer is single-use: create a new Writer (and, if you need a
+// pristine baseline, a new Reader) for each distinct output. Method
+// calls must be serialised; no Writer method is safe for concurrent
+// use. The Reader the Writer was built from must not be consumed by
+// any other goroutine between NewWriter and WriteTo.
 type Writer struct {
-	reader          *Reader
-	mutations       []mutation
-	encryptCfg      *crypto.EncryptConfig
-	decrypt         bool
-	forceRewrite    bool
-	signer          Signer
-	requiredVersion string
+	reader       *Reader
+	mutations    []mutation
+	encryptCfg   *crypto.EncryptConfig
+	decrypt      bool
+	forceRewrite bool
+	trailerDirty bool
+	// rewriteOverrides holds per-object replacements produced during
+	// remediation, keyed by source object number. They are forwarded to
+	// the full-rewrite copier so the renumbered output reflects the
+	// patched data instead of the original.
+	rewriteOverrides map[int]ast.PdfObject
+	signer           Signer
+	requiredVersion  string
+
+	// preSerializedPath is the path to a temp file holding the fully
+	// serialized PDF when remediation pre-serializes for accurate
+	// residual validation. When set, WriteTo streams from this file
+	// instead of re-serializing, then removes it.
+	preSerializedPath string
 }
 
 // mutation is a deferred modification applied during WriteTo.
@@ -356,7 +433,10 @@ type mutation struct {
 	apply func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
 }
 
-// NewWriter creates a Writer that modifies the document behind the given Reader.
+// NewWriter creates a single-use [Writer] that queues mutations
+// against r. Close r with [Reader.Close] after the Writer has
+// finished; do not issue further reads through r while the Writer
+// is active.
 func NewWriter(r *Reader) *Writer {
 	return &Writer{reader: r}
 }
@@ -719,13 +799,53 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 	return opts
 }
 
-// AddAttachment embeds a file in the document's /EmbeddedFiles name tree.
-// Uses incremental update. The mutation is queued and applied when
-// [Writer.WriteTo] is called.
+// AddAttachment embeds a file in the document's /EmbeddedFiles name
+// tree. This is the generic attachment API suitable for most use
+// cases. The mutation is queued and applied when [Writer.WriteTo] is
+// called.
+//
+// For PDF/A-3, Factur-X, or ZUGFeRD compliance where an embedded file
+// must carry a /AFRelationship and appear in the catalog /AF array,
+// use [Writer.AddAssociatedFile] instead.
 func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.AddAttachment(ctx, alloc, doc, name, data, mimeType)
+		},
+	})
+}
+
+// AssociatedFile describes an embedded file for PDF/A-3+ compliance with the
+// /AFRelationship and document-level /AF array required by Factur-X / ZUGFeRD.
+// Values must not be shared across goroutines without synchronization.
+type AssociatedFile struct {
+	// Name is the displayed file name.
+	Name string
+	// Data is the file content.
+	Data []byte
+	// MimeType is the embedded file /Subtype (e.g., "application/xml").
+	MimeType string
+	// Relationship is the /AFRelationship value. Valid per
+	// ISO 32000-2 §7.11.3: Source, Data, Alternative, Supplement,
+	// EncryptedPayload, FormData, Schema, Unspecified.
+	Relationship string
+}
+
+// AddAssociatedFile embeds a file as a PDF/A-3+ associated file: sets
+// /Subtype and /AFRelationship on the embedded-file stream and adds the
+// filespec to the catalog /AF array. Use this for Factur-X and
+// ZUGFeRD compliance.
+//
+// For generic attachments with no compliance requirement, prefer
+// [Writer.AddAttachment].
+func (w *Writer) AddAssociatedFile(af AssociatedFile) {
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			return mutations.AddAttachmentWithOptions(ctx, alloc, doc, af.Name, af.Data, mutations.AttachmentOptions{
+				MimeType:       af.MimeType,
+				AFRelationship: af.Relationship,
+				AddToCatalogAF: true,
+			})
 		},
 	})
 }
@@ -753,12 +873,15 @@ func (w *Writer) Sign(signer Signer) {
 // describes what was fixed and what could not be fixed automatically.
 // Uses incremental update to preserve existing document structure.
 func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (*RemediationReport, error) {
-	cfg := remediateOpts{lang: "en", preserveContent: true}
+	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	remOpts := remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
-	return w.remediate(ctx, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
+		return r.ValidatePDFA(ctx, profile)
+	}
+	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
 		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts)
 	})
 }
@@ -766,17 +889,91 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // RemediatePDFUA validates the document against the given PDF/UA profile,
 // applies targeted fixes, and queues the result for writing.
 func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (*RemediationReport, error) {
-	cfg := remediateOpts{lang: "en", preserveContent: true}
+	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	remOpts := remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
-	return w.remediate(ctx, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
+		return r.ValidatePDFUA(ctx, profile)
+	}
+	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
 		return remediation.RemediatePDFUA(ctx, doc, alloc, profile, remOpts)
 	})
 }
 
-func (w *Writer) remediate(ctx context.Context, run func(context.Context, *writer.ObjAllocator, *document.Document) (*remediation.Report, error)) (*RemediationReport, error) {
+// integritySnap captures the signals the post-remediation probe compares
+// against the baseline measured on the source [Reader].
+type integritySnap struct {
+	pageCount  int
+	textLen    int
+	imageCount int
+}
+
+// probeIntegrity samples the observable surface area of a document: its
+// page count, the total length of extractable text across every page, and
+// the total number of image references. Per-page extraction failures
+// (missing fonts, OCR-only pages, decode errors) count as zero rather than
+// aborting the probe. The baseline may suffer the same failures, and the
+// comparison only needs relative movement between baseline and post.
+func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
+	snap := integritySnap{}
+	pages, err := r.PageCount(ctx)
+	if err != nil {
+		return snap, fmt.Errorf("page count: %w", err)
+	}
+	snap.pageCount = pages
+	for p := 1; p <= pages; p++ {
+		if err := ctx.Err(); err != nil {
+			return snap, err
+		}
+		text, extractErr := r.ExtractText(ctx, p)
+		if extractErr == nil {
+			snap.textLen += len(text)
+		}
+		images, imagesErr := r.ExtractImages(ctx, p)
+		if imagesErr == nil {
+			snap.imageCount += len(images)
+		}
+	}
+	return snap, nil
+}
+
+// evaluateRegression returns a non-empty reason describing the first
+// observed regression; an empty string means the post-remediation sample
+// is within tolerance of baseline. Each field guards on a positive
+// baseline so an unreadable source (zero baseline) does not spuriously
+// flag a post that has legitimate content.
+func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) string {
+	if baseline.pageCount > 0 {
+		if !tol.AllowPageLoss && post.pageCount != baseline.pageCount {
+			return fmt.Sprintf("page count changed from %d to %d", baseline.pageCount, post.pageCount)
+		}
+		if tol.AllowPageLoss && post.pageCount > baseline.pageCount {
+			return fmt.Sprintf("page count grew from %d to %d", baseline.pageCount, post.pageCount)
+		}
+	}
+	if baseline.textLen > 0 {
+		minText := int(float64(baseline.textLen) * (1.0 - tol.MaxTextDropRatio))
+		if post.textLen < minText {
+			return fmt.Sprintf("extracted text dropped from %d to %d bytes (min %d)", baseline.textLen, post.textLen, minText)
+		}
+	}
+	if baseline.imageCount > 0 {
+		minImg := int(float64(baseline.imageCount) * (1.0 - tol.MaxImageDropRatio))
+		if post.imageCount < minImg {
+			return fmt.Sprintf("image count dropped from %d to %d (min %d)", baseline.imageCount, post.imageCount, minImg)
+		}
+	}
+	return ""
+}
+
+func (w *Writer) remediate(
+	ctx context.Context,
+	tol RegressionTolerance,
+	revalidate func(context.Context, *Reader) ([]error, error),
+	run func(context.Context, *writer.ObjAllocator, *document.Document) (*remediation.Report, error),
+) (*RemediationReport, error) {
 	doc := w.reader.doc
 	maxObjNum := 0
 	for objNum := range doc.Index.Entries {
@@ -786,21 +983,53 @@ func (w *Writer) remediate(ctx context.Context, run func(context.Context, *write
 	}
 	alloc := writer.NewObjAllocator(maxObjNum)
 
+	baseline, baseErr := probeIntegrity(ctx, w.reader)
+	if baseErr != nil {
+		// Treat an unreadable source as a zero baseline: the user asked
+		// litho to fix a broken PDF, so refusing at the door defeats the
+		// purpose. The integrity gates below skip their comparisons when
+		// baseline fields are zero, leaving reopen + revalidate as the
+		// only post-checks.
+		doc.Logger.Debug("remediate: baseline probe failed, regression gates disabled",
+			slog.Any("err", baseErr))
+		baseline = integritySnap{}
+	}
+
+	// Remember pre-remediate Writer state so a hard-fail can leave the
+	// source untouched instead of wedging the Writer in a half-mutated
+	// state that later WriteTo calls would honor. The trailer snapshot
+	// undoes in-place mutations made by fixers such as trailer-id
+	// (assigning a fresh /ID) or enforceInfoDictLimits (deleting /Info),
+	// which otherwise persist on the shared document even when
+	// remediation returns ErrRemediationBrokePDF.
+	preMutations := len(w.mutations)
+	preForceRewrite := w.forceRewrite
+	preTrailerDirty := w.trailerDirty
+	preRequiredVersion := w.requiredVersion
+	preRewriteOverrides := w.rewriteOverrides
+	preTrailerSnap := make(ast.PdfDict, len(doc.Index.Trailer))
+	maps.Copy(preTrailerSnap, doc.Index.Trailer)
+
 	report, err := run(ctx, alloc, doc)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(alloc.Pending()) > 0 || report.NeedsFullRewrite {
-		pending := alloc.Pending()
-		w.mutations = append(w.mutations, mutation{
-			apply: func(_ context.Context, writeAlloc *writer.ObjAllocator, _ *document.Document) error {
-				for objNum, obj := range pending {
-					writeAlloc.AllocAt(objNum, obj)
-				}
-				return nil
-			},
-		})
+	if len(alloc.Pending()) > 0 || report.NeedsFullRewrite || report.TrailerDirty {
+		// Keep the allocator's pending map as the override source. WriteTo
+		// seeds its write allocator from this map on the incremental path;
+		// the full-rewrite path flows it through the copier via
+		// FullRewriteConfig.Overrides. A previous implementation also
+		// queued a mutation that did writeAlloc.AllocAt(srcObjNum, obj) for
+		// every pending entry. That worked incrementally because source
+		// and dst numbering are identical, but stomped the copier's
+		// dst-namespace allocations during full rewrite and produced PDFs
+		// whose trailer pointed at the wrong object. Seed via
+		// rewriteOverrides only.
+		w.rewriteOverrides = alloc.Pending()
+	}
+	if report.TrailerDirty {
+		w.trailerDirty = true
 	}
 
 	if report.NeedsFullRewrite {
@@ -810,15 +1039,211 @@ func (w *Writer) remediate(ctx context.Context, run func(context.Context, *write
 		w.requiredVersion = report.RequiredVersion
 	}
 
-	return &RemediationReport{Fixed: report.Fixed, Residual: report.Residual}, nil
+	// attemptResult distinguishes a failed serialize/reopen (treated as
+	// advisory, falling back to preliminary residuals) from a serialized
+	// output that reopens but then fails probing or validation (treated as
+	// a regression candidate, eligible for rollback).
+	type attemptResult int
+	const (
+		attemptOK attemptResult = iota
+		attemptSetupFailed
+		attemptBroken
+	)
+
+	// serializeAndProbe writes the currently-queued mutations to a fresh
+	// temp file, reopens it, and samples both the profile residuals and an
+	// integrity snapshot. The caller must os.Remove the returned tmpPath on
+	// every branch except the happy path, where tmpPath is kept as
+	// w.preSerializedPath.
+	serializeAndProbe := func() (tmpPath string, residuals []error, post integritySnap, outcome attemptResult) {
+		tmpFile, tmpErr := os.CreateTemp("", "litho-remediate-*.pdf")
+		if tmpErr != nil {
+			doc.Logger.Debug("remediate: creating temp file failed", slog.Any("err", tmpErr))
+			return "", nil, integritySnap{}, attemptSetupFailed
+		}
+		tmpPath = tmpFile.Name()
+		if writeErr := w.WriteTo(ctx, tmpFile); writeErr != nil {
+			tmpFile.Close()
+			doc.Logger.Debug("remediate: pre-serialization failed, treating output as broken",
+				slog.Any("err", writeErr))
+			return tmpPath, nil, integritySnap{}, attemptBroken
+		}
+		tmpFile.Close()
+
+		r2, openErr := OpenFile(ctx, tmpPath)
+		if openErr != nil {
+			doc.Logger.Debug("remediate: re-open failed", slog.Any("err", openErr))
+			return tmpPath, nil, integritySnap{}, attemptBroken
+		}
+		defer r2.Close()
+
+		probe, probeErr := probeIntegrity(ctx, r2)
+		if probeErr != nil {
+			doc.Logger.Debug("remediate: post probe failed", slog.Any("err", probeErr))
+			return tmpPath, nil, integritySnap{}, attemptBroken
+		}
+		res, valErr := revalidate(ctx, r2)
+		if valErr != nil {
+			doc.Logger.Debug("remediate: re-validation failed", slog.Any("err", valErr))
+			return tmpPath, nil, integritySnap{}, attemptBroken
+		}
+		return tmpPath, res, probe, attemptOK
+	}
+
+	restorePreState := func() {
+		w.mutations = w.mutations[:preMutations]
+		w.forceRewrite = preForceRewrite
+		w.trailerDirty = preTrailerDirty
+		w.requiredVersion = preRequiredVersion
+		w.rewriteOverrides = preRewriteOverrides
+		for k := range doc.Index.Trailer {
+			delete(doc.Index.Trailer, k)
+		}
+		maps.Copy(doc.Index.Trailer, preTrailerSnap)
+	}
+
+	tmpPath, residual, post, outcome := serializeAndProbe()
+
+	// Treat a broken output and a regression identically: both trigger
+	// rollback when a content-tier snapshot exists, and hard-fail
+	// otherwise. A pure setup failure (no bytes written, no reopen
+	// attempted) preserves the older best-effort behavior.
+	var trigger string
+	switch outcome {
+	case attemptSetupFailed:
+		return &RemediationReport{Fixed: report.Fixed, Residual: report.Residual}, nil
+	case attemptBroken:
+		trigger = "output failed to reopen or revalidate"
+	case attemptOK:
+		trigger = evaluateRegression(baseline, post, tol)
+	}
+
+	if trigger != "" {
+		doc.Logger.Debug("remediate: regression detected",
+			slog.String("reason", trigger),
+			slog.Bool("rollback_eligible", report.ContentSnapshot != nil),
+		)
+		removeTempFile(doc.Logger, tmpPath)
+		if report.ContentSnapshot == nil {
+			restorePreState()
+			return nil, fmt.Errorf("%w: %s", ErrRemediationBrokePDF, trigger)
+		}
+
+		// Roll back content-tier fixers only. The allocator mutates its
+		// pending map in place, so the closure captured above still sees
+		// a coherent view after Restore.
+		alloc.Restore(*report.ContentSnapshot)
+
+		tmpPath2, residual2, post2, outcome2 := serializeAndProbe()
+		if outcome2 == attemptSetupFailed {
+			restorePreState()
+			return nil, fmt.Errorf("%w: rollback serialize failed", ErrRemediationBrokePDF)
+		}
+		if outcome2 == attemptBroken {
+			removeTempFile(doc.Logger, tmpPath2)
+			restorePreState()
+			return nil, fmt.Errorf("%w: output still unusable after rollback", ErrRemediationBrokePDF)
+		}
+		if reason2 := evaluateRegression(baseline, post2, tol); reason2 != "" {
+			removeTempFile(doc.Logger, tmpPath2)
+			restorePreState()
+			return nil, fmt.Errorf("%w: %s (persisted after rollback)", ErrRemediationBrokePDF, reason2)
+		}
+
+		// Rollback succeeded. Content-tier fixes are discarded; the
+		// violations they claimed to handle move back to residual.
+		w.preSerializedPath = tmpPath2
+		kept := keepFixedWithout(report.Fixed, report.ContentFixed)
+		finalResidual := make([]error, 0, len(residual2)+len(report.ContentResidual))
+		finalResidual = append(finalResidual, residual2...)
+		finalResidual = append(finalResidual, report.ContentResidual...)
+		doc.Logger.Debug("remediate: rollback succeeded",
+			slog.Int("kept_fixes", len(kept)),
+			slog.Int("rolled_back", len(report.ContentFixed)),
+			slog.String("trigger", trigger),
+		)
+		return &RemediationReport{
+			Fixed:      kept,
+			Residual:   finalResidual,
+			RolledBack: report.ContentFixed,
+		}, nil
+	}
+
+	// Happy path: no regression.
+	w.preSerializedPath = tmpPath
+	return &RemediationReport{Fixed: report.Fixed, Residual: residual}, nil
 }
 
-// WriteTo serializes the modified document to dst. By default, it uses an
-// incremental update (appending to the original file). Pass [WithFullRewrite]
-// to force a clean rewrite. Pass [WithWriteLogger] to receive structured
-// debug logs for every mutation, best-effort fallback, and write-engine
-// decision.
+// keepFixedWithout returns the subset of fixed that is not also present in
+// rolledBack. The comparison is by exact description because the
+// remediation engine emits stable, human-readable strings.
+func keepFixedWithout(fixed, rolledBack []string) []string {
+	if len(rolledBack) == 0 {
+		return fixed
+	}
+	skip := make(map[string]int, len(rolledBack))
+	for _, d := range rolledBack {
+		skip[d]++
+	}
+	out := make([]string, 0, len(fixed))
+	for _, d := range fixed {
+		if skip[d] > 0 {
+			skip[d]--
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+// removeTempFile deletes path and logs a debug line if the removal fails.
+// Temp-file cleanup is best-effort: the OS reclaims the file on restart
+// and callers cannot do anything useful with the error at this point.
+func removeTempFile(logger *slog.Logger, path string) {
+	if path == "" {
+		return
+	}
+	if err := os.Remove(path); err != nil {
+		logger.Debug("remediate: removing temp file failed",
+			slog.String("path", path),
+			slog.Any("err", err))
+	}
+}
+
+// copyFromPreSerialized streams the pre-serialized temp file to dst and
+// removes it afterward.
+func (w *Writer) copyFromPreSerialized(dst io.Writer) error {
+	path := w.preSerializedPath
+	w.preSerializedPath = ""
+
+	f, err := os.Open(path) //nolint:gosec // Path is a temp file created by remediate, not user input.
+	if err != nil {
+		os.Remove(path)
+		return fmt.Errorf("opening pre-serialized output: %w", err)
+	}
+
+	_, copyErr := io.Copy(dst, f)
+	f.Close()
+	os.Remove(path)
+	return copyErr
+}
+
+// WriteTo serializes the modified document to dst. By default it
+// emits an incremental update (appending a new xref and trailer to
+// the original bytes). Pass [WithFullRewrite] to force a clean
+// rewrite, or [WithWriteLogger] for structured logs covering every
+// mutation, best-effort fallback, and write-engine decision.
+//
+// WriteTo drains the mutation queue and may alter the backing
+// [Reader]'s in-memory state. Call it exactly once per Writer; to
+// produce another output, create a new Writer from a fresh Reader.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) error {
+	// Fast path: remediation already serialized the output to a temp file
+	// for accurate residual validation. Stream from that file.
+	if w.preSerializedPath != "" {
+		return w.copyFromPreSerialized(dst)
+	}
+
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
@@ -865,6 +1290,7 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 			Version:         cfg.version,
 			RequiredVersion: w.requiredVersion,
 			XRefStream:      cfg.xrefStream,
+			Overrides:       w.rewriteOverrides,
 		})
 	}
 
@@ -888,8 +1314,19 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		logger.Debug("mutation applied", slog.Int("index", i))
 	}
 
-	// If no mutations produced pending objects, nothing to write.
-	if len(alloc.Pending()) == 0 {
+	// Seed remediation overrides last so they win if a queued user
+	// mutation wrote to the same object number. Remediation uses
+	// source-namespace object numbers, which match the incremental
+	// path's allocator, so AllocAt with the same keys lands correctly.
+	for objNum, obj := range w.rewriteOverrides {
+		alloc.AllocAt(objNum, obj)
+	}
+
+	// If no mutations produced pending objects AND the trailer was not
+	// mutated in place, nothing has to be written. Otherwise the
+	// incremental update below emits a fresh xref + trailer even when
+	// the allocator is empty, preserving trailer-only fixes like /ID.
+	if len(alloc.Pending()) == 0 && !w.trailerDirty {
 		logger.Debug("no pending objects, copying source as-is")
 		src := io.NewSectionReader(doc.RawReader(), 0, doc.FileSize())
 		_, err := io.Copy(dst, src)

@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"embed"
+	"strings"
 	"sync"
 )
 
@@ -68,40 +69,49 @@ func loadAdobeBCMap(name string) map[int]rune {
 	return m
 }
 
-// encodingToOrdering maps predefined CMap encoding names to their Adobe
-// character collection ordering.
-var encodingToOrdering = map[string]string{
-	"GBK-EUC-H":    "GB1",
-	"GBK-EUC-V":    "GB1",
-	"GBKp-EUC-H":   "GB1",
-	"GBKp-EUC-V":   "GB1",
-	"GBK2K-H":      "GB1",
-	"GBK2K-V":      "GB1",
-	"GB-EUC-H":     "GB1",
-	"GB-EUC-V":     "GB1",
-	"GBpc-EUC-H":   "GB1",
-	"GBpc-EUC-V":   "GB1",
-	"GBT-EUC-H":    "GB1",
-	"GBT-EUC-V":    "GB1",
-	"GBTpc-EUC-H":  "GB1",
-	"GBTpc-EUC-V":  "GB1",
-	"EUC-H":        "Japan1",
-	"EUC-V":        "Japan1",
-	"78-EUC-H":     "Japan1",
-	"78-EUC-V":     "Japan1",
-	"83pv-RKSJ-H":  "Japan1",
-	"90ms-RKSJ-H":  "Japan1",
-	"90ms-RKSJ-V":  "Japan1",
-	"90msp-RKSJ-H": "Japan1",
-	"90msp-RKSJ-V": "Japan1",
-	"90pv-RKSJ-H":  "Japan1",
-	"90pv-RKSJ-V":  "Japan1",
-	"CNS-EUC-H":    "CNS1",
-	"CNS-EUC-V":    "CNS1",
-	"KSC-EUC-H":    "Korea1",
-	"KSC-EUC-V":    "Korea1",
-	"KSCpc-EUC-H":  "Korea1",
-	"KSCpc-EUC-V":  "Korea1",
+// orderingFromEncodingName resolves a predefined PDF CMap encoding name
+// (for example "UniJIS-UTF16-H", "GBK-EUC-V", "ETen-B5-H") to the Adobe
+// character collection ordering that carries its CID→Unicode table
+// ("Japan1", "GB1", "CNS1", or "Korea1"). Name-pattern dispatch covers
+// the full set of predefined CMaps listed in ISO 32000-1 §9.7.5.2
+// Table 118. An unrecognized name returns "", signalling the caller to
+// treat the encoding as non-predefined.
+func orderingFromEncodingName(name string) string {
+	// Short identity-style names (Japan1).
+	switch name {
+	case "H", "V", "Hiragana", "Katakana", "Roman", "Hankaku", "WP-Symbol":
+		return "Japan1"
+	}
+	switch {
+	case strings.HasPrefix(name, "GB"),
+		strings.HasPrefix(name, "UniGB-"):
+		return "GB1"
+	case strings.HasPrefix(name, "B5"),
+		strings.HasPrefix(name, "CNS"),
+		strings.HasPrefix(name, "ETen"),
+		strings.HasPrefix(name, "ETHK"),
+		strings.HasPrefix(name, "HKdla"),
+		strings.HasPrefix(name, "HKdlb"),
+		strings.HasPrefix(name, "HKgccs"),
+		strings.HasPrefix(name, "HKm"),
+		strings.HasPrefix(name, "HKscs"),
+		strings.HasPrefix(name, "UniCNS-"):
+		return "CNS1"
+	case strings.HasPrefix(name, "78"),
+		strings.HasPrefix(name, "83"),
+		strings.HasPrefix(name, "90"),
+		strings.HasPrefix(name, "Add"),
+		strings.HasPrefix(name, "EUC-"),
+		strings.HasPrefix(name, "Ext"),
+		strings.HasPrefix(name, "NWP"),
+		strings.HasPrefix(name, "RKSJ"),
+		strings.HasPrefix(name, "UniJIS"):
+		return "Japan1"
+	case strings.HasPrefix(name, "KSC"),
+		strings.HasPrefix(name, "UniKS-"):
+		return "Korea1"
+	}
+	return ""
 }
 
 // predefinedCMapCache caches loaded predefined CMaps by name.
@@ -123,8 +133,8 @@ func LoadPredefinedCMap(name string) *CMap {
 }
 
 func loadPredefinedCMapUncached(name string) *CMap {
-	ordering, ok := encodingToOrdering[name]
-	if !ok {
+	ordering := orderingFromEncodingName(name)
+	if ordering == "" {
 		return nil
 	}
 

@@ -3,6 +3,7 @@ package writer
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -14,6 +15,7 @@ type Copier struct {
 	src       *document.Document
 	allocator *ObjAllocator
 	mapping   map[int]int // src objNum -> dst objNum
+	overrides map[int]ast.PdfObject
 }
 
 // NewCopier creates a Copier that copies objects from src into the allocator's
@@ -24,6 +26,22 @@ func NewCopier(src *document.Document, allocator *ObjAllocator) *Copier {
 		allocator: allocator,
 		mapping:   make(map[int]int),
 	}
+}
+
+// WithOverrides registers pre-patched versions of source objects. When
+// the copier is asked to copy an indirect reference whose object number
+// appears in overrides, it copies that object instead of the one
+// persisted in the source document. Returns the copier for chaining.
+func (c *Copier) WithOverrides(overrides map[int]ast.PdfObject) *Copier {
+	c.overrides = overrides
+	return c
+}
+
+// Mapping exposes the src-to-dst object number map assembled during the
+// copy pass. Callers use it to translate references allocated in the
+// source namespace into the destination namespace after copy completes.
+func (c *Copier) Mapping() map[int]int {
+	return c.mapping
 }
 
 // CopyRef resolves an indirect reference from the source document, deep-copies
@@ -39,10 +57,17 @@ func (c *Copier) CopyRef(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfIn
 	dstRef := c.allocator.Alloc(ast.PdfNull{}) // placeholder
 	c.mapping[ref.ObjectNum] = dstRef.ObjectNum
 
-	// Resolve the source object.
-	srcObj, err := c.src.Resolve(ctx, ref)
-	if err != nil {
-		return dstRef, fmt.Errorf("resolving source object %d: %w", ref.ObjectNum, err)
+	// Prefer a caller-supplied override of the source object so
+	// remediation-stage patches flow through the copier intact.
+	var srcObj ast.PdfObject
+	if override, ok := c.overrides[ref.ObjectNum]; ok {
+		srcObj = override
+	} else {
+		var err error
+		srcObj, err = c.src.Resolve(ctx, ref)
+		if err != nil {
+			return dstRef, fmt.Errorf("resolving source object %d: %w", ref.ObjectNum, err)
+		}
 	}
 
 	// Deep-copy.
@@ -98,8 +123,18 @@ func (c *Copier) copyArray(ctx context.Context, arr ast.PdfArray) (ast.PdfArray,
 
 func (c *Copier) copyDict(ctx context.Context, d ast.PdfDict) (ast.PdfDict, error) {
 	result := make(ast.PdfDict, len(d))
-	for k, v := range d {
-		copied, err := c.CopyObject(ctx, v)
+	// Walk keys in a stable order. copyDict recurses into child refs that
+	// allocate new dst object numbers in traversal order; without a fixed
+	// order the dst numbering differs run-to-run, which makes byte-level
+	// diffing of full-rewrite output impossible and hides real regressions.
+	keys := make([]string, 0, len(d))
+	for k := range d {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+	for _, ks := range keys {
+		k := ast.PdfName(ks)
+		copied, err := c.CopyObject(ctx, d[k])
 		if err != nil {
 			return nil, err
 		}

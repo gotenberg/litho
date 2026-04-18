@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -279,6 +280,7 @@ func renderActualText(machine *graphics.Machine, state *graphics.State, elements
 			Y:             y,
 			Width:         math.Abs(dx),
 			FontSize:      fontSize,
+			Chunk:         machine.Chunk,
 			MCID:          mcid,
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
@@ -589,6 +591,135 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 	}
 
 	return elements, nil
+}
+
+// CoalesceElements merges consecutive per-glyph [models.TextElement]
+// entries that share styling and marked-content context and sit on the
+// same baseline, then drops runs that carry only whitespace.
+// Reader.ExtractTextElements applies this so the public API returns
+// text-run-level items rather than per-glyph fragments; internal
+// callers that need per-glyph positions (text reconstruction, bidi,
+// crop-clip) keep using the raw output from [ExtractElements]. The
+// context is checked periodically so large pages can be cancelled.
+func CoalesceElements(ctx context.Context, in []models.TextElement) []models.TextElement {
+	coalesced := coalesceTextElements(ctx, in)
+	out := coalesced[:0]
+	for i, el := range coalesced {
+		if i%coalesceCancelStride == 0 && ctx.Err() != nil {
+			return coalesced
+		}
+		if strings.TrimSpace(el.Text) == "" {
+			continue
+		}
+		out = append(out, el)
+	}
+	return out
+}
+
+// coalesceCancelStride is the number of elements to process between
+// ctx.Err() checks inside the coalesce and filter loops. Text pages
+// routinely carry thousands of glyphs; a per-iteration check would add
+// measurable overhead, while a stride this size keeps latency bounded
+// on cancellation without changing the common-case fast path.
+const coalesceCancelStride = 512
+
+// coalesceTextElements merges consecutive per-glyph [models.TextElement]
+// entries that share font size, direction, vertical mode, marked-content
+// context, visibility flags, and are spatially adjacent along the
+// baseline. The raw emission path produces one element per glyph byte,
+// which inflates item counts and fragments text layout for downstream
+// consumers. Grouping glyphs that came from the same text-showing
+// operator restores run-level granularity for the public API without
+// losing the per-glyph positions accumulated elsewhere in the pipeline
+// (text-reconstruction, bidi, crop-clip).
+func coalesceTextElements(ctx context.Context, in []models.TextElement) []models.TextElement {
+	if len(in) < 2 {
+		return in
+	}
+	out := make([]models.TextElement, 0, len(in))
+	out = append(out, in[0])
+	for i := 1; i < len(in); i++ {
+		if i%coalesceCancelStride == 0 && ctx.Err() != nil {
+			return append(out, in[i:]...)
+		}
+		last := &out[len(out)-1]
+		next := in[i]
+		if !canMergeTextElements(*last, next) {
+			out = append(out, next)
+			continue
+		}
+		last.Text += next.Text
+		// Width is the total advance from the run's starting position
+		// to the end of the final glyph, measured along the text
+		// baseline direction (cos, sin of the rotation angle).
+		dirX, dirY := baselineDirection(*last)
+		dx := (next.X + next.Width*dirX) - last.X
+		dy := (next.Y + next.Width*dirY) - last.Y
+		last.Width = dx*dirX + dy*dirY
+	}
+	return out
+}
+
+// canMergeTextElements reports whether two consecutive per-glyph
+// elements belong to the same run and can be concatenated. Mergeable
+// elements share every style and visibility property and sit along the
+// expected baseline advance with a sub-space gap; anything larger is a
+// legitimate word boundary and stays split.
+func canMergeTextElements(a, b models.TextElement) bool {
+	if a.FontSize != b.FontSize ||
+		a.Vertical != b.Vertical ||
+		a.Hidden != b.Hidden ||
+		a.Invisible != b.Invisible ||
+		a.Redacted != b.Redacted ||
+		a.IsClipped != b.IsClipped ||
+		a.MCID != b.MCID ||
+		a.PatternType != b.PatternType ||
+		a.Language != b.Language ||
+		a.ExpansionText != b.ExpansionText ||
+		a.MathML != b.MathML {
+		return false
+	}
+	if math.Abs(a.Angle-b.Angle) > 1e-6 {
+		return false
+	}
+
+	// Spatial adjacency projected onto the baseline direction. The
+	// along-baseline gap must be small (sub-space kerning only) and the
+	// perpendicular offset must be near zero.
+	spaceW := a.SpaceWidth
+	if spaceW <= 0 {
+		spaceW = a.FontSize * 0.25
+	}
+	const kernTolerance = 0.3 // up to 30% of a space counts as kerning.
+	maxGap := spaceW * kernTolerance
+	baselineTolerance := a.FontSize * 0.2
+
+	dirX, dirY := baselineDirection(a)
+	perpX, perpY := -dirY, dirX
+
+	dx := b.X - a.X
+	dy := b.Y - a.Y
+	alongDelta := dx*dirX + dy*dirY
+	perpDelta := dx*perpX + dy*perpY
+
+	expected := a.Width
+	if alongDelta < expected-baselineTolerance || alongDelta > expected+maxGap {
+		return false
+	}
+	if math.Abs(perpDelta) > baselineTolerance {
+		return false
+	}
+	return true
+}
+
+// baselineDirection returns the unit vector pointing along the text
+// baseline for an element. Vertical text advances down the Y axis of
+// text space; horizontal text advances along its rotation angle.
+func baselineDirection(e models.TextElement) (float64, float64) {
+	if e.Vertical {
+		return math.Sin(e.Angle), math.Cos(e.Angle)
+	}
+	return math.Cos(e.Angle), math.Sin(e.Angle)
 }
 
 // boxRectFromArray converts a PdfArray [llx, lly, urx, ury] to [4]float64.

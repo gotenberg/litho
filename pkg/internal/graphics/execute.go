@@ -170,14 +170,16 @@ func handleConcatMatrix(_ context.Context, _ *Machine, state *State, op content.
 
 var identityTextMatrix = [6]float64{1, 0, 0, 1, 0, 0}
 
-func handleBeginText(_ context.Context, _ *Machine, state *State, _ content.Operation) {
+func handleBeginText(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	state.Text.Tm = identityTextMatrix
 	state.Text.Tlm = identityTextMatrix
+	m.Chunk++
 }
 
-func handleEndText(_ context.Context, _ *Machine, state *State, _ content.Operation) {
+func handleEndText(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	state.Text.Tm = identityTextMatrix
 	state.Text.Tlm = identityTextMatrix
+	m.Chunk++
 }
 
 func handleTextCharSpacing(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -204,7 +206,7 @@ func handleTextLeading(_ context.Context, _ *Machine, state *State, op content.O
 	}
 }
 
-func handleTextFont(_ context.Context, _ *Machine, state *State, op content.Operation) {
+func handleTextFont(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
@@ -212,9 +214,10 @@ func handleTextFont(_ context.Context, _ *Machine, state *State, op content.Oper
 		state.Text.Tf = string(name)
 	}
 	state.Text.Tfs = document.Float(op.Operands[1])
+	m.Chunk++
 }
 
-func handleTextMatrix(_ context.Context, _ *Machine, state *State, op content.Operation) {
+func handleTextMatrix(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 6 {
 		return
 	}
@@ -222,6 +225,7 @@ func handleTextMatrix(_ context.Context, _ *Machine, state *State, op content.Op
 		state.Text.Tm[i] = document.Float(op.Operands[i])
 	}
 	state.Text.Tlm = state.Text.Tm
+	m.Chunk++
 }
 
 // applyTextMove advances the text line matrix by (tx, ty) per PDF 32000
@@ -233,16 +237,17 @@ func applyTextMove(state *State, tx, ty float64) {
 	state.Text.Tm = state.Text.Tlm
 }
 
-func handleTextMove(_ context.Context, _ *Machine, state *State, op content.Operation) {
+func handleTextMove(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
 	tx := document.Float(op.Operands[0])
 	ty := document.Float(op.Operands[1])
 	applyTextMove(state, tx, ty)
+	m.Chunk++
 }
 
-func handleTextMoveSetLeading(_ context.Context, _ *Machine, state *State, op content.Operation) {
+func handleTextMoveSetLeading(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 2 {
 		return
 	}
@@ -250,25 +255,29 @@ func handleTextMoveSetLeading(_ context.Context, _ *Machine, state *State, op co
 	ty := document.Float(op.Operands[1])
 	state.Text.Tl = -ty
 	applyTextMove(state, tx, ty)
+	m.Chunk++
 }
 
-func handleTextNextLine(_ context.Context, _ *Machine, state *State, _ content.Operation) {
+func handleTextNextLine(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	applyTextMove(state, 0, -state.Text.Tl)
+	m.Chunk++
 }
 
-func handleTextNextLineShow(_ context.Context, _ *Machine, state *State, _ content.Operation) {
+func handleTextNextLineShow(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	// Per spec, ' moves to the next line and shows text. Text rendering
 	// is handled by the extractor layer. Here we only advance the matrix.
 	applyTextMove(state, 0, -state.Text.Tl)
+	m.Chunk++
 }
 
-func handleTextSpacingNextLineShow(_ context.Context, _ *Machine, state *State, op content.Operation) {
+func handleTextSpacingNextLineShow(_ context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 3 {
 		return
 	}
 	state.Text.Tw = document.Float(op.Operands[0])
 	state.Text.Tc = document.Float(op.Operands[1])
 	applyTextMove(state, 0, -state.Text.Tl)
+	m.Chunk++
 }
 
 func handleTextRenderingMode(_ context.Context, _ *Machine, state *State, op content.Operation) {
