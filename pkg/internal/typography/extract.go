@@ -575,8 +575,15 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 	// The check uses the glyph's start point, matching PDF viewers
 	// that reject a glyph when its text-matrix position sits past the
 	// right or bottom edge of the page.
+	//
+	// When a page declares a /CropBox that lies entirely outside the
+	// /MediaBox, the stated clip is nonsensical and viewers (PDF.js
+	// included) fall back to the /MediaBox for visibility. Treating the
+	// empty-intersection case as "no clip" recovers text from the page
+	// rather than discarding every glyph as out-of-bounds.
 	cropBox := boxRectFromArray(page.CropBox)
-	if cropBox != [4]float64{} {
+	mediaBox := boxRectFromArray(page.MediaBox)
+	if cropBox != [4]float64{} && rectsIntersect(cropBox, mediaBox) {
 		minX, minY, maxX, maxY := cropBox[0], cropBox[1], cropBox[2], cropBox[3]
 		if minX > maxX {
 			minX, maxX = maxX, minX
@@ -730,6 +737,35 @@ func boxRectFromArray(arr ast.PdfArray) [4]float64 {
 		return [4]float64{}
 	}
 	return [4]float64{document.Float(arr[0]), document.Float(arr[1]), document.Float(arr[2]), document.Float(arr[3])}
+}
+
+// rectsIntersect reports whether two PDF box rectangles (given as
+// [llx, lly, urx, ury] quadruples with possibly swapped corners) share
+// any area. A zero rect on the second operand is treated as unbounded:
+// callers routinely pass a missing /MediaBox as the empty [0 0 0 0]
+// rect, and the intersection check must not reject the page because the
+// page tree never declared a media box.
+func rectsIntersect(a, b [4]float64) bool {
+	if b == [4]float64{} {
+		return true
+	}
+	aMinX, aMaxX := a[0], a[2]
+	if aMinX > aMaxX {
+		aMinX, aMaxX = aMaxX, aMinX
+	}
+	aMinY, aMaxY := a[1], a[3]
+	if aMinY > aMaxY {
+		aMinY, aMaxY = aMaxY, aMinY
+	}
+	bMinX, bMaxX := b[0], b[2]
+	if bMinX > bMaxX {
+		bMinX, bMaxX = bMaxX, bMinX
+	}
+	bMinY, bMaxY := b[1], b[3]
+	if bMinY > bMaxY {
+		bMinY, bMaxY = bMaxY, bMinY
+	}
+	return aMinX < bMaxX && aMaxX > bMinX && aMinY < bMaxY && aMaxY > bMinY
 }
 
 // ExtractText extracts text from a page's content operations and reconstructs it via [ReconstructText].
