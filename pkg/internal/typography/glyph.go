@@ -170,6 +170,18 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		}
 		return "", n, true
 	}
+	// Type0 fonts whose /ToUnicode CMap declares a limited codespace
+	// (for example <0086> <0374> covering only subset glyphs) return
+	// n=0 when the input code falls outside that range. The font is
+	// still Identity-H encoded, so two bytes belong together; consume
+	// them and reveal the raw CID as a Unicode codepoint rather than
+	// splitting across the WinAnsi single-byte path.
+	if font.Subtype == "Type0" && font.ToUnicode != nil && n == 0 && len(data) >= 2 {
+		cp := rune(uint16(data[0])<<8 | uint16(data[1]))
+		if cp > 0x1F {
+			return string(cp), 2, false
+		}
+	}
 
 	// Single-byte fallback paths. [Font.LigatureOverrides] is checked
 	// before the regular encoding map because composite /Differences
