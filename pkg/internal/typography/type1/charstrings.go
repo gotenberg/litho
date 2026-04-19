@@ -111,11 +111,11 @@ func ParseCharStringNames(data []byte) []string {
 // caller.
 func eexecRegion(data []byte) []byte {
 	const keyword = "currentfile eexec"
-	idx := bytes.Index(data, []byte(keyword))
-	if idx < 0 {
+	_, after, ok := bytes.Cut(data, []byte(keyword))
+	if !ok {
 		return data
 	}
-	return data[idx+len(keyword):]
+	return after
 }
 
 // readName parses a PostScript name token starting one byte after the

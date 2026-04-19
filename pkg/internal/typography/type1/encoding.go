@@ -69,8 +69,8 @@ func ParseEncoding(data []byte) [256]string {
 // eliminates false positives on binary bytes that happen to form
 // PostScript-like sequences.
 func clearTextRegion(data []byte) []byte {
-	if idx := bytes.Index(data, eexecMarker); idx >= 0 {
-		return data[:idx]
+	if before, _, ok := bytes.Cut(data, eexecMarker); ok {
+		return before
 	}
 	return data
 }

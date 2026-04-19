@@ -125,7 +125,7 @@ func TestParseCharStringWidths_Synthetic(t *testing.T) {
 // encryptCharString is the test-only inverse of decryptCharString.
 func encryptCharString(plain []byte, lenIV int) []byte {
 	body := make([]byte, lenIV+len(plain))
-	for i := 0; i < lenIV; i++ {
+	for i := range lenIV {
 		body[i] = 0x00
 	}
 	copy(body[lenIV:], plain)
