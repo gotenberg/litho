@@ -102,3 +102,39 @@ func TestImplicitArrayInStream(t *testing.T) {
 		}
 	}
 }
+
+// TestLexer_ScientificNotationNumber confirms the lexer tolerates
+// scientific-notation numbers that some producers emit even though
+// PDF spec §7.3.3 does not list the form. Viewers (PDF.js) accept
+// them; rejecting them drops the operand into the next operator's
+// stack and corrupts the remainder of the content stream.
+func TestLexer_ScientificNotationNumber(t *testing.T) {
+	cases := []struct {
+		input     string
+		wantType  TokenType
+		wantValue string
+	}{
+		{"1e2", TokenNumber, "1e2"},
+		{"1.5e10", TokenNumber, "1.5e10"},
+		{"-1E-3", TokenNumber, "-1E-3"},
+		{"+2e+5", TokenNumber, "+2e+5"},
+		{"1e", TokenKeyword, "1e"},       // incomplete exponent: no digits after 'e'
+		{"e2", TokenKeyword, "e2"},       // no mantissa
+		{"1e2e3", TokenKeyword, "1e2e3"}, // two exponents
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			lex := newLexer(tc.input)
+			tok, err := lex.NextToken()
+			if err != nil {
+				t.Fatalf("NextToken: %v", err)
+			}
+			if tok.Type != tc.wantType {
+				t.Errorf("type: got %v, want %v", tok.Type, tc.wantType)
+			}
+			if tok.Value != tc.wantValue {
+				t.Errorf("value: got %q, want %q", tok.Value, tc.wantValue)
+			}
+		})
+	}
+}

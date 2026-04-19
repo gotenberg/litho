@@ -120,22 +120,51 @@ func isNumber(s string) bool {
 	if i == len(s) {
 		return false
 	}
+	// Scan mantissa (optional decimal point, at least one digit).
 	hasDot := false
 	hasDigit := false
 	for ; i < len(s); i++ {
-		switch {
-		case s[i] == '.':
+		c := s[i]
+		if c == '.' {
 			if hasDot {
 				return false
 			}
 			hasDot = true
-		case s[i] >= '0' && s[i] <= '9':
+			continue
+		}
+		if c >= '0' && c <= '9' {
 			hasDigit = true
-		default:
+			continue
+		}
+		break
+	}
+	if !hasDigit {
+		return false
+	}
+	if i == len(s) {
+		return true
+	}
+	// Optional exponent: e/E, optional sign, at least one digit. PDF
+	// spec (ISO 32000-1 §7.3.3) does not list scientific notation for
+	// numbers, but some producers emit it (e.g. `/F1 1e2 Tf`). Viewers
+	// accept these leniently; rejecting them pushes the text after
+	// them onto the wrong operator and derails the entire text block.
+	if c := s[i]; c != 'e' && c != 'E' {
+		return false
+	}
+	i++
+	if i < len(s) && (s[i] == '+' || s[i] == '-') {
+		i++
+	}
+	if i == len(s) {
+		return false
+	}
+	for ; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
 			return false
 		}
 	}
-	return hasDigit
+	return true
 }
 
 func (l *Lexer) readRegular() (Token, error) {
