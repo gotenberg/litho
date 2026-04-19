@@ -444,6 +444,17 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			// adding +29 would shift the text (e.g. "6XPPD" → "Summa").
 			if !hasCIDToGIDMapStream(ctx, doc, fontDict) {
 				font.CIDOffset = detectCIDOffset(font.CIDWidths)
+				// Non-embedded fonts (e.g. /Impact referenced by name,
+				// never shipped with the PDF) follow the host font's
+				// standard TrueType GID table where space is GID 3.
+				// When no /FontFile2 or /FontFile3 is present the /W
+				// array often exposes unusual values on CIDs 0-2 that
+				// defeat the width-based detection above; apply the +29
+				// offset unconditionally so CID 26 → '7', CID 22 → '3',
+				// etc.
+				if font.CIDOffset == 0 && !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
+					font.CIDOffset = 29
+				}
 			}
 		}
 	}
@@ -1405,6 +1416,25 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	// Parse the stream and combine with the embedded font's GID→Unicode
 	// cmap to build a CID→Unicode mapping.
 	applyCIDToGIDStream(ctx, doc, fontDict, font, mapObj)
+}
+
+// cidFontHasEmbeddedProgram reports whether a Type0 font's descendant
+// CIDFont ships an embedded font program (FontFile, FontFile2, or
+// FontFile3) in its FontDescriptor. Non-embedded fonts are rendered by
+// viewers using the host system's matching face and therefore follow
+// the host's standard TrueType GID layout; the detector uses this
+// signal to decide whether to apply a CID→Unicode offset by default.
+func cidFontHasEmbeddedProgram(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return false
+	}
+	for _, key := range []ast.PdfName{"FontFile", "FontFile2", "FontFile3"} {
+		if _, ok := fdDict[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // hasCIDToGIDMapStream reports whether a Type0 font's descendant CIDFont
