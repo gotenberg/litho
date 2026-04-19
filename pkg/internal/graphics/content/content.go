@@ -160,7 +160,14 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		}
 		data, err := doc.DecodeStream(ctx, s)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode content stream: %v", err)
+			// Pages can legitimately split content across many small
+			// streams and leave one or two truncated or missing past
+			// the filter's expected length; viewers render what they
+			// can. Log the individual failure and keep assembling the
+			// remaining streams rather than dropping the whole page.
+			doc.Logger.Debug("content stream decode failed; skipping",
+				slog.Any("err", err))
+			continue
 		}
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
