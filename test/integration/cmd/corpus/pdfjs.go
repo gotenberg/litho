@@ -548,7 +548,14 @@ func lithoReference(ctx context.Context, r *pdf.Reader, id string, lastPage int)
 
 		page := refPage{PageNumber: i}
 
-		text, err := r.ExtractText(ctx, i, pdf.WithHiddenText())
+		// PDF.js's textContent rejects glyphs whose transform falls
+		// outside the viewBox (CropBox) but includes invisible and
+		// artifact text. Match that policy so comparisons reflect the
+		// same reality: strip clipped, keep the rest.
+		text, err := r.ExtractText(ctx, i,
+			pdf.WithInvisibleText(),
+			pdf.WithArtifacts(),
+		)
 		if err != nil {
 			page.Error = err.Error()
 			fixture.Pages = append(fixture.Pages, page)

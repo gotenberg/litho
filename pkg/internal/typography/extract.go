@@ -572,9 +572,11 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 	}
 
 	// Flag elements that fall outside the CropBox (the visible region).
+	// The check uses the glyph's start point, matching PDF viewers
+	// that reject a glyph when its text-matrix position sits past the
+	// right or bottom edge of the page.
 	cropBox := boxRectFromArray(page.CropBox)
 	if cropBox != [4]float64{} {
-		// Normalize: ensure min < max.
 		minX, minY, maxX, maxY := cropBox[0], cropBox[1], cropBox[2], cropBox[3]
 		if minX > maxX {
 			minX, maxX = maxX, minX
