@@ -304,18 +304,19 @@ func decomposeLigature(s string) string {
 // surface in extracted content.
 func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 	switch {
-	case font.GIDToUnicode != nil:
-		// Use the embedded TrueType/OpenType cmap to map the raw character
-		// code (treated as a glyph ID) to a Unicode rune.
-		// For CIDFonts (Type0), try 2-byte big-endian code first.
-		if font.CIDWidths != nil && len(data) >= 2 {
-			gid := uint16(data[0])<<8 | uint16(data[1])
-			if r, ok := font.GIDToUnicode[gid]; ok {
-				*n = 2
-				return string(r)
-			}
-		}
-		if r, ok := font.GIDToUnicode[uint16(data[0])]; ok {
+	case font.GIDToUnicode != nil && font.CIDWidths != nil && len(data) >= 2:
+		// CIDFonts (Type0) feed 2-byte CIDs to the embedded font's
+		// GID→Unicode cmap. Single-byte simple fonts must not follow
+		// this path: their byte codes are char codes that need to go
+		// through [Font.Encoding] → glyph-name lookups, and treating
+		// those bytes as raw GIDs resurrects ghost glyphs (e.g. byte
+		// 0x0D, which WinAnsiEncoding leaves unmapped, would resolve
+		// to whichever glyph happens to live at GID 13 in the embedded
+		// face — "*" for Arial, producing stray asterisks in running
+		// text).
+		gid := uint16(data[0])<<8 | uint16(data[1])
+		if r, ok := font.GIDToUnicode[gid]; ok {
+			*n = 2
 			return string(r)
 		}
 		return ""
