@@ -60,17 +60,18 @@ type MarkedContentState struct {
 
 // Machine is the graphics state machine that processes content stream operations.
 type Machine struct {
-	Stack             []State
-	MarkedContent     []MarkedContentState
-	IgnoreTextOps     bool
-	StripArtifacts    bool // When true, text inside /Artifact marked content is discarded
-	PendingActualText string
-	OCConfigOn        map[int]bool
-	OCConfigOff       map[int]bool
-	ActiveOCs         map[string]bool
-	CurrentPath       BoundingBox // Tracks the current active path bounds
-	Doc               *document.Document
-	Resources         ast.PdfDict // Current page resources (for resolving Pattern names)
+	Stack              []State
+	MarkedContent      []MarkedContentState
+	IgnoreTextOps      bool
+	StripArtifacts     bool // When true, text inside /Artifact marked content is discarded
+	IgnoreOCVisibility bool // When true, optional-content layer visibility does not drive SkipExtraction; the machine still records IsHiddenOC for callers that care.
+	PendingActualText  string
+	OCConfigOn         map[int]bool
+	OCConfigOff        map[int]bool
+	ActiveOCs          map[string]bool
+	CurrentPath        BoundingBox // Tracks the current active path bounds
+	Doc                *document.Document
+	Resources          ast.PdfDict // Current page resources (for resolving Pattern names)
 	// Chunk is a monotonically increasing counter bumped by text
 	// operators that start or reposition a new show-text chain
 	// (BT, ET, Td, TD, Tm, Tf, T*). Glyphs produced while it is

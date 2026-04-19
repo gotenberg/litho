@@ -300,6 +300,11 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 
 	// Initialize the graphics state machine with the CropBox as the visible region.
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
+	// PDF.js's getTextContent extracts text from every optional-content
+	// layer regardless of the /OCProperties visibility flags; its viewport
+	// alone respects /On and /Off. Mirror that here so callers get the
+	// same textual content without having to pre-configure OCs.
+	machine.IgnoreOCVisibility = true
 
 	// Build the extraction config. WithHiddenText disables all stripping;
 	// the granular options override individual flags.
@@ -658,6 +663,7 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) ([]models.Table
 
 	// Extract text elements via the graphics state machine.
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
+	machine.IgnoreOCVisibility = true
 	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
@@ -858,6 +864,7 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) ([]models
 	}
 
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
+	machine.IgnoreOCVisibility = true
 	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {

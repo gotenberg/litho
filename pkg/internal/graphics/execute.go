@@ -557,14 +557,18 @@ func applyBDCOptionalContent(m *Machine, state *State, mcState *MarkedContentSta
 	if ocName, ok := propsOperand.(ast.PdfName); ok {
 		if visible, exists := m.ActiveOCs[string(ocName)]; exists && !visible {
 			mcState.IsHiddenOC = true
-			state.SkipExtraction = true
+			if !m.IgnoreOCVisibility {
+				state.SkipExtraction = true
+			}
 		}
 		return
 	}
 	if inlineDict, isDict := propsOperand.(ast.PdfDict); isDict {
 		if !m.evaluateOCMD(inlineDict) {
 			mcState.IsHiddenOC = true
-			state.SkipExtraction = true
+			if !m.IgnoreOCVisibility {
+				state.SkipExtraction = true
+			}
 		}
 	}
 }
@@ -627,7 +631,7 @@ func handleEMC(_ context.Context, m *Machine, state *State, _ content.Operation)
 		if mc.HasText {
 			m.IgnoreTextOps = true
 		}
-		if mc.IsHiddenOC {
+		if mc.IsHiddenOC && !m.IgnoreOCVisibility {
 			state.SkipExtraction = true
 		}
 		if mc.IsArtifact && m.StripArtifacts {
