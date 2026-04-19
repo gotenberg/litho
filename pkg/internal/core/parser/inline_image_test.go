@@ -95,3 +95,24 @@ func TestSkipInlineImage_EIFollowedByDelimiter(t *testing.T) {
 		t.Errorf("expected /F1 name, got %v %q", tok.Type, tok.Value)
 	}
 }
+
+func TestSkipInlineImage_ASCII85FalseEIWithDelimiter(t *testing.T) {
+	// ASCII85-encoded image body whose data happens to contain the
+	// bytes "<ws>EI<delim>" well before the real terminator. Without
+	// filter-aware handling, the scanner would match that false EI
+	// and leave the parser reading ASCII85 bytes as operators. With
+	// /F /A85 declared, the scanner should require whitespace after
+	// EI and skip past the false match to the real EI.
+	data := []byte("/W 4 /H 1 /BPC 8 /CS /G /F /A85 ID Gb\"0;!=]#/!5bE/ABCD\nEI/X\r\n~>\nEI Q")
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	p := NewParser(lex)
+
+	if err := p.SkipInlineImage(context.Background()); err != nil {
+		t.Fatalf("SkipInlineImage failed: %v", err)
+	}
+
+	tok, _ := p.Peek(0)
+	if tok.Type != lexer.TokenKeyword || tok.Value != "Q" {
+		t.Errorf("expected Q keyword, got %v %q", tok.Type, tok.Value)
+	}
+}

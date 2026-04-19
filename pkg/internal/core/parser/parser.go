@@ -646,8 +646,11 @@ func (p *Parser) parseString(val string) ast.PdfString {
 // key/value pairs until the ID keyword, then scans forward through raw
 // binary image data until the EI terminator is found.
 func (p *Parser) SkipInlineImage(ctx context.Context) error {
+	ascii85 := false
 	// Phase 1: Consume inline image dictionary entries until the ID keyword.
 	// Entries are key/value pairs (e.g., /W 100 /H 50 /BPC 8 /CS /RGB).
+	// Track the /F filter to know whether the image data is ASCII85-encoded,
+	// which changes how the EI terminator scan must handle PDF delimiters.
 	for {
 		tok, err := p.Peek(0)
 		if err != nil {
@@ -662,6 +665,19 @@ func (p *Parser) SkipInlineImage(ctx context.Context) error {
 				return fmt.Errorf("failed to consume ID: %w", err)
 			}
 			break
+		}
+		if tok.Type == lexer.TokenName && (tok.Value == "/F" || tok.Value == "/Filter") {
+			if _, err := p.Consume(); err != nil {
+				return fmt.Errorf("inline image filter key: %w", err)
+			}
+			val, err := p.ParseObject(ctx)
+			if err != nil {
+				continue
+			}
+			if filterNamesContainASCII85(val) {
+				ascii85 = true
+			}
+			continue
 		}
 		// Consume the token (key or value). We don't need the data.
 		if _, err := p.Consume(); err != nil {
@@ -685,7 +701,26 @@ func (p *Parser) SkipInlineImage(ctx context.Context) error {
 	// followed by "EI" followed by whitespace, a delimiter, or EOF.
 	// Raw bytes 'E' and 'I' can occur inside image data, so we must
 	// validate the trailing context to avoid false matches.
-	return scanToEI(reader, ctx)
+	return scanToEI(reader, ctx, ascii85)
+}
+
+// filterNamesContainASCII85 reports whether a /F (or /Filter) value
+// includes the ASCII85Decode filter, testing both the short abbreviation
+// ("A85") used by inline images and the long name.
+func filterNamesContainASCII85(obj ast.PdfObject) bool {
+	switch v := obj.(type) {
+	case ast.PdfName:
+		return v == "A85" || v == "ASCII85Decode"
+	case ast.PdfArray:
+		for _, elem := range v {
+			if name, ok := elem.(ast.PdfName); ok {
+				if name == "A85" || name == "ASCII85Decode" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // ParseInlineImageDict reads an inline image's dictionary key/value pairs
@@ -761,7 +796,16 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 	}
 
 	// Phase 3: Scan forward for the EI terminator.
-	if err := scanToEI(reader, ctx); err != nil {
+	ascii85 := false
+	if f, ok := dict["F"]; ok {
+		ascii85 = filterNamesContainASCII85(f)
+	}
+	if !ascii85 {
+		if f, ok := dict["Filter"]; ok {
+			ascii85 = filterNamesContainASCII85(f)
+		}
+	}
+	if err := scanToEI(reader, ctx, ascii85); err != nil {
 		return nil, err
 	}
 
@@ -771,8 +815,15 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 // scanToEI scans forward through raw binary image data looking for the
 // EI end-of-inline-image marker. Uses a state machine: the marker must be
 // preceded by whitespace and followed by whitespace, a delimiter, or EOF.
-// The optional ctx enables cancellation during long scans of malformed data.
-func scanToEI(reader io.Reader, ctx context.Context) error {
+// When ascii85 is true, EI is accepted only if followed by whitespace
+// (or EOF). That stricter post-check prevents false matches on the bytes
+// 'E' and 'I' inside ASCII85-encoded image data, whose 33-117 alphabet
+// includes every PDF delimiter character. Non-ASCII85 image data can
+// contain arbitrary binary bytes, so the looser ws-or-delim post-check
+// remains necessary to match producers that pack the next operator
+// immediately after EI. The optional ctx enables cancellation during
+// long scans of malformed data.
+func scanToEI(reader io.Reader, ctx context.Context, ascii85 bool) error {
 	type readByteFunc interface {
 		ReadByte() (byte, error)
 		UnreadByte() error
@@ -821,7 +872,6 @@ func scanToEI(reader io.Reader, ctx context.Context) error {
 		case 2:
 			switch {
 			case c == 'I':
-				// Verify the byte after EI is whitespace, delimiter, or EOF.
 				next, err := r.ReadByte()
 				if err != nil {
 					if err == io.EOF {
@@ -829,7 +879,8 @@ func scanToEI(reader io.Reader, ctx context.Context) error {
 					}
 					return err
 				}
-				if isInlineWS(next) || isInlineDelim(next) {
+				accepted := isInlineWS(next) || (!ascii85 && isInlineDelim(next))
+				if accepted {
 					_ = r.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 					return nil
 				}
@@ -848,14 +899,14 @@ func scanToEI(reader io.Reader, ctx context.Context) error {
 	}
 }
 
-func isInlineWS(c byte) bool {
-	return c == 0x00 || c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D || c == 0x20
-}
-
 func isInlineDelim(c byte) bool {
 	return c == '(' || c == ')' || c == '<' || c == '>' ||
 		c == '[' || c == ']' || c == '{' || c == '}' ||
 		c == '/' || c == '%'
+}
+
+func isInlineWS(c byte) bool {
+	return c == 0x00 || c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D || c == 0x20
 }
 
 func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
