@@ -437,8 +437,14 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			// Detect CID offset from the /W array. Many non-embedded fonts
 			// use GIDs where the first printable character (space, U+0020)
 			// starts at GID 3 (offset 29). If /W starts at CID 3, assume
-			// CID + 29 = Unicode.
-			font.CIDOffset = detectCIDOffset(font.CIDWidths)
+			// CID + 29 = Unicode. Skipped when the CIDFont has an explicit
+			// /CIDToGIDMap stream: the stream already remaps CIDs to
+			// subset GIDs, so the CID values carry Unicode semantics
+			// directly (matching PDF.js's IdentityToUnicodeMap) and
+			// adding +29 would shift the text (e.g. "6XPPD" → "Summa").
+			if !hasCIDToGIDMapStream(ctx, doc, fontDict) {
+				font.CIDOffset = detectCIDOffset(font.CIDWidths)
+			}
 		}
 	}
 
@@ -1399,6 +1405,39 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	// Parse the stream and combine with the embedded font's GID→Unicode
 	// cmap to build a CID→Unicode mapping.
 	applyCIDToGIDStream(ctx, doc, fontDict, font, mapObj)
+}
+
+// hasCIDToGIDMapStream reports whether a Type0 font's descendant CIDFont
+// declares /CIDToGIDMap as an indirect reference to a stream (as opposed
+// to being absent or set to /Identity). Such a stream indicates the
+// producer is explicitly remapping CIDs to subset glyph IDs, which means
+// the CID values carry their own semantic identity and should not be
+// shifted by the GID-space heuristic in [detectCIDOffset].
+func hasCIDToGIDMapStream(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	dfObj, ok := fontDict["DescendantFonts"]
+	if !ok {
+		return false
+	}
+	dfArr, err := document.ResolveArray(ctx, doc, dfObj)
+	if err != nil || len(dfArr) == 0 {
+		return false
+	}
+	cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+	if err != nil || cidDict == nil {
+		return false
+	}
+	mapObj, ok := cidDict["CIDToGIDMap"]
+	if !ok {
+		return false
+	}
+	if name, err := document.ResolveName(ctx, doc, mapObj); err == nil && name != "" {
+		return false
+	}
+	stream, err := document.ResolveStream(ctx, doc, mapObj)
+	if err != nil || stream.Dict == nil {
+		return false
+	}
+	return true
 }
 
 // applyCIDToGIDStream parses a CIDToGIDMap stream and combines it with the
