@@ -70,7 +70,9 @@ func ExtractEncoding(data []byte) map[byte]string {
 	if encOff >= len(data) {
 		return nil
 	}
-	format := data[encOff] & 0x7F // High bit is supplement flag.
+	formatByte := data[encOff]
+	format := formatByte & 0x7F
+	hasSupplement := formatByte&0x80 != 0
 	encOff++
 
 	result := make(map[byte]string)
@@ -113,6 +115,25 @@ func ExtractEncoding(data []byte) map[byte]string {
 					}
 				}
 				gid++
+			}
+		}
+	}
+
+	// Supplemental encoding: when bit 7 of the format byte was set, a
+	// supplement table follows the main encoding. Each entry maps an
+	// additional byte code directly to a glyph SID, independent of
+	// GID order. TeX CMR fonts rely on this to expose ligatures (ff,
+	// fi, fl, ffi) at positions like 0xAE outside the primary range.
+	if hasSupplement && encOff < len(data) {
+		nSupp := int(data[encOff])
+		encOff++
+		for i := 0; i < nSupp && encOff+2 < len(data); i++ {
+			code := data[encOff]
+			sid := uint16(data[encOff+1])<<8 | uint16(data[encOff+2])
+			encOff += 3
+			name := strings.get(int(sid))
+			if name != "" && name != ".notdef" {
+				result[code] = name
 			}
 		}
 	}
