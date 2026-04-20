@@ -296,6 +296,26 @@ func RuneToGlyph(r rune) string {
 
 var hexDigits = [16]byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
 
+// texMathGlyphs maps TeX-specific glyph names (not in the Adobe Glyph
+// List) to the Unicode codepoints producers use when embedding TeX
+// fonts. Names follow the conventions used by AMS fonts (MSBM, MSAM,
+// CMSY, CMMI) and by pdfTeX's bitmapped math symbol fonts. Without
+// these entries a /FontFile /Encoding vector that references, for
+// example, /planckover2pi1 would fall through and leave the byte
+// decoded as the WinAnsi default character at its slot.
+var texMathGlyphs = map[string]rune{
+	"planckover2pi1": 0x210F, // ℏ reduced Planck constant (ℏ)
+	"planck":         0x210F,
+	"hbar":           0x210F,
+	"Reals":          0x211D, // ℝ
+	"Integers":       0x2124, // ℤ
+	"Naturals":       0x2115, // ℕ
+	"Rationals":      0x211A, // ℚ
+	"Complexes":      0x2102, // ℂ
+	"lessequal":      0x2264,
+	"greaterequal":   0x2265,
+}
+
 // GlyphToRuneFull resolves a glyph name to a Unicode rune using the core
 // GlyphToRune map, the extended AGL, and the "uniXXXX" / "uXXXXXXXX" naming
 // convention. Returns (rune, true) on success, (0, false) if unknown.
@@ -304,6 +324,9 @@ func GlyphToRuneFull(name string) (rune, bool) {
 		return r, true
 	}
 	if r, ok := extendedAGL[name]; ok {
+		return r, true
+	}
+	if r, ok := texMathGlyphs[name]; ok {
 		return r, true
 	}
 	// "uniXXXX": 4 hex digits after "uni".
