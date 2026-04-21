@@ -314,6 +314,28 @@ var texMathGlyphs = map[string]rune{
 	"Complexes":      0x2102, // ℂ
 	"lessequal":      0x2264,
 	"greaterequal":   0x2265,
+
+	// Standard AGL math-symbol names not in [extendedAGL] (the generator
+	// dropped Greek/math entries to keep the compliance tables clean).
+	// TeX CMSY/CMMI/MSAM/MSBM fonts rely on them via the /Encoding vector
+	// in their /FontFile preambles. Values mirror PDF.js glyphlist.js so
+	// the two extractors agree on the resulting codepoint; in particular
+	// "negationslash" is intentionally absent, as PDF.js drops it and
+	// falls back to the byte code.
+	"nabla":           0x2207, // ∇
+	"openbullet":      0x25E6, // ◦
+	"arrowdblleft":    0x21D0, // ⇐
+	"arrowdblright":   0x21D2, // ⇒
+	"arrowdblboth":    0x21D4, // ⇔
+	"arrowdblup":      0x21D1, // ⇑
+	"arrowdbldown":    0x21D3, // ⇓
+	"angbracketleft":  0x3008, // 〈
+	"angbracketright": 0x3009, // 〉
+	// AGL distinguishes /Delta → U+2206 INCREMENT from /Deltagreek →
+	// U+0394. CMMI/CMEX/MSAM math fonts use /Delta for the increment
+	// symbol; Symbol-font resolution still wins for explicitly Symbol-
+	// keyed fonts because it checks [SymbolGlyphsUnicode] first.
+	"Delta": 0x2206, // ∆
 }
 
 // GlyphToRuneFull resolves a glyph name to a Unicode rune using the core
