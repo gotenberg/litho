@@ -109,9 +109,9 @@ func TestNormalizeSoftHyphens(t *testing.T) {
 			want:  "document",
 		},
 		{
-			name:  "discretionary hyphen at line break",
+			name:  "unicode hyphen preserved at line break",
 			input: "docu\u2010\nment",
-			want:  "document",
+			want:  "docu\u2010\nment",
 		},
 		{
 			name:  "standalone soft hyphens become regular hyphens",
