@@ -1786,6 +1786,24 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 			return r, true
 		}
 	}
+	// Stylistic-variant glyph names ("A.sc", "zero.oldstyle", "a.smcp")
+	// split off a dot-suffix and fall back to the base name. This mirrors
+	// PDF.js's recoverGlyphName step and lets small-caps or old-style
+	// /Differences entries extract as their underlying character.
+	if dot := strings.IndexByte(name, '.'); dot > 0 {
+		base := name[:dot]
+		if r, ok := encodings.GlyphToRuneFull(base); ok {
+			if !isDingbats && isDingbatsGlyphName(base) {
+				return 0, false
+			}
+			return r, true
+		}
+		if !isSymbol {
+			if r, ok := encodings.SymbolGlyphsUnicode[base]; ok {
+				return r, true
+			}
+		}
+	}
 	return 0, false
 }
 
