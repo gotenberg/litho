@@ -510,7 +510,11 @@ func parseAndCacheToUnicode(ctx context.Context, doc *document.Document, tuObj a
 	return c
 }
 
-// parseToUnicode resolves and parses a ToUnicode CMap stream.
+// parseToUnicode resolves and parses a ToUnicode CMap stream. Returns
+// nil when the stream resolves to an empty mapping so downstream
+// fallbacks (Identity, Adobe CID tables, font-file cmap) can take over
+// instead of being blocked by a hollow CMap that never resolves any
+// character code.
 func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfObject) *cmap.CMap {
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil || stream.Dict == nil {
@@ -522,6 +526,9 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 	}
 	c, err := cmap.Parse(ctx, decoded)
 	if err != nil {
+		return nil
+	}
+	if c == nil || len(c.Mapping) == 0 {
 		return nil
 	}
 	return c
