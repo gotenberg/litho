@@ -17,7 +17,11 @@ var (
 // ExtractEncoding extracts the CFF encoding as a byte code → glyph name map.
 // For fonts with a custom encoding (like TeX OT1), this maps byte positions
 // to their glyph names, enabling correct text extraction when no PDF-level
-// /Encoding is present. Returns nil for predefined encodings (0=Standard, 1=Expert).
+// /Encoding is present. Predefined encodings (0=Standard, 1=Expert) are
+// resolved by iterating the font's charset and pairing each glyph name with
+// its position in the predefined encoding table — matching PDF.js's
+// CFFParser.parseEncoding and producing a valid byte→name map even for
+// subset fonts that only include a handful of Expert glyphs.
 func ExtractEncoding(data []byte) map[byte]string {
 	if len(data) < 4 || data[0] != 1 {
 		return nil
@@ -32,11 +36,6 @@ func ExtractEncoding(data []byte) map[byte]string {
 		return nil
 	}
 	info := parseTopDict(topDictEntries[0])
-
-	// Predefined encodings (0=Standard, 1=Expert), handled by the caller.
-	if info.encodingOffset <= 1 {
-		return nil
-	}
 
 	// Parse custom strings.
 	_, stringEntries, err := parseINDEX(data, topDictEnd)
@@ -61,6 +60,41 @@ func ExtractEncoding(data []byte) map[byte]string {
 	sids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
 	if err != nil {
 		return nil
+	}
+
+	// Predefined encodings: intersect the standard byte→name table with
+	// the font's glyph set. Subset fonts that declare Expert (encoding 1)
+	// typically ship only a handful of glyphs, and a naive byte→name
+	// lookup on the full Expert table would surface names the font never
+	// contains. Iterating the charset first ensures only the positions
+	// whose glyph actually lives in this font populate the result.
+	if info.encodingOffset == 0 || info.encodingOffset == 1 {
+		var predefined []string
+		if info.encodingOffset == 1 {
+			predefined = expertEncodingNames[:]
+		} else {
+			predefined = standardEncodingNames[:]
+		}
+		result := make(map[byte]string)
+		for gid, sid := range sids {
+			if gid == 0 {
+				continue // .notdef
+			}
+			name := strings.get(sid)
+			if name == "" || name == ".notdef" {
+				continue
+			}
+			for code, expertName := range predefined {
+				if expertName == name {
+					result[byte(code)] = name //nolint:gosec // code in [0,255]
+					break
+				}
+			}
+		}
+		if len(result) == 0 {
+			return nil
+		}
+		return result
 	}
 
 	// Parse CFF Encoding at encodingOffset.

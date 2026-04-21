@@ -497,12 +497,19 @@ func TestValidCIDs_NotCID(t *testing.T) {
 	}
 }
 
-func TestExtractEncoding_PredefinedReturnsNil(t *testing.T) {
-	// A minimal font with no custom encoding (encodingOffset == 0) should
-	// return nil so the caller falls back to standard encoding.
+func TestExtractEncoding_PredefinedStandard(t *testing.T) {
+	// With encodingOffset == 0 (Standard predefined), the encoder
+	// intersects the font's charset with the Standard encoding table
+	// and returns byte→glyph-name pairs only for glyphs that actually
+	// ship in the font. The minimal fixture declares glyph "A" at GID 1,
+	// so byte 0x41 should map to "A".
 	data := buildMinimalCFF(t)
-	if enc := ExtractEncoding(data); enc != nil {
-		t.Errorf("expected nil for predefined encoding, got %v", enc)
+	enc := ExtractEncoding(data)
+	if got, want := enc[0x41], "A"; got != want {
+		t.Errorf("Standard[0x41]: got %q, want %q", got, want)
+	}
+	if _, present := enc[0x42]; present {
+		t.Errorf("Standard[0x42] should be absent (font has no B); got %q", enc[0x42])
 	}
 }
 
