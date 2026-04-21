@@ -1,0 +1,105 @@
+package typography
+
+import (
+	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
+)
+
+// isPDFJSNormalizable reports whether r is in the character set PDF.js passes
+// through NFKC in its runBidiTransform pipeline (see
+// https://github.com/mozilla/pdf.js — src/shared/util.js normalizeUnicode).
+//
+// The regex PDF.js uses groups these targets into compact ranges. The set is
+// intentionally narrow: Latin ligatures, Arabic presentation forms, Ohm/Micro
+// signs, and Unicode spaces — characters whose NFKC form is what a human
+// reader would expect when searching the extracted text.
+func isPDFJSNormalizable(r rune) bool {
+	switch {
+	case r == 0x00A0, r == 0x00B5, r == 0x037E, r == 0x0EB3:
+		return true
+	case r >= 0x2000 && r <= 0x200A:
+		return true
+	case r == 0x202F, r == 0x2126:
+		return true
+	case r >= 0xFB00 && r <= 0xFB04, r == 0xFB05, r == 0xFB06:
+		return true
+	case r >= 0xFB20 && r <= 0xFB36:
+		return true
+	case r >= 0xFB38 && r <= 0xFB3C:
+		return true
+	case r == 0xFB3E:
+		return true
+	case r >= 0xFB40 && r <= 0xFB41:
+		return true
+	case r >= 0xFB43 && r <= 0xFB44:
+		return true
+	case r >= 0xFB46 && r <= 0xFBA1:
+		return true
+	case r >= 0xFBA4 && r <= 0xFBA9:
+		return true
+	case r >= 0xFBAE && r <= 0xFBB1:
+		return true
+	case r >= 0xFBD3 && r <= 0xFBDC:
+		return true
+	case r >= 0xFBDE && r <= 0xFBE7:
+		return true
+	case r >= 0xFBEA && r <= 0xFBF8:
+		return true
+	case r >= 0xFBFC && r <= 0xFBFD:
+		return true
+	case r >= 0xFC00 && r <= 0xFC5D:
+		return true
+	case r >= 0xFC64 && r <= 0xFCF1:
+		return true
+	case r >= 0xFCF5 && r <= 0xFD3D:
+		return true
+	case r == 0xFD88, r == 0xFDF4:
+		return true
+	case r >= 0xFDFA && r <= 0xFDFB:
+		return true
+	case r == 0xFE71, r == 0xFE77, r == 0xFE79, r == 0xFE7B, r == 0xFE7D:
+		return true
+	}
+	return false
+}
+
+// normalizePDFJSUnicode applies NFKC only to runs of characters PDF.js targets
+// in src/shared/util.js normalizeUnicode. Other characters pass through
+// unchanged, so extracted text matches PDF.js's getTextContent output without
+// altering e.g. CJK glyphs that NFKC would otherwise decompose differently.
+func normalizePDFJSUnicode(s string) string {
+	hasTarget := false
+	for _, r := range s {
+		if isPDFJSNormalizable(r) {
+			hasTarget = true
+			break
+		}
+	}
+	if !hasTarget {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	i := 0
+	for i < len(s) {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if !isPDFJSNormalizable(r) {
+			b.WriteRune(r)
+			i += size
+			continue
+		}
+		j := i + size
+		for j < len(s) {
+			r2, sz2 := utf8.DecodeRuneInString(s[j:])
+			if !isPDFJSNormalizable(r2) {
+				break
+			}
+			j += sz2
+		}
+		b.WriteString(norm.NFKC.String(s[i:j]))
+		i = j
+	}
+	return b.String()
+}

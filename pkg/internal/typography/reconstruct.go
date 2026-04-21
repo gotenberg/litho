@@ -122,7 +122,7 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 		}
 	}
 
-	return normalizeSoftHyphens(sb.String())
+	return normalizePDFJSUnicode(normalizeSoftHyphens(sb.String()))
 }
 
 // reconstructWithBeads handles the bead-aware spatial sorting path for PDFs
@@ -288,7 +288,7 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 		}
 	}
 
-	return normalizeSoftHyphens(sb.String())
+	return normalizePDFJSUnicode(normalizeSoftHyphens(sb.String()))
 }
 
 // computeLineGap computes the inter-glyph gap (delta - prevWidth) for a pair.
