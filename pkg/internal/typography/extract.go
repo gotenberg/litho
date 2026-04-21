@@ -597,6 +597,41 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 				elements[i].IsClipped = true
 			}
 		}
+		// Un-clip a single glyph that continues a non-clipped word past
+		// the right edge by a hairline margin. Viewers render a trailing
+		// letter whose origin has drifted a few points past maxX when
+		// the glyph itself sits on the baseline of its in-bounds
+		// neighbour; without this relaxation "Checkliste Service"
+		// becomes "Checkliste Servic". The chain is capped at one glyph
+		// per non-clipped run and at a small absolute overshoot (a few
+		// points), so a long runaway tail cannot propagate back in:
+		// ShowText-ShadingPattern repeats "Helvetica" many points past
+		// the margin and must stay clipped to match PDF.js.
+		const edgeOvershoot = 3.0
+		originallyClipped := make([]bool, len(elements))
+		for i := range elements {
+			originallyClipped[i] = elements[i].IsClipped
+		}
+		for i := 1; i < len(elements); i++ {
+			if !originallyClipped[i] {
+				continue
+			}
+			if originallyClipped[i-1] {
+				continue
+			}
+			prev := &elements[i-1]
+			if math.Abs(elements[i].Y-prev.Y) > 0.5 {
+				continue
+			}
+			expectedX := prev.X + prev.Width
+			if math.Abs(elements[i].X-expectedX) > 0.5 {
+				continue
+			}
+			if elements[i].X > maxX+edgeOvershoot {
+				continue
+			}
+			elements[i].IsClipped = false
+		}
 	}
 
 	return elements, nil
