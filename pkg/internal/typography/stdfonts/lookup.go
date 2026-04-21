@@ -21,6 +21,8 @@ func CMap(baseFont string) map[uint16]rune {
 	switch {
 	case strings.Contains(name, "arial"), strings.Contains(name, "helvetica"):
 		return arialGIDToUnicode
+	case strings.Contains(name, "calibri"):
+		return calibriGIDToUnicode
 	}
 	return nil
 }
