@@ -264,6 +264,13 @@ func renderActualText(machine *graphics.Machine, state *graphics.State, elements
 	actualText := document.DecodePdfString(ast.PdfString(machine.PendingActualText))
 
 	for _, r := range actualText {
+		// Skip U+FE0F VARIATION SELECTOR-16: it requests emoji presentation
+		// for the preceding base character but carries no semantic content,
+		// and PDF.js's getTextContent likewise omits it from ActualText
+		// spans like <FEFF2620FE0F> (☠️).
+		if r == 0xFE0F {
+			continue
+		}
 		tm := state.Text.Tm
 		ctm := state.CTM
 		tx := tm[4]
