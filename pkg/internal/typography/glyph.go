@@ -303,8 +303,7 @@ func decomposeLigature(s string) string {
 // from emitted text rather than printing a "?" placeholder that would
 // surface in extracted content.
 func resolveGlyphFallback(font *Font, data []byte, n *int) string {
-	switch {
-	case font.GIDToUnicode != nil && font.CIDWidths != nil && len(data) >= 2:
+	if font.GIDToUnicode != nil && font.CIDWidths != nil && len(data) >= 2 {
 		// CIDFonts (Type0) feed 2-byte CIDs to the embedded font's
 		// GID→Unicode cmap. Single-byte simple fonts must not follow
 		// this path: their byte codes are char codes that need to go
@@ -319,8 +318,13 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 			*n = 2
 			return string(r)
 		}
-		return ""
-	case font.CIDIdentityFallback && len(data) >= 2:
+		// Fall through to CIDIdentityFallback when a non-embedded font
+		// overlays a partial GID table via [stdfonts]: the table lists
+		// only the handful of extended-Latin positions that don't
+		// follow CID + 29, so GIDs missing from it should still go
+		// through the offset path instead of resolving to empty.
+	}
+	if font.CIDIdentityFallback && len(data) >= 2 {
 		// CIDToGIDMap /Identity without embedded font: treat the
 		// 2-byte character code as a direct Unicode code point,
 		// applying any detected CID offset.
@@ -330,7 +334,6 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 			return string(cp)
 		}
 		return ""
-	default:
-		return ""
 	}
+	return ""
 }

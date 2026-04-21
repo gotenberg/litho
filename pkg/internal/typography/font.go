@@ -18,6 +18,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
+	"github.com/gotenberg/litho/pkg/internal/typography/stdfonts"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 	"github.com/gotenberg/litho/pkg/internal/typography/type1"
 )
@@ -454,6 +455,24 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 				// etc.
 				if font.CIDOffset == 0 && !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
 					font.CIDOffset = 29
+				}
+				// Overlay a partial GID→Unicode table for the handful of
+				// Windows standard fonts (Arial, Helvetica) that PDFs
+				// reference by name without embedding. The CID + 29
+				// heuristic covers ASCII; extended-Latin positions (e.g.
+				// GID 207 = Ó in Arial, GID 179-182 = smart quotes) do
+				// not follow a linear offset and need an explicit lookup
+				// — [stdfonts.CMap] provides the curated subset.
+				if !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
+					if bf, ok := fontDict["BaseFont"]; ok {
+						name, _ := document.ResolveName(ctx, doc, bf)
+						if m := stdfonts.CMap(string(name)); m != nil {
+							if font.GIDToUnicode == nil {
+								font.GIDToUnicode = make(map[uint16]rune, len(m))
+							}
+							maps.Copy(font.GIDToUnicode, m)
+						}
+					}
 				}
 			}
 		}
