@@ -285,7 +285,14 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 				}
 			}
 		}
-		// No shorter match found: consume the codespace width as unmapped.
+		// Unmapped code. For a mixed-width CMap where single-byte entries
+		// live inside a multi-byte codespace (malformed but common in
+		// hand-authored PDFs), consuming the full codespace width would
+		// swallow the next byte — which the mapping can likely decode on
+		// its own. Advance by one instead so the caller re-aligns.
+		if n > 1 && c.hasShortKeys() {
+			return 1, "", false
+		}
 		return n, "", false
 	}
 
@@ -325,6 +332,19 @@ func (c *CMap) codeLengths() []int {
 		}
 	}
 	return lengths
+}
+
+// hasShortKeys reports whether any mapping entry uses a single-byte source
+// code. Used to detect mixed-width CMaps (1-byte bfchar entries inside a
+// 2-byte codespace), where unmapped multi-byte codes should advance by one
+// byte so mappable bytes are not inadvertently skipped.
+func (c *CMap) hasShortKeys() bool {
+	for k := range c.Mapping {
+		if len(k) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // inCodeSpace checks whether candidate bytes fall within any codespace range
