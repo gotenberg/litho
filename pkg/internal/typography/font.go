@@ -578,8 +578,9 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			font.Encoding = copyEncoding(encodings.MacExpertEncoding)
 		}
 	case ast.PdfDict:
-		// Dictionary-based Encoding
-		baseMap := encodings.WinAnsiEncoding // Default fallback
+		// Dictionary-based Encoding.
+		haveNamedBase := false
+		var baseMap map[byte]rune
 		if baseObj, ok := enc["BaseEncoding"]; ok {
 			baseName, err := document.ResolveName(ctx, doc, baseObj)
 			if err != nil {
@@ -589,16 +590,38 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 				switch baseName {
 				case "WinAnsiEncoding":
 					baseMap = encodings.WinAnsiEncoding
+					haveNamedBase = true
 				case "MacRomanEncoding":
 					baseMap = encodings.MacRomanEncoding
+					haveNamedBase = true
 				case "StandardEncoding":
 					baseMap = encodings.StandardEncoding
+					haveNamedBase = true
 				case "MacExpertEncoding":
 					baseMap = encodings.MacExpertEncoding
+					haveNamedBase = true
 				}
 			}
 		}
-		font.Encoding = copyEncoding(baseMap)
+		if haveNamedBase {
+			font.Encoding = copyEncoding(baseMap)
+		} else {
+			// No /BaseEncoding: per ISO 32000-2 §9.6.6.4, symbolic
+			// Type1 fonts fall back to the font program's built-in
+			// encoding (TeX cmbx12 et al expose ff/fi/ffl ligatures at
+			// bytes 0x0B-0x0F this way). Seed from the FontFile/
+			// FontFile3 first, then overlay WinAnsi on any unfilled
+			// Latin-1 slot so ASCII text remains decodable for
+			// non-symbolic fonts that also omit /BaseEncoding.
+			font.Encoding = make(map[byte]rune)
+			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats, isSymbol)
+			extractCFFEncodingAsBase(ctx, doc, fontDict, font)
+			for code, r := range encodings.WinAnsiEncoding {
+				if _, set := font.Encoding[code]; !set {
+					font.Encoding[code] = r
+				}
+			}
+		}
 
 		// Process Differences array
 		if diffObj, ok := enc["Differences"]; ok {
@@ -1617,6 +1640,36 @@ func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict as
 	}
 	// Convert glyph names to runes and overwrite the encoding table.
 	for code, name := range encMap {
+		if r, ok := encodings.GlyphToRuneFull(name); ok {
+			font.Encoding[code] = r
+		}
+	}
+}
+
+// extractCFFEncodingAsBase fills holes in font.Encoding from a /FontFile3
+// (Type1C/CFF) built-in encoding without overwriting entries that
+// /Differences will set. Used when a dict /Encoding has no /BaseEncoding:
+// the font program's own mapping is a better base than WinAnsi.
+func extractCFFEncodingAsBase(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return
+	}
+	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile3")
+	if fontData == nil {
+		return
+	}
+	encMap := cff.ExtractEncoding(fontData)
+	if len(encMap) == 0 {
+		return
+	}
+	if font.Encoding == nil {
+		font.Encoding = make(map[byte]rune)
+	}
+	for code, name := range encMap {
+		if _, set := font.Encoding[code]; set {
+			continue
+		}
 		if r, ok := encodings.GlyphToRuneFull(name); ok {
 			font.Encoding[code] = r
 		}
