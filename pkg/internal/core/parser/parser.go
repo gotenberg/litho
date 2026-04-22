@@ -610,6 +610,16 @@ func (p *Parser) parseString(val string) ast.PdfString {
 				buf.WriteByte('\f')
 			case '(', ')', '\\':
 				buf.WriteByte(val[i])
+			case '\r':
+				// Per ISO 32000-2 §7.3.4.2, a reverse solidus followed by an
+				// end-of-line marker (CR, LF, or CR LF) is ignored: the
+				// sequence continues the string on the next source line
+				// without emitting a character.
+				if i+1 < len(val) && val[i+1] == '\n' {
+					i++
+				}
+			case '\n':
+				// Same line-continuation rule for a lone LF after backslash.
 			default:
 				if val[i] >= '0' && val[i] <= '7' {
 					octal := string(val[i])
@@ -626,6 +636,13 @@ func (p *Parser) parseString(val string) ast.PdfString {
 				} else {
 					buf.WriteByte(val[i])
 				}
+			}
+		} else if val[i] == '\r' {
+			// Literal end-of-line markers (CR, LF, CR LF) inside a string
+			// are normalised to a single LF per ISO 32000-2 §7.3.4.2.
+			buf.WriteByte('\n')
+			if i+1 < len(val) && val[i+1] == '\n' {
+				i++
 			}
 		} else {
 			buf.WriteByte(val[i])
