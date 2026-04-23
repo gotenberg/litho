@@ -40,21 +40,26 @@ func isNeutralOrWeak(r rune) bool {
 // logical order. RTL runs already in logical order (X increasing) are
 // left untouched. The xPositions slice provides the X coordinate for
 // each element so the heuristic can detect visual vs logical order.
+//
+// When a line's only strong direction is RTL and at least one run
+// triggered the visual→logical reversal, leading neutral elements
+// (spaces, punctuation emitted at the left of the visual line) are
+// moved to the tail so the logical reading order ends with them, as
+// PDF.js's full UAX#9 bidi does for a Hebrew-only paragraph.
 func reorderBidiIndices(texts []string, indices []int, xPositions []float64) []int {
 	if len(indices) == 0 {
 		return indices
 	}
 
 	hasRTL := false
+	hasLTR := false
 	for _, t := range texts {
 		for _, r := range t {
 			if isRTL(r) {
 				hasRTL = true
-				break
+			} else if !isNeutralOrWeak(r) {
+				hasLTR = true
 			}
-		}
-		if hasRTL {
-			break
 		}
 	}
 	if !hasRTL {
@@ -64,6 +69,7 @@ func reorderBidiIndices(texts []string, indices []int, xPositions []float64) []i
 	result := make([]int, len(indices))
 	copy(result, indices)
 
+	reversedAnyRun := false
 	i := 0
 	for i < len(result) {
 		firstRune := firstRuneOf(texts[result[i]])
@@ -95,11 +101,28 @@ func reorderBidiIndices(texts []string, indices []int, xPositions []float64) []i
 				lastX := xPositions[result[j-1]]
 				if firstX < lastX {
 					reverseInts(result[i:j])
+					reversedAnyRun = true
 				}
 			}
 			i = j
 		} else {
 			i++
+		}
+	}
+
+	// RTL-paragraph neutral shift: when the line is purely RTL (no LTR
+	// strong characters) and at least one run was in visual order, any
+	// neutrals the content stream placed before the first RTL element
+	// belong after the last RTL element in logical order — the visual
+	// "left of line" is the logical "end of line" for Hebrew/Arabic.
+	if reversedAnyRun && !hasLTR {
+		k := 0
+		for k < len(result) && !isRTL(firstRuneOf(texts[result[k]])) {
+			k++
+		}
+		if k > 0 && k < len(result) {
+			leading := append([]int(nil), result[:k]...)
+			result = append(result[k:], leading...)
 		}
 	}
 
