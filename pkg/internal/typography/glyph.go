@@ -150,6 +150,17 @@ func currentMCIDFromStack(stack []graphics.MarkedContentState) (mcid int, lang, 
 // without emitting an element (used for unmapped CID fallbacks that
 // should not produce visible output).
 func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
+	if font.SuppressExtraction {
+		// Font is a reference-only CJK Type0 without an embedded program:
+		// any decoding we do would diverge from the real glyph (rendered
+		// by the host's system font) and from PDF.js's getTextContent
+		// output. Consume the codespace width without emitting.
+		consume := 2
+		if len(data) < 2 {
+			consume = len(data)
+		}
+		return "", consume, true
+	}
 	var ok bool
 	if font.ToUnicode != nil {
 		n, char, ok = font.ToUnicode.Map(data)
