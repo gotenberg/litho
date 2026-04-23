@@ -481,13 +481,22 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// CJK heuristic for simple fonts: when a TrueType or Type1 font has no
 	// ToUnicode CMap and the BaseFont name contains CJK characters, the font
 	// is likely mis-declared with WinAnsiEncoding but actually uses GBK byte
-	// encoding. Load the GBK-EUC-H predefined CMap as a ToUnicode substitute.
+	// encoding. Embedded fonts get a synthesised GBK ToUnicode so their
+	// Chinese text extracts; reference-only fonts (no embedded program) are
+	// what PDF.js treats as unextractable, so clearing Encoding avoids
+	// emitting WinAnsi-decoded garbage or synthesised Chinese that neither
+	// matches the rendered glyph nor PDF.js's output (SimFang-variant,
+	// issue20489 "Fcpdf0").
 	if font.ToUnicode == nil && (subtypeName == "TrueType" || subtypeName == "Type1") {
 		if bfObj, ok := fontDict["BaseFont"]; ok {
 			bfName, _ := document.ResolveName(ctx, doc, bfObj)
 			if hasCJKFontName(string(bfName)) {
-				if cm := cmap.LoadPredefinedCMap("GBK-EUC-H"); cm != nil {
-					font.ToUnicode = cm
+				if hasEmbeddedFontFile(ctx, doc, fontDict) {
+					if cm := cmap.LoadPredefinedCMap("GBK-EUC-H"); cm != nil {
+						font.ToUnicode = cm
+					}
+				} else {
+					font.Encoding = nil
 				}
 			}
 		}
@@ -1576,6 +1585,24 @@ func decodeFontStreamFromDescriptor(ctx context.Context, doc *document.Document,
 		return data
 	}
 	return decodeFontStream(ctx, doc, fdDict, "FontFile3")
+}
+
+// hasEmbeddedFontFile reports whether a font dict's FontDescriptor carries
+// any of the embedded-program streams (/FontFile, /FontFile2, /FontFile3).
+// Used to gate heuristics that should only fire for fonts whose glyph
+// payload travels with the PDF, so reference-only system fonts stay
+// aligned with PDF.js's "cannot extract" behaviour.
+func hasEmbeddedFontFile(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return false
+	}
+	for _, key := range []ast.PdfName{"FontFile", "FontFile2", "FontFile3"} {
+		if _, ok := fdDict[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // hasCJKFontName reports whether a BaseFont name indicates a CJK font.
