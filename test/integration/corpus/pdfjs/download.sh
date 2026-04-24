@@ -17,11 +17,14 @@ node /work/pdfjs/download-pdfjs-pdfs.mjs --test-dir "$TEST_DIR" \
 
 # Flatten any nested pdfs/ layout into OUT. pdf.js keeps everything
 # under test/pdfs/ and a few subdirectories with sub-folder fixtures.
+# install(1) avoids the sparse-file probe that cp(1) performs; macOS
+# Docker Desktop's virtiofs bind mount rejects FALLOC_FL_PUNCH_HOLE
+# with EINVAL and cp then exits 1 on files it copied successfully.
 find "$TEST_DIR/pdfs" -type f -name '*.pdf' | while read -r pdf; do
-  cp "$pdf" "$OUT/"
+  install -m644 "$pdf" "$OUT/"
 done
 
 # Ship the fixture manifest too: litho's manifest.json declares Skips
 # keyed on the PDF.js fixture ID (filename without extension), so
 # callers can cross-reference.
-cp "$TEST_DIR/test_manifest.json" "/output/test_manifest.json" || true
+install -m644 "$TEST_DIR/test_manifest.json" "/output/test_manifest.json" || true
