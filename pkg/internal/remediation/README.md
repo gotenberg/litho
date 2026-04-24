@@ -41,10 +41,10 @@ The `file-structure` fixer is a sentinel: it never mutates, only signals `Report
 2. Prefer `clausePrefix(v, "6.7.3")` over `descriptionContains`.
 3. Register in `fixer.go::registry` in the appropriate tier.
 4. Write a unit test in `fixer_<name>_test.go` (see `fixer_structtree_test.go` for the pattern).
-5. Run `go run ./test/integration/cmd/corpus remediate` before and after.
+5. Run `make corpus CORPUS_FEATURE=remediation,remediation-aggressive` before and after.
 
 ## Testing
 
 Unit tests: `*_test.go` files in this package. Shared helpers in `shared_helpers_test.go`.
 
-Integration: `go run ./test/integration/cmd/corpus remediate`. See [test/integration/README.md](../../../test/integration/README.md) for flags.
+Integration: `make corpus CORPUS_FEATURE=remediation`. See [test/integration/README.md](../../../test/integration/README.md) for variables.

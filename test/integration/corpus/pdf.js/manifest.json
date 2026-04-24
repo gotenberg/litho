@@ -1,0 +1,16 @@
+{
+  "name": "pdfjs",
+  "source": "pdf.js",
+  "docker_image": "litho-pdfjs-corpus",
+  "fixture_source": "pdfjs-manifest",
+  "fixture_manifest": "test_manifest.json",
+  "pdf_root": "pdfs",
+  "goldens": {
+    "text": "references",
+    "metadata": "references"
+  },
+  "skips": {
+    "bug1393476": "infinite loop in xref parsing",
+    "bomb_giant_contents_image_stream": "JBIG2 decompression bomb: CGO call blocks ~20s, cannot be cancelled by context"
+  }
+}

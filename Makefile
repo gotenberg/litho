@@ -38,46 +38,33 @@ test-unit: ## Run unit tests
 bench: ## Run all benchmarks
 	go test -run=^$$ -bench=. -benchmem ./...
 
-.PHONY: corpus-verapdf
-corpus-verapdf: ## Run VeraPDF corpus comparison (text output)
-	go run ./test/integration/cmd/corpus verapdf
+CORPUS_RUN_FLAGS :=
+ifdef CORPUS_JSON_OUTPUT
+CORPUS_RUN_FLAGS += --format=json
+endif
+ifdef CORPUS_NAME
+CORPUS_RUN_FLAGS += --corpus=$(CORPUS_NAME)
+endif
+ifdef CORPUS_FEATURE
+CORPUS_RUN_FLAGS += --feature=$(CORPUS_FEATURE)
+endif
+ifdef CORPUS_PROFILE
+CORPUS_RUN_FLAGS += --profile=$(CORPUS_PROFILE)
+endif
+ifdef CORPUS_WORKERS
+CORPUS_RUN_FLAGS += --workers=$(CORPUS_WORKERS)
+endif
 
-.PHONY: corpus-verapdf-json
-corpus-verapdf-json: ## Run VeraPDF corpus comparison (JSON output)
-	go run ./test/integration/cmd/corpus verapdf --format json
+CORPUS_INIT_FLAGS :=
+ifdef CORPUS_NAME
+CORPUS_INIT_FLAGS += --corpus=$(CORPUS_NAME)
+endif
 
-.PHONY: corpus-verapdf-init
-corpus-verapdf-init: ## Provision VeraPDF corpus via Docker, then compare
-	go run ./test/integration/cmd/corpus verapdf --init
-
-.PHONY: corpus-pdfjs
-corpus-pdfjs: ## Run PDF.js corpus comparison (text output)
-	go run ./test/integration/cmd/corpus pdfjs
-
-.PHONY: corpus-pdfjs-json
-corpus-pdfjs-json: ## Run PDF.js corpus comparison (JSON output)
-	go run ./test/integration/cmd/corpus pdfjs --format json
-
-.PHONY: corpus-pdfjs-init
-corpus-pdfjs-init: ## Provision PDF.js corpus via Docker, then compare
-	go run ./test/integration/cmd/corpus pdfjs --init
-
-.PHONY: corpus-remediate
-corpus-remediate: ## Run VeraPDF remediation report (text output)
-	go run ./test/integration/cmd/corpus remediate
-
-.PHONY: corpus-remediate-json
-corpus-remediate-json: ## Run VeraPDF remediation report (JSON output)
-	go run ./test/integration/cmd/corpus remediate --format json
-
-.PHONY: corpus-remediate-aggressive
-corpus-remediate-aggressive: ## Run VeraPDF remediation report with aggressive fixers
-	go run ./test/integration/cmd/corpus remediate --aggressive
-
-.PHONY: corpus-remediate-detail
-corpus-remediate-detail: ## Run VeraPDF remediation report with residual breakdown
-	go run ./test/integration/cmd/corpus remediate --detail
+.PHONY: corpus
+corpus: ## Score litho across the (corpus, feature) matrix; auto-provisions. Vars: CORPUS_JSON_OUTPUT, CORPUS_NAME, CORPUS_FEATURE, CORPUS_PROFILE, CORPUS_WORKERS
+	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
+	go run ./test/integration/cmd/corpus run $(CORPUS_RUN_FLAGS)
 
 .PHONY: clean-corpus
-clean-corpus: ## Remove all corpus data (forces regeneration on next test-integration)
-	rm -rf test/integration/testdata/pdf.js test/integration/testdata/verapdf
+clean-corpus: ## Remove all corpus testdata (forces re-provisioning on next make corpus)
+	rm -rf test/integration/testdata

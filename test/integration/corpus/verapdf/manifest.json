@@ -1,0 +1,9 @@
+{
+  "name": "verapdf",
+  "source": "verapdf",
+  "docker_image": "litho-verapdf-corpus",
+  "fixture_source": "walk-profiles",
+  "goldens": {
+    "compliance": "references"
+  }
+}

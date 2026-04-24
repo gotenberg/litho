@@ -38,7 +38,7 @@ Profile-to-group mappings live in `check.go`.
 2. Add the XML profile to `profiles/` if missing, then run `go generate`.
 3. Implement the check in the relevant domain file.
 4. Wire it into the check group.
-5. Run `make corpus-verapdf` to verify.
+5. Run `make corpus CORPUS_NAME=verapdf CORPUS_FEATURE=compliance` to verify.
 
 For rules not in VeraPDF profiles, add to `rules_extra.go`.
 

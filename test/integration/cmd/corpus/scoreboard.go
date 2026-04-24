@@ -1,0 +1,140 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"sort"
+)
+
+// Scoreboard aggregates results across every (corpus, feature) cell
+// the runner traversed. Serialised as JSON or rendered as text.
+type Scoreboard struct {
+	Corpora []*CorpusReport `json:"corpora"`
+	Elapsed string          `json:"elapsed"`
+}
+
+// CorpusReport holds one corpus row of the matrix plus per-feature
+// results.
+type CorpusReport struct {
+	Name     string           `json:"name"`
+	Fixtures int              `json:"fixtures"`
+	Features []*FeatureReport `json:"features"`
+}
+
+// FeatureReport captures the outcome of running one feature across
+// every fixture in a corpus.
+type FeatureReport struct {
+	Name             string         `json:"name"`
+	GoldenSource     string         `json:"golden_source"`
+	NoGolden         bool           `json:"no_golden,omitempty"`
+	LoadError        string         `json:"load_error,omitempty"`
+	Matched          int            `json:"matched"`
+	Mismatched       int            `json:"mismatched"`
+	Skipped          int            `json:"skipped"`
+	NoGoldenFixtures int            `json:"no_golden_fixtures,omitempty"`
+	Metrics          map[string]int `json:"metrics,omitempty"`
+	Verdicts         []Verdict      `json:"verdicts,omitempty"`
+}
+
+// Denominator returns the number of fixtures that counted toward the
+// match/mismatch split (excludes skipped and missing-golden cases).
+func (fr *FeatureReport) Denominator() int {
+	return fr.Matched + fr.Mismatched
+}
+
+// PrintText renders a human-readable scoreboard on w.
+func (s *Scoreboard) PrintText(w io.Writer) {
+	fmt.Fprintln(w, "litho corpus scoreboard")
+	fmt.Fprintln(w, "=======================")
+	fmt.Fprintf(w, "Elapsed: %s\n\n", s.Elapsed)
+
+	for _, c := range s.Corpora {
+		fmt.Fprintf(w, "Corpus: %s (%d fixtures)\n", c.Name, c.Fixtures)
+		for _, fr := range c.Features {
+			printFeatureRow(w, fr)
+		}
+		fmt.Fprintln(w)
+	}
+
+	printMismatches(w, s)
+}
+
+func printFeatureRow(w io.Writer, fr *FeatureReport) {
+	prefix := fmt.Sprintf("  %-22s [%s]", fr.Name, fr.GoldenSource)
+	switch {
+	case fr.LoadError != "":
+		fmt.Fprintf(w, "%s load error: %s\n", prefix, fr.LoadError)
+		return
+	case fr.NoGolden:
+		fmt.Fprintf(w, "%s [no golden]\n", prefix)
+		return
+	}
+
+	denom := fr.Denominator()
+	primary := fmt.Sprintf("%d/%d (%.1f%%)", fr.Matched, denom, pct(fr.Matched, denom))
+
+	switch fr.Name {
+	case "text":
+		chars := fr.Metrics["chars_match"]
+		words := fr.Metrics["words_match"]
+		fmt.Fprintf(w, "%s chars: %d/%d (%.1f%%)  words: %d/%d (%.1f%%)\n",
+			prefix, chars, denom, pct(chars, denom), words, denom, pct(words, denom))
+	case "compliance":
+		fp := fr.Metrics["false_positive"]
+		fn := fr.Metrics["false_negative"]
+		fmt.Fprintf(w, "%s %s  FP=%d FN=%d\n", prefix, primary, fp, fn)
+	case "remediation", "remediation-aggressive":
+		fullyFixed := fr.Metrics["fully_fixed"]
+		regressions := fr.Metrics["regression"]
+		improved := fr.Metrics["improved"]
+		fmt.Fprintf(w, "%s %s  fully_fixed=%d  regressions=%d  improved=%d\n",
+			prefix, primary, fullyFixed, regressions, improved)
+	default:
+		fmt.Fprintf(w, "%s %s\n", prefix, primary)
+	}
+
+	if fr.NoGoldenFixtures > 0 {
+		fmt.Fprintf(w, "    %d fixtures skipped (no per-fixture golden)\n", fr.NoGoldenFixtures)
+	}
+	if fr.Skipped > 0 {
+		fmt.Fprintf(w, "    %d fixtures skipped (corpus skip list)\n", fr.Skipped)
+	}
+}
+
+func printMismatches(w io.Writer, s *Scoreboard) {
+	anyMismatches := false
+	for _, c := range s.Corpora {
+		for _, fr := range c.Features {
+			if fr.Mismatched == 0 {
+				continue
+			}
+			anyMismatches = true
+			fmt.Fprintf(w, "%s / %s mismatches (%d):\n", c.Name, fr.Name, fr.Mismatched)
+			losers := make([]Verdict, 0, fr.Mismatched)
+			for _, v := range fr.Verdicts {
+				if v.Match || v.Skipped {
+					continue
+				}
+				losers = append(losers, v)
+			}
+			sort.Slice(losers, func(i, j int) bool {
+				return losers[i].FixtureID < losers[j].FixtureID
+			})
+			for i, v := range losers {
+				if i >= 20 { //nolint:mnd // keep the text output readable; full list lives in --format=json
+					fmt.Fprintf(w, "  ... %d more\n", len(losers)-i)
+					break
+				}
+				reason := v.Reason
+				if reason == "" {
+					reason = "mismatch"
+				}
+				fmt.Fprintf(w, "  %s: %s\n", v.FixtureID, reason)
+			}
+			fmt.Fprintln(w)
+		}
+	}
+	if !anyMismatches {
+		fmt.Fprintln(w, "No mismatches.")
+	}
+}
