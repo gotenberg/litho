@@ -151,10 +151,10 @@ func currentMCIDFromStack(stack []graphics.MarkedContentState) (mcid int, lang, 
 // should not produce visible output).
 func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	if font.SuppressExtraction {
-		// Font is a reference-only CJK Type0 without an embedded program:
-		// any decoding we do would diverge from the real glyph (rendered
-		// by the host's system font) and from PDF.js's getTextContent
-		// output. Consume the codespace width without emitting.
+		// Font is a reference-only CJK Type0 without an embedded
+		// program. Any decoding would diverge from the glyph the host's
+		// system font renders. Consume the codespace width without
+		// emitting.
 		consume := 2
 		if len(data) < 2 {
 			consume = len(data)
@@ -322,7 +322,7 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 		// those bytes as raw GIDs resurrects ghost glyphs (e.g. byte
 		// 0x0D, which WinAnsiEncoding leaves unmapped, would resolve
 		// to whichever glyph happens to live at GID 13 in the embedded
-		// face — "*" for Arial, producing stray asterisks in running
+		// face: "*" for Arial, producing stray asterisks in running
 		// text).
 		gid := uint16(data[0])<<8 | uint16(data[1])
 		if r, ok := font.GIDToUnicode[gid]; ok {

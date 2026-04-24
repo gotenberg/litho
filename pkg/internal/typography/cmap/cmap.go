@@ -288,7 +288,7 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 		// Unmapped code. For a mixed-width CMap where single-byte entries
 		// live inside a multi-byte codespace (malformed but common in
 		// hand-authored PDFs), consuming the full codespace width would
-		// swallow the next byte — which the mapping can likely decode on
+		// swallow the next byte, which the mapping can likely decode on
 		// its own. Advance by one instead so the caller re-aligns.
 		if n > 1 && c.hasShortKeys() {
 			return 1, "", false

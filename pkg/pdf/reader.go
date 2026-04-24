@@ -300,10 +300,10 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 
 	// Initialize the graphics state machine with the CropBox as the visible region.
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
-	// PDF.js's getTextContent extracts text from every optional-content
-	// layer regardless of the /OCProperties visibility flags; its viewport
-	// alone respects /On and /Off. Mirror that here so callers get the
-	// same textual content without having to pre-configure OCs.
+	// Extract text from every optional-content layer regardless of the
+	// /OCProperties visibility flags. Visibility belongs in the viewer's
+	// viewport; callers asking for textual content should get it without
+	// having to pre-configure OCs.
 	machine.IgnoreOCVisibility = true
 
 	// Build the extraction config. WithHiddenText disables all stripping;

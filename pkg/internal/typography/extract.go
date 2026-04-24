@@ -265,9 +265,9 @@ func renderActualText(machine *graphics.Machine, state *graphics.State, elements
 
 	for _, r := range actualText {
 		// Skip U+FE0F VARIATION SELECTOR-16: it requests emoji presentation
-		// for the preceding base character but carries no semantic content,
-		// and PDF.js's getTextContent likewise omits it from ActualText
-		// spans like <FEFF2620FE0F> (☠️).
+		// for the preceding base character but carries no semantic content.
+		// ActualText spans like <FEFF2620FE0F> (☠️) should extract as the
+		// base codepoint alone.
 		if r == 0xFE0F {
 			continue
 		}
@@ -584,10 +584,10 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 	// right or bottom edge of the page.
 	//
 	// When a page declares a /CropBox that lies entirely outside the
-	// /MediaBox, the stated clip is nonsensical and viewers (PDF.js
-	// included) fall back to the /MediaBox for visibility. Treating the
-	// empty-intersection case as "no clip" recovers text from the page
-	// rather than discarding every glyph as out-of-bounds.
+	// /MediaBox, the stated clip is nonsensical and viewers fall back to
+	// the /MediaBox for visibility. Treating the empty-intersection case
+	// as "no clip" recovers text from the page rather than discarding
+	// every glyph as out-of-bounds.
 	cropBox := boxRectFromArray(page.CropBox)
 	mediaBox := boxRectFromArray(page.MediaBox)
 	if cropBox != [4]float64{} && rectsIntersect(cropBox, mediaBox) {
@@ -613,7 +613,7 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 		// per non-clipped run and at a small absolute overshoot (a few
 		// points), so a long runaway tail cannot propagate back in:
 		// ShowText-ShadingPattern repeats "Helvetica" many points past
-		// the margin and must stay clipped to match PDF.js.
+		// the margin and must stay clipped.
 		const edgeOvershoot = 3.0
 		originallyClipped := make([]bool, len(elements))
 		for i := range elements {

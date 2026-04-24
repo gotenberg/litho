@@ -7,15 +7,12 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// isPDFJSNormalizable reports whether r is in the character set PDF.js passes
-// through NFKC in its runBidiTransform pipeline (see
-// https://github.com/mozilla/pdf.js — src/shared/util.js normalizeUnicode).
-//
-// The regex PDF.js uses groups these targets into compact ranges. The set is
-// intentionally narrow: Latin ligatures, Arabic presentation forms, Ohm/Micro
-// signs, and Unicode spaces — characters whose NFKC form is what a human
-// reader would expect when searching the extracted text.
-func isPDFJSNormalizable(r rune) bool {
+// isNormalizable reports whether r belongs to the narrow character set
+// that wants NFKC folding when surfaced as extracted text: Latin
+// ligatures, Arabic presentation forms, Ohm and Micro signs, and the
+// Unicode space block. Everything outside this set passes through
+// [normalizeExtractionUnicode] unchanged.
+func isNormalizable(r rune) bool {
 	switch {
 	case r == 0x00A0, r == 0x00B5, r == 0x037E, r == 0x0EB3:
 		return true
@@ -65,14 +62,15 @@ func isPDFJSNormalizable(r rune) bool {
 	return false
 }
 
-// normalizePDFJSUnicode applies NFKC only to runs of characters PDF.js targets
-// in src/shared/util.js normalizeUnicode. Other characters pass through
-// unchanged, so extracted text matches PDF.js's getTextContent output without
-// altering e.g. CJK glyphs that NFKC would otherwise decompose differently.
-func normalizePDFJSUnicode(s string) string {
+// normalizeExtractionUnicode applies NFKC to contiguous runs of
+// [isNormalizable] characters and leaves every other rune untouched.
+// Scoping the fold this tightly avoids altering CJK glyphs that NFKC
+// would otherwise decompose, while still surfacing the compatibility
+// equivalence on Latin ligatures and presentation forms.
+func normalizeExtractionUnicode(s string) string {
 	hasTarget := false
 	for _, r := range s {
-		if isPDFJSNormalizable(r) {
+		if isNormalizable(r) {
 			hasTarget = true
 			break
 		}
@@ -85,7 +83,7 @@ func normalizePDFJSUnicode(s string) string {
 	i := 0
 	for i < len(s) {
 		r, size := utf8.DecodeRuneInString(s[i:])
-		if !isPDFJSNormalizable(r) {
+		if !isNormalizable(r) {
 			b.WriteRune(r)
 			i += size
 			continue
@@ -93,7 +91,7 @@ func normalizePDFJSUnicode(s string) string {
 		j := i + size
 		for j < len(s) {
 			r2, sz2 := utf8.DecodeRuneInString(s[j:])
-			if !isPDFJSNormalizable(r2) {
+			if !isNormalizable(r2) {
 				break
 			}
 			j += sz2

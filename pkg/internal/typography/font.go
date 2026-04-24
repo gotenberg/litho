@@ -50,8 +50,7 @@ type Font struct {
 	// SuppressExtraction marks a font whose text cannot be decoded
 	// without the system font that would render it (reference-only
 	// CJK Type0 with a predefined CMap /Encoding and no /FontFile).
-	// [decodeNextChar] consumes the CID width and emits no element,
-	// matching PDF.js's skip behaviour for the same pattern.
+	// [decodeNextChar] consumes the CID width and emits no element.
 	SuppressExtraction bool
 
 	// LigatureOverrides maps a byte code to a pre-decoded multi-rune
@@ -387,11 +386,12 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// Adobe CID→Unicode table to synthesize a ToUnicode CMap.
 	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback {
 		if encName := encodingCMapName(ctx, doc, fontDict); encName != "" {
-			// Gated on embedded font: a reference-only Type0 font uses the
-			// host's system font to actually render glyphs, and PDF.js
-			// treats that as unextractable. Synthesising text from our
-			// bundled predefined CMaps would diverge from its empty output
-			// (noembed-eucjp / noembed-sjis).
+			// Gated on embedded font: a reference-only Type0 font uses
+			// the host's system font to render glyphs, so the byte
+			// stream carries no information litho can decode without
+			// that font. Synthesising text from bundled predefined
+			// CMaps produces characters that do not match the glyphs
+			// actually drawn (noembed-eucjp, noembed-sjis).
 			if hasEmbeddedFontFile(ctx, doc, fontDict) {
 				if cm := cmap.LoadPredefinedCMap(encName); cm != nil {
 					font.ToUnicode = cm
@@ -442,12 +442,11 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	}
 
 	// Adobe predefined CID→Unicode fallback for Type0 fonts. Gated on
-	// an embedded font program because a reference-only CJK font (no
-	// /FontFile*) is what PDF.js treats as unextractable; synthesising
-	// CIDs through Adobe-Japan1/GB1/CNS1/Korea1 emits characters that
-	// neither match the rendered glyphs (the system font that would
-	// actually draw them is absent) nor PDF.js's empty output
-	// (noembed-eucjp, noembed-sjis, noembed-jis7, noembed-identity).
+	// an embedded font program. Reference-only CJK fonts carry no
+	// glyph data, so synthesising through Adobe-Japan1/GB1/CNS1/Korea1
+	// emits characters that do not match what the host's system font
+	// would draw (noembed-eucjp, noembed-sjis, noembed-jis7,
+	// noembed-identity).
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
 		if hasEmbeddedFontFile(ctx, doc, fontDict) {
 			applyAdobeCIDFallback(ctx, doc, fontDict, font)
@@ -458,7 +457,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// mapping. Treats 2-byte character codes as direct Unicode codepoints.
 	// Reference-only CJK fonts (Adobe-Japan1/GB1/CNS1/Korea1 with no
 	// /FontFile*) would decode to garbage through the +29 heuristic;
-	// suppress extraction instead so the output aligns with PDF.js.
+	// suppress extraction instead.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback && !font.SuppressExtraction {
 		if isIdentityEncoding(ctx, doc, fontDict) && isCJKOrdering(ctx, doc, fontDict) && !hasEmbeddedFontFile(ctx, doc, fontDict) {
 			font.SuppressExtraction = true
@@ -470,8 +469,8 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			// CID + 29 = Unicode. Skipped when the CIDFont has an explicit
 			// /CIDToGIDMap stream: the stream already remaps CIDs to
 			// subset GIDs, so the CID values carry Unicode semantics
-			// directly (matching PDF.js's IdentityToUnicodeMap) and
-			// adding +29 would shift the text (e.g. "6XPPD" → "Summa").
+			// directly and adding +29 would shift the text (e.g. "6XPPD"
+			// becomes "Summa").
 			if !hasCIDToGIDMapStream(ctx, doc, fontDict) {
 				font.CIDOffset = detectCIDOffset(font.CIDWidths)
 				// Non-embedded fonts (e.g. /Impact referenced by name,
@@ -490,8 +489,8 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 				// reference by name without embedding. The CID + 29
 				// heuristic covers ASCII; extended-Latin positions (e.g.
 				// GID 207 = Ó in Arial, GID 179-182 = smart quotes) do
-				// not follow a linear offset and need an explicit lookup
-				// — [stdfonts.CMap] provides the curated subset.
+				// not follow a linear offset and need an explicit lookup.
+				// [stdfonts.CMap] provides the curated subset.
 				if !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
 					if bf, ok := fontDict["BaseFont"]; ok {
 						name, _ := document.ResolveName(ctx, doc, bf)
@@ -511,11 +510,11 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// ToUnicode CMap and the BaseFont name contains CJK characters, the font
 	// is likely mis-declared with WinAnsiEncoding but actually uses GBK byte
 	// encoding. Embedded fonts get a synthesised GBK ToUnicode so their
-	// Chinese text extracts; reference-only fonts (no embedded program) are
-	// what PDF.js treats as unextractable, so clearing Encoding avoids
-	// emitting WinAnsi-decoded garbage or synthesised Chinese that neither
-	// matches the rendered glyph nor PDF.js's output (SimFang-variant,
-	// issue20489 "Fcpdf0").
+	// Chinese text extracts; reference-only fonts (no embedded program)
+	// cannot be extracted without a host CJK font, so clearing Encoding
+	// avoids emitting WinAnsi-decoded garbage or synthesised Chinese that
+	// does not match the rendered glyph (SimFang-variant, issue20489
+	// "Fcpdf0").
 	if font.ToUnicode == nil && (subtypeName == "TrueType" || subtypeName == "Type1") {
 		if bfObj, ok := fontDict["BaseFont"]; ok {
 			bfName, _ := document.ResolveName(ctx, doc, bfObj)
@@ -1619,8 +1618,8 @@ func decodeFontStreamFromDescriptor(ctx context.Context, doc *document.Document,
 // hasEmbeddedFontFile reports whether a font dict's FontDescriptor carries
 // any of the embedded-program streams (/FontFile, /FontFile2, /FontFile3).
 // Used to gate heuristics that should only fire for fonts whose glyph
-// payload travels with the PDF, so reference-only system fonts stay
-// aligned with PDF.js's "cannot extract" behaviour.
+// payload travels with the PDF, so reference-only system fonts are not
+// forced through fallbacks that would emit host-dependent text.
 func hasEmbeddedFontFile(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
@@ -1637,8 +1636,8 @@ func hasEmbeddedFontFile(ctx context.Context, doc *document.Document, fontDict a
 // isCJKOrdering reports whether a Type0 font's CIDSystemInfo /Ordering
 // identifies one of Adobe's CJK character collections (Japan1, GB1, CNS1,
 // Korea1 / GB-Chinese, KR). Used as a signal that a non-embedded font
-// would need the host's system CJK font to render — PDF.js treats that
-// as unextractable, so we suppress our own fallbacks to stay aligned.
+// would need the host's system CJK font to render: without one, any
+// fallback would emit host-dependent text.
 func isCJKOrdering(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	dfObj, ok := fontDict["DescendantFonts"]
 	if !ok {
@@ -1933,9 +1932,9 @@ func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 		}
 	}
 	// Stylistic-variant glyph names ("A.sc", "zero.oldstyle", "a.smcp")
-	// split off a dot-suffix and fall back to the base name. This mirrors
-	// PDF.js's recoverGlyphName step and lets small-caps or old-style
-	// /Differences entries extract as their underlying character.
+	// split off a dot-suffix and fall back to the base name. Small-caps
+	// and old-style /Differences entries extract as their underlying
+	// character.
 	if dot := strings.IndexByte(name, '.'); dot > 0 {
 		base := name[:dot]
 		if r, ok := encodings.GlyphToRuneFull(base); ok {

@@ -1,17 +1,18 @@
 package stdfonts
 
 // calibriGIDToUnicode maps Calibri's standard TrueType glyph IDs to
-// Unicode codepoints. Calibri uses a different GID ordering from Arial
-// (space is at GID 3, but accented Latin capitals start immediately
-// after .notdef and several Latin-Extended-B letters appear in the
-// first few hundred GIDs), so ASCII digits and punctuation do not
-// follow the GID + 29 convention. Entries were captured by exercising
-// non-embedded-Calibri fixtures in the PDF.js corpus against the
-// reference output.
+// Unicode codepoints. Calibri uses a different GID ordering from
+// Arial (space is at GID 3, but accented Latin capitals start
+// immediately after .notdef and several Latin-Extended-B letters
+// appear in the first few hundred GIDs), so ASCII digits and
+// punctuation do not follow the GID + 29 convention. Entries were
+// captured by exercising non-embedded-Calibri fixtures from the
+// corpus against the reference output.
 //
-// Like the Arial table, this is intentionally partial — corpus-driven,
-// additive, safe to extend. GIDs missing from the map fall through to
-// the CIDIdentityFallback offset path.
+// Like the Arial table, this is intentionally partial:
+// corpus-driven, additive, safe to extend. GIDs missing from the map
+// fall through to the CID-offset path handled by
+// [typography.Font.CIDIdentityFallback].
 var calibriGIDToUnicode = map[uint16]rune{
 	// Basic punctuation / digits the Calibri subset places below GID 128.
 	0x0001: 0x0020, // space

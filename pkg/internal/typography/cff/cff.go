@@ -19,9 +19,9 @@ var (
 // to their glyph names, enabling correct text extraction when no PDF-level
 // /Encoding is present. Predefined encodings (0=Standard, 1=Expert) are
 // resolved by iterating the font's charset and pairing each glyph name with
-// its position in the predefined encoding table — matching PDF.js's
-// CFFParser.parseEncoding and producing a valid byte→name map even for
-// subset fonts that only include a handful of Expert glyphs.
+// its position in the predefined encoding table. The result is a valid
+// byte→name map even for subset fonts that only include a handful of
+// Expert glyphs.
 func ExtractEncoding(data []byte) map[byte]string {
 	if len(data) < 4 || data[0] != 1 {
 		return nil

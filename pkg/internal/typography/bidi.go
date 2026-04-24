@@ -42,10 +42,10 @@ func isNeutralOrWeak(r rune) bool {
 // each element so the heuristic can detect visual vs logical order.
 //
 // When a line's only strong direction is RTL and at least one run
-// triggered the visual→logical reversal, leading neutral elements
+// triggered the visual-to-logical reversal, leading neutral elements
 // (spaces, punctuation emitted at the left of the visual line) are
 // moved to the tail so the logical reading order ends with them, as
-// PDF.js's full UAX#9 bidi does for a Hebrew-only paragraph.
+// UAX#9 prescribes for a pure-RTL paragraph.
 func reorderBidiIndices(texts []string, indices []int, xPositions []float64) []int {
 	if len(indices) == 0 {
 		return indices
@@ -113,7 +113,7 @@ func reorderBidiIndices(texts []string, indices []int, xPositions []float64) []i
 	// RTL-paragraph neutral shift: when the line is purely RTL (no LTR
 	// strong characters) and at least one run was in visual order, any
 	// neutrals the content stream placed before the first RTL element
-	// belong after the last RTL element in logical order — the visual
+	// belong after the last RTL element in logical order: the visual
 	// "left of line" is the logical "end of line" for Hebrew/Arabic.
 	if reversedAnyRun && !hasLTR {
 		k := 0
@@ -139,9 +139,8 @@ func reverseInts(s []int) {
 // normalizeSoftHyphens converts soft hyphens (U+00AD) to regular hyphens
 // (U+002D) for searchability. At line boundaries, soft hyphens followed by
 // a newline rejoin the split word: the hyphen was discretionary. Unicode
-// U+2010 HYPHEN is preserved as-is because PDF.js's normalizeUnicode leaves
-// it untouched, and removing it at line ends silently dropped real hyphens
-// from compound words.
+// U+2010 HYPHEN is preserved as-is: removing it at line ends silently
+// dropped real hyphens from compound words.
 func normalizeSoftHyphens(text string) string {
 	text = strings.ReplaceAll(text, "\u00AD\n", "")
 	text = strings.ReplaceAll(text, "\u00AD", "-")

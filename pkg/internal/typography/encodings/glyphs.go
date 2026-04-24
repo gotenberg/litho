@@ -318,10 +318,10 @@ var texMathGlyphs = map[string]rune{
 	// Standard AGL math-symbol names not in [extendedAGL] (the generator
 	// dropped Greek/math entries to keep the compliance tables clean).
 	// TeX CMSY/CMMI/MSAM/MSBM fonts rely on them via the /Encoding vector
-	// in their /FontFile preambles. Values mirror PDF.js glyphlist.js so
-	// the two extractors agree on the resulting codepoint; in particular
-	// "negationslash" is intentionally absent, as PDF.js drops it and
-	// falls back to the byte code.
+	// in their /FontFile preambles. /negationslash is intentionally
+	// absent: the AGL carries no entry for it, and falling back to the
+	// byte-code ASCII character is the better behaviour for TeX fonts
+	// that rely on it to compose negated relations.
 	"nabla":           0x2207, // ∇
 	"openbullet":      0x25E6, // ◦
 	"arrowdblleft":    0x21D0, // ⇐

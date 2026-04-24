@@ -2,10 +2,9 @@ package cff
 
 // expertEncodingNames is the Adobe Expert encoding for CFF fonts, indexed
 // by byte code (0..255). Positions not assigned an Expert glyph are empty
-// strings. The table mirrors PDF.js's src/core/encodings.js
-// ExpertEncoding array so a subset font that declares Expert (encoding 1)
-// resolves to the same byte→name mapping PDF.js applies after
-// intersecting with the font's charset.
+// strings. A subset font that declares Expert (encoding 1) resolves to
+// the byte→name mapping produced by intersecting this table with the
+// font's charset.
 var expertEncodingNames = [256]string{
 	0x20: "space",
 	0x21: "exclamsmall",
@@ -176,7 +175,6 @@ var expertEncodingNames = [256]string{
 
 // standardEncodingNames is the Adobe Standard encoding for CFF fonts,
 // the default encoding (offset 0) used by most non-Expert Type 1 fonts.
-// Mirrors PDF.js's src/core/encodings.js StandardEncoding array.
 var standardEncodingNames = [256]string{
 	0x20: "space",
 	0x21: "exclam",

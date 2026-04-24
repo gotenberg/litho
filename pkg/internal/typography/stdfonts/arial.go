@@ -1,18 +1,16 @@
 package stdfonts
 
 // arialGIDToUnicode maps Arial's standard TrueType glyph IDs to the
-// Unicode codepoints the Microsoft-shipped Arial renders at those
+// Unicode codepoints Microsoft-shipped Arial renders at those
 // positions. Only codepoints outside the ASCII range (GID ≥ 128) are
-// listed; the [0x20, 0x7E] range follows the GID + 29 convention
-// already handled by typography.CIDIdentityFallback + CIDOffset=29 in
-// the per-glyph decoder. Entries are captured by exercising
-// non-embedded-Arial fixtures from the PDF.js corpus and comparing
-// against the reference output.
+// listed. The [0x20, 0x7E] range follows the GID + 29 convention
+// already handled by [typography.Font.CIDIdentityFallback] +
+// CIDOffset=29 in the per-glyph decoder.
 //
-// The table is intentionally partial: only positions the corpus has
-// exercised appear here. Additions are additive — a missing GID
-// falls back to the CID offset path and the caller emits the raw
-// codepoint, which at worst stays in the corpus diff but never
+// The table is intentionally partial: only positions the corpus
+// fixtures exercise appear here. Additions are additive: a missing
+// GID falls back to the CID-offset path and the caller emits the
+// raw codepoint, which at worst stays in the corpus diff but never
 // regresses correctly resolved files.
 var arialGIDToUnicode = map[uint16]rune{
 	// Smart quotes (General Punctuation).
