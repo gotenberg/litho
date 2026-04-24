@@ -18,8 +18,8 @@ for dir in /tmp/verapdf-corpus/PDF_A-* /tmp/verapdf-corpus/PDF_UA-*; do
     # Some VeraPDF fixtures use spaces in paths. Collapse to underscores
     # inside the flat layout to keep fixture IDs shell-friendly.
     safe_base=$(echo "$base" | tr ' ' '_')
-    # install(1) avoids cp's sparse-file probe that breaks on macOS
-    # Docker Desktop's virtiofs bind mount (EINVAL on fallocate).
-    install -m644 "$pdf" "$OUT/${prefix}__${safe_base}"
+    # Plain shell redirect sidesteps cp/install's fallocate probe,
+    # which fails on macOS Docker Desktop's virtiofs bind mount.
+    cat "$pdf" >"$OUT/${prefix}__${safe_base}"
   done
 done

@@ -32,12 +32,12 @@ for thread in "${THREADS[@]}"; do
 
   # Govdocs filenames are numeric (e.g. 042123.pdf). Prefix the thread
   # ID so fixture IDs are unique across threads and stable across
-  # re-provisioning. install(1) avoids cp's sparse-file probe that
-  # breaks on macOS Docker Desktop's virtiofs bind mount.
+  # re-provisioning. Plain shell redirect sidesteps cp/install's
+  # fallocate probe that breaks on macOS Docker Desktop's virtiofs.
   found=0
   while IFS= read -r -d '' pdf; do
     base=$(basename "$pdf" .pdf)
-    install -m644 "$pdf" "$OUT/thread_${thread}_${base}.pdf"
+    cat "$pdf" >"$OUT/thread_${thread}_${base}.pdf"
     found=$((found + 1))
   done < <(find "$stage" -type f -iname '*.pdf' -print0)
   echo "  thread ${thread}: ${found} PDFs"

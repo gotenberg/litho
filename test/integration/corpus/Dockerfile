@@ -9,7 +9,11 @@
 #   docker run --rm -v $(pwd)/test/integration/testdata/<name>:/output \
 #     litho-corpus-builder <name> <profiles_csv>
 
-FROM verapdf/cli:latest AS verapdf-dist
+# verapdf/cli is published as linux/amd64 only. Pin the platform so the
+# build does not emit the InvalidBaseImagePlatform warning on arm64
+# hosts. The files copied out are platform-independent (pure Java jars
+# plus shell launchers).
+FROM --platform=linux/amd64 verapdf/cli:latest AS verapdf-dist
 
 FROM node:24
 
