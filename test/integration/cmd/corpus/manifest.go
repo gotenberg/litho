@@ -23,8 +23,9 @@ type Manifest struct {
 	DockerImage string `json:"docker_image,omitempty"`
 
 	// FixtureSource selects the enumeration strategy in [LoadFixtures]:
-	//   - "pdfjs-manifest": read a pdf.js-style test_manifest.json.
-	//   - "walk-profiles":  walk VeraPDF profile directories for *.pdf.
+	//   - "pdfjs-manifest":        read a pdf.js-style test_manifest.json.
+	//   - "walk-profiles":         walk VeraPDF profile directories for *.pdf.
+	//   - "walk-flat-x-profiles":  cartesian product of a flat pdfs/ tree and Profiles.
 	FixtureSource string `json:"fixture_source"`
 
 	// FixtureManifest is the path to the fixture manifest file relative
@@ -34,6 +35,11 @@ type Manifest struct {
 	// PDFRoot is the subdirectory of the corpus testdata root that holds
 	// the fixture PDFs. Empty means the testdata root itself.
 	PDFRoot string `json:"pdf_root,omitempty"`
+
+	// Profiles lists the VeraPDF profile directory names to expand each
+	// PDF against under the "walk-flat-x-profiles" fixture source. Every
+	// PDF yields len(Profiles) fixtures with IDs "<profile>/<basename>".
+	Profiles []string `json:"profiles,omitempty"`
 
 	// Goldens maps feature name to the directory (relative to the corpus
 	// testdata root) that holds the golden files. Features absent from

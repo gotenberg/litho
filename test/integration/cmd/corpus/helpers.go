@@ -146,3 +146,27 @@ func pct(n, total int) float64 {
 	}
 	return float64(n) / float64(total) * 100
 }
+
+// cachedRun holds a memoised [Feature.Run] result. Features that see the
+// same PDFPath under multiple fixture IDs (one per target profile) share
+// one entry so extraction runs once per PDF.
+type cachedRun struct {
+	output []byte
+	err    error
+}
+
+// baseFixtureID strips the leading profile directory from a fixture ID
+// when present. "PDF_A-2b/foo" becomes "foo"; "foo" stays "foo". Lets
+// profile-agnostic features (text, metadata) key their goldens on a
+// single per-PDF basename while compliance retains the profile-qualified
+// form its VeraPDF reports produce.
+func baseFixtureID(fixtureID string) string {
+	head, rest, ok := strings.Cut(fixtureID, "/")
+	if !ok {
+		return fixtureID
+	}
+	if isProfileDir(head) {
+		return rest
+	}
+	return fixtureID
+}

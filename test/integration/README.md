@@ -58,10 +58,11 @@ The matrix displays `[no golden]` when a (corpus, feature) cell has no stored re
 
 ## Corpora
 
-| Corpus    | Fixtures | Source                                                            |
-| --------- | -------- | ----------------------------------------------------------------- |
-| `pdfjs`   | ~1,100   | Mozilla's PDF.js test suite; fixture list in `test_manifest.json` |
-| `verapdf` | ~2,600   | VeraPDF corpus organised by profile → clause → test               |
+| Corpus    | Fixtures | Source                                                                                |
+| --------- | -------- | ------------------------------------------------------------------------------------- |
+| `pdfjs`   | ~1,100   | Mozilla's PDF.js test suite; fixture list in `test_manifest.json`                     |
+| `verapdf` | ~2,600   | VeraPDF corpus organised by profile → clause → test                                   |
+| `govdocs` | ~15,000  | Govdocs1 sample from five fixed thread archives × 13 VeraPDF profiles (pdf × profile) |
 
 ## Manifest schema
 
@@ -87,7 +88,8 @@ Fields:
 
 - `name`: identifier used in `--corpus` flags. Need not match the source directory.
 - `source`: directory under `corpus/` holding the Dockerfile. Defaults to `name`.
-- `fixture_source`: `pdfjs-manifest` (read a `test_manifest.json`) or `walk-profiles` (walk VeraPDF profile directories).
+- `fixture_source`: one of `pdfjs-manifest` (read `test_manifest.json`), `walk-profiles` (walk VeraPDF profile directories), or `walk-flat-x-profiles` (cartesian product of a flat `pdfs/` tree and the `profiles` list, used by real-world corpora like Govdocs where each PDF is validated against every conformance target).
+- `profiles`: VeraPDF profile directory names used by `walk-flat-x-profiles`; each PDF yields one fixture per profile.
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files.
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
 

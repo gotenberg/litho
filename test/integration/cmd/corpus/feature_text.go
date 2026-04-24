@@ -68,9 +68,14 @@ type pdfjsRefItem struct {
 // reference. Primary metric is per-fixture words-match (whitespace-
 // normalised); chars_match (whitespace-insensitive NFKC match) is
 // reported as a secondary breakdown.
+//
+// Run memoises by PDFPath so corpora that expand each PDF into multiple
+// (pdf, profile) fixtures (e.g. govdocs) only pay the extraction cost
+// once per PDF.
 type textFeature struct {
 	mu      sync.RWMutex
 	goldens map[string]*pdfjsReference
+	cache   sync.Map // pdfPath -> *cachedRun
 }
 
 func newTextFeature() *textFeature {
@@ -87,7 +92,7 @@ func (f *textFeature) LoadGoldens(dir string) error {
 func (f *textFeature) HasGolden(fixtureID string) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	_, ok := f.goldens[fixtureID]
+	_, ok := f.goldens[baseFixtureID(fixtureID)]
 	return ok
 }
 
@@ -105,20 +110,27 @@ type textOutputPage struct {
 }
 
 func (f *textFeature) Run(ctx context.Context, pdfPath, fixtureID string) ([]byte, error) {
+	if v, ok := f.cache.Load(pdfPath); ok {
+		cr := v.(*cachedRun)
+		return cr.output, cr.err
+	}
 	f.mu.RLock()
-	golden := f.goldens[fixtureID]
+	golden := f.goldens[baseFixtureID(fixtureID)]
 	f.mu.RUnlock()
 
 	pages, numPages, err := extractTextPages(ctx, pdfPath, effectiveLastPage(golden))
 	if err != nil {
+		f.cache.Store(pdfPath, &cachedRun{err: err})
 		return nil, err
 	}
-	return json.Marshal(textOutput{NumPages: numPages, Pages: pages})
+	out, err := json.Marshal(textOutput{NumPages: numPages, Pages: pages})
+	f.cache.Store(pdfPath, &cachedRun{output: out, err: err})
+	return out, err
 }
 
 func (f *textFeature) Compare(fixtureID string, output []byte) Verdict {
 	f.mu.RLock()
-	golden := f.goldens[fixtureID]
+	golden := f.goldens[baseFixtureID(fixtureID)]
 	f.mu.RUnlock()
 
 	if golden == nil {

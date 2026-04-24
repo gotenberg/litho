@@ -14,9 +14,14 @@ import (
 
 // metadataFeature compares document-level metadata (Info dict fields,
 // linearization flag, form presence) against the PDF.js reference.
+//
+// Run memoises by PDFPath so corpora that expand each PDF into multiple
+// (pdf, profile) fixtures only pay the metadata extraction cost once
+// per PDF.
 type metadataFeature struct {
 	mu      sync.RWMutex
 	goldens map[string]*pdfjsReference
+	cache   sync.Map // pdfPath -> *cachedRun
 }
 
 func newMetadataFeature() *metadataFeature {
@@ -33,7 +38,7 @@ func (f *metadataFeature) LoadGoldens(dir string) error {
 func (f *metadataFeature) HasGolden(fixtureID string) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	_, ok := f.goldens[fixtureID]
+	_, ok := f.goldens[baseFixtureID(fixtureID)]
 	return ok
 }
 
@@ -42,16 +47,23 @@ type metadataOutput struct {
 }
 
 func (f *metadataFeature) Run(ctx context.Context, pdfPath, _ string) ([]byte, error) {
+	if v, ok := f.cache.Load(pdfPath); ok {
+		cr := v.(*cachedRun)
+		return cr.output, cr.err
+	}
 	info, err := extractMetadata(ctx, pdfPath)
 	if err != nil {
+		f.cache.Store(pdfPath, &cachedRun{err: err})
 		return nil, err
 	}
-	return json.Marshal(metadataOutput{Info: info})
+	out, err := json.Marshal(metadataOutput{Info: info})
+	f.cache.Store(pdfPath, &cachedRun{output: out, err: err})
+	return out, err
 }
 
 func (f *metadataFeature) Compare(fixtureID string, output []byte) Verdict {
 	f.mu.RLock()
-	golden := f.goldens[fixtureID]
+	golden := f.goldens[baseFixtureID(fixtureID)]
 	f.mu.RUnlock()
 
 	if golden == nil {
