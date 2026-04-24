@@ -6,8 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
+	"os/exec"
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -16,32 +15,27 @@ import (
 	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
-// remediationGolden stores the expected delta for one (fixture, profile,
-// aggressive?) pairing. Pre is the violation count before remediation;
-// Post is what litho produced last time the golden was regenerated. The
-// feature asserts that Post matches exactly so both regressions (more
-// violations) and unreported improvements (fewer violations) surface.
-type remediationGolden struct {
-	Profile    string `json:"profile"`
-	Aggressive bool   `json:"aggressive"`
-	Pre        int    `json:"pre"`
-	Post       int    `json:"post"`
-}
-
-// remediationFeature applies the remediation engine to a fixture for
-// its declared profile and compares the resulting violation count to the
-// golden. One instance runs in default mode; a second instance with
-// aggressive=true handles content-modifying fixers.
+// remediationFeature remediates each fixture with litho, then validates
+// the output with both litho and VeraPDF to surface producer-consumer
+// disagreement. There is no captured golden: the feature reports live
+// numbers that a human reads on every run. Matches are the fixtures
+// both validators rule compliant after remediation (fully fixed).
+//
+// The compliance goldens serve as the source of verapdf_pre — the
+// VeraPDF verdict on the original PDF, already captured during init.
+// One VeraPDF shell-out per fixture is enough.
 type remediationFeature struct {
 	aggressive bool
 	mu         sync.RWMutex
-	goldens    map[string]*remediationGolden
+	// pre-counts carried over from the compliance golden, keyed by
+	// fixture ID. Populated by LoadGoldens.
+	complianceGoldens map[string]*complianceGolden
 }
 
 func newRemediationFeature(aggressive bool) *remediationFeature {
 	return &remediationFeature{
-		aggressive: aggressive,
-		goldens:    make(map[string]*remediationGolden),
+		aggressive:        aggressive,
+		complianceGoldens: make(map[string]*complianceGolden),
 	}
 }
 
@@ -52,76 +46,69 @@ func (f *remediationFeature) Name() string {
 	return "remediation"
 }
 
-func (f *remediationFeature) GoldenSource() string { return "litho-self" }
+func (f *remediationFeature) GoldenSource() string { return "verapdf-live" }
 
-// LoadGoldens reads one JSON file per fixture from dir. Missing dir is
-// treated as [ErrNoGoldens] so the runner can print "[no golden]" and
-// emit a bootstrap hint rather than fail.
+// LoadGoldens parses the compliance golden directory so Run can reach
+// the verapdf_pre count without a second VeraPDF invocation per fixture.
+// The manifest points "remediation" at the same directory "compliance"
+// uses (usually goldens/compliance).
 func (f *remediationFeature) LoadGoldens(dir string) error {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ErrNoGoldens
-	}
-	loaded := 0
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var g remediationGolden
-		if err := json.Unmarshal(data, &g); err != nil {
-			continue
-		}
-		id := strings.TrimSuffix(e.Name(), ".json")
+	return loadVeraPDFGoldens(dir, func(id string, g *complianceGolden) {
 		f.mu.Lock()
-		f.goldens[id] = &g
+		f.complianceGoldens[id] = g
 		f.mu.Unlock()
-		loaded++
-	}
-	if loaded == 0 {
-		return ErrNoGoldens
-	}
-	return nil
+	})
 }
 
 func (f *remediationFeature) HasGolden(fixtureID string) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	_, ok := f.goldens[fixtureID]
+	_, ok := f.complianceGoldens[fixtureID]
 	return ok
 }
 
-// remediationOutput is litho's pre/post violation counts for the
-// fixture's target profile.
+// remediationOutput is the per-fixture blob Compare decodes. The four
+// violation counts plus the VeraPDF vs litho disagreement on the
+// remediated buffer drive the scoreboard metrics.
 type remediationOutput struct {
 	Profile    string   `json:"profile"`
 	Aggressive bool     `json:"aggressive"`
-	Pre        int      `json:"pre"`
-	Post       int      `json:"post"`
-	Error      string   `json:"error,omitempty"`
+	LithoPre   int      `json:"litho_pre"`
+	LithoPost  int      `json:"litho_post"`
+	VeraPre    int      `json:"verapdf_pre"`
+	VeraPost   int      `json:"verapdf_post"`
 	NewErrors  []string `json:"new_errors,omitempty"`
+	VeraRules  []string `json:"verapdf_post_rules,omitempty"`
+	Error      string   `json:"error,omitempty"`
 }
 
 func (f *remediationFeature) Run(ctx context.Context, pdfPath, fixtureID string) ([]byte, error) {
 	f.mu.RLock()
-	golden := f.goldens[fixtureID]
+	golden := f.complianceGoldens[fixtureID]
 	f.mu.RUnlock()
-
-	profile := profileFromFixtureID(fixtureID)
-	if golden != nil && golden.Profile != "" {
-		profile = models.PDFAProfile(golden.Profile)
+	if golden == nil {
+		return json.Marshal(remediationOutput{Error: "no compliance golden for fixture"})
 	}
-	if profile == "" {
+
+	profile := models.PDFAProfile("")
+	if p, ok := dirToPDFAProfile[golden.ProfileDir]; ok {
+		profile = p
+	} else if _, ok := dirToPDFUAProfile[golden.ProfileDir]; ok {
+		// The remediation engine only targets PDF/A at the moment; PDF/UA
+		// fixtures run a no-op remediation that still validates both ways.
 		return json.Marshal(remediationOutput{
+			Profile:    golden.ProfileDir,
 			Aggressive: f.aggressive,
-			Error:      "no profile target for fixture",
+			Error:      "remediation does not target PDF/UA profiles",
 		})
 	}
 
-	out := remediationOutput{Profile: string(profile), Aggressive: f.aggressive}
+	out := remediationOutput{
+		Profile:    golden.ProfileDir,
+		Aggressive: f.aggressive,
+		VeraPre:    len(golden.FailedRules),
+	}
+
 	if err := runRemediation(ctx, pdfPath, profile, f.aggressive, &out); err != nil {
 		out.Error = err.Error()
 	}
@@ -129,91 +116,82 @@ func (f *remediationFeature) Run(ctx context.Context, pdfPath, fixtureID string)
 }
 
 func (f *remediationFeature) Compare(fixtureID string, output []byte) Verdict {
-	f.mu.RLock()
-	golden := f.goldens[fixtureID]
-	f.mu.RUnlock()
-
-	if golden == nil {
-		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: "no golden"}
-	}
-
 	var got remediationOutput
 	if err := json.Unmarshal(output, &got); err != nil {
 		return Verdict{FixtureID: fixtureID, Reason: fmt.Sprintf("decode output: %v", err)}
 	}
-
 	if got.Error != "" {
-		return Verdict{FixtureID: fixtureID, Reason: got.Error}
+		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: got.Error}
 	}
 
-	metrics := map[string]int{
-		"pre":  got.Pre,
-		"post": got.Post,
-	}
-	if got.Post < got.Pre {
-		metrics["fixed"] = got.Pre - got.Post
-	}
-	if got.Post == 0 {
-		metrics["fully_fixed"] = 1
-	}
-
-	match := got.Pre == golden.Pre && got.Post == golden.Post
+	// Match = both validators see 0 violations on the remediated buffer.
+	fullyFixed := got.LithoPost == 0 && got.VeraPost == 0
 	score := 0.0
-	if match {
+	if fullyFixed {
 		score = 1.0
 	}
 
-	reason := ""
-	var mismatches []json.RawMessage
-	if !match {
-		switch {
-		case got.Post > golden.Post:
-			reason = fmt.Sprintf("regression: %d → %d (golden: %d → %d)", got.Pre, got.Post, golden.Pre, golden.Post)
-			metrics["regression"] = 1
-		case got.Post < golden.Post:
-			reason = fmt.Sprintf("improved: %d → %d (golden: %d → %d); regenerate golden", got.Pre, got.Post, golden.Pre, golden.Post)
-			metrics["improved"] = 1
-		default:
-			reason = fmt.Sprintf("pre-violation drift: %d vs golden %d", got.Pre, golden.Pre)
-			metrics["drifted_pre"] = 1
-		}
-		raw, _ := json.Marshal(remediationMismatch{
-			File:       fixtureID,
-			Profile:    got.Profile,
-			Aggressive: f.aggressive,
-			LithoPre:   got.Pre,
-			LithoPost:  got.Post,
-			GoldenPre:  golden.Pre,
-			GoldenPost: golden.Post,
-			NewErrors:  got.NewErrors,
-		})
-		mismatches = append(mismatches, raw)
+	disagreement := got.LithoPost - got.VeraPost
+	if disagreement < 0 {
+		disagreement = -disagreement
 	}
+
+	metrics := map[string]int{
+		"litho_pre":     got.LithoPre,
+		"litho_post":    got.LithoPost,
+		"verapdf_pre":   got.VeraPre,
+		"verapdf_post":  got.VeraPost,
+		"litho_fixed":   max(0, got.LithoPre-got.LithoPost),
+		"verapdf_fixed": max(0, got.VeraPre-got.VeraPost),
+		"disagreement":  disagreement,
+	}
+	if fullyFixed {
+		metrics["fully_fixed"] = 1
+	}
+	if got.LithoPost > got.LithoPre {
+		metrics["litho_regressed"] = 1
+	}
+	if got.VeraPost > got.VeraPre {
+		metrics["verapdf_regressed"] = 1
+	}
+
+	raw, _ := json.Marshal(remediationReport{
+		File:       fixtureID,
+		Profile:    got.Profile,
+		Aggressive: f.aggressive,
+		LithoPre:   got.LithoPre,
+		LithoPost:  got.LithoPost,
+		VeraPre:    got.VeraPre,
+		VeraPost:   got.VeraPost,
+		NewErrors:  got.NewErrors,
+		VeraRules:  got.VeraRules,
+	})
 
 	return Verdict{
 		FixtureID:  fixtureID,
-		Match:      match,
+		Match:      fullyFixed,
 		Score:      score,
-		Reason:     reason,
 		Metrics:    metrics,
-		Mismatches: mismatches,
+		Mismatches: []json.RawMessage{raw},
 	}
 }
 
-type remediationMismatch struct {
+type remediationReport struct {
 	File       string   `json:"file"`
 	Profile    string   `json:"profile"`
 	Aggressive bool     `json:"aggressive"`
 	LithoPre   int      `json:"litho_pre"`
 	LithoPost  int      `json:"litho_post"`
-	GoldenPre  int      `json:"golden_pre"`
-	GoldenPost int      `json:"golden_post"`
+	VeraPre    int      `json:"verapdf_pre"`
+	VeraPost   int      `json:"verapdf_post"`
 	NewErrors  []string `json:"new_errors,omitempty"`
+	VeraRules  []string `json:"verapdf_post_rules,omitempty"`
 }
 
-// runRemediation opens pdfPath, validates for profile, applies the
-// remediation engine, writes the result to a buffer, re-opens + re-
-// validates, and populates out with pre/post counts.
+// runRemediation opens pdfPath, validates with litho, applies the
+// remediation engine, writes the result to a temp file, re-validates
+// with litho, and shells out to VeraPDF on the same temp file. The out
+// parameter is populated in place.
 func runRemediation(ctx context.Context, pdfPath string, profile models.PDFAProfile, aggressive bool, out *remediationOutput) error {
 	data, err := os.ReadFile(pdfPath)
 	if err != nil {
@@ -230,7 +208,7 @@ func runRemediation(ctx context.Context, pdfPath string, profile models.PDFAProf
 	if err != nil {
 		return fmt.Errorf("validate pre: %w", err)
 	}
-	out.Pre = len(pre)
+	out.LithoPre = len(pre)
 
 	w := pdf.NewWriter(r)
 	var opts []pdf.RemediateOption
@@ -238,30 +216,34 @@ func runRemediation(ctx context.Context, pdfPath string, profile models.PDFAProf
 		opts = append(opts, pdf.WithAggressiveFixes())
 	}
 	if _, err := w.RemediatePDFA(ctx, profile, opts...); err != nil {
-		// Treat remediation failure as "post == pre" (no improvement).
-		out.Post = out.Pre
+		out.LithoPost = out.LithoPre
+		out.VeraPost = out.VeraPre
 		return nil
 	}
 
 	var buf bytes.Buffer
 	if err := w.WriteTo(ctx, &buf); err != nil {
-		out.Post = out.Pre
+		out.LithoPost = out.LithoPre
+		out.VeraPost = out.VeraPre
 		return nil
 	}
+
 	r2, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()),
 		pdf.WithFilterPlugin(jbig2.New()),
 		pdf.WithFilterPlugin(jpx.New()),
 	)
 	if err != nil {
-		out.Post = out.Pre
+		out.LithoPost = out.LithoPre
+		out.VeraPost = out.VeraPre
 		return nil
 	}
 	post, err := r2.ValidatePDFA(ctx, profile)
 	if err != nil {
-		out.Post = out.Pre
+		out.LithoPost = out.LithoPre
+		out.VeraPost = out.VeraPre
 		return nil
 	}
-	out.Post = len(post)
+	out.LithoPost = len(post)
 	if len(post) > len(pre) {
 		for _, v := range post {
 			if isNew(v, pre) {
@@ -269,21 +251,92 @@ func runRemediation(ctx context.Context, pdfPath string, profile models.PDFAProf
 			}
 		}
 	}
+
+	// VeraPDF cross-check on the remediated buffer.
+	veraPost, veraRules, err := validateWithVeraPDF(ctx, buf.Bytes(), out.Profile)
+	if err != nil {
+		out.Error = fmt.Sprintf("verapdf: %v", err)
+		out.VeraPost = out.VeraPre
+		return nil
+	}
+	out.VeraPost = veraPost
+	out.VeraRules = veraRules
 	return nil
 }
 
-// profileFromFixtureID derives the PDF/A profile from the leading path
-// component of the fixture ID. Returns "" when the prefix is not a
-// known profile directory (e.g. pdf.js fixtures have no profile).
-func profileFromFixtureID(fixtureID string) models.PDFAProfile {
-	head, _, ok := strings.Cut(fixtureID, "/")
+// validateWithVeraPDF writes buf to a temp file and invokes the
+// `verapdf` binary on it, returning the failed-rule count and the list
+// of failed clause/test identifiers. Errors if the binary is missing.
+func validateWithVeraPDF(ctx context.Context, buf []byte, profileDir string) (int, []string, error) {
+	flavour, ok := profileDirToVeraPDFFlavour(profileDir)
 	if !ok {
-		return ""
+		return 0, nil, fmt.Errorf("no verapdf flavour for profile %q", profileDir)
 	}
-	if p, ok := dirToPDFAProfile[head]; ok {
-		return p
+
+	tmp, err := os.CreateTemp("", "litho-remediation-*.pdf")
+	if err != nil {
+		return 0, nil, fmt.Errorf("tempfile: %w", err)
 	}
-	return ""
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(buf); err != nil {
+		tmp.Close()
+		return 0, nil, fmt.Errorf("write temp: %w", err)
+	}
+	tmp.Close()
+
+	cmd := exec.CommandContext(ctx, "verapdf", //nolint:gosec // fixed binary name, flavour from whitelist, path is temp file
+		"-f", flavour, "--format", "json",
+		"--maxfailuresdisplayed", "-1",
+		tmp.Name())
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		// VeraPDF exits non-zero when the file is non-compliant. Only
+		// bail on the "binary not found" kind of error.
+		if _, pathErr := exec.LookPath("verapdf"); pathErr != nil {
+			return 0, nil, fmt.Errorf("verapdf binary missing from PATH: install VeraPDF or run under the provisioning container")
+		}
+	}
+
+	var report verapdfReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		return 0, nil, fmt.Errorf("parse verapdf output: %w", err)
+	}
+	for _, job := range report.Report.Jobs {
+		if len(job.ValidationResult) == 0 {
+			continue
+		}
+		vr := job.ValidationResult[0]
+		rules := failedRules(vr)
+		ids := make([]string, 0, len(rules))
+		for _, r := range rules {
+			ids = append(ids, fmt.Sprintf("%s-t%02d", r.Clause, r.TestNumber))
+		}
+		return len(rules), ids, nil
+	}
+	return 0, nil, nil
+}
+
+// profileDirToVeraPDFFlavour maps a profile directory name to the
+// "-f" argument the VeraPDF CLI accepts.
+func profileDirToVeraPDFFlavour(profileDir string) (string, bool) {
+	m := map[string]string{
+		"PDF_A-1a": "1a",
+		"PDF_A-1b": "1b",
+		"PDF_A-2a": "2a",
+		"PDF_A-2b": "2b",
+		"PDF_A-2u": "2u",
+		"PDF_A-3a": "3a",
+		"PDF_A-3b": "3b",
+		"PDF_A-3u": "3u",
+		"PDF_A-4":  "4",
+		"PDF_A-4e": "4e",
+		"PDF_A-4f": "4f",
+		"PDF_UA-1": "ua1",
+		"PDF_UA-2": "ua2",
+	}
+	v, ok := m[profileDir]
+	return v, ok
 }
 
 func isNew(v error, before []error) bool {

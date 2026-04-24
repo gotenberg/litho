@@ -1,7 +1,6 @@
 /litho
 /.idea/
-/test/integration/testdata/pdf.js/
-/test/integration/testdata/verapdf/
+/test/integration/testdata/
 /corpus
 /node_modules/
 /.claude/

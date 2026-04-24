@@ -8,38 +8,27 @@ import (
 	"path/filepath"
 )
 
-// Manifest describes one corpus: where its PDFs live, how to enumerate
-// its fixtures, and which goldens are available. One manifest.json per
-// corpus directory.
+// Manifest describes one corpus: where its PDFs live on disk, which
+// conformance profiles to expand them against, and where the goldens
+// sit. Every corpus under test/integration/corpus/ ships one
+// manifest.json with this exact shape.
 type Manifest struct {
-	// Name is the corpus identifier used in CLI flags ("pdfjs", "verapdf").
+	// Name is the corpus identifier used in CLI flags ("pdfjs", "verapdf",
+	// "govdocs").
 	Name string `json:"name"`
 
 	// Source is the directory under test/integration/corpus/ that holds
-	// the Dockerfile and helper scripts. Defaults to Name when empty.
+	// the corpus's download.sh. Defaults to Name when empty.
 	Source string `json:"source,omitempty"`
 
-	// DockerImage is the tag used when building the provisioning image.
-	DockerImage string `json:"docker_image,omitempty"`
-
-	// FixtureSource selects the enumeration strategy in [LoadFixtures]:
-	//   - "pdfjs-manifest":        read a pdf.js-style test_manifest.json.
-	//   - "walk-profiles":         walk VeraPDF profile directories for *.pdf.
-	//   - "walk-flat-x-profiles":  cartesian product of a flat pdfs/ tree and Profiles.
-	FixtureSource string `json:"fixture_source"`
-
-	// FixtureManifest is the path to the fixture manifest file relative
-	// to the corpus testdata root (used only by "pdfjs-manifest").
-	FixtureManifest string `json:"fixture_manifest,omitempty"`
-
 	// PDFRoot is the subdirectory of the corpus testdata root that holds
-	// the fixture PDFs. Empty means the testdata root itself.
+	// the flat pdfs/ tree. Empty means the testdata root itself.
 	PDFRoot string `json:"pdf_root,omitempty"`
 
 	// Profiles lists the VeraPDF profile directory names to expand each
-	// PDF against under the "walk-flat-x-profiles" fixture source. Every
-	// PDF yields len(Profiles) fixtures with IDs "<profile>/<basename>".
-	Profiles []string `json:"profiles,omitempty"`
+	// PDF against. Every PDF yields len(Profiles) fixtures with IDs
+	// "<profile>/<basename>".
+	Profiles []string `json:"profiles"`
 
 	// Goldens maps feature name to the directory (relative to the corpus
 	// testdata root) that holds the golden files. Features absent from

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // runInit provisions one or more corpora via Docker. For each corpus,
@@ -56,17 +57,14 @@ func provisionCorpus(m *Manifest) error {
 		return nil
 	}
 
-	dockerCtx := findDockerContext(m.Source)
-	if dockerCtx == "" {
-		return fmt.Errorf("docker context not found for source %q", m.Source)
+	dockerCtx := corpusRoot()
+	if dockerCtx == "" || !hasDockerfile(dockerCtx) {
+		return fmt.Errorf("docker context not found at %q", dockerCtx)
 	}
-	image := m.DockerImage
-	if image == "" {
-		image = "litho-corpus-" + m.Source
-	}
+	const image = "litho-corpus-builder"
 
-	fmt.Printf("%s: building docker image...\n", m.Name)
-	build := exec.Command("docker", "build", "-t", image, dockerCtx)
+	fmt.Printf("%s: building shared corpus image (%s)...\n", m.Name, image)
+	build := exec.Command("docker", "build", "-t", image, dockerCtx) //nolint:gosec // build context is the fixed corpus directory
 	build.Stdout = os.Stdout
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -77,6 +75,8 @@ func provisionCorpus(m *Manifest) error {
 	run := exec.Command("docker", "run", "--rm", //nolint:gosec // paths come from CLI flags / manifest, not untrusted input
 		"-v", testdataRoot+":/output",
 		image,
+		m.Source,
+		strings.Join(m.Profiles, ","),
 	)
 	run.Stdout = os.Stdout
 	run.Stderr = os.Stderr
@@ -102,15 +102,8 @@ func provisioned(testdataRoot string, m *Manifest) bool {
 	return false
 }
 
-func findDockerContext(source string) string {
-	candidates := []string{
-		filepath.Join("test", "integration", "corpus", source),
-		filepath.Join("corpus", source),
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(filepath.Join(c, "Dockerfile")); err == nil {
-			return c
-		}
-	}
-	return ""
+// hasDockerfile reports whether dir contains a Dockerfile.
+func hasDockerfile(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "Dockerfile"))
+	return err == nil
 }

@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 # run-verapdf.sh: run VeraPDF against a flat pdfs/ directory for every
-# conformance profile litho cross-checks against.
+# conformance profile in the supplied comma-separated list.
 #
-# Usage: run-verapdf.sh <pdfs_dir> <compliance_out_dir>
+# Usage: run-verapdf.sh <pdfs_dir> <compliance_out_dir> <profiles_csv>
 #
 # Emits one JSON report per profile, same shape the compliance feature
-# already parses (report.jobs[].itemDetails.name / validationResult[]).
+# parses (report.jobs[].itemDetails.name / validationResult[]).
 set -euo pipefail
 
 PDFS_DIR="$1"
 OUT_DIR="$2"
+PROFILES="${3:-PDF_A-1a,PDF_A-1b,PDF_A-2a,PDF_A-2b,PDF_A-2u,PDF_A-3a,PDF_A-3b,PDF_A-3u,PDF_A-4,PDF_A-4e,PDF_A-4f,PDF_UA-1,PDF_UA-2}"
 mkdir -p "$OUT_DIR"
 
-# Profile directory name → VeraPDF flavour flag. Matches the verapdf
-# corpus's own mapping so the compliance feature indexes one format
-# regardless of which corpus produced the report.
 declare -A FLAVOURS=(
   ["PDF_A-1a"]="1a"
   ["PDF_A-1b"]="1b"
@@ -31,8 +29,13 @@ declare -A FLAVOURS=(
   ["PDF_UA-2"]="ua2"
 )
 
-for profile in "${!FLAVOURS[@]}"; do
-  flavour="${FLAVOURS[$profile]}"
+IFS=',' read -ra PROFILE_LIST <<< "$PROFILES"
+for profile in "${PROFILE_LIST[@]}"; do
+  flavour="${FLAVOURS[$profile]:-}"
+  if [ -z "$flavour" ]; then
+    echo "  WARN: unknown profile ${profile}, skipping"
+    continue
+  fi
   echo "  $profile (flavour=$flavour)..."
   verapdf -f "$flavour" -r --format json --maxfailuresdisplayed -1 "$PDFS_DIR" \
     > "$OUT_DIR/$profile.json" 2> /dev/null \

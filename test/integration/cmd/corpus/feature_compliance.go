@@ -103,45 +103,11 @@ func (f *complianceFeature) GoldenSource() string { return "verapdf" }
 // covering every fixture under that profile. The feature flattens the
 // per-profile jobs into a per-fixture map so Run/Compare can key by ID.
 func (f *complianceFeature) LoadGoldens(dir string) error {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ErrNoGoldens
-	}
-	loaded := 0
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var report verapdfReport
-		if err := json.Unmarshal(data, &report); err != nil {
-			continue
-		}
-		profileDir := strings.TrimSuffix(e.Name(), ".json")
-		for _, job := range report.Report.Jobs {
-			if len(job.ValidationResult) == 0 {
-				continue
-			}
-			vr := job.ValidationResult[0]
-			id := fixtureIDFromVeraPDFName(job.ItemDetails.Name, profileDir)
-			f.mu.Lock()
-			f.goldens[id] = &complianceGolden{
-				Profile:     vr.ProfileName,
-				ProfileDir:  profileDir,
-				Compliant:   vr.Compliant,
-				FailedRules: failedRules(vr),
-			}
-			f.mu.Unlock()
-			loaded++
-		}
-	}
-	if loaded == 0 {
-		return ErrNoGoldens
-	}
-	return nil
+	return loadVeraPDFGoldens(dir, func(id string, g *complianceGolden) {
+		f.mu.Lock()
+		f.goldens[id] = g
+		f.mu.Unlock()
+	})
 }
 
 func (f *complianceFeature) HasGolden(fixtureID string) bool {
@@ -186,25 +152,20 @@ func (f *complianceFeature) Compare(fixtureID string, output []byte) Verdict {
 		return Verdict{FixtureID: fixtureID, Reason: fmt.Sprintf("decode output: %v", err)}
 	}
 
-	// Expected verdict is the corpus filename convention (-pass- / -fail-).
-	// When litho lands on the same verdict as VeraPDF (even if that
-	// disagrees with the filename) both validators have converged and the
-	// filename is the corpus anomaly; credit litho for matching VeraPDF.
-	expected, hasExpected := expectedCompliantFromFilename(filepath.Base(fixtureID))
-	reason := ""
+	// Match rule: litho and VeraPDF must agree on the verdict. A fixture
+	// the VeraPDF corpus was never designed for still counts: both tools
+	// will usually call it non-compliant for unrelated reasons, which is
+	// a real alignment data point.
 	metrics := map[string]int{}
-
-	// Agrees with VeraPDF → match. Disagrees with VeraPDF but agrees
-	// with the filename convention → still match (the corpus anomaly
-	// is on VeraPDF's side and litho happens to be right).
-	match := got.Compliant == golden.Compliant || (hasExpected && got.Compliant == expected)
+	reason := ""
+	match := got.Compliant == golden.Compliant
 	if !match {
-		if hasExpected && !got.Compliant && expected {
-			metrics["false_positive"] = 1
-			reason = "false positive"
-		} else {
+		if got.Compliant && !golden.Compliant {
 			metrics["false_negative"] = 1
-			reason = "false negative"
+			reason = "false negative: litho compliant, VeraPDF non-compliant"
+		} else {
+			metrics["false_positive"] = 1
+			reason = "false positive: litho non-compliant, VeraPDF compliant"
 		}
 	}
 
@@ -243,19 +204,6 @@ type complianceMismatch struct {
 	LithoViolations []string         `json:"litho_violations,omitempty"`
 }
 
-// expectedCompliantFromFilename derives the expected verdict from the
-// VeraPDF corpus naming convention.
-func expectedCompliantFromFilename(name string) (bool, bool) {
-	switch {
-	case strings.Contains(name, "-pass-"):
-		return true, true
-	case strings.Contains(name, "-fail-"):
-		return false, true
-	default:
-		return false, false
-	}
-}
-
 // fixtureIDFromVeraPDFName converts a container-absolute path from the
 // VeraPDF report into a corpus-relative fixture ID: e.g.
 // "/output/PDF_A-2b/6.1 File structure/foo.pdf" ->
@@ -287,6 +235,50 @@ func failedRules(vr verapdfValidationResult) []complianceRule {
 		}
 	}
 	return rules
+}
+
+// loadVeraPDFGoldens walks dir for <profile>.json files and calls
+// store(id, golden) for every job it finds. Used by both the compliance
+// feature (as its golden source) and the remediation feature (to pick
+// up verapdf_pre counts without a second invocation).
+func loadVeraPDFGoldens(dir string, store func(id string, g *complianceGolden)) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ErrNoGoldens
+	}
+	loaded := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var report verapdfReport
+		if err := json.Unmarshal(data, &report); err != nil {
+			continue
+		}
+		profileDir := strings.TrimSuffix(e.Name(), ".json")
+		for _, job := range report.Report.Jobs {
+			if len(job.ValidationResult) == 0 {
+				continue
+			}
+			vr := job.ValidationResult[0]
+			id := fixtureIDFromVeraPDFName(job.ItemDetails.Name, profileDir)
+			store(id, &complianceGolden{
+				Profile:     vr.ProfileName,
+				ProfileDir:  profileDir,
+				Compliant:   vr.Compliant,
+				FailedRules: failedRules(vr),
+			})
+			loaded++
+		}
+	}
+	if loaded == 0 {
+		return ErrNoGoldens
+	}
+	return nil
 }
 
 // validateWithLitho opens pdfPath, dispatches to the litho validator for

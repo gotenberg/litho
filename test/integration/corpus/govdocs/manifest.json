@@ -1,8 +1,6 @@
 {
   "name": "govdocs",
   "source": "govdocs",
-  "docker_image": "litho-govdocs-corpus",
-  "fixture_source": "walk-flat-x-profiles",
   "pdf_root": "pdfs",
   "profiles": [
     "PDF_A-1a",
@@ -22,6 +20,8 @@
   "goldens": {
     "text": "goldens/text",
     "metadata": "goldens/metadata",
-    "compliance": "goldens/compliance"
+    "compliance": "goldens/compliance",
+    "remediation": "goldens/compliance",
+    "remediation-aggressive": "goldens/compliance"
   }
 }

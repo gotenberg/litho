@@ -1,17 +1,33 @@
 # Integration Tests
 
-Matrix runner that scores litho across (corpus, feature) cells. Each corpus supplies PDF fixtures; each feature pairs a litho entry point with a golden reference.
+Matrix runner that scores litho across (corpus, feature) cells. Every corpus supplies PDF fixtures; every feature either loads a captured golden or runs live against an external tool.
 
 ## Layout
 
 ```
 test/integration/
-├── corpus/<name>/
-│   ├── Dockerfile           Provisioning image (emits PDFs + goldens)
-│   ├── manifest.json        Fixture source, docker image tag, golden directories
-│   └── setup.sh             Docker entrypoint
-├── testdata/<name>/         Provisioned output (gitignored)
-└── cmd/corpus/              CLI
+├── corpus/                     Shared provisioning image + per-corpus scripts
+│   ├── Dockerfile              One image: Node + PDF.js + VeraPDF
+│   ├── entrypoint.sh           Dispatches to <corpus>/download.sh then shared goldens
+│   ├── lib/
+│   │   ├── gen-references.mjs  PDF.js text + metadata generator (shared)
+│   │   └── run-verapdf.sh      VeraPDF per-profile runner (shared)
+│   ├── pdfjs/
+│   │   ├── download.sh
+│   │   └── manifest.json
+│   ├── verapdf/
+│   │   ├── download.sh
+│   │   └── manifest.json
+│   └── govdocs/
+│       ├── download.sh
+│       └── manifest.json
+├── testdata/<corpus>/          Provisioned output (gitignored)
+│   ├── pdfs/*.pdf
+│   └── goldens/
+│       ├── text/<fixture>.json
+│       ├── metadata/<fixture>.json
+│       └── compliance/<profile>.json
+└── cmd/corpus/                 CLI
 ```
 
 ## Running
@@ -35,48 +51,46 @@ make clean-corpus
 | -------------------- | ------------------------------------------------ | -------------------------------- |
 | `CORPUS_NAME`        | run one corpus only (also narrows the auto-init) | `CORPUS_NAME=pdfjs`              |
 | `CORPUS_FEATURE`     | comma-separated feature filter                   | `CORPUS_FEATURE=text,compliance` |
-| `CORPUS_PROFILE`     | restrict to one VeraPDF profile directory        | `CORPUS_PROFILE=PDF_A-2b`        |
+| `CORPUS_PROFILE`     | restrict to one profile directory                | `CORPUS_PROFILE=PDF_A-2b`        |
 | `CORPUS_JSON_OUTPUT` | emit the scoreboard as JSON                      | `CORPUS_JSON_OUTPUT=1`           |
 | `CORPUS_WORKERS`     | override the parallel worker pool size           | `CORPUS_WORKERS=16`              |
 
-Direct CLI invocation (equivalent, no auto-init):
-
-- `go run ./test/integration/cmd/corpus init [--corpus=NAME]`
-- `go run ./test/integration/cmd/corpus run [--corpus=...] [--feature=...] [--profile=...] [--format=text|json] [--workers=N]`
-
 ## Features
 
-| Feature                  | Golden source | What it compares                                             |
-| ------------------------ | ------------- | ------------------------------------------------------------ |
-| `text`                   | PDF.js        | Per-page text extraction (char-level + word-level match)     |
-| `metadata`               | PDF.js        | Info dict + linearization/form flags                         |
-| `compliance`             | VeraPDF       | PDF/A and PDF/UA validation verdict                          |
-| `remediation`            | litho self    | Pre/post violation counts for non-aggressive fixers          |
-| `remediation-aggressive` | litho self    | Pre/post violation counts with `WithAggressiveFixes` enabled |
+| Feature                  | Golden source              | What it compares                                                                               |
+| ------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------- |
+| `text`                   | PDF.js (captured at init)  | Per-page text extraction against PDF.js's reference text                                       |
+| `metadata`               | PDF.js (captured at init)  | Info dict + linearization/form flags                                                           |
+| `compliance`             | VeraPDF (captured at init) | Litho's validation verdict against VeraPDF's, per profile                                      |
+| `remediation`            | VeraPDF (live at run time) | Remediates with litho, then validates the output with both litho and VeraPDF; reports the diff |
+| `remediation-aggressive` | VeraPDF (live at run time) | Same as `remediation` with `WithAggressiveFixes` enabled                                       |
 
-The matrix displays `[no golden]` when a (corpus, feature) cell has no stored reference.
+All three captured goldens live under the corpus's `testdata/goldens/` directory and are produced by the provisioning Docker image. `remediation` has no captured golden: it shells out to `verapdf` at run time on the remediated buffer. Needs `verapdf` on PATH.
 
 ## Corpora
 
-| Corpus    | Fixtures | Source                                                                                |
-| --------- | -------- | ------------------------------------------------------------------------------------- |
-| `pdfjs`   | ~1,100   | Mozilla's PDF.js test suite; fixture list in `test_manifest.json`                     |
-| `verapdf` | ~2,600   | VeraPDF corpus organised by profile → clause → test                                   |
-| `govdocs` | ~15,000  | Govdocs1 sample from five fixed thread archives × 13 VeraPDF profiles (pdf × profile) |
+| Corpus    | Fixtures                  | Source                                                                 |
+| --------- | ------------------------- | ---------------------------------------------------------------------- |
+| `pdfjs`   | ~1,100 PDFs × 13 profiles | Mozilla's PDF.js test suite                                            |
+| `verapdf` | ~2,600 PDFs × 13 profiles | VeraPDF corpus, flattened from the per-profile directories             |
+| `govdocs` | ~1,500 PDFs × 13 profiles | Govdocs1 random-sample of five fixed thread archives (real-world PDFs) |
+
+Each fixture is one `(pdf, profile)` pair. Fixture ID takes the shape `<profile>/<basename>`. Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`; nothing else changes.
 
 ## Manifest schema
 
 ```json
 {
   "name": "pdfjs",
-  "source": "pdf.js",
-  "docker_image": "litho-pdfjs-corpus",
-  "fixture_source": "pdfjs-manifest",
-  "fixture_manifest": "test_manifest.json",
+  "source": "pdfjs",
   "pdf_root": "pdfs",
+  "profiles": ["PDF_A-1a", "PDF_A-1b", "...", "PDF_UA-2"],
   "goldens": {
-    "text": "references",
-    "metadata": "references"
+    "text": "goldens/text",
+    "metadata": "goldens/metadata",
+    "compliance": "goldens/compliance",
+    "remediation": "goldens/compliance",
+    "remediation-aggressive": "goldens/compliance"
   },
   "skips": {
     "bug1393476": "infinite loop in xref parsing"
@@ -86,11 +100,11 @@ The matrix displays `[no golden]` when a (corpus, feature) cell has no stored re
 
 Fields:
 
-- `name`: identifier used in `--corpus` flags. Need not match the source directory.
-- `source`: directory under `corpus/` holding the Dockerfile. Defaults to `name`.
-- `fixture_source`: one of `pdfjs-manifest` (read `test_manifest.json`), `walk-profiles` (walk VeraPDF profile directories), or `walk-flat-x-profiles` (cartesian product of a flat `pdfs/` tree and the `profiles` list, used by real-world corpora like Govdocs where each PDF is validated against every conformance target).
-- `profiles`: VeraPDF profile directory names used by `walk-flat-x-profiles`; each PDF yields one fixture per profile.
-- `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files.
+- `name`: identifier used in `CORPUS_NAME`. Need not match the source directory.
+- `source`: directory under `corpus/` holding the `download.sh`. Defaults to `name`.
+- `pdf_root`: subdirectory of the corpus testdata root that holds the flat `pdfs/` tree.
+- `profiles`: VeraPDF profile directory names the runner cartesian-products each PDF against. Every PDF yields one fixture per profile.
+- `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from.
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
 
 ## See also
