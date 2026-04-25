@@ -66,3 +66,14 @@ type Verdict struct {
 // ErrNoGoldens signals that a feature's golden directory is missing or
 // empty. The runner treats this as "[no golden]" rather than a fatal error.
 var ErrNoGoldens = errors.New("no goldens available")
+
+// BatchPreparer is an optional interface a [Feature] can implement when
+// per-fixture Run calls would be too expensive. The runner invokes
+// Prepare once after [Feature.LoadGoldens] and before any Run call,
+// passing the full fixture list. Features that need to batch external
+// tool invocations (remediation runs VeraPDF once per profile, not once
+// per fixture) populate their internal state here so Run can degrade
+// to a lookup.
+type BatchPreparer interface {
+	Prepare(ctx context.Context, fixtures []Fixture) error
+}

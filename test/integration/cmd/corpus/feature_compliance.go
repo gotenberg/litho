@@ -204,22 +204,14 @@ type complianceMismatch struct {
 	LithoViolations []string         `json:"litho_violations,omitempty"`
 }
 
-// fixtureIDFromVeraPDFName converts a container-absolute path from the
-// VeraPDF report into a corpus-relative fixture ID: e.g.
-// "/output/PDF_A-2b/6.1 File structure/foo.pdf" ->
-// "PDF_A-2b/6.1 File structure/foo".
+// fixtureIDFromVeraPDFName derives the fixture ID from a VeraPDF job's
+// itemDetails.name. Under the flat pdfs/ layout, the path is always
+// "/output/pdfs/<basename>.pdf"; the fixture ID we need is
+// "<profile>/<basename>" to line up with walk-flat-x-profiles.
 func fixtureIDFromVeraPDFName(name, profileDir string) string {
-	const prefix = "/output/"
-	rel := name
-	if _, after, ok := strings.Cut(name, prefix); ok {
-		rel = after
-	}
-	rel = strings.TrimSuffix(rel, ".pdf")
-	if !strings.HasPrefix(rel, profileDir+"/") {
-		rel = profileDir + "/" + strings.TrimPrefix(rel, profileDir)
-		rel = strings.TrimPrefix(rel, "/")
-	}
-	return rel
+	base := filepath.Base(name)
+	base = strings.TrimSuffix(base, ".pdf")
+	return profileDir + "/" + base
 }
 
 // failedRules pulls the "failed" rule summaries from a VeraPDF result.

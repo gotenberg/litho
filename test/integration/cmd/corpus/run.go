@@ -177,6 +177,13 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 			report.Features = append(report.Features, fr)
 			continue
 		}
+		if p, ok := feat.(BatchPreparer); ok {
+			if err := p.Prepare(ctx, fixtures); err != nil {
+				fr.LoadError = fmt.Sprintf("prepare: %v", err)
+				report.Features = append(report.Features, fr)
+				continue
+			}
+		}
 		runFeatureAcrossFixtures(ctx, feat, fixtures, opts.workers, fr)
 		report.Features = append(report.Features, fr)
 	}
