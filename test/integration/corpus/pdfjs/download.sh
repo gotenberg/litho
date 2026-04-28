@@ -22,10 +22,10 @@ node /work/pdfjs/download-pdfjs-pdfs.mjs --test-dir "$TEST_DIR" \
 # virtiofs bind mount rejects FALLOC_FL_PUNCH_HOLE with EINVAL and the
 # tool exits non-zero on files it copied successfully.
 find "$TEST_DIR/pdfs" -type f -name '*.pdf' | while read -r pdf; do
-  cat "$pdf" >"$OUT/$(basename "$pdf")"
+  cat "$pdf" > "$OUT/$(basename "$pdf")"
 done
 
 # Ship the fixture manifest too: litho's manifest.json declares Skips
 # keyed on the PDF.js fixture ID (filename without extension), so
 # callers can cross-reference.
-cat "$TEST_DIR/test_manifest.json" >"/output/test_manifest.json" || true
+cat "$TEST_DIR/test_manifest.json" > "/output/test_manifest.json" || true

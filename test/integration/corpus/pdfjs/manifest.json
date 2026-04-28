@@ -2,27 +2,10 @@
   "name": "pdfjs",
   "source": "pdfjs",
   "pdf_root": "pdfs",
-  "profiles": [
-    "PDF_A-1a",
-    "PDF_A-1b",
-    "PDF_A-2a",
-    "PDF_A-2b",
-    "PDF_A-2u",
-    "PDF_A-3a",
-    "PDF_A-3b",
-    "PDF_A-3u",
-    "PDF_A-4",
-    "PDF_A-4e",
-    "PDF_A-4f",
-    "PDF_UA-1",
-    "PDF_UA-2"
-  ],
+  "profile_mode": "none",
   "goldens": {
     "text": "goldens/text",
-    "metadata": "goldens/metadata",
-    "compliance": "goldens/compliance",
-    "remediation": "goldens/compliance",
-    "remediation-aggressive": "goldens/compliance"
+    "metadata": "goldens/metadata"
   },
   "skips": {
     "bug1393476": "infinite loop in xref parsing",

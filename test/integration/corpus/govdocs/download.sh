@@ -37,7 +37,7 @@ for thread in "${THREADS[@]}"; do
   found=0
   while IFS= read -r -d '' pdf; do
     base=$(basename "$pdf" .pdf)
-    cat "$pdf" >"$OUT/thread_${thread}_${base}.pdf"
+    cat "$pdf" > "$OUT/thread_${thread}_${base}.pdf"
     found=$((found + 1))
   done < <(find "$stage" -type f -iname '*.pdf' -print0)
   echo "  thread ${thread}: ${found} PDFs"

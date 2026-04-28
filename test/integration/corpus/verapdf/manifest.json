@@ -2,6 +2,7 @@
   "name": "verapdf",
   "source": "verapdf",
   "pdf_root": "pdfs",
+  "profile_mode": "expand",
   "profiles": [
     "PDF_A-1a",
     "PDF_A-1b",
@@ -18,8 +19,6 @@
     "PDF_UA-2"
   ],
   "goldens": {
-    "text": "goldens/text",
-    "metadata": "goldens/metadata",
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"

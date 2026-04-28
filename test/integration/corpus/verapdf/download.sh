@@ -20,6 +20,6 @@ for dir in /tmp/verapdf-corpus/PDF_A-* /tmp/verapdf-corpus/PDF_UA-*; do
     safe_base=$(echo "$base" | tr ' ' '_')
     # Plain shell redirect sidesteps cp/install's fallocate probe,
     # which fails on macOS Docker Desktop's virtiofs bind mount.
-    cat "$pdf" >"$OUT/${prefix}__${safe_base}"
+    cat "$pdf" > "$OUT/${prefix}__${safe_base}"
   done
 done

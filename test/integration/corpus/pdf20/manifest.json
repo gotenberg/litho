@@ -1,0 +1,14 @@
+{
+  "name": "pdf20",
+  "source": "pdf20",
+  "pdf_root": "pdfs",
+  "profile_mode": "auto",
+  "profiles": ["PDF_A-4", "PDF_A-4e", "PDF_A-4f", "PDF_UA-2"],
+  "goldens": {
+    "text": "goldens/text",
+    "metadata": "goldens/metadata",
+    "compliance": "goldens/compliance",
+    "remediation": "goldens/compliance",
+    "remediation-aggressive": "goldens/compliance"
+  }
+}

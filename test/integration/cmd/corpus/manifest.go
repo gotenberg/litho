@@ -14,7 +14,7 @@ import (
 // manifest.json with this exact shape.
 type Manifest struct {
 	// Name is the corpus identifier used in CLI flags ("pdfjs", "verapdf",
-	// "govdocs").
+	// "govdocs", "pdf20").
 	Name string `json:"name"`
 
 	// Source is the directory under test/integration/corpus/ that holds
@@ -25,10 +25,27 @@ type Manifest struct {
 	// the flat pdfs/ tree. Empty means the testdata root itself.
 	PDFRoot string `json:"pdf_root,omitempty"`
 
-	// Profiles lists the VeraPDF profile directory names to expand each
-	// PDF against. Every PDF yields len(Profiles) fixtures with IDs
-	// "<profile>/<basename>".
-	Profiles []string `json:"profiles"`
+	// Profiles lists the VeraPDF profile directory names. Their meaning
+	// depends on ProfileMode: "expand" cartesians every PDF over the list,
+	// "auto" uses the list as the allow-set for XMP-claimed profiles, and
+	// "none" ignores it entirely.
+	Profiles []string `json:"profiles,omitempty"`
+
+	// ProfileMode controls how PDFs are expanded into fixtures.
+	//
+	//   "expand" (default): every PDF yields len(Profiles) fixtures with
+	//   IDs "<profile>/<basename>". Used by the VeraPDF corpus, where the
+	//   reference batch report drives compliance for every profile.
+	//
+	//   "none": one fixture per PDF, ID = basename. Used by corpora whose
+	//   features are profile-agnostic (PDF.js text/metadata oracle).
+	//
+	//   "auto": one fixture per PDF, profile read from the PDF's XMP
+	//   pdfaid:part/conformance and pdfuaid:part. PDFs that claim a
+	//   profile get ID "<profile>/<basename>"; PDFs without a claim get
+	//   ID = basename and skip profile-keyed features (compliance,
+	//   remediation). Used by govdocs and pdf20.
+	ProfileMode string `json:"profile_mode,omitempty"`
 
 	// Goldens maps feature name to the directory (relative to the corpus
 	// testdata root) that holds the golden files. Features absent from
@@ -39,6 +56,23 @@ type Manifest struct {
 	// skip it (infinite loop, decompression bomb). Skipped fixtures do
 	// not reach any feature.
 	Skips map[string]string `json:"skips,omitempty"`
+}
+
+// Profile mode constants. Empty string aliases "expand" for backward
+// compatibility with manifests written before the field existed.
+const (
+	ProfileModeExpand = "expand"
+	ProfileModeNone   = "none"
+	ProfileModeAuto   = "auto"
+)
+
+// EffectiveProfileMode returns ProfileMode with empty defaulted to
+// "expand".
+func (m *Manifest) EffectiveProfileMode() string {
+	if m.ProfileMode == "" {
+		return ProfileModeExpand
+	}
+	return m.ProfileMode
 }
 
 // LoadManifest reads the manifest whose Name field matches name. It

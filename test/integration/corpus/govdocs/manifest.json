@@ -2,6 +2,7 @@
   "name": "govdocs",
   "source": "govdocs",
   "pdf_root": "pdfs",
+  "profile_mode": "auto",
   "profiles": [
     "PDF_A-1a",
     "PDF_A-1b",

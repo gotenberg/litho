@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -77,6 +78,7 @@ func provisionCorpus(m *Manifest) error {
 		image,
 		m.Source,
 		strings.Join(m.Profiles, ","),
+		strings.Join(featuresFromGoldens(m), ","),
 	)
 	run.Stdout = os.Stdout
 	run.Stderr = os.Stderr
@@ -106,4 +108,17 @@ func provisioned(testdataRoot string, m *Manifest) bool {
 func hasDockerfile(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "Dockerfile"))
 	return err == nil
+}
+
+// featuresFromGoldens returns the sorted set of feature names declared
+// in the manifest's goldens map. The provisioning entrypoint uses this
+// list to skip golden generators a corpus does not need (e.g. PDF.js
+// text/metadata are pointless for the VeraPDF corpus).
+func featuresFromGoldens(m *Manifest) []string {
+	names := make([]string, 0, len(m.Goldens))
+	for k := range m.Goldens {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
 }

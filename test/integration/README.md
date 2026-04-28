@@ -18,7 +18,10 @@ test/integration/
 │   ├── verapdf/
 │   │   ├── download.sh
 │   │   └── manifest.json
-│   └── govdocs/
+│   ├── govdocs/
+│   │   ├── download.sh
+│   │   └── manifest.json
+│   └── pdf20/
 │       ├── download.sh
 │       └── manifest.json
 ├── testdata/<corpus>/          Provisioned output (gitignored)
@@ -67,23 +70,40 @@ make clean-corpus
 
 All three captured goldens live under the corpus's `testdata/goldens/` directory and are produced by the provisioning Docker image. `remediation` has no captured golden: it shells out to `verapdf` at run time on the remediated buffer. Needs `verapdf` on PATH.
 
+Not every corpus runs every feature. Each corpus is the oracle for the feature it ships goldens for; running the others on it would be redundant.
+
+| Corpus    | text | metadata | compliance | remediation | role                                                            |
+| --------- | ---- | -------- | ---------- | ----------- | --------------------------------------------------------------- |
+| `pdfjs`   | ✓    | ✓        | —          | —           | text + metadata oracle (PDF.js renderer is the ground truth)    |
+| `verapdf` | —    | —        | ✓          | ✓           | compliance + remediation oracle (VeraPDF is the ground truth)   |
+| `govdocs` | ✓    | ✓        | ✓          | ✓           | real-world canary; compliance/remediation use each file's claim |
+| `pdf20`   | ✓    | ✓        | ✓          | ✓           | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
+
 ## Corpora
 
-| Corpus    | Fixtures                  | Source                                                                 |
-| --------- | ------------------------- | ---------------------------------------------------------------------- |
-| `pdfjs`   | ~1,100 PDFs × 13 profiles | Mozilla's PDF.js test suite                                            |
-| `verapdf` | ~2,600 PDFs × 13 profiles | VeraPDF corpus, flattened from the per-profile directories             |
-| `govdocs` | ~1,500 PDFs × 13 profiles | Govdocs1 random-sample of five fixed thread archives (real-world PDFs) |
+| Corpus    | Fixtures                          | Source                                                                 |
+| --------- | --------------------------------- | ---------------------------------------------------------------------- |
+| `pdfjs`   | ~1,100 PDFs (1 fixture each)      | Mozilla's PDF.js test suite                                            |
+| `verapdf` | ~2,600 PDFs × 13 profiles         | VeraPDF corpus, flattened from the per-profile directories             |
+| `govdocs` | ~1,500 PDFs (1 fixture per claim) | Govdocs1 random-sample of five fixed thread archives (real-world PDFs) |
+| `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (BSD-licensed PDF 2.0 samples)       |
 
-Each fixture is one `(pdf, profile)` pair. Fixture ID takes the shape `<profile>/<basename>`. Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`; nothing else changes.
+Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
+
+- `expand` (verapdf): every PDF yields one fixture per declared profile, ID = `<profile>/<basename>`.
+- `none` (pdfjs): one fixture per PDF, ID = `<basename>`.
+- `auto` (govdocs, pdf20): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
+
+Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`; nothing else changes.
 
 ## Manifest schema
 
 ```json
 {
-  "name": "pdfjs",
-  "source": "pdfjs",
+  "name": "govdocs",
+  "source": "govdocs",
   "pdf_root": "pdfs",
+  "profile_mode": "auto",
   "profiles": ["PDF_A-1a", "PDF_A-1b", "...", "PDF_UA-2"],
   "goldens": {
     "text": "goldens/text",
@@ -103,8 +123,9 @@ Fields:
 - `name`: identifier used in `CORPUS_NAME`. Need not match the source directory.
 - `source`: directory under `corpus/` holding the `download.sh`. Defaults to `name`.
 - `pdf_root`: subdirectory of the corpus testdata root that holds the flat `pdfs/` tree.
-- `profiles`: VeraPDF profile directory names the runner cartesian-products each PDF against. Every PDF yields one fixture per profile.
-- `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from.
+- `profile_mode`: how PDFs become fixtures. `expand` (default) cartesian-products every PDF over `profiles`; `none` drops the cartesian and emits one fixture per PDF; `auto` reads each PDF's XMP claim and emits one fixture per PDF, keyed by the claimed profile when present.
+- `profiles`: VeraPDF profile directory names. Drives the cartesian under `expand`, acts as the allow-set for accepted XMP claims under `auto`, and is ignored under `none`.
+- `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the VeraPDF corpus skips the (slow) PDF.js generator entirely.
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
 
 ## See also
