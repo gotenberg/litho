@@ -26,11 +26,12 @@ test/integration/
 │       └── manifest.json
 ├── testdata/<corpus>/          Provisioned output (gitignored)
 │   ├── pdfs/*.pdf
+│   ├── claims.csv              Auto-mode only: <basename>,<profile> per claimed PDF
 │   └── goldens/
 │       ├── text/<fixture>.json
 │       ├── metadata/<fixture>.json
 │       └── compliance/<profile>.json
-└── cmd/corpus/                 CLI
+└── cmd/corpus/                 CLI (init, run, scan-claims)
 ```
 
 ## Running
@@ -93,6 +94,8 @@ Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 - `expand` (verapdf): every PDF yields one fixture per declared profile, ID = `<profile>/<basename>`.
 - `none` (pdfjs): one fixture per PDF, ID = `<basename>`.
 - `auto` (govdocs, pdf20): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
+
+Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after download, writing `<testdata_root>/claims.csv` keyed `<basename>,<profile>`. `run-verapdf.sh` consumes that file and validates each PDF only against the profile it claims (one VeraPDF invocation per profile, hard-linked staging buckets), so cost scales with corpus size, not corpus size × profile count. The runner picks up the same CSV on `corpus run` to skip the live XMP scan. Delete the CSV (or `make clean-corpus`) to force a re-scan.
 
 Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`; nothing else changes.
 

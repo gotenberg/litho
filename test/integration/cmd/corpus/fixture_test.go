@@ -163,6 +163,44 @@ func TestEffectiveProfileModeDefaultsToExpand(t *testing.T) {
 	}
 }
 
+func TestLoadClaimsCSV(t *testing.T) {
+	dir := t.TempDir()
+	csv := filepath.Join(dir, "claims.csv")
+	body := "alpha,PDF_A-2b\n" +
+		"\n" + // blank line ignored
+		"beta,PDF_UA-1\n" +
+		"malformed_line\n" + // no comma -> dropped
+		",PDF_A-1b\n" + // empty base -> dropped
+		"gamma,\n" + // empty profile -> dropped
+		"delta,PDF_A-4e\n"
+	if err := os.WriteFile(csv, []byte(body), 0o600); err != nil {
+		t.Fatalf("write csv: %v", err)
+	}
+	got, err := loadClaimsCSV(csv)
+	if err != nil {
+		t.Fatalf("loadClaimsCSV: %v", err)
+	}
+	want := map[string]string{
+		"alpha": "PDF_A-2b",
+		"beta":  "PDF_UA-1",
+		"delta": "PDF_A-4e",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d rows, want %d: %#v", len(got), len(want), got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("got[%q] = %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestLoadClaimsCSVMissing(t *testing.T) {
+	if _, err := loadClaimsCSV(filepath.Join(t.TempDir(), "nope.csv")); err == nil {
+		t.Fatal("expected error for missing csv")
+	}
+}
+
 func compareIDs(got []Fixture, want []string) string {
 	gotIDs := make([]string, len(got))
 	for i, fx := range got {

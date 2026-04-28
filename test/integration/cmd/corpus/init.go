@@ -72,14 +72,32 @@ func provisionCorpus(m *Manifest) error {
 		return fmt.Errorf("docker build: %w", err)
 	}
 
+	// Auto-mode corpora rely on a small in-tree helper (the
+	// `scan-claims` subcommand) to attach each PDF's claimed conformance
+	// profile before VeraPDF runs. Cross-compile it for linux/amd64 on
+	// the host, then bind-mount the binary into the container so the
+	// provisioning image stays Go-free.
+	binaryMount := []string{}
+	if m.EffectiveProfileMode() == ProfileModeAuto {
+		binPath, err := buildScanClaimsBinary()
+		if err != nil {
+			return fmt.Errorf("build scan-claims helper: %w", err)
+		}
+		defer os.RemoveAll(filepath.Dir(binPath))
+		binaryMount = []string{"-v", binPath + ":/work/bin/scan-claims:ro"}
+	}
+
 	fmt.Printf("%s: running provisioning container...\n", m.Name)
-	run := exec.Command("docker", "run", "--rm", //nolint:gosec // paths come from CLI flags / manifest, not untrusted input
-		"-v", testdataRoot+":/output",
-		image,
+	args := make([]string, 0, 4+len(binaryMount)+5)
+	args = append(args, "run", "--rm", "-v", testdataRoot+":/output")
+	args = append(args, binaryMount...)
+	args = append(args, image,
 		m.Source,
 		strings.Join(m.Profiles, ","),
 		strings.Join(featuresFromGoldens(m), ","),
+		m.EffectiveProfileMode(),
 	)
+	run := exec.Command("docker", args...) //nolint:gosec // paths come from CLI flags / manifest, not untrusted input
 	run.Stdout = os.Stdout
 	run.Stderr = os.Stderr
 	if err := run.Run(); err != nil {
@@ -87,6 +105,31 @@ func provisionCorpus(m *Manifest) error {
 	}
 	fmt.Printf("%s: provisioned.\n", m.Name)
 	return nil
+}
+
+// buildScanClaimsBinary cross-compiles the `corpus scan-claims` helper
+// for linux/amd64 (matching the verapdf/cli base image) and returns
+// the path to the resulting binary. The caller is responsible for
+// cleaning up the binary's parent directory.
+func buildScanClaimsBinary() (string, error) {
+	dir, err := os.MkdirTemp("", "litho-scanclaims-")
+	if err != nil {
+		return "", fmt.Errorf("tempdir: %w", err)
+	}
+	binPath := filepath.Join(dir, "scan-claims")
+	cmd := exec.Command("go", "build", "-o", binPath, "./test/integration/cmd/corpus") //nolint:gosec // package path is fixed
+	cmd.Env = append(os.Environ(),
+		"GOOS=linux",
+		"GOARCH=amd64",
+		"CGO_ENABLED=0",
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		os.RemoveAll(dir)
+		return "", fmt.Errorf("go build: %w", err)
+	}
+	return binPath, nil
 }
 
 // provisioned reports whether the testdata root already carries a

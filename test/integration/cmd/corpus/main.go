@@ -15,6 +15,8 @@ func main() {
 		os.Exit(runInit(os.Args[2:]))
 	case "run":
 		os.Exit(runRun(os.Args[2:]))
+	case "scan-claims":
+		os.Exit(runScanClaims(os.Args[2:]))
 	case "-h", "--help", "help":
 		printUsage()
 	default:
@@ -28,8 +30,9 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: corpus <init|run> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  init   Provision corpora via Docker (downloads PDFs and goldens)")
-	fmt.Fprintln(os.Stderr, "  run    Compare litho against golden references across the matrix")
+	fmt.Fprintln(os.Stderr, "  init          Provision corpora via Docker (downloads PDFs and goldens)")
+	fmt.Fprintln(os.Stderr, "  run           Compare litho against golden references across the matrix")
+	fmt.Fprintln(os.Stderr, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Common run flags:")
 	fmt.Fprintln(os.Stderr, "  --corpus=pdfjs,verapdf        Restrict to named corpora")

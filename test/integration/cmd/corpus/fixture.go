@@ -112,6 +112,12 @@ func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 		allow[p] = true
 	}
 
+	// When provisioning produced a claims.csv next to the testdata
+	// root, trust it and skip the live XMP scan. Govdocs has ~1500
+	// PDFs and the live scan adds ~30s to every run; the CSV cuts
+	// that to a single fopen.
+	claims, _ := loadClaimsCSV(filepath.Join(m.TestdataRoot(), "claims.csv"))
+
 	fixtures := make([]Fixture, len(pdfs))
 	sem := make(chan struct{}, runtime.NumCPU())
 	var wg sync.WaitGroup
@@ -122,7 +128,12 @@ func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			base := strings.TrimSuffix(filepath.Base(path), ".pdf")
-			profile := detectClaimedProfile(context.Background(), path)
+			var profile string
+			if claims != nil {
+				profile = claims[base]
+			} else {
+				profile = detectClaimedProfile(context.Background(), path)
+			}
 			if profile != "" && len(allow) > 0 && !allow[profile] {
 				profile = ""
 			}
