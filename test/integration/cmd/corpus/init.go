@@ -133,18 +133,22 @@ func buildScanClaimsBinary() (string, error) {
 }
 
 // provisioned reports whether the testdata root already carries a
-// provisioned corpus. The test looks at whichever golden directory the
-// manifest declares first; empty manifests provision unconditionally.
+// provisioned corpus. Every declared golden directory must exist and
+// be non-empty; a partial run (e.g. download succeeded but VeraPDF
+// crashed) returns false so the entrypoint resumes the missing stages
+// instead of skipping straight to scoring. Empty manifests are not
+// considered provisioned.
 func provisioned(testdataRoot string, m *Manifest) bool {
-	for _, rel := range m.Goldens {
-		p := filepath.Join(testdataRoot, rel)
-		entries, err := os.ReadDir(p)
-		if err == nil && len(entries) > 0 {
-			return true
-		}
+	if len(m.Goldens) == 0 {
 		return false
 	}
-	return false
+	for _, rel := range m.Goldens {
+		entries, err := os.ReadDir(filepath.Join(testdataRoot, rel))
+		if err != nil || len(entries) == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // hasDockerfile reports whether dir contains a Dockerfile.
