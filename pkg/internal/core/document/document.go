@@ -120,8 +120,8 @@ func (d *Document) AppendFormatViolations(violations ...error) {
 		return
 	}
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.FormatViolations = append(d.FormatViolations, violations...)
-	d.mu.Unlock()
 }
 
 // ResetFormatViolations clears the document's format-violation slice
@@ -130,9 +130,9 @@ func (d *Document) AppendFormatViolations(violations ...error) {
 // subsequent pass on the same Document.
 func (d *Document) ResetFormatViolations() []error {
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	out := d.FormatViolations
 	d.FormatViolations = nil
-	d.mu.Unlock()
 	return out
 }
 

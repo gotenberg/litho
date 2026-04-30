@@ -210,10 +210,8 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 
 	// Separator between object number and generation: must be single SP (0x20).
 	if data[pos] != ' ' {
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: obj header %d: object number not followed by single space (0x%02X)", objNum, data[pos]))
-		d.mu.Unlock()
 		return
 	}
 	// Check for multiple spaces.
@@ -223,10 +221,8 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 		pos++
 	}
 	if spCount > 1 {
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: obj header %d: %d spaces between object number and generation (must be 1)", objNum, spCount))
-		d.mu.Unlock()
 	}
 
 	// Generation number: digits.
@@ -240,10 +236,8 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 
 	// Separator between generation and "obj": must be single SP (0x20).
 	if data[pos] != ' ' {
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: obj header %d: generation not followed by single space (0x%02X)", objNum, data[pos]))
-		d.mu.Unlock()
 		return
 	}
 	spCount = 0
@@ -252,10 +246,8 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 		pos++
 	}
 	if spCount > 1 {
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: obj header %d: %d spaces between generation and obj keyword (must be 1)", objNum, spCount))
-		d.mu.Unlock()
 	}
 
 	// "obj" keyword.
@@ -268,10 +260,8 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 	if pos < len(data) {
 		ch := data[pos]
 		if ch != '\n' && ch != '\r' {
-			d.mu.Lock()
-			d.FormatViolations = append(d.FormatViolations,
+			d.AppendFormatViolations(
 				fmt.Errorf("compliance: obj header %d: obj keyword not followed by EOL marker (0x%02X)", objNum, ch))
-			d.mu.Unlock()
 		}
 	}
 
@@ -319,10 +309,8 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 	// Check that endobj is preceded by EOL (LF or CR).
 	prevByte := data[endobjIdx-1] //nolint:gosec // endobjIdx >= 2 guaranteed by the check above
 	if prevByte != '\n' && prevByte != '\r' {
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: obj %d: endobj not preceded by EOL marker (0x%02X)", objNum, prevByte))
-		d.mu.Unlock()
 	}
 
 	// Check that endobj is followed by EOL (LF or CR) or EOF.
@@ -330,10 +318,8 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 	if afterIdx < len(data) {
 		afterByte := data[afterIdx]
 		if afterByte != '\n' && afterByte != '\r' {
-			d.mu.Lock()
-			d.FormatViolations = append(d.FormatViolations,
+			d.AppendFormatViolations(
 				fmt.Errorf("compliance: obj %d: endobj not followed by EOL marker (0x%02X)", objNum, afterByte))
-			d.mu.Unlock()
 		}
 	}
 }
@@ -375,27 +361,21 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 	case '\n':
 		pos++
 	default:
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: xref keyword not followed by EOL"))
-		d.mu.Unlock()
 		return
 	}
 
 	// Check for multiple EOL markers (double LF, etc.). Must be a single EOL.
 	if pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r') {
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: xref keyword and subsection header separated by multiple EOL markers"))
-		d.mu.Unlock()
 	}
 
 	// Check for extra whitespace before subsection header (forbidden).
 	if pos < len(buf) && (buf[pos] == ' ' || buf[pos] == '\t') {
-		d.mu.Lock()
-		d.FormatViolations = append(d.FormatViolations,
+		d.AppendFormatViolations(
 			fmt.Errorf("compliance: xref keyword and subsection header separated by extra whitespace"))
-		d.mu.Unlock()
 	}
 
 	// Parse subsection headers and validate format.
@@ -422,10 +402,8 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 			break
 		}
 		if buf[pos] != ' ' {
-			d.mu.Lock()
-			d.FormatViolations = append(d.FormatViolations,
+			d.AppendFormatViolations(
 				fmt.Errorf("compliance: xref subsection header separator is not a single space (0x%02X)", buf[pos]))
-			d.mu.Unlock()
 			break
 		}
 		sepCount := 0
@@ -434,10 +412,8 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 			pos++
 		}
 		if sepCount > 1 {
-			d.mu.Lock()
-			d.FormatViolations = append(d.FormatViolations,
+			d.AppendFormatViolations(
 				fmt.Errorf("compliance: xref subsection header has %d spaces between start and count (must be 1)", sepCount))
-			d.mu.Unlock()
 		}
 
 		// Read count (digits).
