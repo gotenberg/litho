@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -481,7 +482,15 @@ func needsToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	}
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return true
+		// CMap unreadable: don't trigger regeneration. A regenerated
+		// CMap is built from the font's encoding tables and may not
+		// match the document's intended glyph-to-Unicode mapping;
+		// preserving the existing one keeps any user-supplied custom
+		// mapping intact. The validator will still flag the file if
+		// it is truly non-compliant.
+		doc.Logger.Debug("remediation: ToUnicode CMap decode failed, leaving as-is",
+			slog.Any("err", err))
+		return false
 	}
 	content := string(data)
 	// Look for mappings to <0000>, <FEFF>, or <FFFE>.

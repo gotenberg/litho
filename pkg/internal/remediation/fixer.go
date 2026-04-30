@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -145,7 +146,17 @@ func walkIndirectObjects(
 			}
 		case ast.PdfStream:
 			if patched, changed := dictFn(v.Dict); changed {
-				raw, _ := v.Bytes(ctx)
+				raw, err := v.Bytes(ctx)
+				if err != nil {
+					// Reading the raw stream body failed (cancelled
+					// context, decryption error, I/O fault). Leaving
+					// the original object in place is safer than
+					// allocating a new stream with an empty body and
+					// silently dropping the payload.
+					doc.Logger.Debug("remediation: skipping stream rewrite, body read failed",
+						slog.Int("obj", objNum), slog.Any("err", err))
+					continue
+				}
 				alloc.AllocAt(objNum, ast.NewStream(patched, raw))
 				count++
 			}

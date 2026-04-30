@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -466,7 +467,17 @@ func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc
 			newDict := make(ast.PdfDict, len(stream.Dict)+1)
 			maps.Copy(newDict, stream.Dict)
 			newDict["Resources"] = patched.value
-			raw, _ := stream.Bytes(ctx)
+			raw, err := stream.Bytes(ctx)
+			if err != nil {
+				// Form XObject body unreadable: skip the Resources
+				// patch rather than rewriting the stream with empty
+				// content. The validator will keep flagging the
+				// underlying issue, but at least the appearance stream
+				// stays intact.
+				doc.Logger.Debug("remediation: skipping Form XObject Resources rewrite, body read failed",
+					slog.Int("obj", ref.ObjectNum), slog.Any("err", err))
+				continue
+			}
 			alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, raw))
 			changed = true
 			continue

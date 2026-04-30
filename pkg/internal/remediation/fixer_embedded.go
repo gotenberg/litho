@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -137,7 +138,15 @@ func patchFileSpec(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		newDict := make(ast.PdfDict, len(stream.Dict))
 		maps.Copy(newDict, stream.Dict)
 		newDict["Subtype"] = ast.PdfName("application/octet-stream")
-		data, _ := stream.Bytes(ctx)
+		data, err := stream.Bytes(ctx)
+		if err != nil {
+			// Cannot read the embedded file body: skip the rewrite so
+			// the original payload stays intact rather than being
+			// replaced by an empty stream.
+			doc.Logger.Debug("remediation: skipping embedded-file Subtype rewrite, body read failed",
+				slog.Int("obj", streamRef.ObjectNum), slog.Any("err", err))
+			continue
+		}
 		alloc.AllocAt(streamRef.ObjectNum, ast.NewStream(newDict, data))
 		*count++
 	}
