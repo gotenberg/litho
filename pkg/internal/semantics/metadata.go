@@ -325,7 +325,7 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 	// entirely; the raw scan recovers Title, Creator, Producer,
 	// Keywords, CreationDate, and ModDate from the bytes of older Info
 	// dicts when the in-memory metadata map is missing them.
-	scanRawInfoFields(doc, metadata)
+	scanRawInfoFields(ctx, doc, metadata)
 
 	// Catalog /Lang: the document-level language tag (per ISO 32000-2, 14.9.2).
 	if _, hasLang := metadata["Language"]; !hasLang {
@@ -349,7 +349,7 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 // runs against the entire file so incremental updates whose newest
 // trailer points at a stale or non-dict /Info can still expose
 // earlier revisions' values.
-func scanRawInfoFields(doc *document.Document, metadata map[string]string) {
+func scanRawInfoFields(ctx context.Context, doc *document.Document, metadata map[string]string) {
 	fileSize := doc.FileSize()
 	if fileSize > 10*1024*1024 {
 		return
@@ -364,14 +364,14 @@ func scanRawInfoFields(doc *document.Document, metadata map[string]string) {
 	}
 	raw := buf[:n]
 
-	scanRawInfoField(raw, "ModDate", func(v string) {
+	scanRawInfoField(ctx, raw, "ModDate", func(v string) {
 		metadata["ModDate"] = newerDate(metadata["ModDate"], v)
 	})
 	fillIfMissing := func(key string) {
-		if metadata[key] != "" {
+		if ctx.Err() != nil || metadata[key] != "" {
 			return
 		}
-		scanRawInfoField(raw, key, func(v string) {
+		scanRawInfoField(ctx, raw, key, func(v string) {
 			if v != "" && metadata[key] == "" {
 				metadata[key] = v
 			}
@@ -392,10 +392,13 @@ func scanRawInfoFields(doc *document.Document, metadata map[string]string) {
 // literal "(...)" and hex "<...>" syntaxes are supported. The visit
 // callback is responsible for deciding how to combine multiple
 // recoveries (newest wins for dates, first non-empty for strings).
-func scanRawInfoField(raw []byte, key string, visit func(string)) {
+func scanRawInfoField(ctx context.Context, raw []byte, key string, visit func(string)) {
 	pattern := []byte("/" + key)
 	pos := 0
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		idx := bytes.Index(raw[pos:], pattern)
 		if idx == -1 {
 			return

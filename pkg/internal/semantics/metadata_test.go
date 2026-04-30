@@ -1,6 +1,11 @@
 package semantics
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+)
 
 func TestParseXMP(t *testing.T) {
 	tests := []struct {
@@ -116,5 +121,35 @@ func TestParseXMP(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestScanRawInfoField_RespectsContextCancel(t *testing.T) {
+	// Build a buffer with thousands of /Title hits surrounded by sibling
+	// keys so the inner loop would otherwise advance for each match.
+	// With a pre-cancelled context the loop must bail out on the first
+	// iteration without invoking visit.
+	chunk := []byte("/Title (x) /Producer (y) ")
+	raw := bytes.Repeat(chunk, 50000)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	calls := 0
+	scanRawInfoField(ctx, raw, "Title", func(string) { calls++ })
+	if calls != 0 {
+		t.Errorf("scanRawInfoField with cancelled ctx invoked visit %d times, want 0", calls)
+	}
+
+	// Sanity: same buffer with a live ctx still finds matches.
+	calls = 0
+	scanRawInfoField(context.Background(), raw, "Title", func(v string) {
+		if !strings.HasPrefix(v, "x") {
+			t.Errorf("unexpected value %q", v)
+		}
+		calls++
+	})
+	if calls == 0 {
+		t.Error("scanRawInfoField with live ctx visited 0 times, want >0")
 	}
 }
