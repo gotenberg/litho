@@ -272,3 +272,47 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 		t.Errorf("expected nil for missing key, got %v", result3)
 	}
 }
+
+func TestSearchNameTree_DepthCapBreaksCycle(t *testing.T) {
+	doc := &Document{
+		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		objectCache: make(map[int]ast.PdfObject),
+		fontCache:   make(map[int]any),
+	}
+
+	// PdfDict is a map (reference type), so wrapping the same dict in
+	// its own Kids array creates a true self-cycle. Without the depth
+	// cap searchNameTree would recurse until the runtime's stack
+	// overflows.
+	cyclic := ast.PdfDict{}
+	cyclic["Kids"] = ast.PdfArray{cyclic}
+
+	result, err := searchNameTree(context.Background(), doc, cyclic, "anything")
+	if err != nil {
+		t.Fatalf("searchNameTree on cycle: %v", err)
+	}
+	if result != nil {
+		t.Errorf("expected nil on cyclic name tree, got %v", result)
+	}
+}
+
+func TestSearchNameTree_RespectsContextCancel(t *testing.T) {
+	doc := &Document{
+		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		objectCache: make(map[int]ast.PdfObject),
+		fontCache:   make(map[int]any),
+	}
+
+	leafNode := ast.PdfDict{
+		"Names": ast.PdfArray{
+			ast.PdfString("dest1"),
+			ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 10}, ast.PdfName("Fit")},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := searchNameTree(ctx, doc, leafNode, "dest1"); err == nil {
+		t.Fatal("expected ctx.Err() when called with cancelled context")
+	}
+}

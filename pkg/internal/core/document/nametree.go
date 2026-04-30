@@ -50,10 +50,28 @@ func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfA
 	return nil, nil
 }
 
+// maxNameTreeDepth caps the recursion depth in [searchNameTree]. PDF
+// name trees in real documents rarely exceed a handful of levels; the
+// cap defends against adversarial files that nest /Kids deeply or
+// introduce cycles via indirect references. A search that hits the cap
+// degrades to "not found" rather than overflowing the goroutine stack.
+const maxNameTreeDepth = 64
+
 // searchNameTree recursively searches a name tree node for the given key.
 // Name trees use /Kids for intermediate nodes and /Names for leaf nodes,
 // with optional /Limits [min max] arrays for efficient pruning.
 func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
+	return searchNameTreeAt(ctx, doc, nodeObj, key, 0)
+}
+
+func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, depth int) (ast.PdfArray, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if depth > maxNameTreeDepth {
+		return nil, nil
+	}
+
 	nodeDict, err := ResolveDict(ctx, doc, nodeObj)
 	if err != nil {
 		return nil, err
@@ -89,7 +107,10 @@ func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, k
 			return nil, nil
 		}
 		for _, kid := range kidsArr {
-			result, err := searchNameTree(ctx, doc, kid, key)
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			result, err := searchNameTreeAt(ctx, doc, kid, key, depth+1)
 			if err != nil {
 				return nil, err
 			}
