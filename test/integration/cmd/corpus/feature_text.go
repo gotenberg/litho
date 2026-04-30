@@ -267,6 +267,7 @@ func extractTextPages(ctx context.Context, pdfPath string, lastPage int) ([]text
 	if err != nil {
 		return nil, 0, fmt.Errorf("pdf.Open: %w", err)
 	}
+	defer r.Close()
 
 	numPages, err := r.PageCount(ctx)
 	if err != nil {

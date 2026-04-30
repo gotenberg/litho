@@ -161,6 +161,7 @@ func extractMetadata(ctx context.Context, pdfPath string) (pdfjsRefInfo, error) 
 	if err != nil {
 		return pdfjsRefInfo{}, fmt.Errorf("pdf.Open: %w", err)
 	}
+	defer r.Close()
 
 	out := pdfjsRefInfo{
 		PDFFormatVersion: r.Version(),

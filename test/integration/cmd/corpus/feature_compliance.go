@@ -295,6 +295,7 @@ func validateWithLitho(ctx context.Context, pdfPath, profileDir string) (bool, [
 	if err != nil {
 		return false, []string{fmt.Sprintf("pdf.Open: %v", err)}
 	}
+	defer r.Close()
 
 	var errs []error
 	if pdfa, ok := dirToPDFAProfile[profileDir]; ok {

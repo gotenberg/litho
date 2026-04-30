@@ -175,6 +175,7 @@ func detectClaimedProfile(ctx context.Context, pdfPath string) string {
 	if err != nil {
 		return ""
 	}
+	defer r.Close()
 	open, err := r.XMPMetadata(ctx)
 	if err != nil || open == nil {
 		return ""

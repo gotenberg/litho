@@ -315,6 +315,7 @@ func remediateOnce(ctx context.Context, pdfPath string, profile models.PDFAProfi
 	if err != nil {
 		return fmt.Errorf("pdf.Open: %w", err)
 	}
+	defer r.Close()
 	pre, err := r.ValidatePDFA(ctx, profile)
 	if err != nil {
 		return fmt.Errorf("validate pre: %w", err)
@@ -348,6 +349,7 @@ func remediateOnce(ctx context.Context, pdfPath string, profile models.PDFAProfi
 		out.VeraPost = out.VeraPre
 		return nil
 	}
+	defer r2.Close()
 	post, err := r2.ValidatePDFA(ctx, profile)
 	if err != nil {
 		out.LithoPost = out.LithoPre
