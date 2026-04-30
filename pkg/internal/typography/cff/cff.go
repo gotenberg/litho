@@ -14,6 +14,14 @@ var (
 	ErrTruncated  = errors.New("cff: data truncated")
 )
 
+// maxCharstringStack caps the operand stack inside a Type 2 charstring.
+// CFF1 specifies 48; CFF2 specifies 513 to accommodate variation-store
+// "blend" subroutines. Using the larger ceiling lets legitimate CFF2
+// charstrings through while rejecting adversarial fonts that push
+// thousands of operands between stack-clearing operators to force an
+// unbounded slice growth.
+const maxCharstringStack = 513
+
 // ExtractEncoding extracts the CFF encoding as a byte code → glyph name map.
 // For fonts with a custom encoding (like TeX OT1), this maps byte positions
 // to their glyph names, enabling correct text extraction when no PDF-level
@@ -945,6 +953,13 @@ func extractCharstringWidth(cs []byte) *int32 {
 	stack := make([]int32, 0, 48) //nolint:mnd // typical charstring stack depth
 
 	for i := 0; i < len(cs); {
+		if len(stack) >= maxCharstringStack {
+			// Adversarial charstring: too many operands pushed before
+			// any stack-clearing operator. Spec says CFF1 caps at 48,
+			// CFF2 at 513, so anything above the larger ceiling is
+			// outside both. Refuse to keep growing the slice.
+			return nil
+		}
 		b := cs[i]
 
 		switch {

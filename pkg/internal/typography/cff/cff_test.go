@@ -657,3 +657,16 @@ func TestGlyphToUnicode_ContextCancel(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestExtractCharstringWidth_RejectsStackOverflow(t *testing.T) {
+	// Bytes 32-246 are single-byte operand pushes per CFF Type 2.
+	// A charstring made of just these never hits a stack-clearing
+	// operator, so without the cap the stack would grow to len(cs).
+	cs := make([]byte, maxCharstringStack+10)
+	for i := range cs {
+		cs[i] = 100 // any operand byte in [32, 246]
+	}
+	if got := extractCharstringWidth(cs); got != nil {
+		t.Errorf("extractCharstringWidth on adversarial stack overflow returned %d, want nil", *got)
+	}
+}
