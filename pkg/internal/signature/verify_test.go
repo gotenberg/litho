@@ -222,3 +222,59 @@ func TestParsePKCS7Certificates_InvalidDER(t *testing.T) {
 		t.Error("expected error for invalid DER, got nil")
 	}
 }
+
+func TestPermitsSigning(t *testing.T) {
+	tests := []struct {
+		name string
+		ku   x509.KeyUsage
+		want bool
+	}{
+		{
+			name: "absent extension permits everything",
+			ku:   0,
+			want: true,
+		},
+		{
+			name: "DigitalSignature only",
+			ku:   x509.KeyUsageDigitalSignature,
+			want: true,
+		},
+		{
+			name: "ContentCommitment only",
+			ku:   x509.KeyUsageContentCommitment,
+			want: true,
+		},
+		{
+			name: "both signing bits",
+			ku:   x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment,
+			want: true,
+		},
+		{
+			name: "DigitalSignature alongside other bits",
+			ku:   x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+			want: true,
+		},
+		{
+			name: "KeyEncipherment only",
+			ku:   x509.KeyUsageKeyEncipherment,
+			want: false,
+		},
+		{
+			name: "DataEncipherment only",
+			ku:   x509.KeyUsageDataEncipherment,
+			want: false,
+		},
+		{
+			name: "CertSign only",
+			ku:   x509.KeyUsageCertSign,
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := permitsSigning(tc.ku); got != tc.want {
+				t.Errorf("permitsSigning(%v) = %v, want %v", tc.ku, got, tc.want)
+			}
+		})
+	}
+}

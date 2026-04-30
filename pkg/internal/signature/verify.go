@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/asn1"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +11,22 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
+
+// permitsSigning reports whether a certificate's [x509.KeyUsage] bits
+// allow digital-signature use. RFC 5280 §4.2.1.3 leaves the KeyUsage
+// extension optional, so an absent extension (KeyUsage == 0) is
+// treated as permissive for backwards compatibility with legacy PDF
+// signing certs that omit it. When the extension is present, at least
+// one of [x509.KeyUsageDigitalSignature] or
+// [x509.KeyUsageContentCommitment] (the X.509 name for
+// "non-repudiation") must be set.
+func permitsSigning(ku x509.KeyUsage) bool {
+	if ku == 0 {
+		return true
+	}
+	const sigBits = x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment
+	return ku&sigBits != 0
+}
 
 // PKCS#7 / CMS ASN.1 structures (RFC 5652). Only the subset needed to
 // extract the embedded X.509 certificates is modeled here.
@@ -119,12 +134,10 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 		// Validate the document hash.
 		result.HashValid = sig.DocumentHash != "" && sig.ByteRange[1] > 0
 
-		// Decode the PKCS#7 contents from hex.
-		der, err := hex.DecodeString(fmt.Sprintf("%x", []byte(sig.Contents)))
-		if err != nil {
-			// Contents might already be raw DER bytes (not hex-encoded string).
-			der = []byte(sig.Contents)
-		}
+		// /Contents in a signature dict is stored as a hex string in
+		// the PDF, but the lexer has already decoded it into raw DER
+		// bytes by the time we see sig.Contents.
+		der := []byte(sig.Contents)
 
 		certs, err := parsePKCS7Certificates(der)
 		if err != nil {
@@ -191,6 +204,16 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 			result.CertChainValid = true
 		} else {
 			result.ErrorMessage = fmt.Sprintf("certificate chain validation failed: %v", err)
+		}
+
+		// Per RFC 5280, when the leaf cert carries a KeyUsage
+		// extension it must permit signing. ExtKeyUsage stays
+		// permissive (ExtKeyUsageAny) because PDF defines no required
+		// EKU; tightening that field would reject many legitimate
+		// signatures. KeyUsage is the orthogonal check.
+		if result.CertChainValid && !permitsSigning(leaf.KeyUsage) {
+			result.CertChainValid = false
+			result.ErrorMessage = "certificate KeyUsage extension does not permit digital signatures"
 		}
 
 		// Validate signing time against certificate validity.
