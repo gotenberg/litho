@@ -134,7 +134,7 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		return fail(rule, "no XMP metadata")
 	}
 
-	if !containsDCTitle(xmpData) {
+	if !containsDCTitle(ctx, xmpData) {
 		return fail(rule, "")
 	}
 

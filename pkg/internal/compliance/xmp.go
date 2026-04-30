@@ -191,14 +191,14 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	// PDF/A identification (§6.7.11 / §6.6.4 / §6.7.3).
-	xmpCheckPDFAIdentification(xmpData, profile, part, &results)
+	xmpCheckPDFAIdentification(ctx, xmpData, profile, part, &results)
 
 	if ctx.Err() != nil {
 		return results
 	}
 
 	// Extension schema structure (§6.7.8 / §6.6.2.3.3).
-	xmpCheckExtensionSchemas(xmpData, part, &results)
+	xmpCheckExtensionSchemas(ctx, xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
@@ -492,7 +492,7 @@ func xmpSchemaRule(part int, ns string) []Violation {
 
 // xmpCheckPDFAIdentification verifies that the XMP contains pdfaid:part and
 // pdfaid:conformance entries with correct values matching the declared profile.
-func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *[]Violation) {
+func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string, part int, results *[]Violation) {
 	var partValue, confValue, revValue string
 	hasPart := false
 	hasConf := false
@@ -570,13 +570,13 @@ func xmpCheckPDFAIdentification(data []byte, profile string, part int, results *
 	// namespaces by URI, so "pdfa:part" with the correct URI appears correct
 	// to the parser. We need to check the actual serialized prefix.
 	if hasPart && !wrongPrefixPart {
-		wrongPrefixPart = xmpHasWrongPdfaidPrefix(data, "part")
+		wrongPrefixPart = xmpHasWrongPdfaidPrefix(ctx, data, "part")
 	}
 	if hasConf && !wrongPrefixConf {
-		wrongPrefixConf = xmpHasWrongPdfaidPrefix(data, "conformance")
+		wrongPrefixConf = xmpHasWrongPdfaidPrefix(ctx, data, "conformance")
 	}
 	if revValue != "" && !wrongPrefixRev {
-		wrongPrefixRev = xmpHasWrongPdfaidPrefix(data, "rev")
+		wrongPrefixRev = xmpHasWrongPdfaidPrefix(ctx, data, "rev")
 	}
 
 	// Emit prefix violations for pdfaid fields using wrong namespace.
@@ -672,13 +672,17 @@ func xmpCheckPart4Conformance(profile string, hasConf bool, confValue string, re
 // xmpHasWrongPdfaidPrefix scans raw XMP bytes to check if a pdfaid field
 // uses a non-"pdfaid" prefix (e.g., "pdfa:part" instead of "pdfaid:part").
 // The XML parser resolves namespaces by URI, masking the actual prefix.
-func xmpHasWrongPdfaidPrefix(data []byte, field string) bool {
+// Returns false on context cancellation; outer callers re-check ctx.
+func xmpHasWrongPdfaidPrefix(ctx context.Context, data []byte, field string) bool {
 	// Look for the field name preceded by a colon and prefix.
 	// Valid: "pdfaid:part" / "pdfaid:conformance" / "pdfaid:rev"
 	// Invalid: "pdfa:part" / "foo:part" (any prefix != "pdfaid")
 	needle := []byte(":" + field)
 	validPrefix := []byte("pdfaid:" + field)
 	for off := 0; ; {
+		if ctx.Err() != nil {
+			return false
+		}
 		idx := bytes.Index(data[off:], needle)
 		if idx < 0 {
 			break
@@ -812,9 +816,9 @@ var xmpExpectedPrefix = map[string]string{
 // and returns a map from namespace URI to the actual prefix name used. When
 // a URI is bound to multiple prefixes, the last occurrence wins; callers
 // that need every binding must use [xmpExtractAllPrefixesForURI] instead.
-func xmpExtractPrefixMap(data []byte) map[string]string {
+func xmpExtractPrefixMap(ctx context.Context, data []byte) map[string]string {
 	result := make(map[string]string)
-	for _, b := range xmpNamespaceBindings(data) {
+	for _, b := range xmpNamespaceBindings(ctx, data) {
 		result[b.uri] = b.prefix
 	}
 	return result
@@ -827,9 +831,9 @@ func xmpExtractPrefixMap(data []byte) map[string]string {
 // properties under that alias. ISO 14289 still requires the canonical
 // "pdfuaid" prefix for those properties, so callers need to check every
 // binding rather than whichever one last-write-wins leaves in the map.
-func xmpExtractAllPrefixesForURI(data []byte, targetURI string) []string {
+func xmpExtractAllPrefixesForURI(ctx context.Context, data []byte, targetURI string) []string {
 	var result []string
-	for _, b := range xmpNamespaceBindings(data) {
+	for _, b := range xmpNamespaceBindings(ctx, data) {
 		if b.uri == targetURI {
 			result = append(result, b.prefix)
 		}
@@ -845,11 +849,14 @@ type xmpNSBinding struct {
 // xmpNamespaceBindings walks every xmlns:prefix="uri" declaration in the
 // raw XMP bytes and returns them in order of appearance. Duplicates are
 // preserved so callers can distinguish "URI bound to one prefix" from
-// "URI bound to several prefixes".
-func xmpNamespaceBindings(data []byte) []xmpNSBinding {
+// "URI bound to several prefixes". Returns nil on context cancellation.
+func xmpNamespaceBindings(ctx context.Context, data []byte) []xmpNSBinding {
 	var bindings []xmpNSBinding
 	s := string(data)
 	for {
+		if ctx.Err() != nil {
+			return nil
+		}
 		idx := strings.Index(s, "xmlns:")
 		if idx < 0 {
 			break
@@ -884,9 +891,9 @@ func xmpNamespaceBindings(data []byte) []xmpNSBinding {
 // Each missing field emits a specific rule (t02–t18).
 // It also validates that extension schema elements use the expected namespace
 // prefix names (e.g., "pdfaSchema" not "nonpdfaSchema").
-func xmpCheckExtensionSchemas(data []byte, part int, results *[]Violation) {
+func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, results *[]Violation) {
 	// Extract prefix→URI map to check prefix name correctness.
-	prefixMap := xmpExtractPrefixMap(data)
+	prefixMap := xmpExtractPrefixMap(ctx, data)
 
 	// Check that pdfa extension schema namespace URIs use the expected prefix names.
 	for uri, expectedPrefix := range xmpExpectedPrefix {

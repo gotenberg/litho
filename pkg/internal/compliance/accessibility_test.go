@@ -1,6 +1,9 @@
 package compliance
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestExtractXMPPropertyValue(t *testing.T) {
 	t.Parallel()
@@ -210,7 +213,7 @@ func TestCheckPDFUAIDPrefixesIn(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := checkPDFUAIDPrefixesIn([]byte(tc.xmp), tc.profile)
+			got := checkPDFUAIDPrefixesIn(context.Background(), []byte(tc.xmp), tc.profile)
 			gotRules := make([]Rule, 0, len(got))
 			for _, v := range got {
 				gotRules = append(gotRules, v.Rule)
@@ -273,7 +276,7 @@ func TestContainsDCTitle_NamespaceAware(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := containsDCTitle([]byte(tc.xmp)); got != tc.want {
+			if got := containsDCTitle(context.Background(), []byte(tc.xmp)); got != tc.want {
 				t.Errorf("containsDCTitle = %v, want %v\n%s", got, tc.want, tc.xmp)
 			}
 		})
@@ -333,7 +336,7 @@ func TestContainsPDFUAIDPart_NamespaceAware(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := containsPDFUAIDPart([]byte(tc.xmp), tc.part); got != tc.want {
+			if got := containsPDFUAIDPart(context.Background(), []byte(tc.xmp), tc.part); got != tc.want {
 				t.Errorf("containsPDFUAIDPart(_, %q) = %v, want %v\n%s", tc.part, got, tc.want, tc.xmp)
 			}
 		})

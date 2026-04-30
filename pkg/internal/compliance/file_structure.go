@@ -618,7 +618,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		}
 
 		// Find the "stream" keyword that is NOT part of "endstream".
-		streamDataStart := findStreamDataStart(headerBuf)
+		streamDataStart := findStreamDataStart(ctx, headerBuf)
 		if streamDataStart < 0 {
 			continue // not a stream, or header too small to find it
 		}
@@ -650,8 +650,9 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 
 // findStreamDataStart locates the byte offset within buf where stream data
 // begins (immediately after the "stream" keyword and its required EOL).
-// Returns -1 if the "stream" keyword is not found in buf.
-func findStreamDataStart(buf []byte) int {
+// Returns -1 if the "stream" keyword is not found in buf or when ctx is
+// cancelled mid-scan; outer callers re-check ctx.
+func findStreamDataStart(ctx context.Context, buf []byte) int {
 	// Scan for the "stream" keyword. We must skip occurrences that are
 	// part of "endstream" or part of a PDF name or other token
 	// (e.g., /application#2Foctet-stream).
@@ -660,6 +661,9 @@ func findStreamDataStart(buf []byte) int {
 	// and followed immediately by a single EOL (CR+LF or LF).
 	searchFrom := 0
 	for {
+		if ctx.Err() != nil {
+			return -1
+		}
 		idx := bytes.Index(buf[searchFrom:], []byte("stream"))
 		if idx < 0 {
 			return -1

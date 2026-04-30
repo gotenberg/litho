@@ -838,7 +838,7 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 		}
 		// Scan for /ActualText in BDC operands.
 		// BDC dict operands contain /ActualText as a key.
-		if containsPUAInContentStreamActualText(streamData) {
+		if containsPUAInContentStreamActualText(ctx, streamData) {
 			results = append(results, failf(Rule_19005_4_6_2_10_8_t01,
 				"page %d: content stream ActualText contains PUA", pageIdx+1)...)
 		}
@@ -882,10 +882,14 @@ func containsPUARunes(s string) bool {
 
 // containsPUAInContentStreamActualText scans raw content stream bytes for
 // /ActualText entries in BDC property dicts that contain PUA code points.
-func containsPUAInContentStreamActualText(data []byte) bool {
+// Returns false on context cancellation; outer callers re-check ctx.
+func containsPUAInContentStreamActualText(ctx context.Context, data []byte) bool {
 	// Look for /ActualText followed by a string value containing PUA.
 	s := string(data)
 	for {
+		if ctx.Err() != nil {
+			return false
+		}
 		idx := strings.Index(s, "/ActualText")
 		if idx < 0 {
 			return false
@@ -1259,7 +1263,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		if len(streamData) > 0 {
 			s := string(streamData)
 			searchStr := s
-			for {
+			for ctx.Err() == nil {
 				idx := strings.Index(searchStr, "/Lang")
 				if idx < 0 {
 					break

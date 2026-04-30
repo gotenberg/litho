@@ -216,9 +216,9 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 // non-DC namespace URI does not satisfy the Dublin Core title
 // requirement, so the check keys off the URI rather than the prefix
 // substring.
-func containsDCTitle(xmpData []byte) bool {
+func containsDCTitle(ctx context.Context, xmpData []byte) bool {
 	const dcNamespace = "http://purl.org/dc/elements/1.1/"
-	prefix := xmpExtractPrefixMap(xmpData)[dcNamespace]
+	prefix := xmpExtractPrefixMap(ctx, xmpData)[dcNamespace]
 	if prefix == "" {
 		return false
 	}
@@ -233,9 +233,9 @@ func containsDCTitle(xmpData []byte) bool {
 // attribute) bound to that namespace with the requested value. The
 // canonical prefix is "pdfuaid" but XMP allows any prefix provided the
 // namespace URI matches.
-func containsPDFUAIDPart(xmpData []byte, part string) bool {
+func containsPDFUAIDPart(ctx context.Context, xmpData []byte, part string) bool {
 	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
-	prefix := xmpExtractPrefixMap(xmpData)[pdfuaIDNamespace]
+	prefix := xmpExtractPrefixMap(ctx, xmpData)[pdfuaIDNamespace]
 	if prefix == "" {
 		return false
 	}

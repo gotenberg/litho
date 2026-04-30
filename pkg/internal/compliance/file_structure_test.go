@@ -1,6 +1,9 @@
 package compliance
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestFindStreamDataStart(t *testing.T) {
 	t.Parallel()
@@ -43,7 +46,7 @@ func TestFindStreamDataStart(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := findStreamDataStart([]byte(tc.buf))
+			got := findStreamDataStart(context.Background(), []byte(tc.buf))
 			if got != tc.want {
 				t.Errorf("findStreamDataStart(%q) = %d, want %d", tc.buf, got, tc.want)
 			}

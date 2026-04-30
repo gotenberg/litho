@@ -103,11 +103,11 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 
 	switch profile {
 	case "PDF/UA-1":
-		if !containsPDFUAIDPart(xmpData, "1") {
+		if !containsPDFUAIDPart(ctx, xmpData, "1") {
 			return fail(Rule_14289_1_5_t02, "pdfuaid:part is not 1")
 		}
 	case "PDF/UA-2":
-		if !containsPDFUAIDPart(xmpData, "2") {
+		if !containsPDFUAIDPart(ctx, xmpData, "2") {
 			return fail(Rule_14289_2_5_t02, "pdfuaid:part is not 2")
 		}
 	}
@@ -129,14 +129,14 @@ func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog a
 	if !ok {
 		return nil
 	}
-	return checkPDFUAIDPrefixesIn(xmpData, profile)
+	return checkPDFUAIDPrefixesIn(ctx, xmpData, profile)
 }
 
 // checkPDFUAIDPrefixesIn is the pure-logic core of [checkPDFUAIDPrefixes]
 // exposed for unit testing. It takes the decoded XMP bytes and the
 // profile name and returns the same violations the I/O-bound wrapper
 // would.
-func checkPDFUAIDPrefixesIn(xmpData []byte, profile string) []Violation {
+func checkPDFUAIDPrefixesIn(ctx context.Context, xmpData []byte, profile string) []Violation {
 	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
 	// Enumerate every prefix bound to the PDF/UA Identification
 	// namespace URI. XMP permits a URI to be aliased to several prefixes
@@ -144,7 +144,7 @@ func checkPDFUAIDPrefixesIn(xmpData []byte, profile string) []Violation {
 	// URI). A single-value lookup would return only one of them and
 	// miss the "wrong-prefix" violation when the document uses a
 	// non-canonical alias for the target property.
-	uaPrefixes := xmpExtractAllPrefixesForURI(xmpData, pdfuaIDNamespace)
+	uaPrefixes := xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace)
 
 	var results []Violation
 	raw := string(xmpData)
