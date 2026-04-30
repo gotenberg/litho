@@ -25,7 +25,7 @@ func ValidatePDFA(ctx context.Context, doc *document.Document, profile models.PD
 	groups, ok := pdfaCheckGroups[profile]
 	if !ok {
 		slog.Error("compliance: unknown PDF/A profile", "profile", profile)
-		return nil, fmt.Errorf("compliance: unknown PDF/A profile: %s", profile)
+		return nil, fmt.Errorf("%w: PDF/A %s", ErrUnknownProfile, profile)
 	}
 
 	release := doc.LockValidationRun()
@@ -43,7 +43,7 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 	groups, ok := pdfuaCheckGroups[profile]
 	if !ok {
 		slog.Error("compliance: unknown PDF/UA profile", "profile", profile)
-		return nil, fmt.Errorf("compliance: unknown PDF/UA profile: %s", profile)
+		return nil, fmt.Errorf("%w: PDF/UA %s", ErrUnknownProfile, profile)
 	}
 
 	release := doc.LockValidationRun()
