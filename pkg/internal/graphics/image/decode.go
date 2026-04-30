@@ -13,6 +13,33 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+const (
+	// maxImagePixels caps how many pixels a single Image XObject may
+	// declare before [DecodeImage] refuses to allocate. 100 megapixels
+	// covers print-resolution photographs (8K display tops out at
+	// ~33 MP) yet rejects adversarial PDFs that declare 100k×100k
+	// dimensions to force ~40 GB allocations.
+	maxImagePixels = 100_000_000
+
+	// maxImageBytes caps the decoded byte stream. Four bytes per pixel
+	// is the worst case (RGBA), so this matches the pixel cap and
+	// bounds [io.ReadAll] on the streaming decoder output.
+	maxImageBytes = 4 * maxImagePixels
+)
+
+// validateImageDimensions rejects degenerate or out-of-policy image
+// sizes. Width and height must both be positive and their product must
+// fit under [maxImagePixels].
+func validateImageDimensions(width, height int) error {
+	if width <= 0 || height <= 0 {
+		return fmt.Errorf("invalid image dimensions: %dx%d", width, height)
+	}
+	if int64(width)*int64(height) > maxImagePixels {
+		return fmt.Errorf("image %dx%d exceeds %d-pixel safety cap", width, height, maxImagePixels)
+	}
+	return nil
+}
+
 // DecodeImage decodes a named Image XObject from a page into a Go image.Image.
 // The name parameter is the resource key (e.g., "Im0") under the page's
 // /Resources /XObject dictionary.
@@ -50,6 +77,10 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 
 	height, err := resolveInt(ctx, doc, stream.Dict, "Height")
 	if err != nil {
+		return nil, err
+	}
+
+	if err := validateImageDimensions(width, height); err != nil {
 		return nil, err
 	}
 
@@ -100,12 +131,18 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	if err != nil {
 		return nil, fmt.Errorf("opening image stream: %w", err)
 	}
-	decodedData, err := io.ReadAll(rc)
+	// Cap the decoded read so a flate/lzw bomb cannot blow memory
+	// before we discover the dimension mismatch below. The +1 makes
+	// "exactly maxImageBytes" valid while detecting overflow.
+	decodedData, err := io.ReadAll(io.LimitReader(rc, int64(maxImageBytes)+1))
 	if closeErr := rc.Close(); closeErr != nil {
 		doc.Logger.Debug("closing image stream reader", slog.Any("err", closeErr))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading decoded image stream: %w", err)
+	}
+	if len(decodedData) > maxImageBytes {
+		return nil, fmt.Errorf("decoded image stream exceeds %d-byte safety cap", maxImageBytes)
 	}
 
 	if bitsPerComp != 8 {

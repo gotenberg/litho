@@ -252,3 +252,28 @@ func TestExtractImages_SkipsNonImage(t *testing.T) {
 		t.Errorf("expected 0 images for Form XObject, got %d", len(images))
 	}
 }
+
+func TestValidateImageDimensions(t *testing.T) {
+	tests := []struct {
+		name    string
+		w, h    int
+		wantErr bool
+	}{
+		{name: "zero width", w: 0, h: 100, wantErr: true},
+		{name: "zero height", w: 100, h: 0, wantErr: true},
+		{name: "negative width", w: -1, h: 100, wantErr: true},
+		{name: "small image", w: 100, h: 100, wantErr: false},
+		{name: "8K display", w: 7680, h: 4320, wantErr: false},
+		{name: "just under cap", w: 10000, h: 9999, wantErr: false},
+		{name: "100k by 100k", w: 100000, h: 100000, wantErr: true},
+		{name: "32-bit overflow shape", w: 1 << 30, h: 1 << 30, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateImageDimensions(tc.w, tc.h)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("validateImageDimensions(%d, %d) err=%v, wantErr=%v", tc.w, tc.h, err, tc.wantErr)
+			}
+		})
+	}
+}

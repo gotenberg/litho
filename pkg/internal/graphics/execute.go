@@ -105,9 +105,15 @@ func (m *Machine) ExecuteOne(ctx context.Context, op content.Operation) error {
 }
 
 // Execute processes a sequence of content stream [content.Operation]
-// values and updates the graphics state.
+// values and updates the graphics state. ctx.Err() is polled every
+// 100 operators so a long content stream remains cancellable.
 func (m *Machine) Execute(ctx context.Context, ops []content.Operation) error {
-	for _, op := range ops {
+	for i, op := range ops {
+		if i%100 == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		if err := m.executeOp(ctx, op); err != nil {
 			return err
 		}
