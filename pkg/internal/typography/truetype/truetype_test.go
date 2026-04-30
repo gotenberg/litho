@@ -230,6 +230,99 @@ func TestGlyphToUnicode_InvalidData(t *testing.T) {
 	}
 }
 
+// buildCmapFormat12 builds a Format 12 subtable from raw groups so
+// adversarial-range tests can construct ranges no legitimate font
+// would emit.
+func buildCmapFormat12(groups [][3]uint32) []byte {
+	subtable := make([]byte, 16+len(groups)*12)
+	binary.BigEndian.PutUint16(subtable[0:2], 12)
+	binary.BigEndian.PutUint32(subtable[4:8], uint32(len(subtable)))
+	binary.BigEndian.PutUint32(subtable[12:16], uint32(len(groups)))
+	for i, g := range groups {
+		off := 16 + i*12
+		binary.BigEndian.PutUint32(subtable[off:off+4], g[0])
+		binary.BigEndian.PutUint32(subtable[off+4:off+8], g[1])
+		binary.BigEndian.PutUint32(subtable[off+8:off+12], g[2])
+	}
+	return subtable
+}
+
+func TestGlyphToUnicode_Format12_ClampsHugeRange(t *testing.T) {
+	// startCharCode=0, endCharCode=0xFFFFFFFE: without the clamp the
+	// parser would attempt ~4 billion map entries. The fix caps the
+	// range at U+10FFFF.
+	subtable := buildCmapFormat12([][3]uint32{{0, 0xFFFFFFFE, 1}})
+	fontData := buildTableDirectory(map[string][]byte{
+		"cmap": buildCmapTable(3, 10, subtable),
+	})
+
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
+	if err != nil {
+		t.Fatalf("GlyphToUnicode failed: %v", err)
+	}
+	if got, max := len(gidMap), maxUnicodeCodePoint+1; got > max {
+		t.Errorf("clamp violated: %d entries, want <= %d", got, max)
+	}
+}
+
+func TestGlyphToUnicode_Format12_SkipsReversedGroup(t *testing.T) {
+	// startCharCode > endCharCode is a malformed group; expect zero
+	// contributions instead of a wrap-around or a panic.
+	subtable := buildCmapFormat12([][3]uint32{
+		{0x2000, 0x1000, 1}, // reversed
+		{0x41, 0x41, 100},   // valid: 'A' -> GID 100
+	})
+	fontData := buildTableDirectory(map[string][]byte{
+		"cmap": buildCmapTable(3, 10, subtable),
+	})
+
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
+	if err != nil {
+		t.Fatalf("GlyphToUnicode failed: %v", err)
+	}
+	if r := gidMap[100]; r != 0x41 {
+		t.Errorf("GID 100: got %U, want U+0041", r)
+	}
+	if len(gidMap) != 1 {
+		t.Errorf("got %d entries, want 1 (reversed group should contribute none)", len(gidMap))
+	}
+}
+
+func TestGlyphToUnicode_Format12_RespectsContextCancel(t *testing.T) {
+	// One group spanning the full Unicode range. With a pre-cancelled
+	// context the inner loop must return ctx.Err() rather than
+	// running to completion.
+	subtable := buildCmapFormat12([][3]uint32{{0, maxUnicodeCodePoint, 1}})
+	fontData := buildTableDirectory(map[string][]byte{
+		"cmap": buildCmapTable(3, 10, subtable),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := GlyphToUnicode(ctx, fontData); !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestGlyphToUnicode_Format4_RespectsContextCancel(t *testing.T) {
+	// Build a Format 4 cmap covering the full BMP via a single
+	// segment, then pre-cancel the context.
+	mappings := map[uint16]uint16{}
+	for code := uint16(0); code < 0xFFFE; code++ {
+		mappings[code] = code + 1
+	}
+	subtable := buildCmapFormat4(mappings)
+	fontData := buildTableDirectory(map[string][]byte{
+		"cmap": buildCmapTable(3, 1, subtable),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := GlyphToUnicode(ctx, fontData); !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+}
+
 func TestPostGlyphNames_Format1(t *testing.T) {
 	// Post format 1.0: version=1.0 (0x00010000), then 28 bytes of fixed data.
 	postData := make([]byte, 32)

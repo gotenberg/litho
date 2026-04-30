@@ -7,6 +7,19 @@ import (
 	"fmt"
 )
 
+const (
+	// maxUnicodeCodePoint is the largest valid code point per ISO 10646.
+	// Used to clamp Format 12 cmap ranges so a malformed font cannot ask
+	// the parser to populate billions of map entries.
+	maxUnicodeCodePoint = 0x10FFFF
+
+	// cmapCtxCheckEvery sets how often inner cmap-iteration loops poll
+	// ctx.Err(). 4096 is small enough to react to cancellation within
+	// microseconds yet large enough to keep the lookup-cost overhead
+	// negligible on legitimate fonts.
+	cmapCtxCheckEvery = 4096
+)
+
 // TableRecord is an entry in the TrueType/OpenType table directory.
 type TableRecord struct {
 	Tag    string
@@ -392,6 +405,11 @@ func parseCmapFormat4(ctx context.Context, data []byte) (map[uint16]rune, error)
 		}
 
 		for code := uint32(startCode); code <= uint32(endCode); code++ {
+			if (code-uint32(startCode))%cmapCtxCheckEvery == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			var gid uint16
 			if rangeOff == 0 {
 				gid = uint16(int32(code) + int32(idDelta)) //nolint:gosec // TrueType spec: modular arithmetic
@@ -444,7 +462,23 @@ func parseCmapFormat12(ctx context.Context, data []byte) (map[uint16]rune, error
 		endCharCode := binary.BigEndian.Uint32(data[off+4 : off+8])
 		startGlyphID := binary.BigEndian.Uint32(data[off+8 : off+12])
 
+		// Reject groups that are entirely outside the Unicode range or
+		// whose endpoints are reversed. Without this guard a malformed
+		// font with endCharCode = 0xFFFFFFFE asks the loop to allocate
+		// 4 billion map entries.
+		if startCharCode > endCharCode || startCharCode > maxUnicodeCodePoint {
+			continue
+		}
+		if endCharCode > maxUnicodeCodePoint {
+			endCharCode = maxUnicodeCodePoint
+		}
+
 		for code := startCharCode; code <= endCharCode; code++ {
+			if (code-startCharCode)%cmapCtxCheckEvery == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			gid := uint16(startGlyphID + code - startCharCode) //nolint:gosec // GID narrowing is expected per spec
 			if gid != 0 {
 				if _, exists := result[gid]; !exists {
