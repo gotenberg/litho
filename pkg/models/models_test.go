@@ -522,3 +522,43 @@ func TestModels_EmptySchema(t *testing.T) {
 		})
 	}
 }
+
+func TestPDFAProfile_IsValid(t *testing.T) {
+	valid := []PDFAProfile{
+		PDFA1a, PDFA1b,
+		PDFA2a, PDFA2b, PDFA2u,
+		PDFA3a, PDFA3b, PDFA3u,
+		PDFA4, PDFA4e, PDFA4f,
+	}
+	for _, p := range valid {
+		if !p.IsValid() {
+			t.Errorf("PDFAProfile(%q).IsValid() = false, want true", p)
+		}
+		if p.String() != string(p) {
+			t.Errorf("String() drift on %q", p)
+		}
+	}
+
+	invalid := []PDFAProfile{"", "PDF/A", "PDF/A-1", "PDF/A-1c", "pdf/a-2b"}
+	for _, p := range invalid {
+		if p.IsValid() {
+			t.Errorf("PDFAProfile(%q).IsValid() = true, want false", p)
+		}
+	}
+}
+
+func TestPDFUAProfile_IsValid(t *testing.T) {
+	for _, p := range []PDFUAProfile{PDFUA1, PDFUA2} {
+		if !p.IsValid() {
+			t.Errorf("PDFUAProfile(%q).IsValid() = false, want true", p)
+		}
+		if p.String() != string(p) {
+			t.Errorf("String() drift on %q", p)
+		}
+	}
+	for _, p := range []PDFUAProfile{"", "PDF/UA", "PDF/UA-3", "pdf/ua-1"} {
+		if p.IsValid() {
+			t.Errorf("PDFUAProfile(%q).IsValid() = true, want false", p)
+		}
+	}
+}

@@ -14,7 +14,14 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
+
+// httpClient is the default HTTP client for downloading VeraPDF
+// profiles. The 30 s timeout caps how long the codegen step blocks
+// when the upstream raw.githubusercontent.com host is slow or
+// unreachable; the bare http.Get default has no timeout.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // errGofmt signals that the generator produced syntactically invalid Go.
 // main() catches this and writes the unformatted buffer to disk for
@@ -151,7 +158,7 @@ func downloadProfiles(baseURL, tag, destDir string) {
 			fatalf("creating directory for %s: %v", destPath, err)
 		}
 
-		resp, err := http.Get(url) //nolint:gosec // URL is built from trusted constants + user flag
+		resp, err := httpClient.Get(url) //nolint:gosec // URL is built from trusted constants + user flag
 		if err != nil {
 			fatalf("downloading %s: %v", url, err)
 		}
