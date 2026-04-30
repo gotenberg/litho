@@ -31,7 +31,7 @@ func cidSystemInfoRule(profile string) Rule {
 // be embedded, t2: WMode consistency, t3: usecmap non-predefined forbidden).
 func cmapEmbeddingRules(profile string) (t1, t2, t3 Rule) {
 	if IsPDFUA(profile) {
-		if strings.Contains(profile, "2") {
+		if PDFUAPart(profile) == 2 {
 			return Rule_14289_2_8_4_5_4_t01, Rule_14289_2_8_4_5_4_t02, Rule_14289_2_8_4_5_4_t03
 		}
 		return Rule_14289_1_7_21_3_3_t01, Rule_14289_1_7_21_3_3_t02, Rule_14289_1_7_21_3_3_t03

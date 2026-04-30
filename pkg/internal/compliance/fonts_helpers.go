@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -124,7 +123,7 @@ func fontNameUTF8Rule(profile string) Rule {
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
 func toUnicodeCMapValuesRule(profile string) Rule {
 	if IsPDFUA(profile) {
-		if strings.Contains(profile, "2") {
+		if PDFUAPart(profile) == 2 {
 			return Rule_14289_2_8_4_5_8_t02
 		}
 		return Rule_14289_1_7_21_7_t02
