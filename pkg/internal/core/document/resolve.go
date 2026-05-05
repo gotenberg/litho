@@ -237,7 +237,8 @@ const (
 )
 
 // DecodePdfString converts a raw [ast.PdfString] to a Go string, handling the
-// UTF-16BE BOM (0xFE 0xFF) encoding used by many PDF producers.
+// UTF-16BE BOM (0xFE 0xFF) encoding used by many PDF producers and the
+// UTF-8 BOM (0xEF 0xBB 0xBF) form added in PDF 2.0.
 //
 // DecodePdfString operates on already-decrypted string data. Decryption is
 // handled transparently by the parser's crypto pipeline during object
@@ -250,7 +251,7 @@ func DecodePdfString(s ast.PdfString) string {
 		for i := range u16s {
 			u16s[i] = uint16(b[2+i*2])<<8 | uint16(b[2+i*2+1])
 		}
-		return string(utf16.Decode(u16s))
+		return stripLeadingBOM(string(utf16.Decode(u16s)))
 	}
 	// UTF-16LE BOM (0xFF 0xFE): little-endian byte order.
 	if len(b) >= 2 && b[0] == utf16BEBom1 && b[1] == utf16BEBom0 {
@@ -258,7 +259,12 @@ func DecodePdfString(s ast.PdfString) string {
 		for i := range u16s {
 			u16s[i] = uint16(b[2+i*2+1])<<8 | uint16(b[2+i*2])
 		}
-		return string(utf16.Decode(u16s))
+		return stripLeadingBOM(string(utf16.Decode(u16s)))
+	}
+	// UTF-8 BOM (0xEF 0xBB 0xBF): added in PDF 2.0 for the text-string
+	// type. Strip the marker and treat the remainder as UTF-8.
+	if len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		return string(b[3:])
 	}
 	// PDFDocEncoding / Windows-1252: bytes 0x80-0x9F have specific Unicode
 	// mappings; bytes 0xA0-0xFF map to the same Unicode code point.
@@ -283,7 +289,7 @@ func DecodePdfString(s ast.PdfString) string {
 	// values in the 0x80-0x9F mapping range are not valid UTF-8 (they
 	// contain bare continuation bytes), so the ambiguity rarely bites.
 	if utf8.Valid(b) && utf8.RuneCount(b) < len(b) {
-		return string(b)
+		return stripLeadingBOM(string(b))
 	}
 	var buf strings.Builder
 	buf.Grow(len(b))
@@ -298,6 +304,17 @@ func DecodePdfString(s ast.PdfString) string {
 		}
 	}
 	return buf.String()
+}
+
+// stripLeadingBOM removes a single leading U+FEFF rune from s. The BOM
+// is meaningful as an encoding marker on the wire but should not
+// appear as content in the decoded string. PDF producers occasionally
+// double-encode the BOM (UTF-16BE marker followed by an in-band U+FEFF
+// rune) and PDF 2.0 UTF-8 strings carry the BOM as content after the
+// marker bytes are consumed; in both cases callers want the textual
+// content only.
+func stripLeadingBOM(s string) string {
+	return strings.TrimPrefix(s, "\uFEFF")
 }
 
 // pdfDocEncoding maps bytes in the 0x80-0x9F range to their Unicode

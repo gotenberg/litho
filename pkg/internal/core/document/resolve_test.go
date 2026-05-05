@@ -47,6 +47,10 @@ func TestDecodePdfString(t *testing.T) {
 		{"ascii", ast.PdfString("hello"), "hello"},
 		{"empty", ast.PdfString(""), ""},
 		{"utf16be-bom", ast.PdfString("\xfe\xff\x00H\x00i"), "Hi"},
+		{"utf16le-bom", ast.PdfString("\xff\xfeH\x00i\x00"), "Hi"},
+		{"utf8-bom", ast.PdfString("\xef\xbb\xbfHi"), "Hi"},
+		{"utf16be-double-bom", ast.PdfString("\xfe\xff\xfe\xff\x00H\x00i"), "Hi"},
+		{"utf8-leading-fEFF", ast.PdfString("\xef\xbb\xbf\xe8\xa1\xa8"), "表"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
