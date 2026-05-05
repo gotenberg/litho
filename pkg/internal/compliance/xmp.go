@@ -622,13 +622,13 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 		*results = append(*results, xmpPDFAPartRule(part, partValue)...)
 	}
 
-	// Validate pdfaid:conformance value (parts 1-3).
-	// Must be uppercase (A, B, U). Case-sensitive comparison.
-	if part < 4 && level != 0 {
-		expectedConf := strings.ToUpper(string(rune(level)))
-		if confValue != expectedConf {
-			*results = append(*results, xmpPDFAConformanceRule(part, confValue)...)
-		}
+	// Validate pdfaid:conformance value (parts 1-3). Per ISO 19005 the
+	// levels nest A ⊃ U ⊃ B, so a stricter XMP claim is allowed to
+	// cover a looser validation profile (e.g. a "Level A" file is also
+	// a valid "Level B" file). [ConformanceSatisfies] encodes that
+	// hierarchy.
+	if part < 4 && level != 0 && !ConformanceSatisfies(confValue, level) {
+		*results = append(*results, xmpPDFAConformanceRule(part, confValue)...)
 	}
 
 	// Part 4 conformance validation depends on the sub-profile.

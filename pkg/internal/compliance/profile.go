@@ -79,3 +79,38 @@ func PDFUAPart(profile string) int {
 	}
 	return 0
 }
+
+// ConformanceSatisfies reports whether a file whose XMP claims
+// pdfaid:conformance = xmpConf satisfies a profile whose level
+// (last byte of "PDF/A-Nx") is profileLevel. Per ISO 19005 the
+// conformance levels nest: Level A files meet Level U requirements,
+// and Level U files meet Level B requirements (A ⊃ U ⊃ B). A
+// stricter XMP claim therefore covers a looser validation profile;
+// a looser claim does not cover a stricter profile.
+//
+// xmpConf is matched case-insensitively. Unknown letters (anything
+// other than A/B/U) and an empty string fail. profileLevel is matched
+// case-insensitively too so callers can pass either the lowercase
+// byte returned by [PDFALevel] or an uppercase variant.
+func ConformanceSatisfies(xmpConf string, profileLevel byte) bool {
+	if len(xmpConf) != 1 {
+		return false
+	}
+	claim := xmpConf[0]
+	if claim >= 'a' && claim <= 'z' {
+		claim -= 'a' - 'A'
+	}
+	prof := profileLevel
+	if prof >= 'A' && prof <= 'Z' {
+		prof += 'a' - 'A'
+	}
+	switch prof {
+	case 'a':
+		return claim == 'A'
+	case 'u':
+		return claim == 'A' || claim == 'U'
+	case 'b':
+		return claim == 'A' || claim == 'U' || claim == 'B'
+	}
+	return false
+}

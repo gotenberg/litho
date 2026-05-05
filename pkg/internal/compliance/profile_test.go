@@ -160,3 +160,42 @@ func TestPDFUAPart(t *testing.T) {
 		})
 	}
 }
+
+func TestConformanceSatisfies(t *testing.T) {
+	tests := []struct {
+		name    string
+		xmpConf string
+		level   byte
+		want    bool
+	}{
+		// Profile -a accepts only A.
+		{"A covers a", "A", 'a', true},
+		{"U does not cover a", "U", 'a', false},
+		{"B does not cover a", "B", 'a', false},
+		// Profile -u accepts A or U.
+		{"A covers u", "A", 'u', true},
+		{"U covers u", "U", 'u', true},
+		{"B does not cover u", "B", 'u', false},
+		// Profile -b accepts A, U, or B.
+		{"A covers b", "A", 'b', true},
+		{"U covers b", "U", 'b', true},
+		{"B covers b", "B", 'b', true},
+		// Case-insensitive matching on both sides.
+		{"lowercase a claim covers a", "a", 'a', true},
+		{"uppercase profile letter", "A", 'A', true},
+		// Degenerate input.
+		{"empty xmp", "", 'b', false},
+		{"two-char xmp", "AB", 'b', false},
+		{"unknown letter", "X", 'b', false},
+		{"unknown profile letter", "A", 'z', false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ConformanceSatisfies(tc.xmpConf, tc.level); got != tc.want {
+				t.Errorf("ConformanceSatisfies(%q, %q) = %v, want %v",
+					tc.xmpConf, string(tc.level), got, tc.want)
+			}
+		})
+	}
+}
