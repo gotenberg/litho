@@ -178,15 +178,29 @@ func NopLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
+// headerScanLimit is the byte window scanned for the "%PDF-" header
+// at the start of a file. ISO 32000 places the header on the first
+// line, but Acrobat tolerates a leading prefix (BOM, shebang line,
+// HTTP-style preamble, explanatory comment) and so does litho. xref
+// offsets remain absolute from byte 0 of the file, which is why no
+// offset adjustment is needed downstream.
+const headerScanLimit = 1024
+
 // NewDocument creates a new [Document] by parsing the XRef chains.
 // If logger is nil, a no-op logger is used.
 func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger) (*Document, error) {
-	// Validate PDF Header
-	headerBuf := make([]byte, 10)
-	_, err := r.ReadAt(headerBuf, 0)
-	if err != nil {
+	// Validate PDF Header. Scan up to [headerScanLimit] bytes so files
+	// with a leading prefix (UTF-8 BOM, explanatory comment) are still
+	// accepted.
+	headerBuf := make([]byte, headerScanLimit)
+	n, err := r.ReadAt(headerBuf, 0)
+	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("failed to read file header: %w", err)
 	}
+	if n == 0 {
+		return nil, ErrMissingHeader
+	}
+	headerBuf = headerBuf[:n]
 	pdfIdx := bytes.Index(headerBuf, []byte("%PDF-"))
 	if pdfIdx == -1 {
 		return nil, ErrMissingHeader

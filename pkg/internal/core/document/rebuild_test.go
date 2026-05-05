@@ -219,3 +219,38 @@ func TestNewDocument_TotallyBroken(t *testing.T) {
 		t.Errorf("expected ErrMissingHeader, got: %v", err)
 	}
 }
+
+func TestNewDocument_HeaderAfterPrefix(t *testing.T) {
+	// PDF spec puts %PDF- on the first line, but Acrobat (and litho)
+	// tolerate a leading prefix up to headerScanLimit bytes. Build a
+	// minimal one-page document with a 700-byte explanatory prefix to
+	// confirm the version is still extracted from the right offset.
+	prefix := bytes.Repeat([]byte("# explanatory prefix\n"), 35)
+	if len(prefix) < 600 {
+		t.Fatalf("test prefix too short: %d", len(prefix))
+	}
+	body := minimalPDF()
+	data := append(append([]byte{}, prefix...), body...)
+
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument with prefix: %v", err)
+	}
+	if doc.Version == "" {
+		t.Errorf("expected non-empty Version after header at offset %d", len(prefix))
+	}
+}
+
+func TestNewDocument_HeaderBeyondScanLimit(t *testing.T) {
+	// A header buried past headerScanLimit must still be rejected;
+	// otherwise litho would tolerate documents whose body is too far
+	// from the start to safely cache.
+	prefix := bytes.Repeat([]byte("x"), headerScanLimit+1)
+	body := minimalPDF()
+	data := append(append([]byte{}, prefix...), body...)
+
+	_, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
+	if !errors.Is(err, ErrMissingHeader) {
+		t.Errorf("expected ErrMissingHeader for header beyond scan limit, got: %v", err)
+	}
+}
