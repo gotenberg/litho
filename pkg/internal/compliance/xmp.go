@@ -8,6 +8,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/encoding/unicode/utf32"
+	"golang.org/x/text/transform"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
@@ -167,10 +171,11 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
-	// XMP encoding must be UTF-8 for part 4 (§6.7.2.1 t05).
-	if part == 4 {
-		xmpCheckEncoding(xmpData, part, &results)
-	}
+	// XMP encoding must be UTF-8 (PDF/A-2/3/4 require it explicitly;
+	// PDF/A-1 does not). Normalise to UTF-8 so the downstream XML
+	// parser and byte-scan checks see real content even when the
+	// packet shipped as UTF-16.
+	xmpData = xmpNormalizeForChecks(xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
@@ -347,25 +352,141 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 
 // xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
 // For PDF/A-4 (§6.7.2.1 t05), UTF-16 encoding is a violation.
-func xmpCheckEncoding(data []byte, _ int, results *[]Violation) {
-	// Check for UTF-16 BOM: FE FF (BE) or FF FE (LE).
-	if len(data) >= 2 {
-		if data[0] == 0xFE && data[1] == 0xFF {
-			*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16BE")...)
-			return
+// xmpDetectEncoding returns the byte encoding of an XMP packet. The
+// PDF/A family requires UTF-8 from part 2 onward, so anything else
+// here triggers a clause violation. Detection looks at:
+//
+//   - A leading byte-order mark (00 00 FE FF for UTF-32BE,
+//     FF FE 00 00 for UTF-32LE, FE FF for UTF-16BE,
+//     FF FE for UTF-16LE).
+//   - A BOM-less heuristic: regular zero stride (3 zero bytes per
+//     code unit for UTF-32, 1 zero byte per code unit for UTF-16).
+//   - An XML declaration "encoding=…" hint inside the first
+//     [xmpPacketHeaderSize] bytes.
+//
+// Returns one of "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-32BE",
+// "UTF-32LE". An empty input is treated as UTF-8 so the caller does
+// not double-report a missing metadata stream.
+func xmpDetectEncoding(data []byte) string {
+	// 4-byte BOMs first; FF FE 00 00 also matches the 2-byte UTF-16 LE
+	// BOM, so the longer prefix has to win.
+	if len(data) >= 4 {
+		switch {
+		case data[0] == 0x00 && data[1] == 0x00 && data[2] == 0xFE && data[3] == 0xFF:
+			return "UTF-32BE"
+		case data[0] == 0xFF && data[1] == 0xFE && data[2] == 0x00 && data[3] == 0x00:
+			return "UTF-32LE"
 		}
-		if data[0] == 0xFF && data[1] == 0xFE {
-			*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16LE")...)
-			return
+	}
+	if len(data) >= 2 {
+		switch {
+		case data[0] == 0xFE && data[1] == 0xFF:
+			return "UTF-16BE"
+		case data[0] == 0xFF && data[1] == 0xFE:
+			return "UTF-16LE"
 		}
 	}
 
-	// Also check XML declaration for encoding="UTF-16".
+	// BOM-less heuristics. UTF-32 patterns must come before UTF-16
+	// patterns: a UTF-32 LE byte stream "X 00 00 00" also satisfies
+	// the UTF-16 LE pattern "X 00".
+	if len(data) >= 8 {
+		switch {
+		case data[0] != 0 && data[1] == 0 && data[2] == 0 && data[3] == 0 &&
+			data[4] != 0 && data[5] == 0 && data[6] == 0 && data[7] == 0:
+			return "UTF-32LE"
+		case data[0] == 0 && data[1] == 0 && data[2] == 0 && data[3] != 0 &&
+			data[4] == 0 && data[5] == 0 && data[6] == 0 && data[7] != 0:
+			return "UTF-32BE"
+		}
+	}
+	if len(data) >= 4 {
+		switch {
+		case data[0] != 0 && data[1] == 0 && data[2] != 0 && data[3] == 0:
+			return "UTF-16LE"
+		case data[0] == 0 && data[1] != 0 && data[2] == 0 && data[3] != 0:
+			return "UTF-16BE"
+		}
+	}
+
 	headerLen := min(len(data), xmpPacketHeaderSize)
 	header := strings.ToLower(string(data[:headerLen]))
-	if strings.Contains(header, "encoding=\"utf-16") || strings.Contains(header, "encoding='utf-16") {
-		*results = append(*results, failf(Rule_19005_4_6_7_2_1_t05, "UTF-16")...)
+	switch {
+	case strings.Contains(header, "encoding=\"utf-32le") || strings.Contains(header, "encoding='utf-32le"):
+		return "UTF-32LE"
+	case strings.Contains(header, "encoding=\"utf-32be") || strings.Contains(header, "encoding='utf-32be") ||
+		strings.Contains(header, "encoding=\"utf-32") || strings.Contains(header, "encoding='utf-32"):
+		return "UTF-32BE"
+	case strings.Contains(header, "encoding=\"utf-16le") || strings.Contains(header, "encoding='utf-16le"):
+		return "UTF-16LE"
+	case strings.Contains(header, "encoding=\"utf-16be") || strings.Contains(header, "encoding='utf-16be") ||
+		strings.Contains(header, "encoding=\"utf-16") || strings.Contains(header, "encoding='utf-16"):
+		return "UTF-16BE"
 	}
+	return "UTF-8"
+}
+
+// xmpDecodeToUTF8 returns data re-encoded as UTF-8 from the encoding
+// reported by [xmpDetectEncoding]. UTF-8 input passes through. The
+// BOM, if present, is stripped so downstream string operations do not
+// see a stray U+FEFF in the first character.
+func xmpDecodeToUTF8(data []byte, enc string) ([]byte, error) {
+	switch enc {
+	case "UTF-8":
+		return data, nil
+	case "UTF-16BE", "UTF-16LE":
+		order := unicode.BigEndian
+		if enc == "UTF-16LE" {
+			order = unicode.LittleEndian
+		}
+		dec := unicode.UTF16(order, unicode.UseBOM).NewDecoder()
+		out, _, err := transform.Bytes(dec, data)
+		return out, err
+	case "UTF-32BE", "UTF-32LE":
+		order := utf32.BigEndian
+		if enc == "UTF-32LE" {
+			order = utf32.LittleEndian
+		}
+		dec := utf32.UTF32(order, utf32.UseBOM).NewDecoder()
+		out, _, err := transform.Bytes(dec, data)
+		return out, err
+	}
+	return data, nil
+}
+
+// xmpEncodingRule returns the PDF/A clause that requires the XMP
+// packet to be UTF-8 for the given part. PDF/A-1 (ISO 19005-1) does
+// not mandate UTF-8 explicitly, so part 1 returns nil and the caller
+// suppresses the violation.
+func xmpEncodingRule(part int, encoding string) []Violation {
+	switch part {
+	case 2:
+		return failf(Rule_19005_2_6_6_2_1_t05, "XMP encoded as %s, must be UTF-8", encoding)
+	case 3:
+		return failf(Rule_19005_3_6_6_2_1_t05, "XMP encoded as %s, must be UTF-8", encoding)
+	case 4:
+		return failf(Rule_19005_4_6_7_2_1_t05, "XMP encoded as %s, must be UTF-8", encoding)
+	}
+	return nil
+}
+
+// xmpNormalizeForChecks emits the encoding-violation rule when [data]
+// is non-UTF-8, then returns the UTF-8 form so subsequent checks
+// (packet header, namespace audit, identification) can parse and
+// validate the values inside the packet. A decoding failure leaves
+// the bytes untouched; downstream checks degrade gracefully (xml
+// parser bails, byte-scan fallback finds nothing).
+func xmpNormalizeForChecks(data []byte, part int, results *[]Violation) []byte {
+	enc := xmpDetectEncoding(data)
+	if enc == "UTF-8" {
+		return data
+	}
+	*results = append(*results, xmpEncodingRule(part, enc)...)
+	decoded, err := xmpDecodeToUTF8(data, enc)
+	if err != nil || len(decoded) == 0 {
+		return data
+	}
+	return decoded
 }
 
 // xmpCheckNamespaces walks the XMP XML and verifies that every namespace URI
