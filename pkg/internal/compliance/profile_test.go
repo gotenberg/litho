@@ -161,6 +161,42 @@ func TestPDFUAPart(t *testing.T) {
 	}
 }
 
+func TestRequiresUnicodeMapping(t *testing.T) {
+	tests := []struct {
+		profile string
+		want    bool
+	}{
+		// Part 1: only Level A requires Unicode mapping.
+		{"PDF/A-1a", true},
+		{"PDF/A-1b", false},
+		// Parts 2 and 3: Levels U and A.
+		{"PDF/A-2a", true},
+		{"PDF/A-2u", true},
+		{"PDF/A-2b", false},
+		{"PDF/A-3a", true},
+		{"PDF/A-3u", true},
+		{"PDF/A-3b", false},
+		// Part 4 always requires Unicode mapping.
+		{"PDF/A-4", true},
+		{"PDF/A-4e", true},
+		{"PDF/A-4f", true},
+		// Non-PDF/A profiles fall back to false; the gate only fires
+		// for callers that have already filtered to PDF/A.
+		{"PDF/UA-1", false},
+		{"PDF/UA-2", false},
+		{"", false},
+		{"garbage", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.profile, func(t *testing.T) {
+			t.Parallel()
+			if got := RequiresUnicodeMapping(tc.profile); got != tc.want {
+				t.Errorf("RequiresUnicodeMapping(%q) = %v, want %v", tc.profile, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestConformanceSatisfies(t *testing.T) {
 	tests := []struct {
 		name    string

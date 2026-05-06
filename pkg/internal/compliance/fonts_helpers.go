@@ -39,29 +39,23 @@ func fontEmbeddingRule(profile string) Rule {
 }
 
 // toUnicodeRule returns the ToUnicode mapping rule for the given profile.
-// Returns a zero Rule if the check does not apply.
+// Returns a zero Rule if the check does not apply (Level B never
+// requires Unicode mapping).
 func toUnicodeRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		return Rule_14289_1_7_21_7_t01
 	}
+	if !RequiresUnicodeMapping(profile) {
+		return Rule{}
+	}
 	switch PDFAPart(profile) {
 	case 1:
-		// Part 1: applies to all levels.
 		return Rule_19005_1_6_3_8_t01
 	case 2:
-		level := PDFALevel(profile)
-		if level == 'u' || level == 'a' {
-			return Rule_19005_2_6_2_11_7_2_t01
-		}
-		return Rule{}
+		return Rule_19005_2_6_2_11_7_2_t01
 	case 3:
-		level := PDFALevel(profile)
-		if level == 'u' || level == 'a' {
-			return Rule_19005_3_6_2_11_7_2_t01
-		}
-		return Rule{}
+		return Rule_19005_3_6_2_11_7_2_t01
 	case 4:
-		// All PDF/A-4 profiles require ToUnicode.
 		return Rule_19005_4_6_2_10_7_t01
 	}
 	return Rule{}
@@ -121,6 +115,9 @@ func fontNameUTF8Rule(profile string) Rule {
 }
 
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
+// The check only applies to profiles that require text-to-Unicode
+// mapping (Level A under Part 1, Levels U/A under Parts 2/3, and all
+// PDF/A-4 profiles); Level B fixtures never trigger it.
 func toUnicodeCMapValuesRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		if PDFUAPart(profile) == 2 {
@@ -128,10 +125,21 @@ func toUnicodeCMapValuesRule(profile string) Rule {
 		}
 		return Rule_14289_1_7_21_7_t02
 	}
+	if !RequiresUnicodeMapping(profile) {
+		return Rule{}
+	}
 	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule_19005_4_6_2_10_7_t01)
 }
 
+// puaActualTextRule returns the rule that PUA characters must carry
+// an ActualText entry. ActualText is a tagged-content concept (Marked
+// Content BDC operands), so the rule only fires for Level A profiles
+// — Level U requires Unicode mapping but not tagging, and Level B
+// requires neither.
 func puaActualTextRule(profile string) Rule {
+	if PDFALevel(profile) != 'a' {
+		return Rule{}
+	}
 	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule{})
 }
 

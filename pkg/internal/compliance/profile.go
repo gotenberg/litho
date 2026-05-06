@@ -80,6 +80,29 @@ func PDFUAPart(profile string) int {
 	return 0
 }
 
+// RequiresUnicodeMapping reports whether the profile mandates that
+// text content be mapped back to Unicode. Per ISO 19005 the
+// requirement keys off the conformance level: Level A (Part 1) and
+// Levels U or A (Parts 2/3) require it; Level B never does. Part 4
+// always requires it because the spec mandates Unicode mapping for
+// every PDF/A-4 conforming document.
+//
+// Compliance rule selectors that gate on text-extraction (ToUnicode,
+// PUA + ActualText, ToUnicode CMap values) consult this helper so a
+// "fail under Level A" fixture does not incorrectly fail under
+// Level B as well.
+func RequiresUnicodeMapping(profile string) bool {
+	part := PDFAPart(profile)
+	switch part {
+	case 0:
+		return false
+	case 4:
+		return true
+	}
+	lvl := PDFALevel(profile)
+	return lvl == 'a' || lvl == 'u'
+}
+
 // ConformanceSatisfies reports whether a file whose XMP claims
 // pdfaid:conformance = xmpConf satisfies a profile whose level
 // (last byte of "PDF/A-Nx") is profileLevel. Per ISO 19005 the
