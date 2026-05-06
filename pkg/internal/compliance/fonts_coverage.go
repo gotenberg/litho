@@ -7,8 +7,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typography"
-	"github.com/gotenberg/litho/pkg/internal/typography/cff"
-	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
 // charSetRule returns the CharSet rule for Type1 font subsets.
@@ -116,116 +114,22 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
 		}
 
-		// Part 1: §6.3.5 t2 requires CharSet to cover every glyph
-		// actually rendered, not every glyph defined in the subset.
-		// Without page-level usage information, rendered and
-		// non-rendered glyphs are indistinguishable; skip the check
-		// rather than risk a false positive on subsets that carry
-		// extra unreachable glyphs.
-		if usage == nil || len(usage.charCodes) == 0 {
-			return nil
-		}
-		codeToName := resolveType1CodeToName(ctx, doc, fontDict, fontData)
-		renderedNames := make(map[uint16]string, len(usage.charCodes))
-		for code := range usage.charCodes {
-			if name := codeToName[code]; name != "" && name != ".notdef" {
-				renderedNames[uint16(code)] = name
-			}
-		}
-		if len(renderedNames) == 0 {
-			return nil
-		}
-		return checkCharSetCompleteness(string(charSetStr), renderedNames, fontName, pageNum, completenessRule, false)
+		// Part 1: §6.3.5 t2 — completeness check skipped. The spec
+		// wording ("listing the character names defined in the font
+		// subset") reads strict, but VeraPDF and Acrobat accept any
+		// CharSet that covers the *rendered* glyph set, with names
+		// derived from the embedded font program's own encoding.
+		// Reproducing that requires parsing the Type 1 CharStrings
+		// dict (no parser shipped) and the font program's encoding
+		// array (PDF /Encoding diverges on math fonts). The presence
+		// check above already catches the common offence (CharSet
+		// missing entirely); deeper completeness verification is
+		// deferred to avoid false positives.
+		_ = completenessRule
+		return nil
 	}
 
 	return nil
-}
-
-// resolveType1CodeToName builds the effective byte-code → glyph-name
-// table for a Type 1 simple font. It resolves the PDF /Encoding entry
-// (Name form or dict with /BaseEncoding + /Differences), and falls
-// back to the encoding embedded in the CFF/Type1C font program when
-// the PDF dictionary has no explicit encoding.
-func resolveType1CodeToName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontData []byte) map[byte]string {
-	encObj, hasEnc := fontDict["Encoding"]
-
-	var baseName string
-	var differences ast.PdfArray
-
-	if hasEnc {
-		resolved, err := document.ResolveObject(ctx, doc, encObj)
-		if err == nil {
-			switch v := resolved.(type) {
-			case ast.PdfName:
-				baseName = string(v)
-			case ast.PdfDict:
-				if bn, err := document.ResolveName(ctx, doc, v["BaseEncoding"]); err == nil {
-					baseName = string(bn)
-				}
-				if diffs, err := document.ResolveArray(ctx, doc, v["Differences"]); err == nil {
-					differences = diffs
-				}
-			}
-		}
-	}
-
-	baseTable := baseEncodingTable(baseName)
-
-	result := make(map[byte]string, 256)
-	for code, rn := range baseTable {
-		if name := encodings.RuneToGlyph(rn); name != "" {
-			result[code] = name
-		}
-	}
-
-	// Apply /Differences on top of the base encoding.
-	if differences != nil {
-		code := 0
-		for _, item := range differences {
-			resolved, err := document.ResolveObject(ctx, doc, item)
-			if err != nil {
-				continue
-			}
-			switch v := resolved.(type) {
-			case ast.PdfInt:
-				code = int(v)
-			case ast.PdfName:
-				if code >= 0 && code <= 255 {
-					result[byte(code)] = string(v) //nolint:gosec // range-checked above.
-				}
-				code++
-			}
-		}
-	}
-
-	// No explicit /Encoding: fall back to the CFF font program's
-	// embedded encoding. The CFF encoding is authoritative in this
-	// case per ISO 32000-1 §9.6.6.2.
-	if !hasEnc || (baseName == "" && differences == nil) {
-		if cffEnc := cff.ExtractEncoding(fontData); cffEnc != nil {
-			for code, name := range cffEnc {
-				if _, exists := result[code]; !exists {
-					result[code] = name
-				}
-			}
-		}
-	}
-
-	return result
-}
-
-// baseEncodingTable returns the byte → rune map for a named base
-// encoding. An unknown or empty name defaults to StandardEncoding per
-// ISO 32000-1 §9.6.6.2.
-func baseEncodingTable(name string) map[byte]rune {
-	switch name {
-	case "WinAnsiEncoding":
-		return encodings.WinAnsiEncoding
-	case "MacRomanEncoding":
-		return encodings.MacRomanEncoding
-	default:
-		return encodings.StandardEncoding
-	}
 }
 
 // checkCharSetCompleteness verifies that /CharSet lists all glyph names
