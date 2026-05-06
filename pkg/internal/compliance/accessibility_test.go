@@ -53,34 +53,6 @@ func TestExtractXMPPropertyValue(t *testing.T) {
 	})
 }
 
-func TestIsFourDigitYear(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{"2024", true},
-		{"1999", true},
-		{"0001", true},
-		{"9999", true},
-		{"", false},
-		{"123", false},
-		{"12345", false},
-		{"abcd", false},
-		{"20a4", false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			t.Parallel()
-			if got := isFourDigitYear(tc.input); got != tc.want {
-				t.Errorf("isFourDigitYear(%q) = %v, want %v", tc.input, got, tc.want)
-			}
-		})
-	}
-}
-
 // TestCheckPDFUAIDPrefixesIn verifies that the PDF/UA prefix checks key
 // off the PDF/UA Identification namespace URI, not just the local name.
 // Properties from the PDF/A Identification namespace (pdfaid:part,
@@ -162,10 +134,31 @@ func TestCheckPDFUAIDPrefixesIn(t *testing.T) {
 			wantRules: []Rule{Rule_14289_1_5_t03},
 		},
 		{
-			name:      "pdfuaid:rev that is not a 4-digit year fires t5",
+			name:      "pdfuaid:rev not 2024 fires t5 (non-year)",
 			xmp:       revNotAYear,
 			profile:   "PDF/UA-2",
 			wantRules: []Rule{Rule_14289_2_5_t05},
+		},
+		{
+			// VeraPDF fixture PDF_UA-2/5-t05-fail-b.pdf carries a
+			// well-formed but stale revision year. ISO 14289-2 §5
+			// pins the value to "2024" specifically.
+			name: "pdfuaid:rev=2018 fires t5",
+			xmp: `<rdf:Description
+  xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
+  pdfuaid:part="2"
+  pdfuaid:rev="2018"/>`,
+			profile:   "PDF/UA-2",
+			wantRules: []Rule{Rule_14289_2_5_t05},
+		},
+		{
+			name: "pdfuaid:rev=2024 passes",
+			xmp: `<rdf:Description
+  xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
+  pdfuaid:part="2"
+  pdfuaid:rev="2024"/>`,
+			profile:   "PDF/UA-2",
+			wantRules: nil,
 		},
 		{
 			// VeraPDF fixture PDF_UA-1/5-t04-fail-a.pdf: both pdfuaid

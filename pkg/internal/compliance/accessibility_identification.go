@@ -9,6 +9,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+// pdfua2ExpectedRev is the literal value pdfuaid:rev must carry for a
+// PDF/UA-2 file. ISO 14289-2 §5 fixes the value at "2024"; any other
+// year-shaped string violates the spec even if it parses as a valid
+// year. Lift the constant when ISO 14289-2 ships a revision.
+const pdfua2ExpectedRev = "2024"
+
 func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := ocConfigNameRule(profile)
 
@@ -188,10 +194,11 @@ func checkPDFUAIDPrefixesIn(ctx context.Context, xmpData []byte, profile string)
 			results = append(results, failf(Rule_14289_2_5_t04,
 				"property 'rev' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		// t5: pdfuaid:rev must be a 4-digit year. Read the value from
-		// the canonical prefix first, then from any other prefix bound
-		// to the PDF/UA URI. The PDF/A pdfaid:rev (under a different
-		// namespace URI) must never be consulted.
+		// t5: pdfuaid:rev must be the literal value pdfua2ExpectedRev.
+		// Read the value from the canonical prefix first, then from
+		// any other prefix bound to the PDF/UA URI. The PDF/A
+		// pdfaid:rev (under a different namespace URI) must never be
+		// consulted.
 		revValue := extractXMPPropertyValue(raw, "pdfuaid", "rev")
 		if revValue == "" {
 			for _, p := range uaPrefixes {
@@ -204,9 +211,9 @@ func checkPDFUAIDPrefixesIn(ctx context.Context, xmpData []byte, profile string)
 				}
 			}
 		}
-		if revValue != "" && !isFourDigitYear(revValue) {
+		if revValue != "" && revValue != pdfua2ExpectedRev {
 			results = append(results, failf(Rule_14289_2_5_t05,
-				"pdfuaid:rev value %q is not a 4-digit year", revValue)...)
+				"pdfuaid:rev=%q must be %q", revValue, pdfua2ExpectedRev)...)
 		}
 	}
 
@@ -244,16 +251,4 @@ func extractXMPPropertyValue(raw, prefix, localName string) string {
 		}
 	}
 	return ""
-}
-
-func isFourDigitYear(s string) bool {
-	if len(s) != 4 {
-		return false
-	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
 }

@@ -308,7 +308,7 @@ func TestGlyphToUnicode_Format4_RespectsContextCancel(t *testing.T) {
 	// Build a Format 4 cmap covering the full BMP via a single
 	// segment, then pre-cancel the context.
 	mappings := map[uint16]uint16{}
-	for code := uint16(0); code < 0xFFFE; code++ {
+	for code := range uint16(0xFFFE) {
 		mappings[code] = code + 1
 	}
 	subtable := buildCmapFormat4(mappings)
