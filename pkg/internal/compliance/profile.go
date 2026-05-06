@@ -111,18 +111,16 @@ func RequiresUnicodeMapping(profile string) bool {
 // stricter XMP claim therefore covers a looser validation profile;
 // a looser claim does not cover a stricter profile.
 //
-// xmpConf is matched case-insensitively. Unknown letters (anything
-// other than A/B/U) and an empty string fail. profileLevel is matched
-// case-insensitively too so callers can pass either the lowercase
-// byte returned by [PDFALevel] or an uppercase variant.
+// The comparison is case-sensitive: ISO 19005 requires the XMP
+// conformance value to be uppercase ("A", "B", or "U"), so a
+// lowercase claim must fail and trigger the value rule. profileLevel
+// accepts either case so callers can pass the lowercase byte returned
+// by [PDFALevel] or an uppercase variant.
 func ConformanceSatisfies(xmpConf string, profileLevel byte) bool {
 	if len(xmpConf) != 1 {
 		return false
 	}
 	claim := xmpConf[0]
-	if claim >= 'a' && claim <= 'z' {
-		claim -= 'a' - 'A'
-	}
 	prof := profileLevel
 	if prof >= 'A' && prof <= 'Z' {
 		prof += 'a' - 'A'

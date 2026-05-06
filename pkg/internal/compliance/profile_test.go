@@ -216,8 +216,13 @@ func TestConformanceSatisfies(t *testing.T) {
 		{"A covers b", "A", 'b', true},
 		{"U covers b", "U", 'b', true},
 		{"B covers b", "B", 'b', true},
-		// Case-insensitive matching on both sides.
-		{"lowercase a claim covers a", "a", 'a', true},
+		// Case-sensitive on the XMP claim; ISO 19005 requires the value
+		// to be uppercase.
+		{"lowercase a claim does not cover a", "a", 'a', false},
+		{"lowercase u claim does not cover b", "u", 'b', false},
+		{"lowercase b claim does not cover b", "b", 'b', false},
+		// Profile letter is matched case-insensitively so callers can
+		// pass either form of [PDFALevel].
 		{"uppercase profile letter", "A", 'A', true},
 		// Degenerate input.
 		{"empty xmp", "", 'b', false},
