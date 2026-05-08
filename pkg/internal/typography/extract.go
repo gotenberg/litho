@@ -855,5 +855,49 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 		}
 	}
 
+	// Article threads are a viewer-navigation construct intended for
+	// click-through reading, not for text extraction. Honour them as a
+	// reading-order hint only when every text element on the page sits
+	// inside some bead; a partial thread (a sidebar bead alone, for
+	// example) would otherwise drag elements outside any bead to the
+	// end of the output and place the sidebar before the main body.
+	// When coverage is incomplete the page is reconstructed in
+	// content-stream order instead.
+	if !beadsCoverAllElements(filtered, pageBeads) {
+		pageBeads = nil
+	}
+
 	return ReconstructText(ctx, filtered, pageBeads), nil
+}
+
+// beadsCoverAllElements reports whether every element in elements
+// falls inside at least one bead's rectangle. Used as the gate on
+// thread-driven reading-order reconstruction.
+func beadsCoverAllElements(elements []models.TextElement, beads []semantics.Bead) bool {
+	if len(beads) == 0 || len(elements) == 0 {
+		return false
+	}
+	for _, el := range elements {
+		if !elementInsideAnyBead(el, beads) {
+			return false
+		}
+	}
+	return true
+}
+
+func elementInsideAnyBead(el models.TextElement, beads []semantics.Bead) bool {
+	for _, bead := range beads {
+		minX, maxX := bead.Rect[0], bead.Rect[2]
+		if minX > maxX {
+			minX, maxX = maxX, minX
+		}
+		minY, maxY := bead.Rect[1], bead.Rect[3]
+		if minY > maxY {
+			minY, maxY = maxY, minY
+		}
+		if el.X >= minX && el.X <= maxX && el.Y >= minY && el.Y <= maxY {
+			return true
+		}
+	}
+	return false
 }
