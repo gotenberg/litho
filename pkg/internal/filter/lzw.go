@@ -179,18 +179,21 @@ func (r *lzwReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// maybeWiden increases the code width if the dictionary has reached the threshold.
+// maybeWiden increases the code width once the dictionary has filled the
+// last slot of the current width. The widening point matches the encoder's
+// view of the dictionary, so the bit reader stays aligned with the
+// encoder's bitstream:
 //
-// The decoder's dictionary lags the encoder's by one entry (the first code
-// after ClearTable produces no dictionary entry), so the decoder must widen
-// one entry earlier than the encoder would. The encoder widens at
-// nextCode == (1<<codeWidth) - earlyChange; the decoder widens at
-// nextCode == (1<<codeWidth) - earlyChange - 1.
+//	EarlyChange=1 (standard): widen at nextCode == (1<<codeWidth) - 1
+//	EarlyChange=0 (legacy):   widen at nextCode == (1<<codeWidth)
 //
-//	EarlyChange=1 (standard): decoder widens at nextCode == (1<<codeWidth) - 2
-//	EarlyChange=0 (legacy):   decoder widens at nextCode == (1<<codeWidth) - 1
+// Reference implementations (Adobe's LZW, libtiff, Poppler, MuPDF) and the
+// PDF EarlyChange convention all use this formula. An off-by-one here
+// misaligns reads against the encoded bitstream once nextCode crosses the
+// width boundary, and the decoder typically silently terminates on the
+// first garbage code that decodes as EOD (257).
 func (r *lzwReader) maybeWiden() {
-	if r.codeWidth < lzwMaxWidth && r.nextCode == (1<<r.codeWidth)-r.earlyChange-1 {
+	if r.codeWidth < lzwMaxWidth && r.nextCode == (1<<r.codeWidth)-r.earlyChange {
 		r.codeWidth++
 	}
 }
