@@ -351,7 +351,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		}
 	}
 
-	resolveEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
+	resolveEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont, isStandardType1)
 
 	// Type 3 fonts: extract widths from /CharProcs streams via d0/d1 operators.
 	if subtypeName == "Type3" {
@@ -593,7 +593,7 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 // resolveEncoding resolves the /Encoding entry from the font dictionary into
 // the font's encoding map. Handles both named encodings (WinAnsiEncoding, etc.)
 // and dictionary-based encodings with /BaseEncoding and /Differences.
-func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
+func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol, isStandardType1 bool) {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
 		return
@@ -649,9 +649,10 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			// bytes 0x0B-0x0F this way). Seed from the FontFile/
 			// FontFile3 first, then overlay the appropriate default on
 			// any unfilled slot. Symbol and ZapfDingbats fonts overlay
-			// their built-in encodings; everything else overlays
-			// WinAnsi so ASCII text remains decodable for non-symbolic
-			// fonts that also omit /BaseEncoding.
+			// their built-in encodings; the standard 14 non-symbolic
+			// fonts overlay StandardEncoding (e.g. byte 0xD0 = emdash);
+			// everything else falls back to WinAnsi for non-Standard14
+			// producers that target Windows.
 			font.Encoding = make(map[byte]rune)
 			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats, isSymbol)
 			extractCFFEncodingAsBase(ctx, doc, fontDict, font)
@@ -661,6 +662,8 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 				overlay = encodings.BuildSymbolEncoding()
 			case isDingbats:
 				overlay = encodings.BuildZapfDingbatsEncoding()
+			case isStandardType1:
+				overlay = encodings.StandardEncoding
 			default:
 				overlay = encodings.WinAnsiEncoding
 			}

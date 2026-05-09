@@ -117,6 +117,47 @@ func TestRuneToGlyph(t *testing.T) {
 	}
 }
 
+// TestResolveFont_Standard14DifferencesNoBaseEncoding verifies that a
+// standard 14 non-symbolic font with an /Encoding dict containing only
+// /Differences (no /BaseEncoding) overlays StandardEncoding for unmapped
+// slots, per ISO 32000-2 §9.6.6.4. The previous WinAnsi overlay turned
+// byte 0xD0 (StandardEncoding emdash → U+2014) into 'Ð' on
+// Mac-authored govdocs filings.
+func TestResolveFont_Standard14DifferencesNoBaseEncoding(t *testing.T) {
+	fontDict := ast.PdfDict{
+		"Type":     ast.PdfName("Font"),
+		"Subtype":  ast.PdfName("Type1"),
+		"BaseFont": ast.PdfName("Times-Roman"),
+		"Encoding": ast.PdfDict{
+			"Type":        ast.PdfName("Encoding"),
+			"Differences": ast.PdfArray{ast.PdfInt(219), ast.PdfName("Zcaron")},
+		},
+	}
+	font, err := ResolveFont(context.Background(), &document.Document{Logger: document.NopLogger()}, fontDict)
+	if err != nil {
+		t.Fatalf("ResolveFont: %v", err)
+	}
+	cases := []struct {
+		code byte
+		want rune
+	}{
+		{0xD0, 0x2014}, // emdash
+		{0xB1, 0x2013}, // endash (canary that StandardEncoding survived)
+		{0x27, 0x2019}, // quoteright (StandardEncoding diverges from WinAnsi here)
+		{0xDB, 0x017D}, // /Zcaron from Differences
+	}
+	for _, c := range cases {
+		got, ok := font.Encoding[c.code]
+		if !ok {
+			t.Errorf("byte 0x%02X unmapped, want U+%04X", c.code, c.want)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("byte 0x%02X = U+%04X, want U+%04X", c.code, got, c.want)
+		}
+	}
+}
+
 // TestResolveFont_SymbolDifferencesNoBaseEncoding verifies that a /Symbol
 // font with an /Encoding dict containing only /Differences (no /BaseEncoding)
 // keeps the Symbol built-in encoding for unmapped slots, per ISO 32000-2
