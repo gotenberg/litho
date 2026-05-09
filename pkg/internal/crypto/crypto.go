@@ -23,6 +23,7 @@ var paddingString = []byte{
 type Handler struct {
 	EncryptionKey []byte
 	V             int
+	R             int
 	Length        int
 	CFM           string // Crypt filter method (V4)
 	Authenticated bool
@@ -53,6 +54,10 @@ func dictString(dict ast.PdfDict, key ast.PdfName) []byte {
 // NewHandler initializes a new encryption handler and attempts to authenticate with a blank password.
 func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) {
 	v := dictInt(encryptDict, "V", 0)
+	// /R defaults to V's revision when /R is missing; R selects the
+	// algorithm variants in ISO 32000-1 §7.6.3.3/§7.6.3.4. V=2 R=3 is
+	// common (RC4 128-bit + 50-pass MD5 + Algorithm 3.5 verification).
+	r := dictInt(encryptDict, "R", v)
 	length := dictInt(encryptDict, "Length", 40)
 	p := dictInt(encryptDict, "P", 0)
 	o := dictString(encryptDict, "O")
@@ -89,6 +94,7 @@ func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) 
 
 	h := &Handler{
 		V:       v,
+		R:       r,
 		Length:  length,
 		CFM:     cfm,
 		oVal:    o,
@@ -197,7 +203,7 @@ func (h *Handler) Authenticate(password string) error {
 	md.Write(padded)
 	ownerKey := md.Sum(nil)
 
-	if h.V >= 3 {
+	if h.R >= 3 {
 		for range 50 {
 			md2 := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 			md2.Write(ownerKey)
@@ -211,7 +217,7 @@ func (h *Handler) Authenticate(password string) error {
 	decryptedO := make([]byte, len(h.oVal))
 	copy(decryptedO, h.oVal)
 
-	if h.V < 3 {
+	if h.R < 3 {
 		c, err := rc4.NewCipher(encKey) //nolint:gosec // RC4 required by PDF spec
 		if err != nil {
 			return fmt.Errorf("creating RC4 cipher for owner password recovery: %w", err)
@@ -259,7 +265,7 @@ func (h *Handler) Authenticate(password string) error {
 		}
 
 		key := mdC.Sum(nil)
-		if h.V >= 3 {
+		if h.R >= 3 {
 			for range 50 {
 				md2 := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 				md2.Write(key[:h.Length/8])
@@ -271,7 +277,7 @@ func (h *Handler) Authenticate(password string) error {
 
 		// Verify the key (Algorithm 3.2, checking against the U string).
 		var expectedU []byte
-		if h.V >= 3 {
+		if h.R >= 3 {
 			// ISO 32000-1 Algorithm 3.4 and 3.5 for V >= 3
 
 			// Compute base hash.

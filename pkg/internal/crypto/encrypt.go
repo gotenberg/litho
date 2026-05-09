@@ -228,16 +228,16 @@ func newEncryptorV5(userPw, ownerPw string, pVal, keyLen int, docID []byte) (*En
 // newEncryptorLegacy implements V1-V4 encryption setup.
 func newEncryptorLegacy(userPw, ownerPw string, v, r, keyLen int, cfm string, pVal int, docID []byte) (*Encryptor, ast.PdfDict, error) {
 	// Compute O value (Algorithm 3.3, encryption direction).
-	oVal, err := computeOValue(ownerPw, userPw, v, keyLen)
+	oVal, err := computeOValue(ownerPw, userPw, r, keyLen)
 	if err != nil {
 		return nil, nil, fmt.Errorf("computing O value: %w", err)
 	}
 
 	// Compute file encryption key (Algorithm 3.1).
-	fileKey := computeFileKey(userPw, oVal, pVal, docID, v, keyLen, true)
+	fileKey := computeFileKey(userPw, oVal, pVal, docID, v, r, keyLen, true)
 
 	// Compute U value (Algorithm 3.4/3.5).
-	uVal, err := computeUValue(fileKey, docID, v)
+	uVal, err := computeUValue(fileKey, docID, r)
 	if err != nil {
 		return nil, nil, fmt.Errorf("computing U value: %w", err)
 	}
@@ -269,6 +269,7 @@ func newEncryptorLegacy(userPw, ownerPw string, v, r, keyLen int, cfm string, pV
 	h := &Handler{
 		EncryptionKey: fileKey,
 		V:             v,
+		R:             r,
 		Length:        keyLen * 8,
 		CFM:           cfm,
 		Authenticated: true,
@@ -283,14 +284,15 @@ func newEncryptorLegacy(userPw, ownerPw string, v, r, keyLen int, cfm string, pV
 }
 
 // computeOValue computes the O (owner) value per Algorithm 3.3 (encryption direction).
-func computeOValue(ownerPw, userPw string, v, keyLen int) ([]byte, error) {
+// r is the security handler revision (drives the 50-pass MD5 and 20-pass RC4 variants).
+func computeOValue(ownerPw, userPw string, r, keyLen int) ([]byte, error) {
 	// Pad owner password.
 	ownerPadded := padPassword([]byte(ownerPw))
 	md := md5.New() //nolint:gosec // Required for PDF standard
 	md.Write(ownerPadded)
 	ownerKey := md.Sum(nil)
 
-	if v >= 3 {
+	if r >= 3 {
 		for range 50 {
 			md2 := md5.New() //nolint:gosec // Required for PDF standard
 			md2.Write(ownerKey)
@@ -304,7 +306,7 @@ func computeOValue(ownerPw, userPw string, v, keyLen int) ([]byte, error) {
 	result := make([]byte, 32)
 	copy(result, userPadded)
 
-	if v < 3 {
+	if r < 3 {
 		c, err := rc4.NewCipher(encKey) //nolint:gosec // RC4 required by PDF spec
 		if err != nil {
 			return nil, fmt.Errorf("creating RC4 cipher for O value computation: %w", err)
@@ -329,7 +331,8 @@ func computeOValue(ownerPw, userPw string, v, keyLen int) ([]byte, error) {
 }
 
 // computeFileKey derives the file encryption key per Algorithm 3.1.
-func computeFileKey(userPw string, oVal []byte, pVal int, docID []byte, v, keyLen int, encMeta bool) []byte {
+// v selects the V=4 metadata-flag append; r drives the 50-pass MD5.
+func computeFileKey(userPw string, oVal []byte, pVal int, docID []byte, v, r, keyLen int, encMeta bool) []byte {
 	padded := padPassword([]byte(userPw))
 	md := md5.New() //nolint:gosec // Required for PDF standard
 	md.Write(padded)
@@ -343,7 +346,7 @@ func computeFileKey(userPw string, oVal []byte, pVal int, docID []byte, v, keyLe
 	}
 
 	key := md.Sum(nil)
-	if v >= 3 {
+	if r >= 3 {
 		for range 50 {
 			md2 := md5.New() //nolint:gosec // Required for PDF standard
 			md2.Write(key[:keyLen])
@@ -355,8 +358,9 @@ func computeFileKey(userPw string, oVal []byte, pVal int, docID []byte, v, keyLe
 }
 
 // computeUValue computes the U (user) value per Algorithm 3.4/3.5.
-func computeUValue(fileKey, docID []byte, v int) ([]byte, error) {
-	if v >= 3 {
+// r selects the algorithm: 3.4 for r<3, 3.5 for r>=3.
+func computeUValue(fileKey, docID []byte, r int) ([]byte, error) {
+	if r >= 3 {
 		// Algorithm 3.5.
 		md := md5.New() //nolint:gosec // Required for PDF standard
 		md.Write(paddingString)

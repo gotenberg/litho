@@ -112,6 +112,44 @@ func TestNewHandler_BlankPassword(t *testing.T) {
 	}
 }
 
+// TestAuthenticate_V2R3_BlankUserPassword guards against the gating bug
+// that keyed Algorithm 3.4/3.5 on /V instead of /R. Govdocs PDFs commonly
+// declare V=2 R=3 (RC4-128 + 50-pass MD5 + 16-byte U match), so the V=2
+// path must still run the R≥3 algorithms.
+func TestAuthenticate_V2R3_BlankUserPassword(t *testing.T) {
+	cfg := EncryptConfig{
+		UserPassword:  "",
+		OwnerPassword: "ownersecret",
+		Algorithm:     RC4_128,
+		Permissions:   -1324,
+	}
+	docID := []byte("0123456789abcdef")
+	_, encDict, err := NewEncryptor(cfg, docID)
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	if v, _ := encDict["V"].(ast.PdfInt); int(v) != 2 {
+		t.Fatalf("V = %v, want 2", v)
+	}
+	if r, _ := encDict["R"].(ast.PdfInt); int(r) != 3 {
+		t.Fatalf("R = %v, want 3", r)
+	}
+
+	trailer := ast.PdfDict{
+		"ID": ast.PdfArray{ast.PdfString(string(docID)), ast.PdfString(string(docID))},
+	}
+	h, err := NewHandler(encDict, trailer)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	if !h.Authenticated {
+		t.Fatal("blank user password did not authenticate against V=2 R=3 dict")
+	}
+	if h.R != 3 {
+		t.Errorf("Handler.R = %d, want 3", h.R)
+	}
+}
+
 func TestAuthenticate_InvalidPassword(t *testing.T) {
 	encDict, trailer := buildV1EncryptDict("")
 
