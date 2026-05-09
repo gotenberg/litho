@@ -116,3 +116,44 @@ func TestRuneToGlyph(t *testing.T) {
 		t.Errorf("RuneToGlyph(' ') = %q, want %q", got, "space")
 	}
 }
+
+// TestResolveFont_SymbolDifferencesNoBaseEncoding verifies that a /Symbol
+// font with an /Encoding dict containing only /Differences (no /BaseEncoding)
+// keeps the Symbol built-in encoding for unmapped slots, per ISO 32000-2
+// §9.6.6.4. A previous regression overlaid WinAnsi here, so byte 0xFC
+// (Symbol bracerighttp → U+F8FC) leaked through as Latin-1 'ü' on legal
+// caption braces in scanned filings.
+func TestResolveFont_SymbolDifferencesNoBaseEncoding(t *testing.T) {
+	fontDict := ast.PdfDict{
+		"Type":     ast.PdfName("Font"),
+		"Subtype":  ast.PdfName("Type1"),
+		"BaseFont": ast.PdfName("Symbol"),
+		"Encoding": ast.PdfDict{
+			"Type":        ast.PdfName("Encoding"),
+			"Differences": ast.PdfArray{ast.PdfInt(240), ast.PdfName("apple")},
+		},
+	}
+	font, err := ResolveFont(context.Background(), &document.Document{Logger: document.NopLogger()}, fontDict)
+	if err != nil {
+		t.Fatalf("ResolveFont: %v", err)
+	}
+	cases := []struct {
+		code byte
+		want rune
+	}{
+		{0xFC, 0xF8FC}, // bracerighttp
+		{0xFD, 0xF8FD}, // bracerightmid
+		{0xFE, 0xF8FE}, // bracerightbt
+		{0xA1, 0x03D2}, // Upsilon1 (canary that the Symbol base survived)
+	}
+	for _, c := range cases {
+		got, ok := font.Encoding[c.code]
+		if !ok {
+			t.Errorf("byte 0x%02X unmapped, want U+%04X", c.code, c.want)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("byte 0x%02X = U+%04X, want U+%04X", c.code, got, c.want)
+		}
+	}
+}

@@ -647,13 +647,24 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			// Type1 fonts fall back to the font program's built-in
 			// encoding (TeX cmbx12 et al expose ff/fi/ffl ligatures at
 			// bytes 0x0B-0x0F this way). Seed from the FontFile/
-			// FontFile3 first, then overlay WinAnsi on any unfilled
-			// Latin-1 slot so ASCII text remains decodable for
-			// non-symbolic fonts that also omit /BaseEncoding.
+			// FontFile3 first, then overlay the appropriate default on
+			// any unfilled slot. Symbol and ZapfDingbats fonts overlay
+			// their built-in encodings; everything else overlays
+			// WinAnsi so ASCII text remains decodable for non-symbolic
+			// fonts that also omit /BaseEncoding.
 			font.Encoding = make(map[byte]rune)
 			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats, isSymbol)
 			extractCFFEncodingAsBase(ctx, doc, fontDict, font)
-			for code, r := range encodings.WinAnsiEncoding {
+			var overlay map[byte]rune
+			switch {
+			case isSymbol:
+				overlay = encodings.BuildSymbolEncoding()
+			case isDingbats:
+				overlay = encodings.BuildZapfDingbatsEncoding()
+			default:
+				overlay = encodings.WinAnsiEncoding
+			}
+			for code, r := range overlay {
 				if _, set := font.Encoding[code]; !set {
 					font.Encoding[code] = r
 				}
