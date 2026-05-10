@@ -113,6 +113,71 @@ func TestExtractText_MinimalPDF(t *testing.T) {
 	}
 }
 
+// TestExtractElements_ActualTextEmitsRealGlyph guards the BDC /ActualText
+// path. A producer that wraps a glyph in a /Span <</ActualText...>> BDC
+// (commonly small-cap renderings of capital glyphs) used to suppress the
+// inner Tj and emit a synthetic placeholder element with FontSize=Tfs and
+// a hardcoded 0.5 advance, leaving downstream gap accounting blind to
+// where the substituted glyph really sat. PDF.js drops the substitution
+// for text extraction and reports the rendered glyph; this test pins the
+// same behaviour: the original glyph reaches the element list with its
+// real advance and effective font size.
+func TestExtractElements_ActualTextEmitsRealGlyph(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	// Single-page PDF with content stream:
+	//   BT /F1 1 Tf
+	//   8 0 0 8 100 500 Tm           (effective FontSize 8)
+	//   /Span <</ActualText (v)>> BDC
+	//   (V) Tj
+	//   EMC
+	//   ET
+	const stream = "BT /F1 1 Tf 8 0 0 8 100 500 Tm /Span <</ActualText (v)>> BDC (V) Tj EMC ET"
+	data := []byte(
+		"%PDF-1.4\n" +
+			"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+			"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+			"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+			"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
+			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
+			"6 0 obj\n<< /Length " + ftoa(len(stream)) + " >>\nstream\n" + stream + "\nendstream\nendobj\n" +
+			"xref\n0 7\n0000000000 65535 f \n0000000000 00000 n \n0000000000 00000 n \n0000000000 00000 n \n0000000000 00000 n \n0000000000 00000 n \n0000000000 00000 n \n" +
+			"trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n0\n%%EOF\n")
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, _ := document.ResolveCatalog(ctx, doc)
+	pages, _ := document.ResolvePages(ctx, doc, catalog)
+	if len(pages) == 0 {
+		t.Fatal("no pages")
+	}
+	ops, _ := content.ParsePageContent(ctx, doc, pages[0].Dict)
+	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
+	elems, err := ExtractElements(ctx, doc, machine, pages[0], ops)
+	if err != nil {
+		t.Fatalf("ExtractElements: %v", err)
+	}
+	if len(elems) != 1 {
+		t.Fatalf("got %d elements, want 1; elems=%+v", len(elems), elems)
+	}
+	got := elems[0]
+	if got.Text != "V" {
+		t.Errorf("Text = %q, want %q (rendered glyph, not ActualText)", got.Text, "V")
+	}
+	if math.Abs(got.FontSize-8.0) > 1e-6 {
+		t.Errorf("FontSize = %v, want 8 (effective Tm scale × Tfs)", got.FontSize)
+	}
+	if got.Width <= 0 {
+		t.Errorf("Width = %v, want >0 (real glyph advance, not zero/placeholder)", got.Width)
+	}
+}
+
+// ftoa is a tiny helper for the inline xref-less fixture above.
+func ftoa(n int) string {
+	return strings.TrimSpace(string([]byte{byte('0' + n/100), byte('0' + (n/10)%10), byte('0' + n%10)}))
+}
+
 // TestExtractElements_ContextCancellation honors a cancelled context.
 // The per-op cancellation check in extractTextRecursive fires every
 // 100 operators. For a 1-op content stream the outer ctx.Err() check

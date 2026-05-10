@@ -548,7 +548,6 @@ func handleBDC(_ context.Context, m *Machine, state *State, op content.Operation
 
 	m.MarkedContent = append(m.MarkedContent, mcState)
 	if mcState.HasText {
-		m.IgnoreTextOps = true
 		m.PendingActualText = mcState.ActualText
 	}
 }
@@ -631,12 +630,8 @@ func handleEMC(_ context.Context, m *Machine, state *State, _ content.Operation)
 		m.MarkedContent = m.MarkedContent[:len(m.MarkedContent)-1]
 	}
 	// Re-evaluate flags based on the remaining marked-content stack.
-	m.IgnoreTextOps = false
 	state.SkipExtraction = false
 	for _, mc := range m.MarkedContent {
-		if mc.HasText {
-			m.IgnoreTextOps = true
-		}
 		if mc.IsHiddenOC && !m.IgnoreOCVisibility {
 			state.SkipExtraction = true
 		}

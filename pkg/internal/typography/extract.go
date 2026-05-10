@@ -135,15 +135,12 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 		state := machine.Current()
 
-		// If marked content just provided an ActualText cheat-code, render
-		// it directly. The flag is reset unconditionally after rendering so
-		// that `SkipExtraction` still clears it on a hidden layer.
-		if machine.PendingActualText != "" {
-			if !state.SkipExtraction {
-				renderActualText(machine, state, elements)
-			}
-			machine.PendingActualText = ""
-		}
+		// PDF.js's text extraction returns the rendered glyphs and
+		// does not honour /ActualText (the substitution is reserved
+		// for accessibility consumers). Drop any PendingActualText
+		// that BDC may have set so it does not affect downstream
+		// state, and let the glyph-rendering operators emit normally.
+		machine.PendingActualText = ""
 
 		if state.SkipExtraction {
 			continue
@@ -235,68 +232,6 @@ func ocgVisible(v ast.PdfObject, cfg *document.OCConfig) bool {
 	}
 }
 
-// renderActualText emits a synthetic text element per rune of the pending
-// ActualText replacement. Used when a BDC/BMC block provides an
-// /ActualText (or /Alt) entry that overrides the enclosed character
-// sequence. See PDF 32000 §14.9.4.
-func renderActualText(machine *graphics.Machine, state *graphics.State, elements *[]models.TextElement) {
-	fontSize := state.Text.Tfs
-	if fontSize == 0 {
-		fontSize = 12
-	}
-
-	mcid := -1
-	var mcLang, mcExpansion string
-	for i := len(machine.MarkedContent) - 1; i >= 0; i-- {
-		mc := &machine.MarkedContent[i]
-		if mcid == -1 && mc.MCID != -1 {
-			mcid = mc.MCID
-		}
-		if mcLang == "" && mc.Language != "" {
-			mcLang = mc.Language
-		}
-		if mcExpansion == "" && mc.ExpansionText != "" {
-			mcExpansion = mc.ExpansionText
-		}
-	}
-
-	// DecodePdfString handles UTF-16 BE that may be present in ActualText.
-	actualText := document.DecodePdfString(ast.PdfString(machine.PendingActualText))
-
-	for _, r := range actualText {
-		// Skip U+FE0F VARIATION SELECTOR-16: it requests emoji presentation
-		// for the preceding base character but carries no semantic content.
-		// ActualText spans like <FEFF2620FE0F> (☠️) should extract as the
-		// base codepoint alone.
-		if r == 0xFE0F {
-			continue
-		}
-		tm := state.Text.Tm
-		ctm := state.CTM
-		tx := tm[4]
-		ty := tm[5]
-		x := tx*ctm[0] + ty*ctm[2] + ctm[4]
-		y := tx*ctm[1] + ty*ctm[3] + ctm[5]
-
-		advance := 0.5 * fontSize
-		dx := advance * tm[0] * ctm[0]
-
-		*elements = append(*elements, models.TextElement{
-			Text:          string(r),
-			X:             x,
-			Y:             y,
-			Width:         math.Abs(dx),
-			FontSize:      fontSize,
-			Chunk:         machine.Chunk,
-			MCID:          mcid,
-			Language:      mcLang,
-			ExpansionText: mcExpansion,
-		})
-
-		state.Text.Tm[4] += advance * state.Text.Tm[0]
-		state.Text.Tm[5] += advance * state.Text.Tm[1]
-	}
-}
 
 // handleTfOp resolves the font named by a Tf operator through the current
 // page's /Font resource dict and the document-wide font cache. Returns
