@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"crypto/md5" //nolint:gosec
 	"crypto/rc4" //nolint:gosec
 	"errors"
@@ -186,12 +187,38 @@ func TestObjKey_V4_SaltSuffix(t *testing.T) {
 	h := &Handler{
 		EncryptionKey: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10},
 		V:             4,
+		CFM:           "AESV2",
 		Length:        128,
 	}
 
 	key := h.ObjKey(1, 0)
 	if len(key) != 16 {
 		t.Errorf("V=4 key length = %d, want 16", len(key))
+	}
+}
+
+// TestObjKey_V4_RC4_NoSalt pins the cipher-aware salt rule. V=4 PDFs
+// can declare CFM=V2 (RC4-128) instead of AESV2; per ISO 32000-1
+// §7.6.3.1 the four-byte 'sAlT' suffix is reserved for the AES
+// cipher only. Salting the RC4 per-object key produces a stream that
+// decrypts every object to garbage and surfaces as empty extraction
+// output on real-world V=4/V2 documents.
+func TestObjKey_V4_RC4_NoSalt(t *testing.T) {
+	const objNum, genNum = 5, 0
+	encKey := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
+
+	h := &Handler{EncryptionKey: encKey, V: 4, CFM: "V2", Length: 128}
+	got := h.ObjKey(objNum, genNum)
+
+	want := make([]byte, 0, 21)
+	want = append(want, encKey...)
+	want = append(want, byte(objNum), byte(objNum>>8), byte(objNum>>16))
+	want = append(want, byte(genNum), byte(genNum>>8))
+	wantHash := md5.Sum(want) //nolint:gosec
+	expected := wantHash[:min(len(encKey)+5, 16)]
+
+	if !bytes.Equal(got, expected) {
+		t.Errorf("V=4 CFM=V2 ObjKey = %x, want %x (no 'sAlT' suffix)", got, expected)
 	}
 }
 

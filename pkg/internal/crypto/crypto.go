@@ -340,13 +340,18 @@ func (h *Handler) PermissionFlags() int {
 }
 
 // ObjKey generates the specific encryption key for an object.
+// Per ISO 32000-1 §7.6.3.1 (Algorithm 1) the four-byte 'sAlT' suffix
+// is only appended when the chosen cipher is AES (V=4 with /CFM AESV2,
+// or V=5/AESV3); RC4 cipher methods (V<4, V=4 with /CFM V2) MUST NOT
+// salt the per-object key, otherwise the resulting RC4 stream
+// decrypts content streams to garbage.
 func (h *Handler) ObjKey(objNum, genNum int) []byte {
 	md := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
 	md.Write(h.EncryptionKey)
 	md.Write([]byte{byte(objNum), byte(objNum >> 8), byte(objNum >> 16)}) //nolint:gosec // Expected truncation
 	md.Write([]byte{byte(genNum), byte(genNum >> 8)})                     //nolint:gosec // Expected truncation
 
-	if h.V == 4 {
+	if h.V == 4 && (h.CFM == "AESV2" || h.CFM == "AESV3") {
 		md.Write([]byte{0x73, 0x41, 0x6C, 0x54}) // 'sAlT'
 	}
 
