@@ -313,11 +313,13 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 // largest-jump method. Sorted gaps are scanned for the biggest consecutive
 // jump; when that jump is significantly larger than the median of the gaps
 // below it, the midpoint is used as the threshold.
-// Falls back to 0.15 * avgFontSize when no clear split exists.
+// Falls back to PDF.js's TRACKING_SPACE_FACTOR (0.102 * avgFontSize)
+// when no clear split exists, so an inter-chunk gap is treated the
+// same way the same-chunk floor treats one.
 func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
 	if len(indices) < 3 {
 		if len(elems) > 0 {
-			return 0.15 * math.Abs(elems[0].FontSize)
+			return 0.102 * math.Abs(elems[0].FontSize)
 		}
 		return 1.0
 	}
@@ -336,7 +338,7 @@ func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
 	}
 
 	avgFontSize := math.Abs(totalFontSize / float64(len(indices)-1))
-	fixedThreshold := 0.15 * avgFontSize
+	fixedThreshold := 0.102 * avgFontSize
 
 	// Need at least 4 gaps to form two meaningful clusters.
 	if len(gaps) < 4 {
