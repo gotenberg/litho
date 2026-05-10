@@ -155,10 +155,7 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		// program. Any decoding would diverge from the glyph the host's
 		// system font renders. Consume the codespace width without
 		// emitting.
-		consume := 2
-		if len(data) < 2 {
-			consume = len(data)
-		}
+		consume := min(len(data), 2)
 		return "", consume, true
 	}
 	var ok bool
@@ -238,35 +235,39 @@ func textIsInvisible(state *graphics.State) bool {
 	return false
 }
 
-// computeGlyphPageWidth returns the advance width of a glyph in
-// page-space units, including character spacing (Tc), word spacing
-// (Tw when the glyph is a space), and horizontal scaling (Tz).
-// Vertical and horizontal writing modes are handled separately.
-func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, char string, charCode int) float64 {
+// computeGlyphPageWidth returns the painted advance width of a glyph in
+// page-space units, EXCLUDING character spacing (Tc) and word spacing
+// (Tw). Tc/Tw are inter-glyph adjustments and live in the gap between
+// elements, not in the glyph itself; matching PDF.js's accounting where
+// `lastPosX` is captured after the glyph advance but before Tc/Tw lets
+// downstream gap heuristics distinguish tracked text from real spaces.
+//
+// Horizontal scaling (Tz) is folded in because it scales the painted
+// glyph itself, not the inter-glyph gap.
+func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, _char string, charCode int) float64 {
 	tm := state.Text.Tm
 	ctm := state.CTM
-	wordSpace := 0.0
-	if char == " " {
-		wordSpace = state.Text.Tw
-	}
 	if font.WMode == 1 {
 		w1, _, _ := font.VerticalMetrics(charCode)
-		advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
+		advance := (w1 / 1000.0) * fontSize
 		awx := advance * (tm[2]*ctm[0] + tm[3]*ctm[2])
 		awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
 		return math.Sqrt(awx*awx + awy*awy)
 	}
 	glyphWidth := font.GlyphWidth(charCode)
-	advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
+	advance := (glyphWidth / 1000.0) * fontSize * (state.Text.Tz / 100.0)
 	awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
 	awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])
 	return math.Sqrt(awx*awx + awy*awy)
 }
 
-// advanceTextMatrix shifts the text matrix by the glyph's advance width
-// after emitting its [models.TextElement]. Horizontal and vertical modes
-// both use the same word-/character-spacing terms but push the
-// displacement along different axes (PDF spec §9.4.4, Table 108).
+// advanceTextMatrix shifts the text matrix by the FULL per-glyph advance
+// after emitting its [models.TextElement]. Per ISO 32000-1 §9.4.4, the
+// advance is `(glyph_width × Tfs + Tc + Tw) × Th` (horizontal) or
+// `glyph_width × Tfs + Tc + Tw` (vertical), Tw applying only when the
+// glyph is a space. This is the spec-correct Tm update; it differs from
+// [computeGlyphPageWidth] which excludes Tc/Tw from the painted Width
+// reported to consumers.
 func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, char string, charCode int) {
 	wordSpace := 0.0
 	if char == " " {

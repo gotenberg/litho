@@ -382,11 +382,11 @@ func needsSpace(gap, threshold float64) bool {
 // intra-chunk kerning for [ReconstructText]. A same-chunk gap at or
 // below this limit never produces a space; a larger gap falls back to
 // the adaptive space heuristic so big TJ adjustments inside a single
-// operator chain still surface as visible breaks. The ceiling scales
-// with font size; values noticeably above this fraction are too wide
-// to read as kerning and too narrow to swallow a genuine word break.
+// operator chain still surface as visible breaks. The factor matches
+// PDF.js's TRACKING_SPACE_FACTOR so tracked text (positive Tc with
+// compensating TJ shifts) merges the same way as in PDF.js.
 func chunkKerningLimit(prev models.TextElement) float64 {
-	const kerningFactor = 0.1
+	const kerningFactor = 0.102
 	return kerningFactor * math.Abs(prev.FontSize)
 }
 

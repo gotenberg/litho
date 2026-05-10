@@ -56,6 +56,41 @@ func TestReconstructText_SameLine(t *testing.T) {
 	}
 }
 
+// TestReconstructText_TrackedSameChunk merges glyphs whose inter-glyph
+// gap (Tc + TJ shift expressed in user space) is below the chunk-kerning
+// floor, the way PDF.js merges letter-spaced display text. The synthetic
+// case mirrors a TJ run with Tc + TJ shift ≈ 0.23pt at FontSize 7.29
+// against a chunk floor of 0.102 × 7.29 ≈ 0.74pt, so the residual gap
+// stays in the tracking band on every glyph boundary.
+func TestReconstructText_TrackedSameChunk(t *testing.T) {
+	t.Parallel()
+	const fs = 7.29
+	chars := []string{"V", "o", "l", "u", "m", "e"}
+	widths := []float64{6.52, 5.32, 2.00, 3.23, 4.45, 2.17}
+	xs := make([]float64, len(chars))
+	xs[0] = 0
+	for i := 1; i < len(chars); i++ {
+		xs[i] = xs[i-1] + widths[i-1] + 0.23 // residual gap below chunk floor
+	}
+	xs[1] = xs[0] + widths[0] - 0.16 // 'Vo' overlap as observed on real fixtures
+	in := make([]models.TextElement, len(chars))
+	for i, c := range chars {
+		in[i] = models.TextElement{
+			Text:       c,
+			X:          xs[i],
+			Y:          500,
+			Width:      widths[i],
+			FontSize:   fs,
+			SpaceWidth: fs * 0.25,
+			Chunk:      4,
+		}
+	}
+	got := ReconstructText(context.Background(), in, nil)
+	if !strings.Contains(got, "Volume") {
+		t.Errorf("tracked same-chunk text should merge: got %q, want substring %q", got, "Volume")
+	}
+}
+
 // TestReconstructText_DifferentLines emits a newline between elements
 // whose Y coordinates differ by more than the line threshold.
 func TestReconstructText_DifferentLines(t *testing.T) {
