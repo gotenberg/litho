@@ -308,71 +308,27 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 	return delta - 0.5*curr.FontSize
 }
 
-// computeSpaceThreshold analyzes inter-glyph gaps on a line to find the
-// optimal split between kerning adjustments and word spaces using the
-// largest-jump method. Sorted gaps are scanned for the biggest consecutive
-// jump; when that jump is significantly larger than the median of the gaps
-// below it, the midpoint is used as the threshold.
-// Falls back to PDF.js's TRACKING_SPACE_FACTOR (0.102 * avgFontSize)
-// when no clear split exists, so an inter-chunk gap is treated the
-// same way the same-chunk floor treats one.
+// computeSpaceThreshold returns the inter-glyph gap above which a real
+// space is inserted. Earlier versions tried to detect a bimodal gap
+// distribution per line and pick the threshold adaptively; in practice
+// the adaptive rule overshot the natural cutoff and dropped real
+// inter-word spaces on lines that mixed kerning with word breaks.
+// PDF.js's TRACKING_SPACE_FACTOR (0.102 × fontSize) is authoritative
+// regardless of the line's gap histogram, so the threshold is now a
+// constant fraction of the line's average font size.
 func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
-	if len(indices) < 3 {
-		if len(elems) > 0 {
-			return 0.102 * math.Abs(elems[0].FontSize)
-		}
+	if len(indices) == 0 {
 		return 1.0
 	}
-
-	// Collect all inter-glyph gaps.
-	gaps := make([]float64, 0, len(indices)-1)
+	if len(indices) < 3 {
+		return 0.102 * math.Abs(elems[indices[0]].FontSize)
+	}
 	var totalFontSize float64
 	for i := 1; i < len(indices); i++ {
-		prev := elems[indices[i-1]]
-		curr := elems[indices[i]]
-		totalFontSize += curr.FontSize
-		gap := computeLineGap(prev, curr)
-		if gap > 0 {
-			gaps = append(gaps, gap)
-		}
+		totalFontSize += elems[indices[i]].FontSize
 	}
-
 	avgFontSize := math.Abs(totalFontSize / float64(len(indices)-1))
-	fixedThreshold := 0.102 * avgFontSize
-
-	// Need at least 4 gaps to form two meaningful clusters.
-	if len(gaps) < 4 {
-		return fixedThreshold
-	}
-
-	sort.Float64s(gaps)
-
-	// Largest-jump method: find the biggest consecutive jump in the sorted
-	// gap list. If the jump is at least 2× the median of the gaps below it,
-	// use the midpoint as the threshold.
-	bestJump := 0.0
-	bestIdx := 0
-	for i := 1; i < len(gaps); i++ {
-		jump := gaps[i] - gaps[i-1]
-		if jump > bestJump {
-			bestJump = jump
-			bestIdx = i
-		}
-	}
-
-	// Require at least 2 gaps on each side for a meaningful split.
-	if bestIdx >= 2 && bestIdx < len(gaps)-1 {
-		// Median of the gaps below the jump.
-		medianBelow := gaps[bestIdx/2]
-		threshold := (gaps[bestIdx-1] + gaps[bestIdx]) / 2.0
-
-		if bestJump > 2*medianBelow &&
-			threshold > 0.05*avgFontSize && threshold < 0.5*avgFontSize {
-			return threshold
-		}
-	}
-
-	return fixedThreshold
+	return 0.102 * avgFontSize
 }
 
 // needsSpace decides whether to insert a space between two consecutive glyphs.

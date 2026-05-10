@@ -232,7 +232,6 @@ func ocgVisible(v ast.PdfObject, cfg *document.OCConfig) bool {
 	}
 }
 
-
 // handleTfOp resolves the font named by a Tf operator through the current
 // page's /Font resource dict and the document-wide font cache. Returns
 // the resolved font, or a best-effort [fallbackFont] if nothing can be

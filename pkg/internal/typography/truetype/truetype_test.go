@@ -107,7 +107,7 @@ func buildCmapTableMultiple(ids []CmapSubtable, subtables [][]byte) []byte {
 	}
 	headerSize := 4 + 8*len(ids)
 	out := make([]byte, headerSize)
-	binary.BigEndian.PutUint16(out[0:2], 0)                 // version
+	binary.BigEndian.PutUint16(out[0:2], 0)                // version
 	binary.BigEndian.PutUint16(out[2:4], uint16(len(ids))) //nolint:gosec // small
 	offset := uint32(headerSize)
 	for i, id := range ids {
