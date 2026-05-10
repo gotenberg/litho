@@ -121,6 +121,26 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	populateOCsFromResources(ctx, doc, machine, resources)
 
 	var currentFont *Font
+	var currentFontName string
+	syncFont := func(state *graphics.State) {
+		// q/Q save/restore the Tf state on the graphics stack. The
+		// currentFont variable lives outside that stack, so a Q that
+		// pops back to a different font must re-resolve to keep the
+		// next Tj/TJ from decoding bytes through the wrong CMap.
+		if state.Text.Tf == currentFontName {
+			return
+		}
+		currentFontName = state.Text.Tf
+		if state.Text.Tf == "" {
+			currentFont = nil
+			return
+		}
+		if font := resolveFontFromResources(ctx, doc, resources, ast.PdfName(state.Text.Tf)); font != nil {
+			currentFont = font
+			return
+		}
+		currentFont = fallbackFont()
+	}
 	for opIdx, op := range ops {
 		// Check for context cancellation every 100 operators to respect
 		// deadlines without adding per-operator overhead.
@@ -146,9 +166,18 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			continue
 		}
 
+		// Operators that touch the graphics state (q, Q, cm, gs, …) may
+		// have popped a different Tf onto the active state. Re-resolve
+		// before any text-rendering operator so handleShowTextOp /
+		// handleTJOp see the correct font.
+		syncFont(state)
+
 		switch op.Operator {
 		case "Tf":
 			currentFont = handleTfOp(ctx, doc, resources, op, currentFont)
+			if name, ok := op.Operands[0].(ast.PdfName); ok {
+				currentFontName = string(name)
+			}
 		case "Tj":
 			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements); err != nil {
 				return err
