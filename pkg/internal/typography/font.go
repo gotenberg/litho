@@ -284,6 +284,15 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		}
 	}
 
+	// FontDescriptor /Flags bit 3 (Symbolic) marks fonts whose glyph
+	// repertoire is bespoke. Custom glyph names (H11537, etc.) are
+	// laid out at WinAnsi-style byte positions for PostScript-printed
+	// docs (Universal-NewswithCommPi, OCR symbols, math notation), and
+	// PDF.js falls back to WinAnsi for those bytes. Pulling the flag
+	// before defaultEncoding selection lets us route Type 1 symbolic
+	// fonts past the StandardEncoding default below.
+	symbolicByFlags := fontIsSymbolicByFlags(ctx, doc, fontDict)
+
 	// Default encoding selection. ISO 32000-1 §9.6.6.1 makes
 	// StandardEncoding the implicit base for non-symbolic Type 1
 	// programs that omit /Encoding (Melior, Minion, Garamond, …); per
@@ -296,7 +305,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	subtype := string(subtypeName)
 	isType1Like := subtype == "Type1" || subtype == "MMType1"
 	defaultEncoding := copyEncoding(encodings.WinAnsiEncoding)
-	if isType1Like {
+	if isType1Like && !symbolicByFlags {
 		defaultEncoding = copyEncoding(encodings.StandardEncoding)
 	}
 	switch {
@@ -1726,6 +1735,29 @@ func detectCIDOffset(cidWidths map[int]float64) int {
 		}
 	}
 	return 29
+}
+
+// fontIsSymbolicByFlags reports whether the FontDescriptor's /Flags entry
+// has bit 3 (Symbolic) set per ISO 32000-1 Table 123. The flag tells the
+// PDF interpreter that the font's glyph repertoire is bespoke and the
+// character codes do not follow the Adobe glyph list, so a fallback to
+// StandardEncoding would surface the wrong characters at high bytes.
+// Returns false when no FontDescriptor is reachable.
+func fontIsSymbolicByFlags(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return false
+	}
+	flagsObj, ok := fdDict["Flags"]
+	if !ok {
+		return false
+	}
+	flagsInt, ok := flagsObj.(ast.PdfInt)
+	if !ok {
+		return false
+	}
+	const symbolicBit = 1 << 2 // bit 3 in Adobe's 1-indexed numbering
+	return int(flagsInt)&symbolicBit != 0
 }
 
 // applyTrueTypeBuiltinEncoding switches font.Encoding to MacRomanEncoding

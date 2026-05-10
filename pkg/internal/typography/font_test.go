@@ -117,6 +117,36 @@ func TestRuneToGlyph(t *testing.T) {
 	}
 }
 
+// TestResolveFont_SymbolicFlagFallsBackToWinAnsi verifies that a Type 1
+// font marked Symbolic via FontDescriptor /Flags bit 3 sticks to WinAnsi
+// instead of the StandardEncoding default. PDF 32000-1 Table 123 marks
+// such fonts as having bespoke glyph repertoires; producers that ship
+// custom-named glyphs (Universal-NewswithCommPi, OCR symbols) lay them
+// out at WinAnsi byte positions, so byte 0xA9 must surface as '©' not
+// the StandardEncoding 'quotesingle'.
+func TestResolveFont_SymbolicFlagFallsBackToWinAnsi(t *testing.T) {
+	fontDict := ast.PdfDict{
+		"Type":     ast.PdfName("Font"),
+		"Subtype":  ast.PdfName("Type1"),
+		"BaseFont": ast.PdfName("Universal-NewswithCommPi"),
+		"FontDescriptor": ast.PdfDict{
+			"Type":     ast.PdfName("FontDescriptor"),
+			"FontName": ast.PdfName("Universal-NewswithCommPi"),
+			"Flags":    ast.PdfInt(4), // bit 3: Symbolic
+		},
+	}
+	font, err := ResolveFont(context.Background(), &document.Document{Logger: document.NopLogger()}, fontDict)
+	if err != nil {
+		t.Fatalf("ResolveFont: %v", err)
+	}
+	if got, want := font.Encoding[0xA9], rune(0x00A9); got != want {
+		t.Errorf("byte 0xA9 = U+%04X, want U+%04X (©)", got, want)
+	}
+	if got, want := font.Encoding[0x91], rune(0x2018); got != want {
+		t.Errorf("byte 0x91 = U+%04X, want U+%04X (WinAnsi quoteleft)", got, want)
+	}
+}
+
 // TestResolveFont_NonStandard14NoEncoding pins the spec-compliant
 // fallback for non-symbolic Type 1 fonts that omit /Encoding entirely
 // (e.g. /Melior, /Minion, /Garamond). Per ISO 32000-1 §9.6.6.1 the
