@@ -98,6 +98,31 @@ func buildCmapTable(platformID, encodingID uint16, subtable []byte) []byte {
 	return append(header, subtable...)
 }
 
+// buildCmapTableMultiple builds a cmap table containing several subtables.
+// The records are emitted in the same order as ids; each record's offset
+// points at the supplied subtable bytes appended after the records block.
+func buildCmapTableMultiple(ids []CmapSubtable, subtables [][]byte) []byte {
+	if len(ids) != len(subtables) {
+		panic("buildCmapTableMultiple: ids and subtables length mismatch")
+	}
+	headerSize := 4 + 8*len(ids)
+	out := make([]byte, headerSize)
+	binary.BigEndian.PutUint16(out[0:2], 0)                 // version
+	binary.BigEndian.PutUint16(out[2:4], uint16(len(ids))) //nolint:gosec // small
+	offset := uint32(headerSize)
+	for i, id := range ids {
+		recOff := 4 + i*8
+		binary.BigEndian.PutUint16(out[recOff:recOff+2], id.PlatformID)
+		binary.BigEndian.PutUint16(out[recOff+2:recOff+4], id.EncodingID)
+		binary.BigEndian.PutUint32(out[recOff+4:recOff+8], offset)
+		offset += uint32(len(subtables[i]))
+	}
+	for _, sub := range subtables {
+		out = append(out, sub...)
+	}
+	return out
+}
+
 func TestGlyphToUnicode_Format4(t *testing.T) {
 	// Build a font with a Format 4 cmap: 'A'(65)→GID 1, 'B'(66)→GID 2, 'z'(122)→GID 50.
 	charToGID := map[uint16]uint16{
@@ -133,6 +158,35 @@ func TestGlyphToUnicode_Format4(t *testing.T) {
 			t.Errorf("GID %d: not found in map", tc.gid)
 		} else if r != tc.want {
 			t.Errorf("GID %d: got %U, want %U", tc.gid, r, tc.want)
+		}
+	}
+}
+
+// TestCmapSubtables_Enumerates exposes every (platform, encoding) record
+// declared by the font so the typography layer can pick MacRomanEncoding
+// when only the Mac Roman subtable is present (or alongside MS Unicode in
+// PDF.js-equivalent behaviour). The returned order mirrors the order in
+// the cmap table.
+func TestCmapSubtables_Enumerates(t *testing.T) {
+	subA := buildCmapFormat4(map[uint16]uint16{65: 1})
+	subB := buildCmapFormat4(map[uint16]uint16{66: 2})
+	cmap := buildCmapTableMultiple(
+		[]CmapSubtable{{PlatformID: 1, EncodingID: 0}, {PlatformID: 3, EncodingID: 1}},
+		[][]byte{subA, subB},
+	)
+	font := buildTableDirectory(map[string][]byte{"cmap": cmap})
+
+	got, err := CmapSubtables(font)
+	if err != nil {
+		t.Fatalf("CmapSubtables: %v", err)
+	}
+	want := []CmapSubtable{{PlatformID: 1, EncodingID: 0}, {PlatformID: 3, EncodingID: 1}}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d (got=%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("subtable[%d] = %+v, want %+v", i, got[i], want[i])
 		}
 	}
 }

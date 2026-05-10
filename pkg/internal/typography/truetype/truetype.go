@@ -216,6 +216,46 @@ func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	return parseCmap(ctx, cmapData)
 }
 
+// CmapSubtable identifies a single (platformID, encodingID) cmap subtable
+// declared by a TrueType/OpenType font. The pair is enough for callers
+// that need to pick a fallback PDF encoding when the font dictionary
+// omits /Encoding (PDF 32000 §9.6.6.4).
+type CmapSubtable struct {
+	PlatformID uint16
+	EncodingID uint16
+}
+
+// CmapSubtables returns every (platform, encoding) pair declared in the
+// font's cmap table without parsing the payload. Used by callers that
+// need to detect "Mac Roman only" fonts so they can pick
+// MacRomanEncoding as the implicit base encoding.
+func CmapSubtables(data []byte) ([]CmapSubtable, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return nil, err
+	}
+	cmapData, err := TableData(data, records, "cmap")
+	if err != nil {
+		return nil, err
+	}
+	if len(cmapData) < 4 {
+		return nil, fmt.Errorf("%w: cmap table too short", ErrInvalidFont)
+	}
+	numSubtables := int(binary.BigEndian.Uint16(cmapData[2:4]))
+	if len(cmapData) < 4+numSubtables*8 {
+		return nil, fmt.Errorf("%w: cmap subtable records truncated", ErrInvalidFont)
+	}
+	out := make([]CmapSubtable, 0, numSubtables)
+	for i := range numSubtables {
+		off := 4 + i*8
+		out = append(out, CmapSubtable{
+			PlatformID: binary.BigEndian.Uint16(cmapData[off : off+2]),
+			EncodingID: binary.BigEndian.Uint16(cmapData[off+2 : off+4]),
+		})
+	}
+	return out, nil
+}
+
 // PostGlyphNames extracts glyph names from the post (PostScript) table.
 // Returns a map of glyph ID → glyph name. Only post table formats 1.0 and
 // 2.0 are supported; other formats return an empty map.

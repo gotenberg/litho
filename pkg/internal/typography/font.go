@@ -363,6 +363,20 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		extractCFFEncoding(ctx, doc, fontDict, font)
 	}
 
+	// TrueType cmap-derived implicit encoding (ISO 32000-1 §9.6.6.4).
+	// When a non-symbolic TrueType font omits /Encoding, the font's
+	// embedded cmap subtables decide the implicit base. Microsoft
+	// Unicode subtables expose the Latin-1 range that aligns with
+	// WinAnsi (already the litho default); fonts that only ship a Mac
+	// Roman subtable (older Mac-authored documents, common in govdocs
+	// scanned filings) put accented glyphs at MacRoman byte positions
+	// — byte 0xD0 is en-dash, 0x96 is ñ, 0xA9 is © — and PDF.js picks
+	// MacRomanEncoding for them. Match the same fallback so high-byte
+	// glyphs surface as text instead of WinAnsi look-alikes.
+	if !hasExplicitEncoding && subtypeName == "TrueType" && !isSymbolFont && !isDingbatsFont {
+		applyTrueTypeBuiltinEncoding(ctx, doc, fontDict, font)
+	}
+
 	// Extract /FontBBox and embedded font metrics from the FontDescriptor.
 	extractFontDescriptorMetrics(ctx, doc, fontDict, font)
 
@@ -1712,6 +1726,40 @@ func detectCIDOffset(cidWidths map[int]float64) int {
 		}
 	}
 	return 29
+}
+
+// applyTrueTypeBuiltinEncoding switches font.Encoding to MacRomanEncoding
+// when the embedded TrueType program ships a Mac Roman cmap subtable
+// (platform 1, encoding 0). ISO 32000-1 §9.6.6.4 says non-symbolic
+// TrueType fonts that omit /Encoding inherit their cmap-derived
+// encoding; PDF.js treats the Mac Roman subtable as authoritative
+// whenever it is present, even alongside a Microsoft Unicode subtable,
+// because high-byte glyphs are positioned at MacRoman slots (0x96 = ñ,
+// 0xA9 = ©, 0xD0 = en-dash). Without this override these bytes surface
+// as WinAnsi look-alikes (–, etc.) on Mac-authored govdocs filings.
+func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return
+	}
+	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile2")
+	if fontData == nil {
+		return
+	}
+	subtables, err := truetype.CmapSubtables(fontData)
+	if err != nil || len(subtables) == 0 {
+		return
+	}
+	hasMacRoman := false
+	for _, st := range subtables {
+		if st.PlatformID == 1 && st.EncodingID == 0 {
+			hasMacRoman = true
+			break
+		}
+	}
+	if hasMacRoman {
+		font.Encoding = copyEncoding(encodings.MacRomanEncoding)
+	}
 }
 
 // extractCFFEncoding reads the CFF encoding from a /FontFile3 (Type1C) font
