@@ -247,31 +247,6 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 	return dst
 }
 
-// standard14Prefixes holds lowercase substrings that identify the
-// non-Symbol, non-Dingbats entries of the PDF standard 14 base fonts.
-// Subset prefixes (e.g. "ABCDEF+Helvetica") still match because the
-// lookup uses Contains.
-var standard14Prefixes = []string{
-	"helvetica",
-	"courier",
-	"times",
-	"timesroman",
-	"timesnewroman",
-}
-
-// isStandard14BaseFont reports whether a lowercased BaseFont name
-// identifies one of the standard 14 Type 1 fonts whose built-in
-// encoding is [encodings.StandardEncoding] when no /Encoding entry is
-// present.
-func isStandard14BaseFont(lowerName string) bool {
-	for _, p := range standard14Prefixes {
-		if strings.Contains(lowerName, p) {
-			return true
-		}
-	}
-	return false
-}
-
 // ResolveFont extracts and resolves a [Font] from a PDF font dictionary.
 func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (*Font, error) {
 	subtypeObj, ok := fontDict["Subtype"]
@@ -288,15 +263,15 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	}
 
 	// Detect Symbol, ZapfDingbats, and the other 14 standard Type 1
-	// fonts by BaseFont name to select the correct default encoding
-	// per ISO 32000-1 §9.6.5.4. Symbol and ZapfDingbats use their own
-	// built-in encodings; the remaining standard fonts default to
-	// [encodings.StandardEncoding]. Other simple fonts keep
-	// [encodings.WinAnsiEncoding] as the fallback because most modern
-	// producers target Windows.
+	// fonts by BaseFont name to select the correct default encoding.
+	// Per ISO 32000-1 §9.6.6.1 a non-symbolic Type 1 font that omits
+	// /Encoding inherits StandardEncoding; Symbol and ZapfDingbats use
+	// their own built-in encoding; the standard 14 base fonts already
+	// fall in the StandardEncoding bucket. Custom Type 1 fonts (e.g.
+	// /Melior, /Minion-Pro) hit the same StandardEncoding default,
+	// matching PDF.js.
 	isSymbolFont := false
 	isDingbatsFont := false
-	isStandardType1 := false
 	if bfObj, ok := fontDict["BaseFont"]; ok {
 		bfName, err := document.ResolveName(ctx, doc, bfObj)
 		if err != nil {
@@ -306,18 +281,29 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			name := strings.ToLower(string(bfName))
 			isSymbolFont = strings.Contains(name, "symbol")
 			isDingbatsFont = strings.Contains(name, "dingbat") || strings.Contains(name, "zapfdingbats")
-			isStandardType1 = isStandard14BaseFont(name)
 		}
 	}
 
+	// Default encoding selection. ISO 32000-1 §9.6.6.1 makes
+	// StandardEncoding the implicit base for non-symbolic Type 1
+	// programs that omit /Encoding (Melior, Minion, Garamond, …); per
+	// §9.6.6.4 TrueType non-symbolic fonts are expected to declare
+	// WinAnsi/MacRoman/MacExpert and fall through to WinAnsi when they
+	// don't, since their cmap stays in the Latin-1 range. Type 3 fonts
+	// in the wild commonly bake glyphs into direct Latin-1 slots and
+	// rely on a WinAnsi default too. Symbol/ZapfDingbats always use
+	// their own built-in encoding regardless of subtype.
+	subtype := string(subtypeName)
+	isType1Like := subtype == "Type1" || subtype == "MMType1"
 	defaultEncoding := copyEncoding(encodings.WinAnsiEncoding)
+	if isType1Like {
+		defaultEncoding = copyEncoding(encodings.StandardEncoding)
+	}
 	switch {
 	case isSymbolFont:
 		defaultEncoding = encodings.BuildSymbolEncoding()
 	case isDingbatsFont:
 		defaultEncoding = encodings.BuildZapfDingbatsEncoding()
-	case isStandardType1:
-		defaultEncoding = copyEncoding(encodings.StandardEncoding)
 	}
 
 	font := &Font{
@@ -351,7 +337,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		}
 	}
 
-	resolveEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont, isStandardType1)
+	resolveEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
 
 	// Type 3 fonts: extract widths from /CharProcs streams via d0/d1 operators.
 	if subtypeName == "Type3" {
@@ -593,7 +579,7 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 // resolveEncoding resolves the /Encoding entry from the font dictionary into
 // the font's encoding map. Handles both named encodings (WinAnsiEncoding, etc.)
 // and dictionary-based encodings with /BaseEncoding and /Differences.
-func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol, isStandardType1 bool) {
+func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
 		return
@@ -646,23 +632,24 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			// No /BaseEncoding: per ISO 32000-2 §9.6.6.4, symbolic
 			// Type1 fonts fall back to the font program's built-in
 			// encoding (TeX cmbx12 et al expose ff/fi/ffl ligatures at
-			// bytes 0x0B-0x0F this way). Seed from the FontFile/
-			// FontFile3 first, then overlay the appropriate default on
-			// any unfilled slot. Symbol and ZapfDingbats fonts overlay
-			// their built-in encodings; the standard 14 non-symbolic
-			// fonts overlay StandardEncoding (e.g. byte 0xD0 = emdash);
-			// everything else falls back to WinAnsi for non-Standard14
-			// producers that target Windows.
+			// bytes 0x0B-0x0F this way) and non-symbolic Type 1 fonts
+			// fall back to StandardEncoding. TrueType / Type 3 keep
+			// WinAnsi as the pragmatic default since their producers
+			// almost always store glyphs at Latin-1 byte positions.
+			// Seed from the FontFile / FontFile3 first so the program's
+			// own encoding wins, then overlay the appropriate built-in
+			// on any unfilled slot.
 			font.Encoding = make(map[byte]rune)
 			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats, isSymbol)
 			extractCFFEncodingAsBase(ctx, doc, fontDict, font)
+			isType1Like := font.Subtype == "Type1" || font.Subtype == "MMType1"
 			var overlay map[byte]rune
 			switch {
 			case isSymbol:
 				overlay = encodings.BuildSymbolEncoding()
 			case isDingbats:
 				overlay = encodings.BuildZapfDingbatsEncoding()
-			case isStandardType1:
+			case isType1Like:
 				overlay = encodings.StandardEncoding
 			default:
 				overlay = encodings.WinAnsiEncoding

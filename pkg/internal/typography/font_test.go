@@ -117,6 +117,43 @@ func TestRuneToGlyph(t *testing.T) {
 	}
 }
 
+// TestResolveFont_NonStandard14NoEncoding pins the spec-compliant
+// fallback for non-symbolic Type 1 fonts that omit /Encoding entirely
+// (e.g. /Melior, /Minion, /Garamond). Per ISO 32000-1 §9.6.6.1 the
+// implicit encoding is StandardEncoding; PDF.js follows the same rule.
+// Litho previously fell back to WinAnsi here, so byte 0xB1 surfaced as
+// '±' (Latin-1 plus-minus) instead of '–' (en-dash) in Federal-Register-
+// style filings.
+func TestResolveFont_NonStandard14NoEncoding(t *testing.T) {
+	fontDict := ast.PdfDict{
+		"Type":     ast.PdfName("Font"),
+		"Subtype":  ast.PdfName("Type1"),
+		"BaseFont": ast.PdfName("Melior"),
+	}
+	font, err := ResolveFont(context.Background(), &document.Document{Logger: document.NopLogger()}, fontDict)
+	if err != nil {
+		t.Fatalf("ResolveFont: %v", err)
+	}
+	cases := []struct {
+		code byte
+		want rune
+	}{
+		{0xB1, 0x2013}, // endash — the Federal-Register byte
+		{0xD0, 0x2014}, // emdash
+		{0x27, 0x2019}, // quoteright
+	}
+	for _, c := range cases {
+		got, ok := font.Encoding[c.code]
+		if !ok {
+			t.Errorf("byte 0x%02X unmapped, want U+%04X", c.code, c.want)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("byte 0x%02X = U+%04X, want U+%04X", c.code, got, c.want)
+		}
+	}
+}
+
 // TestResolveFont_Standard14DifferencesNoBaseEncoding verifies that a
 // standard 14 non-symbolic font with an /Encoding dict containing only
 // /Differences (no /BaseEncoding) overlays StandardEncoding for unmapped
