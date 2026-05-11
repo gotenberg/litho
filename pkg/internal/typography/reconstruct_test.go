@@ -56,6 +56,47 @@ func TestReconstructText_SameLine(t *testing.T) {
 	}
 }
 
+// TestReconstructText_RunningHeadResetDropsTrailingSpace pins PDF.js's
+// NEGATIVE_SPACE_FACTOR behaviour: a large backward X jump on the same
+// line (a producer rendering a right-aligned page number then a Tm
+// reset to the left margin for the title text) drops the trailing
+// space the previous run baked in, so 'p56213 Federal Register' no
+// longer surfaces an extra space where PDF.js extracts the bytes as
+// 'p56213Federal Register'.
+func TestReconstructText_RunningHeadResetDropsTrailingSpace(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "p", X: 530, Y: 750, Width: 6, FontSize: 11},
+		{Text: " ", X: 536, Y: 750, Width: 3, FontSize: 11},
+		{Text: "F", X: 96, Y: 750, Width: 7, FontSize: 11},
+		{Text: "e", X: 103, Y: 750, Width: 6, FontSize: 11},
+	}
+	got := ReconstructText(context.Background(), in, nil)
+	if strings.Contains(got, "p Fe") || strings.Contains(got, "p F") {
+		t.Errorf("trailing space leaked across backward jump: got %q", got)
+	}
+	if !strings.Contains(got, "pFe") {
+		t.Errorf("expected 'pFe' (running-head reset trims the space): got %q", got)
+	}
+}
+
+// TestReconstructText_RTLBackwardFlowKeepsSpace guards the running-head
+// drop's RTL gate: Hebrew/Arabic glyphs naturally decrease in X as
+// the run progresses, so the literal space between two RTL words must
+// survive even though gap is negative.
+func TestReconstructText_RTLBackwardFlowKeepsSpace(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "ם", X: 416, Y: 758, Width: 7, FontSize: 12},
+		{Text: " ", X: 472, Y: 758, Width: 3, FontSize: 12},
+		{Text: "ב", X: 476, Y: 758, Width: 6, FontSize: 12},
+	}
+	got := ReconstructText(context.Background(), in, nil)
+	if !strings.Contains(got, " ") {
+		t.Errorf("RTL backward flow should preserve literal space: got %q", got)
+	}
+}
+
 // TestReconstructText_TrackedSameChunk merges glyphs whose inter-glyph
 // gap (Tc + TJ shift expressed in user space) is below the chunk-kerning
 // floor, the way PDF.js merges letter-spaced display text. The synthetic

@@ -113,7 +113,22 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 				prev := ln.elems[prevIdx]
 				gap := computeLineGap(prev, el)
 				sameChunk := prev.Chunk == el.Chunk && el.Chunk != 0
-				if prev.Text != "" && shouldInsertSpace(prev, gap, spaceThreshold, sameChunk) {
+				if prev.Text != "" && isRunningHeadReset(prev, el, gap) {
+					// A running-head reset (page header at the right
+					// of a line, then a deliberate Tm reset to the
+					// left margin for the title on the same line)
+					// drops the trailing space the previous run baked
+					// in. Mirrors PDF.js's NEGATIVE_SPACE_FACTOR +
+					// resetLastChars rule but scoped to horizontal,
+					// LTR text so RTL flow (Hebrew, Arabic) and
+					// orthogonal column layouts (90°-rotated body
+					// text) keep their genuine literal spaces.
+					if b := sb.String(); len(b) > 0 && b[len(b)-1] == ' ' {
+						buf := []byte(b)
+						sb.Reset()
+						sb.Write(buf[:len(buf)-1])
+					}
+				} else if prev.Text != "" && shouldInsertSpace(prev, gap, spaceThreshold, sameChunk) {
 					sb.WriteString(" ")
 				}
 			}
@@ -123,6 +138,73 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 	}
 
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
+}
+
+// isRunningHeadReset reports whether the transition from prev to el is
+// the kind of large, horizontal backward jump that producers emit to
+// place a running head (right-aligned page number) on the same line as
+// the following body text. The check requires:
+//
+//   - Both elements are horizontal LTR (no rotation, no vertical
+//     writing mode) so RTL scripts and column layouts are excluded.
+//   - The gap is more negative than negativeSpaceFactor × fontSize so
+//     normal kerning never qualifies.
+//   - The X-position regresses by at least negativeSpaceJumpMin
+//     user-space units, which weeds out single-glyph backward shifts
+//     that come from microtypography or inline ligature corrections.
+//
+// PDF.js applies a single -0.2 × fontSize cutoff in its text-space
+// model; litho's user-space gap is wider, so the combined check
+// captures the running-head pattern (Federal Register-style filings)
+// without dropping the literal space in RTL paragraphs or in
+// vertically-set columns.
+func isRunningHeadReset(prev, el models.TextElement, gap float64) bool {
+	if prev.Vertical || el.Vertical {
+		return false
+	}
+	if isOrthogonalRotation(prev.Angle) || isOrthogonalRotation(el.Angle) {
+		return false
+	}
+	if isRotated(prev.Angle) || isRotated(el.Angle) {
+		return false
+	}
+	if stringHasRTL(prev.Text) || stringHasRTL(el.Text) {
+		return false
+	}
+	fs := math.Abs(el.FontSize)
+	if gap >= negativeSpaceFactor*fs {
+		return false
+	}
+	xJump := prev.X - el.X
+	return xJump >= negativeSpaceJumpMin
+}
+
+// negativeSpaceFactor and negativeSpaceJumpMin together gate the
+// running-head trailing-space drop. The factor mirrors PDF.js's
+// NEGATIVE_SPACE_FACTOR (-0.2) re-scaled for litho's user-space gap
+// (which subtracts prev.Width and so lands further negative). The
+// jump minimum guards against single-glyph backward shifts (kerning
+// adjustments, italic overhang) that would otherwise satisfy the
+// factor on small fonts.
+const (
+	negativeSpaceFactor  = -0.5
+	negativeSpaceJumpMin = 50.0
+)
+
+// negativeSpaceFactor is the user-space counterpart of PDF.js's
+// NEGATIVE_SPACE_FACTOR. See [isRunningHeadReset] for usage.
+
+// stringHasRTL reports whether s contains any right-to-left script
+// codepoint. Used by [isRunningHeadReset] to skip the trailing-space
+// drop on RTL paragraphs where X naturally decreases as glyphs
+// progress.
+func stringHasRTL(s string) bool {
+	for _, r := range s {
+		if isRTL(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // reconstructWithBeads handles the bead-aware spatial sorting path for PDFs
