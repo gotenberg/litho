@@ -8,6 +8,7 @@
     "metadata": "goldens/metadata",
     "bookmarks": "goldens/bookmarks",
     "split": "goldens/text",
-    "merge": "goldens/merges"
+    "merge": "goldens/merges",
+    "merge-empty": "goldens/merge-empty"
   }
 }

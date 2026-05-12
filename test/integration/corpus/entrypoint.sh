@@ -124,6 +124,19 @@ else
   echo "==> skipping merge goldens (not requested by ${CORPUS})."
 fi
 
+if wants merge-empty; then
+  ME="$OUTPUT/goldens/merge-empty"
+  if nonempty "$ME"; then
+    echo "==> merge-empty goldens already present, skipping pdfcpu merge."
+  else
+    mkdir -p "$ME"
+    echo "==> generating merge-empty goldens (pdfcpu merge + bookmarks export)..."
+    /work/lib/gen-merge-empty.sh "$PDFS" "$ME"
+  fi
+else
+  echo "==> skipping merge-empty goldens (not requested by ${CORPUS})."
+fi
+
 if wants compliance || wants remediation || wants remediation-aggressive; then
   COMP="$OUTPUT/goldens/compliance"
   if nonempty "$COMP"; then

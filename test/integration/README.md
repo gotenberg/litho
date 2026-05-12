@@ -74,18 +74,19 @@ make clean-corpus
 | `bookmarks`              | pdfcpu (captured at init)  | Outline tree (title, page, children) against pdfcpu's `bookmarks export`                                                                       |
 | `split`                  | litho-self (live)          | Round-trips Split([1,last]); compares output text + bookmarks against litho's input extraction                                                 |
 | `merge`                  | litho-self + pdfcpu (live) | Merges each PDF with itself; checks page count, per-page text, and bookmark leaf multiset against the derived oracle AND pdfcpu's merge result |
+| `merge-empty`            | litho-self + pdfcpu (live) | Two-input companion: merges each PDF with `empty.pdf`; exercises the real cross-document resource-merging path same as `merge` checks          |
 
 All three captured goldens live under the corpus's `testdata/goldens/` directory and are produced by the provisioning Docker image. `remediation` has no captured golden: it shells out to `verapdf` at run time on the remediated buffer. Needs `verapdf` on PATH.
 
 Not every corpus runs every feature. Each corpus is the oracle for the feature it ships goldens for; running the others on it would be redundant.
 
-| Corpus    | text | metadata | compliance | remediation | bookmarks | split | merge | role                                                            |
-| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | ----- | --------------------------------------------------------------- |
-| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | —     | text + metadata oracle (PDF.js renderer is the ground truth)    |
-| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | —     | compliance + remediation oracle (VeraPDF is the ground truth)   |
-| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | real-world canary; compliance/remediation use each file's claim |
-| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
-| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
+| Corpus    | text | metadata | compliance | remediation | bookmarks | split | merge | merge-empty | role                                                            |
+| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | ----- | ----------- | --------------------------------------------------------------- |
+| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | —     | —           | text + metadata oracle (PDF.js renderer is the ground truth)    |
+| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | —     | —           | compliance + remediation oracle (VeraPDF is the ground truth)   |
+| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | real-world canary; compliance/remediation use each file's claim |
+| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
+| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | ✓           | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
 
 ### Comparison notes
 
