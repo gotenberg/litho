@@ -6,6 +6,7 @@
   "goldens": {
     "text": "goldens/text",
     "metadata": "goldens/metadata",
-    "bookmarks": "goldens/bookmarks"
+    "bookmarks": "goldens/bookmarks",
+    "split": "goldens/text"
   }
 }
