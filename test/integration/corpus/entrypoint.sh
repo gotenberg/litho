@@ -48,7 +48,7 @@ mkdir -p "$PDFS"
 # rerunning the container after a partial failure (or just bumping the
 # image) does not pay the cost of stages that already succeeded.
 nonempty() {
-  [ -d "$1" ] && [ -n "$(ls -A "$1" 2>/dev/null || true)" ]
+  [ -d "$1" ] && [ -n "$(ls -A "$1" 2> /dev/null || true)" ]
 }
 
 PDF_COUNT=$(find "$PDFS" -maxdepth 1 -name '*.pdf' | wc -l)
@@ -96,6 +96,19 @@ if wants text || wants metadata; then
   fi
 else
   echo "==> skipping text + metadata goldens (not requested by ${CORPUS})."
+fi
+
+if wants bookmarks; then
+  BOOKS="$OUTPUT/goldens/bookmarks"
+  if nonempty "$BOOKS"; then
+    echo "==> bookmarks goldens already present, skipping pdfcpu export."
+  else
+    mkdir -p "$BOOKS"
+    echo "==> generating bookmarks goldens (pdfcpu)..."
+    /work/lib/gen-bookmarks.sh "$PDFS" "$BOOKS"
+  fi
+else
+  echo "==> skipping bookmarks goldens (not requested by ${CORPUS})."
 fi
 
 if wants compliance || wants remediation || wants remediation-aggressive; then

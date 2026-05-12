@@ -29,6 +29,16 @@ ENV PATH="/opt/verapdf:${PATH}"
 RUN git clone --depth 1 https://github.com/mozilla/pdf.js.git /opt/pdfjs \
   && cd /opt/pdfjs && npm install && npx gulp generic-legacy
 
+# Install pdfcpu CLI: third-party oracle for the bookmarks feature.
+# Pinned to a tagged release so corpus runs stay reproducible when
+# upstream master shifts the JSON export shape.
+ARG PDFCPU_VERSION=0.12.1
+RUN curl -fSL -o /tmp/pdfcpu.tar.xz \
+  "https://github.com/pdfcpu/pdfcpu/releases/download/v${PDFCPU_VERSION}/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64.tar.xz" \
+  && tar -xJf /tmp/pdfcpu.tar.xz -C /tmp \
+  && install -m 0755 "/tmp/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64/pdfcpu" /usr/local/bin/pdfcpu \
+  && rm -rf /tmp/pdfcpu.tar.xz "/tmp/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64"
+
 WORKDIR /work
 COPY entrypoint.sh ./
 COPY lib/ ./lib/
@@ -39,6 +49,7 @@ COPY pdf20/ ./pdf20/
 COPY pdfcpu/ ./pdfcpu/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
+  lib/gen-bookmarks.sh \
   pdfjs/download.sh \
   verapdf/download.sh \
   govdocs/download.sh \

@@ -5,6 +5,7 @@
   "profile_mode": "none",
   "goldens": {
     "text": "goldens/text",
-    "metadata": "goldens/metadata"
+    "metadata": "goldens/metadata",
+    "bookmarks": "goldens/bookmarks"
   }
 }
