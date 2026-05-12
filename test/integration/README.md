@@ -94,6 +94,14 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 
 - **Bookmarks: tab inside a UTF-16BE title is a known difference.** pdfcpu strips horizontal tabs from outline titles ("1`\t`Preface" → "1Preface"); litho preserves them. Both are pointing at the same source byte; the canary leaves this case visible (1 fixture in the pdfcpu corpus, `adobe_supplement_iso32000_1.pdf`) because collapsing whitespace symmetrically would mask genuine title differences.
 
+- **Text on pdfcpu skews low for layout reasons, not extraction quality.** The pdfcpu corpus runs around 62% word-match against PDF.js — much lower than govdocs or pdfjs corpora. Triage shows the gap is dominated by layout-style disagreements rather than litho bugs:
+  - Right-margin page numbers separated from the left-margin doc number by 375 pt on the same Y line — litho inserts a space (correct), PDF.js concatenates.
+  - Line-wrap hyphenation — litho preserves `Edi-` + newline + `tion`, PDF.js joins.
+  - Subscript / superscript Y-drops in technical notation — both tools fire heuristics differently around the small Y offset.
+  - Occasional PDF.js bugs where a single element is split mid-content (`(Extract from the Blue Book)` → `theBlue`).
+
+  Treat the pdfcpu `text` score as a layout-style canary, not a regression signal. Real-world corpora (govdocs, pdfjs) are the load-bearing word-match oracle.
+
 ## Corpora
 
 | Corpus    | Fixtures                          | Source                                                                 |
