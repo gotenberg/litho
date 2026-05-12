@@ -155,6 +155,57 @@ type cachedRun struct {
 	err    error
 }
 
+// stripUndefinedControls removes the bytes PDFDocEncoding leaves
+// undefined (ISO 32000-1 Table D.2: 0x00-0x08, 0x0B, 0x0E-0x17, 0x7F)
+// from a string. Litho's [document.DecodePdfString] drops these bytes
+// at decode time, so litho-extracted /Info dict fields come out
+// clean ("Title" rather than "Title\x00"). PDF.js passes them through
+// as raw runes (U+0000, etc.) and the captured golden carries the
+// junk. Applying the same drop on both sides in the metadata
+// comparison lets the two converge without weakening the test for
+// genuine field differences.
+//
+// Mirrors the four defined low controls (HT, LF, FF, CR) that
+// [pdfDocEncodingUndefined] preserves: they round-trip through both
+// engines and remain meaningful inside strings.
+func stripUndefinedControls(s string) string {
+	if s == "" {
+		return s
+	}
+	keep := func(r rune) bool {
+		switch {
+		case r <= 0x08:
+			return false
+		case r == 0x0B:
+			return false
+		case r >= 0x0E && r <= 0x17:
+			return false
+		case r == 0x7F:
+			return false
+		}
+		return true
+	}
+	// Fast path: pure ASCII with no controls to strip.
+	clean := true
+	for _, r := range s {
+		if !keep(r) {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if keep(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // baseFixtureID strips the leading profile directory from a fixture ID
 // when present. "PDF_A-2b/foo" becomes "foo"; "foo" stays "foo". Lets
 // profile-agnostic features (text, metadata) key their goldens on a

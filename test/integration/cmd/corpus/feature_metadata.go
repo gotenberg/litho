@@ -112,9 +112,13 @@ func compareMetadata(file string, golden, litho pdfjsRefInfo) []metadataMismatch
 	var mm []metadataMismatch
 
 	addStr := func(field, lithoVal, goldenVal string) {
-		if goldenVal != "" && lithoVal != goldenVal {
-			mm = append(mm, metadataMismatch{File: file, Field: field, Litho: lithoVal, Golden: goldenVal})
+		if goldenVal == "" {
+			return
 		}
+		if stripUndefinedControls(lithoVal) == stripUndefinedControls(goldenVal) {
+			return
+		}
+		mm = append(mm, metadataMismatch{File: file, Field: field, Litho: lithoVal, Golden: goldenVal})
 	}
 	addBool := func(field string, lithoVal, goldenVal bool) {
 		if lithoVal != goldenVal {
