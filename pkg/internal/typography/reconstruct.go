@@ -118,11 +118,10 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 					// of a line, then a deliberate Tm reset to the
 					// left margin for the title on the same line)
 					// drops the trailing space the previous run baked
-					// in. Mirrors PDF.js's NEGATIVE_SPACE_FACTOR +
-					// resetLastChars rule but scoped to horizontal,
-					// LTR text so RTL flow (Hebrew, Arabic) and
-					// orthogonal column layouts (90°-rotated body
-					// text) keep their genuine literal spaces.
+					// in. The drop is scoped to horizontal LTR text
+					// so RTL flow (Hebrew, Arabic) and orthogonal
+					// column layouts (90°-rotated body text) keep
+					// their literal spaces.
 					if b := sb.String(); len(b) > 0 && b[len(b)-1] == ' ' {
 						buf := []byte(b)
 						sb.Reset()
@@ -132,14 +131,13 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 					sb.WriteString(" ")
 				}
 			}
-			// Collapse consecutive whitespace: PDF.js's saveLastChar
-			// state already filters away repeated space emissions, so a
-			// producer that bakes two literal spaces into a Tj (one
-			// from word-spacing, one from a degenerate Tm reset that
-			// places it backward over the previous glyph) surfaces as
-			// a single space in PDF.js's text-layer and should here
-			// too. We swallow el.Text when it is whitespace and the
-			// accumulated output already ends in whitespace.
+			// Collapse consecutive whitespace. A producer that bakes
+			// two literal spaces into a Tj (one from word-spacing,
+			// one from a degenerate Tm reset that places it backward
+			// over the previous glyph) would otherwise leak two
+			// spaces into the output. Skip el.Text when it is
+			// whitespace and the accumulated output already ends in
+			// whitespace.
 			emit := el.Text
 			if isAllWhitespace(emit) {
 				if b := sb.String(); len(b) > 0 && isWhitespaceByte(b[len(b)-1]) {
@@ -167,11 +165,9 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     user-space units, which weeds out single-glyph backward shifts
 //     that come from microtypography or inline ligature corrections.
 //
-// PDF.js applies a single -0.2 × fontSize cutoff in its text-space
-// model; litho's user-space gap is wider, so the combined check
-// captures the running-head pattern (Federal Register-style filings)
-// without dropping the literal space in RTL paragraphs or in
-// vertically-set columns.
+// The combined check captures the running-head pattern (Federal
+// Register-style filings) without dropping the literal space in RTL
+// paragraphs or in vertically-set columns.
 func isRunningHeadReset(prev, el models.TextElement, gap float64) bool {
 	if prev.Vertical || el.Vertical {
 		return false
@@ -194,19 +190,15 @@ func isRunningHeadReset(prev, el models.TextElement, gap float64) bool {
 }
 
 // negativeSpaceFactor and negativeSpaceJumpMin together gate the
-// running-head trailing-space drop. The factor mirrors PDF.js's
-// NEGATIVE_SPACE_FACTOR (-0.2) re-scaled for litho's user-space gap
-// (which subtracts prev.Width and so lands further negative). The
-// jump minimum guards against single-glyph backward shifts (kerning
+// running-head trailing-space drop. The factor is a backward-jump
+// cutoff measured as a fraction of effective fontSize; the jump
+// minimum guards against single-glyph backward shifts (kerning
 // adjustments, italic overhang) that would otherwise satisfy the
-// factor on small fonts.
+// factor on small fonts. See [isRunningHeadReset] for usage.
 const (
 	negativeSpaceFactor  = -0.5
 	negativeSpaceJumpMin = 50.0
 )
-
-// negativeSpaceFactor is the user-space counterpart of PDF.js's
-// NEGATIVE_SPACE_FACTOR. See [isRunningHeadReset] for usage.
 
 func isAllWhitespace(s string) bool {
 	if s == "" {
@@ -422,12 +414,13 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 
 // computeSpaceThreshold returns the inter-glyph gap above which a real
 // space is inserted. Earlier versions tried to detect a bimodal gap
-// distribution per line and pick the threshold adaptively; in practice
-// the adaptive rule overshot the natural cutoff and dropped real
-// inter-word spaces on lines that mixed kerning with word breaks.
-// PDF.js's TRACKING_SPACE_FACTOR (0.102 × fontSize) is authoritative
-// regardless of the line's gap histogram, so the threshold is now a
-// constant fraction of the line's average font size.
+// distribution per line and pick the threshold adaptively. In
+// practice the adaptive rule overshot the natural cutoff and dropped
+// real inter-word spaces on lines that mixed kerning with word
+// breaks. A fixed 0.102 × fontSize fraction (the canonical tracking
+// cutoff for typeset text) is authoritative regardless of the line's
+// gap histogram, so the threshold is a constant fraction of the
+// line's average font size.
 func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
 	if len(indices) == 0 {
 		return 1.0
@@ -452,9 +445,9 @@ func needsSpace(gap, threshold float64) bool {
 // intra-chunk kerning for [ReconstructText]. A same-chunk gap at or
 // below this limit never produces a space; a larger gap falls back to
 // the adaptive space heuristic so big TJ adjustments inside a single
-// operator chain still surface as visible breaks. The factor matches
-// PDF.js's TRACKING_SPACE_FACTOR so tracked text (positive Tc with
-// compensating TJ shifts) merges the same way as in PDF.js.
+// operator chain still surface as visible breaks. The 0.102 factor is
+// the canonical tracking cutoff so tracked text (positive Tc with
+// compensating TJ shifts) merges as a single chunk.
 func chunkKerningLimit(prev models.TextElement) float64 {
 	const kerningFactor = 0.102
 	return kerningFactor * math.Abs(prev.FontSize)

@@ -155,11 +155,13 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 		state := machine.Current()
 
-		// PDF.js's text extraction returns the rendered glyphs and
-		// does not honour /ActualText (the substitution is reserved
-		// for accessibility consumers). Drop any PendingActualText
-		// that BDC may have set so it does not affect downstream
-		// state, and let the glyph-rendering operators emit normally.
+		// Text extraction returns the rendered glyphs and does not
+		// honour /ActualText; the substitution is reserved for
+		// accessibility consumers and would surface lowercase 'v' in
+		// place of the small-caps 'V' actually drawn on the page. Drop
+		// any PendingActualText that BDC may have set so it does not
+		// affect downstream state, and let the glyph-rendering
+		// operators emit normally.
 		machine.PendingActualText = ""
 
 		if state.SkipExtraction {

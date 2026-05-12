@@ -56,12 +56,12 @@ func TestReconstructText_SameLine(t *testing.T) {
 	}
 }
 
-// TestReconstructText_RunningHeadResetDropsTrailingSpace pins PDF.js's
-// NEGATIVE_SPACE_FACTOR behaviour: a large backward X jump on the same
+// TestReconstructText_RunningHeadResetDropsTrailingSpace pins the
+// running-head reset behaviour: a large backward X jump on the same
 // line (a producer rendering a right-aligned page number then a Tm
 // reset to the left margin for the title text) drops the trailing
 // space the previous run baked in, so 'p56213 Federal Register' no
-// longer surfaces an extra space where PDF.js extracts the bytes as
+// longer surfaces an extra space where the raw byte sequence is
 // 'p56213Federal Register'.
 func TestReconstructText_RunningHeadResetDropsTrailingSpace(t *testing.T) {
 	t.Parallel()
@@ -99,10 +99,11 @@ func TestReconstructText_RTLBackwardFlowKeepsSpace(t *testing.T) {
 
 // TestReconstructText_TrackedSameChunk merges glyphs whose inter-glyph
 // gap (Tc + TJ shift expressed in user space) is below the chunk-kerning
-// floor, the way PDF.js merges letter-spaced display text. The synthetic
-// case mirrors a TJ run with Tc + TJ shift ≈ 0.23pt at FontSize 7.29
-// against a chunk floor of 0.102 × 7.29 ≈ 0.74pt, so the residual gap
-// stays in the tracking band on every glyph boundary.
+// floor, the way letter-spaced display text should collapse into a
+// single token. The synthetic case mirrors a TJ run with Tc + TJ shift
+// ≈ 0.23pt at FontSize 7.29 against a chunk floor of 0.102 × 7.29 ≈
+// 0.74pt, so the residual gap stays in the tracking band on every
+// glyph boundary.
 func TestReconstructText_TrackedSameChunk(t *testing.T) {
 	t.Parallel()
 	const fs = 7.29

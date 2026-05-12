@@ -238,9 +238,9 @@ func textIsInvisible(state *graphics.State) bool {
 // computeGlyphPageWidth returns the painted advance width of a glyph in
 // page-space units, EXCLUDING character spacing (Tc) and word spacing
 // (Tw). Tc/Tw are inter-glyph adjustments and live in the gap between
-// elements, not in the glyph itself; matching PDF.js's accounting where
-// `lastPosX` is captured after the glyph advance but before Tc/Tw lets
-// downstream gap heuristics distinguish tracked text from real spaces.
+// elements, not in the glyph itself. Capturing the post-glyph position
+// before Tc/Tw applies lets downstream gap heuristics distinguish
+// tracked text from real spaces.
 //
 // Horizontal scaling (Tz) is folded in because it scales the painted
 // glyph itself, not the inter-glyph gap.

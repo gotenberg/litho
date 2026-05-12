@@ -164,9 +164,8 @@ func TestGlyphToUnicode_Format4(t *testing.T) {
 
 // TestCmapSubtables_Enumerates exposes every (platform, encoding) record
 // declared by the font so the typography layer can pick MacRomanEncoding
-// when only the Mac Roman subtable is present (or alongside MS Unicode in
-// PDF.js-equivalent behaviour). The returned order mirrors the order in
-// the cmap table.
+// when only the Mac Roman subtable is present (or alongside MS Unicode).
+// The returned order mirrors the order in the cmap table.
 func TestCmapSubtables_Enumerates(t *testing.T) {
 	subA := buildCmapFormat4(map[uint16]uint16{65: 1})
 	subB := buildCmapFormat4(map[uint16]uint16{66: 2})

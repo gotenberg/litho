@@ -268,8 +268,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// /Encoding inherits StandardEncoding; Symbol and ZapfDingbats use
 	// their own built-in encoding; the standard 14 base fonts already
 	// fall in the StandardEncoding bucket. Custom Type 1 fonts (e.g.
-	// /Melior, /Minion-Pro) hit the same StandardEncoding default,
-	// matching PDF.js.
+	// /Melior, /Minion-Pro) hit the same StandardEncoding default.
 	isSymbolFont := false
 	isDingbatsFont := false
 	if bfObj, ok := fontDict["BaseFont"]; ok {
@@ -287,10 +286,10 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// FontDescriptor /Flags bit 3 (Symbolic) marks fonts whose glyph
 	// repertoire is bespoke. Custom glyph names (H11537, etc.) are
 	// laid out at WinAnsi-style byte positions for PostScript-printed
-	// docs (Universal-NewswithCommPi, OCR symbols, math notation), and
-	// PDF.js falls back to WinAnsi for those bytes. Pulling the flag
-	// before defaultEncoding selection lets us route Type 1 symbolic
-	// fonts past the StandardEncoding default below.
+	// docs (Universal-NewswithCommPi, OCR symbols, math notation), so
+	// those bytes need the WinAnsi fallback. Pulling the flag before
+	// defaultEncoding selection lets us route Type 1 symbolic fonts
+	// past the StandardEncoding default below.
 	symbolicByFlags := fontIsSymbolicByFlags(ctx, doc, fontDict)
 
 	// Default encoding selection. ISO 32000-1 §9.6.6.1 makes
@@ -376,12 +375,12 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// When a non-symbolic TrueType font omits /Encoding, the font's
 	// embedded cmap subtables decide the implicit base. Microsoft
 	// Unicode subtables expose the Latin-1 range that aligns with
-	// WinAnsi (already the litho default); fonts that only ship a Mac
+	// WinAnsi (already the litho default). Fonts that only ship a Mac
 	// Roman subtable (older Mac-authored documents, common in govdocs
-	// scanned filings) put accented glyphs at MacRoman byte positions
-	// — byte 0xD0 is en-dash, 0x96 is ñ, 0xA9 is © — and PDF.js picks
-	// MacRomanEncoding for them. Match the same fallback so high-byte
-	// glyphs surface as text instead of WinAnsi look-alikes.
+	// scanned filings) put accented glyphs at MacRoman byte positions:
+	// byte 0xD0 is en-dash, 0x96 is ñ, 0xA9 is ©. Switching to
+	// MacRomanEncoding on the cmap signal surfaces those bytes as
+	// real characters instead of WinAnsi look-alikes.
 	if !hasExplicitEncoding && subtypeName == "TrueType" && !isSymbolFont && !isDingbatsFont {
 		applyTrueTypeBuiltinEncoding(ctx, doc, fontDict, font)
 	}
@@ -1764,11 +1763,11 @@ func fontIsSymbolicByFlags(ctx context.Context, doc *document.Document, fontDict
 // when the embedded TrueType program ships a Mac Roman cmap subtable
 // (platform 1, encoding 0). ISO 32000-1 §9.6.6.4 says non-symbolic
 // TrueType fonts that omit /Encoding inherit their cmap-derived
-// encoding; PDF.js treats the Mac Roman subtable as authoritative
-// whenever it is present, even alongside a Microsoft Unicode subtable,
-// because high-byte glyphs are positioned at MacRoman slots (0x96 = ñ,
-// 0xA9 = ©, 0xD0 = en-dash). Without this override these bytes surface
-// as WinAnsi look-alikes (–, etc.) on Mac-authored govdocs filings.
+// encoding. The Mac Roman subtable is treated as authoritative whenever
+// it is present, even alongside a Microsoft Unicode subtable, because
+// high-byte glyphs are positioned at MacRoman slots (0x96 = ñ, 0xA9 = ©,
+// 0xD0 = en-dash). Without this override these bytes surface as WinAnsi
+// look-alikes on Mac-authored govdocs filings.
 func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {

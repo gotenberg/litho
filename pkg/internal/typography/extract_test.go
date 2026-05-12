@@ -118,10 +118,10 @@ func TestExtractText_MinimalPDF(t *testing.T) {
 // (commonly small-cap renderings of capital glyphs) used to suppress the
 // inner Tj and emit a synthetic placeholder element with FontSize=Tfs and
 // a hardcoded 0.5 advance, leaving downstream gap accounting blind to
-// where the substituted glyph really sat. PDF.js drops the substitution
-// for text extraction and reports the rendered glyph; this test pins the
-// same behaviour: the original glyph reaches the element list with its
-// real advance and effective font size.
+// where the substituted glyph really sat. For text extraction the
+// substitution is dropped and the rendered glyph is reported: this test
+// pins that contract, so the original glyph reaches the element list
+// with its real advance and effective font size.
 func TestExtractElements_ActualTextEmitsRealGlyph(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
