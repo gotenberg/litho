@@ -1,0 +1,10 @@
+{
+  "name": "pdfcpu",
+  "source": "pdfcpu",
+  "pdf_root": "pdfs",
+  "profile_mode": "none",
+  "goldens": {
+    "text": "goldens/text",
+    "metadata": "goldens/metadata"
+  }
+}

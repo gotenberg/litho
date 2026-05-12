@@ -36,11 +36,13 @@ COPY pdfjs/ ./pdfjs/
 COPY verapdf/ ./verapdf/
 COPY govdocs/ ./govdocs/
 COPY pdf20/ ./pdf20/
+COPY pdfcpu/ ./pdfcpu/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   pdfjs/download.sh \
   verapdf/download.sh \
   govdocs/download.sh \
-  pdf20/download.sh
+  pdf20/download.sh \
+  pdfcpu/download.sh
 
 ENTRYPOINT ["/work/entrypoint.sh"]

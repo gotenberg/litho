@@ -21,7 +21,10 @@ test/integration/
 │   ├── govdocs/
 │   │   ├── download.sh
 │   │   └── manifest.json
-│   └── pdf20/
+│   ├── pdf20/
+│   │   ├── download.sh
+│   │   └── manifest.json
+│   └── pdfcpu/
 │       ├── download.sh
 │       └── manifest.json
 ├── testdata/<corpus>/          Provisioned output (gitignored)
@@ -79,6 +82,7 @@ Not every corpus runs every feature. Each corpus is the oracle for the feature i
 | `verapdf` | —    | —        | ✓          | ✓           | compliance + remediation oracle (VeraPDF is the ground truth)   |
 | `govdocs` | ✓    | ✓        | ✓          | ✓           | real-world canary; compliance/remediation use each file's claim |
 | `pdf20`   | ✓    | ✓        | ✓          | ✓           | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
+| `pdfcpu`  | ✓    | ✓        | —          | —           | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
 
 ## Corpora
 
@@ -88,6 +92,7 @@ Not every corpus runs every feature. Each corpus is the oracle for the feature i
 | `verapdf` | ~2,600 PDFs × 13 profiles         | VeraPDF corpus, flattened from the per-profile directories             |
 | `govdocs` | ~1,500 PDFs (1 fixture per claim) | Govdocs1 random-sample of five fixed thread archives (real-world PDFs) |
 | `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (BSD-licensed PDF 2.0 samples)       |
+| `pdfcpu`  | ~50 PDFs (1 fixture each)         | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)         |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
