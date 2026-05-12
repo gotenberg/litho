@@ -132,7 +132,21 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 					sb.WriteString(" ")
 				}
 			}
-			sb.WriteString(el.Text)
+			// Collapse consecutive whitespace: PDF.js's saveLastChar
+			// state already filters away repeated space emissions, so a
+			// producer that bakes two literal spaces into a Tj (one
+			// from word-spacing, one from a degenerate Tm reset that
+			// places it backward over the previous glyph) surfaces as
+			// a single space in PDF.js's text-layer and should here
+			// too. We swallow el.Text when it is whitespace and the
+			// accumulated output already ends in whitespace.
+			emit := el.Text
+			if isAllWhitespace(emit) {
+				if b := sb.String(); len(b) > 0 && isWhitespaceByte(b[len(b)-1]) {
+					emit = ""
+				}
+			}
+			sb.WriteString(emit)
 			prevIdx = idx
 		}
 	}
@@ -193,6 +207,22 @@ const (
 
 // negativeSpaceFactor is the user-space counterpart of PDF.js's
 // NEGATIVE_SPACE_FACTOR. See [isRunningHeadReset] for usage.
+
+func isAllWhitespace(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !isWhitespaceByte(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isWhitespaceByte(b byte) bool {
+	return b == ' ' || b == '\t'
+}
 
 // stringHasRTL reports whether s contains any right-to-left script
 // codepoint. Used by [isRunningHeadReset] to skip the trailing-space
