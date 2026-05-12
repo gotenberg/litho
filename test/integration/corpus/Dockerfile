@@ -50,6 +50,7 @@ COPY pdfcpu/ ./pdfcpu/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/gen-bookmarks.sh \
+  lib/gen-merges.sh \
   pdfjs/download.sh \
   verapdf/download.sh \
   govdocs/download.sh \

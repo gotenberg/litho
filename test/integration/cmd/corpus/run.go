@@ -28,6 +28,7 @@ var featureRegistry = []FeatureFactory{
 	func() Feature { return newRemediationFeature(true) },
 	func() Feature { return newBookmarksFeature() },
 	func() Feature { return newSplitFeature() },
+	func() Feature { return newMergeFeature() },
 }
 
 // runOptions captures the CLI flags for the run subcommand.

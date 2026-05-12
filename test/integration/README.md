@@ -64,27 +64,28 @@ make clean-corpus
 
 ## Features
 
-| Feature                  | Golden source              | What it compares                                                                               |
-| ------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------- |
-| `text`                   | PDF.js (captured at init)  | Per-page text extraction against PDF.js's reference text                                       |
-| `metadata`               | PDF.js (captured at init)  | Info dict + linearization/form flags                                                           |
-| `compliance`             | VeraPDF (captured at init) | Litho's validation verdict against VeraPDF's, per profile                                      |
-| `remediation`            | VeraPDF (live at run time) | Remediates with litho, then validates the output with both litho and VeraPDF; reports the diff |
-| `remediation-aggressive` | VeraPDF (live at run time) | Same as `remediation` with `WithAggressiveFixes` enabled                                       |
-| `bookmarks`              | pdfcpu (captured at init)  | Outline tree (title, page, children) against pdfcpu's `bookmarks export`                       |
-| `split`                  | litho-self (live)          | Round-trips Split([1,last]); compares output text + bookmarks against litho's input extraction |
+| Feature                  | Golden source              | What it compares                                                                                                                               |
+| ------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`                   | PDF.js (captured at init)  | Per-page text extraction against PDF.js's reference text                                                                                       |
+| `metadata`               | PDF.js (captured at init)  | Info dict + linearization/form flags                                                                                                           |
+| `compliance`             | VeraPDF (captured at init) | Litho's validation verdict against VeraPDF's, per profile                                                                                      |
+| `remediation`            | VeraPDF (live at run time) | Remediates with litho, then validates the output with both litho and VeraPDF; reports the diff                                                 |
+| `remediation-aggressive` | VeraPDF (live at run time) | Same as `remediation` with `WithAggressiveFixes` enabled                                                                                       |
+| `bookmarks`              | pdfcpu (captured at init)  | Outline tree (title, page, children) against pdfcpu's `bookmarks export`                                                                       |
+| `split`                  | litho-self (live)          | Round-trips Split([1,last]); compares output text + bookmarks against litho's input extraction                                                 |
+| `merge`                  | litho-self + pdfcpu (live) | Merges each PDF with itself; checks page count, per-page text, and bookmark leaf multiset against the derived oracle AND pdfcpu's merge result |
 
 All three captured goldens live under the corpus's `testdata/goldens/` directory and are produced by the provisioning Docker image. `remediation` has no captured golden: it shells out to `verapdf` at run time on the remediated buffer. Needs `verapdf` on PATH.
 
 Not every corpus runs every feature. Each corpus is the oracle for the feature it ships goldens for; running the others on it would be redundant.
 
-| Corpus    | text | metadata | compliance | remediation | bookmarks | split | role                                                            |
-| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | --------------------------------------------------------------- |
-| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | text + metadata oracle (PDF.js renderer is the ground truth)    |
-| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | compliance + remediation oracle (VeraPDF is the ground truth)   |
-| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | real-world canary; compliance/remediation use each file's claim |
-| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
-| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
+| Corpus    | text | metadata | compliance | remediation | bookmarks | split | merge | role                                                            |
+| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | ----- | --------------------------------------------------------------- |
+| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | —     | text + metadata oracle (PDF.js renderer is the ground truth)    |
+| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | —     | compliance + remediation oracle (VeraPDF is the ground truth)   |
+| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | real-world canary; compliance/remediation use each file's claim |
+| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
+| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
 
 ### Comparison notes
 

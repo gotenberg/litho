@@ -111,6 +111,19 @@ else
   echo "==> skipping bookmarks goldens (not requested by ${CORPUS})."
 fi
 
+if wants merge; then
+  MERGES="$OUTPUT/goldens/merges"
+  if nonempty "$MERGES"; then
+    echo "==> merge goldens already present, skipping pdfcpu merge."
+  else
+    mkdir -p "$MERGES"
+    echo "==> generating merge goldens (pdfcpu merge + bookmarks export)..."
+    /work/lib/gen-merges.sh "$PDFS" "$MERGES"
+  fi
+else
+  echo "==> skipping merge goldens (not requested by ${CORPUS})."
+fi
+
 if wants compliance || wants remediation || wants remediation-aggressive; then
   COMP="$OUTPUT/goldens/compliance"
   if nonempty "$COMP"; then

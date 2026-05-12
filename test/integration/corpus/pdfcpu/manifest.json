@@ -7,6 +7,7 @@
     "text": "goldens/text",
     "metadata": "goldens/metadata",
     "bookmarks": "goldens/bookmarks",
-    "split": "goldens/text"
+    "split": "goldens/text",
+    "merge": "goldens/merges"
   }
 }
