@@ -51,6 +51,25 @@ func TestDecodePdfString(t *testing.T) {
 		{"utf8-bom", ast.PdfString("\xef\xbb\xbfHi"), "Hi"},
 		{"utf16be-double-bom", ast.PdfString("\xfe\xff\xfe\xff\x00H\x00i"), "Hi"},
 		{"utf8-leading-fEFF", ast.PdfString("\xef\xbb\xbf\xe8\xa1\xa8"), "表"},
+		// PDFDocEncoding diacritic range (ISO 32000-1 Table D.2). Bytes
+		// 0x18-0x1F are spacing modifier letters, not control codes.
+		// A producer that uses 0x18 in a bookmark title means U+02D8
+		// BREVE, not U+0018 CANCEL.
+		{"pdfdoc-breve", ast.PdfString("a\x18b\xff"), "a˘bÿ"},
+		{"pdfdoc-tilde", ast.PdfString("a\x1fb\xff"), "a˜bÿ"},
+		// Undefined PDFDocEncoding bytes (0x00-0x08, 0x0B, 0x0E-0x17,
+		// 0x7F) have no Unicode mapping. Dropping them keeps corrupted
+		// producer output (0x05 leaking between words) from surfacing
+		// as a literal control char in user-facing strings.
+		{"pdfdoc-drop-0x05-pure-ascii", ast.PdfString("Blend\x05Down"), "BlendDown"},
+		// The trailing 0xFF forces the PDFDocEncoding branch even when
+		// the rest is ASCII, separately covering both fast and slow paths.
+		{"pdfdoc-drop-0x05", ast.PdfString("Blend\x05Down\xff"), "BlendDownÿ"},
+		{"pdfdoc-drop-0x7F", ast.PdfString("ab\x7fcd\xff"), "abcdÿ"},
+		// The four defined low controls survive: HT (0x09), LF (0x0A),
+		// FF (0x0C), CR (0x0D). Multi-line outline titles depend on
+		// these breaks not being stripped.
+		{"pdfdoc-keep-controls", ast.PdfString("a\tb\nc\fd\re\xff"), "a\tb\nc\fd\reÿ"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

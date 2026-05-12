@@ -269,10 +269,14 @@ func DecodePdfString(s ast.PdfString) string {
 	// PDFDocEncoding / Windows-1252: bytes 0x80-0x9F have specific Unicode
 	// mappings; bytes 0xA0-0xFF map to the same Unicode code point.
 	// All bytes > 0x7F must be converted to proper UTF-8 runes since Go
-	// strings are UTF-8 and raw high bytes are invalid sequences.
+	// strings are UTF-8 and raw high bytes are invalid sequences. Also
+	// route around the fast path when an undefined PDFDocEncoding control
+	// byte is present so [pdfDocEncodingUndefined] can drop it: a stray
+	// 0x05 inside an otherwise-ASCII bookmark title leaks through as
+	// U+0005 otherwise.
 	needsDecode := false
 	for _, c := range b {
-		if c > 0x7F {
+		if c > 0x7F || pdfDocEncodingUndefined(c) {
 			needsDecode = true
 			break
 		}
@@ -296,14 +300,42 @@ func DecodePdfString(s ast.PdfString) string {
 	for _, c := range b {
 		if r, ok := pdfDocEncoding[c]; ok {
 			buf.WriteRune(r)
-		} else if c > 0x7F {
+			continue
+		}
+		switch {
+		case c > 0x7F:
 			// Bytes 0xA0-0xFF: same Unicode code point as byte value.
 			buf.WriteRune(rune(c))
-		} else {
+		case pdfDocEncodingUndefined(c):
+			// ISO 32000-1 Table D.2 leaves these bytes undefined.
+			// Passing them through as raw runes leaks control codes
+			// into user-facing strings (outline titles, /Info dict,
+			// metadata). Drop them: a corrupted producer's stray
+			// 0x05 between words should not surface as U+0005.
+		default:
 			buf.WriteByte(c)
 		}
 	}
 	return buf.String()
+}
+
+// pdfDocEncodingUndefined reports whether c is a byte that PDFDocEncoding
+// leaves without a Unicode mapping (ISO 32000-1 Table D.2). The four
+// defined low control codes (HT, LF, FF, CR) are NOT undefined; they
+// pass through as their raw Unicode equivalents so structured strings
+// (multi-line bookmark titles, tab-aligned metadata) keep their breaks.
+func pdfDocEncodingUndefined(c byte) bool {
+	switch {
+	case c <= 0x08:
+		return true
+	case c == 0x0B:
+		return true
+	case c >= 0x0E && c <= 0x17:
+		return true
+	case c == 0x7F:
+		return true
+	}
+	return false
 }
 
 // stripLeadingBOM removes a single leading U+FEFF rune from s. The BOM
@@ -317,9 +349,30 @@ func stripLeadingBOM(s string) string {
 	return strings.TrimPrefix(s, "\uFEFF")
 }
 
-// pdfDocEncoding maps bytes in the 0x80-0x9F range to their Unicode
-// equivalents per ISO 32000-2, Table D.2 (PDFDocEncoding).
+// pdfDocEncoding maps the PDFDocEncoding bytes that do not coincide
+// with their ISO Latin-1 / ASCII code points to their Unicode
+// equivalents per ISO 32000-1 Table D.2. Two ranges live here:
+//
+//   - 0x18-0x1F: spacing diacritics (breve, caron, etc.). PDFDocEncoding
+//     reuses these otherwise-undefined control slots for combining-style
+//     marks; without them, byte 0x18 in a bookmark title surfaces as
+//     U+0018 (CANCEL) instead of U+02D8 BREVE.
+//   - 0x80-0x9E: typographic punctuation, currency, and accented Latin
+//     letters that occupy the Windows-1252 supplemental range.
+//
+// The remaining bytes either pass through unchanged (printable ASCII,
+// the four defined low controls, 0xA0-0xFF) or are dropped by
+// [pdfDocEncodingUndefined].
 var pdfDocEncoding = map[byte]rune{
+	0x18: 0x02D8, // BREVE
+	0x19: 0x02C7, // CARON
+	0x1A: 0x02C6, // MODIFIER LETTER CIRCUMFLEX ACCENT
+	0x1B: 0x02D9, // DOT ABOVE
+	0x1C: 0x02DD, // DOUBLE ACUTE ACCENT
+	0x1D: 0x02DB, // OGONEK
+	0x1E: 0x02DA, // RING ABOVE
+	0x1F: 0x02DC, // SMALL TILDE
+
 	0x80: 0x2022, // BULLET
 	0x81: 0x2020, // DAGGER
 	0x82: 0x2021, // DOUBLE DAGGER

@@ -273,6 +273,59 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 	}
 }
 
+// TestSearchNameTree_ByteExactKey pins the contract that name tree
+// lookups use the raw byte string as the key. The pdfcpu bookmark
+// fixture bookmarkDuplicates.pdf shows the real-world need: two
+// destinations sharing the visible title "kid1" are disambiguated by
+// a trailing 0x01 in the named destination identifier. Routing the
+// key through [DecodePdfString] would drop that byte (it is undefined
+// in PDFDocEncoding) and the second lookup would hit the first
+// destination's page.
+func TestSearchNameTree_ByteExactKey(t *testing.T) {
+	doc := &Document{
+		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		objectCache: make(map[int]ast.PdfObject),
+		fontCache:   make(map[int]any),
+	}
+
+	pageA := ast.PdfIndirectRef{ObjectNum: 10, GenNum: 0}
+	pageB := ast.PdfIndirectRef{ObjectNum: 20, GenNum: 0}
+	leafNode := ast.PdfDict{
+		"Names": ast.PdfArray{
+			ast.PdfString("kid1"),
+			ast.PdfArray{pageA, ast.PdfName("Fit")},
+			ast.PdfString("kid1\x01"),
+			ast.PdfArray{pageB, ast.PdfName("Fit")},
+		},
+	}
+
+	cases := []struct {
+		key  string
+		want ast.PdfIndirectRef
+	}{
+		{"kid1", pageA},
+		{"kid1\x01", pageB},
+	}
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("key=%q", c.key), func(t *testing.T) {
+			result, err := searchNameTree(context.Background(), doc, leafNode, c.key)
+			if err != nil {
+				t.Fatalf("searchNameTree: %v", err)
+			}
+			if result == nil {
+				t.Fatal("expected result, got nil")
+			}
+			ref, ok := result[0].(ast.PdfIndirectRef)
+			if !ok {
+				t.Fatalf("expected PdfIndirectRef, got %T", result[0])
+			}
+			if ref != c.want {
+				t.Errorf("got %v, want %v", ref, c.want)
+			}
+		})
+	}
+}
+
 func TestSearchNameTree_DepthCapBreaksCycle(t *testing.T) {
 	doc := &Document{
 		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},

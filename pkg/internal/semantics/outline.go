@@ -131,11 +131,15 @@ func resolveDestination(ctx context.Context, doc *document.Document, destObj ast
 		return pageFromDestArray(destArr, pageMap)
 	}
 
-	// Named destination: look up in the name tree.
+	// Named destination: look up in the name tree by raw byte key.
+	// Name tree keys are byte strings (ISO 32000-1 §7.9.6); decoding via
+	// [document.DecodePdfString] would collapse producer-disambiguated
+	// destinations like "kid1" and "kid1\x01" onto the same key and the
+	// wrong page would surface.
 	var name string
 	switch v := destRes.(type) {
 	case ast.PdfString:
-		name = document.DecodePdfString(v)
+		name = string(v)
 	case ast.PdfName:
 		name = string(v)
 	default:

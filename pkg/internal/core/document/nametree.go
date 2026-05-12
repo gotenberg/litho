@@ -87,8 +87,8 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 			return nil, err
 		}
 		if len(limitsArr) >= 2 {
-			minStr := decodeLimitString(limitsArr[0])
-			maxStr := decodeLimitString(limitsArr[1])
+			minStr := nameTreeKey(limitsArr[0])
+			maxStr := nameTreeKey(limitsArr[1])
 			if minStr != "" && maxStr != "" {
 				if key < minStr || key > maxStr {
 					return nil, nil
@@ -135,7 +135,7 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 	}
 
 	for i := 0; i+1 < len(namesArr); i += 2 {
-		entryName := decodeLimitString(namesArr[i])
+		entryName := nameTreeKey(namesArr[i])
 		if entryName == key {
 			return resolveDestValue(ctx, doc, namesArr[i+1])
 		}
@@ -171,12 +171,16 @@ func resolveDestValue(ctx context.Context, doc *Document, obj ast.PdfObject) (as
 	return nil, nil
 }
 
-// decodeLimitString extracts a Go string from a name tree key,
-// which may be a PdfString or PdfName.
-func decodeLimitString(obj ast.PdfObject) string {
+// nameTreeKey extracts the raw byte-string key from a name tree entry.
+// Per ISO 32000-1 §7.9.6, name tree keys are compared as byte strings,
+// not as decoded text: lookup is byte-exact. Routing keys through
+// [DecodePdfString] would collapse producer-disambiguated entries
+// (e.g. "kid1" vs "kid1\x01") onto the same key and the lookup would
+// hit the wrong destination.
+func nameTreeKey(obj ast.PdfObject) string {
 	switch v := obj.(type) {
 	case ast.PdfString:
-		return DecodePdfString(v)
+		return string(v)
 	case ast.PdfName:
 		return string(v)
 	}
