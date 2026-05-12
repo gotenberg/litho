@@ -174,13 +174,71 @@ func normalizeLithoTree(in []models.Bookmark) []normalizedBookmark {
 	return out
 }
 
-// normalizeBookmarkTitle trims surrounding whitespace and NFC-normalises
-// the title. PDF outline strings sit at the byte boundary between many
-// producers and consumers, so canonicalising here keeps trivial
-// encoding differences (NBSP vs space, decomposed accents) from
-// inflating the mismatch count.
+// normalizeBookmarkTitle trims surrounding whitespace, NFC-normalises
+// the title, and rewrites C1 control runes (U+0080-U+009F) to their
+// PDFDocEncoding glyph equivalents.
+//
+// The C1 rewrite is what keeps the canary honest. PDFDocEncoding
+// (ISO 32000-1 Table D.2) maps bytes 0x80-0x9F to typographic glyphs
+// (en dash, em dash, smart quotes, etc.); litho applies this mapping
+// at decode time, matching PDF.js's [PDFStringTranslateTable]. pdfcpu
+// emits the raw byte as a C1 control rune (U+0085, U+0090, ...), so a
+// title containing the en-dash byte 0x85 surfaces as "Annex A – Foo"
+// in litho and "Annex A  Foo" in the pdfcpu golden. Both sides
+// are pointing at the same source byte; the rewrite folds them back
+// onto the same glyph for comparison without weakening the test for
+// genuine title differences.
 func normalizeBookmarkTitle(s string) string {
-	return norm.NFC.String(strings.TrimSpace(s))
+	s = norm.NFC.String(strings.TrimSpace(s))
+	var buf strings.Builder
+	buf.Grow(len(s))
+	for _, r := range s {
+		if g, ok := pdfDocC1Glyphs[r]; ok {
+			buf.WriteRune(g)
+			continue
+		}
+		buf.WriteRune(r)
+	}
+	return buf.String()
+}
+
+// pdfDocC1Glyphs mirrors the 0x80-0x9F slice of PDFDocEncoding
+// (ISO 32000-1 Table D.2) promoted from byte → rune to rune → rune.
+// Kept in sync by hand with litho's [document.DecodePdfString] table;
+// the entries are immutable so duplication is cheap.
+var pdfDocC1Glyphs = map[rune]rune{
+	0x0080: 0x2022, // BULLET
+	0x0081: 0x2020, // DAGGER
+	0x0082: 0x2021, // DOUBLE DAGGER
+	0x0083: 0x2026, // HORIZONTAL ELLIPSIS
+	0x0084: 0x2014, // EM DASH
+	0x0085: 0x2013, // EN DASH
+	0x0086: 0x0192, // LATIN SMALL LETTER F WITH HOOK
+	0x0087: 0x2044, // FRACTION SLASH
+	0x0088: 0x2039, // SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+	0x0089: 0x203A, // SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+	0x008A: 0x2212, // MINUS SIGN
+	0x008B: 0x2030, // PER MILLE SIGN
+	0x008C: 0x201E, // DOUBLE LOW-9 QUOTATION MARK
+	0x008D: 0x201C, // LEFT DOUBLE QUOTATION MARK
+	0x008E: 0x201D, // RIGHT DOUBLE QUOTATION MARK
+	0x008F: 0x2018, // LEFT SINGLE QUOTATION MARK
+	0x0090: 0x2019, // RIGHT SINGLE QUOTATION MARK
+	0x0091: 0x201A, // SINGLE LOW-9 QUOTATION MARK
+	0x0092: 0x2122, // TRADE MARK SIGN
+	0x0093: 0xFB01, // LATIN SMALL LIGATURE FI
+	0x0094: 0xFB02, // LATIN SMALL LIGATURE FL
+	0x0095: 0x0141, // LATIN CAPITAL LETTER L WITH STROKE
+	0x0096: 0x0152, // LATIN CAPITAL LIGATURE OE
+	0x0097: 0x0160, // LATIN CAPITAL LETTER S WITH CARON
+	0x0098: 0x0178, // LATIN CAPITAL LETTER Y WITH DIAERESIS
+	0x0099: 0x017D, // LATIN CAPITAL LETTER Z WITH CARON
+	0x009A: 0x0131, // LATIN SMALL LETTER DOTLESS I
+	0x009B: 0x0142, // LATIN SMALL LETTER L WITH STROKE
+	0x009C: 0x0153, // LATIN SMALL LIGATURE OE
+	0x009D: 0x0161, // LATIN SMALL LETTER S WITH CARON
+	0x009E: 0x017E, // LATIN SMALL LETTER Z WITH CARON
+	// 0x9F: undefined in PDFDocEncoding
 }
 
 // diffBookmarks returns "" when got and want are structurally equal or

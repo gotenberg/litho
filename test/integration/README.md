@@ -86,6 +86,14 @@ Not every corpus runs every feature. Each corpus is the oracle for the feature i
 | `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
 | `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
 
+### Comparison notes
+
+Cross-tool comparisons live behind small normalisations so equivalent inputs do not register as mismatches. The non-obvious ones:
+
+- **Bookmarks: C1 control fold.** PDFDocEncoding (ISO 32000-1 Table D.2) maps bytes `0x80-0x9F` to typographic glyphs (en dash, em dash, smart quotes, etc.). litho applies this mapping when decoding outline titles, matching PDF.js's `PDFStringTranslateTable`. pdfcpu emits the raw byte as a C1 control rune (`U+0085`, `U+0090`, ...). The bookmarks feature folds C1 runes through the same table on both sides before diffing so an "Annex A – Foo" / "Annex A `` Foo" pair compares equal. The fold is a no-op on the litho side (no C1 runes remain after decode).
+
+- **Bookmarks: tab inside a UTF-16BE title is a known difference.** pdfcpu strips horizontal tabs from outline titles ("1`\t`Preface" → "1Preface"); litho preserves them. Both are pointing at the same source byte; the canary leaves this case visible (1 fixture in the pdfcpu corpus, `adobe_supplement_iso32000_1.pdf`) because collapsing whitespace symmetrically would mask genuine title differences.
+
 ## Corpora
 
 | Corpus    | Fixtures                          | Source                                                                 |

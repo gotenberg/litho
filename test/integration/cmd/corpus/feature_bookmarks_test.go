@@ -17,17 +17,32 @@ import (
 func TestNormalizeBookmarkTitle(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
+		name     string
 		in, want string
 	}{
-		{"Chapter 1", "Chapter 1"},
-		{"  Chapter 1  ", "Chapter 1"},
+		{"plain", "Chapter 1", "Chapter 1"},
+		{"trim", "  Chapter 1  ", "Chapter 1"},
 		// NFD "é" (e + U+0301) normalises to NFC "é" (U+00E9).
-		{"Café", "Café"},
+		{"nfc", "Café", "Café"},
+		// C1 control runes fold to their PDFDocEncoding glyph
+		// equivalents. pdfcpu emits raw bytes as U+0085, U+0090,
+		// etc.; litho already mapped the byte to the en-dash /
+		// smart quote glyph via PDFDocEncoding, so this fold
+		// makes them agree without weakening the test.
+		{"c1-en-dash", "Annex A \u0085 Foo", "Annex A \u2013 Foo"},
+		{"c1-em-dash", "Annex A \u0084 Foo", "Annex A \u2014 Foo"},
+		{"c1-rsquote", "What\u0090s in this guide?", "What\u2019s in this guide?"},
+		{"c1-bullet", "Item\u0080A", "Item\u2022A"},
+		// 0x9F is undefined in PDFDocEncoding; leave it alone so
+		// a future producer using the slot stays visible.
+		{"c1-undefined", "x\u009fy", "x\u009fy"},
 	}
 	for _, c := range cases {
-		if got := normalizeBookmarkTitle(c.in); got != c.want {
-			t.Errorf("normalizeBookmarkTitle(%q) = %q, want %q", c.in, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			if got := normalizeBookmarkTitle(c.in); got != c.want {
+				t.Errorf("normalizeBookmarkTitle(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
 	}
 }
 
