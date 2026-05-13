@@ -562,3 +562,47 @@ func TestPDFUAProfile_IsValid(t *testing.T) {
 		}
 	}
 }
+
+func TestFacturXLevel_JSONValue(t *testing.T) {
+	tests := []struct {
+		level FacturXLevel
+		want  string
+	}{
+		{FacturXMinimum, `"MINIMUM"`},
+		{FacturXBasicWL, `"BASIC WL"`},
+		{FacturXBasic, `"BASIC"`},
+		{FacturXEN16931, `"EN 16931"`},
+		{FacturXExtended, `"EXTENDED"`},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.level), func(t *testing.T) {
+			data, err := json.Marshal(tc.level)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if string(data) != tc.want {
+				t.Errorf("got %s, want %s", data, tc.want)
+			}
+		})
+	}
+}
+
+func TestFacturXLevel_IsValid(t *testing.T) {
+	valid := []FacturXLevel{
+		FacturXMinimum, FacturXBasicWL, FacturXBasic, FacturXEN16931, FacturXExtended,
+	}
+	for _, l := range valid {
+		if !l.IsValid() {
+			t.Errorf("FacturXLevel(%q).IsValid() = false, want true", l)
+		}
+		if l.String() != string(l) {
+			t.Errorf("String() drift on %q", l)
+		}
+	}
+	invalid := []FacturXLevel{"", "minimum", "basic", "EN16931", "Extended"}
+	for _, l := range invalid {
+		if l.IsValid() {
+			t.Errorf("FacturXLevel(%q).IsValid() = true, want false", l)
+		}
+	}
+}

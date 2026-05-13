@@ -79,6 +79,21 @@ var (
 	// tolerance, disable aggressive fixes, or report the document as
 	// unfixable.
 	ErrRemediationBrokePDF = errors.New("remediation broke the PDF beyond the configured regression tolerance")
+
+	// ErrEmptyInvoiceXML is returned by [Writer.RemediateFacturX] when
+	// [FacturXConfig.InvoiceXML] is nil or zero-length. Factur-X
+	// requires an embedded Cross-Industry Invoice payload.
+	ErrEmptyInvoiceXML = errors.New("factur-x invoice XML is empty")
+
+	// ErrInvalidFacturXLevel is returned by [Writer.RemediateFacturX]
+	// when [FacturXConfig.Level] does not match one of the documented
+	// [models.FacturXLevel] constants.
+	ErrInvalidFacturXLevel = errors.New("factur-x conformance level is invalid")
+
+	// ErrInvalidFacturXProfile is returned by [Writer.RemediateFacturX]
+	// when [FacturXConfig.Profile] is not a PDF/A-3 conformance level.
+	// Factur-X 1.0.07 mandates a PDF/A-3 archival base.
+	ErrInvalidFacturXProfile = errors.New("factur-x requires a PDF/A-3 profile")
 )
 
 // Pipeline sentinel errors surface structural problems with a [Pipeline]

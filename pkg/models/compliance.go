@@ -63,3 +63,44 @@ func (p PDFUAProfile) IsValid() bool {
 	}
 	return false
 }
+
+// FacturXLevel identifies a Factur-X conformance level. The levels match
+// the values that appear verbatim in the XMP `fx:ConformanceLevel`
+// property defined by the Factur-X 1.0.07 specification. ZUGFeRD 2.x
+// shares the same identifiers.
+// Values are immutable and safe for concurrent use.
+type FacturXLevel string
+
+// Factur-X conformance levels.
+const (
+	// FacturXMinimum corresponds to the MINIMUM profile: header data and
+	// totals only.
+	FacturXMinimum FacturXLevel = "MINIMUM"
+	// FacturXBasicWL corresponds to the BASIC WL profile: BASIC without
+	// line items.
+	FacturXBasicWL FacturXLevel = "BASIC WL"
+	// FacturXBasic corresponds to the BASIC profile: BASIC WL with line
+	// items.
+	FacturXBasic FacturXLevel = "BASIC"
+	// FacturXEN16931 corresponds to the EN 16931 profile, also called
+	// COMFORT. Mandatory level for cross-border B2B invoices in the EU.
+	FacturXEN16931 FacturXLevel = "EN 16931"
+	// FacturXExtended corresponds to the EXTENDED profile: superset of
+	// EN 16931 with bilateral fields.
+	FacturXExtended FacturXLevel = "EXTENDED"
+)
+
+// String returns the canonical string form of the level, e.g.
+// "EN 16931". The zero value renders as the empty string.
+func (l FacturXLevel) String() string { return string(l) }
+
+// IsValid reports whether l matches one of the documented Factur-X
+// level constants. Use this to validate user input before passing the
+// value to a remediation engine that assumes a known level.
+func (l FacturXLevel) IsValid() bool {
+	switch l {
+	case FacturXMinimum, FacturXBasicWL, FacturXBasic, FacturXEN16931, FacturXExtended:
+		return true
+	}
+	return false
+}

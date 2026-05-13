@@ -902,6 +902,107 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 	})
 }
 
+// FacturX defaults applied by [Writer.RemediateFacturX] when the
+// corresponding [FacturXConfig] field is zero.
+const (
+	// DefaultFacturXProfile is the PDF/A-3 conformance level used when
+	// [FacturXConfig.Profile] is empty.
+	DefaultFacturXProfile = models.PDFA3b
+	// DefaultFacturXFileName is the embedded file name used when
+	// [FacturXConfig.FileName] is empty. Matches the Factur-X 1.0.07
+	// specification.
+	DefaultFacturXFileName = "factur-x.xml"
+	// DefaultFacturXDocumentType is the value written into the XMP
+	// `fx:DocumentType` property when [FacturXConfig.DocumentType] is
+	// empty.
+	DefaultFacturXDocumentType = "INVOICE"
+	// DefaultFacturXRelationship is the `/AFRelationship` value used
+	// when [FacturXConfig.Relationship] is empty. Factur-X mandates
+	// "Data"; legacy ZUGFeRD 2.0 producers used "Alternative".
+	DefaultFacturXRelationship = "Data"
+)
+
+// FacturXConfig describes the inputs to [Writer.RemediateFacturX].
+// Values must not be shared across goroutines without synchronization.
+type FacturXConfig struct {
+	// InvoiceXML is the Cross-Industry Invoice (CII) XML payload that
+	// will be embedded as the Factur-X data file. Required, non-empty.
+	InvoiceXML []byte
+	// Level is the Factur-X conformance level. Required; must satisfy
+	// [models.FacturXLevel.IsValid].
+	Level models.FacturXLevel
+	// Profile is the PDF/A-3 conformance level used as the underlying
+	// archival base. Optional; defaults to [DefaultFacturXProfile].
+	// Must be one of [models.PDFA3a], [models.PDFA3b], or
+	// [models.PDFA3u].
+	Profile models.PDFAProfile
+	// FileName is the embedded file name. Optional; defaults to
+	// [DefaultFacturXFileName]. The same value is written into the XMP
+	// `fx:DocumentFileName` property.
+	FileName string
+	// DocumentType is the value of the XMP `fx:DocumentType` property.
+	// Optional; defaults to [DefaultFacturXDocumentType].
+	DocumentType string
+	// Relationship is the embedded-file `/AFRelationship` value.
+	// Optional; defaults to [DefaultFacturXRelationship].
+	Relationship string
+}
+
+// RemediateFacturX embeds the supplied invoice XML as a Factur-X
+// associated file, remediates the document against the configured
+// PDF/A-3 profile, and injects the four `fx:` XMP properties plus the
+// PDF/A extension schema declaration the format requires.
+//
+// The returned [RemediationReport] aggregates the underlying PDF/A-3
+// fixes plus the Factur-X-specific operations.
+func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (*RemediationReport, error) {
+	if len(cfg.InvoiceXML) == 0 {
+		return nil, ErrEmptyInvoiceXML
+	}
+	if !cfg.Level.IsValid() {
+		return nil, fmt.Errorf("%w: %q", ErrInvalidFacturXLevel, cfg.Level)
+	}
+	profile := cfg.Profile
+	if profile == "" {
+		profile = DefaultFacturXProfile
+	}
+	if profile != models.PDFA3a && profile != models.PDFA3b && profile != models.PDFA3u {
+		return nil, fmt.Errorf("%w: got %q", ErrInvalidFacturXProfile, profile)
+	}
+	fileName := cfg.FileName
+	if fileName == "" {
+		fileName = DefaultFacturXFileName
+	}
+	docType := cfg.DocumentType
+	if docType == "" {
+		docType = DefaultFacturXDocumentType
+	}
+	relationship := cfg.Relationship
+	if relationship == "" {
+		relationship = DefaultFacturXRelationship
+	}
+
+	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
+	for _, o := range opts {
+		o(&rcfg)
+	}
+	remOpts := remediation.Options{Lang: rcfg.lang, PreserveContent: rcfg.preserveContent}
+	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
+		return r.ValidatePDFA(ctx, profile)
+	}
+	fxOpts := remediation.FacturXOptions{
+		InvoiceXML:   cfg.InvoiceXML,
+		Level:        cfg.Level,
+		Profile:      profile,
+		FileName:     fileName,
+		DocumentType: docType,
+		Relationship: relationship,
+	}
+	return w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+		return remediation.RemediateFacturX(ctx, doc, alloc, fxOpts, remOpts)
+	})
+}
+
 // integritySnap captures the signals the post-remediation probe compares
 // against the baseline measured on the source [Reader].
 type integritySnap struct {
