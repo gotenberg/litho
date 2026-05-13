@@ -64,23 +64,10 @@ func runRun(args []string) int {
 		opts.workers = 1
 	}
 
-	corpora, err := resolveCorpora(opts.corpora)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+	board, ok := buildScoreboard(context.Background(), opts)
+	if !ok {
 		return 1
 	}
-
-	start := time.Now()
-	board := &Scoreboard{Corpora: make([]*CorpusReport, 0, len(corpora))}
-	for _, name := range corpora {
-		report, err := runCorpus(context.Background(), name, opts)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
-			continue
-		}
-		board.Corpora = append(board.Corpora, report)
-	}
-	board.Elapsed = time.Since(start).Round(time.Millisecond).String()
 
 	switch opts.format {
 	case "json":
@@ -94,6 +81,31 @@ func runRun(args []string) int {
 		board.PrintText(os.Stdout)
 	}
 	return 0
+}
+
+// buildScoreboard runs the matrix described by opts and returns the
+// aggregated [Scoreboard]. Shared between the run, baseline, and
+// check subcommands. Returns ok=false when corpus resolution fails;
+// per-corpus errors are reported to stderr and the offending corpus
+// is omitted from the result.
+func buildScoreboard(ctx context.Context, opts runOptions) (*Scoreboard, bool) {
+	corpora, err := resolveCorpora(opts.corpora)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return nil, false
+	}
+	start := time.Now()
+	board := &Scoreboard{Corpora: make([]*CorpusReport, 0, len(corpora))}
+	for _, name := range corpora {
+		report, err := runCorpus(ctx, name, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
+			continue
+		}
+		board.Corpora = append(board.Corpora, report)
+	}
+	board.Elapsed = time.Since(start).Round(time.Millisecond).String()
+	return board, true
 }
 
 // resolveCorpora returns the corpus names to run. When the filter is

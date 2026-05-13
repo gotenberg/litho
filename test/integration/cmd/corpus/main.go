@@ -37,6 +37,10 @@ func dispatch(cmd string, args []string) int {
 		return runInit(args)
 	case "run":
 		return runRun(args)
+	case "baseline":
+		return runBaseline(args)
+	case "check":
+		return runCheck(args)
 	case "scan-claims":
 		return runScanClaims(args)
 	case "-h", "--help", "help":
@@ -50,11 +54,13 @@ func dispatch(cmd string, args []string) int {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: corpus <init|run> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: corpus <init|run|baseline|check> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  init          Provision corpora via Docker (downloads PDFs and goldens)")
 	fmt.Fprintln(os.Stderr, "  run           Compare litho against golden references across the matrix")
+	fmt.Fprintln(os.Stderr, "  baseline      Run the matrix and write the per-cell match counts to a baseline file")
+	fmt.Fprintln(os.Stderr, "  check         Run the matrix and fail if any cell regressed against the baseline")
 	fmt.Fprintln(os.Stderr, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Common run flags:")

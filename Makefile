@@ -65,6 +65,16 @@ corpus: ## Score litho across the (corpus, feature) matrix; auto-provisions. Var
 	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
 	go run ./test/integration/cmd/corpus run $(CORPUS_RUN_FLAGS)
 
+.PHONY: corpus-baseline
+corpus-baseline: ## Rewrite test/integration/baseline.json with the current matrix scores
+	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
+	go run ./test/integration/cmd/corpus baseline $(CORPUS_RUN_FLAGS)
+
+.PHONY: corpus-check
+corpus-check: ## Fail if any cell regressed against test/integration/baseline.json
+	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
+	go run ./test/integration/cmd/corpus check $(CORPUS_RUN_FLAGS)
+
 .PHONY: clean-corpus
 clean-corpus: ## Remove all corpus testdata (forces re-provisioning on next make corpus)
 	rm -rf test/integration/testdata

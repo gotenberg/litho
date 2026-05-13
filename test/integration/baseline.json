@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "captured_at": "2026-05-12T20:06:00Z",
+  "corpora": {
+    "govdocs": {
+      "features": {
+        "metadata": {
+          "matched": 1084,
+          "mismatched": 7,
+          "skipped": 0
+        },
+        "text": {
+          "matched": 622,
+          "mismatched": 469,
+          "skipped": 0,
+          "metrics": {
+            "chars_match": 999,
+            "words_match": 622
+          }
+        }
+      }
+    },
+    "pdf20": {
+      "features": {
+        "metadata": {
+          "matched": 7,
+          "mismatched": 0,
+          "skipped": 0
+        },
+        "text": {
+          "matched": 7,
+          "mismatched": 0,
+          "skipped": 0,
+          "metrics": {
+            "chars_match": 7,
+            "words_match": 7
+          }
+        }
+      }
+    },
+    "pdfcpu": {
+      "features": {
+        "bookmarks": {
+          "matched": 50,
+          "mismatched": 1,
+          "skipped": 0
+        },
+        "merge": {
+          "matched": 31,
+          "mismatched": 2,
+          "skipped": 6
+        },
+        "merge-empty": {
+          "matched": 31,
+          "mismatched": 1,
+          "skipped": 6
+        },
+        "metadata": {
+          "matched": 51,
+          "mismatched": 0,
+          "skipped": 0
+        },
+        "split": {
+          "matched": 33,
+          "mismatched": 0,
+          "skipped": 18
+        },
+        "text": {
+          "matched": 32,
+          "mismatched": 19,
+          "skipped": 0,
+          "metrics": {
+            "chars_match": 46,
+            "words_match": 32
+          }
+        }
+      }
+    },
+    "pdfjs": {
+      "features": {
+        "metadata": {
+          "matched": 1180,
+          "mismatched": 10,
+          "skipped": 1
+        },
+        "text": {
+          "matched": 1010,
+          "mismatched": 180,
+          "skipped": 1,
+          "metrics": {
+            "chars_match": 1096,
+            "words_match": 1010
+          }
+        }
+      }
+    },
+    "verapdf": {
+      "features": {
+        "compliance": {
+          "matched": 33812,
+          "mismatched": 1,
+          "skipped": 0,
+          "metrics": {
+            "false_negative": 1
+          }
+        }
+      }
+    }
+  }
+}

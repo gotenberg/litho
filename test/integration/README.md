@@ -52,6 +52,14 @@ make corpus CORPUS_WORKERS=16
 
 # Wipe provisioned data to force re-init on the next run.
 make clean-corpus
+
+# Capture the current matrix scores as the regression baseline.
+# Writes to test/integration/baseline.json (commit it).
+make corpus-baseline
+
+# Fail if any (corpus, feature) cell regressed against the baseline.
+# Used by CI to gate merges; improvements are non-fatal but noted.
+make corpus-check
 ```
 
 | Variable             | Effect                                           | Example                          |
@@ -61,6 +69,12 @@ make clean-corpus
 | `CORPUS_PROFILE`     | restrict to one profile directory                | `CORPUS_PROFILE=PDF_A-2b`        |
 | `CORPUS_JSON_OUTPUT` | emit the scoreboard as JSON                      | `CORPUS_JSON_OUTPUT=1`           |
 | `CORPUS_WORKERS`     | override the parallel worker pool size           | `CORPUS_WORKERS=16`              |
+
+## Regression baseline
+
+`test/integration/baseline.json` captures one `(matched, mismatched, skipped)` count per `(corpus, feature)` cell, plus named metrics for the `text` feature (`chars_match` and `words_match`). The file is committed; `make corpus-check` runs the matrix and fails when any cell's `matched` count or metric drops below the captured value. Improvements are non-fatal — they surface as `improvement:` lines so the operator can decide whether to refresh the baseline with `make corpus-baseline`.
+
+Cells with `[no golden]` (typically corpora not provisioned for a feature) are excluded so capturing the baseline on a partially provisioned tree does not pin missing-golden states. The check is silent about corpora that exist in the current run but not the baseline; new corpora become regression-gated only after the next `make corpus-baseline` commit.
 
 ## Features
 
