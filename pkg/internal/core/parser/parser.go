@@ -598,7 +598,8 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 
 	var buf strings.Builder
 	for i := 0; i < len(val); i++ {
-		if val[i] == '\\' && i+1 < len(val) {
+		switch {
+		case val[i] == '\\' && i+1 < len(val):
 			i++
 			switch val[i] {
 			case 'n':
@@ -640,14 +641,14 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 					buf.WriteByte(val[i])
 				}
 			}
-		} else if val[i] == '\r' {
+		case val[i] == '\r':
 			// Literal end-of-line markers (CR, LF, CR LF) inside a string
 			// are normalised to a single LF per ISO 32000-2 §7.3.4.2.
 			buf.WriteByte('\n')
 			if i+1 < len(val) && val[i+1] == '\n' {
 				i++
 			}
-		} else {
+		default:
 			buf.WriteByte(val[i])
 		}
 	}
