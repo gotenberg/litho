@@ -1,0 +1,14 @@
+{
+  "name": "facturx",
+  "source": "facturx",
+  "pdf_root": "pdfs",
+  "profile_mode": "auto",
+  "profiles": ["PDF_A-3a", "PDF_A-3b", "PDF_A-3u"],
+  "goldens": {
+    "text": "goldens/text",
+    "metadata": "goldens/metadata",
+    "compliance": "goldens/compliance",
+    "remediation": "goldens/compliance",
+    "remediation-aggressive": "goldens/compliance"
+  }
+}

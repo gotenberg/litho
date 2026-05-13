@@ -13,14 +13,14 @@ Spec: Factur-X 1.0.07 / ZUGFeRD 2.x. The PDF/A-3 base allows arbitrary embedded 
 
 Required artifacts on top of plain PDF/A-3:
 
-| Artifact | Constraint |
-| --- | --- |
-| Embedded XML | Filename `factur-x.xml` (Factur-X) or `zugferd-invoice.xml` (legacy ZUGFeRD 2.0 path) |
-| Filespec | `/F` and `/UF` set, `/Subtype application/xml`, `/AFRelationship /Data` (Factur-X) or `/Alternative` (ZUGFeRD) |
-| Catalog | `/AF` array containing the filespec reference |
-| XMP packet | `fx:` namespace declared with `fx:DocumentType`, `fx:DocumentFileName`, `fx:Version`, `fx:ConformanceLevel` |
+| Artifact             | Constraint                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Embedded XML         | Filename `factur-x.xml` (Factur-X) or `zugferd-invoice.xml` (legacy ZUGFeRD 2.0 path)                              |
+| Filespec             | `/F` and `/UF` set, `/Subtype application/xml`, `/AFRelationship /Data` (Factur-X) or `/Alternative` (ZUGFeRD)     |
+| Catalog              | `/AF` array containing the filespec reference                                                                      |
+| XMP packet           | `fx:` namespace declared with `fx:DocumentType`, `fx:DocumentFileName`, `fx:Version`, `fx:ConformanceLevel`        |
 | XMP extension schema | `pdfaExtension:schemas` entry declaring the four `fx:` properties (PDF/A forbids unknown XMP properties otherwise) |
-| Base | A valid PDF/A-3 (any conformance level: a/b/u) |
+| Base                 | A valid PDF/A-3 (any conformance level: a/b/u)                                                                     |
 
 Conformance levels (XMP `fx:ConformanceLevel`): `MINIMUM`, `BASIC WL`, `BASIC`, `EN 16931`, `EXTENDED`. These map to CII profile content; the PDF wrapper is identical across levels.
 
@@ -42,17 +42,17 @@ PDF/A-3 plumbing is solid. Factur-X-specific layer is absent.
 
 Grep confirms zero Factur-X-specific code under `pkg/internal/compliance`, `pkg/internal/remediation`, or `pkg/models`.
 
-| Requirement | Status |
-| --- | --- |
-| PDF/A-3 base validation and remediation | Done |
-| Embed XML with `/AFRelationship Data` or `Alternative` | Done (via `AddAssociatedFile`) |
-| Catalog `/AF` array | Done |
-| XMP `fx:` namespace registered in `pkg/internal/compliance/xmp_registry.go` | Missing |
-| XMP `fx:DocumentType` / `fx:DocumentFileName` / `fx:Version` / `fx:ConformanceLevel` injection | Missing |
-| PDF/A extension schema declaration for the `fx:` namespace | Missing |
-| Conformance-level enum and validation | Missing |
-| CII XML schema validation | Missing |
-| High-level `MakeFacturX(...)` API | Missing |
+| Requirement                                                                                    | Status                         |
+| ---------------------------------------------------------------------------------------------- | ------------------------------ |
+| PDF/A-3 base validation and remediation                                                        | Done                           |
+| Embed XML with `/AFRelationship Data` or `Alternative`                                         | Done (via `AddAssociatedFile`) |
+| Catalog `/AF` array                                                                            | Done                           |
+| XMP `fx:` namespace registered in `pkg/internal/compliance/xmp_registry.go`                    | Missing                        |
+| XMP `fx:DocumentType` / `fx:DocumentFileName` / `fx:Version` / `fx:ConformanceLevel` injection | Missing                        |
+| PDF/A extension schema declaration for the `fx:` namespace                                     | Missing                        |
+| Conformance-level enum and validation                                                          | Missing                        |
+| CII XML schema validation                                                                      | Missing                        |
+| High-level `MakeFacturX(...)` API                                                              | Missing                        |
 
 ## Plan
 

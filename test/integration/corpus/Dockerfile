@@ -47,6 +47,7 @@ COPY verapdf/ ./verapdf/
 COPY govdocs/ ./govdocs/
 COPY pdf20/ ./pdf20/
 COPY pdfcpu/ ./pdfcpu/
+COPY facturx/ ./facturx/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/gen-bookmarks.sh \
@@ -56,6 +57,7 @@ RUN chmod +x entrypoint.sh \
   verapdf/download.sh \
   govdocs/download.sh \
   pdf20/download.sh \
-  pdfcpu/download.sh
+  pdfcpu/download.sh \
+  facturx/download.sh
 
 ENTRYPOINT ["/work/entrypoint.sh"]
