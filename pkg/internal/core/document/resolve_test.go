@@ -51,6 +51,18 @@ func TestDecodePdfString(t *testing.T) {
 		{"utf8-bom", ast.PdfString("\xef\xbb\xbfHi"), "Hi"},
 		{"utf16be-double-bom", ast.PdfString("\xfe\xff\xfe\xff\x00H\x00i"), "Hi"},
 		{"utf8-leading-fEFF", ast.PdfString("\xef\xbb\xbf\xe8\xa1\xa8"), "表"},
+		// Double UTF-8 BOM: the producer wrapped a U+FEFF rune (which
+		// is itself 3 bytes in UTF-8) inside a UTF-8 BOM marker. The
+		// outer BOM is consumed as an encoding marker; the inner
+		// U+FEFF must also drop so the caller does not see a stray
+		// zero-width no-break space at the front of the string.
+		{"utf8-double-bom", ast.PdfString("\xef\xbb\xbf\xef\xbb\xbfHi"), "Hi"},
+		// UTF-8 BOM declared but the payload contains invalid UTF-8
+		// (lone continuation byte). Replace with U+FFFD instead of
+		// returning a Go string that fails [utf8.ValidString], which
+		// would silently corrupt JSON encoders and rune iteration
+		// downstream.
+		{"utf8-bom-invalid-payload", ast.PdfString("\xef\xbb\xbf\xc2hello"), "�hello"},
 		// PDFDocEncoding diacritic range (ISO 32000-1 Table D.2). Bytes
 		// 0x18-0x1F are spacing modifier letters, not control codes.
 		// A producer that uses 0x18 in a bookmark title means U+02D8

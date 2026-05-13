@@ -262,9 +262,18 @@ func DecodePdfString(s ast.PdfString) string {
 		return stripLeadingBOM(string(utf16.Decode(u16s)))
 	}
 	// UTF-8 BOM (0xEF 0xBB 0xBF): added in PDF 2.0 for the text-string
-	// type. Strip the marker and treat the remainder as UTF-8.
+	// type. Strip the marker, repair any invalid UTF-8 in the payload
+	// (producers that flag UTF-8 but then write a lone continuation
+	// byte are rare but real — the canonical fix is to surface the
+	// damage as U+FFFD instead of returning a Go string that fails
+	// utf8.Valid), and trim a second leading U+FEFF rune if the
+	// producer double-wrapped the BOM.
 	if len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
-		return string(b[3:])
+		payload := string(b[3:])
+		if !utf8.ValidString(payload) {
+			payload = strings.ToValidUTF8(payload, "�")
+		}
+		return stripLeadingBOM(payload)
 	}
 	// PDFDocEncoding / Windows-1252: bytes 0x80-0x9F have specific Unicode
 	// mappings; bytes 0xA0-0xFF map to the same Unicode code point.
