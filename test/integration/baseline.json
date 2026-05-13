@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-05-12T20:06:00Z",
+  "captured_at": "2026-05-13T15:11:01Z",
   "corpora": {
     "govdocs": {
       "features": {
@@ -14,7 +14,7 @@
           "mismatched": 469,
           "skipped": 0,
           "metrics": {
-            "chars_match": 999,
+            "chars_match": 1000,
             "words_match": 622
           }
         }

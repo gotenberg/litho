@@ -298,9 +298,18 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 				}
 				return ewb[i].BeadIndex < ewb[j].BeadIndex
 			}
-			if ewb[i].Y > ewb[j].Y+2.0 {
+			// Y-tolerance sized for sub/superscripts. Typical drops
+			// are 20-30% of font size (e.g., 7.98 vs 9.96 baseline ≈
+			// 2.5 pt). A 5 pt tolerance keeps the subscript glyphs
+			// sorted in document order with the baseline run instead
+			// of forming a separate "row" that the gap heuristic then
+			// reads as a word break ("0 -Tl" → "0 -T l"). Real line
+			// breaks are 10+ pt (line height ≈ 1.2 × font size for
+			// 10+ pt fonts), well above this threshold.
+			const sameRowDY = 5.0
+			if ewb[i].Y > ewb[j].Y+sameRowDY {
 				return true
-			} else if ewb[i].Y < ewb[j].Y-2.0 {
+			} else if ewb[i].Y < ewb[j].Y-sameRowDY {
 				return false
 			}
 			return ewb[i].X < ewb[j].X
