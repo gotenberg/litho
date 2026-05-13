@@ -240,10 +240,12 @@ const (
 // UTF-16BE BOM (0xFE 0xFF) encoding used by many PDF producers and the
 // UTF-8 BOM (0xEF 0xBB 0xBF) form added in PDF 2.0.
 //
-// DecodePdfString operates on already-decrypted string data. Decryption is
-// handled transparently by the parser's crypto pipeline during object
-// resolution, so by the time a [ast.PdfString] reaches this function the
-// cleartext bytes are guaranteed.
+// DecodePdfString operates on already-decrypted string data. The parser's
+// crypto pipeline applies decryption during object resolution and now
+// propagates decryption errors instead of silently passing the ciphertext
+// through, so by the time a [ast.PdfString] reaches this function the
+// bytes are guaranteed to be cleartext (or the resolver chain has already
+// returned an error).
 func DecodePdfString(s ast.PdfString) string {
 	b := []byte(s)
 	if len(b) >= 2 && b[0] == utf16BEBom0 && b[1] == utf16BEBom1 {

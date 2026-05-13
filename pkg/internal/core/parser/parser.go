@@ -186,7 +186,7 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 		}
 		return ast.PdfInt(i), nil
 	case lexer.TokenString:
-		return p.parseString(t0.Value), nil
+		return p.parseString(t0.Value)
 	case lexer.TokenHexString:
 		return p.parseHexString(t0.Value)
 	case lexer.TokenDelimiter:
@@ -540,9 +540,12 @@ func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length
 				return
 			}
 			if decryptFn != nil {
-				if dec, err := decryptFn(buf); err == nil {
-					buf = dec
+				dec, err := decryptFn(buf)
+				if err != nil {
+					cachedErr = fmt.Errorf("decrypting stream data: %w", err)
+					return
 				}
+				buf = dec
 			}
 			cached = buf
 		})
@@ -588,7 +591,7 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 	return arr, nil
 }
 
-func (p *Parser) parseString(val string) ast.PdfString {
+func (p *Parser) parseString(val string) (ast.PdfString, error) {
 	if len(val) >= 2 && val[0] == '(' && val[len(val)-1] == ')' {
 		val = val[1 : len(val)-1]
 	}
@@ -651,11 +654,13 @@ func (p *Parser) parseString(val string) ast.PdfString {
 
 	b := []byte(buf.String())
 	if p.decryptFn != nil {
-		if dec, err := p.decryptFn(b); err == nil {
-			b = dec
+		dec, err := p.decryptFn(b)
+		if err != nil {
+			return "", fmt.Errorf("decrypting literal string: %w", err)
 		}
+		b = dec
 	}
-	return ast.PdfString(string(b))
+	return ast.PdfString(string(b)), nil
 }
 
 // SkipInlineImage reads past an inline image in a content stream.
@@ -963,9 +968,11 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 		return "", err
 	}
 	if p.decryptFn != nil {
-		if dec, err := p.decryptFn(decoded); err == nil {
-			decoded = dec
+		dec, err := p.decryptFn(decoded)
+		if err != nil {
+			return "", fmt.Errorf("decrypting hex string: %w", err)
 		}
+		decoded = dec
 	}
 	return ast.PdfString(decoded), nil
 }
