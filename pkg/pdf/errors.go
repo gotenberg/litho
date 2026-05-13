@@ -94,6 +94,11 @@ var (
 	// when [FacturXConfig.Profile] is not a PDF/A-3 conformance level.
 	// Factur-X 1.0.07 mandates a PDF/A-3 archival base.
 	ErrInvalidFacturXProfile = errors.New("factur-x requires a PDF/A-3 profile")
+
+	// ErrInvalidZUGFeRDVersion is returned by [Reader.ValidateZUGFeRD]
+	// when the version argument does not match one of the documented
+	// [models.ZUGFeRDVersion] constants.
+	ErrInvalidZUGFeRDVersion = errors.New("zugferd version is invalid")
 )
 
 // Pipeline sentinel errors surface structural problems with a [Pipeline]

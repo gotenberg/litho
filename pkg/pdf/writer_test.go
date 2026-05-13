@@ -2923,6 +2923,104 @@ func TestWriter_RemediateFacturX_AppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestReader_ValidateFacturX_RoundTrip(t *testing.T) {
+	// Writer.RemediateFacturX output must satisfy Reader.ValidateFacturX
+	// without raising any hybrid-invoice (INVOICE.*) violations. The
+	// PDF/A-3 archival base may still surface residual violations on
+	// the minimal fixture; this test asserts only that no INVOICE rule
+	// other than the PDF/A-3 base aggregator is reported.
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXEN16931,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer r2.Close()
+
+	violations, err := r2.ValidateFacturX(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturX: %v", err)
+	}
+	for _, v := range violations {
+		msg := v.Error()
+		if strings.Contains(msg, "clause INVOICE") &&
+			!strings.Contains(msg, "PDF/A-3 violations on the archival base") {
+			t.Errorf("unexpected hybrid-invoice violation: %v", v)
+		}
+	}
+}
+
+func TestReader_ValidateZUGFeRD_VersionMismatch(t *testing.T) {
+	// A document produced as Factur-X (filename factur-x.xml, fx
+	// namespace) must NOT validate as ZUGFeRD 1.0 or 2.0: the legacy
+	// filename is absent so the variant-specific filespec check fires.
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXBasic,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer r2.Close()
+
+	violations, err := r2.ValidateZUGFeRD(ctx, models.ZUGFeRD2)
+	if err != nil {
+		t.Fatalf("ValidateZUGFeRD(2.0): %v", err)
+	}
+	saw := false
+	for _, v := range violations {
+		if strings.Contains(v.Error(), `no filespec named "zugferd-invoice.xml"`) {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Error("expected hybrid-invoice filespec mismatch when auditing Factur-X file as ZUGFeRD 2.0")
+	}
+}
+
+func TestReader_ValidateZUGFeRD_BadVersion(t *testing.T) {
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	_, err = r.ValidateZUGFeRD(ctx, models.ZUGFeRDVersion("9.9"))
+	if !errors.Is(err, ErrInvalidZUGFeRDVersion) {
+		t.Errorf("err: got %v, want errors.Is(_, ErrInvalidZUGFeRDVersion)", err)
+	}
+}
+
 func TestWriter_RemediateFacturX_RejectsBadConfig(t *testing.T) {
 	ctx := context.Background()
 	data := writerTestPDF()

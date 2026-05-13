@@ -139,6 +139,32 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 	return compliance.ValidatePDFUA(ctx, r.doc, profile)
 }
 
+// ValidateFacturX audits the document against the joint
+// Factur-X 1.0+ / ZUGFeRD 2.1+ specification. The returned slice
+// contains the PDF/A-3 violations of the archival base plus any
+// hybrid-invoice rule violations.
+//
+// Use [Reader.ValidateZUGFeRD] when the producer claims an earlier
+// ZUGFeRD generation (1.0 or 2.0) since those use different filenames
+// and XMP namespaces.
+func (r *Reader) ValidateFacturX(ctx context.Context) ([]error, error) {
+	return compliance.ValidateFacturX(ctx, r.doc)
+}
+
+// ValidateZUGFeRD audits the document against the given ZUGFeRD
+// version. For [models.ZUGFeRD21] this is equivalent to
+// [Reader.ValidateFacturX] because the joint specification merges
+// both names under the same on-disk layout.
+//
+// Returns [ErrInvalidZUGFeRDVersion] wrapped with the offending value
+// when version is not a documented constant.
+func (r *Reader) ValidateZUGFeRD(ctx context.Context, version models.ZUGFeRDVersion) ([]error, error) {
+	if !version.IsValid() {
+		return nil, fmt.Errorf("%w: %q", ErrInvalidZUGFeRDVersion, version)
+	}
+	return compliance.ValidateZUGFeRD(ctx, r.doc, version)
+}
+
 // Open initializes a new [Reader] from an [io.ReaderAt] and its total size.
 // Pass functional options (e.g., [WithLogger], [WithPassword]) to customize behavior.
 func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*Reader, error) {

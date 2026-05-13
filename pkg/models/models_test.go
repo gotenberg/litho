@@ -588,6 +588,44 @@ func TestFacturXLevel_JSONValue(t *testing.T) {
 	}
 }
 
+func TestZUGFeRDVersion_JSONValue(t *testing.T) {
+	tests := []struct {
+		version ZUGFeRDVersion
+		want    string
+	}{
+		{ZUGFeRD1, `"1.0"`},
+		{ZUGFeRD2, `"2.0"`},
+		{ZUGFeRD21, `"2.1"`},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.version), func(t *testing.T) {
+			data, err := json.Marshal(tc.version)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if string(data) != tc.want {
+				t.Errorf("got %s, want %s", data, tc.want)
+			}
+		})
+	}
+}
+
+func TestZUGFeRDVersion_IsValid(t *testing.T) {
+	for _, v := range []ZUGFeRDVersion{ZUGFeRD1, ZUGFeRD2, ZUGFeRD21} {
+		if !v.IsValid() {
+			t.Errorf("ZUGFeRDVersion(%q).IsValid() = false, want true", v)
+		}
+		if v.String() != string(v) {
+			t.Errorf("String() drift on %q", v)
+		}
+	}
+	for _, v := range []ZUGFeRDVersion{"", "3.0", "2", "2.2"} {
+		if v.IsValid() {
+			t.Errorf("ZUGFeRDVersion(%q).IsValid() = true, want false", v)
+		}
+	}
+}
+
 func TestFacturXLevel_IsValid(t *testing.T) {
 	valid := []FacturXLevel{
 		FacturXMinimum, FacturXBasicWL, FacturXBasic, FacturXEN16931, FacturXExtended, FacturXXRechnung,

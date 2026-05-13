@@ -95,6 +95,43 @@ const (
 	FacturXXRechnung FacturXLevel = "XRECHNUNG"
 )
 
+// ZUGFeRDVersion identifies a ZUGFeRD generation. The legacy 1.0 and
+// 2.0 generations carry their own filename, namespace, and conformance
+// profiles; 2.1 onwards is the joint specification shared with
+// Factur-X 1.0+.
+// Values are immutable and safe for concurrent use.
+type ZUGFeRDVersion string
+
+// ZUGFeRD generation constants.
+const (
+	// ZUGFeRD1 identifies the 2014 ZUGFeRD 1.0 specification.
+	// Filename: ZUGFeRD-invoice.xml. AFRelationship: Alternative.
+	// Profiles: BASIC, COMFORT, EXTENDED.
+	ZUGFeRD1 ZUGFeRDVersion = "1.0"
+	// ZUGFeRD2 identifies the 2018 ZUGFeRD 2.0 specification.
+	// Filename: zugferd-invoice.xml. AFRelationship: Alternative.
+	// Profiles: MINIMUM, BASIC, COMFORT, EXTENDED.
+	ZUGFeRD2 ZUGFeRDVersion = "2.0"
+	// ZUGFeRD21 identifies the joint ZUGFeRD 2.1+ / Factur-X 1.0+
+	// specification. Filename: factur-x.xml. AFRelationship: Data.
+	// Profiles: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG.
+	ZUGFeRD21 ZUGFeRDVersion = "2.1"
+)
+
+// String returns the canonical string form of the version, e.g.
+// "2.1". The zero value renders as the empty string.
+func (v ZUGFeRDVersion) String() string { return string(v) }
+
+// IsValid reports whether v matches one of the documented ZUGFeRD
+// version constants.
+func (v ZUGFeRDVersion) IsValid() bool {
+	switch v {
+	case ZUGFeRD1, ZUGFeRD2, ZUGFeRD21:
+		return true
+	}
+	return false
+}
+
 // String returns the canonical string form of the level, e.g.
 // "EN 16931". The zero value renders as the empty string.
 func (l FacturXLevel) String() string { return string(l) }
