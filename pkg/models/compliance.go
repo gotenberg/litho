@@ -88,6 +88,11 @@ const (
 	// FacturXExtended corresponds to the EXTENDED profile: superset of
 	// EN 16931 with bilateral fields.
 	FacturXExtended FacturXLevel = "EXTENDED"
+	// FacturXXRechnung corresponds to the XRECHNUNG profile shipped by
+	// ZUGFeRD 2.1+. Mandatory format for invoices addressed to German
+	// federal public-sector buyers under the E-Rechnungsverordnung.
+	// Aligned with the KoSIT XRechnung specification.
+	FacturXXRechnung FacturXLevel = "XRECHNUNG"
 )
 
 // String returns the canonical string form of the level, e.g.
@@ -99,7 +104,7 @@ func (l FacturXLevel) String() string { return string(l) }
 // value to a remediation engine that assumes a known level.
 func (l FacturXLevel) IsValid() bool {
 	switch l {
-	case FacturXMinimum, FacturXBasicWL, FacturXBasic, FacturXEN16931, FacturXExtended:
+	case FacturXMinimum, FacturXBasicWL, FacturXBasic, FacturXEN16931, FacturXExtended, FacturXXRechnung:
 		return true
 	}
 	return false

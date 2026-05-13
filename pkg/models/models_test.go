@@ -573,6 +573,7 @@ func TestFacturXLevel_JSONValue(t *testing.T) {
 		{FacturXBasic, `"BASIC"`},
 		{FacturXEN16931, `"EN 16931"`},
 		{FacturXExtended, `"EXTENDED"`},
+		{FacturXXRechnung, `"XRECHNUNG"`},
 	}
 	for _, tc := range tests {
 		t.Run(string(tc.level), func(t *testing.T) {
@@ -589,7 +590,7 @@ func TestFacturXLevel_JSONValue(t *testing.T) {
 
 func TestFacturXLevel_IsValid(t *testing.T) {
 	valid := []FacturXLevel{
-		FacturXMinimum, FacturXBasicWL, FacturXBasic, FacturXEN16931, FacturXExtended,
+		FacturXMinimum, FacturXBasicWL, FacturXBasic, FacturXEN16931, FacturXExtended, FacturXXRechnung,
 	}
 	for _, l := range valid {
 		if !l.IsValid() {
