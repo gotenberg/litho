@@ -112,10 +112,20 @@ func compareMetadata(file string, golden, litho pdfjsRefInfo) []metadataMismatch
 	var mm []metadataMismatch
 
 	addStr := func(field, lithoVal, goldenVal string) {
-		if goldenVal == "" {
+		// A golden that is empty after stripping undefined controls
+		// has no useful reference to compare against. PDF.js's
+		// /Info dict reads can surface NULL-padded fields (govdocs
+		// thread_100_100981.pdf has a 1024-byte all-NUL Title)
+		// where litho's scanRawInfoFields fallback recovers a real
+		// value from an older incremental-save /Info revision. We
+		// have no way to confirm whether the recovered litho value
+		// is correct or not, but we know the golden carries no
+		// signal — skip rather than flag.
+		strippedGolden := stripUndefinedControls(goldenVal)
+		if strippedGolden == "" {
 			return
 		}
-		if stripUndefinedControls(lithoVal) == stripUndefinedControls(goldenVal) {
+		if stripUndefinedControls(lithoVal) == strippedGolden {
 			return
 		}
 		mm = append(mm, metadataMismatch{File: file, Field: field, Litho: lithoVal, Golden: goldenVal})
