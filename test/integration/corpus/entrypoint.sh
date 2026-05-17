@@ -137,6 +137,19 @@ else
   echo "==> skipping merge-empty goldens (not requested by ${CORPUS})."
 fi
 
+if wants facturx-validity; then
+  FX="$OUTPUT/goldens/facturx-validity"
+  if nonempty "$FX"; then
+    echo "==> facturx-validity goldens already present, skipping Mustang."
+  else
+    mkdir -p "$FX"
+    echo "==> running Mustang per fixture..."
+    /work/lib/run-mustang.sh "$PDFS" "$FX/jobs.json"
+  fi
+else
+  echo "==> skipping Mustang goldens (not requested by ${CORPUS})."
+fi
+
 if wants compliance || wants remediation || wants remediation-aggressive; then
   COMP="$OUTPUT/goldens/compliance"
   if nonempty "$COMP"; then

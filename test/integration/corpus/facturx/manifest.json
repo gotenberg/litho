@@ -9,6 +9,7 @@
     "metadata": "goldens/metadata",
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
-    "remediation-aggressive": "goldens/compliance"
+    "remediation-aggressive": "goldens/compliance",
+    "facturx-validity": "goldens/facturx-validity"
   }
 }

@@ -18,7 +18,7 @@ FROM --platform=linux/amd64 verapdf/cli:latest AS verapdf-dist
 FROM node:24
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  git unzip curl ca-certificates default-jre-headless parallel \
+  git unzip curl ca-certificates default-jre-headless parallel jq \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=verapdf-dist /opt/verapdf /opt/verapdf
@@ -39,6 +39,14 @@ RUN curl -fSL -o /tmp/pdfcpu.tar.xz \
   && install -m 0755 "/tmp/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64/pdfcpu" /usr/local/bin/pdfcpu \
   && rm -rf /tmp/pdfcpu.tar.xz "/tmp/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64"
 
+# Install Mustang CLI: third-party oracle for the facturx-validity
+# feature. Covers the Factur-X / ZUGFeRD PDF wrapper (filename,
+# AFRelationship, XMP fx:* properties, extension schema) plus the
+# embedded CII XML schema. Pinned to a tagged release for reproducibility.
+ARG MUSTANG_VERSION=2.13.0
+RUN curl -fSL -o /opt/mustang.jar \
+  "https://github.com/ZUGFeRD/mustangproject/releases/download/V${MUSTANG_VERSION}/Mustang-CLI-${MUSTANG_VERSION}.jar"
+
 WORKDIR /work
 COPY entrypoint.sh ./
 COPY lib/ ./lib/
@@ -50,6 +58,7 @@ COPY pdfcpu/ ./pdfcpu/
 COPY facturx/ ./facturx/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
+  lib/run-mustang.sh \
   lib/gen-bookmarks.sh \
   lib/gen-merges.sh \
   lib/gen-merge-empty.sh \
