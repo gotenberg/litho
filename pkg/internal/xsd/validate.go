@@ -251,13 +251,27 @@ func (v *validator) findRootElement(qn QName) (*Element, bool) {
 // pushFrame opens a frame for an accepted element. The matcher is
 // installed when the type carries an element content model; simple
 // types and built-ins leave matcher nil so CharData is collected as
-// leaf text instead.
+// leaf text instead. Attribute validation runs at frame open since
+// every attribute is bound to its element by the time the
+// StartElement event arrives.
 func (v *validator) pushFrame(start xml.StartElement, el *Element) {
 	f := &frame{element: el, name: start.Name}
 	if ct, ok := el.Type.(*ComplexType); ok {
 		f.matcher = newMatcher(ct, v.schema)
+		v.violations = append(v.violations,
+			validateAttributes(start, ct, v.pathWith(start.Name))...)
 	}
 	v.stack = append(v.stack, f)
+}
+
+// pathWith renders the path that the new frame will own once pushed.
+// Used by attribute validation so violation paths point at the
+// owning element, not at its parent.
+func (v *validator) pathWith(name xml.Name) string {
+	if len(v.stack) == 0 {
+		return "/" + name.Local
+	}
+	return v.path() + "/" + name.Local
 }
 
 // pushPlaceholder opens a frame without an attached schema element.
@@ -292,22 +306,140 @@ func nameOf(n xml.Name) string {
 }
 
 // newMatcher constructs the matcher for a ComplexType's content
-// model. Resolves the model by walking xs:extension chains so the
-// content seen by the matcher includes inherited particles from
-// the base type. Base-merging is a PR4 concern; PR3 honours the
-// type's own Content only.
-func newMatcher(ct *ComplexType, schema *Schema) contentMatcher {
-	switch m := ct.Content.(type) {
-	case Sequence:
-		return &sequenceMatcher{seq: m, particles: m.Particles}
-	case Choice:
-		// Treat choice as a tolerant sequence in PR3: any particle
-		// is accepted, cardinality enforced. PR4 promotes this to a
-		// true choice matcher.
-		seq := Sequence(m)
-		return &sequenceMatcher{seq: seq, particles: m.Particles}
+// model. Walks xs:extension chains so inherited particles from the
+// base type sit ahead of the derived type's own particles in the
+// matcher's view, matching XSD's "base content first, then extension"
+// semantics for derivation by extension.
+func newMatcher(ct *ComplexType, _ *Schema) contentMatcher {
+	particles := collectExtendedParticles(ct)
+	if len(particles) == 0 {
+		// Empty content type or anonymous all-attributes complex type.
+		return &emptyMatcher{}
 	}
-	return &emptyMatcher{}
+	// Choice is treated as a tolerant-sequence at the content-model
+	// level: particles can appear in any order, cardinality is
+	// enforced per particle. CII makes light use of choice so the
+	// stricter "exactly one alternative" semantics is not yet worth
+	// the matcher complexity.
+	return &sequenceMatcher{seq: Sequence{Particles: particles}, particles: particles}
+}
+
+// collectExtendedParticles flattens the xs:extension chain rooted at
+// ct into a single particle list. Base particles appear before
+// derived particles, matching the way an extending complex type
+// appends to the base's content model. Cycles cannot occur because
+// the loader rejects xs:include cycles at load time, but a sane
+// upper bound on the walk depth still guards against pathological
+// schemas.
+func collectExtendedParticles(ct *ComplexType) []Particle {
+	const maxDepth = 64
+	var chain []*ComplexType
+	cur := ct
+	for depth := 0; cur != nil && depth < maxDepth; depth++ {
+		chain = append([]*ComplexType{cur}, chain...)
+		if base, ok := cur.Base.(*ComplexType); ok {
+			cur = base
+			continue
+		}
+		break
+	}
+	var out []Particle
+	for _, link := range chain {
+		switch m := link.Content.(type) {
+		case Sequence:
+			out = append(out, m.Particles...)
+		case Choice:
+			out = append(out, m.Particles...)
+		}
+	}
+	return out
+}
+
+// collectExtendedAttributes flattens the xs:extension chain into a
+// single attribute-use list, base-first then derived. Used by
+// attribute validation so an extending complex type honours every
+// attribute declared on its base alongside the local additions.
+func collectExtendedAttributes(ct *ComplexType) []AttributeUse {
+	const maxDepth = 64
+	var chain []*ComplexType
+	cur := ct
+	for depth := 0; cur != nil && depth < maxDepth; depth++ {
+		chain = append([]*ComplexType{cur}, chain...)
+		if base, ok := cur.Base.(*ComplexType); ok {
+			cur = base
+			continue
+		}
+		break
+	}
+	var out []AttributeUse
+	for _, link := range chain {
+		out = append(out, link.Attributes...)
+	}
+	return out
+}
+
+// validateAttributes walks the declared attribute uses on ct and
+// matches each one against the StartElement's attribute list. The
+// path argument names the owning element so violations point at the
+// right place when several elements have attribute issues.
+//
+// Three failure modes surface as RuleAttribute:
+//   - required attribute absent
+//   - attribute value does not satisfy its declared type
+//   - attribute has a fixed value and the document supplied a
+//     different one
+func validateAttributes(start xml.StartElement, ct *ComplexType, path string) []Violation {
+	declared := collectExtendedAttributes(ct)
+	if len(declared) == 0 {
+		return nil
+	}
+	var out []Violation
+	for _, use := range declared {
+		value, present := findAttr(start.Attr, use.Name)
+		if !present {
+			if use.Required {
+				out = append(out, Violation{
+					Rule:   RuleAttribute,
+					Path:   path + "/@" + use.Name.Local,
+					Reason: "required attribute missing",
+				})
+			}
+			continue
+		}
+		if use.Fixed != "" && value != use.Fixed {
+			out = append(out, Violation{
+				Rule:   RuleAttribute,
+				Path:   path + "/@" + use.Name.Local,
+				Reason: fmt.Sprintf("fixed attribute value %q does not match required %q", value, use.Fixed),
+			})
+			continue
+		}
+		for _, fv := range ValidateValue(value, use.Type) {
+			out = append(out, Violation{
+				Rule:   RuleAttribute,
+				Path:   path + "/@" + use.Name.Local,
+				Reason: fv.Reason,
+			})
+		}
+	}
+	return out
+}
+
+// findAttr returns the value of an attribute matching want from
+// attrs, plus whether one was found. Match is by full QName so
+// namespaced attribute names like xml:lang resolve correctly; an
+// empty want namespace matches an unprefixed attribute, which is
+// the convention CII relies on.
+func findAttr(attrs []xml.Attr, want QName) (string, bool) {
+	for _, a := range attrs {
+		if a.Name.Local != want.Local {
+			continue
+		}
+		if want.Namespace == "" || a.Name.Space == want.Namespace || a.Name.Space == "" {
+			return a.Value, true
+		}
+	}
+	return "", false
 }
 
 // sequenceMatcher walks an xs:sequence content model. It accepts
