@@ -3094,6 +3094,46 @@ func TestReader_ValidateFacturX_WithXSD(t *testing.T) {
 	}
 }
 
+func TestReader_ValidateFacturX_BundledXSDDefault(t *testing.T) {
+	// No WithCIISchemas override: ValidateFacturX should still run
+	// the XSD pass using the bundled D16B schemas (currently a
+	// placeholder that accepts every child element under the root)
+	// and not surface bogus CII_XSD violations on a valid fixture.
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXEN16931,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer r2.Close()
+
+	violations, err := r2.ValidateFacturX(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturX: %v", err)
+	}
+	for _, v := range violations {
+		if strings.Contains(v.Error(), "clause CII_XSD") {
+			t.Errorf("unexpected CII_XSD violation under default bundle: %v", v)
+		}
+	}
+}
+
 func TestReader_ValidateFacturX_XSDBadSchema(t *testing.T) {
 	ctx := context.Background()
 	data := writerTestPDF()

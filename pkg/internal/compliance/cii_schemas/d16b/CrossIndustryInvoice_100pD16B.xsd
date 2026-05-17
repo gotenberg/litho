@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PLACEHOLDER schema — replace with the CEN/EN 16931 D16B set.
+
+  This file ships only so the embed.FS path can compile and so the
+  auto-dispatch in Reader.ValidateFacturX exercises the validator
+  pipeline end-to-end. Real type-level XSD validation requires the
+  full UN/CEFACT CII D16B schema set as published by the CEN/EN 16931
+  artefacts repository at:
+
+      https://github.com/ConnectingEurope/eInvoicing-EN16931
+
+  Replace this directory's contents with the canonical XSDs (rooted
+  at CrossIndustryInvoice_100pD16B.xsd) and bump the version pin
+  documented in the README before relying on CII_XSD violations.
+-->
+<xs:schema
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
+  targetNamespace="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
+  elementFormDefault="qualified">
+  <xs:complexType name="CrossIndustryInvoiceType">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="CrossIndustryInvoice" type="rsm:CrossIndustryInvoiceType"/>
+</xs:schema>

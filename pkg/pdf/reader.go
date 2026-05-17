@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/annotation"
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	cii_schemas "github.com/gotenberg/litho/pkg/internal/compliance/cii_schemas"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
@@ -175,17 +176,31 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 // ZUGFeRD generation (1.0 or 2.0) since those use different filenames
 // and XMP namespaces.
 func (r *Reader) ValidateFacturX(ctx context.Context) ([]error, error) {
-	return compliance.ValidateFacturX(ctx, r.doc, r.facturXValidateOpts()...)
+	return compliance.ValidateFacturX(ctx, r.doc, r.facturXValidateOpts(ctx)...)
 }
 
 // facturXValidateOpts assembles the compliance options threaded into
-// the validator entry points. The XSD pass is included when the
-// caller passed [WithCIISchemas] to [Open] / [OpenFile].
-func (r *Reader) facturXValidateOpts() []compliance.FacturXValidateOption {
-	if r.ciiSchema == nil {
+// the validator entry points. The XSD pass uses, in order:
+//
+//  1. The schema set passed via [WithCIISchemas] when the caller
+//     overrode the default.
+//  2. The bundled D16B set from
+//     [pkg/internal/compliance/cii_schemas] otherwise.
+//
+// A bundle load error is logged at debug and the XSD pass is skipped
+// rather than failing the validation call, so a botched bump in the
+// schemas directory does not break callers that rely on the spine
+// rules alone.
+func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXValidateOption {
+	if r.ciiSchema != nil {
+		return []compliance.FacturXValidateOption{compliance.WithFacturXXSD(r.ciiSchema)}
+	}
+	schema, err := cii_schemas.LoadDefault(ctx)
+	if err != nil {
+		r.doc.Logger.Debug("xsd: bundled CII schemas unavailable, falling back to spine rules", "err", err)
 		return nil
 	}
-	return []compliance.FacturXValidateOption{compliance.WithFacturXXSD(r.ciiSchema)}
+	return []compliance.FacturXValidateOption{compliance.WithFacturXXSD(schema)}
 }
 
 // ValidateZUGFeRD audits the document against the given ZUGFeRD
@@ -199,7 +214,7 @@ func (r *Reader) ValidateZUGFeRD(ctx context.Context, version models.ZUGFeRDVers
 	if !version.IsValid() {
 		return nil, fmt.Errorf("%w: %q", ErrInvalidZUGFeRDVersion, version)
 	}
-	return compliance.ValidateZUGFeRD(ctx, r.doc, version, r.facturXValidateOpts()...)
+	return compliance.ValidateZUGFeRD(ctx, r.doc, version, r.facturXValidateOpts(ctx)...)
 }
 
 // Open initializes a new [Reader] from an [io.ReaderAt] and its total size.
