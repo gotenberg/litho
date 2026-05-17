@@ -209,4 +209,59 @@ var (
 		Object:        "CII",
 		Description:   "SpecifiedTradeSettlementHeaderMonetarySummation shall expose a non-empty GrandTotalAmount",
 	}
+
+	// CII XSD rules. Each rule below maps a category from the pure-Go
+	// XSD engine ([pkg/internal/xsd]) onto a Violation surface so the
+	// existing compliance scoreboard can aggregate them. Tests that
+	// load a CII schema set into [pdf.Reader] turn structural,
+	// cardinality, lexical, facet, and attribute failures the engine
+	// finds into violations under the CII_XSD clause.
+
+	Rule_cii_xsd_Root = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_XSD",
+		TestNumber:    1,
+		Object:        "CII",
+		Description:   "The embedded invoice document element shall be declared in the loaded XSD schema set",
+	}
+
+	Rule_cii_xsd_Structure = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_XSD",
+		TestNumber:    2,
+		Object:        "CII",
+		Description:   "Element ordering and parent-child structure shall match the XSD content model",
+	}
+
+	Rule_cii_xsd_Cardinality = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_XSD",
+		TestNumber:    3,
+		Object:        "CII",
+		Description:   "Each element occurrence count shall fall within the XSD minOccurs/maxOccurs bounds",
+	}
+
+	Rule_cii_xsd_Lexical = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_XSD",
+		TestNumber:    4,
+		Object:        "CII",
+		Description:   "Leaf-element text shall lie within the XSD built-in type's lexical space",
+	}
+
+	Rule_cii_xsd_Facet = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_XSD",
+		TestNumber:    5,
+		Object:        "CII",
+		Description:   "Leaf-element values shall satisfy every facet declared by the XSD simple type",
+	}
+
+	Rule_cii_xsd_Attribute = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_XSD",
+		TestNumber:    6,
+		Object:        "CII",
+		Description:   "Element attributes shall meet the XSD declaration's required/fixed/type constraints",
+	}
 )

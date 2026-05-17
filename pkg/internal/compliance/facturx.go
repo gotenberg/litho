@@ -9,8 +9,34 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/xsd"
 	"github.com/gotenberg/litho/pkg/models"
 )
+
+// FacturXValidateOption configures [ValidateFacturX] and
+// [ValidateZUGFeRD]. Options are designed to be safe to call from any
+// goroutine and immutable after construction.
+type FacturXValidateOption func(*facturXValidateOpts)
+
+type facturXValidateOpts struct {
+	xsdSchema *xsd.Schema
+}
+
+// WithFacturXXSD registers a loaded XSD schema set against which the
+// validator runs a full XML Schema pass over the embedded CII XML.
+// When the option is absent, the validator only runs the existing
+// hand-rolled spine rules under clause CII; with the option present
+// it additionally surfaces violations under clause CII_XSD covering
+// the full XSD subset the engine supports.
+//
+// The schema set must be the Factur-X / ZUGFeRD 2.1+ CII D16B
+// hierarchy; passing a different schema set will surface every
+// element as a root or structure violation. PR5 leaves bundling of
+// the canonical XSDs to the caller (use [xsd.Load] with an embed.FS
+// or os.DirFS) so litho keeps no UN/CEFACT artefacts in-tree.
+func WithFacturXXSD(s *xsd.Schema) FacturXValidateOption {
+	return func(o *facturXValidateOpts) { o.xsdSchema = s }
+}
 
 // hybridInvoiceVariant captures the format-specific values that
 // distinguish Factur-X 1.0+ / ZUGFeRD 2.1+ from the legacy ZUGFeRD 1.0
@@ -75,8 +101,8 @@ var (
 //
 // The function holds the document's validation run mutex during the
 // PDF/A-3 pass; see [ValidatePDFA] for the concurrency contract.
-func ValidateFacturX(ctx context.Context, doc *document.Document) ([]error, error) {
-	return validateHybridInvoice(ctx, doc, variantFacturX)
+func ValidateFacturX(ctx context.Context, doc *document.Document, opts ...FacturXValidateOption) ([]error, error) {
+	return validateHybridInvoice(ctx, doc, variantFacturX, opts...)
 }
 
 // ValidateZUGFeRD audits the document against the ZUGFeRD version
@@ -86,12 +112,12 @@ func ValidateFacturX(ctx context.Context, doc *document.Document) ([]error, erro
 //
 // Returns an error if ver is not one of [models.ZUGFeRD1],
 // [models.ZUGFeRD2], or [models.ZUGFeRD21].
-func ValidateZUGFeRD(ctx context.Context, doc *document.Document, ver models.ZUGFeRDVersion) ([]error, error) {
+func ValidateZUGFeRD(ctx context.Context, doc *document.Document, ver models.ZUGFeRDVersion, opts ...FacturXValidateOption) ([]error, error) {
 	variant, ok := zugferdVariantFor(ver)
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownProfile, ver)
 	}
-	return validateHybridInvoice(ctx, doc, variant)
+	return validateHybridInvoice(ctx, doc, variant, opts...)
 }
 
 // zugferdVariantFor maps a [models.ZUGFeRDVersion] to its variant
@@ -111,7 +137,11 @@ func zugferdVariantFor(ver models.ZUGFeRDVersion) (hybridInvoiceVariant, bool) {
 // validateHybridInvoice runs the PDF/A-3 pass and then the
 // hybrid-invoice rules against doc. Variant-specific filenames and
 // XMP namespace details flow through v.
-func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybridInvoiceVariant) ([]error, error) {
+func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybridInvoiceVariant, opts ...FacturXValidateOption) ([]error, error) {
+	var cfg facturXValidateOpts
+	for _, o := range opts {
+		o(&cfg)
+	}
 	pdfaErrs, err := ValidatePDFA(ctx, doc, models.PDFA3b)
 	if err != nil {
 		return nil, fmt.Errorf("validating PDF/A-3 base for %s: %w", v.label, err)
@@ -130,6 +160,9 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	hybrid = append(hybrid, checkInvoiceConflictingVariant(ctx, doc, v)...)
 	hybrid = append(hybrid, checkInvoiceXMP(ctx, doc, catalog, invoice, v)...)
 	hybrid = append(hybrid, checkInvoiceCII(ctx, doc, invoice, v)...)
+	if cfg.xsdSchema != nil {
+		hybrid = append(hybrid, checkInvoiceCIIXSD(ctx, doc, invoice, v, cfg.xsdSchema)...)
+	}
 	hybrid = append(hybrid, tagPDFA3Base(pdfaErrs, v)...)
 
 	out := violationsToErrors(hybrid)

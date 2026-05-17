@@ -155,11 +155,18 @@ func (v *validator) onStart(start xml.StartElement) {
 	}
 	parent := v.stack[len(v.stack)-1]
 	if parent.matcher == nil {
-		v.violations = append(v.violations, Violation{
-			Rule:   RuleStructure,
-			Path:   v.path() + "/" + nameOf(start.Name),
-			Reason: fmt.Sprintf("element %s appears inside simple-type content", nameOf(start.Name)),
-		})
+		// Two cases with no matcher: a simple-type leaf (children
+		// are illegal, surface a structure violation) or a
+		// placeholder absorbing a wildcard-matched or rejected
+		// subtree (children silently propagate as more placeholders
+		// so cascading false violations do not pile up).
+		if parent.element != nil {
+			v.violations = append(v.violations, Violation{
+				Rule:   RuleStructure,
+				Path:   v.path() + "/" + nameOf(start.Name),
+				Reason: fmt.Sprintf("element %s appears inside simple-type content", nameOf(start.Name)),
+			})
+		}
 		v.pushPlaceholder(start)
 		return
 	}
@@ -167,6 +174,12 @@ func (v *validator) onStart(start xml.StartElement) {
 	if vio != nil {
 		vio.Path = v.path() + "/" + nameOf(start.Name)
 		v.violations = append(v.violations, *vio)
+		v.pushPlaceholder(start)
+		return
+	}
+	if el == nil {
+		// Wildcard match: accepted, but no schema element to drive
+		// validation on the subtree. Treat the child as opaque.
 		v.pushPlaceholder(start)
 		return
 	}
@@ -467,10 +480,15 @@ func (m *sequenceMatcher) step(name xml.Name) (*Element, *Violation) {
 	for m.pos < len(m.particles) {
 		p := m.particles[m.pos]
 		if p.Wildcard != nil {
-			// Wildcards are skipped permissively in PR3: any name
-			// matches, no cardinality counting.
-			m.advance()
-			continue
+			// Wildcards accept any qualified name and treat the
+			// child as opaque (process-contents="skip" semantics).
+			// Tracking occurrence keeps a finite-maxOccurs wildcard
+			// from accepting more than the spec allows.
+			m.occurrence++
+			if m.occurrence >= maxOccursOrUnlimited(p.Wildcard.MaxOccurs) {
+				m.advance()
+			}
+			return nil, nil
 		}
 		if p.Element == nil {
 			m.advance()

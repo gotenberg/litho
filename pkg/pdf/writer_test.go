@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -3029,6 +3030,78 @@ func TestReader_ValidateZUGFeRD_VersionMismatch(t *testing.T) {
 	}
 	if !saw {
 		t.Error("expected hybrid-invoice filespec mismatch when auditing Factur-X file as ZUGFeRD 2.0")
+	}
+}
+
+// facturXTestXSD is a deliberately minimal CII-shape XSD that only
+// declares the document root in the canonical CII namespace. The
+// integration test in [TestReader_ValidateFacturX_WithXSD] uses it
+// to drive the XSD pass through the embedded factur-x.xml without
+// pulling the full UN/CEFACT D16B hierarchy into the repository.
+const facturXTestXSD = `<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
+           targetNamespace="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
+           elementFormDefault="qualified">
+  <xs:complexType name="CrossIndustryInvoiceType">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="CrossIndustryInvoice" type="rsm:CrossIndustryInvoiceType"/>
+</xs:schema>`
+
+func TestReader_ValidateFacturX_WithXSD(t *testing.T) {
+	// Round-trip: produce a Factur-X PDF, open the result with the
+	// CII schema option set, validate, and confirm no CII_XSD
+	// violations surface against a passing fixture. A wholly missing
+	// schema set in earlier tests proves the XSD pass is gated on
+	// the option.
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXEN16931,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	schemaFS := fstest.MapFS{"cii.xsd": &fstest.MapFile{Data: []byte(facturXTestXSD)}}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()),
+		WithCIISchemas(schemaFS, "cii.xsd"))
+	if err != nil {
+		t.Fatalf("reopen with schema: %v", err)
+	}
+	defer r2.Close()
+
+	violations, err := r2.ValidateFacturX(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturX: %v", err)
+	}
+	for _, v := range violations {
+		if strings.Contains(v.Error(), "clause CII_XSD") {
+			t.Errorf("unexpected CII_XSD violation on passing fixture: %v", v)
+		}
+	}
+}
+
+func TestReader_ValidateFacturX_XSDBadSchema(t *testing.T) {
+	ctx := context.Background()
+	data := writerTestPDF()
+	schemaFS := fstest.MapFS{"missing.xsd": &fstest.MapFile{Data: []byte("not an xsd")}}
+	_, err := Open(ctx, bytes.NewReader(data), int64(len(data)),
+		WithCIISchemas(schemaFS, "missing.xsd"))
+	if err == nil {
+		t.Error("expected error from Open with malformed XSD")
 	}
 }
 

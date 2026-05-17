@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/xsd"
 )
 
 // UN/CEFACT Cross-Industry Invoice namespace URIs. The XML decoder
@@ -265,4 +266,80 @@ func readLeafText(dec *xml.Decoder, name xml.Name) string {
 			}
 		}
 	}
+}
+
+// checkInvoiceCIIXSD runs the pure-Go XSD engine against the embedded
+// CII XML and translates each XSD violation into a Violation under
+// the CII_XSD clause. Skips silently when the invoice file is not
+// found or the variant is not Factur-X (the engine's rule set only
+// fits the joint format).
+func checkInvoiceCIIXSD(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *xsd.Schema) []Violation {
+	if schema == nil {
+		return nil
+	}
+	if v.namespaceURI != variantFacturX.namespaceURI {
+		return nil
+	}
+	if !invoice.found || invoice.streamDict == nil {
+		return nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, invoice.streamRef)
+	if err != nil {
+		return nil
+	}
+	data, err := stream.Bytes(ctx)
+	if err != nil || len(data) == 0 {
+		decoded, decErr := doc.DecodeStream(ctx, stream)
+		if decErr != nil {
+			return nil
+		}
+		data = decoded
+	}
+
+	xsdViolations, err := xsd.Validate(ctx, schema, data)
+	if err != nil {
+		// Parse failure already surfaced via the structural spine
+		// rules in checkInvoiceCII; do not double-report it.
+		return nil
+	}
+	out := make([]Violation, 0, len(xsdViolations))
+	for _, xv := range xsdViolations {
+		out = append(out, Violation{
+			Rule:    ruleForXSDClass(xv.Rule),
+			Context: formatXSDContext(v, xv),
+		})
+	}
+	return out
+}
+
+// ruleForXSDClass picks the matching CII_XSD rule constant for the
+// engine's per-category violation kind. Unknown categories fall back
+// to the structural rule so the violation still surfaces with a
+// sensible classification.
+func ruleForXSDClass(class string) Rule {
+	switch class {
+	case xsd.RuleRoot:
+		return Rule_cii_xsd_Root
+	case xsd.RuleStructure:
+		return Rule_cii_xsd_Structure
+	case xsd.RuleCardinality:
+		return Rule_cii_xsd_Cardinality
+	case xsd.RuleLexical:
+		return Rule_cii_xsd_Lexical
+	case xsd.RuleFacet:
+		return Rule_cii_xsd_Facet
+	case xsd.RuleAttribute:
+		return Rule_cii_xsd_Attribute
+	}
+	return Rule_cii_xsd_Structure
+}
+
+// formatXSDContext renders the variant label, the violating path,
+// and the engine's reason text into a single Context string. The
+// scoreboard surfaces this verbatim alongside the rule description.
+func formatXSDContext(v hybridInvoiceVariant, xv xsd.Violation) string {
+	if xv.Path == "" {
+		return v.label + ": " + xv.Reason
+	}
+	return v.label + " at " + xv.Path + ": " + xv.Reason
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/semantics/structure"
 	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/xsd"
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
@@ -37,10 +39,12 @@ import (
 type OpenOption func(*openOpts)
 
 type openOpts struct {
-	logger   *slog.Logger
-	password string
-	ocr      models.OCREngine
-	filters  []plugins.FilterDecoder
+	logger       *slog.Logger
+	password     string
+	ocr          models.OCREngine
+	filters      []plugins.FilterDecoder
+	ciiSchema    *xsd.Schema
+	ciiSchemaErr error
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -84,6 +88,32 @@ func WithFilterPlugin(p plugins.FilterDecoder) OpenOption {
 	}
 }
 
+// WithCIISchemas loads the supplied Cross-Industry Invoice XSD set
+// once at open time and threads it into every subsequent
+// [Reader.ValidateFacturX] / [Reader.ValidateZUGFeRD] call. When set,
+// the validator runs a full pure-Go XSD pass over the embedded CII
+// XML and surfaces violations under the CII_XSD clause alongside the
+// existing INVOICE and CII spine rules.
+//
+// fsys is any [io/fs.FS]: an embed.FS works for bundled schemas, an
+// os.DirFS for a path on disk. rootPath is the schema root file
+// (typically CrossIndustryInvoice_100pD16B.xsd or similar). Schema
+// load errors abort the [pdf.Open] call so misconfiguration surfaces
+// at startup rather than at validation time.
+func WithCIISchemas(fsys fs.FS, rootPath string) OpenOption {
+	return func(o *openOpts) {
+		schema, err := xsd.Load(fsys, rootPath)
+		if err != nil {
+			// Defer error reporting to Open via a closure that
+			// records the failure on the options struct; logging
+			// here would silently swallow the diagnostic.
+			o.ciiSchemaErr = err
+			return
+		}
+		o.ciiSchema = schema
+	}
+}
+
 // Reader is the high-level API facade for the PDF parsing engine.
 // When opened via [OpenFile], the Reader holds a reference to the underlying
 // file; call [Reader.Close] to release it.
@@ -99,6 +129,7 @@ type Reader struct {
 	pagesOnce   sync.Once
 	cachedPages []*document.Page
 	pagesErr    error
+	ciiSchema   *xsd.Schema // non-nil when WithCIISchemas was set
 }
 
 // Close releases any resources held by the [Reader]. When the Reader
@@ -148,7 +179,17 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 // ZUGFeRD generation (1.0 or 2.0) since those use different filenames
 // and XMP namespaces.
 func (r *Reader) ValidateFacturX(ctx context.Context) ([]error, error) {
-	return compliance.ValidateFacturX(ctx, r.doc)
+	return compliance.ValidateFacturX(ctx, r.doc, r.facturXValidateOpts()...)
+}
+
+// facturXValidateOpts assembles the compliance options threaded into
+// the validator entry points. The XSD pass is included when the
+// caller passed [WithCIISchemas] to [Open] / [OpenFile].
+func (r *Reader) facturXValidateOpts() []compliance.FacturXValidateOption {
+	if r.ciiSchema == nil {
+		return nil
+	}
+	return []compliance.FacturXValidateOption{compliance.WithFacturXXSD(r.ciiSchema)}
 }
 
 // ValidateZUGFeRD audits the document against the given ZUGFeRD
@@ -162,7 +203,7 @@ func (r *Reader) ValidateZUGFeRD(ctx context.Context, version models.ZUGFeRDVers
 	if !version.IsValid() {
 		return nil, fmt.Errorf("%w: %q", ErrInvalidZUGFeRDVersion, version)
 	}
-	return compliance.ValidateZUGFeRD(ctx, r.doc, version)
+	return compliance.ValidateZUGFeRD(ctx, r.doc, version, r.facturXValidateOpts()...)
 }
 
 // Open initializes a new [Reader] from an [io.ReaderAt] and its total size.
@@ -171,6 +212,9 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 	var o openOpts
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if o.ciiSchemaErr != nil {
+		return nil, fmt.Errorf("loading CII schemas: %w", o.ciiSchemaErr)
 	}
 
 	doc, err := document.NewDocument(ctx, r, size, o.logger)
@@ -205,7 +249,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 		doc.Filters = filter.NewDecoder(o.filters)
 	}
 
-	return &Reader{doc: doc, ocr: o.ocr}, nil
+	return &Reader{doc: doc, ocr: o.ocr, ciiSchema: o.ciiSchema}, nil
 }
 
 // OpenFile opens a PDF directly from the filesystem. The returned [Reader]
