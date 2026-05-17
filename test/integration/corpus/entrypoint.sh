@@ -150,6 +150,19 @@ else
   echo "==> skipping Mustang goldens (not requested by ${CORPUS})."
 fi
 
+if wants facturx-schematron; then
+  KO="$OUTPUT/goldens/facturx-schematron"
+  if nonempty "$KO"; then
+    echo "==> facturx-schematron goldens already present, skipping KoSIT."
+  else
+    mkdir -p "$KO"
+    echo "==> running KoSIT per fixture..."
+    /work/lib/run-kosit.sh "$PDFS" "$KO/jobs.json"
+  fi
+else
+  echo "==> skipping KoSIT goldens (not requested by ${CORPUS})."
+fi
+
 if wants compliance || wants remediation || wants remediation-aggressive; then
   COMP="$OUTPUT/goldens/compliance"
   if nonempty "$COMP"; then

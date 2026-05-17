@@ -47,6 +47,23 @@ ARG MUSTANG_VERSION=2.13.0
 RUN curl -fSL -o /opt/mustang.jar \
   "https://github.com/ZUGFeRD/mustangproject/releases/download/V${MUSTANG_VERSION}/Mustang-CLI-${MUSTANG_VERSION}.jar"
 
+# Install KoSIT validator + XRechnung scenarios bundle: third-party
+# oracle for the facturx-schematron feature. The XRechnung config
+# bundles both XRechnung-specific and generic EN 16931 CII Schematron;
+# KoSIT auto-selects the rule set per document via CustomizationID.
+# Apache-2.0 for both artefacts. Pinned for reproducibility; bump the
+# version pins yearly to track Schematron drift.
+ARG KOSIT_VERSION=1.5.0
+ARG XRECHNUNG_CONFIG_VERSION=2.1.0
+ARG XRECHNUNG_CONFIG_RELEASE=2024-06-20
+RUN curl -fSL -o /opt/kosit.jar \
+  "https://github.com/itplr-kosit/validator/releases/download/v${KOSIT_VERSION}/validationtool-${KOSIT_VERSION}-standalone.jar" \
+  && curl -fSL -o /tmp/xrechnung-config.zip \
+    "https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/release_${XRECHNUNG_CONFIG_VERSION}/validator-configuration-xrechnung_${XRECHNUNG_CONFIG_VERSION}_${XRECHNUNG_CONFIG_RELEASE}.zip" \
+  && mkdir -p /opt/kosit-config \
+  && unzip -q /tmp/xrechnung-config.zip -d /opt/kosit-config \
+  && rm /tmp/xrechnung-config.zip
+
 WORKDIR /work
 COPY entrypoint.sh ./
 COPY lib/ ./lib/
@@ -59,6 +76,7 @@ COPY facturx/ ./facturx/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/run-mustang.sh \
+  lib/run-kosit.sh \
   lib/gen-bookmarks.sh \
   lib/gen-merges.sh \
   lib/gen-merge-empty.sh \

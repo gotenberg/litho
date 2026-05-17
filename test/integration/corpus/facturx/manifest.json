@@ -10,6 +10,7 @@
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance",
-    "facturx-validity": "goldens/facturx-validity"
+    "facturx-validity": "goldens/facturx-validity",
+    "facturx-schematron": "goldens/facturx-schematron"
   }
 }
