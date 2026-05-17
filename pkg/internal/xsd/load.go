@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -22,8 +23,12 @@ import (
 // which embed.FS satisfies natively and os.DirFS satisfies on every
 // platform. Path resolution for imports/includes is relative to the
 // importing schema's location.
-func Load(fsys fs.FS, rootPath string) (*Schema, error) {
+//
+// The loader checks ctx.Err() at each import boundary so callers
+// that load large schema sets can bound provisioning time.
+func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 	loader := &loader{
+		ctx:     ctx,
 		fsys:    fsys,
 		schemas: make(map[string]*Schema),
 		raw:     make(map[string]*rawSchema),
@@ -44,6 +49,7 @@ func Load(fsys fs.FS, rootPath string) (*Schema, error) {
 // so re-imports of the same file from different importers reuse one
 // Schema instance.
 type loader struct {
+	ctx     context.Context
 	fsys    fs.FS
 	schemas map[string]*Schema
 	raw     map[string]*rawSchema
@@ -54,6 +60,9 @@ type loader struct {
 // plus the namespace URI so callers can register the import. importer
 // is the path of the schema that triggered the load; "" for the root.
 func (l *loader) loadFile(p, importer string) (*Schema, string, error) {
+	if err := l.ctx.Err(); err != nil {
+		return nil, "", err
+	}
 	if importer != "" {
 		p = path.Join(path.Dir(importer), p)
 	}

@@ -14,7 +14,7 @@ import (
 func loadTestSchema(t *testing.T, body string) *Schema {
 	t.Helper()
 	fsys := fstest.MapFS{"schema.xsd": &fstest.MapFile{Data: []byte(body)}}
-	s, err := Load(fsys, "schema.xsd")
+	s, err := Load(context.Background(), fsys, "schema.xsd")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

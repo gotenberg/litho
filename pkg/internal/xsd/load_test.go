@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"testing/fstest"
@@ -29,7 +30,7 @@ func TestLoad_MinimalSchema(t *testing.T) {
 	fsys := fstest.MapFS{
 		"schema.xsd": &fstest.MapFile{Data: []byte(minimalXSD)},
 	}
-	s, err := Load(fsys, "schema.xsd")
+	s, err := Load(context.Background(), fsys, "schema.xsd")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestLoad_MinimalSchema(t *testing.T) {
 
 func TestLoad_FacetsCollected(t *testing.T) {
 	fsys := fstest.MapFS{"schema.xsd": &fstest.MapFile{Data: []byte(minimalXSD)}}
-	s, err := Load(fsys, "schema.xsd")
+	s, err := Load(context.Background(), fsys, "schema.xsd")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -133,7 +134,7 @@ func TestLoad_ImportCrossSchemaRef(t *testing.T) {
 		"importer.xsd": &fstest.MapFile{Data: []byte(importerXSD)},
 		"base.xsd":     &fstest.MapFile{Data: []byte(baseXSD)},
 	}
-	s, err := Load(fsys, "importer.xsd")
+	s, err := Load(context.Background(), fsys, "importer.xsd")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -163,7 +164,7 @@ const missingTypeXSD = `<?xml version="1.0" encoding="UTF-8"?>
 
 func TestLoad_UnresolvedRef(t *testing.T) {
 	fsys := fstest.MapFS{"schema.xsd": &fstest.MapFile{Data: []byte(missingTypeXSD)}}
-	_, err := Load(fsys, "schema.xsd")
+	_, err := Load(context.Background(), fsys, "schema.xsd")
 	if !errors.Is(err, ErrUnresolvedRef) {
 		t.Errorf("err: got %v, want errors.Is(_, ErrUnresolvedRef)", err)
 	}
@@ -173,7 +174,7 @@ const malformedXSD = `<?xml version="1.0"?><not-a-schema/>`
 
 func TestLoad_MalformedSchema(t *testing.T) {
 	fsys := fstest.MapFS{"schema.xsd": &fstest.MapFile{Data: []byte(malformedXSD)}}
-	_, err := Load(fsys, "schema.xsd")
+	_, err := Load(context.Background(), fsys, "schema.xsd")
 	if !errors.Is(err, ErrSchemaParse) {
 		t.Errorf("err: got %v, want errors.Is(_, ErrSchemaParse)", err)
 	}
@@ -200,7 +201,7 @@ const extensionXSD = `<?xml version="1.0" encoding="UTF-8"?>
 
 func TestLoad_ComplexExtension(t *testing.T) {
 	fsys := fstest.MapFS{"schema.xsd": &fstest.MapFile{Data: []byte(extensionXSD)}}
-	s, err := Load(fsys, "schema.xsd")
+	s, err := Load(context.Background(), fsys, "schema.xsd")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

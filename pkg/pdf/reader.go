@@ -39,12 +39,13 @@ import (
 type OpenOption func(*openOpts)
 
 type openOpts struct {
-	logger       *slog.Logger
-	password     string
-	ocr          models.OCREngine
-	filters      []plugins.FilterDecoder
-	ciiSchema    *xsd.Schema
-	ciiSchemaErr error
+	logger    *slog.Logger
+	password  string
+	ocr       models.OCREngine
+	filters   []plugins.FilterDecoder
+	ciiFS     fs.FS  // nil unless WithCIISchemas was supplied
+	ciiRoot   string // schema root path within ciiFS
+	ciiSchema *xsd.Schema
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -99,18 +100,13 @@ func WithFilterPlugin(p plugins.FilterDecoder) OpenOption {
 // os.DirFS for a path on disk. rootPath is the schema root file
 // (typically CrossIndustryInvoice_100pD16B.xsd or similar). Schema
 // load errors abort the [pdf.Open] call so misconfiguration surfaces
-// at startup rather than at validation time.
+// at startup rather than at validation time. The actual load runs
+// inside [Open] with the caller's context, so a slow filesystem can
+// be canceled.
 func WithCIISchemas(fsys fs.FS, rootPath string) OpenOption {
 	return func(o *openOpts) {
-		schema, err := xsd.Load(fsys, rootPath)
-		if err != nil {
-			// Defer error reporting to Open via a closure that
-			// records the failure on the options struct; logging
-			// here would silently swallow the diagnostic.
-			o.ciiSchemaErr = err
-			return
-		}
-		o.ciiSchema = schema
+		o.ciiFS = fsys
+		o.ciiRoot = rootPath
 	}
 }
 
@@ -213,8 +209,12 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if o.ciiSchemaErr != nil {
-		return nil, fmt.Errorf("loading CII schemas: %w", o.ciiSchemaErr)
+	if o.ciiFS != nil {
+		schema, err := xsd.Load(ctx, o.ciiFS, o.ciiRoot)
+		if err != nil {
+			return nil, fmt.Errorf("loading CII schemas: %w", err)
+		}
+		o.ciiSchema = schema
 	}
 
 	doc, err := document.NewDocument(ctx, r, size, o.logger)
