@@ -2745,11 +2745,33 @@ func TestWriter_RemediatePDFA_Pages12_StrictTolerance(t *testing.T) {
 	}
 }
 
-const facturXSampleCII = `<?xml version="1.0" encoding="UTF-8"?>` +
-	`<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100">` +
-	`<rsm:ExchangedDocumentContext><ram:BusinessProcessSpecifiedDocumentContextParameter>` +
-	`<ram:ID>A1</ram:ID></ram:BusinessProcessSpecifiedDocumentContextParameter>` +
-	`</rsm:ExchangedDocumentContext></rsm:CrossIndustryInvoice>`
+const facturXSampleCII = `<?xml version="1.0" encoding="UTF-8"?>
+<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+  <rsm:ExchangedDocumentContext>
+    <ram:BusinessProcessSpecifiedDocumentContextParameter>
+      <ram:ID>A1</ram:ID>
+    </ram:BusinessProcessSpecifiedDocumentContextParameter>
+  </rsm:ExchangedDocumentContext>
+  <rsm:ExchangedDocument>
+    <ram:ID>INV-001</ram:ID>
+    <ram:IssueDateTime>
+      <udt:DateTimeString format="102">20260517</udt:DateTimeString>
+    </ram:IssueDateTime>
+  </rsm:ExchangedDocument>
+  <rsm:SupplyChainTradeTransaction>
+    <ram:ApplicableHeaderTradeAgreement>
+      <ram:SellerTradeParty>
+        <ram:Name>Acme Co</ram:Name>
+      </ram:SellerTradeParty>
+    </ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeSettlement>
+      <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
+      <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+        <ram:GrandTotalAmount currencyID="EUR">100.00</ram:GrandTotalAmount>
+      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+    </ram:ApplicableHeaderTradeSettlement>
+  </rsm:SupplyChainTradeTransaction>
+</rsm:CrossIndustryInvoice>`
 
 func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 	ctx := context.Background()
@@ -2961,6 +2983,9 @@ func TestReader_ValidateFacturX_RoundTrip(t *testing.T) {
 		if strings.Contains(msg, "clause INVOICE") &&
 			!strings.Contains(msg, "PDF/A-3 violations on the archival base") {
 			t.Errorf("unexpected hybrid-invoice violation: %v", v)
+		}
+		if strings.Contains(msg, "clause CII") {
+			t.Errorf("unexpected CII structural violation: %v", v)
 		}
 	}
 }

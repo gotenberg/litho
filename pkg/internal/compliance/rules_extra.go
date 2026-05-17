@@ -129,4 +129,84 @@ var (
 		Object:        "CosDocument",
 		Description:   "A hybrid invoice shall conform to PDF/A-3 as its archival base",
 	}
+
+	// CII structural rules. Cover the spine of a Factur-X 1.0+ /
+	// ZUGFeRD 2.1+ Cross-Industry Invoice without pretending to be a
+	// full UN/CEFACT XSD validator: the goal is to catch the realistic
+	// failure modes (wrong root, missing required section, unreadable
+	// payload) so litho rejects bad attachments before downstream
+	// tools see them. Schema-deep type/value checks remain the job of
+	// Mustang or KoSIT.
+
+	Rule_cii_StreamReadable = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    1,
+		Object:        "EmbeddedFile",
+		Description:   "The embedded invoice XML stream shall resolve and read without error",
+	}
+
+	Rule_cii_WellFormed = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    2,
+		Object:        "CII",
+		Description:   "The embedded invoice payload shall be well-formed XML",
+	}
+
+	Rule_cii_RootElement = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    3,
+		Object:        "CII",
+		Description:   "The XML root shall be CrossIndustryInvoice in the UN/CEFACT CrossIndustryInvoice:100 namespace",
+	}
+
+	Rule_cii_DocumentContext = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    4,
+		Object:        "CII",
+		Description:   "CrossIndustryInvoice shall contain an ExchangedDocumentContext child",
+	}
+
+	Rule_cii_ExchangedDocument = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    5,
+		Object:        "CII",
+		Description:   "ExchangedDocument shall be present with non-empty ID and IssueDateTime",
+	}
+
+	Rule_cii_TradeTransaction = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    6,
+		Object:        "CII",
+		Description:   "CrossIndustryInvoice shall contain a SupplyChainTradeTransaction child",
+	}
+
+	Rule_cii_SellerTradeParty = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    7,
+		Object:        "CII",
+		Description:   "ApplicableHeaderTradeAgreement shall identify a SellerTradeParty with a non-empty Name",
+	}
+
+	Rule_cii_InvoiceCurrency = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    8,
+		Object:        "CII",
+		Description:   "ApplicableHeaderTradeSettlement shall carry a non-empty InvoiceCurrencyCode",
+	}
+
+	Rule_cii_GrandTotalAmount = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII",
+		TestNumber:    9,
+		Object:        "CII",
+		Description:   "SpecifiedTradeSettlementHeaderMonetarySummation shall expose a non-empty GrandTotalAmount",
+	}
 )

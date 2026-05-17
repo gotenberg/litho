@@ -129,6 +129,7 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	hybrid = append(hybrid, checkInvoiceStreamSubtype(ctx, doc, invoice, v)...)
 	hybrid = append(hybrid, checkInvoiceConflictingVariant(ctx, doc, v)...)
 	hybrid = append(hybrid, checkInvoiceXMP(ctx, doc, catalog, invoice, v)...)
+	hybrid = append(hybrid, checkInvoiceCII(ctx, doc, invoice, v)...)
 	hybrid = append(hybrid, tagPDFA3Base(pdfaErrs, v)...)
 
 	out := violationsToErrors(hybrid)
