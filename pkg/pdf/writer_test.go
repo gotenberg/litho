@@ -2765,6 +2765,7 @@ const facturXSampleCII = `<?xml version="1.0" encoding="UTF-8"?>
         <ram:Name>Acme Co</ram:Name>
       </ram:SellerTradeParty>
     </ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeDelivery/>
     <ram:ApplicableHeaderTradeSettlement>
       <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>

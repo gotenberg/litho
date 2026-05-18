@@ -323,17 +323,24 @@ func nameOf(n xml.Name) string {
 // base type sit ahead of the derived type's own particles in the
 // matcher's view, matching XSD's "base content first, then extension"
 // semantics for derivation by extension.
+//
+// xs:choice content models route through [choiceMatcher], which
+// enforces "exactly one alternative" semantics rather than the
+// per-particle minOccurs that [sequenceMatcher] uses for xs:sequence.
+// CII leans on choice for DateTimeType and a handful of other
+// switchable scalar containers, so accurate choice handling matters.
 func newMatcher(ct *ComplexType, _ *Schema) contentMatcher {
+	if _, isChoice := ct.Content.(Choice); isChoice {
+		particles := collectExtendedParticles(ct)
+		if len(particles) == 0 {
+			return &emptyMatcher{}
+		}
+		return &choiceMatcher{particles: particles}
+	}
 	particles := collectExtendedParticles(ct)
 	if len(particles) == 0 {
-		// Empty content type or anonymous all-attributes complex type.
 		return &emptyMatcher{}
 	}
-	// Choice is treated as a tolerant-sequence at the content-model
-	// level: particles can appear in any order, cardinality is
-	// enforced per particle. CII makes light use of choice so the
-	// stricter "exactly one alternative" semantics is not yet worth
-	// the matcher complexity.
 	return &sequenceMatcher{seq: Sequence{Particles: particles}, particles: particles}
 }
 
@@ -591,6 +598,59 @@ func maxOccursOrUnlimited(max int) int {
 		return 1 << 30
 	}
 	return max
+}
+
+// choiceMatcher implements xs:choice content semantics: any one of
+// the listed particles accepts a child. Cardinality is on the choice
+// itself, not on the alternatives, so an unmatched alternative does
+// not trip RuleCardinality on finalize. The current model carries
+// choice cardinality only at the particle level, so a top-level
+// choice content model is treated as min=1 max=1 by default; nested
+// choice particles inherit their bounds from the surrounding sequence.
+type choiceMatcher struct {
+	particles []Particle
+	// matched counts how many alternatives have been accepted so
+	// far. For a min=1 max=1 choice, finalize requires matched >= 1
+	// and step refuses additional matches.
+	matched int
+}
+
+func (m *choiceMatcher) step(name xml.Name) (*Element, *Violation) {
+	if m.matched >= 1 {
+		return nil, &Violation{
+			Rule:   RuleStructure,
+			Reason: fmt.Sprintf("unexpected element %s: choice already satisfied", nameOf(name)),
+		}
+	}
+	for _, p := range m.particles {
+		if p.Wildcard != nil {
+			m.matched++
+			return nil, nil
+		}
+		if p.Element == nil {
+			continue
+		}
+		want := p.Element.Name
+		if want.Namespace == name.Space && want.Local == name.Local {
+			m.matched++
+			return p.Element, nil
+		}
+	}
+	return nil, &Violation{
+		Rule:   RuleStructure,
+		Reason: fmt.Sprintf("element %s matches no alternative in choice", nameOf(name)),
+	}
+}
+
+func (m *choiceMatcher) finalize(path string) []Violation {
+	if m.matched >= 1 {
+		return nil
+	}
+	return []Violation{{
+		Rule:   RuleCardinality,
+		Path:   path,
+		Reason: "choice requires at least one alternative to match",
+	}}
 }
 
 // emptyMatcher accepts no children and surfaces every encountered

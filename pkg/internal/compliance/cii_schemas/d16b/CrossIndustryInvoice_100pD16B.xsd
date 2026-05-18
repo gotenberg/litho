@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  PLACEHOLDER schema — replace with the CEN/EN 16931 D16B set.
+Schema agency:  UNCEFACT
+Schema version:  100.D16B (Decoupled Code List Schema Modules)
+Schema date:      10 October 2016
 
-  This file ships only so the embed.FS path can compile and so the
-  auto-dispatch in Reader.ValidateFacturX exercises the validator
-  pipeline end-to-end. Real type-level XSD validation requires the
-  full UN/CEFACT CII D16B schema set as published by the CEN/EN 16931
-  artefacts repository at:
+Copyright (C) UN/CEFACT (2016). All Rights Reserved.
 
-      https://github.com/ConnectingEurope/eInvoicing-EN16931
+This document and translations of it may be copied and furnished to others, and derivative works that comment on or otherwise explain it or assist in its implementation may be prepared, copied, published and distributed, in whole or in part, without restriction of any kind, provided that the above copyright notice and this paragraph are included on all such copies and derivative works. However, this document itself may not be modified in any way, such as by removing the copyright notice or references to UN/CEFACT, except as needed for the purpose of developing UN/CEFACT specifications, in which case the procedures for copyrights defined in the UN/CEFACT Intellectual Property Rights document must be followed, or as required to translate it into languages other than English.
 
-  Replace this directory's contents with the canonical XSDs (rooted
-  at CrossIndustryInvoice_100pD16B.xsd) and bump the version pin
-  documented in the README before relying on CII_XSD violations.
+The limited permissions granted above are perpetual and will not be revoked by UN/CEFACT or its successors or assigns.
+
+This document and the information contained herein is provided on an "AS IS" basis and UN/CEFACT DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTY THAT THE USE OF THE INFORMATION HEREIN WILL NOT INFRINGE ANY RIGHTS OR ANY IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
 -->
-<xs:schema
-  xmlns:xs="http://www.w3.org/2001/XMLSchema"
-  xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
-  targetNamespace="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
-  elementFormDefault="qualified">
-  <xs:complexType name="CrossIndustryInvoiceType">
-    <xs:sequence>
-      <xs:any namespace="##any" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-  </xs:complexType>
-  <xs:element name="CrossIndustryInvoice" type="rsm:CrossIndustryInvoiceType"/>
-</xs:schema>
+<xsd:schema xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100" targetNamespace="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" elementFormDefault="qualified" version="100.D16B">
+	<xsd:import namespace="urn:un:unece:uncefact:data:standard:QualifiedDataType:100" schemaLocation="CrossIndustryInvoice_QualifiedDataType_100pD16B.xsd"/>
+	<xsd:import namespace="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" schemaLocation="CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd"/>
+	<xsd:import namespace="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100" schemaLocation="CrossIndustryInvoice_UnqualifiedDataType_100pD16B.xsd"/>
+	<xsd:element name="CrossIndustryInvoice" type="rsm:CrossIndustryInvoiceType"/>
+	<xsd:complexType name="CrossIndustryInvoiceType">
+		<xsd:sequence>
+			<xsd:element name="ExchangedDocumentContext" type="ram:ExchangedDocumentContextType"/>
+			<xsd:element name="ExchangedDocument" type="ram:ExchangedDocumentType"/>
+			<xsd:element name="SupplyChainTradeTransaction" type="ram:SupplyChainTradeTransactionType"/>
+			<xsd:element name="ValuationBreakdownStatement" type="ram:ValuationBreakdownStatementType" minOccurs="0"/>
+		</xsd:sequence>
+	</xsd:complexType>
+</xsd:schema>
