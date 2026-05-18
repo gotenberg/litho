@@ -139,12 +139,14 @@ Stage specific files. Never `git add -A`.
 
 ## Dependencies
 
-| Dependency                      | Purpose                               |
-| ------------------------------- | ------------------------------------- |
-| `github.com/dop251/goja`        | JavaScript VM for dynamic form fields |
-| `github.com/andybalholm/brotli` | Brotli stream decompression           |
-| `golang.org/x/text`             | Unicode text processing               |
-| `golang.org/x/image`            | PNG decoding for image stamps         |
+| Dependency                      | Purpose                                               |
+| ------------------------------- | ----------------------------------------------------- |
+| `github.com/dop251/goja`        | JavaScript VM for dynamic form fields                 |
+| `github.com/andybalholm/brotli` | Brotli stream decompression                           |
+| `golang.org/x/text`             | Unicode text processing                               |
+| `golang.org/x/image`            | PNG decoding for image stamps                         |
+| `github.com/antchfx/xpath`      | XPath 1.0 evaluator backing the Schematron engine     |
+| `github.com/antchfx/xmlquery`   | XML DOM + XPath navigator paired with `antchfx/xpath` |
 
 ### Optional CGO plugins
 
