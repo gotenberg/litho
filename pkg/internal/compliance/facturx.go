@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/schematron"
 	"github.com/gotenberg/litho/pkg/internal/xsd"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -19,7 +20,9 @@ import (
 type FacturXValidateOption func(*facturXValidateOpts)
 
 type facturXValidateOpts struct {
-	xsdSchema *xsd.Schema
+	xsdSchema       *xsd.Schema
+	schematron      *schematron.Schema
+	schematronPhase string
 }
 
 // WithFacturXXSD registers a loaded XSD schema set against which the
@@ -36,6 +39,19 @@ type facturXValidateOpts struct {
 // or os.DirFS) so litho keeps no UN/CEFACT artefacts in-tree.
 func WithFacturXXSD(s *xsd.Schema) FacturXValidateOption {
 	return func(o *facturXValidateOpts) { o.xsdSchema = s }
+}
+
+// WithFacturXSchematron registers a loaded Schematron schema set
+// against which the validator runs a business-rule pass over the
+// embedded CII XML. The optional phase argument restricts evaluation
+// to that phase's active patterns; pass an empty string to run every
+// pattern. Violations surface under clause CII_SCH alongside the
+// existing INVOICE, CII, and CII_XSD rules.
+func WithFacturXSchematron(s *schematron.Schema, phase string) FacturXValidateOption {
+	return func(o *facturXValidateOpts) {
+		o.schematron = s
+		o.schematronPhase = phase
+	}
 }
 
 // hybridInvoiceVariant captures the format-specific values that
@@ -162,6 +178,9 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	hybrid = append(hybrid, checkInvoiceCII(ctx, doc, invoice, v)...)
 	if cfg.xsdSchema != nil {
 		hybrid = append(hybrid, checkInvoiceCIIXSD(ctx, doc, invoice, v, cfg.xsdSchema)...)
+	}
+	if cfg.schematron != nil {
+		hybrid = append(hybrid, checkInvoiceSchematron(ctx, doc, invoice, v, cfg.schematron, cfg.schematronPhase)...)
 	}
 	hybrid = append(hybrid, tagPDFA3Base(pdfaErrs, v)...)
 

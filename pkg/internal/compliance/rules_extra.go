@@ -264,4 +264,26 @@ var (
 		Object:        "CII",
 		Description:   "Element attributes shall meet the XSD declaration's required/fixed/type constraints",
 	}
+
+	// CII Schematron rules. The Schematron engine fires when a
+	// business-rule assertion sourced from EN 16931 / XRechnung
+	// (or any user-supplied Schematron set) trips on the embedded
+	// invoice. Two rules let the scoreboard tally by severity:
+	// fatal-class flags map to Fatal, everything else to Warning.
+
+	Rule_cii_sch_Fatal = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_SCH",
+		TestNumber:    1,
+		Object:        "CII",
+		Description:   "Schematron assertion with fatal severity fired on the embedded invoice",
+	}
+
+	Rule_cii_sch_Warning = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_SCH",
+		TestNumber:    2,
+		Object:        "CII",
+		Description:   "Schematron assertion with warning or info severity fired on the embedded invoice",
+	}
 )

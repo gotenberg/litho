@@ -26,6 +26,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/schematron"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/internal/semantics/structure"
 	"github.com/gotenberg/litho/pkg/internal/signature"
@@ -47,6 +48,10 @@ type openOpts struct {
 	ciiFS     fs.FS  // nil unless WithCIISchemas was supplied
 	ciiRoot   string // schema root path within ciiFS
 	ciiSchema *xsd.Schema
+	schFS     fs.FS // nil unless WithSchematron was supplied
+	schRoot   string
+	schPhase  string
+	schSchema *schematron.Schema
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -111,6 +116,26 @@ func WithCIISchemas(fsys fs.FS, rootPath string) OpenOption {
 	}
 }
 
+// WithSchematron registers a Schematron schema set against which
+// [Reader.ValidateFacturX] and [Reader.ValidateZUGFeRD] run a
+// business-rule pass over the embedded CII XML. When phase is
+// non-empty, only that phase's active patterns evaluate; pass "" to
+// run every pattern. Violations surface as compliance.Violation
+// entries under the CII_SCH clause.
+//
+// fsys is any [io/fs.FS]: an embed.FS for bundled rule sets, an
+// os.DirFS for a path on disk. rootPath is the Schematron root file
+// (typically an EN16931-CII-validation.sch or XRechnung equivalent).
+// Schema load errors abort the [pdf.Open] call so misconfiguration
+// surfaces at startup rather than at validation time.
+func WithSchematron(fsys fs.FS, rootPath string, phase string) OpenOption {
+	return func(o *openOpts) {
+		o.schFS = fsys
+		o.schRoot = rootPath
+		o.schPhase = phase
+	}
+}
+
 // Reader is the high-level API facade for the PDF parsing engine.
 // When opened via [OpenFile], the Reader holds a reference to the underlying
 // file; call [Reader.Close] to release it.
@@ -126,7 +151,9 @@ type Reader struct {
 	pagesOnce   sync.Once
 	cachedPages []*document.Page
 	pagesErr    error
-	ciiSchema   *xsd.Schema // non-nil when WithCIISchemas was set
+	ciiSchema   *xsd.Schema        // non-nil when WithCIISchemas was set
+	schSchema   *schematron.Schema // non-nil when WithSchematron was set
+	schPhase    string             // phase argument to WithSchematron
 }
 
 // Close releases any resources held by the [Reader]. When the Reader
@@ -192,15 +219,26 @@ func (r *Reader) ValidateFacturX(ctx context.Context) ([]error, error) {
 // schemas directory does not break callers that rely on the spine
 // rules alone.
 func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXValidateOption {
+	var opts []compliance.FacturXValidateOption
+
+	// XSD layer: caller-supplied override first, bundled default
+	// otherwise. A bundle load error degrades gracefully to spine
+	// rules without aborting the validation call.
 	if r.ciiSchema != nil {
-		return []compliance.FacturXValidateOption{compliance.WithFacturXXSD(r.ciiSchema)}
-	}
-	schema, err := cii_schemas.LoadDefault(ctx)
-	if err != nil {
+		opts = append(opts, compliance.WithFacturXXSD(r.ciiSchema))
+	} else if schema, err := cii_schemas.LoadDefault(ctx); err == nil {
+		opts = append(opts, compliance.WithFacturXXSD(schema))
+	} else {
 		r.doc.Logger.Debug("xsd: bundled CII schemas unavailable, falling back to spine rules", "err", err)
-		return nil
 	}
-	return []compliance.FacturXValidateOption{compliance.WithFacturXXSD(schema)}
+
+	// Schematron layer: opt-in, no bundled default yet. A caller
+	// who wants EN 16931 / XRechnung business-rule validation
+	// passes the Schematron set via [WithSchematron].
+	if r.schSchema != nil {
+		opts = append(opts, compliance.WithFacturXSchematron(r.schSchema, r.schPhase))
+	}
+	return opts
 }
 
 // ValidateZUGFeRD audits the document against the given ZUGFeRD
@@ -230,6 +268,13 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 			return nil, fmt.Errorf("loading CII schemas: %w", err)
 		}
 		o.ciiSchema = schema
+	}
+	if o.schFS != nil {
+		schSchema, err := schematron.Load(ctx, o.schFS, o.schRoot)
+		if err != nil {
+			return nil, fmt.Errorf("loading Schematron schema: %w", err)
+		}
+		o.schSchema = schSchema
 	}
 
 	doc, err := document.NewDocument(ctx, r, size, o.logger)
@@ -264,7 +309,13 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 		doc.Filters = filter.NewDecoder(o.filters)
 	}
 
-	return &Reader{doc: doc, ocr: o.ocr, ciiSchema: o.ciiSchema}, nil
+	return &Reader{
+		doc:       doc,
+		ocr:       o.ocr,
+		ciiSchema: o.ciiSchema,
+		schSchema: o.schSchema,
+		schPhase:  o.schPhase,
+	}, nil
 }
 
 // OpenFile opens a PDF directly from the filesystem. The returned [Reader]

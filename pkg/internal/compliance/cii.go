@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/schematron"
 	"github.com/gotenberg/litho/pkg/internal/xsd"
 )
 
@@ -342,4 +344,79 @@ func formatXSDContext(v hybridInvoiceVariant, xv xsd.Violation) string {
 		return v.label + ": " + xv.Reason
 	}
 	return v.label + " at " + xv.Path + ": " + xv.Reason
+}
+
+// checkInvoiceSchematron runs the supplied Schematron schema against
+// the embedded CII XML and translates fired assertions into compliance
+// violations. The variant guard mirrors checkInvoiceCIIXSD: only the
+// Factur-X 1.0+ / ZUGFeRD 2.1+ variant carries a CII payload that the
+// EN 16931 / XRechnung Schematron knows how to validate.
+func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string) []Violation {
+	if schema == nil {
+		return nil
+	}
+	if v.namespaceURI != variantFacturX.namespaceURI {
+		return nil
+	}
+	if !invoice.found || invoice.streamDict == nil {
+		return nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, invoice.streamRef)
+	if err != nil {
+		return nil
+	}
+	data, err := stream.Bytes(ctx)
+	if err != nil || len(data) == 0 {
+		decoded, decErr := doc.DecodeStream(ctx, stream)
+		if decErr != nil {
+			return nil
+		}
+		data = decoded
+	}
+
+	var opts []schematron.EvalOption
+	if phase != "" {
+		opts = append(opts, schematron.WithPhase(phase))
+	}
+	violations, err := schematron.Validate(ctx, schema, data, opts...)
+	if err != nil {
+		// Parse failure on the CII payload surfaces via the CII spine
+		// checks in checkInvoiceCII; do not double-report it here.
+		return nil
+	}
+	out := make([]Violation, 0, len(violations))
+	for _, sv := range violations {
+		out = append(out, Violation{
+			Rule:    ruleForSchematronSeverity(sv.Flag),
+			Context: formatSchematronContext(v, sv),
+		})
+	}
+	return out
+}
+
+// ruleForSchematronSeverity picks Fatal versus Warning based on the
+// Schematron flag attribute. EN 16931 uses "fatal" for blockers and
+// "warning"/"info" for softer signals; anything that does not match
+// "warning" or "info" defaults to Fatal so unknown severities surface
+// loudly rather than being silently downgraded.
+func ruleForSchematronSeverity(flag string) Rule {
+	switch flag {
+	case "warning", "info":
+		return Rule_cii_sch_Warning
+	}
+	return Rule_cii_sch_Fatal
+}
+
+// formatSchematronContext renders one fired assertion into the
+// compliance violation Context string. RuleID is the source
+// assertion id (e.g. BR-CO-25), Path locates the offending node.
+func formatSchematronContext(v hybridInvoiceVariant, sv schematron.Violation) string {
+	prefix := "assert"
+	if sv.Negate {
+		prefix = "report"
+	}
+	if sv.Path == "" {
+		return fmt.Sprintf("%s: %s %s: %s", v.label, prefix, sv.RuleID, sv.Message)
+	}
+	return fmt.Sprintf("%s at %s: %s %s: %s", v.label, sv.Path, prefix, sv.RuleID, sv.Message)
 }

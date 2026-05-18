@@ -3094,6 +3094,115 @@ func TestReader_ValidateFacturX_WithXSD(t *testing.T) {
 	}
 }
 
+// facturXTestSchematron exercises the Schematron integration without
+// pulling EN 16931's full rule set into the repo. It targets the
+// SellerTradeParty/Name path that is present in the round-trip
+// fixture, so a happy-path run produces zero violations; a tampered
+// fixture (or the absence of the SellerTradeParty/Name child) trips
+// the assertion.
+const facturXTestSchematron = `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt2">
+  <sch:ns prefix="rsm" uri="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"/>
+  <sch:ns prefix="ram" uri="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"/>
+  <sch:pattern id="seller">
+    <sch:rule context="//ram:SellerTradeParty">
+      <sch:assert id="BR-FX-1" flag="fatal" test="ram:Name">[BR-FX-1] SellerTradeParty must declare a Name</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+
+func TestReader_ValidateFacturX_WithSchematron_HappyPath(t *testing.T) {
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXEN16931,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	schFS := fstest.MapFS{"rules.sch": &fstest.MapFile{Data: []byte(facturXTestSchematron)}}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()),
+		WithSchematron(schFS, "rules.sch", ""))
+	if err != nil {
+		t.Fatalf("reopen with schematron: %v", err)
+	}
+	defer r2.Close()
+
+	violations, err := r2.ValidateFacturX(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturX: %v", err)
+	}
+	for _, v := range violations {
+		if strings.Contains(v.Error(), "clause CII_SCH") {
+			t.Errorf("unexpected CII_SCH violation on passing fixture: %v", v)
+		}
+	}
+}
+
+func TestReader_ValidateFacturX_WithSchematron_AssertFires(t *testing.T) {
+	// Build a Schematron rule whose context exists in the fixture
+	// but whose assertion fails: every Invoice must declare a
+	// nonsensical "Foo" attribute. CII_SCH violation expected.
+	const fireSch = `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="rsm" uri="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"/>
+  <sch:pattern id="impossible">
+    <sch:rule context="//rsm:CrossIndustryInvoice">
+      <sch:assert id="BR-FX-Z" flag="fatal" test="@Foo">[BR-FX-Z] Foo attribute is mandatory</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXEN16931,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	schFS := fstest.MapFS{"rules.sch": &fstest.MapFile{Data: []byte(fireSch)}}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()),
+		WithSchematron(schFS, "rules.sch", ""))
+	if err != nil {
+		t.Fatalf("reopen with schematron: %v", err)
+	}
+	defer r2.Close()
+
+	violations, err := r2.ValidateFacturX(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturX: %v", err)
+	}
+	saw := false
+	for _, v := range violations {
+		if strings.Contains(v.Error(), "clause CII_SCH") && strings.Contains(v.Error(), "BR-FX-Z") {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected CII_SCH violation for BR-FX-Z, got %v", violations)
+	}
+}
+
 func TestReader_ValidateFacturX_BundledXSDDefault(t *testing.T) {
 	// No WithCIISchemas override: ValidateFacturX should still run
 	// the XSD pass using the bundled D16B schemas (currently a
