@@ -234,16 +234,27 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 	}
 
 	// Schematron layer: caller-supplied override first, bundled
-	// EN 16931 default otherwise. Same graceful-fallback rule as
-	// the XSD layer: a bundle load failure logs at debug and
-	// skips the Schematron pass rather than failing the whole
-	// validation call.
+	// EN 16931 + XRechnung otherwise. The bundle route lets the
+	// validator pick between the two rule sets based on the XMP
+	// fx:ConformanceLevel of the document. Bundle load failures
+	// log at debug and skip; the validation call does not abort.
 	if r.schSchema != nil {
 		opts = append(opts, compliance.WithFacturXSchematron(r.schSchema, r.schPhase))
-	} else if schSchema, err := cii_schematron.LoadDefault(ctx); err == nil {
-		opts = append(opts, compliance.WithFacturXSchematron(schSchema, ""))
 	} else {
-		r.doc.Logger.Debug("schematron: bundled EN 16931 rules unavailable, skipping pass", "err", err)
+		var en16931Sch, xrechnungSch *schematron.Schema
+		if s, err := cii_schematron.LoadDefault(ctx); err == nil {
+			en16931Sch = s
+		} else {
+			r.doc.Logger.Debug("schematron: bundled EN 16931 rules unavailable", "err", err)
+		}
+		if s, err := cii_schematron.LoadXRechnung(ctx); err == nil {
+			xrechnungSch = s
+		} else {
+			r.doc.Logger.Debug("schematron: bundled XRechnung rules unavailable", "err", err)
+		}
+		if en16931Sch != nil || xrechnungSch != nil {
+			opts = append(opts, compliance.WithFacturXSchematronBundle(en16931Sch, xrechnungSch))
+		}
 	}
 	return opts
 }

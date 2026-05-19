@@ -23,6 +23,13 @@ type facturXValidateOpts struct {
 	xsdSchema       *xsd.Schema
 	schematron      *schematron.Schema
 	schematronPhase string
+	// schematronBundle, when set, routes the Schematron pass by XMP
+	// conformance level: XRECHNUNG-level documents validate against
+	// the XRechnung schema and everything else falls back to the
+	// EN 16931 baseline. The explicit schematron field above wins
+	// when both are configured.
+	schematronBundleEN16931   *schematron.Schema
+	schematronBundleXRechnung *schematron.Schema
 }
 
 // WithFacturXXSD registers a loaded XSD schema set against which the
@@ -51,6 +58,19 @@ func WithFacturXSchematron(s *schematron.Schema, phase string) FacturXValidateOp
 	return func(o *facturXValidateOpts) {
 		o.schematron = s
 		o.schematronPhase = phase
+	}
+}
+
+// WithFacturXSchematronBundle wires both the EN 16931 baseline and
+// the XRechnung CIUS rule sets. The validator inspects the document's
+// XMP fx:ConformanceLevel and routes XRECHNUNG-level documents to
+// xrechnung; everything else uses en16931. Either argument may be nil
+// to disable that route (e.g. pass nil for xrechnung if only the
+// EN 16931 bundle is loaded).
+func WithFacturXSchematronBundle(en16931, xrechnung *schematron.Schema) FacturXValidateOption {
+	return func(o *facturXValidateOpts) {
+		o.schematronBundleEN16931 = en16931
+		o.schematronBundleXRechnung = xrechnung
 	}
 }
 
@@ -179,8 +199,9 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	if cfg.xsdSchema != nil {
 		hybrid = append(hybrid, checkInvoiceCIIXSD(ctx, doc, invoice, v, cfg.xsdSchema)...)
 	}
-	if cfg.schematron != nil {
-		hybrid = append(hybrid, checkInvoiceSchematron(ctx, doc, invoice, v, cfg.schematron, cfg.schematronPhase)...)
+	schSchema, schPhase := pickSchematron(ctx, doc, catalog, v, &cfg)
+	if schSchema != nil {
+		hybrid = append(hybrid, checkInvoiceSchematron(ctx, doc, invoice, v, schSchema, schPhase)...)
 	}
 	hybrid = append(hybrid, tagPDFA3Base(pdfaErrs, v)...)
 

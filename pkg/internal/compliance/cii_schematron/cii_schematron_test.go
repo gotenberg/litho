@@ -48,3 +48,20 @@ func TestFS_ContainsRoot(t *testing.T) {
 	}
 	f.Close()
 }
+
+func TestLoadXRechnung_Succeeds(t *testing.T) {
+	s, err := LoadXRechnung(context.Background())
+	if err != nil {
+		t.Fatalf("LoadXRechnung: %v", err)
+	}
+	if s == nil {
+		t.Fatal("LoadXRechnung returned nil")
+	}
+	if len(s.PatternOrder) == 0 {
+		t.Error("XRechnung bundle has no patterns")
+	}
+	// Spot-check one of the canonical XRechnung patterns.
+	if _, ok := s.Patterns["cii-pattern"]; !ok {
+		t.Errorf("missing cii-pattern; have %v", s.PatternOrder)
+	}
+}

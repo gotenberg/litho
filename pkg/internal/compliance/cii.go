@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/schematron"
 	"github.com/gotenberg/litho/pkg/internal/xsd"
@@ -344,6 +345,30 @@ func formatXSDContext(v hybridInvoiceVariant, xv xsd.Violation) string {
 		return v.label + ": " + xv.Reason
 	}
 	return v.label + " at " + xv.Path + ": " + xv.Reason
+}
+
+// pickSchematron resolves the Schematron schema to run against the
+// document. The override path (WithFacturXSchematron) always wins.
+// Falling back to the bundle path (WithFacturXSchematronBundle), the
+// chooser reads fx:ConformanceLevel off the XMP packet and routes
+// XRECHNUNG-level documents to the XRechnung schema; everything else
+// uses the EN 16931 baseline. Returns (nil, "") when no schema
+// applies.
+func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.PdfDict, v hybridInvoiceVariant, cfg *facturXValidateOpts) (*schematron.Schema, string) {
+	if cfg.schematron != nil {
+		return cfg.schematron, cfg.schematronPhase
+	}
+	if cfg.schematronBundleEN16931 == nil && cfg.schematronBundleXRechnung == nil {
+		return nil, ""
+	}
+	level := ""
+	if xmpBytes := readInvoiceXMP(ctx, doc, catalog); xmpBytes != nil {
+		level = decodeHybridInvoiceXMP(xmpBytes, v).conformanceLevel
+	}
+	if level == "XRECHNUNG" && cfg.schematronBundleXRechnung != nil {
+		return cfg.schematronBundleXRechnung, ""
+	}
+	return cfg.schematronBundleEN16931, ""
 }
 
 // checkInvoiceSchematron runs the supplied Schematron schema against
