@@ -403,11 +403,16 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	if phase != "" {
 		opts = append(opts, schematron.WithPhase(phase))
 	}
-	violations, err := schematron.Validate(ctx, schema, data, opts...)
+	violations, skipped, err := schematron.Validate(ctx, schema, data, opts...)
 	if err != nil {
 		// Parse failure on the CII payload surfaces via the CII spine
 		// checks in checkInvoiceCII; do not double-report it here.
 		return nil
+	}
+	if len(skipped) > 0 {
+		doc.Logger.Debug("schematron: rules skipped (XPath unsupported in the engine subset)",
+			"variant", v.label, "skipped_count", len(skipped),
+			"first", skipped[0].RuleID)
 	}
 	out := make([]Violation, 0, len(violations))
 	for _, sv := range violations {

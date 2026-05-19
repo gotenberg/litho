@@ -10,6 +10,17 @@ import (
 	"github.com/antchfx/xpath"
 )
 
+// SkippedRule captures one assertion or report that could not be
+// evaluated. The evaluator silently skips such rules so an
+// unsupported XPath construct in one rule does not abort the whole
+// pass; this surface lets callers audit coverage instead of guessing
+// from missing violations.
+type SkippedRule struct {
+	RuleID  string
+	Context string
+	Reason  string
+}
+
 // Violation is one Schematron assertion firing on a context node.
 // RuleID and Flag/Role come from the source schema; Path locates
 // the context node in the document for diagnostics.
@@ -61,46 +72,52 @@ func WithPhase(id string) EvalOption {
 // pattern, the first rule whose context matches a node wins for
 // that node; later rules in the same pattern skip that node.
 //
+// The skipped return lists every assertion or report whose XPath
+// could not compile or evaluate. The evaluator silently drops these
+// so a single unsupported construct does not abort the pass; the
+// list lets callers audit the coverage gap.
+//
 // payload must be well-formed XML. A parse error surfaces as the
-// second return value distinct from violations so callers can tell
+// third return value distinct from violations so callers can tell
 // "ran-but-failed-rules" apart from "could-not-run".
-func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalOption) ([]Violation, error) {
+func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalOption) ([]Violation, []SkippedRule, error) {
 	cfg := evalOpts{}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	if schema == nil {
-		return nil, fmt.Errorf("schematron: schema is nil")
+		return nil, nil, fmt.Errorf("schematron: schema is nil")
 	}
 	doc, err := xmlquery.Parse(bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("schematron: parsing payload: %w", err)
+		return nil, nil, fmt.Errorf("schematron: parsing payload: %w", err)
 	}
 
 	active, err := selectPatterns(schema, cfg.phase)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ns := namespaceMap(schema)
 	cache := newExprCache(ns)
 
-	var out []Violation
+	var (
+		out     []Violation
+		skipped []SkippedRule
+	)
 	for _, pid := range active {
 		if err := ctx.Err(); err != nil {
-			return out, err
+			return out, skipped, err
 		}
 		pat := schema.Patterns[pid]
 		if pat == nil {
 			continue
 		}
-		v, err := evaluatePattern(ctx, doc, pat, cache)
-		if err != nil {
-			return out, err
-		}
+		v, s := evaluatePattern(ctx, doc, pat, cache)
 		out = append(out, v...)
+		skipped = append(skipped, s...)
 	}
-	return out, nil
+	return out, skipped, nil
 }
 
 // selectPatterns returns the ordered pattern ids that the requested
@@ -123,27 +140,49 @@ func selectPatterns(s *Schema, phase string) ([]string, error) {
 // evaluatePattern walks every rule in pat against doc. The standard
 // Schematron rule-selection semantics applies: within a pattern, the
 // first rule whose context matches a node "claims" that node, and
-// later rules skip nodes already claimed.
-func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cache *exprCache) ([]Violation, error) {
+// later rules skip nodes already claimed. Rules whose context XPath
+// fails to compile or evaluate silently skip; the second return
+// reports them so callers can audit Schematron coverage.
+func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cache *exprCache) ([]Violation, []SkippedRule) {
 	claimed := make(map[*xmlquery.Node]bool)
-	var out []Violation
+	var (
+		out     []Violation
+		skipped []SkippedRule
+	)
 	for _, rule := range pat.Rules {
 		if err := ctx.Err(); err != nil {
-			return out, err
+			return out, skipped
 		}
 		nodes, err := selectNodes(doc, rule.Context, cache)
 		if err != nil {
-			return out, fmt.Errorf("evaluating context %q: %w", rule.Context, err)
+			// Whole rule unevaluable: record one SkippedRule per
+			// assertion the rule would have run, since each
+			// assertion identity matters for coverage tallies.
+			for _, a := range rule.Asserts {
+				skipped = append(skipped, SkippedRule{
+					RuleID: a.ID, Context: rule.Context,
+					Reason: fmt.Sprintf("context xpath: %v", err),
+				})
+			}
+			for _, r := range rule.Reports {
+				skipped = append(skipped, SkippedRule{
+					RuleID: r.ID, Context: rule.Context,
+					Reason: fmt.Sprintf("context xpath: %v", err),
+				})
+			}
+			continue
 		}
 		for _, n := range nodes {
 			if claimed[n] {
 				continue
 			}
 			claimed[n] = true
-			out = append(out, evaluateRule(rule, n, cache)...)
+			v, s := evaluateRule(rule, n, cache)
+			out = append(out, v...)
+			skipped = append(skipped, s...)
 		}
 	}
-	return out, nil
+	return out, skipped
 }
 
 // evaluateRule applies every assertion in rule against the single
@@ -160,22 +199,28 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 // violations - worse than no Schematron at all. PR-followup
 // territory: surface skipped rules via a logger hook so callers can
 // audit coverage.
-func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache) []Violation {
+func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache) ([]Violation, []SkippedRule) {
 	vars := make(map[string]string, len(rule.Lets))
 	for _, lt := range rule.Lets {
 		raw, err := cache.evalForVariable(lt.Value, n)
 		if err != nil {
 			// Skip this let; assertions that reference it will
-			// either fail to compile or evaluate to empty.
+			// either fail to compile or evaluate to empty and end
+			// up in the skipped list below.
 			continue
 		}
 		vars[lt.Name] = xpathLiteral(raw)
 	}
 
 	out := make([]Violation, 0, len(rule.Asserts)+len(rule.Reports))
+	var skipped []SkippedRule
 	for _, a := range rule.Asserts {
 		fired, err := evalBoolean(substituteLets(a.Test, vars), n, cache)
 		if err != nil {
+			skipped = append(skipped, SkippedRule{
+				RuleID: a.ID, Context: rule.Context,
+				Reason: err.Error(),
+			})
 			continue
 		}
 		if !fired {
@@ -185,13 +230,17 @@ func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache) []Violation {
 	for _, r := range rule.Reports {
 		fired, err := evalBoolean(substituteLets(r.Test, vars), n, cache)
 		if err != nil {
+			skipped = append(skipped, SkippedRule{
+				RuleID: r.ID, Context: rule.Context,
+				Reason: err.Error(),
+			})
 			continue
 		}
 		if fired {
 			out = append(out, makeViolation(rule, r, n))
 		}
 	}
-	return out
+	return out, skipped
 }
 
 // xpathLiteral renders an XPath evaluation result back into a literal

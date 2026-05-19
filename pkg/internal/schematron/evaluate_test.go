@@ -36,7 +36,7 @@ func TestValidate_HappyPath(t *testing.T) {
   <inv:ID>INV-001</inv:ID>
   <inv:Date>2026-05-18</inv:Date>
 </inv:Invoice>`)
-	got, err := Validate(context.Background(), s, xmlBytes)
+	got, _, err := Validate(context.Background(), s, xmlBytes)
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestValidate_AssertFires(t *testing.T) {
 <inv:Invoice xmlns:inv="urn:example:invoice">
   <inv:Date>2026-05-18</inv:Date>
 </inv:Invoice>`)
-	got, err := Validate(context.Background(), s, xmlBytes)
+	got, _, err := Validate(context.Background(), s, xmlBytes)
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestValidate_ReportFires(t *testing.T) {
   <inv:Date>2026-05-18</inv:Date>
   <inv:DraftFlag/>
 </inv:Invoice>`)
-	got, err := Validate(context.Background(), s, xmlBytes)
+	got, _, err := Validate(context.Background(), s, xmlBytes)
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestValidate_WithPhase(t *testing.T) {
   <inv:ID>INV-001</inv:ID>
 </inv:Invoice>`)
 	// "basic" only fires P-headers; Total absence does not trip.
-	basic, err := Validate(context.Background(), s, xmlBytes, WithPhase("basic"))
+	basic, _, err := Validate(context.Background(), s, xmlBytes, WithPhase("basic"))
 	if err != nil {
 		t.Fatalf("Validate basic: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestValidate_WithPhase(t *testing.T) {
 		t.Errorf("basic phase: got %d violations, want 0: %v", len(basic), basic)
 	}
 	// "extended" also fires P-totals, which complains about Total.
-	extended, err := Validate(context.Background(), s, xmlBytes, WithPhase("extended"))
+	extended, _, err := Validate(context.Background(), s, xmlBytes, WithPhase("extended"))
 	if err != nil {
 		t.Fatalf("Validate extended: %v", err)
 	}
@@ -134,14 +134,14 @@ func TestValidate_WithPhase(t *testing.T) {
 
 func TestValidate_UnknownPhase(t *testing.T) {
 	s := loadInline(t, phaseSch)
-	_, err := Validate(context.Background(), s, []byte(`<root/>`), WithPhase("ghost"))
+	_, _, err := Validate(context.Background(), s, []byte(`<root/>`), WithPhase("ghost"))
 	if err == nil || !strings.Contains(err.Error(), "phase \"ghost\"") {
 		t.Errorf("err: got %v, want phase-not-declared", err)
 	}
 }
 
 func TestValidate_NilSchema(t *testing.T) {
-	_, err := Validate(context.Background(), nil, []byte(`<root/>`))
+	_, _, err := Validate(context.Background(), nil, []byte(`<root/>`))
 	if err == nil {
 		t.Error("expected error for nil schema")
 	}
@@ -149,7 +149,7 @@ func TestValidate_NilSchema(t *testing.T) {
 
 func TestValidate_MalformedXML(t *testing.T) {
 	s := loadInline(t, invoiceRulesSch)
-	_, err := Validate(context.Background(), s, []byte(`<oops`))
+	_, _, err := Validate(context.Background(), s, []byte(`<oops`))
 	if err == nil {
 		t.Error("expected parse error")
 	}
@@ -172,7 +172,7 @@ func TestValidate_FirstMatchingRuleClaims(t *testing.T) {
   </sch:pattern>
 </sch:schema>`
 	s := loadInline(t, sch)
-	got, err := Validate(context.Background(), s,
+	got, _, err := Validate(context.Background(), s,
 		[]byte(`<inv:Invoice xmlns:inv="urn:example:invoice"/>`))
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
@@ -182,11 +182,39 @@ func TestValidate_FirstMatchingRuleClaims(t *testing.T) {
 	}
 }
 
+func TestValidate_SurfacesSkippedRules(t *testing.T) {
+	// tokenize() is XPath 2.0 and not covered by the rewriter; the
+	// rule should land in the skipped slice rather than aborting
+	// the run or being silently absent.
+	sch := `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:pattern id="P">
+    <sch:rule context="//inv:Invoice">
+      <sch:assert id="SKIPME" test="count(tokenize(inv:Tags, ',')) &gt; 0">tags required</sch:assert>
+      <sch:assert id="RUNME" test="inv:ID">missing ID</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	s := loadInline(t, sch)
+	xmlBytes := []byte(`<inv:Invoice xmlns:inv="urn:example:invoice"><inv:ID>X</inv:ID></inv:Invoice>`)
+	violations, skipped, err := Validate(context.Background(), s, xmlBytes)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Errorf("violations: got %d, want 0 (RUNME passes, SKIPME skips)", len(violations))
+	}
+	if len(skipped) != 1 || skipped[0].RuleID != "SKIPME" {
+		t.Errorf("skipped: got %+v, want one SKIPME entry", skipped)
+	}
+}
+
 func TestValidate_ContextCancel(t *testing.T) {
 	s := loadInline(t, invoiceRulesSch)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Validate(ctx, s, []byte(`<inv:Invoice xmlns:inv="urn:example:invoice"/>`))
+	_, _, err := Validate(ctx, s, []byte(`<inv:Invoice xmlns:inv="urn:example:invoice"/>`))
 	if err == nil {
 		t.Error("expected ctx error")
 	}
