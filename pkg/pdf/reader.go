@@ -200,11 +200,67 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 // contains the PDF/A-3 violations of the archival base plus any
 // hybrid-invoice rule violations.
 //
+// Schematron rules whose XPath the bundled engine could not compile
+// or evaluate appear in the slice as advisories wrapping
+// [ErrSchematronRuleSkipped]; use [errors.Is] to filter them out or
+// [Reader.ValidateFacturXReport] for a pre-partitioned view.
+//
 // Use [Reader.ValidateZUGFeRD] when the producer claims an earlier
 // ZUGFeRD generation (1.0 or 2.0) since those use different filenames
 // and XMP namespaces.
 func (r *Reader) ValidateFacturX(ctx context.Context) ([]error, error) {
 	return compliance.ValidateFacturX(ctx, r.doc, r.facturXValidateOpts(ctx)...)
+}
+
+// FacturXReport partitions the output of a [Reader.ValidateFacturXReport]
+// call into hard violations and Schematron advisories. Violations are
+// the PDF/A-3 plus hybrid-invoice rule failures that callers must act
+// on; Advisories list Schematron rules whose XPath the bundled engine
+// could not evaluate and whose verdict is therefore unknown.
+type FacturXReport struct {
+	// Violations are hard rule failures: PDF/A-3 base, hybrid-invoice
+	// AF/XMP/CII checks, and Schematron assertions that fired.
+	Violations []error
+	// Advisories list Schematron rules skipped because the bundled
+	// XPath engine does not support the construct the rule uses.
+	// Each entry wraps [ErrSchematronRuleSkipped] and names the rule
+	// id plus the unsupported construct in its error message.
+	Advisories []error
+}
+
+// ValidateFacturXReport runs the same checks as [Reader.ValidateFacturX]
+// and returns a [FacturXReport] that pre-partitions the result into
+// hard violations and Schematron advisories. Callers that only want
+// the hard violations can use [Reader.ValidateFacturX] directly.
+func (r *Reader) ValidateFacturXReport(ctx context.Context) (FacturXReport, error) {
+	errs, err := r.ValidateFacturX(ctx)
+	if err != nil {
+		return FacturXReport{}, err
+	}
+	return partitionFacturXErrors(errs), nil
+}
+
+// ValidateZUGFeRDReport mirrors [Reader.ValidateFacturXReport] for the
+// ZUGFeRD entry point. See that function's docs for how the report
+// partitions errors.
+func (r *Reader) ValidateZUGFeRDReport(ctx context.Context, version models.ZUGFeRDVersion) (FacturXReport, error) {
+	errs, err := r.ValidateZUGFeRD(ctx, version)
+	if err != nil {
+		return FacturXReport{}, err
+	}
+	return partitionFacturXErrors(errs), nil
+}
+
+func partitionFacturXErrors(errs []error) FacturXReport {
+	var rep FacturXReport
+	for _, e := range errs {
+		if errors.Is(e, ErrSchematronRuleSkipped) {
+			rep.Advisories = append(rep.Advisories, e)
+			continue
+		}
+		rep.Violations = append(rep.Violations, e)
+	}
+	return rep
 }
 
 // facturXValidateOpts assembles the compliance options threaded into

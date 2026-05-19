@@ -3,6 +3,8 @@ package pdf
 import (
 	"errors"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 )
 
 // Exported errors for granular error handling by consumers.
@@ -99,6 +101,25 @@ var (
 	// when the version argument does not match one of the documented
 	// [models.ZUGFeRDVersion] constants.
 	ErrInvalidZUGFeRDVersion = errors.New("zugferd version is invalid")
+
+	// ErrSchematronRuleSkipped is returned by [Reader.ValidateFacturX]
+	// and [Reader.ValidateZUGFeRD] as an advisory entry in the
+	// violations slice whenever a Schematron rule's XPath could not
+	// be compiled or evaluated by the bundled engine. The rule's
+	// verdict is unknown; the document neither passes nor fails it.
+	//
+	// Use [errors.Is] to separate advisories from real violations:
+	//
+	//	for _, e := range errs {
+	//	    if errors.Is(e, pdf.ErrSchematronRuleSkipped) { continue }
+	//	    // real violation
+	//	}
+	//
+	// The wrapped error's string identifies the rule id and the
+	// XPath construct that triggered the skip (typically an
+	// XPath 2.0 function the engine does not implement, e.g.
+	// "tokenize", "for $x in ... return", "string-to-codepoints").
+	ErrSchematronRuleSkipped = compliance.ErrSchematronRuleSkipped
 )
 
 // Pipeline sentinel errors surface structural problems with a [Pipeline]

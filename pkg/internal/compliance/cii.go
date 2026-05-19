@@ -373,28 +373,32 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 // checkInvoiceSchematron runs the supplied Schematron schema against
 // the embedded CII XML and translates fired assertions into compliance
-// violations. The variant guard mirrors checkInvoiceCIIXSD: only the
-// Factur-X 1.0+ / ZUGFeRD 2.1+ variant carries a CII payload that the
-// EN 16931 / XRechnung Schematron knows how to validate.
-func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string) []Violation {
+// violations. Rules whose XPath the engine could not compile or
+// evaluate surface as a parallel advisory slice; each entry wraps
+// [ErrSchematronRuleSkipped] so callers can branch on the sentinel
+// without scanning message text. The variant guard mirrors
+// checkInvoiceCIIXSD: only the Factur-X 1.0+ / ZUGFeRD 2.1+ variant
+// carries a CII payload that the EN 16931 / XRechnung Schematron
+// knows how to validate.
+func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string) ([]Violation, []error) {
 	if schema == nil {
-		return nil
+		return nil, nil
 	}
 	if v.namespaceURI != variantFacturX.namespaceURI {
-		return nil
+		return nil, nil
 	}
 	if !invoice.found || invoice.streamDict == nil {
-		return nil
+		return nil, nil
 	}
 	stream, err := document.ResolveStream(ctx, doc, invoice.streamRef)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	data, err := stream.Bytes(ctx)
 	if err != nil || len(data) == 0 {
 		decoded, decErr := doc.DecodeStream(ctx, stream)
 		if decErr != nil {
-			return nil
+			return nil, nil
 		}
 		data = decoded
 	}
@@ -407,12 +411,7 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	if err != nil {
 		// Parse failure on the CII payload surfaces via the CII spine
 		// checks in checkInvoiceCII; do not double-report it here.
-		return nil
-	}
-	if len(skipped) > 0 {
-		doc.Logger.Debug("schematron: rules skipped (XPath unsupported in the engine subset)",
-			"variant", v.label, "skipped_count", len(skipped),
-			"first", skipped[0].RuleID)
+		return nil, nil
 	}
 	out := make([]Violation, 0, len(violations))
 	for _, sv := range violations {
@@ -421,7 +420,20 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 			Context: formatSchematronContext(v, sv),
 		})
 	}
-	return out
+	advisories := make([]error, 0, len(skipped))
+	for _, s := range skipped {
+		advisories = append(advisories, &schematronSkippedError{
+			RuleID:  s.RuleID,
+			Context: v.label,
+			Reason:  s.Reason,
+		})
+	}
+	if len(skipped) > 0 {
+		doc.Logger.Debug("schematron: rules skipped (XPath unsupported in the engine subset)",
+			"variant", v.label, "skipped_count", len(skipped),
+			"first", skipped[0].RuleID)
+	}
+	return out, advisories
 }
 
 // ruleForSchematronSeverity picks Fatal versus Warning based on the

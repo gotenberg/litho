@@ -34,9 +34,14 @@ func rewriteXPath2(expr string) string {
 	for _, cast := range stringCasts {
 		out = rewriteCast(out, "xs:"+cast, "string")
 	}
+	out = elideCastInStep(out, "number")
+	out = elideCastInStep(out, "string")
 	out = rewriteCaseFunction(out, "upper-case", upperCaseLo, upperCaseUp)
 	out = rewriteCaseFunction(out, "lower-case", lowerCaseUp, lowerCaseLo)
 	out = rewriteFnRename(out, "exists", "boolean")
+	out = rewriteAbs(out)
+	out = rewriteDistinctValuesEqOne(out)
+	out = coerceRoundToFloat(out)
 	out = rewriteSequenceEquality(out)
 	// Bare sequence construction runs AFTER sequence-equality so the
 	// equality form's "= (a, b)" gets first dibs on the literal and
@@ -93,6 +98,186 @@ func rewriteCast(expr, fullName, replacement string) string {
 		i++
 	}
 	return b.String()
+}
+
+// elideCastInStep drops a numeric or string cast that sits directly
+// after a path-step "/" - XPath 1.0 forbids a function call in that
+// position, but XPath 2.0 (and the EN 16931 Schematron's BR-CO-17 in
+// particular) uses the form to type-cast a path step in place:
+//
+//	.[predicate]/xs:decimal(ram:Rate)
+//
+// After the generic [rewriteCast] pass that becomes ".[pred]/number(
+// ram:Rate)" which antchfx/xpath rejects as an invalid token.
+// Dropping the cast wrapper leaves ".[pred]/ram:Rate", a plain path
+// step; implicit numeric coercion at the surrounding arithmetic
+// operator preserves the verdict. Used for "number" and "string"
+// (the targets the generic cast pass produces).
+func elideCastInStep(expr, fnName string) string {
+	target := "/" + fnName + "("
+	for {
+		idx := strings.Index(expr, target)
+		if idx < 0 {
+			return expr
+		}
+		argStart := idx + len(target)
+		argEnd := matchCloseParen(expr, argStart)
+		if argEnd < 0 {
+			return expr
+		}
+		arg := expr[argStart:argEnd]
+		expr = expr[:idx+1] + arg + expr[argEnd+1:]
+	}
+}
+
+// coerceRoundToFloat wraps every round(EXPR) call in number(...) so
+// the result is a float64 rather than a Go int. antchfx/xpath v1.3.6
+// returns int from its round helper, and a subsequent operation that
+// runs the result through the engine's type registry (a comparison
+// against another round result, for example) panics with "xpath
+// unknown value type: int". Wrapping round() in number() routes the
+// int through the engine's asNumber coercion, which folds it back to
+// float64. The transformation is semantically a no-op for
+// well-typed XPath 1.0 expressions; without it, BR-CO-17 in the
+// EN 16931 Schematron crashes on every CII invoice.
+func coerceRoundToFloat(expr string) string {
+	prefix := "round("
+	if !strings.Contains(expr, prefix) {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr) + 16)
+	for i := 0; i < len(expr); {
+		if strings.HasPrefix(expr[i:], prefix) && (i == 0 || !isXPathNameChar(expr[i-1])) {
+			start := i + len(prefix)
+			end := matchCloseParen(expr, start)
+			if end < 0 {
+				b.WriteByte(expr[i])
+				i++
+				continue
+			}
+			b.WriteString("number(round(")
+			b.WriteString(expr[start:end])
+			b.WriteString("))")
+			i = end + 1
+			continue
+		}
+		b.WriteByte(expr[i])
+		i++
+	}
+	return b.String()
+}
+
+// rewriteAbs converts every abs(EXPR) call into the XPath 1.0
+// equivalent (EXPR * (1 - 2 * (EXPR < 0))). The multiplier evaluates
+// to 1 when EXPR is non-negative and to -1 when EXPR is negative, so
+// the result is |EXPR| in either case. EXPR is evaluated twice; the
+// EN 16931 abs uses all wrap a pure numeric coercion (xs:decimal of
+// a leaf node) so duplicate evaluation costs nothing observable.
+//
+// Used by BR-S-09, BR-S-N, BR-CO-17 and their VAT-category siblings
+// in the EN 16931 Schematron, which all check |amount| ≈ basis × rate
+// to two decimals.
+func rewriteAbs(expr string) string {
+	prefix := "abs("
+	if !strings.Contains(expr, prefix) {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr))
+	for i := 0; i < len(expr); {
+		if strings.HasPrefix(expr[i:], prefix) && (i == 0 || !isXPathNameChar(expr[i-1])) {
+			start := i + len(prefix)
+			end := matchCloseParen(expr, start)
+			if end < 0 {
+				b.WriteByte(expr[i])
+				i++
+				continue
+			}
+			arg := expr[start:end]
+			b.WriteString("((")
+			b.WriteString(arg)
+			b.WriteString(") * (1.0 - 2.0 * number((")
+			b.WriteString(arg)
+			b.WriteString(") < 0.0)))")
+			i = end + 1
+			continue
+		}
+		b.WriteByte(expr[i])
+		i++
+	}
+	return b.String()
+}
+
+// rewriteDistinctValuesEqOne converts the narrow XPath 2.0 idiom
+//
+//	count(distinct-values(EXPR)) = 1
+//
+// into the XPath 1.0 equivalent
+//
+//	(not(EXPR) or not((EXPR)[. != (EXPR)[1]]))
+//
+// Semantically: when EXPR is empty, both forms say "no distinct
+// values"; when EXPR is non-empty, both ask whether every member
+// equals the first. CII-SR-462 is the canonical case ("only one
+// DueDateTypeCode shall be present"). Other distinct-values forms
+// (count = 0, count = count(EXPR), nested in arithmetic) are
+// deliberately left alone; the per-rule skip in [evaluateRule]
+// catches them and surfaces a coverage gap instead of producing a
+// wrong verdict.
+//
+// EXPR is captured by matching parens, so nested function calls and
+// path predicates inside the argument do not throw off the rewriter.
+func rewriteDistinctValuesEqOne(expr string) string {
+	target := "count(distinct-values("
+	for {
+		idx := strings.Index(expr, target)
+		if idx < 0 {
+			return expr
+		}
+		if idx > 0 && isXPathNameChar(expr[idx-1]) {
+			expr = expr[:idx+1] + rewriteDistinctValuesEqOne(expr[idx+1:])
+			return expr
+		}
+		innerStart := idx + len(target)
+		innerEnd := matchCloseParen(expr, innerStart)
+		if innerEnd < 0 {
+			return expr
+		}
+		// After the inner ")", the next byte should be the close of
+		// count(...).
+		if innerEnd+1 >= len(expr) || expr[innerEnd+1] != ')' {
+			return expr
+		}
+		countClose := innerEnd + 1
+		// Look for " = 1" (whitespace flexible) after count(...).
+		k := countClose + 1
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n') {
+			k++
+		}
+		if k >= len(expr) || expr[k] != '=' {
+			return expr
+		}
+		k++
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n') {
+			k++
+		}
+		if k >= len(expr) || expr[k] != '1' {
+			return expr
+		}
+		if k+1 < len(expr) {
+			next := expr[k+1]
+			if next >= '0' && next <= '9' {
+				return expr
+			}
+			if next == '.' {
+				return expr
+			}
+		}
+		inner := expr[innerStart:innerEnd]
+		replacement := "(not(" + inner + ") or not((" + inner + ")[. != (" + inner + ")[1]]))"
+		expr = expr[:idx] + replacement + expr[k+1:]
+	}
 }
 
 // rewriteSequenceEquality converts XPath 2.0 sequence-literal

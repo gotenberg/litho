@@ -3209,6 +3209,124 @@ func TestReader_ValidateFacturX_WithSchematron_AssertFires(t *testing.T) {
 	}
 }
 
+func TestReader_ValidateFacturX_WithSchematron_SkippedAdvisory(t *testing.T) {
+	// A Schematron rule using XPath 2.0 tokenize() must surface as an
+	// advisory wrapping ErrSchematronRuleSkipped, not as a violation
+	// and not swallowed silently. Anything else would let unsupported
+	// rules disappear from coverage tallies.
+	const skipSch = `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="rsm" uri="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"/>
+  <sch:pattern id="unsupported">
+    <sch:rule context="//rsm:CrossIndustryInvoice">
+      <sch:assert id="BR-FX-SKIP" flag="fatal" test="count(tokenize('a,b,c', ',')) = 3">[BR-FX-SKIP] tokenize</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXEN16931,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	schFS := fstest.MapFS{"rules.sch": &fstest.MapFile{Data: []byte(skipSch)}}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()),
+		WithSchematron(schFS, "rules.sch", ""))
+	if err != nil {
+		t.Fatalf("reopen with schematron: %v", err)
+	}
+	defer r2.Close()
+
+	violations, err := r2.ValidateFacturX(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturX: %v", err)
+	}
+	advisories := 0
+	for _, v := range violations {
+		if errors.Is(v, ErrSchematronRuleSkipped) {
+			advisories++
+			if !strings.Contains(v.Error(), "BR-FX-SKIP") {
+				t.Errorf("advisory missing rule id: %v", v)
+			}
+		}
+	}
+	if advisories != 1 {
+		t.Errorf("got %d ErrSchematronRuleSkipped advisories, want 1; violations=%v", advisories, violations)
+	}
+}
+
+func TestReader_ValidateFacturXReport_PartitionsAdvisories(t *testing.T) {
+	// The structured report should land the tokenize() advisory in
+	// Advisories and any other entries in Violations. The flat
+	// ValidateFacturX call returns both in one slice; the report
+	// must partition them so callers can branch without scanning
+	// errors.Is on every entry.
+	const skipSch = `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="rsm" uri="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"/>
+  <sch:pattern id="unsupported">
+    <sch:rule context="//rsm:CrossIndustryInvoice">
+      <sch:assert id="BR-FX-SKIP" flag="fatal" test="count(tokenize('a,b,c', ',')) = 3">[BR-FX-SKIP] tokenize</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	ctx := context.Background()
+	data := writerTestPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+		InvoiceXML: []byte(facturXSampleCII),
+		Level:      models.FacturXEN16931,
+	}); err != nil {
+		t.Fatalf("RemediateFacturX: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	schFS := fstest.MapFS{"rules.sch": &fstest.MapFile{Data: []byte(skipSch)}}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()),
+		WithSchematron(schFS, "rules.sch", ""))
+	if err != nil {
+		t.Fatalf("reopen with schematron: %v", err)
+	}
+	defer r2.Close()
+
+	report, err := r2.ValidateFacturXReport(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturXReport: %v", err)
+	}
+	if len(report.Advisories) != 1 {
+		t.Errorf("got %d advisories, want 1: %v", len(report.Advisories), report.Advisories)
+	}
+	for _, v := range report.Advisories {
+		if !errors.Is(v, ErrSchematronRuleSkipped) {
+			t.Errorf("advisory does not match ErrSchematronRuleSkipped: %v", v)
+		}
+	}
+	for _, v := range report.Violations {
+		if errors.Is(v, ErrSchematronRuleSkipped) {
+			t.Errorf("advisory leaked into Violations: %v", v)
+		}
+	}
+}
+
 func TestReader_ValidateFacturX_BundledXSDDefault(t *testing.T) {
 	// No WithCIISchemas override: ValidateFacturX should still run
 	// the XSD pass using the bundled D16B schemas (currently a
