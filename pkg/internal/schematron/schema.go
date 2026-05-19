@@ -59,6 +59,11 @@ type Pattern struct {
 	Title string
 	// Rules walks the pattern's sch:rule children in source order.
 	Rules []*Rule
+	// Lets carries pattern-scoped sch:let declarations. They
+	// evaluate against the document root before any rule in the
+	// pattern runs and the resulting literals substitute into the
+	// rule contexts and assertion tests.
+	Lets []Let
 }
 
 // Rule binds a context XPath to a list of assertions. Every assert

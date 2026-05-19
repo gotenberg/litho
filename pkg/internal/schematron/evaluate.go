@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/antchfx/xmlquery"
@@ -101,6 +102,26 @@ func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalO
 	ns := namespaceMap(schema)
 	cache := newExprCache(ns)
 
+	// Schema-level lets evaluate against the document root once and
+	// stay constant for every pattern below. Their literal values
+	// substitute into pattern lets, rule contexts, and assertion
+	// tests before XPath compilation.
+	//
+	// XRechnung and similar schemas adopt a "variable-pattern"
+	// convention: declare constants in a dedicated pattern whose
+	// lets are referenced by every other pattern. Strict
+	// per-pattern scoping would break that idiom, so the schema's
+	// pattern lets fold into the shared map up front, in source
+	// order so a later pattern can reference an earlier one.
+	schemaVars := resolveLevelLets(schema.Lets, doc, cache, nil)
+	for _, pid := range schema.PatternOrder {
+		pat := schema.Patterns[pid]
+		if pat == nil {
+			continue
+		}
+		schemaVars = resolveLevelLets(pat.Lets, doc, cache, schemaVars)
+	}
+
 	var (
 		out     []Violation
 		skipped []SkippedRule
@@ -113,11 +134,30 @@ func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalO
 		if pat == nil {
 			continue
 		}
-		v, s := evaluatePattern(ctx, doc, pat, cache)
+		v, s := evaluatePattern(ctx, doc, pat, cache, schemaVars)
 		out = append(out, v...)
 		skipped = append(skipped, s...)
 	}
 	return out, skipped, nil
+}
+
+// resolveLevelLets evaluates a list of let bindings against the
+// supplied context node, threading any pre-bound variables through
+// the substitution. The bindings are processed in source order so a
+// later let may reference an earlier one. Failure to evaluate any
+// individual let drops it; downstream references resolve to their
+// raw $name and let the per-rule error isolation handle the gap.
+func resolveLevelLets(lets []Let, n *xmlquery.Node, cache *exprCache, inherited map[string]string) map[string]string {
+	out := make(map[string]string, len(inherited)+len(lets))
+	maps.Copy(out, inherited)
+	for _, lt := range lets {
+		value, err := cache.evalForVariable(substituteLets(lt.Value, out), n)
+		if err != nil {
+			continue
+		}
+		out[lt.Name] = xpathLiteral(value)
+	}
+	return out
 }
 
 // selectPatterns returns the ordered pattern ids that the requested
@@ -143,17 +183,22 @@ func selectPatterns(s *Schema, phase string) ([]string, error) {
 // later rules skip nodes already claimed. Rules whose context XPath
 // fails to compile or evaluate silently skip; the second return
 // reports them so callers can audit Schematron coverage.
-func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cache *exprCache) ([]Violation, []SkippedRule) {
+func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cache *exprCache, schemaVars map[string]string) ([]Violation, []SkippedRule) {
 	claimed := make(map[*xmlquery.Node]bool)
 	var (
 		out     []Violation
 		skipped []SkippedRule
 	)
+	patternVars := resolveLevelLets(pat.Lets, doc, cache, schemaVars)
 	for _, rule := range pat.Rules {
 		if err := ctx.Err(); err != nil {
 			return out, skipped
 		}
-		nodes, err := selectNodes(doc, rule.Context, cache)
+		// Apply schema + pattern lets to the rule context. Rule-scoped
+		// lets evaluate per context match inside evaluateRule because
+		// they may depend on the matched node.
+		contextExpr := substituteLets(rule.Context, patternVars)
+		nodes, err := selectNodes(doc, contextExpr, cache)
 		if err != nil {
 			// Whole rule unevaluable: record one SkippedRule per
 			// assertion the rule would have run, since each
@@ -177,7 +222,7 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 				continue
 			}
 			claimed[n] = true
-			v, s := evaluateRule(rule, n, cache)
+			v, s := evaluateRule(rule, n, cache, patternVars)
 			out = append(out, v...)
 			skipped = append(skipped, s...)
 		}
@@ -199,18 +244,12 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 // violations - worse than no Schematron at all. PR-followup
 // territory: surface skipped rules via a logger hook so callers can
 // audit coverage.
-func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache) ([]Violation, []SkippedRule) {
-	vars := make(map[string]string, len(rule.Lets))
-	for _, lt := range rule.Lets {
-		raw, err := cache.evalForVariable(lt.Value, n)
-		if err != nil {
-			// Skip this let; assertions that reference it will
-			// either fail to compile or evaluate to empty and end
-			// up in the skipped list below.
-			continue
-		}
-		vars[lt.Name] = xpathLiteral(raw)
-	}
+func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[string]string) ([]Violation, []SkippedRule) {
+	// Rule lets evaluate against the matched node and stack on top
+	// of the inherited schema + pattern lets. The inherited map is
+	// copied (not mutated) so concurrent calls on different match
+	// nodes do not stomp each other.
+	vars := resolveLevelLets(rule.Lets, n, cache, inherited)
 
 	out := make([]Violation, 0, len(rule.Asserts)+len(rule.Reports))
 	var skipped []SkippedRule

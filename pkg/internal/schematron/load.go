@@ -110,6 +110,9 @@ func (l *loader) loadFile(p, importer string) (*Schema, error) {
 			return nil, fmt.Errorf("%w: abstract patterns (pattern id=%q)", ErrUnsupportedConstruct, rp.ID)
 		}
 		pat := &Pattern{ID: rp.ID, Title: strings.TrimSpace(rp.Title)}
+		for _, lt := range rp.Lets {
+			pat.Lets = append(pat.Lets, Let(lt))
+		}
 		for _, rr := range rp.Rules {
 			rule := &Rule{Context: rr.Context}
 			for _, lt := range rr.Lets {
@@ -213,6 +216,7 @@ type rawPattern struct {
 	ID       string    `xml:"id,attr"`
 	Abstract string    `xml:"abstract,attr"`
 	Title    string    `xml:"http://purl.oclc.org/dsdl/schematron title"`
+	Lets     []rawLet  `xml:"http://purl.oclc.org/dsdl/schematron let"`
 	Rules    []rawRule `xml:"http://purl.oclc.org/dsdl/schematron rule"`
 }
 
