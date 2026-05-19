@@ -30,6 +30,10 @@ type facturXValidateOpts struct {
 	// when both are configured.
 	schematronBundleEN16931   *schematron.Schema
 	schematronBundleXRechnung *schematron.Schema
+	// schematronOverrides registers Go evaluators for rules whose
+	// XPath the bundled engine cannot compile. The map is threaded
+	// into [schematron.Validate] as [schematron.WithRuleOverrides].
+	schematronOverrides map[string]schematron.RuleOverride
 }
 
 // WithFacturXXSD registers a loaded XSD schema set against which the
@@ -72,6 +76,19 @@ func WithFacturXSchematronBundle(en16931, xrechnung *schematron.Schema) FacturXV
 		o.schematronBundleEN16931 = en16931
 		o.schematronBundleXRechnung = xrechnung
 	}
+}
+
+// WithFacturXSchematronOverrides registers Go evaluators that
+// take precedence over the bundled XPath engine for the named
+// Schematron rule ids. Used for rules whose XPath relies on
+// XPath 2.0 constructs antchfx/xpath does not implement (BR-DE-19's
+// IBAN checksum is the canonical example).
+//
+// The companion package cii_schematron ships
+// [cii_schematron.BuiltinRuleOverrides]; callers can pass that map
+// directly or merge it with their own entries.
+func WithFacturXSchematronOverrides(m map[string]schematron.RuleOverride) FacturXValidateOption {
+	return func(o *facturXValidateOpts) { o.schematronOverrides = m }
 }
 
 // hybridInvoiceVariant captures the format-specific values that
@@ -202,7 +219,7 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	schSchema, schPhase := pickSchematron(ctx, doc, catalog, v, &cfg)
 	var schAdvisories []error
 	if schSchema != nil {
-		schViolations, advisories := checkInvoiceSchematron(ctx, doc, invoice, v, schSchema, schPhase)
+		schViolations, advisories := checkInvoiceSchematron(ctx, doc, invoice, v, schSchema, schPhase, cfg.schematronOverrides)
 		hybrid = append(hybrid, schViolations...)
 		schAdvisories = advisories
 	}

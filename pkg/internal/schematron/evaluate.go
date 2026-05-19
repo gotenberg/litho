@@ -57,14 +57,45 @@ func (v Violation) Error() string {
 type EvalOption func(*evalOpts)
 
 type evalOpts struct {
-	phase string
+	phase     string
+	overrides map[string]RuleOverride
 }
+
+// RuleOverride is a Go implementation of one Schematron assertion or
+// report test. It receives the matched context node and returns the
+// boolean that the rule's XPath test expression would have produced:
+//
+//   - For sch:assert: true means the rule passes (no violation).
+//   - For sch:report: true means the rule fires (one violation).
+//
+// Overrides exist so callers can handle rules whose XPath uses
+// XPath 2.0 constructs the bundled engine does not implement (for…
+// return, if/then/else, string-to-codepoints, etc.). The evaluator
+// consults the override map before attempting XPath compilation; a
+// registered override always takes precedence. When an override
+// returns an error, the rule lands in the skipped slice with the
+// error's message as the reason - same shape as an XPath skip.
+type RuleOverride func(ctx context.Context, node *xmlquery.Node) (bool, error)
 
 // WithPhase restricts evaluation to the patterns activated by the
 // named phase. When the option is absent, [Validate] runs every
 // pattern in source order.
 func WithPhase(id string) EvalOption {
 	return func(o *evalOpts) { o.phase = id }
+}
+
+// WithRuleOverrides registers per-assertion Go evaluators that take
+// precedence over the bundled XPath engine. The map key is the
+// assertion's id attribute (e.g. "BR-DE-19"); the value is the
+// Go function that decides whether the rule passes for a given
+// context node. Unknown ids in the map are ignored.
+//
+// Use this to handle rules whose XPath the engine cannot compile or
+// evaluate. The companion package cii_schematron ships
+// [cii_schematron.BuiltinRuleOverrides] with overrides for known
+// holes in the EN 16931 / XRechnung rule sets.
+func WithRuleOverrides(overrides map[string]RuleOverride) EvalOption {
+	return func(o *evalOpts) { o.overrides = overrides }
 }
 
 // Validate parses payload, walks schema's active patterns, and
@@ -134,7 +165,7 @@ func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalO
 		if pat == nil {
 			continue
 		}
-		v, s := evaluatePattern(ctx, doc, pat, cache, schemaVars)
+		v, s := evaluatePattern(ctx, doc, pat, cache, schemaVars, cfg.overrides)
 		out = append(out, v...)
 		skipped = append(skipped, s...)
 	}
@@ -186,7 +217,7 @@ func selectPatterns(s *Schema, phase string) ([]string, error) {
 // later rules skip nodes already claimed. Rules whose context XPath
 // fails to compile or evaluate silently skip; the second return
 // reports them so callers can audit Schematron coverage.
-func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cache *exprCache, schemaVars map[string]string) ([]Violation, []SkippedRule) {
+func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cache *exprCache, schemaVars map[string]string, overrides map[string]RuleOverride) ([]Violation, []SkippedRule) {
 	claimed := make(map[*xmlquery.Node]bool)
 	var (
 		out     []Violation
@@ -225,7 +256,7 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 				continue
 			}
 			claimed[n] = true
-			v, s := evaluateRule(rule, n, cache, patternVars)
+			v, s := evaluateRule(ctx, rule, n, cache, patternVars, overrides)
 			out = append(out, v...)
 			skipped = append(skipped, s...)
 		}
@@ -247,7 +278,7 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 // violations - worse than no Schematron at all. PR-followup
 // territory: surface skipped rules via a logger hook so callers can
 // audit coverage.
-func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[string]string) ([]Violation, []SkippedRule) {
+func evaluateRule(ctx context.Context, rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[string]string, overrides map[string]RuleOverride) ([]Violation, []SkippedRule) {
 	// Rule lets stack on top of the inherited schema + pattern lets.
 	// The inherited map is copied (not mutated) so concurrent calls
 	// on different match nodes do not stomp each other.
@@ -256,7 +287,7 @@ func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[
 	out := make([]Violation, 0, len(rule.Asserts)+len(rule.Reports))
 	var skipped []SkippedRule
 	for _, a := range rule.Asserts {
-		fired, err := evalBoolean(substituteLets(a.Test, vars), n, cache)
+		fired, err := runAssertion(ctx, a, n, vars, cache, overrides)
 		if err != nil {
 			skipped = append(skipped, SkippedRule{
 				RuleID: a.ID, Context: rule.Context,
@@ -269,7 +300,7 @@ func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[
 		}
 	}
 	for _, r := range rule.Reports {
-		fired, err := evalBoolean(substituteLets(r.Test, vars), n, cache)
+		fired, err := runAssertion(ctx, r, n, vars, cache, overrides)
 		if err != nil {
 			skipped = append(skipped, SkippedRule{
 				RuleID: r.ID, Context: rule.Context,
@@ -282,6 +313,20 @@ func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[
 		}
 	}
 	return out, skipped
+}
+
+// runAssertion evaluates a single assertion: a registered override
+// wins over the XPath engine, otherwise the test compiles and runs
+// against the bundled antchfx/xpath. The boolean returned matches
+// the test expression's verdict; callers translate that into
+// pass/fire per assertion kind.
+func runAssertion(ctx context.Context, a *Assertion, n *xmlquery.Node, vars map[string]string, cache *exprCache, overrides map[string]RuleOverride) (bool, error) {
+	if a.ID != "" {
+		if fn, ok := overrides[a.ID]; ok {
+			return fn(ctx, n)
+		}
+	}
+	return evalBoolean(substituteLets(a.Test, vars), n, cache)
 }
 
 // substituteLets replaces XPath variable references ($name) in expr

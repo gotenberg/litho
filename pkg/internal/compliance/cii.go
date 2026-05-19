@@ -380,7 +380,7 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 // checkInvoiceCIIXSD: only the Factur-X 1.0+ / ZUGFeRD 2.1+ variant
 // carries a CII payload that the EN 16931 / XRechnung Schematron
 // knows how to validate.
-func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string) ([]Violation, []error) {
+func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string, overrides map[string]schematron.RuleOverride) ([]Violation, []error) {
 	if schema == nil {
 		return nil, nil
 	}
@@ -406,6 +406,9 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	var opts []schematron.EvalOption
 	if phase != "" {
 		opts = append(opts, schematron.WithPhase(phase))
+	}
+	if len(overrides) > 0 {
+		opts = append(opts, schematron.WithRuleOverrides(overrides))
 	}
 	violations, skipped, err := schematron.Validate(ctx, schema, data, opts...)
 	if err != nil {

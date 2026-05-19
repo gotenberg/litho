@@ -312,6 +312,13 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 			opts = append(opts, compliance.WithFacturXSchematronBundle(en16931Sch, xrechnungSch))
 		}
 	}
+	// Always wire the bundled Go rule overrides so rules that the
+	// XPath engine cannot handle (BR-DE-19's IBAN checksum is the
+	// load-bearing example) evaluate through their Go implementation
+	// instead of landing in the advisory slice.
+	if overrides := cii_schematron.BuiltinRuleOverrides(); len(overrides) > 0 {
+		opts = append(opts, compliance.WithFacturXSchematronOverrides(overrides))
+	}
 	return opts
 }
 
