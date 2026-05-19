@@ -69,12 +69,16 @@ type evalOpts struct {
 //   - For sch:report: true means the rule fires (one violation).
 //
 // Overrides exist so callers can handle rules whose XPath uses
-// XPath 2.0 constructs the bundled engine does not implement (for…
-// return, if/then/else, string-to-codepoints, etc.). The evaluator
+// XPath 2.0 constructs the bundled engine does not implement
+// (for/return, if/then/else, string-to-codepoints). The evaluator
 // consults the override map before attempting XPath compilation; a
 // registered override always takes precedence. When an override
 // returns an error, the rule lands in the skipped slice with the
-// error's message as the reason - same shape as an XPath skip.
+// error's message as the reason, matching the shape of an XPath skip.
+//
+// Implementations must be safe to call from any goroutine; [Validate]
+// may invoke the same override concurrently against different context
+// nodes when patterns share a rule id.
 type RuleOverride func(ctx context.Context, node *xmlquery.Node) (bool, error)
 
 // WithPhase restricts evaluation to the patterns activated by the

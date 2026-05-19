@@ -582,7 +582,7 @@ func rewriteOneQuantifier(expr string) (string, bool) {
 		if kind == "" {
 			continue
 		}
-		// After "every" or "some" we expect at least one space and
+		// After "every" or "some", expect at least one space and
 		// then a "$VAR in PATH satisfies EXPR" structure.
 		j := i + kindLen
 		for j < len(expr) && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
@@ -728,7 +728,7 @@ func indexSatisfies(expr string, pos int) (int, int) {
 		if strings.HasPrefix(expr[k:], "satisfies") {
 			endByte := k + len("satisfies")
 			// "satisfies" must be followed by a non-name character
-			// so we don't match "satisfiesX".
+			// so "satisfiesX" doesn't match.
 			if endByte >= len(expr) || !isXPathNameChar(expr[endByte]) {
 				return i, endByte
 			}

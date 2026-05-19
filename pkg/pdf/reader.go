@@ -217,6 +217,9 @@ func (r *Reader) ValidateFacturX(ctx context.Context) ([]error, error) {
 // the PDF/A-3 plus hybrid-invoice rule failures that callers must act
 // on; Advisories list Schematron rules whose XPath the bundled engine
 // could not evaluate and whose verdict is therefore unknown.
+//
+// Values are immutable once returned; callers may share a FacturXReport
+// across goroutines without synchronisation.
 type FacturXReport struct {
 	// Violations are hard rule failures: PDF/A-3 base, hybrid-invoice
 	// AF/XMP/CII checks, and Schematron assertions that fired.
