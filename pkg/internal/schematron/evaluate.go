@@ -337,14 +337,21 @@ func nodePath(n *xmlquery.Node) string {
 }
 
 // selectNodes evaluates a context XPath against doc and returns
-// every element node it matches.
-func selectNodes(doc *xmlquery.Node, expr string, cache *exprCache) ([]*xmlquery.Node, error) {
+// every element node it matches. Panic recovery mirrors the
+// evalBoolean guard: an antchfx/xpath panic surfaces as an error
+// so the caller skips the rule rather than crashing the host.
+func selectNodes(doc *xmlquery.Node, expr string, cache *exprCache) (out []*xmlquery.Node, err error) {
 	compiled, err := cache.compile(expr)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("xpath evaluator panic on context: %v", r)
+			out = nil
+		}
+	}()
 	iter := compiled.Select(xmlquery.CreateXPathNavigator(doc))
-	var out []*xmlquery.Node
 	for iter.MoveNext() {
 		nav, ok := iter.Current().(*xmlquery.NodeNavigator)
 		if !ok {
@@ -359,11 +366,23 @@ func selectNodes(doc *xmlquery.Node, expr string, cache *exprCache) ([]*xmlquery
 // the boolean semantics Schematron expects. Let-binding substitution
 // has already happened at the caller; this function just compiles
 // and runs the (possibly XPath 2.0) test expression.
-func evalBoolean(expr string, n *xmlquery.Node, cache *exprCache) (bool, error) {
+//
+// Panic recovery guards against upstream evaluator bugs in
+// antchfx/xpath: a malformed query graph has been observed to deref
+// a nil node deep inside the evaluator on real EN 16931 / XRechnung
+// payloads, and the host process should not crash for that. A
+// recovered panic surfaces as an error so the caller logs the rule
+// as skipped rather than ignoring the gap.
+func evalBoolean(expr string, n *xmlquery.Node, cache *exprCache) (result bool, err error) {
 	compiled, err := cache.compile(expr)
 	if err != nil {
 		return false, err
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("xpath evaluator panic: %v", r)
+		}
+	}()
 	nav := xmlquery.CreateXPathNavigator(n)
 	return xpathBoolean(compiled.Evaluate(nav)), nil
 }
@@ -433,11 +452,20 @@ func (c *exprCache) compile(expr string) (*xpath.Expr, error) {
 
 // evalForVariable evaluates a let expression against node n and
 // returns the resulting any-typed value. Used by [evaluateRule] to
-// pre-compute let bindings before assertions fire.
-func (c *exprCache) evalForVariable(expr string, n *xmlquery.Node) (any, error) {
+// pre-compute let bindings before assertions fire. Panic recovery
+// mirrors evalBoolean's guard so an upstream evaluator crash on a
+// let binding surfaces as a normal error and the rule's lets fall
+// back to their unbound state.
+func (c *exprCache) evalForVariable(expr string, n *xmlquery.Node) (result any, err error) {
 	compiled, err := c.compile(expr)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("xpath evaluator panic on let: %v", r)
+			result = nil
+		}
+	}()
 	return compiled.Evaluate(xmlquery.CreateXPathNavigator(n)), nil
 }

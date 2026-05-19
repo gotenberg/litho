@@ -35,7 +35,36 @@ func rewriteXPath2(expr string) string {
 	out = stringCastRewrite.ReplaceAllString(out, "string($1)")
 	out = rewriteCaseFunction(out, "upper-case", upperCaseLo, upperCaseUp)
 	out = rewriteCaseFunction(out, "lower-case", lowerCaseUp, lowerCaseLo)
+	out = rewriteFnRename(out, "exists", "boolean")
 	return out
+}
+
+// rewriteFnRename replaces every fn(EXPR) call with replacement(EXPR).
+// Used to redirect XPath 2.0 function names to their XPath 1.0
+// equivalents when the semantics match exactly. For example,
+// exists(x) and boolean(x) return the same value for any node set
+// or sequence: empty maps to false, non-empty to true.
+func rewriteFnRename(expr, fn, replacement string) string {
+	prefix := fn + "("
+	if !strings.Contains(expr, prefix) {
+		return expr
+	}
+	// Replace only at function-call boundaries: the byte preceding
+	// "fn(" must not be a name character, otherwise we would rewrite
+	// "myExists(" or similar.
+	var b strings.Builder
+	b.Grow(len(expr))
+	for i := 0; i < len(expr); {
+		if strings.HasPrefix(expr[i:], prefix) && (i == 0 || !isXPathNameChar(expr[i-1])) {
+			b.WriteString(replacement)
+			b.WriteByte('(')
+			i += len(prefix)
+			continue
+		}
+		b.WriteByte(expr[i])
+		i++
+	}
+	return b.String()
 }
 
 //nolint:gochecknoglobals // immutable compiled patterns shared across calls.
