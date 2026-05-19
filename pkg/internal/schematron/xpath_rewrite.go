@@ -38,6 +38,11 @@ func rewriteXPath2(expr string) string {
 	out = rewriteCaseFunction(out, "lower-case", lowerCaseUp, lowerCaseLo)
 	out = rewriteFnRename(out, "exists", "boolean")
 	out = rewriteSequenceEquality(out)
+	// Bare sequence construction runs AFTER sequence-equality so the
+	// equality form's "= (a, b)" gets first dibs on the literal and
+	// is rewritten as a disjunction of equality comparisons rather
+	// than a disjunction of boolean coercions.
+	out = rewriteBareSequenceAsDisjunction(out)
 	return out
 }
 
@@ -222,6 +227,126 @@ func captureLHS(expr string, opIdx int) (start, end int) {
 		start--
 	}
 	return start, end
+}
+
+// rewriteBareSequenceAsDisjunction converts a top-level XPath 2.0
+// sequence construction "(X, Y, Z)" used in a boolean context into
+// "(boolean(X) or boolean(Y) or boolean(Z))". Identifies grouping
+// parens (those not following an identifier name, i.e. not a
+// function-call argument list) and checks for a top-level comma; a
+// comma means the parens enclose a sequence literal rather than a
+// parenthesised single expression.
+//
+// XRechnung's BR-DE-16 leans on this pattern to assert "X exists or
+// Y exists" in one step. XPath 2.0 interprets the sequence in a
+// boolean position as true when any member yields a non-empty
+// node-set; XPath 1.0's "or" with implicit boolean coercion
+// reproduces the same verdict.
+func rewriteBareSequenceAsDisjunction(expr string) string {
+	for {
+		next, changed := rewriteOneBareSequence(expr)
+		if !changed {
+			return expr
+		}
+		expr = next
+	}
+}
+
+func rewriteOneBareSequence(expr string) (string, bool) {
+	for i := 0; i < len(expr); i++ {
+		if expr[i] != '(' {
+			continue
+		}
+		if isFunctionCallParen(expr, i) {
+			continue
+		}
+		end := matchCloseParen(expr, i+1)
+		if end < 0 {
+			continue
+		}
+		items := splitSequenceLiteral(expr[i+1 : end])
+		if len(items) < 2 {
+			continue
+		}
+		// Skip sequences whose items look like equality comparisons:
+		// those were the target of rewriteSequenceEquality and any
+		// leftover commas here indicate a different construct (e.g.
+		// step predicates) we should not touch.
+		safe := true
+		for _, item := range items {
+			if !looksLikePathOrCall(strings.TrimSpace(item)) {
+				safe = false
+				break
+			}
+		}
+		if !safe {
+			continue
+		}
+		var parts []string
+		for _, item := range items {
+			parts = append(parts, "boolean("+strings.TrimSpace(item)+")")
+		}
+		replacement := "(" + strings.Join(parts, " or ") + ")"
+		return expr[:i] + replacement + expr[end+1:], true
+	}
+	return expr, false
+}
+
+// isFunctionCallParen reports whether the open paren at position i
+// in expr belongs to a function call (preceding non-whitespace byte
+// is an XPath name char). Grouping parens follow operators, the
+// start of expression, or another open paren.
+func isFunctionCallParen(expr string, i int) bool {
+	j := i - 1
+	for j >= 0 && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
+		j--
+	}
+	if j < 0 {
+		return false
+	}
+	return isXPathNameChar(expr[j])
+}
+
+// looksLikePathOrCall returns true when s is plausibly a path
+// expression or a function call: starts with a letter, slash, or
+// dot, and contains no operator that would indicate this is a
+// comparison or arithmetic expression (which we deliberately do not
+// touch).
+func looksLikePathOrCall(s string) bool {
+	if s == "" {
+		return false
+	}
+	c := s[0]
+	letter := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+	if c != '/' && c != '.' && c != '@' && c != '_' && !letter {
+		return false
+	}
+	// Reject any top-level operator that would make the item a
+	// comparison or arithmetic expression rather than a bare path.
+	depth := 0
+	inStr := byte(0)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			inStr = c
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		case '=', '<', '>', '+':
+			if depth == 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // splitSequenceLiteral splits the inside of a sequence literal on
