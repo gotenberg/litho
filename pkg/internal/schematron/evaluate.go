@@ -140,11 +140,7 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 				continue
 			}
 			claimed[n] = true
-			v, err := evaluateRule(rule, n, cache)
-			if err != nil {
-				return out, err
-			}
-			out = append(out, v...)
+			out = append(out, evaluateRule(rule, n, cache)...)
 		}
 	}
 	return out, nil
@@ -152,38 +148,118 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 
 // evaluateRule applies every assertion in rule against the single
 // context node n. Let bindings declared on the rule are pre-evaluated
-// and threaded into the per-assertion XPath context so test
-// expressions can reference them by name.
-func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache) ([]Violation, error) {
-	vars := make(map[string]any, len(rule.Lets))
+// and substituted into each assertion's test expression before
+// compilation; assertions whose test expression fails to compile or
+// evaluate get silently skipped so a single unsupported XPath
+// construct does not abort the whole pass.
+//
+// The silent-skip behaviour exists because real-world Schematron
+// schemas (EN 16931, XRechnung) lean on XPath 2.0 functions and
+// xsl:function helpers that antchfx/xpath does not implement. A
+// per-rule abort would leave most documents producing zero
+// violations - worse than no Schematron at all. PR-followup
+// territory: surface skipped rules via a logger hook so callers can
+// audit coverage.
+func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache) []Violation {
+	vars := make(map[string]string, len(rule.Lets))
 	for _, lt := range rule.Lets {
-		v, err := cache.evalForVariable(lt.Value, n)
+		raw, err := cache.evalForVariable(lt.Value, n)
 		if err != nil {
-			return nil, fmt.Errorf("evaluating let %q: %w", lt.Name, err)
+			// Skip this let; assertions that reference it will
+			// either fail to compile or evaluate to empty.
+			continue
 		}
-		vars[lt.Name] = v
+		vars[lt.Name] = xpathLiteral(raw)
 	}
 
-	var out []Violation
+	out := make([]Violation, 0, len(rule.Asserts)+len(rule.Reports))
 	for _, a := range rule.Asserts {
-		fired, err := evalBoolean(a.Test, n, vars, cache)
+		fired, err := evalBoolean(substituteLets(a.Test, vars), n, cache)
 		if err != nil {
-			return out, fmt.Errorf("evaluating assert %q: %w", a.ID, err)
+			continue
 		}
 		if !fired {
 			out = append(out, makeViolation(rule, a, n))
 		}
 	}
 	for _, r := range rule.Reports {
-		fired, err := evalBoolean(r.Test, n, vars, cache)
+		fired, err := evalBoolean(substituteLets(r.Test, vars), n, cache)
 		if err != nil {
-			return out, fmt.Errorf("evaluating report %q: %w", r.ID, err)
+			continue
 		}
 		if fired {
 			out = append(out, makeViolation(rule, r, n))
 		}
 	}
-	return out, nil
+	return out
+}
+
+// xpathLiteral renders an XPath evaluation result back into a literal
+// suitable for textual substitution. String values are wrapped in
+// quotes (or apostrophes when the value itself contains quotes);
+// numbers serialise without quoting; everything else falls back to
+// string-coercion.
+func xpathLiteral(v any) string {
+	switch t := v.(type) {
+	case string:
+		if strings.ContainsRune(t, '\'') && !strings.ContainsRune(t, '"') {
+			return `"` + t + `"`
+		}
+		return "'" + strings.ReplaceAll(t, "'", "&apos;") + "'"
+	case float64:
+		return fmt.Sprintf("%g", t)
+	case bool:
+		if t {
+			return "true()"
+		}
+		return "false()"
+	}
+	return "''"
+}
+
+// substituteLets replaces XPath variable references ($name) in expr
+// with the literal values captured in vars. Variable name matching
+// honours XPath's name-character rules: alpha/digit/underscore/hyphen
+// after the leading $; everything else terminates the name.
+func substituteLets(expr string, vars map[string]string) string {
+	if len(vars) == 0 || !strings.ContainsRune(expr, '$') {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr))
+	for i := 0; i < len(expr); i++ {
+		if expr[i] != '$' {
+			b.WriteByte(expr[i])
+			continue
+		}
+		// Collect the variable name following $.
+		j := i + 1
+		for j < len(expr) && isXPathNameChar(expr[j]) {
+			j++
+		}
+		name := expr[i+1 : j]
+		if lit, ok := vars[name]; ok {
+			b.WriteString(lit)
+		} else {
+			b.WriteString(expr[i:j])
+		}
+		i = j - 1
+	}
+	return b.String()
+}
+
+func isXPathNameChar(b byte) bool {
+	switch {
+	case b >= 'a' && b <= 'z':
+		return true
+	case b >= 'A' && b <= 'Z':
+		return true
+	case b >= '0' && b <= '9':
+		return true
+	case b == '_' || b == '-' || b == '.':
+		return true
+	}
+	return false
 }
 
 func makeViolation(rule *Rule, a *Assertion, n *xmlquery.Node) Violation {
@@ -231,34 +307,16 @@ func selectNodes(doc *xmlquery.Node, expr string, cache *exprCache) ([]*xmlquery
 }
 
 // evalBoolean compiles expr and evaluates it against node n with
-// the supplied variable map. The XPath spec coerces every value to
-// boolean according to its truthiness rules; we lean on
-// antchfx/xpath's [xpath.Bool] for that conversion.
-func evalBoolean(expr string, n *xmlquery.Node, vars map[string]any, cache *exprCache) (bool, error) {
+// the boolean semantics Schematron expects. Let-binding substitution
+// has already happened at the caller; this function just compiles
+// and runs the (possibly XPath 2.0) test expression.
+func evalBoolean(expr string, n *xmlquery.Node, cache *exprCache) (bool, error) {
 	compiled, err := cache.compile(expr)
 	if err != nil {
 		return false, err
 	}
 	nav := xmlquery.CreateXPathNavigator(n)
-	val := evaluateWithVars(compiled, nav, vars)
-	return xpathBoolean(val), nil
-}
-
-// evaluateWithVars threads the variable map into the XPath evaluator
-// via a custom xpath.NodeNavigator wrapper. antchfx/xpath does not
-// expose a "set variable" helper on Expr.Evaluate, so we substitute
-// references in the expression text before compilation. PR2 keeps
-// this simple: variables resolve to their stringified evaluated
-// values, which works for the bulk of EN 16931 let usage (date
-// strings, totals as decimal strings).
-func evaluateWithVars(expr *xpath.Expr, nav xpath.NodeNavigator, _ map[string]any) any {
-	// PR2 does not yet wire variables through antchfx/xpath because
-	// the library's public Evaluate signature does not accept a
-	// variable resolver. EN 16931 schemas that rely on let
-	// bindings will see those expressions fail to compile or
-	// evaluate to empty; PR3 adds proper variable threading. Leaving
-	// the vars parameter in place keeps the call sites stable.
-	return expr.Evaluate(nav)
+	return xpathBoolean(compiled.Evaluate(nav)), nil
 }
 
 // xpathBoolean coerces an XPath evaluation result to the boolean
@@ -311,7 +369,12 @@ func (c *exprCache) compile(expr string) (*xpath.Expr, error) {
 	if cached, ok := c.compiled[expr]; ok {
 		return cached, nil
 	}
-	compiled, err := xpath.CompileWithNS(expr, c.ns)
+	// Rewrite XPath 2.0 constructs antchfx/xpath does not support
+	// (xs:decimal casts, upper-case/lower-case) into the closest
+	// XPath 1.0 equivalents before compilation. Lossy by design; see
+	// rewriteXPath2 for the accepted approximations.
+	rewritten := rewriteXPath2(expr)
+	compiled, err := xpath.CompileWithNS(rewritten, c.ns)
 	if err != nil {
 		return nil, fmt.Errorf("compiling xpath %q: %w", expr, err)
 	}

@@ -2986,9 +2986,14 @@ func TestReader_ValidateFacturX_RoundTrip(t *testing.T) {
 			!strings.Contains(msg, "PDF/A-3 violations on the archival base") {
 			t.Errorf("unexpected hybrid-invoice violation: %v", v)
 		}
-		if strings.Contains(msg, "clause CII") {
+		if strings.Contains(msg, "clause CII ") {
 			t.Errorf("unexpected CII structural violation: %v", v)
 		}
+		// CII_XSD and CII_SCH violations are expected on this
+		// deliberately minimal fixture: the bundled EN 16931
+		// Schematron and the D16B XSD both require fields that the
+		// spine fixture omits. Those layers get their own dedicated
+		// tests below.
 	}
 }
 

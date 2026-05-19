@@ -1,6 +1,7 @@
 package schematron
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -235,14 +236,49 @@ type rawInclude struct {
 }
 
 func parseRawSchema(data []byte) (*rawSchema, error) {
-	var raw rawSchema
-	if err := xml.Unmarshal(data, &raw); err != nil {
+	root, err := peekRoot(data)
+	if err != nil {
 		return nil, err
 	}
-	if raw.XMLName.Local != "schema" || raw.XMLName.Space != SchematronNamespace {
-		return nil, errors.New("root element is not sch:schema")
+	if root.Space != SchematronNamespace {
+		return nil, errors.New("root element is not in the Schematron namespace")
 	}
-	return &raw, nil
+	switch root.Local {
+	case "schema":
+		var raw rawSchema
+		if err := xml.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		return &raw, nil
+	case "pattern":
+		// ISO Schematron lets sch:include reference any element,
+		// not just sch:schema. KoSIT's XRechnung common.sch ships
+		// a bare sch:pattern; we wrap it into a synthetic schema
+		// so the rest of the loader pipeline sees a uniform root.
+		var pat rawPattern
+		if err := xml.Unmarshal(data, &pat); err != nil {
+			return nil, err
+		}
+		return &rawSchema{Patterns: []rawPattern{pat}}, nil
+	}
+	return nil, fmt.Errorf("root element %s is not sch:schema or sch:pattern", root.Local)
+}
+
+// peekRoot returns the qualified name of the first StartElement in
+// data. encoding/xml does not expose this on the unmarshal path, so
+// the loader walks the token stream just far enough to identify the
+// root and then dispatches to the appropriate concrete decoder.
+func peekRoot(data []byte) (xml.Name, error) {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return xml.Name{}, err
+		}
+		if se, ok := tok.(xml.StartElement); ok {
+			return se.Name, nil
+		}
+	}
 }
 
 // collapseWhitespace flattens multi-line assertion messages into a
