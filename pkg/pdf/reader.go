@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	cii_schemas "github.com/gotenberg/litho/pkg/internal/compliance/cii_schemas"
+	cii_schematron "github.com/gotenberg/litho/pkg/internal/compliance/cii_schematron"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
@@ -232,11 +233,17 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 		r.doc.Logger.Debug("xsd: bundled CII schemas unavailable, falling back to spine rules", "err", err)
 	}
 
-	// Schematron layer: opt-in, no bundled default yet. A caller
-	// who wants EN 16931 / XRechnung business-rule validation
-	// passes the Schematron set via [WithSchematron].
+	// Schematron layer: caller-supplied override first, bundled
+	// EN 16931 default otherwise. Same graceful-fallback rule as
+	// the XSD layer: a bundle load failure logs at debug and
+	// skips the Schematron pass rather than failing the whole
+	// validation call.
 	if r.schSchema != nil {
 		opts = append(opts, compliance.WithFacturXSchematron(r.schSchema, r.schPhase))
+	} else if schSchema, err := cii_schematron.LoadDefault(ctx); err == nil {
+		opts = append(opts, compliance.WithFacturXSchematron(schSchema, ""))
+	} else {
+		r.doc.Logger.Debug("schematron: bundled EN 16931 rules unavailable, skipping pass", "err", err)
 	}
 	return opts
 }
