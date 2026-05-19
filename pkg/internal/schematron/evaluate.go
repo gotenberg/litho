@@ -113,13 +113,13 @@ func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalO
 	// per-pattern scoping would break that idiom, so the schema's
 	// pattern lets fold into the shared map up front, in source
 	// order so a later pattern can reference an earlier one.
-	schemaVars := resolveLevelLets(schema.Lets, doc, cache, nil)
+	schemaVars := resolveLevelLets(schema.Lets, nil)
 	for _, pid := range schema.PatternOrder {
 		pat := schema.Patterns[pid]
 		if pat == nil {
 			continue
 		}
-		schemaVars = resolveLevelLets(pat.Lets, doc, cache, schemaVars)
+		schemaVars = resolveLevelLets(pat.Lets, schemaVars)
 	}
 
 	var (
@@ -141,21 +141,24 @@ func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalO
 	return out, skipped, nil
 }
 
-// resolveLevelLets evaluates a list of let bindings against the
-// supplied context node, threading any pre-bound variables through
-// the substitution. The bindings are processed in source order so a
-// later let may reference an earlier one. Failure to evaluate any
-// individual let drops it; downstream references resolve to their
-// raw $name and let the per-rule error isolation handle the gap.
-func resolveLevelLets(lets []Let, n *xmlquery.Node, cache *exprCache, inherited map[string]string) map[string]string {
+// resolveLevelLets folds a list of let bindings into a textual
+// substitution map. Bindings are processed in source order so a
+// later let may reference an earlier one. Each let's value is
+// kept as its source XPath (with prior $vars already substituted)
+// rather than evaluated to a literal: path-valued lets, e.g.
+// "rsm:.../ram:IBANID", must remain XPath subexpressions so the
+// references they participate in (boolean coercion, sequence
+// membership) evaluate correctly against the live document. A
+// literal-evaluated path collapses to an empty string and flips
+// the verdict.
+//
+// Parentheses wrap each substituted value so the precedence of
+// surrounding operators does not chop the let body in half.
+func resolveLevelLets(lets []Let, inherited map[string]string) map[string]string {
 	out := make(map[string]string, len(inherited)+len(lets))
 	maps.Copy(out, inherited)
 	for _, lt := range lets {
-		value, err := cache.evalForVariable(substituteLets(lt.Value, out), n)
-		if err != nil {
-			continue
-		}
-		out[lt.Name] = xpathLiteral(value)
+		out[lt.Name] = "(" + substituteLets(lt.Value, out) + ")"
 	}
 	return out
 }
@@ -189,7 +192,7 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 		out     []Violation
 		skipped []SkippedRule
 	)
-	patternVars := resolveLevelLets(pat.Lets, doc, cache, schemaVars)
+	patternVars := resolveLevelLets(pat.Lets, schemaVars)
 	for _, rule := range pat.Rules {
 		if err := ctx.Err(); err != nil {
 			return out, skipped
@@ -245,11 +248,10 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 // territory: surface skipped rules via a logger hook so callers can
 // audit coverage.
 func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[string]string) ([]Violation, []SkippedRule) {
-	// Rule lets evaluate against the matched node and stack on top
-	// of the inherited schema + pattern lets. The inherited map is
-	// copied (not mutated) so concurrent calls on different match
-	// nodes do not stomp each other.
-	vars := resolveLevelLets(rule.Lets, n, cache, inherited)
+	// Rule lets stack on top of the inherited schema + pattern lets.
+	// The inherited map is copied (not mutated) so concurrent calls
+	// on different match nodes do not stomp each other.
+	vars := resolveLevelLets(rule.Lets, inherited)
 
 	out := make([]Violation, 0, len(rule.Asserts)+len(rule.Reports))
 	var skipped []SkippedRule
@@ -280,29 +282,6 @@ func evaluateRule(rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[
 		}
 	}
 	return out, skipped
-}
-
-// xpathLiteral renders an XPath evaluation result back into a literal
-// suitable for textual substitution. String values are wrapped in
-// quotes (or apostrophes when the value itself contains quotes);
-// numbers serialise without quoting; everything else falls back to
-// string-coercion.
-func xpathLiteral(v any) string {
-	switch t := v.(type) {
-	case string:
-		if strings.ContainsRune(t, '\'') && !strings.ContainsRune(t, '"') {
-			return `"` + t + `"`
-		}
-		return "'" + strings.ReplaceAll(t, "'", "&apos;") + "'"
-	case float64:
-		return fmt.Sprintf("%g", t)
-	case bool:
-		if t {
-			return "true()"
-		}
-		return "false()"
-	}
-	return "''"
 }
 
 // substituteLets replaces XPath variable references ($name) in expr
@@ -487,24 +466,4 @@ func (c *exprCache) compile(expr string) (*xpath.Expr, error) {
 	}
 	c.compiled[expr] = compiled
 	return compiled, nil
-}
-
-// evalForVariable evaluates a let expression against node n and
-// returns the resulting any-typed value. Used by [evaluateRule] to
-// pre-compute let bindings before assertions fire. Panic recovery
-// mirrors evalBoolean's guard so an upstream evaluator crash on a
-// let binding surfaces as a normal error and the rule's lets fall
-// back to their unbound state.
-func (c *exprCache) evalForVariable(expr string, n *xmlquery.Node) (result any, err error) {
-	compiled, err := c.compile(expr)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("xpath evaluator panic on let: %v", r)
-			result = nil
-		}
-	}()
-	return compiled.Evaluate(xmlquery.CreateXPathNavigator(n)), nil
 }

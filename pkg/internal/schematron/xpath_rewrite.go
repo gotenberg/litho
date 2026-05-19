@@ -43,6 +43,10 @@ func rewriteXPath2(expr string) string {
 	// is rewritten as a disjunction of equality comparisons rather
 	// than a disjunction of boolean coercions.
 	out = rewriteBareSequenceAsDisjunction(out)
+	// Quantifier rewrite runs last so the body of every/some has
+	// already been through the other rewrites by the time the
+	// quantifier consumes it.
+	out = rewriteQuantifiers(out)
 	return out
 }
 
@@ -312,7 +316,19 @@ func isFunctionCallParen(expr string, i int) bool {
 // dot, and contains no operator that would indicate this is a
 // comparison or arithmetic expression (which we deliberately do not
 // touch).
+//
+// Paren-wrapped paths (e.g. "(rsm:.../ram:ID)" produced by let
+// substitution) are recognised by peeling matched outer parens; this
+// keeps the sequence-as-disjunction rewriter applicable to expressions
+// that have already been through substitution.
 func looksLikePathOrCall(s string) bool {
+	for len(s) >= 2 && s[0] == '(' {
+		end := matchCloseParen(s, 1)
+		if end != len(s)-1 {
+			break
+		}
+		s = strings.TrimSpace(s[1:end])
+	}
 	if s == "" {
 		return false
 	}
@@ -347,6 +363,251 @@ func looksLikePathOrCall(s string) bool {
 		}
 	}
 	return true
+}
+
+// rewriteQuantifiers converts XPath 2.0 quantifier expressions into
+// XPath 1.0 predicate idioms that antchfx/xpath can evaluate.
+//
+//	every $V in PATH satisfies EXPR  →  not(PATH[not(EXPR')])
+//	some  $V in PATH satisfies EXPR  →  boolean(PATH[EXPR'])
+//
+// EXPR' is EXPR with every $V reference replaced by "." (XPath's
+// context-node reference), which inside the rewritten predicate
+// resolves to the bound element. The rewriter walks the input
+// repeatedly so nested quantifiers collapse from the inside out.
+//
+// antchfx/xpath happens to accept "every $V in LITERAL satisfies ..."
+// when the binding is a literal sequence; this rewriter targets the
+// more common form where the binding is a path expression, which
+// antchfx rejects as "invalid token". XRechnung's BR-DE-TMP-32 is
+// the canonical case.
+func rewriteQuantifiers(expr string) string {
+	for {
+		next, changed := rewriteOneQuantifier(expr)
+		if !changed {
+			return expr
+		}
+		expr = next
+	}
+}
+
+func rewriteOneQuantifier(expr string) (string, bool) {
+	for i := 0; i < len(expr); i++ {
+		kind, kindLen := matchQuantifierKeyword(expr, i)
+		if kind == "" {
+			continue
+		}
+		// After "every" or "some" we expect at least one space and
+		// then a "$VAR in PATH satisfies EXPR" structure.
+		j := i + kindLen
+		for j < len(expr) && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
+			j++
+		}
+		if j >= len(expr) || expr[j] != '$' {
+			continue
+		}
+		nameStart := j + 1
+		nameEnd := nameStart
+		for nameEnd < len(expr) && isXPathNameChar(expr[nameEnd]) {
+			nameEnd++
+		}
+		if nameEnd == nameStart {
+			continue
+		}
+		varName := expr[nameStart:nameEnd]
+		j = nameEnd
+		for j < len(expr) && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
+			j++
+		}
+		if !strings.HasPrefix(expr[j:], "in ") && !strings.HasPrefix(expr[j:], "in\t") && !strings.HasPrefix(expr[j:], "in\n") {
+			continue
+		}
+		j += 2
+		// Capture PATH up to a top-level "satisfies" keyword.
+		pathStart := j
+		satisfiesStart, satisfiesEnd := indexSatisfies(expr, j)
+		if satisfiesStart < 0 {
+			continue
+		}
+		path := strings.TrimSpace(expr[pathStart:satisfiesStart])
+		// antchfx/xpath natively accepts "every $V in LITERAL ..."
+		// where LITERAL is a parenthesised sequence; the rewrite
+		// only adds value when the binding is a path expression.
+		// Leaving literal-sequence forms untouched also prevents
+		// the rewriter from producing nonsense like
+		// "not(('A','B')[not(BODY)])" that would not compile.
+		if strings.HasPrefix(path, "(") {
+			continue
+		}
+		// EXPR starts at the byte after "satisfies" plus any
+		// trailing whitespace, and runs to the close paren or end
+		// of the enclosing parenthesised group.
+		bodyStart := satisfiesEnd
+		for bodyStart < len(expr) && (expr[bodyStart] == ' ' || expr[bodyStart] == '\t' || expr[bodyStart] == '\n') {
+			bodyStart++
+		}
+		bodyEnd := findQuantifierBodyEnd(expr, bodyStart)
+		body := strings.TrimSpace(expr[bodyStart:bodyEnd])
+		body = substituteVar(body, varName, ".")
+		var replacement string
+		switch kind {
+		case "every":
+			replacement = "not(" + path + "[not(" + body + ")])"
+		case "some":
+			replacement = "boolean(" + path + "[" + body + "])"
+		default:
+			continue
+		}
+		return expr[:i] + replacement + expr[bodyEnd:], true
+	}
+	return expr, false
+}
+
+// matchQuantifierKeyword detects "every" or "some" at position i in
+// expr, returning the keyword and its length. The keyword must be
+// (a) preceded by start-of-input or a non-name character so a
+// substring like "uneverye" is not mistaken for a quantifier, and
+// (b) wrapped in a grouping paren - antchfx/xpath accepts a bare
+// quantifier ("every $x in path satisfies expr") natively but
+// chokes on the same expression inside parens. Restricting the
+// rewrite to the paren-wrapped form leaves the cases antchfx
+// handles untouched and only kicks in when the rewrite is needed.
+func matchQuantifierKeyword(expr string, i int) (string, int) {
+	if i > 0 && isXPathNameChar(expr[i-1]) {
+		return "", 0
+	}
+	// Find the closest preceding non-whitespace byte; require it be
+	// an open paren.
+	j := i - 1
+	for j >= 0 && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
+		j--
+	}
+	if j < 0 || expr[j] != '(' {
+		return "", 0
+	}
+	for _, kw := range []string{"every", "some"} {
+		if strings.HasPrefix(expr[i:], kw) {
+			endByte := i + len(kw)
+			if endByte < len(expr) && isXPathNameChar(expr[endByte]) {
+				continue
+			}
+			return kw, len(kw)
+		}
+	}
+	return "", 0
+}
+
+// indexSatisfies returns the byte offsets of the top-level
+// "satisfies" keyword starting at or after pos. The first return is
+// the position of the whitespace immediately preceding "satisfies"
+// (so the caller can slice the path expression up to that point);
+// the second return is the position just past the keyword.
+// Returns (-1, -1) when no top-level "satisfies" exists.
+//
+// Paren/bracket depth and quoted strings are honoured so a
+// "satisfies" nested inside a sub-expression or string literal
+// does not get picked up.
+func indexSatisfies(expr string, pos int) (int, int) {
+	depth := 0
+	inStr := byte(0)
+	for i := pos; i < len(expr); i++ {
+		c := expr[i]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			inStr = c
+			continue
+		case '(', '[':
+			depth++
+			continue
+		case ')', ']':
+			depth--
+			continue
+		}
+		if depth != 0 {
+			continue
+		}
+		if c != ' ' && c != '\t' && c != '\n' {
+			continue
+		}
+		// Scan forward over whitespace to find the next token.
+		k := i + 1
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n') {
+			k++
+		}
+		if strings.HasPrefix(expr[k:], "satisfies") {
+			endByte := k + len("satisfies")
+			// "satisfies" must be followed by a non-name character
+			// so we don't match "satisfiesX".
+			if endByte >= len(expr) || !isXPathNameChar(expr[endByte]) {
+				return i, endByte
+			}
+		}
+	}
+	return -1, -1
+}
+
+// findQuantifierBodyEnd returns the byte offset where the body of a
+// quantifier ends: at the first unmatched close paren or close
+// bracket at the original depth, or end of input. The body is
+// allowed to contain balanced parens/brackets internally.
+func findQuantifierBodyEnd(expr string, start int) int {
+	depth := 0
+	inStr := byte(0)
+	for i := start; i < len(expr); i++ {
+		c := expr[i]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			inStr = c
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+			if depth < 0 {
+				return i
+			}
+		}
+	}
+	return len(expr)
+}
+
+// substituteVar replaces every "$name" reference in expr with the
+// supplied replacement. Honours XPath name-character boundaries so
+// "$line" does not get mistaken for the start of "$lineage".
+func substituteVar(expr, name, replacement string) string {
+	target := "$" + name
+	if !strings.Contains(expr, target) {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr))
+	for i := 0; i < len(expr); {
+		if strings.HasPrefix(expr[i:], target) {
+			tail := i + len(target)
+			if tail < len(expr) && isXPathNameChar(expr[tail]) {
+				b.WriteByte(expr[i])
+				i++
+				continue
+			}
+			b.WriteString(replacement)
+			i = tail
+			continue
+		}
+		b.WriteByte(expr[i])
+		i++
+	}
+	return b.String()
 }
 
 // splitSequenceLiteral splits the inside of a sequence literal on
