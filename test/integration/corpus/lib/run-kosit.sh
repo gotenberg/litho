@@ -55,10 +55,12 @@ while IFS= read -r -d '' pdf; do
   work="$STAGE/work-$count"
   mkdir -p "$work"
 
-  # Extract the embedded CII XML. Mustang writes to factur-x.xml in
-  # the working directory; route stderr/stdout to /dev/null so the
-  # script's loop output stays readable.
-  if ! (cd "$work" && java -jar /opt/mustang.jar --action extract --source "$pdf" > /dev/null 2>&1); then
+  # Extract the embedded CII XML. Mustang 2.20+ no longer defaults
+  # the output filename, so --out is mandatory; without it Mustang
+  # prompts on stdin and (when stdin is /dev/null) NPEs. Redirect
+  # stdin from /dev/null so Java does not slurp the surrounding
+  # find -print0 stream and collapse the loop after one iteration.
+  if ! (cd "$work" && java -jar /opt/mustang.jar --action extract --source "$pdf" --out factur-x.xml > /dev/null 2>&1 < /dev/null); then
     jq -n --arg file "$base" \
       '{file: $file, verdict: "skip", reason: "no embedded CII found"}' \
       > "$STAGE/$(printf '%05d' "$count").json"
@@ -89,8 +91,8 @@ while IFS= read -r -d '' pdf; do
   mkdir -p "$report_dir"
   if report=$(java -jar /opt/kosit.jar \
     --scenarios "$SCENARIOS" \
-    --output "$report_dir" \
-    "$xml" 2>&1); then
+    --output-directory "$report_dir" \
+    "$xml" 2>&1 < /dev/null); then
     rc=0
   else
     rc=$?
@@ -104,6 +106,12 @@ while IFS= read -r -d '' pdf; do
     report_body="$report"
   fi
 
+  # Stash the report body in a file: KoSIT's validation report XML
+  # routinely exceeds ARG_MAX when passed as --arg, so --rawfile
+  # keeps the jq invocation within the kernel's argv limit.
+  report_file="$work/report.txt"
+  printf '%s' "$report_body" > "$report_file"
+
   # Three-way detection markers. KoSIT's report shape varies across
   # releases; the patterns below cover the published 1.x reports:
   # rejected scenario block, accepted scenario block, or a top-level
@@ -111,7 +119,7 @@ while IFS= read -r -d '' pdf; do
   if echo "$report_body" | grep -qiE '<acceptedBy>\s*</acceptedBy>|no scenario matched|no applicable scenario'; then
     verdict="skip"
     reason="no scenario applicable"
-    jq -n --arg file "$base" --arg verdict "$verdict" --arg reason "$reason" --arg report "$report_body" \
+    jq -n --arg file "$base" --arg verdict "$verdict" --arg reason "$reason" --rawfile report "$report_file" \
       '{file: $file, verdict: $verdict, reason: $reason, report: $report}' \
       > "$STAGE/$(printf '%05d' "$count").json"
   else
@@ -129,7 +137,7 @@ while IFS= read -r -d '' pdf; do
     else
       verdict="fail"
     fi
-    jq -n --arg file "$base" --arg verdict "$verdict" --arg report "$report_body" --argjson rules "$rules" \
+    jq -n --arg file "$base" --arg verdict "$verdict" --rawfile report "$report_file" --argjson rules "$rules" \
       '{file: $file, verdict: $verdict, report: $report, rules: $rules}' \
       > "$STAGE/$(printf '%05d' "$count").json"
   fi
@@ -137,5 +145,7 @@ while IFS= read -r -d '' pdf; do
   count=$((count + 1))
 done < <(find "$PDFS_DIR" -maxdepth 1 -type f -iname '*.pdf' -print0 | sort -z)
 
-jq -s '{jobs: .}' "$STAGE"/*.json > "$OUT_FILE"
+find "$STAGE" -maxdepth 1 -name '*.json' -print0 \
+  | sort -z \
+  | xargs -0 jq -s '{jobs: .}' > "$OUT_FILE"
 echo "  kosit: ${count} jobs written to ${OUT_FILE}"

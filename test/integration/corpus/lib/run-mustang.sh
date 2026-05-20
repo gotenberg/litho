@@ -48,7 +48,7 @@ while IFS= read -r -d '' pdf; do
   # putting the failure-swallowing "|| true" inside the substitution
   # would mask Mustang's exit code, and bare "rc=$?" under set -e dies
   # on non-zero before it can read the status.
-  if report=$(java -jar /opt/mustang.jar --action validate --source "$pdf" 2>&1); then
+  if report=$(java -jar /opt/mustang.jar --action validate --source "$pdf" 2>&1 < /dev/null); then
     rc=0
   else
     rc=$?
@@ -58,11 +58,20 @@ while IFS= read -r -d '' pdf; do
   else
     valid=false
   fi
-  jq -n --arg file "$base" --argjson valid "$valid" --arg report "$report" \
+  # Mustang's XML validation report can exceed ARG_MAX when passed
+  # as --arg, so --rawfile keeps the jq invocation within the kernel
+  # argv limit even on the most verbose fixtures.
+  report_file="$STAGE/report-$(printf '%05d' "$count").txt"
+  printf '%s' "$report" > "$report_file"
+  jq -n --arg file "$base" --argjson valid "$valid" --rawfile report "$report_file" \
     '{file: $file, valid: $valid, report: $report}' \
     > "$STAGE/$(printf '%05d' "$count").json"
   count=$((count + 1))
 done < <(find "$PDFS_DIR" -maxdepth 1 -type f -iname '*.pdf' -print0 | sort -z)
 
-jq -s '{jobs: .}' "$STAGE"/*.json > "$OUT_FILE"
+# Use find + xargs over a glob so corpora with hundreds of fixtures
+# do not blow ARG_MAX on the final aggregation.
+find "$STAGE" -maxdepth 1 -name '*.json' -print0 \
+  | sort -z \
+  | xargs -0 jq -s '{jobs: .}' > "$OUT_FILE"
 echo "  mustang: ${count} jobs written to ${OUT_FILE}"
