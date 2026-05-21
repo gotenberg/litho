@@ -340,10 +340,19 @@ func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invo
 		return nil
 	}
 	subtype, err := document.ResolveName(ctx, doc, invoice.streamDict["Subtype"])
-	if err != nil || string(subtype) != "application/xml" {
-		return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype = %q, want %q", v.label, invoice.streamRef.ObjectNum, subtype, "application/xml")
+	if err != nil {
+		return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype unreadable: %v", v.label, invoice.streamRef.ObjectNum, err)
 	}
-	return nil
+	// Factur-X 1.0.07 / ZUGFeRD 2.1+ mandate /text#2Fxml (text/xml)
+	// but a sizeable portion of third-party producers ship /application#2Fxml
+	// instead. Mustang and the FNFE reference both accept either, so
+	// litho follows the same lenient stance for the consumer path; the
+	// writer side emits text/xml per the spec.
+	switch string(subtype) {
+	case "text/xml", "application/xml":
+		return nil
+	}
+	return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype = %q, want %q or %q", v.label, invoice.streamRef.ObjectNum, subtype, "text/xml", "application/xml")
 }
 
 func checkInvoiceConflictingVariant(ctx context.Context, doc *document.Document, v hybridInvoiceVariant) []Violation {

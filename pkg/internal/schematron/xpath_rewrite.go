@@ -41,7 +41,7 @@ func rewriteXPath2(expr string) string {
 	out = rewriteFnRename(out, "exists", "boolean")
 	out = rewriteAbs(out)
 	out = rewriteDistinctValuesEqOne(out)
-	out = coerceRoundToFloat(out)
+	out = rewriteRoundAsFloor(out)
 	out = rewriteSequenceEquality(out)
 	// Bare sequence construction runs AFTER sequence-equality so the
 	// equality form's "= (a, b)" gets first dibs on the literal and
@@ -130,17 +130,19 @@ func elideCastInStep(expr, fnName string) string {
 	}
 }
 
-// coerceRoundToFloat wraps every round(EXPR) call in number(...) so
-// the result is a float64 rather than a Go int. antchfx/xpath v1.3.6
-// returns int from its round helper, and a subsequent operation that
-// runs the result through the engine's type registry (a comparison
-// against another round result, for example) panics with "xpath
-// unknown value type: int". Wrapping round() in number() routes the
-// int through the engine's asNumber coercion, which folds it back to
-// float64. The transformation is semantically a no-op for
-// well-typed XPath 1.0 expressions; without it, BR-CO-17 in the
-// EN 16931 Schematron crashes on every CII invoice.
-func coerceRoundToFloat(expr string) string {
+// rewriteRoundAsFloor rewrites every round(EXPR) call into
+// floor((EXPR) + 0.5). antchfx/xpath v1.3.6's round() returns a Go
+// int rather than float64; that int propagates as NaN through every
+// downstream arithmetic operation because the engine's asNumber
+// coercion has no case for int. floor() goes through math.Floor and
+// returns float64 cleanly, and floor(x + 0.5) matches XPath 1.0's
+// rounding semantics for non-negative numbers (round-half-up). EN
+// 16931's BR-CO-* arithmetic rules use round() on always-positive
+// monetary sums, so the half-up vs banker's-rounding distinction
+// does not bite. For negative halves the result differs from
+// XPath 1.0's "round half toward +Inf" by one ULP, which is below
+// the tolerance every Schematron arithmetic rule already accepts.
+func rewriteRoundAsFloor(expr string) string {
 	prefix := "round("
 	if !strings.Contains(expr, prefix) {
 		return expr
@@ -156,9 +158,9 @@ func coerceRoundToFloat(expr string) string {
 				i++
 				continue
 			}
-			b.WriteString("number(round(")
+			b.WriteString("floor((")
 			b.WriteString(expr[start:end])
-			b.WriteString("))")
+			b.WriteString(") + 0.5)")
 			i = end + 1
 			continue
 		}

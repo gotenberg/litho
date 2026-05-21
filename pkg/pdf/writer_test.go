@@ -2847,8 +2847,8 @@ func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 	if files[0].Name != DefaultFacturXFileName {
 		t.Errorf("attachment name: got %q, want %q", files[0].Name, DefaultFacturXFileName)
 	}
-	if files[0].MIMEType != "application/xml" {
-		t.Errorf("attachment MIME: got %q, want %q", files[0].MIMEType, "application/xml")
+	if files[0].MIMEType != "text/xml" {
+		t.Errorf("attachment MIME: got %q, want %q", files[0].MIMEType, "text/xml")
 	}
 	rc2, err := files[0].Open(ctx)
 	if err != nil {
@@ -2863,14 +2863,14 @@ func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 		t.Errorf("attachment payload diverged from input invoice XML")
 	}
 
-	// The serializer hex-escapes the forward slash in "application/xml",
+	// The serializer hex-escapes the forward slash in "text/xml",
 	// so the raw stream check uses the escaped form (#2F).
 	rawPDF := out.String()
 	if !strings.Contains(rawPDF, "/AFRelationship /Data") {
 		t.Error("output PDF missing /AFRelationship /Data on filespec")
 	}
-	if !strings.Contains(rawPDF, "/Subtype /application#2Fxml") {
-		t.Error("output PDF missing /Subtype /application/xml on embedded stream")
+	if !strings.Contains(rawPDF, "/Subtype /text#2Fxml") {
+		t.Error("output PDF missing /Subtype /text/xml on embedded stream")
 	}
 }
 

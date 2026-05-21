@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 	"github.com/gotenberg/litho/pkg/plugins/jbig2"
 	"github.com/gotenberg/litho/pkg/plugins/jpx"
@@ -185,10 +186,17 @@ type facturxMismatch struct {
 }
 
 // validateFacturXWithLitho opens pdfPath and returns the list of
-// INVOICE.* failures from [pdf.Reader.ValidateFacturX]. The PDF/A-3
-// base aggregator surface (INVOICE test 13) is filtered out so the
-// feature only scores fx-layer violations; PDF/A-3 base mismatches
-// belong to the compliance feature.
+// INVOICE.* failures from [pdf.Reader.ValidateFacturX] (or the
+// matching [pdf.Reader.ValidateZUGFeRD] variant for legacy v1 / v2
+// fixtures). The PDF/A-3 base aggregator surface (INVOICE test 13)
+// is filtered out so the feature only scores fx-layer violations;
+// PDF/A-3 base mismatches belong to the compliance feature.
+//
+// Dispatch by filename prefix: ZUGFeRD/corpus flattens its tree into
+// names like "v1__correct_*", "v2__fail_*", "xmlrechnung__*". The v1
+// fixtures use ZUGFeRD 1.0 filenames + namespaces that ValidateFacturX
+// rejects on principle, so the feature routes them to the v1 entry
+// point instead.
 func validateFacturXWithLitho(ctx context.Context, pdfPath string) ([]string, error) {
 	f, err := os.Open(pdfPath)
 	if err != nil {
@@ -210,9 +218,16 @@ func validateFacturXWithLitho(ctx context.Context, pdfPath string) ([]string, er
 	}
 	defer r.Close()
 
-	errs, err := r.ValidateFacturX(ctx)
+	base := filepath.Base(pdfPath)
+	var errs []error
+	switch {
+	case strings.HasPrefix(base, "v1__"):
+		errs, err = r.ValidateZUGFeRD(ctx, models.ZUGFeRD1)
+	default:
+		errs, err = r.ValidateFacturX(ctx)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("ValidateFacturX: %w", err)
+		return nil, fmt.Errorf("validate: %w", err)
 	}
 	var failures []string
 	for _, e := range errs {
