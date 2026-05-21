@@ -28,6 +28,9 @@ import "strings"
 // in [evaluateRule].
 func rewriteXPath2(expr string) string {
 	out := expr
+	// Tolerance must run before the cast rewrite so the marker
+	// "xs:decimal(" is still in the input.
+	out = rewriteDecimalEquality(out)
 	for _, cast := range numericCasts {
 		out = rewriteCast(out, "xs:"+cast, "number")
 	}
@@ -39,7 +42,6 @@ func rewriteXPath2(expr string) string {
 	out = rewriteCaseFunction(out, "upper-case", upperCaseLo, upperCaseUp)
 	out = rewriteCaseFunction(out, "lower-case", lowerCaseUp, lowerCaseLo)
 	out = rewriteFnRename(out, "exists", "boolean")
-	out = rewriteAbs(out)
 	out = rewriteDistinctValuesEqOne(out)
 	out = rewriteRoundAsFloor(out)
 	out = rewriteSequenceEquality(out)
@@ -170,45 +172,202 @@ func rewriteRoundAsFloor(expr string) string {
 	return b.String()
 }
 
-// rewriteAbs converts every abs(EXPR) call into the XPath 1.0
-// equivalent (EXPR * (1 - 2 * (EXPR < 0))). The multiplier evaluates
-// to 1 when EXPR is non-negative and to -1 when EXPR is negative, so
-// the result is |EXPR| in either case. EXPR is evaluated twice; the
-// EN 16931 abs uses all wrap a pure numeric coercion (xs:decimal of
-// a leaf node) so duplicate evaluation costs nothing observable.
+// decimalEqualityEpsilon is the tolerance used when [rewriteDecimalEquality]
+// converts an xs:decimal equality into an absolute-difference check.
+// EN 16931 / XRechnung Schematron arithmetic rules work in monetary
+// values with two decimal places, so a half-cent rounding error
+// (5e-3) is the smallest meaningful divergence; 1e-6 is six orders
+// of magnitude tighter than that, but several orders of magnitude
+// looser than the worst-case IEEE jitter (~1e-13) of summing the
+// kinds of two-decimal values these rules compare. Sized to make
+// genuine errors still fire while ignoring representation noise.
+const decimalEqualityEpsilon = "0.000001"
+
+// rewriteDecimalEquality converts equality comparisons whose source
+// expression marks at least one side with an XPath 2.0 numeric cast
+// (xs:decimal / xs:integer / xs:double / ...) into an
+// absolute-difference tolerance check. Without the rewrite, the
+// rest of the pipeline collapses the cast to a number() and the
+// equality runs in IEEE float, which trips bit-level on common
+// monetary sums (e.g. 473.00 + 56.87 != 529.87). With the rewrite:
 //
-// Used by BR-S-09, BR-S-N, BR-CO-17 and their VAT-category siblings
-// in the EN 16931 Schematron, which all check |amount| ≈ basis × rate
-// to two decimals.
-func rewriteAbs(expr string) string {
-	prefix := "abs("
-	if !strings.Contains(expr, prefix) {
+//	xs:decimal(LHS) = RHS   →  (abs((LHS) - (RHS)) < 0.000001)
+//	xs:decimal(LHS) != RHS  →  (abs((LHS) - (RHS)) >= 0.000001)
+//
+// LHS and RHS are captured by paren-depth-aware boundary walk so the
+// rewrite respects operator precedence: top-level "and"/"or" or an
+// unmatched close paren terminates the capture. Strings literals are
+// honoured.
+//
+// The rewriter targets only the equality operators (= and !=); the
+// strict comparison operators (<, <=, >, >=) keep their exact
+// semantics because EN 16931 rules that use them already build in
+// their own tolerance (e.g. "abs(X) - 1 <= round(Y)") and would
+// double-tolerance if we touched them.
+//
+// Unblocks BR-CO-13, BR-CO-14, BR-CO-15, BR-CO-16, and the
+// VAT-category sibling rules (BR-S-08, BR-S-09, etc.) which all read
+// "BT-X = BT-Y +/- BT-Z" against two-decimal monetary values.
+func rewriteDecimalEquality(expr string) string {
+	if !looksLikeMonetaryEquality(expr) {
 		return expr
 	}
-	var b strings.Builder
-	b.Grow(len(expr))
-	for i := 0; i < len(expr); {
-		if strings.HasPrefix(expr[i:], prefix) && (i == 0 || !isXPathNameChar(expr[i-1])) {
-			start := i + len(prefix)
-			end := matchCloseParen(expr, start)
-			if end < 0 {
-				b.WriteByte(expr[i])
-				i++
-				continue
+	for {
+		next := rewriteOneDecimalEquality(expr)
+		if next == expr {
+			return expr
+		}
+		expr = next
+	}
+}
+
+func rewriteOneDecimalEquality(expr string) string {
+	inStr := byte(0)
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
 			}
-			arg := expr[start:end]
-			b.WriteString("((")
-			b.WriteString(arg)
-			b.WriteString(") * (1.0 - 2.0 * number((")
-			b.WriteString(arg)
-			b.WriteString(") < 0.0)))")
-			i = end + 1
 			continue
 		}
-		b.WriteByte(expr[i])
-		i++
+		if c == '\'' || c == '"' {
+			inStr = c
+			continue
+		}
+		op, opLen := matchEqualityOperator(expr, i)
+		if op == "" {
+			continue
+		}
+		lhsStart, lhsEnd := captureLHS(expr, i)
+		if lhsStart < 0 || lhsEnd <= lhsStart {
+			continue
+		}
+		rhsStart, rhsEnd := captureRHS(expr, i+opLen)
+		if rhsStart < 0 || rhsEnd <= rhsStart {
+			continue
+		}
+		lhs := strings.TrimSpace(expr[lhsStart:lhsEnd])
+		rhs := strings.TrimSpace(expr[rhsStart:rhsEnd])
+		// looksLikeMonetaryEquality gates the transform so equality
+		// comparisons that aren't arithmetic (count = 1,
+		// position = last, code = 'VAT', Indicator = true()) keep
+		// their exact XPath 1.0 semantics. The gate fires when a
+		// numeric cast or known numeric helper appears in the
+		// source on either side.
+		if !looksLikeMonetaryEquality(lhs) && !looksLikeMonetaryEquality(rhs) {
+			continue
+		}
+		// Tolerance shape: |X - Y| < eps for equality, |X - Y| >= eps
+		// for inequality. Expanded as two comparisons to avoid
+		// abs(): antchfx/xpath cannot coerce a boolean to a number,
+		// so the canonical "X * (1 - 2 * number(X<0))" idiom yields
+		// NaN universally and any abs()-based form silently mis-
+		// evaluates.
+		diff := "((" + lhs + ") - (" + rhs + "))"
+		var replacement string
+		if op == "=" {
+			replacement = "(" + diff + " < " + decimalEqualityEpsilon + " and " + diff + " > -" + decimalEqualityEpsilon + ")"
+		} else {
+			replacement = "(" + diff + " >= " + decimalEqualityEpsilon + " or " + diff + " <= -" + decimalEqualityEpsilon + ")"
+		}
+		return expr[:lhsStart] + replacement + expr[rhsEnd:]
 	}
-	return b.String()
+	return expr
+}
+
+// captureRHS returns the byte offsets of the RHS expression that
+// follows the equality operator at position start. The capture stops
+// at end-of-input, an unmatched close paren/bracket at the original
+// depth, or a top-level "and"/"or" keyword. String literals are
+// honoured so a kw embedded in a quoted string does not terminate
+// the capture.
+func captureRHS(expr string, start int) (int, int) {
+	for start < len(expr) && (expr[start] == ' ' || expr[start] == '\t' || expr[start] == '\n') {
+		start++
+	}
+	if start >= len(expr) {
+		return -1, -1
+	}
+	depth := 0
+	inStr := byte(0)
+	end := start
+	for end < len(expr) {
+		c := expr[end]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
+			}
+			end++
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			inStr = c
+		case '(', '[':
+			depth++
+		case ')', ']':
+			if depth == 0 {
+				return start, end
+			}
+			depth--
+		case ' ', '\t', '\n':
+			if depth == 0 && isAndOrBoundary(expr, end) {
+				return start, end
+			}
+		}
+		end++
+	}
+	return start, end
+}
+
+// isAndOrBoundary reports whether the whitespace at i in expr is
+// immediately followed by the "and" or "or" keyword (with a trailing
+// non-name character). Used by [captureRHS] to stop at a top-level
+// boolean junction.
+func isAndOrBoundary(expr string, i int) bool {
+	j := i + 1
+	for j < len(expr) && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
+		j++
+	}
+	for _, kw := range []string{"and", "or"} {
+		if !strings.HasPrefix(expr[j:], kw) {
+			continue
+		}
+		k := j + len(kw)
+		if k >= len(expr) {
+			return true
+		}
+		if !isXPathNameChar(expr[k]) {
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikeMonetaryEquality reports whether expr looks like a
+// monetary arithmetic expression worth threading through the
+// decimal-equality tolerance rewrite. The gate fires on XPath 2.0
+// numeric casts (xs:decimal-family) plus the XPath 1.0 numeric
+// helpers Schematron arithmetic rules lean on (round, sum, floor,
+// ceiling). Strict comparisons like "Code = 'VAT'" and "Indicator =
+// true()" stay outside the rewrite because their RHS carries
+// neither cast nor numeric helper, preserving exact string and
+// boolean equality semantics.
+func looksLikeMonetaryEquality(expr string) bool {
+	if strings.Contains(expr, "xs:") {
+		for _, cast := range numericCasts {
+			if strings.Contains(expr, "xs:"+cast+"(") {
+				return true
+			}
+		}
+	}
+	for _, fn := range []string{"round(", "sum(", "floor(", "ceiling("} {
+		if strings.Contains(expr, fn) {
+			return true
+		}
+	}
+	return false
 }
 
 // rewriteDistinctValuesEqOne converts the narrow XPath 2.0 idiom
@@ -652,24 +811,18 @@ func rewriteOneQuantifier(expr string) (string, bool) {
 
 // matchQuantifierKeyword detects "every" or "some" at position i in
 // expr, returning the keyword and its length. The keyword must be
-// (a) preceded by start-of-input or a non-name character so a
-// substring like "uneverye" is not mistaken for a quantifier, and
-// (b) wrapped in a grouping paren - antchfx/xpath accepts a bare
-// quantifier ("every $x in path satisfies expr") natively but
-// chokes on the same expression inside parens. Restricting the
-// rewrite to the paren-wrapped form leaves the cases antchfx
-// handles untouched and only kicks in when the rewrite is needed.
+// preceded by start-of-input or a non-name character so a substring
+// like "uneverye" is not mistaken for a quantifier.
+//
+// Earlier versions of this matcher additionally required a grouping
+// paren before the keyword on the theory that antchfx/xpath accepted
+// bare quantifiers natively. Closer inspection showed antchfx parses
+// the bare form into a zero-node iterator regardless of the satisfies
+// body, so every assertion using the construct fires falsely. The
+// guard is gone: both bare and paren-wrapped quantifiers now rewrite
+// to the predicate idiom that actually evaluates the body.
 func matchQuantifierKeyword(expr string, i int) (string, int) {
 	if i > 0 && isXPathNameChar(expr[i-1]) {
-		return "", 0
-	}
-	// Find the closest preceding non-whitespace byte; require it be
-	// an open paren.
-	j := i - 1
-	for j >= 0 && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
-		j--
-	}
-	if j < 0 || expr[j] != '(' {
 		return "", 0
 	}
 	for _, kw := range []string{"every", "some"} {
