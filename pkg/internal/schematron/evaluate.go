@@ -321,16 +321,150 @@ func evaluateRule(ctx context.Context, rule *Rule, n *xmlquery.Node, cache *expr
 
 // runAssertion evaluates a single assertion: a registered override
 // wins over the XPath engine, otherwise the test compiles and runs
-// against the bundled antchfx/xpath. The boolean returned matches
-// the test expression's verdict; callers translate that into
-// pass/fire per assertion kind.
+// against the bundled antchfx/xpath, with one wrinkle - a top-level
+// XPath 2.0 quantifier (every / some) is peeled off and evaluated in
+// Go before handing the body to antchfx. antchfx misparses bare
+// quantifiers (the resulting iterator is always empty) and the
+// textual "not(PATH[not(BODY)])" rewrite trips an antchfx bug where
+// absolute paths inside the predicate context resolve to nothing.
+// Looping in Go and substituting the bound variable as a string
+// literal lets the body run in the original rule context.
+//
+// The boolean returned matches the test expression's verdict;
+// callers translate that into pass/fire per assertion kind.
 func runAssertion(ctx context.Context, a *Assertion, n *xmlquery.Node, vars map[string]string, cache *exprCache, overrides map[string]RuleOverride) (bool, error) {
 	if a.ID != "" {
 		if fn, ok := overrides[a.ID]; ok {
 			return fn(ctx, n)
 		}
 	}
-	return evalBoolean(substituteLets(a.Test, vars), n, cache)
+	return evalBooleanWithQuantifier(substituteLets(a.Test, vars), n, cache)
+}
+
+// evalBooleanWithQuantifier peels a top-level XPath 2.0 quantifier
+// off expr and evaluates its bindings in Go, then recurses on the
+// substituted body. When expr is not a quantifier it falls straight
+// through to [evalBoolean] against antchfx.
+func evalBooleanWithQuantifier(expr string, n *xmlquery.Node, cache *exprCache) (bool, error) {
+	kind, varName, path, body, ok := peelQuantifier(expr)
+	if !ok {
+		return evalBoolean(expr, n, cache)
+	}
+	root := documentRoot(n)
+	bindings, err := selectNodes(root, path, cache)
+	if err != nil {
+		return false, fmt.Errorf("quantifier path: %w", err)
+	}
+	isEvery := kind == "every"
+	if len(bindings) == 0 {
+		// XPath 2.0 vacuous truth: "every" on an empty sequence is
+		// true; "some" on an empty sequence is false.
+		return isEvery, nil
+	}
+	for _, b := range bindings {
+		literal := xpathStringLiteral(b.InnerText())
+		substituted := substituteVar(body, varName, literal)
+		// Evaluate against the document root, not the rule context:
+		// quantifier bodies overwhelmingly use absolute paths, and
+		// antchfx/xpath silently resolves "/foo" to an empty node-set
+		// when the context is not the document node. The bound
+		// variable has already been substituted to a string literal,
+		// so the body no longer references the rule context.
+		fired, err := evalBooleanWithQuantifier(substituted, root, cache)
+		if err != nil {
+			return false, err
+		}
+		if isEvery && !fired {
+			return false, nil
+		}
+		if !isEvery && fired {
+			return true, nil
+		}
+	}
+	return isEvery, nil
+}
+
+// peelQuantifier matches a top-level "every $V in PATH satisfies
+// BODY" or "some $V in PATH satisfies BODY" prefix on expr. Returns
+// ok=false when expr does not start with a quantifier or the syntax
+// is malformed.
+//
+// Top-level only: the parser does not recurse into parenthesised
+// groups or boolean disjunctions, which means
+// "(every $V ...) or X" stays opaque to it. The bundled EN 16931
+// rule set keeps every quantifier at the top of its assertion test,
+// so the narrow scope matches the in-the-wild usage.
+func peelQuantifier(expr string) (kind, varName, path, body string, ok bool) {
+	s := strings.TrimLeft(expr, " \t\n")
+	for _, kw := range []string{"every", "some"} {
+		if !strings.HasPrefix(s, kw) {
+			continue
+		}
+		after := s[len(kw):]
+		if after == "" || isXPathNameChar(after[0]) {
+			continue
+		}
+		after = strings.TrimLeft(after, " \t\n")
+		if !strings.HasPrefix(after, "$") {
+			continue
+		}
+		nameEnd := 1
+		for nameEnd < len(after) && isXPathNameChar(after[nameEnd]) {
+			nameEnd++
+		}
+		if nameEnd == 1 {
+			continue
+		}
+		v := after[1:nameEnd]
+		afterName := strings.TrimLeft(after[nameEnd:], " \t\n")
+		if !strings.HasPrefix(afterName, "in") || len(afterName) < 3 || isXPathNameChar(afterName[2]) {
+			continue
+		}
+		afterIn := strings.TrimLeft(afterName[2:], " \t\n")
+		// Find the matching " satisfies " keyword at depth 0
+		// relative to afterIn so a nested satisfies inside the path
+		// does not get picked up.
+		satStart, satEnd := indexSatisfies(afterIn, 0)
+		if satStart < 0 {
+			continue
+		}
+		path := strings.TrimSpace(afterIn[:satStart])
+		body := strings.TrimSpace(afterIn[satEnd:])
+		return kw, v, path, body, true
+	}
+	return "", "", "", "", false
+}
+
+// documentRoot returns the topmost ancestor of n. Used by
+// [evalBooleanWithQuantifier] so the quantifier's path expression
+// resolves against the document root rather than the rule context,
+// matching XPath 2.0 semantics.
+func documentRoot(n *xmlquery.Node) *xmlquery.Node {
+	for n != nil && n.Parent != nil {
+		n = n.Parent
+	}
+	return n
+}
+
+// xpathStringLiteral wraps s as an XPath string literal. Apostrophes
+// in s flip the delimiter to double quotes; when both are present the
+// literal is constructed via concat() so neither needs escaping in
+// the source.
+func xpathStringLiteral(s string) string {
+	hasApos := strings.Contains(s, "'")
+	hasQuot := strings.Contains(s, `"`)
+	switch {
+	case !hasApos:
+		return "'" + s + "'"
+	case !hasQuot:
+		return `"` + s + `"`
+	default:
+		var parts []string
+		for p := range strings.SplitSeq(s, "'") {
+			parts = append(parts, "'"+p+"'")
+		}
+		return "concat(" + strings.Join(parts, `,"'",`) + ")"
+	}
 }
 
 // substituteLets replaces XPath variable references ($name) in expr

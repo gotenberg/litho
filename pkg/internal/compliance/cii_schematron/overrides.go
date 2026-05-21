@@ -11,10 +11,10 @@ import (
 )
 
 // BuiltinRuleOverrides returns Go evaluators for Schematron rules
-// whose XPath the bundled engine cannot compile. Callers pass the
-// map to [schematron.WithRuleOverrides] so each listed rule fires
-// through the Go implementation instead of landing in the skipped
-// slice as an advisory.
+// whose XPath the bundled engine either cannot compile or evaluates
+// wrongly. Callers pass the map to [schematron.WithRuleOverrides]
+// so each listed rule fires through the Go implementation instead
+// of landing in the skipped slice as an advisory.
 //
 // Current overrides:
 //
@@ -22,12 +22,21 @@ import (
 //     XRechnung source mixes for/return, if/then/else,
 //     string-to-codepoints, and xs:integer; antchfx/xpath supports
 //     none of those.
+//   - BR-CO-18: existence of one ApplicableTradeTax under the
+//     header. antchfx evaluates "//foo" relative to the context
+//     node rather than the document root, so the rule wrongly
+//     skips the header tax when fired from a deep line context.
+//   - BR-S-02: existence of one Seller VAT identifier (or tax
+//     representative) when a line uses VAT category S. Same
+//     antchfx "//foo from non-root context" issue.
 //
 // The returned map is fresh on each call so callers can mutate or
 // extend it without disturbing the package's internal state.
 func BuiltinRuleOverrides() map[string]schematron.RuleOverride {
 	return map[string]schematron.RuleOverride{
 		"BR-DE-19": brDE19IBANCheck,
+		"BR-CO-18": brCO18HeaderTaxBreakdown,
+		"BR-S-02":  brS02SellerVATIdentifier,
 	}
 }
 
@@ -115,6 +124,113 @@ func ibanChecksumOK(iban string) bool {
 		}
 	}
 	return rem == 1
+}
+
+// brCO18HeaderTaxBreakdown checks that the document carries at
+// least one ApplicableTradeTax under
+// SupplyChainTradeTransaction/ApplicableHeaderTradeSettlement.
+// The Schematron source expresses this as an absolute "//" path
+// but antchfx evaluates "//" relative to the context node rather
+// than the document root, so the rule misses the header tax when
+// the rule fires on a deep line-item context.
+func brCO18HeaderTaxBreakdown(_ context.Context, node *xmlquery.Node) (bool, error) {
+	root := topAncestor(node)
+	cii := findFirstByPath(root, "CrossIndustryInvoice", "SupplyChainTradeTransaction", "ApplicableHeaderTradeSettlement", "ApplicableTradeTax")
+	if cii == nil {
+		// Try alternate root path where the first descendant of the
+		// document node is CrossIndustryInvoice already.
+		cii = findFirstByPath(root, "SupplyChainTradeTransaction", "ApplicableHeaderTradeSettlement", "ApplicableTradeTax")
+	}
+	return cii != nil, nil
+}
+
+// brS02SellerVATIdentifier checks that the document carries a
+// Seller VAT identifier (BT-31), a Seller tax registration
+// identifier (BT-32), or a Seller tax representative VAT identifier
+// (BT-63). Required whenever an invoice line uses VAT category "S"
+// (Standard rated). Same antchfx absolute-path workaround applies.
+func brS02SellerVATIdentifier(_ context.Context, node *xmlquery.Node) (bool, error) {
+	root := topAncestor(node)
+	agreement := findFirstByPath(root, "CrossIndustryInvoice", "SupplyChainTradeTransaction", "ApplicableHeaderTradeAgreement")
+	if agreement == nil {
+		agreement = findFirstByPath(root, "SupplyChainTradeTransaction", "ApplicableHeaderTradeAgreement")
+	}
+	if agreement == nil {
+		return false, nil
+	}
+	if seller := findChild(agreement, "SellerTradeParty"); seller != nil {
+		for reg := seller.FirstChild; reg != nil; reg = reg.NextSibling {
+			if reg.Type != xmlquery.ElementNode || reg.Data != "SpecifiedTaxRegistration" {
+				continue
+			}
+			if id := findChild(reg, "ID"); id != nil {
+				switch attrValue(id, "schemeID") {
+				case "VA", "FC":
+					return true, nil
+				}
+			}
+		}
+	}
+	if rep := findChild(agreement, "SellerTaxRepresentativeTradeParty"); rep != nil {
+		for reg := rep.FirstChild; reg != nil; reg = reg.NextSibling {
+			if reg.Type != xmlquery.ElementNode || reg.Data != "SpecifiedTaxRegistration" {
+				continue
+			}
+			if id := findChild(reg, "ID"); id != nil {
+				if attrValue(id, "schemeID") == "VA" {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+// topAncestor walks parent pointers to the topmost node, mirroring
+// the schematron evaluator's documentRoot helper but private to
+// this package.
+func topAncestor(n *xmlquery.Node) *xmlquery.Node {
+	for n != nil && n.Parent != nil {
+		n = n.Parent
+	}
+	return n
+}
+
+// findFirstByPath walks a sequence of element names from n, taking
+// the first child with each local name. Returns the deepest matched
+// element, or nil if any step fails.
+func findFirstByPath(n *xmlquery.Node, names ...string) *xmlquery.Node {
+	cur := n
+	for _, name := range names {
+		if cur == nil {
+			return nil
+		}
+		// Document nodes have no Data; descend into the first element
+		// child until we land on something with the requested name.
+		next := findChild(cur, name)
+		if next == nil {
+			// Walk through wrapper/document children that aren't
+			// the desired name to reach the first matching element.
+			for c := cur.FirstChild; c != nil && next == nil; c = c.NextSibling {
+				if c.Type == xmlquery.ElementNode && c.Data == name {
+					next = c
+				}
+			}
+		}
+		cur = next
+	}
+	return cur
+}
+
+// attrValue returns the value of n's named attribute, or empty
+// string when the attribute is absent.
+func attrValue(n *xmlquery.Node, name string) string {
+	for _, a := range n.Attr {
+		if a.Name.Local == name {
+			return a.Value
+		}
+	}
+	return ""
 }
 
 // childText returns the trimmed text content of the first direct
