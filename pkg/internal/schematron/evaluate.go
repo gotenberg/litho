@@ -561,6 +561,12 @@ func prefixRelativePaths(expr, prefix string) string {
 	bracketDepth := 0
 	inStr := byte(0)
 	pathStart := true
+	// stepFuncStack tracks, per open paren, whether the paren
+	// introduces the argument list of a path-step function call
+	// (the "/xs:decimal(...)" shape). When the top of the stack is
+	// true, paths inside resolve against the path step's context,
+	// not the rule context, so the prefix must not be applied.
+	stepFuncStack := []bool{}
 
 	for i := 0; i < len(expr); {
 		c := expr[i]
@@ -590,12 +596,28 @@ func prefixRelativePaths(expr, prefix string) string {
 			i++
 			pathStart = false
 			continue
-		case '(', ',':
+		case '(':
+			// Push the path-step flag for whatever this paren
+			// opens. Determined by what's been written so far: if
+			// a name token immediately precedes "(", it's a
+			// function call; if the byte before the name is "/",
+			// the function's result is consumed as a path step
+			// and its arguments resolve in the step's context
+			// rather than the rule context.
+			stepFuncStack = append(stepFuncStack, isFollowingPathStepFuncCall(&b))
+			b.WriteByte(c)
+			i++
+			pathStart = true
+			continue
+		case ',':
 			b.WriteByte(c)
 			i++
 			pathStart = true
 			continue
 		case ')':
+			if len(stepFuncStack) > 0 {
+				stepFuncStack = stepFuncStack[:len(stepFuncStack)-1]
+			}
 			b.WriteByte(c)
 			i++
 			pathStart = false
@@ -617,6 +639,16 @@ func prefixRelativePaths(expr, prefix string) string {
 			continue
 		}
 		if bracketDepth > 0 {
+			b.WriteByte(c)
+			i++
+			pathStart = false
+			continue
+		}
+		if len(stepFuncStack) > 0 && stepFuncStack[len(stepFuncStack)-1] {
+			// Inside a path-step function call's arg list; the
+			// arg is relative to the step's iterated context, not
+			// the rule context. Emit the byte as-is and let later
+			// path bytes follow.
 			b.WriteByte(c)
 			i++
 			pathStart = false
@@ -650,6 +682,10 @@ func prefixRelativePaths(expr, prefix string) string {
 				j++
 			}
 			if j < len(expr) && expr[j] == '(' {
+				// Function call at path-start: write the name
+				// without prefixing it. The "(" branch below
+				// handles the stack push uniformly when the byte
+				// arrives in its own iteration.
 				b.WriteString(name)
 				i = nameEnd
 				pathStart = false
@@ -671,6 +707,31 @@ func prefixRelativePaths(expr, prefix string) string {
 		pathStart = false
 	}
 	return b.String()
+}
+
+// isFollowingPathStepFuncCall reports whether the "(" about to be
+// emitted into b opens the argument list of a path-step function
+// call. The check looks at what has already been written: a name
+// token directly preceding "(" plus a "/" before that name means
+// the function's result feeds back into a path step
+// (e.g. ".../xs:decimal(child)"), and its arguments resolve in the
+// step's iterated context rather than the rule context.
+func isFollowingPathStepFuncCall(b *strings.Builder) bool {
+	s := b.String()
+	end := len(s)
+	for end > 0 && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n') {
+		end--
+	}
+	if end == 0 || (!isXPathNameChar(s[end-1]) && s[end-1] != ':') {
+		return false
+	}
+	for end > 0 && (isXPathNameChar(s[end-1]) || s[end-1] == ':') {
+		end--
+	}
+	for end > 0 && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n') {
+		end--
+	}
+	return end > 0 && s[end-1] == '/'
 }
 
 // matchInfixOperator detects an XPath infix operator starting at
