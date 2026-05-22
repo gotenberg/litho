@@ -365,6 +365,17 @@ func runAssertion(ctx context.Context, a *Assertion, n *xmlquery.Node, vars map[
 // substituted body. When expr is not a quantifier it falls straight
 // through to [evalBoolean] against antchfx.
 func evalBooleanWithQuantifier(expr string, n *xmlquery.Node, cache *exprCache) (bool, error) {
+	// XPath 2.0 "for $V in ... return ..." let-list expressions
+	// compile cleanly under antchfx but evaluate as garbled name
+	// references, silently producing false on perfectly valid
+	// invoices. Skipping the rule surfaces the coverage gap via the
+	// SkippedRule slice rather than firing a spurious violation.
+	// Detection is conservative: only top-level "for $name in"
+	// triggers the skip; nested forms inside parentheses fall through
+	// to the regular compile path.
+	if hasLeadingForBinding(expr) {
+		return false, fmt.Errorf("xpath 2.0 'for $var in ... return ...' let-list not supported")
+	}
 	kind, varName, path, body, ok := peelQuantifier(expr)
 	if !ok {
 		return evalBoolean(expr, n, cache)
@@ -403,6 +414,25 @@ func evalBooleanWithQuantifier(expr string, n *xmlquery.Node, cache *exprCache) 
 	return isEvery, nil
 }
 
+// hasLeadingForBinding reports whether expr begins with an XPath 2.0
+// "for $V in ..." let-list. The check is whitespace-tolerant and
+// uses the same boundary rules as [peelQuantifier]: the "for" keyword
+// must not run into another name character, and the next non-space
+// byte must be the dollar sign that introduces the bound variable.
+func hasLeadingForBinding(expr string) bool {
+	const ws = " \t\n\r"
+	s := strings.TrimLeft(expr, ws)
+	if !strings.HasPrefix(s, "for") {
+		return false
+	}
+	after := s[3:]
+	if after == "" || isXPathNameChar(after[0]) {
+		return false
+	}
+	after = strings.TrimLeft(after, ws)
+	return strings.HasPrefix(after, "$")
+}
+
 // peelQuantifier matches a top-level "every $V in PATH satisfies
 // BODY" or "some $V in PATH satisfies BODY" prefix on expr. Returns
 // ok=false when expr does not start with a quantifier or the syntax
@@ -414,7 +444,14 @@ func evalBooleanWithQuantifier(expr string, n *xmlquery.Node, cache *exprCache) 
 // rule set keeps every quantifier at the top of its assertion test,
 // so the narrow scope matches the in-the-wild usage.
 func peelQuantifier(expr string) (kind, varName, path, body string, ok bool) {
-	s := strings.TrimLeft(expr, " \t\n")
+	// Trim every form of XPath whitespace (space, tab, LF, CR): the
+	// bundled Factur-X profile schematrons ship with CRLF line endings
+	// inside test attributes, and missing CR from the trim leaves an
+	// orphan carriage return between the variable name and the "in"
+	// keyword, which silently breaks peelQuantifier on every "every $V
+	// in ..." rule.
+	const ws = " \t\n\r"
+	s := strings.TrimLeft(expr, ws)
 	for _, kw := range []string{"every", "some"} {
 		if !strings.HasPrefix(s, kw) {
 			continue
@@ -423,7 +460,7 @@ func peelQuantifier(expr string) (kind, varName, path, body string, ok bool) {
 		if after == "" || isXPathNameChar(after[0]) {
 			continue
 		}
-		after = strings.TrimLeft(after, " \t\n")
+		after = strings.TrimLeft(after, ws)
 		if !strings.HasPrefix(after, "$") {
 			continue
 		}
@@ -435,11 +472,11 @@ func peelQuantifier(expr string) (kind, varName, path, body string, ok bool) {
 			continue
 		}
 		v := after[1:nameEnd]
-		afterName := strings.TrimLeft(after[nameEnd:], " \t\n")
+		afterName := strings.TrimLeft(after[nameEnd:], ws)
 		if !strings.HasPrefix(afterName, "in") || len(afterName) < 3 || isXPathNameChar(afterName[2]) {
 			continue
 		}
-		afterIn := strings.TrimLeft(afterName[2:], " \t\n")
+		afterIn := strings.TrimLeft(afterName[2:], ws)
 		// Find the matching " satisfies " keyword at depth 0
 		// relative to afterIn so a nested satisfies inside the path
 		// does not get picked up.

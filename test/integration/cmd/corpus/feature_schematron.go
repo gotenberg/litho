@@ -286,6 +286,14 @@ func validateFacturXFailures(ctx context.Context, pdfPath string) ([]string, err
 		if !strings.Contains(msg, "clause CII_SCH") {
 			continue
 		}
+		// CII_SCH test 2 covers warning- and report-class firings.
+		// KoSIT's validator returns rc=0 (pass) for warnings, so
+		// counting them here turns flag="warning" rules (notably the
+		// PEPPOL-EN16931 "Document MUST not contain empty elements"
+		// advisory) into spurious false positives.
+		if strings.Contains(msg, "clause CII_SCH test 2") {
+			continue
+		}
 		failures = append(failures, msg)
 	}
 	return failures, nil

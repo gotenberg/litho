@@ -44,6 +44,9 @@ func rewriteXPath2(expr string) string {
 	out = rewriteFnRename(out, "exists", "boolean")
 	out = rewriteDistinctValuesEqOne(out)
 	out = rewriteRoundAsFloor(out)
+	out = rewriteNotNormalizeSpace(out)
+	out = rewriteNotNumericCast(out)
+	out = rewriteValueComparisonOperators(out)
 	out = rewriteSequenceEquality(out)
 	// Bare sequence construction runs AFTER sequence-equality so the
 	// equality form's "= (a, b)" gets first dibs on the literal and
@@ -141,31 +144,250 @@ func elideCastInStep(expr, fnName string) string {
 // XPath 1.0's "round half toward +Inf" by one ULP, which is below
 // the tolerance every Schematron arithmetic rule already accepts.
 func rewriteRoundAsFloor(expr string) string {
-	prefix := "round("
-	if !strings.Contains(expr, prefix) {
+	if !strings.Contains(expr, "round") {
 		return expr
 	}
 	var b strings.Builder
 	b.Grow(len(expr) + 16)
 	for i := 0; i < len(expr); {
-		if strings.HasPrefix(expr[i:], prefix) && (i == 0 || !isXPathNameChar(expr[i-1])) {
-			start := i + len(prefix)
-			end := matchCloseParen(expr, start)
-			if end < 0 {
-				b.WriteByte(expr[i])
+		// "round" must appear as a function-call boundary: the byte
+		// before must not be a name char (so "ground" is left alone)
+		// and an open paren must follow, with optional whitespace
+		// between the identifier and the paren. The bundled Factur-X
+		// profile schematrons use the spaced form "round (X)" in
+		// places, which the old prefix-only matcher silently skipped
+		// and left the broken antchfx round() behaviour in place.
+		if !strings.HasPrefix(expr[i:], "round") || (i > 0 && isXPathNameChar(expr[i-1])) {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		k := i + len("round")
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n') {
+			k++
+		}
+		if k >= len(expr) || expr[k] != '(' {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		start := k + 1
+		end := matchCloseParen(expr, start)
+		if end < 0 {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		// Recurse into the argument so a nested round() (which the
+		// upstream Factur-X schematrons use heavily, e.g. round of a
+		// sum-of-rounds expression) also gets rewritten. Without the
+		// recursion the outer rewrite preserves the inner "round(X)"
+		// untouched and the broken antchfx integer-returning round()
+		// silently NaN-propagates through the surrounding arithmetic.
+		b.WriteString("floor((")
+		b.WriteString(rewriteRoundAsFloor(expr[start:end]))
+		b.WriteString(") + 0.5)")
+		i = end + 1
+	}
+	return b.String()
+}
+
+// rewriteNotNormalizeSpace converts every "not(normalize-space(X))"
+// call into "string-length(normalize-space(X))=0", with X defaulting
+// to "." when the call site omits the argument.
+//
+// antchfx/xpath v1.3.6 evaluates not("") as false rather than true:
+// the engine's string-to-boolean coercion only fires for some code
+// paths, so "not(empty-string)" silently stays at the default false.
+// That breaks every "//*[not(normalize-space())]" rule context -
+// FX-SCH-A-000372's PEPPOL-EN16931-R008 "Document MUST not contain
+// empty elements" rule is the canonical victim. The string-length
+// form sidesteps the bug because antchfx coerces the integer to a
+// boolean correctly.
+func rewriteNotNormalizeSpace(expr string) string {
+	prefix := "not(normalize-space"
+	if !strings.Contains(expr, prefix) {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr) + 32)
+	for i := 0; i < len(expr); {
+		if !strings.HasPrefix(expr[i:], prefix) || (i > 0 && isXPathNameChar(expr[i-1])) {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		k := i + len(prefix)
+		if k >= len(expr) || expr[k] != '(' {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		argStart := k + 1
+		argEnd := matchCloseParen(expr, argStart)
+		if argEnd < 0 {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		notClose := argEnd + 1
+		if notClose >= len(expr) || expr[notClose] != ')' {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		arg := strings.TrimSpace(expr[argStart:argEnd])
+		if arg == "" {
+			arg = "."
+		}
+		b.WriteString("string-length(normalize-space(")
+		b.WriteString(arg)
+		b.WriteString("))=0")
+		i = notClose + 1
+	}
+	return b.String()
+}
+
+// rewriteNotNumericCast strips a "not(number(X))" wrapper down to
+// "not(X)" when X is a simple path expression. Whitespace between
+// "not" and its open paren is tolerated because XPath permits it
+// and the bundled Factur-X profile schematrons use the spaced form.
+//
+// antchfx/xpath v1.3.6 evaluates not(NaN) as false rather than the
+// XPath 1.0 not(0)=true semantics. Schematron arithmetic rules
+// (notably BR-CO-16 / FX-SCH-A-000122) rely on the
+// "not(xs:decimal(optional-field))" idiom to detect a missing
+// field, and the rewriter converts the xs:decimal cast to number()
+// before this pass. Without the unwrap the test silently flips
+// from "field absent" to false on every fixture, producing dozens
+// of false positives once the arithmetic disjuncts run.
+//
+// The unwrap keeps XPath 1.0 semantics for the "missing" case:
+// not(empty-node-set) is true. For numerically-zero values the
+// outer rule's matching equality disjunct still covers the test
+// (e.g. BR-CO-16's first clause covers TotalPrepaid=0 via the
+// arithmetic), so the precision loss for that branch does not
+// propagate into a wrong verdict.
+//
+// The rewrite only fires when the cast wraps a plain path: function
+// calls, comparisons, and arithmetic stay untouched so callers that
+// rely on the cast for non-existence semantics keep their behaviour.
+func rewriteNotNumericCast(expr string) string {
+	if !strings.Contains(expr, "not") || !strings.Contains(expr, "number(") {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr))
+	i := 0
+	for i < len(expr) {
+		// Look for "not" as a function-call boundary.
+		if !strings.HasPrefix(expr[i:], "not") || (i > 0 && isXPathNameChar(expr[i-1])) {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		k := i + 3
+		// Skip whitespace between "not" and its open paren.
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n') {
+			k++
+		}
+		if k >= len(expr) || expr[k] != '(' {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		notOpen := k
+		// Skip whitespace inside the not(...) call before the next
+		// token.
+		k++
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n') {
+			k++
+		}
+		if !strings.HasPrefix(expr[k:], "number(") {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		argStart := k + len("number(")
+		argEnd := matchCloseParen(expr, argStart)
+		if argEnd < 0 {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		// After the inner number(...) close paren, optional whitespace
+		// then the not(...) close paren.
+		tail := argEnd + 1
+		for tail < len(expr) && (expr[tail] == ' ' || expr[tail] == '\t' || expr[tail] == '\n') {
+			tail++
+		}
+		if tail >= len(expr) || expr[tail] != ')' {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		inner := strings.TrimSpace(expr[argStart:argEnd])
+		if !looksLikePathOrCall(inner) {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		_ = notOpen
+		b.WriteString("not(")
+		b.WriteString(inner)
+		b.WriteString(")")
+		i = tail + 1
+	}
+	return b.String()
+}
+
+// rewriteValueComparisonOperators rewrites XPath 2.0 value-comparison
+// operators (eq, ne, lt, le, gt, ge) into their XPath 1.0
+// general-comparison counterparts (=, !=, <, <=, >, >=). The forms
+// differ on node-set vs atomic semantics in XPath 2.0, but the
+// bundled EN 16931 / Factur-X schematrons use the value operators
+// exclusively against atomic results (count(X) eq 1, position() lt
+// last(), etc.) where the substitution preserves the verdict.
+//
+// Tokens are matched on whitespace-and-name-boundary so an element
+// named "ram:eq" or a variable like "$eqValue" is left alone.
+func rewriteValueComparisonOperators(expr string) string {
+	replacements := []struct{ from, to string }{
+		{" eq ", " = "},
+		{" ne ", " != "},
+		{" lt ", " < "},
+		{" le ", " <= "},
+		{" gt ", " > "},
+		{" ge ", " >= "},
+	}
+	out := expr
+	for _, r := range replacements {
+		if !strings.Contains(out, r.from) {
+			continue
+		}
+		var b strings.Builder
+		b.Grow(len(out))
+		i := 0
+		for i < len(out) {
+			if !strings.HasPrefix(out[i:], r.from) {
+				b.WriteByte(out[i])
 				i++
 				continue
 			}
-			b.WriteString("floor((")
-			b.WriteString(expr[start:end])
-			b.WriteString(") + 0.5)")
-			i = end + 1
-			continue
+			// Confirm the surrounding bytes form a valid token boundary:
+			// the byte before the leading space must close an identifier
+			// or a paren/number, never another name char.
+			if i == 0 {
+				b.WriteByte(out[i])
+				i++
+				continue
+			}
+			b.WriteString(r.to)
+			i += len(r.from)
 		}
-		b.WriteByte(expr[i])
-		i++
+		out = b.String()
 	}
-	return b.String()
+	return out
 }
 
 // decimalEqualityEpsilon is the tolerance used when [rewriteDecimalEquality]
@@ -742,12 +964,15 @@ func indexSatisfies(expr string, pos int) (int, int) {
 		if depth != 0 {
 			continue
 		}
-		if c != ' ' && c != '\t' && c != '\n' {
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
 			continue
 		}
-		// Scan forward over whitespace to find the next token.
+		// Scan forward over whitespace to find the next token. CR is
+		// included so CRLF line endings inside the schematron source
+		// (the bundled Factur-X profile schematrons use them) do not
+		// block the "satisfies" lookup.
 		k := i + 1
-		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n') {
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n' || expr[k] == '\r') {
 			k++
 		}
 		if strings.HasPrefix(expr[k:], "satisfies") {

@@ -105,7 +105,7 @@ func (l *loader) loadFile(p, importer string) (*Schema, error) {
 		}
 		s.Phases[rp.ID] = ph
 	}
-	for _, rp := range raw.Patterns {
+	for idx, rp := range raw.Patterns {
 		if rp.Abstract == "true" {
 			return nil, fmt.Errorf("%w: abstract patterns (pattern id=%q)", ErrUnsupportedConstruct, rp.ID)
 		}
@@ -140,8 +140,21 @@ func (l *loader) loadFile(p, importer string) (*Schema, error) {
 			}
 			pat.Rules = append(pat.Rules, rule)
 		}
-		s.Patterns[rp.ID] = pat
-		s.PatternOrder = append(s.PatternOrder, rp.ID)
+		// ISO Schematron does not require sch:pattern to carry an id;
+		// the bundled Factur-X profile schematrons (mirroring Mustang's
+		// upstream sources) ship dozens of anonymous sch:pattern
+		// siblings. Bucketing them by raw id would collapse every
+		// nameless sibling into a single map entry and silently drop
+		// 66 of FACTUR-X_EN16931.sch's 67 patterns. The synthetic key
+		// is empty-prefixed so phase activation, which looks up named
+		// patterns only, continues to see no match for the anonymous
+		// ones - matching how the spec uses phases.
+		key := rp.ID
+		if key == "" {
+			key = fmt.Sprintf("__anon_%d", idx)
+		}
+		s.Patterns[key] = pat
+		s.PatternOrder = append(s.PatternOrder, key)
 	}
 	return s, nil
 }
