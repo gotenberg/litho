@@ -114,8 +114,11 @@ while IFS= read -r -d '' pdf; do
 
   # Three-way detection markers. KoSIT's report shape varies across
   # releases; the patterns below cover both the textual phrases from
-  # 1.5.x and the camelCase XML element introduced in 1.6.x.
-  if echo "$report_body" | grep -qiE '<acceptedBy>\s*</acceptedBy>|no scenario matched|no applicable scenario|noScenarioMatched'; then
+  # 1.5.x and the camelCase XML element introduced in 1.6.x. Read
+  # from $report_file because echo of a multi-hundred-KB variable
+  # silently drops the rest of the body on some Linux bash builds,
+  # making the regex miss the marker that sits past the buffer cap.
+  if grep -qiE '<acceptedBy>\s*</acceptedBy>|no scenario matched|no applicable scenario|noScenarioMatched' "$report_file"; then
     verdict="skip"
     reason="no scenario applicable"
     jq -n --arg file "$base" --arg verdict "$verdict" --arg reason "$reason" --rawfile report "$report_file" \
