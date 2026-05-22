@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -198,6 +199,30 @@ type schematronMismatch struct {
 	LithoFailures []string `json:"litho_failures,omitempty"`
 }
 
+// embeddedAttachmentNames returns the filename of every entry the
+// reader sees as an embedded file. Used by [validateFacturXFailures]
+// to pick the right validator entry point based on whether the PDF
+// carries a ZUGFeRD 1.0 ("ZUGFeRD-invoice.xml"), ZUGFeRD 2.0
+// ("zugferd-invoice.xml"), or Factur-X 1.0+ / ZUGFeRD 2.1+
+// ("factur-x.xml") payload.
+func embeddedAttachmentNames(ctx context.Context, r *pdf.Reader) []string {
+	files, err := r.EmbeddedFiles(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		out = append(out, f.Name)
+	}
+	return out
+}
+
+// has reports whether name appears in the list (case-sensitive,
+// matching the variants' on-the-wire filenames).
+func has(list []string, name string) bool {
+	return slices.Contains(list, name)
+}
+
 // validateFacturXFailures opens pdfPath, runs the appropriate
 // validator entry point, and returns only the Schematron-clause
 // rule descriptions. INVOICE-class failures (filename, AF, XMP,
@@ -234,13 +259,21 @@ func validateFacturXFailures(ctx context.Context, pdfPath string) ([]string, err
 	}
 	defer r.Close()
 
-	base := filepath.Base(pdfPath)
+	// Dispatch by embedded filename: each variant expects a
+	// different /AF entry, and only the matching ValidateZUGFeRD/
+	// ValidateFacturX call runs the schematron pass. Filename-based
+	// dispatch (over basename-prefix heuristics) catches fixtures
+	// like Mustang's revision-numbered ZUGFeRD 2.0 samples that
+	// don't follow the corpus's "zugferd_2p0_" naming.
+	embedded := embeddedAttachmentNames(ctx, r)
 	var errs []error
 	switch {
-	case strings.HasPrefix(base, "v1__"):
+	case has(embedded, "ZUGFeRD-invoice.xml") && strings.HasPrefix(filepath.Base(pdfPath), "v1__"):
 		errs, err = r.ValidateZUGFeRD(ctx, models.ZUGFeRD1)
-	case strings.Contains(base, "zugferd_2p0_") || strings.Contains(base, "zugferd_2.0_"):
+	case has(embedded, "zugferd-invoice.xml"):
 		errs, err = r.ValidateZUGFeRD(ctx, models.ZUGFeRD2)
+	case has(embedded, "ZUGFeRD-invoice.xml"):
+		errs, err = r.ValidateZUGFeRD(ctx, models.ZUGFeRD1)
 	default:
 		errs, err = r.ValidateFacturX(ctx)
 	}

@@ -1024,10 +1024,68 @@ func (c *exprCache) compile(expr string) (*xpath.Expr, error) {
 	// XPath 1.0 equivalents before compilation. Lossy by design; see
 	// rewriteXPath2 for the accepted approximations.
 	rewritten := rewriteXPath2(expr)
+	// antchfx/xpath returns an empty node-set for "ns:*" wildcard
+	// steps and the same step nested in a predicate, regardless of
+	// what the document actually contains. Replace "ns:*" with
+	// "*[namespace-uri()='URI']" using the schema's prefix map; the
+	// namespace-uri predicate evaluates correctly and matches the
+	// same element set the XPath 1.0 spec defines for "ns:*".
+	rewritten = rewriteNamespaceWildcard(rewritten, c.ns)
 	compiled, err := xpath.CompileWithNS(rewritten, c.ns)
 	if err != nil {
 		return nil, fmt.Errorf("compiling xpath %q: %w", expr, err)
 	}
 	c.compiled[expr] = compiled
 	return compiled, nil
+}
+
+// rewriteNamespaceWildcard converts "prefix:*" wildcard steps into
+// the "*[namespace-uri()='URI']" form. The substitution looks up the
+// prefix in ns; unknown prefixes pass through unchanged so a typo or
+// a prefix referenced before its declaration surfaces as a regular
+// XPath compile error instead of a silent rewrite.
+//
+// "*" is only replaced when it occupies a path-step position - never
+// as the multiplication operator. The walker recognises a path-step
+// "*" when it follows ":" (after a name prefix), or when the
+// preceding character is "/", or start-of-input. Anywhere else the
+// "*" stays as the arithmetic operator.
+func rewriteNamespaceWildcard(expr string, ns map[string]string) string {
+	if !strings.Contains(expr, ":*") || len(ns) == 0 {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr) + 64)
+	for i := 0; i < len(expr); {
+		c := expr[i]
+		if !isNameStart(c) {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		// Scan a name token.
+		j := i + 1
+		for j < len(expr) && isXPathNameChar(expr[j]) {
+			j++
+		}
+		// Need the form "name:*" with no other characters between.
+		if j+1 < len(expr) && expr[j] == ':' && expr[j+1] == '*' {
+			// Confirm "*" is not followed by a name char (e.g. avoid
+			// matching "foo:*bar" which is invalid XPath but defensive).
+			after := j + 2
+			if after >= len(expr) || !isXPathNameChar(expr[after]) {
+				prefix := expr[i:j]
+				if uri, ok := ns[prefix]; ok {
+					b.WriteString("*[namespace-uri()='")
+					b.WriteString(uri)
+					b.WriteString("']")
+					i = after
+					continue
+				}
+			}
+		}
+		b.WriteString(expr[i:j])
+		i = j
+	}
+	return b.String()
 }
