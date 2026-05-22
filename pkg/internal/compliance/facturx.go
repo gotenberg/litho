@@ -252,8 +252,16 @@ func locateInvoiceFileSpec(ctx context.Context, doc *document.Document, catalog 
 	if !ok {
 		return invoiceFileSpec{}
 	}
-	afArr, err := document.ResolveArray(ctx, doc, afObj)
-	if err != nil {
+	// /AF should be an array per Factur-X spec, but some producers
+	// ship a single filespec reference when only one file is
+	// embedded. Tolerate both forms by promoting the bare ref into
+	// a one-element array before iterating.
+	var afArr ast.PdfArray
+	if arr, err := document.ResolveArray(ctx, doc, afObj); err == nil {
+		afArr = arr
+	} else if ref, ok := afObj.(ast.PdfIndirectRef); ok {
+		afArr = ast.PdfArray{ref}
+	} else {
 		return invoiceFileSpec{}
 	}
 	for _, entry := range afArr {
@@ -299,12 +307,12 @@ func locateInvoiceFileSpec(ctx context.Context, doc *document.Document, catalog 
 func filespecName(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
 	if uf, ok := dict["UF"]; ok {
 		if s, err := document.ResolveString(ctx, doc, uf); err == nil {
-			return string(s)
+			return document.DecodePdfString(s)
 		}
 	}
 	if f, ok := dict["F"]; ok {
 		if s, err := document.ResolveString(ctx, doc, f); err == nil {
-			return string(s)
+			return document.DecodePdfString(s)
 		}
 	}
 	return ""

@@ -69,13 +69,13 @@ func checkInvoiceCII(ctx context.Context, doc *document.Document, invoice invoic
 	if err != nil {
 		return failf(Rule_cii_StreamReadable, "%s: resolving invoice stream %d: %v", v.label, invoice.streamRef.ObjectNum, err)
 	}
-	data, err := stream.Bytes(ctx)
-	if err != nil || len(data) == 0 {
-		decoded, decErr := doc.DecodeStream(ctx, stream)
-		if decErr != nil {
-			return failf(Rule_cii_StreamReadable, "%s: decoding invoice stream %d: %v", v.label, invoice.streamRef.ObjectNum, decErr)
-		}
-		data = decoded
+	// Always go through DecodeStream: stream.Bytes returns the raw
+	// post-decryption bytes which are still filter-encoded (FlateDecode
+	// is common on embedded XML), and feeding those to the XML parser
+	// trips an "invalid UTF-8" error.
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return failf(Rule_cii_StreamReadable, "%s: decoding invoice stream %d: %v", v.label, invoice.streamRef.ObjectNum, err)
 	}
 	if len(data) == 0 {
 		return failf(Rule_cii_StreamReadable, "%s: invoice stream %d is empty", v.label, invoice.streamRef.ObjectNum)
@@ -303,13 +303,9 @@ func checkInvoiceCIIXSD(ctx context.Context, doc *document.Document, invoice inv
 	if err != nil {
 		return nil
 	}
-	data, err := stream.Bytes(ctx)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(data) == 0 {
-		decoded, decErr := doc.DecodeStream(ctx, stream)
-		if decErr != nil {
-			return nil
-		}
-		data = decoded
+		return nil
 	}
 
 	xsdViolations, err := xsd.Validate(ctx, schema, data)
@@ -407,13 +403,9 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	if err != nil {
 		return nil, nil
 	}
-	data, err := stream.Bytes(ctx)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(data) == 0 {
-		decoded, decErr := doc.DecodeStream(ctx, stream)
-		if decErr != nil {
-			return nil, nil
-		}
-		data = decoded
+		return nil, nil
 	}
 
 	var opts []schematron.EvalOption
