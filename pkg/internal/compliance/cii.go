@@ -358,16 +358,24 @@ func formatXSDContext(v hybridInvoiceVariant, xv xsd.Violation) string {
 
 // pickSchematron resolves the Schematron schema to run against the
 // document. The override path (WithFacturXSchematron) always wins.
-// Falling back to the bundle path (WithFacturXSchematronBundle), the
-// chooser reads fx:ConformanceLevel off the XMP packet and routes
-// XRECHNUNG-level documents to the XRechnung schema; everything else
-// uses the EN 16931 baseline. Returns (nil, "") when no schema
-// applies.
+// Falling back to the bundle path, the chooser reads
+// fx:ConformanceLevel off the XMP packet and routes:
+//
+//   - XRECHNUNG -> the XRechnung CIUS schematron when registered.
+//   - Any other level matching a Factur-X profile bundle entry ->
+//     that profile's schematron, which mirrors what Mustang applies
+//     (CEN EN 16931 + PEPPOL-EN16931 + Factur-X-specific BR-FX-EN-*
+//     rules).
+//   - Otherwise -> the generic EN 16931 baseline.
+//
+// Returns (nil, "") when no schema applies.
 func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.PdfDict, v hybridInvoiceVariant, cfg *facturXValidateOpts) (*schematron.Schema, string) {
 	if cfg.schematron != nil {
 		return cfg.schematron, cfg.schematronPhase
 	}
-	if cfg.schematronBundleEN16931 == nil && cfg.schematronBundleXRechnung == nil {
+	if cfg.schematronBundleEN16931 == nil &&
+		cfg.schematronBundleXRechnung == nil &&
+		len(cfg.schematronBundleFacturXProfiles) == 0 {
 		return nil, ""
 	}
 	level := ""
@@ -376,6 +384,9 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	}
 	if level == "XRECHNUNG" && cfg.schematronBundleXRechnung != nil {
 		return cfg.schematronBundleXRechnung, ""
+	}
+	if s, ok := cfg.schematronBundleFacturXProfiles[level]; ok && s != nil {
+		return s, ""
 	}
 	return cfg.schematronBundleEN16931, ""
 }

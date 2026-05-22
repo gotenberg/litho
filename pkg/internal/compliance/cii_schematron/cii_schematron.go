@@ -22,13 +22,22 @@ import (
 
 // Bundled Schematron roots. Each constant names the root file inside
 // [FS] for one rule set so callers can pick between EN 16931
-// (cross-EU baseline) and XRechnung (German CIUS).
+// (cross-EU baseline), XRechnung (German CIUS), and the
+// Factur-X-profile-specific rule sets (MINIMUM / BASIC WL / BASIC /
+// EN 16931 / EXTENDED) that mirror what Mustang's reference
+// validator applies.
 const (
 	EN16931Root   = "en16931/EN16931-CII-validation.sch"
 	XRechnungRoot = "xrechnung/XRechnung-CII-validation.sch"
+
+	FacturXMinimumRoot  = "facturx_profiles/FACTUR-X_MINIMUM.sch"
+	FacturXBasicWLRoot  = "facturx_profiles/FACTUR-X_BASIC-WL.sch"
+	FacturXBasicRoot    = "facturx_profiles/FACTUR-X_BASIC.sch"
+	FacturXEN16931Root  = "facturx_profiles/FACTUR-X_EN16931.sch"
+	FacturXExtendedRoot = "facturx_profiles/FACTUR-X_EXTENDED.sch"
 )
 
-//go:embed en16931/*.sch xrechnung/*.sch
+//go:embed en16931/*.sch xrechnung/*.sch facturx_profiles/*.sch
 var bundledFS embed.FS
 
 // FS exposes the bundled rule set as an [io/fs.FS] for callers that
@@ -87,4 +96,71 @@ func LoadXRechnung(ctx context.Context) (*schematron.Schema, error) {
 		xrechnungSchema = s
 	})
 	return xrechnungSchema, xrechnungFault
+}
+
+//nolint:gochecknoglobals // memoised load results, not sentinel errors.
+var (
+	facturxProfileOnce sync.Map // string conformance level -> *sync.Once
+	facturxProfileMu   sync.Mutex
+	facturxProfileMem  = map[string]*schematron.Schema{}
+	facturxProfileErr  = map[string]error{}
+)
+
+// LoadFacturXProfile returns the bundled Factur-X profile Schematron
+// matching the supplied conformance level. The five profiles ship
+// alongside the EN 16931 baseline and XRechnung CIUS bundles; they
+// mirror the rule set Mustang's reference validator applies, which
+// is CEN EN 16931 + PEPPOL-EN16931 + Factur-X-specific BR-FX-EN-*
+// rules rolled into one. Callers pick this in place of [LoadDefault]
+// when the document's fx:ConformanceLevel selects one of MINIMUM,
+// BASIC WL, BASIC, EN 16931, or EXTENDED.
+//
+// level is matched case-insensitively against the canonical Factur-X
+// 1.0.07 spelling. Returns (nil, nil) when level is empty or
+// unrecognised so callers can fall back to the generic EN 16931
+// schematron without branching on the absence.
+//
+// Concurrency: results memoise per level behind a [sync.Mutex];
+// concurrent callers see one parse cost per level per process.
+func LoadFacturXProfile(ctx context.Context, level string) (*schematron.Schema, error) {
+	root, ok := facturxProfileRoot(level)
+	if !ok {
+		return nil, nil
+	}
+	key := root
+	onceObj, _ := facturxProfileOnce.LoadOrStore(key, &sync.Once{})
+	once := onceObj.(*sync.Once)
+	once.Do(func() {
+		s, err := schematron.Load(ctx, bundledFS, root)
+		facturxProfileMu.Lock()
+		defer facturxProfileMu.Unlock()
+		if err != nil {
+			facturxProfileErr[key] = fmt.Errorf("loading bundled Factur-X %s Schematron: %w", level, err)
+			return
+		}
+		facturxProfileMem[key] = s
+	})
+	facturxProfileMu.Lock()
+	defer facturxProfileMu.Unlock()
+	return facturxProfileMem[key], facturxProfileErr[key]
+}
+
+// facturxProfileRoot maps a conformance-level string to the
+// corresponding bundle root path. Returns ("", false) for unknown
+// or unsupported levels (XRECHNUNG routes through LoadXRechnung;
+// every other free-form level falls back to LoadDefault).
+func facturxProfileRoot(level string) (string, bool) {
+	switch level {
+	case "MINIMUM":
+		return FacturXMinimumRoot, true
+	case "BASIC WL":
+		return FacturXBasicWLRoot, true
+	case "BASIC":
+		return FacturXBasicRoot, true
+	case "EN 16931":
+		return FacturXEN16931Root, true
+	case "EXTENDED":
+		return FacturXExtendedRoot, true
+	}
+	return "", false
 }

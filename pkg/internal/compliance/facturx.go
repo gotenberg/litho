@@ -31,6 +31,13 @@ type facturXValidateOpts struct {
 	// when both are configured.
 	schematronBundleEN16931   *schematron.Schema
 	schematronBundleXRechnung *schematron.Schema
+	// schematronBundleFacturXProfiles is a per-conformance-level
+	// map of Factur-X profile schematrons. Keyed by the XMP
+	// fx:ConformanceLevel value (canonical Factur-X 1.0.07 spelling:
+	// "MINIMUM" / "BASIC WL" / "BASIC" / "EN 16931" / "EXTENDED").
+	// When set, the profile match takes precedence over the
+	// EN 16931 baseline; the XRechnung CIUS still wins over both.
+	schematronBundleFacturXProfiles map[string]*schematron.Schema
 	// schematronOverrides registers Go evaluators for rules whose
 	// XPath the bundled engine cannot compile. The map is threaded
 	// into [schematron.Validate] as [schematron.WithRuleOverrides].
@@ -76,6 +83,25 @@ func WithFacturXSchematronBundle(en16931, xrechnung *schematron.Schema) FacturXV
 	return func(o *facturXValidateOpts) {
 		o.schematronBundleEN16931 = en16931
 		o.schematronBundleXRechnung = xrechnung
+	}
+}
+
+// WithFacturXProfileSchematronBundle registers per-conformance-level
+// Factur-X profile schematrons. The map's keys are the canonical
+// fx:ConformanceLevel values from Factur-X 1.0.07 ("MINIMUM",
+// "BASIC WL", "BASIC", "EN 16931", "EXTENDED"); the values are
+// loaded schemas that wrap CEN EN 16931 + PEPPOL-EN16931 +
+// Factur-X-specific BR-FX-EN-* rules into the per-profile bundle
+// Mustang's reference validator applies.
+//
+// The validator consults this map after [WithFacturXSchematron] and
+// before [WithFacturXSchematronBundle]: when the document's level
+// matches a key here, that profile's schematron runs instead of the
+// EN 16931 baseline. Documents whose level reads XRECHNUNG continue
+// routing to the XRechnung CIUS regardless.
+func WithFacturXProfileSchematronBundle(profiles map[string]*schematron.Schema) FacturXValidateOption {
+	return func(o *facturXValidateOpts) {
+		o.schematronBundleFacturXProfiles = profiles
 	}
 }
 

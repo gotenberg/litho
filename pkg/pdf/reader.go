@@ -314,6 +314,13 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 		if en16931Sch != nil || xrechnungSch != nil {
 			opts = append(opts, compliance.WithFacturXSchematronBundle(en16931Sch, xrechnungSch))
 		}
+		// Factur-X profile schematrons are available via
+		// [cii_schematron.LoadFacturXProfile] but stay opt-in: the
+		// rules reference an external code database through the
+		// document() XPath function, which antchfx/xpath does not
+		// implement. Apply via [compliance.WithFacturXProfileSchematronBundle]
+		// only when the caller supplies a document() resolver or
+		// pre-substitutes the code-list lookups.
 	}
 	// Always wire the bundled Go rule overrides so rules that the
 	// XPath engine cannot handle (BR-DE-19's IBAN checksum is the
