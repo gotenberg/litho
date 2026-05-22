@@ -358,37 +358,116 @@ func formatXSDContext(v hybridInvoiceVariant, xv xsd.Violation) string {
 
 // pickSchematron resolves the Schematron schema to run against the
 // document. The override path (WithFacturXSchematron) always wins.
-// Falling back to the bundle path, the chooser reads
-// fx:ConformanceLevel off the XMP packet and routes:
+// Falling back to the bundle path, the chooser layers two signals:
 //
-//   - XRECHNUNG -> the XRechnung CIUS schematron when registered.
-//   - Any other level matching a Factur-X profile bundle entry ->
-//     that profile's schematron, which mirrors what Mustang applies
-//     (CEN EN 16931 + PEPPOL-EN16931 + Factur-X-specific BR-FX-EN-*
-//     rules).
-//   - Otherwise -> the generic EN 16931 baseline.
+//   - The CII payload's
+//     rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID.
+//     Mustang's reference validator routes by this value, applying
+//     the XRechnung overlay whenever the ID carries the "xrechnung"
+//     CIUS marker - including the extended form
+//     "urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_*"
+//     that documents whose XMP claims plain EN 16931 still emit.
+//     litho mirrors that route so the EN 16931 profile schematron's
+//     FX-SCH-A-000026 does not reject XRechnung-extended IDs.
+//   - fx:ConformanceLevel from the XMP packet, used as the final
+//     tie-breaker. XRECHNUNG levels route to the XRechnung CIUS,
+//     anything matching a Factur-X profile bundle entry routes to
+//     that profile, and the EN 16931 baseline catches the rest.
 //
-// Returns (nil, "") when no schema applies.
-func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.PdfDict, v hybridInvoiceVariant, cfg *facturXValidateOpts) (*schematron.Schema, string) {
+// The second return value is the chosen schema's phase string; the
+// third reports whether the schema runs as an overlay (CII-ID route
+// while the XMP claim is not XRECHNUNG). Overlay firings are notice
+// class in Mustang's reference pipeline and need the demoted
+// severity in [checkInvoiceSchematron]. Returns (nil, "", false)
+// when no schema applies.
+func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.PdfDict, invoice invoiceFileSpec, v hybridInvoiceVariant, cfg *facturXValidateOpts) (*schematron.Schema, string, bool) {
 	if cfg.schematron != nil {
-		return cfg.schematron, cfg.schematronPhase
+		return cfg.schematron, cfg.schematronPhase, false
 	}
 	if cfg.schematronBundleEN16931 == nil &&
 		cfg.schematronBundleXRechnung == nil &&
 		len(cfg.schematronBundleFacturXProfiles) == 0 {
-		return nil, ""
+		return nil, "", false
 	}
 	level := ""
 	if xmpBytes := readInvoiceXMP(ctx, doc, catalog); xmpBytes != nil {
 		level = decodeHybridInvoiceXMP(xmpBytes, v).conformanceLevel
 	}
+	if cfg.schematronBundleXRechnung != nil && invoiceClaimsXRechnungCIUS(ctx, doc, invoice, v) {
+		// Overlay mode: the document claims a non-XRechnung profile
+		// in XMP but its CII GuidelineSpecifiedDocumentContextParameter
+		// /ID carries the XRechnung CIUS marker. Mustang's reference
+		// pipeline routes the XRechnung schematron in advisory mode
+		// for these, so every firing surfaces as a notice rather
+		// than an error.
+		return cfg.schematronBundleXRechnung, "", level != "XRECHNUNG"
+	}
 	if level == "XRECHNUNG" && cfg.schematronBundleXRechnung != nil {
-		return cfg.schematronBundleXRechnung, ""
+		return cfg.schematronBundleXRechnung, "", false
 	}
 	if s, ok := cfg.schematronBundleFacturXProfiles[level]; ok && s != nil {
-		return s, ""
+		return s, "", false
 	}
-	return cfg.schematronBundleEN16931, ""
+	return cfg.schematronBundleEN16931, "", false
+}
+
+// invoiceClaimsXRechnungCIUS reports whether the embedded CII payload
+// declares an XRechnung CIUS in its GuidelineSpecifiedDocumentContextParameter
+// /ID. Used by pickSchematron to override the XMP-derived
+// conformance level when the document carries the XRechnung CIUS
+// marker - which Mustang's reference pipeline always treats as an
+// XRechnung overlay regardless of the XMP claim.
+func invoiceClaimsXRechnungCIUS(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) bool {
+	if !variantHasCIIv100Payload(v) || !invoice.found || invoice.streamDict == nil {
+		return false
+	}
+	stream, err := document.ResolveStream(ctx, doc, invoice.streamRef)
+	if err != nil {
+		return false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	id := scanCIIProfileID(data)
+	if id == "" {
+		return false
+	}
+	return strings.Contains(strings.ToLower(id), "xrechnung")
+}
+
+// scanCIIProfileID extracts the
+// CrossIndustryInvoice/ExchangedDocumentContext/GuidelineSpecifiedDocumentContextParameter/ID
+// leaf text and returns its trimmed value, or empty when the field is
+// absent or the payload is not well-formed CII. The decoder stops at
+// the first match so an early return covers the typical case where
+// the document context sits near the document head.
+func scanCIIProfileID(payload []byte) string {
+	dec := xml.NewDecoder(bytes.NewReader(payload))
+	dec.Strict = false
+	dec.Entity = xml.HTMLEntity
+
+	root := xml.Name{Space: ciiRootNS, Local: "CrossIndustryInvoice"}
+	docContext := xml.Name{Space: ciiRootNS, Local: "ExchangedDocumentContext"}
+	guideline := xml.Name{Space: ciiRamNS, Local: "GuidelineSpecifiedDocumentContextParameter"}
+	idElem := xml.Name{Space: ciiRamNS, Local: "ID"}
+
+	var path ciiPath
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			path = path.push(t.Name)
+			if path.matches(root, docContext, guideline, idElem) {
+				return readLeafText(dec, t.Name)
+			}
+		case xml.EndElement:
+			path = path.pop()
+		}
+	}
 }
 
 // checkInvoiceSchematron runs the supplied Schematron schema against
@@ -400,7 +479,7 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 // checkInvoiceCIIXSD: only the Factur-X 1.0+ / ZUGFeRD 2.1+ variant
 // carries a CII payload that the EN 16931 / XRechnung Schematron
 // knows how to validate.
-func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string, overrides map[string]schematron.RuleOverride) ([]Violation, []error) {
+func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string, overlay bool, overrides map[string]schematron.RuleOverride) ([]Violation, []error) {
 	if schema == nil {
 		return nil, nil
 	}
@@ -434,8 +513,16 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	}
 	out := make([]Violation, 0, len(violations))
 	for _, sv := range violations {
+		rule := ruleForSchematronSeverity(sv)
+		if overlay && rule == Rule_cii_sch_Fatal {
+			// Overlay mode demotes every fatal firing to warning so
+			// the validator's overall verdict matches Mustang's
+			// notice-class handling of overlay schematrons applied
+			// to non-claiming documents.
+			rule = Rule_cii_sch_Warning
+		}
 		out = append(out, Violation{
-			Rule:    ruleForSchematronSeverity(sv),
+			Rule:    rule,
 			Context: formatSchematronContext(v, sv),
 		})
 	}

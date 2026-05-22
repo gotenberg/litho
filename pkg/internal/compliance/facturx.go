@@ -274,10 +274,10 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	if cfg.xsdSchema != nil {
 		hybrid = append(hybrid, checkInvoiceCIIXSD(ctx, doc, invoice, v, cfg.xsdSchema)...)
 	}
-	schSchema, schPhase := pickSchematron(ctx, doc, catalog, v, &cfg)
+	schSchema, schPhase, schOverlay := pickSchematron(ctx, doc, catalog, invoice, v, &cfg)
 	var schAdvisories []error
 	if schSchema != nil {
-		schViolations, advisories := checkInvoiceSchematron(ctx, doc, invoice, v, schSchema, schPhase, cfg.schematronOverrides)
+		schViolations, advisories := checkInvoiceSchematron(ctx, doc, invoice, v, schSchema, schPhase, schOverlay, cfg.schematronOverrides)
 		hybrid = append(hybrid, schViolations...)
 		schAdvisories = advisories
 	}
