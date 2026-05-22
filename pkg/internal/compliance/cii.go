@@ -435,7 +435,7 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	out := make([]Violation, 0, len(violations))
 	for _, sv := range violations {
 		out = append(out, Violation{
-			Rule:    ruleForSchematronSeverity(sv.Flag),
+			Rule:    ruleForSchematronSeverity(sv),
 			Context: formatSchematronContext(v, sv),
 		})
 	}
@@ -455,14 +455,28 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	return out, advisories
 }
 
-// ruleForSchematronSeverity picks Fatal versus Warning based on the
-// Schematron flag attribute. EN 16931 uses "fatal" for blockers and
-// "warning"/"info" for softer signals; anything that does not match
-// "warning" or "info" defaults to Fatal so unknown severities surface
+// ruleForSchematronSeverity picks Fatal versus Warning for one fired
+// Schematron rule. Three cases land in Warning:
+//
+//   - flag="warning" or flag="info" (EN 16931 marks softer signals
+//     this way);
+//   - <sch:report> firings without an explicit fatal flag - the
+//     reference Mustang validator emits these as <svrl:successful-report>
+//     notices that never flip the validity bit, so litho mirrors that
+//     stance to avoid spurious failures on profile-restriction reports
+//     (e.g. "Attribute @schemeID is marked as not used in the given
+//     context").
+//
+// Everything else defaults to Fatal so unknown severities surface
 // loudly rather than being silently downgraded.
-func ruleForSchematronSeverity(flag string) Rule {
-	switch flag {
+func ruleForSchematronSeverity(sv schematron.Violation) Rule {
+	switch sv.Flag {
 	case "warning", "info":
+		return Rule_cii_sch_Warning
+	case "fatal":
+		return Rule_cii_sch_Fatal
+	}
+	if sv.Negate {
 		return Rule_cii_sch_Warning
 	}
 	return Rule_cii_sch_Fatal

@@ -251,11 +251,16 @@ func validateFacturXWithLitho(ctx context.Context, pdfPath string) ([]string, er
 		// Mirror Mustang's overall pass/fail by counting every
 		// Factur-X-layer failure that litho can detect: wrapper,
 		// CII spine, CII XSD, and schematron. PDF/A-3 base aggregation
-		// stays out so the compliance feature owns it. Schematron
-		// firings inflate FPs because Mustang labels them notices
-		// rather than fail; the trade-off lands net more matched
-		// fixtures than excluding them entirely.
+		// stays out so the compliance feature owns it. CII_SCH test 2
+		// covers warning- and report-class Schematron firings, which
+		// Mustang surfaces as <svrl:successful-report> notices and
+		// never lets flip the valid bit; excluding them mirrors that
+		// stance and clears the FP inflation profile-restriction
+		// reports were causing.
 		if strings.Contains(msg, "PDF/A-3 violations on the archival base") {
+			continue
+		}
+		if strings.Contains(msg, "clause CII_SCH test 2") {
 			continue
 		}
 		if !strings.Contains(msg, "clause INVOICE") &&
