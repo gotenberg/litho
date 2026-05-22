@@ -314,13 +314,26 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 		if en16931Sch != nil || xrechnungSch != nil {
 			opts = append(opts, compliance.WithFacturXSchematronBundle(en16931Sch, xrechnungSch))
 		}
-		// Factur-X profile schematrons are available via
-		// [cii_schematron.LoadFacturXProfile] but stay opt-in: the
-		// rules reference an external code database through the
-		// document() XPath function, which antchfx/xpath does not
-		// implement. Apply via [compliance.WithFacturXProfileSchematronBundle]
-		// only when the caller supplies a document() resolver or
-		// pre-substitutes the code-list lookups.
+		// Factur-X profile schematrons mirror Mustang's per-profile
+		// rule set (CEN + PEPPOL + BR-FX-EN-*). The upstream rules
+		// reference a code database through XPath document(); the
+		// generator at cmd/gen-facturx-schematron pre-substitutes
+		// those lookups with inline contains() membership tests so
+		// the bundle runs cleanly under antchfx/xpath.
+		profileSchematrons := map[string]*schematron.Schema{}
+		for _, level := range []string{"MINIMUM", "BASIC WL", "BASIC", "EN 16931", "EXTENDED"} {
+			s, err := cii_schematron.LoadFacturXProfile(ctx, level)
+			if err != nil {
+				r.doc.Logger.Debug("schematron: bundled Factur-X profile unavailable", "level", level, "err", err)
+				continue
+			}
+			if s != nil {
+				profileSchematrons[level] = s
+			}
+		}
+		if len(profileSchematrons) > 0 {
+			opts = append(opts, compliance.WithFacturXProfileSchematronBundle(profileSchematrons))
+		}
 	}
 	// Always wire the bundled Go rule overrides so rules that the
 	// XPath engine cannot handle (BR-DE-19's IBAN checksum is the
