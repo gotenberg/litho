@@ -236,6 +236,13 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 		// lets evaluate per context match inside evaluateRule because
 		// they may depend on the matched node.
 		contextExpr := substituteLets(rule.Context, patternVars)
+		// ISO Schematron 5.4.3: a rule's context is shorthand for
+		// "//<context>" so the rule fires on every descendant of the
+		// document that matches. A bare relative path like
+		// "ram:URIUniversalCommunication/ram:URIID" would otherwise
+		// resolve to children of the document node and silently miss
+		// every actual match.
+		contextExpr = anchorRuleContext(contextExpr)
 		nodes, err := selectNodes(doc, contextExpr, cache)
 		if err != nil {
 			// Whole rule unevaluable: record one SkippedRule per
@@ -445,6 +452,26 @@ func peelQuantifier(expr string) (kind, varName, path, body string, ok bool) {
 		return kw, v, path, body, true
 	}
 	return "", "", "", "", false
+}
+
+// anchorRuleContext prefixes the rule context expression with "//"
+// when it starts with a name token, matching the ISO Schematron
+// implicit-descendant semantics. Absolute paths ("/abs" or "//abs"),
+// expressions wrapped in parens, predicates, or already-prefixed
+// forms pass through unchanged.
+func anchorRuleContext(expr string) string {
+	s := strings.TrimLeft(expr, " \t\n")
+	if s == "" {
+		return expr
+	}
+	switch s[0] {
+	case '/', '(', '$', '.', '*':
+		return expr
+	}
+	if isNameStart(s[0]) {
+		return "//" + s
+	}
+	return expr
 }
 
 // documentRoot returns the topmost ancestor of n. Used by

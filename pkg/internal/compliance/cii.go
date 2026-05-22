@@ -40,13 +40,26 @@ type ciiPresence struct {
 	grandTotalAmount      string
 }
 
+// variantHasCIIv100Payload reports whether v carries a CII payload
+// using the UN/CEFACT v100 namespace
+// (urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100).
+// Factur-X 1.0+ / ZUGFeRD 2.1+ and ZUGFeRD 2.0 share that schema;
+// legacy ZUGFeRD 1.0 uses urn:ferd:CrossIndustryDocument:invoice:1p0:*
+// instead, so its CII spine rules and Schematron pass have to stay
+// off to avoid emitting false positives.
+func variantHasCIIv100Payload(v hybridInvoiceVariant) bool {
+	return v.namespaceURI == variantFacturX.namespaceURI ||
+		v.namespaceURI == variantZUGFeRD20.namespaceURI
+}
+
 // checkInvoiceCII reads the embedded invoice stream and runs the CII
-// structural rules. The function is variant-aware: only the Factur-X
-// 1.0+ / ZUGFeRD 2.1+ variant currently has a CII rule set. Legacy
-// ZUGFeRD generations short-circuit because their CII shape differs
-// enough that the spine checks would emit false positives.
+// structural rules. The function is variant-aware: ZUGFeRD 2.0 and
+// the Factur-X 1.0+ / ZUGFeRD 2.1+ variants share the CII v100
+// payload that the spine rules cover. Legacy ZUGFeRD 1.0 short-
+// circuits because its CII shape differs enough that the spine
+// checks would emit false positives.
 func checkInvoiceCII(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) []Violation {
-	if v.namespaceURI != variantFacturX.namespaceURI {
+	if !variantHasCIIv100Payload(v) {
 		return nil
 	}
 	if !invoice.found {
@@ -280,7 +293,7 @@ func checkInvoiceCIIXSD(ctx context.Context, doc *document.Document, invoice inv
 	if schema == nil {
 		return nil
 	}
-	if v.namespaceURI != variantFacturX.namespaceURI {
+	if !variantHasCIIv100Payload(v) {
 		return nil
 	}
 	if !invoice.found || invoice.streamDict == nil {
@@ -384,7 +397,7 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	if schema == nil {
 		return nil, nil
 	}
-	if v.namespaceURI != variantFacturX.namespaceURI {
+	if !variantHasCIIv100Payload(v) {
 		return nil, nil
 	}
 	if !invoice.found || invoice.streamDict == nil {

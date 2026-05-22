@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 	"github.com/gotenberg/litho/pkg/plugins/jbig2"
 	"github.com/gotenberg/litho/pkg/plugins/jpx"
@@ -197,10 +198,21 @@ type schematronMismatch struct {
 	LithoFailures []string `json:"litho_failures,omitempty"`
 }
 
-// validateFacturXFailures opens pdfPath, runs ValidateFacturX, and
-// returns the INVOICE-or-CII rule descriptions. The PDF/A-3 base
-// aggregator surface is filtered out so this feature only scores
-// rule classes that overlap with Schematron checks.
+// validateFacturXFailures opens pdfPath, runs the appropriate
+// validator entry point, and returns only the Schematron-clause
+// rule descriptions. INVOICE-class failures (filename, AF, XMP,
+// embedded stream Subtype) belong to the facturx-validity feature,
+// and PDF/A-3 base failures belong to the compliance feature; both
+// stay out of this view so a single fixture's defects do not
+// double-count across cells.
+//
+// Dispatch by ZUGFeRD generation: ValidateFacturX targets the v2.1+
+// (urn:factur-x.eu:1p0:*) variant and silently skips the schematron
+// pass when the embedded invoice filename does not match. Legacy
+// ZUGFeRD 1.0 and 2.0 fixtures use distinct filenames and namespaces
+// and need the matching entry point; the corpus encodes the
+// generation in the file basename ("v1__", "...2p0...") so the
+// dispatch reads from there.
 func validateFacturXFailures(ctx context.Context, pdfPath string) ([]string, error) {
 	f, err := os.Open(pdfPath)
 	if err != nil {
@@ -222,17 +234,23 @@ func validateFacturXFailures(ctx context.Context, pdfPath string) ([]string, err
 	}
 	defer r.Close()
 
-	errs, err := r.ValidateFacturX(ctx)
+	base := filepath.Base(pdfPath)
+	var errs []error
+	switch {
+	case strings.HasPrefix(base, "v1__"):
+		errs, err = r.ValidateZUGFeRD(ctx, models.ZUGFeRD1)
+	case strings.Contains(base, "zugferd_2p0_") || strings.Contains(base, "zugferd_2.0_"):
+		errs, err = r.ValidateZUGFeRD(ctx, models.ZUGFeRD2)
+	default:
+		errs, err = r.ValidateFacturX(ctx)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("ValidateFacturX: %w", err)
+		return nil, fmt.Errorf("validate: %w", err)
 	}
 	var failures []string
 	for _, e := range errs {
 		msg := e.Error()
-		if !strings.Contains(msg, "clause INVOICE") && !strings.Contains(msg, "clause CII") {
-			continue
-		}
-		if strings.Contains(msg, "PDF/A-3 violations on the archival base") {
+		if !strings.Contains(msg, "clause CII_SCH") {
 			continue
 		}
 		failures = append(failures, msg)
