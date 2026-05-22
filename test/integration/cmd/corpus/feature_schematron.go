@@ -253,13 +253,6 @@ func validateFacturXFailures(ctx context.Context, pdfPath string) ([]string, err
 		if !strings.Contains(msg, "clause CII_SCH") {
 			continue
 		}
-		// Mirror KoSIT's verdict: only fatal-severity firings flip
-		// the document to invalid. Warning- and info-severity rules
-		// still surface from the validator (clause CII_SCH test 2)
-		// but they should not affect the schematron matrix verdict.
-		if strings.Contains(msg, "warning or info severity") {
-			continue
-		}
 		failures = append(failures, msg)
 	}
 	return failures, nil
