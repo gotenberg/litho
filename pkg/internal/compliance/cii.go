@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	cii_schematron "github.com/gotenberg/litho/pkg/internal/compliance/cii_schematron"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/schematron"
@@ -545,14 +546,23 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 // ruleForSchematronSeverity picks Fatal versus Warning for one fired
 // Schematron rule. Three cases land in Warning:
 //
-//   - flag="warning" or flag="info" (EN 16931 marks softer signals
-//     this way);
+//   - flag="warning" or flag="info" (the schema author tagged the
+//     rule as soft on purpose; the bundled Factur-X profile
+//     schematrons mark "still status warning" PEPPOL rules this way);
 //   - <sch:report> firings without an explicit fatal flag - the
 //     reference Mustang validator emits these as <svrl:successful-report>
 //     notices that never flip the validity bit, so litho mirrors that
 //     stance to avoid spurious failures on profile-restriction reports
 //     (e.g. "Attribute @schemeID is marked as not used in the given
-//     context").
+//     context");
+//   - the assertion message carries a "[RULE-ID]" prefix whose
+//     EN 16931 baseline entry has flag="warning" or flag="info".
+//     The bundled Factur-X profile schematrons rebadge baseline
+//     rules under fresh FX-SCH-A-* ids and lose the baseline's flag
+//     attribute, so rules like [CII-SR-465] silently flip Fatal in
+//     per-profile mode. Inheriting the baseline flag restores the
+//     reference severity without forcing a regeneration of the
+//     bundled .sch files.
 //
 // Everything else defaults to Fatal so unknown severities surface
 // loudly rather than being silently downgraded.
@@ -566,7 +576,42 @@ func ruleForSchematronSeverity(sv schematron.Violation) Rule {
 	if sv.Negate {
 		return Rule_cii_sch_Warning
 	}
+	if id := baselineRuleID(sv.Message); id != "" {
+		if flag, ok := cii_schematron.BaselineFlagForRule(id); ok {
+			switch flag {
+			case "warning", "info":
+				return Rule_cii_sch_Warning
+			}
+		}
+	}
 	return Rule_cii_sch_Fatal
+}
+
+// baselineRuleID extracts the "[RULE-ID]" prefix the bundled Factur-X
+// profile schematrons embed in assertion messages, mapping a per-
+// profile firing back to its EN 16931 baseline rule id. Returns the
+// empty string when no bracketed identifier sits at the head of msg
+// or when the brackets carry something other than an upper-case
+// identifier token. The lookup is non-greedy so a message like
+// "[CII-SR-465]-Only one BT-41 element is allowed" yields
+// "CII-SR-465" cleanly.
+func baselineRuleID(msg string) string {
+	s := strings.TrimLeft(msg, " \t\n\r")
+	if s == "" || s[0] != '[' {
+		return ""
+	}
+	end := strings.IndexByte(s, ']')
+	if end <= 1 {
+		return ""
+	}
+	id := s[1:end]
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if c != '-' && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
+			return ""
+		}
+	}
+	return id
 }
 
 // formatSchematronContext renders one fired assertion into the

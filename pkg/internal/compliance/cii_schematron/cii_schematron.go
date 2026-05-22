@@ -11,8 +11,10 @@
 package cii_schematron
 
 import (
+	"bytes"
 	"context"
 	"embed"
+	"encoding/xml"
 	"fmt"
 	"io/fs"
 	"sync"
@@ -149,6 +151,76 @@ func LoadFacturXProfile(ctx context.Context, level string) (*schematron.Schema, 
 // corresponding bundle root path. Returns ("", false) for unknown
 // or unsupported levels (XRECHNUNG routes through LoadXRechnung;
 // every other free-form level falls back to LoadDefault).
+// baselineFlagsOnce + baselineFlags carry the lazy-loaded
+// {EN 16931 rule id -> flag attribute} map used by
+// [BaselineFlagForRule]. The bundled FACTUR-X profile schematrons
+// rebadge CEN EN 16931 rules under fresh FX-SCH-A-* ids but lose the
+// flag attribute the baseline carries, so rules that should fire
+// non-fatal (e.g. CII-SR-465's "[CII-SR-465]-Only one BT-41
+// element is allowed" warning) silently flip the validity bit in
+// per-profile mode. The lookup mirrors the baseline flag so the
+// severity mapper in pkg/internal/compliance honours it.
+var (
+	baselineFlagsOnce sync.Once
+	baselineFlags     map[string]string
+)
+
+// BaselineFlagForRule returns the EN 16931 baseline schematron's
+// flag attribute for the supplied rule id (the bracketed prefix that
+// appears in [CII-SR-465] / [BR-CO-10] / etc. message text). The
+// lookup is case-sensitive and the empty string maps to "no flag /
+// implicit fatal" - distinct from the absent-key signal returned
+// via ok=false.
+//
+// The compliance severity mapper consults this so per-profile rules
+// inherit the baseline's flag classification without forcing a
+// regeneration of the bundled Factur-X profile schematrons. Returns
+// "", false when id is unknown to the baseline (BR-FX-EN-*,
+// PEPPOL-EN16931-*, etc. that exist only in extensions).
+func BaselineFlagForRule(id string) (string, bool) {
+	baselineFlagsOnce.Do(loadBaselineFlags)
+	flag, ok := baselineFlags[id]
+	return flag, ok
+}
+
+func loadBaselineFlags() {
+	data, err := bundledFS.ReadFile(EN16931Root)
+	if err != nil {
+		return
+	}
+	// Streaming XML decoder keeps the parse cost low and avoids a
+	// second full schematron-tree allocation. We only care about
+	// <assert>/<report> id and flag attributes regardless of nesting.
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	out := make(map[string]string, 1024)
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if start.Name.Local != "assert" && start.Name.Local != "report" {
+			continue
+		}
+		var id, flag string
+		for _, a := range start.Attr {
+			switch a.Name.Local {
+			case "id":
+				id = a.Value
+			case "flag":
+				flag = a.Value
+			}
+		}
+		if id != "" {
+			out[id] = flag
+		}
+	}
+	baselineFlags = out
+}
+
 func facturxProfileRoot(level string) (string, bool) {
 	switch level {
 	case "MINIMUM":
