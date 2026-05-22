@@ -113,10 +113,9 @@ while IFS= read -r -d '' pdf; do
   printf '%s' "$report_body" > "$report_file"
 
   # Three-way detection markers. KoSIT's report shape varies across
-  # releases; the patterns below cover the published 1.x reports:
-  # rejected scenario block, accepted scenario block, or a top-level
-  # marker indicating no scenario matched.
-  if echo "$report_body" | grep -qiE '<acceptedBy>\s*</acceptedBy>|no scenario matched|no applicable scenario'; then
+  # releases; the patterns below cover both the textual phrases from
+  # 1.5.x and the camelCase XML element introduced in 1.6.x.
+  if echo "$report_body" | grep -qiE '<acceptedBy>\s*</acceptedBy>|no scenario matched|no applicable scenario|noScenarioMatched'; then
     verdict="skip"
     reason="no scenario applicable"
     jq -n --arg file "$base" --arg verdict "$verdict" --arg reason "$reason" --rawfile report "$report_file" \

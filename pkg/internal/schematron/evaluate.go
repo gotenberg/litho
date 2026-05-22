@@ -338,7 +338,19 @@ func runAssertion(ctx context.Context, a *Assertion, n *xmlquery.Node, vars map[
 			return fn(ctx, n)
 		}
 	}
-	return evalBooleanWithQuantifier(substituteLets(a.Test, vars), n, cache)
+	expr := substituteLets(a.Test, vars)
+	// Prefix every top-level relative path with the rule context's
+	// positional XPath, then evaluate against the document root.
+	// antchfx/xpath silently breaks "/abs" and "//abs" paths when the
+	// navigator's current node is not the document root, so the
+	// expression is rewritten and the navigator re-rooted at the
+	// document so both absolute and relative paths resolve correctly.
+	prefix := positionalXPath(n)
+	if prefix != "" {
+		expr = prefixRelativePaths(expr, prefix)
+		return evalBooleanWithQuantifier(expr, documentRoot(n), cache)
+	}
+	return evalBooleanWithQuantifier(expr, n, cache)
 }
 
 // evalBooleanWithQuantifier peels a top-level XPath 2.0 quantifier
@@ -444,6 +456,287 @@ func documentRoot(n *xmlquery.Node) *xmlquery.Node {
 		n = n.Parent
 	}
 	return n
+}
+
+// positionalXPath builds a document-root-anchored XPath that
+// resolves uniquely to n. The path uses each ancestor's element
+// name plus a 1-based positional predicate among siblings sharing
+// the same name, e.g. "/rsm:CrossIndustryInvoice/rsm:SupplyChain
+// TradeTransaction/ram:IncludedSupplyChainTradeLineItem[2]".
+// Returns the empty string when n is the document node or nil so
+// callers can skip the rewrite.
+//
+// Used by [runAssertion] so the test expression can be evaluated
+// against the document root with relative paths prefixed; antchfx's
+// absolute-path resolution from non-root contexts is broken, and
+// re-rooting the navigator is the cleanest workaround.
+func positionalXPath(n *xmlquery.Node) string {
+	if n == nil || n.Parent == nil {
+		return ""
+	}
+	var parts []string
+	for cur := n; cur != nil && cur.Parent != nil; cur = cur.Parent {
+		if cur.Type != xmlquery.ElementNode {
+			continue
+		}
+		name := cur.Data
+		if cur.Prefix != "" {
+			name = cur.Prefix + ":" + cur.Data
+		}
+		pos := 1
+		for sib := cur.PrevSibling; sib != nil; sib = sib.PrevSibling {
+			if sib.Type != xmlquery.ElementNode {
+				continue
+			}
+			sibName := sib.Data
+			if sib.Prefix != "" {
+				sibName = sib.Prefix + ":" + sib.Data
+			}
+			if sibName == name {
+				pos++
+			}
+		}
+		parts = append([]string{fmt.Sprintf("%s[%d]", name, pos)}, parts...)
+	}
+	return "/" + strings.Join(parts, "/")
+}
+
+// prefixRelativePaths walks expr and prepends "prefix/" to every
+// top-level relative path-start. Absolute paths ("/abs", "//abs"),
+// variables ("$var"), string literals, numeric literals, function
+// calls, and paths inside a predicate "[...]" are left alone -
+// predicates resolve relative to the matched step, not the rule
+// context.
+//
+// The rewriter recognises path-starts at:
+//
+//   - The beginning of the expression.
+//   - Immediately after "(", "[", or "," (function args, predicates,
+//     grouping).
+//   - Immediately after an arithmetic / comparison / boolean operator
+//     keyword.
+//
+// At a path-start, a name-character or "." or "@" introduces a
+// relative path step. A name immediately followed by "(" is a
+// function call; the rewriter looks inside the function arguments
+// for its own path-starts but leaves the function name alone.
+//
+// XPath 1.0 is regular enough that a hand-rolled tokenizer is
+// reliable for the constructs Schematron rules use; a full parser is
+// not necessary for the bundled EN 16931 / XRechnung sets.
+func prefixRelativePaths(expr, prefix string) string {
+	if prefix == "" {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr) + 32)
+
+	bracketDepth := 0
+	inStr := byte(0)
+	pathStart := true
+
+	for i := 0; i < len(expr); {
+		c := expr[i]
+		if inStr != 0 {
+			b.WriteByte(c)
+			if c == inStr {
+				inStr = 0
+			}
+			i++
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			b.WriteByte(c)
+			inStr = c
+			i++
+			continue
+		case '[':
+			bracketDepth++
+			b.WriteByte(c)
+			i++
+			pathStart = true
+			continue
+		case ']':
+			bracketDepth--
+			b.WriteByte(c)
+			i++
+			pathStart = false
+			continue
+		case '(', ',':
+			b.WriteByte(c)
+			i++
+			pathStart = true
+			continue
+		case ')':
+			b.WriteByte(c)
+			i++
+			pathStart = false
+			continue
+		case ' ', '\t', '\n':
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		if op, opLen := matchInfixOperator(expr, i); op != "" {
+			b.WriteString(expr[i : i+opLen])
+			i += opLen
+			pathStart = true
+			continue
+		}
+		if !pathStart {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		if bracketDepth > 0 {
+			b.WriteByte(c)
+			i++
+			pathStart = false
+			continue
+		}
+		switch {
+		case c == '/':
+			b.WriteByte(c)
+			i++
+		case c == '$':
+			b.WriteByte(c)
+			i++
+		case c >= '0' && c <= '9':
+			b.WriteByte(c)
+			i++
+		case c == '.':
+			b.WriteString(prefix)
+			b.WriteByte('/')
+			b.WriteByte(c)
+			i++
+		case c == '@':
+			b.WriteString(prefix)
+			b.WriteByte('/')
+			b.WriteByte(c)
+			i++
+		case isNameStart(c):
+			nameEnd := scanQName(expr, i)
+			name := expr[i:nameEnd]
+			j := nameEnd
+			for j < len(expr) && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n') {
+				j++
+			}
+			if j < len(expr) && expr[j] == '(' {
+				b.WriteString(name)
+				i = nameEnd
+				pathStart = false
+				continue
+			}
+			if isXPathKeyword(name) {
+				b.WriteString(name)
+				i = nameEnd
+				continue
+			}
+			b.WriteString(prefix)
+			b.WriteByte('/')
+			b.WriteString(name)
+			i = nameEnd
+		default:
+			b.WriteByte(c)
+			i++
+		}
+		pathStart = false
+	}
+	return b.String()
+}
+
+// matchInfixOperator detects an XPath infix operator starting at
+// position i in expr. Returns the operator text and its byte length,
+// or ("", 0) when no operator starts at i. Both punctuation
+// operators (=, !=, <, <=, >, >=, +, -, *, |) and keyword operators
+// (and, or, mod, div) are recognised; keyword operators require a
+// preceding whitespace and a trailing non-name character so a
+// substring like "land" or "more" is not mistaken for one.
+func matchInfixOperator(expr string, i int) (string, int) {
+	switch expr[i] {
+	case '=':
+		return "=", 1
+	case '!':
+		if i+1 < len(expr) && expr[i+1] == '=' {
+			return "!=", 2
+		}
+	case '<':
+		if i+1 < len(expr) && expr[i+1] == '=' {
+			return "<=", 2
+		}
+		return "<", 1
+	case '>':
+		if i+1 < len(expr) && expr[i+1] == '=' {
+			return ">=", 2
+		}
+		return ">", 1
+	case '+', '*', '|':
+		return string(expr[i]), 1
+	case '-':
+		if i > 0 && isXPathNameChar(expr[i-1]) {
+			return "", 0
+		}
+		return "-", 1
+	}
+	for _, kw := range []string{"and", "or", "mod", "div"} {
+		if !strings.HasPrefix(expr[i:], kw) {
+			continue
+		}
+		if i > 0 && isXPathNameChar(expr[i-1]) {
+			continue
+		}
+		end := i + len(kw)
+		if end < len(expr) && isXPathNameChar(expr[end]) {
+			continue
+		}
+		return kw, len(kw)
+	}
+	return "", 0
+}
+
+// scanQName walks one qualified XPath name (optional prefix + local
+// name) starting at i and returns the index just past it. Returns i
+// when no name starts at that position.
+func scanQName(expr string, i int) int {
+	if i >= len(expr) || !isNameStart(expr[i]) {
+		return i
+	}
+	j := i + 1
+	for j < len(expr) && (isXPathNameChar(expr[j]) || expr[j] == ':') {
+		j++
+	}
+	return j
+}
+
+// isXPathKeyword reports whether name is an XPath / XPath 2.0
+// keyword that should not be prefixed as a path step. The list
+// covers the keywords the bundled Schematron rules use; missing
+// entries surface as path-prefix errors immediately, so the set is
+// easy to extend.
+func isXPathKeyword(name string) bool {
+	switch name {
+	case "every", "some", "in", "satisfies", "for", "return",
+		"if", "then", "else", "to", "and", "or", "mod", "div",
+		"true", "false":
+		return true
+	}
+	return false
+}
+
+// isNameStart reports whether c can begin an XPath QName. XPath
+// names start with a letter or underscore; subsequent characters
+// also allow digit, hyphen, period, and colon (for ns prefixes).
+func isNameStart(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z':
+		return true
+	case c >= 'A' && c <= 'Z':
+		return true
+	case c == '_':
+		return true
+	}
+	return false
 }
 
 // xpathStringLiteral wraps s as an XPath string literal. Apostrophes
