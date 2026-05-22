@@ -56,13 +56,25 @@ RUN curl -fSL -o /opt/mustang.jar \
 ARG KOSIT_VERSION=1.6.2
 ARG XRECHNUNG_CONFIG_TAG=v2026-01-31
 ARG XRECHNUNG_CONFIG_ASSET=xrechnung-3.0.2-validator-configuration-2026-01-31.zip
+ARG EN16931_VERSION=1.3.16
 RUN curl -fSL -o /opt/kosit.jar \
   "https://github.com/itplr-kosit/validator/releases/download/v${KOSIT_VERSION}/validator-${KOSIT_VERSION}-standalone.jar" \
   && curl -fSL -o /tmp/xrechnung-config.zip \
     "https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/${XRECHNUNG_CONFIG_TAG}/${XRECHNUNG_CONFIG_ASSET}" \
   && mkdir -p /opt/kosit-config \
   && unzip -q /tmp/xrechnung-config.zip -d /opt/kosit-config \
-  && rm /tmp/xrechnung-config.zip
+  && rm /tmp/xrechnung-config.zip \
+  # Swap KoSIT's bundled EN 16931 CII XSLT (v1.3.15 in the
+  # 2026-01-31 release) for the v1.3.16 release litho's
+  # bundled schematron also tracks. Keeps the matrix comparing
+  # the same rule semantics on both sides; without the swap,
+  # KoSIT applies the older rule list and disagreement reads
+  # as a litho coverage gap instead of as version drift.
+  && curl -fSL -o /tmp/en16931-cii.zip \
+    "https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/download/validation-${EN16931_VERSION}/en16931-cii-${EN16931_VERSION}.zip" \
+  && unzip -p /tmp/en16931-cii.zip "xslt/EN16931-CII-validation.xslt" \
+    > /opt/kosit-config/resources/cii/16b/xsl/EN16931-CII-validation.xsl \
+  && rm /tmp/en16931-cii.zip
 
 WORKDIR /work
 COPY entrypoint.sh ./
