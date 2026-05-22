@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -102,19 +103,36 @@ type hybridInvoiceVariant struct {
 	namespaceURI    string
 	namespacePrefix string
 	documentVersion string
-	allowedLevels   map[string]bool
-	conflictNames   []string
+	// altVersions lists additional acceptable values for the XMP
+	// Version property. Real-world producers vary on whether they
+	// write the metadata schema number ("1.0") or the spec version
+	// ("2p0"); a non-empty altVersions list mirrors Mustang's
+	// lenient stance.
+	altVersions []string
+	// altRelationships lists additional acceptable values for the
+	// embedded filespec's /AFRelationship. Factur-X 1.0+ mandates
+	// /Data; many real-world producers carry over /Alternative from
+	// ZUGFeRD 2.0 and Mustang accepts either.
+	altRelationships []string
+	allowedLevels    map[string]bool
+	conflictNames    []string
 }
 
 //nolint:gochecknoglobals // immutable variant descriptors.
 var (
 	variantFacturX = hybridInvoiceVariant{
-		label:           "Factur-X 1.0+/ZUGFeRD 2.1+",
-		fileName:        "factur-x.xml",
-		relationship:    "Data",
-		namespaceURI:    "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#",
-		namespacePrefix: "fx",
+		label:            "Factur-X 1.0+/ZUGFeRD 2.1+",
+		fileName:         "factur-x.xml",
+		relationship:     "Data",
+		altRelationships: []string{"Alternative"},
+		namespaceURI:     "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#",
+		namespacePrefix:  "fx",
+		// fx:Version is the metadata extension schema version, not
+		// the spec version. Factur-X 1.0.07 fixes it at "1.0";
+		// some producers reuse the spec version "2.1" instead and
+		// Mustang accepts either.
 		documentVersion: "1.0",
+		altVersions:     []string{"2.1"},
 		allowedLevels: map[string]bool{
 			"MINIMUM": true, "BASIC WL": true, "BASIC": true,
 			"EN 16931": true, "EXTENDED": true, "XRECHNUNG": true,
@@ -127,9 +145,20 @@ var (
 		relationship:    "Alternative",
 		namespaceURI:    "urn:zugferd:pdfa:CrossIndustryDocument:invoice:2p0#",
 		namespacePrefix: "zf",
+		// ZUGFeRD 2.0 producers split on the zf:Version value: some
+		// follow the spec letter ("2p0"), others reuse the metadata
+		// schema number ("1.0"). Mustang accepts either; tolerating
+		// both here matches that.
 		documentVersion: "2p0",
+		altVersions:     []string{"1.0"},
+		// ZUGFeRD 2.0 introduced the EN 16931 (CIUS) profile and the
+		// MINIMUM / BASIC WL / XRECHNUNG levels alongside the legacy
+		// BASIC / COMFORT / EXTENDED that v1 carried. The Mustang
+		// reference accepts all six.
 		allowedLevels: map[string]bool{
-			"MINIMUM": true, "BASIC": true, "COMFORT": true, "EXTENDED": true,
+			"MINIMUM": true, "BASIC WL": true, "BASIC": true,
+			"EN 16931": true, "COMFORT": true, "EXTENDED": true,
+			"XRECHNUNG": true,
 		},
 		conflictNames: []string{"factur-x.xml", "ZUGFeRD-invoice.xml"},
 	}
@@ -139,7 +168,10 @@ var (
 		relationship:    "Alternative",
 		namespaceURI:    "urn:ferd:pdfa:CrossIndustryDocument:invoice:1p0#",
 		namespacePrefix: "zf",
+		// 4s4u and Intarsys ZUGFeRD 1.0 PDFs ship zf:Version = "1.0"
+		// even though the spec letter is "1p0". Mustang accepts both.
 		documentVersion: "1p0",
+		altVersions:     []string{"1.0"},
 		allowedLevels: map[string]bool{
 			"BASIC": true, "COMFORT": true, "EXTENDED": true,
 		},
@@ -337,10 +369,13 @@ func checkInvoiceAFRelationship(ctx context.Context, doc *document.Document, inv
 		return failf(Rule_invoice_AFRelationship, "%s: filespec object %d missing /AFRelationship", v.label, invoice.objNum)
 	}
 	got, err := document.ResolveName(ctx, doc, afObj)
-	if err != nil || string(got) != v.relationship {
-		return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship = %q, want %q", v.label, invoice.objNum, got, v.relationship)
+	if err != nil {
+		return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship unreadable: %v", v.label, invoice.objNum, err)
 	}
-	return nil
+	if string(got) == v.relationship || slices.Contains(v.altRelationships, string(got)) {
+		return nil
+	}
+	return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship = %q, want %q", v.label, invoice.objNum, got, v.relationship)
 }
 
 func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) []Violation {
@@ -424,7 +459,7 @@ func checkInvoiceXMP(ctx context.Context, doc *document.Document, catalog ast.Pd
 		results = append(results, failf(Rule_invoice_XMPDocumentFileName,
 			"%s: XMP %s:DocumentFileName missing or empty", v.label, v.namespacePrefix)...)
 	}
-	if props.version != v.documentVersion {
+	if props.version != v.documentVersion && !slices.Contains(v.altVersions, props.version) {
 		results = append(results, failf(Rule_invoice_XMPVersion,
 			"%s: XMP %s:Version = %q, want %q", v.label, v.namespacePrefix, props.version, v.documentVersion)...)
 	}
