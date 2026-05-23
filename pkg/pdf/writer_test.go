@@ -2752,9 +2752,13 @@ const facturXSampleCII = `<?xml version="1.0" encoding="UTF-8"?>
     <ram:BusinessProcessSpecifiedDocumentContextParameter>
       <ram:ID>A1</ram:ID>
     </ram:BusinessProcessSpecifiedDocumentContextParameter>
+    <ram:GuidelineSpecifiedDocumentContextParameter>
+      <ram:ID>urn:factur-x.eu:1p0:minimum</ram:ID>
+    </ram:GuidelineSpecifiedDocumentContextParameter>
   </rsm:ExchangedDocumentContext>
   <rsm:ExchangedDocument>
     <ram:ID>INV-001</ram:ID>
+    <ram:TypeCode>380</ram:TypeCode>
     <ram:IssueDateTime>
       <udt:DateTimeString format="102">20260517</udt:DateTimeString>
     </ram:IssueDateTime>
@@ -2764,12 +2768,17 @@ const facturXSampleCII = `<?xml version="1.0" encoding="UTF-8"?>
       <ram:SellerTradeParty>
         <ram:Name>Acme Co</ram:Name>
       </ram:SellerTradeParty>
+      <ram:BuyerTradeParty>
+        <ram:Name>Buyer Inc</ram:Name>
+      </ram:BuyerTradeParty>
     </ram:ApplicableHeaderTradeAgreement>
     <ram:ApplicableHeaderTradeDelivery/>
     <ram:ApplicableHeaderTradeSettlement>
       <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+        <ram:TaxBasisTotalAmount>100.00</ram:TaxBasisTotalAmount>
         <ram:GrandTotalAmount currencyID="EUR">100.00</ram:GrandTotalAmount>
+        <ram:DuePayableAmount>100.00</ram:DuePayableAmount>
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
     </ram:ApplicableHeaderTradeSettlement>
   </rsm:SupplyChainTradeTransaction>
@@ -3329,9 +3338,13 @@ func TestReader_ValidateFacturXReport_PartitionsAdvisories(t *testing.T) {
 
 func TestReader_ValidateFacturX_BundledXSDDefault(t *testing.T) {
 	// No WithCIISchemas override: ValidateFacturX should still run
-	// the XSD pass using the bundled D16B schemas (currently a
-	// placeholder that accepts every child element under the root)
-	// and not surface bogus CII_XSD violations on a valid fixture.
+	// the bundled XSD pass without surfacing bogus CII_XSD violations
+	// on a valid fixture. The fixture is the MINIMUM-profile shape
+	// (header-only, no line items) so the profile-routed XSD picks
+	// the MINIMUM schema and the strict EN 16931 line-item cardinality
+	// stays out of scope; richer profiles require IncludedSupplyChain
+	// TradeLineItem entries the placeholder fixture deliberately
+	// omits.
 	ctx := context.Background()
 	data := writerTestPDF()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -3341,7 +3354,7 @@ func TestReader_ValidateFacturX_BundledXSDDefault(t *testing.T) {
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCII),
-		Level:      models.FacturXEN16931,
+		Level:      models.FacturXMinimum,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
 	}

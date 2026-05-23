@@ -300,13 +300,15 @@ func readLeafText(dec *xml.Decoder, name xml.Name) string {
 // checkInvoiceCIIXSD runs the pure-Go XSD engine against the embedded
 // CII XML and translates each XSD violation into a Violation under
 // the CII_XSD clause. Skips silently when the invoice file is not
-// found or the variant is not Factur-X (the engine's rule set only
-// fits the joint format).
+// found. The gate admits ZUGFeRD 1.0 alongside the v100-family CII
+// variants because the caller pairs the variant with the matching
+// XSD set; the schema's own root element binding catches
+// namespace mismatches.
 func checkInvoiceCIIXSD(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *xsd.Schema) []Violation {
 	if schema == nil {
 		return nil
 	}
-	if !variantHasCIIv100Payload(v) {
+	if !variantHasAnyCIIPayload(v) {
 		return nil
 	}
 	if !invoice.found || invoice.streamDict == nil {
@@ -429,6 +431,33 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return s, "", false
 	}
 	return cfg.schematronBundleEN16931, "", false
+}
+
+// pickXSD resolves the XSD schema to run against the document. The
+// override path (WithFacturXXSD) wins when no profile-specific
+// schema is registered. For ZUGFeRD 1.0 the v1 schema short-
+// circuits because the v100-family bundles do not match v1
+// content. For v2.x documents the chooser tries the Factur-X
+// profile bundle matching the XMP fx:ConformanceLevel first,
+// falling back to the generic D16B schema when no profile match
+// applies.
+//
+// Returns nil when no XSD applies (the validator then runs the
+// structural spine rules without an XSD pass).
+func pickXSD(ctx context.Context, doc *document.Document, catalog ast.PdfDict, v hybridInvoiceVariant, cfg *facturXValidateOpts) *xsd.Schema {
+	if v.namespaceURI == variantZUGFeRD10.namespaceURI {
+		return cfg.xsdSchemaZUGFeRD1
+	}
+	if len(cfg.xsdSchemaFacturXProfiles) > 0 {
+		level := ""
+		if xmpBytes := readInvoiceXMP(ctx, doc, catalog); xmpBytes != nil {
+			level = decodeHybridInvoiceXMP(xmpBytes, v).conformanceLevel
+		}
+		if s, ok := cfg.xsdSchemaFacturXProfiles[level]; ok && s != nil {
+			return s
+		}
+	}
+	return cfg.xsdSchema
 }
 
 // invoiceClaimsPlainEN16931 reports whether the embedded CII payload

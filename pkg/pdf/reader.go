@@ -291,6 +291,32 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 	} else {
 		r.doc.Logger.Debug("xsd: bundled CII schemas unavailable, falling back to spine rules", "err", err)
 	}
+	// Per-Factur-X-profile XSDs (MINIMUM / BASIC WL / BASIC / EN 16931
+	// / EXTENDED) tighten the cross-profile D16B schema with profile-
+	// specific cardinalities. Bundle load failures degrade silently
+	// to the D16B fallback configured above.
+	if r.ciiSchema == nil {
+		profileXSDs := map[string]*xsd.Schema{}
+		for _, level := range []string{"MINIMUM", "BASIC WL", "BASIC", "EN 16931", "EXTENDED"} {
+			s, err := cii_schemas.LoadFacturXProfile(ctx, level)
+			if err != nil {
+				r.doc.Logger.Debug("xsd: bundled Factur-X profile XSD unavailable", "level", level, "err", err)
+				continue
+			}
+			if s != nil {
+				profileXSDs[level] = s
+			}
+		}
+		if len(profileXSDs) > 0 {
+			opts = append(opts, compliance.WithFacturXProfileXSDBundle(profileXSDs))
+		}
+		// Legacy ZUGFeRD 1.0 XSD set lives outside the v100 family.
+		if s, err := cii_schemas.LoadZUGFeRD1p0(ctx); err == nil && s != nil {
+			opts = append(opts, compliance.WithZUGFeRD1XSD(s))
+		} else if err != nil {
+			r.doc.Logger.Debug("xsd: bundled ZUGFeRD 1.0 XSD unavailable", "err", err)
+		}
+	}
 
 	// Schematron layer: caller-supplied override first, bundled
 	// EN 16931 + XRechnung otherwise. The bundle route lets the

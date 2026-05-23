@@ -50,6 +50,18 @@ type facturXValidateOpts struct {
 	// identifier with no CIUS suffix - the same condition under
 	// which Mustang's reference pipeline applies it.
 	schematronBundlePeppol *schematron.Schema
+	// xsdSchemaFacturXProfiles is the per-conformance-level XSD set.
+	// Keyed by Factur-X 1.0.07 spelling ("MINIMUM" / "BASIC WL" /
+	// "BASIC" / "EN 16931" / "EXTENDED"); the validator picks the
+	// matching schema when the XMP claim selects a profile, falling
+	// back to xsdSchema (the cross-profile D16B set) when no entry
+	// matches.
+	xsdSchemaFacturXProfiles map[string]*xsd.Schema
+	// xsdSchemaZUGFeRD1 wires the legacy v1 XSD set against
+	// urn:ferd:CrossIndustryDocument:invoice:1p0 documents. The
+	// v100-family schemas (D16B and the Factur-X profile bundles) do
+	// not share the v1 namespace and cannot validate v1 content.
+	xsdSchemaZUGFeRD1 *xsd.Schema
 	// schematronOverrides registers Go evaluators for rules whose
 	// XPath the bundled engine cannot compile. The map is threaded
 	// into [schematron.Validate] as [schematron.WithRuleOverrides].
@@ -70,6 +82,34 @@ type facturXValidateOpts struct {
 // or os.DirFS) so litho keeps no UN/CEFACT artefacts in-tree.
 func WithFacturXXSD(s *xsd.Schema) FacturXValidateOption {
 	return func(o *facturXValidateOpts) { o.xsdSchema = s }
+}
+
+// WithFacturXProfileXSDBundle registers per-conformance-level XSD
+// sets. The map keys follow the Factur-X 1.0.07 spelling
+// ("MINIMUM" / "BASIC WL" / "BASIC" / "EN 16931" / "EXTENDED");
+// the validator picks the matching schema for the document's XMP
+// fx:ConformanceLevel and runs the full XSD pass against it.
+//
+// Profile XSDs are tighter than the generic D16B set: MINIMUM drops
+// most of the BasicInformation branch, BASIC-WL trims line-item
+// detail, etc. Threading them through here makes the XSD layer
+// surface profile-specific structural violations (Mustang flags them
+// as type-4 errors) that the D16B fallback otherwise silently lets
+// through.
+func WithFacturXProfileXSDBundle(profiles map[string]*xsd.Schema) FacturXValidateOption {
+	return func(o *facturXValidateOpts) { o.xsdSchemaFacturXProfiles = profiles }
+}
+
+// WithZUGFeRD1XSD registers the legacy ZUGFeRD 1.0 XSD set against
+// which [ValidateZUGFeRD] for v1 documents runs the full XSD pass
+// over the embedded urn:ferd:CrossIndustryDocument:invoice:1p0
+// payload. The v100-family schemas do not match v1 content.
+//
+// Pass nil (or omit the option) to skip the v1 XSD pass; the
+// validator then relies on the structural CII spine and the wrapper
+// rules alone for v1 documents.
+func WithZUGFeRD1XSD(s *xsd.Schema) FacturXValidateOption {
+	return func(o *facturXValidateOpts) { o.xsdSchemaZUGFeRD1 = s }
 }
 
 // WithFacturXSchematron registers a loaded Schematron schema set
@@ -315,8 +355,9 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	hybrid = append(hybrid, checkInvoiceConflictingVariant(ctx, doc, v)...)
 	hybrid = append(hybrid, checkInvoiceXMP(ctx, doc, catalog, invoice, v)...)
 	hybrid = append(hybrid, checkInvoiceCII(ctx, doc, invoice, v)...)
-	if cfg.xsdSchema != nil {
-		hybrid = append(hybrid, checkInvoiceCIIXSD(ctx, doc, invoice, v, cfg.xsdSchema)...)
+	xsdSchema := pickXSD(ctx, doc, catalog, v, &cfg)
+	if xsdSchema != nil {
+		hybrid = append(hybrid, checkInvoiceCIIXSD(ctx, doc, invoice, v, xsdSchema)...)
 	}
 	schSchema, schPhase, schOverlay := pickSchematron(ctx, doc, catalog, invoice, v, &cfg)
 	var schAdvisories []error
