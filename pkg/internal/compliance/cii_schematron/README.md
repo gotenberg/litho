@@ -30,15 +30,24 @@ curl -fsSL https://raw.githubusercontent.com/ConnectingEurope/eInvoicing-EN16931
 When KoSIT publishes a newer XRechnung release:
 
 ```sh
-BASE='https://raw.githubusercontent.com/itplr-kosit/xrechnung-schematron/master/src/validation/schematron'
-curl -fsSL "$BASE/cii/XRechnung-CII-validation.sch" \
-  -o pkg/internal/compliance/cii_schematron/xrechnung/XRechnung-CII-validation.sch
-curl -fsSL "$BASE/common.sch" \
-  -o pkg/internal/compliance/cii_schematron/xrechnung/common.sch
+# Pull from the tagged release ZIP, NOT the master branch sources -
+# the release pipeline merges PEPPOL-EN16931-* rules into the
+# XRechnung schematron before publishing, and the master branch
+# sources drop them entirely.
+TAG=v2.5.0
+ZIP=$(curl -sfSL "https://api.github.com/repos/itplr-kosit/xrechnung-schematron/releases/tags/${TAG}" \
+  | python3 -c 'import json,sys; print([a["browser_download_url"] for a in json.load(sys.stdin)["assets"] if a["name"].endswith(".zip")][0])')
+TMP=$(mktemp -d)
+curl -sfSL "$ZIP" -o "$TMP/release.zip"
+unzip -p "$TMP/release.zip" schematron/cii/XRechnung-CII-validation.sch \
+  > pkg/internal/compliance/cii_schematron/xrechnung/XRechnung-CII-validation.sch
+unzip -p "$TMP/release.zip" schematron/common.sch \
+  > pkg/internal/compliance/cii_schematron/xrechnung/common.sch
+unzip -p "$TMP/release.zip" LICENSE \
+  > pkg/internal/compliance/cii_schematron/LICENSE-xrechnung.txt
 sed -i '' 's|href="../common.sch"|href="common.sch"|' \
   pkg/internal/compliance/cii_schematron/xrechnung/XRechnung-CII-validation.sch
-curl -fsSL https://raw.githubusercontent.com/itplr-kosit/xrechnung-schematron/master/LICENSE \
-  -o pkg/internal/compliance/cii_schematron/LICENSE-xrechnung.txt
+rm -rf "$TMP"
 ```
 
 When Mustang publishes a new ZUGFeRD 1.0 schematron release:
