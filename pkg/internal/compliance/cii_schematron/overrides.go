@@ -29,14 +29,45 @@ import (
 //   - BR-S-02: existence of one Seller VAT identifier (or tax
 //     representative) when a line uses VAT category S. Same
 //     antchfx "//foo from non-root context" issue.
+//   - FX-SCH-A-000052 / BR-CO-17 + FX-SCH-A-000057 / BR-S-09:
+//     VAT category tax-amount tolerance arithmetic. The source
+//     mixes abs(), xs:decimal-cast path steps, and a sentinel
+//     "round(rate) = 0" branch; the engine cannot generally
+//     compile abs(), so the rules silently land in the skipped
+//     slice without a Go port.
+//   - FX-SCH-A-000304 / BR-FXEXT-CO-11 +
+//     FX-SCH-A-000305 / BR-FXEXT-CO-12: document-level
+//     allowance/charge total tolerance.
+//   - FX-SCH-A-000365 / BR-FXEXT-CO-10: line-net-amount sum
+//     tolerance.
+//   - FX-SCH-A-000366 / BR-FXEXT-CO-13: tax-basis arithmetic
+//     tolerance.
+//   - FX-SCH-A-000357 / BR-FXEXT-S-09: standard-rated VAT amount
+//     with wider tolerance.
+//   - FX-SCH-A-000374 / BR-FXEXT-06: line ParentLineID /
+//     LineStatusReasonCode coherence.
+//   - FX-SCH-A-000354 / BR-FX-EN-04: German invoice delivery
+//     date / billing period requirement.
+//   - CII-SR-119: gross price AppliedTradeAllowanceCharge
+//     consistency.
 //
 // The returned map is fresh on each call so callers can mutate or
 // extend it without disturbing the package's internal state.
 func BuiltinRuleOverrides() map[string]schematron.RuleOverride {
 	return map[string]schematron.RuleOverride{
-		"BR-DE-19": brDE19IBANCheck,
-		"BR-CO-18": brCO18HeaderTaxBreakdown,
-		"BR-S-02":  brS02SellerVATIdentifier,
+		"BR-DE-19":        brDE19IBANCheck,
+		"BR-CO-18":        brCO18HeaderTaxBreakdown,
+		"BR-S-02":         brS02SellerVATIdentifier,
+		"FX-SCH-A-000052": brCO17VATCalc,
+		"FX-SCH-A-000057": brS09StandardVAT,
+		"FX-SCH-A-000304": brFXEXTCO11AllowanceTotal,
+		"FX-SCH-A-000305": brFXEXTCO12ChargeTotal,
+		"FX-SCH-A-000365": brFXEXTCO10LineTotal,
+		"FX-SCH-A-000366": brFXEXTCO13TaxBasis,
+		"FX-SCH-A-000357": brFXEXTS09StandardVAT,
+		"FX-SCH-A-000374": brFXEXT06ParentLine,
+		"FX-SCH-A-000354": brFXENO4GermanDelivery,
+		"CII-SR-119":      ciiSR119GrossPriceConsistency,
 	}
 }
 
@@ -235,7 +266,7 @@ func attrValue(n *xmlquery.Node, name string) string {
 
 // childText returns the trimmed text content of the first direct
 // child of n whose local name matches name. Empty string when
-// nothing matches.
+// nothing matches. Nil-safe via [findChild].
 func childText(n *xmlquery.Node, name string) string {
 	c := findChild(n, name)
 	if c == nil {
@@ -246,8 +277,13 @@ func childText(n *xmlquery.Node, name string) string {
 
 // findChild walks n's element children and returns the first whose
 // local name matches name (namespace-agnostic; the CII schema keeps
-// local names unambiguous).
+// local names unambiguous). Nil-safe: returns nil when n is nil so
+// callers can chain findChild(findChild(...), ...) without an
+// intermediate nil check.
 func findChild(n *xmlquery.Node, name string) *xmlquery.Node {
+	if n == nil {
+		return nil
+	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type != xmlquery.ElementNode {
 			continue

@@ -17,6 +17,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io/fs"
+	"maps"
 	"strings"
 	"sync"
 
@@ -291,9 +292,7 @@ func augmentProfileWithBaseline(profile, baseline *schematron.Schema) *schematro
 		Phases:       profile.Phases,
 		Lets:         profile.Lets,
 	}
-	for k, v := range profile.Patterns {
-		out.Patterns[k] = v
-	}
+	maps.Copy(out.Patterns, profile.Patterns)
 	out.PatternOrder = append(out.PatternOrder, profile.PatternOrder...)
 	out.Patterns[importPattern.ID] = importPattern
 	out.PatternOrder = append(out.PatternOrder, importPattern.ID)
