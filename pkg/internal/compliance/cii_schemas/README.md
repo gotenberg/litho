@@ -1,8 +1,8 @@
 # Bundled CII XSDs
 
-`Reader.ValidateFacturX` reads its default XSD set from this directory via `embed.FS`. The auto-dispatch picks `d16b/` for Factur-X 1.0+ / ZUGFeRD 2.1+ payloads; legacy ZUGFeRD 1.0 / 2.0 fall back to the structural CII spine rules.
+`Reader.ValidateFacturX` and `Reader.ValidateZUGFeRD` read their XSD sets from this directory via `embed.FS`. The validator routes documents by variant + XMP profile to the matching schema set; the fallback path uses `d16b/` for any v100 CII payload whose conformance level doesn't pick a per-profile bundle.
 
-## Current bundle
+## Current bundles
 
 `d16b/` ships the canonical UN/CEFACT D16B SCRDM (Decoupled Code List Schema Modules) subset published by CEN as part of the EN 16931 artefacts at <https://github.com/ConnectingEurope/eInvoicing-EN16931>.
 
@@ -14,6 +14,10 @@ Four files, ~140 KB total:
 - `CrossIndustryInvoice_UnqualifiedDataType_100pD16B.xsd`
 
 The "decoupled" variant validates structure but not code-list enumeration. That's appropriate for litho: code lists evolve faster than the XSDs and live elsewhere (Mustang or KoSIT typically handle them via Schematron in `pkg/internal/schematron`).
+
+`facturx_profiles/{MINIMUM,BASIC-WL,BASIC,EN16931,EXTENDED}/` carry the per-profile Factur-X 1.0.07 XSD sets sourced from Mustang's `validator/src/main/resources/schema/ZF_240/<level>/` tree. Each level tightens the cross-profile D16B set: MINIMUM strips most of BasicInformation, BASIC-WL trims line-item detail, EN 16931 enforces the cross-EU baseline, EXTENDED carries Factur-X-specific extensions. The validator picks the matching schema by XMP fx:ConformanceLevel; the FACTUR-X profile XSDs are what Mustang's reference pipeline applies for `urn:factur-x.eu:1p0:*` documents.
+
+`zugferd1p0/` is the legacy ZUGFeRD 1.0 XSD set sourced from Mustang's `validator/src/main/resources/schema/ZF_10/` tree. ZUGFeRD 1.0 uses the `urn:ferd:CrossIndustryDocument:invoice:1p0` namespace with v12/v15 ram/qdt/udt child types; the v100 D16B schemas pre-date that namespace and do not match.
 
 ## How to bump
 
@@ -33,6 +37,18 @@ curl -fsSL https://raw.githubusercontent.com/ConnectingEurope/eInvoicing-EN16931
 ```
 
 Then `make test-unit` and adjust any drifted assertions (rare; the schema changes annually but the high-level structure is stable).
+
+When Mustang publishes a new Factur-X profile or ZUGFeRD 1.0 XSD revision:
+
+```sh
+git clone --depth 1 https://github.com/ZUGFeRD/mustangproject.git /tmp/mu
+for p in MINIMUM BASIC-WL BASIC EN16931 EXTENDED; do
+  cp /tmp/mu/validator/src/main/resources/schema/ZF_240/$p/*.xsd \
+     pkg/internal/compliance/cii_schemas/facturx_profiles/$p/
+done
+cp /tmp/mu/validator/src/main/resources/schema/ZF_10/*.xsd \
+   pkg/internal/compliance/cii_schemas/zugferd1p0/
+```
 
 ## License
 
