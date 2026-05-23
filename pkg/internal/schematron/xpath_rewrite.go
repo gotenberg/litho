@@ -47,6 +47,9 @@ func rewriteXPath2(expr string) string {
 	out = rewriteNotNormalizeSpace(out)
 	out = rewriteNotNumericCast(out)
 	out = rewriteValueComparisonOperators(out)
+	out = rewriteTokenizeWhitespaceLiteral(out)
+	out = rewriteAbsToleranceComparison(out)
+	out = rewriteSequenceQuantifier(out)
 	out = rewriteSequenceEquality(out)
 	// Bare sequence construction runs AFTER sequence-equality so the
 	// equality form's "= (a, b)" gets first dibs on the literal and
@@ -388,6 +391,431 @@ func rewriteValueComparisonOperators(expr string) string {
 		out = b.String()
 	}
 	return out
+}
+
+// rewriteSequenceQuantifier expands inline XPath 2.0 quantifier
+// expressions whose binding sequence is a literal "(v1, v2, ...)"
+// into the equivalent XPath 1.0 disjunction / conjunction of the
+// substituted body. Used when the quantifier sits inside a
+// predicate or function argument and [peelQuantifier] cannot
+// surface it.
+//
+//	some $V in (a, b, c) satisfies body($V)
+//	    -> (body(a) or body(b) or body(c))
+//	every $V in (a, b, c) satisfies body($V)
+//	    -> (body(a) and body(b) and body(c))
+//
+// EN 16931 / XRechnung / Factur-X pair this idiom with
+// [rewriteTokenizeWhitespaceLiteral] so the typical
+//
+//	[some $code in tokenize('30 58', '\s') satisfies normalize-space(.) = $code]
+//
+// predicate becomes a plain disjunction antchfx can compile.
+func rewriteSequenceQuantifier(expr string) string {
+	if !strings.Contains(expr, "every $") && !strings.Contains(expr, "some $") {
+		return expr
+	}
+	for {
+		next := rewriteOneSequenceQuantifier(expr)
+		if next == expr {
+			return expr
+		}
+		expr = next
+	}
+}
+
+func rewriteOneSequenceQuantifier(expr string) string {
+	for _, kw := range []string{"every", "some"} {
+		// Walk every occurrence of the keyword and try to peel it.
+		for searchFrom := 0; searchFrom < len(expr); {
+			idx := strings.Index(expr[searchFrom:], kw)
+			if idx < 0 {
+				break
+			}
+			idx += searchFrom
+			searchFrom = idx + 1
+			// Boundary check: identifier-class boundary on both sides.
+			if idx > 0 && isXPathNameChar(expr[idx-1]) {
+				continue
+			}
+			tail := idx + len(kw)
+			if tail >= len(expr) || isXPathNameChar(expr[tail]) {
+				continue
+			}
+			// Skip whitespace and require "$varName".
+			k := tail
+			for k < len(expr) && isXMLWhitespace(expr[k]) {
+				k++
+			}
+			if k >= len(expr) || expr[k] != '$' {
+				continue
+			}
+			nameEnd := k + 1
+			for nameEnd < len(expr) && isXPathNameChar(expr[nameEnd]) {
+				nameEnd++
+			}
+			if nameEnd == k+1 {
+				continue
+			}
+			varName := expr[k+1 : nameEnd]
+			afterName := nameEnd
+			for afterName < len(expr) && isXMLWhitespace(expr[afterName]) {
+				afterName++
+			}
+			if !strings.HasPrefix(expr[afterName:], "in") {
+				continue
+			}
+			afterIn := afterName + 2
+			if afterIn < len(expr) && isXPathNameChar(expr[afterIn]) {
+				continue
+			}
+			for afterIn < len(expr) && isXMLWhitespace(expr[afterIn]) {
+				afterIn++
+			}
+			if afterIn >= len(expr) || expr[afterIn] != '(' {
+				continue
+			}
+			seqClose := matchCloseParen(expr, afterIn+1)
+			if seqClose < 0 {
+				continue
+			}
+			items := splitSequenceLiteral(expr[afterIn+1 : seqClose])
+			if len(items) < 1 {
+				continue
+			}
+			// Require " satisfies " after the sequence literal.
+			satStart, satEnd := indexSatisfies(expr, seqClose+1)
+			if satStart < 0 || satStart != seqClose+1 && !isAllWhitespace(expr[seqClose+1:satStart+1]) {
+				continue
+			}
+			bodyEnd := captureSatisfiesBody(expr, satEnd)
+			if bodyEnd <= satEnd {
+				continue
+			}
+			body := strings.TrimSpace(expr[satEnd:bodyEnd])
+			var parts []string
+			for _, item := range items {
+				item = strings.TrimSpace(item)
+				if item == "" {
+					continue
+				}
+				parts = append(parts, substituteVar(body, varName, item))
+			}
+			if len(parts) == 0 {
+				continue
+			}
+			joinOp := " or "
+			if kw == "every" {
+				joinOp = " and "
+			}
+			replacement := "(" + strings.Join(parts, joinOp) + ")"
+			return expr[:idx] + replacement + expr[bodyEnd:]
+		}
+	}
+	return expr
+}
+
+// captureSatisfiesBody walks forward from start (the byte index just
+// past "satisfies") and returns the index where the quantifier body
+// ends. The body terminates at the same boundaries quantifier
+// expressions use elsewhere: matching close paren / bracket, a
+// top-level boolean keyword (and / or), or end-of-input. String
+// literals and nested parens are honoured so a top-level "and" in
+// a sub-expression does not terminate the capture early.
+func captureSatisfiesBody(expr string, start int) int {
+	for start < len(expr) && isXMLWhitespace(expr[start]) {
+		start++
+	}
+	depth := 0
+	inStr := byte(0)
+	end := start
+	for end < len(expr) {
+		c := expr[end]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
+			}
+			end++
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			inStr = c
+		case '(', '[':
+			depth++
+		case ')', ']':
+			if depth == 0 {
+				return end
+			}
+			depth--
+		case ' ', '\t', '\n', '\r':
+			if depth == 0 && isAndOrBoundary(expr, end) {
+				return end
+			}
+		}
+		end++
+	}
+	return end
+}
+
+func isXMLWhitespace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+func isAllWhitespace(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isXMLWhitespace(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// rewriteTokenizeWhitespaceLiteral converts the XPath 2.0 idiom
+//
+//	tokenize('v1 v2 v3', '\s')
+//
+// into the equivalent XPath 1.0 sequence literal
+//
+//	('v1', 'v2', 'v3')
+//
+// so the downstream some / every quantifier path picks it up via
+// [peelQuantifier] without needing XPath 2.0 tokenize support in
+// antchfx. The transform fires only when both arguments are
+// single-quoted string literals and the separator regex is one of
+// the canonical whitespace patterns ('\s', '\\s', ' '); other
+// tokenize forms (path-based input, regex-based splitting on
+// non-whitespace, positional access like tokenize(X,':')[7]) stay
+// untouched and surface via [evaluateRule]'s skip slice.
+//
+// EN 16931 / XRechnung / Factur-X use this idiom for "BT-XX value
+// is one of {V1, V2, ...}" code-list membership checks
+// (PEPPOL-EN16931-R061, FX-SCH-A-000132, BR-DE-TMP-32 etc.);
+// without the rewrite the rules silently land in the skipped slice.
+func rewriteTokenizeWhitespaceLiteral(expr string) string {
+	const prefix = "tokenize("
+	if !strings.Contains(expr, prefix) {
+		return expr
+	}
+	var b strings.Builder
+	b.Grow(len(expr))
+	for i := 0; i < len(expr); {
+		if !strings.HasPrefix(expr[i:], prefix) || (i > 0 && isXPathNameChar(expr[i-1])) {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		argStart := i + len(prefix)
+		argEnd := matchCloseParen(expr, argStart)
+		if argEnd < 0 {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		// Split on the top-level comma inside the argument list. A
+		// regex argument may legally contain a comma, so the splitter
+		// honours quoting depth.
+		commaIdx := topLevelComma(expr[argStart:argEnd])
+		if commaIdx < 0 {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		input := strings.TrimSpace(expr[argStart : argStart+commaIdx])
+		sep := strings.TrimSpace(expr[argStart+commaIdx+1 : argEnd])
+		if !isStringLiteral(input) || !isWhitespaceRegexLiteral(sep) {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		fields := strings.Fields(unquoteStringLiteral(input))
+		if len(fields) == 0 {
+			b.WriteByte(expr[i])
+			i++
+			continue
+		}
+		parts := make([]string, 0, len(fields))
+		for _, f := range fields {
+			parts = append(parts, "'"+strings.ReplaceAll(f, "'", "''")+"'")
+		}
+		b.WriteByte('(')
+		b.WriteString(strings.Join(parts, ", "))
+		b.WriteByte(')')
+		i = argEnd + 1
+	}
+	return b.String()
+}
+
+// rewriteAbsToleranceComparison rewrites the XPath 2.0 idiom
+//
+//	abs(X) le tolerance
+//	abs(X) <= tolerance
+//
+// into the equivalent XPath 1.0 conjunction
+//
+//	(X < tolerance and X > -tolerance)
+//
+// antchfx/xpath returns NaN for abs() of a numeric cast on a
+// missing element, which silently mis-evaluates the entire
+// tolerance check. Rewriting peels the abs() wrapper and recovers
+// the same verdict via two strict comparisons against the
+// tolerance and its negation.
+//
+// The "le" keyword has already been rewritten to "<=" by
+// [rewriteValueComparisonOperators] when this transform runs, so
+// the matcher targets "<=" only. Both sides of the comparison may
+// be arbitrary expressions; X is what abs() wraps and tolerance is
+// the right-hand operand.
+func rewriteAbsToleranceComparison(expr string) string {
+	const prefix = "abs("
+	if !strings.Contains(expr, prefix) || !strings.Contains(expr, "<=") {
+		return expr
+	}
+	for {
+		idx := strings.Index(expr, prefix)
+		if idx < 0 {
+			return expr
+		}
+		if idx > 0 && isXPathNameChar(expr[idx-1]) {
+			expr = expr[:idx+1] + rewriteAbsToleranceComparison(expr[idx+1:])
+			return expr
+		}
+		argStart := idx + len(prefix)
+		argEnd := matchCloseParen(expr, argStart)
+		if argEnd < 0 {
+			return expr
+		}
+		// After the abs(...) close paren, accept whitespace + "<=".
+		k := argEnd + 1
+		for k < len(expr) && (expr[k] == ' ' || expr[k] == '\t' || expr[k] == '\n' || expr[k] == '\r') {
+			k++
+		}
+		if k+1 >= len(expr) || expr[k] != '<' || expr[k+1] != '=' {
+			// Not a tolerance comparison. Skip past this abs() call.
+			expr = expr[:idx+1] + rewriteAbsToleranceComparison(expr[idx+1:])
+			return expr
+		}
+		rhsStart := k + 2
+		rhsEnd := rhsCaptureEnd(expr, rhsStart)
+		if rhsEnd <= rhsStart {
+			expr = expr[:idx+1] + rewriteAbsToleranceComparison(expr[idx+1:])
+			return expr
+		}
+		inner := strings.TrimSpace(expr[argStart:argEnd])
+		tolerance := strings.TrimSpace(expr[rhsStart:rhsEnd])
+		replacement := "((" + inner + ") < (" + tolerance + ") and (" + inner + ") > -(" + tolerance + "))"
+		expr = expr[:idx] + replacement + expr[rhsEnd:]
+	}
+}
+
+// topLevelComma returns the byte index of the first top-level comma
+// in s (i.e. outside parens, brackets and quoted strings), or -1
+// when none exists.
+func topLevelComma(s string) int {
+	depth := 0
+	inStr := byte(0)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			inStr = c
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// isStringLiteral reports whether s is a single- or double-quoted
+// XPath string literal with no embedded quotes.
+func isStringLiteral(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	q := s[0]
+	if (q != '\'' && q != '"') || s[len(s)-1] != q {
+		return false
+	}
+	for i := 1; i < len(s)-1; i++ {
+		if s[i] == q {
+			return false
+		}
+	}
+	return true
+}
+
+// isWhitespaceRegexLiteral reports whether s is the literal regex
+// EN 16931 uses for tokenize's whitespace separator. Accepts the
+// common spellings: '\s', '\\s', ' ', "\\s", and so on.
+func isWhitespaceRegexLiteral(s string) bool {
+	if !isStringLiteral(s) {
+		return false
+	}
+	body := s[1 : len(s)-1]
+	switch body {
+	case `\s`, `\\s`, ` `:
+		return true
+	}
+	return false
+}
+
+// unquoteStringLiteral strips the outer quote characters from a
+// validated string literal. Caller guarantees [isStringLiteral]
+// returned true.
+func unquoteStringLiteral(s string) string {
+	return s[1 : len(s)-1]
+}
+
+// rhsCaptureEnd locates the end of the right-hand operand of a
+// "<=" comparison starting at i. The walk honours paren depth and
+// string literals, stopping at the next top-level boolean keyword
+// (`and`, `or`) or unmatched closing paren / bracket.
+func rhsCaptureEnd(expr string, start int) int {
+	depth := 0
+	inStr := byte(0)
+	for start < len(expr) && (expr[start] == ' ' || expr[start] == '\t' || expr[start] == '\n' || expr[start] == '\r') {
+		start++
+	}
+	end := start
+	for end < len(expr) {
+		c := expr[end]
+		if inStr != 0 {
+			if c == inStr {
+				inStr = 0
+			}
+			end++
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			inStr = c
+		case '(', '[':
+			depth++
+		case ')', ']':
+			if depth == 0 {
+				return end
+			}
+			depth--
+		case ' ', '\t', '\n', '\r':
+			if depth == 0 && isAndOrBoundary(expr, end) {
+				return end
+			}
+		}
+		end++
+	}
+	return end
 }
 
 // decimalEqualityEpsilon is the tolerance used when [rewriteDecimalEquality]
