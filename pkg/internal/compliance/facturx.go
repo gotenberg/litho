@@ -38,6 +38,18 @@ type facturXValidateOpts struct {
 	// When set, the profile match takes precedence over the
 	// EN 16931 baseline; the XRechnung CIUS still wins over both.
 	schematronBundleFacturXProfiles map[string]*schematron.Schema
+	// schematronBundleZUGFeRD1 is the legacy ZUGFeRD 1.0 schematron
+	// keyed off the urn:ferd:CrossIndustryDocument:invoice:1p0
+	// namespace. The v100-family EN 16931 / XRechnung / Factur-X
+	// profile rules don't match v1's element structure, so v1
+	// documents take this separate route.
+	schematronBundleZUGFeRD1 *schematron.Schema
+	// schematronBundlePeppol carries the PEPPOL BIS 3.0 EN 16931 CII
+	// schematron. It overlays the EN 16931 baseline for documents
+	// whose CII profile is the plain "urn:cen.eu:en16931:2017"
+	// identifier with no CIUS suffix - the same condition under
+	// which Mustang's reference pipeline applies it.
+	schematronBundlePeppol *schematron.Schema
 	// schematronOverrides registers Go evaluators for rules whose
 	// XPath the bundled engine cannot compile. The map is threaded
 	// into [schematron.Validate] as [schematron.WithRuleOverrides].
@@ -102,6 +114,38 @@ func WithFacturXSchematronBundle(en16931, xrechnung *schematron.Schema) FacturXV
 func WithFacturXProfileSchematronBundle(profiles map[string]*schematron.Schema) FacturXValidateOption {
 	return func(o *facturXValidateOpts) {
 		o.schematronBundleFacturXProfiles = profiles
+	}
+}
+
+// WithZUGFeRD1Schematron registers the legacy ZUGFeRD 1.0 Schematron
+// so [ValidateZUGFeRD] for v1 documents runs a business-rule pass
+// over the embedded urn:ferd:CrossIndustryDocument:invoice:1p0
+// payload. ZUGFeRD 1.0's CII shape pre-dates the v100 namespace
+// reorganisation, so the EN 16931 / XRechnung / Factur-X profile
+// rule sets bundled for v2.x payloads do not apply.
+//
+// Pass nil (or omit the option) to skip the v1 Schematron pass; the
+// validator then relies on the structural CII spine and the wrapper
+// rules alone for v1 documents.
+func WithZUGFeRD1Schematron(s *schematron.Schema) FacturXValidateOption {
+	return func(o *facturXValidateOpts) {
+		o.schematronBundleZUGFeRD1 = s
+	}
+}
+
+// WithPeppolSchematron registers the PEPPOL BIS 3.0 EN 16931 CII
+// schematron so [ValidateFacturX] runs it alongside the matching
+// per-profile rules. Documents whose CII profile is plain
+// "urn:cen.eu:en16931:2017" without a CIUS suffix get the PEPPOL
+// rules applied as an overlay - the same routing Mustang's
+// reference validator uses.
+//
+// Pass nil (or omit the option) to skip the PEPPOL overlay; the
+// validator then only runs the configured baseline / profile
+// schematron.
+func WithPeppolSchematron(s *schematron.Schema) FacturXValidateOption {
+	return func(o *facturXValidateOpts) {
+		o.schematronBundlePeppol = s
 	}
 }
 
@@ -280,6 +324,16 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 		schViolations, advisories := checkInvoiceSchematron(ctx, doc, invoice, v, schSchema, schPhase, schOverlay, cfg.schematronOverrides)
 		hybrid = append(hybrid, schViolations...)
 		schAdvisories = advisories
+	}
+	// PEPPOL BIS 3.0 overlays the EN 16931 baseline when the CII
+	// profile is the plain "urn:cen.eu:en16931:2017" identifier with
+	// no CIUS suffix. Factur-X / XRechnung / other CIUS-tagged
+	// documents skip this pass because their per-profile schematron
+	// already embeds the relevant PEPPOL extensions.
+	if cfg.schematronBundlePeppol != nil && invoiceClaimsPlainEN16931(ctx, doc, invoice, v) {
+		peppolViolations, peppolAdvisories := checkInvoiceSchematron(ctx, doc, invoice, v, cfg.schematronBundlePeppol, "", false, cfg.schematronOverrides)
+		hybrid = append(hybrid, peppolViolations...)
+		schAdvisories = append(schAdvisories, peppolAdvisories...)
 	}
 	hybrid = append(hybrid, tagPDFA3Base(pdfaErrs, v)...)
 

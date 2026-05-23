@@ -53,6 +53,18 @@ func variantHasCIIv100Payload(v hybridInvoiceVariant) bool {
 		v.namespaceURI == variantZUGFeRD20.namespaceURI
 }
 
+// variantHasAnyCIIPayload reports whether v carries any flavour of
+// CII payload the schematron layer can run rules against. v100
+// covers EN 16931 / XRechnung / Factur-X profile schemas; the
+// legacy urn:ferd:CrossIndustryDocument:invoice:1p0 payload pairs
+// with a dedicated v1 Schematron bundle, so the gate here admits
+// both so [checkInvoiceSchematron] can dispatch on the picked
+// schema rather than the namespace alone.
+func variantHasAnyCIIPayload(v hybridInvoiceVariant) bool {
+	return variantHasCIIv100Payload(v) ||
+		v.namespaceURI == variantZUGFeRD10.namespaceURI
+}
+
 // checkInvoiceCII reads the embedded invoice stream and runs the CII
 // structural rules. The function is variant-aware: ZUGFeRD 2.0 and
 // the Factur-X 1.0+ / ZUGFeRD 2.1+ variants share the CII v100
@@ -385,6 +397,13 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if cfg.schematron != nil {
 		return cfg.schematron, cfg.schematronPhase, false
 	}
+	// Legacy ZUGFeRD 1.0 documents take a dedicated schematron route:
+	// the v100-family EN 16931 / XRechnung / Factur-X profile rule
+	// sets are keyed off the v100 namespace and never match v1
+	// content, so they can't substitute.
+	if v.namespaceURI == variantZUGFeRD10.namespaceURI {
+		return cfg.schematronBundleZUGFeRD1, "", false
+	}
 	if cfg.schematronBundleEN16931 == nil &&
 		cfg.schematronBundleXRechnung == nil &&
 		len(cfg.schematronBundleFacturXProfiles) == 0 {
@@ -410,6 +429,29 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return s, "", false
 	}
 	return cfg.schematronBundleEN16931, "", false
+}
+
+// invoiceClaimsPlainEN16931 reports whether the embedded CII payload
+// declares the plain EN 16931 profile identifier
+// ("urn:cen.eu:en16931:2017") with no CIUS suffix in its
+// GuidelineSpecifiedDocumentContextParameter/ID. Used by the PEPPOL
+// overlay so its rules fire only when Mustang's reference pipeline
+// also applies them - Factur-X / XRechnung / other CIUS profiles
+// rely on their own per-profile bundle.
+func invoiceClaimsPlainEN16931(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) bool {
+	if !variantHasCIIv100Payload(v) || !invoice.found || invoice.streamDict == nil {
+		return false
+	}
+	stream, err := document.ResolveStream(ctx, doc, invoice.streamRef)
+	if err != nil {
+		return false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	id := scanCIIProfileID(data)
+	return strings.TrimSpace(id) == "urn:cen.eu:en16931:2017"
 }
 
 // invoiceClaimsXRechnungCIUS reports whether the embedded CII payload
@@ -484,7 +526,7 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 	if schema == nil {
 		return nil, nil
 	}
-	if !variantHasCIIv100Payload(v) {
+	if !variantHasAnyCIIPayload(v) {
 		return nil, nil
 	}
 	if !invoice.found || invoice.streamDict == nil {

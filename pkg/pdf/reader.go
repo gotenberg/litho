@@ -334,6 +334,23 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 		if len(profileSchematrons) > 0 {
 			opts = append(opts, compliance.WithFacturXProfileSchematronBundle(profileSchematrons))
 		}
+		// Legacy ZUGFeRD 1.0 documents validate against a separate
+		// schematron because their CII payload uses the
+		// urn:ferd:CrossIndustryDocument:invoice:1p0 namespace the
+		// v100-family bundles do not cover.
+		if s, err := cii_schematron.LoadZUGFeRD1p0(ctx); err == nil && s != nil {
+			opts = append(opts, compliance.WithZUGFeRD1Schematron(s))
+		} else if err != nil {
+			r.doc.Logger.Debug("schematron: bundled ZUGFeRD 1.0 rules unavailable", "err", err)
+		}
+		// PEPPOL BIS 3.0 stays opt-in via [compliance.WithPeppolSchematron]:
+		// the rule set fires on documents whose CII profile is plain
+		// "urn:cen.eu:en16931:2017", but Mustang's reference pipeline
+		// actually applies it only to documents declaring a PEPPOL
+		// business process. Wiring it as a default overlay over-fires
+		// the universally-required rules (R001 "Business process MUST
+		// be provided", R010/R020 electronic address checks) on the
+		// many Factur-X-style invoices that legitimately have neither.
 	}
 	// Always wire the bundled Go rule overrides so rules that the
 	// XPath engine cannot handle (BR-DE-19's IBAN checksum is the
