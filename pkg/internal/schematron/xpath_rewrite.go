@@ -50,6 +50,7 @@ func rewriteXPath2(expr string) string {
 	out = rewriteTokenizeWhitespaceLiteral(out)
 	out = rewriteAbsToleranceComparison(out)
 	out = rewriteSequenceQuantifier(out)
+	out = rewriteBooleanLiteralComparison(out)
 	out = rewriteSequenceEquality(out)
 	// Bare sequence construction runs AFTER sequence-equality so the
 	// equality form's "= (a, b)" gets first dibs on the literal and
@@ -569,6 +570,36 @@ func isAllWhitespace(s string) bool {
 		}
 	}
 	return true
+}
+
+// rewriteBooleanLiteralComparison rewrites comparisons against the
+// XPath 1.0 boolean constructors false() / true() into their string-
+// literal equivalents 'false' / 'true'. antchfx panics with a nil-
+// pointer dereference when a node-set compares against a function-
+// call boolean on certain predicate shapes (BR-CL-19's
+// "ram:Indicator = false()" is the canonical case); the string-
+// comparison form sidesteps the bug because the elements carry the
+// literal text "false" / "true" anyway.
+//
+// The transform looks for the exact "= false()" / "= true()" /
+// "!= false()" / "!= true()" tail (case-sensitive, no nested args)
+// and replaces it with the quoted literal. The leading whitespace
+// before the operator is preserved so source-level formatting stays
+// readable in compile-error messages.
+func rewriteBooleanLiteralComparison(expr string) string {
+	if !strings.Contains(expr, "true()") && !strings.Contains(expr, "false()") {
+		return expr
+	}
+	replacements := []struct{ from, to string }{
+		{"= true()", "= 'true'"},
+		{"!= true()", "!= 'true'"},
+		{"= false()", "= 'false'"},
+		{"!= false()", "!= 'false'"},
+	}
+	for _, r := range replacements {
+		expr = strings.ReplaceAll(expr, r.from, r.to)
+	}
+	return expr
 }
 
 // rewriteTokenizeWhitespaceLiteral converts the XPath 2.0 idiom

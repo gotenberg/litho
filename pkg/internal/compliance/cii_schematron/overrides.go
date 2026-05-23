@@ -50,24 +50,42 @@ import (
 //     date / billing period requirement.
 //   - CII-SR-119: gross price AppliedTradeAllowanceCharge
 //     consistency.
+//   - PEPPOL-EN16931-R046: gross price = net price + allowance
+//     (the antchfx engine cannot fully neutralise the source's
+//     xs:decimal() casts on path-step references).
+//   - PEPPOL-EN16931-R054: TaxTotalAmount-by-currency count
+//     (XPath 2.0 `if/then/else` conditional).
+//   - PEPPOL-EN16931-R120: invoice line net amount equals
+//     quantity × net price + charges - allowances within the
+//     XSLT helper `u:slack(...)` tolerance.
+//   - BR-DE-TMP-32: German invoice delivery/period hint
+//     (`every $line ... satisfies ...` in an `or` chain that
+//     peelQuantifier cannot peel from top-level).
+//   - FX-SCH-A-000370 / BR-FXEXT-IC-08: intra-community VAT
+//     basis arithmetic tolerance.
 //
 // The returned map is fresh on each call so callers can mutate or
 // extend it without disturbing the package's internal state.
 func BuiltinRuleOverrides() map[string]schematron.RuleOverride {
 	return map[string]schematron.RuleOverride{
-		"BR-DE-19":        brDE19IBANCheck,
-		"BR-CO-18":        brCO18HeaderTaxBreakdown,
-		"BR-S-02":         brS02SellerVATIdentifier,
-		"FX-SCH-A-000052": brCO17VATCalc,
-		"FX-SCH-A-000057": brS09StandardVAT,
-		"FX-SCH-A-000304": brFXEXTCO11AllowanceTotal,
-		"FX-SCH-A-000305": brFXEXTCO12ChargeTotal,
-		"FX-SCH-A-000365": brFXEXTCO10LineTotal,
-		"FX-SCH-A-000366": brFXEXTCO13TaxBasis,
-		"FX-SCH-A-000357": brFXEXTS09StandardVAT,
-		"FX-SCH-A-000374": brFXEXT06ParentLine,
-		"FX-SCH-A-000354": brFXENO4GermanDelivery,
-		"CII-SR-119":      ciiSR119GrossPriceConsistency,
+		"BR-DE-19":            brDE19IBANCheck,
+		"BR-CO-18":            brCO18HeaderTaxBreakdown,
+		"BR-S-02":             brS02SellerVATIdentifier,
+		"FX-SCH-A-000052":     brCO17VATCalc,
+		"FX-SCH-A-000057":     brS09StandardVAT,
+		"FX-SCH-A-000304":     brFXEXTCO11AllowanceTotal,
+		"FX-SCH-A-000305":     brFXEXTCO12ChargeTotal,
+		"FX-SCH-A-000365":     brFXEXTCO10LineTotal,
+		"FX-SCH-A-000366":     brFXEXTCO13TaxBasis,
+		"FX-SCH-A-000357":     brFXEXTS09StandardVAT,
+		"FX-SCH-A-000374":     brFXEXT06ParentLine,
+		"FX-SCH-A-000354":     brFXENO4GermanDelivery,
+		"CII-SR-119":          ciiSR119GrossPriceConsistency,
+		"PEPPOL-EN16931-R120": peppolR120LineNetAmount,
+		"PEPPOL-EN16931-R046": peppolR046GrossPrice,
+		"PEPPOL-EN16931-R054": peppolR054TaxCurrencyCount,
+		"BR-DE-TMP-32":        brDETMP32DeliveryHint,
+		"FX-SCH-A-000370":     brFXEXTIC08IntracommunityTaxBasis,
 	}
 }
 
