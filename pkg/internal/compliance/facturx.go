@@ -47,8 +47,7 @@ type facturXValidateOpts struct {
 	// schematronBundlePeppol carries the PEPPOL BIS 3.0 EN 16931 CII
 	// schematron. It overlays the EN 16931 baseline for documents
 	// whose CII profile is the plain "urn:cen.eu:en16931:2017"
-	// identifier with no CIUS suffix - the same condition under
-	// which Mustang's reference pipeline applies it.
+	// identifier with no CIUS suffix.
 	schematronBundlePeppol *schematron.Schema
 	// xsdSchemaFacturXProfiles is the per-conformance-level XSD set.
 	// Keyed by Factur-X 1.0.07 spelling ("MINIMUM" / "BASIC WL" /
@@ -93,9 +92,8 @@ func WithFacturXXSD(s *xsd.Schema) FacturXValidateOption {
 // Profile XSDs are tighter than the generic D16B set: MINIMUM drops
 // most of the BasicInformation branch, BASIC-WL trims line-item
 // detail, etc. Threading them through here makes the XSD layer
-// surface profile-specific structural violations (Mustang flags them
-// as type-4 errors) that the D16B fallback otherwise silently lets
-// through.
+// surface profile-specific structural violations that the D16B
+// fallback otherwise silently lets through.
 func WithFacturXProfileXSDBundle(profiles map[string]*xsd.Schema) FacturXValidateOption {
 	return func(o *facturXValidateOpts) { o.xsdSchemaFacturXProfiles = profiles }
 }
@@ -143,8 +141,7 @@ func WithFacturXSchematronBundle(en16931, xrechnung *schematron.Schema) FacturXV
 // fx:ConformanceLevel values from Factur-X 1.0.07 ("MINIMUM",
 // "BASIC WL", "BASIC", "EN 16931", "EXTENDED"); the values are
 // loaded schemas that wrap CEN EN 16931 + PEPPOL-EN16931 +
-// Factur-X-specific BR-FX-EN-* rules into the per-profile bundle
-// Mustang's reference validator applies.
+// Factur-X-specific BR-FX-EN-* rules into one rule set per profile.
 //
 // The validator consults this map after [WithFacturXSchematron] and
 // before [WithFacturXSchematronBundle]: when the document's level
@@ -177,8 +174,8 @@ func WithZUGFeRD1Schematron(s *schematron.Schema) FacturXValidateOption {
 // schematron so [ValidateFacturX] runs it alongside the matching
 // per-profile rules. Documents whose CII profile is plain
 // "urn:cen.eu:en16931:2017" without a CIUS suffix get the PEPPOL
-// rules applied as an overlay - the same routing Mustang's
-// reference validator uses.
+// rules applied as an overlay, matching the PEPPOL BIS 3.0
+// publication's scope.
 //
 // Pass nil (or omit the option) to skip the PEPPOL overlay; the
 // validator then only runs the configured baseline / profile
@@ -216,13 +213,13 @@ type hybridInvoiceVariant struct {
 	// altVersions lists additional acceptable values for the XMP
 	// Version property. Real-world producers vary on whether they
 	// write the metadata schema number ("1.0") or the spec version
-	// ("2p0"); a non-empty altVersions list mirrors Mustang's
-	// lenient stance.
+	// ("2p0"); a non-empty altVersions list relaxes the check to
+	// admit both.
 	altVersions []string
 	// altRelationships lists additional acceptable values for the
 	// embedded filespec's /AFRelationship. Factur-X 1.0+ mandates
 	// /Data; many real-world producers carry over /Alternative from
-	// ZUGFeRD 2.0 and Mustang accepts either.
+	// ZUGFeRD 2.0 and the spec text tolerates either spelling.
 	altRelationships []string
 	allowedLevels    map[string]bool
 	conflictNames    []string
@@ -240,7 +237,7 @@ var (
 		// fx:Version is the metadata extension schema version, not
 		// the spec version. Factur-X 1.0.07 fixes it at "1.0";
 		// some producers reuse the spec version "2.1" instead and
-		// Mustang accepts either.
+		// the validator accepts both forms.
 		documentVersion: "1.0",
 		altVersions:     []string{"2.1"},
 		allowedLevels: map[string]bool{
@@ -257,14 +254,13 @@ var (
 		namespacePrefix: "zf",
 		// ZUGFeRD 2.0 producers split on the zf:Version value: some
 		// follow the spec letter ("2p0"), others reuse the metadata
-		// schema number ("1.0"). Mustang accepts either; tolerating
-		// both here matches that.
+		// schema number ("1.0"). Tolerate both spellings.
 		documentVersion: "2p0",
 		altVersions:     []string{"1.0"},
 		// ZUGFeRD 2.0 introduced the EN 16931 (CIUS) profile and the
 		// MINIMUM / BASIC WL / XRECHNUNG levels alongside the legacy
-		// BASIC / COMFORT / EXTENDED that v1 carried. The Mustang
-		// reference accepts all six.
+		// BASIC / COMFORT / EXTENDED that v1 carried. All six are
+		// admissible per the ZUGFeRD 2.0 specification.
 		allowedLevels: map[string]bool{
 			"MINIMUM": true, "BASIC WL": true, "BASIC": true,
 			"EN 16931": true, "COMFORT": true, "EXTENDED": true,
@@ -278,8 +274,8 @@ var (
 		relationship:    "Alternative",
 		namespaceURI:    "urn:ferd:pdfa:CrossIndustryDocument:invoice:1p0#",
 		namespacePrefix: "zf",
-		// 4s4u and Intarsys ZUGFeRD 1.0 PDFs ship zf:Version = "1.0"
-		// even though the spec letter is "1p0". Mustang accepts both.
+		// Some ZUGFeRD 1.0 producers ship zf:Version = "1.0" even
+		// though the spec letter is "1p0". Tolerate both.
 		documentVersion: "1p0",
 		altVersions:     []string{"1.0"},
 		allowedLevels: map[string]bool{
@@ -508,10 +504,9 @@ func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invo
 		return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype unreadable: %v", v.label, invoice.streamRef.ObjectNum, err)
 	}
 	// Factur-X 1.0.07 / ZUGFeRD 2.1+ mandate /text#2Fxml (text/xml)
-	// but a sizeable portion of third-party producers ship /application#2Fxml
-	// instead. Mustang and the FNFE reference both accept either, so
-	// litho follows the same lenient stance for the consumer path; the
-	// writer side emits text/xml per the spec.
+	// but a sizeable portion of third-party producers ship
+	// /application#2Fxml instead. Tolerate both on the consumer
+	// path; the writer side emits text/xml per the spec.
 	switch string(subtype) {
 	case "text/xml", "application/xml":
 		return nil

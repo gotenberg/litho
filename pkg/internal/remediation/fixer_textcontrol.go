@@ -29,8 +29,8 @@ func matchTextControl(v compliance.Violation) bool {
 // them eliminates the violation without affecting legitimate text.
 func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
 	// Dropping bytes from Tj/TJ operands removes whatever glyph those
-	// codes mapped to. That's exactly how we fix .notdef references,
-	// but it is still content loss; gate behind PreserveContent.
+	// codes mapped to. That is the standard .notdef-reference fix, but
+	// it is still content loss; gate behind PreserveContent.
 	if opts.PreserveContent {
 		return nil, nil
 	}

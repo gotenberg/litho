@@ -300,7 +300,6 @@ func rewriteNotNumericCast(expr string) string {
 			i++
 			continue
 		}
-		notOpen := k
 		// Skip whitespace inside the not(...) call before the next
 		// token.
 		k++
@@ -336,7 +335,6 @@ func rewriteNotNumericCast(expr string) string {
 			i++
 			continue
 		}
-		_ = notOpen
 		b.WriteString("not(")
 		b.WriteString(inner)
 		b.WriteString(")")
@@ -880,7 +878,7 @@ const decimalEqualityEpsilon = "0.000001"
 // strict comparison operators (<, <=, >, >=) keep their exact
 // semantics because EN 16931 rules that use them already build in
 // their own tolerance (e.g. "abs(X) - 1 <= round(Y)") and would
-// double-tolerance if we touched them.
+// double-tolerance if the rewriter touched them.
 //
 // Unblocks BR-CO-13, BR-CO-14, BR-CO-15, BR-CO-16, and the
 // VAT-category sibling rules (BR-S-08, BR-S-09, etc.) which all read
@@ -1171,7 +1169,7 @@ func rewriteOneSequenceEquality(expr string) string {
 		items := splitSequenceLiteral(expr[k+1 : closeIdx])
 		if len(items) < 2 {
 			// One-item sequence or empty literal: probably not the
-			// XPath 2.0 sequence comparison we are targeting.
+			// XPath 2.0 sequence comparison this pass targets.
 			continue
 		}
 		exprStart, exprEnd := captureLHS(expr, i)
@@ -1244,9 +1242,8 @@ func captureLHS(expr string, opIdx int) (start, end int) {
 		}
 		if depth == 0 {
 			// Stop on operators (=, !=, <, >, and, or, +, -, *, /, etc.)
-			// when we are at the top level. Recognising every operator
-			// would be its own parser; conservatively break on common
-			// XPath delimiters.
+			// at the top level. Recognising every operator would be its
+			// own parser; conservatively break on common XPath delimiters.
 			if c == '|' || c == ',' {
 				return start, end
 			}
@@ -1298,7 +1295,7 @@ func rewriteOneBareSequence(expr string) (string, bool) {
 		// Skip sequences whose items look like equality comparisons:
 		// those were the target of rewriteSequenceEquality and any
 		// leftover commas here indicate a different construct (e.g.
-		// step predicates) we should not touch.
+		// step predicates) that the rewriter should leave alone.
 		safe := true
 		for _, item := range items {
 			if !looksLikePathOrCall(strings.TrimSpace(item)) {
@@ -1337,8 +1334,8 @@ func isFunctionCallParen(expr string, i int) bool {
 // looksLikePathOrCall returns true when s is plausibly a path
 // expression or a function call: starts with a letter, slash, or
 // dot, and contains no operator that would indicate this is a
-// comparison or arithmetic expression (which we deliberately do not
-// touch).
+// comparison or arithmetic expression (those are deliberately left
+// alone).
 //
 // Paren-wrapped paths (e.g. "(rsm:.../ram:ID)" produced by let
 // substitution) are recognised by peeling matched outer parens; this
@@ -1518,8 +1515,8 @@ func rewriteFnRename(expr, fn, replacement string) string {
 		return expr
 	}
 	// Replace only at function-call boundaries: the byte preceding
-	// "fn(" must not be a name character, otherwise we would rewrite
-	// "myExists(" or similar.
+	// "fn(" must not be a name character, otherwise the rewrite would
+	// catch "myExists(" or similar.
 	var b strings.Builder
 	b.Grow(len(expr))
 	for i := 0; i < len(expr); {

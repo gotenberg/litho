@@ -141,14 +141,14 @@ func (l *loader) loadFile(p, importer string) (*Schema, error) {
 			pat.Rules = append(pat.Rules, rule)
 		}
 		// ISO Schematron does not require sch:pattern to carry an id;
-		// the bundled Factur-X profile schematrons (mirroring Mustang's
-		// upstream sources) ship dozens of anonymous sch:pattern
-		// siblings. Bucketing them by raw id would collapse every
-		// nameless sibling into a single map entry and silently drop
-		// 66 of FACTUR-X_EN16931.sch's 67 patterns. The synthetic key
-		// is empty-prefixed so phase activation, which looks up named
-		// patterns only, continues to see no match for the anonymous
-		// ones - matching how the spec uses phases.
+		// the bundled Factur-X profile schematrons ship dozens of
+		// anonymous sch:pattern siblings. Bucketing them by raw id
+		// would collapse every nameless sibling into a single map
+		// entry and silently drop 66 of FACTUR-X_EN16931.sch's 67
+		// patterns. The synthetic key is empty-prefixed so phase
+		// activation, which looks up named patterns only, continues
+		// to see no match for the anonymous ones, matching how the
+		// spec uses phases.
 		key := rp.ID
 		if key == "" {
 			key = fmt.Sprintf("__anon_%d", idx)
@@ -269,9 +269,9 @@ func parseRawSchema(data []byte) (*rawSchema, error) {
 		return &raw, nil
 	case "pattern":
 		// ISO Schematron lets sch:include reference any element,
-		// not just sch:schema. KoSIT's XRechnung common.sch ships
-		// a bare sch:pattern; we wrap it into a synthetic schema
-		// so the rest of the loader pipeline sees a uniform root.
+		// not just sch:schema. XRechnung common.sch ships a bare
+		// sch:pattern; wrap it into a synthetic schema so the rest
+		// of the loader pipeline sees a uniform root.
 		var pat rawPattern
 		if err := xml.Unmarshal(data, &pat); err != nil {
 			return nil, err

@@ -84,7 +84,7 @@ func isoToPdfDate(iso string) string {
 		return ""
 	}
 	year := iso[0:4]
-	if _, err := parseDigits(year); err != nil {
+	if err := parseDigits(year); err != nil {
 		return ""
 	}
 	if iso[4] != '-' || iso[7] != '-' {
@@ -115,11 +115,11 @@ func isoToPdfDate(iso string) string {
 }
 
 // parseDigits returns an error when s contains any non-digit byte.
-func parseDigits(s string) (int, error) {
+func parseDigits(s string) error {
 	for _, r := range s {
 		if r < '0' || r > '9' {
-			return 0, fmt.Errorf("non-digit %q", r)
+			return fmt.Errorf("non-digit %q", r)
 		}
 	}
-	return 0, nil
+	return nil
 }

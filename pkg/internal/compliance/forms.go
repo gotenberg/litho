@@ -68,7 +68,7 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 const maxFieldTreeDepth = 100
 
 // checkFormField validates a single form field and recurses into child fields.
-func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, profile string, part int, ua bool, fieldIdx int, results *[]Violation, depth int) {
+func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, _ string, part int, _ bool, fieldIdx int, results *[]Violation, depth int) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
 		return
 	}
@@ -104,7 +104,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 		if ctx.Err() != nil {
 			return
 		}
-		checkFormField(ctx, doc, kid, profile, part, ua, i, results, depth+1)
+		checkFormField(ctx, doc, kid, "", part, false, i, results, depth+1)
 	}
 }
 

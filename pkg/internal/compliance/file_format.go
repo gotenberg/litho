@@ -176,7 +176,7 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []V
 		// Read a small window starting a few bytes before the xref offset
 		// to inspect what's between the preceding EOL and the object number.
 		// Some PDFs have xref offsets pointing to the EOL before the object
-		// number, so we need to look ahead past any EOL chars.
+		// number, so look ahead past any EOL chars.
 		const windowSize = 20
 		startOff := max(entry.Offset-1, 0)
 		var buf [windowSize]byte
@@ -219,7 +219,7 @@ func checkXRefTableByteFormat(doc *document.Document, profile string) []Violatio
 		return nil
 	}
 
-	// Record count before validation so we only process new violations.
+	// Record count before validation so only new violations get processed.
 	prevCount := len(doc.FormatViolations)
 
 	for _, offset := range doc.XRefTableOffsets {

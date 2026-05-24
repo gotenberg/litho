@@ -74,7 +74,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 	// is at least partially determinable. Elements without structure-level /Lang
 	// may still have language set via BDC marked content operators in the content
 	// stream, which litho does not currently parse. To avoid false positives on
-	// files that use inline BDC /Lang, we only flag coverage violations when the
+	// files that use inline BDC /Lang, coverage violations only fire when the
 	// entire tree is devoid of /Lang.
 	anyLangFound := rootLang != ""
 	if !anyLangFound {
@@ -262,7 +262,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 // isValidLangTag validates a language tag against RFC 3066 / RFC 5646 (BCP 47)
 // well-formedness. The PDF spec (ISO 32000-1:2008, 14.9.2) references RFC 3066
 // which allows 1-8 ALPHA for the primary language subtag (RFC 5646 tightened
-// this to 2-8). We accept 1-8 to match VeraPDF's behavior and the spec reference.
+// this to 2-8). The validator accepts 1-8 to match VeraPDF's behavior and the spec reference.
 //
 // It does NOT check against the IANA subtag registry, only structural validity.
 // An empty or whitespace-only tag is treated as "not present" rather than

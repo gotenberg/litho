@@ -133,9 +133,9 @@ func toUnicodeCMapValuesRule(profile string) Rule {
 
 // puaActualTextRule returns the rule that PUA characters must carry
 // an ActualText entry. ActualText is a tagged-content concept (Marked
-// Content BDC operands), so the rule only fires for Level A profiles
-// — Level U requires Unicode mapping but not tagging, and Level B
-// requires neither.
+// Content BDC operands), so the rule only fires for Level A profiles.
+// Level U requires Unicode mapping but not tagging; Level B requires
+// neither.
 func puaActualTextRule(profile string) Rule {
 	if PDFALevel(profile) != 'a' {
 		return Rule{}

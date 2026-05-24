@@ -46,7 +46,8 @@
 //
 // Callers that need full XPath 2.0 coverage of skipped rules should
 // pipe the embedded CII XML through an external XSLT 2.0 processor
-// (Saxon-EE, KoSIT validator) and treat the results as authoritative.
+// and treat those results as authoritative for the unsupported
+// constructs.
 //
 // # Concurrency
 //

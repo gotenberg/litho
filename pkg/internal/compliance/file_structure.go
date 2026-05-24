@@ -234,8 +234,8 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 // checkLinearizedID validates §6.1.3 t04: in a linearized PDF, the trailer must
 // have an /ID key. The two entries in the ID array represent the original file
 // ID and the modified file ID. They legitimately differ in linearized PDFs
-// (the second entry is updated during linearization), so we only verify
-// presence, not equality.
+// (the second entry is updated during linearization), so only presence is
+// checked, not equality.
 func checkLinearizedID(doc *document.Document, _ string) []Violation {
 	trailer := doc.Index.Trailer
 	idObj, hasID := trailer["ID"]
@@ -287,8 +287,8 @@ func checkPostEOFData(ctx context.Context, doc *document.Document, profile strin
 	// Find the last occurrence of %%EOF.
 	lastIdx := bytes.LastIndex(tail, []byte(eofMarker))
 	if lastIdx < 0 {
-		// No %%EOF found. This is a structural issue, but we report it as post-EOF
-		// since the rule specifically concerns data after %%EOF.
+		// No %%EOF found. The rule specifically concerns data after %%EOF,
+		// so report this structural issue under the post-EOF clause.
 		return fail(postEOFRule(profile), "no %%EOF marker found in file")
 	}
 
@@ -653,8 +653,8 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 // Returns -1 if the "stream" keyword is not found in buf or when ctx is
 // cancelled mid-scan; outer callers re-check ctx.
 func findStreamDataStart(ctx context.Context, buf []byte) int {
-	// Scan for the "stream" keyword. We must skip occurrences that are
-	// part of "endstream" or part of a PDF name or other token
+	// Scan for the "stream" keyword. Skip occurrences that are part of
+	// "endstream" or part of a PDF name or other token
 	// (e.g., /application#2Foctet-stream).
 	// Per ISO 32000, the stream keyword is a standalone keyword preceded by
 	// whitespace or a delimiter (typically ">>" closing the stream dictionary)

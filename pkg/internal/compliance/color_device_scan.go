@@ -139,7 +139,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		return usage
 	}
 
-	// Track Do operator targets so we only scan referenced nested XObjects.
+	// Track Do operator targets so only referenced nested XObjects get scanned.
 	nestedXObjects := make(map[string]bool)
 	formFillCSSet := false
 	formStrokeCSSet := false

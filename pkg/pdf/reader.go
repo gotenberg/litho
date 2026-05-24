@@ -340,12 +340,13 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 		if en16931Sch != nil || xrechnungSch != nil {
 			opts = append(opts, compliance.WithFacturXSchematronBundle(en16931Sch, xrechnungSch))
 		}
-		// Factur-X profile schematrons mirror Mustang's per-profile
-		// rule set (CEN + PEPPOL + BR-FX-EN-*). The upstream rules
-		// reference a code database through XPath document(); the
-		// generator at cmd/gen-facturx-schematron pre-substitutes
-		// those lookups with inline contains() membership tests so
-		// the bundle runs cleanly under antchfx/xpath.
+		// Factur-X profile schematrons roll the CEN baseline,
+		// PEPPOL-EN16931, and BR-FX-EN-* rules into one per-profile
+		// rule set. The upstream sources reference a code database
+		// through XPath document(); the generator at
+		// cmd/gen-facturx-schematron pre-substitutes those lookups
+		// with inline contains() membership tests so the bundle
+		// runs cleanly under antchfx/xpath.
 		profileSchematrons := map[string]*schematron.Schema{}
 		for _, level := range []string{"MINIMUM", "BASIC WL", "BASIC", "EN 16931", "EXTENDED"} {
 			s, err := cii_schematron.LoadFacturXProfile(ctx, level)
@@ -369,14 +370,13 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 		} else if err != nil {
 			r.doc.Logger.Debug("schematron: bundled ZUGFeRD 1.0 rules unavailable", "err", err)
 		}
-		// PEPPOL BIS 3.0 stays opt-in via [compliance.WithPeppolSchematron]:
-		// the rule set fires on documents whose CII profile is plain
-		// "urn:cen.eu:en16931:2017", but Mustang's reference pipeline
-		// actually applies it only to documents declaring a PEPPOL
-		// business process. Wiring it as a default overlay over-fires
-		// the universally-required rules (R001 "Business process MUST
-		// be provided", R010/R020 electronic address checks) on the
-		// many Factur-X-style invoices that legitimately have neither.
+		// PEPPOL BIS 3.0 stays opt-in via
+		// [compliance.WithPeppolSchematron]: the rule set is scoped
+		// to documents declaring a PEPPOL business process
+		// (R001 "Business process MUST be provided", R010/R020
+		// electronic address checks), so wiring it as a default
+		// overlay would over-fire on the many Factur-X-style
+		// invoices that legitimately omit those fields.
 	}
 	// Always wire the bundled Go rule overrides so rules that the
 	// XPath engine cannot handle (BR-DE-19's IBAN checksum is the

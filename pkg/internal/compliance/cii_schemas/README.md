@@ -13,11 +13,11 @@ Four files, ~140 KB total:
 - `CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd`
 - `CrossIndustryInvoice_UnqualifiedDataType_100pD16B.xsd`
 
-The "decoupled" variant validates structure but not code-list enumeration. That's appropriate for litho: code lists evolve faster than the XSDs and live elsewhere (Mustang or KoSIT typically handle them via Schematron in `pkg/internal/schematron`).
+The "decoupled" variant validates structure but not code-list enumeration. That's appropriate for litho: code lists evolve faster than the XSDs and live in the Schematron rule set under `pkg/internal/compliance/cii_schematron/`.
 
-`facturx_profiles/{MINIMUM,BASIC-WL,BASIC,EN16931,EXTENDED}/` carry the per-profile Factur-X 1.0.07 XSD sets sourced from Mustang's `validator/src/main/resources/schema/ZF_240/<level>/` tree. Each level tightens the cross-profile D16B set: MINIMUM strips most of BasicInformation, BASIC-WL trims line-item detail, EN 16931 enforces the cross-EU baseline, EXTENDED carries Factur-X-specific extensions. The validator picks the matching schema by XMP fx:ConformanceLevel; the FACTUR-X profile XSDs are what Mustang's reference pipeline applies for `urn:factur-x.eu:1p0:*` documents.
+`facturx_profiles/{MINIMUM,BASIC-WL,BASIC,EN16931,EXTENDED}/` carry the per-profile Factur-X 1.0.07 XSD sets published by FNFE-MPE. Each level tightens the cross-profile D16B set: MINIMUM strips most of BasicInformation, BASIC-WL trims line-item detail, EN 16931 enforces the cross-EU baseline, EXTENDED carries Factur-X-specific extensions. The validator picks the matching schema by XMP fx:ConformanceLevel and applies the FACTUR-X profile XSDs to `urn:factur-x.eu:1p0:*` documents.
 
-`zugferd1p0/` is the legacy ZUGFeRD 1.0 XSD set sourced from Mustang's `validator/src/main/resources/schema/ZF_10/` tree. ZUGFeRD 1.0 uses the `urn:ferd:CrossIndustryDocument:invoice:1p0` namespace with v12/v15 ram/qdt/udt child types; the v100 D16B schemas pre-date that namespace and do not match.
+`zugferd1p0/` is the legacy ZUGFeRD 1.0 XSD set published by the ZUGFeRD project. ZUGFeRD 1.0 uses the `urn:ferd:CrossIndustryDocument:invoice:1p0` namespace with v12/v15 ram/qdt/udt child types; the v100 D16B schemas pre-date that namespace and do not match.
 
 ## How to bump
 
@@ -38,15 +38,15 @@ curl -fsSL https://raw.githubusercontent.com/ConnectingEurope/eInvoicing-EN16931
 
 Then `make test-unit` and adjust any drifted assertions (rare; the schema changes annually but the high-level structure is stable).
 
-When Mustang publishes a new Factur-X profile or ZUGFeRD 1.0 XSD revision:
+When a new Factur-X profile or ZUGFeRD 1.0 XSD revision is published upstream, refresh from the canonical Git mirror:
 
 ```sh
-git clone --depth 1 https://github.com/ZUGFeRD/mustangproject.git /tmp/mu
+git clone --depth 1 https://github.com/ZUGFeRD/mustangproject.git /tmp/zf
 for p in MINIMUM BASIC-WL BASIC EN16931 EXTENDED; do
-  cp /tmp/mu/validator/src/main/resources/schema/ZF_240/$p/*.xsd \
+  cp /tmp/zf/validator/src/main/resources/schema/ZF_240/$p/*.xsd \
      pkg/internal/compliance/cii_schemas/facturx_profiles/$p/
 done
-cp /tmp/mu/validator/src/main/resources/schema/ZF_10/*.xsd \
+cp /tmp/zf/validator/src/main/resources/schema/ZF_10/*.xsd \
    pkg/internal/compliance/cii_schemas/zugferd1p0/
 ```
 

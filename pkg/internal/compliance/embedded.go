@@ -23,7 +23,7 @@ var validAFRelationships = map[ast.PdfName]bool{
 	"FormData":         true,
 	"Schema":           true,
 	"Unspecified":      true,
-	"Undefined":        true, // Used in some VeraPDF test corpus files.
+	"Undefined":        true, // Tolerated for producers that emit this non-spec value.
 }
 
 // checkEmbeddedGroup validates embedded file compliance rules for PDF/A.
@@ -530,7 +530,7 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 	if err != nil {
 		doc.Logger.Debug("compliance.embedded: cannot parse embedded PDF",
 			"object", fs.objNum, "error", err)
-		// If we can't parse it, it's certainly not PDF/A-compliant.
+		// An unparseable PDF cannot be PDF/A-compliant.
 		return failf(Rule_19005_4_6_9_t03,
 			"object %d: embedded file is not a valid PDF", fs.objNum)
 	}

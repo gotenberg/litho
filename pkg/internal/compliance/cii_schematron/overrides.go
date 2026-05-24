@@ -255,7 +255,7 @@ func findFirstByPath(n *xmlquery.Node, names ...string) *xmlquery.Node {
 			return nil
 		}
 		// Document nodes have no Data; descend into the first element
-		// child until we land on something with the requested name.
+		// child until landing on the requested name.
 		next := findChild(cur, name)
 		if next == nil {
 			// Walk through wrapper/document children that aren't

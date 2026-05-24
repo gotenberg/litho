@@ -57,10 +57,9 @@ type FacturXOptions struct {
 // the Factur-X-specific operations.
 func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, cfg FacturXOptions, opts Options) (*Report, error) {
 	// Factur-X 1.0.07 / ZUGFeRD 2.1+ mandate /text#2Fxml as the
-	// embedded stream /Subtype. Earlier versions of litho wrote
-	// application/xml, which Mustang and FNFE samples both accept,
-	// but text/xml is the spec-correct value and matches what
-	// third-party reference producers (FNFE, symtrax) emit.
+	// embedded stream /Subtype. text/xml is the spec-correct value
+	// and what the writer emits; the consumer side stays lenient
+	// against application/xml producers.
 	attachErr := mutations.AddAttachmentWithOptions(ctx, alloc, doc, cfg.FileName, cfg.InvoiceXML, mutations.AttachmentOptions{
 		MimeType:       "text/xml",
 		AFRelationship: cfg.Relationship,

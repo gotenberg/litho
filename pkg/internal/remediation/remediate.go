@@ -50,10 +50,10 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		slog.Int("plan_entries", len(plan)),
 	)
 
-	// Snapshot the original trailer size so we can detect mutations that
+	// Snapshot the original trailer size to detect mutations that
 	// don't hit the allocator (e.g. a /ID insertion). The incremental
-	// writer's fast-path skips writes when nothing is pending, so without
-	// this check trailer-only fixes would silently be lost.
+	// writer's fast-path skips writes when nothing is pending, so
+	// without this check trailer-only fixes would silently be lost.
 	origTrailerSize := len(doc.Index.Trailer)
 
 	// Execute fixers in registry order.

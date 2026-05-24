@@ -273,8 +273,8 @@ func scanCIIPresence(payload []byte) (p ciiPresence, rootSeen bool, wellFormed b
 // ram:IssueDateTime → udt:DateTimeString); collecting CharData
 // regardless of nesting treats the wrapper as transparent. The
 // downside, accepting mixed content as a flat string, is acceptable
-// for presence-check rules: a wrong-shaped element is fielded by
-// the deeper XSD validator (Mustang) elsewhere in the matrix.
+// for presence-check rules: a wrong-shaped element is caught by
+// the XSD pass under clause CII_XSD.
 func readLeafText(dec *xml.Decoder, name xml.Name) string {
 	var sb strings.Builder
 	depth := 1
@@ -377,13 +377,12 @@ func formatXSDContext(v hybridInvoiceVariant, xv xsd.Violation) string {
 //
 //   - The CII payload's
 //     rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID.
-//     Mustang's reference validator routes by this value, applying
-//     the XRechnung overlay whenever the ID carries the "xrechnung"
-//     CIUS marker - including the extended form
+//     Documents that carry the XRechnung CIUS marker in this field
+//     (including the extended form
 //     "urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_*"
-//     that documents whose XMP claims plain EN 16931 still emit.
-//     litho mirrors that route so the EN 16931 profile schematron's
-//     FX-SCH-A-000026 does not reject XRechnung-extended IDs.
+//     that documents whose XMP claims plain EN 16931 still emit)
+//     route to the XRechnung CIUS so the EN 16931 profile
+//     schematron's FX-SCH-A-000026 does not reject the extended ID.
 //   - fx:ConformanceLevel from the XMP packet, used as the final
 //     tie-breaker. XRECHNUNG levels route to the XRechnung CIUS,
 //     anything matching a Factur-X profile bundle entry routes to
@@ -391,10 +390,9 @@ func formatXSDContext(v hybridInvoiceVariant, xv xsd.Violation) string {
 //
 // The second return value is the chosen schema's phase string; the
 // third reports whether the schema runs as an overlay (CII-ID route
-// while the XMP claim is not XRECHNUNG). Overlay firings are notice
-// class in Mustang's reference pipeline and need the demoted
-// severity in [checkInvoiceSchematron]. Returns (nil, "", false)
-// when no schema applies.
+// while the XMP claim is not XRECHNUNG). Overlay firings carry
+// notice severity and are demoted in [checkInvoiceSchematron].
+// Returns (nil, "", false) when no schema applies.
 func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.PdfDict, invoice invoiceFileSpec, v hybridInvoiceVariant, cfg *facturXValidateOpts) (*schematron.Schema, string, bool) {
 	if cfg.schematron != nil {
 		return cfg.schematron, cfg.schematronPhase, false
@@ -418,10 +416,9 @@ func pickSchematron(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if cfg.schematronBundleXRechnung != nil && invoiceClaimsXRechnungCIUS(ctx, doc, invoice, v) {
 		// Overlay mode: the document claims a non-XRechnung profile
 		// in XMP but its CII GuidelineSpecifiedDocumentContextParameter
-		// /ID carries the XRechnung CIUS marker. Mustang's reference
-		// pipeline routes the XRechnung schematron in advisory mode
-		// for these, so every firing surfaces as a notice rather
-		// than an error.
+		// /ID carries the XRechnung CIUS marker. The XRechnung
+		// schematron runs in advisory mode for these, so every
+		// firing surfaces as a notice rather than an error.
 		return cfg.schematronBundleXRechnung, "", level != "XRECHNUNG"
 	}
 	if level == "XRECHNUNG" && cfg.schematronBundleXRechnung != nil {
@@ -464,9 +461,9 @@ func pickXSD(ctx context.Context, doc *document.Document, catalog ast.PdfDict, v
 // declares the plain EN 16931 profile identifier
 // ("urn:cen.eu:en16931:2017") with no CIUS suffix in its
 // GuidelineSpecifiedDocumentContextParameter/ID. Used by the PEPPOL
-// overlay so its rules fire only when Mustang's reference pipeline
-// also applies them - Factur-X / XRechnung / other CIUS profiles
-// rely on their own per-profile bundle.
+// overlay so its rules fire only on the documents the PEPPOL BIS
+// spec targets - Factur-X / XRechnung / other CIUS profiles rely on
+// their own per-profile bundle.
 func invoiceClaimsPlainEN16931(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) bool {
 	if !variantHasCIIv100Payload(v) || !invoice.found || invoice.streamDict == nil {
 		return false
@@ -487,8 +484,8 @@ func invoiceClaimsPlainEN16931(ctx context.Context, doc *document.Document, invo
 // declares an XRechnung CIUS in its GuidelineSpecifiedDocumentContextParameter
 // /ID. Used by pickSchematron to override the XMP-derived
 // conformance level when the document carries the XRechnung CIUS
-// marker - which Mustang's reference pipeline always treats as an
-// XRechnung overlay regardless of the XMP claim.
+// marker, applying the XRechnung schematron as an advisory overlay
+// regardless of the XMP claim.
 func invoiceClaimsXRechnungCIUS(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) bool {
 	if !variantHasCIIv100Payload(v) || !invoice.found || invoice.streamDict == nil {
 		return false
@@ -588,9 +585,9 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 		rule := ruleForSchematronSeverity(sv)
 		if overlay && rule == Rule_cii_sch_Fatal {
 			// Overlay mode demotes every fatal firing to warning so
-			// the validator's overall verdict matches Mustang's
-			// notice-class handling of overlay schematrons applied
-			// to non-claiming documents.
+			// the overall verdict treats the overlay schematron as
+			// advisory when the document does not claim the
+			// overlay's profile.
 			rule = Rule_cii_sch_Warning
 		}
 		out = append(out, Violation{
@@ -620,20 +617,21 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 //   - flag="warning" or flag="info" (the schema author tagged the
 //     rule as soft on purpose; the bundled Factur-X profile
 //     schematrons mark "still status warning" PEPPOL rules this way);
-//   - <sch:report> firings without an explicit fatal flag - the
-//     reference Mustang validator emits these as <svrl:successful-report>
-//     notices that never flip the validity bit, so litho mirrors that
-//     stance to avoid spurious failures on profile-restriction reports
-//     (e.g. "Attribute @schemeID is marked as not used in the given
-//     context");
+//   - <sch:report> firings without an explicit fatal flag. ISO
+//     Schematron treats sch:report as informational by design (the
+//     XSLT compilation surfaces them as <svrl:successful-report>
+//     notices, not failed asserts), so litho keeps them out of the
+//     validity bit to avoid spurious failures on profile-restriction
+//     reports (e.g. "Attribute @schemeID is marked as not used in
+//     the given context");
 //   - the assertion message carries a "[RULE-ID]" prefix whose
 //     EN 16931 baseline entry has flag="warning" or flag="info".
 //     The bundled Factur-X profile schematrons rebadge baseline
 //     rules under fresh FX-SCH-A-* ids and lose the baseline's flag
-//     attribute, so rules like [CII-SR-465] silently flip Fatal in
-//     per-profile mode. Inheriting the baseline flag restores the
-//     reference severity without forcing a regeneration of the
-//     bundled .sch files.
+//     attribute, so rules like [CII-SR-465] would silently flip
+//     Fatal under per-profile mode. Inheriting the baseline flag
+//     restores the published severity without forcing a regeneration
+//     of the bundled .sch files.
 //
 // Everything else defaults to Fatal so unknown severities surface
 // loudly rather than being silently downgraded.

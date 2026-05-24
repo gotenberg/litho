@@ -88,10 +88,10 @@ func findXMPProperty(xmp []byte, nsURI, localName string) xmpPropertyLocation {
 			return attrLoc
 		}
 
-		// Element form: scan forward through child tokens until we hit
-		// the matching child or the corresponding EndElement. We keep a
-		// cursor over the byte stream so we can record the byte range
-		// of the matching child element including its closing tag.
+		// Element form: scan forward through child tokens until the
+		// matching child or the corresponding EndElement is reached.
+		// A cursor over the byte stream tracks the byte range of the
+		// matching child element including its closing tag.
 		if elemLoc, found := findChildElementRange(dec, xmp, startElem.Name, nsURI, localName); found {
 			return elemLoc
 		}
@@ -116,8 +116,8 @@ func isRDFDescription(n xml.Name) bool {
 // left neighbor.
 func findAttributeRange(xmp []byte, tagStart, tagEnd int, nsURI, localName string) (xmpPropertyLocation, bool) {
 	// Walk the raw bytes of the start tag looking for attributes whose
-	// expanded name matches (nsURI, localName). We can't directly use
-	// the StartElement.Attr slice because xml.Decoder doesn't expose
+	// expanded name matches (nsURI, localName). The StartElement.Attr
+	// slice is not directly usable because xml.Decoder doesn't expose
 	// per-attribute byte offsets. The tag text is bounded, so a
 	// targeted scan is both cheap and unambiguous.
 	//
@@ -224,7 +224,8 @@ func findChildElementRange(dec *xml.Decoder, xmp []byte, descName xml.Name, nsUR
 		case xml.StartElement:
 			if depth == 1 && t.Name.Space == nsURI && t.Name.Local == localName {
 				// Found: consume tokens until the matching EndElement
-				// so we know where the child element ends in bytes.
+				// so the byte offset of the child element's closing
+				// tag is known.
 				if endOff, ok := consumeElement(dec, t.Name); ok {
 					spliceStart := int(tokStart)
 					// Expand backwards to include the indentation and
@@ -318,7 +319,7 @@ func insertAttributeAtDescription(xmp []byte, prefix, attrSuffix string) ([]byte
 		}
 		tagEnd += tagStart
 		if bytes.Contains(xmp[tagStart:tagEnd], prefixDecl) {
-			return insertAttrBeforeTagEnd(xmp, tagStart, tagEnd, attrSuffix), nil
+			return insertAttrBeforeTagEnd(xmp, tagEnd, attrSuffix), nil
 		}
 		offset = tagEnd + 1
 	}
@@ -332,15 +333,13 @@ func insertAttributeAtDescription(xmp []byte, prefix, attrSuffix string) ([]byte
 		return append([]byte(nil), xmp...), errXMPPropertyNotFound
 	}
 	tagEnd += tagStart
-	return insertAttrBeforeTagEnd(xmp, tagStart, tagEnd, attrSuffix), nil
+	return insertAttrBeforeTagEnd(xmp, tagEnd, attrSuffix), nil
 }
 
-// insertAttrBeforeTagEnd writes attrSuffix just before the end of a tag
-// whose start and end byte offsets are tagStart..tagEnd (tagEnd points
-// at the closing '>'). The attribute suffix is the full "name=\"value\""
-// text; a single space prefix is inserted.
-func insertAttrBeforeTagEnd(xmp []byte, tagStart, tagEnd int, attrSuffix string) []byte {
-	_ = tagStart
+// insertAttrBeforeTagEnd writes attrSuffix just before the end of a
+// tag whose closing '>' sits at tagEnd. The attribute suffix is the
+// full `name="value"` text; a single space prefix is inserted.
+func insertAttrBeforeTagEnd(xmp []byte, tagEnd int, attrSuffix string) []byte {
 	insertAt := tagEnd
 	if tagEnd > 0 && xmp[tagEnd-1] == '/' {
 		insertAt = tagEnd - 1
@@ -624,10 +623,10 @@ func rewriteNamespaceURI(xmp []byte, prefix, uri string) []byte {
 				out = append(append([]byte{}, out[:idx]...),
 					append(fmt.Appendf(nil, `xmlns:%s=%c%s%c`, prefix, quote, currentURI, quote),
 						out[valueStart+end+1:]...)...)
-				// To avoid infinite loop, break scanning on matching URIs.
-				// We handle all mismatches in earlier iterations; if we
-				// reach a match, remaining occurrences are correct too
-				// for the bytes we already scanned, so stop.
+				// To avoid an infinite loop, break scanning on matching
+				// URIs. Earlier iterations have already handled every
+				// mismatch; reaching a match means the remaining
+				// occurrences are correct too for the scanned bytes.
 				break
 			}
 			replacement := fmt.Sprintf(`xmlns:%s=%c%s%c`, prefix, quote, uri, quote)

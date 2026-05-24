@@ -53,9 +53,9 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Violation {
 	// Artifact tagging checks require deep content stream analysis to determine
 	// if headers/footers/page numbers are properly marked as Artifact. This is
-	// a heuristic check that cannot be fully validated without rendering. We log
-	// the check but return no violations. A future enhancement may add
-	// heuristic detection of repeated header/footer content.
+	// a heuristic check that cannot be fully validated without rendering, so
+	// no violations are emitted. A future enhancement may add heuristic
+	// detection of repeated header/footer content.
 	return nil
 }
 

@@ -135,8 +135,9 @@ var (
 	// full UN/CEFACT XSD validator: the goal is to catch the realistic
 	// failure modes (wrong root, missing required section, unreadable
 	// payload) so litho rejects bad attachments before downstream
-	// tools see them. Schema-deep type/value checks remain the job of
-	// Mustang or KoSIT.
+	// tools see them. Schema-deep type/value checks belong to the
+	// per-profile XSD pass under [Rule_cii_xsd_Structure] and the
+	// Schematron pass.
 
 	Rule_cii_StreamReadable = Rule{
 		Specification: "HYBRID_INVOICE",

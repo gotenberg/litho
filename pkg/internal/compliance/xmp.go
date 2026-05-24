@@ -527,7 +527,7 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 	}
 
 	var inExtensionSchema bool
-	descDepth := 0 // >0 means we are inside an rdf:Description
+	descDepth := 0 // >0 indicates the scanner sits inside an rdf:Description
 
 	for {
 		tok, err := decoder.Token()
@@ -689,7 +689,7 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 
 	// Detect wrong prefix via raw byte scan. The XML parser resolves
 	// namespaces by URI, so "pdfa:part" with the correct URI appears correct
-	// to the parser. We need to check the actual serialized prefix.
+	// to the parser. The actual serialized prefix must be inspected.
 	if hasPart && !wrongPrefixPart {
 		wrongPrefixPart = xmpHasWrongPdfaidPrefix(ctx, data, "part")
 	}
@@ -1112,7 +1112,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				continue
 			}
 
-			// When we see rdf:li, push the appropriate level.
+			// On rdf:li, push the appropriate level.
 			if t.Name.Local == "li" {
 				if hasPending { //nolint:gocritic // compound conditions with state mutation
 					levelStack = append(levelStack, pendingLevel)
@@ -1936,7 +1936,7 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					currentCharData = ""
 					inContainer = false
 					inLi = false
-					// Default to simple until we see a container child.
+					// Default to simple until a container child appears.
 					pv := getOrCreate(currentNS, currentLocal)
 					pv.containerType = xmpContSimple
 					record(currentNS, currentLocal, pv)

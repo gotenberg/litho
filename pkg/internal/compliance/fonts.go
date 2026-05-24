@@ -309,8 +309,8 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	if err != nil || len(descArr) == 0 {
 		doc.Logger.Debug("compliance: fonts: Type0 font has no DescendantFonts",
 			"font", fontName, "error", err)
-		// Without descendants we cannot check further, but the font is still
-		// subject to embedding checks at the Type0 level.
+		// Without descendants no further checks are possible, but the font is
+		// still subject to embedding checks at the Type0 level.
 		return results
 	}
 

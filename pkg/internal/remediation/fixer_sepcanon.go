@@ -30,8 +30,8 @@ func matchSepCanon(v compliance.Violation) bool {
 // requirement across the document.
 func fixSepCanon(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
 	// Rewriting a Separation's alternate space or tint transform
-	// changes rendered colour. That's outside the content-preserving
-	// default — gate behind PreserveContent.
+	// changes rendered colour. That sits outside the content-preserving
+	// default, so gate behind PreserveContent.
 	if opts.PreserveContent {
 		return nil, nil
 	}
@@ -171,7 +171,7 @@ func objectsEqual(a, b ast.PdfObject) bool {
 // eachColorSpaceArray walks every colour-space array reachable from the
 // page's resources: direct /ColorSpace entries and the /Colorants
 // values of DeviceN/NChannel arrays. The visitor is read-only.
-func eachColorSpaceArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, visit func(ast.PdfArray)) {
+func eachColorSpaceArray(ctx context.Context, _ *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, visit func(ast.PdfArray)) {
 	resObj, ok := pe.dict["Resources"]
 	if !ok {
 		return

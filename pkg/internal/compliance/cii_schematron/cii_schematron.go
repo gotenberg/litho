@@ -28,8 +28,8 @@ import (
 // [FS] for one rule set so callers can pick between EN 16931
 // (cross-EU baseline), XRechnung (German CIUS), and the
 // Factur-X-profile-specific rule sets (MINIMUM / BASIC WL / BASIC /
-// EN 16931 / EXTENDED) that mirror what Mustang's reference
-// validator applies.
+// EN 16931 / EXTENDED) that the Factur-X 1.0.07 publication
+// references.
 const (
 	EN16931Root   = "en16931/EN16931-CII-validation.sch"
 	XRechnungRoot = "xrechnung/XRechnung-CII-validation.sch"
@@ -44,18 +44,16 @@ const (
 	// 1.0 schematron. ZUGFeRD 1.0 uses the
 	// urn:ferd:CrossIndustryDocument:invoice:1p0 root namespace and
 	// the ram/qdt v12/v15 child types, none of which the v100 CII
-	// rule sets cover. The bundle source is Mustang's
-	// validator/src/main/resources/ZUGFeRD_1p0.sch published under
-	// the FeRD-AWV non-discriminatory licence.
+	// rule sets cover. The bundle source is the ZUGFeRD project's
+	// ZUGFeRD_1p0.sch published under the FeRD-AWV
+	// non-discriminatory licence.
 	ZUGFeRD1p0Root = "zugferd1p0/ZUGFeRD_1p0.sch"
 
 	// PeppolRoot names the bundled root of the PEPPOL BIS 3.0
 	// EN 16931 CII schematron sourced from OpenPEPPOL's
 	// peppol-bis-invoice-3 repository. The rule set fires on
 	// documents whose CII profile is plain
-	// "urn:cen.eu:en16931:2017" (no Factur-X / XRechnung / other
-	// CIUS suffix) - the same condition under which Mustang's
-	// reference pipeline overlays it.
+	// "urn:cen.eu:en16931:2017" with no CIUS suffix.
 	PeppolRoot = "peppol/PEPPOL-EN16931-CII.sch"
 )
 
@@ -182,12 +180,11 @@ var (
 
 // LoadFacturXProfile returns the bundled Factur-X profile Schematron
 // matching the supplied conformance level. The five profiles ship
-// alongside the EN 16931 baseline and XRechnung CIUS bundles; they
-// mirror the rule set Mustang's reference validator applies, which
-// is CEN EN 16931 + PEPPOL-EN16931 + Factur-X-specific BR-FX-EN-*
-// rules rolled into one. Callers pick this in place of [LoadDefault]
-// when the document's fx:ConformanceLevel selects one of MINIMUM,
-// BASIC WL, BASIC, EN 16931, or EXTENDED.
+// alongside the EN 16931 baseline and XRechnung CIUS bundles; each
+// rolls CEN EN 16931 + PEPPOL-EN16931 + Factur-X-specific
+// BR-FX-EN-* rules into one rule set per profile. Callers pick this
+// in place of [LoadDefault] when the document's fx:ConformanceLevel
+// selects one of MINIMUM, BASIC WL, BASIC, EN 16931, or EXTENDED.
 //
 // level is matched case-insensitively against the canonical Factur-X
 // 1.0.07 spelling. Returns (nil, nil) when level is empty or
@@ -215,16 +212,15 @@ func LoadFacturXProfile(ctx context.Context, level string) (*schematron.Schema, 
 		// Augment only the EN 16931 profile with EN 16931 baseline
 		// rules whose canonical id (the bracketed prefix in profile
 		// assertion messages) isn't already carried by the profile.
-		// The upstream Mustang sources rebadge most baseline rules
-		// under FX-SCH-A-* ids when producing the per-profile
-		// schematron, but ~600 entries (the CII-DT-* "should not
-		// be present" data-type guards and the CII-SR-* warning-
-		// class schema refinements) drop off the per-profile cut.
-		// Importing them closes the gap KoSIT exposes for the
-		// schematron oracle without touching the BR-CO-*
-		// arithmetic rules whose profile equivalents already fire
-		// (and whose baseline xs:decimal forms break our XPath
-		// engine, producing the FPs the layered approach hit).
+		// The upstream per-profile sources rebadge most baseline
+		// rules under FX-SCH-A-* ids, but ~600 entries (the
+		// CII-DT-* "should not be present" data-type guards and the
+		// CII-SR-* warning-class schema refinements) drop off the
+		// per-profile cut. Importing them restores the spec
+		// coverage without touching the BR-CO-* arithmetic rules
+		// whose profile equivalents already fire (the baseline
+		// xs:decimal forms trip the XPath engine and would produce
+		// spurious firings on otherwise-conformant documents).
 		//
 		// The augmentation only fires for level=="EN 16931":
 		// MINIMUM / BASIC WL / BASIC / EXTENDED loosen or tighten
@@ -232,8 +228,8 @@ func LoadFacturXProfile(ctx context.Context, level string) (*schematron.Schema, 
 		// can't represent (BR-12 / BR-16 mandate line items even
 		// though MINIMUM legitimately omits them; CII-DT-031
 		// forbids @currencyID where the BASIC profile allows it),
-		// so mixing in baseline rules produces FPs on Mustang-valid
-		// profile documents.
+		// so mixing in baseline rules produces spurious firings on
+		// otherwise-conformant profile documents.
 		if level == "EN 16931" {
 			if baseline, baseErr := LoadDefault(ctx); baseErr == nil && baseline != nil {
 				s = augmentProfileWithBaseline(s, baseline)
@@ -448,8 +444,8 @@ func loadBaselineFlags() {
 		return
 	}
 	// Streaming XML decoder keeps the parse cost low and avoids a
-	// second full schematron-tree allocation. We only care about
-	// <assert>/<report> id and flag attributes regardless of nesting.
+	// second full schematron-tree allocation. Only <assert>/<report>
+	// id and flag attributes matter, regardless of nesting depth.
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	out := make(map[string]string, 1024)
 	for {

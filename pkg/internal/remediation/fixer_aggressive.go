@@ -339,9 +339,10 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 }
 
 // DecodeStream is checked via interface to avoid import cycle.
-// The document.Document type has a DecodeStream method we need.
+// The document.Document type provides the DecodeStream method this
+// package depends on.
 func init() {
-	// Verify at compile time that document.Document has the method we need.
+	// Compile-time check that document.Document carries DecodeStream.
 	var _ interface {
 		DecodeStream(context.Context, ast.PdfStream) ([]byte, error)
 	} = (*document.Document)(nil)

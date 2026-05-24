@@ -930,7 +930,7 @@ func isXPathNameChar(b byte) bool {
 	return false
 }
 
-func makeViolation(rule *Rule, a *Assertion, n *xmlquery.Node) Violation {
+func makeViolation(_ *Rule, a *Assertion, n *xmlquery.Node) Violation {
 	return Violation{
 		RuleID:  a.ID,
 		Flag:    a.Flag,

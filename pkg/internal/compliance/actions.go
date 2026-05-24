@@ -352,8 +352,8 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	}
 
 	// Walk widget /A action chain for forbidden types (when /A is present and
-	// not already flagged as structurally forbidden. We still report the type
-	// violations for completeness).
+	// not already flagged as structurally forbidden). Type violations still
+	// fire for completeness.
 	if hasA {
 		aDict, err := document.ResolveDict(ctx, doc, annotDict["A"])
 		if err == nil && aDict != nil {
@@ -388,7 +388,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 
 // walkActionChain recursively checks an action dict and its /Next chain for
 // forbidden action types and invalid named actions.
-func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int) []Violation {
+func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, _ string, part int, location string, depth int) []Violation {
 	if ctx.Err() != nil || depth > maxActionChainDepth {
 		return nil
 	}
@@ -422,7 +422,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 	// /Next can be a single action dict or an array of action dicts.
 	nextDict, err := document.ResolveDict(ctx, doc, nextObj)
 	if err == nil && nextDict != nil {
-		results = append(results, walkActionChain(ctx, doc, nextDict, profile, part, location+" /Next", depth+1)...)
+		results = append(results, walkActionChain(ctx, doc, nextDict, "", part, location+" /Next", depth+1)...)
 		return results
 	}
 
@@ -438,7 +438,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 		if err != nil || itemDict == nil {
 			continue
 		}
-		results = append(results, walkActionChain(ctx, doc, itemDict, profile, part, fmt.Sprintf("%s /Next[%d]", location, i), depth+1)...)
+		results = append(results, walkActionChain(ctx, doc, itemDict, "", part, fmt.Sprintf("%s /Next[%d]", location, i), depth+1)...)
 	}
 
 	return results

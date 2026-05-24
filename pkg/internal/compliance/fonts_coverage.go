@@ -62,7 +62,7 @@ func cidSetCompletenessRule(profile string) Rule {
 // (§6.3.5 t2), where CharSet only has to cover rendered glyphs; it is
 // ignored for parts 2/3, whose rule requires the full font-program
 // charset to be listed.
-func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, _ *fontUsageInfo) []Violation {
 	basefont := fontBaseFont(ctx, doc, fontDict)
 	if !isSubsetFont(basefont) {
 		return nil
@@ -114,7 +114,7 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
 		}
 
-		// Part 1: §6.3.5 t2 — completeness check skipped. The spec
+		// Part 1: §6.3.5 t2 completeness check skipped. The spec
 		// wording ("listing the character names defined in the font
 		// subset") reads strict, but VeraPDF and Acrobat accept any
 		// CharSet that covers the *rendered* glyph set, with names
@@ -125,7 +125,6 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 		// check above already catches the common offence (CharSet
 		// missing entirely); deeper completeness verification is
 		// deferred to avoid false positives.
-		_ = completenessRule
 		return nil
 	}
 
@@ -215,8 +214,9 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 	}
 
 	// Part 1: also check CIDSet completeness for CFF CIDFonts.
-	// TrueType empty-glyph detection is unreliable for Part 1, so we limit
-	// this to CFF fonts where ValidCIDs produces accurate results.
+	// TrueType empty-glyph detection is unreliable for Part 1, so the
+	// check is limited to CFF fonts where ValidCIDs produces accurate
+	// results.
 	if PDFAPart(profile) == 1 {
 		cidSetObj, hasCIDSet := fd["CIDSet"]
 		if hasCIDSet {

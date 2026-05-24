@@ -96,8 +96,8 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 }
 
 // scanFormXObjectsUA scans XObject resources for PDF/UA-1 §7.20 t01: /Ref
-// key forbidden. XObjects are streams, so we use ResolveStream.
-// checkedForRef prevents reporting the same object twice.
+// key forbidden. XObjects are streams, so the scanner resolves them via
+// ResolveStream. checkedForRef prevents reporting the same object twice.
 func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.PdfDict, results *[]Violation, checkedForRef map[int]bool, depth int) {
 	if depth > 10 || ctx.Err() != nil {
 		return

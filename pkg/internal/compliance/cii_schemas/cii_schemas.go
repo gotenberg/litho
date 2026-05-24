@@ -36,8 +36,8 @@ const D16BRoot = "d16b/CrossIndustryInvoice_100pD16B.xsd"
 // branch, BASIC-WL keeps the document header but trims line items
 // out, BASIC adds back the line-level details, EN 16931 lifts the
 // cross-EU baseline, and EXTENDED keeps Factur-X-specific
-// extensions. The bundle source is Mustang's
-// validator/src/main/resources/schema/ZF_240/<level>/ tree.
+// extensions. The bundled XSD files come from the Factur-X 1.0.07
+// publication.
 const (
 	FacturXMinimumRoot  = "facturx_profiles/MINIMUM/FACTUR-X_MINIMUM.xsd"
 	FacturXBasicWLRoot  = "facturx_profiles/BASIC-WL/FACTUR-X_BASIC-WL.xsd"

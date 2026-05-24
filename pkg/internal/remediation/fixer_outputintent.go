@@ -273,7 +273,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		}
 	}
 
-	// When we just added an OutputIntent, any existing ICCBased page
+	// When an OutputIntent was just added, any existing ICCBased page
 	// colorspace that happens to share the profile now violates
 	// §6.2.4.2. Dedup them immediately.
 	if addOI {
@@ -295,7 +295,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	// Inject a Default{RGB,CMYK} for the colorspace the OutputIntent
 	// does not cover. Validators only report a single colorspace
 	// violation even when a page mixes DeviceCMYK and DeviceRGB, so
-	// pre-stage the paired default whenever we added an OI.
+	// pre-stage the paired default whenever an OI was added.
 	var defaultColor ast.PdfName
 	var iccData []byte
 	var nComponents int

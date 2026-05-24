@@ -370,8 +370,8 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		)
 		if findXMPProperty(buf, dcNS, "creator").Form != xmpPropertyNotFound {
 			// Element exists; try to replace via the splicer. If that
-			// fails (e.g., complex nested structure), we leave the
-			// existing value alone rather than risk a malformed patch.
+			// fails (e.g., complex nested structure), leave the existing
+			// value alone rather than risk a malformed patch.
 			if out, err := replacePropertyValue(buf, dcNS, "creator", fmt.Sprintf(
 				`<rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq>`, escaped)); err == nil {
 				buf = out

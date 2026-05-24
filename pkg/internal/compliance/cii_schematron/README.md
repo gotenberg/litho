@@ -8,9 +8,9 @@
 
 `xrechnung/XRechnung-CII-validation.sch` plus `xrechnung/common.sch` are the German CIUS rules published by KoSIT at <https://github.com/itplr-kosit/xrechnung-schematron>. The include reference was rewritten from `../common.sch` to `common.sch` so both files sit next to each other inside the bundle directory; the rule content is otherwise verbatim.
 
-`facturx_profiles/FACTUR-X_*.sch` are the per-profile schematrons sourced from Mustang's `validator/src/main/resources/schematron/ZF_240/` directory. They go through `cmd/gen-facturx-schematron` to inline external code-list lookups (`document('FACTUR-X_*_codedb.xml')/...`) the antchfx XPath engine cannot resolve.
+`facturx_profiles/FACTUR-X_*.sch` are the per-profile schematrons published by FNFE-MPE with Factur-X 1.0.07. They go through `cmd/gen-facturx-schematron` to inline external code-list lookups (`document('FACTUR-X_*_codedb.xml')/...`) the antchfx XPath engine cannot resolve.
 
-`zugferd1p0/ZUGFeRD_1p0.sch` is Mustang's `validator/src/main/resources/ZUGFeRD_1p0.sch`, the legacy ZUGFeRD 1.0 rule set keyed off the `urn:ferd:CrossIndustryDocument:invoice:1p0` namespace. The v100-family EN 16931 / XRechnung / Factur-X profile rules do not match v1's element structure, so v1 documents route through this dedicated pass.
+`zugferd1p0/ZUGFeRD_1p0.sch` is the legacy ZUGFeRD 1.0 rule set published by the ZUGFeRD project (FeRD-AWV), keyed off the `urn:ferd:CrossIndustryDocument:invoice:1p0` namespace. The v100-family EN 16931 / XRechnung / Factur-X profile rules do not match v1's element structure, so v1 documents route through this dedicated pass.
 
 `peppol/PEPPOL-EN16931-CII.sch` is OpenPEPPOL's PEPPOL BIS 3.0 rule set for CII (<https://github.com/OpenPEPPOL/peppol-bis-invoice-3>). It ships **opt-in** because R001 / R010 / R020 require a PEPPOL business-process identifier that Factur-X / ZUGFeRD documents legitimately omit; the validator does not auto-overlay it. Callers that want PEPPOL coverage thread `compliance.WithPeppolSchematron(s)` after `cii_schematron.LoadPeppol(ctx)`.
 
@@ -50,7 +50,7 @@ sed -i '' 's|href="../common.sch"|href="common.sch"|' \
 rm -rf "$TMP"
 ```
 
-When Mustang publishes a new ZUGFeRD 1.0 schematron release:
+When the ZUGFeRD project publishes a new ZUGFeRD 1.0 schematron release (canonical Git mirror at mustangproject):
 
 ```sh
 curl -fsSL "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/master/validator/src/main/resources/ZUGFeRD_1p0.sch" \
@@ -65,7 +65,7 @@ curl -fsSL "https://raw.githubusercontent.com/OpenPEPPOL/peppol-bis-invoice-3/${
   -o pkg/internal/compliance/cii_schematron/peppol/PEPPOL-EN16931-CII.sch
 ```
 
-Then `make test-unit` and adjust any drifted assertions. The Schematron evolves a few times a year as CEN and KoSIT revise business rules.
+Then `make test-unit` and adjust any drifted assertions. The Schematron evolves a few times a year as CEN, KoSIT (XRechnung publisher), FNFE-MPE, and OpenPEPPOL revise their business rules.
 
 ## License
 
