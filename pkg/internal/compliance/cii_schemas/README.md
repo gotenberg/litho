@@ -44,10 +44,10 @@ When a new Factur-X profile or ZUGFeRD 1.0 XSD revision is published upstream, r
 git clone --depth 1 https://github.com/ZUGFeRD/mustangproject.git /tmp/zf
 for p in MINIMUM BASIC-WL BASIC EN16931 EXTENDED; do
   cp /tmp/zf/validator/src/main/resources/schema/ZF_240/$p/*.xsd \
-     pkg/internal/compliance/cii_schemas/facturx_profiles/$p/
+    pkg/internal/compliance/cii_schemas/facturx_profiles/$p/
 done
 cp /tmp/zf/validator/src/main/resources/schema/ZF_10/*.xsd \
-   pkg/internal/compliance/cii_schemas/zugferd1p0/
+  pkg/internal/compliance/cii_schemas/zugferd1p0/
 ```
 
 ## License
