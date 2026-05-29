@@ -522,8 +522,40 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 // offset does not contain the expected "N G obj" header. Compressed
 // (type 2) and free (type 0) entries are left alone: a raw scan cannot
 // see into object streams, and free entries intentionally reference no
-// body. All writes to [Index.Entries] run under the sync.Once so
-// concurrent resolves observe a consistent map.
+// body. The sync.Once serializes the scan against itself; the mutation
+// loop holds d.mu so a concurrent resolve, which reads Index.Entries
+// under d.mu.RLock via xrefEntry, never observes the map mid-write. The
+// O(file size) scan runs unlocked so it does not serialize unrelated
+// resolves.
+// xrefEntry returns the cross-reference entry for objNum. It reads
+// Index.Entries under d.mu.RLock so a concurrent lazy augmentation
+// write in [Document.augmentXrefFromRawScan] cannot race the read. The
+// critical section is a single map lookup and never calls back into
+// resolution, so it cannot deadlock against the augmentation write lock.
+func (d *Document) xrefEntry(objNum int) (xref.XRefEntry, bool) {
+	d.mu.RLock()
+	entry, ok := d.Index.Entries[objNum]
+	d.mu.RUnlock()
+	return entry, ok
+}
+
+// XRefEntriesSnapshot returns a copy of the cross-reference entries taken
+// under d.mu.RLock. Callers that must iterate the table while resolving
+// objects inside the loop (recovery scans, the compliance warming pass)
+// range the snapshot instead of Index.Entries directly, so a concurrent
+// lazy augmentation write cannot race their iteration. The lock is not
+// held during iteration, so Resolve calls in the loop cannot deadlock
+// against the augmentation write lock.
+func (d *Document) XRefEntriesSnapshot() map[int]xref.XRefEntry {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	out := make(map[int]xref.XRefEntry, len(d.Index.Entries))
+	for objNum, entry := range d.Index.Entries {
+		out[objNum] = entry
+	}
+	return out
+}
+
 func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 	d.xrefAugment.Do(func() {
 		discovered, err := scanIndirectObjects(ctx, d.r, d.size)
@@ -532,6 +564,7 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 			return
 		}
 		added, overridden := 0, 0
+		d.mu.Lock()
 		for objNum, entry := range discovered {
 			existing, exists := d.Index.Entries[objNum]
 			if !exists {
@@ -548,6 +581,7 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 			d.Index.Entries[objNum] = entry
 			overridden++
 		}
+		d.mu.Unlock()
 		if added > 0 || overridden > 0 {
 			d.Logger.Debug("xref augmented from raw scan",
 				slog.Int("added", added),
@@ -737,8 +771,9 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	visited[ref.ObjectNum] = true
 	defer delete(visited, ref.ObjectNum)
 
-	// Look up the object in the xref table.
-	entry, ok := d.Index.Entries[ref.ObjectNum]
+	// Look up the object in the xref table. Read under d.mu.RLock (via
+	// xrefEntry) so a concurrent augmentation write cannot tear the map.
+	entry, ok := d.xrefEntry(ref.ObjectNum)
 	if !ok {
 		// Once per document, augment the xref with entries recovered
 		// from a raw-byte scan of the file. Handles PDFs whose xref
@@ -747,7 +782,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		// O(file size) and memoised via sync.Once so subsequent
 		// lookups hit the cached index.
 		d.augmentXrefFromRawScan(ctx)
-		entry, ok = d.Index.Entries[ref.ObjectNum]
+		entry, ok = d.xrefEntry(ref.ObjectNum)
 	}
 	if !ok {
 		return nil, fmt.Errorf("%w: object %d", ErrObjectNotFound, ref.ObjectNum)
@@ -781,7 +816,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		// Index.Entries stay under the sync.Once.
 		if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
 			d.augmentXrefFromRawScan(ctx)
-			if rescanned, ok := d.Index.Entries[ref.ObjectNum]; ok {
+			if rescanned, ok := d.xrefEntry(ref.ObjectNum); ok {
 				entry = rescanned
 			}
 		}

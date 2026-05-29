@@ -199,7 +199,13 @@ func resolveCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, e
 func resolveAllObjects(ctx context.Context, doc *document.Document) {
 	doc.Logger.Debug("compliance: resolving all objects for format checks")
 	count := 0
-	for objNum, entry := range doc.Index.Entries {
+	// Iterate a snapshot: this warming pass resolves each object, which
+	// can trigger the lazy xref augmentation write on a damaged file. A
+	// concurrent reader (e.g. ExtractText on the same Document) could win
+	// the augmentation race, so ranging Index.Entries directly here would
+	// race that write. The per-group checks below run after this pass, by
+	// which point the augmentation sync.Once is spent.
+	for objNum, entry := range doc.XRefEntriesSnapshot() {
 		if count%100 == 0 {
 			if ctx.Err() != nil {
 				return

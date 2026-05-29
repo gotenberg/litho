@@ -137,7 +137,10 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 // cost of every recovery path by several orders of magnitude on files
 // with large object streams.
 func scanObjects(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) ast.PdfDict {
-	for objNum, entry := range doc.Index.Entries {
+	// Iterate a snapshot: the loop calls Resolve, which can trigger the
+	// lazy xref augmentation write, so ranging Index.Entries directly
+	// would race a concurrent augmentation.
+	for objNum, entry := range doc.XRefEntriesSnapshot() {
 		if err := ctx.Err(); err != nil {
 			return nil
 		}
@@ -168,7 +171,9 @@ func findPagesRoot(ctx context.Context, doc *Document) ast.PdfIndirectRef {
 	// large object streams that are unlikely to hold a pages-root
 	// dictionary.
 	candidates := make(map[int]ast.PdfIndirectRef)
-	for objNum, entry := range doc.Index.Entries {
+	// Snapshot for the same reason as scanObjects: Resolve in the loop
+	// can trigger the lazy xref augmentation write.
+	for objNum, entry := range doc.XRefEntriesSnapshot() {
 		if err := ctx.Err(); err != nil {
 			return ast.PdfIndirectRef{}
 		}

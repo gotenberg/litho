@@ -40,7 +40,7 @@ type Document struct {
 	objectCache   map[int]ast.PdfObject
 	fontCache     map[int]any
 	cmapCache     map[int]any  // parsed CMap by ToUnicode stream object number
-	mu            sync.RWMutex // protects objectCache, fontCache, cmapCache, FormatViolations
+	mu            sync.RWMutex // protects objectCache, fontCache, cmapCache, FormatViolations, and the lazy Index.Entries augmentation
 	runMu         sync.Mutex   // serializes compliance-engine validation runs
 	xrefAugment   sync.Once    // guards the one-shot raw-bytes augmentation of Index
 	maxCacheSize  int          // evict all objects when cache exceeds this size
