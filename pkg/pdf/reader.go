@@ -195,6 +195,30 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 	return compliance.ValidatePDFUA(ctx, r.doc, profile)
 }
 
+// ValidatePDFAReport audits the document against a PDF/A profile and
+// returns structured [Violation] values carrying the clause, test
+// number, and severity that [Reader.ValidatePDFA] stringifies away.
+// Every PDF/A violation is [SeverityFatal]: ISO 19005 conformance is
+// binary. Use [Reader.ValidatePDFA] for the flat error form.
+func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProfile) ([]Violation, error) {
+	errs, err := compliance.ValidatePDFA(ctx, r.doc, profile)
+	if err != nil {
+		return nil, err
+	}
+	return toViolations(errs), nil
+}
+
+// ValidatePDFUAReport mirrors [Reader.ValidatePDFAReport] for PDF/UA.
+// Every PDF/UA violation is [SeverityFatal]: ISO 14289 conformance is
+// binary.
+func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAProfile) ([]Violation, error) {
+	errs, err := compliance.ValidatePDFUA(ctx, r.doc, profile)
+	if err != nil {
+		return nil, err
+	}
+	return toViolations(errs), nil
+}
+
 // ValidateFacturX audits the document against the joint
 // Factur-X 1.0+ / ZUGFeRD 2.1+ specification. The returned slice
 // contains the PDF/A-3 violations of the archival base plus any
@@ -264,6 +288,28 @@ func partitionFacturXErrors(errs []error) FacturXReport {
 		rep.Violations = append(rep.Violations, e)
 	}
 	return rep
+}
+
+// Structured returns the hard violations as structured [Violation]
+// values carrying clause, test number, and severity. Unlike PDF/A and
+// PDF/UA, a Factur-X result mixes [SeverityFatal] (PDF/A-3 base and
+// fired Schematron asserts) with [SeverityWarning] (soft Schematron
+// rules and report notices).
+func (rep FacturXReport) Structured() []Violation {
+	return toViolations(rep.Violations)
+}
+
+// Fatals returns the structured violations whose severity is
+// [SeverityFatal]: the failures that make the document non-conformant.
+func (rep FacturXReport) Fatals() []Violation {
+	return filterBySeverity(rep.Violations, SeverityFatal)
+}
+
+// Warnings returns the structured violations whose severity is
+// [SeverityWarning]: soft Schematron findings that do not by themselves
+// fail conformance.
+func (rep FacturXReport) Warnings() []Violation {
+	return filterBySeverity(rep.Violations, SeverityWarning)
 }
 
 // facturXValidateOpts assembles the compliance options threaded into
