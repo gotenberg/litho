@@ -17,6 +17,13 @@ var (
 	// %PDF- header.
 	ErrNotAPDF = errors.New("not a valid PDF document (missing %PDF- header)")
 
+	// ErrInternalPanic is returned when an unexpected panic was recovered
+	// at a public API boundary while processing document bytes. Internal
+	// code is not supposed to panic; this sentinel exists so a crafted or
+	// corrupt input cannot crash the host process. The recovered value
+	// and a stack trace are logged at Error via the document logger.
+	ErrInternalPanic = errors.New("internal panic recovered while processing the document")
+
 	// ErrDamagedXRef is returned when the cross-reference table is
 	// corrupted or missing and could not be reconstructed.
 	ErrDamagedXRef = errors.New("damaged or missing cross-reference table")

@@ -202,14 +202,16 @@ func (r *Reader) ClearCache() {
 // ValidatePDFA audits the document against a specific PDF/A profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func (r *Reader) ValidatePDFA(ctx context.Context, profile models.PDFAProfile) ([]error, error) {
+func (r *Reader) ValidatePDFA(ctx context.Context, profile models.PDFAProfile) (_ []error, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidatePDFA", &err)
 	return compliance.ValidatePDFA(ctx, r.doc, profile)
 }
 
 // ValidatePDFUA audits the document against a specific PDF/UA profile,
 // returning all compliance violations found. An empty slice means the
 // document passes.
-func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile) ([]error, error) {
+func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile) (_ []error, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidatePDFUA", &err)
 	return compliance.ValidatePDFUA(ctx, r.doc, profile)
 }
 
@@ -218,7 +220,8 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 // number, and severity that [Reader.ValidatePDFA] stringifies away.
 // Every PDF/A violation is [SeverityFatal]: ISO 19005 conformance is
 // binary. Use [Reader.ValidatePDFA] for the flat error form.
-func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProfile) ([]Violation, error) {
+func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProfile) (_ []Violation, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidatePDFAReport", &err)
 	errs, err := compliance.ValidatePDFA(ctx, r.doc, profile)
 	if err != nil {
 		return nil, err
@@ -229,7 +232,8 @@ func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProf
 // ValidatePDFUAReport mirrors [Reader.ValidatePDFAReport] for PDF/UA.
 // Every PDF/UA violation is [SeverityFatal]: ISO 14289 conformance is
 // binary.
-func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAProfile) ([]Violation, error) {
+func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAProfile) (_ []Violation, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidatePDFUAReport", &err)
 	errs, err := compliance.ValidatePDFUA(ctx, r.doc, profile)
 	if err != nil {
 		return nil, err
@@ -250,7 +254,8 @@ func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAPr
 // Use [Reader.ValidateZUGFeRD] when the producer claims an earlier
 // ZUGFeRD generation (1.0 or 2.0) since those use different filenames
 // and XMP namespaces.
-func (r *Reader) ValidateFacturX(ctx context.Context) ([]error, error) {
+func (r *Reader) ValidateFacturX(ctx context.Context) (_ []error, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidateFacturX", &err)
 	return compliance.ValidateFacturX(ctx, r.doc, r.facturXValidateOpts(ctx)...)
 }
 
@@ -463,7 +468,8 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 //
 // Returns [ErrInvalidZUGFeRDVersion] wrapped with the offending value
 // when version is not a documented constant.
-func (r *Reader) ValidateZUGFeRD(ctx context.Context, version models.ZUGFeRDVersion) ([]error, error) {
+func (r *Reader) ValidateZUGFeRD(ctx context.Context, version models.ZUGFeRDVersion) (_ []error, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidateZUGFeRD", &err)
 	if !version.IsValid() {
 		return nil, fmt.Errorf("%w: %q", ErrInvalidZUGFeRDVersion, version)
 	}
@@ -472,11 +478,12 @@ func (r *Reader) ValidateZUGFeRD(ctx context.Context, version models.ZUGFeRDVers
 
 // Open initializes a new [Reader] from an [io.ReaderAt] and its total size.
 // Pass functional options (e.g., [WithLogger], [WithPassword]) to customize behavior.
-func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*Reader, error) {
+func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_ *Reader, err error) {
 	var o openOpts
 	for _, opt := range opts {
 		opt(&o)
 	}
+	defer recoverToError(o.logger, "pdf.Open", &err)
 	if o.ciiFS != nil {
 		schema, err := xsd.Load(ctx, o.ciiFS, o.ciiRoot)
 		if err != nil {
@@ -573,7 +580,8 @@ func (r *Reader) IsEncrypted() bool {
 }
 
 // PageCount returns the total number of pages in the document.
-func (r *Reader) PageCount(ctx context.Context) (int, error) {
+func (r *Reader) PageCount(ctx context.Context) (_ int, err error) {
+	defer recoverToError(r.logger(), "Reader.PageCount", &err)
 	pages, err := r.resolvePages(ctx)
 	if err != nil {
 		return 0, err
@@ -633,7 +641,8 @@ func WithArtifacts() ExtractTextOption {
 // text outside the clipping path and CropBox, and artifact text (headers,
 // footers, page numbers) are silently dropped. Pass [WithHiddenText] to
 // include all text regardless of visibility.
-func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (string, error) {
+func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (_ string, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractText", &err)
 	var o extractTextOpts
 	for _, opt := range opts {
 		opt(&o)
@@ -702,7 +711,8 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 // ExtractAllText extracts and concatenates text from every page in the
 // document, separated by newlines. This is a convenience wrapper around
 // [Reader.ExtractText] for the common "give me all the text" use case.
-func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) (string, error) {
+func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) (_ string, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractAllText", &err)
 	pages, err := r.resolvePages(ctx)
 	if err != nil {
 		return "", err
@@ -799,7 +809,8 @@ func (p Permissions) Mask() int32 {
 // XMPMetadata only when you need custom XMP namespaces, PDF/A
 // identification fields, or full RDF/XML access.
 // Values must not be shared across goroutines without synchronization.
-func (r *Reader) XMPMetadata(ctx context.Context) (func(context.Context) (io.ReadCloser, error), error) {
+func (r *Reader) XMPMetadata(ctx context.Context) (_ func(context.Context) (io.ReadCloser, error), err error) {
+	defer recoverToError(r.logger(), "Reader.XMPMetadata", &err)
 	return semantics.XMPOpen(ctx, r.doc)
 }
 
@@ -811,12 +822,14 @@ func (r *Reader) XMPMetadata(ctx context.Context) (func(context.Context) (io.Rea
 // For PDF/A-compliant documents with custom XMP namespaces or extended
 // rights/history metadata, use [Reader.XMPMetadata] to read the raw
 // XMP packet.
-func (r *Reader) Metadata(ctx context.Context) (map[string]string, error) {
+func (r *Reader) Metadata(ctx context.Context) (_ map[string]string, err error) {
+	defer recoverToError(r.logger(), "Reader.Metadata", &err)
 	return semantics.Metadata(ctx, r.doc)
 }
 
 // Bookmarks extracts the hierarchical outline (table of contents) from the document.
-func (r *Reader) Bookmarks(ctx context.Context) ([]models.Bookmark, error) {
+func (r *Reader) Bookmarks(ctx context.Context) (_ []models.Bookmark, err error) {
+	defer recoverToError(r.logger(), "Reader.Bookmarks", &err)
 	return semantics.ResolveOutline(ctx, r.doc)
 }
 
@@ -947,7 +960,8 @@ func adaptHeadingScorer(s HeadingScorer) bookmarks.HeadingScorer {
 // When the document has a structure tree and PreferStructureTree is true
 // (default), bookmarks are extracted from tagged H1-H6 elements. Otherwise,
 // bookmarks are inferred from font size relative to body text.
-func (r *Reader) GenerateBookmarks(ctx context.Context, opts BookmarkGenerationOptions) ([]models.Bookmark, error) {
+func (r *Reader) GenerateBookmarks(ctx context.Context, opts BookmarkGenerationOptions) (_ []models.Bookmark, err error) {
+	defer recoverToError(r.logger(), "Reader.GenerateBookmarks", &err)
 	input, err := r.buildBookmarkInput(ctx)
 	if err != nil {
 		return nil, err
@@ -1004,7 +1018,8 @@ func (r *Reader) buildBookmarkInput(ctx context.Context) (bookmarks.Input, error
 //
 // For field type, flags, options, and geometry, use
 // [Reader.FormFields] instead.
-func (r *Reader) FormData(ctx context.Context) (map[string]string, error) {
+func (r *Reader) FormData(ctx context.Context) (_ map[string]string, err error) {
+	defer recoverToError(r.logger(), "Reader.FormData", &err)
 	fields, err := annotation.ExtractFormData(ctx, r.doc)
 	if err != nil {
 		return nil, err
@@ -1021,7 +1036,8 @@ func (r *Reader) FormData(ctx context.Context) (map[string]string, error) {
 // (name, value, type, flags), evaluating any PDF JavaScript
 // calculation scripts. Use [Reader.FormData] when only the flat
 // name-to-value mapping is needed.
-func (r *Reader) FormFields(ctx context.Context) ([]models.FormField, error) {
+func (r *Reader) FormFields(ctx context.Context) (_ []models.FormField, err error) {
+	defer recoverToError(r.logger(), "Reader.FormFields", &err)
 	return annotation.ExtractFormData(ctx, r.doc)
 }
 
@@ -1029,7 +1045,8 @@ func (r *Reader) FormFields(ctx context.Context) ([]models.FormField, error) {
 // stroked line segments (physical grid) and, when no lines are found, by
 // spatially clustering text elements into rows and inferring column boundaries
 // from consistent X-gaps.
-func (r *Reader) ExtractTables(ctx context.Context, pageNum int) ([]models.Table, error) {
+func (r *Reader) ExtractTables(ctx context.Context, pageNum int) (_ []models.Table, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractTables", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -1093,19 +1110,22 @@ func (r *Reader) HasAcroForm(ctx context.Context) bool {
 // IsPortfolio reports whether the document is a PDF Portfolio (Collection).
 // Portfolio PDFs are containers whose visible pages are merely a cover sheet;
 // the real payload is a set of embedded files.
-func (r *Reader) IsPortfolio(ctx context.Context) (bool, error) {
+func (r *Reader) IsPortfolio(ctx context.Context) (_ bool, err error) {
+	defer recoverToError(r.logger(), "Reader.IsPortfolio", &err)
 	return semantics.IsPortfolio(ctx, r.doc)
 }
 
 // EmbeddedFiles returns all files from the document's /EmbeddedFiles name
 // tree. Each item includes the original filename, MIME type, and a lazy Open
 // accessor. Callers can recursively pass embedded PDFs back into pdf.Open.
-func (r *Reader) EmbeddedFiles(ctx context.Context) ([]models.EmbeddedFile, error) {
+func (r *Reader) EmbeddedFiles(ctx context.Context) (_ []models.EmbeddedFile, err error) {
+	defer recoverToError(r.logger(), "Reader.EmbeddedFiles", &err)
 	return semantics.ExtractPortfolioItems(ctx, r.doc)
 }
 
 // ExtractAnnotations extracts annotations from the given 1-based page number.
-func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) ([]models.Annotation, error) {
+func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) (_ []models.Annotation, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractAnnotations", &err)
 	pages, err := r.resolvePages(ctx)
 	if err != nil {
 		return nil, err
@@ -1159,7 +1179,8 @@ func (r *Reader) LinearizationInfo() *models.LinearizationParams {
 
 // ExtractSignatures returns the digital signatures present in the document
 // without performing chain validation.
-func (r *Reader) ExtractSignatures(ctx context.Context) ([]models.Signature, error) {
+func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractSignatures", &err)
 	return signature.ExtractSignatures(ctx, r.doc)
 }
 
@@ -1171,7 +1192,8 @@ func (r *Reader) ExtractSignatures(ctx context.Context) ([]models.Signature, err
 // When a Document Security Store (DSS) is present, embedded OCSP responses,
 // CRLs, and RFC 3161 timestamp tokens are used for Long-Term Validation
 // (LTV), enabling offline verification of signatures with expired certificates.
-func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) ([]models.SignatureValidation, error) {
+func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
+	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)
 }
 
@@ -1179,14 +1201,16 @@ func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) ([]
 // contents. The DSS holds the embedded validation materials (certificates,
 // CRLs, OCSP responses) needed for Long-Term Validation. Returns nil if
 // no DSS exists.
-func (r *Reader) DSSInfo(ctx context.Context) (*models.DSSInfo, error) {
+func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
+	defer recoverToError(r.logger(), "Reader.DSSInfo", &err)
 	return signature.ResolveDSSInfo(ctx, r.doc)
 }
 
 // Page returns the geometry and metadata for the given 1-based page number.
 // Width and Height are effective dimensions in PDF points, derived from the
 // CropBox (the visible area) and accounting for /Rotate and /UserUnit.
-func (r *Reader) Page(ctx context.Context, pageNum int) (models.Page, error) {
+func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err error) {
+	defer recoverToError(r.logger(), "Reader.Page", &err)
 	p, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return models.Page{}, err
@@ -1231,7 +1255,8 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (models.Page, error) {
 
 // ExtractTextElements extracts spatially positioned text elements from
 // the given 1-based page number.
-func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) ([]models.TextElement, error) {
+func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []models.TextElement, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractTextElements", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -1257,7 +1282,8 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) ([]models
 
 // ExtractImages returns metadata for Image XObjects on the given 1-based
 // page number without decoding pixel data.
-func (r *Reader) ExtractImages(ctx context.Context, pageNum int) ([]models.ImageMeta, error) {
+func (r *Reader) ExtractImages(ctx context.Context, pageNum int) (_ []models.ImageMeta, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractImages", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -1267,7 +1293,8 @@ func (r *Reader) ExtractImages(ctx context.Context, pageNum int) ([]models.Image
 
 // ExtractLines extracts stroked line segments from the content stream of
 // the given 1-based page number.
-func (r *Reader) ExtractLines(ctx context.Context, pageNum int) ([]models.Line, error) {
+func (r *Reader) ExtractLines(ctx context.Context, pageNum int) (_ []models.Line, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractLines", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -1286,7 +1313,8 @@ func (r *Reader) ExtractLines(ctx context.Context, pageNum int) ([]models.Line, 
 // /Measure dictionaries with /Subtype /GEO, returning tie points that
 // map PDF coordinates to GPS (latitude/longitude). Returns nil when the
 // page declares no geospatial data.
-func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) ([]models.GeoData, error) {
+func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) (_ []models.GeoData, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractGeoData", &err)
 	page, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -1299,7 +1327,8 @@ func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) ([]models.GeoD
 // Line/PolyLine annotations for /Measure dictionaries with
 // /Subtype /RL, returning scale axes that map PDF coordinates to
 // real-world units.
-func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) ([]models.Measurement, error) {
+func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) (_ []models.Measurement, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractMeasurements", &err)
 	page, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -1311,7 +1340,8 @@ func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) ([]models
 // annotations on the given 1-based page. Each returned Model3D carries
 // a lazy Open accessor; the stream data is not decoded until the caller
 // invokes Open. The caller must close the reader returned by Open.
-func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Model3D, error) {
+func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) (_ []models.Model3D, err error) {
+	defer recoverToError(r.logger(), "Reader.Extract3DModels", &err)
 	page, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -1323,14 +1353,16 @@ func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) ([]models.Mod
 // Lexicon Specification) XML documents referenced from the catalog's
 // /PronunciationLexicon array (PDF 2.0). Returns nil when none are
 // present.
-func (r *Reader) ExtractPronunciationLexicons(ctx context.Context) ([]models.PronunciationLexicon, error) {
+func (r *Reader) ExtractPronunciationLexicons(ctx context.Context) (_ []models.PronunciationLexicon, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractPronunciationLexicons", &err)
 	return semantics.ExtractPronunciationLexicons(ctx, r.doc)
 }
 
 // ExtractFormulas walks the document structure tree and returns MathML
 // from /Formula elements that carry an /AF entry with /AFRelationship
 // /Supplement and MIME type application/mathml+xml (PDF 2.0).
-func (r *Reader) ExtractFormulas(ctx context.Context) ([]models.FormulaElement, error) {
+func (r *Reader) ExtractFormulas(ctx context.Context) (_ []models.FormulaElement, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractFormulas", &err)
 	return structure.ExtractFormulas(ctx, r.doc)
 }
 
@@ -1338,7 +1370,8 @@ func (r *Reader) ExtractFormulas(ctx context.Context) ([]models.FormulaElement, 
 // page and flags any that fall inside unapplied /Redact annotations.
 // Use this to detect redactions applied visually but not committed to
 // content streams.
-func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) ([]models.TextElement, error) {
+func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) (_ []models.TextElement, err error) {
+	defer recoverToError(r.logger(), "Reader.ExtractRedactedText", &err)
 	elements, err := r.ExtractTextElements(ctx, pageNum)
 	if err != nil {
 		return nil, err

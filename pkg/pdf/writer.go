@@ -874,16 +874,24 @@ func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
 
-// RemediatePDFA validates the document against the given PDF/A profile,
-// applies targeted fixes, and queues the result for writing. The report
-// describes what was fixed and what could not be fixed automatically.
-// Uses incremental update to preserve existing document structure.
-func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (*RemediationReport, error) {
+// remediateConfig applies the remediation options and returns the
+// resolved settings plus the internal options the RemediatePDFA and
+// RemediatePDFUA entry points share.
+func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options) {
 	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	remOpts := remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
+	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
+}
+
+// RemediatePDFA validates the document against the given PDF/A profile,
+// applies targeted fixes, and queues the result for writing. The report
+// describes what was fixed and what could not be fixed automatically.
+// Uses incremental update to preserve existing document structure.
+func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
+	defer recoverToError(w.logger(), "Writer.RemediatePDFA", &err)
+	cfg, remOpts := remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}
@@ -894,12 +902,9 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 
 // RemediatePDFUA validates the document against the given PDF/UA profile,
 // applies targeted fixes, and queues the result for writing.
-func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (*RemediationReport, error) {
-	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
-	for _, o := range opts {
-		o(&cfg)
-	}
-	remOpts := remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
+func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
+	defer recoverToError(w.logger(), "Writer.RemediatePDFUA", &err)
+	cfg, remOpts := remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFUA(ctx, profile)
 	}
@@ -976,7 +981,8 @@ type FacturXConfig struct {
 // is a PDF/A-3 carrying a legacy-named CII payload rather than a fully
 // spec-valid legacy ZUGFeRD file. Producing genuine 1.0/2.0 output is
 // out of scope.
-func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (*RemediationReport, error) {
+func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *RemediationReport, err error) {
+	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
 		return nil, ErrEmptyInvoiceXML
 	}
@@ -1371,7 +1377,8 @@ func (w *Writer) copyFromPreSerialized(dst io.Writer) error {
 // clear metadata, or [WithFullRewrite]); combining them returns
 // [ErrSignFullRewriteIncompatible] instead of silently dropping the
 // requested operation.
-func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) error {
+func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
+	defer recoverToError(w.logger(), "Writer.WriteTo", &err)
 	if w.consumed {
 		return ErrWriterConsumed
 	}
@@ -1539,7 +1546,8 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 // outline is handled in the output (default: keep and remap existing,
 // drop orphans). Pass [WithWriteLogger] to receive structured debug logs
 // from the split engine.
-func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) error {
+func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) (err error) {
+	defer recoverToError(src.logger(), "pdf.Split", &err)
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
@@ -1571,7 +1579,12 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 // (default: concatenate with offset page indexes). Pass [WithWriteLogger] to
 // receive structured debug logs from the merge engine (logs are emitted via
 // the first source's document logger).
-func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteOption) error {
+func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteOption) (err error) {
+	var lg *slog.Logger
+	if len(sources) > 0 {
+		lg = sources[0].logger()
+	}
+	defer recoverToError(lg, "pdf.Merge", &err)
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)

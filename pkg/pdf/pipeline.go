@@ -157,7 +157,7 @@ func (p *Pipeline) buildValidationErrors() []error {
 // WriteTo executes the pipeline and writes the final document to dst.
 // Pass [WithWriteLogger] for structured debug logs; pass
 // [WithPipelineTempDir] to redirect intermediate temp files.
-func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (*PipelineResult, error) {
+func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *PipelineResult, err error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
@@ -170,6 +170,7 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
+	defer recoverToError(logger, "Pipeline.WriteTo", &err)
 
 	ex := &executor{
 		tempDir:     cfg.pipelineTempDir,
