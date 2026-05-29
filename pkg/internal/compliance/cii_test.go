@@ -40,7 +40,7 @@ func validCII() string {
 }
 
 func TestValidateCIIBytes_HappyPath(t *testing.T) {
-	got := validateCIIBytes([]byte(validCII()), variantFacturX)
+	got := validateCIIBytes([]byte(validCII()), variantFacturX, false)
 	if len(got) != 0 {
 		for _, v := range got {
 			t.Logf("unexpected: %v", v)
@@ -50,15 +50,35 @@ func TestValidateCIIBytes_HappyPath(t *testing.T) {
 }
 
 func TestValidateCIIBytes_NotWellFormed(t *testing.T) {
-	got := validateCIIBytes([]byte("<rsm:CrossIndustryInvoice><unbalanced>"), variantFacturX)
+	got := validateCIIBytes([]byte("<rsm:CrossIndustryInvoice><unbalanced>"), variantFacturX, false)
 	if len(got) != 1 || got[0].Rule != Rule_cii_WellFormed {
 		t.Errorf("expected single Rule_cii_WellFormed, got %+v", got)
 	}
 }
 
+func TestValidateCIIBytes_StrictRejectsHTMLEntity(t *testing.T) {
+	// An HTML named entity (&nbsp;) is undefined in XML/CII. Strict
+	// parsing (the default) rejects it as not-well-formed; lenient
+	// tolerates it.
+	payload := strings.Replace(validCII(),
+		`<ram:Name>Acme Co</ram:Name>`, `<ram:Name>Acme&nbsp;Co</ram:Name>`, 1)
+
+	strict := validateCIIBytes([]byte(payload), variantFacturX, false)
+	if len(strict) != 1 || strict[0].Rule != Rule_cii_WellFormed {
+		t.Errorf("strict: expected single Rule_cii_WellFormed for HTML entity, got %+v", strict)
+	}
+
+	lenient := validateCIIBytes([]byte(payload), variantFacturX, true)
+	for _, v := range lenient {
+		if v.Rule == Rule_cii_WellFormed {
+			t.Error("lenient: should tolerate the HTML entity, but got Rule_cii_WellFormed")
+		}
+	}
+}
+
 func TestValidateCIIBytes_WrongRoot(t *testing.T) {
 	payload := `<?xml version="1.0"?><foo:Invoice xmlns:foo="urn:bogus"/>`
-	got := validateCIIBytes([]byte(payload), variantFacturX)
+	got := validateCIIBytes([]byte(payload), variantFacturX, false)
 	if len(got) != 1 || got[0].Rule != Rule_cii_RootElement {
 		t.Errorf("expected single Rule_cii_RootElement, got %+v", got)
 	}
@@ -71,7 +91,7 @@ func TestValidateCIIBytes_MissingDocumentContext(t *testing.T) {
       <ram:ID>A1</ram:ID>
     </ram:BusinessProcessSpecifiedDocumentContextParameter>
   </rsm:ExchangedDocumentContext>`, "", 1)
-	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX))
+	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX, false))
 	if !got[Rule_cii_DocumentContext] {
 		t.Errorf("missing Rule_cii_DocumentContext: %v", got)
 	}
@@ -80,7 +100,7 @@ func TestValidateCIIBytes_MissingDocumentContext(t *testing.T) {
 func TestValidateCIIBytes_MissingDocumentID(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:ID>INV-001</ram:ID>`, "", 1)
-	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX))
+	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX, false))
 	if !got[Rule_cii_ExchangedDocument] {
 		t.Errorf("missing Rule_cii_ExchangedDocument: %v", got)
 	}
@@ -91,7 +111,7 @@ func TestValidateCIIBytes_MissingIssueDateTime(t *testing.T) {
 		`<ram:IssueDateTime>
       <udt:DateTimeString format="102">20260517</udt:DateTimeString>
     </ram:IssueDateTime>`, "", 1)
-	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX))
+	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX, false))
 	if !got[Rule_cii_ExchangedDocument] {
 		t.Errorf("missing Rule_cii_ExchangedDocument: %v", got)
 	}
@@ -102,7 +122,7 @@ func TestValidateCIIBytes_MissingTradeTransaction(t *testing.T) {
 		`<rsm:SupplyChainTradeTransaction>`, `<rsm:OtherSection>`, 1)
 	payload = strings.Replace(payload,
 		`</rsm:SupplyChainTradeTransaction>`, `</rsm:OtherSection>`, 1)
-	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX))
+	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX, false))
 	if !got[Rule_cii_TradeTransaction] {
 		t.Errorf("missing Rule_cii_TradeTransaction: %v", got)
 	}
@@ -111,7 +131,7 @@ func TestValidateCIIBytes_MissingTradeTransaction(t *testing.T) {
 func TestValidateCIIBytes_MissingSellerName(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:Name>Acme Co</ram:Name>`, ``, 1)
-	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX))
+	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX, false))
 	if !got[Rule_cii_SellerTradeParty] {
 		t.Errorf("missing Rule_cii_SellerTradeParty: %v", got)
 	}
@@ -120,7 +140,7 @@ func TestValidateCIIBytes_MissingSellerName(t *testing.T) {
 func TestValidateCIIBytes_MissingCurrency(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>`, ``, 1)
-	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX))
+	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX, false))
 	if !got[Rule_cii_InvoiceCurrency] {
 		t.Errorf("missing Rule_cii_InvoiceCurrency: %v", got)
 	}
@@ -129,7 +149,7 @@ func TestValidateCIIBytes_MissingCurrency(t *testing.T) {
 func TestValidateCIIBytes_MissingGrandTotal(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:GrandTotalAmount currencyID="EUR">100.00</ram:GrandTotalAmount>`, ``, 1)
-	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX))
+	got := violationRules(validateCIIBytes([]byte(payload), variantFacturX, false))
 	if !got[Rule_cii_GrandTotalAmount] {
 		t.Errorf("missing Rule_cii_GrandTotalAmount: %v", got)
 	}
@@ -139,7 +159,7 @@ func TestValidateCIIBytes_LegacyVariantSkipsChecks(t *testing.T) {
 	// ZUGFeRD 1.0 / 2.0 use a different CII schema; the structural
 	// rules must not fire on those variants. Pass payload that would
 	// fail every spine rule under the Factur-X variant.
-	got := validateCIIBytes([]byte(`<root/>`), variantZUGFeRD20)
+	got := validateCIIBytes([]byte(`<root/>`), variantZUGFeRD20, false)
 	// The function returns early without any work, but the entry
 	// point is checkInvoiceCII which short-circuits on variant. The
 	// pure-function variant runs unconditionally, so test the entry

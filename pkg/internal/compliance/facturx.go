@@ -367,7 +367,7 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	hybrid = append(hybrid, checkInvoiceStreamSubtype(ctx, doc, invoice, v, cfg.lenient)...)
 	hybrid = append(hybrid, checkInvoiceConflictingVariant(ctx, doc, v)...)
 	hybrid = append(hybrid, checkInvoiceXMP(ctx, doc, catalog, invoice, v, cfg.lenient)...)
-	hybrid = append(hybrid, checkInvoiceCII(ctx, doc, invoice, v)...)
+	hybrid = append(hybrid, checkInvoiceCII(ctx, doc, invoice, v, cfg.lenient)...)
 	xsdSchema := pickXSD(ctx, doc, catalog, v, &cfg)
 	if xsdSchema != nil {
 		hybrid = append(hybrid, checkInvoiceCIIXSD(ctx, doc, invoice, v, xsdSchema)...)
@@ -662,9 +662,11 @@ func readInvoiceXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 // property serializations.
 func decodeHybridInvoiceXMP(xmp []byte, v hybridInvoiceVariant) xmpProperties {
 	var props xmpProperties
-	dec := xml.NewDecoder(bytes.NewReader(xmp))
-	dec.Strict = false
-	dec.Entity = xml.HTMLEntity
+	// XMP property extraction is best-effort: pull the conformance level
+	// and version even from slightly non-conformant XMP so routing and the
+	// value checks have something to inspect. The strict well-formedness
+	// gate for the CII payload lives in scanCIIPresence.
+	dec := newComplianceXMLDecoder(xmp, true)
 
 	for {
 		tok, err := dec.Token()

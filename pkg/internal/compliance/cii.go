@@ -71,7 +71,7 @@ func variantHasAnyCIIPayload(v hybridInvoiceVariant) bool {
 // payload that the spine rules cover. Legacy ZUGFeRD 1.0 short-
 // circuits because its CII shape differs enough that the spine
 // checks would emit false positives.
-func checkInvoiceCII(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) []Violation {
+func checkInvoiceCII(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, lenient bool) []Violation {
 	if !variantHasCIIv100Payload(v) {
 		return nil
 	}
@@ -93,14 +93,14 @@ func checkInvoiceCII(ctx context.Context, doc *document.Document, invoice invoic
 	if len(data) == 0 {
 		return failf(Rule_cii_StreamReadable, "%s: invoice stream %d is empty", v.label, invoice.streamRef.ObjectNum)
 	}
-	return validateCIIBytes(data, v)
+	return validateCIIBytes(data, v, lenient)
 }
 
 // validateCIIBytes runs the CII spine checks against an in-memory XML
 // payload. Extracted from [checkInvoiceCII] so unit tests can exercise
 // the structural rules without round-tripping through a PDF.
-func validateCIIBytes(payload []byte, v hybridInvoiceVariant) []Violation {
-	presence, rootSeen, wellFormed, parseErr := scanCIIPresence(payload)
+func validateCIIBytes(payload []byte, v hybridInvoiceVariant, lenient bool) []Violation {
+	presence, rootSeen, wellFormed, parseErr := scanCIIPresence(payload, lenient)
 	if !wellFormed {
 		return failf(Rule_cii_WellFormed, "%s: invoice XML is not well-formed: %v", v.label, parseErr)
 	}
@@ -175,14 +175,28 @@ func (p ciiPath) matches(steps ...xml.Name) bool {
 	return true
 }
 
+// newComplianceXMLDecoder builds the XML decoder used across the
+// Factur-X / CII validation path. Strict by default: a malformed
+// document or an HTML named entity (which CII and XMP never define) is
+// rejected, so the well-formedness check produces a violation. When
+// lenient is true the decoder tolerates both, matching producers that
+// emit not-quite-conformant XML. No spec sanctions the lenient mode; it
+// is opt-in via WithFacturXLenient.
+func newComplianceXMLDecoder(payload []byte, lenient bool) *xml.Decoder {
+	dec := xml.NewDecoder(bytes.NewReader(payload))
+	if lenient {
+		dec.Strict = false
+		dec.Entity = xml.HTMLEntity
+	}
+	return dec
+}
+
 // scanCIIPresence walks the XML token stream once and fills the
 // presence struct. The walk records boolean flags for required
 // containers and trimmed text for leaf scalars whose value the
 // rules need to inspect.
-func scanCIIPresence(payload []byte) (p ciiPresence, rootSeen bool, wellFormed bool, parseErr error) {
-	dec := xml.NewDecoder(bytes.NewReader(payload))
-	dec.Strict = false
-	dec.Entity = xml.HTMLEntity
+func scanCIIPresence(payload []byte, lenient bool) (p ciiPresence, rootSeen bool, wellFormed bool, parseErr error) {
+	dec := newComplianceXMLDecoder(payload, lenient)
 
 	root := xml.Name{Space: ciiRootNS, Local: "CrossIndustryInvoice"}
 	docContext := xml.Name{Space: ciiRootNS, Local: "ExchangedDocumentContext"}
@@ -512,9 +526,10 @@ func invoiceClaimsXRechnungCIUS(ctx context.Context, doc *document.Document, inv
 // the first match so an early return covers the typical case where
 // the document context sits near the document head.
 func scanCIIProfileID(payload []byte) string {
-	dec := xml.NewDecoder(bytes.NewReader(payload))
-	dec.Strict = false
-	dec.Entity = xml.HTMLEntity
+	// Profile detection is best-effort routing, not a verdict: extract the
+	// id even from slightly non-conformant XML so the right Schematron set
+	// is selected. The strict well-formedness gate lives in scanCIIPresence.
+	dec := newComplianceXMLDecoder(payload, true)
 
 	root := xml.Name{Space: ciiRootNS, Local: "CrossIndustryInvoice"}
 	docContext := xml.Name{Space: ciiRootNS, Local: "ExchangedDocumentContext"}
