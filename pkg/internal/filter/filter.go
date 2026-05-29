@@ -41,7 +41,12 @@ func limitedCopy(ctx context.Context, buf *bytes.Buffer, r io.Reader) error {
 		}
 		if err != nil {
 			if buf.Len() > 0 {
-				return nil // partial data is usable
+				// Best-effort: a truncated or corrupt stream yields
+				// usable partial data, so return what decoded with a nil
+				// error. The caller cannot currently distinguish a fully
+				// decoded stream from a salvaged partial one; surfacing
+				// that is deferred to the strict/lenient read mode.
+				return nil
 			}
 			return err
 		}
@@ -90,10 +95,14 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 		decoded, err := applyDecodeFilter(ctx, data, f, parms[i])
 		if err != nil {
 			if errors.Is(err, ErrUnsupportedFilter) {
-				// Skip unsupported filters and continue with the
-				// current data. This allows text extraction from
-				// streams where only some filters in a chain are
-				// unsupported (e.g., a plugin not loaded).
+				// Best-effort: skip an unsupported filter and continue
+				// with the current data so text extraction still works
+				// when only part of a chain is supported (e.g. a plugin
+				// is not loaded). The returned bytes are then only
+				// partially decoded (still encoded by the skipped
+				// filter) yet carry a nil error; callers that need to
+				// reject incompletely decoded chains must do so via the
+				// strict/lenient read mode (not yet wired here).
 				continue
 			}
 			return nil, err

@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/hex"
+	"errors"
 	"io"
 	"testing"
 
@@ -341,6 +342,49 @@ func TestTIFFPredictor_BPC4(t *testing.T) {
 	expected := []byte{0x5A, 0x30}
 	if !bytes.Equal(result, expected) {
 		t.Errorf("got %02x, want %02x", result, expected)
+	}
+}
+
+func TestTIFFPredictor_BPC16(t *testing.T) {
+	// BPC=16, Colors=1, Columns=3 → 3 samples × 2 bytes = 6 bytes per row.
+	// Samples are big-endian uint16; differencing must carry across the
+	// byte boundary, which the pre-fix sub-byte path could not do.
+	//
+	// Original samples: [300, 1000, 65535]
+	// Differenced (encoding): [300, 700, 64535]
+	//   300   = 0x012C, 700 = 0x02BC, 64535 = 0xFC17
+	diffed := []byte{0x01, 0x2C, 0x02, 0xBC, 0xFC, 0x17}
+	params := &predictorParams{
+		Predictor:        2,
+		Columns:          3,
+		Colors:           1,
+		BitsPerComponent: 16,
+	}
+
+	result, err := applyTIFFPredictor(diffed, params)
+	if err != nil {
+		t.Fatalf("applyTIFFPredictor BPC=16 failed: %v", err)
+	}
+
+	// Un-differenced: [300, 1000, 65535] → 0x012C 0x03E8 0xFFFF
+	expected := []byte{0x01, 0x2C, 0x03, 0xE8, 0xFF, 0xFF}
+	if !bytes.Equal(result, expected) {
+		t.Errorf("got %02x, want %02x", result, expected)
+	}
+}
+
+func TestTIFFPredictor_UnsupportedBPC(t *testing.T) {
+	// A BitsPerComponent PDF images never use must error rather than
+	// silently mis-decode.
+	params := &predictorParams{
+		Predictor:        2,
+		Columns:          2,
+		Colors:           1,
+		BitsPerComponent: 12,
+	}
+	_, err := applyTIFFPredictor([]byte{0, 0, 0}, params)
+	if !errors.Is(err, ErrUnsupportedPredictor) {
+		t.Fatalf("got %v, want ErrUnsupportedPredictor", err)
 	}
 }
 

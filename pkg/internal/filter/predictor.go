@@ -210,7 +210,8 @@ func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
 	result := make([]byte, len(data))
 	copy(result, data)
 
-	if params.BitsPerComponent == 8 {
+	switch params.BitsPerComponent {
+	case 8:
 		for off := 0; off+rowBytes <= len(result); off += rowBytes {
 			row := result[off : off+rowBytes]
 			for i := params.Colors; i < numSamples; i++ {
@@ -218,22 +219,43 @@ func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
 			}
 		}
 		return result, nil
-	}
 
-	// Sub-byte samples (BPC 1, 2, or 4): operate at the bit level.
-	bpc := params.BitsPerComponent
-	mask := byte((1 << bpc) - 1)
-
-	for off := 0; off+rowBytes <= len(result); off += rowBytes {
-		row := result[off : off+rowBytes]
-		for i := params.Colors; i < numSamples; i++ {
-			cur := bitSample(row, i, bpc, mask)
-			prev := bitSample(row, i-params.Colors, bpc, mask)
-			setBitSample(row, i, bpc, mask, (cur+prev)&mask)
+	case 16:
+		// 16-bit samples are two big-endian bytes. Difference them as
+		// uint16 so the carry crosses the byte boundary correctly; the
+		// byte-level paths below would corrupt the high byte.
+		for off := 0; off+rowBytes <= len(result); off += rowBytes {
+			row := result[off : off+rowBytes]
+			for i := params.Colors; i < numSamples; i++ {
+				ci, pi := i*2, (i-params.Colors)*2
+				cur := uint16(row[ci])<<8 | uint16(row[ci+1])
+				prev := uint16(row[pi])<<8 | uint16(row[pi+1])
+				v := cur + prev
+				row[ci] = byte(v >> 8)     //nolint:gosec // high byte of the 16-bit horizontal difference
+				row[ci+1] = byte(v & 0xff) //nolint:gosec // low byte of the 16-bit horizontal difference
+			}
 		}
-	}
+		return result, nil
 
-	return result, nil
+	case 1, 2, 4:
+		// Sub-byte samples: operate at the bit level.
+		bpc := params.BitsPerComponent
+		mask := byte((1 << bpc) - 1)
+		for off := 0; off+rowBytes <= len(result); off += rowBytes {
+			row := result[off : off+rowBytes]
+			for i := params.Colors; i < numSamples; i++ {
+				cur := bitSample(row, i, bpc, mask)
+				prev := bitSample(row, i-params.Colors, bpc, mask)
+				setBitSample(row, i, bpc, mask, (cur+prev)&mask)
+			}
+		}
+		return result, nil
+
+	default:
+		// 1/2/4/8/16 are the only BitsPerComponent values PDF images use.
+		// Reject anything else rather than mis-decode it.
+		return nil, fmt.Errorf("%w: TIFF predictor BitsPerComponent %d", ErrUnsupportedPredictor, params.BitsPerComponent)
+	}
 }
 
 // bitSample extracts a sub-byte sample at the given sample index.
