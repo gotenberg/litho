@@ -24,7 +24,7 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 
 	outlinesDict, err := document.ResolveDictRequired(ctx, doc, outlinesObj, "outlines")
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve outlines: %v", err)
+		return nil, fmt.Errorf("failed to resolve outlines: %w", err)
 	}
 
 	firstObj, ok := outlinesDict["First"]
@@ -35,7 +35,7 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 	// Fetch pages and build a clean ref → 1-based page number map.
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch pages for outline mapping: %v", err)
+		return nil, fmt.Errorf("failed to fetch pages for outline mapping: %w", err)
 	}
 
 	return parseOutlineItems(ctx, doc, firstObj, document.BuildPageMap(pages))

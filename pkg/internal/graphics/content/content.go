@@ -40,7 +40,7 @@ func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error)
 
 		tok, err := p.Peek(0)
 		if err != nil && err != io.EOF && tok.Type == lexer.TokenError {
-			return nil, fmt.Errorf("lexer error: %v", err)
+			return nil, fmt.Errorf("lexer error: %w", err)
 		}
 		if tok.Type == lexer.TokenEOF {
 			break
@@ -81,7 +81,7 @@ func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error)
 				// continuing. Lenient parsers skip unrecognised tokens in content
 				// streams rather than aborting.
 				if _, consumeErr := p.Consume(); consumeErr != nil {
-					return nil, fmt.Errorf("failed to parse operand: %v (token: %v)", err, tok)
+					return nil, fmt.Errorf("failed to parse operand: %w (token: %v)", err, tok)
 				}
 				continue
 			}
@@ -124,7 +124,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 
 		contentsResolved, err := document.ResolveObject(ctx, doc, contentsObj)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve /Contents: %v", err)
+			return nil, fmt.Errorf("failed to resolve /Contents: %w", err)
 		}
 
 		switch c := contentsResolved.(type) {

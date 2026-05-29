@@ -28,13 +28,12 @@ import (
 // that load large schema sets can bound provisioning time.
 func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 	loader := &loader{
-		ctx:     ctx,
 		fsys:    fsys,
 		schemas: make(map[string]*Schema),
 		raw:     make(map[string]*rawSchema),
 		loading: make(map[string]bool),
 	}
-	root, _, err := loader.loadFile(rootPath, "")
+	root, _, err := loader.loadFile(ctx, rootPath, "")
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +48,6 @@ func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 // so re-imports of the same file from different importers reuse one
 // Schema instance.
 type loader struct {
-	ctx     context.Context
 	fsys    fs.FS
 	schemas map[string]*Schema
 	raw     map[string]*rawSchema
@@ -59,8 +57,8 @@ type loader struct {
 // loadFile reads a single XSD by path. Returns the populated Schema
 // plus the namespace URI so callers can register the import. importer
 // is the path of the schema that triggered the load; "" for the root.
-func (l *loader) loadFile(p, importer string) (*Schema, string, error) {
-	if err := l.ctx.Err(); err != nil {
+func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, string, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, "", err
 	}
 	if importer != "" {
@@ -98,7 +96,7 @@ func (l *loader) loadFile(p, importer string) (*Schema, string, error) {
 		if imp.SchemaLocation == "" {
 			continue
 		}
-		sub, ns, err := l.loadFile(imp.SchemaLocation, p)
+		sub, ns, err := l.loadFile(ctx, imp.SchemaLocation, p)
 		if err != nil {
 			return nil, "", err
 		}
@@ -112,7 +110,7 @@ func (l *loader) loadFile(p, importer string) (*Schema, string, error) {
 		if inc.SchemaLocation == "" {
 			continue
 		}
-		sub, _, err := l.loadFile(inc.SchemaLocation, p)
+		sub, _, err := l.loadFile(ctx, inc.SchemaLocation, p)
 		if err != nil {
 			return nil, "", err
 		}

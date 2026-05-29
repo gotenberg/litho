@@ -397,6 +397,8 @@ func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 	newRes := make(ast.PdfDict, len(resDict)+1)
 	maps.Copy(newRes, resDict)
 
+	// Best-effort: an unreadable /ColorSpace resource yields a nil map,
+	// handled by the nil check below.
 	csMap, _ := document.ResolveDict(ctx, doc, resDict["ColorSpace"])
 	if csMap == nil || csMap[key] == nil {
 		base := csMap

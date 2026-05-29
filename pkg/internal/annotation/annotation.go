@@ -18,7 +18,7 @@ func ExtractAnnotations(ctx context.Context, doc *document.Document, page *docum
 
 	annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve /Annots: %v", err)
+		return nil, fmt.Errorf("failed to resolve /Annots: %w", err)
 	}
 	if annotsArr == nil {
 		return nil, fmt.Errorf("/Annots is not an array")

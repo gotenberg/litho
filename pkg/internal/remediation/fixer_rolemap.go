@@ -81,6 +81,8 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	newRoleMap := make(ast.PdfDict, len(roleMap))
 	modified := false
 	for src, dstObj := range roleMap {
+		// Best-effort: an unreadable mapping target yields an empty name,
+		// skipped by the guard below.
 		dstName, _ := document.ResolveName(ctx, doc, dstObj)
 
 		// Drop entries for standard types (forbidden by PDF/A-2a §7.1).

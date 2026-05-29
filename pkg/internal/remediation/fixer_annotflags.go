@@ -70,6 +70,8 @@ func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 				annotDict = resolved
 			}
 
+			// Best-effort: an unreadable /Subtype yields an empty name,
+			// which is not "Popup".
 			subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
 			if subtype == "Popup" {
 				continue

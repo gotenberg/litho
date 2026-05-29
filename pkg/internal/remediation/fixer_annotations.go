@@ -175,6 +175,8 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		dict = resolved
 	}
 
+	// Best-effort: an unreadable /Type yields an empty name; the switch
+	// default handles it.
 	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
 	switch typeName {
 	case "Pages":
@@ -231,6 +233,7 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			annotDict = resolved
 		}
 
+		// Best-effort: an unreadable /Subtype yields an empty name, handled below.
 		subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
 
 		// Remove forbidden or non-standard annotation subtypes

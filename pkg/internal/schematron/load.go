@@ -26,11 +26,10 @@ import (
 // that load large schema sets can bound provisioning time.
 func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 	l := &loader{
-		ctx:     ctx,
 		fsys:    fsys,
 		loading: make(map[string]bool),
 	}
-	s, err := l.loadFile(rootPath, "")
+	s, err := l.loadFile(ctx, rootPath, "")
 	if err != nil {
 		return nil, err
 	}
@@ -43,13 +42,12 @@ func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 // loader tracks the work-in-progress state during a multi-file
 // Schematron load. The loading map detects include cycles.
 type loader struct {
-	ctx     context.Context
 	fsys    fs.FS
 	loading map[string]bool
 }
 
-func (l *loader) loadFile(p, importer string) (*Schema, error) {
-	if err := l.ctx.Err(); err != nil {
+func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if importer != "" {
@@ -88,7 +86,7 @@ func (l *loader) loadFile(p, importer string) (*Schema, error) {
 		if inc.Href == "" {
 			continue
 		}
-		sub, err := l.loadFile(inc.Href, p)
+		sub, err := l.loadFile(ctx, inc.Href, p)
 		if err != nil {
 			return nil, err
 		}

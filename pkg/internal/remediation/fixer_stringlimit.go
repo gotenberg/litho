@@ -59,6 +59,8 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	// parser → serializer round trip.
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err == nil {
+		// Best-effort: a page-tree resolve failure yields an empty slice;
+		// the loop then no-ops.
 		pages, _ := document.ResolvePages(ctx, doc, catalog)
 		for pageNum, page := range pages {
 			if ctx.Err() != nil {

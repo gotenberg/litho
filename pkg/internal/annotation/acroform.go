@@ -28,7 +28,7 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 
 	acroFormDict, err := document.ResolveDict(ctx, doc, acroFormObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve AcroForm: %v", err)
+		return nil, fmt.Errorf("failed to resolve AcroForm: %w", err)
 	}
 	if acroFormDict == nil {
 		return nil, fmt.Errorf("AcroForm is not a dictionary")
@@ -54,7 +54,7 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 
 	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve Fields: %v", err)
+		return nil, fmt.Errorf("failed to resolve Fields: %w", err)
 	}
 	if fieldsArr == nil {
 		return nil, fmt.Errorf("fields is not an array")

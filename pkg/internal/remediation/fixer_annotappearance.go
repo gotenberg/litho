@@ -76,11 +76,15 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				annotDict = resolved
 			}
 
+			// Best-effort: an unreadable /Subtype yields an empty name,
+			// which simply fails the comparisons below.
 			subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
 			if subtype == "Popup" || subtype == "Link" {
 				continue
 			}
 
+			// Best-effort: an unreadable /Rect yields a nil array, which
+			// isZeroAreaRect treats as zero-area.
 			rect, _ := document.ResolveArray(ctx, doc, annotDict["Rect"])
 			if isZeroAreaRect(rect) {
 				continue
@@ -93,6 +97,8 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				// Widget/Btn (button) fields require /N to be a state
 				// sub-dict rather than a bare stream (ISO 19005-1
 				// §6.5.3 test 5 / ISO 19005-2 §6.3.3 test 3).
+				// Best-effort: a missing /FT yields an empty name; only
+				// Widget/Btn fields need the state sub-dict below.
 				ft, _ := document.ResolveName(ctx, doc, annotDict["FT"])
 				var nValue ast.PdfObject = apRef
 				if subtype == "Widget" && ft == "Btn" {
@@ -200,6 +206,8 @@ func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfD
 		changed = true
 	}
 
+	// Best-effort: unreadable /Subtype or /FT yield empty names; only the
+	// Widget/Btn branch below acts on them.
 	subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
 	ft, _ := document.ResolveName(ctx, doc, annotDict["FT"])
 	if subtype == "Widget" && ft == "Btn" {

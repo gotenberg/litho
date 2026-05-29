@@ -3,15 +3,9 @@ package cff
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
-)
-
-var (
-	ErrInvalidCFF = errors.New("cff: invalid font data")
-	ErrTruncated  = errors.New("cff: data truncated")
 )
 
 // maxCharstringStack caps the operand stack inside a Type 2 charstring.
