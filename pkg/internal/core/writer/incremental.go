@@ -87,7 +87,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 	xrefOffset := offset
 
 	if cfg.UseXRefStream {
-		if _, err := WriteXRefStream(ctx, dst, records, trailer, cfg.Allocator); err != nil {
+		if _, err := WriteXRefStream(ctx, dst, records, trailer, cfg.Allocator, xrefOffset); err != nil {
 			return fmt.Errorf("writing xref stream: %w", err)
 		}
 	} else {

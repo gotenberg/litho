@@ -93,6 +93,14 @@ func formatReal(f float64) string {
 		}
 		s = s[:idx+1]
 	}
+	// A nonzero magnitude smaller than the 6-decimal grid rounds to "0",
+	// silently dropping the value on round-trip. ISO 32000-1 Annex C
+	// permits reals down to ~1.18e-38, so fall back to the shortest
+	// exponent-free form (strconv 'f' with -1 precision never emits an
+	// exponent, which PDF reals forbid) so small values survive.
+	if f != 0 && (s == "0" || s == "-0") {
+		s = strconv.FormatFloat(f, 'f', -1, 64)
+	}
 	return s
 }
 

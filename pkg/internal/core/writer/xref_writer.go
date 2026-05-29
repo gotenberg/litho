@@ -104,7 +104,18 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 // WriteXRefStream writes a PDF 1.5+ cross-reference stream to w. The stream
 // dict doubles as the trailer. Returns the total bytes written.
 // The allocator is used to assign an object number to the xref stream itself.
-func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict, allocator *ObjAllocator) (int64, error) {
+func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict, allocator *ObjAllocator, selfOffset int64) (int64, error) {
+	// The cross-reference stream is itself an indirect object and must
+	// carry an entry for its own object number (ISO 32000-1 §7.5.8.2);
+	// otherwise a reader following /Index cannot locate it. Allocate the
+	// number up front and record a type-1 entry at selfOffset, the write
+	// position where SerializeIndirect emits the stream below. The xref
+	// stream is the last object written, so selfOffset is fixed
+	// regardless of the field widths chosen for the table, and including
+	// it here also sizes the offset field wide enough to hold it.
+	xrefObjNum := allocator.NextObjNum()
+	records = append(records, XRefRecord{ObjNum: xrefObjNum, Offset: selfOffset})
+
 	// Sort records by object number.
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ObjNum < records[j].ObjNum
@@ -152,9 +163,6 @@ func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, tra
 	}
 
 	// Build the xref stream dict (which doubles as the trailer).
-	// The xref stream itself gets an object number.
-	xrefObjNum := allocator.NextObjNum()
-
 	// Build Index array: subsections of consecutive object numbers.
 	var indexArr ast.PdfArray
 	i := 0

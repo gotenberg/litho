@@ -2,7 +2,10 @@ package writer
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -81,10 +84,11 @@ func TestWriteXRefStream_Basic(t *testing.T) {
 	trailer := ast.PdfDict{
 		"Root": ast.PdfIndirectRef{ObjectNum: 1, GenNum: 0},
 	}
-	allocator := NewObjAllocator(2)
+	allocator := NewObjAllocator(2) // NextObjNum == 3, the xref stream's own number
 
+	const selfOffset = 200
 	var buf bytes.Buffer
-	_, err := WriteXRefStream(context.Background(), &buf, records, trailer, allocator)
+	_, err := WriteXRefStream(context.Background(), &buf, records, trailer, allocator, selfOffset)
 	if err != nil {
 		t.Fatalf("WriteXRefStream: %v", err)
 	}
@@ -109,6 +113,122 @@ func TestWriteXRefStream_Basic(t *testing.T) {
 	if !strings.Contains(out, "/Root") {
 		t.Error("missing /Root in xref stream dict")
 	}
+	// The xref stream must carry an entry for its own object (number 3),
+	// so /Size accounts for it and /Index spans 0..3 (ISO 32000-1
+	// §7.5.8.2). Without the self-entry these would read /Size 3 / [0 3].
+	if !strings.Contains(out, "/Size 4") {
+		t.Errorf("expected /Size 4 (3 records + self), got:\n%s", out)
+	}
+	if !strings.Contains(out, "/Index [0 4]") {
+		t.Errorf("expected /Index [0 4] covering the xref stream object, got:\n%s", out)
+	}
+
+	// Decode the stream and confirm the self object (3) has a type-1
+	// entry at selfOffset.
+	entries := decodeXRefStreamEntries(t, out)
+	self, ok := entries[3]
+	if !ok {
+		t.Fatal("decoded xref stream has no entry for its own object (3)")
+	}
+	if self.typ != 1 {
+		t.Errorf("self entry type = %d, want 1 (in-use)", self.typ)
+	}
+	if self.offset != selfOffset {
+		t.Errorf("self entry offset = %d, want %d", self.offset, selfOffset)
+	}
+}
+
+type decodedXRefEntry struct {
+	typ    int64
+	offset int64
+}
+
+// decodeXRefStreamEntries inflates the FlateDecode stream payload from a
+// serialized xref stream and parses its W=[1 w1 w2] records, keyed by
+// object number derived from the /Index subsections.
+func decodeXRefStreamEntries(t *testing.T, out string) map[int]decodedXRefEntry {
+	t.Helper()
+	start := strings.Index(out, "stream\r\n")
+	if start < 0 {
+		t.Fatal("no stream marker")
+	}
+	start += len("stream\r\n")
+	end := strings.Index(out[start:], "\nendstream")
+	if end < 0 {
+		t.Fatal("no endstream marker")
+	}
+	zr, err := zlib.NewReader(strings.NewReader(out[start : start+end]))
+	if err != nil {
+		t.Fatalf("zlib reader: %v", err)
+	}
+	raw, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatalf("inflate: %v", err)
+	}
+
+	w1, w2 := parseWidths(t, out)
+	idx := parseIndex(t, out)
+	entrySize := 1 + w1 + w2
+	if len(raw)%entrySize != 0 {
+		t.Fatalf("decoded length %d not a multiple of entry size %d", len(raw), entrySize)
+	}
+
+	readBE := func(b []byte) int64 {
+		var v int64
+		for _, c := range b {
+			v = v<<8 | int64(c)
+		}
+		return v
+	}
+
+	entries := make(map[int]decodedXRefEntry)
+	pos := 0
+	rec := 0
+	for i := 0; i+1 < len(idx); i += 2 {
+		objNum, count := idx[i], idx[i+1]
+		for c := 0; c < count; c++ {
+			b := raw[pos : pos+entrySize]
+			entries[objNum+c] = decodedXRefEntry{
+				typ:    readBE(b[:1]),
+				offset: readBE(b[1 : 1+w1]),
+			}
+			pos += entrySize
+			rec++
+		}
+	}
+	return entries
+}
+
+func parseWidths(t *testing.T, out string) (int, int) {
+	t.Helper()
+	i := strings.Index(out, "/W [")
+	if i < 0 {
+		t.Fatal("no /W array")
+	}
+	var a, b, c int
+	if _, err := fmt.Sscanf(out[i:], "/W [%d %d %d]", &a, &b, &c); err != nil {
+		t.Fatalf("parsing /W: %v", err)
+	}
+	return b, c
+}
+
+func parseIndex(t *testing.T, out string) []int {
+	t.Helper()
+	i := strings.Index(out, "/Index [")
+	if i < 0 {
+		t.Fatal("no /Index array")
+	}
+	j := strings.Index(out[i:], "]")
+	fields := strings.Fields(out[i+len("/Index [") : i+j])
+	nums := make([]int, 0, len(fields))
+	for _, f := range fields {
+		var n int
+		if _, err := fmt.Sscanf(f, "%d", &n); err != nil {
+			t.Fatalf("parsing /Index field %q: %v", f, err)
+		}
+		nums = append(nums, n)
+	}
+	return nums
 }
 
 func TestBytesNeeded(t *testing.T) {

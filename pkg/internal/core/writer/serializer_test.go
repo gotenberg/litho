@@ -251,6 +251,14 @@ func TestFormatReal(t *testing.T) {
 		{0.5, "0.5"},
 		{-2.5, "-2.5"},
 		{100.000, "100"},
+		// Values that fit the 6-decimal grid are unchanged.
+		{0.000001, "0.000001"},
+		// Nonzero magnitudes smaller than the grid must survive rather
+		// than collapse to "0" and lose data on round-trip.
+		{0.0000005, "0.0000005"},
+		{0.0000001, "0.0000001"},
+		{-0.0000001, "-0.0000001"},
+		{1.5e-8, "0.000000015"},
 	}
 	for _, tc := range tests {
 		got := formatReal(tc.input)
