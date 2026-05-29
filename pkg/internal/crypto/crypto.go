@@ -59,7 +59,14 @@ func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) 
 	// common (RC4 128-bit + 50-pass MD5 + Algorithm 3.5 verification).
 	r := dictInt(encryptDict, "R", v)
 	length := dictInt(encryptDict, "Length", 40)
-	p := dictInt(encryptDict, "P", 0)
+	// /P is a required entry (ISO 32000-1 Table 22). When a malformed
+	// document omits it, default to all-permissions-granted (0xFFFFFFFC,
+	// i.e. -4 in two's complement: reserved bits 1-2 clear, every
+	// permission bit set) rather than 0, which would deny every
+	// operation and misreport permissions on a document that never
+	// intended to restrict them. -4 is also the value a producer writes
+	// for "grant everything", so it matches a present /P.
+	p := dictInt(encryptDict, "P", -4)
 	o := dictString(encryptDict, "O")
 	u := dictString(encryptDict, "U")
 	oe := dictString(encryptDict, "OE")

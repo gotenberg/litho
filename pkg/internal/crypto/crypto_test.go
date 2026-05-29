@@ -113,6 +113,34 @@ func TestNewHandler_BlankPassword(t *testing.T) {
 	}
 }
 
+func TestNewHandler_MissingP_DefaultsToAllPermissions(t *testing.T) {
+	// The V1 fixture computes U/O with /P = -4 (0xFFFFFFFC, all
+	// permissions). Removing /P forces NewHandler to apply its default;
+	// blank-password authentication succeeds only if that default is also
+	// -4, which proves the old deny-everything default (0) was replaced
+	// with the spec all-granted value.
+	encDict, trailer := buildV1EncryptDict("")
+	delete(encDict, "P")
+
+	h, err := NewHandler(encDict, trailer)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	if !h.Authenticated {
+		t.Fatal("blank password did not authenticate; the /P default does not match the -4 used to derive U/O")
+	}
+	if got := h.PermissionFlags(); got != -4 {
+		t.Errorf("PermissionFlags() = %d, want -4 (all permissions)", got)
+	}
+	// The load-bearing permission bits (Print, Modify, Copy, Annotate,
+	// FillForms, Assemble, PrintHighQuality) must all be set by default.
+	for _, bit := range []int{4, 8, 16, 32, 256, 1024, 2048} {
+		if h.PermissionFlags()&bit == 0 {
+			t.Errorf("permission bit %d not set in default /P", bit)
+		}
+	}
+}
+
 // TestAuthenticate_V2R3_BlankUserPassword guards against the gating bug
 // that keyed Algorithm 3.4/3.5 on /V instead of /R. Govdocs PDFs commonly
 // declare V=2 R=3 (RC4-128 + 50-pass MD5 + 16-byte U match), so the V=2
