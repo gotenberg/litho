@@ -2,7 +2,6 @@ package signature
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
 
@@ -146,7 +145,11 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 							chunk2, err2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
 
 							if err1 == nil && err2 == nil {
-								h := sha256.New()
+								// Use the digest algorithm the signature
+								// actually declares rather than assuming
+								// SHA-256, so DocumentHash is meaningful for
+								// SHA-384/512 (and legacy) signatures.
+								h := cmsDigestHash([]byte(sig.Contents)).New()
 								h.Write(chunk1)
 								h.Write(chunk2)
 								sig.DocumentHash = hex.EncodeToString(h.Sum(nil))

@@ -131,9 +131,6 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 			result.HasDSS = true
 		}
 
-		// Validate the document hash.
-		result.HashValid = sig.DocumentHash != "" && sig.ByteRange[1] > 0
-
 		// /Contents in a signature dict is stored as a hex string in
 		// the PDF, but the lexer has already decoded it into raw DER
 		// bytes by the time we see sig.Contents.
@@ -245,6 +242,36 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 		// a cryptographic timestamp.
 		result.LTVEnabled = result.HasDSS && result.HasTimestamp &&
 			(result.RevocationOK || result.RevocationInfo != "")
+
+		// Cryptographically verify the PKCS#7/CMS signature over the byte
+		// range it covers. HashValid is true only when the SignerInfo's
+		// signed messageDigest matches the recomputed digest of those
+		// bytes and the signature value verifies against the signer's
+		// public key. This is independent of CertChainValid (trust) and
+		// of revocation: a signature can be cryptographically valid yet
+		// chain-untrusted, or vice versa.
+		if sig.ByteRange[1] > 0 && sig.ByteRange[3] >= 0 {
+			chunk1, e1 := doc.ReadFileBytes(ctx, sig.ByteRange[0], sig.ByteRange[1])
+			chunk2, e2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
+			if e1 != nil || e2 != nil {
+				result.HashValid = false
+				if result.ErrorMessage == "" {
+					result.ErrorMessage = "could not read signed byte range"
+				}
+			} else {
+				content := make([]byte, 0, len(chunk1)+len(chunk2))
+				content = append(content, chunk1...)
+				content = append(content, chunk2...)
+				if _, verifyErr := verifyCMSSignature(der, content, certs); verifyErr != nil {
+					result.HashValid = false
+					if result.ErrorMessage == "" {
+						result.ErrorMessage = verifyErr.Error()
+					}
+				} else {
+					result.HashValid = true
+				}
+			}
+		}
 
 		// Evaluate MDP (Modification Detection and Prevention) policy.
 		evaluateMDP(ctx, doc, sig, &result)
