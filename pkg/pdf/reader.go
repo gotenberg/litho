@@ -764,6 +764,33 @@ func (r *Reader) Permissions() Permissions {
 	}
 }
 
+// Mask builds the 32-bit /P permission value for these flags, suitable
+// for [EncryptConfig.Permissions]. It is the inverse of the decoding in
+// [Reader.Permissions]: every reserved bit the spec requires to be 1
+// (bits 7-8 and 13-32, ISO 32000-2 Table 22) is set, the reserved low
+// bits 1-2 are cleared, and each named permission bit is set only when
+// its flag is true. This is safer than hand-assembling a mask or passing
+// -1, which leaves the reserved low bits set.
+func (p Permissions) Mask() int32 {
+	// Start from all bits set, then clear the reserved low bits and any
+	// denied permission. The high reserved bits stay 1 as the spec wants.
+	var m int32 = -1
+	m &^= 0b11 // reserved bits 1-2 must be 0
+	clear := func(bit int32, granted bool) {
+		if !granted {
+			m &^= bit
+		}
+	}
+	clear(4, p.Print)
+	clear(8, p.ModifyContent)
+	clear(16, p.ExtractText)
+	clear(32, p.ModifyAnnotations)
+	clear(256, p.FillForms)
+	clear(1024, p.Assemble)
+	clear(2048, p.PrintHighQuality)
+	return m
+}
+
 // XMPMetadata returns a lazy Open function for the catalog /Metadata
 // XMP stream, or nil when the document has no XMP packet. The stream
 // data is not read until the caller invokes the returned function.

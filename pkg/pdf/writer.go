@@ -695,9 +695,11 @@ func (w *Writer) FlattenForm() {
 	})
 }
 
-// StampText overlays text on the specified 1-based pages. If no pages are
-// specified, the stamp is applied to all pages. Uses incremental update.
-// The mutation is queued and applied when [Writer.WriteTo] is called.
+// StampText overlays text (a watermark or stamp) on the specified
+// 1-based pages. If no pages are specified, the stamp is applied to all
+// pages. A diagonal, semi-transparent watermark is a [TextStamp] with a
+// Rotation and an Opacity below 1. Uses incremental update. The mutation
+// is queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if stamp.Text == "" {
 		return ErrEmptyText
@@ -959,6 +961,21 @@ type FacturXConfig struct {
 //
 // The returned [RemediationReport] aggregates the underlying PDF/A-3
 // fixes plus the Factur-X-specific operations.
+//
+// There is no RemediateZUGFeRD: the ZUGFeRD 2.1+ generation is
+// byte-for-byte Factur-X, so use this method with the defaults. The
+// legacy generations differ only in the embedded file name and
+// relationship, which [FacturXConfig] can reproduce:
+//
+//   - ZUGFeRD 2.1+ / Factur-X: FileName "factur-x.xml", Relationship "Data" (the defaults).
+//   - ZUGFeRD 2.0:             FileName "zugferd-invoice.xml", Relationship "Alternative".
+//   - ZUGFeRD 1.0:             FileName "ZUGFeRD-invoice.xml", Relationship "Alternative".
+//
+// The legacy 1.0/2.0 generations also use an older XMP namespace and
+// conformance vocabulary that this method does not emit, so the output
+// is a PDF/A-3 carrying a legacy-named CII payload rather than a fully
+// spec-valid legacy ZUGFeRD file. Producing genuine 1.0/2.0 output is
+// out of scope.
 func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (*RemediationReport, error) {
 	if len(cfg.InvoiceXML) == 0 {
 		return nil, ErrEmptyInvoiceXML
@@ -1406,6 +1423,15 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		slog.Bool("signer", w.signer != nil),
 		slog.Bool("xref_stream", cfg.xrefStream),
 	)
+
+	// WithVersion only takes effect on a full rewrite (it sets the output
+	// header). Surface the no-op rather than dropping it silently so a
+	// caller who passed it to an incremental write can see why the header
+	// did not change.
+	if cfg.version != "" && !cfg.fullRewrite && !w.forceRewrite {
+		logger.Debug("WithVersion ignored: it applies only to a full rewrite; this write is incremental",
+			slog.String("requested_version", cfg.version))
+	}
 
 	// Signing requires its own two-pass incremental flow.
 	if w.signer != nil {

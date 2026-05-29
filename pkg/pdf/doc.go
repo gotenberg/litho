@@ -73,6 +73,37 @@
 // signatures. [Writer.Sign] queues a new signature; [WriteTo] produces a
 // signed incremental update.
 //
+// # Functional options
+//
+// Each entry point takes its own option type, so the compiler prevents
+// passing an option to the wrong call:
+//
+//   - [Open] / [OpenFile] take [OpenOption]: [WithLogger], [WithPassword],
+//     [WithOCREngine], [WithFilterPlugin], [WithCIISchemas],
+//     [WithSchematron], [WithLenient].
+//   - [Reader.ExtractText] takes [ExtractTextOption]: [WithHiddenText],
+//     [WithInvisibleText], [WithClippedText], [WithArtifacts].
+//   - [Writer.WriteTo], [Split], and [Merge] take [WriteOption]:
+//     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
+//     [WithBookmarks], [WithPipelineTempDir].
+//   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA], and
+//     [Writer.RemediateFacturX] take [RemediateOption]: [WithLanguage],
+//     [WithAggressiveFixes], [WithRegressionTolerance].
+//
+// [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
+// serialization controls. The defaults suit most callers:
+// content-modifying operations escalate to a full rewrite on their own.
+//
+// # Embedding files
+//
+// [Writer.AddAttachment] embeds a generic file in the /EmbeddedFiles name
+// tree. For PDF/A-3, Factur-X, or ZUGFeRD, an embedded file must instead
+// carry an /AFRelationship and appear in the catalog /AF array: use
+// [Writer.AddAssociatedFile], or [Writer.RemediateFacturX] for the full
+// hybrid-invoice setup. Using AddAttachment where an associated file is
+// required yields a structurally valid PDF that still fails PDF/A-3 and
+// Factur-X validation.
+//
 // # Acknowledgments
 //
 // litho's text extraction pipeline, CMap parser, and font resolution logic
