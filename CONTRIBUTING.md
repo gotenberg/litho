@@ -29,6 +29,7 @@ make bench            # go test -bench=. -benchmem ./...
 - Wrap and propagate every error: `fmt.Errorf("resolving font on page %d: %w", pageNum, err)`.
 - Match errors with `errors.Is`, never `strings.Contains`.
 - Sentinel errors live in `errors.go` per package.
+- Every `//nolint` directive carries a trailing justification on the same line; bare `//nolint` is rejected. Prefer fixing the finding over suppressing it. A `gosec` suppression on an integer conversion (`uintN(x)`) states the bound that makes the conversion safe.
 
 ### Context
 
@@ -63,6 +64,32 @@ Validate token types with `Expect`. Handle `io.EOF` gracefully. Never panic. Tra
 ### No duplication of core logic
 
 `ResolveDict`, `DecodePdfString`, `Float`, and friends live in `internal/core/document`. Do not reimplement them in other packages.
+
+### Spec-grounded behavior
+
+Any code that produces a compliance verdict, accepts or rejects a construct, or hardcodes a spec table cites the governing clause (ISO 32000-1/2, ISO 19005-x, ISO 14289-x, EN 16931, Factur-X) at the decision site. Deliberate leniency toward real-world producers names the specific clause it relaxes and the empirical reason (which producer, why), so a divergence is auditable rather than supposed. Hardcoded spec tables carry an inline citation to the table they mirror and, where licensing permits, are generated.
+
+## Safety and robustness
+
+### Untrusted input sizes
+
+Any length, count, or offset read from the PDF is untrusted. Before `make([]T, n)`, allocating a buffer, or looping `n` times, validate `n` against a documented bound or against `Document.FileSize()`. Reject negative and overflowing values explicitly: a panicking `make` is itself a denial of service. Prefer a natural bound (page count vs trailer `/Size`, stream `/Length` vs file size) over an arbitrary constant.
+
+### Panic boundary
+
+Internal code never panics (see [Parser safety](#parser-safety)) and never calls `recover()`. As defense-in-depth against crafted input, every exported `pkg/pdf` entry point that processes document bytes installs a top-level `recover()` that converts an unexpected panic into a wrapped sentinel logged at Error via `doc.Logger` with the recovered value and a stack. The boundary is a safety net, not a license to panic.
+
+### Resource limits
+
+Every defensive cap (recursion depth, buffer size, decompression output, iteration count) is a named const at package scope with a comment stating it is an anti-DoS guard, not spec-mandated, and why the chosen value is safe for real documents. See `maxPageTreeDepth` in `catalog.go` and `maxNameTreeDepth` in `nametree.go`. No bare numeric literals as limits. The same conceptual limit must not be defined with divergent values across packages without a documented cross-reference.
+
+### Goroutine lifecycle
+
+Every goroutine has a defined exit condition and cannot outlive its parent call. `ctx` propagates into every goroutine, and result collection selects on `ctx.Done()` so cancellation short-circuits. Each worker recovers panics into an error result and logs them, so one bad worker cannot crash the host. Fan-out is bounded by a fixed count or a worker pool, never one goroutine per untrusted-input element.
+
+### Deterministic output
+
+Given identical input bytes and identical options, the writer produces identical output bytes, modulo the documented `/ID` and date seams. Never iterate a Go map to emit ordered output: sort keys or object numbers first. Confine unavoidable nondeterministic inputs (`/ID` generation, current-date metadata) so reproducible-build callers can pin them.
 
 ## Documentation rules
 
@@ -106,9 +133,13 @@ Run `make prettify && make lint-prettier` for YAML, Markdown, and JSON.
 
 ## Testing
 
-Tests live in `_test.go` files alongside the code. Fuzz tests exist for the lexer and parser.
+Tests live in `_test.go` files alongside the code.
 
 Behavior-focused tests assert observable contracts (non-nil output, expected text present, page count matches) rather than internal state. Exact-value assertions that would lock the implementation belong in dedicated regression tests, not in smoke tests.
+
+### Fuzzing
+
+Fuzz tests exist for the lexer and parser. Any function whose leading argument is attacker-controlled `[]byte` (stream filter `Decode`, predictors, font/CMap table parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go` beside it, seeded with one valid and one truncated input, asserting it never panics. Pure-Go decoders only; CGO plugin decoders (jpx, jbig2) are exempt.
 
 See:
 
@@ -127,6 +158,8 @@ Plan non-trivial changes before coding. Present problem, approach, affected file
 - [ ] Context: I/O and recursive functions accept and check `context.Context`.
 - [ ] Thread safety: concurrency contract documented and honored under `-race`.
 - [ ] Resource streaming: no eager materialization of binary resources.
+- [ ] Safety: file-derived sizes bounded before allocation; defensive caps are named consts; new byte decoders have a fuzz target.
+- [ ] Spec-grounded: verdicts, accept/reject decisions, and hardcoded tables cite their clause; deliberate leniency names the clause it relaxes.
 - [ ] Linting: `make fmt && make lint` passes with zero warnings.
 - [ ] Documentation: Godoc on all exports; `doc.go` per package.
 - [ ] Tests: new behavior covered; no regressions; corpora unchanged.
