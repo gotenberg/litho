@@ -3,6 +3,7 @@ package image
 import (
 	"context"
 	"image/color"
+	"log/slog"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -127,6 +128,53 @@ func TestDecodeImage_DeviceGray(t *testing.T) {
 	}
 	if gray.Y != 0 {
 		t.Errorf("pixel(0,0) = %d, want 0", gray.Y)
+	}
+}
+
+func TestDecodeImage_DecodeArrayInverts(t *testing.T) {
+	// 1x1 grayscale, sample 0. /Decode [1 0] inverts the mapping, so the
+	// decoded value is white (255), not black (0). Before /Decode was
+	// honored the raw sample (0) was used and the pixel rendered black.
+	stream := ast.NewStream(ast.PdfDict{
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(1),
+		"Height":           ast.PdfInt(1),
+		"ColorSpace":       ast.PdfName("DeviceGray"),
+		"BitsPerComponent": ast.PdfInt(8),
+		"Decode":           ast.PdfArray{ast.PdfInt(1), ast.PdfInt(0)},
+	}, []byte{0})
+
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
+	page := &document.Page{
+		Resources: ast.PdfDict{"XObject": ast.PdfDict{"Im0": stream}},
+	}
+
+	img, err := DecodeImage(context.Background(), doc, page, "Im0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gray, ok := img.At(0, 0).(color.Gray)
+	if !ok {
+		t.Fatalf("pixel type = %T, want color.Gray", img.At(0, 0))
+	}
+	if gray.Y != 255 {
+		t.Errorf("inverted pixel(0,0) = %d, want 255", gray.Y)
+	}
+}
+
+func TestBuildDecodeLUTs_IdentityWhenAbsent(t *testing.T) {
+	// No /Decode array must yield exact identity tables so output is
+	// byte-for-byte unchanged for images that do not declare one.
+	luts := buildDecodeLUTs(nil, 3)
+	if len(luts) != 3 {
+		t.Fatalf("len(luts) = %d, want 3", len(luts))
+	}
+	for j := range luts {
+		for s := 0; s < 256; s++ {
+			if luts[j][s] != byte(s) {
+				t.Fatalf("identity LUT[%d][%d] = %d, want %d", j, s, luts[j][s], s)
+			}
+		}
 	}
 }
 

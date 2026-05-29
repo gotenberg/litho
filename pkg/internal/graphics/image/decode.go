@@ -40,6 +40,76 @@ func validateImageDimensions(width, height int) error {
 	return nil
 }
 
+// imageComponents returns the samples-per-pixel for the color spaces the
+// 8-bit decoder handles, or 0 for anything else.
+func imageComponents(colorSpace string) int {
+	switch colorSpace {
+	case "DeviceRGB":
+		return 3
+	case "DeviceGray":
+		return 1
+	case "DeviceCMYK":
+		return 4
+	}
+	return 0
+}
+
+// resolveDecodeArray reads the image /Decode array as 2*components
+// numbers, or returns nil when it is absent or malformed. Per ISO
+// 32000-1 §8.9.5.2 the /Decode array remaps each sample from the raw
+// [0, 2^bpc-1] range onto [Dmin, Dmax]; honoring it renders inverted or
+// remapped images (e.g. Adobe-inverted CMYK, /Decode [1 0 ...]) with
+// correct color instead of the raw samples.
+func resolveDecodeArray(ctx context.Context, doc *document.Document, dict ast.PdfDict, components int) []float64 {
+	obj, ok := dict["Decode"]
+	if !ok {
+		return nil
+	}
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil {
+		doc.Logger.Debug("resolving image /Decode array", slog.Any("err", err))
+		return nil
+	}
+	if len(arr) != 2*components {
+		doc.Logger.Debug("ignoring image /Decode array with unexpected length",
+			slog.Int("len", len(arr)), slog.Int("want", 2*components))
+		return nil
+	}
+	dec := make([]float64, len(arr))
+	for i, v := range arr {
+		dec[i] = document.Float(v)
+	}
+	return dec
+}
+
+// buildDecodeLUTs returns one 256-entry lookup table per component that
+// maps an 8-bit sample to its decoded byte. With no /Decode array the
+// tables are the exact identity, so decoded output is byte-for-byte
+// unchanged for the common case.
+func buildDecodeLUTs(dec []float64, components int) [][256]byte {
+	luts := make([][256]byte, components)
+	for j := range luts {
+		if dec == nil {
+			for s := 0; s < 256; s++ {
+				luts[j][s] = byte(s)
+			}
+			continue
+		}
+		dmin, dmax := dec[2*j], dec[2*j+1]
+		for s := 0; s < 256; s++ {
+			v := dmin + float64(s)*(dmax-dmin)/255.0
+			switch {
+			case v < 0:
+				v = 0
+			case v > 1:
+				v = 1
+			}
+			luts[j][s] = byte(v*255 + 0.5)
+		}
+	}
+	return luts
+}
+
 // DecodeImage decodes a named Image XObject from a page into a Go image.Image.
 // The name parameter is the resource key (e.g., "Im0") under the page's
 // /Resources /XObject dictionary.
@@ -149,6 +219,12 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		return nil, fmt.Errorf("unsupported BitsPerComponent %d for image decode", bitsPerComp)
 	}
 
+	// Apply the /Decode array (ISO 32000-1 §8.9.5.2) via per-component
+	// lookup tables. Absent a /Decode array the tables are the identity,
+	// so output is unchanged for images that do not declare one.
+	components := imageComponents(colorSpace)
+	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, stream.Dict, components), components)
+
 	switch colorSpace {
 	case "DeviceRGB":
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -159,9 +235,9 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		idx := 0
 		for y := range height {
 			for x := range width {
-				r := decodedData[idx]
-				g := decodedData[idx+1]
-				b := decodedData[idx+2]
+				r := dec[0][decodedData[idx]]
+				g := dec[1][decodedData[idx+1]]
+				b := dec[2][decodedData[idx+2]]
 				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 				idx += 3
 			}
@@ -177,7 +253,7 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		idx := 0
 		for y := range height {
 			for x := range width {
-				img.Set(x, y, color.Gray{Y: decodedData[idx]})
+				img.Set(x, y, color.Gray{Y: dec[0][decodedData[idx]]})
 				idx++
 			}
 		}
@@ -192,10 +268,10 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		idx := 0
 		for y := range height {
 			for x := range width {
-				c := float64(decodedData[idx]) / 255.0
-				m := float64(decodedData[idx+1]) / 255.0
-				yy := float64(decodedData[idx+2]) / 255.0
-				k := float64(decodedData[idx+3]) / 255.0
+				c := float64(dec[0][decodedData[idx]]) / 255.0
+				m := float64(dec[1][decodedData[idx+1]]) / 255.0
+				yy := float64(dec[2][decodedData[idx+2]]) / 255.0
+				k := float64(dec[3][decodedData[idx+3]]) / 255.0
 				r := uint8((1 - c) * (1 - k) * 255)
 				g := uint8((1 - m) * (1 - k) * 255)
 				b := uint8((1 - yy) * (1 - k) * 255)
