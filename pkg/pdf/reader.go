@@ -53,6 +53,7 @@ type openOpts struct {
 	schRoot   string
 	schPhase  string
 	schSchema *schematron.Schema
+	lenient   bool // relax Factur-X/ZUGFeRD consumer-path tolerances
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -137,6 +138,22 @@ func WithSchematron(fsys fs.FS, rootPath string, phase string) OpenOption {
 	}
 }
 
+// WithLenient relaxes the Factur-X / ZUGFeRD consumer-path tolerances
+// that the specification does not sanction. By default litho validates
+// strictly: a tolerated but non-spec /AFRelationship (e.g. Alternative
+// carried over from ZUGFeRD 2.0), an application/xml embedded-stream
+// subtype, or a non-spec XMP Version surfaces as a [SeverityWarning]
+// [Violation] from [Reader.ValidateFacturX] / [Reader.ValidateZUGFeRD]
+// (see [FacturXReport.Warnings]). WithLenient accepts those values
+// silently, matching the behaviour of producers that carry them over
+// from earlier ZUGFeRD generations. It does not relax fatal structural
+// rules.
+func WithLenient() OpenOption {
+	return func(o *openOpts) {
+		o.lenient = true
+	}
+}
+
 // Reader is the high-level API facade for the PDF parsing engine.
 // When opened via [OpenFile], the Reader holds a reference to the underlying
 // file; call [Reader.Close] to release it.
@@ -155,6 +172,7 @@ type Reader struct {
 	ciiSchema   *xsd.Schema        // non-nil when WithCIISchemas was set
 	schSchema   *schematron.Schema // non-nil when WithSchematron was set
 	schPhase    string             // phase argument to WithSchematron
+	lenient     bool               // relax Factur-X consumer-path tolerances (WithLenient)
 }
 
 // Close releases any resources held by the [Reader]. When the Reader
@@ -326,6 +344,10 @@ func (rep FacturXReport) Warnings() []Violation {
 // rules alone.
 func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXValidateOption {
 	var opts []compliance.FacturXValidateOption
+
+	// Strict by default: relax the consumer-path tolerances only when the
+	// caller opted in via [WithLenient].
+	opts = append(opts, compliance.WithFacturXLenient(r.lenient))
 
 	// XSD layer: caller-supplied override first, bundled default
 	// otherwise. A bundle load error degrades gracefully to spine
@@ -508,6 +530,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (*
 		ciiSchema: o.ciiSchema,
 		schSchema: o.schSchema,
 		schPhase:  o.schPhase,
+		lenient:   o.lenient,
 	}, nil
 }
 

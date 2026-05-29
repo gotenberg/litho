@@ -65,6 +65,23 @@ type facturXValidateOpts struct {
 	// XPath the bundled engine cannot compile. The map is threaded
 	// into [schematron.Validate] as [schematron.WithRuleOverrides].
 	schematronOverrides map[string]schematron.RuleOverride
+	// lenient relaxes the consumer-path tolerances the spec does not
+	// sanction (non-spec /AFRelationship, application/xml subtype,
+	// non-spec XMP Version). When false (the default, strict) those
+	// values surface as warning-severity violations; when true they are
+	// accepted silently.
+	lenient bool
+}
+
+// WithFacturXLenient relaxes the Factur-X / ZUGFeRD consumer-path
+// tolerances. By default the validator is strict: a tolerated but
+// non-spec /AFRelationship, an application/xml subtype, or a non-spec
+// XMP Version surfaces as a warning-severity [Violation]. Passing
+// WithFacturXLenient(true) accepts those values silently, matching the
+// behaviour of producers that carry them over from earlier ZUGFeRD
+// generations. It does not relax fatal structural rules.
+func WithFacturXLenient(lenient bool) FacturXValidateOption {
+	return func(o *facturXValidateOpts) { o.lenient = lenient }
 }
 
 // WithFacturXXSD registers a loaded XSD schema set against which the
@@ -346,10 +363,10 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	invoice := locateInvoiceFileSpec(ctx, doc, catalog, v)
 	hybrid := make([]Violation, 0, 8)
 	hybrid = append(hybrid, checkInvoiceAF(catalog, invoice, v)...)
-	hybrid = append(hybrid, checkInvoiceAFRelationship(ctx, doc, invoice, v)...)
-	hybrid = append(hybrid, checkInvoiceStreamSubtype(ctx, doc, invoice, v)...)
+	hybrid = append(hybrid, checkInvoiceAFRelationship(ctx, doc, invoice, v, cfg.lenient)...)
+	hybrid = append(hybrid, checkInvoiceStreamSubtype(ctx, doc, invoice, v, cfg.lenient)...)
 	hybrid = append(hybrid, checkInvoiceConflictingVariant(ctx, doc, v)...)
-	hybrid = append(hybrid, checkInvoiceXMP(ctx, doc, catalog, invoice, v)...)
+	hybrid = append(hybrid, checkInvoiceXMP(ctx, doc, catalog, invoice, v, cfg.lenient)...)
 	hybrid = append(hybrid, checkInvoiceCII(ctx, doc, invoice, v)...)
 	xsdSchema := pickXSD(ctx, doc, catalog, v, &cfg)
 	if xsdSchema != nil {
@@ -477,7 +494,7 @@ func checkInvoiceAF(catalog ast.PdfDict, invoice invoiceFileSpec, v hybridInvoic
 	return nil
 }
 
-func checkInvoiceAFRelationship(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) []Violation {
+func checkInvoiceAFRelationship(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, lenient bool) []Violation {
 	if !invoice.found {
 		return nil
 	}
@@ -489,13 +506,19 @@ func checkInvoiceAFRelationship(ctx context.Context, doc *document.Document, inv
 	if err != nil {
 		return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship unreadable: %v", v.label, invoice.objNum, err)
 	}
-	if string(got) == v.relationship || slices.Contains(v.altRelationships, string(got)) {
+	if string(got) == v.relationship {
 		return nil
+	}
+	if slices.Contains(v.altRelationships, string(got)) {
+		if lenient {
+			return nil
+		}
+		return failf(Rule_invoice_AFRelationshipNonSpec, "%s: filespec object %d /AFRelationship = %q is tolerated but the spec mandates %q", v.label, invoice.objNum, got, v.relationship)
 	}
 	return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship = %q, want %q", v.label, invoice.objNum, got, v.relationship)
 }
 
-func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) []Violation {
+func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, lenient bool) []Violation {
 	if !invoice.found || invoice.streamDict == nil {
 		return nil
 	}
@@ -503,15 +526,20 @@ func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invo
 	if err != nil {
 		return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype unreadable: %v", v.label, invoice.streamRef.ObjectNum, err)
 	}
-	// Factur-X 1.0.07 / ZUGFeRD 2.1+ mandate /text#2Fxml (text/xml)
-	// but a sizeable portion of third-party producers ship
-	// /application#2Fxml instead. Tolerate both on the consumer
-	// path; the writer side emits text/xml per the spec.
+	// Factur-X 1.0.07 / ZUGFeRD 2.1+ mandate /text#2Fxml (text/xml) but a
+	// sizeable portion of third-party producers ship /application#2Fxml
+	// instead. Strict validation surfaces that as a warning; lenient
+	// accepts it silently. The writer side always emits text/xml.
 	switch string(subtype) {
-	case "text/xml", "application/xml":
+	case "text/xml":
 		return nil
+	case "application/xml":
+		if lenient {
+			return nil
+		}
+		return failf(Rule_invoice_StreamSubtypeNonSpec, "%s: embedded stream %d /Subtype = application/xml is tolerated but the spec mandates text/xml", v.label, invoice.streamRef.ObjectNum)
 	}
-	return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype = %q, want %q or %q", v.label, invoice.streamRef.ObjectNum, subtype, "text/xml", "application/xml")
+	return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype = %q, want %q", v.label, invoice.streamRef.ObjectNum, subtype, "text/xml")
 }
 
 func checkInvoiceConflictingVariant(ctx context.Context, doc *document.Document, v hybridInvoiceVariant) []Violation {
@@ -555,7 +583,7 @@ type xmpProperties struct {
 	extensionSchema  bool
 }
 
-func checkInvoiceXMP(ctx context.Context, doc *document.Document, catalog ast.PdfDict, invoice invoiceFileSpec, v hybridInvoiceVariant) []Violation {
+func checkInvoiceXMP(ctx context.Context, doc *document.Document, catalog ast.PdfDict, invoice invoiceFileSpec, v hybridInvoiceVariant, lenient bool) []Violation {
 	xmpBytes := readInvoiceXMP(ctx, doc, catalog)
 	if xmpBytes == nil {
 		return failf(Rule_invoice_XMPNamespace, "%s: catalog /Metadata stream is missing or unreadable", v.label)
@@ -575,7 +603,15 @@ func checkInvoiceXMP(ctx context.Context, doc *document.Document, catalog ast.Pd
 		results = append(results, failf(Rule_invoice_XMPDocumentFileName,
 			"%s: XMP %s:DocumentFileName missing or empty", v.label, v.namespacePrefix)...)
 	}
-	if props.version != v.documentVersion && !slices.Contains(v.altVersions, props.version) {
+	switch {
+	case props.version == v.documentVersion:
+		// Matches the spec-fixed version.
+	case slices.Contains(v.altVersions, props.version):
+		if !lenient {
+			results = append(results, failf(Rule_invoice_VersionNonSpec,
+				"%s: XMP %s:Version = %q is tolerated but the spec fixes %q", v.label, v.namespacePrefix, props.version, v.documentVersion)...)
+		}
+	default:
 		results = append(results, failf(Rule_invoice_XMPVersion,
 			"%s: XMP %s:Version = %q, want %q", v.label, v.namespacePrefix, props.version, v.documentVersion)...)
 	}

@@ -58,6 +58,36 @@ var (
 		Description:   "The embedded invoice stream shall declare /Subtype /application#2Fxml",
 	}
 
+	// Lenient-profile findings: consumer-path tolerances that the spec
+	// does not sanction. Under strict validation (the default) they
+	// surface as warnings, not fatals, so a document a real-world
+	// producer emits still passes while the divergence is reported.
+	// WithFacturXLenient suppresses them.
+
+	Rule_invoice_AFRelationshipNonSpec = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "INVOICE_LENIENT",
+		TestNumber:    1,
+		Object:        "Filespec",
+		Description:   "The invoice filespec /AFRelationship uses a tolerated non-spec value; the spec mandates the variant value",
+	}
+
+	Rule_invoice_StreamSubtypeNonSpec = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "INVOICE_LENIENT",
+		TestNumber:    2,
+		Object:        "EmbeddedFile",
+		Description:   "The embedded invoice stream /Subtype is application/xml; the spec mandates text/xml",
+	}
+
+	Rule_invoice_VersionNonSpec = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "INVOICE_LENIENT",
+		TestNumber:    3,
+		Object:        "MainXMPPackage",
+		Description:   "The XMP Version uses a tolerated non-spec value; the spec fixes the variant value",
+	}
+
 	Rule_invoice_XMPNamespace = Rule{
 		Specification: "HYBRID_INVOICE",
 		Clause:        "INVOICE",

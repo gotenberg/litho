@@ -113,15 +113,24 @@ const (
 	SeverityWarning = "warning"
 )
 
-// SeverityOf classifies a violation as fatal or warning. Only the
-// Factur-X / CII Schematron path produces non-fatal violations today:
-// [ruleForSchematronSeverity] collapses the ISO/IEC 19757-3 `@flag`
-// (and `<sch:report>` notices) onto [Rule_cii_sch_Warning]. Every other
-// rule, including all PDF/A and PDF/UA rules, is fatal under the binary
-// conformance model. The pdf package maps this onto its public Severity
-// enum at the boundary.
+// warningRules is the set of rules whose firing is a soft finding rather
+// than a conformance failure: the collapsed Schematron warning bucket
+// and the lenient-profile Factur-X tolerances surfaced under strict
+// validation. Everything else, including all PDF/A and PDF/UA rules, is
+// fatal under the binary conformance model.
+//
+//nolint:gochecknoglobals // immutable lookup set.
+var warningRules = map[Rule]bool{
+	Rule_cii_sch_Warning:               true,
+	Rule_invoice_AFRelationshipNonSpec: true,
+	Rule_invoice_StreamSubtypeNonSpec:  true,
+	Rule_invoice_VersionNonSpec:        true,
+}
+
+// SeverityOf classifies a violation as fatal or warning. The pdf package
+// maps this onto its public Severity enum at the boundary.
 func SeverityOf(v Violation) string {
-	if v.Rule == Rule_cii_sch_Warning {
+	if warningRules[v.Rule] {
 		return SeverityWarning
 	}
 	return SeverityFatal
