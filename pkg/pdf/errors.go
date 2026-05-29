@@ -73,6 +73,25 @@ var (
 	// the number of available sources.
 	ErrSourceIndexOutOfRange = errors.New("source index out of range")
 
+	// ErrWriterConsumed is returned by [Writer.WriteTo] when the Writer
+	// has already produced output. A Writer is single-use: its mutations
+	// drain into the backing [Reader]'s in-memory state on the first
+	// successful write, so a second write would re-apply an
+	// already-mutated state and emit a corrupt document. Create a fresh
+	// Writer (and Reader) for each distinct output.
+	ErrWriterConsumed = errors.New("writer already consumed; create a new Writer")
+
+	// ErrSignFullRewriteIncompatible is returned by [Writer.WriteTo] when
+	// [Writer.Sign] is combined with an operation that requires a full
+	// rewrite: [Writer.Encrypt], [Writer.RemoveEncryption],
+	// [Writer.DeletePages], [Writer.InsertPages], [Writer.FlattenForm],
+	// [Writer.ClearMetadata], or [WithFullRewrite]. Signing covers a
+	// ByteRange of the existing bytes via an incremental update; a full
+	// rewrite renumbers objects and invalidates that ByteRange, so the
+	// two cannot be combined. Encrypted-then-signed output is permitted
+	// by the spec but not yet implemented.
+	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with full-rewrite operations (encrypt, decrypt, delete/insert pages, flatten, clear metadata, full rewrite)")
+
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
 	// [Writer.RemediatePDFUA] when applied fixes cause the output to
 	// regress beyond the configured [RegressionTolerance] and rolling back
@@ -127,10 +146,10 @@ var (
 // match on the sentinel via [errors.Is] while still inspecting the
 // offending stage via [errors.As].
 //
-// Cross-stage compatibility errors (e.g., Sign combined with Encrypt,
-// or Encrypt combined with PDF/A remediation) are enforced by
-// [Writer.WriteTo] at execution time. They surface as regular errors
-// from [Pipeline.WriteTo], not as pipeline sentinels.
+// Sign combined with encryption or any other full-rewrite operation
+// is enforced by [Writer.WriteTo] at execution time and surfaces as
+// [ErrSignFullRewriteIncompatible], a regular error from
+// [Pipeline.WriteTo], not a pipeline sentinel.
 var (
 	// ErrPipelineEmpty indicates a pipeline has no source stage.
 	ErrPipelineEmpty = errors.New("pipeline has no source")

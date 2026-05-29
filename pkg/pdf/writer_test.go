@@ -1208,6 +1208,148 @@ func TestWriter_Sign(t *testing.T) {
 	}
 }
 
+func TestWriter_XRefStream_RoundTrips(t *testing.T) {
+	// Exercises both WriteXRefStream call sites (incremental + full
+	// rewrite). The xref stream now carries an entry for its own object,
+	// so the output must reopen cleanly and round-trip metadata.
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	cases := []struct {
+		name string
+		opts []WriteOption
+	}{
+		{"incremental", []WriteOption{WithXRefStream()}},
+		{"full-rewrite", []WriteOption{WithFullRewrite(), WithXRefStream()}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			w := NewWriter(r)
+			w.SetMetadata(Metadata{Title: "xrefstream"})
+
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out, tc.opts...); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+
+			r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+			if err != nil {
+				t.Fatalf("reopen xref-stream output: %v", err)
+			}
+			if _, err := r2.PageCount(ctx); err != nil {
+				t.Fatalf("PageCount on reopened doc: %v", err)
+			}
+			meta, err := r2.Metadata(ctx)
+			if err != nil {
+				t.Fatalf("Metadata on reopened doc: %v", err)
+			}
+			if meta["Title"] != "xrefstream" {
+				t.Errorf("round-tripped Title = %q, want %q", meta["Title"], "xrefstream")
+			}
+		})
+	}
+}
+
+func TestWriter_SingleUse_SecondWriteReturnsErrWriterConsumed(t *testing.T) {
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	w := NewWriter(r)
+	w.SetMetadata(Metadata{Title: "once"})
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("first WriteTo: %v", err)
+	}
+
+	var out2 bytes.Buffer
+	err = w.WriteTo(ctx, &out2)
+	if !errors.Is(err, ErrWriterConsumed) {
+		t.Fatalf("second WriteTo: got %v, want ErrWriterConsumed", err)
+	}
+	if out2.Len() != 0 {
+		t.Errorf("consumed Writer wrote %d bytes, want 0", out2.Len())
+	}
+}
+
+func TestWriter_FailedWriteDoesNotConsume(t *testing.T) {
+	// A write that fails before producing output must leave the Writer
+	// usable so the caller can retry.
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	w := NewWriter(r)
+	w.Sign(&mockSigner{})
+
+	// Sign + full rewrite is rejected before any bytes are written.
+	var bad bytes.Buffer
+	if err := w.WriteTo(ctx, &bad, WithFullRewrite()); !errors.Is(err, ErrSignFullRewriteIncompatible) {
+		t.Fatalf("rejected write: got %v, want ErrSignFullRewriteIncompatible", err)
+	}
+	if w.consumed {
+		t.Fatal("Writer marked consumed after a rejected write")
+	}
+
+	// A subsequent valid write (incremental sign) must still succeed.
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("retry WriteTo: %v", err)
+	}
+	if out.Len() == 0 {
+		t.Error("retry produced no output")
+	}
+}
+
+func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	cases := []struct {
+		name  string
+		setup func(w *Writer, opts *[]WriteOption)
+	}{
+		{"encrypt", func(w *Writer, _ *[]WriteOption) {
+			w.Encrypt(EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1})
+		}},
+		{"remove-encryption", func(w *Writer, _ *[]WriteOption) { w.RemoveEncryption() }},
+		{"clear-metadata", func(w *Writer, _ *[]WriteOption) { w.ClearMetadata() }},
+		{"with-full-rewrite", func(_ *Writer, opts *[]WriteOption) { *opts = append(*opts, WithFullRewrite()) }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			w := NewWriter(r)
+			w.Sign(&mockSigner{})
+			var opts []WriteOption
+			tc.setup(w, &opts)
+
+			var out bytes.Buffer
+			err = w.WriteTo(ctx, &out, opts...)
+			if !errors.Is(err, ErrSignFullRewriteIncompatible) {
+				t.Fatalf("got %v, want ErrSignFullRewriteIncompatible", err)
+			}
+		})
+	}
+}
+
 func TestSigner_ExtractedSignatureFieldsArePopulated(t *testing.T) {
 	// Regression guard that pins down the end-to-end sign → extract
 	// round trip: after signing a minimal PDF with the mockSigner, the

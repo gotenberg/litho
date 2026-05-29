@@ -413,6 +413,10 @@ type Writer struct {
 	decrypt      bool
 	forceRewrite bool
 	trailerDirty bool
+	// consumed is set once WriteTo produces output successfully. A second
+	// WriteTo on the same Writer returns ErrWriterConsumed rather than
+	// re-applying the already-drained mutation state.
+	consumed bool
 	// rewriteOverrides holds per-object replacements produced during
 	// remediation, keyed by source object number. They are forwarded to
 	// the full-rewrite copier so the renumbered output reflects the
@@ -1163,7 +1167,11 @@ func (w *Writer) remediate(
 			return "", nil, integritySnap{}, attemptSetupFailed
 		}
 		tmpPath = tmpFile.Name()
-		if writeErr := w.WriteTo(ctx, tmpFile); writeErr != nil {
+		// Use writeToInternal: this is a probe write to a temp file, not
+		// the caller's final output, so it must not trip the single-use
+		// guard nor the sign/full-rewrite check (remediation may set
+		// forceRewrite legitimately).
+		if writeErr := w.writeToInternal(ctx, tmpFile); writeErr != nil {
 			tmpFile.Close()
 			doc.Logger.Debug("remediate: pre-serialization failed, treating output as broken",
 				slog.Any("err", writeErr))
@@ -1336,9 +1344,39 @@ func (w *Writer) copyFromPreSerialized(dst io.Writer) error {
 // mutation, best-effort fallback, and write-engine decision.
 //
 // WriteTo drains the mutation queue and may alter the backing
-// [Reader]'s in-memory state. Call it exactly once per Writer; to
-// produce another output, create a new Writer from a fresh Reader.
+// [Reader]'s in-memory state. It is single-use: after it produces
+// output successfully it returns [ErrWriterConsumed] on every
+// subsequent call. To produce another output, create a new Writer
+// from a fresh Reader.
+//
+// Signing ([Writer.Sign]) is incompatible with operations that force
+// a full rewrite (encrypt, decrypt, delete/insert pages, flatten,
+// clear metadata, or [WithFullRewrite]); combining them returns
+// [ErrSignFullRewriteIncompatible] instead of silently dropping the
+// requested operation.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) error {
+	if w.consumed {
+		return ErrWriterConsumed
+	}
+	cfg := writeOpts{}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	if w.signer != nil && (w.encryptCfg != nil || w.decrypt || w.forceRewrite || cfg.fullRewrite) {
+		return ErrSignFullRewriteIncompatible
+	}
+	if err := w.writeToInternal(ctx, dst, opts...); err != nil {
+		return err
+	}
+	w.consumed = true
+	return nil
+}
+
+// writeToInternal performs the serialization. [Writer.WriteTo] wraps it
+// with the single-use guard and the sign/full-rewrite compatibility
+// check. Remediation calls this directly so its internal probe writes
+// do not trip the single-use guard before the caller's real WriteTo.
+func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...WriteOption) error {
 	// Fast path: remediation already serialized the output to a temp file
 	// for accurate residual validation. Stream from that file.
 	if w.preSerializedPath != "" {

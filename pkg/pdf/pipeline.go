@@ -99,8 +99,8 @@ func (p *Pipeline) Apply(fn func(ctx context.Context, w *Writer) error) *Pipelin
 // Validate runs build-time structural checks without executing the
 // pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
 // page lists, and empty merge sources. Cross-stage compatibility
-// (Encrypt + PDF/A, Sign + full-rewrite) is enforced by [Writer.WriteTo]
-// at execution time and does not appear here.
+// (Sign combined with a full-rewrite operation) is enforced by
+// [Writer.WriteTo] at execution time and does not appear here.
 func (p *Pipeline) Validate() error {
 	var errs []error
 	if p.firstErr != nil {
