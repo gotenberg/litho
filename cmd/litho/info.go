@@ -10,6 +10,16 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
+type permsInfo struct {
+	Print             bool `json:"print"`
+	ModifyContent     bool `json:"modifyContent"`
+	ExtractText       bool `json:"extractText"`
+	ModifyAnnotations bool `json:"modifyAnnotations"`
+	FillForms         bool `json:"fillForms"`
+	Assemble          bool `json:"assemble"`
+	PrintHighQuality  bool `json:"printHighQuality"`
+}
+
 type infoResult struct {
 	File               string                    `json:"file"`
 	Version            string                    `json:"version"`
@@ -19,6 +29,7 @@ type infoResult struct {
 	HasForms           bool                      `json:"has_forms"`
 	IsPortfolio        bool                      `json:"is_portfolio"`
 	UndecodableStreams []models.StreamDiagnostic `json:"undecodableStreams,omitempty"`
+	Permissions        *permsInfo                `json:"permissions,omitempty"`
 }
 
 func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -27,6 +38,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
 	checkStreams := fs.Bool("streams", false, "Report streams litho cannot decode (JBIG2/JPX without a plugin, or unknown filters)")
+	checkPerms := fs.Bool("permissions", false, "Show the document permission flags")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
@@ -62,6 +74,18 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if *checkStreams {
 			res.UndecodableStreams, _ = r.UndecodableStreams(ctx)
 		}
+		if *checkPerms {
+			p := r.Permissions()
+			res.Permissions = &permsInfo{
+				Print:             p.Print,
+				ModifyContent:     p.ModifyContent,
+				ExtractText:       p.ExtractText,
+				ModifyAnnotations: p.ModifyAnnotations,
+				FillForms:         p.FillForms,
+				Assemble:          p.Assemble,
+				PrintHighQuality:  p.PrintHighQuality,
+			}
+		}
 		results = append(results, res)
 
 		closer()
@@ -93,6 +117,16 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 						fmt.Fprintf(stdout, "  obj %d: %s\n", s.ObjectNum, strings.Join(s.Filters, ", "))
 					}
 				}
+			}
+			if p := res.Permissions; p != nil {
+				fmt.Fprintln(stdout, "Permissions:")
+				fmt.Fprintf(stdout, "  Print:              %t\n", p.Print)
+				fmt.Fprintf(stdout, "  Modify content:     %t\n", p.ModifyContent)
+				fmt.Fprintf(stdout, "  Extract text:       %t\n", p.ExtractText)
+				fmt.Fprintf(stdout, "  Modify annotations: %t\n", p.ModifyAnnotations)
+				fmt.Fprintf(stdout, "  Fill forms:         %t\n", p.FillForms)
+				fmt.Fprintf(stdout, "  Assemble:           %t\n", p.Assemble)
+				fmt.Fprintf(stdout, "  Print high quality: %t\n", p.PrintHighQuality)
 			}
 		}
 	}

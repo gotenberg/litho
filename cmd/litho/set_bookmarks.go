@@ -17,26 +17,15 @@ func runSetBookmarks(ctx context.Context, args []string, stdout, stderr io.Write
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
-	fromJSON := fs.String("from-json", "", "JSON file with bookmark definitions (required)")
+	fromJSON := fs.String("from-json", "", "JSON file with bookmark definitions (required unless --generate)")
+	generate := fs.Bool("generate", false, "Auto-generate bookmarks from detected headings (instead of --from-json)")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 
-	if fs.NArg() < 1 || *output == "" || *fromJSON == "" {
-		fmt.Fprintln(stderr, "Usage: litho set-bookmarks <file> --from-json bookmarks.json -o out.pdf")
-		return exitError
-	}
-
-	data, err := os.ReadFile(*fromJSON)
-	if err != nil {
-		fmt.Fprintf(stderr, "reading bookmark file: %v\n", err)
-		return exitError
-	}
-
-	var bookmarks []models.Bookmark
-	if err := json.Unmarshal(data, &bookmarks); err != nil {
-		fmt.Fprintf(stderr, "parsing bookmark JSON: %v\n", err)
+	if fs.NArg() < 1 || *output == "" || (*fromJSON == "" && !*generate) {
+		fmt.Fprintln(stderr, "Usage: litho set-bookmarks <file> (--from-json bookmarks.json | --generate) -o out.pdf")
 		return exitError
 	}
 
@@ -48,7 +37,22 @@ func runSetBookmarks(ctx context.Context, args []string, stdout, stderr io.Write
 	defer closer()
 
 	w := pdf.NewWriter(r)
-	w.SetBookmarks(bookmarks)
+	if *generate {
+		w.GenerateBookmarks(defaultBookmarkGenOptions(), pdf.BookmarkReplace)
+	} else {
+		data, err := os.ReadFile(*fromJSON)
+		if err != nil {
+			fmt.Fprintf(stderr, "reading bookmark file: %v\n", err)
+			return exitError
+		}
+
+		var bookmarks []models.Bookmark
+		if err := json.Unmarshal(data, &bookmarks); err != nil {
+			fmt.Fprintf(stderr, "parsing bookmark JSON: %v\n", err)
+			return exitError
+		}
+		w.SetBookmarks(bookmarks)
+	}
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {

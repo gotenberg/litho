@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 type bookmarksResult struct {
@@ -20,6 +21,7 @@ func runBookmarks(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
+	generate := fs.Bool("generate", false, "Auto-generate bookmarks from detected headings instead of the existing outline")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
@@ -27,7 +29,7 @@ func runBookmarks(ctx context.Context, args []string, stdout, stderr io.Writer) 
 
 	files := fs.Args()
 	if len(files) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho bookmarks [-f json] [-p password] <file> [file...]")
+		fmt.Fprintln(stderr, "Usage: litho bookmarks [-f json] [-p password] [--generate] <file> [file...]")
 		return exitError
 	}
 
@@ -39,7 +41,12 @@ func runBookmarks(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			return exitError
 		}
 
-		bms, err := r.Bookmarks(ctx)
+		var bms []models.Bookmark
+		if *generate {
+			bms, err = r.GenerateBookmarks(ctx, defaultBookmarkGenOptions())
+		} else {
+			bms, err = r.Bookmarks(ctx)
+		}
 		if err != nil {
 			closer()
 			fmt.Fprintf(stderr, "%s: %v\n", path, err)
@@ -78,5 +85,20 @@ func printBookmarks(w io.Writer, bookmarks []models.Bookmark, depth int) {
 		if len(bm.Children) > 0 {
 			printBookmarks(w, bm.Children, depth+1)
 		}
+	}
+}
+
+// defaultBookmarkGenOptions returns the documented defaults for
+// auto-generated bookmarks. See [pdf.BookmarkGenerationOptions] for the
+// meaning of each field.
+func defaultBookmarkGenOptions() pdf.BookmarkGenerationOptions {
+	return pdf.BookmarkGenerationOptions{
+		MaxDepth:              3,
+		MinFontSizeRatio:      1.15,
+		SkipHeaderFooter:      true,
+		MaxTitleLength:        200,
+		PreferStructureTree:   true,
+		DetectNumbering:       true,
+		HeadingScoreThreshold: 0.5,
 	}
 }
