@@ -83,6 +83,20 @@ dispatch:
 		return runSignatures(ctx, globalArgs, stdout, stderr)
 	case "attachments":
 		return runAttachments(ctx, globalArgs, stdout, stderr)
+	case "tables":
+		return runTables(ctx, globalArgs, stdout, stderr)
+	case "geo":
+		return runGeo(ctx, globalArgs, stdout, stderr)
+	case "measurements":
+		return runMeasurements(ctx, globalArgs, stdout, stderr)
+	case "model3d":
+		return runModel3d(ctx, globalArgs, stdout, stderr)
+	case "formulas":
+		return runFormulas(ctx, globalArgs, stdout, stderr)
+	case "lexicons":
+		return runLexicons(ctx, globalArgs, stdout, stderr)
+	case "redactions":
+		return runRedactions(ctx, globalArgs, stdout, stderr)
 	case "rotate":
 		return runRotate(ctx, globalArgs, stdout, stderr)
 	case "delete":
@@ -143,6 +157,15 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  images        List images per page")
 	fmt.Fprintln(w, "  signatures    List or verify digital signatures")
 	fmt.Fprintln(w, "  attachments   List embedded file attachments")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Extraction:")
+	fmt.Fprintln(w, "  tables        Extract detected tables per page")
+	fmt.Fprintln(w, "  geo           Extract geospatial data per page")
+	fmt.Fprintln(w, "  measurements  Extract measurement scales per page")
+	fmt.Fprintln(w, "  model3d       List embedded 3D models per page")
+	fmt.Fprintln(w, "  formulas      Extract MathML formulas")
+	fmt.Fprintln(w, "  lexicons      Extract pronunciation lexicons")
+	fmt.Fprintln(w, "  redactions    Recover text under redaction marks")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Mutation:")
 	fmt.Fprintln(w, "  rotate        Rotate pages")

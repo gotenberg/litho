@@ -250,3 +250,40 @@ func parsePages(spec string, pageCount int) ([]int, error) {
 
 	return pages, nil
 }
+
+// resolvePages opens path and resolves the list of page numbers to
+// process. An empty pagesSpec means every page; otherwise it is parsed
+// with [parsePages]. The caller must call the returned closer when the
+// reader is no longer needed. On error the cause is already written to
+// stderr and the reader (if any) is closed, so the caller can just
+// return a non-zero exit code.
+func resolvePages(ctx context.Context, path, password, pagesSpec string, stderr io.Writer) (*pdf.Reader, func(), []int, error) {
+	r, closer, err := openPDF(ctx, path, password)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", path, err)
+		return nil, nil, nil, err
+	}
+
+	pageCount, err := r.PageCount(ctx)
+	if err != nil {
+		closer()
+		fmt.Fprintf(stderr, "%s: %v\n", path, err)
+		return nil, nil, nil, err
+	}
+
+	var pageNums []int
+	if pagesSpec != "" {
+		pageNums, err = parsePages(pagesSpec, pageCount)
+		if err != nil {
+			closer()
+			fmt.Fprintf(stderr, "%s: %v\n", path, err)
+			return nil, nil, nil, err
+		}
+	} else {
+		for i := 1; i <= pageCount; i++ {
+			pageNums = append(pageNums, i)
+		}
+	}
+
+	return r, closer, pageNums, nil
+}
