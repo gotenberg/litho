@@ -25,6 +25,9 @@ type validateResult struct {
 	Profile    string          `json:"profile"`
 	Compliant  bool            `json:"compliant"`
 	Violations []violationInfo `json:"violations,omitempty"`
+	// Advisories list Schematron rules the bundled engine could not
+	// evaluate (Factur-X / ZUGFeRD only). They do not affect Compliant.
+	Advisories []string `json:"advisories,omitempty"`
 }
 
 var pdfaProfiles = map[string]models.PDFAProfile{
@@ -44,6 +47,16 @@ var pdfaProfiles = map[string]models.PDFAProfile{
 var pdfuaProfiles = map[string]models.PDFUAProfile{
 	"PDF/UA-1": models.PDFUA1,
 	"PDF/UA-2": models.PDFUA2,
+}
+
+// facturXProfileName is the profile string selecting Factur-X / ZUGFeRD
+// 2.1+ validation, which takes no version argument.
+const facturXProfileName = "Factur-X"
+
+var zugferdProfiles = map[string]models.ZUGFeRDVersion{
+	"ZUGFeRD-1.0": models.ZUGFeRD1,
+	"ZUGFeRD-2.0": models.ZUGFeRD2,
+	"ZUGFeRD-2.1": models.ZUGFeRD21,
 }
 
 func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -95,6 +108,26 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			}
 			res.Compliant = len(violations) == 0
 			res.Violations = structuredViolations(violations)
+		} else if *profile == facturXProfileName {
+			rep, err := r.ValidateFacturXReport(ctx)
+			if err != nil {
+				closer()
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
+				return exitError
+			}
+			res.Compliant = len(rep.Fatals()) == 0
+			res.Violations = structuredViolations(rep.Structured())
+			res.Advisories = advisoryMessages(rep.Advisories)
+		} else if ver, ok := zugferdProfiles[*profile]; ok {
+			rep, err := r.ValidateZUGFeRDReport(ctx, ver)
+			if err != nil {
+				closer()
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
+				return exitError
+			}
+			res.Compliant = len(rep.Fatals()) == 0
+			res.Violations = structuredViolations(rep.Structured())
+			res.Advisories = advisoryMessages(rep.Advisories)
 		} else {
 			closer()
 			fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(allProfileNames(), ", "))
@@ -126,17 +159,23 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			if len(results) > 1 {
 				fmt.Fprintf(stdout, "--- %s ---\n", res.File)
 			}
-			if res.Compliant {
+			switch {
+			case res.Compliant && len(res.Violations) == 0:
 				fmt.Fprintf(stdout, "%s: compliant\n", res.Profile)
-			} else {
+			case res.Compliant:
+				fmt.Fprintf(stdout, "%s: compliant, %d warning(s)\n", res.Profile, len(res.Violations))
+			default:
 				fmt.Fprintf(stdout, "%s: %d violation(s)\n", res.Profile, len(res.Violations))
-				for _, v := range res.Violations {
-					fmt.Fprintf(stdout, "  [%s] clause %s test %d: %s", v.Severity, v.Clause, v.Test, v.Description)
-					if v.Context != "" {
-						fmt.Fprintf(stdout, " [%s]", v.Context)
-					}
-					fmt.Fprintln(stdout)
+			}
+			for _, v := range res.Violations {
+				fmt.Fprintf(stdout, "  [%s] clause %s test %d: %s", v.Severity, v.Clause, v.Test, v.Description)
+				if v.Context != "" {
+					fmt.Fprintf(stdout, " [%s]", v.Context)
 				}
+				fmt.Fprintln(stdout)
+			}
+			for _, a := range res.Advisories {
+				fmt.Fprintf(stdout, "  advisory: %s\n", a)
 			}
 		}
 	}
@@ -169,12 +208,28 @@ func structuredViolations(vs []pdf.Violation) []violationInfo {
 	return result
 }
 
+// advisoryMessages renders Schematron advisories as their error strings.
+func advisoryMessages(errs []error) []string {
+	if len(errs) == 0 {
+		return nil
+	}
+	msgs := make([]string, 0, len(errs))
+	for _, e := range errs {
+		msgs = append(msgs, e.Error())
+	}
+	return msgs
+}
+
 func allProfileNames() []string {
-	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles))
+	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+1+len(zugferdProfiles))
 	for k := range pdfaProfiles {
 		names = append(names, k)
 	}
 	for k := range pdfuaProfiles {
+		names = append(names, k)
+	}
+	names = append(names, facturXProfileName)
+	for k := range zugferdProfiles {
 		names = append(names, k)
 	}
 	return names
