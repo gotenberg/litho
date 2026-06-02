@@ -23,7 +23,12 @@ var validAFRelationships = map[ast.PdfName]bool{
 	"FormData":         true,
 	"Schema":           true,
 	"Unspecified":      true,
-	"Undefined":        true, // Tolerated for producers that emit this non-spec value.
+	// "Undefined" is not an ISO 32000-2 §14.13 value (the spec value is
+	// "Unspecified"), but VeraPDF, the conformance oracle litho is scored
+	// against, accepts it. Rejecting it produces false positives versus
+	// VeraPDF on real PDF/A-3 files, so it is retained as an
+	// oracle-aligned tolerance rather than flagged.
+	"Undefined": true,
 }
 
 // checkEmbeddedGroup validates embedded file compliance rules for PDF/A.
