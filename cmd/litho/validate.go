@@ -8,13 +8,16 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 type violationInfo struct {
-	Rule    string `json:"rule"`
-	Clause  string `json:"clause"`
-	Test    int    `json:"test"`
-	Context string `json:"context"`
+	Specification string `json:"specification,omitempty"`
+	Clause        string `json:"clause"`
+	Test          int    `json:"test"`
+	Description   string `json:"description,omitempty"`
+	Context       string `json:"context,omitempty"`
+	Severity      string `json:"severity"`
 }
 
 type validateResult struct {
@@ -75,23 +78,23 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		res := validateResult{File: path, Profile: *profile}
 
 		if pdfaP, ok := pdfaProfiles[*profile]; ok {
-			violations, err := r.ValidatePDFA(ctx, pdfaP)
+			violations, err := r.ValidatePDFAReport(ctx, pdfaP)
 			if err != nil {
 				closer()
 				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				return exitError
 			}
 			res.Compliant = len(violations) == 0
-			res.Violations = formatViolations(violations)
+			res.Violations = structuredViolations(violations)
 		} else if pdfuaP, ok := pdfuaProfiles[*profile]; ok {
-			violations, err := r.ValidatePDFUA(ctx, pdfuaP)
+			violations, err := r.ValidatePDFUAReport(ctx, pdfuaP)
 			if err != nil {
 				closer()
 				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				return exitError
 			}
 			res.Compliant = len(violations) == 0
-			res.Violations = formatViolations(violations)
+			res.Violations = structuredViolations(violations)
 		} else {
 			closer()
 			fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(allProfileNames(), ", "))
@@ -128,7 +131,11 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			} else {
 				fmt.Fprintf(stdout, "%s: %d violation(s)\n", res.Profile, len(res.Violations))
 				for _, v := range res.Violations {
-					fmt.Fprintf(stdout, "  [%s] %s\n", v.Clause, v.Context)
+					fmt.Fprintf(stdout, "  [%s] clause %s test %d: %s", v.Severity, v.Clause, v.Test, v.Description)
+					if v.Context != "" {
+						fmt.Fprintf(stdout, " [%s]", v.Context)
+					}
+					fmt.Fprintln(stdout)
 				}
 			}
 		}
@@ -140,22 +147,24 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	return exitOK
 }
 
-func formatViolations(errs []error) []violationInfo {
-	if len(errs) == 0 {
+// structuredViolations maps the structured [pdf.Violation] values from
+// the report API onto the CLI output shape, carrying the spec
+// coordinates and severity directly instead of parsing them out of an
+// error string.
+func structuredViolations(vs []pdf.Violation) []violationInfo {
+	if len(vs) == 0 {
 		return nil
 	}
-	var result []violationInfo
-	for _, e := range errs {
-		v := violationInfo{Context: e.Error()}
-		// Parse structured fields if available.
-		msg := e.Error()
-		if _, after, ok := strings.Cut(msg, "clause "); ok {
-			if clause, rest, ok := strings.Cut(after, " "); ok {
-				v.Clause = clause
-				v.Context = rest
-			}
-		}
-		result = append(result, v)
+	result := make([]violationInfo, 0, len(vs))
+	for _, v := range vs {
+		result = append(result, violationInfo{
+			Specification: v.Specification,
+			Clause:        v.Clause,
+			Test:          v.TestNumber,
+			Description:   v.Description,
+			Context:       v.Context,
+			Severity:      v.Severity.String(),
+		})
 	}
 	return result
 }
