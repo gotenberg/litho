@@ -37,6 +37,42 @@ func TestParseDict_MissingCloseBracket(t *testing.T) {
 	}
 }
 
+func TestParseObject_ScientificNotation(t *testing.T) {
+	// A dot+exponent real ("1.5e3") parses (Go ParseFloat accepts it) and,
+	// under format checking, records a violation. The writer re-emits a
+	// plain decimal via formatReal, so the round-trip is compliant.
+	r, ok := func() (ast.PdfReal, bool) {
+		pf := newParser("1.5e3").WithFormatChecking()
+		obj, err := pf.ParseObject(context.Background())
+		if err != nil {
+			t.Fatalf("ParseObject(1.5e3): %v", err)
+		}
+		if len(pf.FormatViolations) != 1 {
+			t.Fatalf("scientific notation under checkFormat: got %d violations, want 1 (%v)", len(pf.FormatViolations), pf.FormatViolations)
+		}
+		rv, isReal := obj.(ast.PdfReal)
+		return rv, isReal
+	}()
+	if !ok || float64(r) != 1500 {
+		t.Fatalf("1.5e3 parsed to %v (%T), want PdfReal(1500)", r, r)
+	}
+
+	// A plain real records nothing.
+	plain := newParser("1.5").WithFormatChecking()
+	if _, err := plain.ParseObject(context.Background()); err != nil {
+		t.Fatalf("ParseObject(1.5): %v", err)
+	}
+	if len(plain.FormatViolations) != 0 {
+		t.Errorf("plain real recorded %d violations, want 0", len(plain.FormatViolations))
+	}
+
+	// A bare exponent integer ("1e2", no dot) remains a parse error, as
+	// before, so text extraction is unaffected.
+	if _, err := newParser("1e2").ParseObject(context.Background()); err == nil {
+		t.Error("ParseObject(1e2): expected a parse error (no dot), got nil")
+	}
+}
+
 func TestParseArray_MissingCloseBracket(t *testing.T) {
 	// Array with no closing ].
 	p := newParser("[1 2 3")

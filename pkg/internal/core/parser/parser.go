@@ -178,6 +178,17 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 			if err != nil {
 				return nil, err
 			}
+			// ISO 32000-1 §7.3.3 real-number syntax has no exponent. Go's
+			// ParseFloat accepts forms like "1.5e2"; flag them under
+			// format checking so a Conforming Processor reports the
+			// divergence. The writer re-emits a plain decimal via
+			// formatReal, so the round-trip is already compliant. Bare
+			// exponent integers ("1e2") are left to the lexer's tokenizer
+			// leniency and remain a parse error here, matching prior
+			// behaviour, to avoid shifting text extraction.
+			if p.checkFormat && strings.ContainsAny(t0.Value, "eE") {
+				p.recordViolation("number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
+			}
 			return ast.PdfReal(f), nil
 		}
 		i, err := strconv.ParseInt(t0.Value, 10, 64)
