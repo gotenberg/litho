@@ -78,6 +78,33 @@ func TestDecodeStream_FlateNoPredictor(t *testing.T) {
 	}
 }
 
+func TestDecodeStreamChecked_IncompleteOnUnsupportedFilter(t *testing.T) {
+	raw := []byte("payload")
+	// Chain: FlateDecode (supported) then JBIG2Decode (no plugin -> skipped).
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfArray{ast.PdfName("FlateDecode"), ast.PdfName("JBIG2Decode")},
+	}, zlibCompress(raw))
+
+	data, incomplete, err := DecodeStreamChecked(context.Background(), stream)
+	if err != nil {
+		t.Fatalf("DecodeStreamChecked: %v", err)
+	}
+	if !incomplete {
+		t.Error("expected incomplete=true when an unsupported filter is skipped")
+	}
+	if !bytes.Equal(data, raw) {
+		t.Errorf("data = %q, want %q", data, raw)
+	}
+
+	// A fully supported chain reports complete.
+	full := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}, zlibCompress(raw))
+	if _, incomplete2, err := DecodeStreamChecked(context.Background(), full); err != nil {
+		t.Fatalf("DecodeStreamChecked (full): %v", err)
+	} else if incomplete2 {
+		t.Error("expected incomplete=false for a fully supported chain")
+	}
+}
+
 func TestDecodeStream_LZW(t *testing.T) {
 	raw := []byte("The quick brown fox jumps over the lazy dog")
 	stream := ast.NewStream(ast.PdfDict{

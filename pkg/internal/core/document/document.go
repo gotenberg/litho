@@ -152,7 +152,14 @@ func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]by
 	if d.Filters != nil {
 		return d.Filters.DecodeStream(ctx, stream)
 	}
-	return filter.DecodeStream(ctx, stream)
+	data, incomplete, err := filter.DecodeStreamChecked(ctx, stream)
+	if incomplete {
+		// The bytes are only partially decoded: an unsupported filter in
+		// the chain was skipped, so they remain filter-encoded. Surface
+		// it at Debug rather than silently returning them as plaintext.
+		d.Logger.Debug("stream only partially decoded; an unsupported filter in the chain was skipped, returned bytes remain filter-encoded")
+	}
+	return data, err
 }
 
 // NewStreamReader returns a lazy [io.ReadCloser] using the document's filter decoder.

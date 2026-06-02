@@ -63,10 +63,25 @@ var bufPool = sync.Pool{
 // It supports applying multiple filters sequentially if an array is provided.
 // /DecodeParms are extracted and passed per filter for predictor processing.
 // Context is checked between decompression chunks to allow cancellation.
+// Decoding is best-effort: an unsupported filter in the chain is skipped.
+// Use [DecodeStreamChecked] when the caller needs to know whether decoding
+// was complete.
 func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
+	data, _, err := DecodeStreamChecked(ctx, stream)
+	return data, err
+}
+
+// DecodeStreamChecked is [DecodeStream] that also reports whether decoding
+// was complete. incomplete is true when an unsupported filter in the chain
+// was skipped, leaving the returned bytes still encoded by that filter, so
+// a caller must not treat them as fully decoded. The byte and error
+// contract matches DecodeStream (best-effort), so callers that ignore
+// incomplete behave exactly as before.
+func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
-		return stream.Bytes(ctx)
+		b, berr := stream.Bytes(ctx)
+		return b, false, berr
 	}
 
 	var filters []ast.PdfName
@@ -80,37 +95,37 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 			}
 		}
 	default:
-		return nil, fmt.Errorf("invalid type for /Filter: %T", filterObj)
+		return nil, false, fmt.Errorf("invalid type for /Filter: %T", filterObj)
 	}
 
 	// Extract per-filter DecodeParms. The value can be a single dict (applied
 	// to the single filter) or an array of dicts matching the filter array.
 	parms := extractDecodeParms(stream.Dict, len(filters))
 
-	data, err := stream.Bytes(ctx)
+	data, err = stream.Bytes(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	for i, f := range filters {
-		decoded, err := applyDecodeFilter(ctx, data, f, parms[i])
-		if err != nil {
-			if errors.Is(err, ErrUnsupportedFilter) {
+		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i])
+		if derr != nil {
+			if errors.Is(derr, ErrUnsupportedFilter) {
 				// Best-effort: skip an unsupported filter and continue
 				// with the current data so text extraction still works
 				// when only part of a chain is supported (e.g. a plugin
 				// is not loaded). The returned bytes are then only
-				// partially decoded (still encoded by the skipped
-				// filter) yet carry a nil error; callers that need to
-				// reject incompletely decoded chains must do so via the
-				// strict/lenient read mode (not yet wired here).
+				// partially decoded (still encoded by the skipped filter);
+				// incomplete records that so a caller can avoid treating
+				// them as fully decoded.
+				incomplete = true
 				continue
 			}
-			return nil, err
+			return nil, incomplete, derr
 		}
 		data = decoded
 	}
 
-	return data, nil
+	return data, incomplete, nil
 }
 
 // extractDecodeParms returns a slice of DecodeParms dicts, one per filter.
