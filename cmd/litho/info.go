@@ -5,16 +5,20 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 type infoResult struct {
-	File        string `json:"file"`
-	Version     string `json:"version"`
-	Pages       int    `json:"pages"`
-	Encrypted   bool   `json:"encrypted"`
-	Linearized  bool   `json:"linearized"`
-	HasForms    bool   `json:"has_forms"`
-	IsPortfolio bool   `json:"is_portfolio"`
+	File               string                    `json:"file"`
+	Version            string                    `json:"version"`
+	Pages              int                       `json:"pages"`
+	Encrypted          bool                      `json:"encrypted"`
+	Linearized         bool                      `json:"linearized"`
+	HasForms           bool                      `json:"has_forms"`
+	IsPortfolio        bool                      `json:"is_portfolio"`
+	UndecodableStreams []models.StreamDiagnostic `json:"undecodableStreams,omitempty"`
 }
 
 func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -22,6 +26,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
+	checkStreams := fs.Bool("streams", false, "Report streams litho cannot decode (JBIG2/JPX without a plugin, or unknown filters)")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
@@ -45,7 +50,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		hasForms := r.HasAcroForm(ctx)
 		isPortfolio, _ := r.IsPortfolio(ctx)
 
-		results = append(results, infoResult{
+		res := infoResult{
 			File:        path,
 			Version:     r.Version(),
 			Pages:       pageCount,
@@ -53,7 +58,11 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			Linearized:  r.IsLinearized(),
 			HasForms:    hasForms,
 			IsPortfolio: isPortfolio,
-		})
+		}
+		if *checkStreams {
+			res.UndecodableStreams, _ = r.UndecodableStreams(ctx)
+		}
+		results = append(results, res)
 
 		closer()
 	}
@@ -75,6 +84,16 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "Linearized:  %t\n", res.Linearized)
 			fmt.Fprintf(stdout, "Has forms:   %t\n", res.HasForms)
 			fmt.Fprintf(stdout, "Portfolio:   %t\n", res.IsPortfolio)
+			if *checkStreams {
+				if len(res.UndecodableStreams) == 0 {
+					fmt.Fprintln(stdout, "Undecodable: none")
+				} else {
+					fmt.Fprintf(stdout, "Undecodable: %d stream(s)\n", len(res.UndecodableStreams))
+					for _, s := range res.UndecodableStreams {
+						fmt.Fprintf(stdout, "  obj %d: %s\n", s.ObjectNum, strings.Join(s.Filters, ", "))
+					}
+				}
+			}
 		}
 	}
 	return exitOK

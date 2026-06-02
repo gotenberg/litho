@@ -59,6 +59,28 @@ var bufPool = sync.Pool{
 	New: func() any { return new(bytes.Buffer) },
 }
 
+// Decodable reports whether the built-in decoders can handle the named
+// stream filter without a plugin. It mirrors the decodable cases of
+// applyDecodeFilter: JBIG2Decode and JPXDecode are excluded because the
+// built-in implementations return ErrUnsupportedFilter (they need the
+// jbig2 / jpx plugins), and unknown filters are excluded. Keep this in
+// sync with applyDecodeFilter.
+func Decodable(name ast.PdfName) bool {
+	switch name {
+	case "FlateDecode", "Fl",
+		"LZWDecode", "LZW",
+		"ASCIIHexDecode", "AHx",
+		"ASCII85Decode", "A85",
+		"CCITTFaxDecode", "CCF",
+		"BrotliDecode",
+		"RunLengthDecode", "RL",
+		"DCTDecode", "DCT",
+		"Crypt":
+		return true
+	}
+	return false
+}
+
 // DecodeStream decodes a PDF stream based on its /Filter dictionary entry.
 // It supports applying multiple filters sequentially if an array is provided.
 // /DecodeParms are extracted and passed per filter for predictor processing.

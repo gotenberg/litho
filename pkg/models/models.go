@@ -309,3 +309,13 @@ type PageOffsetEntry struct {
 	PageLength          int64 `json:"pageLength"`
 	ContentStreamOffset int64 `json:"contentStreamOffset"`
 }
+
+// StreamDiagnostic identifies an in-use stream litho cannot fully decode,
+// reported by [pdf.Reader.UndecodableStreams]. Filters lists the
+// undecodable filter names in the stream's /Filter chain (e.g.
+// "JBIG2Decode" when the jbig2 plugin is not registered).
+// Values must not be shared across goroutines without synchronization.
+type StreamDiagnostic struct {
+	ObjectNum int      `json:"objectNum"`
+	Filters   []string `json:"filters"`
+}

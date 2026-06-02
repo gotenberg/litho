@@ -1383,6 +1383,27 @@ func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) (_ []mode
 	return heuristics.DetectUnappliedRedactions(elements, annots), nil
 }
 
+// UndecodableStreams reports in-use stream objects whose /Filter chain
+// contains a filter litho cannot decode: JBIG2Decode or JPXDecode when
+// the corresponding plugin (see [WithFilterPlugin]) is not registered, or
+// an unknown filter. Text, image, and validation results for those
+// objects are necessarily incomplete; registering the matching plugin
+// makes them decodable. Returns an empty slice when every stream is
+// decodable. The check inspects filter names and does not decode the
+// streams.
+func (r *Reader) UndecodableStreams(ctx context.Context) (_ []models.StreamDiagnostic, err error) {
+	defer recoverToError(r.logger(), "Reader.UndecodableStreams", &err)
+	diags, err := r.doc.UndecodableStreams(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]models.StreamDiagnostic, 0, len(diags))
+	for _, d := range diags {
+		out = append(out, models.StreamDiagnostic{ObjectNum: d.ObjectNum, Filters: d.Filters})
+	}
+	return out, nil
+}
+
 // resolvePages retrieves the catalog and resolves all pages. The result is
 // memoized after the first successful call since the document is read-only
 // after Open. Safe for concurrent use.

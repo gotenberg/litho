@@ -31,6 +31,16 @@ func NewDecoder(pp []plugins.FilterDecoder) *Decoder {
 	return &Decoder{plugins: m}
 }
 
+// Handles reports whether a plugin is registered for the named filter.
+// A nil *Decoder handles nothing.
+func (d *Decoder) Handles(name ast.PdfName) bool {
+	if d == nil {
+		return false
+	}
+	_, ok := d.plugins[name]
+	return ok
+}
+
 // DecodeStream decodes a PDF stream, consulting registered plugins for
 // filter names they handle before falling back to built-in decoders.
 func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
