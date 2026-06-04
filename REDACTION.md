@@ -1,0 +1,84 @@
+# Redaction (apply) in litho
+
+Plan to permanently remove content from a PDF, not just cover it.
+
+litho can already _detect_ failed redactions: `Reader.ExtractRedactedText` (the `redactions` CLI command) surfaces text that sits under redaction marks but was never removed from the content stream — the single most common real-world PDF data leak. The gap is the cure: litho cannot _apply_ a redaction. This is a security-critical, self-contained capability and the only one in the roadmap whose absence is itself a standing hazard: litho diagnoses a leak it cannot fix.
+
+> **Priority.** Redaction's core (text/image/annotation excision + sanitization + full rewrite) needs **none** of the rendering bundle ([RENDERING.md](RENDERING.md) etc.); only the optional pixel-verify hook and the conservative vector-path fallback do. Together with [ACCESSIBILITY-AUTOTAGGING.md](ACCESSIBILITY-AUTOTAGGING.md) it is the cheap, high-value, rendering-independent, **ship-early** pair. Retiring this hazard does not require committing to the rendering bet.
+
+## What redaction actually is
+
+True redaction is **content removal plus document-wide sanitization**, never a drawn black rectangle. Covering text with a filled rect is the classic, catastrophic failure: the bytes remain and any extractor recovers them. The threat model is strict — an attacker or auditor must not recover excised text or pixels from _any_ residual structure in the output. The reference vector lists are the NSA's "Redacting with Confidence" and the glyph-advance reconstruction attack (arXiv 2206.02285, "Story Beyond the Eye").
+
+### Two distinct jobs, often conflated
+
+1. **Full rewrite** kills incremental-update history and orphaned objects. litho's `WithFullRewrite` already does this — but it deep-copies the entire object graph reachable from `/Root` (`pkg/internal/mutations/rewrite.go`, via `Copier.CopyRef`), so it drops **only unreferenced** objects. It is **necessary but not sufficient.**
+2. **Scrubbing catalog-referenced structures** that hold a _second copy_ of the content. Every structure below survives a full rewrite verbatim and must be handled explicitly. This is the job the naive "full rewrite removes the residue" model misses entirely.
+
+### To redact region R on page P
+
+- **Excise marked content (geometry-driven, visibility-independent).** Remove every text-show, image-paint, and path-paint operator whose marks intersect R — **regardless of fill/stroke color, alpha, or text rendering mode.** Invisible text (`Tr 3`, the OCR hidden-text layer), white-on-white overdraw, and content inside an _off_ optional-content group all count: excision keys on geometry through the CTM, never on whether a pixel was visible. Operators straddling R are rewritten (split a `TJ` run at glyph boundaries; clip an image in image space).
+- **Avoid the glyph-advance leak.** After splitting a text run, do not leave width-revealing spacing: the residual advances of surviving neighbors encode the removed glyphs' widths and reconstruct the word (arXiv 2206.02285). Collapse the gap to a fixed mark width or re-lay the survivors so residual advances carry no information.
+- **Blank underlying image pixels in image space.** Overwrite the covered pixels in the image data (clip is reversible, so never treat clipping as removal); this applies to any image whose sensitive pixels map under R through the CTM, including images clipped to a sliver. Re-encode the image — but see the [JBIG2/JPX limit](#limits-and-honest-scope).
+- **Re-subset embedded fonts.** If a glyph/CID now appears only under the mark, its outline still sits in the embedded font, and `/ToUnicode` + a custom `/Encoding /Differences` can themselves spell the redacted characters. Re-subset to drop the outline and prune the matching `ToUnicode`/`Differences`/`CIDToGIDMap` entries (shares the [OPTIMIZATION.md](OPTIMIZATION.md) subsetter).
+
+## Document-wide sanitization — the leak vectors
+
+Each of these is reachable from `/Root` and survives full rewrite. The spec covers them by default (security operations fail closed, so scrubbing is opt-_out_, not opt-in):
+
+| Vector                                                   | Why it leaks                                                                                                                                                             | Action                                                                                                                                                                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Structure tree** (`StructTreeRoot`)                    | `/ActualText`, `/Alt`, `/E` expansion, and MCID-linked text hold a parallel copy of the page text — and tagged PDFs are the _common_ case                                | For each excised marked-content sequence, find its MCID in the page `/StructParents`/ParentTree and remove or neutralize the structure element (incl. `/ActualText`/`/Alt`/`/E`); fail closed on an unsplittable straddle |
+| **Page `/Thumb`**                                        | A producer-baked raster of the _whole pre-redaction page_; image blanking targets content XObjects, not `/Thumb`                                                         | Drop `/Thumb` (cheap, always safe) or regenerate from the redacted page                                                                                                                                                   |
+| **Annotations & form fields (document-wide)**            | `/Contents`, `/RC` rich text, form `/V`/`/DV`, link `/URI`, and `/AP` appearance streams can quote redacted text even _outside_ R                                        | Token-scan all annotation values + `/AP` + AcroForm `/V` document-wide, not just those intersecting R                                                                                                                     |
+| **Optional content** (`OCProperties`/OCG)                | A hidden layer (or OCG-gated alternate image) holds content the interpreter may skip                                                                                     | Excise OCG-hidden content geometrically; scrub OCG-gated alternates                                                                                                                                                       |
+| **Outlines / Dests / Names**                             | Bookmark titles and named-destination keys routinely quote heading/section text                                                                                          | Token-scan and scrub; fail closed on straddle                                                                                                                                                                             |
+| **`/PieceInfo`** (page + document)                       | Producer-private app data (InDesign/Illustrator blobs) can hold the original text                                                                                        | Drop wholesale (private, non-rendered)                                                                                                                                                                                    |
+| **Metadata** (Info + XMP, catalog _and_ per-object)      | `/Title`/`/Subject`/`/Keywords`, XMP `dc:*`, and especially XMP history (`xmpMM:History`/`DerivedFrom`) record prior states; XObjects/images carry their own `/Metadata` | Default-scrub the full standard set + XMP history; caller re-adds explicitly                                                                                                                                              |
+| **Document JS / actions**                                | `/OpenAction`, document/page `/AA`, and the `Names/JavaScript` tree can read or echo content                                                                             | Strip all (new work — see table below)                                                                                                                                                                                    |
+| **Embedded files / legacy search index / `/Collection`** | Attachment bodies, a legacy embedded full-text index, and portable-collection metadata each hold text independently                                                      | Default attachment removal **on**; drop the search index and `/Collection`                                                                                                                                                |
+| **Digital signatures / `/DSS`**                          | A signature `/ByteRange` covers original bytes; a prior signed revision is a full pre-redaction copy; `/DSS`/VRI reference prior revisions                               | Drop all `/Sig` fields, `/Perms`, and `/DSS` (full rewrite already invalidates them)                                                                                                                                      |
+| **Embedded font programs**                               | See font re-subset above                                                                                                                                                 | Re-subset / prune                                                                                                                                                                                                         |
+| **Incremental history + orphans**                        | Prior revisions are full pre-redaction copies                                                                                                                            | `WithFullRewrite` (already handled)                                                                                                                                                                                       |
+
+## What exists in litho today
+
+| Capability                                                                                 | Status                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Detect un-applied redactions (text under marks)                                            | Done — `ExtractRedactedText` / `redactions` CLI                                                                                                                                   |
+| `/Redact` annotation consumer                                                              | Partial — `pkg/internal/heuristics/redaction.go` filters `Subtype == "Redact"` using `/QuadPoints`/`/Rect`. **`/RD` region parsing does not exist** (PR1 adds it)                 |
+| Content-stream interpreter (operator positions, CTM, text/image bbox; MCID/marked-content) | Done — `pkg/internal/graphics/`                                                                                                                                                   |
+| Image decode                                                                               | Done — `pkg/internal/graphics/image/decode.go`. **Re-encode is new** (shared with [OPTIMIZATION.md](OPTIMIZATION.md)); stdlib `image/jpeg`+`compress/zlib` are pure-Go            |
+| Full-rewrite (drops orphaned/incremental objects only)                                     | Done — `WithFullRewrite` (necessary, not sufficient — see above)                                                                                                                  |
+| Metadata / attachment removal                                                              | Partial — `ClearMetadata`, `RemoveAttachment` exist; **JS/AA/OpenAction stripping is new**                                                                                        |
+| **Content-stream excision (remove/rewrite operators by region)**                           | **Missing** — the core new primitive; **owned here** (redaction needs it first, without the renderer), consumed as-is by [TRANSPARENCY-FLATTENING.md](TRANSPARENCY-FLATTENING.md) |
+| **Image-pixel blanking + re-encode**                                                       | **Missing**                                                                                                                                                                       |
+
+## Design
+
+- **Region source.** Apply the document's own `/Redact` annotations, or caller-supplied `[]Rect` per page. `Writer.Redact(ctx, regions, opts)`.
+- **Excision primitive** in `pkg/internal/mutations` + the writer (geometry-driven, visibility-independent, as above). **This is the shared deliverable** flattening reuses; it lives with redaction so redaction does not inherit the rendering gate.
+- **Sanitization pass** over every vector in the table, default-on.
+- **Fail-closed is enforceable, not aspirational.** The interpreter classifies every operator/structure touching the redaction set into `{excised, provably-irrelevant, unknown}`; **any `unknown` forces a hard refusal naming the construct.** Refusal beats half-redaction.
+- **Verification hook (honestly scoped).** Re-running `ExtractRedactedText` + a pixel check covers _only the page content stream and rendered pixels_ — it does **not** see the structure tree, `/Thumb`, metadata, or annotation values, so it is a check, not a proof. Add a belt-and-suspenders **document-wide token scan**: assert no known-redacted token appears in any decoded string/stream (structure tree, outlines, dests, Info/XMP, annotation values/`/AP`, JS) before writing.
+
+Per CONTRIBUTING: redaction is destructive and security-critical, so it is explicit (never a default), the report enumerates exactly what was removed per region and vector, and clause-grounding cites the NSA guidance and arXiv 2206.02285 at the decision sites.
+
+## Plan
+
+- **PR1 — `/Redact` + `/RD` model + region API + report shape.** No removal yet.
+- **PR2 — Content-stream excision primitive.** Region-based, visibility/color-independent operator removal/rewrite in `mutations`; crafted-stream tests including `Tr 3` invisible text, white-on-white overdraw, OCG-hidden text, and a partial-`TJ` glyph-advance case. (Shared with flattening.)
+- **PR3 — Image-pixel blanking + re-encode + in-region annotation/field removal.**
+- **PR4 — Document-wide sanitization** (the full vector table) + font re-subset + full-rewrite enforcement + the token-scan verification gate; fail closed.
+- **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
+
+## Limits and honest scope
+
+- **JBIG2 and JPX images cannot be re-encoded** — the plugins are decode-only and no encoder exists in any binding. A redaction region over a JBIG2 (common in scanned/fax docs — the exact case redaction targets) or JPX image cannot be blanked in its native filter. litho must transcode it to a supported filter (Flate, or DCT — lossy for bilevel JBIG2) or **refuse**; it never silently leaves such an image untouched. (Same caveat in [OPTIMIZATION.md](OPTIMIZATION.md).)
+- **Vector path excision is harder than text/image.** A path straddling R must be geometrically clipped and re-emitted; the conservative fallback rasterizes the affected region (needs [RENDERING.md](RENDERING.md)) rather than leak. The token scan + pixel-verify catch misses.
+- **"Redaction-grade" is a claim, not a default.** Fully remove (and prove it) or refuse — partial redaction is worse than none. No "black box only" mode.
+
+## Out of scope
+
+- Automatic PII detection (deciding _what_ to redact) — caller policy, possibly via the OCR hand-off.
+- Reversible/encrypted redaction.
