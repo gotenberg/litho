@@ -125,7 +125,7 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 | `pdfjs`   | ~1,100 PDFs (1 fixture each)      | Mozilla's PDF.js test suite                                            |
 | `verapdf` | ~2,600 PDFs × 13 profiles         | VeraPDF corpus, flattened from the per-profile directories             |
 | `govdocs` | ~1,500 PDFs (1 fixture per claim) | Govdocs1 random-sample of five fixed thread archives (real-world PDFs) |
-| `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (BSD-licensed PDF 2.0 samples)       |
+| `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)       |
 | `pdfcpu`  | ~50 PDFs (1 fixture each)         | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)         |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
