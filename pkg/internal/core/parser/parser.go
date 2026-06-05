@@ -35,6 +35,14 @@ type Parser struct {
 	// is enabled via WithFormatChecking.
 	FormatViolations []error
 	checkFormat      bool
+
+	// ends holds the end byte offset of each buffered token, parallel to
+	// tokens. It is populated only when trackOffsets is set (via
+	// WithOffsetTracking), so the default parse path pays no overhead. The
+	// end offset is the reader position immediately after the lexer produced
+	// the token, which is stable under lookahead buffering.
+	ends         []int64
+	trackOffsets bool
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -56,6 +64,32 @@ func (p *Parser) WithFormatChecking() *Parser {
 	return p
 }
 
+// WithOffsetTracking records the end byte offset of every token so callers
+// can recover the byte range of a parsed construct. It is opt-in because it
+// adds a position read and a slice entry per token; the default parser does
+// not track offsets. Use [Parser.PeekEnd] to read the offsets.
+func (p *Parser) WithOffsetTracking() *Parser {
+	p.trackOffsets = true
+	return p
+}
+
+// PeekEnd returns the end byte offset of the token n positions ahead, or -1
+// if offset tracking is disabled or n is out of range. The offset is the
+// reader position just past the token's last byte.
+func (p *Parser) PeekEnd(n int) int64 {
+	if !p.trackOffsets || n < 0 || n >= len(p.ends) {
+		return -1
+	}
+	return p.ends[n]
+}
+
+// Position returns the underlying reader's current byte offset. Callers with
+// offset tracking use it to bound constructs the token stream does not cover,
+// notably inline image data consumed by [Parser.ParseInlineImageDict].
+func (p *Parser) Position() int64 {
+	return p.lex.Reader().Position()
+}
+
 func (p *Parser) recordViolation(msg string) {
 	if p.checkFormat {
 		p.FormatViolations = append(p.FormatViolations, fmt.Errorf("compliance: %s", msg))
@@ -70,6 +104,9 @@ func (p *Parser) Peek(n int) (lexer.Token, error) {
 		}
 		tok, err := p.lex.NextToken()
 		p.tokens = append(p.tokens, tok)
+		if p.trackOffsets {
+			p.ends = append(p.ends, p.lex.Reader().Position())
+		}
 		if err != nil && err != io.EOF {
 			p.err = err
 		}
@@ -82,6 +119,9 @@ func (p *Parser) Consume() (lexer.Token, error) {
 	tok, err := p.Peek(0)
 	if len(p.tokens) > 0 {
 		p.tokens = p.tokens[1:]
+		if p.trackOffsets && len(p.ends) > 0 {
+			p.ends = p.ends[1:]
+		}
 	}
 	return tok, err
 }

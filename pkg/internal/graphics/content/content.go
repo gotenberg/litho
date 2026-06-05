@@ -21,14 +21,40 @@ type Operation struct {
 	Operands []ast.PdfObject
 }
 
+// ByteRange is the half-open byte span [Start, End) that an [Operation]
+// occupies in the source content (its operands plus the operator keyword,
+// including any leading whitespace). [ParseStreamDataWithOffsets] returns one
+// per operation, parallel to the operations slice. Ranges are contiguous and
+// monotonic, so the span of a run of operations is [first.Start, last.End].
+type ByteRange struct {
+	Start, End int
+}
+
 // parseOperations is the shared tokenization loop used by both ParseStreamData
 // and ParsePageContent. It reads tokens from the parser, collecting operands
 // and emitting operations when an operator keyword is encountered. Inline
-// images (BI/ID/EI) are detected and safely skipped.
-func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error) {
+// images (BI/ID/EI) are detected and safely skipped. When ranges is non-nil,
+// the parser must have offset tracking enabled and each operation's byte
+// range is appended to it.
+func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange) ([]Operation, error) {
 	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
 	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
 	tokenCount := 0
+	var prevEnd int64
+
+	recordRange := func(end int64) {
+		if ranges == nil {
+			return
+		}
+		// Token end offsets are monotonic in file order, so end >= prevEnd
+		// always holds in valid flow; the guard is defense-in-depth and does
+		// not fire on well-formed input.
+		if end < prevEnd {
+			end = prevEnd
+		}
+		*ranges = append(*ranges, ByteRange{Start: int(prevEnd), End: int(end)})
+		prevEnd = end
+	}
 
 	for {
 		tokenCount++
@@ -62,9 +88,14 @@ func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error)
 					Operands: []ast.PdfObject{dict},
 				})
 				operands = nil
+				// The image data is consumed off-token by ParseInlineImageDict,
+				// which empties the token buffer before reading raw bytes, so
+				// the reader position is just past EI and bounds the operation.
+				recordRange(p.Position())
 				continue
 			}
 
+			opEnd := p.PeekEnd(0) // end offset of the operator token, before consuming it
 			ops = append(ops, Operation{
 				Operator: tok.Value,
 				Operands: operands,
@@ -73,6 +104,7 @@ func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error)
 			if _, err := p.Consume(); err != nil {
 				return nil, fmt.Errorf("failed to consume operator token: %w", err)
 			}
+			recordRange(opEnd)
 		} else {
 			obj, err := p.ParseObject(ctx)
 			if err != nil {
@@ -98,7 +130,25 @@ func parseOperations(ctx context.Context, p *parser.Parser) ([]Operation, error)
 func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
-	return parseOperations(ctx, p)
+	return parseOperations(ctx, p, nil)
+}
+
+// ParseStreamDataWithOffsets parses content stream bytes and also returns the
+// byte range of each operation, parallel to the operations slice. Use it to
+// map operations back to the source bytes (e.g. to inject or excise
+// marked-content around a run of operations). The ranges are into data.
+func ParseStreamDataWithOffsets(ctx context.Context, data []byte) ([]Operation, []ByteRange, error) {
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	p := parser.NewParser(lex).WithOffsetTracking()
+	ranges := make([]ByteRange, 0, 256) //nolint:mnd // matches the operations capacity hint
+	ops, err := parseOperations(ctx, p, &ranges)
+	if err != nil {
+		// On error parseOperations returns ops=nil but ranges may hold the
+		// entries recorded before the failure; drop them so the two slices
+		// stay parallel (both nil) per the documented contract.
+		return nil, nil, err
+	}
+	return ops, ranges, nil
 }
 
 // ParseStreamDataFormatChecked parses content stream data with PDF/A format
@@ -107,7 +157,7 @@ func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
 func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex).WithFormatChecking()
-	ops, _ := parseOperations(ctx, p)
+	ops, _ := parseOperations(ctx, p, nil)
 	return ops, p.FormatViolations
 }
 
@@ -183,7 +233,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(allData), int64(len(allData)), 0))
 	p := parser.NewParser(lex)
-	ops, err := parseOperations(ctx, p)
+	ops, err := parseOperations(ctx, p, nil)
 	if err != nil {
 		return nil, err
 	}
