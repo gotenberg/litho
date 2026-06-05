@@ -255,9 +255,11 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		{"pdfaid", pdfaidNS},
 		{"pdfuaid", pdfuaidNS},
 	} {
-		before := len(buf)
+		before := buf
 		buf = canonicalizePrefix(buf, canon.prefix, canon.uri)
-		if len(buf) != before {
+		// Compare content, not length: an alias→canonical prefix rewrite
+		// (e.g. pdfuaia→pdfuaid) is length-neutral yet still a fix.
+		if !bytes.Equal(buf, before) {
 			fixes = append(fixes, fmt.Sprintf("canonicalized %s namespace prefix", canon.prefix))
 		}
 	}

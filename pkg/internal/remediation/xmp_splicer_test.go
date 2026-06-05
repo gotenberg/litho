@@ -262,3 +262,62 @@ func TestEnsureNamespaceDecl_SkipsIfPresent(t *testing.T) {
 		t.Error("output should match input byte-for-byte when no change")
 	}
 }
+
+func TestCanonicalizePrefix_DropsAliasWhenCanonicalPresent(t *testing.T) {
+	// An alias prefix (pdfuaia) and the canonical prefix (pdfuaid) both bind
+	// the PDF/UA id namespace on one rdf:Description, with a property under
+	// the alias. Canonicalizing must not emit a second xmlns:pdfuaid: a
+	// duplicate attribute is malformed XML that a strict parser (veraPDF)
+	// rejects. The alias declaration is dropped and its usage merged.
+	xmp := []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:pdfuaia="http://www.aiim.org/pdfua/ns/id/"
+        xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
+      <pdfuaid:part>1</pdfuaid:part>
+      <pdfuaia:amd>A</pdfuaia:amd>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+
+	got := string(canonicalizePrefix(xmp, "pdfuaid", pdfuaidNS))
+
+	if n := strings.Count(got, "xmlns:pdfuaid="); n != 1 {
+		t.Errorf("want exactly 1 xmlns:pdfuaid declaration (no duplicate), got %d:\n%s", n, got)
+	}
+	if strings.Contains(got, "xmlns:pdfuaia") {
+		t.Errorf("alias xmlns:pdfuaia should be dropped:\n%s", got)
+	}
+	if !strings.Contains(got, "<pdfuaid:amd>") || strings.Contains(got, "<pdfuaia:amd>") {
+		t.Errorf("aliased property should be rewritten to the canonical prefix:\n%s", got)
+	}
+}
+
+func TestCanonicalizePrefix_RenamesWhenAliasOnly(t *testing.T) {
+	// Only the alias prefix is present (no canonical declaration). The alias
+	// is renamed to the canonical prefix and its usages rewritten.
+	xmp := []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:pdfuaia="http://www.aiim.org/pdfua/ns/id/">
+      <pdfuaia:part>1</pdfuaia:part>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+
+	got := string(canonicalizePrefix(xmp, "pdfuaid", pdfuaidNS))
+
+	if strings.Contains(got, "pdfuaia") {
+		t.Errorf("alias prefix should be renamed away:\n%s", got)
+	}
+	if n := strings.Count(got, "xmlns:pdfuaid="); n != 1 {
+		t.Errorf("want 1 xmlns:pdfuaid declaration, got %d:\n%s", n, got)
+	}
+	if !strings.Contains(got, "<pdfuaid:part>") {
+		t.Errorf("usage should be renamed to the canonical prefix:\n%s", got)
+	}
+}

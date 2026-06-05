@@ -543,12 +543,28 @@ func canonicalizePrefix(xmp []byte, canonical, uri string) []byte {
 				out = append(rewrittenHead, out[next:]...)
 				break
 			}
-			newDecl := fmt.Appendf(nil, "xmlns:%s", canonical)
-			rewritten := make([]byte, 0, len(out)+len(newDecl)-len(declName))
-			rewritten = append(rewritten, out[:nameStart]...)
-			rewritten = append(rewritten, newDecl...)
-			rewritten = append(rewritten, out[nameEnd:]...)
-			out = rewritten
+			// If the canonical prefix is already bound to this URI on the
+			// element, renaming the alias would create a second
+			// xmlns:<canonical> attribute, which is not well-formed XML and
+			// makes a strict parser (veraPDF) reject the whole packet. Drop
+			// the alias declaration instead; the usage rewrite below still
+			// merges the alias's properties into the existing canonical
+			// namespace.
+			declEnd := idx + len(marker)
+			if bytes.Contains(out, fmt.Appendf(nil, `xmlns:%s="%s"`, canonical, uri)) ||
+				bytes.Contains(out, fmt.Appendf(nil, `xmlns:%s='%s'`, canonical, uri)) {
+				rewritten := make([]byte, 0, len(out)-(declEnd-nameStart))
+				rewritten = append(rewritten, out[:nameStart]...)
+				rewritten = append(rewritten, out[declEnd:]...)
+				out = rewritten
+			} else {
+				newDecl := fmt.Appendf(nil, "xmlns:%s", canonical)
+				rewritten := make([]byte, 0, len(out)+len(newDecl)-len(declName))
+				rewritten = append(rewritten, out[:nameStart]...)
+				rewritten = append(rewritten, newDecl...)
+				rewritten = append(rewritten, out[nameEnd:]...)
+				out = rewritten
+			}
 
 			// Rewrite uses: prefix:local → canonical:local. Walk the
 			// buffer finding word boundaries.
