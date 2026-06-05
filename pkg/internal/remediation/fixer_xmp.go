@@ -633,41 +633,38 @@ func extensionSchemaIncomplete(xmp []byte) bool {
 	return false
 }
 
-// stripExtensionSchemasBlock removes the rdf:Description element that
-// hosts pdfaExtension:schemas along with the entire schemas subtree. The
-// enclosing rdf:Description is taken out too because it often declares
-// the specialised pdfaType/pdfaField xmlns bindings that would dangle
-// with no schema to reference them, and validators flag those dangling
-// declarations as part of the PDF/A-1 §6.7.8 / PDF/A-2 §6.6.2.3.3
-// failure modes. Returns ok=false if the surrounding rdf:Description
-// cannot be located cleanly.
+// stripExtensionSchemasBlock removes the pdfaExtension:schemas element and its
+// subtree so the caller can regenerate a complete one. It removes only that
+// element, never the enclosing rdf:Description: a compact XMP packet hosts
+// dc:title, the PDF/UA identifier, dc:creator and other required metadata in the
+// same rdf:Description, and taking the whole Description out destroys them
+// (producing a packet a strict validator rejects). Any specialised pdfaType /
+// pdfaField xmlns bindings left behind are unused-but-valid declarations; the
+// regeneration pass reuses them. Returns ok=false if the element's closing tag
+// cannot be located.
 func stripExtensionSchemasBlock(xmp []byte) ([]byte, bool) {
-	anchor := bytes.Index(xmp, []byte("<pdfaExtension:schemas"))
-	if anchor < 0 {
+	start := bytes.Index(xmp, []byte("<pdfaExtension:schemas"))
+	if start < 0 {
 		return xmp, false
 	}
-
-	descStart := bytes.LastIndex(xmp[:anchor], []byte("<rdf:Description"))
-	if descStart < 0 {
-		return xmp, false
-	}
-	descCloseMark := []byte("</rdf:Description>")
-	closeIdx := bytes.Index(xmp[anchor:], descCloseMark)
+	closeMark := []byte("</pdfaExtension:schemas>")
+	closeIdx := bytes.Index(xmp[start:], closeMark)
 	if closeIdx < 0 {
 		return xmp, false
 	}
-	descEnd := anchor + closeIdx + len(descCloseMark)
+	end := start + closeIdx + len(closeMark)
 
-	for descEnd < len(xmp) && (xmp[descEnd] == '\n' || xmp[descEnd] == '\r' || xmp[descEnd] == ' ' || xmp[descEnd] == '\t') {
-		descEnd++
+	// Trim surrounding whitespace so the removal leaves no blank line.
+	for end < len(xmp) && (xmp[end] == '\n' || xmp[end] == '\r' || xmp[end] == ' ' || xmp[end] == '\t') {
+		end++
 	}
-	for descStart > 0 && (xmp[descStart-1] == '\n' || xmp[descStart-1] == '\r' || xmp[descStart-1] == ' ' || xmp[descStart-1] == '\t') {
-		descStart--
+	for start > 0 && (xmp[start-1] == '\n' || xmp[start-1] == '\r' || xmp[start-1] == ' ' || xmp[start-1] == '\t') {
+		start--
 	}
 
-	out := make([]byte, 0, len(xmp)-(descEnd-descStart))
-	out = append(out, xmp[:descStart]...)
-	out = append(out, xmp[descEnd:]...)
+	out := make([]byte, 0, len(xmp)-(end-start))
+	out = append(out, xmp[:start]...)
+	out = append(out, xmp[end:]...)
 	return out, true
 }
 

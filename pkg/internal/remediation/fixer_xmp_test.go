@@ -127,3 +127,44 @@ func TestPatchExistingXMP_ForeignConformanceDoesNotAbort(t *testing.T) {
 		t.Errorf("expected pdfaid:rev injection, missing:\n%s", patched)
 	}
 }
+
+func TestStripExtensionSchemasBlock_PreservesOtherMetadata(t *testing.T) {
+	// A compact XMP packet hosts dc:title, the PDF/UA identifier, and an
+	// incomplete pdfaExtension:schemas block in one rdf:Description. Stripping
+	// the schema block must not take the surrounding metadata with it.
+	xmp := []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
+        xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+        xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">
+      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Doc Title</rdf:li></rdf:Alt></dc:title>
+      <pdfuaid:part>1</pdfuaid:part>
+      <pdfaExtension:schemas>
+        <rdf:Bag>
+          <rdf:li rdf:parseType="Resource">
+            <pdfaSchema:prefix>pdfuaid</pdfaSchema:prefix>
+          </rdf:li>
+        </rdf:Bag>
+      </pdfaExtension:schemas>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+
+	out, ok := stripExtensionSchemasBlock(xmp)
+	if !ok {
+		t.Fatal("strip reported no change")
+	}
+	got := string(out)
+	if strings.Contains(got, "pdfaExtension:schemas") {
+		t.Errorf("schema block should be removed:\n%s", got)
+	}
+	for _, want := range []string{"<dc:title>", "Doc Title", "<pdfuaid:part>1</pdfuaid:part>", "</rdf:Description>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("metadata %q must be preserved:\n%s", want, got)
+		}
+	}
+}
