@@ -44,13 +44,11 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if contentsObj, ok := page.Dict["Contents"]; ok {
-			n, err := stripUnknownFromStream(ctx, alloc, doc, contentsObj, page.Dict, pageNum+1)
-			if err != nil {
-				return nil, err
-			}
-			total += n
+		n, err := stripUnknownFromStream(ctx, alloc, doc, page, pageNum+1)
+		if err != nil {
+			return nil, err
 		}
+		total += n
 		total += stripUnknownInResources(ctx, alloc, doc, page.Resources, visited)
 	}
 
@@ -60,13 +58,13 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return []string{fmt.Sprintf("removed %d unknown content-stream operator(s)", total)}, nil
 }
 
-// stripUnknownFromStream parses contentsObj (a content stream or
-// concatenated array), strips operators outside [validOperators], and
-// writes the result back through [replaceContentStream]. Returns the
-// number of operators removed.
-func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject, owner ast.PdfDict, pageNum int) (int, error) {
-	ops, err := content.ParsePageContent(ctx, doc, owner)
-	if err != nil {
+// stripUnknownFromStream parses a page's live content (alloc-first, so an
+// earlier fixer's rewrite is seen), strips operators outside [validOperators],
+// and writes the result back through [replaceContentStream]. Returns the number
+// of operators removed.
+func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageNum int) (int, error) {
+	ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+	if err != nil || contentsObj == nil {
 		return 0, nil
 	}
 	removed := 0

@@ -48,12 +48,8 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		contentsObj, ok := page.Dict["Contents"]
-		if !ok {
-			continue
-		}
-		ops, err := content.ParsePageContent(ctx, doc, page.Dict)
-		if err != nil {
+		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+		if err != nil || contentsObj == nil {
 			continue
 		}
 		removed, modified := stripControlBytesFromOps(ops)

@@ -164,13 +164,8 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 			return nil, err
 		}
 
-		contentsObj, ok := page.Dict["Contents"]
-		if !ok {
-			continue
-		}
-
-		ops, err := content.ParsePageContent(ctx, doc, page.Dict)
-		if err != nil {
+		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+		if err != nil || contentsObj == nil {
 			continue
 		}
 
@@ -320,6 +315,21 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		return fmt.Errorf("page %d /Contents is not an indirect reference", pageNum)
 	}
 
+	// Decide stream-vs-array alloc-first: an earlier fixer (auto-tag,
+	// content-tag) may have replaced /Contents with a stream that is queued in
+	// alloc and not yet in the document. Writing back to the same object number
+	// keeps the live page pointing at the rewritten content.
+	if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
+		switch pending.(type) {
+		case ast.PdfStream:
+			alloc.AllocAt(ref.ObjectNum, ast.NewStream(ast.PdfDict{}, newData))
+			return nil
+		case ast.PdfArray:
+			alloc.AllocAt(ref.ObjectNum, alloc.Alloc(ast.NewStream(ast.PdfDict{}, newData)))
+			return nil
+		}
+	}
+
 	resolved, err := document.ResolveObject(ctx, doc, contentsObj)
 	if err != nil {
 		return fmt.Errorf("resolving /Contents for page %d: %w", pageNum, err)
@@ -336,6 +346,52 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		return fmt.Errorf("page %d /Contents has unexpected type %T", pageNum, resolved)
 	}
 	return nil
+}
+
+// livePageContentOps parses a page's current content operations, reading the
+// page dict and its content stream(s) alloc-first so a rewrite queued by an
+// earlier fixer (auto-tag replaces /Contents with a marked stream; content-tag
+// wraps the page) is seen instead of the orphaned original. It returns the
+// operations and the /Contents object that addresses the live stream(s), which
+// [replaceContentStream] writes back to. A nil /Contents means the page has no
+// content to rewrite.
+//
+// When no earlier fixer touched the page (the common case) it resolves entirely
+// from the document, so the operations match [content.ParsePageContent].
+func livePageContentOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]content.Operation, ast.PdfObject, error) {
+	pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, page.Ref)
+	if pageDict == nil {
+		pageDict = page.Dict
+	}
+	contentsObj, ok := pageDict["Contents"]
+	if !ok {
+		return nil, nil, nil
+	}
+	data, err := liveContentBytes(ctx, alloc, doc, contentsObj)
+	if err != nil {
+		return nil, contentsObj, err
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return nil, contentsObj, err
+	}
+	return ops, contentsObj, nil
+}
+
+// liveContentBytes returns a page's decoded content bytes, preferring a single
+// stream queued in alloc (a content rewrite not yet in the document) over the
+// parsed document. The queued stream is decoded, not read raw: an earlier fixer
+// may have queued a filtered replacement at this object number (the LZW fixer
+// re-encodes content as FlateDecode), so its body is not necessarily plaintext.
+// Anything not queued in alloc falls back to the document resolver, matching the
+// prior doc-only behavior.
+func liveContentBytes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject) ([]byte, error) {
+	if ref, ok := contentsObj.(ast.PdfIndirectRef); ok {
+		if s, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfStream); ok {
+			return doc.DecodeStream(ctx, s)
+		}
+	}
+	return resolveContentBytes(ctx, doc, contentsObj)
 }
 
 // DecodeStream is checked via interface to avoid import cycle.

@@ -8,7 +8,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // pdfA1StringLimit is the 65535-byte cap imposed by ISO 19005-1 §6.1.12
@@ -66,12 +65,8 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			if ctx.Err() != nil {
 				break
 			}
-			contentsObj, ok := page.Dict["Contents"]
-			if !ok {
-				continue
-			}
-			ops, err := content.ParsePageContent(ctx, doc, page.Dict)
-			if err != nil {
+			ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+			if err != nil || contentsObj == nil {
 				continue
 			}
 			modified := false

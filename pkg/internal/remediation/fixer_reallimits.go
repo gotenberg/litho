@@ -8,7 +8,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // pdfARealLimit is the absolute maximum real value permitted by ISO 19005-1
@@ -51,12 +50,8 @@ func fixRealLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		contentsObj, ok := page.Dict["Contents"]
-		if !ok {
-			continue
-		}
-		ops, err := content.ParsePageContent(ctx, doc, page.Dict)
-		if err != nil {
+		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+		if err != nil || contentsObj == nil {
 			continue
 		}
 

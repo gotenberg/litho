@@ -89,12 +89,8 @@ func flattenGraphicsStack(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if err := ctx.Err(); err != nil {
 			return count, err
 		}
-		contentsObj, ok := page.Dict["Contents"]
-		if !ok {
-			continue
-		}
-		ops, err := content.ParsePageContent(ctx, doc, page.Dict)
-		if err != nil {
+		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+		if err != nil || contentsObj == nil {
 			continue
 		}
 		depth, maxDepth := 0, 0
