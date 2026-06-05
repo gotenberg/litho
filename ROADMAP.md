@@ -8,6 +8,13 @@ litho today validates and remediates **PDF/A**, **PDF/UA**, and **Factur-X / ZUG
 
 Two categories: **conformance families** (new standards litho would _judge_) and **capabilities** (new operations litho would _perform_ on documents).
 
+## In flight (not among the eleven specs)
+
+Work that has moved past "plan" and is not captured by the specs below.
+
+- **Auto-tagging — shipping.** [ACCESSIBILITY-AUTOTAGGING.md](ACCESSIBILITY-AUTOTAGGING.md) is now real code: `pkg/internal/tagging` synthesizes a structure tree, wired into `RemediatePDFUA` (and PDF/A-1a/2a/3a), exposed as the `litho autotag` command and a `pipe` stage, and exercised by the remediation corpus against veraPDF. Remaining: classifier richness (tables, lists, figures+Alt, reading order, Form-XObject text) and **PDF/UA remediation quality** (the corpus now measures residual UA failures and a handful of `7.1-t09`/`5-t01`/`6.1-t01` regressions to chase down).
+- **Text-extraction enrichment — uncommitted WIP** (held in a git stash, ~3,100 lines). A distinct axis from everything below: extraction _fidelity_, not conformance or rendering. Adds vertical writing mode (`WMode=1`), bidi/RTL reading-direction vectors (`DirX`/`DirY`), pattern-fill typing, invisible- and annotation-text options, and CJK CMap CID→Unicode + glyph→Unicode mapping (`pkg/internal/typography` + `pkg/pdf` extraction API). Needs review, conflict resolution against current HEAD, and a proper spec before it lands.
+
 ## Conformance families
 
 | Spec                                         | Standard                       | What it adds                                                                       | Depends on                |
@@ -91,4 +98,4 @@ Each follows the [FACTUR-X.md](FACTUR-X.md) house shape: _what it is_ → _versi
 
 ## Status
 
-All eleven are **plans awaiting greenlight** — nothing here is implemented. The two safe-to-start-now items are Phase 1; the rest are sequenced above. The cheapest way to de-risk the whole roadmap is to build the corpus Layer-1 backbone early, since it is the independent oracle every conformance and remediation claim is checked against.
+Of the eleven specs, **ACCESSIBILITY-AUTOTAGGING is now shipping** (see In flight above); the other ten are **plans awaiting greenlight**. REDACTION is the remaining Phase 1 item; the rest are sequenced above. The cheapest way to de-risk the whole roadmap is to build the corpus Layer-1 backbone early, since it is the independent oracle every conformance and remediation claim is checked against.
