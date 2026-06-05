@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 	"github.com/gotenberg/litho/pkg/plugins/jbig2"
 	"github.com/gotenberg/litho/pkg/plugins/jpx"
@@ -100,15 +99,40 @@ func (f *remediationFeature) Prepare(ctx context.Context, fixtures []Fixture) er
 	return nil
 }
 
+// remediators returns the litho validate and remediate closures for a profile
+// directory, binding the PDF/A or PDF/UA conformance profile (auto-tagging makes
+// remediation target PDF/UA, so both are supported). ok is false for a profile
+// the remediation engine does not target.
+func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]error, error), remediate func(context.Context, *pdf.Writer) error, ok bool) {
+	var opts []pdf.RemediateOption
+	if f.aggressive {
+		opts = append(opts, pdf.WithAggressiveFixes())
+	}
+	if p, isA := dirToPDFAProfile[profile]; isA {
+		return func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFA(ctx, p) },
+			func(ctx context.Context, w *pdf.Writer) error { _, err := w.RemediatePDFA(ctx, p, opts...); return err },
+			true
+	}
+	if p, isUA := dirToPDFUAProfile[profile]; isUA {
+		return func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, p) },
+			func(ctx context.Context, w *pdf.Writer) error {
+				_, err := w.RemediatePDFUA(ctx, p, opts...)
+				return err
+			},
+			true
+	}
+	return nil, nil, false
+}
+
 // preparePerProfile remediates every fixture for one conformance
 // profile, then asks VeraPDF for its verdict on the staging directory
 // that holds the remediated copies.
 func (f *remediationFeature) preparePerProfile(ctx context.Context, profile string, fixtures []Fixture) error {
-	pdfaProfile, isPDFA := dirToPDFAProfile[profile]
-	if !isPDFA {
-		// Remediation engine only targets PDF/A. PDF/UA fixtures get a
-		// stub verdict so Compare can render a "not supported" reason.
-		f.recordSkippedProfile(profile, fixtures, "remediation does not target PDF/UA")
+	validate, remediate, ok := f.remediators(profile)
+	if !ok {
+		// Profile the remediation engine does not target (e.g. an unknown
+		// directory name); record a stub verdict so Compare can render it.
+		f.recordSkippedProfile(profile, fixtures, "unsupported remediation profile")
 		return nil
 	}
 
@@ -148,7 +172,7 @@ func (f *remediationFeature) preparePerProfile(ctx context.Context, profile stri
 			if golden != nil {
 				res.litho.VeraPre = len(golden.FailedRules)
 			}
-			if err := remediateOnce(ctx, fx.PDFPath, pdfaProfile, f.aggressive, stagingDir, profile, &res.litho, &res.stagingPath); err != nil {
+			if err := remediateOnce(ctx, fx.PDFPath, validate, remediate, stagingDir, &res.litho, &res.stagingPath); err != nil {
 				res.litho.Error = err.Error()
 			}
 			results[i] = res
@@ -299,11 +323,12 @@ type remediationReport struct {
 	VeraRules  []string `json:"verapdf_post_rules,omitempty"`
 }
 
-// remediateOnce opens pdfPath, validates with litho, applies the
-// remediation engine, validates the buffer with litho, and writes the
-// remediated bytes to stagingDir under <basename>.pdf. The basename
-// comes from the fixture ID (profile prefix stripped).
-func remediateOnce(ctx context.Context, pdfPath string, profile models.PDFAProfile, aggressive bool, stagingDir, profileDir string, out *remediationOutput, stagingPath *string) error {
+// remediateOnce opens pdfPath, validates with litho via validate, applies the
+// remediation engine via remediate, validates the buffer with litho, and writes
+// the remediated bytes to stagingDir under <basename>.pdf. The validate and
+// remediate closures bind the conformance profile (PDF/A or PDF/UA), keeping the
+// open/write/stage skeleton profile-agnostic. The basename comes from pdfPath.
+func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Context, *pdf.Reader) ([]error, error), remediate func(context.Context, *pdf.Writer) error, stagingDir string, out *remediationOutput, stagingPath *string) error {
 	data, err := os.ReadFile(pdfPath)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
@@ -316,18 +341,14 @@ func remediateOnce(ctx context.Context, pdfPath string, profile models.PDFAProfi
 		return fmt.Errorf("pdf.Open: %w", err)
 	}
 	defer r.Close()
-	pre, err := r.ValidatePDFA(ctx, profile)
+	pre, err := validate(ctx, r)
 	if err != nil {
 		return fmt.Errorf("validate pre: %w", err)
 	}
 	out.LithoPre = len(pre)
 
 	w := pdf.NewWriter(r)
-	var opts []pdf.RemediateOption
-	if aggressive {
-		opts = append(opts, pdf.WithAggressiveFixes())
-	}
-	if _, err := w.RemediatePDFA(ctx, profile, opts...); err != nil {
+	if err := remediate(ctx, w); err != nil {
 		out.LithoPost = out.LithoPre
 		out.VeraPost = out.VeraPre
 		return nil
@@ -350,7 +371,7 @@ func remediateOnce(ctx context.Context, pdfPath string, profile models.PDFAProfi
 		return nil
 	}
 	defer r2.Close()
-	post, err := r2.ValidatePDFA(ctx, profile)
+	post, err := validate(ctx, r2)
 	if err != nil {
 		out.LithoPost = out.LithoPre
 		out.VeraPost = out.VeraPre
