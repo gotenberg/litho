@@ -131,6 +131,8 @@ dispatch:
 		return runAttach(ctx, globalArgs, stdout, stderr)
 	case "detach":
 		return runDetach(ctx, globalArgs, stdout, stderr)
+	case "autotag":
+		return runAutotag(ctx, globalArgs, stdout, stderr)
 	case "remediate":
 		return runRemediate(ctx, globalArgs, stdout, stderr)
 	case "pipe":
@@ -185,6 +187,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  sign          Sign a PDF (stub, requires custom Signer)")
 	fmt.Fprintln(w, "  attach        Embed a file attachment")
 	fmt.Fprintln(w, "  detach        Remove a file attachment")
+	fmt.Fprintln(w, "  autotag       Synthesize a PDF/UA structure tree")
 	fmt.Fprintln(w, "  remediate     Fix PDF/A or PDF/UA compliance issues")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Pipeline:")

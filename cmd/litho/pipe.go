@@ -17,7 +17,7 @@ func runPipe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
 		fmt.Fprintln(stderr, "Usage: litho pipe <file> <stage> [stage-flags] ... -o out.pdf")
 		fmt.Fprintln(stderr)
-		fmt.Fprintln(stderr, "Stages: rotate, split, merge, delete, encrypt, decrypt,")
+		fmt.Fprintln(stderr, "Stages: rotate, split, merge, delete, encrypt, decrypt, autotag,")
 		fmt.Fprintln(stderr, "        set-metadata, set-form, flatten-form, stamp-text,")
 		fmt.Fprintln(stderr, "        stamp-image, remediate")
 		return exitError
@@ -131,7 +131,7 @@ var stageCmds = map[string]bool{
 	"rotate": true, "split": true, "merge": true, "delete": true,
 	"encrypt": true, "decrypt": true, "set-metadata": true,
 	"set-form": true, "flatten-form": true, "stamp-text": true,
-	"stamp-image": true, "remediate": true,
+	"stamp-image": true, "remediate": true, "autotag": true,
 }
 
 func isStageCmd(s string) bool { return stageCmds[s] }
@@ -400,6 +400,12 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 				return err
 			}
 			return fmt.Errorf("unknown profile %q", *profile)
+		})
+
+	case "autotag":
+		p.Apply(func(_ context.Context, w *pdf.Writer) error {
+			w.AutoTag()
+			return nil
 		})
 
 	default:
