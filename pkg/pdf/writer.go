@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
+	"github.com/gotenberg/litho/pkg/internal/tagging"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -601,6 +602,31 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 				return fmt.Errorf("resolving pages for bookmarks: %w", err)
 			}
 			return mutations.SetBookmarks(ctx, alloc, doc, resolvedPages, final)
+		},
+	})
+}
+
+// AutoTag synthesizes a logical structure tree (a tagged PDF) for an untagged
+// document: it classifies each page's text into headings and paragraphs, marks
+// the content (tagging text, artifacting the rest), and wires the catalog
+// /StructTreeRoot and /MarkInfo. It is a no-op on an already-tagged document.
+// The change is applied when [Writer.WriteTo] is called.
+//
+// AutoTag produces the structure and marked content only; it does not set the
+// document language, title, or the PDF/UA identifier, which other operations
+// own. Pair it with [Writer.RemediatePDFUA], or set those explicitly, for full
+// PDF/UA conformance.
+func (w *Writer) AutoTag() {
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			descs, err := tagging.AutoTag(ctx, alloc, doc)
+			if err != nil {
+				return fmt.Errorf("auto-tagging: %w", err)
+			}
+			for _, d := range descs {
+				doc.Logger.Debug("auto-tag", slog.String("detail", d))
+			}
+			return nil
 		},
 	})
 }
