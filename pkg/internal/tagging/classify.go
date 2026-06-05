@@ -23,9 +23,10 @@ const maxHeadingLevels = 6
 
 // AutoTag classifies each page's text into a logical structure tree and emits
 // it through [Emit]. It is a no-op on an already-tagged document (one with a
-// /StructTreeRoot or /MarkInfo /Marked true), leaving the existing structure
-// intact. Pages whose content cannot be parsed are skipped. It returns Emit's
-// descriptions, or nil with no error when there is nothing to tag.
+// /StructTreeRoot or /MarkInfo /Marked true) and on a document whose content is
+// already marked (any BDC/BMC sequence), leaving such documents to other
+// processors. Pages whose content cannot be parsed are skipped. It returns
+// Emit's descriptions, or nil with no error when there is nothing to tag.
 //
 // AutoTag mutates alloc and is not safe for concurrent use.
 func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]string, error) {
@@ -36,6 +37,13 @@ func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docu
 	if tagged {
 		return nil, nil
 	}
+	marked, err := hasMarkedContent(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	if marked {
+		return nil, nil
+	}
 	root, err := Classify(ctx, doc)
 	if err != nil {
 		return nil, err
@@ -44,6 +52,53 @@ func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docu
 		return nil, nil
 	}
 	return Emit(ctx, alloc, doc, root)
+}
+
+// hasMarkedContent reports whether any page's content stream already contains a
+// marked-content operator (BDC or BMC). Auto-tagging assumes unmarked content:
+// re-marking a stream a producer already marked would nest or cross the existing
+// sequences and corrupt them (a BDC/EMC mismatch). A document with pre-existing
+// marked content but no [alreadyTagged] structure is left to the flat tagging
+// fixers, which skip already-marked pages rather than re-wrapping them.
+//
+// The check is conservative: a false positive (a "BDC" or "BMC" literal inside a
+// string) only makes AutoTag defer, never corrupt. It scans the parsed page
+// content [pageContentBytes] so it agrees with the bytes Emit would rewrite.
+func hasMarkedContent(ctx context.Context, doc *document.Document) (bool, error) {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		return false, fmt.Errorf("tagging: resolving catalog: %w", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		return false, fmt.Errorf("tagging: resolving pages: %w", err)
+	}
+	for pi := range pages {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		data, err := pageContentBytes(ctx, doc, pages[pi])
+		if err != nil {
+			// Content that cannot be assembled cannot be safely re-marked.
+			return true, nil //nolint:nilerr // unverifiable: treat as marked to defer, not corrupt
+		}
+		if containsMarkedContentOp(data) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// containsMarkedContentOp reports whether data contains a BDC or BMC token,
+// the operators that begin a marked-content sequence (ISO 32000-1 §14.6). It
+// mirrors the byte scan in the content-tag remediation fixer.
+func containsMarkedContentOp(data []byte) bool {
+	for i := 0; i+2 < len(data); i++ {
+		if data[i] == 'B' && ((data[i+1] == 'D' && data[i+2] == 'C') || (data[i+1] == 'M' && data[i+2] == 'C')) {
+			return true
+		}
+	}
+	return false
 }
 
 // alreadyTagged reports whether the document already declares a tagged

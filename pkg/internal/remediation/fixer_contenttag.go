@@ -100,8 +100,10 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			return nil, ctx.Err()
 		}
 
-		// Check if page already has tagged content (any BDC/BMC in content stream).
-		if pageHasMarkedContent(ctx, doc, page) {
+		// Check if page already has tagged content (any BDC/BMC in content
+		// stream). Resolved alloc-first so a prior fixer's content rewrite
+		// (e.g. auto-tagging) is seen and not wrapped a second time.
+		if pageHasMarkedContent(ctx, alloc, doc, page) {
 			continue
 		}
 
@@ -184,15 +186,22 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return []string{fmt.Sprintf("tagged %d page(s) with /Document marked-content wrapper", count)}, nil
 }
 
-// pageHasMarkedContent checks if a page's content stream already contains
-// any marked-content operators (BDC, BMC).
-func pageHasMarkedContent(ctx context.Context, doc *document.Document, page *document.Page) bool {
-	contentsObj, ok := page.Dict["Contents"]
+// pageHasMarkedContent checks if a page's content stream already contains any
+// marked-content operators (BDC, BMC). It resolves the page dict and its content
+// alloc-first, so a rewrite queued by an earlier fixer (the auto-tag fixer
+// replaces a page's /Contents with a marked stream that is not yet in the
+// document) is seen and the page is treated as already tagged.
+func pageHasMarkedContent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) bool {
+	pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, page.Ref)
+	if pageDict == nil {
+		pageDict = page.Dict
+	}
+	contentsObj, ok := pageDict["Contents"]
 	if !ok {
 		return true // No content = nothing to tag.
 	}
 
-	data, err := resolveContentBytes(ctx, doc, contentsObj)
+	data, err := liveContentBytes(ctx, alloc, doc, contentsObj)
 	if err != nil {
 		return true // Can't read = assume tagged.
 	}

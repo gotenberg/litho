@@ -65,6 +65,11 @@ var registry = []fixer{
 	{name: "output-intent", safety: safetyStructural, matches: matchOutputIntent, apply: fixOutputIntent},
 	{name: "corrupt-icc", safety: safetyStructural, matches: matchCorruptICC, apply: fixCorruptICC},
 	{name: "output-intent-cleanup", safety: safetyStructural, matches: matchOutputIntentCleanup, apply: fixOutputIntentCleanup},
+	// auto-tag synthesizes a real structure tree first; the flat mark-info,
+	// struct-tree, rolemap, and content-tag fixers below then see a tagged
+	// document and no-op (struct-tree augments /Namespaces for PDF/UA-2),
+	// remaining the fallback for a document auto-tagging cannot process.
+	{name: "auto-tag", safety: safetyStructural, matches: matchAutoTag, apply: fixAutoTag},
 	{name: "mark-info", safety: safetyStructural, matches: matchMarkInfo, apply: fixMarkInfo},
 	{name: "struct-tree", safety: safetyStructural, matches: matchStructTree, apply: fixStructTree},
 	{name: "rolemap", safety: safetyStructural, matches: matchRoleMap, apply: fixRoleMap},

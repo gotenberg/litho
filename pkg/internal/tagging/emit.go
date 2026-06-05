@@ -35,8 +35,11 @@ const maxTaggedContentSize = 32 << 20
 //
 // Emit assumes an untagged document: it overwrites catalog /StructTreeRoot and
 // /MarkInfo and rewrites page content, so a caller must gate on the document
-// being untagged ([AutoTag] does this). Emit mutates alloc and is not safe for
-// concurrent use.
+// being untagged ([AutoTag] does this). It reads the catalog and page dicts
+// alloc-first, so a queued edit to those objects (a remediation fixer's catalog
+// or page patch) is preserved; it reads page content from the document, assuming
+// no earlier stage rewrote a page's /Contents (AutoTag is the first content
+// rewriter in the chain). Emit mutates alloc and is not safe for concurrent use.
 func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, root *Element) ([]string, error) {
 	if root == nil || root.Role != RoleDocument {
 		return nil, fmt.Errorf("tagging: root element must have role Document")
@@ -205,8 +208,15 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 
 		streamRef := e.alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(marked))}, marked))
 		page := e.pages[pi]
-		newPage := make(ast.PdfDict, len(page.Dict)+2)
-		maps.Copy(newPage, page.Dict)
+		// Read the page dict alloc-first so an edit an earlier pipeline stage
+		// queued at this object number (a remediation fixer injecting a
+		// /DefaultRGB colour space, say) is preserved rather than overwritten.
+		baseDict := page.Dict
+		if queued, ok := e.alloc.Pending()[page.Ref.ObjectNum].(ast.PdfDict); ok {
+			baseDict = queued
+		}
+		newPage := make(ast.PdfDict, len(baseDict)+2)
+		maps.Copy(newPage, baseDict)
 		newPage["Contents"] = streamRef
 		if len(leaves) > 0 {
 			newPage["StructParents"] = ast.PdfInt(pi)
@@ -260,13 +270,15 @@ func isBlank(b []byte) bool {
 }
 
 // wireCatalog points the catalog at the new structure tree and marks the
-// document as tagged.
+// document as tagged. It reads the catalog alloc-first so a queued edit from an
+// earlier pipeline stage (a remediation fixer's catalog patch, an /Metadata
+// addition) is preserved rather than overwritten.
 func (e *emitter) wireCatalog(ctx context.Context, stRef ast.PdfIndirectRef) error {
 	catalogRef, ok := e.doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
 		return fmt.Errorf("tagging: trailer /Root is not an indirect reference")
 	}
-	catalogDict, err := document.ResolveDict(ctx, e.doc, catalogRef)
+	catalogDict, err := e.dictAllocFirst(ctx, catalogRef)
 	if err != nil {
 		return fmt.Errorf("tagging: resolving catalog dict: %w", err)
 	}
@@ -277,6 +289,18 @@ func (e *emitter) wireCatalog(ctx context.Context, stRef ast.PdfIndirectRef) err
 	newCatalog["MarkInfo"] = ast.PdfDict{"Marked": ast.PdfBool(true)}
 	e.alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	return nil
+}
+
+// dictAllocFirst returns the dict queued in alloc at ref, falling back to the
+// document. It lets Emit compose with a writer or remediation pipeline that has
+// already queued an edit to the same object.
+func (e *emitter) dictAllocFirst(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfDict, error) {
+	if obj, ok := e.alloc.Pending()[ref.ObjectNum]; ok {
+		if d, ok := obj.(ast.PdfDict); ok {
+			return d, nil
+		}
+	}
+	return document.ResolveDict(ctx, e.doc, ref)
 }
 
 // pageContentBytes returns a page's decoded, concatenated content. It mirrors

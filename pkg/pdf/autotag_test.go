@@ -88,6 +88,80 @@ func TestWriter_AutoTag_ResolvesStructureViolations(t *testing.T) {
 	}
 }
 
+// TestWriter_RemediatePDFUA_AutoTagsStructure proves the remediation chain
+// synthesizes a real structure tree. An untagged page fails the PDF/UA structure
+// and content-marking rules; after RemediatePDFUA with default options and a
+// write, re-validating reports none of them, the report credits the synthesized
+// tree, and the page content carries auto-tagging's per-element marks (/H1, /P)
+// rather than the content-tag fixer's crude whole-page /Document wrapper.
+func TestWriter_RemediatePDFUA_AutoTagsStructure(t *testing.T) {
+	ctx := context.Background()
+	data := untaggedHeadingPDF()
+
+	r0, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	before, err := r0.ValidatePDFUAReport(ctx, models.PDFUA1)
+	r0.Close()
+	if err != nil {
+		t.Fatalf("ValidatePDFUAReport(before): %v", err)
+	}
+	if !hasStructureViolation(before) {
+		t.Skipf("baseline has no structure/content-marking violation to resolve; got:\n%s", describeAll(before))
+	}
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	report, err := w.RemediatePDFUA(ctx, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("RemediatePDFUA: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r.Close()
+
+	// The fix must come from auto-tagging, not the flat whole-page wrapper.
+	var autoTagged bool
+	for _, fix := range report.Fixed {
+		if strings.Contains(fix, "synthesized structure tree") {
+			autoTagged = true
+			break
+		}
+	}
+	if !autoTagged {
+		t.Errorf("report does not credit a synthesized structure tree; fixed=%v", report.Fixed)
+	}
+
+	// The written content carries per-element marks and not the content-tag
+	// fixer's whole-page /Document wrapper, proving it deferred (no double-wrap).
+	outStr := out.String()
+	if !strings.Contains(outStr, "/H1 <</MCID") || !strings.Contains(outStr, "/P <</MCID") {
+		t.Errorf("per-element auto-tag marks missing from remediated content")
+	}
+	if strings.Contains(outStr, "/Document <</MCID") {
+		t.Errorf("content-tag whole-page wrapper present; auto-tag did not supersede it")
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("re-open remediated output: %v", err)
+	}
+	defer r2.Close()
+	after, err := r2.ValidatePDFUAReport(ctx, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("ValidatePDFUAReport(after): %v", err)
+	}
+	if hasStructureViolation(after) {
+		t.Errorf("RemediatePDFUA did not resolve the structure/content-marking violations:\n%s", describeStructureViolations(after))
+	}
+}
+
 func hasStructureViolation(vs []Violation) bool {
 	for _, v := range vs {
 		if isStructureViolation(v) {
