@@ -3,7 +3,9 @@ package tagging
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
+	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -31,7 +33,10 @@ const maxTaggedContentSize = 32 << 20
 // pdfuaid identifier: those are the province of the existing catalog-lang,
 // viewer-prefs, and xmp fixers.
 //
-// Emit mutates alloc and is not safe for concurrent use.
+// Emit assumes an untagged document: it overwrites catalog /StructTreeRoot and
+// /MarkInfo and rewrites page content, so a caller must gate on the document
+// being untagged ([AutoTag] does this). Emit mutates alloc and is not safe for
+// concurrent use.
 func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, root *Element) ([]string, error) {
 	if root == nil || root.Role != RoleDocument {
 		return nil, fmt.Errorf("tagging: root element must have role Document")
@@ -66,6 +71,11 @@ func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Documen
 		"K":          docRef,
 		"ParentTree": ast.PdfDict{"Nums": parentNums},
 	}
+	// Per ISO 32000-1 §14.7.4.4, /ParentTreeNextKey is one greater than the
+	// largest key in the parent tree, so a later pass can allocate keys.
+	if e.maxParentKey >= 0 {
+		stDict["ParentTreeNextKey"] = ast.PdfInt(e.maxParentKey + 1)
+	}
 	alloc.AllocAt(stRef.ObjectNum, stDict)
 
 	if err := e.wireCatalog(ctx, stRef); err != nil {
@@ -85,11 +95,12 @@ type leafEntry struct {
 }
 
 type emitter struct {
-	alloc     *writer.ObjAllocator
-	doc       *document.Document
-	pages     []*document.Page
-	perPage   map[int][]leafEntry // page index -> leaves in MCID order
-	elemCount int
+	alloc        *writer.ObjAllocator
+	doc          *document.Document
+	pages        []*document.Page
+	perPage      map[int][]leafEntry // page index -> leaves in MCID order
+	elemCount    int
+	maxParentKey int // highest StructParents key written, or -1
 }
 
 // build allocates a structure element for node and its subtree, returning the
@@ -156,49 +167,96 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 	return selfRef, nil
 }
 
-// applyMarks injects marked content into every page a leaf references and
-// returns the StructTreeRoot /ParentTree /Nums array mapping each page's
-// StructParents key to its structure elements in MCID order.
+// applyMarks rewrites every page's content so all painting content is marked:
+// structure leaves become BDC/EMC sequences carrying their MCID, and the
+// remaining regions (graphics, and any text the classifier did not place in
+// the tree) are wrapped as /Artifact. This satisfies the "all content marked
+// or artifact" rule (ISO 14289-1 §7.1). It returns the StructTreeRoot
+// /ParentTree /Nums array mapping each tagged page's StructParents key to its
+// structure elements in MCID order.
 func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 	var nums ast.PdfArray
+	e.maxParentKey = -1
+
 	for pi := 0; pi < len(e.pages); pi++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		leaves := e.perPage[pi]
-		if len(leaves) == 0 {
-			continue
-		}
-
-		content, err := e.pageContentBytes(ctx, e.pages[pi])
+		data, err := pageContentBytes(ctx, e.doc, e.pages[pi])
 		if err != nil {
 			return nil, fmt.Errorf("tagging: page %d content: %w", pi, err)
 		}
-
-		spans := make([]markSpan, len(leaves))
-		elemRefs := make(ast.PdfArray, len(leaves))
-		for i, leaf := range leaves {
-			spans[i] = leaf.span
-			elemRefs[leaf.span.mcid] = leaf.ref
+		if len(data) == 0 {
+			continue
 		}
 
-		marked, err := injectMarks(content, spans)
+		leaves := e.perPage[pi]
+		sort.Slice(leaves, func(i, j int) bool { return leaves[i].span.start < leaves[j].span.start })
+
+		spans, elemRefs := pageSpans(data, leaves)
+		if len(spans) == 0 {
+			continue // no paintable content to mark
+		}
+
+		marked, err := injectMarks(data, spans)
 		if err != nil {
 			return nil, fmt.Errorf("tagging: page %d: %w", pi, err)
 		}
 
 		streamRef := e.alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(marked))}, marked))
-
 		page := e.pages[pi]
 		newPage := make(ast.PdfDict, len(page.Dict)+2)
 		maps.Copy(newPage, page.Dict)
 		newPage["Contents"] = streamRef
-		newPage["StructParents"] = ast.PdfInt(pi)
+		if len(leaves) > 0 {
+			newPage["StructParents"] = ast.PdfInt(pi)
+			nums = append(nums, ast.PdfInt(pi), elemRefs)
+			if pi > e.maxParentKey {
+				e.maxParentKey = pi
+			}
+		}
 		e.alloc.AllocAt(page.Ref.ObjectNum, newPage)
-
-		nums = append(nums, ast.PdfInt(pi), elemRefs)
 	}
 	return nums, nil
+}
+
+// pageSpans builds the marked-content spans for one page: the structure leaves,
+// plus an /Artifact span over each non-blank gap before, between, and after
+// them, so no painting operator is left outside marked content. elemRefs maps
+// MCID to its structure element for the page's ParentTree entry.
+func pageSpans(data []byte, leaves []leafEntry) ([]markSpan, ast.PdfArray) {
+	elemRefs := make(ast.PdfArray, len(leaves))
+	var spans []markSpan
+	cursor := 0
+	addArtifact := func(start, end int) {
+		if start < end && !isBlank(data[start:end]) {
+			spans = append(spans, markSpan{start: start, end: end, artifact: true})
+		}
+	}
+	for _, leaf := range leaves {
+		s := leaf.span
+		addArtifact(cursor, s.start)
+		spans = append(spans, s)
+		elemRefs[s.mcid] = leaf.ref
+		if s.end > cursor {
+			cursor = s.end
+		}
+	}
+	addArtifact(cursor, len(data))
+	return spans, elemRefs
+}
+
+// isBlank reports whether b is empty or only PDF whitespace (ISO 32000-1
+// Table 1), in which case it carries no painting content and needs no artifact.
+func isBlank(b []byte) bool {
+	for _, c := range b {
+		switch c {
+		case 0x00, 0x09, 0x0A, 0x0C, 0x0D, 0x20:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // wireCatalog points the catalog at the new structure tree and marks the
@@ -223,14 +281,15 @@ func (e *emitter) wireCatalog(ctx context.Context, stRef ast.PdfIndirectRef) err
 
 // pageContentBytes returns a page's decoded, concatenated content. It mirrors
 // the stream assembly in [content.ParsePageContent] (each decoded stream
-// followed by a newline) so byte offsets a caller derives from that parser
-// line up with the bytes marked here.
-func (e *emitter) pageContentBytes(ctx context.Context, page *document.Page) ([]byte, error) {
+// followed by a newline) so byte offsets the classifier derives from
+// [content.ParseStreamDataWithOffsets] line up with the bytes marked here.
+// Classify and Emit both call it so they agree on the page's content bytes.
+func pageContentBytes(ctx context.Context, doc *document.Document, page *document.Page) ([]byte, error) {
 	contentsObj, ok := page.Dict["Contents"]
 	if !ok {
 		return nil, nil
 	}
-	resolved, err := document.ResolveObject(ctx, e.doc, contentsObj)
+	resolved, err := document.ResolveObject(ctx, doc, contentsObj)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +300,7 @@ func (e *emitter) pageContentBytes(ctx context.Context, page *document.Page) ([]
 		streams = append(streams, v)
 	case ast.PdfArray:
 		for _, item := range v {
-			s, err := document.ResolveStream(ctx, e.doc, item)
+			s, err := document.ResolveStream(ctx, doc, item)
 			if err != nil || s.Dict == nil {
 				continue
 			}
@@ -253,8 +312,13 @@ func (e *emitter) pageContentBytes(ctx context.Context, page *document.Page) ([]
 
 	var all []byte
 	for _, s := range streams {
-		data, err := e.doc.DecodeStream(ctx, s)
+		data, err := doc.DecodeStream(ctx, s)
 		if err != nil {
+			// A page may split content across streams and leave one
+			// truncated; skip it and assemble the rest, matching
+			// content.ParsePageContent so the byte offsets still line up.
+			doc.Logger.Debug("tagging: content stream decode failed; skipping",
+				slog.Any("err", err))
 			continue
 		}
 		all = append(all, data...)

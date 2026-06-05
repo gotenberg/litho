@@ -17,15 +17,19 @@ import (
 // the given uncompressed content stream, computing correct xref offsets. The
 // page is object 3; the content stream is object 5.
 func buildTaggedTestPDF(contentStream string) []byte {
-	objs := []string{
+	return assemblePDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
 			"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(contentStream), contentStream),
-	}
+	})
+}
 
+// assemblePDF writes the given object bodies (object 1 is the catalog) into a
+// valid PDF with a correct cross-reference table.
+func assemblePDF(objs []string) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")
 	offsets := make([]int, len(objs)+1)

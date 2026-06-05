@@ -1,9 +1,11 @@
 package tagging
 
 // Role is a PDF structure-element type, the value of a structure element's
-// /S key. The constants below are the standard structure types from
-// ISO 32000-1 Table 337 that PR1 emits; the type permits any role so the
-// classifier can use the full standard set plus role-mapped custom roles.
+// /S key. The constants below are standard structure types from ISO 32000-1
+// Table 337. The classifier currently produces only Document, H1..H6, and P;
+// Figure/Table/TR/TH/TD are defined for the emitter and a later classifier
+// pass. The type permits any role so callers can use the full standard set
+// plus role-mapped custom roles.
 type Role string
 
 // Standard structure roles.

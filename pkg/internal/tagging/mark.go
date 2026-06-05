@@ -5,13 +5,16 @@ import (
 	"sort"
 )
 
-// markSpan is a resolved leaf ready to inject: a byte range in a page's
-// decoded content, the MCID assigned to it, and the marked-content tag
-// (the element role).
+// markSpan is a resolved region ready to inject. A structure span carries an
+// MCID and a role tag and is wrapped in a BDC/EMC sequence linked to a
+// structure element; an artifact span (artifact == true) is wrapped in an
+// /Artifact BMC/EMC sequence so painting content outside the logical structure
+// is still marked, satisfying the "all content marked or artifact" rule.
 type markSpan struct {
 	start, end int
 	mcid       int
 	tag        Role
+	artifact   bool
 }
 
 // injectMarks wraps each span in content with a marked-content sequence:
@@ -50,7 +53,11 @@ func injectMarks(content []byte, spans []markSpan) ([]byte, error) {
 	cursor := 0
 	for _, s := range sorted {
 		out = append(out, content[cursor:s.start]...)
-		out = append(out, fmt.Sprintf("\n/%s <</MCID %d>> BDC\n", s.tag, s.mcid)...)
+		if s.artifact {
+			out = append(out, "\n/Artifact BMC\n"...)
+		} else {
+			out = append(out, fmt.Sprintf("\n/%s <</MCID %d>> BDC\n", s.tag, s.mcid)...)
+		}
 		out = append(out, content[s.start:s.end]...)
 		out = append(out, "\nEMC\n"...)
 		cursor = s.end
