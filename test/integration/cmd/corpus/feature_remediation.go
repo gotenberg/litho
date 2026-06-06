@@ -196,8 +196,16 @@ func (f *remediationFeature) preparePerProfile(ctx context.Context, profile stri
 		if out.Error == "" {
 			base := strings.TrimPrefix(r.fixtureID, profile+"/")
 			if veraPost, ok := veraByBase[base]; ok {
-				out.VeraPost = veraPost.count
-				out.VeraRules = veraPost.rules
+				if veraPost.parseFailed {
+					// A remediated output veraPDF cannot parse is strictly
+					// worse than the original: flag it and count it as a
+					// regression, never silently as "no improvement".
+					out.ParseFailed = true
+					out.VeraPost = out.VeraPre + 1
+				} else {
+					out.VeraPost = veraPost.count
+					out.VeraRules = veraPost.rules
+				}
 			} else {
 				// VeraPDF skipped this file (write failed, etc). Treat as
 				// no improvement so the disagreement metric stays sane.
@@ -230,15 +238,16 @@ func (f *remediationFeature) recordSkippedProfile(profile string, fixtures []Fix
 // violation counts plus the VeraPDF vs litho disagreement on the
 // remediated buffer drive the scoreboard metrics.
 type remediationOutput struct {
-	Profile    string   `json:"profile"`
-	Aggressive bool     `json:"aggressive"`
-	LithoPre   int      `json:"litho_pre"`
-	LithoPost  int      `json:"litho_post"`
-	VeraPre    int      `json:"verapdf_pre"`
-	VeraPost   int      `json:"verapdf_post"`
-	NewErrors  []string `json:"new_errors,omitempty"`
-	VeraRules  []string `json:"verapdf_post_rules,omitempty"`
-	Error      string   `json:"error,omitempty"`
+	Profile     string   `json:"profile"`
+	Aggressive  bool     `json:"aggressive"`
+	LithoPre    int      `json:"litho_pre"`
+	LithoPost   int      `json:"litho_post"`
+	VeraPre     int      `json:"verapdf_pre"`
+	VeraPost    int      `json:"verapdf_post"`
+	NewErrors   []string `json:"new_errors,omitempty"`
+	VeraRules   []string `json:"verapdf_post_rules,omitempty"`
+	ParseFailed bool     `json:"parse_failed,omitempty"`
+	Error       string   `json:"error,omitempty"`
 }
 
 func (f *remediationFeature) Run(_ context.Context, _, fixtureID string) ([]byte, error) {
@@ -279,6 +288,7 @@ func (f *remediationFeature) Compare(fixtureID string, output []byte) Verdict {
 		"litho_fixed":   max(0, got.LithoPre-got.LithoPost),
 		"verapdf_fixed": max(0, got.VeraPre-got.VeraPost),
 		"disagreement":  disagreement,
+		"parse_failed":  boolToInt(got.ParseFailed),
 	}
 	if fullyFixed {
 		metrics["fully_fixed"] = 1
@@ -395,10 +405,19 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 	return nil
 }
 
+// boolToInt returns 1 for true and 0 for false, for metric tallies.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // veraVerdict captures one VeraPDF result on a remediated PDF.
 type veraVerdict struct {
-	count int
-	rules []string
+	count       int
+	rules       []string
+	parseFailed bool // veraPDF could not parse the file (broken output)
 }
 
 // batchValidate runs `verapdf -r -f <flavour>` on dir and returns a
@@ -423,11 +442,16 @@ func batchValidate(ctx context.Context, dir, flavour string) (map[string]veraVer
 	}
 	out := make(map[string]veraVerdict, len(report.Report.Jobs))
 	for _, job := range report.Report.Jobs {
-		if len(job.ValidationResult) == 0 {
-			continue
-		}
 		base := filepath.Base(job.ItemDetails.Name)
 		base = strings.TrimSuffix(base, filepath.Ext(base))
+		if len(job.ValidationResult) == 0 {
+			// veraPDF emitted no validation result for this file: it failed
+			// to parse (a malformed remediated output). Record it so the
+			// caller counts it as a regression instead of silently masking
+			// it as "no change".
+			out[base] = veraVerdict{parseFailed: true}
+			continue
+		}
 		rules := failedRules(job.ValidationResult[0])
 		ids := make([]string, 0, len(rules))
 		for _, r := range rules {
