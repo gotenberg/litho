@@ -51,8 +51,17 @@ func isStandardStructType(name ast.PdfName, profile string) bool {
 	return true
 }
 
+// MaxStructTreeWalkDepth bounds recursion when walking a logical structure tree.
+// It is an anti-DoS guard, not spec-mandated: real logical trees are shallow
+// (Document > Sect > H/P), so 200 sits far above any genuine document while
+// capping a hostile or deeply nested tree. It is exported so the remediation
+// fixer walks to the same depth as validation: a repair shallower than the
+// check would flag structure elements it could not reach to fix. A visited set
+// independently breaks reference cycles.
+const MaxStructTreeWalkDepth = 200
+
 // maxStructTreeDepth is the recursion limit for walking the structure tree.
-const maxStructTreeDepth = 200
+const maxStructTreeDepth = MaxStructTreeWalkDepth
 
 // checkStructureGroup validates structure tree requirements for PDF/A and
 // PDF/UA profiles. For PDF/A level 'a' it checks MarkInfo and StructTreeRoot.
@@ -1214,7 +1223,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		langStr, err := document.ResolveString(ctx, doc, langObj)
 		if err == nil {
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-			if trimmed != "" && !isValidLangTag(trimmed) {
+			if trimmed != "" && !IsValidLangTag(trimmed) {
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
 			}
 		}
@@ -1236,7 +1245,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 			return
 		}
 		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-		if trimmed != "" && !isValidLangTag(trimmed) {
+		if trimmed != "" && !IsValidLangTag(trimmed) {
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})
@@ -1299,7 +1308,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 					}
 				}
 				trimmed := strings.TrimSpace(langVal)
-				if trimmed != "" && !isValidLangTag(trimmed) {
+				if trimmed != "" && !IsValidLangTag(trimmed) {
 					results = append(results, Violation{
 						Rule:    rule,
 						Context: fmt.Sprintf("lang=%s, page %d inline BDC", trimmed, pageIdx+1),
@@ -1324,7 +1333,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 				continue
 			}
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-			if trimmed != "" && !isValidLangTag(trimmed) {
+			if trimmed != "" && !IsValidLangTag(trimmed) {
 				results = append(results, Violation{
 					Rule:    rule,
 					Context: fmt.Sprintf("lang=%s, page %d property %s", trimmed, pageIdx+1, propName),

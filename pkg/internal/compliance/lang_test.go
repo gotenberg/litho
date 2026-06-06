@@ -43,8 +43,8 @@ func TestIsValidLangTag(t *testing.T) {
 	for _, tc := range valid {
 		t.Run("valid/"+tc.name, func(t *testing.T) {
 			t.Parallel()
-			if !isValidLangTag(tc.tag) {
-				t.Errorf("isValidLangTag(%q) = false, want true", tc.tag)
+			if !IsValidLangTag(tc.tag) {
+				t.Errorf("IsValidLangTag(%q) = false, want true", tc.tag)
 			}
 		})
 	}
@@ -74,8 +74,8 @@ func TestIsValidLangTag(t *testing.T) {
 	for _, tc := range invalid {
 		t.Run("invalid/"+tc.name, func(t *testing.T) {
 			t.Parallel()
-			if isValidLangTag(tc.tag) {
-				t.Errorf("isValidLangTag(%q) = true, want false", tc.tag)
+			if IsValidLangTag(tc.tag) {
+				t.Errorf("IsValidLangTag(%q) = true, want false", tc.tag)
 			}
 		})
 	}

@@ -31,7 +31,7 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		return checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
 	}
 
-	if !isValidLangTag(catalogLang) {
+	if !IsValidLangTag(catalogLang) {
 		return failf(validRule, "lang=%s", catalogLang)
 	}
 
@@ -66,7 +66,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 
 	// Structure tree root /Lang provides fallback for all elements.
 	rootLang := resolveNonEmptyLang(ctx, doc, treeRoot)
-	if rootLang != "" && !isValidLangTag(rootLang) {
+	if rootLang != "" && !IsValidLangTag(rootLang) {
 		return failf(validRule, "lang=%s, StructTreeRoot", rootLang)
 	}
 
@@ -94,7 +94,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		effectiveLang := inheritedLang
 		if elemLang != "" {
 			// Validate format of this element's own /Lang.
-			if !isValidLangTag(elemLang) {
+			if !IsValidLangTag(elemLang) {
 				results = append(results, Violation{Rule: validRule, Context: fmt.Sprintf("lang=%s, %s", elemLang, path)})
 				return
 			}
@@ -251,7 +251,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 			// The "language not determined" checks (t21-t24, t30-t34) handle this case separately.
 			return
 		}
-		if !isValidLangTag(trimmed) {
+		if !IsValidLangTag(trimmed) {
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})
@@ -259,7 +259,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
-// isValidLangTag validates a language tag against RFC 3066 / RFC 5646 (BCP 47)
+// IsValidLangTag validates a language tag against RFC 3066 / RFC 5646 (BCP 47)
 // well-formedness. The PDF spec (ISO 32000-1:2008, 14.9.2) references RFC 3066
 // which allows 1-8 ALPHA for the primary language subtag (RFC 5646 tightened
 // this to 2-8). The validator accepts 1-8 to match VeraPDF's behavior and the spec reference.
@@ -281,7 +281,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 //	extension    = singleton 1*("-" 2*8alphanum)
 //	privateuse   = "x" 1*("-" 1*8alphanum)
 //	singleton    = DIGIT / %x41-57 / %x59-5A / %x61-77 / %x79-7A  (any alphanum except 'x'/'X')
-func isValidLangTag(tag string) bool {
+func IsValidLangTag(tag string) bool {
 	trimmed := strings.TrimSpace(tag)
 	if trimmed == "" {
 		return true
