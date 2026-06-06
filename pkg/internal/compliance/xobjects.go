@@ -264,6 +264,8 @@ func checkImageXObjectPart1(
 		}
 	}
 
+	results = append(results, checkImageBitsPerComponent(ctx, doc, imgDict, name, pageNum, 1)...)
+
 	return results
 }
 
@@ -366,6 +368,8 @@ func checkImageXObject(
 		}
 	}
 
+	results = append(results, checkImageBitsPerComponent(ctx, doc, imgDict, name, pageNum, part)...)
+
 	return results
 }
 
@@ -396,6 +400,55 @@ func psXObjectRule(part int, pageNum int, name ast.PdfName) []Violation {
 	case 3:
 		return failf(Rule_19005_3_6_2_9_t03, "page %d, XObject %s", pageNum, name)
 		// PDF/A-4 does not have a separate PS XObject rule; it's covered by form checks.
+	}
+	return nil
+}
+
+// bpcRule selects the image /BitsPerComponent value rule for the given part.
+func bpcRule(part int) Rule {
+	return ruleByPart(part, Rule_19005_1_6_2_4_t04, Rule_19005_2_6_2_8_t04, Rule_19005_3_6_2_8_t04, Rule_19005_4_6_2_7_1_t04)
+}
+
+// bpcMaskRule selects the image-mask /BitsPerComponent rule for the given part.
+func bpcMaskRule(part int) Rule {
+	return ruleByPart(part, Rule_19005_1_6_2_4_t05, Rule_19005_2_6_2_8_t05, Rule_19005_3_6_2_8_t05, Rule_19005_4_6_2_7_1_t05)
+}
+
+// checkImageBitsPerComponent validates an image XObject's /BitsPerComponent.
+// A regular image allows 1, 2, 4, or 8, and additionally 16 for PDF/A-2 and
+// later (part 1: §6.2.4 t04, parts 2-3: §6.2.8 t04, part 4: §6.2.7.1 t04); an
+// image mask must use 1 (the corresponding t05). An absent key is permitted.
+// JPXDecode images are skipped: their bit depth is defined by the JPEG2000
+// codestream (validated separately) and /BitsPerComponent should be absent, so
+// the value rule does not apply. This is a detection-only check: correcting the
+// bit depth would require decompressing and resampling the pixel data, which
+// risks visible corruption and is out of scope for remediation.
+func checkImageBitsPerComponent(ctx context.Context, doc *document.Document, imgDict ast.PdfDict, name ast.PdfName, pageNum, part int) []Violation {
+	bpcObj, ok := imgDict["BitsPerComponent"]
+	if !ok {
+		return nil
+	}
+	if hasJPXFilter(ctx, doc, imgDict) {
+		return nil
+	}
+	bpc, err := document.ResolveInt(ctx, doc, bpcObj)
+	if err != nil {
+		return nil
+	}
+
+	// An image mask is intrinsically 1 bit per component (ISO 19005 §6.2.4
+	// t05 / §6.2.8 t05 / §6.2.7.1 t05). An absent or unresolvable /ImageMask
+	// defaults to false, so the regular-image branch applies.
+	if mask, _ := document.ResolveBool(ctx, doc, imgDict["ImageMask"]); mask {
+		if bpc != 1 {
+			return failf(bpcMaskRule(part), "page %d, XObject %s: image mask BitsPerComponent=%d (must be 1)", pageNum, name, bpc)
+		}
+		return nil
+	}
+
+	valid := bpc == 1 || bpc == 2 || bpc == 4 || bpc == 8 || (part >= 2 && bpc == 16)
+	if !valid {
+		return failf(bpcRule(part), "page %d, XObject %s: BitsPerComponent=%d", pageNum, name, bpc)
 	}
 	return nil
 }

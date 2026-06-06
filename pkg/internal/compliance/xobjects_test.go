@@ -98,3 +98,42 @@ func TestXObjectRules_PartLabeling(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckImageBitsPerComponent(t *testing.T) {
+	t.Parallel()
+	im := ast.PdfName("Im0")
+	cases := []struct {
+		name string
+		dict ast.PdfDict
+		part int
+		want *Rule // nil means no violation
+	}{
+		{"valid 8 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(8)}, 2, nil},
+		{"valid 16 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 2, nil},
+		{"valid 16 (part 3)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 3, nil},
+		{"valid 16 (part 4)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 4, nil},
+		{"16 rejected (part 1)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 1, &Rule_19005_1_6_2_4_t04},
+		{"invalid 3 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(3)}, 2, &Rule_19005_2_6_2_8_t04},
+		{"invalid 3 (part 4)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(3)}, 4, &Rule_19005_4_6_2_7_1_t04},
+		{"JPXDecode out-of-range skipped", ast.PdfDict{"Filter": ast.PdfName("JPXDecode"), "BitsPerComponent": ast.PdfInt(12)}, 2, nil},
+		{"absent is valid", ast.PdfDict{}, 2, nil},
+		{"mask BPC 1 ok", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(1)}, 2, nil},
+		{"mask BPC 2 bad", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(2)}, 2, &Rule_19005_2_6_2_8_t05},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := checkImageBitsPerComponent(context.Background(), nil, tc.dict, im, 1, tc.part)
+			if tc.want == nil {
+				if len(got) != 0 {
+					t.Errorf("got %v, want no violation", got)
+				}
+				return
+			}
+			if len(got) != 1 || got[0].Rule.Specification != tc.want.Specification ||
+				got[0].Rule.Clause != tc.want.Clause || got[0].Rule.TestNumber != tc.want.TestNumber {
+				t.Errorf("got %v, want %s/%s/t%d", got, tc.want.Specification, tc.want.Clause, tc.want.TestNumber)
+			}
+		})
+	}
+}

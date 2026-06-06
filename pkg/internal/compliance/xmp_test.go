@@ -2,8 +2,78 @@ package compliance
 
 import (
 	"bytes"
+	"context"
 	"testing"
 )
+
+// TestXMPCheckPDFAIdentification_AmdCorrPrefix covers the amd/corr wrong-prefix
+// detection. The XML parser resolves namespaces by URI, so pdfa:amd (bound to
+// the PDF/A Identification URI) looks correct; the byte scan must catch the
+// non-canonical literal prefix.
+func TestXMPCheckPDFAIdentification_AmdCorrPrefix(t *testing.T) {
+	t.Parallel()
+	wrap := func(decls, body string) []byte {
+		return []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" ` + decls + `>
+` + body + `
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+	}
+	const idURI = `"http://www.aiim.org/pdfa/ns/id/"`
+
+	hasRule := func(results []Violation, clause string, test int) bool {
+		for _, v := range results {
+			if v.Rule.Clause == clause && v.Rule.TestNumber == test {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("amd wrong prefix fires t06", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		xmpCheckPDFAIdentification(context.Background(),
+			wrap(`xmlns:pdfa=`+idURI, `<pdfa:amd>2016</pdfa:amd>`), "PDF/A-2b", 2, &results)
+		if !hasRule(results, "6.6.4", 6) {
+			t.Errorf("expected §6.6.4 t06 (amd wrong prefix), got %v", results)
+		}
+	})
+
+	t.Run("corr wrong prefix fires t07", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		xmpCheckPDFAIdentification(context.Background(),
+			wrap(`xmlns:pdfa=`+idURI, `<pdfa:corr>A</pdfa:corr>`), "PDF/A-2b", 2, &results)
+		if !hasRule(results, "6.6.4", 7) {
+			t.Errorf("expected §6.6.4 t07 (corr wrong prefix), got %v", results)
+		}
+	})
+
+	t.Run("canonical pdfaid:amd does not fire", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		xmpCheckPDFAIdentification(context.Background(),
+			wrap(`xmlns:pdfaid=`+idURI, `<pdfaid:amd>2016</pdfaid:amd>`), "PDF/A-2b", 2, &results)
+		if hasRule(results, "6.6.4", 6) {
+			t.Errorf("canonical pdfaid:amd must not flag t06, got %v", results)
+		}
+	})
+
+	t.Run("amd wrong prefix part 1 fires 6.7.11 t06", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		xmpCheckPDFAIdentification(context.Background(),
+			wrap(`xmlns:pdfa=`+idURI, `<pdfa:amd>2016</pdfa:amd>`), "PDF/A-1b", 1, &results)
+		if !hasRule(results, "6.7.11", 6) {
+			t.Errorf("expected §6.7.11 t06 (PDF/A-1 amd wrong prefix), got %v", results)
+		}
+	})
+}
 
 func TestXMPDetectEncoding(t *testing.T) {
 	tests := []struct {

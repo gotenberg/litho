@@ -48,6 +48,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	if part >= 2 {
 		results = append(results, checkAlternatePresentations(ctx, doc, catalog, part)...)
 		results = append(results, checkRequirementsKey(catalog, part)...)
+		results = append(results, checkNeedsRenderingKey(catalog, part)...)
 	}
 
 	if part >= 2 {
@@ -193,6 +194,16 @@ func checkRequirementsKey(catalog ast.PdfDict, part int) []Violation {
 	if _, hasReq := catalog["Requirements"]; hasReq {
 		rule := requirementsRule(part)
 		return fail(rule, "Requirements key present in document catalog")
+	}
+
+	return nil
+}
+
+// checkNeedsRenderingKey validates that the catalog does not contain the
+// forbidden /NeedsRendering key (ISO 19005-2/3/4 §6.4.2).
+func checkNeedsRenderingKey(catalog ast.PdfDict, part int) []Violation {
+	if _, ok := catalog["NeedsRendering"]; ok {
+		return fail(needsRenderingRule(part), "NeedsRendering key present in document catalog")
 	}
 
 	return nil
@@ -345,6 +356,10 @@ func alternatePresentationsRule(part int) Rule {
 
 func requirementsRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_11_t01, Rule_19005_3_6_11_t01, Rule_19005_4_6_12_t01)
+}
+
+func needsRenderingRule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_4_2_t02, Rule_19005_3_6_4_2_t02, Rule_19005_4_6_4_2_t02)
 }
 
 func ocgASRule(part int) Rule {

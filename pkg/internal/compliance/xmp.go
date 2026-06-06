@@ -617,7 +617,9 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	var partValue, confValue, revValue string
 	hasPart := false
 	hasConf := false
+	var hasAmd, hasCorr bool
 	var wrongPrefixPart, wrongPrefixConf, wrongPrefixRev bool
+	var wrongPrefixAmd, wrongPrefixCorr bool
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
@@ -643,6 +645,10 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 					confValue = attr.Value
 				case "rev":
 					revValue = attr.Value
+				case "amd":
+					hasAmd = true
+				case "corr":
+					hasCorr = true
 				}
 			} else if attr.Name.Space != "" && attr.Name.Space != xmpPdfaIDNamespace {
 				// Attribute with matching local name but wrong namespace prefix.
@@ -653,6 +659,10 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 					wrongPrefixConf = true
 				case "rev":
 					wrongPrefixRev = true
+				case "amd":
+					wrongPrefixAmd = true
+				case "corr":
+					wrongPrefixCorr = true
 				}
 			}
 		}
@@ -670,6 +680,10 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 						confValue = val
 					case "rev":
 						revValue = val
+					case "amd":
+						hasAmd = true
+					case "corr":
+						hasCorr = true
 					}
 				}
 			}
@@ -683,6 +697,10 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 				wrongPrefixConf = true
 			case "rev":
 				wrongPrefixRev = true
+			case "amd":
+				wrongPrefixAmd = true
+			case "corr":
+				wrongPrefixCorr = true
 			}
 		}
 	}
@@ -699,6 +717,12 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	if revValue != "" && !wrongPrefixRev {
 		wrongPrefixRev = xmpHasWrongPdfaidPrefix(ctx, data, "rev")
 	}
+	if hasAmd && !wrongPrefixAmd {
+		wrongPrefixAmd = xmpHasWrongPdfaidPrefix(ctx, data, "amd")
+	}
+	if hasCorr && !wrongPrefixCorr {
+		wrongPrefixCorr = xmpHasWrongPdfaidPrefix(ctx, data, "corr")
+	}
 
 	// Emit prefix violations for pdfaid fields using wrong namespace.
 	if wrongPrefixPart {
@@ -709,6 +733,12 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	}
 	if wrongPrefixRev {
 		*results = append(*results, xmpPDFAIdPrefixRule(part, "rev")...)
+	}
+	if wrongPrefixAmd {
+		*results = append(*results, xmpPDFAIdPrefixRule(part, "amd")...)
+	}
+	if wrongPrefixCorr {
+		*results = append(*results, xmpPDFAIdPrefixRule(part, "corr")...)
 	}
 
 	// Fallback: byte scan for pdfaid presence in unparseable XMP.
@@ -880,7 +910,9 @@ func xmpPDFAConformanceRule(part int, actual string) []Violation {
 }
 
 // xmpPDFAIdPrefixRule returns the appropriate rule for a pdfaid field that uses
-// the wrong namespace prefix. The field parameter is "part", "conformance", or "rev".
+// the wrong namespace prefix. The field parameter is "part", "conformance",
+// "rev", "amd", or "corr". A field with no rule for the given part returns nil
+// (for example PDF/A-4 has no amd/corr prefix rule, and part 1 has no corr).
 func xmpPDFAIdPrefixRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("pdfaid:%s uses wrong namespace prefix", field)
 	switch field {
@@ -907,6 +939,22 @@ func xmpPDFAIdPrefixRule(part int, field string) []Violation {
 	case "rev":
 		if part == 4 {
 			return fail(Rule_19005_4_6_7_3_t06, ctx)
+		}
+	case "amd":
+		switch part {
+		case 1:
+			return fail(Rule_19005_1_6_7_11_t06, ctx)
+		case 2:
+			return fail(Rule_19005_2_6_6_4_t06, ctx)
+		case 3:
+			return fail(Rule_19005_3_6_6_4_t06, ctx)
+		}
+	case "corr":
+		switch part {
+		case 2:
+			return fail(Rule_19005_2_6_6_4_t07, ctx)
+		case 3:
+			return fail(Rule_19005_3_6_6_4_t07, ctx)
 		}
 	}
 	return nil
