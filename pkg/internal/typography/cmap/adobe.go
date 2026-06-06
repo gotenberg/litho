@@ -172,24 +172,31 @@ func loadPredefinedCMapUncached(name string) *CMap {
 	}
 }
 
-// byteLength determines the byte length of a character code based on codespace ranges.
+// byteLength determines the byte length of a character code from the codespace
+// ranges, mirroring PDF.js CMap.readCharCode: the width is the SHORTEST codespace
+// width whose integer range [low, high] contains the code. The previous version
+// truncated the code to n bytes before the range check, so a value like 0xE644
+// matched a 1-byte range on its low byte (0x44) and was mis-sized as 1 byte.
 func byteLength(code int, codespaces []CodeSpaceRange) int {
-	for _, cs := range codespaces {
-		n := len(cs.Low)
-		val := 0
-		for _, b := range intToBytes(code, n) {
-			val = (val << 8) | int(b)
+	for n := 1; n <= 4; n++ {
+		if code >= 1<<(8*n) {
+			continue // the value does not fit in n bytes
 		}
-		low := 0
-		for _, b := range cs.Low {
-			low = (low << 8) | int(b)
-		}
-		high := 0
-		for _, b := range cs.High {
-			high = (high << 8) | int(b)
-		}
-		if val >= low && val <= high {
-			return n
+		for _, cs := range codespaces {
+			if len(cs.Low) != n {
+				continue
+			}
+			low := 0
+			for _, b := range cs.Low {
+				low = (low << 8) | int(b)
+			}
+			high := 0
+			for _, b := range cs.High {
+				high = (high << 8) | int(b)
+			}
+			if code >= low && code <= high {
+				return n
+			}
 		}
 	}
 	// Default: use minimum bytes needed.
