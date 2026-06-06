@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
 // fontUsageInfo tracks how a font is used in a content stream.
@@ -481,40 +482,84 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	return nil
 }
 
+// collectType0CIDs decodes a Type0 font's shown strings into the set of CIDs
+// they reference. It returns (cids, notdef, ok):
+//   - ok is false when litho cannot decode the /Encoding to CIDs (an embedded
+//     CMap stream, or an unrecognized predefined CMap); the caller skips the
+//     check rather than risk a false positive.
+//   - notdef is true when decoding reached a character code that unambiguously
+//     renders as the .notdef glyph (an Identity odd-length tail).
+//
+// Identity-H/V treats each 2-byte unit as the CID directly. A predefined CMap
+// (Adobe-Japan1 etc.) is decoded codespace-aware through its bundled bcmap; the
+// resolvable CIDs are returned for the caller's embedded-font charset check,
+// while unmapped codes are skipped to stay free of false positives.
+func collectType0CIDs(encName string, usage *fontUsageInfo) (cids map[uint16]bool, notdef, ok bool) {
+	switch encName {
+	case "Identity-H", "Identity-V":
+		cids = make(map[uint16]bool)
+		for _, s := range usage.rawStrings {
+			data := []byte(s)
+			// An odd-length string under a 2-byte CMap leaves a trailing byte
+			// that cannot form a CID; the renderer draws .notdef.
+			if len(data)%2 != 0 {
+				return nil, true, true
+			}
+			for i := 0; i+1 < len(data); i += 2 {
+				cids[uint16(data[i])<<8|uint16(data[i+1])] = true
+			}
+		}
+		return cids, false, true
+	default:
+		// Any other named encoding is a predefined CMap, decoded through its
+		// bundled bcmap. A nil map means the name is not a recognized
+		// predefined CMap (or /Encoding is an embedded stream, which resolves
+		// to an empty name here), so the check is skipped.
+		//
+		// An unmapped code is NOT treated as .notdef here: litho does not
+		// resolve a bcmap's usecmap base, so a code could be unmapped merely
+		// because its mapping lives in an unresolved base CMap. Flagging it
+		// would be a false positive. Only the CIDs we can resolve are collected
+		// and verified against the embedded font program by the caller, which
+		// is independent of CMap completeness. This trades a possibly missed
+		// .notdef (a false negative) for zero false positives.
+		cm := cmap.LoadPredefinedCIDMap(encName)
+		if cm == nil {
+			return nil, false, false
+		}
+		cids = make(map[uint16]bool)
+		for _, s := range usage.rawStrings {
+			for _, c := range cm.Decode([]byte(s)) {
+				if c.Mapped && c.CID >= 0 && c.CID <= 0xFFFF {
+					cids[uint16(c.CID)] = true
+				}
+			}
+		}
+		return cids, false, true
+	}
+}
+
 // checkType0NotdefGlyph checks if a Type0 (composite) font references CID 0
 // (.notdef) in any text operator string, or references a CID that is absent
-// from the embedded font program's charset (also renders as .notdef).
-// For Identity-H/Identity-V encoded fonts, scans raw string bytes for 2-byte CIDs.
+// from the embedded font program's charset (also renders as .notdef). It
+// handles Identity-H/V and predefined CMap encodings (see [collectType0CIDs]);
+// embedded CMap streams are not decoded and are left unchecked.
 func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {
 		return nil
 	}
 
-	// Only handle Identity-H / Identity-V encoding (2-byte CIDs).
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
-	if encName != "Identity-H" && encName != "Identity-V" {
+	usedCIDs, notdef, ok := collectType0CIDs(string(encName), usage)
+	if !ok {
+		// litho cannot decode this /Encoding to CIDs (an embedded CMap stream
+		// or an unrecognized predefined CMap); leave it unchecked rather than
+		// risk a false positive.
 		return nil
 	}
-
-	// Collect all referenced CIDs from raw strings.
-	usedCIDs := make(map[uint16]bool)
-	hasOddLengthString := false
-	for _, s := range usage.rawStrings {
-		data := []byte(s)
-		if len(data)%2 != 0 {
-			hasOddLengthString = true
-		}
-		for i := 0; i+1 < len(data); i += 2 {
-			cid := uint16(data[i])<<8 | uint16(data[i+1])
-			usedCIDs[cid] = true
-		}
-	}
-
-	// An odd-length string with a 2-byte CMap (Identity-H/V) means the
-	// last byte cannot form a valid CID. The renderer uses .notdef.
-	if hasOddLengthString {
-		return failf(rule, "font %s on page %d: odd-length string with 2-byte CMap references .notdef", fontName, pageNum)
+	if notdef {
+		return failf(rule, "font %s on page %d: odd-length string under a 2-byte CMap references .notdef", fontName, pageNum)
 	}
 
 	// CID 0 is always .notdef.
