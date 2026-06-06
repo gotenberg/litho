@@ -81,11 +81,11 @@ func TestAllowedNamedActions(t *testing.T) {
 	t.Parallel()
 	expected := []ast.PdfName{"NextPage", "PrevPage", "FirstPage", "LastPage"}
 	for _, n := range expected {
-		if !allowedNamedActions[n] {
-			t.Errorf("allowedNamedActions missing %q", n)
+		if !AllowedNamedActions[n] {
+			t.Errorf("AllowedNamedActions missing %q", n)
 		}
 	}
-	if allowedNamedActions["Print"] {
+	if AllowedNamedActions["Print"] {
 		t.Error("Print should not be an allowed named action")
 	}
 }

@@ -266,8 +266,21 @@ func isForbiddenAction(ctx context.Context, doc *document.Document, obj ast.PdfO
 	if err != nil || d == nil {
 		return false
 	}
-	if s, ok := d["S"].(ast.PdfName); ok {
-		return forbiddenActionTypes[string(s)]
+	s, ok := d["S"].(ast.PdfName)
+	if !ok {
+		return false
+	}
+	if forbiddenActionTypes[string(s)] {
+		return true
+	}
+	// A Named action is forbidden unless its /N is one of the standard named
+	// actions (§6.6.1). Mirror the validator (which reuses the same
+	// [compliance.AllowedNamedActions] set): only a present, non-standard /N is
+	// a violation, so a malformed action without /N is left alone.
+	if s == "Named" {
+		if n, _ := document.ResolveName(ctx, doc, d["N"]); n != "" {
+			return !compliance.AllowedNamedActions[n]
+		}
 	}
 	return false
 }

@@ -93,17 +93,22 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			continue
 		}
 
-		// Validate ICC header: device class must be "prtr" or "mntr",
-		// color space must be "GRAY", "RGB ", or "CMYK".
+		// Validate ICC header: version major (byte 8) must be 2 or 4, device
+		// class must be "prtr" or "mntr", color space must be "GRAY", "RGB ",
+		// or "CMYK". The validator rejects ICC version 5+ (it is not admitted
+		// by ISO 15076-1:2005), so the fixer must replace such a profile too;
+		// otherwise a valid-class v5 profile is flagged but never repaired.
+		version := data[8]
 		deviceClass := string(data[12:16])
 		colorSpace := string(data[16:20])
 
+		validVersion := version == 2 || version == 4
 		validClass := deviceClass == "prtr" || deviceClass == "mntr"
 		validCS := colorSpace == "GRAY" || colorSpace == "RGB " || colorSpace == "CMYK"
 
-		if !validClass || !validCS {
+		if !validVersion || !validClass || !validCS {
 			replaceICCProfile(alloc, oiDict, oiRef, dpObj)
-			fixes = append(fixes, fmt.Sprintf("replaced invalid ICC profile in OutputIntent[%d] (class=%q, cs=%q)", i, deviceClass, colorSpace))
+			fixes = append(fixes, fmt.Sprintf("replaced invalid ICC profile in OutputIntent[%d] (version=%d, class=%q, cs=%q)", i, version, deviceClass, colorSpace))
 		}
 
 		newOIArr[i] = oiEntry

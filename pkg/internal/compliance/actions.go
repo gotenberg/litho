@@ -50,10 +50,12 @@ func isForbiddenAction(actionType ast.PdfName, part int) bool {
 	return false
 }
 
-// allowedNamedActions lists the named actions permitted by §6.6.1.
+// AllowedNamedActions lists the named actions permitted by §6.6.1. It is
+// exported so the remediation fixer strips exactly the named actions the
+// validator flags, leaving no room for the two sets to diverge.
 //
 //nolint:gochecknoglobals // package-level lookup table.
-var allowedNamedActions = map[ast.PdfName]bool{
+var AllowedNamedActions = map[ast.PdfName]bool{
 	"NextPage":  true,
 	"PrevPage":  true,
 	"FirstPage": true,
@@ -406,7 +408,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 		// Check named actions (§6.6.1 test 2).
 		if actionType == "Named" {
 			actionName, _ := document.ResolveName(ctx, doc, action["N"])
-			if actionName != "" && !allowedNamedActions[actionName] {
+			if actionName != "" && !AllowedNamedActions[actionName] {
 				rule := namedActionRule(part)
 				results = append(results, failf(rule, "%s at %s", actionName, location)...)
 			}
@@ -618,7 +620,7 @@ func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action 
 	// Also check named actions (§6.6.1 test 2 / §6.5.1 test 2).
 	if actionType == "Named" {
 		actionName, _ := document.ResolveName(ctx, doc, action["N"])
-		if actionName != "" && !allowedNamedActions[actionName] {
+		if actionName != "" && !AllowedNamedActions[actionName] {
 			rule := namedActionRule(part)
 			results = append(results, failf(rule, "%s at outline item", actionName)...)
 		}

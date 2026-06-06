@@ -13,7 +13,8 @@ import (
 )
 
 func matchGraphics(v compliance.Violation) bool {
-	return clausePrefix(v, "6.2.9", "6.2.6") || // rendering intent (ExtGState only)
+	return clausePrefix(v, "6.2.9", "6.2.6") || // rendering intent (ExtGState /RI and image /Intent)
+		clausePrefix(v, "6.2.7") || // PostScript XObject (PDF/A-1 §6.2.7)
 		clausePrefix(v, "6.2.5") || // Form XObject /Subtype2, /PS
 		clausePrefix(v, "6.2.4.2") || // overprint mode OPM
 		clausePrefix(v, "6.2.8.1") || // Form XObject /OPI
@@ -343,11 +344,21 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 					notes = append(notes, fmt.Sprintf("set /Interpolate to false in image %s", string(name)))
 				}
 			}
+
+			// Fix invalid image rendering intent (6.2.6), mirroring the
+			// ExtGState /RI repair above.
+			if intentObj, ok := newDict["Intent"]; ok {
+				if intentName, ok := intentObj.(ast.PdfName); ok && !validRenderingIntents[intentName] {
+					newDict["Intent"] = ast.PdfName("RelativeColorimetric")
+					modified = true
+					notes = append(notes, fmt.Sprintf("replaced invalid rendering intent %q in image %s", string(intentName), string(name)))
+				}
+			}
 		}
 
 		if subtype == "PS" {
-			// PDF/A-2+ §6.2.9.3 forbids PostScript XObjects. Convert to
-			// an empty Form XObject so existing Do references still
+			// PDF/A-1 §6.2.7 and PDF/A-2+ §6.2.9.3 forbid PostScript XObjects.
+			// Convert to an empty Form XObject so existing Do references still
 			// resolve to a valid no-op.
 			newDict["Subtype"] = ast.PdfName("Form")
 			newDict["FormType"] = ast.PdfInt(1)
@@ -403,7 +414,21 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		}
 
 		if modified {
-			alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, nil))
+			// Preserve the original stream bytes: only the dict changed, so
+			// re-emitting with nil data would blank the image pixels or form
+			// content (serializeStream rewrites /Length from the data, leaving
+			// an empty, corrupt stream).
+			data, derr := xobjStream.Bytes(ctx)
+			if derr != nil {
+				// The original payload is unreadable, so it cannot be carried
+				// across. Leave the object untouched rather than write the
+				// fixed dict with an empty body: a still-flagged violation is
+				// safer than a corrupt stream, and re-validation re-surfaces it.
+				doc.Logger.Debug("skipping XObject dict fix; original stream unreadable",
+					slog.String("name", string(name)), slog.Any("err", derr))
+			} else {
+				alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, data))
+			}
 		}
 	}
 

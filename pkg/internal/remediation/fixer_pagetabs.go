@@ -12,9 +12,10 @@ import (
 )
 
 func matchPageTabs(v compliance.Violation) bool {
-	return descriptionContains(v, "Tabs entry") ||
-		descriptionContains(v, "Tabs key") ||
-		descriptionContains(v, "Tabs value")
+	// Match by clause, not Rule.Description: the PDF/UA-1 rule (§7.18.3) and
+	// PDF/UA-2 rule (§8.9.3.3) word the requirement differently, so a
+	// description-substring match silently skipped every PDF/UA-1 document.
+	return clausePrefix(v, "7.18.3", "8.9.3.3")
 }
 
 // fixPageTabs adds a /Tabs /S entry to every page that contains annotations
