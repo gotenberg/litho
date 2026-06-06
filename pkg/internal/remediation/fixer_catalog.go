@@ -13,6 +13,7 @@ import (
 
 func matchCatalogCleanup(v compliance.Violation) bool {
 	if (v.Rule.Clause == "6.1.3" && v.Rule.TestNumber == 2) || // Encrypt in trailer
+		clausePrefix(v, "6.4.2") || // NeedsRendering catalog key
 		clausePrefix(v, "6.10") || // OCG config
 		clausePrefix(v, "6.11") || // AlternatePresentations
 		clausePrefix(v, "6.1.11") { // Perms dict (PDF/A-1)
@@ -79,6 +80,22 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		if sFixes := fixSignatureReferences(ctx, alloc, doc, permsObj); len(sFixes) > 0 {
 			fixes = append(fixes, sFixes...)
 		}
+		// Re-read the catalog in case fixPermsDict rewrote it (an inline /Perms
+		// dict is rewritten through the catalog object). A later catalog edit
+		// must build on that copy, not the stale one.
+		catalogDict = resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+		if catalogDict == nil {
+			return fixes, nil
+		}
+	}
+
+	// 6.4.2: Remove the forbidden /NeedsRendering key from the catalog.
+	if _, ok := catalogDict["NeedsRendering"]; ok {
+		newCatalog := make(ast.PdfDict, len(catalogDict))
+		maps.Copy(newCatalog, catalogDict)
+		delete(newCatalog, "NeedsRendering")
+		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+		fixes = append(fixes, "removed /NeedsRendering from catalog")
 	}
 
 	return fixes, nil

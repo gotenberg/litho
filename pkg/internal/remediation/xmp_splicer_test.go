@@ -321,3 +321,28 @@ func TestCanonicalizePrefix_RenamesWhenAliasOnly(t *testing.T) {
 		t.Errorf("usage should be renamed to the canonical prefix:\n%s", got)
 	}
 }
+
+// TestCanonicalizePrefix_RenamesAmd confirms the existing canonicalize pass also
+// repairs a wrongly-prefixed pdfaid:amd: the compliance side now detects the
+// wrong prefix (§6.6.4 t06), and remediation already fixes it for free.
+func TestCanonicalizePrefix_RenamesAmd(t *testing.T) {
+	xmp := []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:pdfa="http://www.aiim.org/pdfa/ns/id/">
+      <pdfa:amd>2016</pdfa:amd>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+
+	got := string(canonicalizePrefix(xmp, "pdfaid", pdfaidNS))
+
+	if strings.Contains(got, "pdfa:amd") {
+		t.Errorf("pdfa:amd should be canonicalized to pdfaid:amd:\n%s", got)
+	}
+	if !strings.Contains(got, "<pdfaid:amd>") {
+		t.Errorf("expected <pdfaid:amd> after canonicalization:\n%s", got)
+	}
+}
