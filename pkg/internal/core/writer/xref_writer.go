@@ -178,6 +178,11 @@ func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, tra
 
 	dict := make(ast.PdfDict, len(trailer)+5)
 	maps.Copy(dict, trailer)
+	// The entry data is written as plain FlateDecode without a PNG predictor.
+	// An inherited /DecodeParms (e.g. a predictor and /Columns copied from the
+	// source xref stream during an incremental update) would make a strict
+	// parser mis-decode the raw rows, so drop it.
+	delete(dict, "DecodeParms")
 	dict["Type"] = ast.PdfName("XRef")
 	dict["W"] = ast.PdfArray{ast.PdfInt(1), ast.PdfInt(w1), ast.PdfInt(w2)}
 	dict["Index"] = indexArr

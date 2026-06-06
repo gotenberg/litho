@@ -231,6 +231,34 @@ func parseIndex(t *testing.T, out string) []int {
 	return nums
 }
 
+func TestWriteXRefStream_DropsInheritedDecodeParms(t *testing.T) {
+	// An incremental update inherits the source xref stream's dict as the
+	// trailer, which can carry /DecodeParms (a PNG predictor + /Columns). The
+	// writer emits raw, non-predictor entry data, so it must not propagate
+	// /DecodeParms: a strict parser would otherwise un-predict the raw rows
+	// into garbage and reject the stream.
+	records := []XRefRecord{{ObjNum: 1, Offset: 9, Generation: 0}}
+	trailer := ast.PdfDict{
+		"Root": ast.PdfIndirectRef{ObjectNum: 1, GenNum: 0},
+		"DecodeParms": ast.PdfDict{
+			"Predictor": ast.PdfInt(12),
+			"Columns":   ast.PdfInt(3),
+		},
+	}
+	var buf bytes.Buffer
+	if _, err := WriteXRefStream(context.Background(), &buf, records, trailer, NewObjAllocator(1), 100); err != nil {
+		t.Fatalf("WriteXRefStream: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "/DecodeParms") || strings.Contains(out, "/Predictor") {
+		t.Errorf("inherited /DecodeParms must be dropped (writer emits non-predictor data):\n%s", out)
+	}
+	// The raw (no-predictor) stream still decodes to a valid entry.
+	if _, ok := decodeXRefStreamEntries(t, out)[1]; !ok {
+		t.Errorf("entry for object 1 not decodable:\n%s", out)
+	}
+}
+
 func TestBytesNeeded(t *testing.T) {
 	tests := []struct {
 		val  int64
