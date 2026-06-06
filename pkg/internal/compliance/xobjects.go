@@ -67,8 +67,10 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 	switch part {
 	case 1:
 		rule = Rule_19005_1_6_2_4_t03
-	case 2, 3:
+	case 2:
 		rule = Rule_19005_2_6_2_8_t03
+	case 3:
+		rule = Rule_19005_3_6_2_8_t03
 	case 4:
 		rule = Rule_19005_4_6_2_7_1_t03
 	default:
@@ -280,8 +282,10 @@ func checkFormXObject(
 	// Select the appropriate rule based on part.
 	var formRule Rule
 	switch part {
-	case 2, 3:
+	case 2:
 		formRule = Rule_19005_2_6_2_9_t01
+	case 3:
+		formRule = Rule_19005_3_6_2_9_t01
 	case 4:
 		formRule = Rule_19005_4_6_2_8_1_t01
 	}
@@ -320,10 +324,14 @@ func checkImageXObject(
 	// Select the appropriate rules based on part.
 	var altRule, opiRule, interpRule Rule
 	switch part {
-	case 2, 3:
+	case 2:
 		altRule = Rule_19005_2_6_2_8_t01
 		opiRule = Rule_19005_2_6_2_8_t02
 		interpRule = Rule_19005_2_6_2_8_t03
+	case 3:
+		altRule = Rule_19005_3_6_2_8_t01
+		opiRule = Rule_19005_3_6_2_8_t02
+		interpRule = Rule_19005_3_6_2_8_t03
 	case 4:
 		altRule = Rule_19005_4_6_2_7_1_t01
 		opiRule = Rule_19005_4_6_2_7_1_t02
@@ -367,8 +375,10 @@ func refXObjectRule(part int, pageNum int, name ast.PdfName) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_2_6_t01, "page %d, XObject %s", pageNum, name)
-	case 2, 3:
+	case 2:
 		return failf(Rule_19005_2_6_2_9_t02, "page %d, XObject %s", pageNum, name)
+	case 3:
+		return failf(Rule_19005_3_6_2_9_t02, "page %d, XObject %s", pageNum, name)
 	case 4:
 		return failf(Rule_19005_4_6_2_8_2_t01, "page %d, XObject %s", pageNum, name)
 	}
@@ -381,8 +391,10 @@ func psXObjectRule(part int, pageNum int, name ast.PdfName) []Violation {
 	switch part {
 	case 1:
 		return failf(Rule_19005_1_6_2_7_t01, "page %d, XObject %s", pageNum, name)
-	case 2, 3:
+	case 2:
 		return failf(Rule_19005_2_6_2_9_t03, "page %d, XObject %s", pageNum, name)
+	case 3:
+		return failf(Rule_19005_3_6_2_9_t03, "page %d, XObject %s", pageNum, name)
 		// PDF/A-4 does not have a separate PS XObject rule; it's covered by form checks.
 	}
 	return nil
