@@ -9,11 +9,16 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// pdfua2ExpectedRev is the literal value pdfuaid:rev must carry for a
+// PDFUA2ExpectedRev is the literal value pdfuaid:rev must carry for a
 // PDF/UA-2 file. ISO 14289-2 §5 fixes the value at "2024"; any other
 // year-shaped string violates the spec even if it parses as a valid
-// year. Lift the constant when ISO 14289-2 ships a revision.
-const pdfua2ExpectedRev = "2024"
+// year. Lift the constant when ISO 14289-2 ships a revision. It is
+// exported so the remediation fixer emits exactly the value the validator
+// requires, leaving no room for the two to drift.
+const PDFUA2ExpectedRev = "2024"
+
+// pdfua2ExpectedRev is the package-internal alias for [PDFUA2ExpectedRev].
+const pdfua2ExpectedRev = PDFUA2ExpectedRev
 
 func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := ocConfigNameRule(profile)
@@ -107,6 +112,14 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 		return fail(Rule_14289_2_5_t01, "no XMP metadata")
 	}
 
+	return checkPDFUAIdentificationIn(ctx, xmpData, profile)
+}
+
+// checkPDFUAIdentificationIn is the pure-logic core of
+// [checkPDFUAIdentification] exposed for unit testing. It assumes the XMP
+// packet is present (the no-XMP case is handled by the I/O-bound wrapper) and
+// reports the PDF/UA identification-schema violations for the given profile.
+func checkPDFUAIdentificationIn(ctx context.Context, xmpData []byte, profile string) []Violation {
 	switch profile {
 	case "PDF/UA-1":
 		if !containsPDFUAIDPart(ctx, xmpData, "1") {
@@ -115,6 +128,12 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 	case "PDF/UA-2":
 		if !containsPDFUAIDPart(ctx, xmpData, "2") {
 			return fail(Rule_14289_2_5_t02, "pdfuaid:part is not 2")
+		}
+		// ISO 14289-2 §5 also requires pdfuaid:rev=2024. A present-but-wrong
+		// value is reported by checkPDFUAIDPrefixes (t05); detect the missing
+		// case here, where pdfuaid:part=2 confirms the file claims UA-2.
+		if !containsPDFUAIDRev(ctx, xmpData) {
+			return fail(Rule_14289_2_5_t05, "pdfuaid:rev missing")
 		}
 	}
 

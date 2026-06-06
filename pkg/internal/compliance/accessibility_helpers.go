@@ -235,15 +235,36 @@ func containsDCTitle(ctx context.Context, xmpData []byte) bool {
 // namespace URI matches.
 func containsPDFUAIDPart(ctx context.Context, xmpData []byte, part string) bool {
 	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
-	prefix := xmpExtractPrefixMap(ctx, xmpData)[pdfuaIDNamespace]
-	if prefix == "" {
-		return false
-	}
 	xmp := string(xmpData)
-	if strings.Contains(xmp, fmt.Sprintf("%s:part>%s<", prefix, part)) {
-		return true
+	// A namespace URI may be bound to several prefixes (dual bindings like
+	// pdfuaid + pdfuaia appear in the wild), and the property can sit under any
+	// of them. Check every prefix bound to the PDF/UA URI, not just one, so a
+	// last-write-wins map lookup cannot miss the property and falsely report it
+	// absent.
+	for _, prefix := range xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace) {
+		if strings.Contains(xmp, fmt.Sprintf("%s:part>%s<", prefix, part)) ||
+			strings.Contains(xmp, fmt.Sprintf("%s:part=\"%s\"", prefix, part)) {
+			return true
+		}
 	}
-	return strings.Contains(xmp, fmt.Sprintf("%s:part=\"%s\"", prefix, part))
+	return false
+}
+
+// containsPDFUAIDRev reports whether the XMP carries a pdfuaid:rev property
+// (with any value) under the PDF/UA Identification namespace. Like
+// [containsPDFUAIDPart] it keys off the namespace URI, checking every prefix
+// bound to it, so a non-canonical or dual-bound prefix carrying the property
+// still counts. The value itself is checked against [PDFUA2ExpectedRev] by
+// checkPDFUAIDPrefixesIn.
+func containsPDFUAIDRev(ctx context.Context, xmpData []byte) bool {
+	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
+	xmp := string(xmpData)
+	for _, prefix := range xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace) {
+		if strings.Contains(xmp, prefix+":rev>") || strings.Contains(xmp, prefix+":rev=\"") {
+			return true
+		}
+	}
+	return false
 }
 
 // isAnnotHidden checks if an annotation has the Hidden flag set.

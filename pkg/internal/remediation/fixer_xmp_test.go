@@ -93,6 +93,109 @@ func TestFixXMP_GeneratesFromScratch_PDFUA1(t *testing.T) {
 	if !bytes.Contains(xmpBytes, []byte("pdfuaid:part>1")) {
 		t.Errorf("XMP missing pdfuaid:part=1:\n%s", xmpBytes)
 	}
+	// pdfuaid:rev is a PDF/UA-2 property; PDF/UA-1 must not carry it.
+	if bytes.Contains(xmpBytes, []byte("pdfuaid:rev")) {
+		t.Errorf("PDF/UA-1 XMP must not contain pdfuaid:rev:\n%s", xmpBytes)
+	}
+}
+
+func TestFixXMP_GeneratesFromScratch_PDFUA2(t *testing.T) {
+	doc, alloc := newTestDoc(t, minimalCatalogPDF(""))
+
+	if _, err := fixXMP(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixXMP: %v", err)
+	}
+
+	newCatalog := pendingDict(t, alloc, 1)
+	metaRef := newCatalog["Metadata"].(ast.PdfIndirectRef)
+	metaStream := alloc.Pending()[metaRef.ObjectNum].(ast.PdfStream)
+	xmpBytes, _ := metaStream.Bytes(context.Background())
+
+	// ISO 14289-2 §5 requires both pdfuaid:part=2 and pdfuaid:rev=2024.
+	for _, want := range []string{"pdfuaid:part>2", "pdfuaid:rev>2024"} {
+		if !bytes.Contains(xmpBytes, []byte(want)) {
+			t.Errorf("PDF/UA-2 XMP missing %q:\n%s", want, xmpBytes)
+		}
+	}
+}
+
+func TestPatchExistingXMP_InjectsUARev(t *testing.T) {
+	// An existing packet that declares pdfuaid:part=2 but omits the rev.
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
+  <pdfuaid:part>2</pdfuaid:part>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+
+	patched, fixes := patchExistingXMP(xmp, 0, "", 2, infoMetadata{})
+
+	if !strings.Contains(patched, "<pdfuaid:rev>2024</pdfuaid:rev>") {
+		t.Errorf("expected pdfuaid:rev=2024 injection, missing:\n%s", patched)
+	}
+	if !containsFix(fixes, "injected pdfuaid:rev=2024 into XMP") {
+		t.Errorf("expected the rev-injection fix message, got %v", fixes)
+	}
+}
+
+func TestPatchExistingXMP_CorrectsWrongUARev(t *testing.T) {
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
+  <pdfuaid:part>2</pdfuaid:part>
+  <pdfuaid:rev>2018</pdfuaid:rev>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+
+	patched, fixes := patchExistingXMP(xmp, 0, "", 2, infoMetadata{})
+
+	if strings.Contains(patched, "2018") {
+		t.Errorf("stale pdfuaid:rev=2018 should have been corrected:\n%s", patched)
+	}
+	if !strings.Contains(patched, "<pdfuaid:rev>2024</pdfuaid:rev>") {
+		t.Errorf("expected pdfuaid:rev corrected to 2024:\n%s", patched)
+	}
+	if !containsFix(fixes, "set pdfuaid:rev to 2024") {
+		t.Errorf("expected the rev-correction fix message, got %v", fixes)
+	}
+}
+
+func TestPatchExistingXMP_IdempotentUARev(t *testing.T) {
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
+  <pdfuaid:part>2</pdfuaid:part>
+  <pdfuaid:rev>2024</pdfuaid:rev>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+
+	_, fixes := patchExistingXMP(xmp, 0, "", 2, infoMetadata{})
+
+	if containsFix(fixes, "set pdfuaid:rev to 2024") {
+		t.Errorf("an already-correct pdfuaid:rev must not report a fix, got %v", fixes)
+	}
+}
+
+// containsFix reports whether the fix-description slice contains want.
+func containsFix(fixes []string, want string) bool {
+	for _, f := range fixes {
+		if f == want {
+			return true
+		}
+	}
+	return false
 }
 
 // TestPatchExistingXMP_ForeignConformanceDoesNotAbort confirms that a

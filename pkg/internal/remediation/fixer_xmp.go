@@ -198,6 +198,10 @@ func generateXMP(part int, conformance string, uaPart int, info infoMetadata) st
 	}
 	if uaPart > 0 {
 		fmt.Fprintf(&sb, "  <pdfuaid:part>%d</pdfuaid:part>\n", uaPart)
+		// PDF/UA-2 (ISO 14289-2 §5) requires pdfuaid:rev=2024 alongside part.
+		if uaPart == 2 {
+			fmt.Fprintf(&sb, "  <pdfuaid:rev>%s</pdfuaid:rev>\n", compliance.PDFUA2ExpectedRev)
+		}
 	}
 
 	fmt.Fprintf(&sb, "  <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">%s</rdf:li></rdf:Alt></dc:title>\n", title)
@@ -328,6 +332,31 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		if out, err := insertChildElement(buf, fmt.Sprintf("<pdfuaid:part>%d</pdfuaid:part>", uaPart)); err == nil {
 			buf = out
 			fixes = append(fixes, "injected pdfuaid:part into XMP")
+		}
+	}
+
+	// PDF/UA-2 (ISO 14289-2 §5): inject pdfuaid:rev=2024 if missing, or
+	// correct it when present but not the required value.
+	if uaPart == 2 {
+		if findXMPProperty(buf, pdfuaidNS, "rev").Form == xmpPropertyNotFound {
+			if out, err := ensureNamespaceDecl(buf, "pdfuaid", pdfuaidNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf("<pdfuaid:rev>%s</pdfuaid:rev>", compliance.PDFUA2ExpectedRev)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected pdfuaid:rev=2024 into XMP")
+			}
+		} else {
+			before := buf
+			if out, err := replacePropertyValue(buf, pdfuaidNS, "rev", compliance.PDFUA2ExpectedRev); err == nil {
+				buf = out
+				// Compare content, not length: only report a fix when the
+				// value actually changed, so an already-correct rev stays
+				// idempotent.
+				if !bytes.Equal(buf, before) {
+					fixes = append(fixes, "set pdfuaid:rev to 2024")
+				}
+			}
 		}
 	}
 
