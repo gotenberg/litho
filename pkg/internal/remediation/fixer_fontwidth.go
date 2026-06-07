@@ -27,14 +27,18 @@ func matchFontWidth(v compliance.Violation) bool {
 	return contextContains(v, "width mismatch")
 }
 
-// fixFontWidth rewrites a font's declared glyph widths to match the advance
-// widths in its embedded font program, the authoritative source for glyph
-// metrics. A declared width that disagrees with it is wrong; setting it to the
-// program's width is the spec-mandated repair (ISO 19005 glyph-width
-// consistency) and the value the [compliance] width check accepts. Simple fonts
-// (/Widths) and CIDFonts (/W) are both handled. Only entries the width could be
-// computed for and that exceed tolerance are changed, so a font whose widths
-// already agree is left untouched.
+// fixFontWidth rewrites a CIDFontType2's /W widths to match the advance widths
+// in its embedded font program, the authoritative source for glyph metrics. The
+// repair is restricted to CIDFontType2 with an Identity CIDToGIDMap, where CID
+// equals GID and no character-code-to-glyph mapping is involved: the program's
+// width for a CID is unambiguous.
+//
+// Simple-font /Widths are deliberately NOT repaired. Their correction requires
+// litho's character-code to glyph-name to GID resolution, which is unreliable for
+// non-standard and high-bit codes (e.g. WinAnsi 0x96) on real fonts: it can pick
+// the wrong glyph and yield a spurious "mismatch", so rewriting /Widths from it
+// would corrupt correct widths. Until encoding resolution is reliable, simple
+// fonts are left to the validator to report.
 func fixFontWidth(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
 	for objNum, entry := range doc.Index.Entries {
@@ -54,10 +58,6 @@ func fixFontWidth(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			continue
 		}
 
-		if correctSimpleFontWidths(ctx, alloc, doc, objNum, fontDict) {
-			count++
-			continue
-		}
 		if correctCIDFontWidths(ctx, alloc, doc, objNum, fontDict) {
 			count++
 		}
@@ -67,38 +67,6 @@ func fixFontWidth(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		return nil, nil
 	}
 	return []string{fmt.Sprintf("corrected glyph widths in %d font(s)", count)}, nil
-}
-
-// correctSimpleFontWidths rewrites a simple font's /Widths to the font program's
-// advance widths. Returns true when it changed the font.
-func correctSimpleFontWidths(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, fontDict ast.PdfDict) bool {
-	expected, ok := compliance.ExpectedSimpleFontWidths(ctx, doc, fontDict)
-	if !ok {
-		return false
-	}
-	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
-	if err != nil || len(widths) != len(expected) {
-		return false
-	}
-
-	newWidths := make(ast.PdfArray, len(widths))
-	changed := false
-	for i, w := range widths {
-		newWidths[i] = w
-		if expected[i] < 0 {
-			continue
-		}
-		if math.Abs(document.Float(w)-float64(expected[i])) > widthFixTolerance {
-			newWidths[i] = ast.PdfInt(expected[i])
-			changed = true
-		}
-	}
-	if !changed {
-		return false
-	}
-
-	writeFontWidthArray(alloc, fontDict, objNum, "Widths", newWidths)
-	return true
 }
 
 // correctCIDFontWidths rewrites a CIDFont's /W array to the font program's

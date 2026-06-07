@@ -22,11 +22,12 @@ func TestMatchFontWidth(t *testing.T) {
 	}
 }
 
-// TestFixFontWidth_NoopWithoutProgram confirms the fixer leaves a font alone when
-// the embedded program cannot be read, so it never guesses widths. The correction
-// behaviour itself is validated against real fonts by the verapdf remediation
-// corpus (synthetic font programs are impractical to hand-author).
-func TestFixFontWidth_NoopWithoutProgram(t *testing.T) {
+// TestFixFontWidth_SkipsSimpleFont confirms simple fonts (/Widths) are NOT
+// width-repaired: their char-code to glyph mapping is unreliable on real fonts
+// (it produces spurious width "mismatches" for non-standard codes), so rewriting
+// /Widths from it would corrupt correct widths. Only CIDFontType2+Identity, where
+// CID==GID and no mapping is involved, is repaired.
+func TestFixFontWidth_SkipsSimpleFont(t *testing.T) {
 	pdf := fontPDF("<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Helvetica /FirstChar 65 /Widths [500 600] >>")
 	doc, alloc := newTestDoc(t, pdf)
 
@@ -35,7 +36,7 @@ func TestFixFontWidth_NoopWithoutProgram(t *testing.T) {
 		t.Fatalf("fixFontWidth: %v", err)
 	}
 	if len(descs) != 0 || len(alloc.Pending()) != 0 {
-		t.Errorf("a font with no embedded program must be left alone: descs=%v pending=%d", descs, len(alloc.Pending()))
+		t.Errorf("a simple font must not be width-repaired: descs=%v pending=%d", descs, len(alloc.Pending()))
 	}
 }
 

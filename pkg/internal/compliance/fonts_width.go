@@ -104,62 +104,6 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 	return binaryWidths, unitsPerEm, charCodeToGID, true
 }
 
-// ExpectedSimpleFontWidths returns the value each /Widths entry should hold for a
-// simple font (Type1/TrueType/MMType1), computed from the embedded font program
-// and aligned to the font's existing /Widths array: entry i is the width for char
-// code FirstChar+i. A value of -1 means the width could not be determined (no
-// glyph mapping, or a control code the consistency check ignores) and the
-// existing entry should be kept. Returns ok=false when the font is not a
-// width-checkable simple font or has no parseable program. Remediation uses this
-// to repair §6.2.11.5 / §6.3.6 width mismatches with values the width check
-// accepts, keeping checker and fixer in lock-step via [simpleFontGlyphMetrics].
-func ExpectedSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ([]int, bool) {
-	subtype := fontSubtype(ctx, doc, fontDict)
-	if subtype != "Type1" && subtype != "TrueType" && subtype != "MMType1" {
-		return nil, false
-	}
-
-	binaryWidths, unitsPerEm, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
-	if !ok {
-		return nil, false
-	}
-
-	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
-	if err != nil || len(widths) == 0 {
-		return nil, false
-	}
-	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
-	if err != nil {
-		return nil, false
-	}
-
-	out := make([]int, len(widths))
-	for i := range widths {
-		out[i] = -1
-		charCode := int(firstChar) + i
-		// Mirror checkSimpleFontWidths: control codes below 0x20 are not
-		// width-checked, so leave their entries untouched.
-		if charCode < 0x20 {
-			continue
-		}
-		// charCode = FirstChar (0-255) + array index, so it fits uint16.
-		gid := uint16(charCode) //nolint:gosec // bounded by /Widths length + FirstChar
-		if charCodeToGID != nil {
-			mapped, ok := charCodeToGID[uint16(charCode)] //nolint:gosec // see above
-			if !ok {
-				continue
-			}
-			gid = mapped
-		}
-		bw, ok := binaryWidths[gid]
-		if !ok {
-			continue
-		}
-		out[i] = int(math.Round(float64(bw) * 1000.0 / float64(unitsPerEm)))
-	}
-	return out, true
-}
-
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
 // charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
