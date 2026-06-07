@@ -115,6 +115,7 @@ var registry = []fixer{
 	{name: "unknown-ops", safety: safetyContent, matches: matchUnknownOps, apply: fixUnknownOps},
 	{name: "text-control", safety: safetyContent, matches: matchTextControl, apply: fixTextControl},
 	{name: "fonts", safety: safetyContent, matches: matchFontFixes, apply: fixFontIssues},
+	{name: "font-widths", safety: safetyContent, matches: matchFontWidth, apply: fixFontWidth},
 	{name: "tt-encoding", safety: safetyContent, matches: matchTrueTypeEncoding, apply: fixTrueTypeEncoding},
 	{name: "cid-sysinfo", safety: safetyContent, matches: matchCIDSystemInfo, apply: fixCIDSystemInfo},
 	{name: "images", safety: safetyContent, matches: matchImageIssues, apply: fixImageIssues},
