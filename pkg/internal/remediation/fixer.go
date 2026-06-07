@@ -84,6 +84,7 @@ var registry = []fixer{
 	{name: "transparency", safety: safetyResource, matches: matchTransparency, apply: fixTransparency},
 	{name: "group-cs", safety: safetyResource, matches: matchGroupCS, apply: fixGroupCS},
 	{name: "name-utf8", safety: safetyResource, matches: matchNameUTF8, apply: fixNameUTF8},
+	{name: "cid-gidmap", safety: safetyResource, matches: matchCIDToGIDMap, apply: fixCIDToGIDMap},
 	{name: "devicen", safety: safetyResource, matches: matchDeviceNColorants, apply: fixDeviceNColorants},
 	{name: "sep-canon", safety: safetyResource, matches: matchSepCanon, apply: fixSepCanon},
 	{name: "icc-dedup", safety: safetyResource, matches: matchICCDedup, apply: fixICCDedup},
