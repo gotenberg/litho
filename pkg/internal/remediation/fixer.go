@@ -102,6 +102,7 @@ var registry = []fixer{
 	{name: "page-boxes", safety: safetyResource, matches: matchPageBoxes, apply: fixPageBoxes},
 	{name: "page-resources", safety: safetyResource, matches: matchPageResources, apply: fixPageResources},
 	{name: "embedded-subtype", safety: safetyResource, matches: matchEmbeddedSubtype, apply: fixEmbeddedSubtype},
+	{name: "filespec-fuf", safety: safetyResource, matches: matchFileSpecFUF, apply: fixFileSpecFUF},
 	{name: "page-tabs", safety: safetyResource, matches: matchPageTabs, apply: fixPageTabs},
 	{name: "form-tooltip", safety: safetyResource, matches: matchFormTooltip, apply: fixFormTooltip},
 	{name: "javascript", safety: safetyResource, matches: matchJavaScript, apply: fixJavaScript},
