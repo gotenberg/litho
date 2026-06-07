@@ -79,6 +79,7 @@ var registry = []fixer{
 	{name: "table-cells", safety: safetyStructural, matches: matchTableCells, apply: fixTableCells},
 	{name: "list-body", safety: safetyStructural, matches: matchListBody, apply: fixListBody},
 	{name: "figure-alt", safety: safetyStructural, matches: matchFigureAlt, apply: fixFigureAlt},
+	{name: "list-numbering", safety: safetyStructural, matches: matchListNumbering, apply: fixListNumbering},
 	{name: "viewer-prefs", safety: safetyStructural, matches: matchViewerPrefs, apply: fixViewerPrefs},
 	{name: "catalog-lang", safety: safetyStructural, matches: matchCatalogLang, apply: fixCatalogLang},
 	{name: "need-appearances", safety: safetyStructural, matches: matchNeedAppearances, apply: fixNeedAppearances},
