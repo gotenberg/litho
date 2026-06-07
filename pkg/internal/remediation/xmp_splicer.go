@@ -366,14 +366,17 @@ func insertChildElement(xmp []byte, elementXML string) ([]byte, error) {
 	if err != nil {
 		return append([]byte(nil), xmp...), err
 	}
-	// Expand backwards to include the whitespace preceding the close
-	// tag so the injected element adopts that indentation.
+	// Adopt only the run of spaces and tabs immediately before the close
+	// tag as the injected element's indentation. Walking back to the
+	// previous newline would, in a minified packet with no newline before
+	// the close tag, capture the entire preceding document as "indent" and
+	// splice a duplicate of it into the packet, corrupting the XML.
 	insertAt := descEnd
-	lineStart := descEnd
-	for lineStart > 0 && xmp[lineStart-1] != '\n' {
-		lineStart--
+	indentStart := descEnd
+	for indentStart > 0 && (xmp[indentStart-1] == ' ' || xmp[indentStart-1] == '\t') {
+		indentStart--
 	}
-	indent := string(xmp[lineStart:descEnd])
+	indent := string(xmp[indentStart:descEnd])
 
 	injection := indent + elementXML + "\n"
 	out := make([]byte, 0, len(xmp)+len(injection))

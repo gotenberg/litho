@@ -2,6 +2,8 @@ package remediation
 
 import (
 	"bytes"
+	"encoding/xml"
+	"io"
 	"strings"
 	"testing"
 )
@@ -187,6 +189,41 @@ func TestInsertChildElement_NoDescription(t *testing.T) {
 	_, err := insertChildElement(xmp, `<x:foo/>`)
 	if err == nil {
 		t.Error("expected error when no rdf:Description is present")
+	}
+}
+
+// TestInsertChildElement_Minified guards against the indentation bug where a
+// packet with no newline before the close tag made the indent walk capture the
+// entire preceding document and splice a duplicate of it in, producing a second
+// <?xpacket>/<x:xmpmeta> preamble and non-well-formed XML (the source of three
+// PDF/A-2b remediation regressions on veraPDF-built, minified-XMP files).
+func TestInsertChildElement_Minified(t *testing.T) {
+	xmp := []byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">    <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>t</dc:title></rdf:Description>    <rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:conformance="B"/>  </rdf:RDF></x:xmpmeta><?xpacket end="w"?>`)
+
+	out, err := insertChildElement(xmp, `<pdfaid:part>2</pdfaid:part>`)
+	if err != nil {
+		t.Fatalf("insertChildElement: %v", err)
+	}
+	s := string(out)
+	if n := strings.Count(s, "<?xpacket begin"); n != 1 {
+		t.Fatalf("xpacket preamble duplicated: got %d begins\n%s", n, s)
+	}
+	if n := strings.Count(s, "<x:xmpmeta"); n != 1 {
+		t.Errorf("xmpmeta duplicated: got %d\n%s", n, s)
+	}
+	if n := strings.Count(s, "<pdfaid:part>2</pdfaid:part>"); n != 1 {
+		t.Errorf("element not injected exactly once: got %d\n%s", n, s)
+	}
+	// The output must be well-formed XML (the corruption was not).
+	dec := xml.NewDecoder(bytes.NewReader(out))
+	for {
+		_, terr := dec.Token()
+		if terr == io.EOF {
+			break
+		}
+		if terr != nil {
+			t.Fatalf("output not well-formed XML: %v\n%s", terr, s)
+		}
 	}
 }
 
