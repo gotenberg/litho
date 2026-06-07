@@ -12,27 +12,29 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// widthFixTolerance mirrors the compliance width-consistency tolerance: a
-// /Widths entry within one glyph-space unit of the font program's advance width
-// already passes the check, so only larger deviations are rewritten. Keeping the
+// widthFixTolerance mirrors the compliance width-consistency tolerance: a width
+// entry within one glyph-space unit of the font program's advance width already
+// passes the check, so only larger deviations are rewritten. Keeping the
 // threshold equal to the checker's keeps the fixer idempotent and avoids churning
 // values the validator would accept.
 const widthFixTolerance = 1.0
 
 // matchFontWidth matches glyph-width consistency violations (ISO 19005-1 §6.3.6,
 // ISO 19005-2/3 §6.2.11.5, ISO 19005-4 §6.2.10.5). The checker reports each as
-// "char N width mismatch", the one context substring common to every profile.
+// "... width mismatch", the one context substring common to every profile and to
+// both the simple-font (/Widths) and CIDFont (/W) variants.
 func matchFontWidth(v compliance.Violation) bool {
 	return contextContains(v, "width mismatch")
 }
 
-// fixFontWidth rewrites a simple font's /Widths entries to match the advance
-// widths in its embedded font program. The font program is the authoritative
-// source for glyph widths, so an entry that disagrees with it is wrong; setting
-// it to the program's width is the spec-mandated repair (ISO 19005 glyph-width
-// consistency) and the value the [compliance] width check accepts. Only entries
-// the width could be computed for are changed; entries within tolerance are left
-// untouched, so a font whose widths already agree is unmodified.
+// fixFontWidth rewrites a font's declared glyph widths to match the advance
+// widths in its embedded font program, the authoritative source for glyph
+// metrics. A declared width that disagrees with it is wrong; setting it to the
+// program's width is the spec-mandated repair (ISO 19005 glyph-width
+// consistency) and the value the [compliance] width check accepts. Simple fonts
+// (/Widths) and CIDFonts (/W) are both handled. Only entries the width could be
+// computed for and that exceed tolerance are changed, so a font whose widths
+// already agree is left untouched.
 func fixFontWidth(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
 	for objNum, entry := range doc.Index.Entries {
@@ -52,46 +54,162 @@ func fixFontWidth(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			continue
 		}
 
-		expected, ok := compliance.ExpectedSimpleFontWidths(ctx, doc, fontDict)
-		if !ok {
+		if correctSimpleFontWidths(ctx, alloc, doc, objNum, fontDict) {
+			count++
 			continue
 		}
-		widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
-		if err != nil || len(widths) != len(expected) {
-			continue
+		if correctCIDFontWidths(ctx, alloc, doc, objNum, fontDict) {
+			count++
 		}
-
-		newWidths := make(ast.PdfArray, len(widths))
-		changed := false
-		for i, w := range widths {
-			newWidths[i] = w
-			if expected[i] < 0 {
-				continue
-			}
-			if math.Abs(document.Float(w)-float64(expected[i])) > widthFixTolerance {
-				newWidths[i] = ast.PdfInt(expected[i])
-				changed = true
-			}
-		}
-		if !changed {
-			continue
-		}
-
-		// Rewrite the /Widths array in place when it is its own indirect object;
-		// otherwise inline the corrected array on a copy of the font dict.
-		if wref, ok := fontDict["Widths"].(ast.PdfIndirectRef); ok && wref.ObjectNum > 0 {
-			alloc.AllocAt(wref.ObjectNum, newWidths)
-		} else {
-			newFont := make(ast.PdfDict, len(fontDict))
-			maps.Copy(newFont, fontDict)
-			newFont["Widths"] = newWidths
-			alloc.AllocAt(objNum, newFont)
-		}
-		count++
 	}
 
 	if count == 0 {
 		return nil, nil
 	}
 	return []string{fmt.Sprintf("corrected glyph widths in %d font(s)", count)}, nil
+}
+
+// correctSimpleFontWidths rewrites a simple font's /Widths to the font program's
+// advance widths. Returns true when it changed the font.
+func correctSimpleFontWidths(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, fontDict ast.PdfDict) bool {
+	expected, ok := compliance.ExpectedSimpleFontWidths(ctx, doc, fontDict)
+	if !ok {
+		return false
+	}
+	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
+	if err != nil || len(widths) != len(expected) {
+		return false
+	}
+
+	newWidths := make(ast.PdfArray, len(widths))
+	changed := false
+	for i, w := range widths {
+		newWidths[i] = w
+		if expected[i] < 0 {
+			continue
+		}
+		if math.Abs(document.Float(w)-float64(expected[i])) > widthFixTolerance {
+			newWidths[i] = ast.PdfInt(expected[i])
+			changed = true
+		}
+	}
+	if !changed {
+		return false
+	}
+
+	writeFontWidthArray(alloc, fontDict, objNum, "Widths", newWidths)
+	return true
+}
+
+// correctCIDFontWidths rewrites a CIDFont's /W array to the font program's
+// advance widths. Only the individual-entry format [cid [w ...]] is patched; the
+// range format [cidFirst cidLast w] is preserved verbatim, since correcting a
+// range whose glyphs have differing widths would require splitting it. Returns
+// true when it changed the font.
+func correctCIDFontWidths(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, fontDict ast.PdfDict) bool {
+	// Only repair when CID == GID holds, so a CID indexes the font program's
+	// glyph widths directly. That is true for a CIDFontType2 with an Identity
+	// (or absent, default-Identity) CIDToGIDMap. For CIDFontType0 (CFF) or a
+	// stream CIDToGIDMap the mapping is not identity, and computing widths by
+	// treating the CID as the GID would write wrong values and regress the file.
+	subtype, _ := document.ResolveName(ctx, doc, fontDict["Subtype"])
+	if subtype != "CIDFontType2" {
+		return false
+	}
+	if ctg, ok := fontDict["CIDToGIDMap"]; ok {
+		if name, _ := document.ResolveName(ctx, doc, ctg); name != "Identity" {
+			return false
+		}
+	}
+
+	expected, ok := compliance.ExpectedCIDFontWidths(ctx, doc, fontDict)
+	if !ok {
+		return false
+	}
+	wArr, err := document.ResolveArray(ctx, doc, fontDict["W"])
+	if err != nil || len(wArr) == 0 {
+		return false
+	}
+
+	newW, changed := patchCIDWidthArray(ctx, doc, wArr, expected)
+	if !changed {
+		return false
+	}
+
+	writeFontWidthArray(alloc, fontDict, objNum, "W", newW)
+	return true
+}
+
+// patchCIDWidthArray returns a copy of a CIDFont /W array with individual-entry
+// widths corrected to the expected values, and whether anything changed. It
+// mirrors the validator's /W parse: [cid [w ...]] runs are patched per glyph,
+// [cidFirst cidLast w] runs and anything malformed are copied through unchanged.
+func patchCIDWidthArray(ctx context.Context, doc *document.Document, wArr ast.PdfArray, expected map[int]int) (ast.PdfArray, bool) {
+	out := make(ast.PdfArray, 0, len(wArr))
+	changed := false
+	for i := 0; i < len(wArr); {
+		cidStart, ok := resolveIntElem(ctx, doc, wArr[i])
+		if !ok || i+1 >= len(wArr) {
+			out = append(out, wArr[i])
+			i++
+			continue
+		}
+
+		if sub, err := document.ResolveArray(ctx, doc, wArr[i+1]); err == nil && sub != nil {
+			// Individual format: [cidStart [w0 w1 ...]].
+			newSub := make(ast.PdfArray, len(sub))
+			for j, w := range sub {
+				newSub[j] = w
+				if exp, ok := expected[cidStart+j]; ok && math.Abs(document.Float(w)-float64(exp)) > widthFixTolerance {
+					newSub[j] = ast.PdfInt(exp)
+					changed = true
+				}
+			}
+			out = append(out, wArr[i], newSub)
+			i += 2
+			continue
+		}
+
+		if _, ok := resolveIntElem(ctx, doc, wArr[i+1]); ok {
+			// Range format: [cidStart cidEnd w]. Preserve verbatim.
+			if i+2 >= len(wArr) {
+				out = append(out, wArr[i:]...)
+				break
+			}
+			out = append(out, wArr[i], wArr[i+1], wArr[i+2])
+			i += 3
+			continue
+		}
+
+		out = append(out, wArr[i])
+		i++
+	}
+	return out, changed
+}
+
+// writeFontWidthArray stores the corrected width array back: in place when the
+// original entry is its own indirect object, otherwise inlined on a copy of the
+// font dict.
+func writeFontWidthArray(alloc *writer.ObjAllocator, fontDict ast.PdfDict, objNum int, key ast.PdfName, arr ast.PdfArray) {
+	if ref, ok := fontDict[key].(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		alloc.AllocAt(ref.ObjectNum, arr)
+		return
+	}
+	newFont := make(ast.PdfDict, len(fontDict))
+	maps.Copy(newFont, fontDict)
+	newFont[key] = arr
+	alloc.AllocAt(objNum, newFont)
+}
+
+// resolveIntElem resolves a /W array element to an int, reporting ok=false when
+// it is not an integer.
+func resolveIntElem(ctx context.Context, doc *document.Document, obj ast.PdfObject) (int, bool) {
+	r, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return 0, false
+	}
+	if n, ok := r.(ast.PdfInt); ok {
+		return int(n), true
+	}
+	return 0, false
 }

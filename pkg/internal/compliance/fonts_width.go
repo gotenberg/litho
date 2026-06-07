@@ -218,6 +218,39 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 	return nil
 }
 
+// ExpectedCIDFontWidths returns each CID's correct width (in 1000-unit glyph
+// space) for a CIDFont, computed from the embedded font program. The map is
+// keyed by CID, which the width check treats as equal to the glyph index
+// (the Identity CIDToGIDMap assumption); a CID absent from the map has no glyph
+// in the program and should keep its declared width. Returns ok=false when the
+// font program is absent or unparseable. Remediation uses this to repair §6.2.11.5
+// width mismatches in the /W array, sharing the same metrics extraction as the
+// width check so the two stay consistent.
+func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict) (map[int]int, bool) {
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
+	if fd == nil {
+		return nil, false
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil, false
+	}
+	binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
+	if binaryWidths == nil {
+		return nil, false
+	}
+	unitsPerEm := typography.ReadUnitsPerEm(fontData)
+	if unitsPerEm == 0 {
+		unitsPerEm = 1000
+	}
+
+	out := make(map[int]int, len(binaryWidths))
+	for gid, bw := range binaryWidths {
+		out[int(gid)] = int(math.Round(float64(bw) * 1000.0 / float64(unitsPerEm)))
+	}
+	return out, true
+}
+
 // checkType3FontWidths compares /Widths against glyph widths declared by
 // d0/d1 operators in Type3 font CharProcs.
 func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Violation {
