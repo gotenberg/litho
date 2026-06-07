@@ -128,7 +128,7 @@ func buildAnnotStructTypeMap(ctx context.Context, doc *document.Document, catalo
 	}
 
 	// Load role map for resolving non-standard types to standard types.
-	roleMap := loadRoleMap(ctx, doc, treeRoot)
+	roleMap := LoadRoleMap(ctx, doc, treeRoot)
 
 	result := make(map[int]string)
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
@@ -149,8 +149,11 @@ func buildAnnotStructTypeMap(ctx context.Context, doc *document.Document, catalo
 	return result
 }
 
-// loadRoleMap loads the /RoleMap dictionary from the structure tree root.
-func loadRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) map[ast.PdfName]ast.PdfName {
+// LoadRoleMap loads the /RoleMap dictionary from the structure tree root. It is
+// exported so a remediation fixer resolves a structure element's standard type
+// exactly as the validator does, rather than re-deriving the mapping and risking
+// drift.
+func LoadRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) map[ast.PdfName]ast.PdfName {
 	rmObj, ok := structTreeRoot["RoleMap"]
 	if !ok {
 		return nil

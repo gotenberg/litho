@@ -94,6 +94,7 @@ type RemediateOption func(*remediateOpts)
 type remediateOpts struct {
 	lang            string
 	preserveContent bool
+	figureAlt       string
 	tolerance       RegressionTolerance
 }
 
@@ -143,6 +144,20 @@ func WithLanguage(lang string) RemediateOption {
 func WithAggressiveFixes() RemediateOption {
 	return func(o *remediateOpts) {
 		o.preserveContent = false
+	}
+}
+
+// WithFigureAltText sets the alternate text written into a Figure structure
+// element that lacks the /Alt PDF/UA requires (ISO 14289-1 §7.3, ISO 14289-2
+// §8.2.5.28.2). A processor cannot describe an image, so litho never fabricates
+// alt text by default: it leaves the figure for a human. Supplying a string here
+// fills missing /Alt in any mode; the string is the caller's own content, not a
+// machine guess. Without it, [WithAggressiveFixes] inserts a generic placeholder
+// to pass the mechanical presence check, which satisfies the validator but does
+// not convey the image to a reader, so the document still needs human review.
+func WithFigureAltText(alt string) RemediateOption {
+	return func(o *remediateOpts) {
+		o.figureAlt = alt
 	}
 }
 
@@ -908,7 +923,7 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent}
+	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt}
 }
 
 // RemediatePDFA validates the document against the given PDF/A profile,
@@ -1039,7 +1054,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	for _, o := range opts {
 		o(&rcfg)
 	}
-	remOpts := remediation.Options{Lang: rcfg.lang, PreserveContent: rcfg.preserveContent}
+	remOpts := remediation.Options{Lang: rcfg.lang, PreserveContent: rcfg.preserveContent, FigureAlt: rcfg.figureAlt}
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}

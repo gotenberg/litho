@@ -1136,6 +1136,21 @@ func TestWriter_RemediatePDFUA_BasicFixes(t *testing.T) {
 	}
 }
 
+func TestWithFigureAltText_ThreadsIntoOptions(t *testing.T) {
+	// The public WithFigureAltText option must reach the internal remediation
+	// Options the PDF/A and PDF/UA entry points share, and must default to empty
+	// so litho never fabricates alt text unless the caller asks for it.
+	_, opts := remediateConfig([]RemediateOption{WithFigureAltText("A quarterly revenue chart")})
+	if opts.FigureAlt != "A quarterly revenue chart" {
+		t.Errorf("FigureAlt: got %q, want the supplied string", opts.FigureAlt)
+	}
+
+	_, def := remediateConfig(nil)
+	if def.FigureAlt != "" {
+		t.Errorf("default FigureAlt: got %q, want empty (no fabrication by default)", def.FigureAlt)
+	}
+}
+
 func TestPipeline_RemediatePDFUA(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()

@@ -17,37 +17,44 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 
-	roleMap := loadRoleMap(ctx, doc, treeRoot)
+	roleMap := LoadRoleMap(ctx, doc, treeRoot)
 
 	var results []Violation
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
-		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		// Resolve through RoleMap to catch non-standard types mapped to Figure.
-		stdType := resolveStandardType(typeName, roleMap, profile)
-		if stdType != "Figure" {
-			return
-		}
-
-		if profile == "PDF/UA-1" {
-			// PDF/UA-1 §7.3: Figure must have non-empty /Alt, or /ActualText (presence suffices).
-			hasAlt := hasNonEmptyStringKey(ctx, doc, elem, "Alt")
-			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
-			if !hasAlt && !hasActualText {
-				results = append(results, Violation{Rule: rule, Context: path})
-			}
-		} else {
-			// PDF/UA-2 §8.2.5.28.2: Figure must have /Alt, /ActualText, or a /Caption child.
-			// Presence (even empty) satisfies the requirement for PDF/UA-2.
-			hasAlt := hasStringKeyPresent(ctx, doc, elem, "Alt")
-			hasActualText := hasStringKeyPresent(ctx, doc, elem, "ActualText")
-			hasCaptionChild := figureHasCaptionChild(ctx, doc, elem)
-			if !hasAlt && !hasActualText && !hasCaptionChild {
-				results = append(results, Violation{Rule: rule, Context: path})
-			}
+		if FigureNeedsAltText(ctx, doc, elem, roleMap, profile) {
+			results = append(results, Violation{Rule: rule, Context: path})
 		}
 	})
 
 	return results
+}
+
+// FigureNeedsAltText reports whether elem is a Figure structure element, directly
+// or through the role map, that lacks the alternate text PDF/UA requires. A
+// remediation fixer calls it so it repairs exactly the figures this validator
+// flags, with no drift. roleMap comes from [LoadRoleMap]; profile selects the
+// PDF/UA-1 §7.3 or PDF/UA-2 §8.2.5.28.2 requirement.
+func FigureNeedsAltText(ctx context.Context, doc *document.Document, elem ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName, profile string) bool {
+	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+	// Resolve through RoleMap to catch non-standard types mapped to Figure.
+	if resolveStandardType(typeName, roleMap, profile) != "Figure" {
+		return false
+	}
+	return !figureSatisfiesAltText(ctx, doc, elem, profile)
+}
+
+// figureSatisfiesAltText reports whether a Figure already carries the alternate
+// text its profile requires. PDF/UA-1 §7.3 needs a non-empty /Alt or a present
+// /ActualText; PDF/UA-2 §8.2.5.28.2 accepts a present /Alt, a present
+// /ActualText, or a Caption child (presence alone suffices, even when empty).
+func figureSatisfiesAltText(ctx context.Context, doc *document.Document, elem ast.PdfDict, profile string) bool {
+	if profile == "PDF/UA-1" {
+		return hasNonEmptyStringKey(ctx, doc, elem, "Alt") ||
+			hasStringKeyPresent(ctx, doc, elem, "ActualText")
+	}
+	return hasStringKeyPresent(ctx, doc, elem, "Alt") ||
+		hasStringKeyPresent(ctx, doc, elem, "ActualText") ||
+		figureHasCaptionChild(ctx, doc, elem)
 }
 
 func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Violation {

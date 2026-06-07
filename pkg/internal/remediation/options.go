@@ -11,4 +11,14 @@ type Options struct {
 	// (e.g., stripping unknown operators, clamping integers, generating
 	// empty annotation appearances, re-encoding LZW streams).
 	PreserveContent bool
+	// FigureAlt is the alternate text written into a Figure structure element
+	// that lacks the /Alt (or /ActualText) PDF/UA requires. A processor cannot
+	// describe an image, and a generic placeholder satisfies the validator's
+	// presence check (ISO 14289-1 §7.3, ISO 14289-2 §8.2.5.28.2) while masking
+	// the missing description from assistive technology, so it is never
+	// fabricated by default. When set, this string is used in either mode. When
+	// empty, the figure is left for a human in the default safe mode, and in
+	// aggressive mode (PreserveContent == false) a generic placeholder is
+	// inserted so the document passes the mechanical check.
+	FigureAlt string
 }

@@ -984,7 +984,7 @@ func isMathMLType(typeName ast.PdfName) bool {
 // types that are not in the /RoleMap. This catches types used in the document
 // but never declared in the role mapping.
 func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
-	roleMap := loadRoleMap(ctx, doc, structTreeRoot)
+	roleMap := LoadRoleMap(ctx, doc, structTreeRoot)
 	rule := roleMapNonStandardRule(profile)
 	if rule.Specification == "" {
 		return
