@@ -71,6 +71,7 @@ var registry = []fixer{
 	// remaining the fallback for a document auto-tagging cannot process.
 	{name: "auto-tag", safety: safetyStructural, matches: matchAutoTag, apply: fixAutoTag},
 	{name: "mark-info", safety: safetyStructural, matches: matchMarkInfo, apply: fixMarkInfo},
+	{name: "suspects", safety: safetyStructural, matches: matchSuspects, apply: fixSuspects},
 	{name: "struct-tree", safety: safetyStructural, matches: matchStructTree, apply: fixStructTree},
 	{name: "rolemap", safety: safetyStructural, matches: matchRoleMap, apply: fixRoleMap},
 	{name: "content-tag", safety: safetyStructural, matches: matchContentTag, apply: fixContentTag},
