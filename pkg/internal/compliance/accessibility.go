@@ -83,6 +83,9 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Media clip data CT and Alt (PDF/UA-1 §7.18.6.2 t01/t02).
 	results = append(results, checkMediaClipData(ctx, doc, catalog, profile)...)
 
+	// Forbidden Sound/Movie annotations (PDF/UA-2 §8.9.2.4.11 t01/t02).
+	results = append(results, checkPDFUA2ForbiddenMediaAnnots(ctx, doc, catalog, profile)...)
+
 	// Content marking (PDF/UA-1 §7.1 t3).
 	results = append(results, checkContentMarking(ctx, doc, catalog, profile)...)
 

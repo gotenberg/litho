@@ -71,6 +71,40 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, _ ast.Pd
 	return results
 }
 
+// checkPDFUA2ForbiddenMediaAnnots flags Sound and Movie annotations, which
+// PDF/UA-2 forbids (ISO 14289-2 §8.9.2.4.11 t01/t02). These multimedia
+// annotation types cannot be made accessible under PDF/UA-2, so their mere
+// presence is non-conformant.
+func checkPDFUA2ForbiddenMediaAnnots(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if PDFUAPart(profile) != 2 {
+		return nil
+	}
+
+	var results []Violation
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return results
+		}
+		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annots {
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			switch subtype {
+			case "Sound":
+				results = append(results, failf(Rule_14289_2_8_9_2_4_11_t01,
+					"Sound annotation is forbidden in PDF/UA-2")...)
+			case "Movie":
+				results = append(results, failf(Rule_14289_2_8_9_2_4_11_t02,
+					"Movie annotation is forbidden in PDF/UA-2")...)
+			}
+		}
+	}
+	return results
+}
+
 // checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
 // have a non-empty /Contents key providing an alternate description.
 func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
