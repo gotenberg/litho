@@ -75,6 +75,7 @@ var registry = []fixer{
 	{name: "rolemap", safety: safetyStructural, matches: matchRoleMap, apply: fixRoleMap},
 	{name: "content-tag", safety: safetyStructural, matches: matchContentTag, apply: fixContentTag},
 	{name: "table-sections", safety: safetyStructural, matches: matchTableSections, apply: fixTableSections},
+	{name: "list-body", safety: safetyStructural, matches: matchListBody, apply: fixListBody},
 	{name: "figure-alt", safety: safetyStructural, matches: matchFigureAlt, apply: fixFigureAlt},
 	{name: "viewer-prefs", safety: safetyStructural, matches: matchViewerPrefs, apply: fixViewerPrefs},
 	{name: "catalog-lang", safety: safetyStructural, matches: matchCatalogLang, apply: fixCatalogLang},
