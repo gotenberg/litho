@@ -21,7 +21,8 @@ func matchGraphics(v compliance.Violation) bool {
 		clausePrefix(v, "6.2.8.2") || // reference XObject /Ref
 		clausePrefix(v, "6.2.10") && descriptionContains(v, "blend mode") || // BM (parts 2+)
 		descriptionContains(v, "Alternates") || // image /Alternates
-		descriptionContains(v, "Interpolate") // image /Interpolate
+		descriptionContains(v, "Interpolate") || // image /Interpolate
+		descriptionContains(v, "OPI") // image or form /OPI (all PDF/A parts)
 }
 
 // validRenderingIntents lists the four standard rendering intents per
@@ -334,6 +335,16 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 				delete(newDict, "Alternates")
 				modified = true
 				notes = append(notes, fmt.Sprintf("removed /Alternates from image %s", string(name)))
+			}
+
+			// Remove /OPI: forbidden on image XObjects in every PDF/A part
+			// (ISO 19005-1 §6.2.4, ISO 19005-2/3 §6.2.8, ISO 19005-4 §6.2.7.1).
+			// OPI is pre-press workflow metadata with no rendering effect, so
+			// dropping it preserves the image. The form branch already does this.
+			if _, ok := newDict["OPI"]; ok {
+				delete(newDict, "OPI")
+				modified = true
+				notes = append(notes, fmt.Sprintf("removed /OPI from image %s", string(name)))
 			}
 
 			// Set /Interpolate to false (6.2.4).

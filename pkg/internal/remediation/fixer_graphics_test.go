@@ -20,6 +20,73 @@ func TestMatchGraphics_PostScriptXObject(t *testing.T) {
 	}
 }
 
+// TestMatchGraphics_ImageOPI covers image /OPI rules across PDF/A parts, which
+// the matcher previously omitted (only the form /OPI clauses were matched).
+func TestMatchGraphics_ImageOPI(t *testing.T) {
+	t.Parallel()
+	for _, r := range []compliance.Rule{
+		compliance.Rule_19005_1_6_2_4_t02,
+		compliance.Rule_19005_2_6_2_8_t02,
+		compliance.Rule_19005_3_6_2_8_t02,
+		compliance.Rule_19005_4_6_2_7_1_t02,
+	} {
+		if !matchGraphics(compliance.Violation{Rule: r}) {
+			t.Errorf("matchGraphics must match image OPI rule (clause %s)", r.Clause)
+		}
+	}
+}
+
+// pdfWithImageOPI builds a single-page PDF whose image XObject carries a
+// forbidden /OPI dictionary plus a one-byte raw stream body.
+func pdfWithImageOPI() []byte {
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.6\n")
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 4 0 R >> >> >>",
+	}
+	offsets := make([]int, 5)
+	for i, body := range objs {
+		offsets[i+1] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	offsets[4] = buf.Len()
+	buf.WriteString("4 0 obj\n<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB /OPI << /F (a.tif) >> /Length 1 >>\nstream\n\x7f\nendstream\nendobj\n")
+	xrefStart := buf.Len()
+	buf.WriteString("xref\n0 5\n0000000000 65535 f \r\n")
+	for i := 1; i <= 4; i++ {
+		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefStart)
+	return buf.Bytes()
+}
+
+// TestFixGraphics_RemovesImageOPI confirms the image branch now drops /OPI (the
+// form branch already did) while preserving the image stream bytes.
+func TestFixGraphics_RemovesImageOPI(t *testing.T) {
+	doc, alloc := newTestDoc(t, pdfWithImageOPI())
+
+	if _, err := fixGraphics(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
+		t.Fatalf("fixGraphics: %v", err)
+	}
+
+	stream, ok := alloc.Pending()[4].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("expected image XObject (obj 4) rewritten as a stream, got %T", alloc.Pending()[4])
+	}
+	if _, has := stream.Dict["OPI"]; has {
+		t.Error("/OPI must be removed from the image XObject")
+	}
+	data, err := stream.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("reading repaired image stream: %v", err)
+	}
+	if !bytes.Equal(data, []byte{0x7f}) {
+		t.Errorf("image stream data not preserved: got %v, want [127]", data)
+	}
+}
+
 // pdfWithImageIntent builds a single-page PDF whose page references an image
 // XObject carrying the given /Intent and raw stream data. A non-empty filter is
 // emitted as /Filter so the test can confirm the fixer preserves the raw
