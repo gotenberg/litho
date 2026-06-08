@@ -670,6 +670,16 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		}
 		loc := fmt.Sprintf("form field %d", i)
 
+		// §6.6.2 t2 (PDF/A-1) / §6.4.1 t2 (PDF/A-2/3): a form field dictionary
+		// shall not contain an /AA additional-actions entry. veraPDF tests
+		// containsAA on the PDFormField object, so mere presence of the key is
+		// the violation, independent of the actions it holds.
+		if _, hasAA := field["AA"]; hasAA {
+			if rule := fieldAARule(part); rule != (Rule{}) {
+				*results = append(*results, failf(rule, "%s contains forbidden /AA entry", loc)...)
+			}
+		}
+
 		// Check /A on the field.
 		if aObj, hasA := field["A"]; hasA {
 			aDict, err := document.ResolveDict(ctx, doc, aObj)
@@ -705,6 +715,14 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			}
 		}
 	}
+}
+
+// fieldAARule selects the "form field shall not contain /AA" rule by PDF/A
+// part: ISO 19005-1 §6.6.2 t2 and ISO 19005-2/3 §6.4.1 t2. It returns the zero
+// Rule for parts outside 1-3, since PDF/A-4 permits a restricted /AA key set
+// (§6.6.3) and PDF/UA has no equivalent prohibition.
+func fieldAARule(part int) Rule {
+	return ruleByPart(part, Rule_19005_1_6_6_2_t02, Rule_19005_2_6_4_1_t02, Rule_19005_3_6_4_1_t02, Rule{})
 }
 
 // actionKeysPresent returns a human-readable string listing which of /A and

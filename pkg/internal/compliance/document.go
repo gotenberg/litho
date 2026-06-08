@@ -70,9 +70,9 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkPermissionsDict(ctx, doc, catalog, part)...)
 	}
 
-	// §6.11 t2: PresSteps forbidden.
-	if part == 4 {
-		results = append(results, checkPresSteps(ctx, doc, catalog)...)
+	// §6.10 t2 (parts 2/3) / §6.11 t2 (part 4): PresSteps forbidden.
+	if part >= 2 {
+		results = append(results, checkPresSteps(ctx, doc, catalog, part)...)
 	}
 
 	// §6.9 t1: embedded file stream /Subtype MIME type.
@@ -504,15 +504,22 @@ func configName(ctx context.Context, doc *document.Document, cfg ast.PdfDict) st
 	return ""
 }
 
-// checkPresSteps validates PDF/A-4 §6.11 t2: no page may have /PresSteps.
-func checkPresSteps(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
+// checkPresSteps validates that no page contains a /PresSteps entry:
+// ISO 19005-2/3 §6.10 t2 and ISO 19005-4 §6.11 t2.
+func checkPresSteps(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 	for i, page := range pages {
 		if _, has := page["PresSteps"]; has {
-			return failf(Rule_19005_4_6_11_t02, "page %d contains /PresSteps entry", i)
+			return failf(presStepsRule(part), "page %d contains /PresSteps entry", i)
 		}
 	}
 	return nil
+}
+
+// presStepsRule selects the forbidden-/PresSteps rule by part: ISO 19005-2/3
+// §6.10 t2 and ISO 19005-4 §6.11 t2.
+func presStepsRule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_10_t02, Rule_19005_3_6_10_t02, Rule_19005_4_6_11_t02)
 }
 
 // checkEmbeddedFileMIME validates PDF/A-4 §6.9 t1: embedded file streams must

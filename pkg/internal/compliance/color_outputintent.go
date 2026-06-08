@@ -15,6 +15,12 @@ func outputIntentConsistencyRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_2_t02, Rule_19005_2_6_2_3_t02, Rule_19005_3_6_2_3_t02, Rule_19005_4_6_2_3_t02)
 }
 
+// destOutputProfileRefRule selects the forbidden-/DestOutputProfileRef rule for
+// PDF/X OutputIntents by part: ISO 19005-2/3 §6.2.3 t3.
+func destOutputProfileRefRule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_3_t03, Rule_19005_3_6_2_3_t03, Rule{})
+}
+
 // checkOutputIntentICC validates OutputIntent ICC profiles per §6.2.2 (part 1)
 // or §6.2.3 (parts 2-4). It returns the ICC colour space string and whether a
 // valid ICC profile was found.
@@ -60,6 +66,16 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 		subtypeName, _ := document.ResolveName(ctx, doc, intent["S"])
 		if subtypeName == "GTS_PDFA1" {
 			pdfaIntentCount++
+		}
+
+		// ISO 19005-2/3 §6.2.3 t3: a PDF/X OutputIntent (S == GTS_PDFX) shall
+		// not contain DestOutputProfileRef. Unlike PDF/A-4, parts 2/3 forbid
+		// the key only on PDF/X intents, so the subtype guard is mandatory.
+		if (part == 2 || part == 3) && subtypeName == "GTS_PDFX" {
+			if _, has := intent["DestOutputProfileRef"]; has {
+				*results = append(*results, failf(destOutputProfileRefRule(part),
+					"OutputIntent[%d]: PDF/X intent contains forbidden /DestOutputProfileRef", i)...)
+			}
 		}
 
 		// Only PDF/A OutputIntents provide device CS coverage.
