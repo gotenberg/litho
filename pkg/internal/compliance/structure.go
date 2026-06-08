@@ -397,6 +397,16 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		return
 	}
 
+	// §7.1 t12 (UA-1) / §8.2.1 t2 (UA-2): every structure element shall contain
+	// a /P (parent) entry. The structure tree root is never reached here (it has
+	// no /S), so only genuine structure elements are checked.
+	if IsPDFUA(state.profile) {
+		if _, hasP := elem["P"]; !hasP {
+			*state.results = append(*state.results,
+				failf(structParentPresenceRule(state.profile), "%s element lacks /P parent entry", typeName)...)
+		}
+	}
+
 	// Table and list structure validation.
 	validateTableContainment(state, typeName, parentType)
 	validateTableChildren(state, typeName, parentType)
@@ -405,6 +415,23 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// PDF/UA-2 §8.2.5.25: L with Lbl children must have ListNumbering attribute.
 	if typeName == "L" && state.profile == "PDF/UA-2" {
 		validateListNumbering(ctx, state, elem)
+	}
+
+	// PDF/UA-2 §8.2.5.25 t2: real content within an LI shall be enclosed in Lbl
+	// or LBody, never a direct content item of the LI.
+	if typeName == "LI" && state.profile == "PDF/UA-2" && liHasDirectContentItem(ctx, state.doc, elem) {
+		*state.results = append(*state.results,
+			failf(Rule_14289_2_8_2_5_25_t02, "LI element directly contains a content item")...)
+	}
+
+	// PDF/UA-2 §8.2.5.14 t4: a FENote NoteType attribute, when present, shall be
+	// Footnote, Endnote, or None.
+	if typeName == "FENote" && state.profile == "PDF/UA-2" {
+		if nt := resolveAttributeValue(ctx, state.doc, elem, "NoteType"); nt != "" &&
+			nt != "Footnote" && nt != "Endnote" && nt != "None" {
+			*state.results = append(*state.results,
+				failf(Rule_14289_2_8_2_5_14_t04, "FENote NoteType %q is not Footnote/Endnote/None", nt)...)
+		}
 	}
 
 	// PDF/UA-2 §8.2.5.29: math structure type must only appear inside Formula.
@@ -754,6 +781,48 @@ func validateListNumbering(ctx context.Context, state *walkState, lElem ast.PdfD
 }
 
 // liHasLblChild checks if an LI element has a direct Lbl child.
+// structParentPresenceRule selects the structure-element /P presence rule by UA
+// profile: ISO 14289-1 §7.1 t12 and ISO 14289-2 §8.2.1 t2.
+func structParentPresenceRule(profile string) Rule {
+	if profile == "PDF/UA-2" {
+		return Rule_14289_2_8_2_1_t02
+	}
+	return Rule_14289_1_7_1_t12
+}
+
+// liHasDirectContentItem reports whether an LI structure element directly
+// contains a content item (a bare MCID integer, or an /MCR or /OBJR dict) rather
+// than enclosing all real content in Lbl or LBody children.
+func liHasDirectContentItem(ctx context.Context, doc *document.Document, liElem ast.PdfDict) bool {
+	kObj, ok := liElem["K"]
+	if !ok {
+		return false
+	}
+
+	isContentItem := func(item ast.PdfObject) bool {
+		if _, ok := item.(ast.PdfInt); ok {
+			return true
+		}
+		d, err := document.ResolveDict(ctx, doc, item)
+		if err != nil || d == nil {
+			return false
+		}
+		t, _ := document.ResolveName(ctx, doc, d["Type"])
+		return t == "MCR" || t == "OBJR"
+	}
+
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		return isContentItem(kObj)
+	}
+	for _, item := range arr {
+		if isContentItem(item) {
+			return true
+		}
+	}
+	return false
+}
+
 func liHasLblChild(ctx context.Context, doc *document.Document, liElem ast.PdfDict) bool {
 	kObj, ok := liElem["K"]
 	if !ok {
