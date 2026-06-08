@@ -4,11 +4,20 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
+
+// mimeTypePattern matches a "type/subtype" MIME string. It mirrors veraPDF's
+// ISO 19005-3 §6.8 t1 test (^[-\w+.]+/[-\w+.]+$) exactly so the check never
+// rejects a /Subtype that veraPDF accepts.
+//
+//nolint:gochecknoglobals // compiled-once pattern shared by the MIME check.
+var mimeTypePattern = regexp.MustCompile(`^[-\w+.]+/[-\w+.]+$`)
 
 // validAFRelationships lists the valid values for /AFRelationship (ISO 32000-2,
 // 7.11.3).
@@ -86,6 +95,11 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Check /AFRelationship (required for part 3+ and part 4).
 		results = append(results, checkAFRelationship(ctx, doc, fs, part, profile)...)
+
+		// §6.8 t1 (PDF/A-3): embedded file stream /Subtype must be a valid MIME type.
+		if part == 3 {
+			results = append(results, checkEmbeddedSubtypeMIME(ctx, doc, fs)...)
+		}
 	}
 
 	// §6.9 t3: PDF/A-4 embedded files must themselves be PDF/A-compliant.
@@ -100,6 +114,37 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	doc.Logger.Debug("compliance.embedded: embedded file checks complete", "violations", len(results))
+	return results
+}
+
+// checkEmbeddedSubtypeMIME validates ISO 19005-3 §6.8 t1: each embedded file
+// stream shall declare a valid MIME type in its /Subtype. The embedded streams
+// are the /F and /UF entries of the file specification's /EF dictionary.
+func checkEmbeddedSubtypeMIME(ctx context.Context, doc *document.Document, fs fileSpecEntry) []Violation {
+	efDict, err := document.ResolveDict(ctx, doc, fs.dict["EF"])
+	if err != nil || efDict == nil {
+		return nil
+	}
+
+	var results []Violation
+	for _, key := range []ast.PdfName{"F", "UF"} {
+		streamObj, ok := efDict[key]
+		if !ok {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, streamObj)
+		if err != nil {
+			doc.Logger.Debug("compliance.embedded: cannot resolve embedded file stream", "error", err)
+			continue
+		}
+		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		// /Subtype is a name that may encode '/' as #2F.
+		mime := strings.ReplaceAll(strings.ReplaceAll(string(subtype), "#2F", "/"), "#2f", "/")
+		if !mimeTypePattern.MatchString(mime) {
+			results = append(results, failf(Rule_19005_3_6_8_t01,
+				"object %d: embedded file /Subtype %q is not a valid MIME type", fs.objNum, subtype)...)
+		}
+	}
 	return results
 }
 

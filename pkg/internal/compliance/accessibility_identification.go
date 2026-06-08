@@ -83,6 +83,34 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
+// checkMetadataTypeSubtype validates ISO 14289-1 §7.1 t8 and ISO 14289-2
+// §8.11.1 t2: the catalog /Metadata entry shall be a metadata stream whose
+// dictionary has /Type Metadata and /Subtype XML. veraPDF's containsMetadata is
+// satisfied only when both name values are correct.
+func checkMetadataTypeSubtype(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if !IsPDFUA(profile) {
+		return nil
+	}
+	if stream, err := document.ResolveStream(ctx, doc, catalog["Metadata"]); err == nil {
+		typeName, _ := document.ResolveName(ctx, doc, stream.Dict["Type"])
+		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		if typeName == "Metadata" && subtype == "XML" {
+			return nil
+		}
+	}
+	return fail(metadataTypeSubtypeRule(profile),
+		"catalog /Metadata is missing or lacks /Type Metadata and /Subtype XML")
+}
+
+// metadataTypeSubtypeRule selects the catalog /Metadata stream Type/Subtype rule
+// by UA profile: ISO 14289-1 §7.1 t8 and ISO 14289-2 §8.11.1 t2.
+func metadataTypeSubtypeRule(profile string) Rule {
+	if profile == "PDF/UA-2" {
+		return Rule_14289_2_8_11_1_t02
+	}
+	return Rule_14289_1_7_1_t08
+}
+
 // asForbiddenRule selects the "/AS forbidden in an OC configuration dict" rule
 // by UA profile: ISO 14289-1 §7.10 t2 and ISO 14289-2 §8.7 t2.
 func asForbiddenRule(profile string) Rule {

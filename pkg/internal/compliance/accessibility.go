@@ -53,6 +53,9 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// PDF/UA identification: XMP pdfuaid namespace validation.
 	results = append(results, checkPDFUAIdentification(ctx, doc, catalog, profile)...)
 
+	// Catalog /Metadata stream /Type and /Subtype (UA-1 §7.1 t8, UA-2 §8.11.1 t2).
+	results = append(results, checkMetadataTypeSubtype(ctx, doc, catalog, profile)...)
+
 	// PDF/UA-id property prefix validation (§5 t4/t5).
 	results = append(results, checkPDFUAIDPrefixes(ctx, doc, catalog, profile)...)
 
