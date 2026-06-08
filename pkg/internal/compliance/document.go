@@ -9,11 +9,12 @@ import (
 )
 
 // checkDocumentGroup validates document-level properties for PDF/A and PDF/UA:
-//   - PDF/A-1: PDF version must be 1.4 or lower.
+//   - PDF/A-1: PDF version must be 1.4 or lower; /OCProperties forbidden.
 //   - PDF/A-4: PDF version must be 2.0.
 //   - PDF/A parts 2+/4: /AlternatePresentations forbidden in /Names,
 //     /Requirements key forbidden in catalog.
-//   - PDF/A parts 2+/4: /OCProperties must have /AS array if /OCGs present.
+//   - PDF/A parts 2+/4: /OCProperties must have /AS array if /OCGs present;
+//     OC config dicts require unique /Name and complete /Order.
 //   - PDF/A-4: /Info dict restrictions, /Perms dict restrictions.
 //   - PDF/UA-2: PDF version must be 2.0.
 func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
@@ -39,6 +40,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	if part == 1 {
 		results = append(results, checkVersionPart1(doc, catalog)...)
+		results = append(results, checkForbiddenOCProperties(catalog)...)
 	}
 
 	if part == 4 {
@@ -55,9 +57,9 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkOCGUsageApplication(ctx, doc, catalog, part)...)
 	}
 
-	if part == 4 {
-		results = append(results, checkOCConfigNamesPDFA(ctx, doc, catalog)...)
-		results = append(results, checkOCGOrderCompleteness(ctx, doc, catalog)...)
+	if part >= 2 {
+		results = append(results, checkOCConfigNamesPDFA(ctx, doc, catalog, part)...)
+		results = append(results, checkOCGOrderCompleteness(ctx, doc, catalog, part)...)
 	}
 
 	if part == 4 {
@@ -371,9 +373,41 @@ func permsDictRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_1_12_t01, Rule_19005_3_6_1_12_t01, Rule_19005_4_6_1_11_t01)
 }
 
+// checkForbiddenOCProperties validates ISO 19005-1 §6.1.13 t1: a PDF/A-1
+// document catalog shall not contain the OCProperties key. Optional content is
+// not permitted in PDF/A-1, and veraPDF derives isOptionalContentPresent from
+// the catalog OCProperties entry, so its presence is the conformance signal.
+func checkForbiddenOCProperties(catalog ast.PdfDict) []Violation {
+	if _, ok := catalog["OCProperties"]; ok {
+		return fail(Rule_19005_1_6_1_13_t01, "catalog contains /OCProperties (optional content forbidden in PDF/A-1)")
+	}
+	return nil
+}
+
+// ocConfigNamePDFARule selects the OC-configuration /Name presence rule by part:
+// ISO 19005-2/3 §6.9 t1 and ISO 19005-4 §6.10 t1.
+func ocConfigNamePDFARule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_9_t01, Rule_19005_3_6_9_t01, Rule_19005_4_6_10_t01)
+}
+
+// ocConfigNameUniquePDFARule selects the OC-configuration /Name uniqueness rule
+// by part: ISO 19005-2/3 §6.9 t2 and ISO 19005-4 §6.10 t2.
+func ocConfigNameUniquePDFARule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_9_t02, Rule_19005_3_6_9_t02, Rule_19005_4_6_10_t02)
+}
+
+// ocgOrderCompletePDFARule selects the OC-configuration /Order completeness rule
+// by part: ISO 19005-2/3 §6.9 t3 and ISO 19005-4 §6.10 t3.
+func ocgOrderCompletePDFARule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_9_t03, Rule_19005_3_6_9_t03, Rule_19005_4_6_10_t03)
+}
+
 // checkOCConfigNamesPDFA validates that OC configuration dictionaries in
-// /OCProperties have /Name entries and that names are unique (PDF/A-4, §6.10).
-func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
+// /OCProperties carry a /Name entry whose value is unique (ISO 19005-2/3 §6.9
+// t1/t2, ISO 19005-4 §6.10 t1/t2). PDF/A-2 and PDF/A-3 additionally require the
+// name to be non-empty (§6.9 t1: Name != null && length > 0); PDF/A-4 requires
+// only presence (§6.10 t1: Name != null).
+func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	ocPropsObj, ok := catalog["OCProperties"]
 	if !ok {
 		return nil
@@ -387,27 +421,27 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 	var results []Violation
 	var names []string
 
+	inspect := func(cfg ast.PdfDict, format string, args ...any) {
+		name := configName(ctx, doc, cfg)
+		if !configNameValid(cfg, name, part) {
+			results = append(results, failf(ocConfigNamePDFARule(part), format, args...)...)
+			return
+		}
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+
 	// Check default config (/D).
-	dObj, hasD := ocProps["D"]
-	if hasD {
-		dConfig, err := document.ResolveDict(ctx, doc, dObj)
-		if err == nil && dConfig != nil {
-			if !configHasName(dConfig) {
-				results = append(results, fail(Rule_19005_4_6_10_t01, "default config (D)")...)
-			} else {
-				name := configName(ctx, doc, dConfig)
-				if name != "" {
-					names = append(names, name)
-				}
-			}
+	if dObj, hasD := ocProps["D"]; hasD {
+		if dConfig, err := document.ResolveDict(ctx, doc, dObj); err == nil && dConfig != nil {
+			inspect(dConfig, "default config (D)")
 		}
 	}
 
 	// Check /Configs array.
-	configsObj, hasConfigs := ocProps["Configs"]
-	if hasConfigs {
-		configs, err := document.ResolveArray(ctx, doc, configsObj)
-		if err == nil {
+	if configsObj, hasConfigs := ocProps["Configs"]; hasConfigs {
+		if configs, err := document.ResolveArray(ctx, doc, configsObj); err == nil {
 			for i, cfgObj := range configs {
 				if ctx.Err() != nil {
 					return results
@@ -416,14 +450,7 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 				if err != nil || cfg == nil {
 					continue
 				}
-				if !configHasName(cfg) {
-					results = append(results, failf(Rule_19005_4_6_10_t01, "config %d", i)...)
-				} else {
-					name := configName(ctx, doc, cfg)
-					if name != "" {
-						names = append(names, name)
-					}
-				}
+				inspect(cfg, "config %d", i)
 			}
 		}
 	}
@@ -432,12 +459,22 @@ func checkOCConfigNamesPDFA(ctx context.Context, doc *document.Document, catalog
 	seen := make(map[string]bool, len(names))
 	for _, n := range names {
 		if seen[n] {
-			results = append(results, failf(Rule_19005_4_6_10_t02, "duplicate name %q", n)...)
+			results = append(results, failf(ocConfigNameUniquePDFARule(part), "duplicate name %q", n)...)
 		}
 		seen[n] = true
 	}
 
 	return results
+}
+
+// configNameValid reports whether an OC configuration dictionary's /Name
+// satisfies the part requirement: presence only for PDF/A-4 (§6.10 t1), or
+// presence and non-empty for PDF/A-2/3 (§6.9 t1).
+func configNameValid(cfg ast.PdfDict, name string, part int) bool {
+	if part == 4 {
+		return configHasName(cfg)
+	}
+	return name != ""
 }
 
 // configHasName returns true if the OC configuration dict has a /Name key.
@@ -540,9 +577,10 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog 
 	return results
 }
 
-// checkOCGOrderCompleteness validates PDF/A-4 §6.10 t3: if an OC config dict
-// has an /Order key, the Order array must reference all OCGs in the document.
-func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
+// checkOCGOrderCompleteness validates ISO 19005-2/3 §6.9 t3 and ISO 19005-4
+// §6.10 t3: if an OC config dict has an /Order key, the Order array must
+// reference all OCGs in the document.
+func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])
 	if err != nil || ocProps == nil {
 		return nil
@@ -581,7 +619,7 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 	// Check that all OCGs are referenced.
 	for objNum := range allOCGs {
 		if !orderOCGs[objNum] {
-			return failf(Rule_19005_4_6_10_t03,
+			return failf(ocgOrderCompletePDFARule(part),
 				"OCG object %d not referenced in Order array", objNum)
 		}
 	}
