@@ -68,8 +68,9 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Formula MathML (PDF/UA-2): Formula structure elements must have /AF with MathML.
 	results = append(results, checkFormulaMathML(ctx, doc, catalog, profile)...)
 
-	// Invisible annotations in structure (PDF/UA-2): annotations with Invisible flag must be artifacts.
-	results = append(results, checkInvisibleAnnotArtifact(ctx, doc, catalog, profile)...)
+	// Annotation artifact flags (PDF/UA-2 §8.9.2.2): Invisible (t1) or
+	// NoView-without-ToggleNoView (t2) annotations must be artifacts.
+	results = append(results, checkAnnotArtifactFlags(ctx, doc, catalog, profile)...)
 
 	// File specification /F and /UF (PDF/UA-1), §7.11 t01.
 	results = append(results, checkPDFUAFileSpecFUF(ctx, doc, catalog, profile)...)
@@ -83,8 +84,8 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Media clip data CT and Alt (PDF/UA-1 §7.18.6.2 t01/t02).
 	results = append(results, checkMediaClipData(ctx, doc, catalog, profile)...)
 
-	// Forbidden Sound/Movie annotations (PDF/UA-2 §8.9.2.4.11 t01/t02).
-	results = append(results, checkPDFUA2ForbiddenMediaAnnots(ctx, doc, catalog, profile)...)
+	// Per-annotation-type constraints (PDF/UA-2 §8.9.2.4).
+	results = append(results, checkPDFUA2AnnotationConstraints(ctx, doc, catalog, profile)...)
 
 	// Content marking (PDF/UA-1 §7.1 t3).
 	results = append(results, checkContentMarking(ctx, doc, catalog, profile)...)

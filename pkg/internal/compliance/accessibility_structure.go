@@ -423,10 +423,6 @@ func checkFormulaMathML(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
-// checkInvisibleAnnotArtifact validates that annotations with the Invisible flag
-// set are not included in the logical structure tree (they must be artifacts).
-// Rule: ISO 14289-2, 8.9.2.2, test 1.
-
 // hasStructuralChildren reports whether /K contains at least one child dict with an /S key
 // (a structure element), as opposed to only MCR/OBJR/integer references.
 func hasStructuralChildren(ctx context.Context, doc *document.Document, kObj ast.PdfObject) bool {
@@ -453,7 +449,13 @@ func hasStructuralChildren(ctx context.Context, doc *document.Document, kObj ast
 	return false
 }
 
-func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+// checkAnnotArtifactFlags validates ISO 14289-2 §8.9.2.2: an annotation that is
+// part of the logical structure (has /StructParent) must not be effectively
+// hidden. An Invisible annotation violates t1; a NoView annotation without
+// ToggleNoView violates t2. Conforming files instead mark such annotations as
+// artifacts, which keeps them out of the structure tree. /StructParent presence
+// is the in-structure (non-artifact) signal, matching the t1 proxy.
+func checkAnnotArtifactFlags(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
@@ -487,7 +489,11 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 				continue
 			}
 
-			// Only invisible annotations need this check.
+			// Both tests apply only to annotations in the logical structure.
+			if _, hasStructParent := annot["StructParent"]; !hasStructParent {
+				continue
+			}
+
 			fObj, ok := annot["F"]
 			if !ok {
 				continue
@@ -497,18 +503,16 @@ func checkInvisibleAnnotArtifact(ctx context.Context, doc *document.Document, ca
 				doc.Logger.Debug("compliance.accessibility: cannot resolve annotation flags", "error", err)
 				continue
 			}
+			f := int(flags)
 
-			invisible := int(flags)&annotFlagInvisible != 0
-			if !invisible {
-				continue
-			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
 
-			// Invisible annotation. It must NOT be in the logical structure
-			// (i.e., it must not have /StructParent).
-			if _, hasStructParent := annot["StructParent"]; hasStructParent {
-				subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-				loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
+			if f&annotFlagInvisible != 0 {
 				results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t01, Context: loc})
+			}
+			if f&annotFlagNoView != 0 && f&annotFlagToggleNoView == 0 {
+				results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t02, Context: loc})
 			}
 		}
 	}

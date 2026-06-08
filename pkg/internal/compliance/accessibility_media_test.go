@@ -45,7 +45,7 @@ func mediaAnnotViolations(t *testing.T, subtype, profile string) []Violation {
 	if err != nil {
 		t.Fatalf("ResolveCatalog: %v", err)
 	}
-	return checkPDFUA2ForbiddenMediaAnnots(context.Background(), doc, cat.Dict, profile)
+	return checkPDFUA2AnnotationConstraints(context.Background(), doc, cat.Dict, profile)
 }
 
 func TestForbiddenMediaAnnots_UA2(t *testing.T) {

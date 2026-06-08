@@ -38,13 +38,12 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 			if !hasNonEmptyName(ctx, doc, dConfig) {
 				results = append(results, Violation{Rule: rule, Context: "default config (D)"})
 			}
-			// §7.10 t02 (PDF/UA-1): /AS key forbidden in any OC config dict.
-			if profile == "PDF/UA-1" {
-				if _, hasAS := dConfig["AS"]; hasAS {
-					results = append(results, Violation{
-						Rule: Rule_14289_1_7_10_t02, Context: "default config (D)",
-					})
-				}
+			// §7.10 t2 (PDF/UA-1) / §8.7 t2 (PDF/UA-2): /AS key forbidden in any
+			// OC config dict.
+			if _, hasAS := dConfig["AS"]; hasAS {
+				results = append(results, Violation{
+					Rule: asForbiddenRule(profile), Context: "default config (D)",
+				})
 			}
 		}
 	}
@@ -73,17 +72,24 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 		if !hasNonEmptyName(ctx, doc, cfg) {
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("config %d", i)})
 		}
-		// §7.10 t02 (PDF/UA-1): /AS key forbidden.
-		if profile == "PDF/UA-1" {
-			if _, hasAS := cfg["AS"]; hasAS {
-				results = append(results, Violation{
-					Rule: Rule_14289_1_7_10_t02, Context: fmt.Sprintf("config %d", i),
-				})
-			}
+		// §7.10 t2 (PDF/UA-1) / §8.7 t2 (PDF/UA-2): /AS key forbidden.
+		if _, hasAS := cfg["AS"]; hasAS {
+			results = append(results, Violation{
+				Rule: asForbiddenRule(profile), Context: fmt.Sprintf("config %d", i),
+			})
 		}
 	}
 
 	return results
+}
+
+// asForbiddenRule selects the "/AS forbidden in an OC configuration dict" rule
+// by UA profile: ISO 14289-1 §7.10 t2 and ISO 14289-2 §8.7 t2.
+func asForbiddenRule(profile string) Rule {
+	if profile == "PDF/UA-2" {
+		return Rule_14289_2_8_7_t02
+	}
+	return Rule_14289_1_7_10_t02
 }
 
 // hasNonEmptyName checks if a dict has a non-empty /Name string entry.

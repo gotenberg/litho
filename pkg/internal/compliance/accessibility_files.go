@@ -71,11 +71,12 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, _ ast.Pd
 	return results
 }
 
-// checkPDFUA2ForbiddenMediaAnnots flags Sound and Movie annotations, which
-// PDF/UA-2 forbids (ISO 14289-2 §8.9.2.4.11 t01/t02). These multimedia
-// annotation types cannot be made accessible under PDF/UA-2, so their mere
-// presence is non-conformant.
-func checkPDFUA2ForbiddenMediaAnnots(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+// checkPDFUA2AnnotationConstraints validates PDF/UA-2 per-annotation-type
+// constraints (ISO 14289-2 §8.9.2.4): Sound, Movie, and TrapNet annotations are
+// forbidden outright; Popup and PrinterMark annotations must be artifacts (absent
+// from the structure tree); Screen annotations require a /Contents entry; and a
+// FileAttachment annotation's file specification requires /AFRelationship.
+func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if PDFUAPart(profile) != 2 {
 		return nil
 	}
@@ -99,6 +100,40 @@ func checkPDFUA2ForbiddenMediaAnnots(ctx context.Context, doc *document.Document
 			case "Movie":
 				results = append(results, failf(Rule_14289_2_8_9_2_4_11_t02,
 					"Movie annotation is forbidden in PDF/UA-2")...)
+			case "TrapNet":
+				// §8.9.2.4.15 t1: TrapNet annotations shall not be used.
+				results = append(results, failf(Rule_14289_2_8_9_2_4_15_t01,
+					"TrapNet annotation is forbidden in PDF/UA-2")...)
+			case "Popup":
+				// §8.9.2.4.9 t1: Popup annotations shall not be in the structure
+				// tree. /StructParent presence is the in-structure signal.
+				if _, inStruct := annot["StructParent"]; inStruct {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_9_t01,
+						"Popup annotation present in the structure tree")...)
+				}
+			case "PrinterMark":
+				// §8.9.2.4.14 t1: a printer mark annotation shall be an artifact
+				// (absent from the structure tree).
+				if _, inStruct := annot["StructParent"]; inStruct {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_14_t01,
+						"PrinterMark annotation is not an artifact (present in the structure tree)")...)
+				}
+			case "Screen":
+				// §8.9.2.4.12 t1: Screen annotations shall include a /Contents
+				// entry.
+				if _, hasContents := annot["Contents"]; !hasContents {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_12_t01,
+						"Screen annotation lacks a /Contents entry")...)
+				}
+			case "FileAttachment":
+				// §8.9.2.4.10 t1: a file attachment annotation referencing a file
+				// specification dictionary shall include /AFRelationship on it.
+				if fs, _ := document.ResolveDict(ctx, doc, annot["FS"]); fs != nil {
+					if _, hasAF := fs["AFRelationship"]; !hasAF {
+						results = append(results, failf(Rule_14289_2_8_9_2_4_10_t01,
+							"FileAttachment file specification lacks /AFRelationship")...)
+					}
+				}
 			}
 		}
 	}
