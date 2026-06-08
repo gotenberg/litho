@@ -56,6 +56,52 @@ func TestUA2ArtifactRequiredAnnots(t *testing.T) {
 	}
 }
 
+func TestUA2AnnotContentsRequired(t *testing.T) {
+	cases := []struct {
+		subtype string
+		rule    Rule
+	}{
+		{"Ink", Rule_14289_2_8_9_2_4_8_t01},
+		{"3D", Rule_14289_2_8_9_2_4_19_t01},
+		{"RichMedia", Rule_14289_2_8_9_2_4_19_t02},
+	}
+	for _, c := range cases {
+		if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /"+c.subtype+" >>"); !hasRule(got, c.rule) {
+			t.Errorf("%s without /Contents: got %v, want includes %v", c.subtype, got, c.rule)
+		}
+		if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /"+c.subtype+" /Contents (desc) >>"); hasRule(got, c.rule) {
+			t.Errorf("%s with /Contents: got %v, want none", c.subtype, got)
+		}
+	}
+}
+
+func TestUA2StampNameOrContents(t *testing.T) {
+	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Stamp >>"); !hasRule(got, Rule_14289_2_8_9_2_4_7_t01) {
+		t.Errorf("Stamp without /Name or /Contents: got %v, want includes §8.9.2.4.7 t1", got)
+	}
+	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Stamp /Name /Approved >>"); hasRule(got, Rule_14289_2_8_9_2_4_7_t01) {
+		t.Errorf("Stamp with /Name: got %v, want none", got)
+	}
+	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Stamp /Contents (a stamp) >>"); hasRule(got, Rule_14289_2_8_9_2_4_7_t01) {
+		t.Errorf("Stamp with /Contents: got %v, want none", got)
+	}
+}
+
+func TestUA2ZeroSizeWidgetArtifact(t *testing.T) {
+	// Zero-size widget in the structure tree must be an artifact.
+	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Widget /Rect [10 10 10 10] /StructParent 0 >>"); !hasRule(got, Rule_14289_2_8_9_2_4_13_t01) {
+		t.Errorf("zero-size Widget in structure: got %v, want includes §8.9.2.4.13 t1", got)
+	}
+	// Zero-size widget as artifact (no /StructParent): conformant.
+	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Widget /Rect [10 10 10 10] >>"); hasRule(got, Rule_14289_2_8_9_2_4_13_t01) {
+		t.Errorf("zero-size Widget artifact: got %v, want none", got)
+	}
+	// Non-zero widget in structure: conformant.
+	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Widget /Rect [10 10 40 30] /StructParent 0 >>"); hasRule(got, Rule_14289_2_8_9_2_4_13_t01) {
+		t.Errorf("sized Widget in structure: got %v, want none", got)
+	}
+}
+
 func TestUA2ScreenContents(t *testing.T) {
 	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Screen >>"); !hasRule(got, Rule_14289_2_8_9_2_4_12_t01) {
 		t.Errorf("Screen without /Contents: got %v, want includes §8.9.2.4.12 t1", got)

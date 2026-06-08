@@ -73,9 +73,11 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, _ ast.Pd
 
 // checkPDFUA2AnnotationConstraints validates PDF/UA-2 per-annotation-type
 // constraints (ISO 14289-2 §8.9.2.4): Sound, Movie, and TrapNet annotations are
-// forbidden outright; Popup and PrinterMark annotations must be artifacts (absent
-// from the structure tree); Screen annotations require a /Contents entry; and a
-// FileAttachment annotation's file specification requires /AFRelationship.
+// forbidden outright; Popup, PrinterMark, and zero-size Widget annotations must
+// be artifacts (absent from the structure tree); Screen, Ink, 3D, and RichMedia
+// annotations require a /Contents entry; Stamp annotations require /Name or
+// /Contents; and a FileAttachment annotation's file specification requires
+// /AFRelationship.
 func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if PDFUAPart(profile) != 2 {
 		return nil
@@ -133,6 +135,39 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 						results = append(results, failf(Rule_14289_2_8_9_2_4_10_t01,
 							"FileAttachment file specification lacks /AFRelationship")...)
 					}
+				}
+			case "Stamp":
+				// §8.9.2.4.7 t1: a rubber stamp annotation shall have a /Name or a
+				// /Contents entry describing the stamp's intent.
+				_, hasName := annot["Name"]
+				if _, hasContents := annot["Contents"]; !hasName && !hasContents {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_7_t01,
+						"Stamp annotation lacks both /Name and /Contents")...)
+				}
+			case "Ink":
+				// §8.9.2.4.8 t1: Ink annotations shall include a /Contents entry.
+				if _, hasContents := annot["Contents"]; !hasContents {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_8_t01,
+						"Ink annotation lacks a /Contents entry")...)
+				}
+			case "3D":
+				// §8.9.2.4.19 t1: 3D annotations shall include a /Contents entry.
+				if _, hasContents := annot["Contents"]; !hasContents {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_19_t01,
+						"3D annotation lacks a /Contents entry")...)
+				}
+			case "RichMedia":
+				// §8.9.2.4.19 t2: RichMedia annotations shall include a /Contents entry.
+				if _, hasContents := annot["Contents"]; !hasContents {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_19_t02,
+						"RichMedia annotation lacks a /Contents entry")...)
+				}
+			case "Widget":
+				// §8.9.2.4.13 t1: a zero height-and-width widget annotation shall
+				// be an artifact (absent from the structure tree).
+				if _, inStruct := annot["StructParent"]; inStruct && isZeroRect(ctx, doc, annot) {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_13_t01,
+						"zero-size Widget annotation is not an artifact (present in the structure tree)")...)
 				}
 			}
 		}
