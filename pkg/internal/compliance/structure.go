@@ -587,18 +587,13 @@ func validateCaptionPosition(state *walkState, elem ast.PdfDict, parentType ast.
 
 	switch parentType {
 	case "Table":
-		// Table allows Caption as first or last child.
+		// PDF/UA-1 §7.2 t16: Table allows Caption as first or last child.
+		// (veraPDF defines no Caption-position rule for Figure or Form, so those
+		// parents are intentionally not checked here to avoid a false reject.)
 		if notFirstOrLast {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t11,
+				failf(Rule_14289_1_7_2_t16,
 					"Caption at position %d (not first or last) in Table", childIdx+1)...)
-		}
-	case "Figure", "Form":
-		// Figure/Form allow Caption as first or last child.
-		if notFirstOrLast {
-			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t12,
-					"Caption at position %d (not first or last) in %s", childIdx+1, parentType)...)
 		}
 	case "L":
 		// PDF/UA-1 §7.2 t40: L allows Caption only as first child.

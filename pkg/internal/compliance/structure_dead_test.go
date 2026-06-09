@@ -126,6 +126,16 @@ func TestCaptionPositionProfileSemantics(t *testing.T) {
 	if r := run("PDF/UA-1", "L", 0, 2); len(r) != 0 {
 		t.Errorf("UA-1 Caption first in L wrongly flagged: %v", r)
 	}
+
+	// PDF/UA-1 Table Caption position is §7.2 t16 (not the THead-count t11).
+	if r := run("PDF/UA-1", "Table", 1, 3); !hasRule(r, Rule_14289_1_7_2_t16) {
+		t.Errorf("UA-1 middle Caption in Table: got %v, want §7.2 t16", r)
+	}
+	// veraPDF defines no Figure/Form Caption-position rule, so litho must not
+	// flag one (previously a latent false positive).
+	if r := run("PDF/UA-1", "Figure", 1, 3); len(r) != 0 {
+		t.Errorf("UA-1 middle Caption in Figure wrongly flagged: %v", r)
+	}
 }
 
 func TestLIDirectContentItem(t *testing.T) {
