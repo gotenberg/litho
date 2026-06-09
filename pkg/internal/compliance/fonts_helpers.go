@@ -149,6 +149,57 @@ func isType3Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	return subtype == "Type3"
 }
 
+// validFontSubtypes lists the font /Subtype values permitted by the PDF/A font
+// conformance clauses (ISO 19005-1 §6.3.2 t2, ISO 19005-2/3 §6.2.11.2 t2,
+// ISO 19005-4 §6.2.10.2 t2).
+//
+//nolint:gochecknoglobals // static lookup table.
+var validFontSubtypes = map[string]bool{
+	"Type1": true, "MMType1": true, "TrueType": true, "Type3": true,
+	"Type0": true, "CIDFontType0": true, "CIDFontType2": true,
+}
+
+// fontReqKeyRule selects the font required-key rule by PDF/A part and test
+// number: ISO 19005-1 §6.3.2 tN, ISO 19005-2/3 §6.2.11.2 tN, ISO 19005-4
+// §6.2.10.2 tN.
+func fontReqKeyRule(part, test int) Rule {
+	switch test {
+	case 1:
+		return ruleByPart(part, Rule_19005_1_6_3_2_t01, Rule_19005_2_6_2_11_2_t01, Rule_19005_3_6_2_11_2_t01, Rule_19005_4_6_2_10_2_t01)
+	case 2:
+		return ruleByPart(part, Rule_19005_1_6_3_2_t02, Rule_19005_2_6_2_11_2_t02, Rule_19005_3_6_2_11_2_t02, Rule_19005_4_6_2_10_2_t02)
+	case 3:
+		return ruleByPart(part, Rule_19005_1_6_3_2_t03, Rule{}, Rule{}, Rule{})
+	}
+	return Rule{}
+}
+
+// checkFontRequiredKeys validates the PDF/A font-dictionary required-key rules
+// that apply to every font (PDFont): /Type must be Font (t1), /Subtype must be a
+// recognised font subtype (t2), and /BaseFont must be present unless the font is
+// a Type 3 font (t3, PDF/A-1 only).
+func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, subtype string, part int) []Violation {
+	if part == 0 {
+		return nil
+	}
+	var results []Violation
+
+	if typeName, _ := document.ResolveName(ctx, doc, fontDict["Type"]); typeName != "Font" {
+		results = append(results, failf(fontReqKeyRule(part, 1), "font /Type is %q, not Font", typeName)...)
+	}
+	if !validFontSubtypes[subtype] {
+		results = append(results, failf(fontReqKeyRule(part, 2), "font /Subtype %q is not a valid font subtype", subtype)...)
+	}
+	if subtype != "Type3" {
+		if _, ok := fontDict["BaseFont"]; !ok {
+			if rule := fontReqKeyRule(part, 3); rule.Specification != "" {
+				results = append(results, failf(rule, "font missing /BaseFont")...)
+			}
+		}
+	}
+	return results
+}
+
 // isStandard14Font returns true if the font's BaseFont is one of the 14
 // standard PDF fonts.
 func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {

@@ -193,6 +193,9 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 
+	// Required font-dictionary keys (PDFont): §6.3.2 / §6.2.11.2 / §6.2.10.2.
+	results = append(results, checkFontRequiredKeys(ctx, doc, fontDict, subtype, PDFAPart(profile))...)
+
 	// Type 3 fonts have no font program, so skip embedding checks.
 	isType3 := isType3Font(ctx, doc, fontDict)
 
