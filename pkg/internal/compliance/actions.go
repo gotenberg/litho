@@ -465,25 +465,15 @@ func checkAAKeyRestrictions(_ context.Context, _ *document.Document, aaDict ast.
 // forbiddenActionTypeRule returns the appropriate Rule for forbidden action
 // types based on the PDF/A part.
 func forbiddenActionTypeRule(part int) Rule {
-	switch part {
-	case 4:
-		return Rule_19005_4_6_6_1_t01
-	default:
-		// Parts 1, 2, 3 share the same rule.
-		return Rule_19005_1_6_6_1_t01
-	}
+	// PDF/A-1 §6.6.1 t1; PDF/A-2/3 §6.5.1 t1; PDF/A-4 §6.6.1 t1.
+	return ruleByPart(part, Rule_19005_1_6_6_1_t01, Rule_19005_2_6_5_1_t01, Rule_19005_3_6_5_1_t01, Rule_19005_4_6_6_1_t01)
 }
 
 // namedActionRule returns the appropriate Rule for forbidden named actions
 // based on the PDF/A part.
 func namedActionRule(part int) Rule {
-	switch part {
-	case 4:
-		return Rule_19005_4_6_6_1_t02
-	default:
-		// Parts 1, 2, 3 share the same rule.
-		return Rule_19005_1_6_6_1_t02
-	}
+	// PDF/A-1 §6.6.1 t2; PDF/A-2/3 §6.5.1 t2; PDF/A-4 §6.6.1 t2.
+	return ruleByPart(part, Rule_19005_1_6_6_1_t02, Rule_19005_2_6_5_1_t02, Rule_19005_3_6_5_1_t02, Rule_19005_4_6_6_1_t02)
 }
 
 // checkJavaScriptNameTree checks for JavaScript actions in the /Names/JavaScript

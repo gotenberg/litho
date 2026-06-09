@@ -1493,5 +1493,13 @@ func roleMapStandardRemapRule(profile string) Rule {
 		}
 		return Rule_14289_1_7_1_t07
 	}
-	return Rule_14289_1_7_1_t07
+	// PDF/A level 'a' §6.7.3.4 t3 (parts 2/3 have a dedicated rule id).
+	switch PDFAPart(profile) {
+	case 2:
+		return Rule_19005_2_6_7_3_4_t03
+	case 3:
+		return Rule_19005_3_6_7_3_4_t03
+	default:
+		return Rule_14289_1_7_1_t07
+	}
 }
