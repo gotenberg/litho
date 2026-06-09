@@ -536,7 +536,7 @@ func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict,
 	// L must contain only LI (and optionally Caption).
 	if parentType == "L" && typeName != "LI" && typeName != "Caption" && typeName != "L" {
 		*state.results = append(*state.results,
-			failf(Rule_14289_1_7_2_t09, "L contains %s instead of LI", typeName)...)
+			failf(Rule_14289_1_7_2_t19, "L contains %s instead of L/LI/Caption", typeName)...)
 	}
 
 	// LI must be inside L.
@@ -558,7 +558,7 @@ func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict,
 			// OK
 		default:
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t10, "LI contains %s instead of Lbl/LBody", typeName)...)
+				failf(Rule_14289_1_7_2_t20, "LI contains %s instead of Lbl/LBody", typeName)...)
 		}
 	}
 }

@@ -43,6 +43,53 @@ func TestStructParentPresence(t *testing.T) {
 	}
 }
 
+func TestStructuralChildTypeRuleIDs(t *testing.T) {
+	emit := func(fn func(*walkState)) []Violation {
+		var r []Violation
+		fn(&walkState{results: &r, profile: "PDF/UA-1"})
+		return r
+	}
+	ctx := context.Background()
+
+	// Child-type rules (a structure element's permitted children).
+	childCases := []struct {
+		name string
+		run  func(*walkState)
+		want Rule
+	}{
+		{"L children", func(s *walkState) { validateListContainment(ctx, s, nil, "P", "L") }, Rule_14289_1_7_2_t19},
+		{"LI children", func(s *walkState) { validateListContainment(ctx, s, nil, "P", "LI") }, Rule_14289_1_7_2_t20},
+		{"THead children", func(s *walkState) { validateTableChildren(s, "P", "THead") }, Rule_14289_1_7_2_t36},
+		{"TBody children", func(s *walkState) { validateTableChildren(s, "P", "TBody") }, Rule_14289_1_7_2_t37},
+		{"TFoot children", func(s *walkState) { validateTableChildren(s, "P", "TFoot") }, Rule_14289_1_7_2_t38},
+	}
+	for _, c := range childCases {
+		if got := emit(c.run); !hasRule(got, c.want) {
+			t.Errorf("%s: got %v, want %+v", c.name, got, c.want)
+		}
+	}
+
+	// Containment rules (a structure element's required parent).
+	contCases := []struct {
+		name     string
+		typeName ast.PdfName
+		rule     Rule
+	}{
+		{"TR", "TR", Rule_14289_1_7_2_t04},
+		{"THead", "THead", Rule_14289_1_7_2_t05},
+		{"TBody", "TBody", Rule_14289_1_7_2_t06},
+		{"TFoot", "TFoot", Rule_14289_1_7_2_t07},
+		{"TH", "TH", Rule_14289_1_7_2_t08},
+		{"TD", "TD", Rule_14289_1_7_2_t09},
+	}
+	for _, c := range contCases {
+		got := emit(func(s *walkState) { validateTableContainment(s, c.typeName, "P") })
+		if !hasRule(got, c.rule) {
+			t.Errorf("%s containment: got %v, want %+v", c.name, got, c.rule)
+		}
+	}
+}
+
 func TestCaptionPositionProfileSemantics(t *testing.T) {
 	doc, _ := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R >>",

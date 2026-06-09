@@ -17,35 +17,54 @@ func validateTableContainment(state *walkState, typeName ast.PdfName, parentType
 			// OK
 		default:
 			if parentType != "" {
+				// §7.2 t4: TR parent must be Table/THead/TBody/TFoot.
 				*state.results = append(*state.results,
-					failf(Rule_14289_1_7_2_t05, "TR inside %s", parentType)...)
+					failf(Rule_14289_1_7_2_t04, "TR inside %s", parentType)...)
 			}
 		}
 	case "THead":
-		// THead must be inside Table.
+		// §7.2 t5: THead must be inside Table.
 		if parentType != "Table" && parentType != "" {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t06, "THead inside %s", parentType)...)
+				failf(Rule_14289_1_7_2_t05, "THead inside %s", parentType)...)
 		}
 	case "TBody":
-		// TBody must be inside Table.
+		// §7.2 t6: TBody must be inside Table.
 		if parentType != "Table" && parentType != "" {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t07, "TBody inside %s", parentType)...)
+				failf(Rule_14289_1_7_2_t06, "TBody inside %s", parentType)...)
 		}
 	case "TFoot":
-		// TFoot must be inside Table.
+		// §7.2 t7: TFoot must be inside Table.
 		if parentType != "Table" && parentType != "" {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t08, "TFoot inside %s", parentType)...)
+				failf(Rule_14289_1_7_2_t07, "TFoot inside %s", parentType)...)
 		}
 	case "TD", "TH":
-		// TD/TH must be inside TR.
+		// §7.2 t8 (TH) / t9 (TD): cell parent must be TR.
 		if parentType != "TR" && parentType != "" {
+			rule := Rule_14289_1_7_2_t09
+			if typeName == "TH" {
+				rule = Rule_14289_1_7_2_t08
+			}
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t04, "%s inside %s instead of TR", typeName, parentType)...)
+				failf(rule, "%s inside %s instead of TR", typeName, parentType)...)
 		}
 	}
+}
+
+// tableSectionChildRule selects the "section may contain only TR" rule by table
+// section type: PDF/UA-1 §7.2 t36 (THead), t37 (TBody), t38 (TFoot).
+func tableSectionChildRule(parentType ast.PdfName) Rule {
+	switch parentType {
+	case "THead":
+		return Rule_14289_1_7_2_t36
+	case "TBody":
+		return Rule_14289_1_7_2_t37
+	case "TFoot":
+		return Rule_14289_1_7_2_t38
+	}
+	return Rule{}
 }
 
 // validateTableColumnConsistency checks that all TR rows in a Table have the
@@ -297,9 +316,10 @@ func validateTableChildren(state *walkState, typeName ast.PdfName, parentType as
 				failf(Rule_14289_1_7_2_t03, "Table contains %s instead of TR/THead/TBody/TFoot/Caption", typeName)...)
 		}
 	case "THead", "TBody", "TFoot":
+		// §7.2 t36 (THead) / t37 (TBody) / t38 (TFoot): may contain only TR.
 		if typeName != "TR" && typeName != "Caption" {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t03, "%s contains %s instead of TR", parentType, typeName)...)
+				failf(tableSectionChildRule(parentType), "%s contains %s instead of TR", parentType, typeName)...)
 		}
 	case "TR":
 		switch typeName {
