@@ -391,6 +391,105 @@ func (r *nsRoleResolver) resolveStandardType(ctx context.Context, doc *document.
 	return "", "", false
 }
 
+// childStandardTypes returns the effective standard structure types of an
+// element's structural children (those with an /S entry), in order. complete is
+// false when any structural child cannot be resolved to a standard type, in
+// which case callers should not draw conclusions from the partial sequence (the
+// unresolved child is itself a §8.2.4 violation).
+func (r *nsRoleResolver) childStandardTypes(ctx context.Context, doc *document.Document, elem ast.PdfDict) (types []string, complete bool) {
+	kObj, ok := elem["K"]
+	if !ok {
+		return nil, true
+	}
+
+	collect := func(item ast.PdfObject) bool {
+		d, _ := document.ResolveDict(ctx, doc, item)
+		if d == nil {
+			return true
+		}
+		if _, has := d["S"]; !has {
+			return true // content item (MCR/OBJR/MCID), not a structure element.
+		}
+		st, _, ok := r.elementStandardType(ctx, doc, d)
+		if !ok {
+			return false
+		}
+		types = append(types, st)
+		return true
+	}
+
+	arr, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		if !collect(kObj) {
+			return types, false
+		}
+		return types, true
+	}
+	for _, item := range arr {
+		if !collect(item) {
+			return types, false
+		}
+	}
+	return types, true
+}
+
+// pdf1NamespaceURI is the legacy PDF 1.7 standard structure namespace.
+const pdf1NamespaceURI = "http://iso.org/pdf/ssn"
+
+// checkPDFUA2NamespaceStructTypes validates PDF/UA-2 structure-type constraints
+// that depend on namespace role-map resolution:
+//   - §8.2.5.14 t1: the standard Note type shall not be present (use FENote in
+//     the PDF 2.0 namespace).
+//   - §8.2.5.23 t1: a Ruby element's children shall be RB,RT or RB,RP,RT,RP.
+//   - §8.2.5.24 t1: a Warichu element's children shall be WP,WT,WP.
+//
+// Element and child types are resolved through [nsRoleResolver], so a custom
+// type role-mapped to a standard type is recognised and not false-rejected.
+func checkPDFUA2NamespaceStructTypes(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+	r := newNSRoleResolver(ctx, doc, treeRoot)
+
+	var results []Violation
+	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
+		stdType, stdNS, ok := r.elementStandardType(ctx, doc, elem)
+		if !ok {
+			return
+		}
+		switch stdType {
+		case "Note":
+			// The standard Note belongs to the PDF 1.7 namespace; a Note
+			// role-mapped into the PDF 2.0 namespace resolves elsewhere and is
+			// exempt.
+			if stdNS == pdf1NamespaceURI {
+				results = append(results, failf(Rule_14289_2_8_2_5_14_t01,
+					"standard Note structure type is present (use FENote in the PDF 2.0 namespace)")...)
+			}
+		case "Ruby":
+			if seq, complete := r.childStandardTypes(ctx, doc, elem); complete {
+				joined := strings.Join(seq, "&")
+				if joined != "RB&RT" && joined != "RB&RP&RT&RP" {
+					results = append(results, failf(Rule_14289_2_8_2_5_23_t01,
+						"Ruby element children are [%s], not RB,RT or RB,RP,RT,RP", joined)...)
+				}
+			}
+		case "Warichu":
+			if seq, complete := r.childStandardTypes(ctx, doc, elem); complete {
+				if joined := strings.Join(seq, "&"); joined != "WP&WT&WP" {
+					results = append(results, failf(Rule_14289_2_8_2_5_24_t01,
+						"Warichu element children are [%s], not WP,WT,WP", joined)...)
+				}
+			}
+		}
+	})
+	return results
+}
+
 // roleMapChainReturnsSameNS follows a RoleMapNS chain starting from typeName
 // in srcNSURI and returns true if the chain eventually maps back to the
 // source namespace (directly or through intermediates).
