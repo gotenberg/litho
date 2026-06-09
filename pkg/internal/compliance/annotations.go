@@ -63,6 +63,14 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 
 	var results []Violation
 
+	// PDF/A-1 §6.5.3 t3 needs the OutputIntent destination colour space; resolve
+	// it once (it is empty when no embedded profile is present).
+	var outputCS string
+	if part == 1 {
+		_, hdr, _ := resolveOutputIntentICCInfo(ctx, doc, vctx.catalog)
+		outputCS = hdr.colorSpace
+	}
+
 	for pageIdx := range vctx.pages {
 		page := vctx.pages[pageIdx].dict
 		if ctx.Err() != nil {
@@ -105,9 +113,10 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 			// Annotation appearance.
 			results = append(results, checkAnnotAppearance(ctx, doc, annot, subtype, part, level, loc)...)
 
-			// Annotation opacity (PDF/A-1 only).
+			// Annotation opacity and colour arrays (PDF/A-1 only).
 			if part == 1 {
 				results = append(results, checkAnnotOpacity(ctx, doc, annot, loc)...)
+				results = append(results, checkAnnotColorArrays(annot, outputCS, loc)...)
 			}
 
 			// 3D stream Subtype must be U3D or PRC (PDF/A-4e).
@@ -498,6 +507,25 @@ func nSubdictRule(part int) Rule {
 // nStreamRule returns the Rule for non-Widget/non-Btn /N not being a stream.
 func nStreamRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_5_3_t06, Rule_19005_2_6_3_3_t04, Rule_19005_3_6_3_3_t04, Rule_19005_4_6_3_3_t04)
+}
+
+// checkAnnotColorArrays validates ISO 19005-1 §6.5.3 t3: an annotation shall not
+// contain a /C or /IC colour array unless the PDF/A-1 OutputIntent destination
+// profile colour space is RGB. The check fires only when the OutputIntent colour
+// space was resolved to a known non-RGB value; an unresolved colour space (no
+// embedded profile) is left unflagged so the check never false-rejects.
+func checkAnnotColorArrays(annot ast.PdfDict, outputCS, loc string) []Violation {
+	// "RGB " carries a trailing space: ICC colour space signatures are 4 bytes.
+	if outputCS == "" || outputCS == "RGB " {
+		return nil
+	}
+	_, hasC := annot["C"]
+	_, hasIC := annot["IC"]
+	if !hasC && !hasIC {
+		return nil
+	}
+	return failf(Rule_19005_1_6_5_3_t03,
+		"%s: /C or /IC colour array not permitted with %q OutputIntent", loc, outputCS)
 }
 
 // checkAnnotOpacity validates that /CA is 1.0 if present (§6.5.3 test 1, PDF/A-1 only).
