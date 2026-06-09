@@ -118,6 +118,79 @@ func nestingDesc(stdType string) string {
 	return stdType
 }
 
+// buildAnnotStructTypeMapNS walks the structure tree and returns a map from
+// annotation object number to the PDF 2.0 namespace-resolved standard type of
+// the enclosing structure element. It is the PDF/UA-2 counterpart of
+// [buildAnnotStructTypeMap], resolving element types through [nsRoleResolver] so
+// a custom type role-mapped to a standard type is recognised.
+func buildAnnotStructTypeMapNS(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, r *nsRoleResolver) map[int]string {
+	result := make(map[int]string)
+	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
+		stdType, _, ok := r.elementStandardType(ctx, doc, elem)
+		if !ok {
+			return
+		}
+		if kObj, has := elem["K"]; has {
+			collectOBJRWithType(ctx, doc, kObj, stdType, result)
+		}
+	})
+	return result
+}
+
+// checkPDFUA2WidgetForm validates ISO 14289-2 §8.10.1 t1: a field widget
+// annotation present in the logical structure shall be enclosed by a Form
+// structure element. Widgets not associated with a form field (no /FT and no
+// /Parent) and widgets that are artifacts (absent from the structure tree) are
+// exempt, matching the rule's isFieldWidget and structParentType conditions.
+func checkPDFUA2WidgetForm(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if PDFUAPart(profile) != 2 {
+		return nil
+	}
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+	structMap := buildAnnotStructTypeMapNS(ctx, doc, treeRoot, newNSRoleResolver(ctx, doc, treeRoot))
+
+	var results []Violation
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return results
+		}
+		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annots {
+			objNum := 0
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+				objNum = ref.ObjectNum
+			}
+			annot, _ := document.ResolveDict(ctx, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
+				continue
+			}
+			// isFieldWidget: a widget associated with an AcroForm field carries
+			// /FT (merged field+widget) or /Parent (a child of a field).
+			_, hasFT := annot["FT"]
+			_, hasParent := annot["Parent"]
+			if !hasFT && !hasParent {
+				continue
+			}
+			// structParentType == null (not in the tree, i.e. an artifact) is exempt.
+			stdType, inTree := structMap[objNum]
+			if !inTree {
+				continue
+			}
+			if stdType != "Form" {
+				results = append(results, failf(Rule_14289_2_8_10_1_t01,
+					"field Widget annotation enclosed by %s instead of Form", nestingDesc(stdType))...)
+			}
+		}
+	}
+	return results
+}
+
 // buildAnnotStructTypeMap walks the structure tree and returns a map from
 // annotation object number to the standard type name of the enclosing structure
 // element. Annotations not referenced by any structure element are absent.

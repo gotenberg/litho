@@ -90,6 +90,9 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Per-annotation-type constraints (PDF/UA-2 §8.9.2.4).
 	results = append(results, checkPDFUA2AnnotationConstraints(ctx, doc, catalog, profile)...)
 
+	// Field widget annotations must be enclosed by a Form element (PDF/UA-2 §8.10.1 t1).
+	results = append(results, checkPDFUA2WidgetForm(ctx, doc, catalog, profile)...)
+
 	// Content marking (PDF/UA-1 §7.1 t3).
 	results = append(results, checkContentMarking(ctx, doc, catalog, profile)...)
 
