@@ -1169,6 +1169,19 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 			// rdf:Seq/rdf:Bag: remember the container level for subsequent rdf:li items.
 			if t.Name.Local == "Seq" || t.Name.Local == "Bag" {
 				if hasPending {
+					// §6.7.8 t7/t16: the valueType and field containers must be
+					// rdf:Seq; flag an explicit rdf:Bag.
+					if t.Name.Local == "Bag" {
+						switch pendingLevel {
+						case xmpExtLevelValueType:
+							*results = append(*results, xmpExtValueTypeSeqRule(part)...)
+						case xmpExtLevelField:
+							*results = append(*results, xmpExtFieldSeqRule(part)...)
+						case xmpExtLevelSchema, xmpExtLevelProperty:
+							// The schema and property containers are validated
+							// elsewhere (isValidBag and the existing property checks).
+						}
+					}
 					containerLevel = pendingLevel
 					inSeqBag = true
 				}
@@ -1374,6 +1387,36 @@ func xmpExtBagRule(part int) []Violation {
 		return fail(Rule_19005_2_6_6_2_3_3_t01, ctx)
 	case 3:
 		return fail(Rule_19005_3_6_6_2_3_3_t01, ctx)
+	}
+	return nil
+}
+
+// xmpExtValueTypeSeqRule returns the "schema valueType container shall be a
+// valid rdf:Seq" rule by part: ISO 19005-1 §6.7.8 t7, ISO 19005-2/3 §6.6.2.3.3 t6.
+func xmpExtValueTypeSeqRule(part int) []Violation {
+	const ctx = "pdfaSchema:valueType container is not a valid rdf:Seq"
+	switch part {
+	case 1:
+		return fail(Rule_19005_1_6_7_8_t07, ctx)
+	case 2:
+		return fail(Rule_19005_2_6_6_2_3_3_t06, ctx)
+	case 3:
+		return fail(Rule_19005_3_6_6_2_3_3_t06, ctx)
+	}
+	return nil
+}
+
+// xmpExtFieldSeqRule returns the "valueType field container shall be a valid
+// rdf:Seq" rule by part: ISO 19005-1 §6.7.8 t16, ISO 19005-2/3 §6.6.2.3.3 t15.
+func xmpExtFieldSeqRule(part int) []Violation {
+	const ctx = "pdfaType:field container is not a valid rdf:Seq"
+	switch part {
+	case 1:
+		return fail(Rule_19005_1_6_7_8_t16, ctx)
+	case 2:
+		return fail(Rule_19005_2_6_6_2_3_3_t15, ctx)
+	case 3:
+		return fail(Rule_19005_3_6_6_2_3_3_t15, ctx)
 	}
 	return nil
 }
