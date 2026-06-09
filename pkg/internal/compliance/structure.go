@@ -565,30 +565,44 @@ func validateCaptionPosition(state *walkState, elem ast.PdfDict, parentType ast.
 		return
 	}
 
+	notFirstOrLast := childIdx != 0 && childIdx != totalChildren-1
+
+	// PDF/UA-2 §8.2.5.27 t1: a Caption shall be the first or last child of any
+	// structure element. The UA-1 rules below are first-only for L/TOC, which
+	// would false-reject a conformant last-position Caption under PDF/UA-2.
+	if state.profile == "PDF/UA-2" {
+		if notFirstOrLast {
+			*state.results = append(*state.results,
+				failf(Rule_14289_2_8_2_5_27_t01,
+					"Caption at position %d (not first or last) in %s", childIdx+1, parentType)...)
+		}
+		return
+	}
+
 	switch parentType {
 	case "Table":
 		// Table allows Caption as first or last child.
-		if childIdx != 0 && childIdx != totalChildren-1 {
+		if notFirstOrLast {
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t11,
 					"Caption at position %d (not first or last) in Table", childIdx+1)...)
 		}
 	case "Figure", "Form":
 		// Figure/Form allow Caption as first or last child.
-		if childIdx != 0 && childIdx != totalChildren-1 {
+		if notFirstOrLast {
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t12,
 					"Caption at position %d (not first or last) in %s", childIdx+1, parentType)...)
 		}
 	case "L":
-		// L allows Caption only as first child.
+		// PDF/UA-1 §7.2 t40: L allows Caption only as first child.
 		if childIdx != 0 {
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t40,
 					"Caption at position %d (not first) in L", childIdx+1)...)
 		}
 	case "TOC":
-		// TOC allows Caption only as first child.
+		// PDF/UA-1 §7.2 t28: TOC allows Caption only as first child.
 		if childIdx != 0 {
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t28,
