@@ -105,6 +105,11 @@ func checkFormatViolations(doc *document.Document, profile string) []Violation {
 			}
 		} else if containsStreamPattern(msg) {
 			rule = streamRule
+			// PDF/A-1/2/3 attribute a stream-keyword EOL defect to a dedicated
+			// rule (t02), distinct from the /Length-mismatch rule (t01).
+			if eolRule := streamEOLRule(profile); eolRule.Specification != "" && isStreamEOLViolation(msg) {
+				rule = eolRule
+			}
 		} else if containsObjHeaderPattern(msg) {
 			rule = objRule
 		} else if bytes.Contains([]byte(msg), []byte("invalid character")) {
@@ -130,6 +135,31 @@ func containsXRefPattern(msg string) bool {
 // stream formatting (Length mismatch, EOL after stream keyword, indirect Length).
 func containsStreamPattern(msg string) bool {
 	return bytes.Contains([]byte(msg), []byte("stream"))
+}
+
+// streamEOLRule returns the "stream keyword not followed by a valid EOL" rule
+// for PDF/A-1 (§6.1.7 t2) and PDF/A-2/3 (§6.1.7.1 t2). It returns the zero Rule
+// for other parts, which keep the /Length-mismatch attribution.
+func streamEOLRule(profile string) Rule {
+	switch PDFAPart(profile) {
+	case 1:
+		return Rule_19005_1_6_1_7_t02
+	case 2:
+		return Rule_19005_2_6_1_7_1_t02
+	case 3:
+		return Rule_19005_3_6_1_7_1_t02
+	default:
+		return Rule{}
+	}
+}
+
+// isStreamEOLViolation reports whether a format-violation message describes the
+// stream keyword not being followed by a valid EOL, as opposed to a /Length
+// defect (which keeps the t01 attribution).
+func isStreamEOLViolation(msg string) bool {
+	b := []byte(msg)
+	return bytes.Contains(b, []byte("stream keyword")) &&
+		(bytes.Contains(b, []byte("CR only")) || bytes.Contains(b, []byte("not followed by EOL")))
 }
 
 // containsObjHeaderPattern returns true if the error message relates to

@@ -301,6 +301,12 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 	if state.hasGenericH && state.hasSpecificH {
 		*results = append(*results, failf(headingMixedRule(profile),
 			"document uses both H (generic) and H1-H6 (specific) headings, must use one or the other")...)
+		// §7.4.4 t3 (PDF/UA-1): numbered headings (H1-H6) shall not be used when
+		// generic H headings are also present (usesH == false).
+		if profile == "PDF/UA-1" {
+			*results = append(*results, failf(Rule_14289_1_7_4_4_t03,
+				"document uses numbered headings while also using generic H headings")...)
+		}
 	}
 }
 
