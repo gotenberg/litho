@@ -90,8 +90,8 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Per-annotation-type constraints (PDF/UA-2 §8.9.2.4).
 	results = append(results, checkPDFUA2AnnotationConstraints(ctx, doc, catalog, profile)...)
 
-	// Field widget annotations must be enclosed by a Form element (PDF/UA-2 §8.10.1 t1).
-	results = append(results, checkPDFUA2WidgetForm(ctx, doc, catalog, profile)...)
+	// Annotation-in-structure nesting (PDF/UA-2 §8.10.1 widget/Form, §8.9.2.4.16 Watermark/Annot).
+	results = append(results, checkPDFUA2AnnotStructNesting(ctx, doc, catalog, profile)...)
 
 	// Namespace-resolved struct-type constraints (PDF/UA-2 §8.2.5.14/.23/.24).
 	results = append(results, checkPDFUA2NamespaceStructTypes(ctx, doc, catalog, profile)...)

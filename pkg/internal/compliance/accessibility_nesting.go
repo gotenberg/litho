@@ -137,12 +137,15 @@ func buildAnnotStructTypeMapNS(ctx context.Context, doc *document.Document, tree
 	return result
 }
 
-// checkPDFUA2WidgetForm validates ISO 14289-2 §8.10.1 t1: a field widget
-// annotation present in the logical structure shall be enclosed by a Form
-// structure element. Widgets not associated with a form field (no /FT and no
-// /Parent) and widgets that are artifacts (absent from the structure tree) are
-// exempt, matching the rule's isFieldWidget and structParentType conditions.
-func checkPDFUA2WidgetForm(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+// checkPDFUA2AnnotStructNesting validates PDF/UA-2 annotation-in-structure
+// nesting rules that depend on the enclosing element's namespace-resolved type:
+//   - §8.10.1 t1: a field widget annotation shall be enclosed by a Form element.
+//   - §8.9.2.4.16 t1: a Watermark annotation used as real content shall be
+//     enclosed by an Annot element.
+//
+// Annotations that are artifacts (absent from the structure tree) are exempt
+// from both, matching the rules' structParentType/isArtifact conditions.
+func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if PDFUAPart(profile) != 2 {
 		return nil
 	}
@@ -167,24 +170,30 @@ func checkPDFUA2WidgetForm(ctx context.Context, doc *document.Document, catalog 
 			if annot == nil {
 				continue
 			}
-			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
-				continue
-			}
-			// isFieldWidget: a widget associated with an AcroForm field carries
-			// /FT (merged field+widget) or /Parent (a child of a field).
-			_, hasFT := annot["FT"]
-			_, hasParent := annot["Parent"]
-			if !hasFT && !hasParent {
-				continue
-			}
-			// structParentType == null (not in the tree, i.e. an artifact) is exempt.
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+
+			// structParentType == null (not in the tree, i.e. an artifact) is
+			// exempt for both rules.
 			stdType, inTree := structMap[objNum]
 			if !inTree {
 				continue
 			}
-			if stdType != "Form" {
-				results = append(results, failf(Rule_14289_2_8_10_1_t01,
-					"field Widget annotation enclosed by %s instead of Form", nestingDesc(stdType))...)
+
+			switch subtype {
+			case "Widget":
+				// isFieldWidget: a widget associated with an AcroForm field
+				// carries /FT (merged field+widget) or /Parent (a child of a field).
+				_, hasFT := annot["FT"]
+				_, hasParent := annot["Parent"]
+				if (hasFT || hasParent) && stdType != "Form" {
+					results = append(results, failf(Rule_14289_2_8_10_1_t01,
+						"field Widget annotation enclosed by %s instead of Form", nestingDesc(stdType))...)
+				}
+			case "Watermark":
+				if stdType != "Annot" {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_16_t01,
+						"Watermark annotation enclosed by %s instead of Annot", nestingDesc(stdType))...)
+				}
 			}
 		}
 	}

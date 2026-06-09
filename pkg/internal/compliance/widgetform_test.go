@@ -21,7 +21,7 @@ func TestUA2WidgetForm(t *testing.T) {
 			widgetBody,
 			"<< /Type /OBJR /Obj 8 0 R >>",
 		)
-		return checkPDFUA2WidgetForm(ctx, doc, cat, "PDF/UA-2")
+		return checkPDFUA2AnnotStructNesting(ctx, doc, cat, "PDF/UA-2")
 	}
 
 	fieldWidget := "<< /Type /Annot /Subtype /Widget /FT /Tx /Rect [0 0 10 10] /StructParent 0 >>"
@@ -38,5 +38,14 @@ func TestUA2WidgetForm(t *testing.T) {
 	nonField := "<< /Type /Annot /Subtype /Widget /Rect [0 0 10 10] /StructParent 0 >>"
 	if got := build("Div", nonField); hasRule(got, Rule_14289_2_8_10_1_t01) {
 		t.Errorf("non-field widget: got %v, want none", got)
+	}
+
+	// §8.9.2.4.16 t1: a Watermark in the structure tree must be in an Annot element.
+	watermark := "<< /Type /Annot /Subtype /Watermark /Rect [0 0 10 10] /StructParent 0 >>"
+	if got := build("Annot", watermark); hasRule(got, Rule_14289_2_8_9_2_4_16_t01) {
+		t.Errorf("Watermark in Annot: got %v, want none", got)
+	}
+	if got := build("Div", watermark); !hasRule(got, Rule_14289_2_8_9_2_4_16_t01) {
+		t.Errorf("Watermark in Div: got %v, want §8.9.2.4.16 t1", got)
 	}
 }
