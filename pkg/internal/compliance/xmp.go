@@ -1101,6 +1101,10 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	decoder.Strict = false
 
 	var inSchemas bool
+	// justEnteredSchemas is set right after the pdfaExtension:schemas element so
+	// the immediately following rdf container can be checked for being an
+	// rdf:Bag (ISO 19005-1 §6.7.8 t2 / ISO 19005-2/3 §6.6.2.3.3 t1).
+	var justEnteredSchemas bool
 
 	type schemaInfo struct {
 		hasSchema, hasNamespaceURI, hasPrefix, hasProperty bool
@@ -1145,10 +1149,21 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 		case xml.StartElement:
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
 				inSchemas = true
+				justEnteredSchemas = true
 				continue
 			}
 			if !inSchemas {
 				continue
+			}
+
+			// The element directly inside pdfaExtension:schemas must be an
+			// rdf:Bag. Fire only when it is explicitly an rdf:Seq (a wrong but
+			// well-formed container); other shapes are left to the other checks.
+			if justEnteredSchemas {
+				justEnteredSchemas = false
+				if t.Name.Local == "Seq" {
+					*results = append(*results, xmpExtBagRule(part)...)
+				}
 			}
 
 			// rdf:Seq/rdf:Bag: remember the container level for subsequent rdf:li items.
@@ -1348,8 +1363,23 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	slog.Debug("compliance.xmp: extension schema check complete")
 }
 
+// xmpExtBagRule returns the "extension schema container shall be a valid
+// rdf:Bag" rule by part: ISO 19005-1 §6.7.8 t2, ISO 19005-2/3 §6.6.2.3.3 t1.
+func xmpExtBagRule(part int) []Violation {
+	const ctx = "pdfaExtension:schemas container is not a valid rdf:Bag"
+	switch part {
+	case 1:
+		return fail(Rule_19005_1_6_7_8_t02, ctx)
+	case 2:
+		return fail(Rule_19005_2_6_6_2_3_3_t01, ctx)
+	case 3:
+		return fail(Rule_19005_3_6_6_2_3_3_t01, ctx)
+	}
+	return nil
+}
+
 // xmpExtSchemaRule returns the rule for a missing field in a schema definition.
-// Mapping: schema->t02, namespaceURI->t03, prefix->t04, property->t05.
+// Mapping: schema->t03, namespaceURI->t04, prefix->t05, property->t06.
 func xmpExtSchemaRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension schema missing required field '%s'", field)
 	switch part {
@@ -1394,7 +1424,7 @@ func xmpExtSchemaRule(part int, field string) []Violation {
 }
 
 // xmpExtPropertyRule returns the rule for a missing field in a property definition.
-// Mapping: name->t07, valueType->t08, category->t09, description->t10.
+// Mapping: name->t08, valueType->t09, category->t10, description->t11.
 func xmpExtPropertyRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension property missing required field '%s'", field)
 	switch part {
@@ -1438,7 +1468,7 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 }
 
 // xmpExtValueTypeRule returns the rule for a missing field in a valueType definition.
-// Mapping: type->t11, namespaceURI->t12, prefix->t13, description->t14.
+// Mapping: type->t12, namespaceURI->t13, prefix->t14, description->t15.
 func xmpExtValueTypeRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension valueType missing required field '%s'", field)
 	switch part {
@@ -1482,7 +1512,7 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 }
 
 // xmpExtFieldRule returns the rule for a missing field in a field definition.
-// Mapping: name->t16, valueType->t17, description->t18.
+// Mapping: name->t17, valueType->t18, description->t19.
 func xmpExtFieldRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension field missing required field '%s'", field)
 	switch part {
