@@ -205,6 +205,9 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 		return results
 	}
 
+	// Required keys for simple fonts: /FirstChar, /LastChar, /Widths.
+	results = append(results, checkSimpleFontRequiredKeys(ctx, doc, fontDict, PDFAPart(profile))...)
+
 	// Font embedding: only for fonts used for visible rendering.
 	if isVisible {
 		results = append(results, checkFontEmbedding(ctx, doc, fontDict, fontName, pageNum, profile, isType3)...)

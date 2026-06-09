@@ -54,3 +54,51 @@ func TestFontRequiredKeys(t *testing.T) {
 		t.Errorf("part 0: got %v, want none", got)
 	}
 }
+
+func TestSimpleFontRequiredKeys(t *testing.T) {
+	ctx := context.Background()
+	doc, _ := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	)
+	chk := func(fd ast.PdfDict, part int) []Violation { return checkSimpleFontRequiredKeys(ctx, doc, fd, part) }
+
+	// A non-standard simple font missing /FirstChar, /LastChar, /Widths fails
+	// §6.2.11.2 t4/t5/t6.
+	bare := ast.PdfDict{"BaseFont": ast.PdfName("ABCDEF+Custom")}
+	got := chk(bare, 2)
+	for _, r := range []Rule{Rule_19005_2_6_2_11_2_t04, Rule_19005_2_6_2_11_2_t05, Rule_19005_2_6_2_11_2_t06} {
+		if !hasRule(got, r) {
+			t.Errorf("bare simple font: missing %+v in %v", r, got)
+		}
+	}
+
+	// A /Widths array of the wrong size fails t6.
+	wrongSize := ast.PdfDict{
+		"BaseFont": ast.PdfName("X"), "FirstChar": ast.PdfInt(0), "LastChar": ast.PdfInt(2),
+		"Widths": ast.PdfArray{ast.PdfInt(100)},
+	}
+	if got := chk(wrongSize, 2); !hasRule(got, Rule_19005_2_6_2_11_2_t06) {
+		t.Errorf("wrong /Widths size: got %v, want §6.2.11.2 t6", got)
+	}
+
+	// A correctly-sized /Widths array (LastChar - FirstChar + 1) is conformant.
+	okFont := ast.PdfDict{
+		"BaseFont": ast.PdfName("X"), "FirstChar": ast.PdfInt(0), "LastChar": ast.PdfInt(2),
+		"Widths": ast.PdfArray{ast.PdfInt(100), ast.PdfInt(200), ast.PdfInt(300)},
+	}
+	if got := chk(okFont, 2); len(got) != 0 {
+		t.Errorf("conformant simple font: got %v, want none", got)
+	}
+
+	// The standard 14 fonts are exempt from FirstChar/LastChar/Widths.
+	if got := chk(ast.PdfDict{"BaseFont": ast.PdfName("Helvetica")}, 2); len(got) != 0 {
+		t.Errorf("standard-14 font: got %v, want none (exempt)", got)
+	}
+
+	// Non-PDF/A (part 0) is not checked.
+	if got := chk(bare, 0); len(got) != 0 {
+		t.Errorf("part 0: got %v, want none", got)
+	}
+}

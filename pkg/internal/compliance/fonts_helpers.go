@@ -170,8 +170,52 @@ func fontReqKeyRule(part, test int) Rule {
 		return ruleByPart(part, Rule_19005_1_6_3_2_t02, Rule_19005_2_6_2_11_2_t02, Rule_19005_3_6_2_11_2_t02, Rule_19005_4_6_2_10_2_t02)
 	case 3:
 		return ruleByPart(part, Rule_19005_1_6_3_2_t03, Rule{}, Rule{}, Rule{})
+	case 4:
+		return ruleByPart(part, Rule_19005_1_6_3_2_t04, Rule_19005_2_6_2_11_2_t04, Rule_19005_3_6_2_11_2_t04, Rule_19005_4_6_2_10_2_t04)
+	case 5:
+		return ruleByPart(part, Rule_19005_1_6_3_2_t05, Rule_19005_2_6_2_11_2_t05, Rule_19005_3_6_2_11_2_t05, Rule_19005_4_6_2_10_2_t05)
+	case 6:
+		return ruleByPart(part, Rule_19005_1_6_3_2_t06, Rule_19005_2_6_2_11_2_t06, Rule_19005_3_6_2_11_2_t06, Rule_19005_4_6_2_10_2_t06)
 	}
 	return Rule{}
+}
+
+// checkSimpleFontRequiredKeys validates the PDF/A required-key rules that apply
+// to simple fonts only (PDSimpleFont): /FirstChar (t4), /LastChar (t5), and
+// /Widths sized LastChar - FirstChar + 1 (t6). The standard 14 fonts are exempt,
+// matching the isStandard escape in each rule. Callers must invoke it only for
+// simple (non-Type0) fonts.
+func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, part int) []Violation {
+	if part == 0 || isStandard14Font(ctx, doc, fontDict) {
+		return nil
+	}
+
+	var results []Violation
+	_, hasFirst := fontDict["FirstChar"]
+	_, hasLast := fontDict["LastChar"]
+	if !hasFirst {
+		results = append(results, failf(fontReqKeyRule(part, 4), "simple font missing /FirstChar")...)
+	}
+	if !hasLast {
+		results = append(results, failf(fontReqKeyRule(part, 5), "simple font missing /LastChar")...)
+	}
+
+	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
+	if err != nil || widths == nil {
+		results = append(results, failf(fontReqKeyRule(part, 6), "simple font missing /Widths")...)
+		return results
+	}
+	// Size check only when /FirstChar and /LastChar resolve to a sensible range,
+	// so a malformed or absent bound never causes a false reject.
+	first, errF := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
+	last, errL := document.ResolveInt(ctx, doc, fontDict["LastChar"])
+	if hasFirst && hasLast && errF == nil && errL == nil && last >= first {
+		if expected := int(last - first + 1); len(widths) != expected {
+			results = append(results, failf(fontReqKeyRule(part, 6),
+				"simple font /Widths has %d entries, expected %d", len(widths), expected)...)
+		}
+	}
+	return results
 }
 
 // checkFontRequiredKeys validates the PDF/A font-dictionary required-key rules
