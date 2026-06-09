@@ -1115,12 +1115,15 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 		if typeName != "Document" {
 			*results = append(*results, failf(Rule_14289_2_8_2_5_2_t01,
 				"StructTreeRoot child is %s instead of Document", typeName)...)
+			return
 		}
+		checkDocumentNamespace(ctx, doc, structTreeRoot, d, results)
 		return
 	}
 
 	// Count Document children.
 	docCount := 0
+	var docElem ast.PdfDict
 	for _, item := range arr {
 		d, err := document.ResolveDict(ctx, doc, item)
 		if err != nil || d == nil {
@@ -1129,12 +1132,33 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 		typeName, _ := document.ResolveName(ctx, doc, d["S"])
 		if typeName == "Document" {
 			docCount++
+			docElem = d
 		}
 	}
 
 	if docCount != 1 || len(arr) != 1 {
 		*results = append(*results, failf(Rule_14289_2_8_2_5_2_t01,
 			"StructTreeRoot has %d children (%d Document) instead of single Document", len(arr), docCount)...)
+		return
+	}
+	checkDocumentNamespace(ctx, doc, structTreeRoot, docElem, results)
+}
+
+// pdf2NamespaceURI is the PDF 2.0 standard structure namespace (ISO 32000-2
+// §14.8.6).
+const pdf2NamespaceURI = "http://iso.org/pdf2/ssn"
+
+// checkDocumentNamespace validates ISO 14289-2 §8.2.5.2 t2: the single Document
+// child of the structure tree root shall be declared in the PDF 2.0 namespace.
+// It fires only when the Document resolves to a different standard namespace
+// (e.g. the legacy PDF 1.7 namespace); an element that cannot be resolved to a
+// standard namespace is left to the §8.2.4 t1 check to avoid a false reject.
+func checkDocumentNamespace(ctx context.Context, doc *document.Document, treeRoot, docElem ast.PdfDict, results *[]Violation) {
+	r := newNSRoleResolver(ctx, doc, treeRoot)
+	stdType, stdNS, ok := r.elementStandardType(ctx, doc, docElem)
+	if ok && stdType == "Document" && standardNamespaceURIs[stdNS] && stdNS != pdf2NamespaceURI {
+		*results = append(*results, failf(Rule_14289_2_8_2_5_2_t02,
+			"Document structure element is in namespace %q, not the PDF 2.0 namespace", stdNS)...)
 	}
 }
 

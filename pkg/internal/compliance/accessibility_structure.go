@@ -260,6 +260,137 @@ func typeMapsToStandardNS(ctx context.Context, doc *document.Document, typeName,
 	return false
 }
 
+// maxRoleMapNSDepth bounds the namespace role-map (/RoleMapNS) and legacy
+// /RoleMap chain length during type resolution. It is an anti-DoS guard against
+// a crafted cyclic or pathologically long mapping chain, not a spec limit; real
+// documents resolve in one or two hops. Resolution also tracks visited
+// (namespace, type) pairs, so this is a belt-and-suspenders cap.
+const maxRoleMapNSDepth = 32
+
+// nsRoleResolver resolves a structure element's type to its effective standard
+// structure type, following PDF 2.0 namespace role mapping (ISO 32000-2 §14.7.4
+// /RoleMapNS) and the legacy /RoleMap. Build it once per document from the
+// structure tree root with [newNSRoleResolver]; it performs no mutation and is
+// safe to reuse across a single validation run.
+type nsRoleResolver struct {
+	// defaultNSURI is the namespace inherited by elements without an explicit
+	// /NS, taken from the first entry of the tree root /Namespaces array.
+	defaultNSURI string
+	// rmnsByURI maps a namespace URI to that namespace's /RoleMapNS dict.
+	rmnsByURI map[string]ast.PdfDict
+	// classicRole is the tree root legacy /RoleMap (non-namespaced mapping).
+	classicRole map[ast.PdfName]ast.PdfName
+}
+
+// newNSRoleResolver builds a resolver from a structure tree root.
+func newNSRoleResolver(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict) *nsRoleResolver {
+	r := &nsRoleResolver{rmnsByURI: make(map[string]ast.PdfDict)}
+
+	nsArr, _ := document.ResolveArray(ctx, doc, treeRoot["Namespaces"])
+	for _, nsObj := range nsArr {
+		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
+		if nsDict == nil {
+			continue
+		}
+		uri, _ := document.ResolveString(ctx, doc, nsDict["NS"])
+		if len(uri) == 0 {
+			continue
+		}
+		if rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"]); rmns != nil {
+			r.rmnsByURI[string(uri)] = rmns
+		}
+	}
+	if len(nsArr) > 0 {
+		if nsDict, _ := document.ResolveDict(ctx, doc, nsArr[0]); nsDict != nil {
+			if uri, _ := document.ResolveString(ctx, doc, nsDict["NS"]); len(uri) > 0 {
+				r.defaultNSURI = string(uri)
+			}
+		}
+	}
+
+	r.classicRole = LoadRoleMap(ctx, doc, treeRoot)
+	return r
+}
+
+// elementNSURI returns the namespace URI an element belongs to: its own /NS, or
+// the document default namespace when /NS is absent.
+func (r *nsRoleResolver) elementNSURI(ctx context.Context, doc *document.Document, elem ast.PdfDict) string {
+	if nsObj, ok := elem["NS"]; ok {
+		if nsDict, _ := document.ResolveDict(ctx, doc, nsObj); nsDict != nil {
+			if uri, _ := document.ResolveString(ctx, doc, nsDict["NS"]); len(uri) > 0 {
+				return string(uri)
+			}
+		}
+	}
+	return r.defaultNSURI
+}
+
+// elementStandardType resolves an element to its effective standard structure
+// type and the standard namespace URI it lands in. ok is false when the element
+// has no /S or cannot be resolved to a type in a standard namespace.
+func (r *nsRoleResolver) elementStandardType(ctx context.Context, doc *document.Document, elem ast.PdfDict) (stdType, stdNS string, ok bool) {
+	sType, _ := document.ResolveName(ctx, doc, elem["S"])
+	if sType == "" {
+		return "", "", false
+	}
+	return r.resolveStandardType(ctx, doc, string(sType), r.elementNSURI(ctx, doc, elem))
+}
+
+// resolveStandardType resolves (typeName, nsURI) to its effective standard type
+// and standard namespace by following /RoleMapNS (namespaced) or the legacy
+// /RoleMap (when nsURI is empty). ok is false if no standard namespace is
+// reached within [maxRoleMapNSDepth] hops or a cycle is detected.
+func (r *nsRoleResolver) resolveStandardType(ctx context.Context, doc *document.Document, typeName, nsURI string) (stdType, stdNS string, ok bool) {
+	visited := make(map[string]bool)
+	for range maxRoleMapNSDepth {
+		key := nsURI + "\x00" + typeName
+		if visited[key] {
+			return "", "", false
+		}
+		visited[key] = true
+
+		if standardNamespaceURIs[nsURI] {
+			return typeName, nsURI, true
+		}
+
+		if nsURI == "" {
+			// No namespace mechanism: the legacy /RoleMap targets standard type
+			// names with no namespace.
+			if isStandardStructType(ast.PdfName(typeName), "PDF/UA-2") {
+				return typeName, "", true
+			}
+			next, exists := r.classicRole[ast.PdfName(typeName)]
+			if !exists {
+				return "", "", false
+			}
+			typeName = string(next)
+			continue
+		}
+
+		// Namespaced type: follow /RoleMapNS[type] -> [targetType, targetNS].
+		rmns, exists := r.rmnsByURI[nsURI]
+		if !exists {
+			return "", "", false
+		}
+		mappingObj, exists := rmns[ast.PdfName(typeName)]
+		if !exists {
+			return "", "", false
+		}
+		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
+		if len(arr) < 2 {
+			return "", "", false
+		}
+		targetType, _ := document.ResolveName(ctx, doc, arr[0])
+		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
+		if targetType == "" || targetNSDict == nil {
+			return "", "", false
+		}
+		targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
+		typeName, nsURI = string(targetType), string(targetURI)
+	}
+	return "", "", false
+}
+
 // roleMapChainReturnsSameNS follows a RoleMapNS chain starting from typeName
 // in srcNSURI and returns true if the chain eventually maps back to the
 // source namespace (directly or through intermediates).

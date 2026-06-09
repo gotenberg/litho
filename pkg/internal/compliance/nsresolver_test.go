@@ -1,0 +1,104 @@
+package compliance
+
+import (
+	"context"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+)
+
+// nsTestDoc builds a document whose structure tree root declares the PDF 2.0,
+// a custom (role-mapping), and the PDF 1.7 namespaces, plus a legacy /RoleMap.
+// Object numbers: 5 = pdf2 ns, 6 = custom ns (MyForm -> [Form, pdf2]), 7 = pdf1
+// ns, 8 = the single Document child (in pdf2). Returns the doc and the resolved
+// structure tree root.
+func nsTestDoc(t *testing.T) (*document.Document, ast.PdfDict) {
+	t.Helper()
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /Namespaces [5 0 R 6 0 R 7 0 R] /RoleMap << /MyDiv /Div >> /K 8 0 R >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+		"<< /Type /Namespace /NS (http://example.com/ns) /RoleMapNS << /MyForm [/Form 5 0 R] >> >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+		"<< /Type /StructElem /S /Document /NS 5 0 R /P 4 0 R >>",
+	)
+	root, err := document.ResolveDict(context.Background(), doc, cat["StructTreeRoot"])
+	if err != nil || root == nil {
+		t.Fatalf("resolve StructTreeRoot: %v", err)
+	}
+	return doc, root
+}
+
+func ref(n int) ast.PdfIndirectRef { return ast.PdfIndirectRef{ObjectNum: n} }
+
+func TestNSRoleResolver(t *testing.T) {
+	ctx := context.Background()
+	doc, root := nsTestDoc(t)
+	r := newNSRoleResolver(ctx, doc, root)
+
+	const pdf2 = "http://iso.org/pdf2/ssn"
+	const pdf1 = "http://iso.org/pdf/ssn"
+
+	// Core chain resolution by (type, namespace URI).
+	chain := []struct {
+		name           string
+		typeName, ns   string
+		wantType, wfNS string
+		wantOK         bool
+	}{
+		{"standard in pdf2", "Form", pdf2, "Form", pdf2, true},
+		{"RoleMapNS custom->Form", "MyForm", "http://example.com/ns", "Form", pdf2, true},
+		{"standard in pdf1", "Document", pdf1, "Document", pdf1, true},
+		{"legacy RoleMap (no ns)", "MyDiv", "", "Div", "", true},
+		{"unmapped in non-standard ns", "Bogus", "http://example.com/ns", "", "", false},
+	}
+	for _, c := range chain {
+		gotType, gotNS, ok := r.resolveStandardType(ctx, doc, c.typeName, c.ns)
+		if gotType != c.wantType || gotNS != c.wfNS || ok != c.wantOK {
+			t.Errorf("%s: got (%q,%q,%v), want (%q,%q,%v)", c.name, gotType, gotNS, ok, c.wantType, c.wfNS, c.wantOK)
+		}
+	}
+
+	// Element resolution: /NS reference and default-namespace inheritance.
+	if gt, gn, ok := r.elementStandardType(ctx, doc, ast.PdfDict{"S": ast.PdfName("MyForm"), "NS": ref(6)}); !ok || gt != "Form" || gn != pdf2 {
+		t.Errorf("element MyForm in custom ns: got (%q,%q,%v)", gt, gn, ok)
+	}
+	// No /NS: inherits the default (first /Namespaces entry = pdf2).
+	if gt, gn, ok := r.elementStandardType(ctx, doc, ast.PdfDict{"S": ast.PdfName("Form")}); !ok || gt != "Form" || gn != pdf2 {
+		t.Errorf("element Form without /NS: got (%q,%q,%v)", gt, gn, ok)
+	}
+}
+
+func TestDocumentNamespaceRule(t *testing.T) {
+	ctx := context.Background()
+
+	// Document declared in the PDF 1.7 namespace must fail §8.2.5.2 t2.
+	doc1, cat1 := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K 6 0 R >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+		"<< /Type /StructElem /S /Document /NS 5 0 R /P 4 0 R >>",
+	)
+	root1, err := document.ResolveDict(ctx, doc1, cat1["StructTreeRoot"])
+	if err != nil || root1 == nil {
+		t.Fatalf("resolve root1: %v", err)
+	}
+	var got []Violation
+	checkSingleDocumentRoot(ctx, doc1, root1, &got)
+	if !hasRule(got, Rule_14289_2_8_2_5_2_t02) {
+		t.Errorf("Document in PDF 1.7 namespace: got %v, want §8.2.5.2 t2", got)
+	}
+
+	// Document in the PDF 2.0 namespace is conformant.
+	doc2, root2 := nsTestDoc(t)
+	var ok []Violation
+	checkSingleDocumentRoot(ctx, doc2, root2, &ok)
+	if hasRule(ok, Rule_14289_2_8_2_5_2_t02) {
+		t.Errorf("Document in PDF 2.0 namespace: got %v, want no §8.2.5.2 t2", ok)
+	}
+}
