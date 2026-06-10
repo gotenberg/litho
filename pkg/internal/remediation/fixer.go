@@ -99,6 +99,7 @@ var registry = []fixer{
 	{name: "catalog-cleanup", safety: safetyStructural, matches: matchCatalogCleanup, apply: fixCatalogCleanup},
 	{name: "annotations", safety: safetyResource, matches: matchAnnotations, apply: fixAnnotations},
 	{name: "forbidden-annots", safety: safetyResource, matches: matchForbiddenAnnots, apply: fixForbiddenAnnots},
+	{name: "annot-artifact", safety: safetyResource, matches: matchAnnotArtifact, apply: fixAnnotArtifact},
 	{name: "annot-flags", safety: safetyResource, matches: matchAnnotFlags, apply: fixAnnotFlags},
 	{name: "annot-opacity", safety: safetyResource, matches: matchAnnotOpacity, apply: fixAnnotOpacity},
 	{name: "annot-appearance", safety: safetyResource, matches: matchAnnotAppearance, apply: fixAnnotAppearance},
