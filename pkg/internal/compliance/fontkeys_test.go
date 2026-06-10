@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
 func TestFontRequiredKeys(t *testing.T) {
@@ -52,6 +53,39 @@ func TestFontRequiredKeys(t *testing.T) {
 	// Non-PDF/A (part 0) is not checked.
 	if got := chk(ast.PdfDict{}, "", 0); len(got) != 0 {
 		t.Errorf("part 0: got %v, want none", got)
+	}
+}
+
+func TestFontFileSubtype(t *testing.T) {
+	ctx := context.Background()
+	mk := func(ffSubtype string) (ast.PdfDict, *document.Document) {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /FontDescriptor /FontName /X /FontFile3 5 0 R >>",
+			"<< /Subtype /"+ffSubtype+" /Length 3 >>\nstream\nabc\nendstream",
+		)
+		font := ast.PdfDict{
+			"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1"),
+			"BaseFont": ast.PdfName("X"), "FontDescriptor": ref(4),
+		}
+		return font, doc
+	}
+
+	// PDF/A-1 forbids an OpenType FontFile3; PDF/A-2 permits it.
+	font, doc := mk("OpenType")
+	if got := checkFontRequiredKeys(ctx, doc, font, "Type1", 1); !hasRule(got, Rule_19005_1_6_3_2_t07) {
+		t.Errorf("A-1 OpenType FontFile3: got %v, want §6.3.2 t7", got)
+	}
+	if got := checkFontRequiredKeys(ctx, doc, font, "Type1", 2); hasRule(got, Rule_19005_2_6_2_11_2_t07) {
+		t.Errorf("A-2 OpenType FontFile3: got %v, want none", got)
+	}
+
+	// Type1C is permitted for every part.
+	fontC, docC := mk("Type1C")
+	if got := checkFontRequiredKeys(ctx, docC, fontC, "Type1", 1); hasRule(got, Rule_19005_1_6_3_2_t07) {
+		t.Errorf("Type1C FontFile3: got %v, want none", got)
 	}
 }
 

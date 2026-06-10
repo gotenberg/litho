@@ -176,8 +176,23 @@ func fontReqKeyRule(part, test int) Rule {
 		return ruleByPart(part, Rule_19005_1_6_3_2_t05, Rule_19005_2_6_2_11_2_t05, Rule_19005_3_6_2_11_2_t05, Rule_19005_4_6_2_10_2_t05)
 	case 6:
 		return ruleByPart(part, Rule_19005_1_6_3_2_t06, Rule_19005_2_6_2_11_2_t06, Rule_19005_3_6_2_11_2_t06, Rule_19005_4_6_2_10_2_t06)
+	case 7:
+		return ruleByPart(part, Rule_19005_1_6_3_2_t07, Rule_19005_2_6_2_11_2_t07, Rule_19005_3_6_2_11_2_t07, Rule_19005_4_6_2_10_2_t07)
 	}
 	return Rule{}
+}
+
+// isValidFontFileSubtype reports whether an embedded FontFile3 /Subtype is
+// permitted: Type1C and CIDFontType0C for every part, plus OpenType for parts
+// 2+ (ISO 19005-1 §6.3.2 t7 forbids OpenType; §6.2.11.2/§6.2.10.2 t7 allow it).
+func isValidFontFileSubtype(part int, subtype string) bool {
+	switch subtype {
+	case "Type1C", "CIDFontType0C":
+		return true
+	case "OpenType":
+		return part != 1
+	}
+	return false
 }
 
 // checkSimpleFontRequiredKeys validates the PDF/A required-key rules that apply
@@ -238,6 +253,19 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 		if _, ok := fontDict["BaseFont"]; !ok {
 			if rule := fontReqKeyRule(part, 3); rule.Specification != "" {
 				results = append(results, failf(rule, "font missing /BaseFont")...)
+			}
+		}
+	}
+
+	// t7: an embedded FontFile3 program /Subtype must be a permitted value.
+	if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
+		if ff3, ok := fd["FontFile3"]; ok {
+			if stream, err := document.ResolveStream(ctx, doc, ff3); err == nil {
+				ffSubtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+				if ffSubtype != "" && !isValidFontFileSubtype(part, string(ffSubtype)) {
+					results = append(results, failf(fontReqKeyRule(part, 7),
+						"embedded font program /Subtype %q is not permitted", ffSubtype)...)
+				}
 			}
 		}
 	}
