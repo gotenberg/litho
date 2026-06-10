@@ -75,6 +75,7 @@ var registry = []fixer{
 	{name: "struct-tree", safety: safetyStructural, matches: matchStructTree, apply: fixStructTree},
 	{name: "rolemap", safety: safetyStructural, matches: matchRoleMap, apply: fixRoleMap},
 	{name: "content-tag", safety: safetyStructural, matches: matchContentTag, apply: fixContentTag},
+	{name: "single-doc-root", safety: safetyStructural, matches: matchSingleDocRoot, apply: fixSingleDocRoot},
 	{name: "struct-parent", safety: safetyStructural, matches: matchStructParent, apply: fixStructParent},
 	{name: "note-id", safety: safetyStructural, matches: matchNoteID, apply: fixNoteID},
 	{name: "table-sections", safety: safetyStructural, matches: matchTableSections, apply: fixTableSections},
