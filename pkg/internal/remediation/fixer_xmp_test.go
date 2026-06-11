@@ -143,6 +143,41 @@ func TestPatchExistingXMP_InjectsUARev(t *testing.T) {
 	}
 }
 
+// TestSyncXMPToInfo_PresenceSemantics pins the ISO 19005-1 §6.7.3 sync:
+// present Info keys drive the XMP analogue (replace or insert), absent
+// keys leave the XMP side alone, and a present-but-empty /Keywords
+// replaces a whitespace-only pdf:Keywords with an exactly-empty value.
+func TestSyncXMPToInfo_PresenceSemantics(t *testing.T) {
+	xmp := []byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:pdf="http://ns.adobe.com/pdf/1.3/">
+  <pdf:Keywords>
+   </pdf:Keywords>
+  <pdf:Producer>ghost</pdf:Producer>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+
+	info := infoMetadata{
+		Keywords: "",
+		Present:  map[string]bool{"Keywords": true},
+	}
+	out, fixes := syncXMPToInfo(xmp, nil, info)
+
+	if strings.Contains(string(out), "<pdf:Keywords>\n") {
+		t.Errorf("whitespace pdf:Keywords should be replaced with the empty Info value:\n%s", out)
+	}
+	if len(fixes) != 1 {
+		t.Errorf("only /Keywords may be synced (Producer absent from Info), got %v", fixes)
+	}
+	if !strings.Contains(string(out), "<pdf:Producer>ghost</pdf:Producer>") {
+		t.Errorf("pdf:Producer must stay untouched when /Producer is absent from Info:\n%s", out)
+	}
+}
+
 // TestPatchExistingXMP_StripsPdfaidRevForParts1to3 pins the rev removal
 // when retargeting a PDF/A-4 document to parts 1-3: pdfaid:rev exists
 // only in the PDF/A-4 identification schema, and a leftover fails

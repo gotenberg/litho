@@ -138,6 +138,11 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		requiredVersion = "1.4"
 	case strings.HasPrefix(profile, "PDF/A-2"), strings.HasPrefix(profile, "PDF/A-3"):
 		requiredVersion = "1.7"
+	case strings.HasPrefix(profile, "PDF/UA-1"):
+		// ISO 14289-1 §6.1 (PDFUA-1.xml 6.1 t1): the header shall be
+		// %PDF-1.n with n in 0..7, so a PDF 2.0 source is pinned down
+		// to 1.7, the highest conforming version.
+		requiredVersion = "1.7"
 	}
 
 	// Trailer mutations (e.g. /ID insertion) don't allocate objects but

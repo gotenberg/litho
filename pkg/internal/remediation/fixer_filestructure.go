@@ -10,6 +10,12 @@ import (
 )
 
 func matchFileStructure(v compliance.Violation) bool {
+	// PDF/UA-1 header rule (ISO 14289-1 §6.1 t1): a %PDF-2.0 header is
+	// repaired by the full rewrite, which re-emits the header at the
+	// pinned RequiredVersion (1.7 for UA-1 targets).
+	if v.Rule == compliance.Rule_14289_1_6_1_t01 {
+		return true
+	}
 	clause := v.Rule.Clause
 	return strings.HasPrefix(clause, "6.1.2") || // header format
 		strings.HasPrefix(clause, "6.1.4") || // xref table spacing

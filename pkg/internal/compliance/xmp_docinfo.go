@@ -230,6 +230,14 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	depth := 0
 	inDesc := false
 
+	// simpleRaw accumulates the raw character data of a depth-1 simple
+	// property. XMP preserves element text verbatim (whitespace included),
+	// and veraPDF compares the un-trimmed value against the Info dict:
+	// a pretty-printed "\n   " pdf:Keywords is NOT equivalent to an empty
+	// /Keywords (§6.7.3 t5, verified live). Trimming here hid that class.
+	var simpleRaw strings.Builder
+	simpleHasChild := false
+
 	// altDefaults tracks x-default values from rdf:Alt containers so they
 	// can override any earlier first-entry value.
 	altDefaults := make(map[string]string)
@@ -278,6 +286,11 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 				if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
 					propNS = t.Name.Space
 					propLocal = t.Name.Local
+					simpleRaw.Reset()
+					simpleHasChild = false
+				}
+				if depth == 2 {
+					simpleHasChild = true
 				}
 				if depth == 2 && t.Name.Space == xmpRDFNamespace {
 					switch t.Name.Local {
@@ -303,6 +316,9 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 			if !inDesc {
 				continue
 			}
+			if depth == 1 && propNS != "" {
+				simpleRaw.Write(t)
+			}
 			text := strings.TrimSpace(string(t))
 			if text == "" {
 				continue
@@ -324,9 +340,6 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 						result[key] = text
 					}
 				}
-			} else if depth == 1 && propNS != "" {
-				key := makeKey(propNS, propLocal)
-				result[key] = text
 			}
 		case xml.EndElement:
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
@@ -352,6 +365,9 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 					}
 				}
 				if depth == 1 {
+					if propNS != "" && !simpleHasChild {
+						result[makeKey(propNS, propLocal)] = simpleRaw.String()
+					}
 					propNS = ""
 					propLocal = ""
 				}
