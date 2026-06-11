@@ -21,4 +21,9 @@ type Options struct {
 	// aggressive mode (PreserveContent == false) a generic placeholder is
 	// inserted so the document passes the mechanical check.
 	FigureAlt string
+	// PinnedID, when 16 bytes long, seeds the trailer /ID minted by the
+	// trailer-id fixer instead of crypto/rand. Reproducible-build callers
+	// pin it so identical inputs yield identical output bytes; the random
+	// /ID is litho's documented nondeterminism seam.
+	PinnedID []byte
 }

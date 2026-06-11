@@ -17,6 +17,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -3735,5 +3736,72 @@ func TestWriter_MutationAfterRemediationNotDropped(t *testing.T) {
 	}
 	if meta["Title"] != "Post-Remediation Title" {
 		t.Errorf("post-remediation mutation dropped: Title = %q", meta["Title"])
+	}
+}
+
+// TestWriter_WithDocumentID pins the reproducible-build seam: remediating a
+// document lacking a trailer /ID with a pinned ID must produce that ID in
+// the output, and two runs with the same pin must produce identical bytes.
+func TestWriter_WithDocumentID(t *testing.T) {
+	ctx := context.Background()
+	pinned := bytes.Repeat([]byte{0xAB}, 16)
+
+	run := func() []byte {
+		r, err := Open(ctx, bytes.NewReader(writerTestPDF()), int64(len(writerTestPDF())))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer r.Close()
+		w := NewWriter(r)
+		if _, err := w.RemediatePDFA(ctx, models.PDFA2b, WithDocumentID(pinned)); err != nil {
+			t.Fatalf("RemediatePDFA: %v", err)
+		}
+		var out bytes.Buffer
+		if err := w.WriteTo(ctx, &out); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes()
+	}
+
+	a, b := run(), run()
+	r2, err := Open(ctx, bytes.NewReader(a), int64(len(a)))
+	if err != nil {
+		t.Fatalf("Open output: %v", err)
+	}
+	defer r2.Close()
+	idArr, ok := r2.doc.Index.Trailer["ID"].(ast.PdfArray)
+	if !ok || len(idArr) != 2 {
+		t.Fatalf("output trailer /ID: got %v", r2.doc.Index.Trailer["ID"])
+	}
+	if first, ok := idArr[0].(ast.PdfString); !ok || string(first) != string(pinned) {
+		t.Errorf("pinned /ID not honored: got %x", first)
+	}
+	if !bytes.Equal(a, b) {
+		t.Error("two remediation runs with a pinned /ID differ; nondeterminism seam leaked")
+	}
+}
+
+// TestRemediationReport_ResidualViolations pins the structured residual
+// view: clause and test number must be programmatically accessible.
+func TestRemediationReport_ResidualViolations(t *testing.T) {
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(writerTestPDF()), int64(len(writerTestPDF())))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	rep, err := w.RemediatePDFA(ctx, models.PDFA1a)
+	if err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
+	vs := rep.ResidualViolations()
+	if len(vs) != len(rep.Residual) {
+		t.Fatalf("structured view length %d != residual length %d", len(vs), len(rep.Residual))
+	}
+	for _, v := range vs {
+		if v.Clause == "" && v.Description == "" {
+			t.Errorf("structured violation carries neither clause nor description: %+v", v)
+		}
 	}
 }

@@ -96,6 +96,7 @@ type remediateOpts struct {
 	preserveContent bool
 	figureAlt       string
 	tolerance       RegressionTolerance
+	documentID      []byte
 }
 
 // RegressionTolerance bounds the integrity probe that runs after
@@ -161,6 +162,19 @@ func WithFigureAltText(alt string) RemediateOption {
 	}
 }
 
+// WithDocumentID pins the 16-byte seed for the trailer /ID that
+// remediation mints when the source has none (or a malformed one).
+// Reproducible-build callers pin it so identical inputs produce identical
+// output bytes; the random /ID is otherwise litho's documented
+// nondeterminism seam. An id of any other length is ignored and the
+// random seam applies. [Writer.Encrypt] mints its own ID and is not
+// affected by this option.
+func WithDocumentID(id []byte) RemediateOption {
+	return func(o *remediateOpts) {
+		o.documentID = id
+	}
+}
+
 // WithRegressionTolerance overrides [DefaultRegressionTolerance] for a
 // single remediation call. Use tighter bounds for documents whose textual
 // or visual integrity must be preserved byte-for-byte; use looser bounds
@@ -188,6 +202,14 @@ type RemediationReport struct {
 	// and were subsequently discarded. When non-empty, the output preserves
 	// rendering at the cost of leaving the listed violations unfixed.
 	RolledBack []string
+}
+
+// ResidualViolations returns the residual findings as structured
+// [Violation] values with clause, test number, context, and severity.
+// Residual keeps the raw error form; this accessor is the structured view
+// for callers that route, filter, or report findings programmatically.
+func (r *RemediationReport) ResidualViolations() []Violation {
+	return toViolations(r.Residual)
 }
 
 // BookmarkHandling controls how bookmarks are produced for the output of
@@ -930,7 +952,7 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt}
+	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt, PinnedID: cfg.documentID}
 }
 
 // RemediatePDFA validates the document against the given PDF/A profile,
@@ -1061,7 +1083,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	for _, o := range opts {
 		o(&rcfg)
 	}
-	remOpts := remediation.Options{Lang: rcfg.lang, PreserveContent: rcfg.preserveContent, FigureAlt: rcfg.figureAlt}
+	remOpts := remediation.Options{Lang: rcfg.lang, PreserveContent: rcfg.preserveContent, FigureAlt: rcfg.figureAlt, PinnedID: rcfg.documentID}
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}

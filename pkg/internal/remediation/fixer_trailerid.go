@@ -18,7 +18,7 @@ func matchTrailerID(v compliance.Violation) bool {
 	return v.Rule.Clause == "6.1.3" && v.Rule.TestNumber != 2
 }
 
-func fixTrailerID(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+func fixTrailerID(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	var fixes []string
 
 	// /ID missing or malformed (empty element).
@@ -41,10 +41,13 @@ func fixTrailerID(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		needReplace = true
 	}
 	if needReplace {
-		id := make([]byte, 16)
-		// crypto/rand.Read never fails on supported platforms; the Go
-		// runtime aborts on getrandom/EAGAIN.
-		_, _ = rand.Read(id)
+		id := opts.PinnedID
+		if len(id) != 16 {
+			id = make([]byte, 16)
+			// crypto/rand.Read never fails on supported platforms; the Go
+			// runtime aborts on getrandom/EAGAIN.
+			_, _ = rand.Read(id)
+		}
 		doc.Index.Trailer["ID"] = ast.PdfArray{
 			ast.PdfString(string(id)),
 			ast.PdfString(string(id)),
