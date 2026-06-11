@@ -97,59 +97,108 @@ type infoMetadata struct {
 	Keywords     string
 	CreationDate string
 	ModDate      string
+	// FallbackTitle holds a best-effort title (first outline entry) for
+	// PDF/UA dc:title synthesis when the document has no /Title at all.
+	FallbackTitle string
 }
 
 func gatherInfoMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) infoMetadata {
 	var info infoMetadata
+	if infoDict := liveInfoDict(ctx, alloc, doc); infoDict != nil {
+		readField := func(key ast.PdfName) string {
+			v, ok := infoDict[key]
+			if !ok {
+				return ""
+			}
+			if _, isRef := v.(ast.PdfIndirectRef); isRef {
+				resolved, err := document.ResolveObject(ctx, doc, v)
+				if err != nil {
+					return ""
+				}
+				v = resolved
+			}
+			if s, ok := v.(ast.PdfString); ok {
+				return document.DecodePdfString(s)
+			}
+			return ""
+		}
+
+		info.Title = readField("Title")
+		info.Author = readField("Author")
+		info.Subject = readField("Subject")
+		info.Creator = readField("Creator")
+		info.Producer = readField("Producer")
+		info.Keywords = readField("Keywords")
+		info.CreationDate = readField("CreationDate")
+		info.ModDate = readField("ModDate")
+	}
+	if info.Title == "" {
+		info.FallbackTitle = fallbackDocTitle(ctx, alloc, doc)
+	}
+	return info
+}
+
+// liveInfoDict resolves the trailer /Info dict, preferring an in-flight
+// patched version from alloc so earlier fixers (e.g. info-date) see their
+// changes flow into the XMP sync. Returns nil when absent or unreadable.
+func liveInfoDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ast.PdfDict {
 	infoObj, ok := doc.Index.Trailer["Info"]
 	if !ok {
-		return info
+		return nil
 	}
-	// Prefer an in-flight patched /Info dict from alloc so earlier
-	// fixers (e.g. info-date) see their changes flow into the XMP sync.
-	var infoDict ast.PdfDict
 	if ref, isRef := infoObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
 		if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
 			if d, ok := pending.(ast.PdfDict); ok {
-				infoDict = d
+				return d
 			}
 		}
 	}
-	if infoDict == nil {
-		resolved, err := document.ResolveDict(ctx, doc, infoObj)
-		if err != nil || resolved == nil {
-			return info
-		}
-		infoDict = resolved
+	resolved, err := document.ResolveDict(ctx, doc, infoObj)
+	if err != nil {
+		return nil
 	}
+	return resolved
+}
 
-	readField := func(key ast.PdfName) string {
-		v, ok := infoDict[key]
-		if !ok {
-			return ""
-		}
-		if _, isRef := v.(ast.PdfIndirectRef); isRef {
-			resolved, err := document.ResolveObject(ctx, doc, v)
-			if err != nil {
-				return ""
-			}
-			v = resolved
-		}
-		if s, ok := v.(ast.PdfString); ok {
-			return document.DecodePdfString(s)
-		}
+// maxFallbackTitleRunes caps a synthesized dc:title sourced from an outline
+// entry. Anti-bloat guard, not spec-mandated: outline titles are
+// file-supplied strings, and a multi-kilobyte document title helps no
+// reader while inflating every rewrite.
+const maxFallbackTitleRunes = 256
+
+// fallbackDocTitle returns a best-effort document title for PDF/UA
+// dc:title synthesis when DocInfo carries none: the first outline item's
+// /Title, or "" when the document has no usable outline.
+func fallbackDocTitle(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) string {
+	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	if !ok {
 		return ""
 	}
-
-	info.Title = readField("Title")
-	info.Author = readField("Author")
-	info.Subject = readField("Subject")
-	info.Creator = readField("Creator")
-	info.Producer = readField("Producer")
-	info.Keywords = readField("Keywords")
-	info.CreationDate = readField("CreationDate")
-	info.ModDate = readField("ModDate")
-	return info
+	catalog := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalog == nil {
+		return ""
+	}
+	outlines, err := document.ResolveDict(ctx, doc, catalog["Outlines"])
+	if err != nil || outlines == nil {
+		return ""
+	}
+	first, err := document.ResolveDict(ctx, doc, outlines["First"])
+	if err != nil || first == nil {
+		return ""
+	}
+	titleObj, err := document.ResolveObject(ctx, doc, first["Title"])
+	if err != nil {
+		return ""
+	}
+	s, ok := titleObj.(ast.PdfString)
+	if !ok {
+		return ""
+	}
+	title := strings.TrimSpace(document.DecodePdfString(s))
+	if runes := []rune(title); len(runes) > maxFallbackTitleRunes {
+		title = string(runes[:maxFallbackTitleRunes])
+	}
+	return title
 }
 
 func generateXMP(part int, conformance string, uaPart int, info infoMetadata) string {
@@ -382,9 +431,24 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Sync dc:title with Info /Title.
-	if info.Title != "" {
-		escaped := xmlEscape(info.Title)
+	// Sync dc:title with Info /Title. PDF/UA additionally requires a
+	// dc:title outright (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1): when
+	// neither DocInfo nor the packet carries one, synthesize it from the
+	// first outline title, then from a placeholder, so the requirement is
+	// met and /DisplayDocTitle has something to show.
+	title := info.Title
+	titleSource := "Info /Title"
+	if uaPart > 0 && title == "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
+		if info.FallbackTitle != "" {
+			title = info.FallbackTitle
+			titleSource = "outline title"
+		} else {
+			title = "Untitled document"
+			titleSource = "placeholder"
+		}
+	}
+	if title != "" {
+		escaped := xmlEscape(title)
 		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
 		injection := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
 		if findXMPProperty(buf, dcNS, "title").Form != xmpPropertyNotFound {
@@ -398,7 +462,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 			}
 			if out, err := insertChildElement(buf, injection); err == nil {
 				buf = out
-				fixes = append(fixes, "injected dc:title from Info /Title")
+				fixes = append(fixes, fmt.Sprintf("injected dc:title from %s", titleSource))
 			}
 		}
 	}

@@ -267,3 +267,66 @@ func TestStripExtensionSchemasBlock_PreservesOtherMetadata(t *testing.T) {
 		}
 	}
 }
+
+// minimalUAXMP is an XMP packet with pdfuaid identification but no
+// dc:title, the shape behind the dc:title residual pool.
+const minimalUAXMP = `<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/" pdfuaid:part="1">
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>`
+
+// TestPatchExistingXMP_SynthesizesDCTitleForUA pins the PDF/UA dc:title
+// fallback chain (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1): outline title
+// first, placeholder second. Without it, documents lacking a DocInfo
+// /Title kept the dc:title violation as a permanent residual.
+func TestPatchExistingXMP_SynthesizesDCTitleForUA(t *testing.T) {
+	t.Parallel()
+
+	patched, fixes := patchExistingXMP(minimalUAXMP, 0, "", 1, infoMetadata{FallbackTitle: "Chapter One"})
+	if !strings.Contains(patched, ">Chapter One</rdf:li>") {
+		t.Errorf("outline fallback title not injected:\n%s", patched)
+	}
+	if !slices.Contains(fixes, "injected dc:title from outline title") {
+		t.Errorf("fix description missing, got %v", fixes)
+	}
+
+	patched, fixes = patchExistingXMP(minimalUAXMP, 0, "", 1, infoMetadata{})
+	if !strings.Contains(patched, ">Untitled document</rdf:li>") {
+		t.Errorf("placeholder title not injected:\n%s", patched)
+	}
+	if !slices.Contains(fixes, "injected dc:title from placeholder") {
+		t.Errorf("fix description missing, got %v", fixes)
+	}
+}
+
+// TestPatchExistingXMP_NoDCTitleSynthesisForPDFA pins the gate: PDF/A does
+// not require dc:title, so a part-only patch must not invent one.
+func TestPatchExistingXMP_NoDCTitleSynthesisForPDFA(t *testing.T) {
+	t.Parallel()
+	patched, _ := patchExistingXMP(minimalUAXMP, 2, "B", 0, infoMetadata{})
+	if strings.Contains(patched, "dc:title") {
+		t.Errorf("dc:title must not be synthesized for PDF/A-only runs:\n%s", patched)
+	}
+}
+
+// TestPatchExistingXMP_ExistingTitlePreserved pins that a packet that
+// already carries dc:title is left alone when DocInfo has no /Title.
+func TestPatchExistingXMP_ExistingTitlePreserved(t *testing.T) {
+	t.Parallel()
+	xmp := `<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:title><rdf:Alt><rdf:li xml:lang="x-default">Real Title</rdf:li></rdf:Alt></dc:title>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>`
+	patched, _ := patchExistingXMP(xmp, 0, "", 1, infoMetadata{})
+	if strings.Contains(patched, "Untitled document") {
+		t.Errorf("existing dc:title must suppress synthesis:\n%s", patched)
+	}
+	if !strings.Contains(patched, "Real Title") {
+		t.Errorf("existing dc:title lost:\n%s", patched)
+	}
+}
