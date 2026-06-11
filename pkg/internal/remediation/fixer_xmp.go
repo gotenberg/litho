@@ -384,8 +384,22 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Inject pdfuaid namespace + pdfuaid:part if missing.
-	if uaPart > 0 && findXMPProperty(buf, pdfuaidNS, "part").Form == xmpPropertyNotFound {
+	// Inject pdfuaid namespace + pdfuaid:part if missing, or correct an
+	// existing wrong value (ISO 14289-2 §5 t2 requires part == 2; a file
+	// claiming part 1 under a PDF/UA-2 run keeps failing until the claim
+	// is updated).
+	if uaPart > 0 && findXMPProperty(buf, pdfuaidNS, "part").Form != xmpPropertyNotFound {
+		before := buf
+		if out, err := replacePropertyValue(buf, pdfuaidNS, "part", fmt.Sprintf("%d", uaPart)); err == nil {
+			buf = out
+			// Compare content, not length: only report a fix when the
+			// value actually changed, so an already-correct part stays
+			// idempotent.
+			if !bytes.Equal(buf, before) {
+				fixes = append(fixes, fmt.Sprintf("set pdfuaid:part to %d", uaPart))
+			}
+		}
+	} else if uaPart > 0 {
 		if out, err := ensureNamespaceDecl(buf, "pdfuaid", pdfuaidNS); err == nil {
 			buf = out
 		}

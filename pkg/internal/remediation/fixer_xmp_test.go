@@ -330,3 +330,24 @@ func TestPatchExistingXMP_ExistingTitlePreserved(t *testing.T) {
 		t.Errorf("existing dc:title lost:\n%s", patched)
 	}
 }
+
+// TestPatchExistingXMP_CorrectsPDFUAIDPart pins the §5 t2 correction: a
+// document claiming pdfuaid:part 1 under a PDF/UA-2 run must have the
+// claim updated, not left as a permanent residual.
+func TestPatchExistingXMP_CorrectsPDFUAIDPart(t *testing.T) {
+	t.Parallel()
+	patched, fixes := patchExistingXMP(minimalUAXMP, 0, "", 2, infoMetadata{Title: "t"})
+	if !strings.Contains(patched, `pdfuaid:part="2"`) && !strings.Contains(patched, ">2</pdfuaid:part>") {
+		t.Errorf("pdfuaid:part not corrected to 2:\n%s", patched)
+	}
+	if !slices.Contains(fixes, "set pdfuaid:part to 2") {
+		t.Errorf("fix description missing, got %v", fixes)
+	}
+
+	// Idempotence: a correct part reports no fix.
+	patched2, fixes2 := patchExistingXMP(patched, 0, "", 2, infoMetadata{Title: "t"})
+	if slices.Contains(fixes2, "set pdfuaid:part to 2") {
+		t.Errorf("already-correct part must not report a fix, got %v", fixes2)
+	}
+	_ = patched2
+}
