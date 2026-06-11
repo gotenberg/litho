@@ -71,7 +71,7 @@ const maxRoleMapHops = 8
 // guessing.
 func iso32005Key(state *walkState, t string) string {
 	name := ast.PdfName(t)
-	for hops := 0; hops < maxRoleMapHops; hops++ {
+	for range maxRoleMapHops {
 		if iso32005HnRe.MatchString(string(name)) {
 			return "Hn"
 		}

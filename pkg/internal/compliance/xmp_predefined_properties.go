@@ -22,6 +22,8 @@ package compliance
 // diff against the upstream arrays mechanically. This pass consumes
 // presence only.
 
+import "maps"
+
 // xmpPredefinedCommon lists the properties registered for both catalog
 // variants (XMPConstants *_COMMON arrays plus the two seq-choice
 // registrations in SchemasDefinitionCreator.createBasicSchemasDefinition).
@@ -433,9 +435,7 @@ func xmpMergePredefined(base, extra map[string]map[string]string) map[string]map
 	out := make(map[string]map[string]string, len(base)+len(extra))
 	for ns, props := range base {
 		merged := make(map[string]string, len(props))
-		for name, vt := range props {
-			merged[name] = vt
-		}
+		maps.Copy(merged, props)
 		out[ns] = merged
 	}
 	for ns, props := range extra {
@@ -444,9 +444,7 @@ func xmpMergePredefined(base, extra map[string]map[string]string) map[string]map
 			merged = make(map[string]string, len(props))
 			out[ns] = merged
 		}
-		for name, vt := range props {
-			merged[name] = vt
-		}
+		maps.Copy(merged, props)
 	}
 	return out
 }

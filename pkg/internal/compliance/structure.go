@@ -124,8 +124,10 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// PDF/UA-2 §8.2.5.2: single Document root child.
 		if profile == "PDF/UA-2" {
 			checkSingleDocumentRoot(ctx, doc, structTreeRoot, &results)
-			rootState := &walkState{doc: doc, profile: profile, results: &results,
-				roleMap: buildRoleMapIndex(ctx, doc, structTreeRoot)}
+			rootState := &walkState{
+				doc: doc, profile: profile, results: &results,
+				roleMap: buildRoleMapIndex(ctx, doc, structTreeRoot),
+			}
 			validateISO32005Root(ctx, rootState, structTreeRoot)
 		}
 	}

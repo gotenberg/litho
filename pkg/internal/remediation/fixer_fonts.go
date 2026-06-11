@@ -517,10 +517,8 @@ func cmapHasForbiddenDestination(data []byte) bool {
 			toks := cmapHexTokens(line)
 			// <srcCode> <dstString>; the source operand may legally be
 			// <0000> for a two-byte code.
-			for _, dst := range toksAfter(toks, 1) {
-				if utf16HexHasForbidden(dst) {
-					return true
-				}
+			if slices.ContainsFunc(toksAfter(toks, 1), utf16HexHasForbidden) {
+				return true
 			}
 		}
 	}
@@ -528,10 +526,8 @@ func cmapHasForbiddenDestination(data []byte) bool {
 		for line := range strings.Lines(block) {
 			toks := cmapHexTokens(line)
 			// <lo> <hi> <dst> or <lo> <hi> [<dst> <dst> ...].
-			for _, dst := range toksAfter(toks, 2) {
-				if utf16HexHasForbidden(dst) {
-					return true
-				}
+			if slices.ContainsFunc(toksAfter(toks, 2), utf16HexHasForbidden) {
+				return true
 			}
 		}
 	}
@@ -549,12 +545,12 @@ func cmapOperatorBlocks(data []byte, kind string) []string {
 			break
 		}
 		rest := s[i+len(begin):]
-		j := strings.Index(rest, end)
-		if j < 0 {
+		before, after, ok := strings.Cut(rest, end)
+		if !ok {
 			break
 		}
-		out = append(out, rest[:j])
-		s = rest[j+len(end):]
+		out = append(out, before)
+		s = after
 	}
 	return out
 }
