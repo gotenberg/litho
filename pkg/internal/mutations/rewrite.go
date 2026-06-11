@@ -14,21 +14,24 @@ import (
 // FullRewriteConfig holds the parameters for a full document rewrite.
 type FullRewriteConfig struct {
 	Doc             *document.Document
-	Mutations       []MutationFunc
 	EncryptCfg      *crypto.EncryptConfig
 	Decrypt         bool
 	Version         string
 	RequiredVersion string
 	XRefStream      bool
-	// Overrides pre-seeds the copier so remediation patches made against
-	// the source document's object numbers are used in place of the
-	// original objects during the copy pass. Keys are source object
-	// numbers; values are the replacement payloads.
+	// Overrides pre-seeds the copier so edits made against the source
+	// document's object numbers (remediation patches and pre-applied
+	// user mutations) are used in place of the original objects during
+	// the copy pass. Keys are source object numbers; values are the
+	// replacement payloads. Mutations must arrive here, never as
+	// callbacks against the rewrite's own allocator: that allocator is
+	// in destination numbering, so a source-numbered AllocAt would stomp
+	// an unrelated copied object and silently drop the edit.
 	Overrides map[int]ast.PdfObject
 }
 
-// FullRewrite performs a complete rewrite of the document, applying all
-// mutations and optionally encrypting or decrypting the output.
+// FullRewrite performs a complete rewrite of the document, applying the
+// override set and optionally encrypting or decrypting the output.
 func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) error {
 	doc := cfg.Doc
 	alloc := writer.NewObjAllocator(0)
@@ -67,13 +70,6 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		copiedID, err := copier.CopyObject(ctx, idArr)
 		if err == nil {
 			trailer["ID"] = copiedID
-		}
-	}
-
-	// Apply batched mutations on the rewritten objects.
-	for _, m := range cfg.Mutations {
-		if err := m(ctx, alloc, doc); err != nil {
-			return fmt.Errorf("applying mutation: %w", err)
 		}
 	}
 

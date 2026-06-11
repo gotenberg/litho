@@ -67,6 +67,14 @@ type Document struct {
 	// data was damaged or missing.
 	Rebuilt bool
 
+	// HeaderOffset is the physical byte position of the %PDF- header,
+	// non-zero when junk precedes it. Readers disagree on the offset
+	// base for such files: litho resolves xref offsets from the physical
+	// file start, while Acrobat and veraPDF resolve them relative to the
+	// header. Writers must not extend such files incrementally, since
+	// any appended section is wrong for one of the two conventions.
+	HeaderOffset int64
+
 	// Version is the PDF version string extracted from the %PDF-X.Y header
 	// (e.g., "1.4", "1.7", "2.0").
 	Version string
@@ -238,6 +246,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		maxCacheSize: 50_000, // evict when cache exceeds 50k objects
 		Logger:       logger,
 		Version:      version,
+		HeaderOffset: int64(pdfIdx),
 	}
 
 	// Probe for linearization before seeking to the end of the file.

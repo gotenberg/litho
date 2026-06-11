@@ -1453,6 +1453,23 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		o(&cfg)
 	}
 
+	// Two source conditions make an incremental update unsafe. A rebuilt
+	// cross-reference table means the recorded offsets are unusable, so
+	// /Prev would chain into broken data. A non-zero header offset (junk
+	// before %PDF) means readers disagree on the offset base: litho and
+	// this writer use the physical file start, while Acrobat and veraPDF
+	// resolve offsets relative to the header, so any appended section is
+	// wrong for one convention (veraPDF rejects the mix outright). Force
+	// a full rewrite; it re-derives every offset and drops the junk.
+	// A write with no edits stays a byte-identical pass-through, and the
+	// signing path below is exempt: it is structurally incremental, and
+	// [Writer.WriteTo] already rejects sign + full-rewrite combinations.
+	hasEdits := len(w.mutations) > 0 || w.trailerDirty || len(w.rewriteOverrides) > 0 ||
+		w.encryptCfg != nil || w.decrypt
+	if hasEdits && (w.reader.doc.Rebuilt || w.reader.doc.HeaderOffset > 0) && w.signer == nil {
+		cfg.fullRewrite = true
+	}
+
 	// Swap the document logger for the duration of the write so every
 	// internal call site that uses doc.Logger (mutations, copier, remediation)
 	// routes through the caller's logger. The previous logger is restored on
@@ -1491,19 +1508,44 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {
-		mutFuncs := make([]mutations.MutationFunc, len(w.mutations))
-		for i, m := range w.mutations {
-			mutFuncs[i] = m.apply
+		// Pre-apply mutations into a source-namespace allocator and hand
+		// the results to the copier as overrides. Mutations resolve from
+		// the source document and AllocAt source object numbers; running
+		// them inside FullRewrite against its destination-numbered
+		// allocator stomped unrelated copied objects and silently dropped
+		// the edit (a page rotation landed on whatever object the copier
+		// had renumbered into that slot).
+		overrides := w.rewriteOverrides
+		if len(w.mutations) > 0 {
+			maxObjNum := 0
+			for objNum := range w.reader.doc.Index.Entries {
+				if objNum > maxObjNum {
+					maxObjNum = objNum
+				}
+			}
+			mutAlloc := writer.NewObjAllocator(maxObjNum)
+			for i, m := range w.mutations {
+				if err := m.apply(ctx, mutAlloc, w.reader.doc); err != nil {
+					return fmt.Errorf("applying mutation %d: %w", i, err)
+				}
+			}
+			if len(mutAlloc.Pending()) > 0 {
+				merged := make(map[int]ast.PdfObject, len(overrides)+len(mutAlloc.Pending()))
+				maps.Copy(merged, mutAlloc.Pending())
+				// Remediation overrides win at the same object number,
+				// matching the incremental path's seeding order.
+				maps.Copy(merged, w.rewriteOverrides)
+				overrides = merged
+			}
 		}
 		return mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
 			Doc:             w.reader.doc,
-			Mutations:       mutFuncs,
 			EncryptCfg:      w.encryptCfg,
 			Decrypt:         w.decrypt,
 			Version:         cfg.version,
 			RequiredVersion: w.requiredVersion,
 			XRefStream:      cfg.xrefStream,
-			Overrides:       w.rewriteOverrides,
+			Overrides:       overrides,
 		})
 	}
 

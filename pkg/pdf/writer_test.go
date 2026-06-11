@@ -3605,3 +3605,45 @@ func TestWriter_RemediateFacturX_RejectsBadConfig(t *testing.T) {
 		})
 	}
 }
+
+// TestWriter_RebuiltSourceForcesFullRewrite guards the offset-convention
+// fix: a source whose xref was rebuilt (here junk before %PDF shifts every
+// recorded offset) must be written as a full rewrite. The previous
+// incremental path appended a physically addressed xref whose /Prev chained
+// into the broken original offsets, a mixed-convention file conforming
+// readers reject.
+func TestWriter_RebuiltSourceForcesFullRewrite(t *testing.T) {
+	data := append([]byte("JUNK"), writerTestPDF()...)
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if !r.doc.Rebuilt {
+		t.Fatal("fixture must trigger an xref rebuild for this test to be meaningful")
+	}
+
+	w := NewWriter(r)
+	w.SetMetadata(Metadata{Title: "New Title"})
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	if !bytes.HasPrefix(out.Bytes(), []byte("%PDF-")) {
+		t.Error("output must start at the %PDF header; junk prefix not dropped")
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open rewritten output: %v", err)
+	}
+	// The real assertion: the output's offsets must be valid as written. A
+	// rebuilt output means the writer emitted broken offsets again and only
+	// litho's recovery scan could read them back.
+	if r2.doc.Rebuilt {
+		t.Error("output required an xref rebuild: written offsets are not physically valid")
+	}
+}
