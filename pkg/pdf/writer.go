@@ -1371,9 +1371,117 @@ func (w *Writer) remediate(
 		}, nil
 	}
 
-	// Happy path: no regression.
+	// Happy path: no regression. Fix to fixpoint: a fixer can repair
+	// state that only becomes fixable once an earlier round's output is
+	// serialized (a namespace rebind exposing a now-reachable property,
+	// a structural fix unblocking a metadata one). Each extra round runs
+	// on the previous round's file and is kept only when it fixed
+	// something and survives the same probe-and-revalidate gates;
+	// otherwise the previous round's output stands.
+	fixed := report.Fixed
+	for round := 2; round <= maxRemediationRounds && len(residual) > 0; round++ {
+		nextPath, nextResidual, nextFixed, ok := w.remediationRound(ctx, tmpPath, run, revalidate, baseline, tol)
+		if !ok {
+			break
+		}
+		doc.Logger.Debug("remediate: extra round kept",
+			slog.Int("round", round),
+			slog.Int("fixes", len(nextFixed)),
+			slog.Int("residual", len(nextResidual)))
+		removeTempFile(doc.Logger, tmpPath)
+		tmpPath, residual = nextPath, nextResidual
+		fixed = append(fixed, nextFixed...)
+	}
 	w.markPreSerialized(tmpPath)
-	return &RemediationReport{Fixed: report.Fixed, Residual: residual}, nil
+	return &RemediationReport{Fixed: fixed, Residual: residual}, nil
+}
+
+// maxRemediationRounds bounds the fix-to-fixpoint loop, counting the main
+// pass as round one. Anti-livelock guard, not spec-mandated: two extra
+// rounds resolve every fixer-enables-fixer chain the corpus exhibits, and
+// a fixer oscillation must terminate instead of looping.
+const maxRemediationRounds = 3
+
+// remediationRound reopens the serialized output at path and runs the
+// remediation engine once more against it. It returns ok=false (changing
+// nothing) when the round fixes nothing, fails to serialize, or fails the
+// integrity and regression gates; on success it returns the new temp file,
+// its residual validation findings, and the fixes applied.
+func (w *Writer) remediationRound(
+	ctx context.Context,
+	path string,
+	run func(context.Context, *writer.ObjAllocator, *document.Document) (*remediation.Report, error),
+	revalidate func(context.Context, *Reader) ([]error, error),
+	baseline integritySnap,
+	tol RegressionTolerance,
+) (string, []error, []string, bool) {
+	logger := w.reader.doc.Logger
+
+	r2, err := OpenFile(ctx, path)
+	if err != nil {
+		logger.Debug("remediate: round reopen failed", slog.Any("err", err))
+		return "", nil, nil, false
+	}
+	defer r2.Close()
+
+	maxObjNum := 0
+	for objNum := range r2.doc.Index.Entries {
+		if objNum > maxObjNum {
+			maxObjNum = objNum
+		}
+	}
+	alloc := writer.NewObjAllocator(maxObjNum)
+	rep, err := run(ctx, alloc, r2.doc)
+	if err != nil || rep == nil || len(rep.Fixed) == 0 {
+		return "", nil, nil, false
+	}
+
+	w2 := NewWriter(r2)
+	w2.rewriteOverrides = alloc.Pending()
+	w2.trailerDirty = rep.TrailerDirty
+	w2.forceRewrite = rep.NeedsFullRewrite
+	w2.requiredVersion = rep.RequiredVersion
+
+	tmpFile, err := os.CreateTemp("", "litho-remediate-round-*.pdf")
+	if err != nil {
+		logger.Debug("remediate: round temp file failed", slog.Any("err", err))
+		return "", nil, nil, false
+	}
+	tmpPath := tmpFile.Name()
+	if writeErr := w2.writeToInternal(ctx, tmpFile); writeErr != nil {
+		tmpFile.Close()
+		removeTempFile(logger, tmpPath)
+		logger.Debug("remediate: round serialize failed", slog.Any("err", writeErr))
+		return "", nil, nil, false
+	}
+	tmpFile.Close()
+
+	r3, err := OpenFile(ctx, tmpPath)
+	if err != nil {
+		removeTempFile(logger, tmpPath)
+		logger.Debug("remediate: round reopen of output failed", slog.Any("err", err))
+		return "", nil, nil, false
+	}
+	defer r3.Close()
+
+	post, err := probeIntegrity(ctx, r3)
+	if err != nil {
+		removeTempFile(logger, tmpPath)
+		return "", nil, nil, false
+	}
+	if reason := evaluateRegression(baseline, post, tol); reason != "" {
+		removeTempFile(logger, tmpPath)
+		logger.Debug("remediate: round regressed, keeping previous output",
+			slog.String("reason", reason))
+		return "", nil, nil, false
+	}
+	res, err := revalidate(ctx, r3)
+	if err != nil {
+		removeTempFile(logger, tmpPath)
+		return "", nil, nil, false
+	}
+
+	return tmpPath, res, rep.Fixed, true
 }
 
 // keepFixedWithout returns the subset of fixed that is not also present in
