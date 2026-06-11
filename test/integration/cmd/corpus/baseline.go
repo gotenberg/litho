@@ -41,6 +41,34 @@ type baselineFeature struct {
 
 const baselineCurrentVersion = 1
 
+// costMetrics lists metrics where lower is better, inverting the
+// regression comparison. Everything else (chars_match, fully_fixed,
+// verapdf_fixed, ...) is good-when-higher.
+//
+//nolint:gochecknoglobals // static direction table for the comparator
+var costMetrics = map[string]bool{
+	"false_negative":    true,
+	"false_positive":    true,
+	"parse_failed":      true,
+	"verapdf_regressed": true,
+	"litho_regressed":   true,
+	"disagreement":      true,
+}
+
+// uncomparedMetrics lists raw inventory totals that shift with any
+// detection-coverage change and carry no pass/fail meaning of their
+// own; they stay in the baseline for context but are not gated.
+//
+//nolint:gochecknoglobals // static skip table for the comparator
+var uncomparedMetrics = map[string]bool{
+	"litho_pre":     true,
+	"litho_post":    true,
+	"litho_fixed":   true,
+	"verapdf_pre":   true,
+	"verapdf_post":  true,
+	"verapdf_fixed": true,
+}
+
 // defaultBaselinePath returns the canonical baseline location. The
 // in-repo file lives under test/integration so the matrix tool, the
 // Makefile, and CI all point at the same artifact.
@@ -248,20 +276,31 @@ func diffBaseline(want, got *Baseline) (regressions, improvements, missing []str
 						corpus, fname, gf.Matched, wf.Matched))
 			}
 			// Compare named metrics (e.g. text feature's
-			// chars_match and words_match).
+			// chars_match and words_match). Cost metrics invert the
+			// direction, and raw inventory totals are informational
+			// only.
 			metricNames := make([]string, 0, len(wf.Metrics))
 			for mname := range wf.Metrics {
 				metricNames = append(metricNames, mname)
 			}
 			sort.Strings(metricNames)
 			for _, mname := range metricNames {
+				if uncomparedMetrics[mname] {
+					continue
+				}
 				wv := wf.Metrics[mname]
 				gv := gf.Metrics[mname]
-				if gv < wv {
+				worse := gv < wv
+				if costMetrics[mname] {
+					worse = gv > wv
+				}
+				switch {
+				case gv == wv:
+				case worse:
 					regressions = append(regressions,
 						fmt.Sprintf("%s / %s / %s: got %d, baseline %d",
 							corpus, fname, mname, gv, wv))
-				} else if gv > wv {
+				default:
 					improvements = append(improvements,
 						fmt.Sprintf("%s / %s / %s: got %d, baseline %d",
 							corpus, fname, mname, gv, wv))
