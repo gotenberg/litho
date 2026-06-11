@@ -28,7 +28,7 @@ Profile-to-group mappings live in `check.go`.
 
 ## Key types
 
-`Rule` identifies a single VeraPDF validation rule by `(Specification, Clause, TestNumber)`. 751 rules are code-generated from XML profiles via `cmd/gen-rules`.
+`Rule` identifies a single VeraPDF validation rule by `(Specification, Clause, TestNumber)`. The PDF/A and PDF/UA rules are code-generated from XML profiles via `cmd/gen-rules` into `rules.go`; the ISO/TS 32005 Table 5 inclusion matrix (1,636 entries, PDF/UA-2 only) is generated from the vendored `PDF_UA/ISO-32005-Tagged.xml` into `rules_iso32005.go`, mirroring veraPDF's combined PDFUA-2-ISO32005 profile. Hand-maintained extras live in `rules_extra.go`.
 
 `Violation` records a rule violation with context (page, object, font). Implements the `error` interface.
 
@@ -50,7 +50,9 @@ go run ./cmd/gen-rules --download               # download latest profiles first
 go run ./cmd/gen-rules --download --tag v1.28.1 # pin to a release
 ```
 
-The 13 XML profiles are vendored in `profiles/`. The generator produces `rules.go` (do not edit).
+The 13 PDF/A and PDF/UA XML profiles plus `ISO-32005-Tagged.xml` are vendored in `profiles/`. The generator produces `rules.go` and `rules_iso32005.go` (do not edit).
+
+When mirroring a veraPDF rule, follow the profile XML `<test>` expression, not the prose Description: several historical false positives came from implementing the description where the test was laxer (e.g. `toUnicode == null ||` passes a missing map), and several false negatives from the reverse (role maps resolve before standard-type checks; OBJR counts as a content item).
 
 ## JPEG2000 parser
 
