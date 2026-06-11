@@ -351,3 +351,50 @@ func TestPatchExistingXMP_CorrectsPDFUAIDPart(t *testing.T) {
 	}
 	_ = patched2
 }
+
+// TestExtractUnknownNamespaceProperties_Typing pins the extension-schema
+// extractor: only direct children of rdf:Description are properties, the
+// declared valueType matches the serialized container (veraPDF checks it,
+// ISO 19005-2 §6.6.2.3.1 t2), inline structures are skipped rather than
+// mistyped, and attribute-form properties are simple Text.
+func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
+	t.Parallel()
+	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:cu="http://example.com/custom/" cu:attrProp="v">
+  <cu:simple>plain</cu:simple>
+  <cu:bagged><rdf:Bag><rdf:li>a</rdf:li></rdf:Bag></cu:bagged>
+  <cu:listed><rdf:Seq><rdf:li>a</rdf:li></rdf:Seq></cu:listed>
+  <cu:titled><rdf:Alt><rdf:li xml:lang="x-default">a</rdf:li></rdf:Alt></cu:titled>
+  <cu:structured rdf:parseType="Resource"><cu:field>x</cu:field></cu:structured>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>`)
+
+	schemas := extractUnknownNamespaceProperties(xmp)
+	if len(schemas) != 1 {
+		t.Fatalf("expected 1 schema, got %d: %+v", len(schemas), schemas)
+	}
+	got := make(map[string]string)
+	for _, p := range schemas[0].properties {
+		got[p.name] = p.valueType
+	}
+	want := map[string]string{
+		"attrProp": "Text",
+		"simple":   "Text",
+		"bagged":   "bag Text",
+		"listed":   "seq Text",
+		"titled":   "Lang Alt",
+	}
+	for name, vt := range want {
+		if got[name] != vt {
+			t.Errorf("property %s: got valueType %q, want %q", name, got[name], vt)
+		}
+	}
+	if _, present := got["structured"]; present {
+		t.Error("inline structure must be skipped, not mistyped")
+	}
+	if _, present := got["field"]; present {
+		t.Error("nested structure field recorded as a property")
+	}
+}

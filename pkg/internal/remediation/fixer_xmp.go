@@ -835,7 +835,17 @@ var knownXMPNamespaces = map[string]bool{
 type extSchemaInfo struct {
 	nsURI      string
 	prefix     string
-	properties []string // property local names
+	properties []extPropInfo
+}
+
+// extPropInfo names one custom property and the XMP valueType matching its
+// serialized shape. veraPDF type-checks every declared property against its
+// actual container (ISO 19005-2 §6.6.2.3.1 t2), so declaring plain Text for
+// an rdf:Bag/Seq/Alt property trades the missing-schema violation for a
+// type-mismatch one.
+type extPropInfo struct {
+	name      string
+	valueType string
 }
 
 // extractUnknownNamespaceProperties parses XMP XML and returns non-predefined
@@ -846,8 +856,8 @@ func extractUnknownNamespaceProperties(data []byte) []extSchemaInfo {
 
 	// Track namespace URI → prefix mapping from xmlns declarations.
 	nsPrefixes := make(map[string]string)
-	// Track namespace URI → set of property names.
-	nsProps := make(map[string]map[string]bool)
+	// Track namespace URI → property name → valueType ("" = untypeable).
+	nsProps := make(map[string]map[string]string)
 
 	ignoredNS := map[string]bool{
 		"": true, "xmlns": true,
@@ -858,8 +868,35 @@ func extractUnknownNamespaceProperties(data []byte) []extSchemaInfo {
 		"http://www.w3.org/2001/XMLSchema":            true,
 		"adobe:ns:meta/":                              true,
 	}
+	record := func(ns, name, valueType string) {
+		if nsProps[ns] == nil {
+			nsProps[ns] = make(map[string]string)
+		}
+		if _, seen := nsProps[ns][name]; !seen {
+			nsProps[ns][name] = valueType
+		}
+	}
 
+	// descDepth counts nested rdf:Description elements; elemDepth counts
+	// elements below the innermost Description so that only DIRECT children
+	// are recorded as properties. Nested elements are property content
+	// (array items, structure fields), not properties of their own.
 	descDepth := 0
+	elemDepth := 0
+	var curNS, curName string // top-level custom property being classified
+	curType := ""
+
+	finishProp := func() {
+		if curName == "" {
+			return
+		}
+		if curType == "" {
+			curType = "Text"
+		}
+		record(curNS, curName, curType)
+		curNS, curName, curType = "", "", ""
+	}
+
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
@@ -867,35 +904,72 @@ func extractUnknownNamespaceProperties(data []byte) []extSchemaInfo {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" && t.Name.Local == "Description" {
-				descDepth++
-				// Collect xmlns declarations.
-				for _, attr := range t.Attr {
-					if attr.Name.Space == "xmlns" && attr.Value != "" {
-						nsPrefixes[attr.Value] = attr.Name.Local
-					}
-				}
-				continue
-			}
-
-			// Inside rdf:Description: record properties in non-predefined namespaces.
-			if descDepth > 0 && !ignoredNS[t.Name.Space] && !knownXMPNamespaces[t.Name.Space] {
-				if _, ok := nsProps[t.Name.Space]; !ok {
-					nsProps[t.Name.Space] = make(map[string]bool)
-				}
-				nsProps[t.Name.Space][t.Name.Local] = true
-			}
-
-			// Also collect xmlns from nested elements.
 			for _, attr := range t.Attr {
 				if attr.Name.Space == "xmlns" && attr.Value != "" {
 					nsPrefixes[attr.Value] = attr.Name.Local
 				}
 			}
+			if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" && t.Name.Local == "Description" && elemDepth == 0 {
+				descDepth++
+				// Attribute-form custom properties are always simple values.
+				for _, attr := range t.Attr {
+					ns := attr.Name.Space
+					if ns == "" || ignoredNS[ns] || knownXMPNamespaces[ns] || ns == "xmlns" {
+						continue
+					}
+					record(ns, attr.Name.Local, "Text")
+				}
+				continue
+			}
+			if descDepth == 0 {
+				continue
+			}
+			elemDepth++
+			switch {
+			case elemDepth == 1:
+				if !ignoredNS[t.Name.Space] && !knownXMPNamespaces[t.Name.Space] {
+					curNS, curName = t.Name.Space, t.Name.Local
+					curType = ""
+					// rdf:parseType="Resource" marks an inline structure,
+					// whose field types litho cannot derive; declaring a
+					// wrong type would swap the missing-schema violation
+					// for a type-mismatch one, so skip the property.
+					for _, attr := range t.Attr {
+						if attr.Name.Local == "parseType" {
+							curName = ""
+						}
+					}
+				}
+			case elemDepth == 2 && curName != "" && curType == "":
+				// First child decides the container type. The accepted
+				// names mirror the predefined XMP value types the
+				// validator recognizes.
+				if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" {
+					switch t.Name.Local {
+					case "Bag":
+						curType = "bag Text"
+					case "Seq":
+						curType = "seq Text"
+					case "Alt":
+						curType = "Lang Alt"
+					default:
+						curName = "" // rdf:Description etc.: structure, skip.
+					}
+				} else {
+					curName = "" // Element child in another namespace: structure, skip.
+				}
+			}
 
 		case xml.EndElement:
-			if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" && t.Name.Local == "Description" {
+			if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" && t.Name.Local == "Description" && elemDepth == 0 {
 				descDepth--
+				continue
+			}
+			if descDepth > 0 && elemDepth > 0 {
+				if elemDepth == 1 {
+					finishProp()
+				}
+				elemDepth--
 			}
 		}
 	}
@@ -907,12 +981,16 @@ func extractUnknownNamespaceProperties(data []byte) []extSchemaInfo {
 		if prefix == "" {
 			prefix = "ns" + fmt.Sprintf("%d", len(schemas)+1)
 		}
-		propNames := make([]string, 0, len(props))
+		names := make([]string, 0, len(props))
 		for p := range props {
-			propNames = append(propNames, p)
+			names = append(names, p)
 		}
-		sort.Strings(propNames)
-		schemas = append(schemas, extSchemaInfo{nsURI: nsURI, prefix: prefix, properties: propNames})
+		sort.Strings(names)
+		infos := make([]extPropInfo, 0, len(names))
+		for _, n := range names {
+			infos = append(infos, extPropInfo{name: n, valueType: props[n]})
+		}
+		schemas = append(schemas, extSchemaInfo{nsURI: nsURI, prefix: prefix, properties: infos})
 	}
 	sort.Slice(schemas, func(i, j int) bool { return schemas[i].nsURI < schemas[j].nsURI })
 	return schemas
@@ -933,10 +1011,10 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 			sb.WriteString("        <pdfaSchema:property>\n          <rdf:Seq>\n")
 			for _, prop := range s.properties {
 				sb.WriteString("            <rdf:li rdf:parseType=\"Resource\">\n")
-				fmt.Fprintf(&sb, "              <pdfaProperty:name>%s</pdfaProperty:name>\n", xmlEscape(prop))
-				sb.WriteString("              <pdfaProperty:valueType>Text</pdfaProperty:valueType>\n")
+				fmt.Fprintf(&sb, "              <pdfaProperty:name>%s</pdfaProperty:name>\n", xmlEscape(prop.name))
+				fmt.Fprintf(&sb, "              <pdfaProperty:valueType>%s</pdfaProperty:valueType>\n", xmlEscape(prop.valueType))
 				sb.WriteString("              <pdfaProperty:category>internal</pdfaProperty:category>\n")
-				fmt.Fprintf(&sb, "              <pdfaProperty:description>%s</pdfaProperty:description>\n", xmlEscape(prop))
+				fmt.Fprintf(&sb, "              <pdfaProperty:description>%s</pdfaProperty:description>\n", xmlEscape(prop.name))
 				sb.WriteString("            </rdf:li>\n")
 			}
 			sb.WriteString("          </rdf:Seq>\n        </pdfaSchema:property>\n")
