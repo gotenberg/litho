@@ -3702,3 +3702,38 @@ func TestWriter_EncryptedSourceRewrittenDecrypted(t *testing.T) {
 		t.Errorf("Author lost in rewrite: got %q, want Jane", meta["Author"])
 	}
 }
+
+// TestWriter_MutationAfterRemediationNotDropped guards the pre-serialized
+// fast path: remediation serializes its output to a temp file, and WriteTo
+// used to stream that file unconditionally, silently discarding any
+// mutation queued after remediation (a stamp, metadata edit, or Sign).
+func TestWriter_MutationAfterRemediationNotDropped(t *testing.T) {
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(writerTestPDF()), int64(len(writerTestPDF())))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	w := NewWriter(r)
+	if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
+	w.SetMetadata(Metadata{Title: "Post-Remediation Title"})
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open output: %v", err)
+	}
+	meta, err := r2.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("Metadata: %v", err)
+	}
+	if meta["Title"] != "Post-Remediation Title" {
+		t.Errorf("post-remediation mutation dropped: Title = %q", meta["Title"])
+	}
+}

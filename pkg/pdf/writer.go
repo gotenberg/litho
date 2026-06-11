@@ -444,8 +444,15 @@ type Writer struct {
 	// preSerializedPath is the path to a temp file holding the fully
 	// serialized PDF when remediation pre-serializes for accurate
 	// residual validation. When set, WriteTo streams from this file
-	// instead of re-serializing, then removes it.
-	preSerializedPath string
+	// instead of re-serializing, then removes it. The snapshot fields
+	// below record the Writer state at pre-serialization time: any edit
+	// queued afterwards (a new mutation, Sign, Encrypt, decrypt) or a
+	// serialization-shaping write option invalidates the fast path, and
+	// WriteTo re-serializes so the late edit is not silently dropped.
+	preSerializedPath      string
+	preSerializedMutations int
+	preSerializedEncrypt   bool
+	preSerializedDecrypt   bool
 }
 
 // mutation is a deferred modification applied during WriteTo.
@@ -1325,7 +1332,7 @@ func (w *Writer) remediate(
 
 		// Rollback succeeded. Content-tier fixes are discarded; the
 		// violations they claimed to handle move back to residual.
-		w.preSerializedPath = tmpPath2
+		w.markPreSerialized(tmpPath2)
 		kept := keepFixedWithout(report.Fixed, report.ContentFixed)
 		finalResidual := make([]error, 0, len(residual2)+len(report.ContentResidual))
 		finalResidual = append(finalResidual, residual2...)
@@ -1343,7 +1350,7 @@ func (w *Writer) remediate(
 	}
 
 	// Happy path: no regression.
-	w.preSerializedPath = tmpPath
+	w.markPreSerialized(tmpPath)
 	return &RemediationReport{Fixed: report.Fixed, Residual: residual}, nil
 }
 
@@ -1381,6 +1388,16 @@ func removeTempFile(logger *slog.Logger, path string) {
 			slog.String("path", path),
 			slog.Any("err", err))
 	}
+}
+
+// markPreSerialized records the remediation temp file plus the Writer
+// state it captures, so a later WriteTo can detect post-remediation edits
+// and re-serialize instead of streaming a stale file.
+func (w *Writer) markPreSerialized(path string) {
+	w.preSerializedPath = path
+	w.preSerializedMutations = len(w.mutations)
+	w.preSerializedEncrypt = w.encryptCfg != nil
+	w.preSerializedDecrypt = w.decrypt
 }
 
 // copyFromPreSerialized streams the pre-serialized temp file to dst and
@@ -1446,15 +1463,32 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 // check. Remediation calls this directly so its internal probe writes
 // do not trip the single-use guard before the caller's real WriteTo.
 func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...WriteOption) error {
-	// Fast path: remediation already serialized the output to a temp file
-	// for accurate residual validation. Stream from that file.
-	if w.preSerializedPath != "" {
-		return w.copyFromPreSerialized(dst)
-	}
-
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
+	}
+
+	// Fast path: remediation already serialized the output to a temp file
+	// for accurate residual validation. Stream from that file, but only
+	// when nothing changed since: a mutation, Sign, Encrypt, or decrypt
+	// queued after remediation, or a serialization-shaping write option,
+	// is not in the temp file and streaming it would silently drop the
+	// edit. The remediation overrides persist in w.rewriteOverrides, so a
+	// fresh serialization keeps the applied fixes.
+	if w.preSerializedPath != "" {
+		stale := len(w.mutations) != w.preSerializedMutations ||
+			(w.encryptCfg != nil) != w.preSerializedEncrypt ||
+			w.decrypt != w.preSerializedDecrypt ||
+			w.signer != nil ||
+			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream
+		if !stale {
+			return w.copyFromPreSerialized(dst)
+		}
+		w.reader.doc.Logger.Debug("writer: pre-serialized remediation output is stale, re-serializing",
+			slog.Int("mutations", len(w.mutations)),
+			slog.Int("pre_serialized_mutations", w.preSerializedMutations))
+		removeTempFile(w.reader.doc.Logger, w.preSerializedPath)
+		w.preSerializedPath = ""
 	}
 
 	// Three source conditions make an incremental update unsafe. A rebuilt
