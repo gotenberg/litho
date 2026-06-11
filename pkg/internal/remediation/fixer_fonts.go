@@ -28,7 +28,19 @@ func matchFontFixes(v compliance.Violation) bool {
 	)
 }
 
-func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
+	// Width corrections are gated on a validator-reported width mismatch
+	// (ISO 19005-1 §6.3.6, 19005-2 §6.2.10.5/§6.2.11.5). Rewriting widths
+	// uninvited turned conforming /Widths arrays into new 6.3.6 violations
+	// whenever litho's font-program width extraction disagreed with
+	// veraPDF's.
+	hasWidthViolation := false
+	for _, v := range violations {
+		if clausePrefix(v, "6.2.10.5", "6.2.11.5", "6.3.6") {
+			hasWidthViolation = true
+			break
+		}
+	}
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, nil
@@ -77,11 +89,11 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			subtype, _ := fd["Subtype"].(ast.PdfName)
 			switch string(subtype) {
 			case "Type0":
-				if f := fixType0Font(ctx, doc, alloc, fd, fontRef); len(f) > 0 {
+				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			case "Type1", "TrueType", "MMType1":
-				if f := fixSimpleFont(ctx, doc, alloc, fd, fontRef); len(f) > 0 {
+				if f := fixSimpleFont(ctx, doc, alloc, fd, fontRef, hasWidthViolation); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			}
@@ -94,7 +106,7 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return fixes, nil
 }
 
-func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef) []string {
+func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths bool) []string {
 	fdObj, ok := fontDict["FontDescriptor"]
 	if !ok {
 		return nil
@@ -142,6 +154,9 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	newWidths := make(ast.PdfArray, len(widths))
 	copy(newWidths, widths)
 
+	if !fixWidths {
+		widths = nil
+	}
 	for i, wObj := range widths {
 		pdfWidth := document.Float(wObj)
 		charCode := uint16(firstChar + i) //nolint:gosec // charCode range is bounded by PDF spec
@@ -223,7 +238,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	return fixes
 }
 
-func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef) []string {
+func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths bool) []string {
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
 		return nil
@@ -268,8 +283,8 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	var fixes []string
 	baseName := fontBaseName(fontDict)
 
-	// Fix /W array.
-	if wObj, ok := cidFont["W"]; ok {
+	// Fix /W array, only when the validator reported a width mismatch.
+	if wObj, ok := cidFont["W"]; ok && fixWidths {
 		wArr, err := document.ResolveArray(ctx, doc, wObj)
 		if err == nil && wArr != nil {
 			newW, corrected := correctCIDWidths(ctx, doc, wArr, binaryWidths, upm)
