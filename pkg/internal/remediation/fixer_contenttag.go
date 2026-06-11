@@ -80,22 +80,36 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		return nil, nil
 	}
 
-	// Build page ref map for MCR dicts.
-	pageRefs := make(map[int]ast.PdfIndirectRef, len(pages))
-	for i, p := range pages {
-		pageRefs[i] = p.Ref
+	// Both the Document element and the StructTreeRoot must be writable
+	// for the wrapper to be reachable from the structure tree.
+	if docElemRef.ObjectNum == 0 || stRef.ObjectNum == 0 {
+		return nil, nil
+	}
+
+	// Preserve the Document element's existing children: a single
+	// non-array child (reference or inline dict) is normalized to a
+	// one-element array, never dropped.
+	var kChildren ast.PdfArray
+	switch existing := docElem["K"].(type) {
+	case nil:
+	case ast.PdfArray:
+		kChildren = append(kChildren, existing...)
+	default:
+		kChildren = append(kChildren, existing)
+	}
+
+	// Merge into the existing ParentTree rather than replacing it: its
+	// keys also serve annotation /StructParent entries and already-tagged
+	// pages. New entries are appended after the highest existing key so
+	// /Nums stays sorted (ISO 32000-2 §7.9.7).
+	parentTreeNums, nextKey, mergeable := existingParentTreeNums(ctx, alloc, doc, stDict)
+	if !mergeable {
+		doc.Logger.Debug("remediation: content-tag skipped, ParentTree is not safely mergeable")
+		return nil, nil
 	}
 
 	var count int
-	var kChildren ast.PdfArray
-	if existing, ok := docElem["K"].(ast.PdfArray); ok {
-		kChildren = append(kChildren, existing...)
-	}
-
-	// ParentTree /Nums array: [pageIdx, structElemRef, pageIdx, structElemRef, ...]
-	var parentTreeNums ast.PdfArray
-
-	for pageIdx, page := range pages {
+	for _, page := range pages {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -106,58 +120,59 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		if pageHasMarkedContent(ctx, alloc, doc, page) {
 			continue
 		}
+		if page.Ref.ObjectNum == 0 {
+			continue
+		}
 
-		contentsObj, ok := page.Dict["Contents"]
+		// Read alloc-first so a page rewrite queued by an earlier fixer
+		// is extended, not clobbered.
+		pageDict := livePageDict(ctx, alloc, doc, page)
+		if _, has := pageDict["StructParents"]; has {
+			// The page already owns a ParentTree entry whose array is
+			// indexed by MCID; extending it safely would require
+			// rebuilding that entry, so leave the page for manual repair.
+			continue
+		}
+		contentsObj, ok := pageDict["Contents"]
 		if !ok {
 			continue
 		}
 
-		// Resolve existing content stream(s) to raw bytes.
-		contentBytes, err := resolveContentBytes(ctx, doc, contentsObj)
+		contentBytes, err := liveContentBytes(ctx, alloc, doc, contentsObj)
 		if err != nil || len(contentBytes) == 0 {
 			continue
 		}
 
-		mcid := pageIdx // Use page index as MCID for simplicity.
-
-		// Wrap content in marked-content sequence.
+		// MCID 0: the wrapper is the only marked content on the page, and
+		// the ParentTree entry array for the page is indexed by MCID.
 		var wrapped []byte
-		wrapped = append(wrapped, fmt.Sprintf("/Document <</MCID %d>> BDC\n", mcid)...)
+		wrapped = append(wrapped, "/Document <</MCID 0>> BDC\n"...)
 		wrapped = append(wrapped, contentBytes...)
 		wrapped = append(wrapped, "\nEMC\n"...)
 
-		// Create new content stream.
 		newStream := ast.NewStream(ast.PdfDict{
 			"Length": ast.PdfInt(len(wrapped)),
 		}, wrapped)
 		newStreamRef := alloc.Alloc(newStream)
 
-		// Update page dict to point to new content stream.
-		newPage := make(ast.PdfDict, len(page.Dict))
-		maps.Copy(newPage, page.Dict)
+		newPage := make(ast.PdfDict, len(pageDict)+2)
+		maps.Copy(newPage, pageDict)
 		newPage["Contents"] = newStreamRef
-
-		// Mark page as tagged.
-		if _, hasStructParents := newPage["StructParents"]; !hasStructParents {
-			newPage["StructParents"] = ast.PdfInt(pageIdx)
-		}
-
+		newPage["StructParents"] = ast.PdfInt(nextKey)
 		alloc.AllocAt(page.Ref.ObjectNum, newPage)
 
 		// Add MCR (marked-content reference) to the Document element's /K.
-		mcr := ast.PdfDict{
+		kChildren = append(kChildren, ast.PdfDict{
 			"Type": ast.PdfName("MCR"),
 			"Pg":   page.Ref,
-			"MCID": ast.PdfInt(mcid),
-		}
-		kChildren = append(kChildren, mcr)
+			"MCID": ast.PdfInt(0),
+		})
 
-		// ParentTree entry: maps StructParents index → structure element.
 		parentTreeNums = append(parentTreeNums,
-			ast.PdfInt(pageIdx),
+			ast.PdfInt(nextKey),
 			ast.PdfArray{docElemRef},
 		)
-
+		nextKey++
 		count++
 	}
 
@@ -169,21 +184,65 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	newDocElem := make(ast.PdfDict, len(docElem))
 	maps.Copy(newDocElem, docElem)
 	newDocElem["K"] = kChildren
-	if docElemRef.ObjectNum > 0 {
-		alloc.AllocAt(docElemRef.ObjectNum, newDocElem)
-	}
+	alloc.AllocAt(docElemRef.ObjectNum, newDocElem)
 
-	// Update StructTreeRoot ParentTree.
 	newST := make(ast.PdfDict, len(stDict))
 	maps.Copy(newST, stDict)
 	newST["ParentTree"] = ast.PdfDict{
 		"Nums": parentTreeNums,
 	}
-	if stRef.ObjectNum > 0 {
-		alloc.AllocAt(stRef.ObjectNum, newST)
-	}
+	alloc.AllocAt(stRef.ObjectNum, newST)
 
 	return []string{fmt.Sprintf("tagged %d page(s) with /Document marked-content wrapper", count)}, nil
+}
+
+// existingParentTreeNums returns a copy of the structure tree root's
+// /ParentTree /Nums pairs and the next free key (highest existing key + 1).
+// mergeable is false when a ParentTree exists but cannot be extended safely:
+// it uses a /Kids subtree (a deep number tree this fixer would have to
+// rebuild), its /Nums is malformed, or a key is not an integer. A missing
+// ParentTree or empty /Nums yields an empty slice and key 0.
+func existingParentTreeNums(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict) (ast.PdfArray, int, bool) {
+	ptObj, ok := stDict["ParentTree"]
+	if !ok {
+		return nil, 0, true
+	}
+
+	var ptDict ast.PdfDict
+	if ref, isRef := ptObj.(ast.PdfIndirectRef); isRef {
+		ptDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	} else if d, err := document.ResolveDict(ctx, doc, ptObj); err == nil {
+		ptDict = d
+	}
+	if ptDict == nil {
+		return nil, 0, false
+	}
+	if _, hasKids := ptDict["Kids"]; hasKids {
+		return nil, 0, false
+	}
+
+	numsObj, ok := ptDict["Nums"]
+	if !ok {
+		return nil, 0, true
+	}
+	nums, err := document.ResolveArray(ctx, doc, numsObj)
+	if err != nil || len(nums)%2 != 0 {
+		return nil, 0, false
+	}
+
+	nextKey := 0
+	out := make(ast.PdfArray, 0, len(nums))
+	out = append(out, nums...)
+	for i := 0; i < len(nums); i += 2 {
+		key, isInt := nums[i].(ast.PdfInt)
+		if !isInt {
+			return nil, 0, false
+		}
+		if int(key) >= nextKey {
+			nextKey = int(key) + 1
+		}
+	}
+	return out, nextKey, true
 }
 
 // pageHasMarkedContent checks if a page's content stream already contains any
