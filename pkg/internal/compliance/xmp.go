@@ -516,8 +516,12 @@ func xmpCheckNamespaces(data []byte, part int, results *[]Violation) {
 }
 
 // xmpExtractNamespaces parses XMP XML and returns the set of namespace URIs
-// used by properties (including nested elements and attributes at all depths)
-// and the set of namespace URIs declared in extension schemas.
+// used by top-level properties (direct element children of rdf:Description
+// plus attribute-form properties on the Description tag) and the set of
+// namespace URIs declared in extension schemas. Nested elements are
+// excluded deliberately: veraPDF builds its property model from direct
+// schema children only, so a structure field's namespace needs no
+// declaration of its own and flagging it is a false positive.
 func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[string]bool) {
 	used = make(map[string]bool)
 	extensions = make(map[string]bool)
@@ -539,7 +543,8 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 	}
 
 	var inExtensionSchema bool
-	descDepth := 0 // >0 indicates the scanner sits inside an rdf:Description
+	descDepth := 0 // count of enclosing top-level rdf:Description elements
+	elemDepth := 0 // element depth below the innermost top-level Description
 
 	for {
 		tok, err := decoder.Token()
@@ -549,9 +554,10 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 		switch t := tok.(type) {
 		case xml.StartElement:
 
-			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
+			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" && elemDepth == 0 {
 				descDepth++
-				// Record namespaces from attributes on rdf:Description.
+				// Attribute-form properties on the Description tag are
+				// top-level properties.
 				for _, attr := range t.Attr {
 					if !ignoredNS[attr.Name.Space] {
 						used[attr.Name.Space] = true
@@ -560,24 +566,17 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 				continue
 			}
 
-			// Record namespace of every element inside rdf:Description,
-			// regardless of nesting depth. This catches properties nested
-			// inside rdf:Bag, rdf:Seq, rdf:Alt, and structured value types.
-			if descDepth > 0 && !ignoredNS[t.Name.Space] {
-				used[t.Name.Space] = true
-			}
-
-			// Also record namespaces from attributes on nested elements
-			// (e.g., rdf:resource attributes with typed values).
 			if descDepth > 0 {
-				for _, attr := range t.Attr {
-					if !ignoredNS[attr.Name.Space] {
-						used[attr.Name.Space] = true
-					}
+				elemDepth++
+				// Only a direct child of a top-level rdf:Description is a
+				// property; deeper elements are array items and structure
+				// fields, which veraPDF never checks for declarations.
+				if elemDepth == 1 && !ignoredNS[t.Name.Space] {
+					used[t.Name.Space] = true
 				}
 			}
 
-			// Track extension schema namespace declarations.
+			// Track extension schema namespace declarations at any depth.
 			if t.Name.Local == "schemas" && strings.Contains(t.Name.Space, "pdfa/ns/extension") {
 				inExtensionSchema = true
 			}
@@ -593,8 +592,10 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 			}
 
 		case xml.EndElement:
-			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
+			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" && elemDepth == 0 {
 				descDepth--
+			} else if descDepth > 0 && elemDepth > 0 {
+				elemDepth--
 			}
 			if t.Name.Local == "schemas" {
 				inExtensionSchema = false

@@ -294,6 +294,8 @@ const (
 	pdfaExtensionNS = "http://www.aiim.org/pdfa/ns/extension/"
 	pdfaSchemaNS    = "http://www.aiim.org/pdfa/ns/schema#"
 	pdfaPropertyNS  = "http://www.aiim.org/pdfa/ns/property#"
+	pdfaTypeNS      = "http://www.aiim.org/pdfa/ns/type#"
+	pdfaFieldNS     = "http://www.aiim.org/pdfa/ns/field#"
 )
 
 func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info infoMetadata) (string, []string) {
@@ -650,11 +652,20 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	if !strings.Contains(string(buf), "pdfaExtension:schemas") {
 		schemas := extractUnknownNamespaceProperties(buf, part)
 		if len(schemas) > 0 {
-			for prefix, uri := range map[string]string{
+			decls := map[string]string{
 				"pdfaExtension": pdfaExtensionNS,
 				"pdfaSchema":    pdfaSchemaNS,
 				"pdfaProperty":  pdfaPropertyNS,
-			} {
+			}
+			for _, sc := range schemas {
+				for _, prop := range sc.properties {
+					if len(prop.structFields) > 0 {
+						decls["pdfaType"] = pdfaTypeNS
+						decls["pdfaField"] = pdfaFieldNS
+					}
+				}
+			}
+			for prefix, uri := range decls {
 				if out, err := ensureNamespaceDecl(buf, prefix, uri); err == nil {
 					buf = out
 				}
@@ -846,6 +857,15 @@ type extSchemaInfo struct {
 type extPropInfo struct {
 	name      string
 	valueType string
+	// structNS, structPrefix, and structFields describe an inline
+	// structure property (rdf:parseType="Resource" or nested element
+	// fields). When structFields is non-empty the generator emits a
+	// matching pdfaSchema:valueType definition, because veraPDF
+	// type-checks every declared property and a structure declared as a
+	// simple type fails ISO 19005-2 §6.6.2.3.1 t2.
+	structNS     string
+	structPrefix string
+	structFields []string
 }
 
 // needsExtensionDeclaration reports whether the top-level property ns:name
@@ -880,8 +900,8 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 
 	// Track namespace URI → prefix mapping from xmlns declarations.
 	nsPrefixes := make(map[string]string)
-	// Track namespace URI → property name → valueType ("" = untypeable).
-	nsProps := make(map[string]map[string]string)
+	// Track namespace URI → property name → property info.
+	nsProps := make(map[string]map[string]extPropInfo)
 
 	ignoredNS := map[string]bool{
 		"": true, "xmlns": true,
@@ -892,12 +912,12 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 		"http://www.w3.org/2001/XMLSchema":            true,
 		"adobe:ns:meta/":                              true,
 	}
-	record := func(ns, name, valueType string) {
+	record := func(ns string, info extPropInfo) {
 		if nsProps[ns] == nil {
-			nsProps[ns] = make(map[string]string)
+			nsProps[ns] = make(map[string]extPropInfo)
 		}
-		if _, seen := nsProps[ns][name]; !seen {
-			nsProps[ns][name] = valueType
+		if _, seen := nsProps[ns][info.name]; !seen {
+			nsProps[ns][info.name] = info
 		}
 	}
 
@@ -909,16 +929,30 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 	elemDepth := 0
 	var curNS, curName string // top-level custom property being classified
 	curType := ""
+	var curStructNS string
+	var curStructFields []string
 
 	finishProp := func() {
 		if curName == "" {
+			curStructNS, curStructFields = "", nil
 			return
 		}
-		if curType == "" {
-			curType = "Text"
+		if len(curStructFields) > 0 {
+			record(curNS, extPropInfo{
+				name:         curName,
+				valueType:    curName + "Struct",
+				structNS:     curStructNS,
+				structPrefix: nsPrefixes[curStructNS],
+				structFields: curStructFields,
+			})
+		} else {
+			if curType == "" || curType == "structPending" {
+				curType = "Text"
+			}
+			record(curNS, extPropInfo{name: curName, valueType: curType})
 		}
-		record(curNS, curName, curType)
 		curNS, curName, curType = "", "", ""
+		curStructNS, curStructFields = "", nil
 	}
 
 	for {
@@ -942,7 +976,7 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 						!needsExtensionDeclaration(part, ns, attr.Name.Local) {
 						continue
 					}
-					record(ns, attr.Name.Local, "Text")
+					record(ns, extPropInfo{name: attr.Name.Local, valueType: "Text"})
 				}
 				continue
 			}
@@ -955,33 +989,52 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 				if !ignoredNS[t.Name.Space] && needsExtensionDeclaration(part, t.Name.Space, t.Name.Local) {
 					curNS, curName = t.Name.Space, t.Name.Local
 					curType = ""
-					// rdf:parseType="Resource" marks an inline structure,
-					// whose field types litho cannot derive; declaring a
-					// wrong type would swap the missing-schema violation
-					// for a type-mismatch one, so skip the property.
+					// rdf:parseType="Resource" marks an inline structure:
+					// capture its field names so the generator can emit a
+					// matching pdfaSchema:valueType definition. veraPDF
+					// type-checks every declared property, so a structure
+					// declared as a simple type fails §6.6.2.3.1 t2, and
+					// an undeclared one fails t1.
 					for _, attr := range t.Attr {
 						if attr.Name.Local == "parseType" {
-							curName = ""
+							curType = "structPending"
 						}
 					}
 				}
-			case elemDepth == 2 && curName != "" && curType == "":
-				// First child decides the container type. The accepted
-				// names mirror the predefined XMP value types the
-				// validator recognizes.
-				if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" {
-					switch t.Name.Local {
-					case "Bag":
-						curType = "bag Text"
-					case "Seq":
-						curType = "seq Text"
-					case "Alt":
-						curType = "Lang Alt"
-					default:
-						curName = "" // rdf:Description etc.: structure, skip.
+			case elemDepth == 2 && curName != "":
+				if curType == "" {
+					// First child decides the container type. The accepted
+					// names mirror the predefined XMP value types the
+					// validator recognizes; a non-container child means a
+					// structure, handled like the parseType form below.
+					if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" {
+						switch t.Name.Local {
+						case "Bag":
+							curType = "bag Text"
+						case "Seq":
+							curType = "seq Text"
+						case "Alt":
+							curType = "Lang Alt"
+						default:
+							curType = "structPending"
+						}
+					} else {
+						curType = "structPending"
 					}
-				} else {
-					curName = "" // Element child in another namespace: structure, skip.
+				}
+				if curType == "structPending" || curType == "Text" && len(curStructFields) > 0 {
+					// Structure field. Fields spanning more than one
+					// namespace cannot be described by a single pdfaType
+					// definition; drop the property rather than declare a
+					// type veraPDF would reject.
+					if curStructNS == "" {
+						curStructNS = t.Name.Space
+					}
+					if t.Name.Space == curStructNS {
+						curStructFields = append(curStructFields, t.Name.Local)
+					} else {
+						curName, curStructFields = "", nil
+					}
 				}
 			}
 
@@ -1013,7 +1066,7 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 		sort.Strings(names)
 		infos := make([]extPropInfo, 0, len(names))
 		for _, n := range names {
-			infos = append(infos, extPropInfo{name: n, valueType: props[n]})
+			infos = append(infos, props[n])
 		}
 		schemas = append(schemas, extSchemaInfo{nsURI: nsURI, prefix: prefix, properties: infos})
 	}
@@ -1043,6 +1096,38 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 				sb.WriteString("            </rdf:li>\n")
 			}
 			sb.WriteString("          </rdf:Seq>\n        </pdfaSchema:property>\n")
+		}
+
+		// Structure-valued properties need a matching valueType
+		// definition (ISO 19005-2 §6.6.2.3.3): name, namespace, prefix,
+		// description, and one pdfaField entry per observed field. The
+		// fields are declared Text, matching their serialized leaves.
+		var structs []extPropInfo
+		for _, prop := range s.properties {
+			if len(prop.structFields) > 0 {
+				structs = append(structs, prop)
+			}
+		}
+		if len(structs) > 0 {
+			sb.WriteString("        <pdfaSchema:valueType>\n          <rdf:Seq>\n")
+			for _, prop := range structs {
+				sb.WriteString("            <rdf:li rdf:parseType=\"Resource\">\n")
+				fmt.Fprintf(&sb, "              <pdfaType:type>%s</pdfaType:type>\n", xmlEscape(prop.valueType))
+				fmt.Fprintf(&sb, "              <pdfaType:namespaceURI>%s</pdfaType:namespaceURI>\n", xmlEscape(prop.structNS))
+				fmt.Fprintf(&sb, "              <pdfaType:prefix>%s</pdfaType:prefix>\n", xmlEscape(prop.structPrefix))
+				fmt.Fprintf(&sb, "              <pdfaType:description>%s</pdfaType:description>\n", xmlEscape(prop.name))
+				sb.WriteString("              <pdfaType:field>\n                <rdf:Seq>\n")
+				for _, f := range prop.structFields {
+					sb.WriteString("                  <rdf:li rdf:parseType=\"Resource\">\n")
+					fmt.Fprintf(&sb, "                    <pdfaField:name>%s</pdfaField:name>\n", xmlEscape(f))
+					sb.WriteString("                    <pdfaField:valueType>Text</pdfaField:valueType>\n")
+					fmt.Fprintf(&sb, "                    <pdfaField:description>%s</pdfaField:description>\n", xmlEscape(f))
+					sb.WriteString("                  </rdf:li>\n")
+				}
+				sb.WriteString("                </rdf:Seq>\n              </pdfaType:field>\n")
+				sb.WriteString("            </rdf:li>\n")
+			}
+			sb.WriteString("          </rdf:Seq>\n        </pdfaSchema:valueType>\n")
 		}
 
 		sb.WriteString("      </rdf:li>\n")

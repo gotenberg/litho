@@ -391,8 +391,8 @@ func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 			t.Errorf("property %s: got valueType %q, want %q", name, got[name], vt)
 		}
 	}
-	if _, present := got["structured"]; present {
-		t.Error("inline structure must be skipped, not mistyped")
+	if got["structured"] != "structuredStruct" {
+		t.Errorf("inline structure: got %q, want structuredStruct (custom valueType with field definitions)", got["structured"])
 	}
 	if _, present := got["field"]; present {
 		t.Error("nested structure field recorded as a property")
