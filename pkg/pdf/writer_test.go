@@ -3647,3 +3647,58 @@ func TestWriter_RebuiltSourceForcesFullRewrite(t *testing.T) {
 		t.Error("output required an xref rebuild: written offsets are not physically valid")
 	}
 }
+
+// TestWriter_EncryptedSourceRewrittenDecrypted guards the encrypted-source
+// write path: this writer has no encryptor bound to a source's crypto
+// handler, so the previous incremental path appended plaintext strings and
+// streams into the encrypted file, which conforming readers decrypted into
+// garbage. An edit on an encrypted source must produce a full rewrite of
+// the decrypted object graph instead.
+func TestWriter_EncryptedSourceRewrittenDecrypted(t *testing.T) {
+	ctx := context.Background()
+
+	// Build an encrypted document first.
+	r, err := Open(ctx, bytes.NewReader(writerTestPDF()), int64(len(writerTestPDF())))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	w.Encrypt(EncryptConfig{
+		UserPassword:  "user123",
+		OwnerPassword: "owner456",
+		Algorithm:     EncryptAES128,
+	})
+	var enc bytes.Buffer
+	if err := w.WriteTo(ctx, &enc); err != nil {
+		t.Fatalf("WriteTo (encrypt): %v", err)
+	}
+
+	// Edit the encrypted document.
+	r2, err := Open(ctx, bytes.NewReader(enc.Bytes()), int64(enc.Len()), WithPassword("user123"))
+	if err != nil {
+		t.Fatalf("Open encrypted: %v", err)
+	}
+	w2 := NewWriter(r2)
+	w2.SetMetadata(Metadata{Title: "Edited Title"})
+	var out bytes.Buffer
+	if err := w2.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo (edit): %v", err)
+	}
+
+	// The output must be a decrypted rewrite: readable without a password,
+	// with the edit applied and the original content intact.
+	r3, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("output still requires a password or is corrupt: %v", err)
+	}
+	meta, err := r3.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("Metadata: %v", err)
+	}
+	if meta["Title"] != "Edited Title" {
+		t.Errorf("Title: got %q, want %q", meta["Title"], "Edited Title")
+	}
+	if meta["Author"] != "Jane" {
+		t.Errorf("Author lost in rewrite: got %q, want Jane", meta["Author"])
+	}
+}

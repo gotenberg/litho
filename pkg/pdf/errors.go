@@ -99,6 +99,12 @@ var (
 	// by the spec but not yet implemented.
 	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with full-rewrite operations (encrypt, decrypt, delete/insert pages, flatten, clear metadata, full rewrite)")
 
+	// ErrEncryptedNotAuthenticated is returned by [Writer.WriteTo] when the
+	// source document is encrypted but was never authenticated, so its
+	// strings and streams cannot be decrypted for re-serialization. Reopen
+	// the document with [WithPassword] before writing.
+	ErrEncryptedNotAuthenticated = errors.New("source document is encrypted and not authenticated; reopen with WithPassword before writing")
+
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
 	// [Writer.RemediatePDFUA] when applied fixes cause the output to
 	// regress beyond the configured [RegressionTolerance] and rolling back

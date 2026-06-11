@@ -1427,7 +1427,11 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	for _, o := range opts {
 		o(&cfg)
 	}
-	if w.signer != nil && (w.encryptCfg != nil || w.decrypt || w.forceRewrite || cfg.fullRewrite) {
+	// Signing an encrypted source is also rejected: the incremental signing
+	// flow would append the signature dictionary's strings in plaintext
+	// where the source's crypto handler requires ciphertext.
+	if w.signer != nil && (w.encryptCfg != nil || w.decrypt || w.forceRewrite || cfg.fullRewrite ||
+		w.reader.doc.IsEncrypted) {
 		return ErrSignFullRewriteIncompatible
 	}
 	if err := w.writeToInternal(ctx, dst, opts...); err != nil {
@@ -1453,21 +1457,31 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		o(&cfg)
 	}
 
-	// Two source conditions make an incremental update unsafe. A rebuilt
+	// Three source conditions make an incremental update unsafe. A rebuilt
 	// cross-reference table means the recorded offsets are unusable, so
 	// /Prev would chain into broken data. A non-zero header offset (junk
 	// before %PDF) means readers disagree on the offset base: litho and
 	// this writer use the physical file start, while Acrobat and veraPDF
 	// resolve offsets relative to the header, so any appended section is
-	// wrong for one convention (veraPDF rejects the mix outright). Force
-	// a full rewrite; it re-derives every offset and drops the junk.
+	// wrong for one convention (veraPDF rejects the mix outright). An
+	// encrypted source has no encryptor bound to its crypto handler in
+	// this writer, so appended strings and streams would be plaintext
+	// where conforming readers expect ciphertext and decrypt them into
+	// garbage. Force a full rewrite in all three cases: it re-derives
+	// every offset, drops pre-header junk, and copies the decrypted
+	// object graph without /Encrypt (use [Writer.Encrypt] to re-protect).
 	// A write with no edits stays a byte-identical pass-through, and the
 	// signing path below is exempt: it is structurally incremental, and
-	// [Writer.WriteTo] already rejects sign + full-rewrite combinations.
+	// [Writer.WriteTo] rejects unsafe sign combinations.
 	hasEdits := len(w.mutations) > 0 || w.trailerDirty || len(w.rewriteOverrides) > 0 ||
 		w.encryptCfg != nil || w.decrypt
-	if hasEdits && (w.reader.doc.Rebuilt || w.reader.doc.HeaderOffset > 0) && w.signer == nil {
-		cfg.fullRewrite = true
+	if hasEdits && w.signer == nil {
+		if w.reader.doc.IsEncrypted && !w.reader.doc.Authenticated {
+			return ErrEncryptedNotAuthenticated
+		}
+		if w.reader.doc.Rebuilt || w.reader.doc.HeaderOffset > 0 || w.reader.doc.IsEncrypted {
+			cfg.fullRewrite = true
+		}
 	}
 
 	// Swap the document logger for the duration of the write so every
