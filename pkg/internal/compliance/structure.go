@@ -124,6 +124,9 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// PDF/UA-2 §8.2.5.2: single Document root child.
 		if profile == "PDF/UA-2" {
 			checkSingleDocumentRoot(ctx, doc, structTreeRoot, &results)
+			rootState := &walkState{doc: doc, profile: profile, results: &results,
+				roleMap: buildRoleMapIndex(ctx, doc, structTreeRoot)}
+			validateISO32005Root(ctx, rootState, structTreeRoot)
 		}
 	}
 
@@ -290,6 +293,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 		doc:     doc,
 		profile: profile,
 		results: results,
+		roleMap: buildRoleMapIndex(ctx, doc, structTreeRoot),
 	}
 
 	walkChildren(ctx, state, kidsObj, "", 0, 0)
@@ -333,6 +337,28 @@ type walkState struct {
 	// the Headers+IDs association model (any TD has /Headers in its
 	// attributes). When true, TH elements do not need /Scope.
 	tableUsesHeaderIDs bool
+
+	// roleMap is the StructTreeRoot /RoleMap as a name index, used to
+	// resolve custom structure types to standard ones where a check's
+	// semantics (ISO/TS 32005 Table 5) are defined over standard types.
+	roleMap map[ast.PdfName]ast.PdfName
+}
+
+// buildRoleMapIndex resolves the StructTreeRoot /RoleMap into a plain
+// name-to-name index. Unresolvable entries are skipped; cycle handling is
+// the lookup side's concern (bounded hops).
+func buildRoleMapIndex(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) map[ast.PdfName]ast.PdfName {
+	rm, err := document.ResolveDict(ctx, doc, structTreeRoot["RoleMap"])
+	if err != nil || rm == nil {
+		return nil
+	}
+	out := make(map[ast.PdfName]ast.PdfName, len(rm))
+	for key, valObj := range rm {
+		if val, verr := document.ResolveName(ctx, doc, valObj); verr == nil && val != "" {
+			out[key] = val
+		}
+	}
+	return out
 }
 
 // walkChildren processes the /K entry of a structure element (may be a single
@@ -419,6 +445,13 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 			*state.results = append(*state.results,
 				failf(structParentPresenceRule(state.profile), "%s element lacks /P parent entry", typeName)...)
 		}
+	}
+
+	// ISO/TS 32005 Table 5 inclusion rules: veraPDF's ua2 flavour runs
+	// the combined PDFUA-2-ISO32005 profile, so litho mirrors it for
+	// PDF/UA-2 only.
+	if state.profile == "PDF/UA-2" {
+		validateISO32005(ctx, state, elem, typeName, parentType)
 	}
 
 	// Tag-containment rules (§7.2 parent/child tables) are PDF/UA-1 only:

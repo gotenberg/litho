@@ -43,6 +43,7 @@ type xmlRule struct {
 	Object      string    `xml:"object,attr"`
 	ID          xmlRuleID `xml:"id"`
 	Description string    `xml:"description"`
+	Test        string    `xml:"test"`
 }
 
 type xmlRuleID struct {
@@ -89,6 +90,15 @@ var profileFiles = []struct {
 	{"PDF_UA/PDFUA-1.xml", "PDFUA_1"},
 	{"PDF_UA/PDFUA-2.xml", "PDFUA_2"},
 }
+
+// iso32005ProfilePath is the standalone ISO/TS 32005 profile. It is not part
+// of [profileFiles]: its rules do not become Rule vars in rules.go. Instead
+// [generateISO32005] derives the Table 5 parent-child inclusion matrix from
+// its test expressions into rules_iso32005.go. veraPDF's ua2 flavour validates
+// the combined PDFUA-2-ISO32005.xml profile, which is exactly PDFUA-2.xml plus
+// the "Table 5. *" rules of this file (the clause 1, 5.2 and 7.2 rules are
+// excluded from the combination), so litho mirrors that pairing.
+const iso32005ProfilePath = "PDF_UA/ISO-32005-Tagged.xml"
 
 var flavourToFuncName = map[string]string{
 	"PDFA_1_A": "PDFA1aRules",
@@ -144,15 +154,29 @@ func main() {
 	}
 
 	fmt.Printf("Generated %s (%d rules, %d profiles)\n", outPath, len(allRules), len(profiles))
+
+	isoOutPath := filepath.Join(findComplianceDir(), "rules_iso32005.go")
+	pairCount, err := generateISO32005(filepath.Join(profilesDir, iso32005ProfilePath), isoOutPath)
+	if err != nil {
+		fatalf("%v", err)
+	}
+	fmt.Printf("Generated %s (%d Table 5 rules)\n", isoOutPath, pairCount)
 }
 
-// downloadProfiles fetches all 13 XML profiles from the VeraPDF repository.
+// downloadProfiles fetches all 13 XML profiles plus the standalone
+// ISO/TS 32005 profile from the VeraPDF repository.
 func downloadProfiles(baseURL, tag, destDir string) {
 	fmt.Printf("Downloading profiles from %s (ref: %s)\n", baseURL, tag)
 
+	paths := make([]string, 0, len(profileFiles)+1)
 	for _, pf := range profileFiles {
-		url := fmt.Sprintf("%s/%s/%s", baseURL, tag, pf.Path)
-		destPath := filepath.Join(destDir, pf.Path)
+		paths = append(paths, pf.Path)
+	}
+	paths = append(paths, iso32005ProfilePath)
+
+	for _, path := range paths {
+		url := fmt.Sprintf("%s/%s/%s", baseURL, tag, path)
+		destPath := filepath.Join(destDir, path)
 
 		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 			fatalf("creating directory for %s: %v", destPath, err)
@@ -178,7 +202,7 @@ func downloadProfiles(baseURL, tag, destDir string) {
 			fatalf("writing %s: %v", destPath, err)
 		}
 
-		fmt.Printf("  %s (%d bytes)\n", pf.Path, len(data))
+		fmt.Printf("  %s (%d bytes)\n", path, len(data))
 	}
 
 	fmt.Println("Download complete.")
@@ -360,4 +384,123 @@ func findComplianceDir() string {
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "gen-rules: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// iso32005Shape classifies a Table 5 test expression into one of the eight
+// mechanical shapes the ISO/TS 32005 profile uses. Anything else is
+// reported and skipped so a profile update cannot silently emit a wrong
+// check.
+type iso32005Entry struct {
+	Clause      string // verbatim, e.g. "Table 5. Annot-Document"
+	TestNumber  int
+	Object      string
+	Description string
+	Kind        string // forbiddenParent, forbiddenParentHn, kidZeroUnlessGrouping, kidMaxOne, kidMaxOneIfGrouping, kidZeroUnlessGroupingHn, kidExactlyOne, noContent
+	Parent      string // standard type from the clause's "Parent-Child" pair ("Hn" for numbered headings)
+	Child       string // "" for noContent; "Hn" for numbered headings; "content" for content rules
+}
+
+var iso32005ShapeRes = []struct {
+	kind string
+	re   *regexp.Regexp
+}{
+	{"forbiddenParent", regexp.MustCompile(`^parentStandardType != '([^']+)'$`)},
+	{"forbiddenParentHn", regexp.MustCompile(`^/\^H\[1-9\]\[0-9\]\*\$/\.test\(parentStandardType\) == false$`)},
+	{"kidZeroUnlessGrouping", regexp.MustCompile(`^isGrouping == true \|\| kidsStandardTypes\.split\('&'\)\.filter\(elem => elem == '([^']+)'\)\.length == 0$`)},
+	{"kidMaxOne", regexp.MustCompile(`^kidsStandardTypes\.split\('&'\)\.filter\(elem => elem == '([^']+)'\)\.length <= 1$`)},
+	{"kidMaxOneIfGrouping", regexp.MustCompile(`^isGrouping == false \|\| kidsStandardTypes\.split\('&'\)\.filter\(elem => elem == '([^']+)'\)\.length <= 1$`)},
+	{"kidZeroUnlessGroupingHn", regexp.MustCompile(`^isGrouping == true \|\| kidsStandardTypes\.split\('&'\)\.filter\(elem => /\^H\[1-9\]\[0-9\]\*\$/\.test\(elem\)\)\.length == 0$`)},
+	{"kidExactlyOne", regexp.MustCompile(`^kidsStandardTypes\.split\('&'\)\.filter\(elem => elem == '([^']+)'\)\.length == 1$`)},
+	{"noContent", regexp.MustCompile(`^hasContentItems == false$`)},
+}
+
+// generateISO32005 parses the standalone ISO/TS 32005 profile and emits
+// rules_iso32005.go: the Table 5 parent-child inclusion entries as one
+// sorted table the PDF/UA-2 structure walk consumes. Returns the entry
+// count.
+func generateISO32005(profilePath, outPath string) (int, error) {
+	data, err := os.ReadFile(profilePath) //nolint:gosec // path is repo-internal
+	if err != nil {
+		return 0, fmt.Errorf("reading %s: %w", profilePath, err)
+	}
+	var profile xmlProfile
+	if err := xml.Unmarshal(data, &profile); err != nil {
+		return 0, fmt.Errorf("parsing %s: %w", profilePath, err)
+	}
+
+	var entries []iso32005Entry
+	skipped := 0
+	for _, r := range profile.Rules {
+		if !strings.HasPrefix(r.ID.Clause, "Table 5. ") {
+			continue // clause 1 / 5.2 / 7.2 rules are covered elsewhere
+		}
+		pair := strings.TrimPrefix(r.ID.Clause, "Table 5. ")
+		dash := strings.LastIndex(pair, "-")
+		if dash < 0 {
+			skipped++
+			continue
+		}
+		parent, child := pair[:dash], pair[dash+1:]
+		test := strings.Join(strings.Fields(r.Test), " ")
+
+		kind := ""
+		for _, sh := range iso32005ShapeRes {
+			if m := sh.re.FindStringSubmatch(test); m != nil {
+				kind = sh.kind
+				break
+			}
+		}
+		if kind == "" {
+			fmt.Printf("  iso32005: unrecognized test shape for %q: %s\n", r.ID.Clause, test)
+			skipped++
+			continue
+		}
+		entries = append(entries, iso32005Entry{
+			Clause:      r.ID.Clause,
+			TestNumber:  r.ID.TestNumber,
+			Object:      r.Object,
+			Description: strings.Join(strings.Fields(r.Description), " "),
+			Kind:        kind,
+			Parent:      parent,
+			Child:       child,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Clause != entries[j].Clause {
+			return entries[i].Clause < entries[j].Clause
+		}
+		return entries[i].TestNumber < entries[j].TestNumber
+	})
+
+	var buf bytes.Buffer
+	buf.WriteString("// Code generated by cmd/gen-rules. DO NOT EDIT.\n")
+	buf.WriteString("//\n")
+	buf.WriteString("// ISO/TS 32005 Table 5 structure-type inclusion entries, derived from\n")
+	buf.WriteString("// the veraPDF profile PDF_UA/ISO-32005-Tagged.xml. veraPDF's ua2\n")
+	buf.WriteString("// flavour validates PDFUA-2-ISO32005.xml, which is PDFUA-2.xml plus\n")
+	buf.WriteString("// these rules, so litho mirrors that pairing for PDF/UA-2 runs.\n")
+	buf.WriteString("package compliance\n\n")
+	buf.WriteString("// iso32005Entry is one Table 5 rule: a parent-child inclusion\n")
+	buf.WriteString("// constraint (or content-item prohibition) plus the Rule it emits.\n")
+	buf.WriteString("type iso32005Entry struct {\n")
+	buf.WriteString("\tKind   string\n")
+	buf.WriteString("\tParent string\n")
+	buf.WriteString("\tChild  string\n")
+	buf.WriteString("\tRule   Rule\n")
+	buf.WriteString("}\n\n")
+	buf.WriteString("//nolint:gochecknoglobals // generated spec table\n")
+	buf.WriteString("var iso32005Entries = []iso32005Entry{\n")
+	for _, e := range entries {
+		fmt.Fprintf(&buf, "\t{Kind: %q, Parent: %q, Child: %q, Rule: Rule{Specification: %q, Clause: %q, TestNumber: %d, Object: %q, Description: %q}},\n",
+			e.Kind, e.Parent, e.Child, "ISO_32005", e.Clause, e.TestNumber, e.Object, e.Description)
+	}
+	buf.WriteString("}\n")
+
+	if err := os.WriteFile(outPath, buf.Bytes(), 0o644); err != nil { //nolint:gosec // generated source file
+		return 0, fmt.Errorf("writing %s: %w", outPath, err)
+	}
+	if skipped > 0 {
+		fmt.Printf("  iso32005: skipped %d rules (unparsed shapes)\n", skipped)
+	}
+	return len(entries), nil
 }
