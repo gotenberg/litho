@@ -102,19 +102,29 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 			return nil, err
 		}
 
-		annotsObj, ok := page.Dict["Annots"]
+		// Read the page, annot array, and annot dicts alloc-first: an
+		// earlier fixer may have filtered /Annots or rewritten an
+		// annotation, and patching the stale originals would clobber
+		// those fixes (and resurrect removed annotations) on AllocAt.
+		pageDict := livePageDict(ctx, alloc, doc, page)
+		annotsObj, ok := pageDict["Annots"]
 		if !ok {
 			continue
 		}
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil || annots == nil {
+		annots := liveArray(ctx, alloc, doc, annotsObj)
+		if annots == nil {
 			continue
 		}
 
 		for _, annotObj := range annots {
 			ref, isRef := annotObj.(ast.PdfIndirectRef)
-			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annotDict == nil {
+			var annotDict ast.PdfDict
+			if isRef {
+				annotDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+			} else if d, err := document.ResolveDict(ctx, doc, annotObj); err == nil {
+				annotDict = d
+			}
+			if annotDict == nil {
 				continue
 			}
 			if _, hasAP := annotDict["AP"]; hasAP {

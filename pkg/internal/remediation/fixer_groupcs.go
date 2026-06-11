@@ -50,10 +50,11 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		groupObj, hasGroup := page.Dict["Group"]
+		pageDict := livePageDict(ctx, alloc, doc, page)
+		groupObj, hasGroup := pageDict["Group"]
 		if !hasGroup {
-			newPage := make(ast.PdfDict, len(page.Dict)+1)
-			maps.Copy(newPage, page.Dict)
+			newPage := make(ast.PdfDict, len(pageDict)+1)
+			maps.Copy(newPage, pageDict)
 			newPage["Group"] = ast.PdfDict{
 				"Type": ast.PdfName("Group"),
 				"S":    ast.PdfName("Transparency"),
@@ -68,8 +69,13 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			}
 			continue
 		}
-		groupDict, err := document.ResolveDict(ctx, doc, groupObj)
-		if err != nil || groupDict == nil {
+		var groupDict ast.PdfDict
+		if r, ok := groupObj.(ast.PdfIndirectRef); ok {
+			groupDict = resolveFromAllocOrDoc(ctx, alloc, doc, r)
+		} else if d, err := document.ResolveDict(ctx, doc, groupObj); err == nil {
+			groupDict = d
+		}
+		if groupDict == nil {
 			continue
 		}
 		if _, hasCS := groupDict["CS"]; !hasCS {
@@ -86,8 +92,8 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		if groupRef.ObjectNum > 0 {
 			alloc.AllocAt(groupRef.ObjectNum, newGroup)
 		} else {
-			newPage := make(ast.PdfDict, len(page.Dict))
-			maps.Copy(newPage, page.Dict)
+			newPage := make(ast.PdfDict, len(pageDict))
+			maps.Copy(newPage, pageDict)
 			newPage["Group"] = newGroup
 			alloc.AllocAt(page.Ref.ObjectNum, newPage)
 		}

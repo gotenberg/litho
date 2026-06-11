@@ -54,6 +54,74 @@ func TestFixPageTabs_AddsTabsToAnnotatedPage(t *testing.T) {
 	}
 }
 
+// TestFixPageTabs_RespectsPendingPageDict guards the alloc-first read: when
+// an earlier fixer queued a page rewrite, the /Tabs patch must start from
+// that pending dict, not from the parsed original, or the earlier fix is
+// clobbered on AllocAt.
+func TestFixPageTabs_RespectsPendingPageDict(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	alloc.AllocAt(3, ast.PdfDict{
+		"Type":     ast.PdfName("Page"),
+		"Parent":   ast.PdfIndirectRef{ObjectNum: 2},
+		"MediaBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(612), ast.PdfInt(792)},
+		"Annots":   ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 4}},
+		"Marker":   ast.PdfName("FromPending"),
+	})
+
+	if _, err := fixPageTabs(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-1"); err != nil {
+		t.Fatalf("fixPageTabs: %v", err)
+	}
+	got := pendingDict(t, alloc, 3)
+	if got["Marker"] != ast.PdfName("FromPending") {
+		t.Error("fixPageTabs clobbered the pending page rewrite")
+	}
+	if got["Tabs"] != ast.PdfName("S") {
+		t.Errorf("page /Tabs: got %v, want S", got["Tabs"])
+	}
+}
+
+// TestFixPageTabs_SkipsWhenPendingPageDroppedAnnots guards against
+// resurrecting annotations: when an earlier fixer removed the page's
+// /Annots, the stale original (which still has them) must not be written
+// back just to add /Tabs.
+func TestFixPageTabs_SkipsWhenPendingPageDroppedAnnots(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Sound /Rect [0 0 10 10] >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	alloc.AllocAt(3, ast.PdfDict{
+		"Type":     ast.PdfName("Page"),
+		"Parent":   ast.PdfIndirectRef{ObjectNum: 2},
+		"MediaBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(612), ast.PdfInt(792)},
+	})
+
+	descs, err := fixPageTabs(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-1")
+	if err != nil {
+		t.Fatalf("fixPageTabs: %v", err)
+	}
+	if len(descs) != 0 {
+		t.Errorf("expected no fixes, got %v", descs)
+	}
+	got := pendingDict(t, alloc, 3)
+	if _, resurrect := got["Annots"]; resurrect {
+		t.Error("fixPageTabs resurrected annotations removed by an earlier fixer")
+	}
+	if _, hasTabs := got["Tabs"]; hasTabs {
+		t.Error("a page without annotations needs no /Tabs")
+	}
+}
+
 func TestFixPageTabs_SkipsPageWithoutAnnotations(t *testing.T) {
 	pdf := buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R >>",

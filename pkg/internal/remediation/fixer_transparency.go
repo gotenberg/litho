@@ -49,10 +49,11 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		totalFixed += fixXObjectTransparency(ctx, doc, alloc, page.Resources)
 
 		// Remove page-level transparency group.
-		if groupObj, ok := page.Dict["Group"]; ok {
+		pageDict := livePageDict(ctx, alloc, doc, page)
+		if groupObj, ok := pageDict["Group"]; ok {
 			if isTransparencyGroup(ctx, doc, groupObj) {
-				newDict := make(ast.PdfDict, len(page.Dict))
-				maps.Copy(newDict, page.Dict)
+				newDict := make(ast.PdfDict, len(pageDict))
+				maps.Copy(newDict, pageDict)
 				delete(newDict, "Group")
 				alloc.AllocAt(page.Ref.ObjectNum, newDict)
 				totalFixed++
@@ -60,7 +61,7 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		}
 
 		// Fix annotation appearance stream resources.
-		if annotsObj, ok := page.Dict["Annots"]; ok {
+		if annotsObj, ok := pageDict["Annots"]; ok {
 			totalFixed += fixAnnotationTransparency(ctx, doc, alloc, annotsObj)
 		}
 	}

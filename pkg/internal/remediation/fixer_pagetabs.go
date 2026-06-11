@@ -37,15 +37,16 @@ func fixPageTabs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("fixing Tabs on page %d: %w", i+1, err)
 		}
-		if _, hasAnnots := page.Dict["Annots"]; !hasAnnots {
+		pageDict := livePageDict(ctx, alloc, doc, page)
+		if _, hasAnnots := pageDict["Annots"]; !hasAnnots {
 			continue
 		}
-		if _, hasTabs := page.Dict["Tabs"]; hasTabs {
+		if _, hasTabs := pageDict["Tabs"]; hasTabs {
 			continue
 		}
 
-		newDict := make(ast.PdfDict, len(page.Dict)+1)
-		maps.Copy(newDict, page.Dict)
+		newDict := make(ast.PdfDict, len(pageDict)+1)
+		maps.Copy(newDict, pageDict)
 		newDict["Tabs"] = ast.PdfName("S")
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 		count++

@@ -33,12 +33,13 @@ func fixPresSteps(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			return nil, fmt.Errorf("fixing PresSteps on page %d: %w", i+1, err)
 		}
 
-		if _, ok := page.Dict["PresSteps"]; !ok {
+		pageDict := livePageDict(ctx, alloc, doc, page)
+		if _, ok := pageDict["PresSteps"]; !ok {
 			continue
 		}
 
-		newDict := make(ast.PdfDict, len(page.Dict))
-		maps.Copy(newDict, page.Dict)
+		newDict := make(ast.PdfDict, len(pageDict))
+		maps.Copy(newDict, pageDict)
 		delete(newDict, "PresSteps")
 
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)

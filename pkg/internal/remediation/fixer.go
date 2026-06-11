@@ -150,9 +150,16 @@ func walkIndirectObjects(
 		if entry.Type != 1 || objNum == 0 {
 			continue
 		}
-		obj, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
-		if err != nil || obj == nil {
-			continue
+		// Read alloc-first: an earlier fixer may have queued a replacement
+		// at this object number, and transforming the stale original would
+		// clobber that fix on AllocAt.
+		obj, pending := alloc.Pending()[objNum]
+		if !pending {
+			resolved, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
+			if err != nil || resolved == nil {
+				continue
+			}
+			obj = resolved
 		}
 		switch v := obj.(type) {
 		case ast.PdfDict:
@@ -184,6 +191,35 @@ func walkIndirectObjects(
 		}
 	}
 	return count, nil
+}
+
+// livePageDict returns the page dictionary as the next fixer should see it:
+// the replacement queued in alloc when an earlier fixer rewrote the page,
+// otherwise the parsed document's dict. Fixers that copy and re-allocate a
+// page dict must start from this view, or they resurrect state an earlier
+// fixer removed (e.g. forbidden annotations) by writing a stale copy over
+// the queued one.
+func livePageDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ast.PdfDict {
+	if d := resolveFromAllocOrDoc(ctx, alloc, doc, page.Ref); d != nil {
+		return d
+	}
+	return page.Dict
+}
+
+// liveArray resolves an array value alloc-first so a replacement queued by an
+// earlier fixer (e.g. a filtered /Annots) is seen instead of the stale
+// original.
+func liveArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) ast.PdfArray {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		if arr, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfArray); ok {
+			return arr
+		}
+	}
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil {
+		return nil
+	}
+	return arr
 }
 
 // resolveStreamFromAllocOrDoc returns the patched stream queued in alloc
