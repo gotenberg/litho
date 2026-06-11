@@ -136,6 +136,8 @@ Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
 Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after download, writing `<testdata_root>/claims.csv` keyed `<basename>,<profile>`. `run-verapdf.sh` consumes that file and validates each PDF only against the profile it claims (one VeraPDF invocation per profile, hard-linked staging buckets), so cost scales with corpus size, not corpus size × profile count. The runner picks up the same CSV on `corpus run` to skip the live XMP scan. Delete the CSV (or `make clean-corpus`) to force a re-scan.
 
+Known limitation: the current govdocs sample (1,091 files) and the pdf20 examples contain zero PDF/A or PDF/UA claims (verified by byte-scanning for `pdfaid`), so their `claims.csv` files are legitimately empty and the compliance/remediation features run no fixtures there. Real-world compliance coverage needs a corpus sampled from documents that actually claim a profile; until one is added, the verapdf corpus is the only compliance oracle.
+
 Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`; nothing else changes.
 
 ## Manifest schema
