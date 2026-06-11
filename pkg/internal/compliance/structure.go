@@ -294,17 +294,20 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 
 	walkChildren(ctx, state, kidsObj, "", 0, 0)
 
-	// Check heading hierarchy: levels must not be skipped.
-	checkHeadingHierarchy(state)
+	// Heading rules §7.4.2 t1 (no skipped levels) and §7.4.4 t2/t3 (no mixed
+	// H and H1-H6) are PDF/UA-1 only: the veraPDF PDFUA-2 profile carries no
+	// analogue. It forbids the H type entirely (§8.2.5.12 t1, emitted per
+	// element in walkElement) and leaves Hn sequences unconstrained.
+	if profile == "PDF/UA-1" {
+		checkHeadingHierarchy(state)
 
-	// §7.4.4 t2/t3: document must be either strongly structured (H1-H6)
-	// or weakly structured (H), not both.
-	if state.hasGenericH && state.hasSpecificH {
-		*results = append(*results, failf(headingMixedRule(profile),
-			"document uses both H (generic) and H1-H6 (specific) headings, must use one or the other")...)
-		// §7.4.4 t3 (PDF/UA-1): numbered headings (H1-H6) shall not be used when
-		// generic H headings are also present (usesH == false).
-		if profile == "PDF/UA-1" {
+		// §7.4.4 t2/t3: document must be either strongly structured (H1-H6)
+		// or weakly structured (H), not both.
+		if state.hasGenericH && state.hasSpecificH {
+			*results = append(*results, failf(headingMixedRule(profile),
+				"document uses both H (generic) and H1-H6 (specific) headings, must use one or the other")...)
+			// §7.4.4 t3: numbered headings (H1-H6) shall not be used when
+			// generic H headings are also present (usesH == false).
 			*results = append(*results, failf(Rule_14289_1_7_4_4_t03,
 				"document uses numbered headings while also using generic H headings")...)
 		}
@@ -376,13 +379,17 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		}
 		// Only process structure elements (skip marked content refs, object refs).
 		if _, hasS := dict["S"]; hasS {
-			// Check for H (generic heading) children per §7.4.4 t1.
-			childType, _ := document.ResolveName(ctx, state.doc, dict["S"])
-			if childType == "H" {
-				hCount++
-				if hCount > 1 {
-					*state.results = append(*state.results,
-						failf(Rule_14289_1_7_4_4_t01, "node contains %d H children (max 1)", hCount)...)
+			// §7.4.4 t1 (at most one H child per node) is PDF/UA-1 only: the
+			// veraPDF PDFUA-2 profile carries no analogue, it forbids H
+			// entirely (§8.2.5.12 t1, emitted per element in walkElement).
+			if state.profile == "PDF/UA-1" {
+				childType, _ := document.ResolveName(ctx, state.doc, dict["S"])
+				if childType == "H" {
+					hCount++
+					if hCount > 1 {
+						*state.results = append(*state.results,
+							failf(Rule_14289_1_7_4_4_t01, "node contains %d H children (max 1)", hCount)...)
+					}
 				}
 			}
 
@@ -414,10 +421,15 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// Table and list structure validation.
-	validateTableContainment(state, typeName, parentType)
-	validateTableChildren(state, typeName, parentType)
-	validateListContainment(ctx, state, elem, typeName, parentType)
+	// Tag-containment rules (§7.2 parent/child tables) are PDF/UA-1 only:
+	// the veraPDF PDFUA-2 profile defines no containment rules, only table
+	// regularity (§8.2.5.26, validateTableColumnConsistency) and list
+	// semantics (§8.2.5.25, checked below).
+	if state.profile == "PDF/UA-1" {
+		validateTableContainment(state, typeName, parentType)
+		validateTableChildren(state, typeName, parentType)
+		validateListContainment(ctx, state, elem, typeName, parentType)
+	}
 
 	// PDF/UA-2 §8.2.5.25: L with Lbl children must have ListNumbering attribute.
 	if typeName == "L" && state.profile == "PDF/UA-2" {
@@ -447,16 +459,21 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 			failf(Rule_14289_2_8_2_5_29_t01, "math type nested within %s instead of Formula", parentType)...)
 	}
 
-	// TOC/TOCI containment: TOCI must be inside TOC.
-	if typeName == "TOCI" && parentType != "TOC" && parentType != "" {
-		*state.results = append(*state.results,
-			failf(Rule_14289_1_7_2_t26, "TOCI inside %s instead of TOC", parentType)...)
-	}
+	// TOC/TOCI containment (§7.2 t26/t27) is PDF/UA-1 only: the veraPDF
+	// PDFUA-2 profile's only TOCI rule is §8.2.5.8 t1 (Ref presence), not
+	// containment.
+	if state.profile == "PDF/UA-1" {
+		// TOCI must be inside TOC.
+		if typeName == "TOCI" && parentType != "TOC" && parentType != "" {
+			*state.results = append(*state.results,
+				failf(Rule_14289_1_7_2_t26, "TOCI inside %s instead of TOC", parentType)...)
+		}
 
-	// TOC children: TOC may contain only TOC, TOCI, and Caption.
-	if parentType == "TOC" && typeName != "TOC" && typeName != "TOCI" && typeName != "Caption" {
-		*state.results = append(*state.results,
-			failf(Rule_14289_1_7_2_t27, "TOC contains %s instead of TOC/TOCI/Caption", typeName)...)
+		// TOC may contain only TOC, TOCI, and Caption.
+		if parentType == "TOC" && typeName != "TOC" && typeName != "TOCI" && typeName != "Caption" {
+			*state.results = append(*state.results,
+				failf(Rule_14289_1_7_2_t27, "TOC contains %s instead of TOC/TOCI/Caption", typeName)...)
+		}
 	}
 
 	// Track heading levels and generic/specific heading usage.
@@ -473,8 +490,10 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		state.hasSpecificH = true
 	}
 
-	// TH scope validation.
-	if typeName == "TH" {
+	// TH /Scope (§7.5 t1) is PDF/UA-1 only: the veraPDF PDFUA-2 profile
+	// replaces it with the TD header-determination rules §8.2.5.26 t5/t6,
+	// a different test on a different object.
+	if typeName == "TH" && state.profile == "PDF/UA-1" {
 		validateTHScope(ctx, state, elem)
 	}
 
@@ -524,9 +543,13 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
 	}
 
-	// Table section count validation (§7.2 t11-t14).
 	if typeName == "Table" {
-		validateTableSectionCounts(ctx, state, elem)
+		// Section counts (§7.2 t11-t14, t39) are PDF/UA-1 only: the veraPDF
+		// PDFUA-2 profile constrains tables through the regularity rules
+		// §8.2.5.26, not through THead/TFoot/Caption counts.
+		if state.profile == "PDF/UA-1" {
+			validateTableSectionCounts(ctx, state, elem)
+		}
 		validateTableColumnConsistency(ctx, state, elem)
 		state.tableUsesHeaderIDs = prevTableUsesHeaderIDs
 	}
