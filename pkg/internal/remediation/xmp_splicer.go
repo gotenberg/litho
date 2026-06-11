@@ -403,11 +403,29 @@ func replacePropertyValue(xmp []byte, nsURI, localName, newValue string) ([]byte
 		return append([]byte(nil), xmp...), errXMPPropertyNotFound
 	case xmpPropertyAsElement:
 		elementBytes := xmp[loc.Start:loc.End]
-		_, openEnd, closeStart, ok := elementTextRange(elementBytes)
+		openStart, openEnd, closeStart, ok := elementTextRange(elementBytes)
 		if !ok {
 			return append([]byte(nil), xmp...), errXMPPropertyNotFound
 		}
 		out := make([]byte, 0, len(xmp)+len(newValue))
+		if closeStart < openEnd {
+			// Self-closing <prefix:Name/>: rebuild as an open/close pair.
+			// The naive splice would leave the trailing "/>" behind as
+			// stray text, which invalidates the whole packet for XMP
+			// readers.
+			name := elementBytes[openStart:closeStart]
+			if sp := bytes.IndexAny(name, " \t\r\n"); sp >= 0 {
+				name = name[:sp]
+			}
+			out = append(out, xmp[:loc.Start+closeStart]...)
+			out = append(out, '>')
+			out = append(out, newValue...)
+			out = append(out, "</"...)
+			out = append(out, name...)
+			out = append(out, '>')
+			out = append(out, xmp[loc.Start+openEnd:]...)
+			return out, nil
+		}
 		absOpenEnd := loc.Start + openEnd
 		absCloseStart := loc.Start + closeStart
 		out = append(out, xmp[:absOpenEnd]...)

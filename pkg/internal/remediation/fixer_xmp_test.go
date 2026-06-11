@@ -143,38 +143,70 @@ func TestPatchExistingXMP_InjectsUARev(t *testing.T) {
 	}
 }
 
-// TestSyncXMPToInfo_PresenceSemantics pins the ISO 19005-1 §6.7.3 sync:
-// present Info keys drive the XMP analogue (replace or insert), absent
-// keys leave the XMP side alone, and a present-but-empty /Keywords
-// replaces a whitespace-only pdf:Keywords with an exactly-empty value.
-func TestSyncXMPToInfo_PresenceSemantics(t *testing.T) {
-	xmp := []byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+// TestReplacePropertyValue_SelfClosing pins the self-closing splice: the
+// naive byte splice on <pdf:Keywords/> left a stray "/>" behind, which
+// is stray text inside rdf:Description and invalidates the whole packet
+// for XMP readers (caused 94 veraPDF-regressed corpus cells).
+func TestReplacePropertyValue_SelfClosing(t *testing.T) {
+	xmp := []byte(`<rdf:Description rdf:about=""
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:pdf="http://ns.adobe.com/pdf/1.3/">
+  <pdf:Keywords/>
+</rdf:Description>`)
+
+	out, err := replacePropertyValue(xmp, pdfNS, "Keywords", "")
+	if err != nil {
+		t.Fatalf("replacePropertyValue: %v", err)
+	}
+	if strings.Contains(string(out), "/>") {
+		t.Errorf("self-closing splice left stray markup:\n%s", out)
+	}
+	if !strings.Contains(string(out), "<pdf:Keywords></pdf:Keywords>") {
+		t.Errorf("expected rebuilt empty element:\n%s", out)
+	}
+
+	out2, err := replacePropertyValue(xmp, pdfNS, "Keywords", "alpha")
+	if err != nil {
+		t.Fatalf("replacePropertyValue: %v", err)
+	}
+	if !strings.Contains(string(out2), "<pdf:Keywords>alpha</pdf:Keywords>") {
+		t.Errorf("expected rebuilt element with value:\n%s", out2)
+	}
+}
+
+// TestPatchExistingXMP_SyncsEmptyKeywords pins the present-but-empty
+// /Keywords sync (ISO 19005-1 §6.7.3 t5): a whitespace-only pdf:Keywords
+// is replaced by the exactly-empty Info value, while an Info dict
+// without /Keywords leaves the packet alone.
+func TestPatchExistingXMP_SyncsEmptyKeywords(t *testing.T) {
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
 <rdf:Description rdf:about=""
   xmlns:pdf="http://ns.adobe.com/pdf/1.3/">
   <pdf:Keywords>
    </pdf:Keywords>
-  <pdf:Producer>ghost</pdf:Producer>
 </rdf:Description>
 </rdf:RDF>
 </x:xmpmeta>
-<?xpacket end="w"?>`)
+<?xpacket end="w"?>`
 
-	info := infoMetadata{
-		Keywords: "",
-		Present:  map[string]bool{"Keywords": true},
+	info := infoMetadata{Present: map[string]bool{"Keywords": true}}
+	patched, fixes := patchExistingXMP(xmp, 1, "B", 0, info)
+	if !containsFix(fixes, "synced pdf:Keywords with Info /Keywords") {
+		t.Errorf("expected the Keywords sync fix, got %v", fixes)
 	}
-	out, fixes := syncXMPToInfo(xmp, nil, info)
+	if strings.Contains(patched, "<pdf:Keywords>\n") {
+		t.Errorf("whitespace pdf:Keywords should be emptied:\n%s", patched)
+	}
 
-	if strings.Contains(string(out), "<pdf:Keywords>\n") {
-		t.Errorf("whitespace pdf:Keywords should be replaced with the empty Info value:\n%s", out)
+	noInfo := infoMetadata{Present: map[string]bool{}}
+	same, fixes2 := patchExistingXMP(xmp, 1, "B", 0, noInfo)
+	if containsFix(fixes2, "synced pdf:Keywords with Info /Keywords") {
+		t.Errorf("absent /Keywords must not drive a sync, got %v", fixes2)
 	}
-	if len(fixes) != 1 {
-		t.Errorf("only /Keywords may be synced (Producer absent from Info), got %v", fixes)
-	}
-	if !strings.Contains(string(out), "<pdf:Producer>ghost</pdf:Producer>") {
-		t.Errorf("pdf:Producer must stay untouched when /Producer is absent from Info:\n%s", out)
+	if !strings.Contains(same, "<pdf:Keywords>\n   </pdf:Keywords>") {
+		t.Errorf("packet must stay untouched without Info /Keywords:\n%s", same)
 	}
 }
 

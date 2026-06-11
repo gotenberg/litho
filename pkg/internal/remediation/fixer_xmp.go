@@ -406,14 +406,6 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// ISO 19005-1 §6.7.3 / 19005-4 §6.7.3.3: Info dict entries and their
-	// XMP analogues must hold equivalent values. Sync the XMP side to the
-	// Info dict for the pairs those parts test. Only parts 1 and 4 carry
-	// sync rules; parts 2/3 deprecate the Info dict instead.
-	if part == 1 || part == 4 {
-		buf, fixes = syncXMPToInfo(buf, fixes, info)
-	}
-
 	// Inject pdfuaid namespace + pdfuaid:part if missing, or correct an
 	// existing wrong value (ISO 14289-2 §5 t2 requires part == 2; a file
 	// claiming part 1 under a PDF/UA-2 run keeps failing until the claim
@@ -643,11 +635,14 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Sync pdf:Keywords with Info /Keywords.
-	if info.Keywords != "" {
+	// Sync pdf:Keywords with Info /Keywords. A present-but-empty
+	// /Keywords also drives the sync: veraPDF compares the values
+	// verbatim, so a whitespace-only pdf:Keywords is not equivalent to
+	// an empty Info entry (§6.7.3 t5, verified live).
+	if info.Keywords != "" || info.Present["Keywords"] {
 		escaped := xmlEscape(info.Keywords)
 		if findXMPProperty(buf, pdfNS, "Keywords").Form != xmpPropertyNotFound {
-			if out, err := replacePropertyValue(buf, pdfNS, "Keywords", escaped); err == nil {
+			if out, err := replacePropertyValue(buf, pdfNS, "Keywords", escaped); err == nil && !bytes.Equal(out, buf) {
 				buf = out
 				fixes = append(fixes, "synced pdf:Keywords with Info /Keywords")
 			}
@@ -707,73 +702,6 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	}
 
 	return string(buf), fixes
-}
-
-// syncXMPToInfo aligns the XMP analogue of each Info dict entry with the
-// Info value (ISO 19005-1 §6.7.3 t1-t8, ISO 19005-4 §6.7.3.3). Simple
-// properties are replaced in place or inserted; the dc: container pairs
-// (title, creator, description) are inserted only when absent, because
-// rewriting an existing malformed container in place risks breaking
-// sibling markup. Absent Info keys leave the XMP side untouched: the
-// sync rules key on Info presence.
-func syncXMPToInfo(buf []byte, fixes []string, info infoMetadata) ([]byte, []string) {
-	setSimple := func(prefix, ns, local, val, infoKey string) {
-		if !info.Present[infoKey] {
-			return
-		}
-		escaped := xmlEscape(val)
-		if findXMPProperty(buf, ns, local).Form != xmpPropertyNotFound {
-			out, err := replacePropertyValue(buf, ns, local, escaped)
-			if err != nil || bytes.Equal(out, buf) {
-				return
-			}
-			buf = out
-			fixes = append(fixes, fmt.Sprintf("synced %s:%s with Info /%s", prefix, local, infoKey))
-			return
-		}
-		if out, err := ensureNamespaceDecl(buf, prefix, ns); err == nil {
-			buf = out
-		}
-		if out, err := insertChildElement(buf, fmt.Sprintf("<%s:%s>%s</%s:%s>", prefix, local, escaped, prefix, local)); err == nil {
-			buf = out
-			fixes = append(fixes, fmt.Sprintf("injected %s:%s from Info /%s", prefix, local, infoKey))
-		}
-	}
-
-	setSimple("xmp", xmpNS, "CreatorTool", info.Creator, "Creator")
-	setSimple("pdf", pdfNS, "Producer", info.Producer, "Producer")
-	setSimple("pdf", pdfNS, "Keywords", info.Keywords, "Keywords")
-	if d := pdfDateToXMP(info.CreationDate); d != "" {
-		setSimple("xmp", xmpNS, "CreateDate", d, "CreationDate")
-	}
-	if d := pdfDateToXMP(info.ModDate); d != "" {
-		setSimple("xmp", xmpNS, "ModifyDate", d, "ModDate")
-	}
-
-	insertContainer := func(local, container, li string) {
-		if findXMPProperty(buf, dcNS, local).Form != xmpPropertyNotFound {
-			return
-		}
-		if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
-			buf = out
-		}
-		elem := fmt.Sprintf("<dc:%s><rdf:%s>%s</rdf:%s></dc:%s>", local, container, li, container, local)
-		if out, err := insertChildElement(buf, elem); err == nil {
-			buf = out
-			fixes = append(fixes, fmt.Sprintf("injected dc:%s from Info dict", local))
-		}
-	}
-	if info.Present["Title"] && info.Title != "" {
-		insertContainer("title", "Alt", `<rdf:li xml:lang="x-default">`+xmlEscape(info.Title)+"</rdf:li>")
-	}
-	if info.Present["Author"] && info.Author != "" {
-		insertContainer("creator", "Seq", "<rdf:li>"+xmlEscape(info.Author)+"</rdf:li>")
-	}
-	if info.Present["Subject"] && info.Subject != "" {
-		insertContainer("description", "Alt", `<rdf:li xml:lang="x-default">`+xmlEscape(info.Subject)+"</rdf:li>")
-	}
-
-	return buf, fixes
 }
 
 // extensionSchemaIncomplete reports whether the pdfaExtension:schemas

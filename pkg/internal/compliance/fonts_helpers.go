@@ -62,7 +62,11 @@ func toUnicodeRule(profile string) Rule {
 	case 3:
 		return Rule_19005_3_6_2_11_7_2_t01
 	case 4:
-		return Rule_19005_4_6_2_10_7_t01
+		// No part-4 presence requirement: every PDFA-4 profile's only
+		// ToUnicode rule (6.2.10.7 t1) starts `toUnicode == null ||`,
+		// so a missing map passes and only present values are tested
+		// (see toUnicodeCMapValuesRule).
+		return Rule{}
 	}
 	return Rule{}
 }

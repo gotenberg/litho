@@ -236,7 +236,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	results = append(results, checkGlyphCoverage(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// ToUnicode CMap values.
-	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	return results
 }
@@ -379,7 +379,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile)...)
 
 	// ToUnicode CMap values.
-	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile)...)
+	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	return results
 }

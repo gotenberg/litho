@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
@@ -593,7 +594,12 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 
 // checkToUnicodeCMapValues validates that a /ToUnicode CMap, if present, is
 // decodable and does not map to invalid Unicode values (U+0000, U+FEFF, U+FFFE).
-func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
+// The veraPDF rule (e.g. PDFA-4F 6.2.10.7 t1) is Glyph-scoped: only the
+// Unicode strings of glyphs referenced for rendering are tested, so a
+// forbidden destination behind an unused character code passes. usage
+// carries the rendered character codes; with no recorded usage the check
+// is vacuous, matching the absence of Glyph objects in veraPDF's model.
+func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeCMapValuesRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -601,6 +607,9 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 
 	tuObj, ok := fontDict["ToUnicode"]
 	if !ok {
+		return nil
+	}
+	if usage == nil || len(usage.charCodes) == 0 {
 		return nil
 	}
 
@@ -625,16 +634,48 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		}
 	}
 
-	// Scan the CMap data for invalid Unicode values.
-	// Look for hex strings in beginbfchar/beginbfrange sections that map to
-	// U+0000, U+FEFF, or U+FFFE.
-	cmapStr := string(data)
-	if containsInvalidUnicodeMapping(cmapStr) {
-		return failf(rule, "font %s on page %d: /ToUnicode CMap maps to U+0000, U+FEFF, or U+FFFE",
-			fontName, pageNum)
+	parsed, err := cmap.Parse(ctx, data)
+	if err != nil || parsed == nil || len(parsed.Mapping) == 0 {
+		// Unparseable CMap: fall back to the destination-only byte scan
+		// over the whole map rather than silently passing.
+		if containsInvalidUnicodeMapping(string(data)) {
+			return failf(rule, "font %s on page %d: /ToUnicode CMap maps to U+0000, U+FEFF, or U+FFFE",
+				fontName, pageNum)
+		}
+		return nil
 	}
 
+	for code, uni := range parsed.Mapping {
+		if !codeUsed(usage, code) {
+			continue
+		}
+		if strings.ContainsAny(uni, "\u0000\uFEFF\uFFFE") {
+			return failf(rule, "font %s on page %d: /ToUnicode maps a rendered code to U+0000, U+FEFF, or U+FFFE",
+				fontName, pageNum)
+		}
+	}
 	return nil
+}
+
+// codeUsed reports whether the raw character-code bytes appear in the
+// page's text operators: single-byte codes check the byte set, two-byte
+// codes check consecutive pairs of the raw string operands (the 2-byte
+// code convention of the CID width and .notdef checks).
+func codeUsed(usage *fontUsageInfo, code string) bool {
+	switch len(code) {
+	case 1:
+		return usage.charCodes[code[0]]
+	case 2:
+		for _, s := range usage.rawStrings {
+			b := []byte(s)
+			for i := 0; i+1 < len(b); i += 2 {
+				if b[i] == code[0] && b[i+1] == code[1] {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // containsInvalidUnicodeMapping scans CMap bfchar/bfrange sections for
