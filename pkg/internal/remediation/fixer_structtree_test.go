@@ -96,22 +96,211 @@ func TestFixStructTree_AddsMinimalStructureTree(t *testing.T) {
 		t.Errorf("document element /S: got %v, want Document", docElem["S"])
 	}
 
-	// Regression guard for the ParentTreeRoot bug.
+	// Regression guard for the structure-element parent key.
 	//
-	// Per ISO 32000-1 §14.7.2 Table 323, a structure element's parent
-	// pointer is named /Parent. The fixer used to incorrectly set
-	// /ParentTreeRoot instead, producing an invalid structure tree.
-	parentRef, ok := docElem["Parent"].(ast.PdfIndirectRef)
+	// Per ISO 32000-2, Table 355 the parent entry of a structure element
+	// is /P. Earlier fixer versions wrote /ParentTreeRoot, then /Parent;
+	// neither is a structure-element entry, so the Document element was
+	// parentless for conforming readers.
+	parentRef, ok := docElem["P"].(ast.PdfIndirectRef)
 	if !ok {
-		t.Fatalf("document element /Parent: got %T (%v), want ast.PdfIndirectRef",
-			docElem["Parent"], docElem["Parent"])
+		t.Fatalf("document element /P: got %T (%v), want ast.PdfIndirectRef",
+			docElem["P"], docElem["P"])
 	}
 	if parentRef != stRef {
-		t.Errorf("document element /Parent: got obj %d, want tree root obj %d",
+		t.Errorf("document element /P: got obj %d, want tree root obj %d",
 			parentRef.ObjectNum, stRef.ObjectNum)
 	}
-	if _, hasBug := docElem["ParentTreeRoot"]; hasBug {
-		t.Error("document element should not have /ParentTreeRoot key")
+	for _, bad := range []ast.PdfName{"Parent", "ParentTreeRoot"} {
+		if _, hasBug := docElem[bad]; hasBug {
+			t.Errorf("document element should not have /%s key", bad)
+		}
+	}
+}
+
+// resolveNSString follows a /NS reference into the allocator's pending set
+// and returns the namespace dict's /NS string.
+func resolveNSString(t *testing.T, alloc *writer.ObjAllocator, nsObj ast.PdfObject) string {
+	t.Helper()
+	nsRef, ok := nsObj.(ast.PdfIndirectRef)
+	if !ok {
+		t.Fatalf("/NS: got %T (%v), want ast.PdfIndirectRef", nsObj, nsObj)
+	}
+	nsDict := pendingDict(t, alloc, nsRef.ObjectNum)
+	uri, ok := nsDict["NS"].(ast.PdfString)
+	if !ok {
+		t.Fatalf("namespace dict /NS: got %T, want ast.PdfString", nsDict["NS"])
+	}
+	return string(uri)
+}
+
+func TestFixStructTree_UA2NewTreeUsesPDF2NamespaceOnDocument(t *testing.T) {
+	doc, alloc := newTestDoc(t, minimalPDFNoStructTree())
+
+	descs, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2")
+	if err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+	if len(descs) != 1 {
+		t.Fatalf("expected 1 description, got %d: %v", len(descs), descs)
+	}
+
+	newCatalog := pendingDict(t, alloc, 1)
+	stRef, ok := newCatalog["StructTreeRoot"].(ast.PdfIndirectRef)
+	if !ok {
+		t.Fatalf("catalog /StructTreeRoot: got %T", newCatalog["StructTreeRoot"])
+	}
+	stDict := pendingDict(t, alloc, stRef.ObjectNum)
+
+	nsArr, ok := stDict["Namespaces"].(ast.PdfArray)
+	if !ok || len(nsArr) != 2 {
+		t.Fatalf("StructTreeRoot /Namespaces: got %T (%v), want 2-element array",
+			stDict["Namespaces"], stDict["Namespaces"])
+	}
+
+	docElemRef, ok := stDict["K"].(ast.PdfIndirectRef)
+	if !ok {
+		t.Fatalf("StructTreeRoot /K: got %T", stDict["K"])
+	}
+	docElem := pendingDict(t, alloc, docElemRef.ObjectNum)
+
+	// ISO 14289-2 §8.2.5.2 t2: the Document element must be in the PDF 2.0
+	// namespace. The fixer used to point it at PDF 1.7.
+	if uri := resolveNSString(t, alloc, docElem["NS"]); uri != pdf2NamespaceURI {
+		t.Errorf("document element namespace: got %q, want %q", uri, pdf2NamespaceURI)
+	}
+	if pRef, ok := docElem["P"].(ast.PdfIndirectRef); !ok || pRef != stRef {
+		t.Errorf("document element /P: got %v, want ref to obj %d", docElem["P"], stRef.ObjectNum)
+	}
+}
+
+func TestFixStructTree_UA2ExistingTreeSetsMissingDocumentNS(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R >>",
+		"<< /Type /StructElem /S /Document /P 4 0 R >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	descs, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2")
+	if err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+	if len(descs) != 1 {
+		t.Fatalf("expected 1 description, got %d: %v", len(descs), descs)
+	}
+
+	stDict := pendingDict(t, alloc, 4)
+	if _, ok := stDict["Namespaces"].(ast.PdfArray); !ok {
+		t.Fatalf("StructTreeRoot /Namespaces missing after fix: %v", stDict["Namespaces"])
+	}
+
+	docElem := pendingDict(t, alloc, 5)
+	if uri := resolveNSString(t, alloc, docElem["NS"]); uri != pdf2NamespaceURI {
+		t.Errorf("document element namespace: got %q, want %q", uri, pdf2NamespaceURI)
+	}
+}
+
+func TestFixStructTree_UA2NamespacesPresentRepointsDocNS(t *testing.T) {
+	// /Namespaces already lists both standard namespaces; the Document
+	// element still points at PDF 1.7. The fixer must repoint it at the
+	// listed 2.0 namespace without allocating a duplicate.
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K [5 0 R] /Namespaces [6 0 R 7 0 R] >>",
+		"<< /Type /StructElem /S /Document /P 4 0 R /NS 6 0 R >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	descs, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2")
+	if err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+	if len(descs) != 1 {
+		t.Fatalf("expected 1 description, got %d: %v", len(descs), descs)
+	}
+
+	docElem := pendingDict(t, alloc, 5)
+	nsRef, ok := docElem["NS"].(ast.PdfIndirectRef)
+	if !ok || nsRef.ObjectNum != 7 {
+		t.Errorf("document element /NS: got %v, want reuse of listed 2.0 namespace obj 7", docElem["NS"])
+	}
+	// No new namespace object and no StructTreeRoot rewrite needed.
+	if _, rewrote := alloc.Pending()[4]; rewrote {
+		t.Error("StructTreeRoot should not be rewritten when a 2.0 namespace is already listed")
+	}
+}
+
+func TestFixStructTree_UA2NonDocumentChildUntouched(t *testing.T) {
+	// A single Note child in the PDF 1.7 namespace must not be retagged:
+	// Note does not exist in the PDF 2.0 namespace.
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R /Namespaces [6 0 R] >>",
+		"<< /Type /StructElem /S /Note /P 4 0 R /NS 6 0 R >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	descs, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2")
+	if err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+	if len(descs) != 0 || len(alloc.Pending()) != 0 {
+		t.Errorf("expected no fixes on non-Document child, got %v and %d pending", descs, len(alloc.Pending()))
+	}
+}
+
+func TestFixStructTree_UA2ForeignNSUntouched(t *testing.T) {
+	// A Document element in a non-standard namespace is left alone.
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R /Namespaces [6 0 R] >>",
+		"<< /Type /StructElem /S /Document /P 4 0 R /NS 6 0 R >>",
+		"<< /Type /Namespace /NS (http://example.com/custom/ns) >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	descs, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2")
+	if err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+	if len(descs) != 0 || len(alloc.Pending()) != 0 {
+		t.Errorf("expected no fixes on foreign namespace, got %v and %d pending", descs, len(alloc.Pending()))
+	}
+}
+
+func TestFixStructTree_UA2ExistingTreeRepointsPDF1NS(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R >>",
+		"<< /Type /StructElem /S /Document /P 4 0 R /NS 6 0 R >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	if _, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+
+	docElem := pendingDict(t, alloc, 5)
+	if uri := resolveNSString(t, alloc, docElem["NS"]); uri != pdf2NamespaceURI {
+		t.Errorf("document element namespace: got %q, want %q (PDF 1.7 must be repointed)", uri, pdf2NamespaceURI)
+	}
+	if pRef, ok := docElem["P"].(ast.PdfIndirectRef); !ok || pRef.ObjectNum != 4 {
+		t.Errorf("document element /P: got %v, want ref to obj 4", docElem["P"])
 	}
 }
 

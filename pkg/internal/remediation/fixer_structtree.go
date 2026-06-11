@@ -14,7 +14,10 @@ import (
 func matchStructTree(v compliance.Violation) bool {
 	return descriptionContains(v, "StructTreeRoot") ||
 		descriptionContains(v, "Namespaces missing") ||
-		descriptionContains(v, "not mapped to a standard namespace")
+		descriptionContains(v, "not mapped to a standard namespace") ||
+		// ISO 14289-2 §8.2.5.2 t2: Document element not in the PDF 2.0
+		// namespace.
+		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.5.2" && v.Rule.TestNumber == 2)
 }
 
 func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
@@ -49,18 +52,30 @@ func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 		if stDict != nil {
 			if _, hasNS := stDict["Namespaces"]; !hasNS {
-				nsArray := buildStandardNamespaces(alloc)
+				nsArray, ns20Ref := buildStandardNamespaces(alloc)
 				newST := make(ast.PdfDict, len(stDict)+1)
 				maps.Copy(newST, stDict)
 				newST["Namespaces"] = nsArray
 
-				// Ensure /Document element has /NS pointing to PDF 1.7.
-				ensureDocumentElementNS(ctx, alloc, doc, newST, nsArray)
+				ensureDocumentElementNS(ctx, alloc, doc, newST, ns20Ref)
 
 				if stRef.ObjectNum > 0 {
 					alloc.AllocAt(stRef.ObjectNum, newST)
 				}
 				fixes = append(fixes, "added /Namespaces to existing StructTreeRoot")
+			} else if docRef, docElem, needs := documentElementNeedingNS(ctx, alloc, doc, stDict); needs && docRef.ObjectNum > 0 {
+				// /Namespaces exists but the Document element still names
+				// the PDF 1.7 namespace (or none): repoint it at PDF 2.0,
+				// reusing a listed 2.0 namespace when present.
+				ns20Ref, stWithNS := ensurePDF2Namespace(ctx, alloc, doc, stDict)
+				if stWithNS != nil && stRef.ObjectNum > 0 {
+					alloc.AllocAt(stRef.ObjectNum, stWithNS)
+				}
+				newDoc := make(ast.PdfDict, len(docElem)+1)
+				maps.Copy(newDoc, docElem)
+				newDoc["NS"] = ns20Ref
+				alloc.AllocAt(docRef.ObjectNum, newDoc)
+				fixes = append(fixes, "pointed Document element /NS at the PDF 2.0 namespace")
 			}
 		}
 		return fixes, nil
@@ -81,15 +96,18 @@ func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 
 	if needsNamespaces {
-		nsArray := buildStandardNamespaces(alloc)
+		nsArray, ns20Ref := buildStandardNamespaces(alloc)
 		structTreeRoot["Namespaces"] = nsArray
-		if arr, ok := nsArray.(ast.PdfArray); ok && len(arr) > 0 {
-			docElem["NS"] = arr[0] // PDF 1.7 namespace
-		}
+		// ISO 14289-2 §8.2.5.2 t2: the root Document element shall be in
+		// the PDF 2.0 namespace, not PDF 1.7.
+		docElem["NS"] = ns20Ref
 	}
 
 	structTreeRef := alloc.Alloc(structTreeRoot)
-	docElem["Parent"] = structTreeRef
+	// Per ISO 32000-2, Table 355: the parent entry of a structure element
+	// is /P. A /Parent key is not a structure-element entry, so conforming
+	// readers treat the element as parentless.
+	docElem["P"] = structTreeRef
 	alloc.AllocAt(docElemRef.ObjectNum, docElem)
 
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
@@ -101,58 +119,100 @@ func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return fixes, nil
 }
 
+// pdf1NamespaceURI is the PDF 1.7 standard structure namespace
+// (ISO 32000-2 §14.8.6).
+const pdf1NamespaceURI = "http://iso.org/pdf/ssn"
+
 // buildStandardNamespaces creates the PDF 1.7 and PDF 2.0 namespace dicts
-// as required by ISO 32000-2:2020 §14.8.6 for PDF/UA-2.
-func buildStandardNamespaces(alloc *writer.ObjAllocator) ast.PdfObject {
+// required by ISO 32000-2:2020 §14.8.6 for PDF/UA-2. It returns the
+// /Namespaces array and the PDF 2.0 namespace reference, which ISO 14289-2
+// §8.2.5.2 t2 requires as the /NS of the root Document element.
+func buildStandardNamespaces(alloc *writer.ObjAllocator) (ast.PdfArray, ast.PdfIndirectRef) {
 	ns17 := ast.PdfDict{
 		"Type": ast.PdfName("Namespace"),
-		"NS":   ast.PdfString("http://iso.org/pdf/ssn"),
+		"NS":   ast.PdfString(pdf1NamespaceURI),
 	}
 	ns17Ref := alloc.Alloc(ns17)
 
 	ns20 := ast.PdfDict{
 		"Type": ast.PdfName("Namespace"),
-		"NS":   ast.PdfString("http://iso.org/pdf2/ssn"),
+		"NS":   ast.PdfString(pdf2NamespaceURI),
 	}
 	ns20Ref := alloc.Alloc(ns20)
 
-	return ast.PdfArray{ns17Ref, ns20Ref}
+	return ast.PdfArray{ns17Ref, ns20Ref}, ns20Ref
 }
 
-// ensureDocumentElementNS sets /NS on the root /Document structure element
-// if it doesn't already have one.
-func ensureDocumentElementNS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict, nsArray ast.PdfObject) {
-	kObj, ok := stDict["K"]
-	if !ok {
-		return
-	}
-
-	var docRef ast.PdfIndirectRef
-	if ref, ok := kObj.(ast.PdfIndirectRef); ok {
-		docRef = ref
-	}
-
-	docElem := resolveFromAllocOrDoc(ctx, alloc, doc, docRef)
-	if docElem == nil {
-		if d, err := document.ResolveDict(ctx, doc, kObj); err == nil {
-			docElem = d
-		}
-	}
-	if docElem == nil {
-		return
-	}
-
-	if _, hasNS := docElem["NS"]; hasNS {
+// ensureDocumentElementNS points the root /Document structure element's /NS
+// at the PDF 2.0 namespace (ISO 14289-2 §8.2.5.2 t2). It sets /NS when
+// missing and repoints it when it names the PDF 1.7 namespace; any other
+// existing namespace is left untouched.
+func ensureDocumentElementNS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict, ns20Ref ast.PdfIndirectRef) {
+	docRef, docElem, needs := documentElementNeedingNS(ctx, alloc, doc, stDict)
+	if !needs || docRef.ObjectNum == 0 {
 		return
 	}
 
 	newDoc := make(ast.PdfDict, len(docElem)+1)
 	maps.Copy(newDoc, docElem)
-	// Point to the first namespace (PDF 1.7).
-	if arr, ok := nsArray.(ast.PdfArray); ok && len(arr) > 0 {
-		newDoc["NS"] = arr[0]
+	newDoc["NS"] = ns20Ref
+	alloc.AllocAt(docRef.ObjectNum, newDoc)
+}
+
+// documentElementNeedingNS resolves the structure tree root's single child
+// and returns it when it is a Document element whose /NS is missing or
+// names the PDF 1.7 namespace. /K may be the element reference itself or a
+// one-element array holding it.
+func documentElementNeedingNS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict) (ast.PdfIndirectRef, ast.PdfDict, bool) {
+	kObj, hasK := stDict["K"]
+	if !hasK {
+		return ast.PdfIndirectRef{}, nil, false
 	}
-	if docRef.ObjectNum > 0 {
-		alloc.AllocAt(docRef.ObjectNum, newDoc)
+
+	docRef, ok := kObj.(ast.PdfIndirectRef)
+	if !ok {
+		if arr, err := document.ResolveArray(ctx, doc, kObj); err == nil && len(arr) == 1 {
+			docRef, ok = arr[0].(ast.PdfIndirectRef)
+		}
+		if !ok {
+			return ast.PdfIndirectRef{}, nil, false
+		}
 	}
+
+	docElem := resolveFromAllocOrDoc(ctx, alloc, doc, docRef)
+	if docElem == nil {
+		return ast.PdfIndirectRef{}, nil, false
+	}
+	// Only a Document element carries the §8.2.5.2 t2 obligation. Other
+	// root children (e.g. Note) may be valid only in the PDF 1.7
+	// namespace, so retagging them to 2.0 would create a new violation.
+	if name, err := document.ResolveName(ctx, doc, docElem["S"]); err != nil || name != "Document" {
+		return ast.PdfIndirectRef{}, nil, false
+	}
+	if nsObj, hasNS := docElem["NS"]; hasNS && !namespaceIsPDF1(ctx, alloc, doc, nsObj) {
+		return ast.PdfIndirectRef{}, nil, false
+	}
+	return docRef, docElem, true
+}
+
+// namespaceIsPDF1 reports whether an /NS value resolves to the PDF 1.7
+// standard structure namespace.
+func namespaceIsPDF1(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nsObj ast.PdfObject) bool {
+	var nsDict ast.PdfDict
+	if ref, ok := nsObj.(ast.PdfIndirectRef); ok {
+		nsDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	}
+	if nsDict == nil {
+		if d, err := document.ResolveDict(ctx, doc, nsObj); err == nil {
+			nsDict = d
+		}
+	}
+	if nsDict == nil {
+		return false
+	}
+	uri, err := document.ResolveString(ctx, doc, nsDict["NS"])
+	if err != nil {
+		return false
+	}
+	return string(uri) == pdf1NamespaceURI
 }
