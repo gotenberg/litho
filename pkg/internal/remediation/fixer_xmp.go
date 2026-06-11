@@ -340,6 +340,19 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
+	// Parts 1-3: remove pdfaid:rev. The property exists only in the
+	// PDF/A-4 identification schema; the XMP 2004/2005 catalogs that
+	// ISO 19005-1 §6.7.9 and 19005-2/3 §6.6.2.3.1 bind to predefine
+	// pdfaid part/conformance/amd/corr only, so a leftover rev (typical
+	// when re-targeting a PDF/A-4 document) fails veraPDF 6.6.2.3.1
+	// t1/t2 as a non-predefined property.
+	if part >= 1 && part <= 3 {
+		if loc := findXMPProperty(buf, pdfaidNS, "rev"); loc.Form != xmpPropertyNotFound {
+			buf = removeXMPProperty(buf, loc)
+			fixes = append(fixes, "removed pdfaid:rev (PDF/A-4-only property)")
+		}
+	}
+
 	// Inject or correct pdfaid:part + pdfaid:conformance.
 	if part > 0 {
 		partStr := fmt.Sprintf("%d", part)

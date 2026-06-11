@@ -143,6 +143,39 @@ func TestPatchExistingXMP_InjectsUARev(t *testing.T) {
 	}
 }
 
+// TestPatchExistingXMP_StripsPdfaidRevForParts1to3 pins the rev removal
+// when retargeting a PDF/A-4 document to parts 1-3: pdfaid:rev exists
+// only in the PDF/A-4 identification schema, and a leftover fails
+// veraPDF 6.6.2.3.1 t1/t2 under parts 2/3 (verified live).
+func TestPatchExistingXMP_StripsPdfaidRevForParts1to3(t *testing.T) {
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+  <pdfaid:part>4</pdfaid:part>
+  <pdfaid:rev>2020</pdfaid:rev>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+
+	patched, fixes := patchExistingXMP(xmp, 2, "B", 0, infoMetadata{})
+
+	if strings.Contains(patched, "pdfaid:rev") {
+		t.Errorf("pdfaid:rev should be removed when targeting part 2:\n%s", patched)
+	}
+	if !containsFix(fixes, "removed pdfaid:rev (PDF/A-4-only property)") {
+		t.Errorf("expected the rev-removal fix message, got %v", fixes)
+	}
+
+	// Targeting PDF/A-4 keeps the property.
+	kept, _ := patchExistingXMP(xmp, 4, "", 0, infoMetadata{})
+	if !strings.Contains(kept, "<pdfaid:rev>2020</pdfaid:rev>") {
+		t.Errorf("pdfaid:rev must survive a part-4 target:\n%s", kept)
+	}
+}
+
 func TestPatchExistingXMP_CorrectsWrongUARev(t *testing.T) {
 	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">

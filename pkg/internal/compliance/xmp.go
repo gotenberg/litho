@@ -739,12 +739,12 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, re
 	prefixes := xmpExtractPrefixMap(ctx, data)
 
 	for _, p := range xmpExtractTopLevelProperties(data) {
-		// The pdfaid identification schema keeps its dedicated checks
-		// (xmpCheckPDFAIdentification and the registry-driven
-		// xmpCheckPropertyTypes part-1 narrowing).
-		if p.ns == xmpPdfaIDNamespace {
-			continue
-		}
+		// The pdfaid identification schema participates like any other
+		// predefined namespace: the catalog for the part decides which
+		// names are predefined (the 2005 catalog lacks rev, the 2004 one
+		// lacks corr and rev), so a leftover PDF/A-4 pdfaid:rev fails here
+		// exactly as it does under veraPDF. Value-level pdfaid checks stay
+		// with xmpCheckPDFAIdentification.
 		// Extension schemas may extend predefined schemas: veraPDF
 		// registers extension properties per namespace and name with no
 		// predefined-namespace restriction (veraPDF-library
@@ -2020,6 +2020,13 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 
 		for prop, pv := range props {
 			expectedType, known := registry[prop]
+			// pdfaid:rev exists only in the PDF/A-4 identification schema.
+			// The XMP 2005 catalog (ISO 19005-2/3 §6.6.2.3.1, mirrored in
+			// xmpPredefined2005Extra) predefines part/conformance/amd/corr
+			// only, so rev is an unknown property for parts 2 and 3.
+			if known && (part == 2 || part == 3) && ns == xmpPdfaIDNamespace && prop == "rev" {
+				known = false
+			}
 			// For PDF/A-1: properties must be in the 2004 XMP spec.
 			// Properties added in later spec versions are "unknown."
 			if known && part == 1 {
@@ -2053,17 +2060,15 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 			if isContainerPropType(expectedType) {
 				expectedCont := propTypeToContainerType(expectedType)
 				if pv.containerType != expectedCont {
-					// Specific exemption: photoshop:SupplementalCategories (Bag)
-					// can be expressed as a simple attribute per XMP spec shorthand.
-					exemptSimpleAsBag := expectedType == xmpPropBag &&
-						pv.containerType == xmpContSimple &&
-						prop == "SupplementalCategories"
-					if !exemptSimpleAsBag {
-						*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-							fmt.Sprintf("observed=%s expected=%s",
-								xmpContainerTypeName(pv.containerType),
-								xmpContainerTypeName(expectedCont)))...)
-					}
+					// No simple-as-Bag shorthand exemption: veraPDF 1.30
+					// fails isValueTypeCorrect for a simple-valued
+					// photoshop:SupplementalCategories under parts 2/3
+					// (verified live), and part 1 reads it as plain Text
+					// via xmpPart1TypeOverrides so it never reaches here.
+					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+						fmt.Sprintf("observed=%s expected=%s",
+							xmpContainerTypeName(pv.containerType),
+							xmpContainerTypeName(expectedCont)))...)
 				}
 
 				// Validate Alt container items have xml:lang attribute.

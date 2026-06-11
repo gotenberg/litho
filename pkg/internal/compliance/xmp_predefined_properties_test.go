@@ -3,6 +3,8 @@ package compliance
 import (
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
 // exifDescription wraps property markup in an rdf:Description binding the
@@ -117,6 +119,70 @@ func TestXMPPredefinedProperties_NestedFieldsInvisible(t *testing.T) {
 	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
 	if len(got) != 0 {
 		t.Errorf("structure fields must stay invisible to the property audit, got %v", got)
+	}
+}
+
+// TestXMPPredefinedProperties_PdfaidRev pins the pdfaid:rev gap: the
+// property exists only in the PDF/A-4 identification schema. The XMP
+// 2005 catalog predefines pdfaid part/conformance/amd/corr, so a
+// leftover rev fails §6.6.2.3.1 t1 (name) and t2 (type, via the
+// registry narrowing) under parts 2/3, exactly as veraPDF 1.30 reports
+// (verified live on PDF_A-4__veraPDF_test_suite_6-1-11-t01-pass-a
+// retargeted to PDF/A-2b).
+func TestXMPPredefinedProperties_PdfaidRev(t *testing.T) {
+	data := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+      <pdfaid:part>2</pdfaid:part>
+      <pdfaid:conformance>B</pdfaid:conformance>
+      <pdfaid:rev>2020</pdfaid:rev>
+    </rdf:Description>`)
+
+	var got []Violation
+	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
+	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t01) {
+		t.Errorf("pdfaid:rev under PDF/A-2: got %v, want §6.6.2.3.1 t1", got)
+	}
+	if len(got) != 1 {
+		t.Errorf("only pdfaid:rev may be flagged, got %v", got)
+	}
+
+	var gotTypes []Violation
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, &gotTypes)
+	if !hasRule(gotTypes, Rule_19005_2_6_6_2_3_1_t02) {
+		t.Errorf("pdfaid:rev under PDF/A-2: got %v, want §6.6.2.3.1 t2", gotTypes)
+	}
+
+	// Part 4 predefines rev: both checks stay silent.
+	var got4 []Violation
+	xmpCheckPredefinedProperties(context.Background(), data, 4, &got4)
+	xmpCheckPropertyTypes(data, 4, ast.PdfStream{}, &got4)
+	if len(got4) != 0 {
+		t.Errorf("pdfaid:rev is predefined for PDF/A-4, got %v", got4)
+	}
+}
+
+// TestXMPPropertyTypes_SupplementalCategoriesBag pins the removed
+// simple-as-Bag exemption: veraPDF 1.30 fails isValueTypeCorrect for a
+// simple-valued photoshop:SupplementalCategories under parts 2/3
+// (verified live on PDF_A-1b__veraPDF_test_suite_6-7-2-t13-pass-l
+// retargeted to PDF/A-2b), while part 1 reads the property as plain
+// Text per the 2004 XMP Specification.
+func TestXMPPropertyTypes_SupplementalCategoriesBag(t *testing.T) {
+	data := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/">
+      <photoshop:SupplementalCategories>news</photoshop:SupplementalCategories>
+    </rdf:Description>`)
+
+	var got []Violation
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, &got)
+	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
+		t.Errorf("simple SupplementalCategories under PDF/A-2: got %v, want §6.6.2.3.1 t2", got)
+	}
+
+	var got1 []Violation
+	xmpCheckPropertyTypes(data, 1, ast.PdfStream{}, &got1)
+	if hasRule(got1, Rule_19005_1_6_7_9_t03) {
+		t.Errorf("2004 XMP types SupplementalCategories as Text, got %v", got1)
 	}
 }
 
