@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // cyclePDF builds a PDF from the given object bodies (object 1 is the
@@ -99,4 +100,44 @@ func TestWalkNSCheck_KCycleTerminates(t *testing.T) {
 
 	var results []Violation
 	walkNSCheck(context.Background(), doc, elem, "", nil, &results, make(map[int]bool), 0)
+}
+
+// TestUA1Header pins the PDF/UA-1 header rule (PDFUA-1.xml 6.1 t1): the
+// header must match %PDF-1.[0-7] exactly, so a PDF 2.0 header fails under
+// UA-1 and passes under UA-2 (which has no header rule).
+func TestUA1Header(t *testing.T) {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	}
+	data := bytes.Replace(cyclePDF(objs...), []byte("%PDF-1.7"), []byte("%PDF-2.0"), 1)
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	errs, err := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("ValidatePDFUA(UA-1): %v", err)
+	}
+	found := false
+	for _, e := range errs {
+		if v, ok := e.(Violation); ok && v.Rule == Rule_14289_1_6_1_t01 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("PDF 2.0 header not flagged under PDF/UA-1")
+	}
+
+	errs2, err := ValidatePDFUA(context.Background(), doc, models.PDFUA2)
+	if err != nil {
+		t.Fatalf("ValidatePDFUA(UA-2): %v", err)
+	}
+	for _, e := range errs2 {
+		if v, ok := e.(Violation); ok && v.Rule == Rule_14289_1_6_1_t01 {
+			t.Error("UA-1 header rule emitted under PDF/UA-2")
+		}
+	}
 }

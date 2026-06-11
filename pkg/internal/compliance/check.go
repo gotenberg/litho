@@ -92,6 +92,7 @@ func init() { //nolint:gochecknoinits // breaks initialization cycle.
 			checkStructureGroup,
 			checkAccessibilityGroup,
 			checkFormGroup,
+			checkUAHeaderGroup,
 		},
 		models.PDFUA2: {
 			checkFontGroup,
