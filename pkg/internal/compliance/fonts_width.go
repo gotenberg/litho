@@ -143,6 +143,15 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if pdfWidth == 0 && !charUsed {
 			continue
 		}
+		// A width outside the 32-bit integer range cannot be a real
+		// metric: it is crafted overflow input (implementation-limits
+		// fixtures write -2157483648). ISO 32000-2 §7.3.3 leaves
+		// out-of-range integer handling unspecified, and veraPDF treats
+		// such values as unparseable rather than mismatching, so skip
+		// the comparison instead of flagging it.
+		if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
+			continue
+		}
 		// Skip non-used charCodes when glyph is missing from font program
 		// (GID 0 from name mapping), only flag if the charCode is used.
 		if gid == 0 && !charUsed {
@@ -336,6 +345,11 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if pdfWidth == 0 {
 					continue
 				}
+				// Out-of-int32-range widths are crafted overflow input,
+				// not metrics; see checkSimpleFontWidths.
+				if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
+					continue
+				}
 				bw, ok := binaryWidths[gid]
 				if !ok {
 					continue
@@ -357,6 +371,11 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			pdfWidth := document.Float(wArr[i])
 			i++
 			if pdfWidth == 0 {
+				continue
+			}
+			// Out-of-int32-range widths are crafted overflow input,
+			// not metrics; see checkSimpleFontWidths.
+			if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
 				continue
 			}
 			for cid := cidStart; cid <= cidEnd; cid++ {

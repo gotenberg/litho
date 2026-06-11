@@ -9,61 +9,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-func checkNamespaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if profile != "PDF/UA-2" {
-		return nil
-	}
-
-	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if err != nil || treeRoot == nil {
-		return nil
-	}
-
-	nsObj, ok := treeRoot["Namespaces"]
-	if !ok {
-		return fail(Rule_14289_2_8_2_4_t01, "Namespaces missing from StructTreeRoot")
-	}
-
-	nsArray, err := document.ResolveArray(ctx, doc, nsObj)
-	if err != nil || len(nsArray) == 0 {
-		doc.Logger.Debug("compliance.accessibility: /Namespaces is empty or unresolvable", "error", err)
-		return fail(Rule_14289_2_8_2_4_t01, "Namespaces empty")
-	}
-
-	var results []Violation
-	for i, nsEntryObj := range nsArray {
-		if ctx.Err() != nil {
-			return results
-		}
-
-		nsDict, err := document.ResolveDict(ctx, doc, nsEntryObj)
-		if err != nil || nsDict == nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve namespace entry", "index", i, "error", err)
-			continue
-		}
-
-		// Each namespace dict must have /NS (URI).
-		nsURIObj, ok := nsDict["NS"]
-		if !ok {
-			results = append(results, Violation{
-				Rule:    Rule_14289_2_8_2_4_t01,
-				Context: fmt.Sprintf("namespace %d missing /NS", i),
-			})
-			continue
-		}
-
-		nsURI, err := document.ResolveString(ctx, doc, nsURIObj)
-		if err != nil || string(nsURI) == "" {
-			results = append(results, Violation{
-				Rule:    Rule_14289_2_8_2_4_t01,
-				Context: fmt.Sprintf("namespace %d has empty /NS", i),
-			})
-		}
-	}
-
-	return results
-}
-
 // standardNamespaceURIs lists the namespace URIs that are "standard" per
 // ISO 32000-2:2020, 14.8.6.
 //
@@ -201,8 +146,14 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			}
 		}
 
-		// Verify the element's namespace (or role-mapped target) is standard.
-		if !standardNamespaceURIs[elemNSURI] {
+		// Verify the element's namespace (or role-mapped target) is
+		// standard. Elements without any namespace stay out of this walk:
+		// they belong to the default standard structure namespace
+		// (ISO 32000-2 §14.8.6), and non-standard NS-less types resolve
+		// through the legacy /RoleMap, which the structure-type walk
+		// already validates against 8.2.4 t1. veraPDF keys the rule on
+		// SENonStandard the same way.
+		if elemNSURI != "" && !standardNamespaceURIs[elemNSURI] {
 			// Namespace may have a RoleMapNS that maps to a standard NS.
 			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,

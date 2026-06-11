@@ -13,6 +13,9 @@ import (
 // Returns a zero Rule if the check does not apply (part 1).
 func cidToGIDMapRule(profile string) Rule {
 	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return Rule_14289_2_8_4_5_3_2_t01
+		}
 		return Rule_14289_1_7_21_3_2_t01
 	}
 	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_3_2_t01, Rule_19005_3_6_2_11_3_2_t01, Rule_19005_4_6_2_10_3_2_t01)
@@ -22,6 +25,9 @@ func cidToGIDMapRule(profile string) Rule {
 // Returns a zero Rule if the check does not apply (part 1).
 func cidSystemInfoRule(profile string) Rule {
 	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return Rule_14289_2_8_4_5_3_1_t01
+		}
 		return Rule_14289_1_7_21_3_1_t01
 	}
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_3_1_t01, Rule_19005_2_6_2_11_3_1_t01, Rule_19005_3_6_2_11_3_1_t01, Rule_19005_4_6_2_10_3_1_t01)

@@ -14,9 +14,15 @@ func charSetRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t02, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
 }
 
-// cidSetRule returns the CIDSet rule for CIDFont subsets.
+// cidSetRule returns the CIDSet rule for CIDFont subsets. PDF/UA-2 has
+// no CharSet or CIDSet rules at all (the PDFUA-2 profile keys font
+// completeness on 8.4.5.5.1 t2, glyph presence in the font program), so
+// the UA-2 branch returns the zero Rule.
 func cidSetRule(profile string) Rule {
 	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return Rule{}
+		}
 		return Rule_14289_1_7_21_4_2_t02
 	}
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t03, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
@@ -36,6 +42,9 @@ func cidSetRule(profile string) Rule {
 // full-charset check for parts 2/3.
 func charSetCompletenessRule(profile string) Rule {
 	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return Rule{} // No CharSet rule in PDF/UA-2; see cidSetRule.
+		}
 		return Rule_14289_1_7_21_4_2_t01
 	}
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t02, Rule_19005_2_6_2_11_4_2_t01, Rule_19005_3_6_2_11_4_2_t01, Rule{})
@@ -45,6 +54,9 @@ func charSetCompletenessRule(profile string) Rule {
 // (all CIDs in font program must be identified in /CIDSet).
 func cidSetCompletenessRule(profile string) Rule {
 	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return Rule{} // No CIDSet rule in PDF/UA-2; see cidSetRule.
+		}
 		return Rule_14289_1_7_21_4_2_t02
 	}
 	// Part 1 only requires CIDSet presence, not completeness.

@@ -1209,13 +1209,22 @@ const pdf2NamespaceURI = "http://iso.org/pdf2/ssn"
 
 // checkDocumentNamespace validates ISO 14289-2 §8.2.5.2 t2: the single Document
 // child of the structure tree root shall be declared in the PDF 2.0 namespace.
-// It fires only when the Document resolves to a different standard namespace
-// (e.g. the legacy PDF 1.7 namespace); an element that cannot be resolved to a
-// standard namespace is left to the §8.2.4 t1 check to avoid a false reject.
+// The veraPDF test is firstChildStandardTypeNamespaceURL == 'http://iso.org/pdf2/ssn',
+// which fails for any other namespace including none at all: an unnamespaced
+// Document (typical for legacy tagged PDFs) fails t2, verified live against
+// veraPDF 1.30.
 func checkDocumentNamespace(ctx context.Context, doc *document.Document, treeRoot, docElem ast.PdfDict, results *[]Violation) {
 	r := newNSRoleResolver(ctx, doc, treeRoot)
 	stdType, stdNS, ok := r.elementStandardType(ctx, doc, docElem)
-	if ok && stdType == "Document" && standardNamespaceURIs[stdNS] && stdNS != pdf2NamespaceURI {
+	if !ok || stdType != "Document" {
+		// Raw S=Document with no resolvable namespace still counts: the
+		// kid's standard type is Document, its namespace URL is null.
+		if s, err := document.ResolveName(ctx, doc, docElem["S"]); err != nil || s != "Document" {
+			return
+		}
+		stdNS = ""
+	}
+	if stdNS != pdf2NamespaceURI {
 		*results = append(*results, failf(Rule_14289_2_8_2_5_2_t02,
 			"Document structure element is in namespace %q, not the PDF 2.0 namespace", stdNS)...)
 	}
