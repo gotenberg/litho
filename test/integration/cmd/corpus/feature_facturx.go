@@ -263,6 +263,13 @@ func validateFacturXWithLitho(ctx context.Context, pdfPath string) ([]string, er
 		if strings.Contains(msg, "clause CII_SCH test 2") {
 			continue
 		}
+		// INVOICE_LENIENT firings are warning-class: Mustang surfaces
+		// them as notices and never lets them flip the valid bit. The
+		// bare "clause INVOICE" substring also matches them, which
+		// inflated the matrix with false failures.
+		if strings.Contains(msg, "clause INVOICE_LENIENT") {
+			continue
+		}
 		if !strings.Contains(msg, "clause INVOICE") &&
 			!strings.Contains(msg, "clause CII") {
 			continue
