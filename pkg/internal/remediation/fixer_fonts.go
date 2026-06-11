@@ -182,28 +182,22 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 		}
 	}
 
-	// Generate /ToUnicode if missing or invalid.
-	if needsToUnicode(ctx, doc, fontDict) {
+	// Generate /ToUnicode if missing or invalid. Without a charcode-to-GID
+	// route there is no trustworthy mapping to emit: guessing
+	// charcode == GID produces destinations that belong to other glyphs
+	// and misses the codes the page actually uses, so the font is left
+	// for the validator to keep flagging instead.
+	if charToGID != nil && needsToUnicode(ctx, doc, fontDict) {
 		gidToUnicode := typography.ExtractGIDToUnicode(ctx, fontData)
 		if len(gidToUnicode) > 0 {
-			// Build charcode-to-Unicode: for simple fonts, charcode maps
-			// through encoding or identity.
 			mapping := make(map[uint16]rune)
-			if charToGID != nil {
-				for charCode, gid := range charToGID {
-					if r, ok := gidToUnicode[gid]; ok && isValidUnicodeMapping(r) {
-						mapping[charCode] = r
-					}
-				}
-			} else {
-				// Identity mapping: charcode = GID.
-				for gid, r := range gidToUnicode {
-					if isValidUnicodeMapping(r) {
-						mapping[gid] = r
-					}
+			for charCode, gid := range charToGID {
+				if r, ok := gidToUnicode[gid]; ok && isValidUnicodeMapping(r) {
+					mapping[charCode] = r
 				}
 			}
-			if cmapData := generateToUnicodeCMap(mapping); cmapData != nil {
+			// Simple fonts address glyphs with one-byte codes.
+			if cmapData := generateToUnicodeCMap(mapping, 1); cmapData != nil {
 				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
 				cmapRef := alloc.Alloc(cmapStream)
 				// Use the latest version of fontDict if already modified.
@@ -309,7 +303,7 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 					mapping[gid] = r
 				}
 			}
-			if cmapData := generateToUnicodeCMap(mapping); cmapData != nil {
+			if cmapData := generateToUnicodeCMap(mapping, 2); cmapData != nil {
 				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
 				cmapRef := alloc.Alloc(cmapStream)
 				// Use the latest version of fontDict if already modified.
@@ -492,11 +486,102 @@ func needsToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 			slog.Any("err", err))
 		return false
 	}
-	content := string(data)
-	// Look for mappings to <0000>, <FEFF>, or <FFFE>.
-	return strings.Contains(content, "<0000>") ||
-		strings.Contains(content, "<FEFF>") || strings.Contains(content, "<feff>") ||
-		strings.Contains(content, "<FFFE>") || strings.Contains(content, "<fffe>")
+	return cmapHasForbiddenDestination(data)
+}
+
+// cmapHasForbiddenDestination reports whether any bfchar or bfrange
+// destination in a ToUnicode CMap maps to U+0000, U+FEFF, or U+FFFE
+// (forbidden by ISO 19005-2 §6.2.11.7.2 and ISO 19005-4 §6.2.10.7). Only
+// destination operands are inspected: a previous whole-stream substring
+// scan also matched the "<0000> <FFFF>" codespacerange declaration,
+// classifying nearly every valid CMap as broken and replacing it with a
+// regenerated guess.
+func cmapHasForbiddenDestination(data []byte) bool {
+	for _, block := range cmapOperatorBlocks(data, "bfchar") {
+		for line := range strings.Lines(block) {
+			toks := cmapHexTokens(line)
+			// <srcCode> <dstString>; the source operand may legally be
+			// <0000> for a two-byte code.
+			for _, dst := range toksAfter(toks, 1) {
+				if utf16HexHasForbidden(dst) {
+					return true
+				}
+			}
+		}
+	}
+	for _, block := range cmapOperatorBlocks(data, "bfrange") {
+		for line := range strings.Lines(block) {
+			toks := cmapHexTokens(line)
+			// <lo> <hi> <dst> or <lo> <hi> [<dst> <dst> ...].
+			for _, dst := range toksAfter(toks, 2) {
+				if utf16HexHasForbidden(dst) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// cmapOperatorBlocks returns the text between each beginKIND/endKIND pair.
+func cmapOperatorBlocks(data []byte, kind string) []string {
+	var out []string
+	s := string(data)
+	begin, end := "begin"+kind, "end"+kind
+	for {
+		i := strings.Index(s, begin)
+		if i < 0 {
+			break
+		}
+		rest := s[i+len(begin):]
+		j := strings.Index(rest, end)
+		if j < 0 {
+			break
+		}
+		out = append(out, rest[:j])
+		s = rest[j+len(end):]
+	}
+	return out
+}
+
+// cmapHexTokens extracts the contents of every <...> hex string on a line.
+func cmapHexTokens(line string) []string {
+	var out []string
+	for {
+		i := strings.IndexByte(line, '<')
+		if i < 0 {
+			break
+		}
+		j := strings.IndexByte(line[i:], '>')
+		if j < 0 {
+			break
+		}
+		out = append(out, line[i+1:i+j])
+		line = line[i+j+1:]
+	}
+	return out
+}
+
+// toksAfter returns toks[n:] or nil when fewer than n+1 tokens exist.
+func toksAfter(toks []string, n int) []string {
+	if len(toks) <= n {
+		return nil
+	}
+	return toks[n:]
+}
+
+// utf16HexHasForbidden reports whether a UTF-16BE hex destination contains
+// a 0x0000, 0xFEFF, or 0xFFFE code unit. Surrogate pairs never produce
+// these units, so a flat 16-bit scan is exact.
+func utf16HexHasForbidden(hexStr string) bool {
+	hexStr = strings.TrimSpace(hexStr)
+	for i := 0; i+4 <= len(hexStr); i += 4 {
+		switch strings.ToUpper(hexStr[i : i+4]) {
+		case "0000", "FEFF", "FFFE":
+			return true
+		}
+	}
+	return false
 }
 
 // generateToUnicodeCMap builds a minimal ToUnicode CMap stream from a
@@ -524,15 +609,21 @@ func isValidUnicodeMapping(r rune) bool {
 	return true
 }
 
-func generateToUnicodeCMap(mapping map[uint16]rune) []byte {
-	if len(mapping) == 0 {
-		return nil
-	}
-
-	// Sort keys for deterministic output.
+func generateToUnicodeCMap(mapping map[uint16]rune, codeBytes int) []byte {
+	// Sort keys for deterministic output. The codespacerange and bfchar
+	// source codes must share one width: simple fonts address glyphs with
+	// single-byte codes, and a two-byte codespace would misalign every
+	// lookup a conforming reader performs against the page's one-byte
+	// strings.
 	keys := make([]uint16, 0, len(mapping))
 	for k := range mapping {
+		if codeBytes == 1 && k > 0xFF {
+			continue
+		}
 		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		return nil
 	}
 	slices.Sort(keys)
 
@@ -544,8 +635,20 @@ func generateToUnicodeCMap(mapping map[uint16]rune) []byte {
 	buf.WriteString("/CMapName /Adobe-Identity-UCS def\n")
 	buf.WriteString("/CMapType 2 def\n")
 	buf.WriteString("1 begincodespacerange\n")
-	buf.WriteString("<0000> <FFFF>\n")
+	if codeBytes == 1 {
+		buf.WriteString("<00> <FF>\n")
+	} else {
+		buf.WriteString("<0000> <FFFF>\n")
+	}
 	buf.WriteString("endcodespacerange\n")
+
+	writeCode := func(code uint16) {
+		if codeBytes == 1 {
+			fmt.Fprintf(&buf, "<%02X>", code)
+		} else {
+			fmt.Fprintf(&buf, "<%04X>", code)
+		}
+	}
 
 	// Write bfchar entries in chunks of 100 (CMap spec limit).
 	for i := 0; i < len(keys); i += 100 {
@@ -554,13 +657,14 @@ func generateToUnicodeCMap(mapping map[uint16]rune) []byte {
 		fmt.Fprintf(&buf, "%d beginbfchar\n", len(chunk))
 		for _, code := range chunk {
 			r := mapping[code]
+			writeCode(code)
 			if r <= 0xFFFF {
-				fmt.Fprintf(&buf, "<%04X> <%04X>\n", code, uint16(r)) //nolint:gosec // rune fits in uint16 per guard
+				fmt.Fprintf(&buf, " <%04X>\n", uint16(r)) //nolint:gosec // rune fits in uint16 per guard
 			} else {
 				// Supplementary plane: encode as UTF-16 surrogate pair.
 				hi := uint16(0xD800 + (uint32(r-0x10000) >> 10))   //nolint:gosec // surrogate arithmetic
 				lo := uint16(0xDC00 + (uint32(r-0x10000) & 0x3FF)) //nolint:gosec // surrogate arithmetic
-				fmt.Fprintf(&buf, "<%04X> <%04X%04X>\n", code, hi, lo)
+				fmt.Fprintf(&buf, " <%04X%04X>\n", hi, lo)
 			}
 		}
 		buf.WriteString("endbfchar\n")
