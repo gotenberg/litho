@@ -46,6 +46,9 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	}
 
 	var count int
+	// blendingCSRef is allocated lazily and shared by every page that
+	// needs a synthesized transparency group.
+	var blendingCSRef ast.PdfIndirectRef
 	for _, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -53,15 +56,22 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		pageDict := livePageDict(ctx, alloc, doc, page)
 		groupObj, hasGroup := pageDict["Group"]
 		if !hasGroup {
+			// /CS is required by ISO 19005-2 §6.2.10 test 2 when the
+			// document lacks a matching PDF/A OutputIntent. Use an
+			// ICCBased sRGB space: it is device independent, so the
+			// blending rules of every part (including ISO 19005-4
+			// §6.2.4.3, which keys device spaces to the OutputIntent
+			// family) are satisfied without depending on which intent
+			// other fixers install.
+			if blendingCSRef.ObjectNum == 0 {
+				blendingCSRef = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile))
+			}
 			newPage := make(ast.PdfDict, len(pageDict)+1)
 			maps.Copy(newPage, pageDict)
 			newPage["Group"] = ast.PdfDict{
 				"Type": ast.PdfName("Group"),
 				"S":    ast.PdfName("Transparency"),
-				// /CS is required by ISO 19005-2 §6.2.10 test 2 when
-				// the document lacks a matching PDF/A OutputIntent.
-				// DeviceRGB is a safe default blending colorspace.
-				"CS": ast.PdfName("DeviceRGB"),
+				"CS":   ast.PdfArray{ast.PdfName("ICCBased"), blendingCSRef},
 			}
 			if page.Ref.ObjectNum > 0 {
 				alloc.AllocAt(page.Ref.ObjectNum, newPage)

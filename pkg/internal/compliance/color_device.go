@@ -254,9 +254,13 @@ func checkPageOutputIntent(ctx context.Context, doc *document.Document, page ast
 		if err != nil || intent == nil {
 			continue
 		}
-		// Only accept PDF/A OutputIntents, not PDF/X or others.
+		// Only accept PDF/A OutputIntents, not PDF/X or others. The
+		// subtype is GTS_PDFA1 for every PDF/A part (ISO 32000-2 Table
+		// 401); "GTS_PDFA" does not exist, and veraPDF ignores intents
+		// carrying it, so accepting it here would pass documents veraPDF
+		// fails.
 		s, _ := document.ResolveName(ctx, doc, intent["S"])
-		if s != "GTS_PDFA" && s != "GTS_PDFA1" {
+		if s != "GTS_PDFA1" {
 			continue
 		}
 		destObj, ok := intent["DestOutputProfile"]

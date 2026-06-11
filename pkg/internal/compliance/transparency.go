@@ -586,9 +586,11 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 		if err != nil || intent == nil {
 			continue
 		}
-		// Only PDF/A OutputIntents provide coverage.
+		// Only PDF/A OutputIntents provide coverage. The subtype is
+		// GTS_PDFA1 for every PDF/A part (ISO 32000-2 Table 401);
+		// "GTS_PDFA" does not exist.
 		s, _ := document.ResolveName(ctx, doc, intent["S"])
-		if s != "GTS_PDFA1" && s != "GTS_PDFA" {
+		if s != "GTS_PDFA1" {
 			continue
 		}
 		destObj, ok := intent["DestOutputProfile"]

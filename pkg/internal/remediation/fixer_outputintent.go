@@ -247,13 +247,13 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		iccStream := ast.NewStream(ast.PdfDict{"N": ast.PdfInt(nComponents)}, iccData)
 		iccRef := alloc.Alloc(iccStream)
 
-		sValue := "GTS_PDFA1"
-		if strings.HasPrefix(profile, "PDF/A-4") {
-			sValue = "GTS_PDFA"
-		}
+		// ISO 32000-2 Table 401 and ISO 19005-4 §6.2.3 keep GTS_PDFA1 as
+		// the PDF/A output-intent subtype for every part; a "GTS_PDFA"
+		// subtype does not exist, and veraPDF ignores intents carrying it
+		// (verified live: the 6.2.4.3 device-colour rules keep firing).
 		outputIntent := ast.PdfDict{
 			"Type":                      ast.PdfName("OutputIntent"),
-			"S":                         ast.PdfName(sValue),
+			"S":                         ast.PdfName("GTS_PDFA1"),
 			"OutputConditionIdentifier": ast.PdfString(conditionID),
 			"DestOutputProfile":         iccRef,
 		}

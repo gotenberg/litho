@@ -611,7 +611,10 @@ func xmpSchemaRule(part int, ns string) []Violation {
 	case 3:
 		return failf(Rule_19005_3_6_6_2_3_1_t01, "namespace %s not predefined or in extension schema", ns)
 	case 4:
-		return failf(Rule_19005_4_6_6_1_t01, "namespace %s not predefined or in extension schema", ns)
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3 (XMP 2010 packets are self-describing) and the veraPDF
+		// PDFA-4 profile carries no such rule; its 6.6.1 covers actions.
+		return nil
 	}
 	return nil
 }
@@ -1503,7 +1506,9 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t10, ctx)
 		}
 	case 4:
-		return fail(Rule_19005_4_6_6_1_t01, ctx)
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		return nil
 	}
 	return nil
 }
@@ -1547,7 +1552,9 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t14, ctx)
 		}
 	case 4:
-		return fail(Rule_19005_4_6_6_1_t01, ctx)
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		return nil
 	}
 	return nil
 }
@@ -1585,7 +1592,9 @@ func xmpExtFieldRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t18, ctx)
 		}
 	case 4:
-		return fail(Rule_19005_4_6_6_1_t01, ctx)
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		return nil
 	}
 	return nil
 }
@@ -1979,7 +1988,9 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 	case 3:
 		return fail(Rule_19005_3_6_6_2_3_1_t02, ctx)
 	case 4:
-		return fail(Rule_19005_4_6_6_1_t01, ctx)
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		return nil
 	}
 	return nil
 }

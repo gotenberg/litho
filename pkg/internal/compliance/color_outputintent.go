@@ -78,10 +78,11 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			}
 		}
 
-		// Only PDF/A OutputIntents provide device CS coverage.
-		// GTS_PDFA1 is the subtype for parts 1-3; GTS_PDFA for part 4.
-		// Other subtypes (e.g. GTS_PDFX) do not grant coverage.
-		isPDFAIntent := subtypeName == "GTS_PDFA1" || subtypeName == "GTS_PDFA"
+		// Only PDF/A OutputIntents provide device CS coverage. The
+		// subtype is GTS_PDFA1 for every PDF/A part (ISO 32000-2 Table
+		// 401); "GTS_PDFA" does not exist. Other subtypes (e.g.
+		// GTS_PDFX) do not grant coverage.
+		isPDFAIntent := subtypeName == "GTS_PDFA1"
 
 		destProfileObj, ok := intent["DestOutputProfile"]
 		if !ok {

@@ -293,9 +293,17 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	if part > 0 {
 		partStr := fmt.Sprintf("%d", part)
 		if findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
+			// Repair any wrong-URI xmlns:pdfaid binding first. The rebind
+			// can make an existing pdfaid block (part, conformance, rev)
+			// valid in one stroke, so the property must be re-checked
+			// before injecting: a second pdfaid:part would make the
+			// packet's XMP serialization invalid (ISO 16684-1 forbids
+			// duplicate properties, veraPDF 6.7.2.1 t4).
 			if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
 				buf = out
 			}
+		}
+		if findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
 			if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:part>%s</pdfaid:part>", partStr)); err == nil {
 				buf = out
 				fixes = append(fixes, "injected pdfaid:part into XMP")
