@@ -292,10 +292,11 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 	}
 
 	state := &walkState{
-		doc:     doc,
-		profile: profile,
-		results: results,
-		roleMap: buildRoleMapIndex(ctx, doc, structTreeRoot),
+		doc:            doc,
+		profile:        profile,
+		results:        results,
+		roleMap:        buildRoleMapIndex(ctx, doc, structTreeRoot),
+		iso32005Parent: "StructTreeRoot",
 	}
 
 	walkChildren(ctx, state, kidsObj, "", 0, 0)
@@ -344,6 +345,16 @@ type walkState struct {
 	// resolve custom structure types to standard ones where a check's
 	// semantics (ISO/TS 32005 Table 5) are defined over standard types.
 	roleMap map[ast.PdfName]ast.PdfName
+
+	// iso32005Parent is the effective Table 5 parent of the elements
+	// currently being walked. It differs from the walk's literal
+	// parentType in two ways veraPDF's parentStandardType exhibits:
+	// children of the structure tree root carry the sentinel
+	// "StructTreeRoot", and NonStruct is transparent, so kids of a
+	// NonStruct inherit the NonStruct's own effective parent
+	// (ISO/TS 32005: NonStruct contents are treated as belonging to the
+	// enclosing element; verified against the PDF_UA-1__7.2-t26 golden).
+	iso32005Parent ast.PdfName
 }
 
 // buildRoleMapIndex resolves the StructTreeRoot /RoleMap into a plain
@@ -451,9 +462,11 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 
 	// ISO/TS 32005 Table 5 inclusion rules: veraPDF's ua2 flavour runs
 	// the combined PDFUA-2-ISO32005 profile, so litho mirrors it for
-	// PDF/UA-2 only.
+	// PDF/UA-2 only. The effective parent comes from the walk state, not
+	// the literal parentType: root children see "StructTreeRoot" and
+	// NonStruct wrappers are transparent.
 	if state.profile == "PDF/UA-2" {
-		validateISO32005(ctx, state, elem, typeName, parentType)
+		validateISO32005(ctx, state, elem, typeName, state.iso32005Parent)
 	}
 
 	// Tag-containment rules (§7.2 parent/child tables) are PDF/UA-1 only:
@@ -573,9 +586,16 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		state.tableUsesHeaderIDs = tableHasHeaderIDs(ctx, state.doc, elem)
 	}
 
-	// Recurse into children.
+	// Recurse into children. The Table 5 effective parent follows the
+	// element type, except through NonStruct, which is transparent: its
+	// kids keep the current effective parent.
 	if kObj, ok := elem["K"]; ok {
+		prevISOParent := state.iso32005Parent
+		if iso32005Key(state, string(typeName)) != "NonStruct" {
+			state.iso32005Parent = typeName
+		}
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
+		state.iso32005Parent = prevISOParent
 	}
 
 	if typeName == "Table" {

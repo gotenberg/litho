@@ -64,34 +64,38 @@ func iso32005BuildIndexes() {
 const maxRoleMapHops = 8
 
 // iso32005Key normalizes a structure type for table lookups, following
-// the walk's RoleMap index until a standard type is reached: veraPDF
-// evaluates the Table 5 rules over role-map-resolved standard types.
-// Numbered headings collapse to the profile's "Hn" key. Returns "" when
-// no standard type is reachable, which skips the checks rather than
-// guessing.
+// the walk's RoleMap index until no mapping remains: veraPDF evaluates
+// the Table 5 rules over role-map-resolved standard types, and the role
+// map is consulted FIRST even for standard-named types (a RoleMap entry
+// /Document /Book makes the element a Book, not a Document; golden
+// PDF_UA-1__7.1-t07-fail-a fails "StructTreeRoot shall contain exactly
+// one Document" on exactly that shape). Numbered headings collapse to
+// the profile's "Hn" key. Returns "" when the resolved type is not
+// standard, which skips the checks rather than guessing.
 func iso32005Key(state *walkState, t string) string {
 	name := ast.PdfName(t)
 	for range maxRoleMapHops {
+		if next, ok := state.roleMap[name]; ok && next != name {
+			name = next
+			continue
+		}
 		if iso32005HnRe.MatchString(string(name)) {
 			return "Hn"
 		}
 		if isStandardStructType(name, "PDF/UA-2") {
 			return string(name)
 		}
-		next, ok := state.roleMap[name]
-		if !ok {
-			return ""
-		}
-		name = next
+		return ""
 	}
 	return ""
 }
 
 // iso32005Kids resolves an element's direct /K children into resolved
-// standard-type names and reports whether any direct content items
-// (marked-content MCID integers or MCR dictionaries) are present. OBJR
-// children are neither: veraPDF counts only marked content as content
-// items.
+// standard-type names and reports whether any direct content items are
+// present: marked-content MCID integers, MCR dictionaries, and OBJR
+// object references all count. veraPDF's hasContentItems fires on an
+// OBJR-only Document (PDF_UA-1__7.18.4-t01-fail-a golden:
+// "Table 5. Document-content" fails with a single OBJR kid).
 func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidTypes []string, hasContent bool) {
 	kObj, ok := elem["K"]
 	if !ok {
@@ -112,11 +116,8 @@ func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidT
 		case ast.PdfDict:
 			typeName, _ := document.ResolveName(ctx, state.doc, v["Type"])
 			switch typeName {
-			case "MCR":
+			case "MCR", "OBJR":
 				hasContent = true
-			case "OBJR":
-				// Object references are neither content items nor
-				// structure kids for Table 5 purposes.
 			default:
 				if s, serr := document.ResolveName(ctx, state.doc, v["S"]); serr == nil && s != "" {
 					kidTypes = append(kidTypes, string(s))
@@ -139,7 +140,13 @@ func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, t
 		return
 	}
 
-	if parentKey := iso32005Key(state, string(parentType)); parentKey != "" {
+	parentKey := iso32005Key(state, string(parentType))
+	if parentType == "StructTreeRoot" {
+		// The root sentinel is not a structure type; the Table 5 rows
+		// "StructTreeRoot shall not contain X" key on it literally.
+		parentKey = "StructTreeRoot"
+	}
+	if parentKey != "" {
 		if rule, forbidden := iso32005ForbiddenParents[selfKey][parentKey]; forbidden {
 			*state.results = append(*state.results,
 				failf(rule, "%s inside %s", typeName, parentType)...)
