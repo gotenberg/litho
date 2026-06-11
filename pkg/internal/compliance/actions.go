@@ -513,55 +513,70 @@ func checkOutlineActions(ctx context.Context, doc *document.Document, catalog as
 	}
 
 	var results []Violation
-	walkOutlineItems(ctx, doc, outlines["First"], profile, part, &results, 0)
+	walkOutlineItems(ctx, doc, outlines["First"], profile, part, &results, 0, make(map[int]bool))
 	return results
 }
 
-// walkOutlineItems recursively walks outline items and checks for forbidden actions.
-func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, profile string, part int, results *[]Violation, depth int) {
-	if ctx.Err() != nil || depth > maxActionChainDepth || itemObj == nil {
+// walkOutlineItems checks one outline level for forbidden actions, walking
+// siblings iteratively via /Next and recursing into children via /First.
+// visited tracks resolved item object numbers across the whole walk: outline
+// items form a linked list, and a crafted /Next or /First cycle would
+// otherwise recurse forever. Stack exhaustion is not recoverable in Go, so
+// the cycle must be broken here, not at the pkg/pdf recover boundary.
+func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, profile string, part int, results *[]Violation, depth int, visited map[int]bool) {
+	if depth > maxActionChainDepth {
 		return
 	}
+	for itemObj != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		if ref, ok := itemObj.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				return
+			}
+			visited[ref.ObjectNum] = true
+		}
 
-	item, err := document.ResolveDict(ctx, doc, itemObj)
-	if err != nil || item == nil {
-		return
-	}
+		item, err := document.ResolveDict(ctx, doc, itemObj)
+		if err != nil || item == nil {
+			return
+		}
 
-	// Verify this looks like an outline item (has /Title or /Parent).
-	_, hasTitle := item["Title"]
-	_, hasParent := item["Parent"]
-	if !hasTitle && !hasParent {
-		return
-	}
+		// Verify this looks like an outline item (has /Title or /Parent).
+		_, hasTitle := item["Title"]
+		_, hasParent := item["Parent"]
+		if !hasTitle && !hasParent {
+			return
+		}
 
-	// Check /A action on this outline item.
-	// For PDF/A, outline items are user-initiated (not automatic triggers).
-	// The spec restricts certain action types in /AA (additional actions)
-	// but outline /A is explicit user interaction. VeraPDF does not flag
-	// /JavaScript or /SetOCGState on outline items for PDF/A.
-	if aObj, hasA := item["A"]; hasA {
-		aDict, err := document.ResolveDict(ctx, doc, aObj)
-		if err == nil && aDict != nil {
-			// Verify it's actually an action (has /S key), not a destination.
-			if _, hasS := aDict["S"]; hasS {
-				if IsPDFUA(profile) {
-					violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0)
-					*results = append(*results, violations...)
-				} else {
-					// PDF/A: check with outline-specific exemptions.
-					violations := checkOutlineActionPDFA(ctx, doc, aDict, profile, part)
-					*results = append(*results, violations...)
+		// Check /A action on this outline item.
+		// For PDF/A, outline items are user-initiated (not automatic triggers).
+		// The spec restricts certain action types in /AA (additional actions)
+		// but outline /A is explicit user interaction. VeraPDF does not flag
+		// /JavaScript or /SetOCGState on outline items for PDF/A.
+		if aObj, hasA := item["A"]; hasA {
+			aDict, err := document.ResolveDict(ctx, doc, aObj)
+			if err == nil && aDict != nil {
+				// Verify it's actually an action (has /S key), not a destination.
+				if _, hasS := aDict["S"]; hasS {
+					if IsPDFUA(profile) {
+						violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0)
+						*results = append(*results, violations...)
+					} else {
+						// PDF/A: check with outline-specific exemptions.
+						violations := checkOutlineActionPDFA(ctx, doc, aDict, profile, part)
+						*results = append(*results, violations...)
+					}
 				}
 			}
 		}
+
+		// Recurse into children; siblings continue the loop.
+		walkOutlineItems(ctx, doc, item["First"], profile, part, results, depth+1, visited)
+
+		itemObj = item["Next"]
 	}
-
-	// Recurse into children.
-	walkOutlineItems(ctx, doc, item["First"], profile, part, results, depth+1)
-
-	// Recurse to next sibling. Use depth (not depth+1) since siblings are at same level.
-	walkOutlineItems(ctx, doc, item["Next"], profile, part, results, depth)
 }
 
 // outlineExemptActionsPart4 are action types that VeraPDF does not flag on

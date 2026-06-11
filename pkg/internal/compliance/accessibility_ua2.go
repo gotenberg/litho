@@ -128,7 +128,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 	if ok {
 		outlines, _ := document.ResolveDict(ctx, doc, outlinesObj)
 		if outlines != nil {
-			walkOutlineStructDest(ctx, doc, outlines["First"], &results, 0)
+			walkOutlineStructDest(ctx, doc, outlines["First"], &results, 0, make(map[int]bool))
 		}
 	}
 
@@ -157,43 +157,60 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 	return results
 }
 
-// walkOutlineStructDest walks outline items checking destinations.
-func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Violation, depth int) {
-	if depth > 200 || ctx.Err() != nil {
+// walkOutlineStructDest checks one outline level's destinations, walking
+// siblings iteratively via /Next and recursing into children via /First.
+// visited tracks resolved item object numbers across the whole walk: a
+// crafted /Next or /First cycle would otherwise recurse forever, and stack
+// exhaustion is not recoverable in Go.
+func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Violation, depth int, visited map[int]bool) {
+	if depth > maxActionChainDepth {
 		return
 	}
-	item, err := document.ResolveDict(ctx, doc, obj)
-	if err != nil || item == nil {
-		return
-	}
-
-	// Check /Dest on outline item (t01).
-	if destObj, hasDest := item["Dest"]; hasDest {
-		if !isStructureDestination(ctx, doc, destObj) {
-			*results = append(*results, fail(Rule_14289_2_8_8_t01,
-				"Outline item destination is not a structure destination")...)
+	for obj != nil {
+		if ctx.Err() != nil {
+			return
 		}
-	}
+		if ref, ok := obj.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				return
+			}
+			visited[ref.ObjectNum] = true
+		}
 
-	// Check /A action on outline item.
-	if aObj, hasA := item["A"]; hasA {
-		aDict, _ := document.ResolveDict(ctx, doc, aObj)
-		if aDict != nil {
-			s, _ := document.ResolveName(ctx, doc, aDict["S"])
-			if s == "GoTo" {
-				if dObj, hasDest := aDict["D"]; hasDest {
-					if !isStructureDestination(ctx, doc, dObj) {
-						*results = append(*results, fail(Rule_14289_2_8_8_t02,
-							"Outline GoTo action destination is not a structure destination")...)
+		item, err := document.ResolveDict(ctx, doc, obj)
+		if err != nil || item == nil {
+			return
+		}
+
+		// Check /Dest on outline item (t01).
+		if destObj, hasDest := item["Dest"]; hasDest {
+			if !isStructureDestination(ctx, doc, destObj) {
+				*results = append(*results, fail(Rule_14289_2_8_8_t01,
+					"Outline item destination is not a structure destination")...)
+			}
+		}
+
+		// Check /A action on outline item.
+		if aObj, hasA := item["A"]; hasA {
+			aDict, _ := document.ResolveDict(ctx, doc, aObj)
+			if aDict != nil {
+				s, _ := document.ResolveName(ctx, doc, aDict["S"])
+				if s == "GoTo" {
+					if dObj, hasDest := aDict["D"]; hasDest {
+						if !isStructureDestination(ctx, doc, dObj) {
+							*results = append(*results, fail(Rule_14289_2_8_8_t02,
+								"Outline GoTo action destination is not a structure destination")...)
+						}
 					}
 				}
 			}
 		}
-	}
 
-	// Recurse: children then siblings.
-	walkOutlineStructDest(ctx, doc, item["First"], results, depth+1)
-	walkOutlineStructDest(ctx, doc, item["Next"], results, depth)
+		// Recurse into children; siblings continue the loop.
+		walkOutlineStructDest(ctx, doc, item["First"], results, depth+1, visited)
+
+		obj = item["Next"]
+	}
 }
 
 // isStructureDestination checks if a destination object is a "structure

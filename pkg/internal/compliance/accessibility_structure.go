@@ -173,13 +173,17 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 		}
 	}
 
-	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsArr, &results)
+	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsArr, &results, make(map[int]bool), 0)
 	return results
 }
 
-// walkNSCheck recursively walks structure elements and checks namespace membership.
-func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, results *[]Violation) {
-	if ctx.Err() != nil {
+// walkNSCheck recursively walks structure elements and checks namespace
+// membership. visited tracks the object numbers of /K children already
+// walked: a crafted /K cycle would otherwise recurse forever, and stack
+// exhaustion is not recoverable in Go. The depth cap bounds inline-dict
+// nesting, which carries no object numbers for the visited set.
+func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, results *[]Violation, visited map[int]bool, depth int) {
+	if ctx.Err() != nil || depth > maxStructTreeDepth {
 		return
 	}
 
@@ -215,14 +219,27 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 	}
 	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
 		for _, kid := range arr {
-			d, _ := document.ResolveDict(ctx, doc, kid)
-			if d != nil {
-				walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, results)
-			}
+			walkNSCheckChild(ctx, doc, kid, defaultNSURI, nsArr, results, visited, depth)
 		}
-	} else if d, _ := document.ResolveDict(ctx, doc, kObj); d != nil {
-		walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, results)
+	} else {
+		walkNSCheckChild(ctx, doc, kObj, defaultNSURI, nsArr, results, visited, depth)
 	}
+}
+
+// walkNSCheckChild resolves one /K child and recurses into it, skipping
+// references already walked.
+func walkNSCheckChild(ctx context.Context, doc *document.Document, kid ast.PdfObject, defaultNSURI string, nsArr ast.PdfArray, results *[]Violation, visited map[int]bool, depth int) {
+	if ref, ok := kid.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return
+		}
+		visited[ref.ObjectNum] = true
+	}
+	d, err := document.ResolveDict(ctx, doc, kid)
+	if err != nil || d == nil {
+		return
+	}
+	walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, results, visited, depth+1)
 }
 
 // typeMapsToStandardNS checks if a structure type in a given namespace has a
