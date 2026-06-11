@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -550,9 +551,7 @@ func (d *Document) XRefEntriesSnapshot() map[int]xref.XRefEntry {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	out := make(map[int]xref.XRefEntry, len(d.Index.Entries))
-	for objNum, entry := range d.Index.Entries {
-		out[objNum] = entry
-	}
+	maps.Copy(out, d.Index.Entries)
 	return out
 }
 

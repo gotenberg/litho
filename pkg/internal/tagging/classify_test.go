@@ -130,8 +130,10 @@ func TestAutoTag_EndToEnd(t *testing.T) {
 	if n := strings.Count(got, ">> BDC\n"); n != 2 {
 		t.Errorf("want 2 structure BDC, got %d:\n%s", n, got)
 	}
-	for _, want := range []string{"/H1 <</MCID 0>>", "/P <</MCID 1>>", "(Big Heading)",
-		"(Body line one with several words here.)", "(Body line two with several words here.)"} {
+	for _, want := range []string{
+		"/H1 <</MCID 0>>", "/P <</MCID 1>>", "(Big Heading)",
+		"(Body line one with several words here.)", "(Body line two with several words here.)",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("marked content missing %q\n%s", want, got)
 		}

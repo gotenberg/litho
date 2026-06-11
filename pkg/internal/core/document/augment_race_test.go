@@ -63,11 +63,11 @@ func TestResolve_ConcurrentAugmentation_NoRace(t *testing.T) {
 	const iterations = 40
 
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			for it := 0; it < iterations; it++ {
+			for range iterations {
 				// Vary order per goroutine to maximise overlap of the
 				// object-2 augmentation write with reads of 1/3/4.
 				order := []int{1, 2, 3, 4}

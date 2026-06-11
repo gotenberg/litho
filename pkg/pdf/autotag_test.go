@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -163,12 +164,7 @@ func TestWriter_RemediatePDFUA_AutoTagsStructure(t *testing.T) {
 }
 
 func hasStructureViolation(vs []Violation) bool {
-	for _, v := range vs {
-		if isStructureViolation(v) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(vs, isStructureViolation)
 }
 
 func isStructureViolation(v Violation) bool {

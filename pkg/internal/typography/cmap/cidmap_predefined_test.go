@@ -30,7 +30,7 @@ func TestCIDMap_Decode_RoundTrip(t *testing.T) {
 		return 0
 	}
 
-	var oneByte, twoByte = -1, -1
+	oneByte, twoByte := -1, -1
 	for code := range m.charToCID {
 		switch width(code) {
 		case 1:

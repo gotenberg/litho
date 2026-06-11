@@ -76,7 +76,8 @@ func TestPatchCIDWidthArray(t *testing.T) {
 	// [3 [600 700]] then range [10 12 1000]. Expected: cid3=600 (already right),
 	// cid4=500 (700 is wrong → fix); the range is preserved untouched.
 	wArr := ast.PdfArray{
-		ast.PdfInt(3), ast.PdfArray{ast.PdfInt(600), ast.PdfInt(700)},
+		ast.PdfInt(3),
+		ast.PdfArray{ast.PdfInt(600), ast.PdfInt(700)},
 		ast.PdfInt(10), ast.PdfInt(12), ast.PdfInt(1000),
 	}
 	expected := map[int]int{3: 600, 4: 500, 10: 900}

@@ -3,6 +3,7 @@ package remediation
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -190,12 +191,7 @@ func TestPatchExistingXMP_IdempotentUARev(t *testing.T) {
 
 // containsFix reports whether the fix-description slice contains want.
 func containsFix(fixes []string, want string) bool {
-	for _, f := range fixes {
-		if f == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(fixes, want)
 }
 
 // TestPatchExistingXMP_ForeignConformanceDoesNotAbort confirms that a

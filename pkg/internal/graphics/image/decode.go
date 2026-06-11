@@ -90,13 +90,13 @@ func buildDecodeLUTs(dec []float64, components int) [][256]byte {
 	luts := make([][256]byte, components)
 	for j := range luts {
 		if dec == nil {
-			for s := 0; s < 256; s++ {
+			for s := range 256 {
 				luts[j][s] = byte(s)
 			}
 			continue
 		}
 		dmin, dmax := dec[2*j], dec[2*j+1]
-		for s := 0; s < 256; s++ {
+		for s := range 256 {
 			v := dmin + float64(s)*(dmax-dmin)/255.0
 			switch {
 			case v < 0:

@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -830,12 +831,7 @@ func liHasDirectContentItem(ctx context.Context, doc *document.Document, liElem 
 	if err != nil {
 		return isContentItem(kObj)
 	}
-	for _, item := range arr {
-		if isContentItem(item) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(arr, isContentItem)
 }
 
 func liHasLblChild(ctx context.Context, doc *document.Document, liElem ast.PdfDict) bool {

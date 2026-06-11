@@ -22,11 +22,11 @@ var pureGoFilters = []ast.PdfName{
 func FuzzApplyDecodeFilter(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte("48656C6C6F>"))                // ASCIIHex
-	f.Add([]byte("z~>"))                         // ASCII85 zero shortcut + EOD
-	f.Add([]byte{0x78, 0x9c, 0x03, 0x00})        // zlib empty
-	f.Add([]byte{0x80, 0x0b, 0x60})              // LZW-ish
-	f.Add([]byte{0x00, 0x01, 0x02, 0x80, 0xff})  // RunLength-ish
-	f.Add([]byte{0xff, 0xd8, 0xff, 0xd9})        // JPEG SOI/EOI
+	f.Add([]byte("z~>"))                        // ASCII85 zero shortcut + EOD
+	f.Add([]byte{0x78, 0x9c, 0x03, 0x00})       // zlib empty
+	f.Add([]byte{0x80, 0x0b, 0x60})             // LZW-ish
+	f.Add([]byte{0x00, 0x01, 0x02, 0x80, 0xff}) // RunLength-ish
+	f.Add([]byte{0xff, 0xd8, 0xff, 0xd9})       // JPEG SOI/EOI
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {

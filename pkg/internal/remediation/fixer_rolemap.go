@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -100,7 +100,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	for src := range keep {
 		srcs = append(srcs, src)
 	}
-	sort.Slice(srcs, func(i, j int) bool { return srcs[i] < srcs[j] })
+	slices.Sort(srcs)
 
 	var cyclesBroken, standardsDropped int
 

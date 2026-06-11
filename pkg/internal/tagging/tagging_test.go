@@ -158,8 +158,10 @@ func TestEmit_StructuredTree(t *testing.T) {
 	if n := strings.Count(got, "\nEMC\n"); n != 3 {
 		t.Errorf("EMC count: got %d, want 3", n)
 	}
-	for _, want := range []string{"/H1 <</MCID 0>>", "/P <</MCID 1>>", "/P <</MCID 2>>",
-		"(Heading One)", "(First paragraph.)", "(Second paragraph.)"} {
+	for _, want := range []string{
+		"/H1 <</MCID 0>>", "/P <</MCID 1>>", "/P <</MCID 2>>",
+		"(Heading One)", "(First paragraph.)", "(Second paragraph.)",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("marked content missing %q\n%s", want, got)
 		}

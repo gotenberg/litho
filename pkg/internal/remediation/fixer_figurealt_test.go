@@ -232,7 +232,7 @@ func TestFixFigureAlt_DepthBoundCapsCollection(t *testing.T) {
 	}
 	const firstSect = 5
 	chain := compliance.MaxStructTreeWalkDepth + 10
-	for i := 0; i < chain; i++ {
+	for i := range chain {
 		obj := firstSect + i
 		parent := obj - 1
 		if i == 0 {

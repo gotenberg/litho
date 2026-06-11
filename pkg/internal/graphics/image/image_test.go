@@ -170,7 +170,7 @@ func TestBuildDecodeLUTs_IdentityWhenAbsent(t *testing.T) {
 		t.Fatalf("len(luts) = %d, want 3", len(luts))
 	}
 	for j := range luts {
-		for s := 0; s < 256; s++ {
+		for s := range 256 {
 			if luts[j][s] != byte(s) {
 				t.Fatalf("identity LUT[%d][%d] = %d, want %d", j, s, luts[j][s], s)
 			}

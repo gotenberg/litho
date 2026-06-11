@@ -186,7 +186,7 @@ func decodeXRefStreamEntries(t *testing.T, out string) map[int]decodedXRefEntry 
 	rec := 0
 	for i := 0; i+1 < len(idx); i += 2 {
 		objNum, count := idx[i], idx[i+1]
-		for c := 0; c < count; c++ {
+		for c := range count {
 			b := raw[pos : pos+entrySize]
 			entries[objNum+c] = decodedXRefEntry{
 				typ:    readBE(b[:1]),
