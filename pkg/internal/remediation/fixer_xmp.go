@@ -309,11 +309,14 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		needConformance := conformance != "" && (part != 4 || conformance == "E" || conformance == "F")
 		if needConformance {
 			if findXMPProperty(buf, pdfaidNS, "conformance").Form == xmpPropertyNotFound {
-				// Add as attribute on the rdf:Description that
-				// declares the pdfaid namespace; child-element
-				// insertion lands in the first description, which may
-				// lack the xmlns binding.
-				if out, err := insertAttributeAtDescription(buf, "pdfaid", fmt.Sprintf(`pdfaid:conformance="%s"`, conformance)); err == nil {
+				// Repair any wrong-URI xmlns:pdfaid binding first, then
+				// add the attribute on the rdf:Description that binds the
+				// pdfaid namespace URI; child-element insertion lands in
+				// the first description, which may lack the binding.
+				if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
+					buf = out
+				}
+				if out, err := insertAttributeAtDescription(buf, "pdfaid", pdfaidNS, fmt.Sprintf(`pdfaid:conformance="%s"`, conformance)); err == nil {
 					buf = out
 					fixes = append(fixes, "injected pdfaid:conformance into XMP")
 				}
@@ -735,7 +738,6 @@ var knownXMPNamespaces = map[string]bool{
 	"http://www.w3.org/2001/XMLSchema-instance":        true,
 	"http://www.w3.org/2001/XMLSchema":                 true,
 	"http://www.w3.org/2000/xmlns/":                    true,
-	"http://www.aiim.org/pdfa/":                        true,
 	"http://www.aiim.org/pdfa/ns/extension/":           true,
 	"http://www.aiim.org/pdfa/ns/schema#":              true,
 	"http://www.aiim.org/pdfa/ns/property#":            true,

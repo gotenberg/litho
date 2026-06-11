@@ -300,12 +300,15 @@ func removeXMPProperty(xmp []byte, loc xmpPropertyLocation) []byte {
 	return out
 }
 
-// insertAttributeAtDescription injects attr onto the first
-// rdf:Description tag whose prefix is declared in its xmlns attributes
-// (ensuring the attribute resolves in scope). Falls back to the first
-// rdf:Description when no match is found.
-func insertAttributeAtDescription(xmp []byte, prefix, attrSuffix string) ([]byte, error) {
-	prefixDecl := fmt.Appendf(nil, `xmlns:%s=`, prefix)
+// insertAttributeAtDescription injects attr onto the first rdf:Description
+// tag that binds prefix to uri in its xmlns attributes, so the inserted
+// attribute resolves to the intended namespace. A tag that merely declares
+// the same prefix letters against a different URI is skipped: splicing there
+// would put the property in the wrong namespace and the validator would
+// still see it as missing. Falls back to the first rdf:Description when no
+// tag binds the namespace; callers run [ensureNamespaceDecl] first so that
+// fallback receives the declaration.
+func insertAttributeAtDescription(xmp []byte, prefix, uri, attrSuffix string) ([]byte, error) {
 	offset := 0
 	for offset < len(xmp) {
 		idx := bytes.Index(xmp[offset:], []byte("<rdf:Description"))
@@ -318,7 +321,7 @@ func insertAttributeAtDescription(xmp []byte, prefix, attrSuffix string) ([]byte
 			break
 		}
 		tagEnd += tagStart
-		if bytes.Contains(xmp[tagStart:tagEnd], prefixDecl) {
+		if decls := collectNamespaceDecls(xmp[tagStart:tagEnd]); decls[prefix] == uri {
 			return insertAttrBeforeTagEnd(xmp, tagEnd, attrSuffix), nil
 		}
 		offset = tagEnd + 1

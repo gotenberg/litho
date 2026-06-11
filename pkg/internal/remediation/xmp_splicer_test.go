@@ -383,3 +383,26 @@ func TestCanonicalizePrefix_RenamesAmd(t *testing.T) {
 		t.Errorf("expected <pdfaid:amd> after canonicalization:\n%s", got)
 	}
 }
+
+// TestInsertAttributeAtDescription_SelectsByURI guards the namespace-aware
+// description selection: a tag that declares the same prefix letters bound
+// to a different URI must be skipped, or the spliced attribute lands in the
+// wrong namespace and the validator still reports the property missing.
+func TestInsertAttributeAtDescription_SelectsByURI(t *testing.T) {
+	xmp := []byte(`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:pdfaid="http://example.com/wrong/" rdf:about="" pdfaid:custom="x"/>
+  <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" rdf:about="" pdfaid:part="2"/>
+</rdf:RDF>`)
+
+	out, err := insertAttributeAtDescription(xmp, "pdfaid", pdfaidNS, `pdfaid:conformance="B"`)
+	if err != nil {
+		t.Fatalf("insertAttributeAtDescription: %v", err)
+	}
+	loc := findXMPProperty(out, pdfaidNS, "conformance")
+	if loc.Form != xmpPropertyAsAttribute {
+		t.Fatalf("conformance not found in the pdfaid namespace after splice:\n%s", out)
+	}
+	if wrong := findXMPProperty(out, "http://example.com/wrong/", "conformance"); wrong.Form != xmpPropertyNotFound {
+		t.Errorf("conformance spliced into the wrong-URI description:\n%s", out)
+	}
+}

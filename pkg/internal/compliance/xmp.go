@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 
@@ -63,9 +65,12 @@ var knownXMPNamespaces = map[string]bool{
 	"http://www.w3.org/2001/XMLSchema-instance":   true, // xsi
 	"http://www.w3.org/2001/XMLSchema":            true, // xs
 	"http://www.w3.org/2000/xmlns/":               true, // xmlns
-	"http://www.aiim.org/pdfa/":                   true, // pdfa
 
-	// PDF/A extension schema machinery.
+	// PDF/A extension schema machinery. The bare family URI
+	// "http://www.aiim.org/pdfa/" is deliberately absent: it is not a
+	// registered XMP schema namespace and veraPDF's predefined-schema
+	// list does not include it, so properties under it need an extension
+	// schema like any other custom namespace.
 	"http://www.aiim.org/pdfa/ns/extension/": true,
 	"http://www.aiim.org/pdfa/ns/schema#":    true,
 	"http://www.aiim.org/pdfa/ns/property#":  true,
@@ -624,9 +629,16 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
+	// Only properties in the pdfaid namespace URI carry the identification
+	// and prefix obligations. A matching local name under a different URI
+	// (pdfuaid:part on a dual PDF/A + PDF/UA file, prism:part, ...) belongs
+	// to another schema and must not be flagged; veraPDF keys these rules
+	// to the pdfaid namespace only.
+	var parseClean bool
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
+			parseClean = errors.Is(err, io.EOF)
 			break
 		}
 		t, ok := tok.(xml.StartElement)
@@ -635,35 +647,22 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 		}
 		// Check attributes (inline form).
 		for _, attr := range t.Attr {
-			if attr.Name.Space == xmpPdfaIDNamespace {
-				switch attr.Name.Local {
-				case "part":
-					hasPart = true
-					partValue = attr.Value
-				case "conformance":
-					hasConf = true
-					confValue = attr.Value
-				case "rev":
-					revValue = attr.Value
-				case "amd":
-					hasAmd = true
-				case "corr":
-					hasCorr = true
-				}
-			} else if attr.Name.Space != "" && attr.Name.Space != xmpPdfaIDNamespace {
-				// Attribute with matching local name but wrong namespace prefix.
-				switch attr.Name.Local {
-				case "part":
-					wrongPrefixPart = true
-				case "conformance":
-					wrongPrefixConf = true
-				case "rev":
-					wrongPrefixRev = true
-				case "amd":
-					wrongPrefixAmd = true
-				case "corr":
-					wrongPrefixCorr = true
-				}
+			if attr.Name.Space != xmpPdfaIDNamespace {
+				continue
+			}
+			switch attr.Name.Local {
+			case "part":
+				hasPart = true
+				partValue = attr.Value
+			case "conformance":
+				hasConf = true
+				confValue = attr.Value
+			case "rev":
+				revValue = attr.Value
+			case "amd":
+				hasAmd = true
+			case "corr":
+				hasCorr = true
 			}
 		}
 		// Check element form: read text content.
@@ -686,21 +685,6 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 						hasCorr = true
 					}
 				}
-			}
-		} else if t.Name.Space != "" && t.Name.Space != xmpPdfaIDNamespace &&
-			t.Name.Space != xmpRDFNamespace {
-			// Element with matching local name but wrong namespace prefix.
-			switch t.Name.Local {
-			case "part":
-				wrongPrefixPart = true
-			case "conformance":
-				wrongPrefixConf = true
-			case "rev":
-				wrongPrefixRev = true
-			case "amd":
-				wrongPrefixAmd = true
-			case "corr":
-				wrongPrefixCorr = true
 			}
 		}
 	}
@@ -741,10 +725,11 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 		*results = append(*results, xmpPDFAIdPrefixRule(part, "corr")...)
 	}
 
-	// Fallback: byte scan for pdfaid presence in unparseable XMP.
-	// Only use fallback when the XML parser found no pdfaid fields at all
-	// (not when it successfully parsed some fields but not others).
-	if !hasPart && !hasConf && revValue == "" && !wrongPrefixPart && !wrongPrefixConf && !wrongPrefixRev {
+	// Fallback: byte scan for pdfaid presence in unparseable XMP only. In
+	// well-formed XMP, absence of the pdfaid namespace means the
+	// identification schema is missing, even when pdfaid-looking text
+	// appears under a different namespace URI.
+	if !parseClean && !hasPart && !hasConf && revValue == "" && !wrongPrefixPart && !wrongPrefixConf && !wrongPrefixRev {
 		hasPart = bytes.Contains(data, []byte("pdfaid:part")) ||
 			bytes.Contains(data, []byte("pdfa/ns/id"))
 		if !hasPart {
@@ -820,16 +805,16 @@ func xmpCheckPart4Conformance(profile string, hasConf bool, confValue string, re
 	}
 }
 
-// xmpHasWrongPdfaidPrefix scans raw XMP bytes to check if a pdfaid field
-// uses a non-"pdfaid" prefix (e.g., "pdfa:part" instead of "pdfaid:part").
-// The XML parser resolves namespaces by URI, masking the actual prefix.
+// xmpHasWrongPdfaidPrefix scans raw XMP bytes to check if a pdfaid-namespace
+// field is serialized with a non-"pdfaid" prefix (e.g., "pdfa:part" with
+// xmlns:pdfa bound to the pdfaid URI). The XML parser resolves namespaces by
+// URI, masking the actual prefix, so the serialization must be inspected.
+// A prefix bound to a different URI (pdfuaid:part, prism:part) belongs to
+// another schema and is not flagged. Declarations with whitespace around
+// "=" are not recognized; real-world XMP serializers do not emit them.
 // Returns false on context cancellation; outer callers re-check ctx.
 func xmpHasWrongPdfaidPrefix(ctx context.Context, data []byte, field string) bool {
-	// Look for the field name preceded by a colon and prefix.
-	// Valid: "pdfaid:part" / "pdfaid:conformance" / "pdfaid:rev"
-	// Invalid: "pdfa:part" / "foo:part" (any prefix != "pdfaid")
 	needle := []byte(":" + field)
-	validPrefix := []byte("pdfaid:" + field)
 	for off := 0; ; {
 		if ctx.Err() != nil {
 			return false
@@ -839,28 +824,41 @@ func xmpHasWrongPdfaidPrefix(ctx context.Context, data []byte, field string) boo
 			break
 		}
 		pos := off + idx
-		// Verify exactly "pdfaid" precedes the colon (not a longer prefix
-		// containing "pdfaid" as a substring, e.g., "nonpdfaid").
-		prefixStart := pos - 6
-		if prefixStart >= 0 && bytes.Equal(data[prefixStart:prefixStart+len(validPrefix)], validPrefix) {
-			// Verify the prefix boundary: character before "pdfaid" must not be a letter.
-			if prefixStart == 0 || !isASCIILetter(data[prefixStart-1]) {
-				// Correct prefix, keep searching for other occurrences.
-				off = pos + len(needle)
-				continue
-			}
-		}
-		// Found the field with a non-"pdfaid" prefix. Verify it's an XML
-		// attribute/element name (preceded by a letter, not inside a URL).
-		if pos > 0 {
-			prev := data[pos-1]
-			if prev >= 'a' && prev <= 'z' || prev >= 'A' && prev <= 'Z' {
-				return true
-			}
-		}
 		off = pos + len(needle)
+
+		// The match must end at a name boundary so ":part" does not hit
+		// ":partial".
+		if end := pos + len(needle); end < len(data) && isXMLNameChar(data[end]) {
+			continue
+		}
+
+		prefix := xmlPrefixBefore(data, pos)
+		if prefix == "" || prefix == "pdfaid" {
+			continue
+		}
+		if bytes.Contains(data, []byte(`xmlns:`+prefix+`="`+xmpPdfaIDNamespace+`"`)) ||
+			bytes.Contains(data, []byte(`xmlns:`+prefix+`='`+xmpPdfaIDNamespace+`'`)) {
+			return true
+		}
 	}
 	return false
+}
+
+// xmlPrefixBefore returns the XML name token immediately preceding the colon
+// at colonPos, or "" when none.
+func xmlPrefixBefore(data []byte, colonPos int) string {
+	start := colonPos
+	for start > 0 && isXMLNameChar(data[start-1]) {
+		start--
+	}
+	if start == colonPos {
+		return ""
+	}
+	return string(data[start:colonPos])
+}
+
+func isXMLNameChar(b byte) bool {
+	return isASCIILetter(b) || (b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
 }
 
 func isASCIILetter(b byte) bool {
