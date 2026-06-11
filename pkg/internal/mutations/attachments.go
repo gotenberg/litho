@@ -4,11 +4,81 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
+
+// maxAttachmentTreeDepth caps EmbeddedFiles name-tree recursion in
+// [collectEmbeddedFileEntries]. Anti-DoS guard, not spec-mandated: real
+// trees nest two or three levels; 64 mirrors maxNameTreeDepth in
+// internal/core/document.
+const maxAttachmentTreeDepth = 64
+
+// efEntry is one key-value pair of the EmbeddedFiles name tree.
+type efEntry struct {
+	name string
+	ref  ast.PdfObject
+}
+
+// collectEmbeddedFileEntries flattens the EmbeddedFiles name tree rooted
+// at nodeObj into key-value pairs, following /Kids intermediate nodes.
+// Pending allocator versions take precedence so repeated mutations see
+// each other's edits.
+func collectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]efEntry) {
+	if depth > maxAttachmentTreeDepth {
+		return
+	}
+	var node ast.PdfDict
+	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		node = ResolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	}
+	if node == nil {
+		node, _ = document.ResolveDict(ctx, doc, nodeObj) // Best-effort: nil node ends the branch.
+	}
+	if node == nil {
+		return
+	}
+	if kidsObj, ok := node["Kids"]; ok {
+		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
+			for _, kid := range kids {
+				collectEmbeddedFileEntries(ctx, alloc, doc, kid, depth+1, out)
+			}
+			return
+		}
+	}
+	namesObj, ok := node["Names"]
+	if !ok {
+		return
+	}
+	arr, ok := namesObj.(ast.PdfArray)
+	if !ok {
+		var err error
+		if arr, err = document.ResolveArray(ctx, doc, namesObj); err != nil {
+			return
+		}
+	}
+	for i := 0; i+1 < len(arr); i += 2 {
+		if s, ok := arr[i].(ast.PdfString); ok {
+			*out = append(*out, efEntry{name: string(s), ref: arr[i+1]})
+		}
+	}
+}
+
+// embeddedFilesArray emits the flattened entries as a single-level
+// /Names array, sorted lexically by key as ISO 32000-2 §7.9.6 requires.
+// Flattening is spec-valid: a root node carrying only /Names needs no
+// /Limits or /Kids.
+func embeddedFilesArray(entries []efEntry) ast.PdfArray {
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+	arr := make(ast.PdfArray, 0, len(entries)*2)
+	for _, e := range entries {
+		arr = append(arr, ast.PdfString(e.name), e.ref)
+	}
+	return arr
+}
 
 // AttachmentOptions configures an embedded file attachment.
 // AFRelationship and adding to the catalog /AF array are required for
@@ -93,31 +163,26 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 		namesDict = ast.PdfDict{}
 	}
 
-	// Get or create /EmbeddedFiles name tree.
-	var efNames ast.PdfArray
+	// Flatten the existing tree (including /Kids nodes, which the old
+	// single-leaf read silently dropped) and replace any entry that
+	// already carries this name so re-running the mutation stays
+	// idempotent: name-tree keys must be unique per ISO 32000-2 §7.9.6.
+	var entries []efEntry
 	if efObj, ok := namesDict["EmbeddedFiles"]; ok {
-		var efDict ast.PdfDict
-		if efRef, ok := efObj.(ast.PdfIndirectRef); ok {
-			efDict = ResolveFromAllocOrDoc(ctx, alloc, doc, efRef)
-		}
-		if efDict == nil {
-			efDict, _ = document.ResolveDict(ctx, doc, efObj) // Best-effort: nil efDict is handled below.
-		}
-		if efDict != nil {
-			if namesArr, ok := efDict["Names"]; ok {
-				if arr, ok := namesArr.(ast.PdfArray); ok {
-					efNames = arr
-				} else if arr, err := document.ResolveArray(ctx, doc, namesArr); err == nil {
-					efNames = arr
-				}
-			}
+		collectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
+	}
+	var replacedRef ast.PdfObject
+	for i := range entries {
+		if entries[i].name == name {
+			replacedRef = entries[i].ref
+			entries[i].ref = filespecRef
 		}
 	}
+	if replacedRef == nil {
+		entries = append(entries, efEntry{name: name, ref: filespecRef})
+	}
 
-	// Add the new entry: [name, filespecRef, ...existing...]
-	efNames = append(ast.PdfArray{ast.PdfString(name), filespecRef}, efNames...)
-
-	efDict := ast.PdfDict{"Names": efNames}
+	efDict := ast.PdfDict{"Names": embeddedFilesArray(entries)}
 	efRef := alloc.Alloc(efDict)
 	namesDict["EmbeddedFiles"] = efRef
 
@@ -129,6 +194,8 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 	newCatalog["Names"] = namesRef
 
 	// Add to catalog /AF array if requested (PDF/A-3+ associated files).
+	// A replaced attachment swaps its old filespec in place instead of
+	// appending a duplicate associated-file entry.
 	if opts.AddToCatalogAF {
 		var afArr ast.PdfArray
 		if existing, ok := catalogDict["AF"]; ok {
@@ -136,7 +203,18 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 				afArr = arr
 			}
 		}
-		afArr = append(afArr, filespecRef)
+		swapped := false
+		if oldRef, ok := replacedRef.(ast.PdfIndirectRef); ok {
+			for i, item := range afArr {
+				if cur, ok := item.(ast.PdfIndirectRef); ok && cur == oldRef {
+					afArr[i] = filespecRef
+					swapped = true
+				}
+			}
+		}
+		if !swapped {
+			afArr = append(afArr, filespecRef)
+		}
 		newCatalog["AF"] = afArr
 	}
 
@@ -185,48 +263,27 @@ func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		return nil
 	}
 
-	var efDict ast.PdfDict
-	if efRef, ok := efObj.(ast.PdfIndirectRef); ok {
-		efDict = ResolveFromAllocOrDoc(ctx, alloc, doc, efRef)
-	}
-	if efDict == nil {
-		efDict, _ = document.ResolveDict(ctx, doc, efObj) // Best-effort: nil efDict is handled below.
-	}
-	if efDict == nil {
-		return nil
-	}
-
-	namesArr, ok := efDict["Names"]
-	if !ok {
-		return nil
-	}
-
-	var arr ast.PdfArray
-	if a, ok := namesArr.(ast.PdfArray); ok {
-		arr = a
-	} else if a, err := document.ResolveArray(ctx, doc, namesArr); err == nil {
-		arr = a
-	}
-	if arr == nil {
-		return nil
-	}
-
-	// Name tree entries are [name1, ref1, name2, ref2, ...].
-	// Find and remove the matching pair.
-	var filtered ast.PdfArray
-	for i := 0; i+1 < len(arr); i += 2 {
-		entryName := ""
-		if s, ok := arr[i].(ast.PdfString); ok {
-			entryName = string(s)
+	// Flatten the tree (including /Kids nodes) and drop the matching
+	// entries, remembering their filespec refs so the catalog /AF array
+	// loses the now-dangling associated-file pointers too.
+	var entries []efEntry
+	collectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
+	var kept []efEntry
+	removedRefs := make(map[ast.PdfIndirectRef]bool)
+	for _, e := range entries {
+		if e.name == name {
+			if ref, ok := e.ref.(ast.PdfIndirectRef); ok {
+				removedRefs[ref] = true
+			}
+			continue
 		}
-		if entryName == name {
-			continue // Skip this pair.
-		}
-		filtered = append(filtered, arr[i], arr[i+1])
+		kept = append(kept, e)
+	}
+	if len(kept) == len(entries) {
+		return nil // Nothing matched; leave the document untouched.
 	}
 
-	// Rebuild the name tree.
-	newEFDict := ast.PdfDict{"Names": filtered}
+	newEFDict := ast.PdfDict{"Names": embeddedFilesArray(kept)}
 	efRef := alloc.Alloc(newEFDict)
 
 	newNamesDict := make(ast.PdfDict, len(namesDict))
@@ -238,6 +295,24 @@ func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	newCatalog := make(ast.PdfDict, len(catalogDict))
 	maps.Copy(newCatalog, catalogDict)
 	newCatalog["Names"] = namesRef
+
+	if afObj, ok := catalogDict["AF"]; ok && len(removedRefs) > 0 {
+		if afArr, err := document.ResolveArray(ctx, doc, afObj); err == nil {
+			pruned := make(ast.PdfArray, 0, len(afArr))
+			for _, item := range afArr {
+				if ref, ok := item.(ast.PdfIndirectRef); ok && removedRefs[ref] {
+					continue
+				}
+				pruned = append(pruned, item)
+			}
+			if len(pruned) == 0 {
+				delete(newCatalog, "AF")
+			} else {
+				newCatalog["AF"] = pruned
+			}
+		}
+	}
+
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
 	return nil
