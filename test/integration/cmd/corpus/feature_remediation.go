@@ -103,18 +103,20 @@ func (f *remediationFeature) Prepare(ctx context.Context, fixtures []Fixture) er
 // directory, binding the PDF/A or PDF/UA conformance profile (auto-tagging makes
 // remediation target PDF/UA, so both are supported). ok is false for a profile
 // the remediation engine does not target.
-func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]error, error), remediate func(context.Context, *pdf.Writer) error, ok bool) {
+func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]pdf.Violation, error), remediate func(context.Context, *pdf.Writer) error, ok bool) {
 	var opts []pdf.RemediateOption
 	if f.aggressive {
 		opts = append(opts, pdf.WithAggressiveFixes())
 	}
 	if p, isA := dirToPDFAProfile[profile]; isA {
-		return func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFA(ctx, p) },
+		return func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) { return r.ValidatePDFAReport(ctx, p) },
 			func(ctx context.Context, w *pdf.Writer) error { _, err := w.RemediatePDFA(ctx, p, opts...); return err },
 			true
 	}
 	if p, isUA := dirToPDFUAProfile[profile]; isUA {
-		return func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, p) },
+		return func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) {
+				return r.ValidatePDFUAReport(ctx, p)
+			},
 			func(ctx context.Context, w *pdf.Writer) error {
 				_, err := w.RemediatePDFUA(ctx, p, opts...)
 				return err
@@ -246,6 +248,7 @@ type remediationOutput struct {
 	VeraPost    int      `json:"verapdf_post"`
 	NewErrors   []string `json:"new_errors,omitempty"`
 	VeraRules   []string `json:"verapdf_post_rules,omitempty"`
+	LithoRules  []string `json:"litho_post_rules,omitempty"`
 	ParseFailed bool     `json:"parse_failed,omitempty"`
 	Error       string   `json:"error,omitempty"`
 }
@@ -310,6 +313,7 @@ func (f *remediationFeature) Compare(fixtureID string, output []byte) Verdict {
 		VeraPost:   got.VeraPost,
 		NewErrors:  got.NewErrors,
 		VeraRules:  got.VeraRules,
+		LithoRules: got.LithoRules,
 	})
 
 	return Verdict{
@@ -331,6 +335,7 @@ type remediationReport struct {
 	VeraPost   int      `json:"verapdf_post"`
 	NewErrors  []string `json:"new_errors,omitempty"`
 	VeraRules  []string `json:"verapdf_post_rules,omitempty"`
+	LithoRules []string `json:"litho_post_rules,omitempty"`
 }
 
 // remediateOnce opens pdfPath, validates with litho via validate, applies the
@@ -338,7 +343,7 @@ type remediationReport struct {
 // the remediated bytes to stagingDir under <basename>.pdf. The validate and
 // remediate closures bind the conformance profile (PDF/A or PDF/UA), keeping the
 // open/write/stage skeleton profile-agnostic. The basename comes from pdfPath.
-func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Context, *pdf.Reader) ([]error, error), remediate func(context.Context, *pdf.Writer) error, stagingDir string, out *remediationOutput, stagingPath *string) error {
+func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Context, *pdf.Reader) ([]pdf.Violation, error), remediate func(context.Context, *pdf.Writer) error, stagingDir string, out *remediationOutput, stagingPath *string) error {
 	data, err := os.ReadFile(pdfPath)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
@@ -388,6 +393,9 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 		return nil
 	}
 	out.LithoPost = len(post)
+	for _, v := range post {
+		out.LithoRules = append(out.LithoRules, fmt.Sprintf("%s-t%02d", v.Clause, v.TestNumber))
+	}
 	if len(post) > len(pre) {
 		for _, v := range post {
 			if isNew(v, pre) {
@@ -484,7 +492,7 @@ func profileDirToVeraPDFFlavour(profileDir string) (string, bool) {
 	return v, ok
 }
 
-func isNew(v error, before []error) bool {
+func isNew(v pdf.Violation, before []pdf.Violation) bool {
 	vs := v.Error()
 	for _, b := range before {
 		if b.Error() == vs {
