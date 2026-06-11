@@ -198,7 +198,10 @@ func refreshExtensionSchemaForFacturX(xmp []byte) ([]byte, []string, error) {
 		fixes = append(fixes, "stripped prior extension schema block to refresh fx entry")
 	}
 
-	schemas := extractUnknownNamespaceProperties(buf)
+	// Factur-X embeds its invoice in a PDF/A-3 container (Factur-X 1.0
+	// §5.2), so the XMP 2005 catalog for part 3 decides which properties
+	// need extension declarations.
+	schemas := extractUnknownNamespaceProperties(buf, 3)
 	if len(schemas) == 0 {
 		return buf, fixes, nil
 	}

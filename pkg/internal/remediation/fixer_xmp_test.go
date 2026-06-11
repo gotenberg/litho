@@ -371,7 +371,7 @@ func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 </rdf:RDF>
 </x:xmpmeta>`)
 
-	schemas := extractUnknownNamespaceProperties(xmp)
+	schemas := extractUnknownNamespaceProperties(xmp, 2)
 	if len(schemas) != 1 {
 		t.Fatalf("expected 1 schema, got %d: %+v", len(schemas), schemas)
 	}
@@ -396,5 +396,45 @@ func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 	}
 	if _, present := got["field"]; present {
 		t.Error("nested structure field recorded as a property")
+	}
+}
+
+// TestExtractUnknownNamespaceProperties_PredefinedNamespaceExtras pins the
+// property-level handling of predefined schema namespaces: a property the
+// XMP Specification variant for the part does not define (exif:MakerNote
+// under XMP 2005) is collected for extension-schema synthesis, predefined
+// properties and the pdfaid identification schema are not, and the part
+// decides the catalog (XMP 2004 predefines exif:MakerNote, so PDF/A-1
+// collects nothing).
+func TestExtractUnknownNamespaceProperties_PredefinedNamespaceExtras(t *testing.T) {
+	t.Parallel()
+	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:exif="http://ns.adobe.com/exif/1.0/"
+  xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+  <pdfaid:part>2</pdfaid:part>
+  <pdfaid:conformance>B</pdfaid:conformance>
+  <pdfaid:rev>2020</pdfaid:rev>
+  <exif:MakerNote>opaque</exif:MakerNote>
+  <exif:DateTimeOriginal>2024-01-01</exif:DateTimeOriginal>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>`)
+
+	schemas := extractUnknownNamespaceProperties(xmp, 2)
+	if len(schemas) != 1 {
+		t.Fatalf("part 2: expected 1 schema, got %d: %+v", len(schemas), schemas)
+	}
+	if schemas[0].nsURI != "http://ns.adobe.com/exif/1.0/" {
+		t.Errorf("part 2: schema namespace: got %q, want exif", schemas[0].nsURI)
+	}
+	if len(schemas[0].properties) != 1 || schemas[0].properties[0].name != "MakerNote" {
+		t.Errorf("part 2: expected only MakerNote collected, got %+v", schemas[0].properties)
+	}
+
+	// XMP 2004 (PDF/A-1) predefines exif:MakerNote: nothing to declare.
+	if got := extractUnknownNamespaceProperties(xmp, 1); len(got) != 0 {
+		t.Errorf("part 1: expected no schemas, got %+v", got)
 	}
 }

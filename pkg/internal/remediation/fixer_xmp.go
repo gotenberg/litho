@@ -648,7 +648,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 	if !strings.Contains(string(buf), "pdfaExtension:schemas") {
-		schemas := extractUnknownNamespaceProperties(buf)
+		schemas := extractUnknownNamespaceProperties(buf, part)
 		if len(schemas) > 0 {
 			for prefix, uri := range map[string]string{
 				"pdfaExtension": pdfaExtensionNS,
@@ -848,9 +848,33 @@ type extPropInfo struct {
 	valueType string
 }
 
-// extractUnknownNamespaceProperties parses XMP XML and returns non-predefined
-// namespaces with their prefixes and property names.
-func extractUnknownNamespaceProperties(data []byte) []extSchemaInfo {
+// needsExtensionDeclaration reports whether the top-level property ns:name
+// must be declared in a PDF/A extension schema for the given PDF/A part.
+// Custom namespaces always qualify. Predefined XMP schema namespaces
+// qualify only for property names the XMP Specification variant for the
+// part does not define (e.g. exif:MakerNote under PDF/A-2): veraPDF
+// registers extension-schema properties per namespace and name with no
+// predefined-namespace restriction (veraPDF-library
+// SchemasDefinitionCreator.createExtendedSchemasDefinition), so extending
+// a predefined schema is an accepted repair. The pdfaid identification
+// namespace keeps its dedicated handling and is never collected here.
+func needsExtensionDeclaration(part int, ns, name string) bool {
+	if ns == pdfaidNS {
+		return false
+	}
+	if compliance.XMPPredefinedSchemaNamespace(part, ns) {
+		return !compliance.XMPPredefinedProperty(part, ns, name)
+	}
+	return !knownXMPNamespaces[ns]
+}
+
+// extractUnknownNamespaceProperties parses XMP XML and returns the
+// namespaces holding properties that need an extension schema declaration
+// for the given PDF/A part, with their prefixes and property names: custom
+// namespaces in full, predefined namespaces restricted to the property
+// names absent from the part's predefined catalog (see
+// [needsExtensionDeclaration]).
+func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
@@ -914,7 +938,8 @@ func extractUnknownNamespaceProperties(data []byte) []extSchemaInfo {
 				// Attribute-form custom properties are always simple values.
 				for _, attr := range t.Attr {
 					ns := attr.Name.Space
-					if ns == "" || ignoredNS[ns] || knownXMPNamespaces[ns] || ns == "xmlns" {
+					if ns == "" || ignoredNS[ns] || ns == "xmlns" ||
+						!needsExtensionDeclaration(part, ns, attr.Name.Local) {
 						continue
 					}
 					record(ns, attr.Name.Local, "Text")
@@ -927,7 +952,7 @@ func extractUnknownNamespaceProperties(data []byte) []extSchemaInfo {
 			elemDepth++
 			switch {
 			case elemDepth == 1:
-				if !ignoredNS[t.Name.Space] && !knownXMPNamespaces[t.Name.Space] {
+				if !ignoredNS[t.Name.Space] && needsExtensionDeclaration(part, t.Name.Space, t.Name.Local) {
 					curNS, curName = t.Name.Space, t.Name.Local
 					curType = ""
 					// rdf:parseType="Resource" marks an inline structure,

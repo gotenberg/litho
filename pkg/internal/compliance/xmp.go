@@ -200,6 +200,13 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
+	// Property-level predefined-schema audit (§6.7.9 / §6.6.2.3.1).
+	xmpCheckPredefinedProperties(ctx, xmpData, part, &results)
+
+	if ctx.Err() != nil {
+		return results
+	}
+
 	// PDF/A identification (§6.7.11 / §6.6.4 / §6.7.3).
 	xmpCheckPDFAIdentification(ctx, xmpData, profile, part, &results)
 
@@ -614,6 +621,169 @@ func xmpSchemaRule(part int, ns string) []Violation {
 		// ISO 19005-4 drops the extension-schema requirements of parts
 		// 1-3 (XMP 2010 packets are self-describing) and the veraPDF
 		// PDFA-4 profile carries no such rule; its 6.6.1 covers actions.
+		return nil
+	}
+	return nil
+}
+
+// xmpTopLevelProperty identifies one top-level XMP property: a direct
+// child, in element or attribute form, of a top-level rdf:Description.
+type xmpTopLevelProperty struct {
+	ns   string
+	name string
+}
+
+// xmpExtractTopLevelProperties parses XMP XML and returns the top-level
+// properties in document order, deduplicated by namespace and name. Only
+// direct children of a top-level rdf:Description count: veraPDF builds its
+// XMPProperty objects the same way (VeraPDFMeta.addSchema walks schema-node
+// children only), so fields of structured values, including ones serialized
+// as nested rdf:Description elements, must stay invisible here. ISO 19005
+// §6.7.9 / §6.6.2.3.1 apply to properties, not to structure fields.
+func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
+	// Ancestor classification: structural wrappers (document root,
+	// x:xmpmeta, rdf:RDF), a top-level rdf:Description, or content
+	// (property elements and everything below them).
+	const (
+		xmpFrameStructural = iota
+		xmpFrameDescription
+		xmpFrameContent
+	)
+
+	ignored := map[string]bool{
+		"":                                     true,
+		"xmlns":                                true,
+		xmpRDFNamespace:                        true,
+		"http://www.w3.org/XML/1998/namespace": true,
+		"http://www.w3.org/2000/xmlns/":        true,
+		"http://www.w3.org/2001/XMLSchema-instance": true,
+		"http://www.w3.org/2001/XMLSchema":          true,
+		"adobe:ns:meta/":                            true,
+	}
+
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+
+	seen := make(map[xmpTopLevelProperty]bool)
+	var props []xmpTopLevelProperty
+	record := func(ns, name string) {
+		p := xmpTopLevelProperty{ns: ns, name: name}
+		if !seen[p] {
+			seen[p] = true
+			props = append(props, p)
+		}
+	}
+
+	var stack []int
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			parent := xmpFrameStructural
+			if len(stack) > 0 {
+				parent = stack[len(stack)-1]
+			}
+			frame := xmpFrameContent
+			switch parent {
+			case xmpFrameStructural:
+				switch {
+				case t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description":
+					frame = xmpFrameDescription
+					// Attribute-form properties on the top-level
+					// rdf:Description.
+					for _, attr := range t.Attr {
+						if !ignored[attr.Name.Space] {
+							record(attr.Name.Space, attr.Name.Local)
+						}
+					}
+				case t.Name.Space == "adobe:ns:meta/",
+					t.Name.Space == xmpRDFNamespace && t.Name.Local == "RDF":
+					frame = xmpFrameStructural
+				}
+			case xmpFrameDescription:
+				if !ignored[t.Name.Space] {
+					record(t.Name.Space, t.Name.Local)
+				}
+			}
+			stack = append(stack, frame)
+		case xml.EndElement:
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+	return props
+}
+
+// xmpCheckPredefinedProperties verifies that every top-level property in a
+// predefined XMP schema namespace uses a property name that the XMP
+// Specification variant for the part actually defines. ISO 19005-1 §6.7.9
+// (XMP 2004) and ISO 19005-2/3 §6.6.2.3.1 (XMP 2005) require every
+// property to be either predefined or declared by a PDF/A extension
+// schema; [xmpCheckNamespaces] enforces the namespace half, this enforces
+// the property-name half for namespaces with a predefined catalog.
+// Presence only: value-type correspondence stays with
+// [xmpCheckPropertyTypes].
+func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, results *[]Violation) {
+	catalog := xmpPredefinedPropertyCatalog(part)
+	if catalog == nil {
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3; see xmpSchemaRule.
+		return
+	}
+	_, extensionNS := xmpExtractNamespaces(data)
+	prefixes := xmpExtractPrefixMap(ctx, data)
+
+	for _, p := range xmpExtractTopLevelProperties(data) {
+		// The pdfaid identification schema keeps its dedicated checks
+		// (xmpCheckPDFAIdentification and the registry-driven
+		// xmpCheckPropertyTypes part-1 narrowing).
+		if p.ns == xmpPdfaIDNamespace {
+			continue
+		}
+		// Extension schemas may extend predefined schemas: veraPDF
+		// registers extension properties per namespace and name with no
+		// predefined-namespace restriction (veraPDF-library
+		// SchemasDefinitionCreator.createExtendedSchemasDefinition), and
+		// litho keeps its namespace-level leniency for extension-declared
+		// namespaces.
+		if extensionNS[p.ns] {
+			continue
+		}
+		known, ok := catalog[p.ns]
+		if !ok {
+			// Non-catalog namespaces are handled by xmpCheckNamespaces.
+			continue
+		}
+		if _, defined := known[p.name]; defined {
+			continue
+		}
+		prefixed := p.ns + ":" + p.name
+		if prefix := prefixes[p.ns]; prefix != "" {
+			prefixed = prefix + ":" + p.name
+		}
+		*results = append(*results, xmpSchemaPropertyRule(part, prefixed)...)
+	}
+}
+
+// xmpSchemaPropertyRule mirrors veraPDF rules ISO 19005-1 §6.7.9 t2 and
+// ISO 19005-2/3 §6.6.2.3.1 t1 for a property whose namespace is predefined
+// but whose name is not in the predefined property set and not declared by
+// an extension schema.
+func xmpSchemaPropertyRule(part int, prop string) []Violation {
+	switch part {
+	case 1:
+		return failf(Rule_19005_1_6_7_9_t02, "property %s not predefined in XMP 2004 and not declared in extension schema", prop)
+	case 2:
+		return failf(Rule_19005_2_6_6_2_3_1_t01, "property %s not predefined in XMP 2005 and not declared in extension schema", prop)
+	case 3:
+		return failf(Rule_19005_3_6_6_2_3_1_t01, "property %s not predefined in XMP 2005 and not declared in extension schema", prop)
+	case 4:
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3; see xmpSchemaRule.
 		return nil
 	}
 	return nil
