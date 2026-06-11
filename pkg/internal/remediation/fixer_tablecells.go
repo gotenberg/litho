@@ -9,11 +9,14 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// matchTableCells matches the misplaced-table-cell violation (ISO 14289-1 §7.2
-// t04: "TD/TH inside X instead of TR"). It keys on the exact clause and test
-// number; t04 has a single emission site, so no context disambiguation is needed.
+// matchTableCells matches the misplaced-table-cell violations (ISO 14289-1
+// §7.2 t8: TH not inside TR; t9: TD not inside TR), emitted in
+// structure_table.go. Matching the generated rule constants keys the fixer to
+// the live emission site: a renumbering surfaces as a compile or test failure
+// instead of a fixer that silently never fires (which is how the previous t4
+// keying died when the clause table was realigned).
 func matchTableCells(v compliance.Violation) bool {
-	return v.Rule.Clause == "7.2" && v.Rule.TestNumber == 4
+	return v.Rule == compliance.Rule_14289_1_7_2_t08 || v.Rule == compliance.Rule_14289_1_7_2_t09
 }
 
 // cellContainerRoles are the table containers under which a TR is a valid child.

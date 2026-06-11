@@ -10,14 +10,15 @@ import (
 )
 
 // matchListBody matches the "LI contains a non-Lbl/non-LBody child" violation
-// (ISO 14289-1 §7.2 t10, list side). That rule number is shared with the
-// table-cell containment check ("TR contains ... instead of TH/TD",
-// structure_table.go), and both emitters carry the same static Rule.Description,
-// so the list side is told apart only by the violation context. Keying on the
-// "LI contains" context scopes the fixer to list items and never claims the
-// table-cell violation, which this fixer cannot repair.
+// (ISO 14289-1 §7.2 t20), emitted in structure.go. The list defect once
+// shared the t10 rule with the table-cell containment check and needed
+// context disambiguation; t20 is list-specific, so none is needed. Matching
+// the generated rule constant keys the fixer to the live emission site: a
+// renumbering surfaces as a compile or test failure instead of a fixer that
+// silently never fires (which is how the previous t10 keying died when the
+// clause table was realigned).
 func matchListBody(v compliance.Violation) bool {
-	return v.Rule.Clause == "7.2" && v.Rule.TestNumber == 10 && contextContains(v, "LI contains")
+	return v.Rule == compliance.Rule_14289_1_7_2_t20
 }
 
 // fixListBody wraps an LI's orphan content in an LBody. A list item whose direct

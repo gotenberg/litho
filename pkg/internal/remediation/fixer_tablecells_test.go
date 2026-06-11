@@ -6,20 +6,54 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestMatchTableCells(t *testing.T) {
 	t.Parallel()
-	if !matchTableCells(compliance.Violation{Rule: compliance.Rule_14289_1_7_2_t04}) {
-		t.Error("must match §7.2 t04 (TD/TH not in TR)")
+	if !matchTableCells(compliance.Violation{Rule: compliance.Rule_14289_1_7_2_t08}) {
+		t.Error("must match §7.2 t08 (TH not in TR)")
 	}
-	// t03 (wrong child) and t05 (TR misplaced) share clause 7.2 but are other fixers' concern.
-	if matchTableCells(compliance.Violation{Rule: compliance.Rule_14289_1_7_2_t03}) {
-		t.Error("must not match §7.2 t03")
+	if !matchTableCells(compliance.Violation{Rule: compliance.Rule_14289_1_7_2_t09}) {
+		t.Error("must match §7.2 t09 (TD not in TR)")
+	}
+	// t04 (TR misplaced) and t05 (THead misplaced) share clause 7.2 but are
+	// other defects this fixer cannot repair.
+	if matchTableCells(compliance.Violation{Rule: compliance.Rule_14289_1_7_2_t04}) {
+		t.Error("must not match §7.2 t04")
 	}
 	if matchTableCells(compliance.Violation{Rule: compliance.Rule_14289_1_7_2_t05}) {
 		t.Error("must not match §7.2 t05")
 	}
+}
+
+// TestMatchTableCells_LiveValidator pins the matcher to the validator's real
+// emission: a TD directly under a TBody must produce a violation the fixer
+// claims. The previous matcher keyed on a rule number that a clause
+// realignment moved, leaving the fixer permanently dead while its unit tests
+// (built on fabricated rule numbers) stayed green.
+func TestMatchTableCells_LiveValidator(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R >>",
+		"<< /Type /StructElem /S /Table /P 4 0 R /K [6 0 R] >>",
+		"<< /Type /StructElem /S /TBody /P 5 0 R /K [7 0 R] >>",
+		"<< /Type /StructElem /S /TD /P 6 0 R >>",
+	)
+	doc, _ := newTestDoc(t, pdf)
+
+	violations, err := compliance.ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("ValidatePDFUA: %v", err)
+	}
+	for _, e := range violations {
+		if v, ok := e.(compliance.Violation); ok && matchTableCells(v) {
+			return
+		}
+	}
+	t.Fatalf("no live violation matched matchTableCells; fixer is dead. Emissions: %v", violations)
 }
 
 func TestFixTableCells_WrapsCellsUnderTBody(t *testing.T) {
