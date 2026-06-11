@@ -551,6 +551,11 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 			validateTableSectionCounts(ctx, state, elem)
 		}
 		validateTableColumnConsistency(ctx, state, elem)
+		// PDF/UA-2 §8.2.5.26 t5/t6: every TD in a table with header cells
+		// must have determinable headers (Scope coverage or /Headers IDs).
+		if state.profile == "PDF/UA-2" {
+			validateTableHeaderDetermination(ctx, state, elem)
+		}
 		state.tableUsesHeaderIDs = prevTableUsesHeaderIDs
 	}
 }

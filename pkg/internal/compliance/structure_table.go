@@ -384,3 +384,215 @@ func validateTableSectionCounts(ctx context.Context, state *walkState, tableElem
 			failf(Rule_14289_1_7_2_t39, "Table has %d Caption children (max 1)", captionCount)...)
 	}
 }
+
+// tableGridCell records one logical cell's placement in the table grid,
+// using the same ColSpan/RowSpan carry model as computeEffectiveColumns.
+type tableGridCell struct {
+	elem    ast.PdfDict
+	isTH    bool
+	row     int
+	col     int
+	colSpan int
+	rowSpan int
+}
+
+// buildTableGrid places every TD/TH cell of the given rows on the grid.
+func buildTableGrid(ctx context.Context, doc *document.Document, rows []ast.PdfDict) []tableGridCell {
+	var cells []tableGridCell
+	carry := make(map[int]int)
+	for ri, row := range rows {
+		colPos := 0
+		for _, cell := range resolveRowCells(ctx, doc, row) {
+			for carry[colPos] > 0 {
+				colPos++
+			}
+			cs := cellColSpan(ctx, doc, cell)
+			rs := cellRowSpan(ctx, doc, cell)
+			typeName, _ := document.ResolveName(ctx, doc, cell["S"])
+			cells = append(cells, tableGridCell{
+				elem: cell, isTH: typeName == "TH",
+				row: ri, col: colPos, colSpan: cs, rowSpan: rs,
+			})
+			if rs > 1 {
+				for c := range cs {
+					carry[colPos+c] = rs
+				}
+			}
+			colPos += cs
+		}
+		for k, v := range carry {
+			if v <= 1 {
+				delete(carry, k)
+			} else {
+				carry[k] = v - 1
+			}
+		}
+	}
+	return cells
+}
+
+// cellAttrValue returns the named key from a cell's /A attribute dict or
+// array of dicts, or nil when absent.
+func cellAttrValue(ctx context.Context, doc *document.Document, cell ast.PdfDict, key ast.PdfName) ast.PdfObject {
+	aObj := cell["A"]
+	if aObj == nil {
+		return nil
+	}
+	if d, err := document.ResolveDict(ctx, doc, aObj); err == nil && d != nil {
+		return d[key]
+	}
+	arr, err := document.ResolveArray(ctx, doc, aObj)
+	if err != nil {
+		return nil
+	}
+	for _, item := range arr {
+		d, derr := document.ResolveDict(ctx, doc, item)
+		if derr != nil || d == nil {
+			continue
+		}
+		if v, ok := d[key]; ok {
+			return v
+		}
+	}
+	return nil
+}
+
+// cellHeaders returns the decoded /Headers ID list from a cell's attributes.
+func cellHeaders(ctx context.Context, doc *document.Document, cell ast.PdfDict) []string {
+	hObj := cellAttrValue(ctx, doc, cell, "Headers")
+	if hObj == nil {
+		return nil
+	}
+	arr, err := document.ResolveArray(ctx, doc, hObj)
+	if err != nil {
+		if s, ok := hObj.(ast.PdfString); ok {
+			return []string{string(s)}
+		}
+		return nil
+	}
+	var out []string
+	for _, item := range arr {
+		if s, ok := item.(ast.PdfString); ok {
+			out = append(out, string(s))
+		}
+	}
+	return out
+}
+
+// cellScope returns the /Scope attribute name ("Row", "Column", "Both") or "".
+func cellScope(ctx context.Context, doc *document.Document, cell ast.PdfDict) string {
+	sObj := cellAttrValue(ctx, doc, cell, "Scope")
+	if sObj == nil {
+		return ""
+	}
+	name, err := document.ResolveName(ctx, doc, sObj)
+	if err != nil {
+		return ""
+	}
+	return string(name)
+}
+
+// overlaps reports whether two [start, start+span) grid ranges intersect.
+func overlaps(aStart, aSpan, bStart, bSpan int) bool {
+	return aStart < bStart+bSpan && bStart < aStart+aSpan
+}
+
+// validateTableHeaderDetermination checks PDF/UA-2 §8.2.5.26 t5/t6 on every
+// TD of a table that contains TH cells, mirroring veraPDF's SETD model. A
+// TD is connected when its /Headers list names a TH /ID in the same table,
+// or when a TH /Scope covers the TD's grid position (Row: shared row;
+// Column: shared column; Both: either). /Headers entries naming no TH in
+// the table are unknown headers (t6); a TD with neither mechanism is
+// unconnected (t5). A TH without /Scope connects nothing: veraPDF's model
+// recognizes only the two explicit mechanisms (its 8.2.5.26-t05-fail-a
+// fixture has a scope-less header row and still fails).
+func validateTableHeaderDetermination(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
+	rows := collectTableRows(ctx, state.doc, tableElem)
+	if len(rows) == 0 {
+		return
+	}
+	cells := buildTableGrid(ctx, state.doc, rows)
+
+	thIDs := make(map[string]bool)
+	hasTH := false
+	for _, c := range cells {
+		if !c.isTH {
+			continue
+		}
+		hasTH = true
+		if id, ok := c.elem["ID"].(ast.PdfString); ok {
+			thIDs[string(id)] = true
+		}
+	}
+	if !hasTH {
+		return
+	}
+
+	for _, td := range cells {
+		if td.isTH {
+			continue
+		}
+		if ctx.Err() != nil {
+			return
+		}
+
+		headers := cellHeaders(ctx, state.doc, td.elem)
+		var unknown []string
+		connected := false
+		for _, id := range headers {
+			if thIDs[id] {
+				connected = true
+			} else {
+				unknown = append(unknown, id)
+			}
+		}
+
+		// Positional model per ISO 32000-2 Table 384: /Scope makes a TH
+		// pertain to the REST of its column (cells below) or row (cells
+		// after). A TD with no positionally pertinent TH at all (e.g. the
+		// corner cell beside a header row) has nothing to determine and
+		// passes vacuously; veraPDF's 8.2.5.26-t01 pass fixtures leave
+		// such cells unflagged while its t05-fail fixture (pertinent THs
+		// whose /Scope names are broken) still fails.
+		pertinent := false
+		if !connected {
+			for _, th := range cells {
+				if !th.isTH {
+					continue
+				}
+				aboveInColumn := overlaps(th.col, th.colSpan, td.col, td.colSpan) && th.row < td.row
+				leftInRow := overlaps(th.row, th.rowSpan, td.row, td.rowSpan) && th.col < td.col
+				if !aboveInColumn && !leftInRow {
+					continue
+				}
+				pertinent = true
+				switch cellScope(ctx, state.doc, th.elem) {
+				case "Row":
+					connected = leftInRow
+				case "Column":
+					connected = aboveInColumn
+				case "Both":
+					connected = true
+				}
+				if connected {
+					break
+				}
+			}
+			if !pertinent && len(headers) == 0 {
+				connected = true
+			}
+		}
+
+		switch {
+		case connected:
+		case len(unknown) > 0:
+			*state.results = append(*state.results,
+				failf(Rule_14289_2_8_2_5_26_t06,
+					"TD references unknown header ID(s) %v", unknown)...)
+		default:
+			*state.results = append(*state.results,
+				fail(Rule_14289_2_8_2_5_26_t05,
+					"TD has no determinable header cells in a table containing TH")...)
+		}
+	}
+}
