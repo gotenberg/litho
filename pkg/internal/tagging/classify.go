@@ -232,7 +232,17 @@ type textBlock struct {
 	textLen            int
 	y, lastY           float64
 	hasY               bool
+	// firstText is a short raw-byte prefix of the block's first shown
+	// string, used by the list pass to spot bullet and enumeration
+	// markers. Raw bytes, not decoded text: the marker check matches
+	// ASCII and the WinAnsi bullet only, so font-encoding differences
+	// degrade to "no marker" rather than a wrong match.
+	firstText string
 }
+
+// firstTextPrefixLen bounds the captured first-string prefix. Markers
+// ("•", "12.", "(a)") fit well within 16 bytes.
+const firstTextPrefixLen = 16
 
 // pageTextBlocks segments a page's content into per-text-object blocks (one per
 // BT…ET) and returns them with the length of the decoded content they index
@@ -347,6 +357,9 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 			if cur != nil {
 				cur.endByte = r.End
 				if n := showTextLen(op); n > 0 {
+					if cur.textLen == 0 {
+						cur.firstText = firstShownPrefix(op)
+					}
 					cur.textLen += n
 					sizeChars[roundHalf(curFont)] += n
 					cur.lastY = textY
@@ -434,15 +447,26 @@ func classifyBlocks(blocks []textBlock, pageIndex int, data []byte) []*Element {
 	}
 
 	var elems []*Element
+	var metas []elemMeta
 	for i := 0; i < len(blocks); {
 		role := roles[i]
 		start, end := blocks[i].startByte, blocks[i].endByte
 		j := i + 1
+		// A marker-starting line opens a new list item and never folds
+		// into the preceding paragraph or item.
 		for j < len(blocks) && role == RoleP && roles[j] == RoleP &&
+			!isListMarker(blocks[j].firstText) &&
 			blankGap(data, blocks[j-1].endByte, blocks[j].startByte) &&
 			lineAdjacent(blocks[j-1], blocks[j]) {
 			end = blocks[j].endByte
 			j++
+		}
+		meta := elemMeta{
+			firstText: blocks[i].firstText,
+			y:         blocks[i].y,
+			lastY:     blocks[j-1].lastY,
+			fontSize:  blocks[i].fontSize,
+			hasY:      blocks[i].hasY && blocks[j-1].hasY,
 		}
 		i = j
 
@@ -459,8 +483,106 @@ func classifyBlocks(blocks []textBlock, pageIndex int, data []byte) []*Element {
 			Role: role,
 			Span: &ContentSpan{PageIndex: pageIndex, Start: start, End: end},
 		})
+		metas = append(metas, meta)
 	}
-	return elems
+	return listify(elems, metas)
+}
+
+// elemMeta carries the layout facts of one classified element that the
+// list pass needs: the first shown bytes (marker detection) and the
+// first/last baselines (item adjacency).
+type elemMeta struct {
+	firstText string
+	y, lastY  float64
+	fontSize  float64
+	hasY      bool
+}
+
+// minListItems is the smallest run of marker-starting lines treated as a
+// list. A single bullet-looking line is more often a dash-prefixed
+// sentence than a one-item list, so it stays a paragraph (FP guard, not
+// spec-mandated).
+const minListItems = 2
+
+// maxListItemGapRatio is the largest vertical gap between two list
+// items, in line-heights, that keeps them in the same list. Items are
+// commonly spaced wider than wrapped lines, so this sits above
+// maxLineGapRatio. A tuning constant, not spec-mandated.
+const maxListItemGapRatio = 2.0
+
+// listItemAdjacent reports whether the element described by b reads as
+// the next item of the list ending with a.
+func listItemAdjacent(a, b elemMeta) bool {
+	if !a.hasY || !b.hasY {
+		return false
+	}
+	lh := math.Max(a.fontSize, b.fontSize) * lineHeightFactor
+	if lh <= 0 {
+		return false
+	}
+	gap := a.lastY - b.y
+	return gap > 0 && gap <= lh*maxListItemGapRatio
+}
+
+// listify wraps runs of marker-starting paragraphs into L > LI > LBody
+// structures. The marker glyphs stay inside the LBody span: spans must
+// sit on operator boundaries, so the Lbl cannot be split out of the
+// item's first show-text operand. ISO/TS 32005 permits LI > LBody
+// without an Lbl, and a missing Lbl keeps the PDF/UA-2 ListNumbering
+// requirement (ISO 14289-2 §8.2.5.25) out of scope.
+func listify(elems []*Element, metas []elemMeta) []*Element {
+	var out []*Element
+	for i := 0; i < len(elems); {
+		if elems[i].Role != RoleP || !isListMarker(metas[i].firstText) {
+			out = append(out, elems[i])
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(elems) && elems[j].Role == RoleP && isListMarker(metas[j].firstText) &&
+			listItemAdjacent(metas[j-1], metas[j]) {
+			j++
+		}
+		if j-i < minListItems {
+			out = append(out, elems[i:j]...)
+			i = j
+			continue
+		}
+		list := &Element{Role: RoleL}
+		for _, item := range elems[i:j] {
+			body := &Element{Role: RoleLBody, Span: item.Span}
+			list.Kids = append(list.Kids, &Element{Role: RoleLI, Kids: []*Element{body}})
+		}
+		out = append(out, list)
+		i = j
+	}
+	return out
+}
+
+// isListMarker reports whether a block's first shown bytes start with a
+// bullet or enumeration marker followed by a space (or are the marker
+// alone). Matched conservatively against ASCII plus the WinAnsi bullet
+// (0x95) and en dash (0x96): unknown font encodings degrade to "not a
+// marker".
+func isListMarker(s string) bool {
+	if s == "" {
+		return false
+	}
+	rest := ""
+	switch s[0] {
+	case '\x95', '\xb7', '*', '-', '\x96':
+		rest = s[1:]
+	default:
+		n := 0
+		for n < len(s) && n < 3 && s[n] >= '0' && s[n] <= '9' {
+			n++
+		}
+		if n == 0 || n >= len(s) || (s[n] != '.' && s[n] != ')') {
+			return false
+		}
+		rest = s[n+1:]
+	}
+	return rest == "" || rest[0] == ' '
 }
 
 // blankGap reports whether the bytes between aEnd and bStart are absent or only
@@ -573,6 +695,37 @@ func toFloat(o ast.PdfObject) (float64, bool) {
 // showTextLen returns the byte length of the strings a text-showing operator
 // paints, a proxy for text quantity (not a decoded character count: multi-byte
 // or CID-encoded strings overcount, which only skews the relative weighting).
+// firstShownPrefix returns up to firstTextPrefixLen raw bytes of the
+// first string an op shows, for list-marker detection.
+func firstShownPrefix(op content.Operation) string {
+	var s ast.PdfString
+	switch op.Operator {
+	case "Tj", "'":
+		if len(op.Operands) >= 1 {
+			s, _ = op.Operands[0].(ast.PdfString)
+		}
+	case "\"":
+		if len(op.Operands) >= 3 {
+			s, _ = op.Operands[2].(ast.PdfString)
+		}
+	case "TJ":
+		if len(op.Operands) >= 1 {
+			if arr, ok := op.Operands[0].(ast.PdfArray); ok {
+				for _, item := range arr {
+					if str, ok := item.(ast.PdfString); ok {
+						s = str
+						break
+					}
+				}
+			}
+		}
+	}
+	if len(s) > firstTextPrefixLen {
+		s = s[:firstTextPrefixLen]
+	}
+	return string(s)
+}
+
 func showTextLen(op content.Operation) int {
 	switch op.Operator {
 	case "Tj", "'":

@@ -369,3 +369,75 @@ func TestAutoTag_FigureEndToEnd(t *testing.T) {
 		t.Error("no /Figure BDC mark in rewritten content")
 	}
 }
+
+// TestClassify_BulletList pins the list pass: consecutive marker-starting
+// lines become one L with LI > LBody per item, and the marker stays
+// inside the LBody span (no Lbl split).
+func TestClassify_BulletList(t *testing.T) {
+	ctx := context.Background()
+	cs := "BT /F1 12 Tf 72 700 Td (Intro paragraph before the list.) Tj ET\n" +
+		"BT /F1 12 Tf 72 686 Td (- first item in the list) Tj ET\n" +
+		"BT /F1 12 Tf 72 672 Td (- second item in the list) Tj ET\n" +
+		"BT /F1 12 Tf 72 658 Td (- third item in the list) Tj ET\n" +
+		"BT /F1 12 Tf 72 630 Td (Closing paragraph after the list.) Tj ET\n"
+	data := buildTaggedTestPDF(cs)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	root, err := Classify(ctx, doc)
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+
+	var roles []Role
+	for _, k := range root.Kids {
+		roles = append(roles, k.Role)
+	}
+	want := []Role{RoleP, RoleL, RoleP}
+	if len(roles) != len(want) {
+		t.Fatalf("roles = %v, want %v", roles, want)
+	}
+	list := root.Kids[1]
+	if len(list.Kids) != 3 {
+		t.Fatalf("list has %d items, want 3", len(list.Kids))
+	}
+	for i, li := range list.Kids {
+		if li.Role != RoleLI || len(li.Kids) != 1 || li.Kids[0].Role != RoleLBody {
+			t.Errorf("item %d: want LI > LBody, got %q > %v", i, li.Role, li.Kids)
+		}
+		if li.Kids[0].Span == nil {
+			t.Errorf("item %d LBody has no span", i)
+		}
+	}
+}
+
+// TestClassify_NumberedListAndSingleDash pins the enumeration markers and
+// the single-marker guard: "1." / "2)" lines form a list, while a lone
+// dash-prefixed line stays a paragraph.
+func TestClassify_NumberedListAndSingleDash(t *testing.T) {
+	ctx := context.Background()
+	cs := "BT /F1 12 Tf 72 700 Td (1. first numbered item here) Tj ET\n" +
+		"BT /F1 12 Tf 72 686 Td (2\\) second numbered item here) Tj ET\n" +
+		"BT /F1 12 Tf 72 640 Td (- a lone dash line is prose) Tj ET\n"
+	data := buildTaggedTestPDF(cs)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	root, err := Classify(ctx, doc)
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+	var roles []Role
+	for _, k := range root.Kids {
+		roles = append(roles, k.Role)
+	}
+	want := []Role{RoleL, RoleP}
+	if len(roles) != len(want) || roles[0] != want[0] || roles[1] != want[1] {
+		t.Fatalf("roles = %v, want %v", roles, want)
+	}
+	if len(root.Kids[0].Kids) != 2 {
+		t.Fatalf("numbered list has %d items, want 2", len(root.Kids[0].Kids))
+	}
+}
