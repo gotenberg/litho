@@ -1,0 +1,190 @@
+package remediation
+
+import (
+	"context"
+	"fmt"
+	"maps"
+	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/compliance"
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
+)
+
+// matchParentTree matches the PDF/UA untagged-content violations the
+// ParentTree rebuild repairs: ISO 14289-1 §7.1 t3 and ISO 14289-2 §8.2.2 t1
+// fire when marked content is not reachable through the ParentTree even
+// though the structure tree parents it correctly.
+func matchParentTree(v compliance.Violation) bool {
+	return (v.Rule.Clause == "7.1" && v.Rule.TestNumber == 3) ||
+		(v.Rule.Clause == "8.2.2" && v.Rule.TestNumber == 1)
+}
+
+// fixParentTree rebuilds the StructTreeRoot /ParentTree from the structure
+// tree: every structure element holding integer /K marked-content ids with a
+// /Pg page gets registered under that page's /StructParents key. veraPDF
+// resolves isTaggedContent exclusively through this path, so structure
+// produced by the wrapping fixers stays invisible to it until the tree is
+// rebuilt. Existing Nums entries and /StructParents keys are preserved; only
+// missing registrations are added.
+func fixParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	if !ok {
+		return nil, nil
+	}
+	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return nil, nil
+	}
+	stRef, _ := catalogDict["StructTreeRoot"].(ast.PdfIndirectRef)
+	stDict := resolveFromAllocOrDoc(ctx, alloc, doc, stRef)
+	if stDict == nil {
+		return nil, nil
+	}
+
+	// Collect per-page MCID → element registrations from the whole index:
+	// structure elements are always indirect and may live outside the
+	// reachable /K chains while remediation rounds are in flight.
+	perPage := make(map[int]map[int]ast.PdfIndirectRef)
+	objNums := make([]int, 0, len(doc.Index.Entries))
+	for objNum := range doc.Index.Entries {
+		objNums = append(objNums, objNum)
+	}
+	slices.Sort(objNums)
+	for _, objNum := range objNums {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		d := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if d == nil {
+			continue
+		}
+		if t, _ := document.ResolveName(ctx, doc, d["Type"]); t != "" && t != "StructElem" {
+			continue
+		}
+		if _, isSE := d["S"]; !isSE {
+			continue
+		}
+		pgRef, ok := d["Pg"].(ast.PdfIndirectRef)
+		if !ok {
+			continue
+		}
+		for _, mcid := range structElemMCIDs(ctx, doc, d["K"]) {
+			if perPage[pgRef.ObjectNum] == nil {
+				perPage[pgRef.ObjectNum] = make(map[int]ast.PdfIndirectRef)
+			}
+			perPage[pgRef.ObjectNum][mcid] = ast.PdfIndirectRef{ObjectNum: objNum}
+		}
+	}
+	if len(perPage) == 0 {
+		return nil, nil
+	}
+
+	// Existing flat Nums (bail on a Kids-structured tree: merging into it
+	// safely needs the full number-tree writer, and the wrapping fixers
+	// only ever produce flat trees).
+	nums, nextKey, flat := existingParentTreeNums(ctx, alloc, doc, stDict)
+	if !flat {
+		return nil, nil
+	}
+	existingKeys := make(map[int]bool)
+	for i := 0; i+1 < len(nums); i += 2 {
+		if k, err := document.ResolveInt(ctx, doc, nums[i]); err == nil {
+			existingKeys[int(k)] = true
+		}
+	}
+
+	registered := 0
+	pageNums := make([]int, 0, len(perPage))
+	for pn := range perPage {
+		pageNums = append(pageNums, pn)
+	}
+	slices.Sort(pageNums)
+	for _, pageNum := range pageNums {
+		pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: pageNum})
+		if pageDict == nil {
+			continue
+		}
+		key := -1
+		if spObj, ok := pageDict["StructParents"]; ok {
+			if k, err := document.ResolveInt(ctx, doc, spObj); err == nil {
+				key = int(k)
+			}
+		}
+		if key >= 0 && existingKeys[key] {
+			continue // page already registered
+		}
+		if key < 0 {
+			key = nextKey
+			nextKey++
+			newPage := make(ast.PdfDict, len(pageDict)+1)
+			maps.Copy(newPage, pageDict)
+			newPage["StructParents"] = ast.PdfInt(key)
+			alloc.AllocAt(pageNum, newPage)
+		}
+
+		mcids := perPage[pageNum]
+		maxMCID := -1
+		for mcid := range mcids {
+			if mcid > maxMCID {
+				maxMCID = mcid
+			}
+		}
+		arr := make(ast.PdfArray, maxMCID+1)
+		for i := range arr {
+			arr[i] = ast.PdfNull{}
+		}
+		for mcid, ref := range mcids {
+			arr[mcid] = ref
+		}
+		nums = append(nums, ast.PdfInt(key), arr)
+		registered++
+	}
+	if registered == 0 {
+		return nil, nil
+	}
+
+	newST := make(ast.PdfDict, len(stDict)+2)
+	maps.Copy(newST, stDict)
+	newST["ParentTree"] = ast.PdfDict{"Nums": nums}
+	newST["ParentTreeNextKey"] = ast.PdfInt(nextKey)
+	if stRef.ObjectNum > 0 {
+		alloc.AllocAt(stRef.ObjectNum, newST)
+	}
+	return []string{fmt.Sprintf("registered %d page(s) in the structure ParentTree", registered)}, nil
+}
+
+// structElemMCIDs extracts the integer marked-content ids from a structure
+// element's /K: a bare integer, integers inside a /K array, and MCR
+// dictionaries ({/Type /MCR /MCID n}).
+func structElemMCIDs(ctx context.Context, doc *document.Document, kObj ast.PdfObject) []int {
+	var out []int
+	collect := func(item ast.PdfObject) {
+		switch v := item.(type) {
+		case ast.PdfInt:
+			if v >= 0 {
+				out = append(out, int(v))
+			}
+		default:
+			if d, err := document.ResolveDict(ctx, doc, item); err == nil && d != nil {
+				if t, _ := document.ResolveName(ctx, doc, d["Type"]); t == "MCR" {
+					if n, ok := d["MCID"].(ast.PdfInt); ok && n >= 0 {
+						out = append(out, int(n))
+					}
+				}
+			}
+		}
+	}
+	if kObj == nil {
+		return nil
+	}
+	if arr, err := document.ResolveArray(ctx, doc, kObj); err == nil && arr != nil {
+		for _, item := range arr {
+			collect(item)
+		}
+		return out
+	}
+	collect(kObj)
+	return out
+}

@@ -75,6 +75,10 @@ var registry = []fixer{
 	{name: "struct-tree", safety: safetyStructural, matches: matchStructTree, apply: fixStructTree},
 	{name: "rolemap", safety: safetyStructural, matches: matchRoleMap, apply: fixRoleMap},
 	{name: "content-tag", safety: safetyStructural, matches: matchContentTag, apply: fixContentTag},
+	// parent-tree runs after every structure-producing fixer: veraPDF
+	// resolves content taggedness only through /StructParents → ParentTree,
+	// so structure they create stays invisible until registered here.
+	{name: "parent-tree", safety: safetyStructural, matches: matchParentTree, apply: fixParentTree},
 	{name: "single-doc-root", safety: safetyStructural, matches: matchSingleDocRoot, apply: fixSingleDocRoot},
 	{name: "struct-dest", safety: safetyStructural, matches: matchStructDest, apply: fixStructDest},
 	{name: "struct-parent", safety: safetyStructural, matches: matchStructParent, apply: fixStructParent},
