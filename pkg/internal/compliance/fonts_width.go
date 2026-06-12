@@ -152,6 +152,14 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if !charUsed {
 			continue
 		}
+		// A char mapping to GID 0 has no glyph of its own in the program:
+		// veraPDF's widthFromFontProgram is null there, so the width rule
+		// passes and the missing glyph is 6.3.8 / 6.2.11.4.1 territory
+		// (verified live: PDF_A-1a__veraPDF_test_suite_6-3-8-t01-fail-a
+		// passes veraPDF's PDFA-1B while a GID-0 width proxy flagged it).
+		if gid == 0 {
+			continue
+		}
 		pdfWidth := document.Float(wObj)
 		// A width outside the 32-bit integer range cannot be a real
 		// metric: it is crafted overflow input (implementation-limits
