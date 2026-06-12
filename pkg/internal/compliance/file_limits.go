@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -84,7 +85,11 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// Content streams are those referenced by page /Contents entries.
 	results = append(results, checkContentStreamLimits(ctx, doc, part, profile)...)
 
-	return results
+	// PDF/A-4 drops most ISO 32000-1 implementation limits, so several
+	// rule selectors in this file legitimately return the zero Rule for
+	// part 4. A violation carrying it must never escape: it serialized
+	// as a clause-less "-t00" residual in the corpus.
+	return slices.DeleteFunc(results, func(v Violation) bool { return v.Rule.Specification == "" })
 }
 
 // checkContentStreamLimits finds all page content streams and Form XObject
