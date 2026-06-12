@@ -406,3 +406,32 @@ func TestInsertAttributeAtDescription_SelectsByURI(t *testing.T) {
 		t.Errorf("conformance spliced into the wrong-URI description:\n%s", out)
 	}
 }
+
+// TestXMPToUTF8 pins the UTF-16 transcoding that unblocks the byte-range
+// splicer on UTF-16 packets (the 6-7-9-t04 fixture family ships BOM-less
+// UTF-16BE with a trailing newline; without conversion the pdfaid repairs
+// silently no-op and the UTF-8 requirement stays unrepaired).
+func TestXMPToUTF8(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      []byte
+		want    string
+		changed bool
+	}{
+		{"bom BE", []byte{0xFE, 0xFF, 0x00, '<', 0x00, '?'}, "<?", true},
+		{"bom LE", []byte{0xFF, 0xFE, '<', 0x00, '?', 0x00}, "<?", true},
+		{"bomless BE", []byte{0x00, '<', 0x00, '?'}, "<?", true},
+		{"bomless LE", []byte{'<', 0x00, '?', 0x00}, "<?", true},
+		{"bomless BE trailing newline", []byte{0x00, '<', 0x00, '?', 0x0A}, "<?", true},
+		{"utf8 passthrough", []byte("<?xpacket"), "<?xpacket", false},
+		{"empty", nil, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, changed := xmpToUTF8(tc.in)
+			if changed != tc.changed || string(out) != tc.want {
+				t.Errorf("got %q changed=%v, want %q changed=%v", out, changed, tc.want, tc.changed)
+			}
+		})
+	}
+}

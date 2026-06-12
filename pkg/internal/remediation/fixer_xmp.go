@@ -46,9 +46,18 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 
 	// Check if XMP metadata stream already exists.
 	var existingXMP string
+	var reencoded bool
 	if metaObj, ok := catalogDict["Metadata"]; ok {
 		if stream, err := document.ResolveStream(ctx, doc, metaObj); err == nil {
 			if data, err := stream.Bytes(ctx); err == nil {
+				// The XMP package must be UTF-8 (ISO 19005-2/3 §6.6.2.1,
+				// ISO 19005-4 §6.7.2.1). A UTF-16 packet also defeats the
+				// byte-range splicer, silently leaving stale pdfaid
+				// behind, so transcode before any patching.
+				if utf8Data, changed := xmpToUTF8(data); changed {
+					data = utf8Data
+					reencoded = true
+				}
 				existingXMP = string(data)
 			}
 		}
@@ -60,11 +69,14 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	if existingXMP != "" {
 		// Patch existing XMP.
 		patched, patchFixes := patchExistingXMP(existingXMP, part, conformance, uaPart, info)
-		if len(patchFixes) == 0 {
+		if len(patchFixes) == 0 && !reencoded {
 			return nil, nil // nothing to patch
 		}
 		xmpBytes = []byte(patched)
 		fixes = patchFixes
+		if reencoded {
+			fixes = append(fixes, "re-encoded XMP packet from UTF-16 to UTF-8")
+		}
 	} else {
 		// Generate new XMP.
 		xmpBytes = []byte(generateXMP(part, conformance, uaPart, info))

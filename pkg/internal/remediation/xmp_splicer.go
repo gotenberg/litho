@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf16"
 )
 
 // maxXMPDepth caps the element nesting level while walking XMP. Real
@@ -900,4 +901,54 @@ func (l xmpPropertyLocation) String() string {
 		return fmt.Sprintf("attribute@[%d,%d)", l.Start, l.End)
 	}
 	return "unknown"
+}
+
+// xmpToUTF8 transcodes a UTF-16 XMP packet (detected by its BOM) to UTF-8,
+// returning the converted bytes and whether a conversion happened. UTF-8 and
+// BOM-less packets pass through untouched: the splicer's byte-range
+// operations require UTF-8 (ISO 19005-2/3 §6.6.2.1 and ISO 19005-4 §6.7.2.1
+// demand it of conforming files anyway).
+func xmpToUTF8(data []byte) ([]byte, bool) {
+	// Stream payloads often carry a trailing newline before endstream;
+	// trim ASCII whitespace so an odd byte count cannot mask a UTF-16
+	// packet (the parity of the CONTENT is what matters).
+	for len(data) > 0 {
+		switch data[len(data)-1] {
+		case 0x0A, 0x0D, 0x20, 0x09:
+			data = data[:len(data)-1]
+			continue
+		}
+		break
+	}
+	if len(data) < 2 {
+		return data, false
+	}
+	var be bool
+	start := 2
+	switch {
+	case data[0] == 0xFE && data[1] == 0xFF:
+		be = true
+	case data[0] == 0xFF && data[1] == 0xFE:
+		be = false
+	case data[0] == 0x00 && data[1] == '<':
+		// BOM-less UTF-16BE: every packet opens with "<?xpacket" or
+		// "<?xml", so a NUL before '<' pins the byte order (the
+		// 6-7-9-t04 fixture family ships exactly this shape).
+		be = true
+		start = 0
+	case data[0] == '<' && data[1] == 0x00:
+		be = false
+		start = 0
+	default:
+		return data, false
+	}
+	units := make([]uint16, 0, (len(data)-start)/2)
+	for i := start; i+1 < len(data); i += 2 {
+		if be {
+			units = append(units, uint16(data[i])<<8|uint16(data[i+1]))
+		} else {
+			units = append(units, uint16(data[i+1])<<8|uint16(data[i]))
+		}
+	}
+	return []byte(string(utf16.Decode(units))), true
 }
