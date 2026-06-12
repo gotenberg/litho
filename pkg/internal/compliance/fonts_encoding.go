@@ -664,7 +664,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	// 6.2.11.7.2 t2). A code with a real glyph name is skipped: veraPDF
 	// derives its Unicode from the name. Type0 fonts are excluded; their
 	// unmapped codes fail the per-glyph coverage rule (t1 family) instead.
-	if fontSubtype(ctx, doc, fontDict) != "Type0" {
+	if st := fontSubtype(ctx, doc, fontDict); st == "Type1" || st == "MMType1" {
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 		codes := make([]byte, 0, len(usage.charCodes))
 		for b := range usage.charCodes {
@@ -675,9 +675,23 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 			if _, mapped := parsed.Mapping[string([]byte{c})]; mapped {
 				continue
 			}
-			if name := enc[c]; name != "" && name != ".notdef" {
+			// Mirror checkNotdefGlyph's encoding semantics: a missing
+			// explicit entry only implies .notdef in the control range,
+			// since standard encodings provide implicit names for
+			// printable codes (veraPDF derives Unicode from those; firing
+			// on them produced five PASS-fixture FPs in gate-41).
+			name := enc[c]
+			if name != "" && name != ".notdef" {
 				continue
 			}
+			if name == "" && c >= 0x20 {
+				continue
+			}
+			// TrueType fonts never reach here: without glyph names
+			// veraPDF resolves no Unicode at all (toUnicode == null
+			// PASSES t2; gate-41 FP evidence: symbolic TrueType code 2
+			// in PDF_UA-1__7.1-t05-pass-a passes veraPDF). Only the
+			// Type1 family's name chain bottoms out at .notdef/U+0000.
 			return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and no glyph name (renders U+0000)",
 				fontName, pageNum, c)
 		}
