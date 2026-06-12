@@ -153,12 +153,11 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if !charUsed {
 			continue
 		}
-		// A char mapping to GID 0 has no glyph of its own in the program:
-		// veraPDF's widthFromFontProgram is null there, so the width rule
-		// passes and the missing glyph is 6.3.8 / 6.2.11.4.1 territory
-		// (verified live: PDF_A-1a__veraPDF_test_suite_6-3-8-t01-fail-a
-		// passes veraPDF's PDFA-1B while a GID-0 width proxy flagged it).
-		if gid == 0 {
+		// veraPDF's NUL handling: a 0x00 charCode never appears among its
+		// usedGlyphs (PDF_A-1a__veraPDF_test_suite_6-3-8-t01-fail-a
+		// passes PDFA-1B entirely despite /Widths[0]=826 on an absent
+		// glyph), so skip it here regardless of the GID mapping.
+		if charCode == 0 {
 			continue
 		}
 		pdfWidth := document.Float(wObj)
@@ -171,6 +170,12 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
 			continue
 		}
+		// Absent glyphs resolve to GID 0: veraPDF's widthFromFontProgram
+		// then carries the .notdef glyph's own advance width, and the
+		// width rule fires ALONGSIDE glyph presence when the declared
+		// width disagrees (verified live on
+		// PDF_A-2b__veraPDF_test_suite_6-2-11-4-1-t02-fail-a, where both
+		// 6.2.11.5 t1 and 6.2.11.4.1 t2 cite the same usedGlyph).
 		bw, ok := binaryWidths[gid]
 		if !ok {
 			continue

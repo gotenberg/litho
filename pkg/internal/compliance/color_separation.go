@@ -369,21 +369,26 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		colorantsDict, _ = document.ResolveDict(ctx, doc, attrsDict["Colorants"]) // Best-effort: nil dict skips colorant checks.
 	}
 
-	for _, cName := range colorantNames {
-		if processColors[cName] || cName == "All" || cName == "None" {
-			continue
-		}
-		// Spot colorant: must have a Colorants entry.
-		if colorantsDict == nil {
-			*results = append(*results, failf(separationColorantsRule(part),
-				"page %d, ColorSpace %s: DeviceN spot colorant %q has no Colorants dictionary",
-				pageIdx+1, csName, cName)...)
-			break // Report once per DeviceN CS, not per colorant.
-		}
-		if _, ok := colorantsDict[ast.PdfName(cName)]; !ok {
-			*results = append(*results, failf(separationColorantsRule(part),
-				"page %d, ColorSpace %s: DeviceN spot colorant %q not found in Colorants dictionary",
-				pageIdx+1, csName, cName)...)
+	// §6.2.4.4 t1 exists for parts 2+ only; a zero Rule must never be
+	// emitted (it serializes as a clause-less "-t00" residual).
+	colorantsRule := separationColorantsRule(part)
+	if colorantsRule.Specification != "" {
+		for _, cName := range colorantNames {
+			if processColors[cName] || cName == "All" || cName == "None" {
+				continue
+			}
+			// Spot colorant: must have a Colorants entry.
+			if colorantsDict == nil {
+				*results = append(*results, failf(colorantsRule,
+					"page %d, ColorSpace %s: DeviceN spot colorant %q has no Colorants dictionary",
+					pageIdx+1, csName, cName)...)
+				break // Report once per DeviceN CS, not per colorant.
+			}
+			if _, ok := colorantsDict[ast.PdfName(cName)]; !ok {
+				*results = append(*results, failf(colorantsRule,
+					"page %d, ColorSpace %s: DeviceN spot colorant %q not found in Colorants dictionary",
+					pageIdx+1, csName, cName)...)
+			}
 		}
 	}
 
