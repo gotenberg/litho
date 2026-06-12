@@ -78,7 +78,7 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 				newCatalog := make(ast.PdfDict, len(catalogDict))
 				maps.Copy(newCatalog, catalogDict)
-				catalogDict["Names"] = namesRef
+				newCatalog["Names"] = namesRef
 				catalogDict = newCatalog
 				fixes = append(fixes, "removed /Names/JavaScript from catalog")
 			}

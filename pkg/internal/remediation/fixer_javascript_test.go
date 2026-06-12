@@ -54,6 +54,46 @@ func TestFixJavaScript_RemovesForbiddenNamedAction(t *testing.T) {
 	}
 }
 
+// TestFixJavaScript_RemovesNamesJavaScriptTree pins a swap bug where the
+// rebuilt /Names dict was written into the discarded catalog copy, so the
+// allocated catalog silently kept its /Names/JavaScript tree and litho's
+// post-fix validation kept failing 6.5.1/6.6.1 while veraPDF passed.
+func TestFixJavaScript_RemovesNamesJavaScriptTree(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /Names << /JavaScript << /Names [(init) << /S /JavaScript /JS (app.alert\\(1\\)) >>] >> /Dests << /Names [] >> >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	descs, err := fixJavaScript(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2b")
+	if err != nil {
+		t.Fatalf("fixJavaScript: %v", err)
+	}
+	if len(descs) == 0 {
+		t.Fatal("expected /Names/JavaScript removal to report a fix")
+	}
+
+	namesObj, ok := pendingDict(t, alloc, 1)["Names"]
+	if !ok {
+		t.Fatal("catalog lost its /Names dict entirely; only the JavaScript entry should go")
+	}
+	ref, ok := namesObj.(ast.PdfIndirectRef)
+	if !ok {
+		t.Fatalf("expected rewritten /Names to be an indirect ref, got %T", namesObj)
+	}
+	names, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("rewritten /Names object %d not a pending dict", ref.ObjectNum)
+	}
+	if _, has := names["JavaScript"]; has {
+		t.Error("allocated catalog still references a /Names dict containing /JavaScript")
+	}
+	if _, has := names["Dests"]; !has {
+		t.Error("unrelated /Names entries must survive the rewrite")
+	}
+}
+
 func TestFixJavaScript_KeepsAllowedNamedAction(t *testing.T) {
 	pdf := buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R /OpenAction << /S /Named /N /NextPage >> >>",
