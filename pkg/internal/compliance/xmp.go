@@ -1632,8 +1632,11 @@ func xmpExtSchemaRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t05, ctx)
 		}
 	case 4:
-		// Part 4 uses the general extension schema rule from 6.6.1.
-		return fail(Rule_19005_4_6_6_1_t01, ctx)
+		// ISO 19005-4 drops the extension-schema requirements of parts
+		// 1-3 (XMP 2010 packets are self-describing) and the veraPDF
+		// PDFA-4 profiles carry no such rule; 6.6.1 there covers
+		// actions, not metadata.
+		return nil
 	}
 	return nil
 }
@@ -1686,7 +1689,16 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 
 // xmpExtValueTypeRule returns the rule for a missing field in a valueType definition.
 // Mapping: type->t12, namespaceURI->t13, prefix->t14, description->t15.
+//
+// A missing description is NOT flagged: the veraPDF tests for it
+// (6.7.8 t15 / 6.6.2.3.3 t14, `isDescriptionValidText == true`) pass
+// vacuously when the field is absent, and flagging absence produced a
+// 266-cell-per-profile litho-only pool against real producer schemas.
+// litho's own generator still always writes the field.
 func xmpExtValueTypeRule(part int, field string) []Violation {
+	if field == "description" {
+		return nil
+	}
 	ctx := fmt.Sprintf("extension valueType missing required field '%s'", field)
 	switch part {
 	case 1:
@@ -1697,8 +1709,6 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 			return fail(Rule_19005_1_6_7_8_t13, ctx)
 		case "prefix":
 			return fail(Rule_19005_1_6_7_8_t14, ctx)
-		case "description":
-			return fail(Rule_19005_1_6_7_8_t15, ctx)
 		}
 	case 2:
 		switch field {
@@ -1708,8 +1718,6 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 			return fail(Rule_19005_2_6_6_2_3_3_t12, ctx)
 		case "prefix":
 			return fail(Rule_19005_2_6_6_2_3_3_t13, ctx)
-		case "description":
-			return fail(Rule_19005_2_6_6_2_3_3_t14, ctx)
 		}
 	case 3:
 		switch field {
@@ -1719,8 +1727,6 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t12, ctx)
 		case "prefix":
 			return fail(Rule_19005_3_6_6_2_3_3_t13, ctx)
-		case "description":
-			return fail(Rule_19005_3_6_6_2_3_3_t14, ctx)
 		}
 	case 4:
 		// ISO 19005-4 drops the extension-schema requirements of parts
