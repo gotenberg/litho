@@ -129,10 +129,6 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	if len(binaryWidths) == 0 {
 		return nil
 	}
-	upm := typography.ReadUnitsPerEm(fontData)
-	if upm == 0 {
-		upm = 1000
-	}
 
 	widthsObj, ok := fontDict["Widths"]
 	if !ok {
