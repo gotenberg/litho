@@ -8,46 +8,95 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// forbiddenActionsBase lists action /S values forbidden by §6.6.1 across all
-// PDF/A parts.
+// allowedActionsPart1 is the §6.6.1 t1 action-type whitelist for PDF/A-1:
+// veraPDF tests `S == "GoTo" || ... || S == "SubmitForm"`, so any other /S
+// value (Rendition, GoToE, Launch, SetOCGState, ...) fails. Modelling this as
+// a whitelist, not a blacklist, is required to flag types the spec never
+// enumerated as forbidden but that are still not in the allowed set.
 //
-//nolint:gochecknoglobals // package-level lookup table.
-var forbiddenActionsBase = map[ast.PdfName]bool{
-	"Launch":     true,
-	"Sound":      true,
-	"Movie":      true,
-	"ResetForm":  true,
-	"ImportData": true,
-	"JavaScript": true,
-	"Hide":       true,
-	"SetState":   true,
-	"NoOp":       true,
-	"NOP":        true,
+//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-1B.xml.
+var allowedActionsPart1 = map[ast.PdfName]bool{
+	"GoTo":       true,
+	"GoToR":      true,
+	"Thread":     true,
+	"URI":        true,
+	"Named":      true,
+	"SubmitForm": true,
 }
 
-// forbiddenActionsPart2Plus lists additional action types forbidden for PDF/A-2
-// and later (§6.6.1). These extend the base set with SetOCGState, Rendition,
-// Trans, and GoTo3DView.
+// allowedActionsPart23 is the §6.5.1 t1 whitelist for PDF/A-2 and PDF/A-3: the
+// part-1 set plus GoToE (embedded-document go-to).
 //
-//nolint:gochecknoglobals // package-level lookup table.
-var forbiddenActionsPart2Plus = map[ast.PdfName]bool{
-	"SetOCGState": true,
-	"Rendition":   true,
-	"Trans":       true,
-	"GoTo3DView":  true,
+//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-2B.xml.
+var allowedActionsPart23 = map[ast.PdfName]bool{
+	"GoTo":       true,
+	"GoToR":      true,
+	"GoToE":      true,
+	"Thread":     true,
+	"URI":        true,
+	"Named":      true,
+	"SubmitForm": true,
 }
 
-// isForbiddenAction reports whether the given action type is forbidden for the
-// specified PDF/A part. Part 1 forbids the base set; parts 2+ additionally
-// forbid SetOCGState, Rendition, Trans, and GoTo3DView.
-func isForbiddenAction(actionType ast.PdfName, part int) bool {
-	if forbiddenActionsBase[actionType] {
-		return true
+// allowedActionsPart4 is the §6.6.1 t1 whitelist for PDF/A-4 and PDF/A-4f: the
+// part-2/3 set plus JavaScript, RichMediaExecute, and GoToDp (ISO 19005-4
+// relaxes the JavaScript prohibition).
+//
+//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-4.xml.
+var allowedActionsPart4 = map[ast.PdfName]bool{
+	"GoTo":             true,
+	"GoToR":            true,
+	"GoToE":            true,
+	"Thread":           true,
+	"URI":              true,
+	"Named":            true,
+	"SubmitForm":       true,
+	"JavaScript":       true,
+	"RichMediaExecute": true,
+	"GoToDp":           true,
+}
+
+// allowedActionsPart4e extends the PDF/A-4 set for PDF/A-4e with SetOCGState
+// and GoTo3DView (3D/interactive content is permitted in the -e conformance).
+//
+//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-4E.xml.
+var allowedActionsPart4e = map[ast.PdfName]bool{
+	"GoTo":             true,
+	"GoToR":            true,
+	"GoToE":            true,
+	"Thread":           true,
+	"URI":              true,
+	"Named":            true,
+	"SubmitForm":       true,
+	"JavaScript":       true,
+	"RichMediaExecute": true,
+	"GoToDp":           true,
+	"SetOCGState":      true,
+	"GoTo3DView":       true,
+}
+
+// allowedActionTypes returns the permitted action-type set for a PDF/A profile.
+func allowedActionTypes(profile string) map[ast.PdfName]bool {
+	switch profile {
+	case "PDF/A-4e":
+		return allowedActionsPart4e
+	case "PDF/A-4", "PDF/A-4f":
+		return allowedActionsPart4
 	}
-	if part >= 2 && forbiddenActionsPart2Plus[actionType] {
-		return true
+	switch PDFAPart(profile) {
+	case 1:
+		return allowedActionsPart1
+	case 4:
+		return allowedActionsPart4
+	default:
+		return allowedActionsPart23
 	}
-	return false
+}
+
+// isForbiddenAction reports whether an action /S value is forbidden for the
+// given PDF/A profile: any type outside the profile's whitelist.
+func isForbiddenAction(actionType ast.PdfName, profile string) bool {
+	return !allowedActionTypes(profile)[actionType]
 }
 
 // AllowedNamedActions lists the named actions permitted by §6.6.1. It is
@@ -111,7 +160,7 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	results = append(results, checkAnnotationActions(ctx, doc, catalog, profile, part)...)
 
 	// Check /Names/JavaScript name tree for JavaScript actions.
-	results = append(results, checkJavaScriptNameTree(ctx, doc, catalog, part)...)
+	results = append(results, checkJavaScriptNameTree(ctx, doc, catalog, profile, part)...)
 
 	// Check outline (bookmark) actions.
 	results = append(results, checkOutlineActions(ctx, doc, catalog, profile, part)...)
@@ -390,7 +439,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 
 // walkActionChain recursively checks an action dict and its /Next chain for
 // forbidden action types and invalid named actions.
-func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, _ string, part int, location string, depth int) []Violation {
+func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int) []Violation {
 	if ctx.Err() != nil || depth > maxActionChainDepth {
 		return nil
 	}
@@ -400,7 +449,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 	// Check the action type (/S).
 	actionType, _ := document.ResolveName(ctx, doc, action["S"])
 	if actionType != "" {
-		if isForbiddenAction(actionType, part) {
+		if isForbiddenAction(actionType, profile) {
 			rule := forbiddenActionTypeRule(part)
 			results = append(results, failf(rule, "%s at %s", actionType, location)...)
 		}
@@ -424,7 +473,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 	// /Next can be a single action dict or an array of action dicts.
 	nextDict, err := document.ResolveDict(ctx, doc, nextObj)
 	if err == nil && nextDict != nil {
-		results = append(results, walkActionChain(ctx, doc, nextDict, "", part, location+" /Next", depth+1)...)
+		results = append(results, walkActionChain(ctx, doc, nextDict, profile, part, location+" /Next", depth+1)...)
 		return results
 	}
 
@@ -440,7 +489,7 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 		if err != nil || itemDict == nil {
 			continue
 		}
-		results = append(results, walkActionChain(ctx, doc, itemDict, "", part, fmt.Sprintf("%s /Next[%d]", location, i), depth+1)...)
+		results = append(results, walkActionChain(ctx, doc, itemDict, profile, part, fmt.Sprintf("%s /Next[%d]", location, i), depth+1)...)
 	}
 
 	return results
@@ -477,8 +526,13 @@ func namedActionRule(part int) Rule {
 }
 
 // checkJavaScriptNameTree checks for JavaScript actions in the /Names/JavaScript
-// name tree, which is forbidden by §6.6.1.
-func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
+// name tree. JavaScript is forbidden by §6.6.1 for PDF/A-1 through -3; PDF/A-4
+// permits it, so the check is gated on the profile's action whitelist.
+func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+	if allowedActionTypes(profile)["JavaScript"] {
+		return nil
+	}
+
 	namesObj, ok := catalog["Names"]
 	if !ok {
 		return nil
@@ -579,26 +633,8 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 	}
 }
 
-// outlineExemptActionsPart4 are action types that VeraPDF does not flag on
-// outline items for PDF/A-4. Outline /A is user-initiated, not an automatic trigger.
-//
-//nolint:gochecknoglobals // package-level lookup table.
-var outlineExemptActionsPart4 = map[ast.PdfName]bool{
-	"JavaScript": true,
-}
-
-// outlineExemptActionsPart4e extends Part4 exemptions for PDF/A-4e, which
-// additionally allows SetOCGState and GoTo3DView on outline items.
-//
-//nolint:gochecknoglobals // package-level lookup table.
-var outlineExemptActionsPart4e = map[ast.PdfName]bool{
-	"JavaScript":  true,
-	"SetOCGState": true,
-	"GoTo3DView":  true,
-}
-
-// checkOutlineActionPDFA checks an outline item action for PDF/A, using the
-// standard forbidden set minus outline-exempt types.
+// checkOutlineActionPDFA checks an outline item action for PDF/A against the
+// per-profile action-type whitelist.
 func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int) []Violation {
 	actionType, _ := document.ResolveName(ctx, doc, action["S"])
 	if actionType == "" {
@@ -607,17 +643,9 @@ func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action 
 
 	var results []Violation
 
-	// Determine outline-exempt actions based on profile.
-	var exempt map[ast.PdfName]bool
-	switch profile {
-	case "PDF/A-4e":
-		exempt = outlineExemptActionsPart4e
-	case "PDF/A-4", "PDF/A-4f":
-		exempt = outlineExemptActionsPart4
-	}
-
-	// Check forbidden action types, skipping outline-exempt types.
-	if !exempt[actionType] && isForbiddenAction(actionType, part) {
+	// veraPDF applies the same PDAction whitelist (6.6.1/6.5.1 t1) to outline
+	// /A actions as to every other action site, with no outline exemption.
+	if isForbiddenAction(actionType, profile) {
 		rule := forbiddenActionTypeRule(part)
 		results = append(results, failf(rule, "%s at outline item", actionType)...)
 	}

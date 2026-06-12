@@ -9,69 +9,75 @@ import (
 func TestIsForbiddenAction(t *testing.T) {
 	t.Parallel()
 
-	// Core forbidden types should be forbidden for all parts.
-	coreTypes := []ast.PdfName{
-		"Launch", "Sound", "Movie", "ResetForm", "ImportData",
-		"JavaScript", "Hide", "SetState", "NoOp", "NOP",
-	}
+	// veraPDF models §6.6.1/§6.5.1 t1 as a per-profile whitelist: any /S value
+	// outside the allowed set fails, including types the prose never enumerated.
 
-	t.Run("base types forbidden for part 1", func(t *testing.T) {
+	t.Run("non-whitelisted types forbidden for every profile", func(t *testing.T) {
 		t.Parallel()
-		for _, at := range coreTypes {
-			if !isForbiddenAction(at, 1) {
-				t.Errorf("isForbiddenAction(%q, 1) = false, want true", at)
+		forbidden := []ast.PdfName{
+			"Launch", "Sound", "Movie", "ResetForm", "ImportData",
+			"Hide", "SetState", "NoOp", "NOP",
+		}
+		for _, prof := range []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-3b", "PDF/A-4", "PDF/A-4e", "PDF/A-4f"} {
+			for _, at := range forbidden {
+				if !isForbiddenAction(at, prof) {
+					t.Errorf("isForbiddenAction(%q, %q) = false, want true", at, prof)
+				}
 			}
 		}
 	})
 
-	t.Run("part 2/3 extras forbidden", func(t *testing.T) {
+	t.Run("Rendition Trans GoToE forbidden under part 1 whitelist", func(t *testing.T) {
 		t.Parallel()
-		for _, at := range coreTypes {
-			if !isForbiddenAction(at, 2) {
-				t.Errorf("isForbiddenAction(%q, 2) = false, want true", at)
-			}
-		}
-		extras := []ast.PdfName{"SetOCGState", "Rendition", "Trans", "GoTo3DView"}
-		for _, at := range extras {
-			if !isForbiddenAction(at, 2) {
-				t.Errorf("isForbiddenAction(%q, 2) = false, want true", at)
-			}
-			if !isForbiddenAction(at, 3) {
-				t.Errorf("isForbiddenAction(%q, 3) = false, want true", at)
+		// Old blacklist allowed these on part 1; vera's PDFA-1B whitelist forbids them.
+		for _, at := range []ast.PdfName{"Rendition", "Trans", "SetOCGState", "GoTo3DView", "GoToE"} {
+			if !isForbiddenAction(at, "PDF/A-1b") {
+				t.Errorf("isForbiddenAction(%q, PDF/A-1b) = false, want true", at)
 			}
 		}
 	})
 
-	t.Run("part 4 extras forbidden", func(t *testing.T) {
+	t.Run("GoToE allowed for parts 2/3/4 but not part 1", func(t *testing.T) {
 		t.Parallel()
-		for _, at := range coreTypes {
-			if !isForbiddenAction(at, 4) {
-				t.Errorf("isForbiddenAction(%q, 4) = false, want true", at)
+		if isForbiddenAction("GoToE", "PDF/A-2b") || isForbiddenAction("GoToE", "PDF/A-4") {
+			t.Error("GoToE should be allowed for parts 2-4")
+		}
+		if !isForbiddenAction("GoToE", "PDF/A-1b") {
+			t.Error("GoToE should be forbidden for part 1")
+		}
+	})
+
+	t.Run("JavaScript allowed only for part 4", func(t *testing.T) {
+		t.Parallel()
+		for _, prof := range []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-3b"} {
+			if !isForbiddenAction("JavaScript", prof) {
+				t.Errorf("JavaScript should be forbidden for %q", prof)
 			}
 		}
-		extras := []ast.PdfName{"Rendition", "Trans", "SetOCGState", "GoTo3DView"}
-		for _, at := range extras {
-			if !isForbiddenAction(at, 4) {
-				t.Errorf("isForbiddenAction(%q, 4) = false, want true", at)
+		for _, prof := range []string{"PDF/A-4", "PDF/A-4e", "PDF/A-4f"} {
+			if isForbiddenAction("JavaScript", prof) {
+				t.Errorf("JavaScript should be allowed for %q", prof)
 			}
 		}
 	})
 
-	t.Run("GoTo is allowed", func(t *testing.T) {
+	t.Run("SetOCGState and GoTo3DView allowed only for A-4e", func(t *testing.T) {
 		t.Parallel()
-		for _, part := range []int{1, 2, 3, 4} {
-			if isForbiddenAction("GoTo", part) {
-				t.Errorf("isForbiddenAction(GoTo, %d) = true, want false", part)
+		for _, at := range []ast.PdfName{"SetOCGState", "GoTo3DView"} {
+			if isForbiddenAction(at, "PDF/A-4e") {
+				t.Errorf("%q should be allowed for PDF/A-4e", at)
+			}
+			if !isForbiddenAction(at, "PDF/A-4") {
+				t.Errorf("%q should be forbidden for PDF/A-4", at)
 			}
 		}
 	})
 
-	t.Run("part 2 extras not forbidden for part 1", func(t *testing.T) {
+	t.Run("GoTo is always allowed", func(t *testing.T) {
 		t.Parallel()
-		extras := []ast.PdfName{"SetOCGState", "Rendition", "Trans", "GoTo3DView"}
-		for _, at := range extras {
-			if isForbiddenAction(at, 1) {
-				t.Errorf("isForbiddenAction(%q, 1) = true, want false", at)
+		for _, prof := range []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-3b", "PDF/A-4", "PDF/A-4e", "PDF/A-4f"} {
+			if isForbiddenAction("GoTo", prof) {
+				t.Errorf("isForbiddenAction(GoTo, %q) = true, want false", prof)
 			}
 		}
 	})
