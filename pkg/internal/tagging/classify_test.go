@@ -441,3 +441,70 @@ func TestClassify_NumberedListAndSingleDash(t *testing.T) {
 		t.Fatalf("numbered list has %d items, want 2", len(root.Kids[0].Kids))
 	}
 }
+
+// TestClassify_TableGrid pins the table pass: a 3x3 grid of same-baseline
+// rows with aligned columns becomes one Table with TR > TD structure,
+// and surrounding paragraphs survive.
+func TestClassify_TableGrid(t *testing.T) {
+	ctx := context.Background()
+	cs := "BT /F1 12 Tf 72 720 Td (Before the table paragraph.) Tj ET\n" +
+		"BT /F1 12 Tf 72 690 Td (a1) Tj ET\nBT /F1 12 Tf 200 690 Td (b1) Tj ET\nBT /F1 12 Tf 330 690 Td (c1) Tj ET\n" +
+		"BT /F1 12 Tf 72 672 Td (a2) Tj ET\nBT /F1 12 Tf 200 672 Td (b2) Tj ET\nBT /F1 12 Tf 330 672 Td (c2) Tj ET\n" +
+		"BT /F1 12 Tf 72 654 Td (a3) Tj ET\nBT /F1 12 Tf 200 654 Td (b3) Tj ET\nBT /F1 12 Tf 330 654 Td (c3) Tj ET\n" +
+		"BT /F1 12 Tf 72 600 Td (After the table paragraph.) Tj ET\n"
+	data := buildTaggedTestPDF(cs)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	root, err := Classify(ctx, doc)
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+	var roles []Role
+	for _, k := range root.Kids {
+		roles = append(roles, k.Role)
+	}
+	want := []Role{RoleP, RoleTable, RoleP}
+	if len(roles) != len(want) || roles[0] != want[0] || roles[1] != want[1] || roles[2] != want[2] {
+		t.Fatalf("roles = %v, want %v", roles, want)
+	}
+	table := root.Kids[1]
+	if len(table.Kids) != 3 {
+		t.Fatalf("table has %d rows, want 3", len(table.Kids))
+	}
+	for ri, tr := range table.Kids {
+		if tr.Role != RoleTR || len(tr.Kids) != 3 {
+			t.Fatalf("row %d: role %q with %d cells, want TR with 3", ri, tr.Role, len(tr.Kids))
+		}
+		for ci, td := range tr.Kids {
+			if td.Role != RoleTD || td.Span == nil {
+				t.Errorf("cell %d/%d: role %q span %v, want TD leaf", ri, ci, td.Role, td.Span)
+			}
+		}
+	}
+}
+
+// TestClassify_NoTableFalseClaims pins the guards: a single header-like
+// multi-column line (one row) and ordinary stacked paragraphs never
+// become tables.
+func TestClassify_NoTableFalseClaims(t *testing.T) {
+	ctx := context.Background()
+	cs := "BT /F1 12 Tf 72 720 Td (left) Tj ET\nBT /F1 12 Tf 300 720 Td (right) Tj ET\n" +
+		"BT /F1 12 Tf 72 690 Td (An ordinary paragraph line follows here.) Tj ET\n" +
+		"BT /F1 12 Tf 72 676 Td (Another ordinary paragraph line here.) Tj ET\n"
+	data := buildTaggedTestPDF(cs)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	root, err := Classify(ctx, doc)
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+	for _, k := range root.Kids {
+		if k.Role == RoleTable {
+			t.Fatalf("no table may be claimed, got %v", root.Kids)
+		}
+	}
+}

@@ -159,9 +159,142 @@ func Classify(ctx context.Context, doc *document.Document) (*Element, error) {
 		if err != nil || (len(blocks) == 0 && len(images) == 0) {
 			continue // skip unparseable or content-free pages
 		}
-		root.Kids = append(root.Kids, mergeByOffset(classifyBlocks(blocks, pi, data), figureElements(images, pi))...)
+		tables, rest := carveTables(blocks, pi)
+		elems := mergeByOffset(classifyBlocks(rest, pi, data), figureElements(images, pi))
+		root.Kids = append(root.Kids, mergeByOffset(elems, tables)...)
 	}
 	return root, nil
+}
+
+// Table detection bounds. Tuning constants, not spec-mandated: the pass
+// only claims layouts that are unmistakably grids, leaving everything
+// else to the paragraph flow (over-claiming would fabricate wrong table
+// semantics; under-claiming just leaves paragraphs).
+const (
+	// rowBaselineTol is the baseline difference, in points, within which
+	// two blocks sit on the same table row.
+	rowBaselineTol = 2.0
+	// colAlignTol is the column start-x difference, in points, within
+	// which cells of consecutive rows belong to the same column.
+	colAlignTol = 3.0
+	// minTableRows and minTableCols gate the smallest claimed grid.
+	minTableRows = 2
+	minTableCols = 2
+)
+
+// carveTables extracts strongly grid-like block runs as Table > TR > TD
+// elements and returns them with the remaining blocks. A table is at
+// least minTableRows consecutive rows of minTableCols or more blocks
+// each, where a row shares one baseline and consecutive rows have the
+// same column count with aligned start positions. Cells become TD
+// leaves; no TH is synthesized, which keeps the result inside ISO/TS
+// 32005's Table rows without guessing header semantics (a wrong TH
+// would trigger the PDF/UA header-determination rules).
+func carveTables(blocks []textBlock, pageIndex int) ([]*Element, []textBlock) {
+	rows := blockRows(blocks)
+
+	var tables []*Element
+	consumed := make(map[int]bool)
+	for i := 0; i < len(rows); {
+		if len(rows[i].idx) < minTableCols {
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(rows) && rowsAlign(blocks, rows[j-1], rows[j]) {
+			j++
+		}
+		if j-i < minTableRows {
+			i = j
+			continue
+		}
+		table := &Element{Role: RoleTable}
+		for _, row := range rows[i:j] {
+			tr := &Element{Role: RoleTR}
+			for _, bi := range row.idx {
+				b := blocks[bi]
+				tr.Kids = append(tr.Kids, &Element{
+					Role: RoleTD,
+					Span: &ContentSpan{PageIndex: pageIndex, Start: b.startByte, End: b.endByte},
+				})
+				consumed[bi] = true
+			}
+			table.Kids = append(table.Kids, tr)
+		}
+		tables = append(tables, table)
+		i = j
+	}
+	if len(tables) == 0 {
+		return nil, blocks
+	}
+
+	rest := make([]textBlock, 0, len(blocks))
+	for bi, b := range blocks {
+		if !consumed[bi] {
+			rest = append(rest, b)
+		}
+	}
+	return tables, rest
+}
+
+// blockRow is one same-baseline run of consecutive blocks.
+type blockRow struct {
+	idx []int
+	y   float64
+}
+
+// blockRows groups consecutive blocks that share a baseline (within
+// rowBaselineTol) with strictly increasing x into rows. Blocks without
+// a tracked baseline form single-member rows and never join a grid.
+func blockRows(blocks []textBlock) []blockRow {
+	var rows []blockRow
+	for bi := 0; bi < len(blocks); {
+		b := blocks[bi]
+		row := blockRow{idx: []int{bi}, y: b.y}
+		j := bi + 1
+		for j < len(blocks) && b.hasY && blocks[j].hasY &&
+			math.Abs(blocks[j].y-row.y) <= rowBaselineTol &&
+			blocks[j].x > blocks[j-1].x {
+			row.idx = append(row.idx, j)
+			j++
+		}
+		rows = append(rows, row)
+		bi = j
+	}
+	return rows
+}
+
+// rowsAlign reports whether next reads as the row below prev in the
+// same grid: same column count, each column start within colAlignTol,
+// and next sits below prev.
+func rowsAlign(blocks []textBlock, prev, next blockRow) bool {
+	if len(next.idx) != len(prev.idx) || len(next.idx) < minTableCols {
+		return false
+	}
+	if next.y >= prev.y {
+		return false
+	}
+	for k := range prev.idx {
+		if math.Abs(blocks[prev.idx[k]].x-blocks[next.idx[k]].x) > colAlignTol {
+			return false
+		}
+	}
+	return true
+}
+
+// elemStart returns the byte offset of an element's first leaf, for
+// content-order interleaving of containers and leaves.
+func elemStart(e *Element) int {
+	for e != nil {
+		if e.Span != nil {
+			return e.Span.Start
+		}
+		if len(e.Kids) == 0 {
+			return 0
+		}
+		e = e.Kids[0]
+	}
+	return 0
 }
 
 // imageBlock is one image paint outside any text object: a Do of an
@@ -190,7 +323,8 @@ func figureElements(images []imageBlock, pageIndex int) []*Element {
 }
 
 // mergeByOffset interleaves two per-page element lists into content
-// order by their span start offsets. Both inputs are already ordered.
+// order by the byte offsets of their first leaves. Both inputs are
+// already ordered.
 func mergeByOffset(a, b []*Element) []*Element {
 	if len(b) == 0 {
 		return a
@@ -201,7 +335,7 @@ func mergeByOffset(a, b []*Element) []*Element {
 	out := make([]*Element, 0, len(a)+len(b))
 	i, j := 0, 0
 	for i < len(a) && j < len(b) {
-		if a[i].Span == nil || b[j].Span == nil || a[i].Span.Start <= b[j].Span.Start {
+		if elemStart(a[i]) <= elemStart(b[j]) {
 			out = append(out, a[i])
 			i++
 		} else {
@@ -232,6 +366,11 @@ type textBlock struct {
 	textLen            int
 	y, lastY           float64
 	hasY               bool
+	// x is the block's first text-line start position, tracked from Tm
+	// translation and Td accumulation like y. Used only by the table
+	// pass to test column alignment; the same caveats as y apply (cm
+	// and rotation are ignored).
+	x float64
 	// firstText is a short raw-byte prefix of the block's first shown
 	// string, used by the list pass to spot bullet and enumeration
 	// markers. Raw bytes, not decoded text: the marker check matches
@@ -264,7 +403,7 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 	var images []imageBlock
 	var cur *textBlock
 	curFont := 0.0
-	textY, leading := 0.0, 0.0
+	textY, textX, leading := 0.0, 0.0, 0.0
 	sizeChars := make(map[float64]int) // dominant-size accumulator for the current block
 
 	flush := func() {
@@ -306,7 +445,7 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 		case "BT":
 			flush()
 			cur = &textBlock{startByte: r.Start, endByte: r.End}
-			textY, leading = 0, 0 // BT resets the text and line matrices to identity
+			textY, textX, leading = 0, 0, 0 // BT resets the text and line matrices to identity
 		case "ET":
 			extend(r.End)
 			flush()
@@ -322,10 +461,16 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 				if f, ok := toFloat(op.Operands[5]); ok {
 					textY = f
 				}
+				if f, ok := toFloat(op.Operands[4]); ok {
+					textX = f
+				}
 			}
 			extend(r.End)
 		case "Td":
 			if len(op.Operands) >= 2 {
+				if tx, ok := toFloat(op.Operands[0]); ok {
+					textX += tx
+				}
 				if ty, ok := toFloat(op.Operands[1]); ok {
 					textY += ty
 				}
@@ -333,6 +478,9 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 			extend(r.End)
 		case "TD":
 			if len(op.Operands) >= 2 {
+				if tx, ok := toFloat(op.Operands[0]); ok {
+					textX += tx
+				}
 				if ty, ok := toFloat(op.Operands[1]); ok {
 					textY += ty
 					leading = -ty
@@ -364,7 +512,7 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 					sizeChars[roundHalf(curFont)] += n
 					cur.lastY = textY
 					if !cur.hasY {
-						cur.y, cur.hasY = textY, true
+						cur.y, cur.x, cur.hasY = textY, textX, true
 					}
 				}
 			}
