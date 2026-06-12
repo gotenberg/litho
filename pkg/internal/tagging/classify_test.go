@@ -262,3 +262,110 @@ func TestClassify_AllBodyNoHeading(t *testing.T) {
 		}
 	}
 }
+
+// imagePagePDF is a single page with a paragraph, an image XObject paint
+// between two text objects, and an inline image, plus a form XObject
+// that must NOT become a Figure.
+func imagePagePDF() []byte {
+	cs := "BT /F1 12 Tf 72 700 Td (Text before the image goes here.) Tj ET\n" +
+		"q 100 0 0 80 72 600 cm /Im1 Do Q\n" +
+		"BT /F1 12 Tf 72 500 Td (Text after the image goes here.) Tj ET\n" +
+		"q /Fm1 Do Q\n" +
+		"BI /W 1 /H 1 /CS /G /BPC 8 ID \x00 EI\n"
+	fm := "0 0 m 10 10 l S"
+	return assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+			"/Resources << /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R /Fm1 7 0 R >> >> /Contents 5 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(cs), cs),
+		"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\n\x00\nendstream",
+		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length %d >>\nstream\n%s\nendstream", len(fm), fm),
+	})
+}
+
+// TestClassify_Figures pins the Figure pass: image XObject paints and
+// inline images become Figure leaves with synthesized /Alt, interleaved
+// in content order; form XObjects stay untagged.
+func TestClassify_Figures(t *testing.T) {
+	ctx := context.Background()
+	data := imagePagePDF()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	root, err := Classify(ctx, doc)
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+
+	var roles []Role
+	figures := 0
+	for _, k := range root.Kids {
+		roles = append(roles, k.Role)
+		if k.Role == RoleFigure {
+			figures++
+			if k.Alt == "" {
+				t.Error("Figure without synthesized /Alt")
+			}
+			if k.Span == nil {
+				t.Error("Figure without content span")
+			}
+		}
+	}
+	if figures != 2 {
+		t.Fatalf("got %d Figure elements (roles %v), want 2 (image XObject + inline; the form XObject is excluded)", figures, roles)
+	}
+	// Content order: P, Figure(Im1), P, Figure(inline).
+	want := []Role{RoleP, RoleFigure, RoleP, RoleFigure}
+	if len(roles) != len(want) {
+		t.Fatalf("roles = %v, want %v", roles, want)
+	}
+	for i := range want {
+		if roles[i] != want[i] {
+			t.Fatalf("roles = %v, want %v", roles, want)
+		}
+	}
+}
+
+// TestAutoTag_FigureEndToEnd runs the full pipeline on an image page and
+// asserts the emitted content stream wraps the image paint in a Figure
+// marked-content sequence.
+func TestAutoTag_FigureEndToEnd(t *testing.T) {
+	ctx := context.Background()
+	data := imagePagePDF()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(7)
+	if _, err := AutoTag(ctx, alloc, doc); err != nil {
+		t.Fatalf("AutoTag: %v", err)
+	}
+
+	foundFigureMark := false
+	foundFigureElem := false
+	for _, obj := range alloc.Pending() {
+		switch v := obj.(type) {
+		case ast.PdfStream:
+			body, err := v.Bytes(ctx)
+			if err == nil && bytes.Contains(body, []byte("/Figure <</MCID")) {
+				foundFigureMark = true
+			}
+		case ast.PdfDict:
+			if s, _ := v["S"].(ast.PdfName); s == "Figure" {
+				foundFigureElem = true
+				if alt, _ := v["Alt"].(ast.PdfString); alt == "" {
+					t.Error("emitted Figure element lacks /Alt")
+				}
+			}
+		}
+	}
+	if !foundFigureElem {
+		t.Error("no Figure structure element emitted")
+	}
+	if !foundFigureMark {
+		t.Error("no /Figure BDC mark in rewritten content")
+	}
+}

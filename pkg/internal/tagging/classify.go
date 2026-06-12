@@ -155,13 +155,63 @@ func Classify(ctx context.Context, doc *document.Document) (*Element, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		blocks, data, err := pageTextBlocks(ctx, doc, pages[pi])
-		if err != nil || len(blocks) == 0 {
-			continue // skip unparseable or text-free pages
+		blocks, images, data, err := pageTextBlocks(ctx, doc, pages[pi])
+		if err != nil || (len(blocks) == 0 && len(images) == 0) {
+			continue // skip unparseable or content-free pages
 		}
-		root.Kids = append(root.Kids, classifyBlocks(blocks, pi, data)...)
+		root.Kids = append(root.Kids, mergeByOffset(classifyBlocks(blocks, pi, data), figureElements(images, pi))...)
 	}
 	return root, nil
+}
+
+// imageBlock is one image paint outside any text object: a Do of an
+// image XObject or an inline image (BI..EI), with its byte range in the
+// decoded content and the resource name for the synthesized /Alt.
+type imageBlock struct {
+	startByte, endByte int
+	name               string
+}
+
+// figureElements builds one Figure leaf per image paint. The /Alt value
+// is a synthesized placeholder naming the image resource: ISO 14289
+// requires alternative text on every Figure, and litho cannot infer the
+// image's meaning, so the placeholder keeps the requirement satisfied
+// while staying recognizable as machine-generated for a human editor.
+func figureElements(images []imageBlock, pageIndex int) []*Element {
+	out := make([]*Element, 0, len(images))
+	for _, img := range images {
+		out = append(out, &Element{
+			Role: RoleFigure,
+			Alt:  "Image: " + img.name,
+			Span: &ContentSpan{PageIndex: pageIndex, Start: img.startByte, End: img.endByte},
+		})
+	}
+	return out
+}
+
+// mergeByOffset interleaves two per-page element lists into content
+// order by their span start offsets. Both inputs are already ordered.
+func mergeByOffset(a, b []*Element) []*Element {
+	if len(b) == 0 {
+		return a
+	}
+	if len(a) == 0 {
+		return b
+	}
+	out := make([]*Element, 0, len(a)+len(b))
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		if a[i].Span == nil || b[j].Span == nil || a[i].Span.Start <= b[j].Span.Start {
+			out = append(out, a[i])
+			i++
+		} else {
+			out = append(out, b[j])
+			j++
+		}
+	}
+	out = append(out, a[i:]...)
+	out = append(out, b[j:]...)
+	return out
 }
 
 // textBlock is one text object (BT…ET) that painted text: its byte range, the
@@ -188,17 +238,20 @@ type textBlock struct {
 // BT…ET) and returns them with the length of the decoded content they index
 // into. Marking whole text objects keeps marked-content sequences cleanly
 // nested with BT/ET and lets the gaps between them be artifacted as a unit.
-func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.Page) ([]textBlock, []byte, error) {
+func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.Page) ([]textBlock, []imageBlock, []byte, error) {
 	data, err := pageContentBytes(ctx, doc, page)
 	if err != nil || len(data) == 0 {
-		return nil, data, err
+		return nil, nil, data, err
 	}
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data)
 	if err != nil {
-		return nil, data, err
+		return nil, nil, data, err
 	}
 
+	imageNames := pageImageXObjectNames(ctx, doc, page)
+
 	var blocks []textBlock
+	var images []imageBlock
 	var cur *textBlock
 	curFont := 0.0
 	textY, leading := 0.0, 0.0
@@ -221,11 +274,25 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 	for i, op := range ops {
 		if i%100 == 0 { //nolint:mnd // per-~100-operator ctx checkpoint, per CONTRIBUTING
 			if err := ctx.Err(); err != nil {
-				return nil, data, err
+				return nil, nil, data, err
 			}
 		}
 		r := ranges[i]
 		switch op.Operator {
+		case "Do":
+			// Image paints become Figure leaves. Only outside text
+			// objects: an image inside BT..ET would break the clean
+			// nesting of the injected marked-content operators.
+			if cur == nil && len(op.Operands) == 1 {
+				if n, ok := op.Operands[0].(ast.PdfName); ok && imageNames[string(n)] {
+					images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: string(n)})
+				}
+			}
+		case "BI":
+			// The parser surfaces a whole inline image (BI..EI) as one op.
+			if cur == nil {
+				images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: "inline"})
+			}
 		case "BT":
 			flush()
 			cur = &textBlock{startByte: r.Start, endByte: r.End}
@@ -291,7 +358,34 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 		}
 	}
 	flush()
-	return blocks, data, nil
+	return blocks, images, data, nil
+}
+
+// pageImageXObjectNames resolves the page's /Resources /XObject entries
+// and returns the names whose streams carry /Subtype /Image. Form
+// XObjects are excluded: their content is not descended into (see the
+// Classify scope note), so wrapping their Do in a Figure would mark
+// arbitrary nested content as an image.
+func pageImageXObjectNames(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
+	res, err := document.ResolveDict(ctx, doc, page.Dict["Resources"])
+	if err != nil || res == nil {
+		return nil
+	}
+	xobjs, err := document.ResolveDict(ctx, doc, res["XObject"])
+	if err != nil || xobjs == nil {
+		return nil
+	}
+	names := make(map[string]bool, len(xobjs))
+	for name, obj := range xobjs {
+		stream, err := document.ResolveStream(ctx, doc, obj)
+		if err != nil {
+			continue
+		}
+		if st, _ := stream.Dict["Subtype"].(ast.PdfName); st == "Image" {
+			names[string(name)] = true
+		}
+	}
+	return names
 }
 
 // dominantSize returns the rounded font size that painted the most characters,
