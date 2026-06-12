@@ -394,13 +394,16 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return nil
 	}
 
-	// Type3 fonts: for PDF/A-4 and PDF/UA, VeraPDF exempts Type3 from
-	// ToUnicode checks. For PDF/A parts 1–3 (levels a/u), Type3 fonts
-	// must have resolvable Unicode mappings: either all glyph names in
-	// /Encoding /Differences are AGL-resolvable or a /ToUnicode CMap is present.
+	// Type3 fonts: PDF/A-4 tolerates a missing map (its only ToUnicode
+	// rule starts `toUnicode == null ||`), but PDF/UA does NOT: 7.21.7 t1
+	// and 8.4.5.8 t1 fail a Type 3 glyph with no resolvable Unicode
+	// (verified live on PDF_A-1b__veraPDF_test_suite_6-3-6-t01-fail-a
+	// remediated to PDF/UA-1; the previous blanket UA exemption here was
+	// a 38+38-cell vera-only pool). PDF/A parts 1-3 (levels a/u) and
+	// PDF/UA require either AGL-resolvable Differences names or a
+	// /ToUnicode CMap.
 	if isType3Font(ctx, doc, fontDict) {
-		part := PDFAPart(profile)
-		if part == 4 || IsPDFUA(profile) {
+		if PDFAPart(profile) == 4 {
 			return nil
 		}
 		// For parts 1–3: check if all Differences glyph names are AGL-resolvable.
