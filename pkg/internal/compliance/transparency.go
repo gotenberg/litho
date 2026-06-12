@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -47,16 +48,98 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 		// Check page-level transparency group.
 		results = append(results, checkPageTransparencyGroup1(ctx, doc, page, i+1)...)
 
+		visited := make(map[int]bool)
+
 		res := resolveResources(ctx, doc, page)
-		if res == nil {
-			continue
+		if res != nil {
+			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0)...)
 		}
 
-		// Check ExtGState entries for transparency.
-		results = append(results, checkExtGStateTransparency1(ctx, doc, res, i+1)...)
+		// Annotation appearance streams carry their own resources;
+		// veraPDF reaches ExtGStates there too (the 6-2-10 fixtures fail
+		// 6.4 t6 on a gs used only inside an appearance form).
+		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, visited)...)
+	}
+	return results
+}
 
-		// Check XObject entries for SMask.
-		results = append(results, checkXObjectTransparency1(ctx, doc, res, i+1)...)
+// checkResourceTransparency1 applies the PDF/A-1 §6.4 ExtGState and XObject
+// transparency checks to one resource dict and recurses into the resources of
+// nested Form XObjects and tiling patterns, mirroring veraPDF's full content
+// walk. visited breaks resource cycles; depth is capped by
+// [maxFormXObjectDepth] (anti-DoS guard shared with the device-colour scan).
+func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited map[int]bool, depth int) []Violation {
+	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+		return nil
+	}
+
+	results := checkExtGStateTransparency1(ctx, doc, res, pageNum)
+	results = append(results, checkXObjectTransparency1(ctx, doc, res, pageNum)...)
+
+	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, depth)...)
+	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, depth)...)
+	return results
+}
+
+// walkNestedResources1 recurses into the /Resources of each stream in an
+// XObject or Pattern resource sub-dictionary. Names are sorted so the
+// violation order is deterministic.
+func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj ast.PdfObject, pageNum int, visited map[int]bool, depth int) []Violation {
+	dict, err := document.ResolveDict(ctx, doc, dictObj)
+	if err != nil || dict == nil {
+		return nil
+	}
+
+	names := make([]ast.PdfName, 0, len(dict))
+	for name := range dict {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	var results []Violation
+	for _, name := range names {
+		entry := dict[name]
+		if ref, ok := entry.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				continue
+			}
+			visited[ref.ObjectNum] = true
+		}
+		stream, err := document.ResolveStream(ctx, doc, entry)
+		if err != nil {
+			continue
+		}
+		nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if err != nil || nested == nil {
+			continue
+		}
+		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, depth+1)...)
+	}
+	return results
+}
+
+// checkAnnotAPTransparency1 walks each annotation's /AP normal appearance and
+// applies the part-1 transparency checks to the appearance form's resources.
+func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, visited map[int]bool) []Violation {
+	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil || len(annots) == 0 {
+		return nil
+	}
+
+	var results []Violation
+	for _, annotObj := range annots {
+		if ctx.Err() != nil {
+			return results
+		}
+		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+		if err != nil || annotDict == nil {
+			continue
+		}
+		apDict, err := document.ResolveDict(ctx, doc, annotDict["AP"])
+		if err != nil || apDict == nil {
+			continue
+		}
+		results = append(results, walkNestedResources1(ctx, doc, apDict, pageNum, visited, 0)...)
 	}
 	return results
 }

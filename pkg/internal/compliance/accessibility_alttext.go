@@ -66,6 +66,20 @@ func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDi
 	return nil
 }
 
+// markupAnnotationSubtypes lists the markup annotation types per ISO
+// 32000-2, 12.5.6.2 Table 374 (annotations that carry a /T entry and convey
+// user commentary). RichMedia, Screen, 3D, Movie, and the other non-markup
+// types are deliberately absent.
+//
+//nolint:gochecknoglobals // static spec table.
+var markupAnnotationSubtypes = map[ast.PdfName]bool{
+	"Text": true, "FreeText": true, "Line": true, "Square": true,
+	"Circle": true, "Polygon": true, "PolyLine": true, "Highlight": true,
+	"Underline": true, "Squiggly": true, "StrikeOut": true, "Caret": true,
+	"Stamp": true, "Ink": true, "FileAttachment": true, "Sound": true,
+	"Redact": true, "Projection": true,
+}
+
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := annotAltRule(profile)
 
@@ -114,6 +128,16 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			// Popup annotations are explicitly exempt. They inherit content
 			// from their parent annotation and do not need /Contents or /Alt.
 			if subtype == "Link" || subtype == "Widget" || subtype == "Popup" {
+				continue
+			}
+
+			// ISO 14289-2 §8.9.2.3 covers markup annotations only, and
+			// veraPDF's PDFUA-2 profile scopes it the same way: a
+			// /Contents-less RichMedia annotation fails 8.9.2.4.19, never
+			// 8.9.2.3 (verified live on
+			// PDF_A-2b__veraPDF_test_suite_6-3-1-t01-fail-a remediated to
+			// PDF/UA-2). PDF/UA-1 §7.18.1 keeps the wider scope.
+			if profile == "PDF/UA-2" && !markupAnnotationSubtypes[subtype] {
 				continue
 			}
 

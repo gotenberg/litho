@@ -156,10 +156,19 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 func checkPDFUAIdentificationIn(ctx context.Context, xmpData []byte, profile string) []Violation {
 	switch profile {
 	case "PDF/UA-1":
+		// veraPDF separates presence (t1, containsPDFUAIdentification)
+		// from value correctness (t2): a packet with no pdfuaid:part at
+		// all fails t1, not t2.
+		if !containsPDFUAIDProperty(ctx, xmpData) {
+			return fail(Rule_14289_1_5_t01, "pdfuaid:part missing from XMP")
+		}
 		if !containsPDFUAIDPart(ctx, xmpData, "1") {
 			return fail(Rule_14289_1_5_t02, "pdfuaid:part is not 1")
 		}
 	case "PDF/UA-2":
+		if !containsPDFUAIDProperty(ctx, xmpData) {
+			return fail(Rule_14289_2_5_t01, "pdfuaid:part missing from XMP")
+		}
 		if !containsPDFUAIDPart(ctx, xmpData, "2") {
 			return fail(Rule_14289_2_5_t02, "pdfuaid:part is not 2")
 		}

@@ -56,16 +56,13 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, _ ast.Pd
 			}
 		}
 
-		// PDF/UA-2 §8.14.1: /Desc must be present on embedded file specs.
-		if profile == "PDF/UA-2" {
-			descStr, _ := document.ResolveString(ctx, doc, dict["Desc"])
-			if len(descStr) == 0 {
-				results = append(results, Violation{
-					Rule:    Rule_14289_2_8_14_1_t01,
-					Context: fmt.Sprintf("object %d: embedded file spec missing /Desc", objNum),
-				})
-			}
-		}
+		// ISO 14289-2 §8.14.1 asks for /Desc on embedded file specs, but
+		// veraPDF 1.30's PDFUA-2 profile carries no such rule: a Desc-less
+		// embedded filespec passes (verified live on
+		// PDF_A-3b__veraPDF_test_suite_6-8-t01-fail-a remediated to
+		// PDF/UA-2). litho omits the check to stay profile-faithful;
+		// Rule_14289_2_8_14_1_t01 stays defined for a future veraPDF that
+		// wires it.
 	}
 
 	return results

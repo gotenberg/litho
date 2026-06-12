@@ -250,6 +250,23 @@ func containsPDFUAIDPart(ctx context.Context, xmpData []byte, part string) bool 
 	return false
 }
 
+// containsPDFUAIDProperty reports whether pdfuaid:part is present at all,
+// regardless of its value. veraPDF separates presence (clause 5 t1,
+// containsPDFUAIdentification) from value correctness (t2), so a missing
+// property must not be reported under the value rule (verified live on
+// PDF_A-1b__veraPDF_test_suite_6-7-9-t04-pass-e remediated to PDF/UA-1:
+// veraPDF fails 5-t1, not 5-t2).
+func containsPDFUAIDProperty(ctx context.Context, xmpData []byte) bool {
+	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
+	xmp := string(xmpData)
+	for _, prefix := range xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace) {
+		if strings.Contains(xmp, prefix+":part>") || strings.Contains(xmp, prefix+":part=\"") {
+			return true
+		}
+	}
+	return false
+}
+
 // containsPDFUAIDRev reports whether the XMP carries a pdfuaid:rev property
 // (with any value) under the PDF/UA Identification namespace. Like
 // [containsPDFUAIDPart] it keys off the namespace URI, checking every prefix
