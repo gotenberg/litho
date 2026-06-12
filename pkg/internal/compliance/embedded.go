@@ -105,7 +105,18 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// §6.9 t3: PDF/A-4 embedded files must themselves be PDF/A-compliant.
 	// Applies only to base PDF/A-4 (level '4'), not PDF/A-4e or PDF/A-4f.
 	if part == 4 && vctx.level == '4' {
-		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, fileSpecs)...)
+		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, fileSpecs,
+			Rule_19005_4_6_9_t03,
+			[]models.PDFAProfile{models.PDFA4, models.PDFA2b, models.PDFA1b})...)
+	}
+
+	// §6.8 t5 (PDF/A-2 only): embedded files shall comply with ISO
+	// 19005-1 or 19005-2 (veraPDF isValidPDFA12). Part 3 deliberately
+	// has no such rule: PDF/A-3 permits attachments of any type.
+	if part == 2 {
+		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, fileSpecs,
+			Rule_19005_2_6_8_t05,
+			[]models.PDFAProfile{models.PDFA2b, models.PDFA1b})...)
 	}
 
 	// §6.8 t4: catalog /AF array must reference file spec dicts (parts 3+).
@@ -483,16 +494,16 @@ const maxEmbeddedDepth = 2
 // that will be validated (50 MB). Larger files are skipped to prevent OOM.
 const maxEmbeddedFileSize = 50 * 1024 * 1024
 
-// checkEmbeddedFileCompliance validates that all embedded PDF files within a
-// PDF/A-4 document are themselves PDF/A-compliant (ISO 19005-4 §6.9 t3).
-//
-// For each file specification with an /EF entry, the function decodes the
-// embedded stream, attempts to parse it as a PDF, and validates it against
-// PDF/A-4, then PDF/A-2b, then PDF/A-1b. If none pass, a violation is reported.
+// checkEmbeddedFileCompliance validates that all embedded files are
+// themselves PDF/A-compliant. Two rules share the machinery: ISO
+// 19005-4 §6.9 t3 (embedded files shall comply with 19005-1, -2 or -4)
+// and ISO 19005-2 §6.8 t5 (veraPDF isValidPDFA12: embedded files in a
+// PDF/A-2 document shall comply with 19005-1 or -2). rule selects the
+// violation and accepted lists the profiles whose pass clears a file.
 //
 // Safety limits prevent abuse: maximum 50 MB per file, maximum recursion depth
 // of 2, and context cancellation is checked per file.
-func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fileSpecs []fileSpecEntry) []Violation {
+func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fileSpecs []fileSpecEntry, rule Rule, accepted []models.PDFAProfile) []Violation {
 	if len(fileSpecs) == 0 {
 		return nil
 	}
@@ -514,7 +525,7 @@ func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fi
 			return results
 		}
 
-		violations := validateEmbeddedFileSpec(childCtx, doc, fs)
+		violations := validateEmbeddedFileSpec(childCtx, doc, fs, rule, accepted)
 		results = append(results, violations...)
 	}
 
@@ -523,7 +534,7 @@ func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fi
 
 // validateEmbeddedFileSpec extracts and validates a single embedded file stream
 // from a file specification dictionary.
-func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fileSpecEntry) []Violation {
+func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fileSpecEntry, rule Rule, accepted []models.PDFAProfile) []Violation {
 	efObj, ok := fs.dict["EF"]
 	if !ok {
 		return nil
@@ -568,7 +579,7 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 
 	// Non-PDF embedded files cannot be PDF/A-compliant.
 	if !bytes.Contains(data[:min(len(data), 1024)], []byte("%PDF-")) {
-		return failf(Rule_19005_4_6_9_t03,
+		return failf(rule,
 			"object %d: embedded file is not a PDF document", fs.objNum)
 	}
 
@@ -581,19 +592,11 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 		doc.Logger.Debug("compliance.embedded: cannot parse embedded PDF",
 			"object", fs.objNum, "error", err)
 		// An unparseable PDF cannot be PDF/A-compliant.
-		return failf(Rule_19005_4_6_9_t03,
+		return failf(rule,
 			"object %d: embedded file is not a valid PDF", fs.objNum)
 	}
 
-	// Try PDF/A-4 first, then PDF/A-2b, then PDF/A-1b.
-	// The spec says embedded files shall comply with ISO 19005-1, 19005-2, or 19005-4.
-	profiles := []models.PDFAProfile{
-		models.PDFA4,
-		models.PDFA2b,
-		models.PDFA1b,
-	}
-
-	for _, profile := range profiles {
+	for _, profile := range accepted {
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -615,7 +618,7 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 			"object", fs.objNum, "profile", profile, "violations", len(violations))
 	}
 
-	// Failed all profiles.
-	return failf(Rule_19005_4_6_9_t03,
-		"object %d: embedded file is not compliant with ISO 19005-1, 19005-2, or 19005-4", fs.objNum)
+	// Failed all accepted profiles.
+	return failf(rule,
+		"object %d: embedded file is not compliant with an accepted PDF/A part", fs.objNum)
 }
