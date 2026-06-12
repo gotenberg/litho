@@ -1310,11 +1310,13 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	var levelStack []xmpExtSchemaLevel
 	pendingLevel := xmpExtLevelSchema
 	hasPending := false
-	// containerLevel tracks the level that rdf:li items should push when
-	// inside an rdf:Seq/rdf:Bag container. This allows multiple items in
-	// the same container to all push the correct level (not just the first).
-	containerLevel := xmpExtLevelSchema
-	inSeqBag := false
+	// containerStack tracks, per OPEN rdf:Seq/rdf:Bag, the level its
+	// rdf:li items push. A stack, not a flag: a nested container (the
+	// field Seq inside a valueType definition) must not destroy the
+	// outer container's context, or every definition after the first in
+	// the outer Seq is evaluated at the wrong level (the phantom
+	// missing-field storms of the 792-cell corpus pool).
+	var containerStack []xmpExtSchemaLevel
 
 	currentLevel := func() xmpExtSchemaLevel {
 		if len(levelStack) == 0 {
@@ -1349,9 +1351,13 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				}
 			}
 
-			// rdf:Seq/rdf:Bag: remember the container level for subsequent rdf:li items.
+			// rdf:Seq/rdf:Bag: open a container whose rdf:li items push the
+			// pending definition level (or the enclosing container's when
+			// no definition element preceded it).
 			if t.Name.Local == "Seq" || t.Name.Local == "Bag" {
-				if hasPending {
+				level := xmpExtLevelSchema
+				switch {
+				case hasPending:
 					// §6.7.8 t7/t16: the valueType and field containers must be
 					// rdf:Seq; flag an explicit rdf:Bag.
 					if t.Name.Local == "Bag" {
@@ -1365,20 +1371,19 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 							// elsewhere (isValidBag and the existing property checks).
 						}
 					}
-					containerLevel = pendingLevel
-					inSeqBag = true
+					level = pendingLevel
+					hasPending = false
+				case len(containerStack) > 0:
+					level = containerStack[len(containerStack)-1]
 				}
+				containerStack = append(containerStack, level)
 				continue
 			}
 
-			// On rdf:li, push the appropriate level.
+			// On rdf:li, push the enclosing container's level.
 			if t.Name.Local == "li" {
-				if hasPending { //nolint:gocritic // compound conditions with state mutation
-					levelStack = append(levelStack, pendingLevel)
-					hasPending = false
-				} else if inSeqBag {
-					// Subsequent items in the same Seq/Bag reuse the container level.
-					levelStack = append(levelStack, containerLevel)
+				if len(containerStack) > 0 {
+					levelStack = append(levelStack, containerStack[len(containerStack)-1])
 				} else if len(levelStack) == 0 {
 					levelStack = append(levelStack, xmpExtLevelSchema)
 				}
@@ -1480,9 +1485,11 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				continue
 			}
 
-			// Reset container tracking when Seq/Bag closes.
+			// Close the innermost container when its Seq/Bag closes.
 			if t.Name.Local == "Seq" || t.Name.Local == "Bag" {
-				inSeqBag = false
+				if len(containerStack) > 0 {
+					containerStack = containerStack[:len(containerStack)-1]
+				}
 			}
 
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
