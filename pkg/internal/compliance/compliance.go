@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
@@ -73,6 +74,20 @@ func runValidation(ctx context.Context, doc *document.Document, profile string, 
 	resolveAllObjects(ctx, doc)
 
 	violations := runCheckGroups(ctx, doc, catalog, profile, groups)
+
+	// Systemic zero-Rule filter: dozens of per-part rule selectors
+	// legitimately return Rule{} for parts whose profile drops the rule,
+	// and any unguarded emitter serializes it as a clause-less "-t00"
+	// residual. Per-site guards keep regressing (page bounds, limits,
+	// colorants all shipped this bug), so drop the class centrally and
+	// log so a slipped guard stays visible.
+	violations = slices.DeleteFunc(violations, func(v Violation) bool {
+		if v.Rule.Specification != "" {
+			return false
+		}
+		doc.Logger.Debug("compliance: dropped zero-Rule violation", "context", v.Context)
+		return true
+	})
 
 	doc.Logger.Debug("compliance: validation complete",
 		"profile", profile,

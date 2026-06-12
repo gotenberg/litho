@@ -758,12 +758,17 @@ var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox
 // be within [3, 14400] units in both directions.
 func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := PDFAPart(profile)
-	// Page boundary size limits apply to PDF/A-2, -3, and -4.
+	// Page boundary size limits apply to PDF/A-2 and -3 only: PDF 2.0
+	// drops the ISO 32000-1 media-box implementation limit, the veraPDF
+	// PDFA-4 profile has no such rule, and an unguarded zero Rule here
+	// serialized as a clause-less "-t00" residual (21 cells).
 	if part < 2 {
 		return nil
 	}
-
 	rule := pageBoundRule(profile)
+	if rule.Specification == "" {
+		return nil
+	}
 	var results []Violation
 
 	// Also check the Pages tree root for inherited boundary boxes.
