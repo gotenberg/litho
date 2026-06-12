@@ -127,6 +127,7 @@ var registry = []fixer{
 	{name: "cid-sysinfo", safety: safetyContent, matches: matchCIDSystemInfo, apply: fixCIDSystemInfo},
 	{name: "images", safety: safetyContent, matches: matchImageIssues, apply: fixImageIssues},
 	{name: "lzw", safety: safetyContent, matches: matchLZW, apply: fixLZW},
+	{name: "signature-strip", safety: safetyContent, matches: matchSignatureStrip, apply: fixSignatureStrip},
 	{name: "aggressive", safety: safetyContent, matches: matchAggressive, apply: fixAggressive},
 	{name: "aggressive-limits", safety: safetyContent, matches: matchAggressiveLimits, apply: fixAggressiveLimits},
 }
