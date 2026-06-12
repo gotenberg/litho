@@ -274,12 +274,6 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 	if len(arr) < 4 {
 		return
 	}
-	// §6.2.4.4 exists for parts 2+ only; ISO 19005-1 has no DeviceN
-	// consistency rules, and emitting with the zero Rule produced
-	// clause-less violations (the "-t00" residuals in the corpus).
-	if deviceNConsistencyRule(part).Specification == "" {
-		return
-	}
 
 	names, err := document.ResolveArray(ctx, doc, arr[1])
 	if err != nil {
@@ -296,6 +290,14 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		*results = append(*results, failf(deviceNComponentRule(part),
 			"page %d, ColorSpace %s: DeviceN has %d components (max %d)",
 			pageIdx+1, csName, len(names), maxComponents)...)
+	}
+
+	// Everything below mirrors §6.2.4.4, which exists for parts 2+ only;
+	// ISO 19005-1 has no DeviceN consistency rules, and emitting with
+	// the zero Rule serialized clause-less "-t00" residuals. The
+	// component-limit check above is §6.1.12 t9 and applies to part 1.
+	if deviceNConsistencyRule(part).Specification == "" {
+		return
 	}
 
 	alternateName := resolveCSName(ctx, doc, arr[2])
