@@ -1233,12 +1233,23 @@ func xmpNamespaceBindings(ctx context.Context, data []byte) []xmpNSBinding {
 // It also validates that extension schema elements use the expected namespace
 // prefix names (e.g., "pdfaSchema" not "nonpdfaSchema").
 func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, results *[]Violation) {
-	// Extract prefix→URI map to check prefix name correctness.
-	prefixMap := xmpExtractPrefixMap(ctx, data)
-
-	// Check that pdfa extension schema namespace URIs use the expected prefix names.
+	// Check that pdfa extension schema namespace URIs use the expected
+	// prefix names. Only a binding that is actually USED on elements
+	// counts: a dangling xmlns declaration aliasing one of these URIs
+	// (typical decoy in the veraPDF 6-6-2-3-3 suite, and a common
+	// leftover after remediation empties a defective rdf:Description)
+	// is harmless, and firing on it produced a 266-cell-per-profile
+	// litho-only pool. veraPDF evaluates prefix correctness per element
+	// (e.g. descriptionPrefix == "pdfaType"), never per declaration.
 	for uri, expectedPrefix := range xmpExpectedPrefix {
-		if actualPrefix, ok := prefixMap[uri]; ok && actualPrefix != expectedPrefix {
+		actualPrefix := ""
+		for _, p := range xmpExtractAllPrefixesForURI(ctx, data, uri) {
+			if p != expectedPrefix && bytes.Contains(data, []byte("<"+p+":")) {
+				actualPrefix = p
+				break
+			}
+		}
+		if actualPrefix != "" {
 			switch uri {
 			case xmpPdfaSchemaPrefix:
 				*results = append(*results, xmpExtSchemaRule(part, "schema")...)
