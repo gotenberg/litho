@@ -10,11 +10,22 @@ import (
 )
 
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
-// files contain both /F and /UF keys (ISO 14289-1, §7.11 t01).
-func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, _ ast.PdfDict, profile string) []Violation {
+// files contain both /F and /UF keys (ISO 14289-1, §7.11 t01) and, for
+// PDF/UA-2, that EmbeddedFiles-tree file specifications carry /Desc
+// (ISO 14289-2 §8.14.1 t01).
+func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
 	}
+
+	// veraPDF scopes the UA-2 /Desc requirement to file specifications
+	// reachable from the catalog /Names/EmbeddedFiles name tree, exactly as
+	// the rule text says: a Desc-less filespec referenced only from an /AF
+	// array or annotation passes (verified live: vera fails
+	// PDF_UA-2__8.14.1-t01-fail-a but passes
+	// PDF_A-3b__veraPDF_test_suite_6-8-t01-fail-a remediated to PDF/UA-2,
+	// whose filespec sits outside any EmbeddedFiles tree).
+	inEFTree := collectEmbeddedFilesTreeSpecs(ctx, doc, catalog)
 
 	rule := Rule_14289_1_7_11_t01
 	var results []Violation
@@ -56,16 +67,72 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, _ ast.Pd
 			}
 		}
 
-		// ISO 14289-2 §8.14.1 asks for /Desc on embedded file specs, but
-		// veraPDF 1.30's PDFUA-2 profile carries no such rule: a Desc-less
-		// embedded filespec passes (verified live on
-		// PDF_A-3b__veraPDF_test_suite_6-8-t01-fail-a remediated to
-		// PDF/UA-2). litho omits the check to stay profile-faithful;
-		// Rule_14289_2_8_14_1_t01 stays defined for a future veraPDF that
-		// wires it.
+		// PDF/UA-2 §8.14.1: /Desc must be present on file specifications
+		// in the EmbeddedFiles name tree (and only there, see inEFTree).
+		// Presence suffices: veraPDF accepts an empty /Desc () (verified
+		// live on PDF_A-3b__veraPDF_test_suite_6-8-t01-fail-a remediated
+		// to PDF/UA-2, where vera passes the empty-Desc filespec litho
+		// used to flag).
+		if profile == "PDF/UA-2" && inEFTree[objNum] {
+			if _, hasDesc := dict["Desc"]; !hasDesc {
+				results = append(results, Violation{
+					Rule:    Rule_14289_2_8_14_1_t01,
+					Context: fmt.Sprintf("object %d: embedded file spec missing /Desc", objNum),
+				})
+			}
+		}
 	}
 
 	return results
+}
+
+// collectEmbeddedFilesTreeSpecs returns the object numbers of file
+// specifications referenced from the catalog /Names/EmbeddedFiles name tree.
+// The UA-2 /Desc rule applies only to these, not to filespecs referenced from
+// /AF arrays or annotations.
+func collectEmbeddedFilesTreeSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) map[int]bool {
+	namesDict, err := document.ResolveDict(ctx, doc, catalog["Names"])
+	if err != nil || namesDict == nil {
+		return nil
+	}
+	efObj, ok := namesDict["EmbeddedFiles"]
+	if !ok {
+		return nil
+	}
+	specs := make(map[int]bool)
+	collectNameTreeSpecRefs(ctx, doc, efObj, specs, 0)
+	return specs
+}
+
+// maxEFNameTreeDepth caps the EmbeddedFiles name-tree recursion. Anti-DoS
+// guard, not spec-mandated: mirrors maxNameTreeDepth in
+// internal/core/document/nametree.go (64); real name trees rarely exceed a
+// handful of levels.
+const maxEFNameTreeDepth = 64
+
+// collectNameTreeSpecRefs walks a name tree, recording the object number of
+// every indirect value in leaf /Names arrays. Depth is capped by
+// [maxEFNameTreeDepth].
+func collectNameTreeSpecRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, specs map[int]bool, depth int) {
+	if depth > maxEFNameTreeDepth || ctx.Err() != nil {
+		return
+	}
+	node, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || node == nil {
+		return
+	}
+	if namesArr, err := document.ResolveArray(ctx, doc, node["Names"]); err == nil {
+		for i := 1; i < len(namesArr); i += 2 {
+			if ref, ok := namesArr[i].(ast.PdfIndirectRef); ok {
+				specs[ref.ObjectNum] = true
+			}
+		}
+	}
+	if kids, err := document.ResolveArray(ctx, doc, node["Kids"]); err == nil {
+		for _, kid := range kids {
+			collectNameTreeSpecRefs(ctx, doc, kid, specs, depth+1)
+		}
+	}
 }
 
 // checkPDFUA2AnnotationConstraints validates PDF/UA-2 per-annotation-type
