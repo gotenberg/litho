@@ -209,9 +209,20 @@ func (f *remediationFeature) preparePerProfile(ctx context.Context, profile stri
 					out.VeraPost = veraPost.count
 					out.VeraRules = veraPost.rules
 				}
+			} else if vv, rerr := singleValidate(ctx, r.stagingPath, flavour); rerr == nil {
+				// The batch run occasionally drops a job; a single-file
+				// retry recovers the real verdict.
+				if vv.parseFailed {
+					out.ParseFailed = true
+					out.VeraPost = out.VeraPre + 1
+				} else {
+					out.VeraPost = vv.count
+					out.VeraRules = vv.rules
+				}
 			} else {
-				// VeraPDF skipped this file (write failed, etc). Treat as
-				// no improvement so the disagreement metric stays sane.
+				// VeraPDF skipped this file twice (write failed, etc).
+				// Treat as no improvement so the disagreement metric
+				// stays sane.
 				out.VeraPost = out.VeraPre
 			}
 		}
@@ -464,14 +475,45 @@ func batchValidate(ctx context.Context, dir, flavour string) (map[string]veraVer
 			out[base] = veraVerdict{parseFailed: true}
 			continue
 		}
-		rules := failedRules(job.ValidationResult[0])
-		ids := make([]string, 0, len(rules))
-		for _, r := range rules {
-			ids = append(ids, fmt.Sprintf("%s-t%02d", r.Clause, r.TestNumber))
-		}
-		out[base] = veraVerdict{count: len(rules), rules: ids}
+		out[base] = jobVerdict(job.ValidationResult[0])
 	}
 	return out, nil
+}
+
+// jobVerdict converts one VeraPDF validation result into a verdict.
+func jobVerdict(vr verapdfValidationResult) veraVerdict {
+	rules := failedRules(vr)
+	ids := make([]string, 0, len(rules))
+	for _, r := range rules {
+		ids = append(ids, fmt.Sprintf("%s-t%02d", r.Clause, r.TestNumber))
+	}
+	return veraVerdict{count: len(rules), rules: ids}
+}
+
+// singleValidate runs VeraPDF on one file. Used as a retry when a file
+// is missing from the batch report: the batch run occasionally drops a
+// job, and falling back to "no improvement" inflates the disagreement
+// metric with phantom residuals.
+func singleValidate(ctx context.Context, path, flavour string) (veraVerdict, error) {
+	cmd := exec.CommandContext(ctx, "verapdf", //nolint:gosec // flavour from a static map, path from our staging dir
+		"-f", flavour, "--format", "json", "--maxfailuresdisplayed", "-1", path)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil && stdout.Len() == 0 {
+		return veraVerdict{}, fmt.Errorf("verapdf single: %w", err)
+	}
+	var report verapdfReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		return veraVerdict{}, fmt.Errorf("parse verapdf single output: %w", err)
+	}
+	if len(report.Report.Jobs) == 0 {
+		return veraVerdict{}, fmt.Errorf("verapdf single: no job for %s", path)
+	}
+	job := report.Report.Jobs[0]
+	if len(job.ValidationResult) == 0 {
+		return veraVerdict{parseFailed: true}, nil
+	}
+	return jobVerdict(job.ValidationResult[0]), nil
 }
 
 // profileDirToVeraPDFFlavour maps a profile directory name to the
