@@ -583,16 +583,29 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 			}
 		}
 
+		// veraPDF's UA-1 7.5 tests split the same TD model into
+		// complementary halves: t1 fails an unconnected TD with NO unknown
+		// /Headers refs (test `hasConnectedHeader != false ||
+		// unknownHeaders != ''`), t2 fails an unconnected TD whose
+		// /Headers name unknown IDs (`... || unknownHeaders == ''`).
+		// PDF/UA-2 keys the same split as §8.2.5.26 t5/t6.
+		ua1 := state.profile == "PDF/UA-1"
 		switch {
 		case connected:
 		case len(unknown) > 0:
+			rule := Rule_14289_2_8_2_5_26_t06
+			if ua1 {
+				rule = Rule_14289_1_7_5_t02
+			}
 			*state.results = append(*state.results,
-				failf(Rule_14289_2_8_2_5_26_t06,
-					"TD references unknown header ID(s) %v", unknown)...)
+				failf(rule, "TD references unknown header ID(s) %v", unknown)...)
 		default:
+			rule := Rule_14289_2_8_2_5_26_t05
+			if ua1 {
+				rule = Rule_14289_1_7_5_t01
+			}
 			*state.results = append(*state.results,
-				fail(Rule_14289_2_8_2_5_26_t05,
-					"TD has no determinable header cells in a table containing TH")...)
+				fail(rule, "TD has no determinable header cells in a table containing TH")...)
 		}
 	}
 }
