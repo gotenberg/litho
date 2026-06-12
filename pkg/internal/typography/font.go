@@ -1043,6 +1043,30 @@ func ExtractBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16
 	return nil
 }
 
+// ExtractCIDBinaryWidths extracts advance widths keyed by CID for a CIDFont
+// program. CID-keyed CFF fonts (CIDFontType0) map CID to GID through the
+// CFF charset, so the GID-keyed [ExtractBinaryWidths] reads the wrong
+// charstrings on subsets; TrueType CIDFonts (CIDFontType2) keep the
+// GID-keyed map under the Identity CIDToGIDMap assumption the callers
+// already make.
+func ExtractCIDBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16 {
+	switch detectFontFormat(fontData) {
+	case fontFormatOTTO:
+		cffData, err := extractCFFFromOTTO(fontData)
+		if err != nil {
+			return nil
+		}
+		w, _ := cff.CIDWidths(ctx, cffData)
+		return w
+	case fontFormatBareCFF:
+		w, _ := cff.CIDWidths(ctx, fontData)
+		return w
+	case fontFormatTrueType, fontFormatUnknown:
+		return ExtractBinaryWidths(ctx, fontData)
+	}
+	return nil
+}
+
 // ExtractCharCodeToGID returns a charCode → GID mapping for TrueType fonts.
 // Returns nil for non-TrueType fonts (CFF/Type1).
 func ExtractCharCodeToGID(ctx context.Context, fontData []byte) map[uint16]uint16 {

@@ -356,12 +356,14 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, nil)...)
 	results = append(results, checkType0NotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
-	// Glyph width consistency for CIDFont.
+	// Glyph width consistency for CIDFont. Widths are CID-keyed: CID-keyed
+	// CFF subsets renumber GIDs densely while the /W array stays
+	// CID-indexed, so a GID-keyed map reads the wrong charstrings.
 	cidFd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if cidFd != nil {
 		fontData := extractFontProgramData(ctx, doc, cidFd)
 		if fontData != nil {
-			binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
+			binaryWidths := typography.ExtractCIDBinaryWidths(ctx, fontData)
 			if binaryWidths != nil {
 				unitsPerEm := typography.ReadUnitsPerEm(fontData)
 				if unitsPerEm == 0 {

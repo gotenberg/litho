@@ -188,7 +188,10 @@ func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontD
 	if fontData == nil {
 		return nil, false
 	}
-	binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
+	// CID-keyed map: shares typography.ExtractCIDBinaryWidths with the
+	// width check so detector and repair agree on the authoritative widths
+	// (CID-keyed CFF subsets renumber GIDs; /W stays CID-indexed).
+	binaryWidths := typography.ExtractCIDBinaryWidths(ctx, fontData)
 	if binaryWidths == nil {
 		return nil, false
 	}
@@ -198,8 +201,8 @@ func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontD
 	}
 
 	out := make(map[int]int, len(binaryWidths))
-	for gid, bw := range binaryWidths {
-		out[int(gid)] = int(math.Round(float64(bw) * 1000.0 / float64(unitsPerEm)))
+	for cid, bw := range binaryWidths {
+		out[int(cid)] = int(math.Round(float64(bw) * 1000.0 / float64(unitsPerEm)))
 	}
 	return out, true
 }

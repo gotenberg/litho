@@ -271,7 +271,9 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 		return nil
 	}
 
-	binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
+	// CID-keyed widths: /W is CID-indexed and CID-keyed CFF subsets
+	// renumber GIDs, so the GID-keyed map would repair the wrong entries.
+	binaryWidths := typography.ExtractCIDBinaryWidths(ctx, fontData)
 	if len(binaryWidths) == 0 {
 		return nil
 	}

@@ -452,6 +452,8 @@ type topDictInfo struct {
 	charStringsOffset int32
 	privateDictOffset int32
 	privateDictSize   int32
+	fdArrayOffset     int32 // CID fonts: INDEX of per-FD font dicts (op 12 36)
+	fdSelectOffset    int32 // CID fonts: per-glyph FD selector (op 12 37)
 	isCID             bool
 }
 
@@ -490,6 +492,14 @@ func parseTopDict(data []byte) topDictInfo {
 				}
 			case 1230: // ROS (12 30), marks CID font
 				info.isCID = true
+			case 1236: // FDArray (12 36)
+				if len(operands) > 0 {
+					info.fdArrayOffset = operands[len(operands)-1]
+				}
+			case 1237: // FDSelect (12 37)
+				if len(operands) > 0 {
+					info.fdSelectOffset = operands[len(operands)-1]
+				}
 			}
 			operands = operands[:0]
 			i++
@@ -837,6 +847,13 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 		return nil, fmt.Errorf("%w: no charstrings", ErrInvalidCFF)
 	}
 
+	// CID-keyed fonts carry no top-level Private DICT: each glyph's
+	// nominalWidthX/defaultWidthX comes from the FDArray font dict its
+	// FDSelect entry picks (CFF spec §18). Without this, every width in a
+	// CID font is computed against nominal/default 0 and the /W repair
+	// writes values veraPDF rejects.
+	fdWidths := parseFDWidths(data, info, len(csEntries))
+
 	result := make(map[uint16]uint16, len(csEntries))
 	for gid, cs := range csEntries {
 		if gid%500 == 0 && gid > 0 {
@@ -844,12 +861,16 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 				return nil, err
 			}
 		}
+		nomW, defW := nominalWidth, defaultWidth
+		if fdWidths != nil {
+			nomW, defW = fdWidths.widthsFor(gid)
+		}
 		w := extractCharstringWidth(cs)
 		var width int32
 		if w != nil {
-			width = nominalWidth + *w
+			width = nomW + *w
 		} else {
-			width = defaultWidth
+			width = defW
 		}
 		if width < 0 {
 			width = 0
@@ -858,6 +879,142 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	}
 
 	return result, nil
+}
+
+// CIDWidths extracts advance widths keyed by CID for a CID-keyed CFF font.
+// The charset table maps each GID to its CID (the SID slot holds CIDs in
+// CID-keyed fonts, CFF spec §18), so callers comparing against a PDF /W
+// array, which is CID-indexed, must use this instead of [GlyphWidths]:
+// subset fonts renumber GIDs densely while keeping sparse CIDs, and the
+// identity assumption reads the wrong charstrings. Non-CID fonts return the
+// GID-keyed widths unchanged (GID == code index there).
+func CIDWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
+	byGID, err := GlyphWidths(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < 4 || data[0] != 1 {
+		return byGID, nil
+	}
+	hdrSize := max(int(data[2]), 4)
+	nameEnd, err := skipINDEX(data, hdrSize)
+	if err != nil {
+		return byGID, nil //nolint:nilerr // GlyphWidths already validated the font; fall back to GID keys
+	}
+	_, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return byGID, nil //nolint:nilerr // same fallback
+	}
+	info := parseTopDict(topDictEntries[0])
+	if !info.isCID {
+		return byGID, nil
+	}
+	gidToCID, err := parseCharset(data, int(info.charsetOffset), len(byGID))
+	if err != nil || gidToCID == nil {
+		return byGID, nil //nolint:nilerr // same fallback
+	}
+	byCID := make(map[uint16]uint16, len(byGID))
+	for gid, w := range byGID {
+		if int(gid) < len(gidToCID) {
+			cid := gidToCID[gid]
+			if cid >= 0 && cid <= 0xFFFF {
+				byCID[uint16(cid)] = w
+			}
+		}
+	}
+	return byCID, nil
+}
+
+// fdWidthTable resolves per-glyph nominal/default widths for CID-keyed CFF
+// fonts: fdForGID maps each GID to an FDArray index whose Private DICT
+// supplied the widths.
+type fdWidthTable struct {
+	fdForGID []byte
+	nominal  []int32
+	defaults []int32
+}
+
+// widthsFor returns the nominal/default width pair for a GID, falling back
+// to FD 0 when FDSelect lacks the glyph.
+func (t *fdWidthTable) widthsFor(gid int) (int32, int32) {
+	fd := 0
+	if gid >= 0 && gid < len(t.fdForGID) {
+		fd = int(t.fdForGID[gid])
+	}
+	if fd >= len(t.nominal) {
+		fd = 0
+	}
+	if len(t.nominal) == 0 {
+		return 0, 0
+	}
+	return t.nominal[fd], t.defaults[fd]
+}
+
+// parseFDWidths builds the per-FD width table for a CID-keyed CFF font.
+// Returns nil for non-CID fonts or when the FDArray is unreadable, in which
+// case the caller falls back to the top-level Private DICT values.
+func parseFDWidths(data []byte, info topDictInfo, numGlyphs int) *fdWidthTable {
+	if !info.isCID || info.fdArrayOffset <= 0 || int(info.fdArrayOffset) >= len(data) {
+		return nil
+	}
+	_, fdEntries, err := parseINDEX(data, int(info.fdArrayOffset))
+	if err != nil || len(fdEntries) == 0 {
+		return nil
+	}
+
+	t := &fdWidthTable{
+		nominal:  make([]int32, len(fdEntries)),
+		defaults: make([]int32, len(fdEntries)),
+	}
+	for i, fdDict := range fdEntries {
+		fdInfo := parseTopDict(fdDict)
+		if fdInfo.privateDictOffset > 0 && fdInfo.privateDictSize > 0 {
+			pdStart := int(fdInfo.privateDictOffset)
+			pdEnd := pdStart + int(fdInfo.privateDictSize)
+			if pdEnd <= len(data) && pdStart >= 0 && pdStart < pdEnd {
+				t.nominal[i], t.defaults[i] = parsePrivateDict(data[pdStart:pdEnd])
+			}
+		}
+	}
+
+	t.fdForGID = parseFDSelect(data, int(info.fdSelectOffset), numGlyphs)
+	return t
+}
+
+// parseFDSelect reads an FDSelect structure (format 0 or 3, CFF spec §19)
+// and returns the FD index per GID. A missing or malformed FDSelect yields
+// all zeroes (FD 0), the spec default for single-FD fonts.
+func parseFDSelect(data []byte, offset, numGlyphs int) []byte {
+	out := make([]byte, numGlyphs)
+	if offset <= 0 || offset >= len(data) {
+		return out
+	}
+	switch data[offset] {
+	case 0:
+		for gid := 0; gid < numGlyphs && offset+1+gid < len(data); gid++ {
+			out[gid] = data[offset+1+gid]
+		}
+	case 3:
+		if offset+5 > len(data) {
+			return out
+		}
+		nRanges := int(binary.BigEndian.Uint16(data[offset+1 : offset+3]))
+		pos := offset + 3
+		// Each range is (first uint16, fd byte); a trailing sentinel
+		// uint16 closes the last range.
+		for r := 0; r < nRanges && pos+4 < len(data); r++ {
+			first := int(binary.BigEndian.Uint16(data[pos : pos+2]))
+			fd := data[pos+2]
+			next := int(binary.BigEndian.Uint16(data[pos+3 : pos+5]))
+			for gid := first; gid < next && gid < numGlyphs; gid++ {
+				if gid >= 0 {
+					out[gid] = fd
+				}
+			}
+			pos += 3
+		}
+	}
+	return out
 }
 
 // parsePrivateDict extracts nominalWidthX (op 21) and defaultWidthX (op 20)
