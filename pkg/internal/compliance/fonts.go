@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -227,6 +228,9 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	// Glyph width consistency: only for fonts used for visible rendering.
 	if isVisible {
 		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
+		// Glyph presence (§6.3.8 / §6.2.11.4.1 t2 / §6.2.10.4.1 t2): every
+		// glyph referenced for visible rendering must exist in the program.
+		results = append(results, checkSimpleGlyphPresence(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 	}
 
 	// .notdef glyph.
@@ -598,14 +602,30 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 
 	switch cidSubtype {
 	case "CIDFontType0":
-		// CFF font: check if CIDs exist in the charset.
+		// CFF font: check if CIDs exist in the charset. Sort for a
+		// deterministic context when several CIDs are absent.
 		validCIDs := typography.ExtractValidCIDs(fontData)
 		if validCIDs == nil {
 			return nil
 		}
+		cids := make([]uint16, 0, len(usedCIDs))
 		for cid := range usedCIDs {
+			cids = append(cids, cid)
+		}
+		slices.Sort(cids)
+		for _, cid := range cids {
 			if !validCIDs[cid] {
-				return failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
+				// veraPDF fires BOTH the .notdef rule and the
+				// glyph-presence rule on a used CID absent from the
+				// charset (verified live on
+				// PDF_A-2b__veraPDF_test_suite_6-1-13-t10-fail-a:
+				// 6.2.11.8 t1 + 6.2.11.4.1 t2 on the same usedGlyph).
+				results := failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
+				if pr := glyphPresenceRule(profile); pr.Specification != "" {
+					results = append(results, failf(pr,
+						"font %s on page %d: CID %d not present in embedded font program", fontName, pageNum, cid)...)
+				}
+				return results
 			}
 		}
 

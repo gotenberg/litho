@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -181,6 +182,44 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		}
 	}
 
+	return nil
+}
+
+// glyphPresenceRule selects the per-part "embedded font program defines all
+// glyphs referenced for rendering" rule: ISO 19005-1 §6.3.8 (Level A only;
+// the veraPDF PDFA-1B profile carries no glyph-presence rule), ISO 19005-2/3
+// §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2.
+func glyphPresenceRule(profile string) Rule {
+	if PDFAPart(profile) == 1 && !strings.HasSuffix(profile, "a") {
+		return Rule{}
+	}
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_8_t01, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
+}
+
+// checkSimpleGlyphPresence validates that every glyph referenced for visible
+// rendering exists in the embedded font program (veraPDF usedGlyph test
+// `renderingMode == 3 || isGlyphPresent == null || isGlyphPresent == true`).
+// A used charCode whose glyph name is absent from the program maps to GID 0
+// in simpleFontGlyphMetrics; that is the "glyph not present" signal. Codes
+// litho cannot map at all stay unchecked (isGlyphPresent == null passes).
+func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+	rule := glyphPresenceRule(profile)
+	if rule.Specification == "" {
+		return nil
+	}
+	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
+		return nil
+	}
+	_, _, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
+	if !ok || charCodeToGID == nil {
+		return nil
+	}
+	for code := range usage.charCodes {
+		gid, mapped := charCodeToGID[uint16(code)]
+		if mapped && gid == 0 {
+			return failf(rule, "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
+		}
+	}
 	return nil
 }
 
