@@ -341,6 +341,13 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 
 	apObj, hasAP := annot["AP"]
 	if !hasAP {
+		// PDF/A-1 never requires an appearance dictionary: every 6.5.3
+		// appearance test in the veraPDF PDFA-1 profiles passes when
+		// AP == null (t4 "AP == null || AP == N", t5/t6 likewise), so
+		// absence is only a violation under parts 2+ (6.3.3 t1).
+		if part == 1 {
+			return nil
+		}
 		// Some annotation types are exempt from requiring /AP.
 		if linkExemptFromAP(subtype, part) {
 			return nil
