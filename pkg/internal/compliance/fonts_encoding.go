@@ -666,16 +666,16 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	// unmapped codes fail the per-glyph coverage rule (t1 family) instead.
 	if fontSubtype(ctx, doc, fontDict) != "Type0" {
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
-		codes := make([]int, 0, len(usage.charCodes))
+		codes := make([]byte, 0, len(usage.charCodes))
 		for b := range usage.charCodes {
-			codes = append(codes, int(b))
+			codes = append(codes, b)
 		}
 		slices.Sort(codes)
 		for _, c := range codes {
-			if _, mapped := parsed.Mapping[string([]byte{byte(c)})]; mapped {
+			if _, mapped := parsed.Mapping[string([]byte{c})]; mapped {
 				continue
 			}
-			if name := enc[byte(c)]; name != "" && name != ".notdef" {
+			if name := enc[c]; name != "" && name != ".notdef" {
 				continue
 			}
 			return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and no glyph name (renders U+0000)",
