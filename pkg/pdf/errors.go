@@ -119,6 +119,12 @@ var (
 	// requires an embedded Cross-Industry Invoice payload.
 	ErrEmptyInvoiceXML = errors.New("factur-x invoice XML is empty")
 
+	// ErrNoInvoiceAttachment is returned by [Writer.RepairFacturX] when
+	// the document embeds no attachment named after a known hybrid
+	// invoice convention (factur-x.xml, zugferd-invoice.xml,
+	// ZUGFeRD-invoice.xml).
+	ErrNoInvoiceAttachment = errors.New("no hybrid invoice attachment found")
+
 	// ErrInvalidFacturXLevel is returned by [Writer.RemediateFacturX]
 	// when [FacturXConfig.Level] does not match one of the documented
 	// [models.FacturXLevel] constants.

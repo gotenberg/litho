@@ -1100,6 +1100,38 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	})
 }
 
+// RepairFacturX repairs the PDF-container metadata of a received hybrid
+// invoice (Factur-X or ZUGFeRD): catalog /AF membership, the invoice
+// filespec /AFRelationship and /F + /UF pair, and the embedded stream
+// /Subtype. The invoice XML payload is business data and is never
+// modified; XSD or Schematron findings inside it remain in the residual
+// list. Returns [ErrNoInvoiceAttachment] when the document carries no
+// known invoice attachment. Use [Writer.RemediateFacturX] to embed a new
+// invoice instead.
+func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *RemediationReport, err error) {
+	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
+	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
+	for _, o := range opts {
+		o(&rcfg)
+	}
+	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
+		return r.ValidateFacturX(ctx)
+	}
+	located := false
+	report, err := w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+		fixes, repairErr := remediation.RepairHybridInvoice(ctx, doc, alloc)
+		if repairErr != nil {
+			return nil, repairErr
+		}
+		located = located || fixes != nil
+		return &remediation.Report{Fixed: fixes}, nil
+	})
+	if err == nil && !located {
+		return nil, ErrNoInvoiceAttachment
+	}
+	return report, err
+}
+
 // integritySnap captures the signals the post-remediation probe compares
 // against the baseline measured on the source [Reader].
 type integritySnap struct {
