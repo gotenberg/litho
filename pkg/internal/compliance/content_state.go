@@ -388,16 +388,6 @@ func checkContentStreamResourcesOps(
 			name = propName
 		}
 
-		// veraPDF never reports a missing COLOUR SPACE resource: an
-		// unresolvable cs/CS name yields a null colorSpace object and
-		// every colour rule passes vacuously (verified live on
-		// PDF_A-4__veraPDF_test_suite_6-2-2-t03-fail-a remediated to
-		// PDF/A-1b, where cs /CS0 with no ColorSpace dict anywhere
-		// passes PDFA-1B; firing was a 32-cell litho-only pool).
-		if category == "ColorSpace" {
-			continue
-		}
-
 		// Look up the name in the appropriate Resources sub-dictionary.
 		subDict, err := document.ResolveDict(ctx, doc, resources[category])
 		if err != nil || subDict == nil {
@@ -469,7 +459,13 @@ func undefinedOperatorRule(part int) Rule {
 }
 
 func missingResourceRule(part int) Rule {
-	return ruleByPart(part, Rule_19005_1_6_2_2_t02, Rule_19005_2_6_2_2_t02, Rule_19005_3_6_2_2_t02, Rule_19005_4_6_2_2_t02)
+	// PDF/A-1 carries no resource-completeness rules at all (an undefined
+	// cs name passes PDFA-1B, verified live); parts 2/3/4 key undefined
+	// resources as 6.2.2 t3 (`undefinedResourceNames == ''`). The t2
+	// sibling (`inheritedResourceNames == ''`) is a separate, not yet
+	// implemented check: names resolvable only through Pages-tree
+	// inheritance.
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_2_t03, Rule_19005_3_6_2_2_t03, Rule_19005_4_6_2_2_t03)
 }
 
 // checkAtPaintingOp checks state-dependent compliance rules when a painting

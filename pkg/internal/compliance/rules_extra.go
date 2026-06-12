@@ -317,4 +317,23 @@ var (
 		Object:        "CII",
 		Description:   "Schematron assertion with warning or info severity fired on the embedded invoice",
 	}
+
+	// Parts 2/3 undefined-resource rules, mirroring the part-4 t3 and the
+	// veraPDF PDFA-2/3 profiles (test `undefinedResourceNames == ''`,
+	// verified live on PDF_A-4__veraPDF_test_suite_6-2-2-t03-fail-a).
+	Rule_19005_2_6_2_2_t03 = Rule{
+		Specification: "ISO_19005_2",
+		Clause:        "6.2.2",
+		TestNumber:    3,
+		Object:        "PDContentStream",
+		Description:   "A content stream's named resources shall be defined by a resource dictionary, which shall enumerate the named resources needed by the operators in the content stream and the names by which they can be referred to",
+	}
+
+	Rule_19005_3_6_2_2_t03 = Rule{
+		Specification: "ISO_19005_3",
+		Clause:        "6.2.2",
+		TestNumber:    3,
+		Object:        "PDContentStream",
+		Description:   "A content stream's named resources shall be defined by a resource dictionary, which shall enumerate the named resources needed by the operators in the content stream and the names by which they can be referred to",
+	}
 )
