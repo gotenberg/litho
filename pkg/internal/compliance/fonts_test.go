@@ -7,7 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-func TestCheckSimpleFontWidths_SkipsControlChars(t *testing.T) {
+func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	rule := Rule_19005_1_6_3_6_t01
@@ -19,61 +19,57 @@ func TestCheckSimpleFontWidths_SkipsControlChars(t *testing.T) {
 		65: 600,
 	}
 	var unitsPerEm uint16 = 1000
+	fontDict := ast.PdfDict{
+		"FirstChar": ast.PdfInt(32),
+		"Widths":    ast.PdfArray{ast.PdfReal(226.0)},
+	}
 
-	t.Run("space_charcode_mismatch_reported", func(t *testing.T) {
+	t.Run("used char with mismatch fires", func(t *testing.T) {
 		t.Parallel()
-		// FirstChar=32, Widths=[226] → char 32 has PDF width 226 vs binary 488.
-		// Space (0x20) IS checked for width consistency (VeraPDF checks it).
-		// Only control chars below 0x20 are skipped.
-		fontDict := ast.PdfDict{
-			"FirstChar": ast.PdfInt(32),
-			"Widths":    ast.PdfArray{ast.PdfReal(226.0)},
-		}
-		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, nil)
+		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
+		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
 		if len(results) == 0 {
-			t.Errorf("expected violation for space char width mismatch (226 vs 488), got none")
+			t.Errorf("expected violation for used space char width mismatch (226 vs 488), got none")
 		}
 	})
 
-	t.Run("notdef_charcode_mismatch_skipped", func(t *testing.T) {
+	t.Run("unused char skipped", func(t *testing.T) {
 		t.Parallel()
-		// FirstChar=0, Widths=[250] → char 0 has PDF width 250 vs binary 500.
-		// Should be skipped because charCode < 0x20 (control character).
-		fontDict := ast.PdfDict{
-			"FirstChar": ast.PdfInt(0),
-			"Widths":    ast.PdfArray{ast.PdfReal(250.0)},
+		// veraPDF's test runs per USED glyph: a mismatching width on a
+		// charCode never referenced by a text operator passes.
+		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{65: true}}
+		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
+		if len(results) != 0 {
+			t.Errorf("expected no violations for unused char, got %d: %v", len(results), results)
 		}
+	})
+
+	t.Run("nil usage skipped", func(t *testing.T) {
+		t.Parallel()
 		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, nil)
 		if len(results) != 0 {
-			t.Errorf("expected no violations for .notdef char, got %d: %v", len(results), results)
+			t.Errorf("expected no violations without usage tracking, got %d: %v", len(results), results)
 		}
 	})
 
-	t.Run("visible_glyph_mismatch_reported", func(t *testing.T) {
+	t.Run("invisible-only usage skipped", func(t *testing.T) {
 		t.Parallel()
-		// FirstChar=65, Widths=[700] → char 65 ('A') has PDF width 700 vs binary 600.
-		// Difference is 100 > widthTolerance (1.0), should report violation.
-		fontDict := ast.PdfDict{
-			"FirstChar": ast.PdfInt(65),
-			"Widths":    ast.PdfArray{ast.PdfReal(700.0)},
-		}
-		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, nil)
-		if len(results) == 0 {
-			t.Error("expected violation for visible glyph width mismatch, got none")
-		}
-	})
-
-	t.Run("visible_glyph_within_tolerance", func(t *testing.T) {
-		t.Parallel()
-		// FirstChar=65, Widths=[600.5] → char 65 ('A') has PDF width 600.5 vs binary 600.
-		// Difference is 0.5 ≤ widthTolerance (1.0), should pass.
-		fontDict := ast.PdfDict{
-			"FirstChar": ast.PdfInt(65),
-			"Widths":    ast.PdfArray{ast.PdfReal(600.5)},
-		}
-		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, nil)
+		// renderingMode 3 (invisible) exempts the font per veraPDF's test.
+		usage := &fontUsageInfo{visible: false, charCodes: map[byte]bool{32: true}}
+		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
 		if len(results) != 0 {
-			t.Errorf("expected no violations for within-tolerance width, got %d: %v", len(results), results)
+			t.Errorf("expected no violations for invisible-only usage, got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("missing Widths passes", func(t *testing.T) {
+		t.Parallel()
+		// veraPDF: widthFromDictionary == null PASSES the width rule; the
+		// missing key fails the font-dictionary key rules instead.
+		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
+		results := checkSimpleFontWidths(ctx, nopDoc(), ast.PdfDict{"FirstChar": ast.PdfInt(32)}, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
+		if len(results) != 0 {
+			t.Errorf("expected no violations for missing /Widths, got %d: %v", len(results), results)
 		}
 	})
 }

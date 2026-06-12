@@ -107,25 +107,35 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
 // charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
+	// veraPDF's width test runs per USED glyph and passes whenever the
+	// dictionary width is unresolvable: the test is `renderingMode == 3 ||
+	// widthFromFontProgram == null || widthFromDictionary == null ||
+	// |diff| <= 1`, so a missing /Widths or /FirstChar never fails this
+	// rule (it fails the font-dict key rules instead), and a font used
+	// only invisibly is exempt.
+	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
+		return nil
+	}
+
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
-		return failf(rule, "font %s on page %d: missing /Widths array", fontName, pageNum)
+		return nil
 	}
 
 	widths, err := document.ResolveArray(ctx, doc, widthsObj)
 	if err != nil {
 		doc.Logger.Debug("compliance: fonts: cannot resolve /Widths", "font", fontName, "error", err)
-		return failf(rule, "font %s on page %d: cannot resolve /Widths", fontName, pageNum)
+		return nil
 	}
 
 	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
 	if err != nil {
-		return failf(rule, "font %s on page %d: missing /FirstChar", fontName, pageNum)
+		return nil
 	}
 
 	for i, wObj := range widths {
 		charCode := int(firstChar) + i
-		if charCode < 0x20 {
+		if charCode < 0 || charCode > 255 {
 			continue
 		}
 		gid := uint16(charCode) //nolint:gosec
@@ -136,13 +146,13 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 			}
 			gid = mappedGID
 		}
-		// The spec requires width consistency only for "glyphs referenced
-		// for rendering." Skip charCodes not used in text operators.
-		charUsed := usage != nil && usage.charCodes[byte(charCode)] //nolint:gosec
-		pdfWidth := document.Float(wObj)
-		if pdfWidth == 0 && !charUsed {
+		// Width consistency applies only to glyphs referenced for
+		// rendering: skip charCodes not used in text operators.
+		charUsed := usage.charCodes[byte(charCode)] //nolint:gosec
+		if !charUsed {
 			continue
 		}
+		pdfWidth := document.Float(wObj)
 		// A width outside the 32-bit integer range cannot be a real
 		// metric: it is crafted overflow input (implementation-limits
 		// fixtures write -2157483648). ISO 32000-2 §7.3.3 leaves
@@ -150,11 +160,6 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		// such values as unparseable rather than mismatching, so skip
 		// the comparison instead of flagging it.
 		if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
-			continue
-		}
-		// Skip non-used charCodes when glyph is missing from font program
-		// (GID 0 from name mapping), only flag if the charCode is used.
-		if gid == 0 && !charUsed {
 			continue
 		}
 		bw, ok := binaryWidths[gid]

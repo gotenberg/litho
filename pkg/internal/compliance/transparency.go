@@ -78,6 +78,40 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 
 	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, depth)...)
 	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, depth)...)
+
+	// Type 3 font resources: CharProc operators can reference transparency
+	// Group XObjects through the font's own /Resources (verified live:
+	// veraPDF fails 6.4 t3 on a Group reached only via
+	// font[0]/charStrings[0] in PDF_A-2b__veraPDF_test_suite_6-2-10-t04-fail-e
+	// under PDF/A-1b).
+	if fontDict, err := document.ResolveDict(ctx, doc, res["Font"]); err == nil && fontDict != nil {
+		names := make([]ast.PdfName, 0, len(fontDict))
+		for name := range fontDict {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		for _, name := range names {
+			entry := fontDict[name]
+			if ref, ok := entry.(ast.PdfIndirectRef); ok {
+				if visited[ref.ObjectNum] {
+					continue
+				}
+				visited[ref.ObjectNum] = true
+			}
+			fd, err := document.ResolveDict(ctx, doc, entry)
+			if err != nil || fd == nil {
+				continue
+			}
+			if st, _ := document.ResolveName(ctx, doc, fd["Subtype"]); st != "Type3" {
+				continue
+			}
+			fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"])
+			if err != nil || fontRes == nil {
+				continue
+			}
+			results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, depth+1)...)
+		}
+	}
 	return results
 }
 
@@ -230,8 +264,17 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 			return results
 		}
 
-		xo, err := document.ResolveDict(ctx, doc, xoObj)
-		if err != nil || xo == nil {
+		// XObjects are streams: ResolveDict rejects ast.PdfStream, which
+		// left this check dead for every real Form/Image XObject. Resolve
+		// the stream and use its dict; keep the dict fallback for
+		// malformed producers.
+		var xo ast.PdfDict
+		if stream, err := document.ResolveStream(ctx, doc, xoObj); err == nil {
+			xo = stream.Dict
+		} else if d, derr := document.ResolveDict(ctx, doc, xoObj); derr == nil {
+			xo = d
+		}
+		if xo == nil {
 			continue
 		}
 

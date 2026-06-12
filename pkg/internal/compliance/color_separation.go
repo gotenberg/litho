@@ -24,6 +24,16 @@ func deviceNComponentRule(part int) Rule {
 }
 
 func separationConsistencyRule(part int) Rule {
+	// §6.2.4.4 t2: all Separation arrays with the same colorant name shall
+	// share alternateSpace and tintTransform. t1 is the separate
+	// Colorants-dictionary rule (see veraPDF profile descriptions; litho
+	// emitted t1 here historically, a 36-cell litho-only mislabel).
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_4_4_t02, Rule_19005_3_6_2_4_4_t02, Rule_19005_4_6_2_4_4_t02)
+}
+
+// separationColorantsRule selects §6.2.4.4 t1: any spot colour used in a
+// DeviceN or NChannel colour space needs an entry in the Colorants dict.
+func separationColorantsRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_4_4_t01, Rule_19005_3_6_2_4_4_t01, Rule_19005_4_6_2_4_4_t01)
 }
 
@@ -365,13 +375,13 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		}
 		// Spot colorant: must have a Colorants entry.
 		if colorantsDict == nil {
-			*results = append(*results, failf(separationConsistencyRule(part),
+			*results = append(*results, failf(separationColorantsRule(part),
 				"page %d, ColorSpace %s: DeviceN spot colorant %q has no Colorants dictionary",
 				pageIdx+1, csName, cName)...)
 			break // Report once per DeviceN CS, not per colorant.
 		}
 		if _, ok := colorantsDict[ast.PdfName(cName)]; !ok {
-			*results = append(*results, failf(separationConsistencyRule(part),
+			*results = append(*results, failf(separationColorantsRule(part),
 				"page %d, ColorSpace %s: DeviceN spot colorant %q not found in Colorants dictionary",
 				pageIdx+1, csName, cName)...)
 		}
