@@ -267,6 +267,7 @@ func checkContentStreamResources(
 	doc *document.Document,
 	streamData []byte,
 	resources ast.PdfDict,
+	inherited ast.PdfDict,
 	part int,
 	pageNum int,
 ) []Violation {
@@ -276,7 +277,7 @@ func checkContentStreamResources(
 		return nil
 	}
 
-	results := checkContentStreamResourcesOps(ctx, doc, ops, resources, part, pageNum)
+	results := checkContentStreamResourcesOps(ctx, doc, ops, resources, inherited, part, pageNum)
 
 	// Check inline image /Intent values from parsed BI operations.
 	results = append(results, checkInlineImageIntent(ops, part, pageNum)...)
@@ -292,9 +293,24 @@ func checkContentStreamResourcesOps(
 	doc *document.Document,
 	ops []content.Operation,
 	resources ast.PdfDict,
+	inherited ast.PdfDict,
 	part int,
 	pageNum int,
 ) []Violation {
+	// reportMiss applies veraPDF's §6.2.2 triage to a name absent from the
+	// stream's own resources: resolvable through Pages-tree inheritance is
+	// t2 (`inheritedResourceNames == ''`), truly undefined is t3.
+	inheritedHas := func(category, name ast.PdfName) bool {
+		if inherited == nil {
+			return false
+		}
+		sub, err := document.ResolveDict(ctx, doc, inherited[category])
+		if err != nil || sub == nil {
+			return false
+		}
+		_, ok := sub[name]
+		return ok
+	}
 	if ops == nil {
 		return nil
 	}
@@ -392,17 +408,29 @@ func checkContentStreamResourcesOps(
 		subDict, err := document.ResolveDict(ctx, doc, resources[category])
 		if err != nil || subDict == nil {
 			key := string(category) + ":" + string(name)
-			if !reported[key] && resourceRule.Specification != "" {
+			if !reported[key] {
 				reported[key] = true
-				results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+				if inheritedHas(category, name) {
+					if r := inheritedResourceRule(part); r.Specification != "" {
+						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, category)...)
+					}
+				} else if resourceRule.Specification != "" {
+					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+				}
 			}
 			continue
 		}
 		if _, exists := subDict[name]; !exists {
 			key := string(category) + ":" + string(name)
-			if !reported[key] && resourceRule.Specification != "" {
+			if !reported[key] {
 				reported[key] = true
-				results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+				if inheritedHas(category, name) {
+					if r := inheritedResourceRule(part); r.Specification != "" {
+						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, category)...)
+					}
+				} else if resourceRule.Specification != "" {
+					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+				}
 			}
 		}
 	}
@@ -466,6 +494,13 @@ func missingResourceRule(part int) Rule {
 	// implemented check: names resolvable only through Pages-tree
 	// inheritance.
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_2_t03, Rule_19005_3_6_2_2_t03, Rule_19005_4_6_2_2_t03)
+}
+
+// inheritedResourceRule selects §6.2.2 t2: a content stream shall not use
+// resources it can only reach through Pages-tree inheritance (veraPDF test
+// `inheritedResourceNames == ”`). PDF/A-1 carries no resource rules.
+func inheritedResourceRule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_2_t02, Rule_19005_3_6_2_2_t02, Rule_19005_4_6_2_2_t02)
 }
 
 // checkAtPaintingOp checks state-dependent compliance rules when a painting

@@ -31,18 +31,21 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		res := p.resources
 		hasContent := len(p.content) > 0
 
-		// §6.2.2: check content stream resource completeness even when
-		// the page has no Resources (the absence itself may be a violation).
+		// §6.2.2 t2/t3: resource completeness against the page's OWN
+		// Resources, with names resolvable only through Pages-tree
+		// inheritance reported separately (veraPDF splits
+		// `inheritedResourceNames` from `undefinedResourceNames`; litho's
+		// own-or-fallback page resources conflated them into a 57-cell
+		// t03 / 45-cell t02 pool pair).
 		if hasContent {
 			ops := p.parsedOps(ctx)
-			_, hasOwnRes := page["Resources"]
-			if !hasOwnRes && ops != nil && opsReferenceResources(ops) {
-				results = append(results, failf(missingResourceRule(part),
-					"page %d: content stream references resources but page has no explicitly associated Resources dictionary", i+1)...)
-			}
-			if res != nil && ops != nil {
-				// Content stream resource completeness.
-				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, res, part, i+1)...)
+			if ops != nil {
+				ownRes := resolveResources(ctx, doc, page)
+				var inheritedRes ast.PdfDict
+				if pagesDict, err := document.ResolveDict(ctx, doc, vctx.catalog["Pages"]); err == nil && pagesDict != nil {
+					inheritedRes = resolveResources(ctx, doc, pagesDict)
+				}
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, ownRes, inheritedRes, part, i+1)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 			}
@@ -121,7 +124,11 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		if formRes == nil {
 			formRes = make(ast.PdfDict)
 		}
-		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, part, pageNum)...)
+		// veraPDF's inheritedResourceNames for a Form XObject stream are the
+		// names it resolves only from the PAGE's resources rather than its
+		// own (verified live on 6-2-2-t04-fail-e: t2 fires on the form's
+		// content stream reached via the page xObject).
+		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum)...)
 	}
 	return results
 }
@@ -174,7 +181,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 			if hasOwnRes {
 				type3Res, _ := document.ResolveDict(ctx, doc, fd["Resources"])
 				if type3Res != nil {
-					results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, part, pageNum)...)
+					results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum)...)
 				}
 			}
 		}
