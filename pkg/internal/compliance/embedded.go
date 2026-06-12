@@ -84,20 +84,34 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	fileSpecs := collectFileSpecs(ctx, doc)
+	var embeddedSpecs []fileSpecEntry
+	for _, fs := range fileSpecs {
+		if fs.hasEF {
+			embeddedSpecs = append(embeddedSpecs, fs)
+		}
+	}
 
 	for _, fs := range fileSpecs {
 		if ctx.Err() != nil {
 			return results
 		}
 
-		// Check /F and /UF keys (§7.11, required for parts 2+ generally, strictly for part 4).
-		results = append(results, checkFileSpecFUF(ctx, doc, fs, part)...)
+		// Check /F and /UF keys (§7.11). The rule covers "the file
+		// specification dictionary for an embedded file": veraPDF does
+		// not fail t2 on a plain filespec without /EF.
+		if fs.hasEF {
+			results = append(results, checkFileSpecFUF(ctx, doc, fs, part)...)
+		}
 
-		// Check /AFRelationship (required for part 3+ and part 4).
-		results = append(results, checkAFRelationship(ctx, doc, fs, part, profile)...)
+		// Check /AFRelationship. PDF/A-3 §6.8 t3 applies to every file
+		// specification dictionary; PDF/A-4 §6.9 t4 stays scoped to
+		// embedded ones (no corpus evidence of the wider scope there).
+		if part == 3 || fs.hasEF {
+			results = append(results, checkAFRelationship(ctx, doc, fs, part, profile)...)
+		}
 
 		// §6.8 t1 (PDF/A-3): embedded file stream /Subtype must be a valid MIME type.
-		if part == 3 {
+		if part == 3 && fs.hasEF {
 			results = append(results, checkEmbeddedSubtypeMIME(ctx, doc, fs)...)
 		}
 	}
@@ -105,7 +119,7 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// §6.9 t3: PDF/A-4 embedded files must themselves be PDF/A-compliant.
 	// Applies only to base PDF/A-4 (level '4'), not PDF/A-4e or PDF/A-4f.
 	if part == 4 && vctx.level == '4' {
-		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, fileSpecs,
+		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, embeddedSpecs,
 			Rule_19005_4_6_9_t03,
 			[]models.PDFAProfile{models.PDFA4, models.PDFA2b, models.PDFA1b})...)
 	}
@@ -114,7 +128,7 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// 19005-1 or 19005-2 (veraPDF isValidPDFA12). Part 3 deliberately
 	// has no such rule: PDF/A-3 permits attachments of any type.
 	if part == 2 {
-		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, fileSpecs,
+		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, embeddedSpecs,
 			Rule_19005_2_6_8_t05,
 			[]models.PDFAProfile{models.PDFA2b, models.PDFA1b})...)
 	}
@@ -221,6 +235,7 @@ func checkEmbeddedForbiddenPart1(ctx context.Context, doc *document.Document, _ 
 type fileSpecEntry struct {
 	dict   ast.PdfDict
 	objNum int
+	hasEF  bool
 }
 
 // collectFileSpecs scans all objects to find file specification dictionaries
@@ -246,11 +261,14 @@ func collectFileSpecs(ctx context.Context, doc *document.Document) []fileSpecEnt
 			continue
 		}
 
-		if _, hasEF := dict["EF"]; !hasEF {
-			continue
-		}
+		// veraPDF builds a CosFileSpecification for every /Type /Filespec
+		// dict, embedded or not: ISO 19005-3 §6.8 t3/t4 fail on a plain
+		// filespec without /EF (verified live on
+		// PDF_A-2b__veraPDF_test_suite_6-2-8-1-t01-fail-b under PDF/A-3b).
+		// Callers gate the embedded-only checks on hasEF.
+		_, hasEF := dict["EF"]
 
-		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum})
+		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
 	}
 
 	return specs
@@ -316,11 +334,20 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil
 	}
 
-	// Only file specs with /AFRelationship are "associated files" that require
-	// catalog /AF. Legacy embedded files without /AFRelationship are exempt.
+	// PDF/A-3 §6.8 t4 (isAssociatedFile) covers every file specification
+	// dictionary, with or without /EF or /AFRelationship: veraPDF fails a
+	// plain filespec carrying neither (verified live on
+	// PDF_A-2b__veraPDF_test_suite_6-2-8-1-t01-fail-b under PDF/A-3b).
+	// PDF/A-4 keeps the narrower scope: embedded specs that declare
+	// /AFRelationship (no corpus evidence of the wider scope there).
 	var associatedSpecs []fileSpecEntry
 	for _, fs := range fileSpecs {
-		if _, hasAFR := fs.dict["AFRelationship"]; hasAFR {
+		if part == 3 {
+			associatedSpecs = append(associatedSpecs, fs)
+			continue
+		}
+		_, hasAFR := fs.dict["AFRelationship"]
+		if fs.hasEF && hasAFR {
 			associatedSpecs = append(associatedSpecs, fs)
 		}
 	}
@@ -393,7 +420,7 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	}
 
 	if len(afRefs) == 0 {
-		return failf(rule, "no /AF array found but %d embedded file(s) with /AFRelationship exist", len(associatedSpecs))
+		return failf(rule, "no /AF array found but %d file specification(s) requiring association exist", len(associatedSpecs))
 	}
 
 	var results []Violation
@@ -401,7 +428,7 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		if !afRefs[fs.objNum] {
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: fmt.Sprintf("object %d: file specification with /AFRelationship not referenced in any /AF array", fs.objNum),
+				Context: fmt.Sprintf("object %d: file specification not referenced in any /AF array", fs.objNum),
 			})
 		}
 	}

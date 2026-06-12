@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -27,7 +28,7 @@ func matchAFRelationship(v compliance.Violation) bool {
 // require the entry to be present, not a particular relationship, and the source
 // document records no relationship to infer. The repair is additive and never
 // changes what renders.
-func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
 		return nil, nil
@@ -37,12 +38,99 @@ func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		return nil, nil
 	}
 
+	var fixes []string
+
 	count := fixAFInEmbeddedFilesTree(ctx, doc, alloc, catalogDict)
 	count += fixAFInFileAttachmentAnnots(ctx, doc, alloc, catalogDict)
-	if count == 0 {
-		return nil, nil
+	allCount, specRefs := fixAFOnAllFilespecs(ctx, doc, alloc)
+	count += allCount
+	if count > 0 {
+		fixes = append(fixes, fmt.Sprintf("added /AFRelationship /Unspecified to %d file specs", count))
 	}
-	return []string{fmt.Sprintf("added /AFRelationship /Unspecified to %d file specs", count)}, nil
+
+	// ISO 19005-3 §6.8 t4: every file specification dictionary must be an
+	// associated file, i.e. referenced from an /AF array. Wire the catalog
+	// /AF for PDF/A-3 targets; parts 2 and 4 carry no such requirement at
+	// this scope.
+	if compliance.PDFAPart(profile) == 3 && len(specRefs) > 0 {
+		if afFix := ensureCatalogAFRefs(ctx, doc, alloc, catalogRef, specRefs); afFix != "" {
+			fixes = append(fixes, afFix)
+		}
+	}
+
+	return fixes, nil
+}
+
+// fixAFOnAllFilespecs walks every indirect object and adds /AFRelationship
+// /Unspecified to each /Type /Filespec dictionary that lacks it. The name-tree
+// and annotation walks miss loose file specifications, but ISO 19005-3 §6.8 t3
+// applies to every file specification dictionary, embedded or not. Returns the
+// number of repaired dicts and the sorted object numbers of all filespecs.
+func fixAFOnAllFilespecs(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) (int, []int) {
+	var objNums []int
+	for objNum, entry := range doc.Index.Entries {
+		if ctx.Err() != nil {
+			break
+		}
+		if entry.Free || objNum <= 0 {
+			continue
+		}
+		d := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if d == nil {
+			continue
+		}
+		if tn, _ := document.ResolveName(ctx, doc, d["Type"]); tn != "Filespec" {
+			continue
+		}
+		objNums = append(objNums, objNum)
+	}
+	slices.Sort(objNums)
+
+	count := 0
+	for _, objNum := range objNums {
+		count += fixFileSpecAFRelationship(ctx, doc, alloc, ast.PdfIndirectRef{ObjectNum: objNum})
+	}
+	return count, objNums
+}
+
+// ensureCatalogAFRefs appends every filespec object number missing from the
+// catalog /AF array, creating the array if absent. Returns a fix description,
+// or "" when the catalog already references every filespec. The single-ref
+// Factur-X variant is [ensureCatalogAF].
+func ensureCatalogAFRefs(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef, specRefs []int) string {
+	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return ""
+	}
+
+	existing := make(map[int]bool)
+	var afArr ast.PdfArray
+	if arr, err := document.ResolveArray(ctx, doc, catalogDict["AF"]); err == nil {
+		afArr = slices.Clone(arr)
+		for _, elem := range arr {
+			if ref, ok := elem.(ast.PdfIndirectRef); ok {
+				existing[ref.ObjectNum] = true
+			}
+		}
+	}
+
+	added := 0
+	for _, objNum := range specRefs {
+		if existing[objNum] {
+			continue
+		}
+		afArr = append(afArr, ast.PdfIndirectRef{ObjectNum: objNum})
+		added++
+	}
+	if added == 0 {
+		return ""
+	}
+
+	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
+	maps.Copy(newCatalog, catalogDict)
+	newCatalog["AF"] = afArr
+	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+	return fmt.Sprintf("added %d file spec(s) to catalog /AF array", added)
 }
 
 // fixAFInEmbeddedFilesTree repairs the file specifications in the catalog
@@ -132,9 +220,19 @@ func fixFileSpecAFRelationship(ctx context.Context, doc *document.Document, allo
 		ref = r
 	}
 
-	fsDict, err := document.ResolveDict(ctx, doc, obj)
-	if err != nil || fsDict == nil {
-		return 0
+	// Alloc-aware read: the name-tree, annotation, and all-objects walks
+	// overlap, so a second visit must see the first visit's pending write
+	// and skip instead of re-allocating from the stale on-disk dict.
+	var fsDict ast.PdfDict
+	if ref.ObjectNum > 0 {
+		fsDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	}
+	if fsDict == nil {
+		resolved, err := document.ResolveDict(ctx, doc, obj)
+		if err != nil || resolved == nil {
+			return 0
+		}
+		fsDict = resolved
 	}
 
 	if _, ok := fsDict["AFRelationship"]; ok {

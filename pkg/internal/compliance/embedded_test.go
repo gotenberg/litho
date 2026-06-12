@@ -155,3 +155,24 @@ func TestResolveNamesDict(t *testing.T) {
 		}
 	})
 }
+
+// TestCheckCatalogAF_Part3Scope pins veraPDF's PDF/A-3 §6.8 t4 scope: every
+// /Type /Filespec dict must be associated, with or without /EF or
+// /AFRelationship (verified live on a plain filespec in
+// PDF_A-2b__veraPDF_test_suite_6-2-8-1-t01-fail-b under PDF/A-3b). PDF/A-4
+// keeps the narrower embedded-with-AFRelationship scope.
+func TestCheckCatalogAF_Part3Scope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	loose := fileSpecEntry{dict: ast.PdfDict{"F": ast.PdfString("x.pdf")}, objNum: 20}
+
+	got3 := checkCatalogAF(ctx, nopDoc(), ast.PdfDict{}, []fileSpecEntry{loose}, 3)
+	if len(got3) == 0 {
+		t.Error("part 3: loose filespec without /AF association must fail t4")
+	}
+
+	got4 := checkCatalogAF(ctx, nopDoc(), ast.PdfDict{}, []fileSpecEntry{loose}, 4)
+	if len(got4) != 0 {
+		t.Errorf("part 4: loose filespec stays exempt, got %v", got4)
+	}
+}
