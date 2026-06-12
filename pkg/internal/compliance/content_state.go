@@ -388,6 +388,16 @@ func checkContentStreamResourcesOps(
 			name = propName
 		}
 
+		// veraPDF never reports a missing COLOUR SPACE resource: an
+		// unresolvable cs/CS name yields a null colorSpace object and
+		// every colour rule passes vacuously (verified live on
+		// PDF_A-4__veraPDF_test_suite_6-2-2-t03-fail-a remediated to
+		// PDF/A-1b, where cs /CS0 with no ColorSpace dict anywhere
+		// passes PDFA-1B; firing was a 32-cell litho-only pool).
+		if category == "ColorSpace" {
+			continue
+		}
+
 		// Look up the name in the appropriate Resources sub-dictionary.
 		subDict, err := document.ResolveDict(ctx, doc, resources[category])
 		if err != nil || subDict == nil {

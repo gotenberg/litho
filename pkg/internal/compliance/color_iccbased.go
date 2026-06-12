@@ -303,7 +303,13 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 				}
 			}
 
-			if identical {
+			// Only PDF/A-4 prohibits an ICCBased stream identical to the
+			// OutputIntent profile (6.2.4.2 t3). veraPDF's parts-2/3
+			// profiles carry no such rule: a used ICCBased equal to the
+			// intent passes PDFA-2B (verified live on
+			// PDF_A-4__veraPDF_test_suite_6-2-4-2-t03-fail-c remediated to
+			// PDF/A-2b; firing there was a 36-cell litho-only pool).
+			if identical && part == 4 {
 				*results = append(*results, failf(iccBasedIdentityRule(part),
 					"page %d, ColorSpace %s: ICCBased profile is identical to OutputIntent", pageIdx+1, name)...)
 			}
