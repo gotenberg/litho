@@ -131,3 +131,24 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 
 	return c, nil
 }
+
+// ParseEmbeddedCIDMap builds a [CIDMap] from an embedded CMap stream: the
+// cidchar/cidrange sections supply the code-to-CID mapping and the
+// codespacerange sections supply the byte-length structure needed to decode
+// content-stream strings. Returns nil when either half is missing, so a
+// malformed stream degrades to "encoding not decodable" instead of wrong
+// CIDs.
+func ParseEmbeddedCIDMap(ctx context.Context, data []byte) *CIDMap {
+	cidc, err := ParseCID(ctx, data)
+	if err != nil || cidc == nil || len(cidc.Mapping) == 0 {
+		return nil
+	}
+	full, err := Parse(ctx, data)
+	if err != nil || full == nil || len(full.CodeSpaceRanges) == 0 {
+		return nil
+	}
+	return &CIDMap{
+		charToCID: cidc.Mapping,
+		cs:        &CMap{CodeSpaceRanges: full.CodeSpaceRanges},
+	}
+}

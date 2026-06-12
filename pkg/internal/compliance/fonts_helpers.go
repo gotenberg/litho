@@ -530,3 +530,19 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 	}
 	return dw
 }
+
+// perGlyphToUnicodeRule selects the rule veraPDF fires per used glyph whose
+// Unicode mapping cannot be resolved (usedGlyph test `toUnicode != null`).
+// PDF/UA shares the font-level ids (7.21.7 t1 / 8.4.5.8 t1); parts 2/3 use
+// the §6.2.11.7.2 t2 sibling of the font-level t1, Level A/U only. Part 4's
+// only ToUnicode rule tolerates a missing map, and part 1 is covered by the
+// §6.3.8 presence family, so both return the zero Rule here.
+func perGlyphToUnicodeRule(profile string) Rule {
+	if IsPDFUA(profile) {
+		return toUnicodeRule(profile)
+	}
+	if !RequiresUnicodeMapping(profile) {
+		return Rule{}
+	}
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_2_t02, Rule_19005_3_6_2_11_7_2_t02, Rule{})
+}

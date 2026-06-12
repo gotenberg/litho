@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
 // widthTolerance is the maximum allowed difference between PDF-declared
@@ -195,6 +196,15 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 // the veraPDF PDFA-1B profile carries no glyph-presence rule), ISO 19005-2/3
 // §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2.
 func glyphPresenceRule(profile string) Rule {
+	// PDF/UA ids verified live on PDF_A-1b__veraPDF_test_suite
+	// _6-1-12-t10-fail-a remediated to UA-1/UA-2: 7.21.4.1 t2 and
+	// 8.4.5.5.1 t2 fire alongside the notdef and toUnicode rules.
+	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return Rule_14289_2_8_4_5_5_1_t02
+		}
+		return Rule_14289_1_7_21_4_1_t02
+	}
 	if PDFAPart(profile) == 1 && !strings.HasSuffix(profile, "a") {
 		return Rule{}
 	}
@@ -487,6 +497,48 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 			continue
 		}
 		return data
+	}
+	return nil
+}
+
+// checkType0PerGlyphToUnicode validates that every code rendered through a
+// Type0 font resolves to a Unicode value via the font's /ToUnicode CMap
+// (veraPDF usedGlyph test `toUnicode != null`, verified live on
+// 6-1-12-t10-fail-a under UA-1/UA-2: 7.21.7 t1 / 8.4.5.8 t1 fire alongside
+// the presence and notdef rules). A missing /ToUnicode entirely is the
+// font-level rule's job; this check covers a present map with gaps.
+func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+	rule := perGlyphToUnicodeRule(profile)
+	if rule.Specification == "" {
+		return nil
+	}
+	if usage == nil || len(usage.rawStrings) == 0 || !usage.visible {
+		return nil
+	}
+	tuStream, err := document.ResolveStream(ctx, doc, fontDict["ToUnicode"])
+	if err != nil {
+		return nil
+	}
+	data, err := doc.DecodeStream(ctx, tuStream)
+	if err != nil {
+		return nil
+	}
+	tu, err := cmap.Parse(ctx, data)
+	if err != nil || tu == nil || len(tu.Mapping) == 0 {
+		return nil
+	}
+	for _, s := range usage.rawStrings {
+		b := []byte(s)
+		for off := 0; off < len(b); {
+			consumed, _, ok := tu.Map(b[off:])
+			if consumed <= 0 {
+				consumed = 1
+			}
+			if !ok {
+				return failf(rule, "font %s on page %d: rendered code has no ToUnicode mapping", fontName, pageNum)
+			}
+			off += consumed
+		}
 	}
 	return nil
 }

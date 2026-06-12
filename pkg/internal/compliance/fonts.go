@@ -350,6 +350,10 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// ToUnicode for composite fonts.
 	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
+	// Per-glyph ToUnicode coverage: a present map must cover every code
+	// rendered through the font (§6.2.11.7.2 t2 / UA 7.21.7 / 8.4.5.8).
+	results = append(results, checkType0PerGlyphToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
+
 	// CMap embedding and WMode.
 	results = append(results, checkCMapEmbedding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
@@ -506,7 +510,30 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 // (Adobe-Japan1 etc.) is decoded codespace-aware through its bundled bcmap; the
 // resolvable CIDs are returned for the caller's embedded-font charset check,
 // while unmapped codes are skipped to stay free of false positives.
-func collectType0CIDs(encName string, usage *fontUsageInfo) (cids map[uint16]bool, notdef, ok bool) {
+func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInfo) (cids map[uint16]bool, notdef, ok bool) {
+	// An embedded CMap stream resolves to an empty name; decode through the
+	// parsed stream instead so the used-glyph checks cover fonts the
+	// veraPDF test suite encodes with custom CMaps (the 6-1-12-t10 family
+	// was silent across every profile without this).
+	if encName == "" && embedded != nil {
+		cids = make(map[uint16]bool)
+		for _, s := range usage.rawStrings {
+			for _, c := range embedded.Decode([]byte(s)) {
+				if !c.Mapped {
+					continue
+				}
+				// A CMap mapping a used code to a CID beyond 65535
+				// references a glyph no font can contain (ISO 32000-2
+				// limits CIDs to 0..65535): the renderer draws .notdef,
+				// which is exactly what the caller's notdef path reports.
+				if c.CID < 0 || c.CID > 0xFFFF {
+					return nil, true, true
+				}
+				cids[uint16(c.CID)] = true
+			}
+		}
+		return cids, false, true
+	}
 	switch encName {
 	case "Identity-H", "Identity-V":
 		cids = make(map[uint16]bool)
@@ -563,15 +590,32 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 	}
 
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
-	usedCIDs, notdef, ok := collectType0CIDs(string(encName), usage)
+	var embedded *cmap.CIDMap
+	if encName == "" {
+		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
+			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
+				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
+			}
+		}
+	}
+	usedCIDs, notdef, ok := collectType0CIDs(string(encName), embedded, usage)
 	if !ok {
-		// litho cannot decode this /Encoding to CIDs (an embedded CMap stream
-		// or an unrecognized predefined CMap); leave it unchecked rather than
-		// risk a false positive.
+		// litho cannot decode this /Encoding to CIDs (an unparseable
+		// embedded CMap stream or an unrecognized predefined CMap); leave
+		// it unchecked rather than risk a false positive.
 		return nil
 	}
 	if notdef {
-		return failf(rule, "font %s on page %d: odd-length string under a 2-byte CMap references .notdef", fontName, pageNum)
+		// A decode-level .notdef (odd-length tail or a CID beyond 65535)
+		// also means no real glyph backs the rendered code: veraPDF fires
+		// the glyph-presence rule alongside notdef (verified live on
+		// 6-1-12-t10-fail-a under UA-1: 7.21.4.1 t2 + 7.21.8 t1).
+		results := failf(rule, "font %s on page %d: text renders .notdef (odd-length code tail or CID beyond 65535)", fontName, pageNum)
+		if pr := glyphPresenceRule(profile); pr.Specification != "" {
+			results = append(results, failf(pr,
+				"font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)...)
+		}
+		return results
 	}
 
 	// CID 0 is always .notdef.
