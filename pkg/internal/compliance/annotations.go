@@ -130,6 +130,17 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 	return results
 }
 
+// pdfa1AnnotWhitelist mirrors veraPDF's PDFA-1 §6.5.2 t1 test verbatim: the
+// PDF 1.4 annotation types ISO 19005-1 permits.
+//
+//nolint:gochecknoglobals // static spec table.
+var pdfa1AnnotWhitelist = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Highlight": true, "Underline": true,
+	"Squiggly": true, "StrikeOut": true, "Stamp": true, "Ink": true,
+	"Popup": true, "Widget": true, "PrinterMark": true, "TrapNet": true,
+}
+
 // checkForbiddenAnnotType validates that the annotation subtype is permitted
 // for the given PDF/A part and level (§6.5.2 for part 1, §6.3.1 for parts 2+).
 func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfDict, subtype ast.PdfName, part int, level byte, loc string) []Violation {
@@ -137,16 +148,15 @@ func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfD
 
 	switch part {
 	case 1:
-		// PDF/A-1: FileAttachment, Sound, Movie are forbidden.
-		// 3D and RichMedia are also forbidden (not in PDF Reference).
-		// Non-standard subtypes (not in ISO 32000-1, Table 169) are forbidden.
-		switch subtype {
-		case "FileAttachment", "Sound", "Movie", "3D", "RichMedia":
+		// PDF/A-1 permits exactly the PDF 1.4 annotation set minus the
+		// types ISO 19005-1 forbids. veraPDF's PDFA-1 6.5.2 whitelist
+		// (extracted from the live profile test): Text, Link, FreeText,
+		// Line, Square, Circle, Highlight, Underline, Squiggly,
+		// StrikeOut, Stamp, Ink, Popup, Widget, PrinterMark, TrapNet.
+		// PDF 1.5+ types (Screen, Caret, Polygon, PolyLine, Watermark)
+		// are forbidden alongside FileAttachment/Sound/Movie.
+		if !pdfa1AnnotWhitelist[subtype] {
 			forbidden = true
-		default:
-			if !standardAnnotTypes1[subtype] {
-				forbidden = true
-			}
 		}
 	case 2, 3:
 		// PDF/A-2/3: 3D, RichMedia are forbidden.
