@@ -383,6 +383,12 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 		// Scan CharProcs content streams for device CS operators.
 		// This must run even when the font has no /Resources dict, since
 		// Type3 fonts may legally inherit resources from the page.
+		// CharProcs are a sub-scope like Form XObjects: only the FONT's
+		// own /Resources DefaultCS covers their operators, never the
+		// page's (ISO 32000-2 §8.6.5.7; veraPDF fails 6.2.4.3 t2 on a
+		// charproc rg despite an injected page DefaultRGB, verified live
+		// on PDF_A-2b__veraPDF_test_suite_6-2-4-3-t01-fail-h).
+		var charProcUsage deviceCSUsage
 		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
 		if err == nil && charProcs != nil {
 			for _, cpObj := range charProcs {
@@ -404,21 +410,43 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 				for _, op := range ops {
 					switch op.Operator {
 					case "g", "G":
-						usage.gray = true
+						charProcUsage.gray = true
 					case "rg", "RG":
-						usage.rgb = true
+						charProcUsage.rgb = true
 					case "k", "K":
-						usage.cmyk = true
+						charProcUsage.cmyk = true
 					case "cs", "CS":
 						if len(op.Operands) >= 1 {
 							if csN, ok := op.Operands[0].(ast.PdfName); ok {
-								markDeviceCS(string(csN), usage)
+								markDeviceCS(string(csN), &charProcUsage)
 							}
 						}
 					}
 				}
 			}
 		}
+
+		// Suppress charproc usage covered by the font's own Resources
+		// DefaultCS, then record the remainder as sub-scope usage that a
+		// parent DefaultCS cannot cover.
+		if fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"]); err == nil && fontRes != nil {
+			fontDefaults := collectDefaultColorSpaces(ctx, doc, fontRes)
+			if fontDefaults.hasRGB {
+				charProcUsage.rgb = false
+			}
+			if fontDefaults.hasCMYK {
+				charProcUsage.cmyk = false
+			}
+			if fontDefaults.hasGray {
+				charProcUsage.gray = false
+			}
+		}
+		usage.subScopeRGB = usage.subScopeRGB || charProcUsage.rgb
+		usage.subScopeCMYK = usage.subScopeCMYK || charProcUsage.cmyk
+		usage.subScopeGray = usage.subScopeGray || charProcUsage.gray
+		usage.rgb = usage.rgb || charProcUsage.rgb
+		usage.cmyk = usage.cmyk || charProcUsage.cmyk
+		usage.gray = usage.gray || charProcUsage.gray
 
 		// Scan font's own ColorSpace resource dict (if present).
 		fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"])

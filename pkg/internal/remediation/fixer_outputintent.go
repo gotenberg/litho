@@ -414,6 +414,7 @@ func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 
 	changedDown := recurseColorSpacePatch(ctx, alloc, doc, newRes, "XObject", key, csArr, visited)
 	changedDown = recurseColorSpacePatch(ctx, alloc, doc, newRes, "Pattern", key, csArr, visited) || changedDown
+	changedDown = patchType3FontColorSpace(ctx, alloc, doc, newRes, key, csArr, visited) || changedDown
 	if changedDown {
 		changed = true
 	}
@@ -426,6 +427,62 @@ func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 		return patchResult{value: resRef, changed: true}
 	}
 	return patchResult{value: newRes, changed: true}
+}
+
+// patchType3FontColorSpace ensures every Type 3 font in the /Font resource
+// sub-dict defines `key` in its own /Resources ColorSpace, creating the
+// Resources dict when absent. CharProcs are a sub-scope like Form XObjects:
+// a page-level DefaultCS never covers their operators (ISO 32000-2
+// §8.6.5.7), so the Default must live on the font itself for veraPDF's
+// gOutputCS resolution to see it.
+func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, key ast.PdfName, csArr ast.PdfArray, visited map[int]bool) bool {
+	fontObj, ok := newRes["Font"]
+	if !ok {
+		return false
+	}
+	fontDict, err := document.ResolveDict(ctx, doc, fontObj)
+	if err != nil || fontDict == nil {
+		return false
+	}
+	changed := false
+	for _, entryObj := range fontDict {
+		ref, isRef := entryObj.(ast.PdfIndirectRef)
+		if !isRef || ref.ObjectNum == 0 {
+			continue
+		}
+		if visited[ref.ObjectNum] {
+			continue
+		}
+		visited[ref.ObjectNum] = true
+
+		fd := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		if fd == nil {
+			continue
+		}
+		if subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"]); subtype != "Type3" {
+			continue
+		}
+
+		resObj, hasRes := fd["Resources"]
+		if !hasRes {
+			newFont := make(ast.PdfDict, len(fd)+1)
+			maps.Copy(newFont, fd)
+			newFont["Resources"] = ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr}}
+			alloc.AllocAt(ref.ObjectNum, newFont)
+			changed = true
+			continue
+		}
+		patched := patchResourceColorSpace(ctx, alloc, doc, resObj, key, csArr, visited)
+		if !patched.changed {
+			continue
+		}
+		newFont := make(ast.PdfDict, len(fd)+1)
+		maps.Copy(newFont, fd)
+		newFont["Resources"] = patched.value
+		alloc.AllocAt(ref.ObjectNum, newFont)
+		changed = true
+	}
+	return changed
 }
 
 // recurseColorSpacePatch walks a named resource sub-dict (XObject or
