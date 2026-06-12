@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -98,15 +99,44 @@ func checkSignatureByteRange(ctx context.Context, doc *document.Document, field 
 		br[i] = int64(v)
 	}
 	size := doc.FileSize()
-	if br[0] != 0 || br[1] < 0 || br[2] < br[1] || br[2]+br[3] != size {
+	covers := br[0] == 0 && br[1] >= 0 && br[2] >= br[1] && br[2]+br[3] <= size
+	if covers && br[2]+br[3] < size {
+		// Incremental updates after signing are legal: veraPDF accepts a
+		// ByteRange that covers the entire SIGNED revision, i.e. the span
+		// ends at that revision's %%EOF, with later revisions appended
+		// behind it (verified live: the same [0 1022 4862 6654] range
+		// passes in an 11,516-byte file grown to 15,913 by remediation
+		// and fails in a 7,207-byte file it overruns).
+		covers = signedSpanEndsAtEOF(ctx, doc, br[2]+br[3])
+	}
+	if !covers {
 		rule := Rule_19005_2_6_4_3_t01
 		if part == 3 {
 			rule = Rule_19005_3_6_4_3_t01
 		}
 		*results = append(*results, failf(rule,
-			"signature /ByteRange [%d %d %d %d] does not cover the file (size %d)",
+			"signature /ByteRange [%d %d %d %d] does not cover the signed revision (file size %d)",
 			br[0], br[1], br[2], br[3], size)...)
 	}
+}
+
+// sigEOFWindow bounds the tail read when checking that a signature's
+// ByteRange ends at a revision boundary. Anti-DoS sizing, not
+// spec-mandated: "%%EOF" plus one EOL is at most 7 bytes; 32 leaves
+// room for trailing whitespace real producers emit.
+const sigEOFWindow = 32
+
+// signedSpanEndsAtEOF reports whether the bytes immediately before
+// offset end with an %%EOF marker (optionally followed by EOL or
+// whitespace), meaning the span covers a complete revision.
+func signedSpanEndsAtEOF(ctx context.Context, doc *document.Document, end int64) bool {
+	start := max(end-sigEOFWindow, 0)
+	buf, err := doc.ReadFileBytes(ctx, start, end-start)
+	if err != nil {
+		return false
+	}
+	t := bytes.TrimRight(buf, " \t\r\n")
+	return bytes.HasSuffix(t, []byte("%%EOF"))
 }
 
 // checkFormField validates a single form field and recurses into child fields.
