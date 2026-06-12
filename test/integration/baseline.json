@@ -105,14 +105,14 @@
           }
         },
         "remediation": {
-          "matched": 22317,
-          "mismatched": 11483,
+          "matched": 22381,
+          "mismatched": 11419,
           "skipped": 13,
           "metrics": {
-            "disagreement": 10354,
-            "fully_fixed": 22317,
-            "litho_fixed": 128926,
-            "litho_post": 18798,
+            "disagreement": 10114,
+            "fully_fixed": 22381,
+            "litho_fixed": 129166,
+            "litho_post": 18558,
             "litho_pre": 147724,
             "parse_failed": 0,
             "verapdf_fixed": 126776,
