@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
@@ -360,7 +361,7 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 	if err != nil {
 		return fmt.Errorf("validate pre: %w", err)
 	}
-	out.LithoPre = len(pre)
+	out.LithoPre = len(distinctRuleIDs(pre))
 
 	w := pdf.NewWriter(r)
 	if err := remediate(ctx, w); err != nil {
@@ -392,10 +393,13 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 		out.VeraPost = out.VeraPre
 		return nil
 	}
-	out.LithoPost = len(post)
-	for _, v := range post {
-		out.LithoRules = append(out.LithoRules, fmt.Sprintf("%s-t%02d", v.Clause, v.TestNumber))
-	}
+	// Count DISTINCT failed rules, the same unit batchValidate reports
+	// for VeraPDF: counting per-occurrence violations against VeraPDF's
+	// per-rule counts made the disagreement metric compare apples to
+	// oranges (a 7-destination 8.8 failure read as 6 cells of fake
+	// disagreement).
+	out.LithoRules = distinctRuleIDs(post)
+	out.LithoPost = len(out.LithoRules)
 	if len(post) > len(pre) {
 		for _, v := range post {
 			if isNew(v, pre) {
@@ -490,6 +494,23 @@ func profileDirToVeraPDFFlavour(profileDir string) (string, bool) {
 	}
 	v, ok := m[profileDir]
 	return v, ok
+}
+
+// distinctRuleIDs returns the sorted, deduplicated "clause-tNN" ids of
+// the violations, the same identifiers batchValidate derives from
+// VeraPDF rule summaries.
+func distinctRuleIDs(violations []pdf.Violation) []string {
+	seen := make(map[string]bool, len(violations))
+	var ids []string
+	for _, v := range violations {
+		id := fmt.Sprintf("%s-t%02d", v.Clause, v.TestNumber)
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func isNew(v pdf.Violation, before []pdf.Violation) bool {
