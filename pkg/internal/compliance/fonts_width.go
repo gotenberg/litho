@@ -542,3 +542,27 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 	}
 	return nil
 }
+
+// ExpectedSimpleFontWidths returns the authoritative width (in 1/1000 text
+// space units) for each charCode of a simple font, using exactly the
+// resolution the width check applies: the font program's metrics through
+// the cmap or glyph-name mapping, with codes that map to GID 0 carrying the
+// .notdef glyph's own advance width. Codes litho cannot map are absent from
+// the map and must keep their declared width (veraPDF treats them as
+// unresolvable). Remediation uses this so the repair and the check can
+// never drift.
+func ExpectedSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (map[int]float64, bool) {
+	binaryWidths, unitsPerEm, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
+	if !ok || charCodeToGID == nil {
+		return nil, false
+	}
+	out := make(map[int]float64, len(charCodeToGID))
+	for code, gid := range charCodeToGID {
+		bw, ok := binaryWidths[gid]
+		if !ok {
+			continue
+		}
+		out[int(code)] = float64(bw) * 1000.0 / float64(unitsPerEm)
+	}
+	return out, true
+}

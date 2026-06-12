@@ -148,29 +148,25 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 		firstChar = int(fc)
 	}
 
-	charToGID := typography.ExtractCharCodeToGID(ctx, fontData)
+	// Shared metrics with the width CHECK (compliance.ExpectedSimpleFontWidths):
+	// the old private mapping fell back to gid == charCode for codes absent
+	// from the cmap and lacked the Type1 glyph-name chain, so it wrote widths
+	// veraPDF then flagged (the 60-cell post-remediation 6.2.11.5 pool).
+	expectedWidths, okMetrics := compliance.ExpectedSimpleFontWidths(ctx, doc, fontDict)
 
 	modified := false
 	newWidths := make(ast.PdfArray, len(widths))
 	copy(newWidths, widths)
 
-	if !fixWidths {
+	if !fixWidths || !okMetrics {
 		widths = nil
 	}
 	for i, wObj := range widths {
 		pdfWidth := document.Float(wObj)
-		charCode := uint16(firstChar + i) //nolint:gosec // charCode range is bounded by PDF spec
-		gid := charCode
-		if charToGID != nil {
-			if mapped, ok := charToGID[charCode]; ok {
-				gid = mapped
-			}
-		}
-		bw, ok := binaryWidths[gid]
+		expected, ok := expectedWidths[firstChar+i]
 		if !ok {
 			continue
 		}
-		expected := float64(bw) * 1000.0 / float64(upm)
 		if math.Abs(pdfWidth-expected) > 1.0 {
 			newWidths[i] = ast.PdfReal(math.Round(expected*100) / 100)
 			modified = true
@@ -202,6 +198,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	// charcode == GID produces destinations that belong to other glyphs
 	// and misses the codes the page actually uses, so the font is left
 	// for the validator to keep flagging instead.
+	charToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 	if charToGID != nil && needsToUnicode(ctx, doc, fontDict) {
 		gidToUnicode := typography.ExtractGIDToUnicode(ctx, fontData)
 		if len(gidToUnicode) > 0 {
