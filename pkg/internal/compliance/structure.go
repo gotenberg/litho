@@ -39,15 +39,33 @@ var standardStructTypesPDF2Only = map[ast.PdfName]bool{
 	"Em": true, "Strong": true, "Artifact": true, "FENote": true,
 }
 
+// standardStructTypesPDF15Plus lists types that ISO 32000-1 added after
+// PDF 1.4. PDF/A-1 (ISO 19005-1) is based on PDF 1.4, whose structure-type
+// tables lack them; veraPDF's PDFA-1A profile fails an unmapped Annot
+// element under 6.8.3.4 t1 (verified live on PDF_UA-1__7.18.1-t02-fail-a
+// remediated to PDF/A-1a). Only Annot is listed so far: the other PDF 1.5
+// additions (Ruby/Warichu/RB/RT/RP/WT/WP, THead/TBody/TFoot) are
+// unverified against the profile and stay standard until a fixture or
+// profile extract proves otherwise.
+//
+//nolint:gochecknoglobals // constant set.
+var standardStructTypesPDF15Plus = map[ast.PdfName]bool{
+	"Annot": true,
+}
+
 // isStandardStructType returns true if the name is a standard structure type
 // for the given profile. ISO 32000-2 types (Title, Artifact, Em, Strong, etc.)
-// are only standard for PDF/A-4 and PDF/UA-2.
+// are only standard for PDF/A-4 and PDF/UA-2; PDF 1.5 additions are not
+// standard for PDF/A-1.
 func isStandardStructType(name ast.PdfName, profile string) bool {
 	if !standardStructTypes[name] {
 		return false
 	}
 	if standardStructTypesPDF2Only[name] {
 		return PDFAPart(profile) == 4 || profile == "PDF/UA-2"
+	}
+	if standardStructTypesPDF15Plus[name] && PDFAPart(profile) == 1 {
+		return false
 	}
 	return true
 }

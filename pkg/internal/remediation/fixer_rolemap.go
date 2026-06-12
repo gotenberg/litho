@@ -37,7 +37,8 @@ func matchRoleMap(v compliance.Violation) bool {
 	return descriptionContains(v, "standard tags") && descriptionContains(v, "remapped") ||
 		descriptionContains(v, "circular mapping") ||
 		descriptionContains(v, "is remapped") ||
-		descriptionContains(v, "standard type") && descriptionContains(v, "remapped")
+		descriptionContains(v, "standard type") && descriptionContains(v, "remapped") ||
+		clausePrefix(v, "6.8.3.4")
 }
 
 // fixRoleMap cleans up the StructTreeRoot /RoleMap. It breaks every circular
@@ -47,7 +48,7 @@ func matchRoleMap(v compliance.Violation) bool {
 // (PDF 2.0 / PDF/UA-2) document is left to its namespace mechanism: a standard
 // *name* there may belong to a custom namespace and still need its mapping, so
 // the standard-type drop does not apply on name alone.
-func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
 		return nil, nil
@@ -74,12 +75,10 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		return nil, nil
 	}
 
-	roleMapObj, ok := stDict["RoleMap"]
-	if !ok {
-		return nil, nil
-	}
-	roleMap, err := document.ResolveDict(ctx, doc, roleMapObj)
-	if err != nil || roleMap == nil {
+	part1 := compliance.PDFAPart(profile) == 1
+
+	roleMap, _ := document.ResolveDict(ctx, doc, stDict["RoleMap"]) // Best-effort: nil means no existing map.
+	if roleMap == nil && !part1 {
 		return nil, nil
 	}
 
@@ -132,6 +131,12 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			if _, ok := keep[src]; !ok {
 				continue
 			}
+			// Annot is a PDF 1.5 type: under PDF/A-1 (PDF 1.4) it is
+			// NON-standard and its mapping is the required repair, not a
+			// forbidden standard remap (veraPDF PDFA-1A 6.8.3.4 t1).
+			if part1 && src == "Annot" {
+				continue
+			}
 			if standardStructTypes[src] {
 				delete(keep, src)
 				standardsDropped++
@@ -139,7 +144,16 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		}
 	}
 
-	if cyclesBroken == 0 && standardsDropped == 0 {
+	// PDF/A-1 targets: every Annot structure element needs a role mapping
+	// to a PDF 1.4 standard type. Link is the nearest functional
+	// equivalent for the annotation wrappers litho's own tagging emits.
+	annotMapped := 0
+	if part1 && keep["Annot"] == nil && structTreeHasAnnotElement(ctx, doc) {
+		keep["Annot"] = ast.PdfName("Link")
+		annotMapped++
+	}
+
+	if cyclesBroken == 0 && standardsDropped == 0 && annotMapped == 0 {
 		return nil, nil
 	}
 
@@ -161,5 +175,35 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	if standardsDropped > 0 {
 		fixes = append(fixes, fmt.Sprintf("removed %d standard-type role mapping(s)", standardsDropped))
 	}
+	if annotMapped > 0 {
+		fixes = append(fixes, "mapped Annot structure elements to Link for PDF/A-1")
+	}
 	return fixes, nil
+}
+
+// structTreeHasAnnotElement reports whether any structure element in the
+// document uses type Annot. The scan walks the object index like
+// [collectFileSpecs]: structure elements are always indirect.
+func structTreeHasAnnotElement(ctx context.Context, doc *document.Document) bool {
+	for objNum, entry := range doc.Index.Entries {
+		if ctx.Err() != nil {
+			return false
+		}
+		if entry.Free || objNum <= 0 {
+			continue
+		}
+		d, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil || d == nil {
+			continue
+		}
+		if t, _ := document.ResolveName(ctx, doc, d["Type"]); t != "" && t != "StructElem" {
+			continue
+		}
+		if sName, _ := document.ResolveName(ctx, doc, d["S"]); sName == "Annot" {
+			if _, hasP := d["P"]; hasP {
+				return true
+			}
+		}
+	}
+	return false
 }
