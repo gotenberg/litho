@@ -507,7 +507,14 @@ func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, a
 }
 
 func catalogAFRule(part int) Rule {
-	return ruleByPart(part, Rule{}, Rule{}, Rule_19005_3_6_8_t04, Rule_19005_4_6_9_t04)
+	// Only PDF/A-3 requires associated-file linkage (§6.8 t4,
+	// isAssociatedFile). veraPDF's PDF/A-4 profile keys 6.9 t4 as the
+	// AFRelationship-presence rule and carries no association
+	// requirement: a filespec with /AFRelationship and no /AF array
+	// passes PDFA-4F (verified live on
+	// PDF_A-3b__veraPDF_test_suite_6-8-t02-fail-a remediated to
+	// PDF/A-4f; firing there was a 29-cell litho-only pool).
+	return ruleByPart(part, Rule{}, Rule{}, Rule_19005_3_6_8_t04, Rule{})
 }
 
 // embeddedDepthKey is a context key for tracking recursive embedded PDF validation depth.

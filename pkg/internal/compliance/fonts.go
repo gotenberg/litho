@@ -385,8 +385,11 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		}
 	}
 
-	// CIDFont glyph coverage (CIDSet for CIDFont subsets).
-	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile)...)
+	// CIDFont glyph coverage (CIDSet for CIDFont subsets). Completeness
+	// is scoped to USED CIDs: veraPDF passes a CIDSet that omits unused
+	// glyphs (verified live on 6-2-11-4-1-t02-fail-e under PDF/A-2b,
+	// where flagging unused CID 4998 was a 30-cell litho-only pool).
+	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, type0UsedCIDs(ctx, doc, fontDict, usage))...)
 
 	// ToUnicode CMap values.
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
@@ -583,6 +586,31 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 // from the embedded font program's charset (also renders as .notdef). It
 // handles Identity-H/V and predefined CMap encodings (see [collectType0CIDs]);
 // embedded CMap streams are not decoded and are left unchecked.
+// type0UsedCIDs resolves the CIDs a Type0 font's text operators reference,
+// through the same /Encoding decoding the notdef check uses (predefined
+// CMaps, Identity, or an embedded CMap stream). Returns nil when the
+// encoding cannot be decoded or nothing is used: callers treat nil as
+// "usage unknown" and skip usage-scoped checks rather than over-fire.
+func type0UsedCIDs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) map[uint16]bool {
+	if usage == nil || len(usage.rawStrings) == 0 {
+		return nil
+	}
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	var embedded *cmap.CIDMap
+	if encName == "" {
+		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
+			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
+				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
+			}
+		}
+	}
+	cids, _, ok := collectType0CIDs(string(encName), embedded, usage)
+	if !ok || len(cids) == 0 {
+		return nil
+	}
+	return cids
+}
+
 func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {

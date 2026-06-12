@@ -191,7 +191,7 @@ func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, f
 
 // checkCIDFontGlyphCoverage validates that CIDFont subsets have a /CIDSet entry
 // in their FontDescriptor.
-func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
+func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, usedCIDs map[uint16]bool) []Violation {
 	basefont := fontBaseFont(ctx, doc, cidFontDict)
 	if !isSubsetFont(basefont) {
 		return nil
@@ -219,7 +219,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 	if completenessRule.Specification != "" {
 		cidSetObj, hasCIDSet := fd["CIDSet"]
 		if hasCIDSet {
-			if r := checkCIDSetCompleteness(ctx, doc, cidFontDict, cidSetObj, fontName, pageNum, completenessRule); r != nil {
+			if r := checkCIDSetCompleteness(ctx, doc, cidFontDict, cidSetObj, fontName, pageNum, completenessRule, usedCIDs); r != nil {
 				return r
 			}
 		}
@@ -243,7 +243,15 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 
 // checkCIDSetCompleteness decodes a CIDSet bitfield stream and verifies
 // it covers all GIDs with non-empty glyph data in the embedded font program.
-func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
+func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
+	// veraPDF scopes completeness to USED glyphs: a CIDSet omitting an
+	// unused glyph passes PDFA-2B (verified live on
+	// PDF_A-2b__veraPDF_test_suite_6-2-11-4-1-t02-fail-e, where flagging
+	// unused CID 4998 was a 30-cell litho-only pool). Unknown usage means
+	// nothing can be checked without over-firing.
+	if usedCIDs == nil {
+		return nil
+	}
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
 		doc.Logger.Debug("compliance: cannot resolve CIDSet stream", "error", err)
@@ -286,6 +294,9 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 			if cid == 0 {
 				continue // .notdef
 			}
+			if !usedCIDs[cid] {
+				continue
+			}
 			if !cidSetBits[cid] {
 				return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
 			}
@@ -300,6 +311,9 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 
 	// Find GIDs with actual glyph data (non-empty).
 	for gid := uint16(1); gid < uint16(len(cidSetData)*8); gid++ { //nolint:gosec,mnd
+		if !usedCIDs[gid] {
+			continue
+		}
 		if !emptyGIDs[gid] {
 			// GID has data → CID (== GID under Identity) must be in CIDSet.
 			if !cidSetBits[gid] {
