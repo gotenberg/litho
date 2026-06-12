@@ -154,6 +154,41 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		}
 	}
 
+	// Link annotation destinations (t01 for /Dest, t02 for /A GoTo):
+	// veraPDF's 8.8 rules cover every intra-document PDDestination,
+	// including ones reached through Link annotations.
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return results
+		}
+		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, aObj := range annots {
+			annot, _ := document.ResolveDict(ctx, doc, aObj)
+			if annot == nil {
+				continue
+			}
+			if st, _ := document.ResolveName(ctx, doc, annot["Subtype"]); st != "Link" {
+				continue
+			}
+			if destObj, ok := annot["Dest"]; ok && !isStructureDestination(ctx, doc, destObj) {
+				results = append(results, fail(Rule_14289_2_8_8_t01,
+					"Link annotation destination is not a structure destination")...)
+			}
+			if actObj, ok := annot["A"]; ok {
+				act, err := document.ResolveDict(ctx, doc, actObj)
+				if err != nil || act == nil {
+					continue
+				}
+				if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" {
+					if dObj, hasD := act["D"]; hasD && !isStructureDestination(ctx, doc, dObj) {
+						results = append(results, fail(Rule_14289_2_8_8_t02,
+							"Link GoTo destination is not a structure destination")...)
+					}
+				}
+			}
+		}
+	}
+
 	return results
 }
 

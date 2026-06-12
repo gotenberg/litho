@@ -66,6 +66,9 @@ func fixStructDest(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		count += picker.fixOutlineLevel(ctx, alloc, outlines["First"], make(map[int]bool))
 	}
 
+	// Link annotations: /Dest arrays and /A GoTo actions.
+	count += picker.fixLinkAnnots(ctx, alloc)
+
 	if count == 0 {
 		return nil, nil
 	}
@@ -199,6 +202,61 @@ func (p *structElemPicker) fixGoToAction(ctx context.Context, alloc *writer.ObjA
 	newDict["D"] = wrapped
 	alloc.AllocAt(ref.ObjectNum, newDict)
 	return true
+}
+
+// fixLinkAnnots rewrites Link annotation /Dest arrays and /A GoTo
+// destinations across all pages.
+func (p *structElemPicker) fixLinkAnnots(ctx context.Context, alloc *writer.ObjAllocator) int {
+	catalog, err := document.ResolveCatalog(ctx, p.doc)
+	if err != nil {
+		return 0
+	}
+	pages, err := document.ResolvePages(ctx, p.doc, catalog)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return count
+		}
+		pageDict := livePageDict(ctx, alloc, p.doc, page)
+		if pageDict == nil {
+			continue
+		}
+		annots, err := document.ResolveArray(ctx, p.doc, pageDict["Annots"])
+		if err != nil {
+			continue
+		}
+		for _, aObj := range annots {
+			ref, isRef := aObj.(ast.PdfIndirectRef)
+			if !isRef {
+				continue // direct annot dicts cannot be re-allocated in place
+			}
+			annot := resolveFromAllocOrDoc(ctx, alloc, p.doc, ref)
+			if annot == nil {
+				continue
+			}
+			if st, _ := document.ResolveName(ctx, p.doc, annot["Subtype"]); st != "Link" {
+				continue
+			}
+			if destObj, hasDest := annot["Dest"]; hasDest {
+				if wrapped, ok := p.wrapDest(ctx, destObj); ok {
+					newAnnot := make(ast.PdfDict, len(annot))
+					maps.Copy(newAnnot, annot)
+					newAnnot["Dest"] = wrapped
+					alloc.AllocAt(ref.ObjectNum, newAnnot)
+					count++
+				}
+			}
+			if actObj, hasA := annot["A"]; hasA {
+				if p.fixGoToAction(ctx, alloc, actObj) {
+					count++
+				}
+			}
+		}
+	}
+	return count
 }
 
 // fixOutlineLevel walks one outline level, rewriting /Dest arrays and
