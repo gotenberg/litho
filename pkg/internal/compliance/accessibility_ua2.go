@@ -150,9 +150,10 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		}
 	}
 
-	// Link annotation destinations (t01 for /Dest, t02 for /A GoTo):
-	// veraPDF's 8.8 rules cover every intra-document PDDestination,
-	// including ones reached through Link annotations.
+	// Annotation destinations: veraPDF's 8.8 rules cover every
+	// intra-document PDDestination and PDGoToAction, including Link
+	// /Dest entries and GoTo actions hanging off any annotation's /A or
+	// /AA (additional-actions) entries.
 	for _, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return results
@@ -163,27 +164,41 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 			if annot == nil {
 				continue
 			}
-			if st, _ := document.ResolveName(ctx, doc, annot["Subtype"]); st != "Link" {
-				continue
+			if st, _ := document.ResolveName(ctx, doc, annot["Subtype"]); st == "Link" {
+				if destObj, ok := annot["Dest"]; ok && !isStructureDestination(ctx, doc, destObj) {
+					results = append(results, fail(Rule_14289_2_8_8_t01,
+						"Link annotation destination is not a structure destination")...)
+				}
 			}
-			if destObj, ok := annot["Dest"]; ok && !isStructureDestination(ctx, doc, destObj) {
-				results = append(results, fail(Rule_14289_2_8_8_t01,
-					"Link annotation destination is not a structure destination")...)
-			}
-			if actObj, ok := annot["A"]; ok {
+			for _, actObj := range annotActionObjects(ctx, doc, annot) {
 				act, err := document.ResolveDict(ctx, doc, actObj)
 				if err != nil || act == nil {
 					continue
 				}
 				if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, act) {
 					results = append(results, fail(Rule_14289_2_8_8_t02,
-						"Link GoTo destination is not a structure destination")...)
+						"annotation GoTo destination is not a structure destination")...)
 				}
 			}
 		}
 	}
 
 	return results
+}
+
+// annotActionObjects collects an annotation's /A action plus every value
+// of its /AA additional-actions dictionary.
+func annotActionObjects(ctx context.Context, doc *document.Document, annot ast.PdfDict) []ast.PdfObject {
+	var out []ast.PdfObject
+	if a, ok := annot["A"]; ok {
+		out = append(out, a)
+	}
+	if aa, err := document.ResolveDict(ctx, doc, annot["AA"]); err == nil && aa != nil {
+		for _, v := range aa {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // walkOutlineStructDest checks one outline level's destinations, walking

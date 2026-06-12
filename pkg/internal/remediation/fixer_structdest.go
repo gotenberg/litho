@@ -171,7 +171,12 @@ func (p *structElemPicker) wrapDest(ctx context.Context, obj ast.PdfObject) (ast
 	return ast.PdfDict{"D": arr, "SD": sd}, true
 }
 
-// fixGoToAction rewrites the /D of a GoTo action dict in place.
+// fixGoToAction adds an action-level /SD to a GoTo action, keeping /D
+// untouched: the PDF 2.0 dual-destination form (ISO 32000-2 Table 202)
+// that veraPDF's containsStructDestination accepts. Wrapping /D in a
+// dictionary destination is NOT enough for actions: veraPDF checks the
+// action's own /SD key (272 corpus cells stayed vera-failed with the
+// wrapped-/D form).
 func (p *structElemPicker) fixGoToAction(ctx context.Context, alloc *writer.ObjAllocator, obj ast.PdfObject) bool {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	var dict ast.PdfDict
@@ -184,6 +189,9 @@ func (p *structElemPicker) fixGoToAction(ctx context.Context, alloc *writer.ObjA
 		return false
 	}
 	if s, _ := document.ResolveName(ctx, p.doc, dict["S"]); s != "GoTo" {
+		return false
+	}
+	if _, hasSD := dict["SD"]; hasSD {
 		return false
 	}
 	dObj, ok := dict["D"]
@@ -199,7 +207,7 @@ func (p *structElemPicker) fixGoToAction(ctx context.Context, alloc *writer.ObjA
 	}
 	newDict := make(ast.PdfDict, len(dict))
 	maps.Copy(newDict, dict)
-	newDict["D"] = wrapped
+	newDict["SD"] = wrapped["SD"]
 	alloc.AllocAt(ref.ObjectNum, newDict)
 	return true
 }
@@ -237,21 +245,28 @@ func (p *structElemPicker) fixLinkAnnots(ctx context.Context, alloc *writer.ObjA
 			if annot == nil {
 				continue
 			}
-			if st, _ := document.ResolveName(ctx, p.doc, annot["Subtype"]); st != "Link" {
-				continue
-			}
-			if destObj, hasDest := annot["Dest"]; hasDest {
-				if wrapped, ok := p.wrapDest(ctx, destObj); ok {
-					newAnnot := make(ast.PdfDict, len(annot))
-					maps.Copy(newAnnot, annot)
-					newAnnot["Dest"] = wrapped
-					alloc.AllocAt(ref.ObjectNum, newAnnot)
-					count++
+			if st, _ := document.ResolveName(ctx, p.doc, annot["Subtype"]); st == "Link" {
+				if destObj, hasDest := annot["Dest"]; hasDest {
+					if wrapped, ok := p.wrapDest(ctx, destObj); ok {
+						newAnnot := make(ast.PdfDict, len(annot))
+						maps.Copy(newAnnot, annot)
+						newAnnot["Dest"] = wrapped
+						alloc.AllocAt(ref.ObjectNum, newAnnot)
+						count++
+					}
 				}
 			}
+			// GoTo actions hang off any annotation's /A or /AA entries.
 			if actObj, hasA := annot["A"]; hasA {
 				if p.fixGoToAction(ctx, alloc, actObj) {
 					count++
+				}
+			}
+			if aa, err := document.ResolveDict(ctx, p.doc, annot["AA"]); err == nil && aa != nil {
+				for _, v := range aa {
+					if p.fixGoToAction(ctx, alloc, v) {
+						count++
+					}
 				}
 			}
 		}
