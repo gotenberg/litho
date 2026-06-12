@@ -102,9 +102,14 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 			effectiveICCCS = pageICCCS
 		}
 
-		// Universal coverage: OutputIntent and blending CS apply to ALL scopes.
-		rgbUniversalCover := (effectiveHasICC && effectiveICCCS == "RGB ") || blendingCS == "RGB "
-		cmykUniversalCover := (effectiveHasICC && effectiveICCCS == "CMYK") || blendingCS == "CMYK"
+		// Universal coverage: the OutputIntent applies to all scopes. The
+		// transparency-group blending CS counts only under PDF/A-4: the
+		// veraPDF parts-2/3 tests are strictly gOutputCS-based (6.2.4.3 t2
+		// is `gOutputCS != null && gOutputCS == "RGB "`; verified live on
+		// PDF_A-4__veraPDF_test_suite_6-2-4-3-t04-pass-a under PDF/A-2b,
+		// where an RGB group blending CS does not cover page-content rg).
+		rgbUniversalCover := (effectiveHasICC && effectiveICCCS == "RGB ") || (part == 4 && blendingCS == "RGB ")
+		cmykUniversalCover := (effectiveHasICC && effectiveICCCS == "CMYK") || (part == 4 && blendingCS == "CMYK")
 		grayUniversalCover := effectiveHasICC
 
 		// DeviceRGB: needs DefaultRGB, OutputIntent with RGB, or RGB blending CS.
