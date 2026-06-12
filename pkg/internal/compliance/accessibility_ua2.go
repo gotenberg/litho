@@ -138,13 +138,9 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 			// Could be an action dict. Check if GoTo.
 			oaDict, _ := document.ResolveDict(ctx, doc, oaObj)
 			if oaDict != nil {
-				if s, _ := document.ResolveName(ctx, doc, oaDict["S"]); s == "GoTo" {
-					if dObj, hasDest := oaDict["D"]; hasDest {
-						if !isStructureDestination(ctx, doc, dObj) {
-							results = append(results, fail(Rule_14289_2_8_8_t02,
-								"OpenAction GoTo destination is not a structure destination")...)
-						}
-					}
+				if s, _ := document.ResolveName(ctx, doc, oaDict["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, oaDict) {
+					results = append(results, fail(Rule_14289_2_8_8_t02,
+						"OpenAction GoTo destination is not a structure destination")...)
 				}
 			} else {
 				// Direct destination array.
@@ -179,11 +175,9 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 				if err != nil || act == nil {
 					continue
 				}
-				if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" {
-					if dObj, hasD := act["D"]; hasD && !isStructureDestination(ctx, doc, dObj) {
-						results = append(results, fail(Rule_14289_2_8_8_t02,
-							"Link GoTo destination is not a structure destination")...)
-					}
+				if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, act) {
+					results = append(results, fail(Rule_14289_2_8_8_t02,
+						"Link GoTo destination is not a structure destination")...)
 				}
 			}
 		}
@@ -231,11 +225,9 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 			if aDict != nil {
 				s, _ := document.ResolveName(ctx, doc, aDict["S"])
 				if s == "GoTo" {
-					if dObj, hasDest := aDict["D"]; hasDest {
-						if !isStructureDestination(ctx, doc, dObj) {
-							*results = append(*results, fail(Rule_14289_2_8_8_t02,
-								"Outline GoTo action destination is not a structure destination")...)
-						}
+					if !goToHasStructDest(ctx, doc, aDict) {
+						*results = append(*results, fail(Rule_14289_2_8_8_t02,
+							"Outline GoTo action destination is not a structure destination")...)
 					}
 				}
 			}
@@ -251,6 +243,22 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 // isStructureDestination checks if a destination object is a "structure
 // destination" per PDF 2.0: an array whose first element references a
 // structure element (has /Type /StructElem or /S key) rather than a page.
+// goToHasStructDest reports whether a GoTo action dict satisfies the
+// PDF/UA-2 §8.8 t2 requirement: either the action carries an /SD entry
+// (the PDF 2.0 dual-destination form, ISO 32000-2 Table 202; veraPDF's
+// containsStructDestination accepts it, see 8.2.5.20-t02-pass-a) or its
+// /D is itself a structure destination.
+func goToHasStructDest(ctx context.Context, doc *document.Document, act ast.PdfDict) bool {
+	if _, hasSD := act["SD"]; hasSD {
+		return true
+	}
+	dObj, hasD := act["D"]
+	if !hasD {
+		return true // nothing to point anywhere; not a t2 case
+	}
+	return isStructureDestination(ctx, doc, dObj)
+}
+
 func isStructureDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject) bool {
 	// Resolve named destination if it's a string/name.
 	if nameObj, err := document.ResolveName(ctx, doc, destObj); err == nil && nameObj != "" {
