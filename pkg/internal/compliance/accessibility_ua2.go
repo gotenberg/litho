@@ -224,6 +224,15 @@ func isStructureDestination(ctx context.Context, doc *document.Document, destObj
 		return false
 	}
 
+	// Dictionary destination: a /SD entry makes it a structure
+	// destination (ISO 32000-2 §12.3.2.3). veraPDF's PDDestination
+	// model checks exactly this key.
+	if dict, err := document.ResolveDict(ctx, doc, destObj); err == nil && dict != nil {
+		if _, hasSD := dict["SD"]; hasSD {
+			return true
+		}
+	}
+
 	arr, err := document.ResolveArray(ctx, doc, destObj)
 	if err != nil || len(arr) == 0 {
 		return false
