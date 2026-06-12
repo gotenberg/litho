@@ -12,22 +12,22 @@ import (
 )
 
 // maxAttachmentTreeDepth caps EmbeddedFiles name-tree recursion in
-// [collectEmbeddedFileEntries]. Anti-DoS guard, not spec-mandated: real
+// [CollectEmbeddedFileEntries]. Anti-DoS guard, not spec-mandated: real
 // trees nest two or three levels; 64 mirrors maxNameTreeDepth in
 // internal/core/document.
 const maxAttachmentTreeDepth = 64
 
-// efEntry is one key-value pair of the EmbeddedFiles name tree.
-type efEntry struct {
-	name string
-	ref  ast.PdfObject
+// EFEntry is one key-value pair of the EmbeddedFiles name tree.
+type EFEntry struct {
+	Name string
+	Ref  ast.PdfObject
 }
 
-// collectEmbeddedFileEntries flattens the EmbeddedFiles name tree rooted
+// CollectEmbeddedFileEntries flattens the EmbeddedFiles name tree rooted
 // at nodeObj into key-value pairs, following /Kids intermediate nodes.
 // Pending allocator versions take precedence so repeated mutations see
 // each other's edits.
-func collectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]efEntry) {
+func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]EFEntry) {
 	if depth > maxAttachmentTreeDepth {
 		return
 	}
@@ -44,7 +44,7 @@ func collectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 	if kidsObj, ok := node["Kids"]; ok {
 		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
 			for _, kid := range kids {
-				collectEmbeddedFileEntries(ctx, alloc, doc, kid, depth+1, out)
+				CollectEmbeddedFileEntries(ctx, alloc, doc, kid, depth+1, out)
 			}
 			return
 		}
@@ -62,7 +62,7 @@ func collectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 	}
 	for i := 0; i+1 < len(arr); i += 2 {
 		if s, ok := arr[i].(ast.PdfString); ok {
-			*out = append(*out, efEntry{name: string(s), ref: arr[i+1]})
+			*out = append(*out, EFEntry{Name: string(s), Ref: arr[i+1]})
 		}
 	}
 }
@@ -71,11 +71,11 @@ func collectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 // /Names array, sorted lexically by key as ISO 32000-2 §7.9.6 requires.
 // Flattening is spec-valid: a root node carrying only /Names needs no
 // /Limits or /Kids.
-func embeddedFilesArray(entries []efEntry) ast.PdfArray {
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+func embeddedFilesArray(entries []EFEntry) ast.PdfArray {
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 	arr := make(ast.PdfArray, 0, len(entries)*2)
 	for _, e := range entries {
-		arr = append(arr, ast.PdfString(e.name), e.ref)
+		arr = append(arr, ast.PdfString(e.Name), e.Ref)
 	}
 	return arr
 }
@@ -167,19 +167,19 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 	// single-leaf read silently dropped) and replace any entry that
 	// already carries this name so re-running the mutation stays
 	// idempotent: name-tree keys must be unique per ISO 32000-2 §7.9.6.
-	var entries []efEntry
+	var entries []EFEntry
 	if efObj, ok := namesDict["EmbeddedFiles"]; ok {
-		collectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
+		CollectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
 	}
 	var replacedRef ast.PdfObject
 	for i := range entries {
-		if entries[i].name == name {
-			replacedRef = entries[i].ref
-			entries[i].ref = filespecRef
+		if entries[i].Name == name {
+			replacedRef = entries[i].Ref
+			entries[i].Ref = filespecRef
 		}
 	}
 	if replacedRef == nil {
-		entries = append(entries, efEntry{name: name, ref: filespecRef})
+		entries = append(entries, EFEntry{Name: name, Ref: filespecRef})
 	}
 
 	efDict := ast.PdfDict{"Names": embeddedFilesArray(entries)}
@@ -266,13 +266,13 @@ func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	// Flatten the tree (including /Kids nodes) and drop the matching
 	// entries, remembering their filespec refs so the catalog /AF array
 	// loses the now-dangling associated-file pointers too.
-	var entries []efEntry
-	collectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
-	var kept []efEntry
+	var entries []EFEntry
+	CollectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
+	var kept []EFEntry
 	removedRefs := make(map[ast.PdfIndirectRef]bool)
 	for _, e := range entries {
-		if e.name == name {
-			if ref, ok := e.ref.(ast.PdfIndirectRef); ok {
+		if e.Name == name {
+			if ref, ok := e.Ref.(ast.PdfIndirectRef); ok {
 				removedRefs[ref] = true
 			}
 			continue
