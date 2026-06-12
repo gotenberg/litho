@@ -67,6 +67,48 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // maxFieldTreeDepth limits recursion when walking the field tree.
 const maxFieldTreeDepth = 100
 
+// checkSignatureByteRange validates ISO 19005-2/3 §6.4.3 t1
+// (veraPDF test: doesByteRangeCoverEntireDocument): a signed signature
+// field's four-integer /ByteRange shall start at byte 0 and its second
+// span shall end exactly at end of file, so every byte except the
+// /Contents hole is signed. Any update after signing, incremental or
+// full rewrite, breaks this. A missing or malformed ByteRange stays
+// silent: the veraPDF goldens fire t1 only on a present, non-covering
+// range (PDF_A-4__6-1-11-t01-pass-a under the part-2 profile) and use
+// the other 6.4.3 tests for shape problems.
+func checkSignatureByteRange(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, results *[]Violation) {
+	ft, _ := document.ResolveName(ctx, doc, field["FT"])
+	if ft != "Sig" {
+		return
+	}
+	sig, err := document.ResolveDict(ctx, doc, field["V"])
+	if err != nil || sig == nil {
+		return
+	}
+	brArr, err := document.ResolveArray(ctx, doc, sig["ByteRange"])
+	if err != nil || len(brArr) != 4 {
+		return
+	}
+	var br [4]int64
+	for i, o := range brArr {
+		v, err := document.ResolveInt(ctx, doc, o)
+		if err != nil {
+			return
+		}
+		br[i] = int64(v)
+	}
+	size := doc.FileSize()
+	if br[0] != 0 || br[1] < 0 || br[2] < br[1] || br[2]+br[3] != size {
+		rule := Rule_19005_2_6_4_3_t01
+		if part == 3 {
+			rule = Rule_19005_3_6_4_3_t01
+		}
+		*results = append(*results, failf(rule,
+			"signature /ByteRange [%d %d %d %d] does not cover the file (size %d)",
+			br[0], br[1], br[2], br[3], size)...)
+	}
+}
+
 // checkFormField validates a single form field and recurses into child fields.
 func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, _ string, part int, _ bool, fieldIdx int, results *[]Violation, depth int) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
@@ -82,6 +124,11 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 	// §6.9/6.4: Form field appearances. Every field must have /AP.
 	if part > 0 {
 		checkFieldAppearance(ctx, doc, field, part, fieldIdx, results)
+	}
+
+	// §6.4.3 t1 (parts 2/3): signature ByteRange coverage.
+	if part == 2 || part == 3 {
+		checkSignatureByteRange(ctx, doc, field, part, results)
 	}
 
 	// PDF/UA: form field tooltips, handled by checkFormFieldTU in
