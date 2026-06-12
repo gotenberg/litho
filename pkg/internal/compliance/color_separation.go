@@ -177,6 +177,11 @@ func checkSeparationCS(ctx context.Context, doc *document.Document, arr ast.PdfA
 
 	cName := string(colorantName)
 	rule := separationConsistencyRule(part)
+	if rule.Specification == "" {
+		// §6.2.4.4 exists for parts 2+ only; a zero Rule must never be
+		// emitted (it serialized as a clause-less "-t00" residual).
+		return
+	}
 
 	if prevAlt, ok := colorantAlternates[cName]; ok {
 		// Check alternate space consistency.
@@ -267,6 +272,12 @@ func functionDictEqual(ctx context.Context, doc *document.Document, a, b ast.Pdf
 // [/DeviceN [/names...] /AlternateSpace /TintTransform ...]
 func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
 	if len(arr) < 4 {
+		return
+	}
+	// §6.2.4.4 exists for parts 2+ only; ISO 19005-1 has no DeviceN
+	// consistency rules, and emitting with the zero Rule produced
+	// clause-less violations (the "-t00" residuals in the corpus).
+	if deviceNConsistencyRule(part).Specification == "" {
 		return
 	}
 
