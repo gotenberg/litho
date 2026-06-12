@@ -1963,19 +1963,45 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 	}
 
 	// Validate: for each property whose valueType is not predefined, check
-	// that the custom type is defined with field declarations.
+	// that the custom type is defined with field declarations. The
+	// declared string may wrap the custom element type in a container
+	// keyword ("Bag declaration" declares a bag of the custom type
+	// "declaration"), and the type definition may live in any schema
+	// entry of the packet, so the lookup strips the container prefix and
+	// searches every schema (the literal-string same-schema lookup
+	// produced a 798-cell phantom pool against pdfd:declarations).
+	allTypes := make(map[string]bool)
+	for _, s := range schemas {
+		for name, hasFields := range s.typeFields {
+			if hasFields {
+				allTypes[name] = true
+			}
+		}
+	}
 	for _, s := range schemas {
 		for pName, vt := range s.propTypes {
 			if xmpPredefinedValueTypes[vt] {
 				continue
 			}
-			hasFields, defined := s.typeFields[vt]
-			if !defined || !hasFields {
-				*results = append(*results, xmpPropertyTypeRule(part, s.nsURI, pName,
-					fmt.Sprintf("does not correspond to type %s", vt))...)
+			if allTypes[vt] || allTypes[stripContainerKeyword(vt)] {
+				continue
 			}
+			*results = append(*results, xmpPropertyTypeRule(part, s.nsURI, pName,
+				fmt.Sprintf("does not correspond to type %s", vt))...)
 		}
 	}
+}
+
+// stripContainerKeyword removes a leading Bag/Seq/Alt container keyword
+// (either case convention) from a declared valueType string, returning
+// the element type name.
+func stripContainerKeyword(vt string) string {
+	for _, prefix := range []string{"bag ", "seq ", "alt ", "Bag ", "Seq ", "Alt "} {
+		if rest, ok := strings.CutPrefix(vt, prefix); ok {
+			return rest
+		}
+	}
+	return vt
 }
 
 // xmpContainerType represents observed XMP container types.
