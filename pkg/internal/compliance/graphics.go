@@ -5,7 +5,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // checkGraphicsGroup validates ExtGState, halftones, rendering intent, and
@@ -146,7 +145,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		return nil
 	}
 	var results []Violation
-	for fontName, fontRef := range fontDict {
+	for _, fontRef := range fontDict {
 		fd, err := document.ResolveDict(ctx, doc, fontRef)
 		if err != nil || fd == nil {
 			continue
@@ -155,8 +154,16 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		if subtype != "Type3" {
 			continue
 		}
-		// CharProc content streams may reference named resources.
-		_, hasOwnRes := fd["Resources"]
+		// veraPDF scopes 6.2.2 to the CharProc stream: a name resolved
+		// only through the page's resources is inherited (t2), one
+		// resolved nowhere is undefined (t3). A font without its own
+		// /Resources therefore fires t2 per inherited name, never a
+		// blanket missing-dictionary violation (vera golden for
+		// 6-2-2-t04-fail-d: 6.2.2-t2 x3, no t3).
+		type3Res, err := document.ResolveDict(ctx, doc, fd["Resources"])
+		if err != nil || type3Res == nil {
+			type3Res = make(ast.PdfDict)
+		}
 		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
 		if err != nil || charProcs == nil {
 			continue
@@ -171,19 +178,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 			if err != nil || len(data) == 0 {
 				continue
 			}
-			if !hasOwnRes && contentReferencesResources(ctx, data) {
-				results = append(results, failf(missingResourceRule(part),
-					"page %d: Type3 font %s CharProc references resources without explicit Resources dictionary",
-					pageNum, fontName)...)
-				return results
-			}
-			// Also check that referenced resources exist in the Type3 Resources dict.
-			if hasOwnRes {
-				type3Res, _ := document.ResolveDict(ctx, doc, fd["Resources"])
-				if type3Res != nil {
-					results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum)...)
-				}
-			}
+			results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum)...)
 		}
 	}
 	return results
@@ -223,29 +218,6 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 		}
 	}
 	return results
-}
-
-// opsReferenceResources checks if parsed operations contain any operators
-// that reference named resources (Tf, cs/CS, Do, gs, sh, BDC/DP).
-func opsReferenceResources(ops []content.Operation) bool {
-	for _, op := range ops {
-		if _, ok := operatorResourceCategory[op.Operator]; ok && len(op.Operands) >= 1 {
-			if _, isName := op.Operands[0].(ast.PdfName); isName {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// contentReferencesResources parses a raw content stream and checks if it has
-// any operators that reference named resources.
-func contentReferencesResources(ctx context.Context, streamData []byte) bool {
-	ops, err := content.ParseStreamData(ctx, streamData)
-	if err != nil {
-		return false
-	}
-	return opsReferenceResources(ops)
 }
 
 // checkFormXObjectExtGState scans Form XObject resources for ExtGState
