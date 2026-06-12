@@ -568,7 +568,7 @@ func isListMarker(s string) bool {
 	if s == "" {
 		return false
 	}
-	rest := ""
+	var rest string
 	switch s[0] {
 	case '\x95', '\xb7', '*', '-', '\x96':
 		rest = s[1:]
