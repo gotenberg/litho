@@ -58,6 +58,7 @@ var knownXMPNamespaces = map[string]bool{
 	"http://ns.adobe.com/xap/1.0/bj/":                  true,
 	"http://ns.adobe.com/pdfx/1.3/":                    true, // pdfx
 	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/":    true, // adhocwf
+	"http://www.aiim.org/pdfua/ns/id/":                 true, // pdfuaid (ISO 14289)
 
 	// RDF/XML structural namespaces (not property schemas).
 	"http://www.w3.org/1999/02/22-rdf-syntax-ns#": true, // rdf

@@ -252,6 +252,14 @@ var xmpPredefinedCommon = map[string]map[string]string{
 	// PDF_UA-1__7-18.3-t01-pass-a adhocwf:state under PDF/A-2b).
 	"http://ns.adobe.com/pdfx/1.3/":                 {},
 	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/": {},
+
+	// The PDF/UA Identification schema is ISO 14289, not part of the XMP
+	// Specification or ISO 19005: under PDF/A parts 1-3 every pdfuaid
+	// property needs an extension schema declaration, and veraPDF fails
+	// both definedness and type resolution on undeclared ones (verified
+	// live on PDF_UA-2__5-t02-fail-a remediated to PDF/A-2b:
+	// 6.6.2.3.1 t2 on pdfuaid:part and pdfuaid:rev in attribute form).
+	"http://www.aiim.org/pdfua/ns/id/": {},
 }
 
 // xmpPredefined2004Extra lists the additions registered only by

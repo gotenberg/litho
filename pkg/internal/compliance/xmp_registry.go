@@ -40,6 +40,7 @@ var xmpPropertyRegistry = map[string]map[string]xmpPropType{
 	// See the matching empty entries in xmpPredefinedCommon.
 	"http://ns.adobe.com/pdfx/1.3/":                 {},
 	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/": {},
+	"http://www.aiim.org/pdfua/ns/id/":              {},
 
 	// Dublin Core (dc:).
 	"http://purl.org/dc/elements/1.1/": {
