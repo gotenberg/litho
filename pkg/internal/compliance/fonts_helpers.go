@@ -142,7 +142,11 @@ func fontNameUTF8Rule(profile string) Rule {
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
 // The check only applies to profiles that require text-to-Unicode
 // mapping (Level A under Part 1, Levels U/A under Parts 2/3, and all
-// PDF/A-4 profiles); Level B fixtures never trigger it.
+// PDF/A-4 profiles); Level B fixtures never trigger it. Parts 2/3 key
+// the forbidden-value test (U+0000, U+FFFE, U+FEFF) as §6.2.11.7.2 t2,
+// not §6.2.11.7.3 (verified live on
+// PDF_A-2b__veraPDF_test_suite_6-2-11-8-t01-fail-a remediated to
+// PDF/A-2a; the t3 emission was a 32-cell litho-only mislabel).
 func toUnicodeCMapValuesRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		if PDFUAPart(profile) == 2 {
@@ -153,7 +157,7 @@ func toUnicodeCMapValuesRule(profile string) Rule {
 	if !RequiresUnicodeMapping(profile) {
 		return Rule{}
 	}
-	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_3_t01, Rule_19005_3_6_2_11_7_3_t01, Rule_19005_4_6_2_10_7_t01)
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_2_t02, Rule_19005_3_6_2_11_7_2_t02, Rule_19005_4_6_2_10_7_t01)
 }
 
 // puaActualTextRule returns the rule that PUA characters must carry
@@ -533,16 +537,11 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 
 // perGlyphToUnicodeRule selects the rule veraPDF fires per used glyph whose
 // Unicode mapping cannot be resolved (usedGlyph test `toUnicode != null`).
-// PDF/UA shares the font-level ids (7.21.7 t1 / 8.4.5.8 t1); parts 2/3 use
-// the §6.2.11.7.2 t2 sibling of the font-level t1, Level A/U only. Part 4's
-// only ToUnicode rule tolerates a missing map, and part 1 is covered by the
-// §6.3.8 presence family, so both return the zero Rule here.
+// Identical to the font-level selector: veraPDF keys both the missing-map
+// and the unmapped-code case as §6.2.11.7.2 t1 under parts 2/3 (verified
+// live on 6-1-12-t10-fail-a under PDF/A-2a, where a t2 emission here was a
+// 48-cell bidirectional mismatch against vera's t1) and shares the UA ids
+// 7.21.7 t1 / 8.4.5.8 t1.
 func perGlyphToUnicodeRule(profile string) Rule {
-	if IsPDFUA(profile) {
-		return toUnicodeRule(profile)
-	}
-	if !RequiresUnicodeMapping(profile) {
-		return Rule{}
-	}
-	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_7_2_t02, Rule_19005_3_6_2_11_7_2_t02, Rule{})
+	return toUnicodeRule(profile)
 }

@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -652,6 +653,33 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		if strings.ContainsAny(uni, "\u0000\uFEFF\uFFFE") {
 			return failf(rule, "font %s on page %d: /ToUnicode maps a rendered code to U+0000, U+FEFF, or U+FFFE",
 				fontName, pageNum)
+		}
+	}
+
+	// A used code that is absent from the ToUnicode CMap and carries no
+	// encoding glyph name renders .notdef, whose Unicode value is U+0000:
+	// veraPDF fires the value rule on it (verified live on
+	// PDF_A-2b__veraPDF_test_suite_6-2-11-8-t01-fail-a under PDF/A-2a,
+	// where <00> Tj against an 8-entry bfchar lacking code 0 fails
+	// 6.2.11.7.2 t2). A code with a real glyph name is skipped: veraPDF
+	// derives its Unicode from the name. Type0 fonts are excluded; their
+	// unmapped codes fail the per-glyph coverage rule (t1 family) instead.
+	if fontSubtype(ctx, doc, fontDict) != "Type0" {
+		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+		codes := make([]int, 0, len(usage.charCodes))
+		for b := range usage.charCodes {
+			codes = append(codes, int(b))
+		}
+		slices.Sort(codes)
+		for _, c := range codes {
+			if _, mapped := parsed.Mapping[string([]byte{byte(c)})]; mapped {
+				continue
+			}
+			if name := enc[byte(c)]; name != "" && name != ".notdef" {
+				continue
+			}
+			return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and no glyph name (renders U+0000)",
+				fontName, pageNum, c)
 		}
 	}
 	return nil
