@@ -40,17 +40,23 @@ var standardStructTypesPDF2Only = map[ast.PdfName]bool{
 }
 
 // standardStructTypesPDF15Plus lists types that ISO 32000-1 added after
-// PDF 1.4. PDF/A-1 (ISO 19005-1) is based on PDF 1.4, whose structure-type
-// tables lack them; veraPDF's PDFA-1A profile fails an unmapped Annot
-// element under 6.8.3.4 t1 (verified live on PDF_UA-1__7.18.1-t02-fail-a
-// remediated to PDF/A-1a). Only Annot is listed so far: the other PDF 1.5
-// additions (Ruby/Warichu/RB/RT/RP/WT/WP, THead/TBody/TFoot) are
-// unverified against the profile and stay standard until a fixture or
-// profile extract proves otherwise.
+// PDF 1.4. PDF/A-1 (ISO 19005-1) is based on PDF 1.4, whose standard
+// structure-type table (PDF Reference 1.4, 9.7.4) lacks them; veraPDF's
+// PDFA-1A profile fails such an unmapped element under 6.8.3.4 t1.
+//
+// Annot verified live on PDF_UA-1__7.18.1-t02-fail-a remediated to PDF/A-1a.
+// The table-section types THead/TBody/TFoot verified live on
+// PDF_UA-1__7.2-t03/t43 and PDF_UA-2__8.2.5.26-t04 remediated to PDF/A-1a:
+// vera reports each as a non-standard SENonStandard not mapped to a standard
+// type. The Ruby/Warichu set (Ruby/RB/RT/RP/Warichu/WT/WP) is also a PDF 1.5
+// addition but stays standard until a fixture or profile extract confirms it.
 //
 //nolint:gochecknoglobals // constant set.
 var standardStructTypesPDF15Plus = map[ast.PdfName]bool{
 	"Annot": true,
+	"THead": true,
+	"TBody": true,
+	"TFoot": true,
 }
 
 // isStandardStructType returns true if the name is a standard structure type
