@@ -1,14 +1,17 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // hybridInvoiceName describes one hybrid-invoice convention litho can
@@ -50,7 +53,9 @@ func RepairHybridInvoice(ctx context.Context, doc *document.Document, alloc *wri
 		return nil, nil
 	}
 
-	var fixes []string
+	// Non-nil from here on: a nil slice means "no invoice attachment",
+	// an empty one "invoice found, container already clean".
+	fixes := make([]string, 0, 4)
 	newSpec := make(ast.PdfDict, len(specDict)+1)
 	maps.Copy(newSpec, specDict)
 	dirty := false
@@ -89,7 +94,99 @@ func RepairHybridInvoice(ctx context.Context, doc *document.Document, alloc *wri
 		fixes = append(fixes, "added invoice filespec to catalog /AF")
 	}
 
+	// fx: XMP identification block (Factur-X 1.0.07 §6). Only the fx:
+	// namespace conventions are synthesized; ZUGFeRD 1.0 used the zf:
+	// namespace and stays residual.
+	if name.fileName != "ZUGFeRD-invoice.xml" {
+		fixes = append(fixes, repairInvoiceXMP(ctx, alloc, doc, catalogRef, catalogDict, name, newSpec)...)
+	}
+
 	return fixes, nil
+}
+
+// repairInvoiceXMP synthesizes or corrects the four fx: properties for a
+// received invoice. DocumentFileName comes from the attachment itself,
+// DocumentType and Version are spec-fixed, and ConformanceLevel is
+// inferred from the CII guideline URN inside the invoice XML; when the
+// URN is unknown the property is left absent rather than guessed.
+func repairInvoiceXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogRef ast.PdfIndirectRef, catalogDict ast.PdfDict, name hybridInvoiceName, specDict ast.PdfDict) []string {
+	metaObj, ok := catalogDict["Metadata"]
+	if !ok {
+		// Without a metadata stream the PDF/A baseline is broken anyway;
+		// the XMP violation stays residual until that is repaired.
+		return nil
+	}
+	xmp, err := readXMPStream(ctx, alloc, doc, metaObj)
+	if err != nil || len(xmp) == 0 {
+		doc.Logger.Debug("repair hybrid invoice: cannot read XMP, leaving fx properties", "err", err)
+		return nil
+	}
+
+	level := inferFacturXLevel(ctx, alloc, doc, specDict)
+	buf, fixes, err := patchFacturXXMP(xmp, level, name.fileName, "INVOICE")
+	if err != nil {
+		doc.Logger.Debug("repair hybrid invoice: fx XMP patch failed", "err", err)
+		return nil
+	}
+	if bytes.Equal(buf, xmp) {
+		return nil
+	}
+
+	xmpStream := ast.NewStream(ast.PdfDict{
+		"Type":    ast.PdfName("Metadata"),
+		"Subtype": ast.PdfName("XML"),
+	}, buf)
+	if ref, isRef := metaObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+		alloc.AllocAt(ref.ObjectNum, xmpStream)
+	} else {
+		newRef := alloc.Alloc(xmpStream)
+		newCatalog := make(ast.PdfDict, len(catalogDict)+1)
+		maps.Copy(newCatalog, catalogDict)
+		newCatalog["Metadata"] = newRef
+		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+	}
+	return fixes
+}
+
+// inferFacturXLevel maps the CII GuidelineSpecifiedDocumentContextParameter
+// URN inside the embedded invoice to a Factur-X conformance level
+// (Factur-X 1.0.07 §4.3 guideline identifiers). Returns "" when the
+// invoice cannot be read or the URN is unknown.
+func inferFacturXLevel(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, specDict ast.PdfDict) models.FacturXLevel {
+	efDict, err := document.ResolveDict(ctx, doc, specDict["EF"])
+	if err != nil || efDict == nil {
+		return ""
+	}
+	streamRef, ok := efDict["F"].(ast.PdfIndirectRef)
+	if !ok {
+		return ""
+	}
+	stream, ok2 := resolveStreamFromAllocOrDoc(ctx, alloc, doc, streamRef, efDict["F"])
+	if !ok2 {
+		return ""
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		if data, err = stream.Bytes(ctx); err != nil {
+			return ""
+		}
+	}
+	urn := strings.ToLower(string(data))
+	switch {
+	case strings.Contains(urn, "xrechnung"):
+		return models.FacturXXRechnung
+	case strings.Contains(urn, "factur-x.eu:1p0:minimum"):
+		return models.FacturXMinimum
+	case strings.Contains(urn, "factur-x.eu:1p0:basicwl"):
+		return models.FacturXBasicWL
+	case strings.Contains(urn, "factur-x.eu:1p0:basic"):
+		return models.FacturXBasic
+	case strings.Contains(urn, "factur-x.eu:1p0:extended"):
+		return models.FacturXExtended
+	case strings.Contains(urn, "urn:cen.eu:en16931:2017"):
+		return models.FacturXEN16931
+	}
+	return ""
 }
 
 // locateInvoiceAttachment finds the first embedded file whose name

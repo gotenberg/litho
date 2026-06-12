@@ -104,6 +104,106 @@ func TestRepairHybridInvoice(t *testing.T) {
 	}
 }
 
+// invoiceXMPPDF embeds an invoice whose container is clean except for
+// the missing fx: XMP block, with a metadata stream present and the
+// given payload as invoice XML.
+func invoiceXMPPDF(payload string) []byte {
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:format>application/pdf</dc:format>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /Metadata 6 0 R /AF [4 0 R] /Names << /EmbeddedFiles << /Names [(factur-x.xml) 4 0 R] >> >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /Filespec /F (factur-x.xml) /UF (factur-x.xml) /AFRelationship /Data /EF << /F 5 0 R >> >>",
+		fmt.Sprintf("<< /Type /EmbeddedFile /Subtype /text#2Fxml /Length %d >>\nstream\n%s\nendstream", len(payload), payload),
+		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(xmp), xmp),
+	}
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offs[i])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return buf.Bytes()
+}
+
+func TestRepairHybridInvoice_SynthesizesXMP(t *testing.T) {
+	ctx := context.Background()
+	payload := `<rsm:CrossIndustryInvoice><ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>urn:cen.eu:en16931:2017</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter></rsm:CrossIndustryInvoice>`
+	data := invoiceXMPPDF(payload)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(6)
+
+	fixes, err := RepairHybridInvoice(ctx, doc, alloc)
+	if err != nil {
+		t.Fatalf("RepairHybridInvoice: %v", err)
+	}
+	joined := strings.Join(fixes, "; ")
+	if !strings.Contains(joined, "fx:DocumentFileName") || !strings.Contains(joined, "fx:ConformanceLevel") {
+		t.Errorf("expected fx property injections, got %v", fixes)
+	}
+	stream, ok := alloc.Pending()[6].(ast.PdfStream)
+	if !ok {
+		t.Fatal("metadata stream not queued")
+	}
+	body, err := stream.Bytes(ctx)
+	if err != nil {
+		t.Fatalf("reading patched XMP: %v", err)
+	}
+	for _, want := range []string{
+		"<fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>",
+		"<fx:DocumentType>INVOICE</fx:DocumentType>",
+		"<fx:Version>1.0</fx:Version>",
+		"<fx:ConformanceLevel>EN 16931</fx:ConformanceLevel>",
+	} {
+		if !bytes.Contains(body, []byte(want)) {
+			t.Errorf("patched XMP missing %s:\n%s", want, body)
+		}
+	}
+}
+
+func TestRepairHybridInvoice_UnknownGuidelineOmitsLevel(t *testing.T) {
+	ctx := context.Background()
+	data := invoiceXMPPDF(`<rsm:CrossIndustryInvoice><ram:ID>urn:example:custom</ram:ID></rsm:CrossIndustryInvoice>`)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(6)
+
+	if _, err := RepairHybridInvoice(ctx, doc, alloc); err != nil {
+		t.Fatalf("RepairHybridInvoice: %v", err)
+	}
+	stream, ok := alloc.Pending()[6].(ast.PdfStream)
+	if !ok {
+		t.Fatal("metadata stream not queued")
+	}
+	body, _ := stream.Bytes(ctx)
+	if bytes.Contains(body, []byte("fx:ConformanceLevel")) {
+		t.Errorf("unknown guideline URN must leave fx:ConformanceLevel absent:\n%s", body)
+	}
+	if !bytes.Contains(body, []byte("<fx:Version>1.0</fx:Version>")) {
+		t.Errorf("spec-fixed fx:Version must still be injected:\n%s", body)
+	}
+}
+
 func TestRepairHybridInvoice_NoInvoice(t *testing.T) {
 	ctx := context.Background()
 	data := cyclePDFRemediation(t)

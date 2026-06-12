@@ -154,6 +154,13 @@ func patchFacturXXMP(xmp []byte, level models.FacturXLevel, fileName, docType st
 		{"ConformanceLevel", string(level)},
 	}
 	for _, p := range properties {
+		// An empty value means the caller could not determine it (e.g.
+		// the conformance level of a received invoice whose guideline
+		// URN is unknown). Leaving the property absent keeps the
+		// violation honest instead of fabricating a wrong claim.
+		if p.value == "" {
+			continue
+		}
 		escaped := xmlEscape(p.value)
 		if loc := findXMPProperty(buf, FacturXNS, p.local); loc.Form != xmpPropertyNotFound {
 			replaced, err := replacePropertyValue(buf, FacturXNS, p.local, escaped)
