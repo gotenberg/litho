@@ -242,6 +242,16 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"UserComment":              "lang alt",
 		"WhiteBalance":             "integer",
 	},
+
+	// Namespaces veraPDF's XMPCore registers as known schemas without
+	// predefining any properties. Every member used in a packet therefore
+	// needs an extension schema declaration, and veraPDF fails both
+	// definedness (6.7.9-t2 / 6.6.2.3.1-t1) and value-type resolution
+	// (6.7.9-t3 / 6.6.2.3.1-t2) on each one (verified live on
+	// PDF_UA-1__7.1-t03-pass-a pdfx:Company and
+	// PDF_UA-1__7-18.3-t01-pass-a adhocwf:state under PDF/A-2b).
+	"http://ns.adobe.com/pdfx/1.3/":                 {},
+	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/": {},
 }
 
 // xmpPredefined2004Extra lists the additions registered only by

@@ -57,6 +57,7 @@ var knownXMPNamespaces = map[string]bool{
 	"http://ns.adobe.com/xap/1.0/sType/ManifestItem#":  true,
 	"http://ns.adobe.com/xap/1.0/bj/":                  true,
 	"http://ns.adobe.com/pdfx/1.3/":                    true, // pdfx
+	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/":    true, // adhocwf
 
 	// RDF/XML structural namespaces (not property schemas).
 	"http://www.w3.org/1999/02/22-rdf-syntax-ns#": true, // rdf
@@ -223,6 +224,14 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	// Extension property valueType correspondence (§6.6.2.3.1 t02).
 	xmpCheckExtensionPropertyTypes(xmpData, part, &results)
+
+	if ctx.Err() != nil {
+		return results
+	}
+
+	// Usage-side value-type resolution for extension-declared namespaces
+	// (§6.7.9 t3 / §6.6.2.3.1 t2).
+	xmpCheckExtensionPropertyResolution(xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
@@ -1832,18 +1841,23 @@ var xmpPredefinedValueTypes = map[string]bool{
 // value types with proper field definitions.  If a property uses a custom
 // valueType that has no field definitions in the extension schema, the property
 // "does not correspond to" its declared type (clause 6.6.2.3.1 test 2).
-func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) {
-	// Parse the extension schema to build:
-	//   propValueTypes:  map[schemaURI]map[propName]valueType
-	//   customTypes:     map[typeName]hasFields
-	type extSchema struct {
-		nsURI      string
-		propTypes  map[string]string // property name → declared valueType
-		typeFields map[string]bool   // custom type name → hasFields
-	}
+// xmpExtSchemaDef holds one pdfaSchema entry parsed from the
+// pdfaExtension:schemas bag: its namespace URI, declared property value
+// types, and declared custom value types.
+type xmpExtSchemaDef struct {
+	nsURI      string
+	propTypes  map[string]string // property name → declared valueType
+	typeFields map[string]bool   // custom type name → hasFields
+}
 
-	var schemas []extSchema
-	var current *extSchema
+// xmpParseExtensionSchemas parses the pdfaExtension:schemas bag and returns
+// one entry per pdfaSchema rdf:li in document order. Entries with the same
+// namespace URI are NOT merged: veraPDF keys its extension type map by URI
+// with later entries replacing earlier ones, and callers need the order to
+// mirror that.
+func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
+	var schemas []xmpExtSchemaDef
+	var current *xmpExtSchemaDef
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
@@ -1875,7 +1889,7 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 				depth++
 				if depth == 1 {
 					// New schema definition.
-					s := extSchema{
+					s := xmpExtSchemaDef{
 						propTypes:  make(map[string]string),
 						typeFields: make(map[string]bool),
 					}
@@ -1962,6 +1976,12 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 		}
 	}
 
+	return schemas
+}
+
+func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) {
+	schemas := xmpParseExtensionSchemas(data)
+
 	// Validate: for each property whose valueType is not predefined, check
 	// that the custom type is defined with field declarations. The
 	// declared string may wrap the custom element type in a container
@@ -1988,6 +2008,47 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 			}
 			*results = append(*results, xmpPropertyTypeRule(part, s.nsURI, pName,
 				fmt.Sprintf("does not correspond to type %s", vt))...)
+		}
+	}
+}
+
+// xmpCheckExtensionPropertyResolution mirrors veraPDF's value-type
+// resolution for properties used in extension-declared namespaces. veraPDF
+// keys its extension type map by namespace URI and a later pdfaSchema entry
+// with the same URI replaces the earlier one, so a property declared only
+// by a replaced entry has no resolvable value type and fails
+// isValueTypeCorrect (ISO 19005-2/3 §6.6.2.3.1 t2, ISO 19005-1 §6.7.9 t3).
+// Verified live: PDF_UA-1__5-t04-fail-a under PDF/A-2b fails t2 on
+// pdfuaid:part, declared by the first of two same-URI entries; blanking the
+// second entry clears the failure.
+func xmpCheckExtensionPropertyResolution(data []byte, part int, results *[]Violation) {
+	schemas := xmpParseExtensionSchemas(data)
+	if len(schemas) == 0 {
+		return
+	}
+	effective := make(map[string]map[string]string, len(schemas))
+	for _, s := range schemas {
+		if s.nsURI != "" {
+			effective[s.nsURI] = s.propTypes
+		}
+	}
+	for ns, props := range xmpExtractPropertyValues(data) {
+		declared, isExt := effective[ns]
+		if !isExt {
+			continue
+		}
+		// Extension schemas may extend predefined schemas; veraPDF still
+		// resolves the predefined members from its built-in catalogs.
+		predefined := xmpPropertyRegistry[ns]
+		for prop := range props {
+			if _, ok := declared[prop]; ok {
+				continue
+			}
+			if _, ok := predefined[prop]; ok {
+				continue
+			}
+			*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
+				"value type not resolvable: property not declared by the namespace's effective extension schema entry")...)
 		}
 	}
 }

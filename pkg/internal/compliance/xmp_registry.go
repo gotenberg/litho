@@ -33,6 +33,14 @@ const (
 //
 //nolint:gochecknoglobals // static lookup table.
 var xmpPropertyRegistry = map[string]map[string]xmpPropType{
+	// Known schema namespaces with no predefined properties: veraPDF's
+	// XMPCore registers pdfx (custom Document Info keys) and adhocwf
+	// (Acrobat workflow) but defines no members, so every property used
+	// in them is an unknown name whose value type cannot be resolved.
+	// See the matching empty entries in xmpPredefinedCommon.
+	"http://ns.adobe.com/pdfx/1.3/":                 {},
+	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/": {},
+
 	// Dublin Core (dc:).
 	"http://purl.org/dc/elements/1.1/": {
 		"contributor": xmpPropBag, "coverage": xmpPropText, "creator": xmpPropSeq,
