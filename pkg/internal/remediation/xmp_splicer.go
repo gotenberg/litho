@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // maxXMPDepth caps the element nesting level while walking XMP. Real
@@ -450,6 +451,29 @@ func replacePropertyValue(xmp []byte, nsURI, localName, newValue string) ([]byte
 		return out, nil
 	}
 	return append([]byte(nil), xmp...), errXMPPropertyNotFound
+}
+
+// xmpPropertyRawValue returns a located property's current text: the
+// element text for element form, the attribute value for attribute
+// form, trimmed of surrounding whitespace.
+func xmpPropertyRawValue(xmp []byte, loc xmpPropertyLocation) string {
+	frag := xmp[loc.Start:loc.End]
+	switch loc.Form {
+	case xmpPropertyAsElement:
+		_, openEnd, closeStart, ok := elementTextRange(frag)
+		if !ok || closeStart < openEnd {
+			return ""
+		}
+		return strings.TrimSpace(string(frag[openEnd:closeStart]))
+	case xmpPropertyAsAttribute:
+		vs, ve, ok := attrValueRange(frag)
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(string(frag[vs:ve]))
+	case xmpPropertyNotFound:
+	}
+	return ""
 }
 
 // attrValueRange walks a ` name="value"` attribute slice and returns

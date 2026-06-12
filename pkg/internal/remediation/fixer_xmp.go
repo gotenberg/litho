@@ -406,6 +406,27 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
+	// Normalize PDF-format date values in XMP date properties. Some
+	// producers copy the Info dict D:YYYY... string verbatim into
+	// xmp:CreateDate and friends; XMP Date is ISO 8601 and veraPDF
+	// fails the value-type rule on the D: form, so convert in place.
+	for _, dateProp := range []string{"CreateDate", "ModifyDate", "MetadataDate"} {
+		loc := findXMPProperty(buf, xmpNS, dateProp)
+		if loc.Form == xmpPropertyNotFound {
+			continue
+		}
+		raw := xmpPropertyRawValue(buf, loc)
+		if !strings.HasPrefix(raw, "D:") {
+			continue
+		}
+		if iso := pdfDateToXMP(raw); iso != "" {
+			if out, err := replacePropertyValue(buf, xmpNS, dateProp, iso); err == nil {
+				buf = out
+				fixes = append(fixes, fmt.Sprintf("normalized xmp:%s to ISO 8601", dateProp))
+			}
+		}
+	}
+
 	// Inject pdfuaid namespace + pdfuaid:part if missing, or correct an
 	// existing wrong value (ISO 14289-2 §5 t2 requires part == 2; a file
 	// claiming part 1 under a PDF/UA-2 run keeps failing until the claim

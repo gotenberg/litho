@@ -408,9 +408,12 @@ func isValidXMPDate(s string) bool {
 		return false
 	}
 
-	// Accept PDF date format: D:YYYY...
-	if strings.HasPrefix(s, "D:") && len(s) >= 6 {
-		return true
+	// PDF date strings (D:YYYY...) are NOT valid XMP dates: XMP Date is
+	// ISO 8601 (XMP Specification part 2), and veraPDF fails
+	// 6.6.2.3.1 t2 on a D:-format xmp:CreateDate (verified live on
+	// PDF_A-4__6-1-5-t02-pass-a retargeted to PDF/A-2a; 294-cell pool).
+	if strings.HasPrefix(s, "D:") {
+		return false
 	}
 
 	// Must start with 4 digits (year).
