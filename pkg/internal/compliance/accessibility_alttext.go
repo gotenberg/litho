@@ -276,6 +276,11 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			if profile != "PDF/UA-2" {
 				continue
 			}
+			// veraPDF's 8.10.2.3 t02 escapes structParentType == null: a widget
+			// not linked into the structure tree (no /StructParent) is exempt.
+			if _, inTree := annot["StructParent"]; !inTree {
+				continue
+			}
 			loc := fmt.Sprintf("page %d, widget annot %d", pageIdx+1, annotIdx)
 			if _, hasContents := annot["Contents"]; !hasContents {
 				results = append(results, Violation{

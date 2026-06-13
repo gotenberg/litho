@@ -50,6 +50,12 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			if isAnnotHidden(ctx, doc, annot) {
 				continue
 			}
+			// veraPDF's 8.10.2.3 t1 escapes structParentType == null: a widget
+			// not linked into the structure tree (no /StructParent) is exempt
+			// (verified on field widgets without /StructParent that vera passes).
+			if _, ok := annot["StructParent"]; !ok {
+				continue
+			}
 			// Widget has /Contents, satisfies labelling requirement.
 			if contentsObj, ok := annot["Contents"]; ok {
 				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
