@@ -20,8 +20,11 @@ func iccBasedNRule(part int) Rule {
 // iccBasedIdentityRule returns the rule for ICCBased profiles identical to
 // the OutputIntent.
 func iccBasedIdentityRule(part int) Rule {
-	// Part 1 does not have this rule; return part 2 as fallback.
-	return ruleByPart(part, Rule_19005_2_6_2_4_2_t02, Rule_19005_2_6_2_4_2_t02, Rule_19005_3_6_2_4_2_t02, Rule_19005_4_6_2_4_2_t03)
+	// The "ICCBased profile identical to the OutputIntent" prohibition exists
+	// ONLY in PDF/A-4 (6.2.4.2 t3). Parts 1-3 have no such rule (their 6.2.4.2
+	// is just ICCInputProfile t1 + overprint t2), so firing there mislabelled
+	// the overprint rule and was a false positive on otherwise-compliant files.
+	return ruleByPart(part, Rule{}, Rule{}, Rule{}, Rule_19005_4_6_2_4_2_t03)
 }
 
 // checkICCBasedProfiles validates ICCBased colour space profiles per
