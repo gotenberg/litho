@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -211,71 +212,49 @@ func checkNeedsRenderingKey(catalog ast.PdfDict, part int) []Violation {
 	return nil
 }
 
-// checkOCGUsageApplication validates that /OCProperties contains the /AS array
-// when /OCGs are present (parts 2+/4).
+// checkOCGUsageApplication validates that no optional-content configuration
+// dictionary carries an /AS (usage application) array. veraPDF's PDFA-2/3 6.9
+// t4 is `AS == null`: a usage-application array would let viewers toggle
+// content visibility automatically, which PDF/A forbids. PDF/A-4 drops the rule
+// (PDFA-4 6.10 has no AS test), so ocgASRule returns a zero Rule there.
 func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
-	ocPropsObj, ok := catalog["OCProperties"]
-	if !ok {
+	rule := ocgASRule(part)
+	if rule.Specification == "" {
 		return nil
 	}
 
-	ocProps, err := document.ResolveDict(ctx, doc, ocPropsObj)
+	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])
 	if err != nil || ocProps == nil {
-		doc.Logger.Debug("compliance.document: cannot resolve /OCProperties", "error", err)
 		return nil
 	}
 
-	// /OCGs array is required when /OCProperties is present.
-	ocgsObj, hasOCGs := ocProps["OCGs"]
-	if !hasOCGs {
-		return nil
-	}
-
-	ocgs, err := document.ResolveArray(ctx, doc, ocgsObj)
-	if err != nil || len(ocgs) == 0 {
-		doc.Logger.Debug("compliance.document: /OCGs array empty or unresolvable", "error", err)
-		return nil
-	}
-
-	// /AS is only required when at least one OCG has a /Usage dictionary.
-	// If no OCG defines usage entries, there is nothing for /AS to control.
-	hasUsage := false
-	for _, ocgObj := range ocgs {
-		if ctx.Err() != nil {
-			return nil
+	var results []Violation
+	checkConfig := func(cfg ast.PdfDict, label string) {
+		if cfg == nil {
+			return
 		}
-		ocgDict, err := document.ResolveDict(ctx, doc, ocgObj)
-		if err != nil || ocgDict == nil {
-			continue
-		}
-		if _, ok := ocgDict["Usage"]; ok {
-			hasUsage = true
-			break
+		if _, hasAS := cfg["AS"]; hasAS {
+			results = append(results, fail(rule,
+				fmt.Sprintf("optional content %s dictionary contains forbidden /AS array", label))...)
 		}
 	}
 
-	if !hasUsage {
-		return nil
+	// The default configuration (/D) and every alternate configuration
+	// (/Configs) is an OC configuration dictionary subject to the rule.
+	if dDict, err := document.ResolveDict(ctx, doc, ocProps["D"]); err == nil {
+		checkConfig(dDict, "default config (D)")
+	}
+	if configs, err := document.ResolveArray(ctx, doc, ocProps["Configs"]); err == nil {
+		for i, cfgObj := range configs {
+			if ctx.Err() != nil {
+				break
+			}
+			cfg, _ := document.ResolveDict(ctx, doc, cfgObj)
+			checkConfig(cfg, fmt.Sprintf("config %d", i))
+		}
 	}
 
-	// /D dict must exist and should have /AS array.
-	dObj, hasD := ocProps["D"]
-	if !hasD {
-		return nil
-	}
-
-	dDict, err := document.ResolveDict(ctx, doc, dObj)
-	if err != nil || dDict == nil {
-		doc.Logger.Debug("compliance.document: cannot resolve /D dict", "error", err)
-		return nil
-	}
-
-	if _, hasAS := dDict["AS"]; !hasAS {
-		rule := ocgASRule(part)
-		return fail(rule, "OCProperties /D dictionary missing AS array while OCGs with /Usage are present")
-	}
-
-	return nil
+	return results
 }
 
 // checkInfoDictPart4 validates Info dict restrictions for PDF/A-4:
@@ -365,8 +344,9 @@ func needsRenderingRule(part int) Rule {
 }
 
 func ocgASRule(part int) Rule {
-	// The AS key rule in OC config dicts, used here for the /AS array check.
-	return ruleByPart(part, Rule{}, Rule_19005_2_6_9_t04, Rule_19005_3_6_9_t04, Rule_19005_4_6_10_t01)
+	// The "/AS forbidden in an OC config dict" rule (parts 2/3 only; PDF/A-4's
+	// 6.10 has no AS test, so part 4 returns a zero Rule).
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_9_t04, Rule_19005_3_6_9_t04, Rule{})
 }
 
 func permsDictRule(part int) Rule {
