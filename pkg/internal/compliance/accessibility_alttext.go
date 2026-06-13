@@ -269,21 +269,18 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 				continue
 			}
 
+			// Only PDF/UA-2 restricts a Widget that carries /AA (§8.10.2.3 t02:
+			// it must also carry /Contents). PDF/UA-1 has no Widget-/AA rule:
+			// its 7.18.1 t3 is the TU-or-Alt requirement (checked elsewhere),
+			// not an /AA prohibition, so firing it here was a false positive.
+			if profile != "PDF/UA-2" {
+				continue
+			}
 			loc := fmt.Sprintf("page %d, widget annot %d", pageIdx+1, annotIdx)
-
-			if profile == "PDF/UA-2" {
-				// PDF/UA-2 §8.10.2.3 t02: if Widget has /AA, /Contents must be present.
-				if _, hasContents := annot["Contents"]; !hasContents {
-					results = append(results, Violation{
-						Rule:    Rule_14289_2_8_10_2_3_t02,
-						Context: loc,
-					})
-				}
-			} else {
-				// PDF/UA-1: Widget annotations should not have /AA trigger actions.
+			if _, hasContents := annot["Contents"]; !hasContents {
 				results = append(results, Violation{
-					Rule:    Rule_14289_1_7_18_1_t03,
-					Context: fmt.Sprintf("widget annotation has /AA at %s", loc),
+					Rule:    Rule_14289_2_8_10_2_3_t02,
+					Context: loc,
 				})
 			}
 		}
