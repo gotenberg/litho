@@ -17,30 +17,60 @@ const (
 	annotFlagToggleNoView = 1 << 8 // bit 9 (PDF/A-2+)
 )
 
-// standardAnnotTypes1 lists annotation subtypes defined in ISO 32000-1:2008, Table 169.
+// annotWhitelistPart23 mirrors veraPDF's PDFA-2/3 §6.3.1 t1 test verbatim: the
+// permitted annotation subtypes. Modelled as a whitelist, not a blacklist:
+// veraPDF fails any /Subtype outside this set, so a type the prose never
+// enumerated as forbidden (Redact, included here) is still permitted while a
+// PDF 1.4 type omitted from it (Sound, Movie, Screen) is not. Notably Redact
+// is allowed for parts 2/3 even though it postdates ISO 32000-1 Table 169.
 //
-//nolint:gochecknoglobals // constant set.
-var standardAnnotTypes1 = map[ast.PdfName]bool{
+//nolint:gochecknoglobals // static spec table mirroring PDFA-2B.xml.
+var annotWhitelistPart23 = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
 	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
 	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
-	"FileAttachment": true, "Sound": true, "Movie": true, "Widget": true,
-	"Screen": true, "PrinterMark": true, "TrapNet": true, "Watermark": true,
-	"3D": true,
+	"FileAttachment": true, "Widget": true, "PrinterMark": true, "TrapNet": true,
+	"Watermark": true, "Redact": true,
 }
 
-// standardAnnotTypes2 lists annotation subtypes defined in ISO 32000-2:2020, Table 171.
+// annotWhitelistPart4 mirrors PDFA-4 §6.3.1 t1: the part-2/3 set with
+// FileAttachment dropped and Projection added.
 //
-//nolint:gochecknoglobals // constant set.
-var standardAnnotTypes2 = map[ast.PdfName]bool{
+//nolint:gochecknoglobals // static spec table mirroring PDFA-4.xml.
+var annotWhitelistPart4 = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
 	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
 	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
-	"FileAttachment": true, "Sound": true, "Movie": true, "Widget": true,
-	"Screen": true, "PrinterMark": true, "TrapNet": true, "Watermark": true,
-	"3D": true, "RichMedia": true, "Redact": true, "Projection": true,
+	"Widget": true, "PrinterMark": true, "TrapNet": true, "Watermark": true,
+	"Redact": true, "Projection": true,
+}
+
+// annotWhitelistPart4e mirrors PDFA-4E §6.3.1 t1: the PDFA-4 set plus 3D and
+// RichMedia (3D/interactive content is permitted in the -e conformance).
+//
+//nolint:gochecknoglobals // static spec table mirroring PDFA-4E.xml.
+var annotWhitelistPart4e = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
+	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
+	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
+	"Widget": true, "PrinterMark": true, "TrapNet": true, "Watermark": true,
+	"Redact": true, "Projection": true, "3D": true, "RichMedia": true,
+}
+
+// annotWhitelistPart4f mirrors PDFA-4F §6.3.1 t1: the PDFA-4 set plus
+// FileAttachment.
+//
+//nolint:gochecknoglobals // static spec table mirroring PDFA-4F.xml.
+var annotWhitelistPart4f = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
+	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
+	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
+	"FileAttachment": true, "Widget": true, "PrinterMark": true, "TrapNet": true,
+	"Watermark": true, "Redact": true, "Projection": true,
 }
 
 // checkAnnotationGroup validates annotation compliance rules for PDF/A profiles.
@@ -144,70 +174,26 @@ var pdfa1AnnotWhitelist = map[ast.PdfName]bool{
 // checkForbiddenAnnotType validates that the annotation subtype is permitted
 // for the given PDF/A part and level (§6.5.2 for part 1, §6.3.1 for parts 2+).
 func checkForbiddenAnnotType(_ context.Context, _ *document.Document, _ ast.PdfDict, subtype ast.PdfName, part int, level byte, loc string) []Violation {
-	forbidden := false
-
+	var whitelist map[ast.PdfName]bool
 	switch part {
 	case 1:
-		// PDF/A-1 permits exactly the PDF 1.4 annotation set minus the
-		// types ISO 19005-1 forbids. veraPDF's PDFA-1 6.5.2 whitelist
-		// (extracted from the live profile test): Text, Link, FreeText,
-		// Line, Square, Circle, Highlight, Underline, Squiggly,
-		// StrikeOut, Stamp, Ink, Popup, Widget, PrinterMark, TrapNet.
-		// PDF 1.5+ types (Screen, Caret, Polygon, PolyLine, Watermark)
-		// are forbidden alongside FileAttachment/Sound/Movie.
-		if !pdfa1AnnotWhitelist[subtype] {
-			forbidden = true
-		}
+		whitelist = pdfa1AnnotWhitelist
 	case 2, 3:
-		// PDF/A-2/3: 3D, RichMedia are forbidden.
-		// Sound, Screen, Movie are also forbidden per the rule description.
-		// Non-standard subtypes (not in ISO 32000-1, Table 169) are forbidden.
-		switch subtype {
-		case "3D", "RichMedia", "Sound", "Screen", "Movie":
-			forbidden = true
-		default:
-			if !standardAnnotTypes1[subtype] {
-				forbidden = true
-			}
-		}
+		whitelist = annotWhitelistPart23
 	case 4:
-		// PDF/A-4 depends on the conformance level.
 		switch level {
 		case 'e':
-			// PDF/A-4e: 3D and RichMedia are allowed.
-			// Sound, Screen, Movie remain forbidden.
-			switch subtype {
-			case "Sound", "Screen", "Movie":
-				forbidden = true
-			default:
-				if !standardAnnotTypes2[subtype] {
-					forbidden = true
-				}
-			}
+			whitelist = annotWhitelistPart4e
 		case 'f':
-			// PDF/A-4f: FileAttachment is allowed, but 3D/RichMedia are not.
-			switch subtype {
-			case "3D", "RichMedia", "Sound", "Screen", "Movie":
-				forbidden = true
-			default:
-				if !standardAnnotTypes2[subtype] {
-					forbidden = true
-				}
-			}
+			whitelist = annotWhitelistPart4f
 		default:
-			// PDF/A-4 (base): Sound, Screen, Movie, 3D, RichMedia, FileAttachment forbidden.
-			switch subtype {
-			case "Sound", "Screen", "Movie", "3D", "RichMedia", "FileAttachment":
-				forbidden = true
-			default:
-				if !standardAnnotTypes2[subtype] {
-					forbidden = true
-				}
-			}
+			whitelist = annotWhitelistPart4
 		}
+	default:
+		return nil
 	}
 
-	if !forbidden {
+	if whitelist[subtype] {
 		return nil
 	}
 
