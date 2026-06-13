@@ -1320,6 +1320,14 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	var levelStack []xmpExtSchemaLevel
 	pendingLevel := xmpExtLevelSchema
 	hasPending := false
+	// foreignDepth tracks descent into a non-pdfa subtree (dc:creator,
+	// xmp:* and friends that producers embed inside a schema's
+	// rdf:Description). veraPDF parses only pdfa-namespace content, so such
+	// a subtree must be skipped whole: its nested rdf:Seq/rdf:li would
+	// otherwise be misread as a second schema definition whose close
+	// resets currentSchema, making the real schema report every field
+	// missing (the 6.6.2.3.3 t2/t3/t4 litho-only pool).
+	foreignDepth := 0
 	// containerStack tracks, per OPEN rdf:Seq/rdf:Bag, the level its
 	// rdf:li items push. A stack, not a flag: a nested container (the
 	// field Seq inside a valueType definition) must not destroy the
@@ -1348,6 +1356,17 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				continue
 			}
 			if !inSchemas {
+				continue
+			}
+
+			// Skip any subtree rooted at a foreign-namespace element: it is
+			// not part of the PDF/A extension schema grammar.
+			if foreignDepth > 0 {
+				foreignDepth++
+				continue
+			}
+			if t.Name.Space != xmpRDFNamespace && !strings.Contains(t.Name.Space, "pdfa/ns") {
+				foreignDepth = 1
 				continue
 			}
 
@@ -1492,6 +1511,12 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 
 		case xml.EndElement:
 			if !inSchemas {
+				continue
+			}
+
+			// Unwind a skipped foreign subtree without touching schema state.
+			if foreignDepth > 0 {
+				foreignDepth--
 				continue
 			}
 
