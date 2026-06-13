@@ -10,7 +10,8 @@ import (
 )
 
 // cidToGIDMapRule returns the CIDToGIDMap rule for the given profile.
-// Returns a zero Rule if the check does not apply (part 1).
+// veraPDF's PDFA-1A profile carries this rule too (6.3.3.2 t1), keyed on
+// PDCIDFont; earlier litho skipped part 1.
 func cidToGIDMapRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		if PDFUAPart(profile) == 2 {
@@ -18,7 +19,7 @@ func cidToGIDMapRule(profile string) Rule {
 		}
 		return Rule_14289_1_7_21_3_2_t01
 	}
-	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_3_2_t01, Rule_19005_3_6_2_11_3_2_t01, Rule_19005_4_6_2_10_3_2_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_3_2_t01, Rule_19005_2_6_2_11_3_2_t01, Rule_19005_3_6_2_11_3_2_t01, Rule_19005_4_6_2_10_3_2_t01)
 }
 
 // cidSystemInfoRule returns the CIDSystemInfo consistency rule.
@@ -95,7 +96,9 @@ func isPredefinedCMap(name string) bool {
 }
 
 // checkCIDToGIDMap validates that Type 2 CIDFonts have a /CIDToGIDMap entry (rule 3).
-func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSubtype, fontName string, pageNum int, profile string) []Violation {
+// visible reports whether the font is used for visible rendering: PDF/A-1's
+// 6.3.3.2 t1 exempts an invisible font (renderingMode == 3).
+func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSubtype, fontName string, pageNum int, profile string, visible bool) []Violation {
 	rule := cidToGIDMapRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -103,6 +106,13 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 
 	// Only applies to CIDFontType2.
 	if cidSubtype != "CIDFontType2" {
+		return nil
+	}
+
+	// PDF/A-1 6.3.3.2 t1 carries a renderingMode == 3 escape: a font used only
+	// invisibly is exempt. Parts 2-4 instead key the escape on font embedding,
+	// handled by the callers that already gate on visibility.
+	if PDFAPart(profile) == 1 && !visible {
 		return nil
 	}
 

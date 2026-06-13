@@ -341,8 +341,10 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// Font name UTF-8 for the Type0 font.
 	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
-	// CIDToGIDMap.
-	results = append(results, checkCIDToGIDMap(ctx, doc, cidFontDict, cidSubtype, fontName, pageNum, profile)...)
+	// CIDToGIDMap. A font with no recorded usage is treated as visible so the
+	// check still runs when content-stream usage could not be collected.
+	visible := usage == nil || usage.visible
+	results = append(results, checkCIDToGIDMap(ctx, doc, cidFontDict, cidSubtype, fontName, pageNum, profile, visible)...)
 
 	// CIDSystemInfo consistency.
 	results = append(results, checkCIDSystemInfo(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
