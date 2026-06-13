@@ -331,14 +331,11 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		cName := string(colorantName)
 		colorantNames = append(colorantNames, cName)
 
-		// DeviceN must not use reserved colorant names "All" or "None"
-		// as tint transform targets (per §6.2.4.4).
-		if cName == "All" || cName == "None" {
-			*results = append(*results, failf(deviceNConsistencyRule(part),
-				"page %d, ColorSpace %s: DeviceN uses reserved colorant name %q",
-				pageIdx+1, csName, cName)...)
-			continue
-		}
+		// veraPDF's 6.2.4.4 has no reserved-colorant-name rule: a DeviceN
+		// colorant named "None" or "All" is not flagged (verified live on
+		// 6-1-12-t09-fail-a remediated to PDF/A-2a, where vera fires no 6.2.4.4
+		// despite a DeviceN "None" colorant). litho only checks colorant
+		// tint/alternate consistency (t2) and Colorants-dict presence (t1).
 
 		if prev, ok := colorantAlternates[cName]; ok {
 			if prev != alternateName {
