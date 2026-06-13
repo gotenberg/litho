@@ -44,6 +44,10 @@ func cmapEmbeddingRules(profile string) (t1, t2, t3 Rule) {
 		return Rule_14289_1_7_21_3_3_t01, Rule_14289_1_7_21_3_3_t02, Rule_14289_1_7_21_3_3_t03
 	}
 	switch PDFAPart(profile) {
+	case 1:
+		// veraPDF's PDFA-1A/1B profile has t1 (embedded/Identity) and t2
+		// (WMode) but no usecmap rule (t3).
+		return Rule_19005_1_6_3_3_3_t01, Rule_19005_1_6_3_3_3_t02, Rule{}
 	case 2:
 		return Rule_19005_2_6_2_11_3_3_t01, Rule_19005_2_6_2_11_3_3_t02, Rule_19005_2_6_2_11_3_3_t03
 	case 3:
@@ -281,10 +285,14 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 	}
 
 	// t1: If encoding is a name and NOT predefined, it must be embedded.
-	// For PDF/UA-2 (ISO 32000-2 Table 116), only Identity-H/V are predefined.
+	// For PDF/UA-2 (ISO 32000-2 Table 116) and PDF/A-1, only Identity-H/V are
+	// exempt: veraPDF's PDFA-1 6.3.3.3 t1 is `CMapName == Identity-H ||
+	// CMapName == Identity-V || containsEmbeddedFile`, so a predefined CJK CMap
+	// name that is not embedded fails (verified vs the goldens: a part-2 pass
+	// fixture using a predefined CMap fails 6.3.3.3-t1 when validated as A-1a).
 	if streamErr != nil && string(encName) != "" {
 		predefined := isPredefinedCMap(string(encName))
-		if profile == "PDF/UA-2" {
+		if profile == "PDF/UA-2" || PDFAPart(profile) == 1 {
 			predefined = encName == "Identity-H" || encName == "Identity-V"
 		}
 		if !predefined {
@@ -320,6 +328,9 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		// follow embedded CMap chains for non-predefined references.
 		usedCMap := findNonPredefinedUseCMap(ctx, doc, data, encStream.Dict, profile, 0)
 		if usedCMap != "" {
+			// PDF/A-1's 6.3.3.3 has no usecmap rule (ruleT3 is empty there);
+			// the central zero-Rule filter drops it, matching veraPDF, which
+			// does not report an embedded CMap's usecmap chain under part 1.
 			results = append(results, failf(ruleT3,
 				"font %s on page %d: CMap chain references non-predefined CMap %q",
 				fontName, pageNum, usedCMap)...)
