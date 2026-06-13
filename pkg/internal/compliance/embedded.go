@@ -360,6 +360,13 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	// Collect all /AF references from catalog, pages, and annotations.
 	// The /AF array can appear on any of these per the spec.
 	afRefs := make(map[int]bool)
+	// fsAnnotRefs holds filespecs reached only through an annotation /FS (e.g. a
+	// Link's remote go-to). veraPDF's isAssociatedFile counts such a reference
+	// for a filespec WITHOUT /EF (an external file) but NOT for an embedded one:
+	// a filespec carrying /EF must appear in a real /AF array (verified vs the
+	// PDFA-3 goldens: every /EF-bearing FileAttachment spec absent from /AF
+	// fires 6.8 t4, while external /FS specs without /EF do not).
+	fsAnnotRefs := make(map[int]bool)
 	collectAFRefs(ctx, doc, catalog["AF"], afRefs)
 
 	// Also collect from pages, their annotations, and XObject resources.
@@ -383,11 +390,12 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 					collectAFRefs(ctx, doc, annotDict["AF"], afRefs)
 
 					// Annotations with /FS directly reference a file spec
-					// (e.g., FileAttachment). This counts as a valid
-					// association, so no separate /AF entry required.
+					// (e.g., a Link's remote go-to or a FileAttachment). This
+					// satisfies association only for an external (non-/EF)
+					// filespec; an embedded one still needs a real /AF entry.
 					if fsObj, hasFS := annotDict["FS"]; hasFS {
 						if ref, isRef := fsObj.(ast.PdfIndirectRef); isRef {
-							afRefs[ref.ObjectNum] = true
+							fsAnnotRefs[ref.ObjectNum] = true
 						}
 					}
 
@@ -419,13 +427,26 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		}
 	}
 
-	if len(afRefs) == 0 {
-		return failf(rule, "no /AF array found but %d file specification(s) requiring association exist", len(associatedSpecs))
+	// /AF can also appear on structure elements (e.g. a Figure or formula
+	// associating a source data file). veraPDF's isAssociatedFile reaches these
+	// through the structure tree, so a spec associated only via a struct
+	// element's /AF must count (otherwise an accessible embedded file is a false
+	// positive, e.g. PDF_UA-1__7.7-t01-pass-a's H1 /AF).
+	if structRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"]); err == nil && structRoot != nil {
+		walkStructureElements(ctx, doc, structRoot, func(elem ast.PdfDict, _ string) {
+			collectAFRefs(ctx, doc, elem["AF"], afRefs)
+		})
 	}
 
 	var results []Violation
 	for _, fs := range associatedSpecs {
-		if !afRefs[fs.objNum] {
+		associated := afRefs[fs.objNum]
+		// An external (non-embedded) filespec may be associated through an
+		// annotation /FS reference; an embedded one (/EF) must be in /AF.
+		if !fs.hasEF && fsAnnotRefs[fs.objNum] {
+			associated = true
+		}
+		if !associated {
 			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("object %d: file specification not referenced in any /AF array", fs.objNum),
