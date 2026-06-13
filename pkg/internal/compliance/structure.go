@@ -1439,6 +1439,14 @@ func findHeadersInAttributes(ctx context.Context, doc *document.Document, aObj a
 func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, _ string, part int) []Violation {
 	rule := pdfaLangValidRule(part)
 
+	// PDF/A-1's 6.8.4 t1 grammar forbids digits in subtags; parts 2/3 (6.7.4)
+	// allow them, matching the alphanumeric grammar of PDF/UA and the general
+	// validator.
+	validLang := IsValidLangTag
+	if part == 1 {
+		validLang = isValidLangTagPDFA1
+	}
+
 	var results []Violation
 
 	// Check catalog /Lang.
@@ -1446,7 +1454,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		langStr, err := document.ResolveString(ctx, doc, langObj)
 		if err == nil {
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-			if trimmed != "" && !IsValidLangTag(trimmed) {
+			if trimmed != "" && !validLang(trimmed) {
 				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
 			}
 		}
@@ -1468,7 +1476,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 			return
 		}
 		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-		if trimmed != "" && !IsValidLangTag(trimmed) {
+		if trimmed != "" && !validLang(trimmed) {
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})

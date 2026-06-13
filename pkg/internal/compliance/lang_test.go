@@ -38,6 +38,12 @@ func TestIsValidLangTag(t *testing.T) {
 		{"case insensitive script", "en-latn-us"},
 		{"single-letter language RFC 3066", "p"},
 		{"single-letter with region", "p-pt"},
+		// veraPDF's RFC 3066 regex accepts a lone letter and 1-char subtags
+		// that RFC 5646 would reject; litho matches the regex it is graded by.
+		{"lone x", "x"},
+		{"lone i", "i"},
+		{"one-char subtag", "en-a"},
+		{"digit subtag (RFC 3066)", "en-12"},
 	}
 
 	for _, tc := range valid {
@@ -64,11 +70,7 @@ func TestIsValidLangTag(t *testing.T) {
 		{"space inside", "en US"},
 		{"trailing dash", "en-"},
 		{"leading dash", "-en"},
-		{"lone x", "x"},
-		{"lone i", "i"},
-		{"singleton without subtag", "en-a"},
 		{"private use empty subtag", "x-"},
-		{"extension subtag too short", "en-a-x"},
 	}
 
 	for _, tc := range invalid {

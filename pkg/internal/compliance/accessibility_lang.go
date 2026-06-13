@@ -3,11 +3,87 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
+
+// langTagAlphaNum and langTagAlphaOnly mirror veraPDF's two CosLang grammars:
+// alphanumeric subtags for PDF/A-2/3/4 and PDF/UA, alpha-only subtags for the
+// stricter PDF/A-1 6.8.4 t1.
+//
+//nolint:gochecknoglobals // compiled-once regex tables.
+var (
+	langTagAlphaNum  = regexp.MustCompile(`^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$`)
+	langTagAlphaOnly = regexp.MustCompile(`^[a-zA-Z]{1,8}(-[a-zA-Z]{1,8})*$`)
+)
+
+// checkMarkedContentLang validates the language tag of any /Lang set on a
+// marked-content sequence (BDC/DP) in a page content stream. veraPDF treats
+// each such /Lang as a CosLang and fails 7.2 t29 (UA-1) / 8.4.4 t2 (UA-2) when
+// it does not match the RFC 3066/BCP 47 grammar. The dict-based catalog and
+// structure-tree checks do not reach content-operator language tags (verified
+// live on 6-8-4-t01-fail-c remediated to PDF/UA-1: 7.2-t29 fires on
+// operators[5]/Lang). An empty tag is "not present" and passes [IsValidLangTag].
+func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if !IsPDFUA(profile) {
+		return nil
+	}
+	rule := langValidRule(profile)
+
+	var results []Violation
+	for pageIdx, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return results
+		}
+		data, err := resolvePageContentBytes(ctx, doc, page)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		ops, err := content.ParseStreamData(ctx, data)
+		if err != nil {
+			continue
+		}
+		var props ast.PdfDict // page /Properties, resolved lazily for named property lists
+		propsResolved := false
+		for _, op := range ops {
+			if op.Operator != "BDC" && op.Operator != "DP" || len(op.Operands) < 2 {
+				continue
+			}
+			var pd ast.PdfDict
+			switch v := op.Operands[1].(type) {
+			case ast.PdfDict:
+				pd = v
+			case ast.PdfName:
+				if !propsResolved {
+					if res := resolveResources(ctx, doc, page); res != nil {
+						props, _ = document.ResolveDict(ctx, doc, res["Properties"])
+					}
+					propsResolved = true
+				}
+				if props != nil {
+					pd, _ = document.ResolveDict(ctx, doc, props[v])
+				}
+			}
+			if pd == nil {
+				continue
+			}
+			langObj, ok := pd["Lang"]
+			if !ok {
+				continue
+			}
+			lang, _ := document.ResolveString(ctx, doc, langObj)
+			if !IsValidLangTag(string(lang)) {
+				results = append(results, failf(rule,
+					"page %d: marked-content /Lang %q is not a valid language tag", pageIdx+1, string(lang))...)
+			}
+		}
+	}
+	return results
+}
 
 // checkLangRequired ensures the catalog has a /Lang key with a valid RFC 3066 tag.
 // Rule mapping:
@@ -259,196 +335,29 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
-// IsValidLangTag validates a language tag against RFC 3066 / RFC 5646 (BCP 47)
-// well-formedness. The PDF spec (ISO 32000-1:2008, 14.9.2) references RFC 3066
-// which allows 1-8 ALPHA for the primary language subtag (RFC 5646 tightened
-// this to 2-8). The validator accepts 1-8 to match VeraPDF's behavior and the spec reference.
+// IsValidLangTag reports whether tag is a well-formed language identifier as
+// veraPDF tests it for PDF/A-2/3/4 and PDF/UA (ISO 19005-2/3 6.7.4 t1, ISO
+// 14289-1 7.2 t29, ISO 14289-2 8.4.4 t2): a 1-8 letter primary subtag followed
+// by any number of 1-8 alphanumeric subtags. An empty or whitespace-only tag is
+// "not present" and passes. PDF/A-1's stricter 6.8.4 t1 grammar (no digits in
+// subtags) is [isValidLangTagPDFA1].
 //
-// It does NOT check against the IANA subtag registry, only structural validity.
-// An empty or whitespace-only tag is treated as "not present" rather than
-// invalid. Callers should skip validation instead of reporting an
-// invalid-tag violation.
-//
-// Grammar (simplified from RFC 5646 §2.1, with RFC 3066 primary language):
-//
-//	Language-Tag = langtag / privateuse / grandfathered
-//	langtag      = language ["-" script] ["-" region] *("-" variant) *("-" extension) ["-" privateuse]
-//	language     = 1*8ALPHA ["-" extlang]   (RFC 3066 allows 1-8 ALPHA)
-//	extlang      = 3ALPHA *2("-" 3ALPHA)
-//	script       = 4ALPHA
-//	region       = 2ALPHA / 3DIGIT
-//	variant      = 5*8alphanum / (DIGIT 3alphanum)
-//	extension    = singleton 1*("-" 2*8alphanum)
-//	privateuse   = "x" 1*("-" 1*8alphanum)
-//	singleton    = DIGIT / %x41-57 / %x59-5A / %x61-77 / %x79-7A  (any alphanum except 'x'/'X')
+// The grammar is RFC 3066 as referenced by ISO 32000-1:2008, 14.9.2, NOT the
+// tighter RFC 5646: subtags may be 1-8 alphanumerics (e.g. "en-12" is valid),
+// and structural well-formedness is checked, not the IANA subtag registry.
 func IsValidLangTag(tag string) bool {
 	trimmed := strings.TrimSpace(tag)
-	if trimmed == "" {
-		return true
-	}
-
-	parts := strings.Split(trimmed, "-")
-	n := len(parts)
-
-	// Private-use tag: x-...
-	if len(parts[0]) == 1 && (parts[0][0] == 'x' || parts[0][0] == 'X') {
-		return validPrivateUse(parts)
-	}
-
-	// Grandfathered/IANA: i-...
-	if len(parts[0]) == 1 && (parts[0][0] == 'i' || parts[0][0] == 'I') {
-		// "i" followed by at least one subtag of 1-8 alphanum.
-		if n < 2 {
-			return false
-		}
-		for _, sub := range parts[1:] {
-			if !isAlphaNumSubtag(sub, 1, 8) {
-				return false
-			}
-		}
-		return true
-	}
-
-	// Primary language subtag: 1-8 ALPHA per RFC 3066 (referenced by PDF spec ISO 32000-1:2008, 14.9.2).
-	// RFC 5646 restricts to 2-8 ALPHA, but PDF conforming readers must accept RFC 3066.
-	primary := parts[0]
-	if !isAlphaStr(primary) {
-		return false
-	}
-	pLen := len(primary)
-	if pLen < 1 || pLen > 8 {
-		return false
-	}
-
-	i := 1 // current index into parts
-
-	// Optional extlang: up to 3 sequences of exactly 3 ALPHA, only after 2-3 char primary.
-	if pLen <= 3 {
-		for extCount := 0; extCount < 3 && i < n; extCount++ {
-			if len(parts[i]) == 3 && isAlphaStr(parts[i]) {
-				i++
-			} else {
-				break
-			}
-		}
-	}
-
-	// Optional script: exactly 4 ALPHA.
-	if i < n && len(parts[i]) == 4 && isAlphaStr(parts[i]) {
-		i++
-	}
-
-	// Optional region: 2 ALPHA or 3 DIGIT.
-	if i < n {
-		sub := parts[i]
-		if (len(sub) == 2 && isAlphaStr(sub)) || (len(sub) == 3 && isDigitStr(sub)) {
-			i++
-		}
-	}
-
-	// Variants: 5-8 alphanum, or DIGIT followed by 3 alphanum.
-	for i < n {
-		sub := parts[i]
-		sLen := len(sub)
-		//nolint:gocritic // variant subtag parsing requires compound conditions incompatible with switch.
-		if sLen >= 5 && sLen <= 8 && isAlphaNumStr(sub) {
-			i++
-		} else if sLen == 4 && isDigit(sub[0]) && isAlphaNumStr(sub[1:]) {
-			i++
-		} else {
-			break
-		}
-	}
-
-	// Extensions: singleton 1*("-" 2*8alphanum), where singleton != 'x'/'X'.
-	for i < n {
-		sub := parts[i]
-		if len(sub) != 1 || !isAlphaNumByte(sub[0]) {
-			break
-		}
-		if sub[0] == 'x' || sub[0] == 'X' {
-			break // private-use handled below
-		}
-		i++ // consume singleton
-		if i >= n {
-			return false // singleton must have at least one subtag
-		}
-		consumed := false
-		for i < n && isAlphaNumSubtag(parts[i], 2, 8) {
-			i++
-			consumed = true
-		}
-		if !consumed {
-			return false
-		}
-	}
-
-	// Optional trailing private-use: x-...
-	if i < n {
-		if len(parts[i]) == 1 && (parts[i][0] == 'x' || parts[i][0] == 'X') {
-			return validPrivateUse(parts[i:])
-		}
-		return false // unexpected trailing subtag
-	}
-
-	return true
+	return trimmed == "" || langTagAlphaNum.MatchString(trimmed)
 }
 
-// validPrivateUse checks that parts is ["x", sub1, sub2, ...] with each sub being 1-8 alphanum.
-func validPrivateUse(parts []string) bool {
-	if len(parts) < 2 {
-		return false
-	}
-	for _, sub := range parts[1:] {
-		if !isAlphaNumSubtag(sub, 1, 8) {
-			return false
-		}
-	}
-	return true
-}
-
-func isAlphaStr(s string) bool {
-	for i := range len(s) {
-		b := s[i]
-		if (b < 'a' || b > 'z') && (b < 'A' || b > 'Z') {
-			return false
-		}
-	}
-	return len(s) > 0
-}
-
-func isDigitStr(s string) bool {
-	for i := range len(s) {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return len(s) > 0
-}
-
-func isAlphaNumStr(s string) bool {
-	for i := range len(s) {
-		b := s[i]
-		if (b < 'a' || b > 'z') && (b < 'A' || b > 'Z') && (b < '0' || b > '9') {
-			return false
-		}
-	}
-	return len(s) > 0
+// isValidLangTagPDFA1 applies veraPDF's PDF/A-1 6.8.4 t1 grammar, whose subtags
+// are letters only (no digits), unlike the alphanumeric subtags every later
+// profile allows.
+func isValidLangTagPDFA1(tag string) bool {
+	trimmed := strings.TrimSpace(tag)
+	return trimmed == "" || langTagAlphaOnly.MatchString(trimmed)
 }
 
 func isDigit(b byte) bool {
 	return b >= '0' && b <= '9'
-}
-
-func isAlphaNumByte(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
-}
-
-// isAlphaNumSubtag checks that s is min..max alphanum characters.
-func isAlphaNumSubtag(s string, min, max int) bool {
-	l := len(s)
-	if l < min || l > max {
-		return false
-	}
-	return isAlphaNumStr(s)
 }

@@ -20,6 +20,10 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Language (§7.2/§8.2): /Lang key required in catalog.
 	results = append(results, checkLangRequired(ctx, doc, catalog, profile)...)
 
+	// Marked-content /Lang format (§7.2 t29 / §8.4.4 t2): a /Lang set on a BDC
+	// sequence must be a valid language tag.
+	results = append(results, checkMarkedContentLang(ctx, doc, catalog, profile)...)
+
 	// Outline language (§7.2 t2, PDF/UA-1): outline entries must have determinable language.
 	results = append(results, checkOutlineLang(ctx, doc, catalog, profile)...)
 
