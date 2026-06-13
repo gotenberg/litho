@@ -109,7 +109,7 @@
           "mismatched": 9475,
           "skipped": 13,
           "metrics": {
-            "disagreement": 776,
+            "disagreement": 769,
             "fully_fixed": 24420,
             "litho_fixed": 131966,
             "litho_post": 10130,
@@ -123,12 +123,12 @@
           }
         },
         "remediation-aggressive": {
-          "matched": 24813,
+          "matched": 24812,
           "mismatched": 9086,
           "skipped": 13,
           "metrics": {
-            "disagreement": 687,
-            "fully_fixed": 24813,
+            "disagreement": 678,
+            "fully_fixed": 24812,
             "litho_fixed": 132409,
             "litho_post": 9687,
             "litho_pre": 142096,
