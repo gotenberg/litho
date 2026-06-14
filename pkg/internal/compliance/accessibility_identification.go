@@ -30,12 +30,21 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 
 	var results []Violation
 
+	// ISO 14289-2 §8.7 t1 requires a /Name on every OC config dict (including the
+	// default /D) ONLY when /OCProperties has a /Configs entry with at least one
+	// config dict; a UA-2 document with only /D and no /Configs passes (verified
+	// live on 6-10-t01 / 7.10-t01 remediated to PDF/UA-2). ISO 14289-1 §7.10 t1
+	// has no such condition: UA-1 requires /Name on /D unconditionally (verified:
+	// vera fires 7.10 t1 on /D-only docs). The /AS prohibition (t2) applies always.
+	configs, _ := document.ResolveArray(ctx, doc, ocProps["Configs"])
+	nameRequired := profile != "PDF/UA-2" || len(configs) >= 1
+
 	// Check default config (/D).
 	dObj, ok := ocProps["D"]
 	if ok {
 		dConfig, err := document.ResolveDict(ctx, doc, dObj)
 		if err == nil && dConfig != nil {
-			if !hasNonEmptyName(ctx, doc, dConfig) {
+			if nameRequired && !hasNonEmptyName(ctx, doc, dConfig) {
 				results = append(results, Violation{Rule: rule, Context: "default config (D)"})
 			}
 			// §7.10 t2 (PDF/UA-1) / §8.7 t2 (PDF/UA-2): /AS key forbidden in any
@@ -46,17 +55,6 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 				})
 			}
 		}
-	}
-
-	// Check /Configs array.
-	configsObj, ok := ocProps["Configs"]
-	if !ok {
-		return results
-	}
-
-	configs, err := document.ResolveArray(ctx, doc, configsObj)
-	if err != nil {
-		return results
 	}
 
 	for i, cfgObj := range configs {
