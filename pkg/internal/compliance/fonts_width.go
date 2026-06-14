@@ -192,9 +192,11 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 }
 
 // glyphPresenceRule selects the per-part "embedded font program defines all
-// glyphs referenced for rendering" rule: ISO 19005-1 §6.3.8 (Level A only;
+// glyphs referenced for rendering" rule: ISO 19005-1 §6.3.5 t1 (Level A only;
 // the veraPDF PDFA-1B profile carries no glyph-presence rule), ISO 19005-2/3
-// §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2.
+// §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2. The PDFA-1A profile keys this on
+// clause 6.3.5 (test `isGlyphPresent`); clause 6.3.8 t1 is the unrelated
+// ToUnicode requirement (`toUnicode != null`).
 func glyphPresenceRule(profile string) Rule {
 	// PDF/UA ids verified live on PDF_A-1b__veraPDF_test_suite
 	// _6-1-12-t10-fail-a remediated to UA-1/UA-2: 7.21.4.1 t2 and
@@ -208,7 +210,7 @@ func glyphPresenceRule(profile string) Rule {
 	if PDFAPart(profile) == 1 && !strings.HasSuffix(profile, "a") {
 		return Rule{}
 	}
-	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_8_t01, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t01, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
 }
 
 // checkSimpleGlyphPresence validates that every glyph referenced for visible
