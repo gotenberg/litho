@@ -196,6 +196,17 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		// Predefined CMap names follow the pattern "Registry-Ordering-Supplement"
 		// (e.g., "Adobe-Japan1-2", "Adobe-Korea1-0").
 		encName, _ := document.ResolveName(ctx, doc, encObj)
+		// A non-Identity encoding given as a name that is neither embedded nor a
+		// real predefined CMap supplies no resolvable CIDSystemInfo, so the
+		// required Registry/Ordering relationship cannot be established. A bogus
+		// name shaped like a CIDSystemInfo ("Adobe-Korea1-2") parses cleanly via
+		// parsePredefinedCMapName and would spuriously "match" the CIDFont;
+		// isPredefinedCMap rejects it. veraPDF fires 6.2.11.3.1 here alongside
+		// the not-embedded rule (verified on /Adobe-Korea1-2 in 7.21.3.3-t01-fail-a).
+		if !isPredefinedCMap(string(encName)) {
+			return failf(rule, "font %s on page %d: encoding %q is neither embedded nor a predefined CMap",
+				fontName, pageNum, string(encName))
+		}
 		reg, ord, sup := parsePredefinedCMapName(string(encName))
 		if reg == "" {
 			// Non-Identity encoding that can't be resolved. The CIDSystemInfo
