@@ -309,6 +309,23 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 
 	var results []Violation
 
+	// PDF/A-1 §6.3.3.3 requires EVERY CMap used in the file, except Identity-H/V,
+	// to be embedded, including a base CMap that an embedded CMap pulls in via
+	// /UseCMap. A /UseCMap given as a NAME (rather than an embedded stream)
+	// references a non-embedded predefined CMap, so a non-Identity name fails t1
+	// (verified live on a /UseCMap /H chain in 7.21.3.3-t03 remediated to A-1a).
+	// Part 1 only: parts 2+/4 permit predefined CMaps, and PDF/UA-2's 8.4.5.4 t1
+	// does not extend the embedding requirement to the /UseCMap base (a /UseCMap
+	// /H pass fixture passes UA-2 live, so gating UA-2 here false-positives).
+	if PDFAPart(profile) == 1 {
+		if useName, _ := document.ResolveName(ctx, doc, encStream.Dict["UseCMap"]); useName != "" &&
+			useName != "Identity-H" && useName != "Identity-V" {
+			results = append(results, failf(ruleT1,
+				"font %s on page %d: CMap uses non-embedded CMap %q via /UseCMap",
+				fontName, pageNum, useName)...)
+		}
+	}
+
 	// t2: WMode in dict must match WMode in stream program.
 	// Both default to 0 when absent.
 	dictWMode, _ := document.ResolveInt(ctx, doc, encStream.Dict["WMode"])
