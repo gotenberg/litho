@@ -124,8 +124,13 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
-			// Link and Widget annotations are excluded from this check.
-			if subtype == "Link" || subtype == "Widget" {
+			// Widget annotations are excluded from this check. Link is NOT
+			// excluded under PDF/UA-1: ISO 14289-1 §7.18.1 t2 exempts only
+			// Widget/hidden/out-of-cropbox, so a Link lacking both /Contents
+			// and an enclosing-element /Alt fails (verified live on the Link in
+			// 6-3-2-t01-fail-b remediated to PDF/UA-1). Under PDF/UA-2 the
+			// markup-subtype filter below still exempts Link (not a markup type).
+			if subtype == "Widget" {
 				continue
 			}
 			// A Popup inherits content from its parent markup annotation, so a
