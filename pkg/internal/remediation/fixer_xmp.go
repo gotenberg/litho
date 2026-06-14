@@ -51,9 +51,9 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		if stream, err := document.ResolveStream(ctx, doc, metaObj); err == nil {
 			if data, err := stream.Bytes(ctx); err == nil {
 				// The XMP package must be UTF-8 (ISO 19005-2/3 §6.6.2.1,
-				// ISO 19005-4 §6.7.2.1). A UTF-16 packet also defeats the
-				// byte-range splicer, silently leaving stale pdfaid
-				// behind, so transcode before any patching.
+				// ISO 19005-4 §6.7.2.1). A UTF-16 or UTF-32 packet also
+				// defeats the byte-range splicer, silently leaving stale
+				// pdfaid behind, so transcode before any patching.
 				if utf8Data, changed := xmpToUTF8(data); changed {
 					data = utf8Data
 					reencoded = true
@@ -75,7 +75,7 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		xmpBytes = []byte(patched)
 		fixes = patchFixes
 		if reencoded {
-			fixes = append(fixes, "re-encoded XMP packet from UTF-16 to UTF-8")
+			fixes = append(fixes, "re-encoded XMP packet to UTF-8")
 		}
 	} else {
 		// Generate new XMP.

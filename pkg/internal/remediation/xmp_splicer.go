@@ -909,6 +909,13 @@ func (l xmpPropertyLocation) String() string {
 // operations require UTF-8 (ISO 19005-2/3 §6.6.2.1 and ISO 19005-4 §6.7.2.1
 // demand it of conforming files anyway).
 func xmpToUTF8(data []byte) ([]byte, bool) {
+	// UTF-32 first: a UTF-32LE packet opens "<\x00\x00\x00", whose first two
+	// bytes ("<\x00") also satisfy the UTF-16LE BOM-less test below, so the
+	// wider unit must win. xmpUTF32ToUTF8 returns false for non-UTF-32 input.
+	if out, ok := xmpUTF32ToUTF8(data); ok {
+		return out, true
+	}
+
 	// Stream payloads often carry a trailing newline before endstream;
 	// trim ASCII whitespace so an odd byte count cannot mask a UTF-16
 	// packet (the parity of the CONTENT is what matters).
@@ -951,4 +958,50 @@ func xmpToUTF8(data []byte) ([]byte, bool) {
 		}
 	}
 	return []byte(string(utf16.Decode(units))), true
+}
+
+// xmpUTF32ToUTF8 transcodes a UTF-32 XMP packet (BOM or BOM-less, either byte
+// order) to UTF-8, returning false for anything that is not UTF-32 so the
+// caller falls through to the UTF-16 path. BOM-less detection keys on the
+// three-NUL-per-code-point pattern that ASCII-range XMP content exhibits
+// across its first two code points; UTF-16 and UTF-8 packets never match it.
+// Keying on the pattern rather than a leading "<" tolerates a leading
+// whitespace code point (the 6-7-9-t04 UTF-32LE fixture opens with an encoded
+// newline before "<?xpacket"). Like the UTF-16 path, this defeats the
+// byte-range splicer, which requires UTF-8 (ISO 19005-4 §6.7.2.1).
+func xmpUTF32ToUTF8(data []byte) ([]byte, bool) {
+	if len(data) < 8 {
+		return nil, false
+	}
+	var be bool
+	start := 0
+	switch {
+	case data[0] == 0x00 && data[1] == 0x00 && data[2] == 0xFE && data[3] == 0xFF:
+		be, start = true, 4
+	case data[0] == 0xFF && data[1] == 0xFE && data[2] == 0x00 && data[3] == 0x00:
+		be, start = false, 4
+	case data[1] == 0 && data[2] == 0 && data[3] == 0 && data[5] == 0 && data[6] == 0 && data[7] == 0:
+		be = false // BOM-less little-endian: ASCII byte then three NULs.
+	case data[0] == 0 && data[1] == 0 && data[2] == 0 && data[4] == 0 && data[5] == 0 && data[6] == 0:
+		be = true // BOM-less big-endian: three NULs then ASCII byte.
+	default:
+		return nil, false
+	}
+	var b strings.Builder
+	b.Grow((len(data) - start) / 4)
+	for i := start; i+3 < len(data); i += 4 {
+		var r uint32
+		if be {
+			r = uint32(data[i])<<24 | uint32(data[i+1])<<16 | uint32(data[i+2])<<8 | uint32(data[i+3])
+		} else {
+			r = uint32(data[i+3])<<24 | uint32(data[i+2])<<16 | uint32(data[i+1])<<8 | uint32(data[i])
+		}
+		// Out-of-range and surrogate code points are invalid in UTF-32; emit
+		// the replacement character rather than corrupt the packet.
+		if r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
+			r = 0xFFFD
+		}
+		b.WriteRune(rune(r))
+	}
+	return []byte(b.String()), true
 }
