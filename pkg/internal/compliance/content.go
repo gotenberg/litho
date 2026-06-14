@@ -55,11 +55,15 @@ var forbiddenInlineImageFilters = map[string]bool{
 	"Crypt":     true,
 }
 
-// allowedInlineImageFiltersPart4 lists filter names/abbreviations permitted
-// in inline images for PDF/A-4 (ISO 32000-2:2020, Table 92).
+// allowedInlineImageFilters lists the inline-image filter abbreviations and
+// full names permitted by PDF/A (ISO 32000-1 Table 6 / ISO 32000-2 Table 92).
+// A value mapped to false (LZW) is a valid abbreviation that PDF/A forbids; a
+// value absent from the map (e.g. "Crypt" or a mis-cased "Lzw") is "not listed
+// in Table 6" and is likewise forbidden. Used for parts 2/3/4, whose §6.1.10 /
+// §6.2.10.x rules require the value to be a valid, non-LZW Table-6 entry.
 //
 //nolint:gochecknoglobals // package-level lookup table.
-var allowedInlineImageFiltersPart4 = map[string]bool{
+var allowedInlineImageFilters = map[string]bool{
 	"AHx": true, "ASCIIHexDecode": true,
 	"A85": true, "ASCII85Decode": true,
 	"LZW": false, "LZWDecode": false, // explicitly forbidden
@@ -246,14 +250,18 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 		dictBytes := data[offset:idIdx]
 		filterVal := extractInlineImageFilter(dictBytes)
 		if filterVal != "" {
-			forbidden := false
-			if part == 4 {
-				allowed, known := allowedInlineImageFiltersPart4[filterVal]
-				if !known || !allowed {
-					forbidden = true
-				}
-			} else {
+			var forbidden bool
+			if part == 1 {
+				// PDF/A-1 forbids only the named filters (no "not in Table 6"
+				// clause for inline images).
 				forbidden = forbiddenInlineImageFilters[filterVal]
+			} else {
+				// Parts 2/3/4: the /F value must be a valid Table-6/92
+				// abbreviation and not LZW. A non-Table-6 name (e.g. "Lzw")
+				// fails "a value not listed in Table 6" (verified live on
+				// /F /Lzw in 6-1-9-t01-fail-c remediated to A-2a).
+				allowed, known := allowedInlineImageFilters[filterVal]
+				forbidden = !known || !allowed
 			}
 			if forbidden {
 				results = append(results, failf(inlineImageFilterRule(part),
