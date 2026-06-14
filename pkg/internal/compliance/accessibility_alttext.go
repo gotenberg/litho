@@ -124,11 +124,22 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
-			// Link, Widget, and Popup annotations are excluded from this check.
-			// Popup annotations are explicitly exempt. They inherit content
-			// from their parent annotation and do not need /Contents or /Alt.
-			if subtype == "Link" || subtype == "Widget" || subtype == "Popup" {
+			// Link and Widget annotations are excluded from this check.
+			if subtype == "Link" || subtype == "Widget" {
 				continue
+			}
+			// A Popup inherits content from its parent markup annotation, so a
+			// Popup WITH a /Parent is exempt. A parentless Popup has no source
+			// of content and must itself satisfy the Contents-or-Alt
+			// requirement: veraPDF UA-1 §7.18.1 t2 exempts only Widget, hidden,
+			// and out-of-cropbox annotations (verified live on a parentless
+			// full-page Popup in 6-3-2-t01-pass-b remediated to PDF/UA-1).
+			// Under PDF/UA-2 the markup-subtype filter below still exempts
+			// every Popup (Popup is not a markup type).
+			if subtype == "Popup" {
+				if _, hasParent := annot["Parent"]; hasParent {
+					continue
+				}
 			}
 
 			// ISO 14289-2 §8.9.2.3 covers markup annotations only, and
