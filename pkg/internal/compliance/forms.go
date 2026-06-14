@@ -233,8 +233,12 @@ func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast
 		return
 	}
 
-	// Zero-area widgets are exempt from appearance requirements.
-	if isZeroAreaRect(ctx, doc, field) {
+	// Zero-area widgets are exempt from appearance requirements, except under
+	// PDF/A-1: veraPDF's §6.9 t2 (PDWidgetAnnot) requires an appearance
+	// dictionary regardless of /Rect area (verified live on a zero-area
+	// signature field in 6-1-12-t02 remediated to A-1a, where vera fires
+	// 6.9 t2 and litho was silent).
+	if part != 1 && isZeroAreaRect(ctx, doc, field) {
 		return
 	}
 
