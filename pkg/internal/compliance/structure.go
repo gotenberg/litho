@@ -135,6 +135,16 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		checkUnmappedStructTypes(ctx, doc, structTreeRoot, profile, &results)
 	}
 
+	// PDF/UA-1 §7.1: a non-standard structure type not role-mapped to a
+	// standard type fails 7.1 t5 (roleMapNonStandardRule). veraPDF reports it
+	// under UA-1 the same as PDF/A level 'a' (verified on the 6-8-3-4 / 6-7-3-4
+	// roleMap fixtures remediated to PDF/UA-1, where litho was silent). UA-2's
+	// equivalent (8.2.4) is covered by the namespace-aware structure check, so
+	// it is excluded here to avoid double-reporting.
+	if profile == "PDF/UA-1" && structTreeRoot != nil {
+		checkUnmappedStructTypes(ctx, doc, structTreeRoot, profile, &results)
+	}
+
 	// PDF/UA-specific structure tree validation.
 	if ua && structTreeRoot != nil {
 		if ctx.Err() != nil {
