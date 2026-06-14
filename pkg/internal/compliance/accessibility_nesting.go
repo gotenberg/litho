@@ -62,9 +62,16 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 				continue
 			}
 
-			// Skip Popup annotations. They are auxiliary and don't have structure requirements.
+			// A Popup with a /Parent is auxiliary to its parent markup
+			// annotation and carries no independent structure requirement. A
+			// parentless Popup is a first-class annotation: ISO 14289-1
+			// §7.18.1 t1 excludes only Widget/PrinterMark/Link, so a parentless
+			// Popup must be nested in an Annot tag like any other (verified live
+			// on a parentless Popup in 6-3-2-t01-pass-b remediated to PDF/UA-1).
 			if subtype == "Popup" {
-				continue
+				if _, hasParent := annot["Parent"]; hasParent {
+					continue
+				}
 			}
 
 			stdType := structParentMap[annotObjNum] // "" if not in structure tree
