@@ -1584,7 +1584,7 @@ func pdfaLangValidRule(part int) Rule {
 // markInfoRule selects the MarkInfo rule based on profile.
 func markInfoRule(profile string, part int) Rule {
 	if IsPDFUA(profile) {
-		if len(profile) >= 7 && profile[6] == '2' {
+		if profile == "PDF/UA-2" {
 			return Rule_14289_2_6_2_t01
 		}
 		return Rule_14289_1_6_2_t01
@@ -1595,7 +1595,7 @@ func markInfoRule(profile string, part int) Rule {
 // structTreeRootRule selects the StructTreeRoot rule based on profile.
 func structTreeRootRule(profile string, part int) Rule {
 	if IsPDFUA(profile) {
-		if len(profile) >= 7 && profile[6] == '2' {
+		if profile == "PDF/UA-2" {
 			return Rule_14289_2_8_2_1_t01
 		}
 		return Rule_14289_1_7_1_t11
@@ -1606,7 +1606,7 @@ func structTreeRootRule(profile string, part int) Rule {
 // roleMapNonStandardRule returns the rule for non-standard types not mapped.
 func roleMapNonStandardRule(profile string) Rule {
 	if IsPDFUA(profile) {
-		if len(profile) >= 7 && profile[6] == '2' {
+		if profile == "PDF/UA-2" {
 			return Rule_14289_2_8_2_4_t01
 		}
 		return Rule_14289_1_7_1_t05
@@ -1617,7 +1617,7 @@ func roleMapNonStandardRule(profile string) Rule {
 // roleMapCircularRule returns the rule for circular role mappings.
 func roleMapCircularRule(profile string) Rule {
 	if IsPDFUA(profile) {
-		if len(profile) >= 7 && profile[6] == '2' {
+		if profile == "PDF/UA-2" {
 			return Rule_14289_2_8_2_4_t02
 		}
 		return Rule_14289_1_7_1_t06
@@ -1636,7 +1636,7 @@ func roleMapCircularRule(profile string) Rule {
 // roleMapStandardRemapRule returns the rule for standard types being remapped.
 func roleMapStandardRemapRule(profile string) Rule {
 	if IsPDFUA(profile) {
-		if len(profile) >= 7 && profile[6] == '2' {
+		if profile == "PDF/UA-2" {
 			return Rule_14289_2_8_2_4_t03
 		}
 		return Rule_14289_1_7_1_t07

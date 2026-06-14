@@ -300,7 +300,7 @@ func widgetHasAppearance(ctx context.Context, doc *document.Document, field ast.
 // xfaRule selects the XFA prohibition rule based on profile.
 func xfaRule(profile string, part int, ua bool) Rule {
 	if ua {
-		if len(profile) >= 7 && profile[6] == '2' {
+		if profile == "PDF/UA-2" {
 			return Rule_14289_2_8_10_1_t03
 		}
 		return Rule_14289_1_7_15_t01
