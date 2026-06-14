@@ -319,8 +319,15 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 			if depth == 1 && propNS != "" {
 				simpleRaw.Write(t)
 			}
-			text := strings.TrimSpace(string(t))
-			if text == "" {
+			raw := string(t)
+			// Trimmed form gates structural whitespace (the pretty-print
+			// newlines between rdf:Seq and rdf:li). The stored value stays
+			// raw: veraPDF reads rdf:li text verbatim, so /Author=" x " is
+			// non-equivalent to a trimmed dc:creator "x" yet equivalent to
+			// a spaced dc:creator " x " (verified live, §6.7.3 t3). Trimming
+			// here would erase whitespace the sync fixer deliberately writes
+			// to match /Author, making litho unable to see its own fix.
+			if strings.TrimSpace(raw) == "" {
 				continue
 			}
 			if inLI && propNS != "" {
@@ -328,16 +335,16 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 				if inAlt {
 					// For Alt containers, track x-default and first entries separately.
 					if liLang == "x-default" {
-						altDefaults[key] = text
+						altDefaults[key] = raw
 					}
 					if _, exists := altFirst[key]; !exists {
-						altFirst[key] = text
+						altFirst[key] = raw
 					}
 				} else {
 					// Seq/Bag: take the first entry; count all entries.
 					entryCounts[key]++
 					if _, exists := result[key]; !exists {
-						result[key] = text
+						result[key] = raw
 					}
 				}
 			}
