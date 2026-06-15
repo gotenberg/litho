@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"math"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -192,11 +191,10 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 }
 
 // glyphPresenceRule selects the per-part "embedded font program defines all
-// glyphs referenced for rendering" rule: ISO 19005-1 §6.3.5 t1 (Level A only;
-// the veraPDF PDFA-1B profile carries no glyph-presence rule), ISO 19005-2/3
-// §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2. The PDFA-1A profile keys this on
-// clause 6.3.5 (test `isGlyphPresent`); clause 6.3.8 t1 is the unrelated
-// ToUnicode requirement (`toUnicode != null`).
+// glyphs referenced for rendering" rule: ISO 19005-1 §6.3.5 t1, ISO 19005-2/3
+// §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2. Both the PDFA-1A and PDFA-1B
+// veraPDF profiles carry §6.3.5 t1 (test `isGlyphPresent`); clause 6.3.8 t1 is
+// the unrelated ToUnicode requirement (`toUnicode != null`).
 func glyphPresenceRule(profile string) Rule {
 	// PDF/UA ids verified live on PDF_A-1b__veraPDF_test_suite
 	// _6-1-12-t10-fail-a remediated to UA-1/UA-2: 7.21.4.1 t2 and
@@ -206,9 +204,6 @@ func glyphPresenceRule(profile string) Rule {
 			return Rule_14289_2_8_4_5_5_1_t02
 		}
 		return Rule_14289_1_7_21_4_1_t02
-	}
-	if PDFAPart(profile) == 1 && !strings.HasSuffix(profile, "a") {
-		return Rule{}
 	}
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_5_t01, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_3_6_2_11_4_1_t02, Rule_19005_4_6_2_10_4_1_t02)
 }
@@ -532,15 +527,17 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 
 	// veraPDF builds no glyph object for a CID a CIDFontType0 (CFF) charset
 	// omits, so it never fires the per-glyph ToUnicode rule on such a code (the
-	// glyph-presence and notdef rules cover it instead). cffCharsetAbsentCIDs
-	// returns those CIDs (empty for non-CFF descendants, where TrueType empty
-	// glyphs still fire the rule). For Identity-H/V an unmapped two-byte code
-	// is the CID directly, so skip it without disturbing the codespace-aware
-	// scan that handles mixed-width ToUnicode maps.
+	// glyph-presence and notdef rules cover it instead). The exemption is
+	// CFF-specific: a CIDFontType2 (TrueType) empty glyph still fires the rule,
+	// so restrict the skip set to CFF descendants. For Identity-H/V an unmapped
+	// two-byte code is the CID directly, so skip it without disturbing the
+	// codespace-aware scan that handles mixed-width ToUnicode maps.
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
 	var cffAbsent map[uint16]bool
 	if encName == "Identity-H" || encName == "Identity-V" {
-		cffAbsent, _ = cffCharsetAbsentCIDs(ctx, doc, fontDict, usage)
+		if absent, subtype, _ := absentType0CIDs(ctx, doc, fontDict, usage); subtype == "CIDFontType0" {
+			cffAbsent = absent
+		}
 	}
 
 	for _, s := range usage.rawStrings {
