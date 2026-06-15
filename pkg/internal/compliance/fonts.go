@@ -451,6 +451,15 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 		if fd != nil {
 			fontData := extractFontProgramData(ctx, doc, fd)
 			if fontData != nil {
+				enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+				// veraPDF resolves a TrueType simple font's glyph through its
+				// /Encoding first (PDF 9.6.6.4): charCode 0 used but absent from
+				// an explicit /Encoding renders .notdef regardless of the font's
+				// cmap. litho's no-post-table path otherwise trusts the cmap and
+				// misses this.
+				if len(enc) > 0 && usage.charCodes[0] && enc[0] == "" {
+					return failf(rule, "font %s on page %d: charCode 0 maps to .notdef", fontName, pageNum)
+				}
 				glyphNames := typography.ExtractGlyphNames(ctx, fontData)
 				if glyphNames != nil {
 					// Build glyphName→GID reverse map.
@@ -460,7 +469,6 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 							nameToGID[gn] = gid
 						}
 					}
-					enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 					for code := range usage.charCodes {
 						glyphName := enc[code]
 						if glyphName == "" || glyphName == ".notdef" {
