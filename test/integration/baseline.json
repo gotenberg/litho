@@ -105,12 +105,12 @@
           }
         },
         "remediation": {
-          "matched": 24559,
+          "matched": 24571,
           "mismatched": 9241,
           "skipped": 13,
           "metrics": {
-            "disagreement": 412,
-            "fully_fixed": 24559,
+            "disagreement": 400,
+            "fully_fixed": 24571,
             "litho_fixed": 132162,
             "litho_post": 9971,
             "litho_pre": 142133,
@@ -123,12 +123,12 @@
           }
         },
         "remediation-aggressive": {
-          "matched": 24965,
+          "matched": 24977,
           "mismatched": 8835,
           "skipped": 13,
           "metrics": {
-            "disagreement": 383,
-            "fully_fixed": 24965,
+            "disagreement": 371,
+            "fully_fixed": 24977,
             "litho_fixed": 132606,
             "litho_post": 9527,
             "litho_pre": 142133,

@@ -490,13 +490,14 @@ func undefinedOperatorRule(part int) Rule {
 }
 
 func missingResourceRule(part int) Rule {
-	// PDF/A-1 carries no resource-completeness rules at all (an undefined
-	// cs name passes PDFA-1B, verified live); parts 2/3/4 key undefined
-	// resources as 6.2.2 t3 (`undefinedResourceNames == ''`). The t2
-	// sibling (`inheritedResourceNames == ''`) is a separate, not yet
-	// implemented check: names resolvable only through Pages-tree
-	// inheritance.
-	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_2_t03, Rule_19005_3_6_2_2_t03, Rule_19005_4_6_2_2_t03)
+	// The undefined-named-resource test (§6.2.2 t3, `undefinedResourceNames
+	// == ''`) exists only in ISO 19005-4: veraPDF's PDFA-2x/3x profiles
+	// define §6.2.2 with t1 and t2 alone (verified against PDFA-2A/2B/2U and
+	// PDFA-3A/3B/3U), while PDFA-4/4E/4F carry t3. PDF/A-1 carries no
+	// resource-completeness rule at all (an undefined cs name passes PDFA-1B).
+	// Emitting it under parts 1-3 was a litho-over against the conformance
+	// oracle, so it is gated to part 4.
+	return ruleByPart(part, Rule{}, Rule{}, Rule{}, Rule_19005_4_6_2_2_t03)
 }
 
 // inheritedResourceRule selects §6.2.2 t2: a content stream shall not use
