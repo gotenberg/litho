@@ -25,20 +25,25 @@ type validationCtx struct {
 
 // pageCtx holds pre-resolved data for a single page.
 type pageCtx struct {
-	dict      ast.PdfDict
-	resources ast.PdfDict // resolved, with inherited fallback from Pages tree
-	content   []byte      // decoded content stream bytes (nil if decode fails)
-	ops       []content.Operation
-	opsOnce   sync.Once
+	dict        ast.PdfDict
+	resources   ast.PdfDict // resolved, with inherited fallback from Pages tree
+	content     []byte      // decoded content stream bytes (nil if decode fails)
+	ops         []content.Operation
+	opsOnce     sync.Once
+	parseFailed bool // true only when ParseStreamData errored (not for empty content)
 }
 
 // parsedOps returns the lazily-parsed content stream operations. The result is
 // cached so that multiple check groups sharing the same pageCtx avoid redundant
-// ParseStreamData calls. Returns nil if content is empty or parsing fails.
+// ParseStreamData calls. Returns nil if content is empty or parsing fails;
+// [pageCtx.parseFailed] distinguishes the two (true only on a parse error, so
+// callers can tell "no operators" from "could not parse").
 func (p *pageCtx) parsedOps(ctx context.Context) []content.Operation {
 	p.opsOnce.Do(func() {
 		if len(p.content) > 0 {
-			p.ops, _ = content.ParseStreamData(ctx, p.content) // Parse failure yields nil ops; checks run on whatever is available.
+			ops, err := content.ParseStreamData(ctx, p.content)
+			p.ops = ops // Parse failure yields nil ops; checks run on whatever is available.
+			p.parseFailed = err != nil
 		}
 	})
 	return p.ops

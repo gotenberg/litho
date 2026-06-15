@@ -147,6 +147,15 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// Collect font usage from the page content stream: which fonts are
 		// visible (rendering mode != 3) and which character codes are used.
 		fontUsage := collectFontUsage(p.parsedOps(ctx))
+		// The conservative "check every declared font" fallback applies only
+		// when content is PRESENT but unparseable (parseFailed). Empty or
+		// fully-parsed content with no glyphs rendered exempts a declared-but-
+		// unused font, matching veraPDF's glyph-scoped model (verified on
+		// PDF_UA-1__7.15-t01-fail-a remediated to A-2/A-3: vera passes the
+		// unused T1_0, so litho must not fire 6.2.11.4.1 t1). Note: empty page
+		// content is one '\n' separator after stream concatenation, so a length
+		// test cannot distinguish it; parseFailed keys off the parser error.
+		parseFailed := p.parseFailed
 
 		for fontName, fontRef := range fontDict {
 			if ctx.Err() != nil {
@@ -171,7 +180,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			if fontUsage != nil {
 				usage = fontUsage[fontKey]
 			}
-			isVisible := fontUsage == nil || (usage != nil && usage.visible)
+			isVisible := parseFailed || (usage != nil && usage.visible)
 
 			results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageIdx+1, profile, isVisible, usage)...)
 
