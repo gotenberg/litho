@@ -723,3 +723,66 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 
 	return nil
 }
+
+// cffCharsetAbsentCIDs returns the set of used CIDs that a CIDFontType0 (CFF)
+// descendant omits from its charset. veraPDF builds no glyph object for such a
+// CID, so it fires the glyph-presence and notdef rules but NOT the per-glyph
+// ToUnicode rule. The ToUnicode coverage check therefore skips these codes
+// (verified live: 6-2-11-4-1-t02-fail-d remediated to PDF/A-2a, where CFF CID
+// 104 is charset-absent and unmapped yet vera reports 6.2.11.4.1 t2 + 6.2.11.8
+// t1 without 6.2.11.7.2 t1). The exemption is specific to CFF charset gaps: a
+// CIDFontType2 (TrueType) empty glyph still gets a glyph object, so veraPDF
+// fires the ToUnicode rule on it too (verified on 6-2-11-4-1-t02-fail-e, where
+// empty TrueType CID 9215 fires 6.2.11.7.2 t1). The set is empty for non-CFF
+// descendants. ok is false when litho cannot decode the encoding to CIDs;
+// callers then stay conservative and check every rendered code.
+func cffCharsetAbsentCIDs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (absent map[uint16]bool, ok bool) {
+	absent = make(map[uint16]bool)
+	if usage == nil || len(usage.rawStrings) == 0 {
+		return absent, false
+	}
+
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	var embedded *cmap.CIDMap
+	if encName == "" {
+		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
+			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
+				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
+			}
+		}
+	}
+	usedCIDs, _, decodeOK := collectType0CIDs(string(encName), embedded, usage)
+	if !decodeOK {
+		return absent, false
+	}
+
+	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
+	if err != nil || len(descArr) == 0 {
+		return absent, true
+	}
+	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
+	if err != nil || cidFontDict == nil {
+		return absent, true
+	}
+	if fontSubtype(ctx, doc, cidFontDict) != "CIDFontType0" {
+		return absent, true
+	}
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
+	if fd == nil {
+		return absent, true
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return absent, true
+	}
+	validCIDs := typography.ExtractValidCIDs(fontData)
+	if validCIDs == nil {
+		return absent, true
+	}
+	for cid := range usedCIDs {
+		if !validCIDs[cid] {
+			absent[cid] = true
+		}
+	}
+	return absent, true
+}

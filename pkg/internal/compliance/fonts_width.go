@@ -529,6 +529,20 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 	if err != nil || tu == nil || len(tu.Mapping) == 0 {
 		return nil
 	}
+
+	// veraPDF builds no glyph object for a CID a CIDFontType0 (CFF) charset
+	// omits, so it never fires the per-glyph ToUnicode rule on such a code (the
+	// glyph-presence and notdef rules cover it instead). cffCharsetAbsentCIDs
+	// returns those CIDs (empty for non-CFF descendants, where TrueType empty
+	// glyphs still fire the rule). For Identity-H/V an unmapped two-byte code
+	// is the CID directly, so skip it without disturbing the codespace-aware
+	// scan that handles mixed-width ToUnicode maps.
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	var cffAbsent map[uint16]bool
+	if encName == "Identity-H" || encName == "Identity-V" {
+		cffAbsent, _ = cffCharsetAbsentCIDs(ctx, doc, fontDict, usage)
+	}
+
 	for _, s := range usage.rawStrings {
 		b := []byte(s)
 		for off := 0; off < len(b); {
@@ -537,7 +551,11 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 				consumed = 1
 			}
 			if !ok {
-				return failf(rule, "font %s on page %d: rendered code has no ToUnicode mapping", fontName, pageNum)
+				cffSkip := len(cffAbsent) > 0 && consumed == 2 && off+1 < len(b) &&
+					cffAbsent[uint16(b[off])<<8|uint16(b[off+1])]
+				if !cffSkip {
+					return failf(rule, "font %s on page %d: rendered code has no ToUnicode mapping", fontName, pageNum)
+				}
 			}
 			off += consumed
 		}
