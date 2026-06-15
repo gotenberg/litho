@@ -491,8 +491,18 @@ func simpleFontWidthIsZero(firstChar int, widths []ast.PdfObject, charCode byte)
 // lookupCIDWidth returns the PDF-declared width for a CID from the /W array
 // and /DW default of a CIDFont dict.
 func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cid uint16) float64 {
+	// Per ISO 32000-1 Table 117, any element of /W (including a width value)
+	// may be an indirect reference; document.Float returns 0 on an unresolved
+	// reference, so resolve every numeric read first. Real ZUGFeRD producers
+	// emit [cidFirst cidLast <width ref>], which otherwise read as width 0 and
+	// trip the empty-glyph .notdef heuristic on conforming files.
+	num := func(o ast.PdfObject) float64 {
+		r, _ := document.ResolveObject(ctx, doc, o)
+		return document.Float(r)
+	}
+
 	// Default width.
-	dw := document.Float(cidFontDict["DW"])
+	dw := num(cidFontDict["DW"])
 	if dw == 0 {
 		dw = 1000 // PDF spec default.
 	}
@@ -508,7 +518,7 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 
 	cidInt := int(cid)
 	for i := 0; i < len(wArr); {
-		first := int(document.Float(wArr[i]))
+		first := int(num(wArr[i]))
 		if i+1 >= len(wArr) {
 			break
 		}
@@ -516,7 +526,7 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 		if arr, err := document.ResolveArray(ctx, doc, wArr[i+1]); err == nil && arr != nil {
 			for j, w := range arr {
 				if first+j == cidInt {
-					return document.Float(w)
+					return num(w)
 				}
 			}
 			i += 2
@@ -526,9 +536,9 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 		if i+2 >= len(wArr) {
 			break
 		}
-		last := int(document.Float(wArr[i+1]))
+		last := int(num(wArr[i+1]))
 		if cidInt >= first && cidInt <= last {
-			return document.Float(wArr[i+2])
+			return num(wArr[i+2])
 		}
 		i += 3
 	}
