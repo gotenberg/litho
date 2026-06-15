@@ -4,12 +4,28 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
+
+// sortedDictKeys returns a colour-space (or colorants) dictionary's keys in
+// deterministic order. Canonicalisation picks the first (alt, tintFunc) seen
+// per colorant; iterating the dict in Go's randomised map order would make that
+// choice — and therefore the remediated bytes — nondeterministic run to run
+// (ISO contributing rule: deterministic output). Sorting the keys fixes the
+// canonical pick to the same Separation every run.
+func sortedDictKeys(d ast.PdfDict) []ast.PdfName {
+	keys := make([]ast.PdfName, 0, len(d))
+	for k := range d {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
 
 // matchSepCanon matches PDF/A-2/3/4 §6.2.4.4 test 2 and ISO 19005-1
 // §6.2.3.4 violations where two /Separation arrays with the same
@@ -184,7 +200,8 @@ func eachColorSpaceArray(ctx context.Context, _ *writer.ObjAllocator, doc *docum
 	if err != nil || csDict == nil {
 		return
 	}
-	for _, entry := range csDict {
+	for _, key := range sortedDictKeys(csDict) {
+		entry := csDict[key]
 		arr, err := document.ResolveArray(ctx, doc, entry)
 		if err != nil || len(arr) == 0 {
 			continue
@@ -194,8 +211,8 @@ func eachColorSpaceArray(ctx context.Context, _ *writer.ObjAllocator, doc *docum
 		if first, ok := arr[0].(ast.PdfName); ok && (first == "DeviceN" || first == "NChannel") && len(arr) >= 5 {
 			if attrs, err := document.ResolveDict(ctx, doc, arr[4]); err == nil && attrs != nil {
 				if colorants, err := document.ResolveDict(ctx, doc, attrs["Colorants"]); err == nil && colorants != nil {
-					for _, cEntry := range colorants {
-						if cArr, err := document.ResolveArray(ctx, doc, cEntry); err == nil && len(cArr) > 0 {
+					for _, cKey := range sortedDictKeys(colorants) {
+						if cArr, err := document.ResolveArray(ctx, doc, colorants[cKey]); err == nil && len(cArr) > 0 {
 							visit(cArr)
 						}
 					}
@@ -230,7 +247,8 @@ func eachColorSpaceArrayMutable(ctx context.Context, alloc *writer.ObjAllocator,
 	maps.Copy(rewritten, csDict)
 	changed := false
 
-	for key, entry := range csDict {
+	for _, key := range sortedDictKeys(csDict) {
+		entry := csDict[key]
 		ref, isRef := entry.(ast.PdfIndirectRef)
 		if isRef {
 			if visited[ref.ObjectNum] {
@@ -304,8 +322,8 @@ func patchColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	changed := false
 	newColorants := make(ast.PdfDict, len(colorantsDict))
 	maps.Copy(newColorants, colorantsDict)
-	for k, v := range colorantsDict {
-		arr, err := document.ResolveArray(ctx, doc, v)
+	for _, k := range sortedDictKeys(colorantsDict) {
+		arr, err := document.ResolveArray(ctx, doc, colorantsDict[k])
 		if err != nil || len(arr) == 0 {
 			continue
 		}
