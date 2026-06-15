@@ -483,7 +483,10 @@ func realRangeRuleByPart(part int) Rule {
 }
 
 func undefinedOperatorRule(part int) Rule {
-	return ruleByPart(part, Rule_19005_1_6_2_2_t01, Rule_19005_2_6_2_2_t01, Rule_19005_3_6_2_2_t01, Rule_19005_4_6_2_2_t01)
+	// ISO 19005-1 numbers the undefined-operator rule §6.2.10 (Op_Undefined);
+	// §6.2.2 t1 in part 1 is the unrelated OutputIntent rule. Parts 2-4 renumber
+	// it to §6.2.2 t1. veraPDF fires 6.2.10 t1 under A-1.
+	return ruleByPart(part, Rule_19005_1_6_2_10_t01, Rule_19005_2_6_2_2_t01, Rule_19005_3_6_2_2_t01, Rule_19005_4_6_2_2_t01)
 }
 
 func missingResourceRule(part int) Rule {

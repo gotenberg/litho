@@ -46,7 +46,10 @@ func matchAggressive(v compliance.Violation) bool {
 	case "6.2.2": // unknown content stream operators
 		return true
 	}
-	return false
+	// Undefined content-stream operators key by Object across parts: ISO 19005-1
+	// numbers the rule §6.2.10, parts 2-4 §6.2.2 (matched above). Clause strings
+	// are reused across parts, so match the stable Object here.
+	return v.Rule.Object == "Op_Undefined"
 }
 
 // fixAggressive applies fixes that modify content streams or generate visual
@@ -57,8 +60,15 @@ func fixAggressive(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 
 	clauseSet := make(map[string]bool)
+	// Undefined operators key by Object: ISO 19005-1 numbers the rule §6.2.10,
+	// parts 2-4 §6.2.2. Clause strings are reused across parts, so the stable
+	// Object drives the unknown-operator removal regardless of profile.
+	opUndefined := false
 	for _, v := range violations {
 		clauseSet[v.Rule.Clause] = true
+		if v.Rule.Object == "Op_Undefined" {
+			opUndefined = true
+		}
 	}
 
 	var fixes []string
@@ -71,10 +81,10 @@ func fixAggressive(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		fixes = append(fixes, desc...)
 	}
 
-	if clauseSet["6.2.9"] || clauseSet["6.2.6"] || clauseSet["6.2.2"] {
+	if clauseSet["6.2.9"] || clauseSet["6.2.6"] || opUndefined {
 		desc, err := fixContentStreams(ctx, alloc, doc,
 			clauseSet["6.2.9"] || clauseSet["6.2.6"],
-			clauseSet["6.2.2"])
+			opUndefined)
 		if err != nil {
 			return nil, fmt.Errorf("fixing content streams: %w", err)
 		}
