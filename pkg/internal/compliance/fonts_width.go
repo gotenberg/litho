@@ -525,18 +525,22 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 		return nil
 	}
 
-	// veraPDF builds no glyph object for a CID a CIDFontType0 (CFF) charset
-	// omits, so it never fires the per-glyph ToUnicode rule on such a code (the
-	// glyph-presence and notdef rules cover it instead). The exemption is
-	// CFF-specific: a CIDFontType2 (TrueType) empty glyph still fires the rule,
-	// so restrict the skip set to CFF descendants. For Identity-H/V an unmapped
-	// two-byte code is the CID directly, so skip it without disturbing the
-	// codespace-aware scan that handles mixed-width ToUnicode maps.
+	// veraPDF does not fire the per-glyph ToUnicode rule on a code that does not
+	// resolve to a real renderable glyph: CID 0 is .notdef (covered by the
+	// notdef rule), and a CIDFontType0 (CFF) charset-absent CID gets no glyph
+	// object at all. Both are exempt. The exemption is CFF-specific for charset
+	// gaps: a CIDFontType2 (TrueType) empty glyph still gets a glyph object and
+	// still fires the rule, so the absent set is restricted to CFF descendants.
+	// For Identity-H/V an unmapped two-byte code is the CID directly, so skip it
+	// without disturbing the codespace-aware scan that handles mixed-width maps.
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	identity := encName == "Identity-H" || encName == "Identity-V"
 	var cffAbsent map[uint16]bool
-	if encName == "Identity-H" || encName == "Identity-V" {
+	cff := false
+	if identity {
 		if absent, subtype, _ := absentType0CIDs(ctx, doc, fontDict, usage); subtype == "CIDFontType0" {
 			cffAbsent = absent
+			cff = true
 		}
 	}
 
@@ -548,9 +552,17 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 				consumed = 1
 			}
 			if !ok {
-				cffSkip := len(cffAbsent) > 0 && consumed == 2 && off+1 < len(b) &&
-					cffAbsent[uint16(b[off])<<8|uint16(b[off+1])]
-				if !cffSkip {
+				// The exemption is CFF-specific. For a CIDFontType0 descendant
+				// veraPDF builds no Glyph object for CID 0 (.notdef) or a
+				// charset-absent CID, so it never fires the rule there. A
+				// CIDFontType2 (TrueType) CID 0 maps to GID 0, a real glyph slot
+				// that still gets a Glyph object and still fires the rule.
+				skip := false
+				if cff && consumed == 2 && off+1 < len(b) {
+					cid := uint16(b[off])<<8 | uint16(b[off+1])
+					skip = cid == 0 || cffAbsent[cid]
+				}
+				if !skip {
 					return failf(rule, "font %s on page %d: rendered code has no ToUnicode mapping", fontName, pageNum)
 				}
 			}
