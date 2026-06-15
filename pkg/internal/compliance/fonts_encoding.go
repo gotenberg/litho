@@ -698,6 +698,29 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 			return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and no glyph name (renders U+0000)",
 				fontName, pageNum, c)
 		}
+	} else if st == "TrueType" {
+		// A TrueType code absent from an explicit /Encoding renders .notdef
+		// (PDF 9.6.6.4, mirroring checkNotdefGlyph); veraPDF assigns it U+0000
+		// and fires the value rule when no ToUnicode entry overrides it. The
+		// len(enc)>0 guard restricts this to fonts with an explicit /Encoding:
+		// symbolic TrueType (no /Encoding) resolves no Unicode at all, so
+		// toUnicode==null PASSES t2 (gate-41: 7.1-t05-pass-a code 2).
+		if enc := resolveSimpleFontEncoding(ctx, doc, fontDict); len(enc) > 0 {
+			codes := make([]byte, 0, len(usage.charCodes))
+			for b := range usage.charCodes {
+				codes = append(codes, b)
+			}
+			slices.Sort(codes)
+			for _, c := range codes {
+				if _, mapped := parsed.Mapping[string([]byte{c})]; mapped {
+					continue
+				}
+				if enc[c] == "" {
+					return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and is absent from the explicit /Encoding (renders U+0000)",
+						fontName, pageNum, c)
+				}
+			}
+		}
 	}
 	return nil
 }
