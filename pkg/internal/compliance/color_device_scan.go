@@ -10,7 +10,7 @@ import (
 
 // scanForDeviceColorSpaces looks through page resources for uses of DeviceRGB,
 // DeviceCMYK, and DeviceGray colour spaces.
-func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool) deviceCSUsage {
+func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool, part int) deviceCSUsage {
 	var usage deviceCSUsage
 
 	// Check named colour spaces in the ColorSpace dictionary.
@@ -46,17 +46,17 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 	// Only scan XObjects that are actually referenced by Do operators in the
 	// content stream; unreferenced XObjects are not "used" per the spec.
 	visited := make(map[string]bool)
-	scanXObjectColorSpaces(ctx, doc, resources, &usage, 0, visited, referencedXObjects)
+	scanXObjectColorSpaces(ctx, doc, resources, &usage, 0, visited, referencedXObjects, part)
 	scanFontColorSpaces(ctx, doc, resources, &usage)
 	scanShadingColorSpaces(ctx, doc, resources, &usage)
-	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited)
+	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited, part)
 
 	return usage
 }
 
 // scanXObjectColorSpaces checks XObject resources for device colour space usage.
 // For Form XObjects, it recurses into their content streams and nested resources.
-func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, referencedNames map[string]bool) {
+func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, referencedNames map[string]bool, part int) {
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
 	if err != nil || xobjDict == nil {
 		return
@@ -103,7 +103,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// For Form XObjects, recurse into content stream and nested resources.
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 		if subtype == "Form" {
-			formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited)
+			formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, part)
 			usage.rgb = usage.rgb || formUsage.rgb
 			usage.cmyk = usage.cmyk || formUsage.cmyk
 			usage.gray = usage.gray || formUsage.gray
@@ -117,7 +117,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 // scanFormXObjectCS decodes a Form XObject's content stream and scans for
 // device-dependent colour space operators. It also checks nested resources
 // (ColorSpace, XObject, Shading, Pattern) within the Form XObject.
-func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool) deviceCSUsage {
+func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool, part int) deviceCSUsage {
 	var usage deviceCSUsage
 
 	if depth >= maxFormXObjectDepth {
@@ -261,11 +261,11 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	}
 
 	// Recurse into nested XObjects (only those referenced by Do operators).
-	scanXObjectColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, nestedXObjects)
+	scanXObjectColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, nestedXObjects, part)
 
 	// Check nested Shading and Pattern resources.
 	scanShadingColorSpaces(ctx, doc, formRes, &usage)
-	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited)
+	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, part)
 
 	// Suppress device CS usage that is covered by the Form/Pattern's own
 	// DefaultCS entries. Device CS operators in the content stream are
@@ -282,16 +282,23 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	}
 
 	// Also suppress if the Form XObject's /Group/CS provides a device-
-	// independent blending colour space that covers the device CS.
-	groupCS := formGroupICCColorSpace(ctx, doc, stream)
-	if groupCS == "RGB " {
-		usage.rgb = false
-	}
-	if groupCS == "CMYK" {
-		usage.cmyk = false
-	}
-	if groupCS == "GRAY" {
-		usage.gray = false
+	// independent blending colour space that covers the device CS. veraPDF
+	// only honours transparency-group blending-space coverage under PDF/A-4
+	// (PDF 2.0); the parts 2/3 device-colour tests are strictly gOutputCS-based
+	// (verified live on 6-2-4-3-t04-pass-e under PDF/A-2b: a CalRGB form /Group
+	// does not cover DeviceRGB when the OutputIntent is CMYK, so 6.2.4.3 t2
+	// fires). Mirror the page-level part==4 gate.
+	if part == 4 {
+		groupCS := formGroupICCColorSpace(ctx, doc, stream)
+		if groupCS == "RGB " {
+			usage.rgb = false
+		}
+		if groupCS == "CMYK" {
+			usage.cmyk = false
+		}
+		if groupCS == "GRAY" {
+			usage.gray = false
+		}
 	}
 
 	// Device CS that remains after sub-scope DefaultCS and Group CS
@@ -628,7 +635,7 @@ func scanInlineImageCSOps(ops []content.Operation, usage *deviceCSUsage) {
 // for device colour space usage. Annotations have /AP << /N <stream/dict> >> etc.
 // 3D annotations also carry a /3DD stream whose own /ColorSpace and
 // /Resources reach device-colour surfaces that the /AP tree does not cover.
-func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, page ast.PdfDict) deviceCSUsage {
+func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, part int) deviceCSUsage {
 	var usage deviceCSUsage
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annotsArr) == 0 {
@@ -665,7 +672,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 			// Appearance can be a stream (single) or dict of streams.
 			stream, err := document.ResolveStream(ctx, doc, apObj)
 			if err == nil {
-				formUsage := scanFormXObjectCS(ctx, doc, stream, 0, visited)
+				formUsage := scanFormXObjectCS(ctx, doc, stream, 0, visited, part)
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
@@ -685,7 +692,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 					doc.Logger.Debug("compliance.color: cannot resolve sub-XObject stream", "error", err)
 					continue
 				}
-				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited)
+				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited, part)
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
@@ -772,7 +779,7 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 // scanPatternColorSpaces checks Pattern resources for device colour space usage.
 // Tiling patterns (Type 1) have their own content streams and resources that may
 // use device-dependent colour spaces.
-func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool) {
+func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, part int) {
 	patternDict, err := document.ResolveDict(ctx, doc, resources["Pattern"])
 	if err != nil || patternDict == nil {
 		return
@@ -809,7 +816,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		}
 
 		// Scan the tiling pattern's content stream as a Form XObject.
-		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited)
+		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, part)
 		usage.rgb = usage.rgb || formUsage.rgb
 		usage.cmyk = usage.cmyk || formUsage.cmyk
 		usage.gray = usage.gray || formUsage.gray
