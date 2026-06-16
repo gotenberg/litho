@@ -427,7 +427,17 @@ var standardFilters = map[string]bool{
 // checkNonStandardFilters validates that all stream /Filter names are
 // from the standard set (case-sensitive). Non-standard filter names
 // like /Flatedecode (wrong case) are forbidden.
+//
+// This is scoped to parts 2-4. ISO 19005-1 §6.1.10 restricts only the LZWDecode
+// filter (handled by [checkStreamLZW]); it imposes no general standard-filter
+// requirement, so veraPDF does not fire a filter rule on a non-LZW non-standard
+// name under PDF/A-1 (verified live on 6-1-6-2-t01-fail-b, where /Flatedecode
+// fires §6.1.7.2 under A-2/A-3 and §6.1.6.2 under A-4, but no filter rule under
+// A-1). Parts 2-4 (§6.1.7.2 / §6.1.6.2) do require the standard filter set.
 func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string) []Violation {
+	if PDFAPart(profile) == 1 {
+		return nil
+	}
 	rule := streamFilterRule(profile)
 	if rule.Specification == "" {
 		return nil
