@@ -1026,11 +1026,12 @@ func ExtractBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16
 		w, _ := truetype.GlyphWidths(ctx, fontData)
 		return w
 	case fontFormatOTTO:
-		cffData, err := extractCFFFromOTTO(fontData)
-		if err != nil {
-			return nil
-		}
-		w, _ := cff.GlyphWidths(ctx, cffData)
+		// OpenType requires an hmtx table, and per the OpenType spec its advance
+		// widths are authoritative for the glyphs, including CFF-outline fonts.
+		// Read hmtx directly: the embedded CFF charstring widths can encode a
+		// nominal value that does not equal the real advance, which would make
+		// litho's width check disagree with the /Widths array (and veraPDF).
+		w, _ := truetype.GlyphWidths(ctx, fontData)
 		return w
 	case fontFormatBareCFF:
 		w, _ := cff.GlyphWidths(ctx, fontData)
