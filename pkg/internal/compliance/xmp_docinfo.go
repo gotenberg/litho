@@ -92,11 +92,24 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			continue
 		}
 		// Normalize dates for comparison.
+		infoHadTZ := true
 		if strings.HasPrefix(normInfo, "D:") {
 			normInfo = xmpNormalizePDFDate(normInfo)
+			infoHadTZ = xmpDateHasTimezone(normInfo)
 		}
 		normInfo = xmpNormalizeISO8601(normInfo)
 		normXMP = xmpNormalizeISO8601(normXMP)
+
+		// A PDF Info date without a timezone has an unknown relationship to UT
+		// (ISO 32000-1 §7.9.4). veraPDF treats such a date as equivalent to an
+		// XMP date with the same wall-clock value regardless of the XMP zone, so
+		// drop both timezones before the equality test when the Info date
+		// carries none (verified: 6-1-5-t01-fail-g, /CreationDate "D:20150310"
+		// vs xmp:CreateDate "2015-03-10T00:00:00Z" passes §6.7.3 under veraPDF).
+		if isDateField && !infoHadTZ {
+			normInfo = xmpStripTimezone(normInfo)
+			normXMP = xmpStripTimezone(normXMP)
+		}
 
 		// Non-date text fields compare exactly. The XMP parser already
 		// trims element-form text per XML rules and preserves attribute
@@ -446,6 +459,34 @@ func xmpNormalizePDFDate(pdfDate string) string {
 	}
 
 	return year + "-" + month + "-" + day + "T" + hour + ":" + min + ":" + sec + tz
+}
+
+// xmpDateHasTimezone reports whether an ISO 8601 datetime carries a timezone
+// designator (Z or a numeric offset) after its time component.
+func xmpDateHasTimezone(s string) bool {
+	tIdx := strings.LastIndex(s, "T")
+	if tIdx < 0 {
+		return false
+	}
+	timePart := s[tIdx+1:]
+	return strings.ContainsAny(timePart, "Z+-")
+}
+
+// xmpStripTimezone removes the timezone designator (Z or numeric offset) from an
+// ISO 8601 datetime, leaving the wall-clock value for zone-agnostic comparison.
+func xmpStripTimezone(s string) string {
+	tIdx := strings.LastIndex(s, "T")
+	if tIdx < 0 {
+		return s
+	}
+	timePart := s[tIdx+1:]
+	for _, tz := range []string{"Z", "+", "-"} {
+		if idx := strings.Index(timePart, tz); idx >= 0 {
+			timePart = timePart[:idx]
+			break
+		}
+	}
+	return s[:tIdx+1] + timePart
 }
 
 // xmpNormalizeISO8601 canonicalizes an ISO 8601 date string for comparison.
