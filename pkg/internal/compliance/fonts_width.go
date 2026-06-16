@@ -134,6 +134,20 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		return nil
 	}
 
+	// veraPDF builds a width Glyph for code 0 only when a text operator
+	// actually shows it; an unrendered NUL in /Widths is never tested
+	// (6-3-8-t01-fail-a passes the width rule despite /Widths[0]). When code 0
+	// IS rendered, the rule compares the resolved glyph's program advance (the
+	// .notdef glyph's advance when the code maps to no glyph) against the
+	// declared width: /Widths[0-FirstChar] when code 0 is in range, else
+	// /MissingWidth (default 0). Verified live on 6-2-11-8-t01-fail-a/b, where
+	// the shown <00> maps to .notdef (advance 632/750) but declares width 0.
+	if usage.charCodes[0] {
+		if v := checkSimpleFontCode0Width(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, int(firstChar), widths); v != nil {
+			return v
+		}
+	}
+
 	for i, wObj := range widths {
 		charCode := int(firstChar) + i
 		if charCode < 0 || charCode > 255 {
@@ -188,6 +202,69 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 	}
 
 	return nil
+}
+
+// checkSimpleFontCode0Width applies the glyph-width rule to a rendered code 0.
+// The main /Widths loop skips code 0 (it often falls below /FirstChar and so is
+// absent from the array), but veraPDF still tests it when shown: it resolves the
+// glyph the same way as any code (charCode → GID, falling back to GID 0 /.notdef
+// when the code maps to no glyph name) and compares the program advance against
+// the declared width. The declared width is /Widths[0-FirstChar] when code 0 is
+// covered by the array, otherwise /MissingWidth (default 0).
+func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar int, widths []ast.PdfObject) []Violation {
+	// Symbolic fonts (FontDescriptor /Flags bit 3) map code 0 through the
+	// embedded program's built-in encoding, which litho does not reconstruct
+	// for CFF; the GID-0 fallback below would then read the wrong glyph and
+	// misfire (CMSY8 code 0 resolves to a real glyph veraPDF accepts). Restrict
+	// the code-0 check to non-symbolic fonts, where the /Encoding name path and
+	// the .notdef fallback match veraPDF (6-2-11-8-t01-fail-a/b are Flags 32).
+	if isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) {
+		return nil
+	}
+
+	// veraPDF resolves code 0 to GID 0 (.notdef) when no glyph name maps it,
+	// then reads that glyph's own advance from the program.
+	gid := uint16(0)
+	if charCodeToGID != nil {
+		if mapped, ok := charCodeToGID[0]; ok {
+			gid = mapped
+		}
+	}
+	bw, ok := binaryWidths[gid]
+	if !ok {
+		// No program advance for the resolved glyph: veraPDF treats
+		// widthFromFontProgram as null and the rule passes.
+		return nil
+	}
+
+	// Declared width: /Widths[0-FirstChar] when code 0 is covered by the array,
+	// else /MissingWidth (default 0, ISO 32000-1 Table 111).
+	pdfWidth := simpleFontMissingWidth(ctx, doc, fontDict)
+	if firstChar <= 0 && -firstChar < len(widths) {
+		pdfWidth = document.Float(widths[-firstChar])
+	}
+	if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
+		return nil
+	}
+
+	expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+	if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
+		return failf(rule, "font %s on page %d: char 0 width mismatch (PDF=%.1f, font=%.1f)",
+			fontName, pageNum, pdfWidth, expectedWidth)
+	}
+	return nil
+}
+
+// simpleFontMissingWidth returns the FontDescriptor /MissingWidth for a simple
+// font, the width veraPDF uses for a code outside the /Widths array. Defaults to
+// 0 when absent (ISO 32000-1 Table 111).
+func simpleFontMissingWidth(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) float64 {
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return 0
+	}
+	mw, _ := document.ResolveObject(ctx, doc, fd["MissingWidth"])
+	return document.Float(mw)
 }
 
 // glyphPresenceRule selects the per-part "embedded font program defines all

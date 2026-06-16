@@ -109,7 +109,7 @@
           "mismatched": 9241,
           "skipped": 13,
           "metrics": {
-            "disagreement": 389,
+            "disagreement": 363,
             "fully_fixed": 24582,
             "litho_fixed": 132162,
             "litho_post": 9971,
@@ -127,7 +127,7 @@
           "mismatched": 8835,
           "skipped": 13,
           "metrics": {
-            "disagreement": 360,
+            "disagreement": 352,
             "fully_fixed": 24988,
             "litho_fixed": 132606,
             "litho_post": 9527,
