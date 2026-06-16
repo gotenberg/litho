@@ -96,6 +96,15 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 	catalogLang := resolveNonEmptyLang(ctx, doc, catalog)
 
 	if catalogLang == "" {
+		// A /Lang entry that is present but empty is an invalid Language-Tag,
+		// not an absent one: veraPDF fires the lang-valid rule (UA-1 §7.2 t29 /
+		// UA-2 §8.4.4 t2) with "Value \"\" is not a Language-Tag" on the catalog
+		// /Lang and does NOT report the language as undeterminable. Only a
+		// genuinely absent /Lang takes the determinability path below.
+		if langPresentButEmpty(ctx, doc, catalog) {
+			return failf(validRule, "catalog /Lang is empty")
+		}
+
 		// PDF/UA-2 §8.4.4 requires catalog /Lang explicitly.
 		if profile == "PDF/UA-2" {
 			return fail(langRule, "catalog")
@@ -127,6 +136,21 @@ func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.P
 		return ""
 	}
 	return strings.TrimSpace(document.DecodePdfString(langStr))
+}
+
+// langPresentButEmpty reports whether dict carries a /Lang key that resolves to
+// an empty (or whitespace-only) string. veraPDF treats such a value as an
+// invalid Language-Tag rather than an absent one.
+func langPresentButEmpty(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	obj, ok := dict["Lang"]
+	if !ok {
+		return false
+	}
+	langStr, err := document.ResolveString(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(document.DecodePdfString(langStr)) == ""
 }
 
 // checkStructureTreeLangCoverage verifies that all structure elements can
@@ -264,9 +288,11 @@ func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.P
 		return nil
 	}
 
-	// If catalog has /Lang, all outline entries inherit it.
-	catalogLang := resolveNonEmptyLang(ctx, doc, catalog)
-	if catalogLang != "" {
+	// If the catalog declares /Lang at all, outline entries inherit it and
+	// their language is determinable. A present-but-empty /Lang is an invalid
+	// Language-Tag (reported once as §7.2 t29 in [checkLangRequired]), not an
+	// undeterminable-language defect, so it must not also fire t2 per outline.
+	if _, hasLang := catalog["Lang"]; hasLang {
 		return nil
 	}
 
