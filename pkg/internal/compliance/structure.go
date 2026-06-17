@@ -342,15 +342,22 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 	if profile == "PDF/UA-1" {
 		checkHeadingHierarchy(state)
 
-		// §7.4.4 t2/t3: document must be either strongly structured (H1-H6)
-		// or weakly structured (H), not both.
+		// §7.4.4 t2/t3: a document must be either strongly structured (H1-H6)
+		// or weakly structured (H), not both. The first heading in document
+		// order sets the mode; the other kind is the offender, and veraPDF
+		// fires exactly one rule on that kind: t2 (object SEH) when a generic H
+		// appears in a strongly structured document, t3 (object SEHn) when a
+		// numbered Hn appears in a weakly structured one. Firing both was a
+		// litho-over (verified live on 7-4-4-t02-fail-a => t2 only,
+		// 7-4-4-t03-fail-a => t3 only).
 		if state.hasGenericH && state.hasSpecificH {
-			*results = append(*results, failf(headingMixedRule(profile),
-				"document uses both H (generic) and H1-H6 (specific) headings, must use one or the other")...)
-			// §7.4.4 t3: numbered headings (H1-H6) shall not be used when
-			// generic H headings are also present (usesH == false).
-			*results = append(*results, failf(Rule_14289_1_7_4_4_t03,
-				"document uses numbered headings while also using generic H headings")...)
+			if state.firstHeadingSpecific {
+				*results = append(*results, failf(headingMixedRule(profile),
+					"document uses a generic H heading while strongly structured with H1-H6 headings")...)
+			} else {
+				*results = append(*results, failf(Rule_14289_1_7_4_4_t03,
+					"document uses numbered H1-H6 headings while weakly structured with generic H headings")...)
+			}
 		}
 	}
 }
@@ -367,6 +374,12 @@ type walkState struct {
 	hasGenericH bool
 	// hasSpecificH is true when any H1-H6 element is found.
 	hasSpecificH bool
+	// firstHeadingSeen / firstHeadingSpecific record the first heading element
+	// encountered in document order: its kind sets the document's structure
+	// mode (specific Hn => strongly structured, generic H => weakly structured)
+	// for the §7.4.4 t2/t3 mixed-heading rule.
+	firstHeadingSeen     bool
+	firstHeadingSpecific bool
 	// noteIDs tracks Note element /ID values for uniqueness (§7.9 t2).
 	noteIDs map[string]bool
 
@@ -561,6 +574,10 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// Track heading levels and generic/specific heading usage.
 	if typeName == "H" {
 		state.hasGenericH = true
+		if !state.firstHeadingSeen {
+			state.firstHeadingSeen = true
+			state.firstHeadingSpecific = false
+		}
 		// PDF/UA-2 §8.2.5.12: H structure type is forbidden entirely.
 		if state.profile == "PDF/UA-2" {
 			*state.results = append(*state.results,
@@ -570,6 +587,10 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	if hl := headingLevel(typeName); hl > 0 {
 		state.headingLevels = append(state.headingLevels, hl)
 		state.hasSpecificH = true
+		if !state.firstHeadingSeen {
+			state.firstHeadingSeen = true
+			state.firstHeadingSpecific = true
+		}
 	}
 
 	// TH /Scope (§7.5 t1) is PDF/UA-1 only: the veraPDF PDFUA-2 profile
