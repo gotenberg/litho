@@ -21,6 +21,11 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 	// Build map: annotation objNum -> enclosing structure element standard type.
 	structParentMap := buildAnnotStructTypeMap(ctx, doc, catalog, profile)
 
+	// treeRoot + roleMap drive the /StructParent -> ParentTree reverse-link
+	// fallback (see the nestType derivation below).
+	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	roleMap := LoadRoleMap(ctx, doc, treeRoot)
+
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
@@ -76,6 +81,20 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 
 			stdType := structParentMap[annotObjNum] // "" if not in structure tree
 
+			// veraPDF keys §7.18.x nesting on structParentStandardType, which it
+			// derives from the annotation's /StructParent -> ParentTree (the
+			// reverse link), not from the forward /K OBJR chain litho walks. When
+			// the OBJR walk finds nothing, fall back to the reverse link so an
+			// annotation reachable only through /StructParent still counts as
+			// nested. Applied only to the rules that fire on a *missing* nesting
+			// type (Widget/Link/other); §7.18.8 fires on the presence of any
+			// structure parent, so it keeps the OBJR-derived stdType to avoid a
+			// new firing direction.
+			nestType := stdType
+			if nestType == "" {
+				nestType = annotStructParentType(ctx, doc, treeRoot, annot, roleMap, profile)
+			}
+
 			switch subtype {
 			case "TrapNet":
 				// §7.18.2: TrapNet annotations are forbidden.
@@ -91,23 +110,23 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 
 			case "Widget":
 				// §7.18.4: Widget must be nested within Form tag.
-				if stdType != "Form" {
+				if nestType != "Form" {
 					results = append(results, failf(Rule_14289_1_7_18_4_t01,
-						"Widget annotation nested within %s instead of Form", nestingDesc(stdType))...)
+						"Widget annotation nested within %s instead of Form", nestingDesc(nestType))...)
 				}
 
 			case "Link":
 				// §7.18.5: Link must be nested within Link tag.
-				if stdType != "Link" {
+				if nestType != "Link" {
 					results = append(results, failf(Rule_14289_1_7_18_5_t01,
-						"Link annotation nested within %s instead of Link", nestingDesc(stdType))...)
+						"Link annotation nested within %s instead of Link", nestingDesc(nestType))...)
 				}
 
 			default:
 				// §7.18.1: All other annotations must be nested within Annot tag.
-				if stdType != "Annot" {
+				if nestType != "Annot" {
 					results = append(results, failf(Rule_14289_1_7_18_1_t01,
-						"%s annotation nested within %s instead of Annot", subtype, nestingDesc(stdType))...)
+						"%s annotation nested within %s instead of Annot", subtype, nestingDesc(nestType))...)
 				}
 			}
 		}
@@ -123,6 +142,77 @@ func nestingDesc(stdType string) string {
 		return "Artifact"
 	}
 	return stdType
+}
+
+// annotStructParentType resolves an annotation's enclosing structure element
+// standard type via its /StructParent index into the ParentTree, mirroring
+// veraPDF's structParentStandardType. The ParentTree entry for an annotation is
+// a single structure element reference (unlike a page's per-MCID array), so it
+// resolves to one element whose /S, role-mapped to a standard type, is returned.
+// Returns "" when no /StructParent, ParentTree entry, or element type resolves.
+func annotStructParentType(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName, profile string) string {
+	spObj, ok := annot["StructParent"]
+	if !ok {
+		return ""
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return ""
+	}
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return ""
+	}
+	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0)
+	if elemObj == nil {
+		return ""
+	}
+	elem, err := document.ResolveDict(ctx, doc, elemObj)
+	if err != nil || elem == nil {
+		return ""
+	}
+	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+	if typeName == "" {
+		return ""
+	}
+	return string(resolveStandardType(typeName, roleMap, profile))
+}
+
+// numberTreeLookupObj resolves a key in a number tree to its raw value object.
+// It mirrors [numberTreeLookup] but returns the value as-is rather than forcing
+// an array, because an annotation /StructParent entry references a single
+// structure element. Depth is capped by [maxEFNameTreeDepth].
+func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int) ast.PdfObject {
+	if depth > maxEFNameTreeDepth || ctx.Err() != nil {
+		return nil
+	}
+	if numsObj, ok := node["Nums"]; ok {
+		nums, err := document.ResolveArray(ctx, doc, numsObj)
+		if err == nil {
+			for i := 0; i+1 < len(nums); i += 2 {
+				k, kerr := document.ResolveInt(ctx, doc, nums[i])
+				if kerr != nil || int(k) != key {
+					continue
+				}
+				return nums[i+1]
+			}
+		}
+	}
+	if kidsObj, ok := node["Kids"]; ok {
+		kids, err := document.ResolveArray(ctx, doc, kidsObj)
+		if err == nil {
+			for _, kid := range kids {
+				kd, kerr := document.ResolveDict(ctx, doc, kid)
+				if kerr != nil || kd == nil {
+					continue
+				}
+				if v := numberTreeLookupObj(ctx, doc, kd, key, depth+1); v != nil {
+					return v
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // buildAnnotStructTypeMapNS walks the structure tree and returns a map from
