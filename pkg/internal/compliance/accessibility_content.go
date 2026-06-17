@@ -143,17 +143,25 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 			switch op.Operator {
 			case "BMC", "BDC":
 				kind := classifyMarker(op)
-				// t1: Artifact inside tagged content with MCID.
-				if kind == markerArtifact && !reportedT1 && inTaggedMCID() {
-					results = append(results, failf(Rule_14289_1_7_1_t01,
-						"content marked as Artifact inside tagged content")...)
-					reportedT1 = true
-				}
-				// t2: Tagged content with MCID inside Artifact.
-				if kind == markerTaggedMCID && !reportedT2 && inArtifact() {
-					results = append(results, failf(Rule_14289_1_7_1_t02,
-						"tagged content inside content marked as Artifact")...)
-					reportedT2 = true
+				// t1/t2 (Artifact↔tagged nesting) are PDF/UA-1 §7.1 concepts.
+				// veraPDF's PDFUA-2 profile has no analogue (its §8.2.2 covers
+				// only unmarked content, handled as t3 below), so firing the
+				// UA-1 ids under PDF/UA-2 is a litho-over (verified live on
+				// 7.1-t01-fail-a / 7.1-t02-fail-a under PDF/UA-2: veraPDF reports
+				// no artifact-nesting rule).
+				if profile == "PDF/UA-1" {
+					// t1: Artifact inside tagged content with MCID.
+					if kind == markerArtifact && !reportedT1 && inTaggedMCID() {
+						results = append(results, failf(Rule_14289_1_7_1_t01,
+							"content marked as Artifact inside tagged content")...)
+						reportedT1 = true
+					}
+					// t2: Tagged content with MCID inside Artifact.
+					if kind == markerTaggedMCID && !reportedT2 && inArtifact() {
+						results = append(results, failf(Rule_14289_1_7_1_t02,
+							"tagged content inside content marked as Artifact")...)
+						reportedT2 = true
+					}
 				}
 				markerStack = append(markerStack, kind)
 			case "EMC":
