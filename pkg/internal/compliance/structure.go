@@ -388,6 +388,12 @@ type walkState struct {
 	// attributes). When true, TH elements do not need /Scope.
 	tableUsesHeaderIDs bool
 
+	// tableIrregular is true when the current enclosing Table failed the
+	// regularity check (§8.2.5.26 / §7.2). veraPDF evaluates header
+	// determination (§8.2.5.26 t5/t6, §7.5) only on a regular table, so the
+	// scope and per-TD header checks skip an irregular grid.
+	tableIrregular bool
+
 	// roleMap is the StructTreeRoot /RoleMap as a name index, used to
 	// resolve custom structure types to standard ones where a check's
 	// semantics (ISO/TS 32005 Table 5) are defined over standard types.
@@ -634,11 +640,15 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		validateLinkDestConsistency(ctx, state, elem)
 	}
 
-	// When entering a Table, determine if it uses the Headers+IDs model.
-	// Save and restore the flag so nested tables don't leak state.
+	// When entering a Table, determine if it uses the Headers+IDs model and
+	// whether it is column-regular. Both flags drive the header checks on its
+	// descendant TH/TD cells (validated during the child recursion below), so
+	// compute them here. Save and restore so nested tables don't leak state.
 	prevTableUsesHeaderIDs := state.tableUsesHeaderIDs
+	prevTableIrregular := state.tableIrregular
 	if typeName == "Table" {
 		state.tableUsesHeaderIDs = tableHasHeaderIDs(ctx, state.doc, elem)
+		state.tableIrregular = !validateTableColumnConsistency(ctx, state, elem)
 	}
 
 	// Recurse into children. The Table 5 effective parent follows the
@@ -660,16 +670,19 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		if state.profile == "PDF/UA-1" {
 			validateTableSectionCounts(ctx, state, elem)
 		}
-		validateTableColumnConsistency(ctx, state, elem)
 		// PDF/UA-2 §8.2.5.26 t5/t6 and PDF/UA-1 §7.5 t2: every TD in a
 		// table with header cells must have determinable headers (Scope
 		// coverage or /Headers IDs). veraPDF's UA-1 test is the same
 		// per-TD model under a single rule id
 		// (hasConnectedHeader != false || unknownHeaders == '').
-		if state.profile == "PDF/UA-2" || state.profile == "PDF/UA-1" {
+		// veraPDF evaluates header determination only on a regular table
+		// (SETable.checkRegular gates it); an irregular grid reports the
+		// regularity violation alone, so skip the header check here too.
+		if (state.profile == "PDF/UA-2" || state.profile == "PDF/UA-1") && !state.tableIrregular {
 			validateTableHeaderDetermination(ctx, state, elem)
 		}
 		state.tableUsesHeaderIDs = prevTableUsesHeaderIDs
+		state.tableIrregular = prevTableIrregular
 	}
 }
 
@@ -1312,6 +1325,12 @@ func checkDocumentNamespace(ctx context.Context, doc *document.Document, treeRoo
 // When the table uses ID-based header association (TH has /ID attribute),
 // /Scope is not required per ISO 14289-1, 7.5.
 func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
+	// veraPDF evaluates header determination only on a regular table; an
+	// irregular grid reports the regularity violation alone.
+	if state.tableIrregular {
+		return
+	}
+
 	// If the enclosing table uses the Headers+IDs association model
 	// (any TD references TH via /Headers), /Scope is not required on any TH.
 	if state.tableUsesHeaderIDs {

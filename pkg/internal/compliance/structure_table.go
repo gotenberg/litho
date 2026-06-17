@@ -70,10 +70,15 @@ func tableSectionChildRule(parentType ast.PdfName) Rule {
 // validateTableColumnConsistency checks that all TR rows in a Table have the
 // same number of columns, accounting for ColSpan attributes on TD/TH cells.
 // PDF/UA-1 §7.2 t43 and PDF/UA-2 §8.2.5.26 t3/t4.
-func validateTableColumnConsistency(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
+// validateTableColumnConsistency checks table regularity (§8.2.5.26 / §7.2) and
+// reports whether the table is column-regular. veraPDF's SETable.checkRegular
+// returns false on any irregularity and the caller then skips header
+// determination (t5/t6); this function mirrors that contract by returning false
+// when it fires a regularity violation.
+func validateTableColumnConsistency(ctx context.Context, state *walkState, tableElem ast.PdfDict) bool {
 	rows := collectTableRows(ctx, state.doc, tableElem)
 	if len(rows) < 2 {
-		return
+		return true
 	}
 
 	// Build effective column count per row using a proper grid model.
@@ -81,18 +86,38 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 	// Columns "occupied" by RowSpan carry-over affect effective counts.
 	effectiveCols := computeEffectiveColumns(ctx, state.doc, rows)
 	if len(effectiveCols) < 2 || effectiveCols[0] == 0 {
-		return
+		return true
 	}
 
+	// veraPDF takes the first row's column count as the table width and splits
+	// the violation: a row WIDER than the first (a column span overflowing the
+	// grid, wrongColumnSpan == null) fires the overflow rule; a NARROWER or
+	// empty row (unfilled grid cells, wrongColumnSpan set) fires the gap rule.
+	// Overflow takes precedence (veraPDF detects it in its placement pass
+	// before the trailing empty-cell scan).
+	n0 := effectiveCols[0]
+	widerRow, narrowerRow := -1, -1
 	for i := 1; i < len(effectiveCols); i++ {
-		if effectiveCols[i] != effectiveCols[0] {
-			rule := tableColumnRule(state.profile)
-			*state.results = append(*state.results,
-				failf(rule, "Table row 1 has %d columns, row %d has %d columns",
-					effectiveCols[0], i+1, effectiveCols[i])...)
-			return
+		if effectiveCols[i] > n0 && widerRow < 0 {
+			widerRow = i
+		}
+		if effectiveCols[i] < n0 && narrowerRow < 0 {
+			narrowerRow = i
 		}
 	}
+	if widerRow < 0 && narrowerRow < 0 {
+		return true
+	}
+	wider := widerRow >= 0
+	row := narrowerRow
+	if wider {
+		row = widerRow
+	}
+	rule := tableColumnRule(state.profile, wider)
+	*state.results = append(*state.results,
+		failf(rule, "Table row 1 has %d columns, row %d has %d columns",
+			n0, row+1, effectiveCols[row])...)
+	return false
 }
 
 // computeEffectiveColumns builds the effective column count for each row,
@@ -293,9 +318,19 @@ func cellRowSpan(ctx context.Context, doc *document.Document, cell ast.PdfDict) 
 	return 1
 }
 
-func tableColumnRule(profile string) Rule {
+// tableColumnRule selects the irregular-table rule by profile and direction.
+// veraPDF fires the overflow variant (ISO 14289-2 §8.2.5.26 t03 / ISO 14289-1
+// §7.2 t42) when a row is wider than the first, and the gap variant (t04 / t43)
+// when a row is narrower or empty.
+func tableColumnRule(profile string, wider bool) Rule {
 	if profile == "PDF/UA-2" {
+		if wider {
+			return Rule_14289_2_8_2_5_26_t03
+		}
 		return Rule_14289_2_8_2_5_26_t04
+	}
+	if wider {
+		return Rule_14289_1_7_2_t42
 	}
 	return Rule_14289_1_7_2_t43
 }
