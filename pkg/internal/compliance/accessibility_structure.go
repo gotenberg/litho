@@ -541,11 +541,16 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 		return nil
 	}
 
-	// Check that Link structure elements exist in the tree.
+	// Check that Link structure elements exist in the tree. Resolve each
+	// element's /S through the legacy /RoleMap so a non-standard type mapped
+	// to Link (e.g. /Link1 -> /Link) counts as a Link structure element,
+	// matching how veraPDF derives the standard type before applying the rule.
+	roleMap := LoadRoleMap(ctx, doc, treeRoot)
 	var linkStructCount int
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		if typeName == "Link" || typeName == "Reference" {
+		std := resolveStandardType(typeName, roleMap, profile)
+		if std == "Link" || std == "Reference" {
 			linkStructCount++
 		}
 	})
