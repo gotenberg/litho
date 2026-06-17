@@ -81,6 +81,15 @@ var markupAnnotationSubtypes = map[ast.PdfName]bool{
 }
 
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	// PDF/UA-2 has no generic "markup annotation needs Contents/Alt" rule: it
+	// keys alternate descriptions per annotation subtype (§8.9.2.4.x, handled by
+	// checkPDFUA2AnnotationConstraints), and §8.9.2.3 t1 is a nesting rule
+	// (markup must be enclosed in Annot, handled by checkPDFUA2AnnotStructNesting),
+	// not an alt-text rule. This UA-1 §7.18.1 t2 model does not apply under UA-2.
+	if profile == "PDF/UA-2" {
+		return nil
+	}
+
 	rule := annotAltRule(profile)
 
 	// Build a map from annotation object number to whether the enclosing

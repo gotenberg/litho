@@ -269,8 +269,23 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 			}
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
+			// §8.9.2.3 t1: a markup annotation shall be enclosed within an Annot
+			// structure element. veraPDF's test is structParentStandardType ==
+			// 'Annot', which fails when the type is absent (the annotation is an
+			// artifact) as well as when it is a non-Annot element, so this arm
+			// does not take the artifact exemption the rules below rely on.
+			if markupAnnotationSubtypes[subtype] {
+				stdType, inTree := structMap[objNum]
+				if !inTree || stdType != "Annot" {
+					results = append(results, failf(Rule_14289_2_8_9_2_3_t01,
+						"%s markup annotation enclosed by %s instead of Annot",
+						subtype, nestingDesc(stdType))...)
+				}
+				continue
+			}
+
 			// structParentType == null (not in the tree, i.e. an artifact) is
-			// exempt for both rules.
+			// exempt for the remaining rules.
 			stdType, inTree := structMap[objNum]
 			if !inTree {
 				continue
