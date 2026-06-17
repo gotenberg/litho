@@ -77,9 +77,6 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Link nesting (PDF/UA-2): Link annotations must be nested in Link structure elements.
 	results = append(results, checkLinkNesting(ctx, doc, catalog, profile)...)
 
-	// Formula MathML (PDF/UA-2): Formula structure elements must have /AF with MathML.
-	results = append(results, checkFormulaMathML(ctx, doc, catalog, profile)...)
-
 	// Annotation artifact flags (PDF/UA-2 §8.9.2.2): Invisible (t1) or
 	// NoView-without-ToggleNoView (t2) annotations must be artifacts.
 	results = append(results, checkAnnotArtifactFlags(ctx, doc, catalog, profile)...)
