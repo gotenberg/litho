@@ -988,7 +988,7 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 		val = val[1 : len(val)-1]
 	}
 
-	// Check for invalid hex characters before stripping whitespace.
+	// Record any invalid hex character before it is dropped below.
 	if p.checkFormat {
 		for _, r := range val {
 			// PDF whitespace: null, tab, LF, FF, CR, space (ISO 32000-1 §7.2.2).
@@ -1001,9 +1001,16 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 		}
 	}
 
+	// ISO 32000-1 §7.3.4.3 permits only hex digits and whitespace in a hex
+	// string, but veraPDF and Acrobat tolerate stray non-hex bytes by
+	// ignoring them. Dropping every non-hex character (rather than failing
+	// the decode) preserves the enclosing object or content operator; a
+	// failed decode would silently discard the value and, in a content
+	// stream, the whole operator. The stray character is still recorded as
+	// a format violation above under checkFormat.
 	val = strings.Map(func(r rune) rune {
-		// PDF whitespace: null, tab, LF, FF, CR, space.
-		if r == 0x00 || r == '\t' || r == '\n' || r == 0x0C || r == '\r' || r == ' ' {
+		isHex := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+		if !isHex {
 			return -1
 		}
 		return r

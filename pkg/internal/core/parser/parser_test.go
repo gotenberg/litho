@@ -243,6 +243,38 @@ func TestParseDict_NonNameKey_Skipped(t *testing.T) {
 	}
 }
 
+func TestParseHexString_TolerateNonHex(t *testing.T) {
+	// veraPDF/Acrobat ignore stray non-hex bytes rather than failing the
+	// decode; litho must not drop the value (or, in a content stream, the
+	// enclosing operator). "<484!>" -> strip '!' -> "484" -> pad -> "4840".
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"<484!>", "\x48\x40"},      // stray non-hex char ignored, then odd-padded
+		{"<48 41>", "\x48\x41"},     // whitespace ignored (unchanged behaviour)
+		{"<4>", "\x40"},             // odd length padded with trailing 0
+		{"<48 41!>", "\x48\x41"},    // mix of whitespace and stray char
+		{"<48414>", "\x48\x41\x40"}, // odd length after valid digits
+	}
+	for _, tc := range tests {
+		p := newParser(tc.in)
+		obj, err := p.ParseObject(context.Background())
+		if err != nil {
+			t.Errorf("ParseObject(%q) failed: %v", tc.in, err)
+			continue
+		}
+		s, ok := obj.(ast.PdfString)
+		if !ok {
+			t.Errorf("ParseObject(%q) = %T, want PdfString", tc.in, obj)
+			continue
+		}
+		if string(s) != tc.want {
+			t.Errorf("ParseObject(%q) = %q, want %q", tc.in, string(s), tc.want)
+		}
+	}
+}
+
 func TestParseArray_HexStringWithoutSpace(t *testing.T) {
 	// Hex string immediately after a number: "3<ABCD>" should parse as 3 then hex string.
 	p := newParser("[3<ABCD>]")
