@@ -166,7 +166,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	doc.Logger.Debug("compliance.xmp: starting XMP checks", "profile", profile, "part", part)
 
-	var results []Violation
+	results := make([]Violation, 0, 8)
 
 	// Catalog /Metadata required (§6.7.2 / §6.6.1).
 	xmpData, metaStream := xmpLoadMetadata(ctx, doc, catalog, part, &results)
@@ -183,6 +183,12 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// parser and byte-scan checks see real content even when the
 	// packet shipped as UTF-16.
 	xmpData = xmpNormalizeForChecks(xmpData, part, &results)
+
+	// A packet that is not well-formed XML fails to parse (PDF/A-2/3
+	// §6.6.2.1 t4 + t5). Checked after normalisation so a well-formed
+	// UTF-16/32 packet (decoded to UTF-8 here) is not misread as
+	// malformed by the UTF-8-only XML parser.
+	results = append(results, xmpPacketSerializationValidity(xmpData, part)...)
 
 	if ctx.Err() != nil {
 		return results
@@ -370,6 +376,47 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 		return fail(Rule_19005_4_6_7_2_1_t03, "")
 	}
 	return nil
+}
+
+// xmpPacketSerializationValidity fires PDF/A-2/3 §6.6.2.1 t4
+// (isSerializationValid) and t5 (actualEncoding) together when the XMP
+// packet is not well-formed XML. veraPDF (GFPDMetadata) builds the
+// XMPPackage from VeraPDFMeta.parse; when that parse throws on malformed
+// XML the package is null, so isSerializationValid is false (t4) and
+// actualEncoding is null (t5). litho parses XMP leniently everywhere
+// else, so this dedicated strict pass catches a not-well-formed packet
+// (for example a start/end tag whose case does not match).
+func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
+	var t4, t5 Rule
+	switch part {
+	case 2:
+		t4, t5 = Rule_19005_2_6_6_2_1_t04, Rule_19005_2_6_6_2_1_t05
+	case 3:
+		t4, t5 = Rule_19005_3_6_6_2_1_t04, Rule_19005_3_6_6_2_1_t05
+	default:
+		return nil // only PDF/A-2 and PDF/A-3 carry §6.6.2.1 t4/t5
+	}
+	if xmpWellFormed(xmpData) {
+		return nil
+	}
+	results := failf(t4, "XMP packet is not well-formed XML")
+	return append(results, failf(t5, "XMP packet encoding cannot be determined: packet is not well-formed XML")...)
+}
+
+// xmpWellFormed reports whether data is well-formed XML, matching the
+// well-formedness gate veraPDF's XMP parser applies.
+func xmpWellFormed(data []byte) bool {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec.Strict = true
+	for {
+		_, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+	}
 }
 
 // xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
