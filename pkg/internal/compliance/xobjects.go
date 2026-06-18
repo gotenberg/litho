@@ -220,6 +220,12 @@ func checkFormXObjectPart1(
 ) []Violation {
 	var results []Violation
 
+	// /OPI key forbidden (ISO 19005-1 §6.2.4 t2 covers Image and Form
+	// XObjects; the image path is checked in checkImageXObjectPart1).
+	if _, hasOPI := formDict["OPI"]; hasOPI {
+		results = append(results, failf(Rule_19005_1_6_2_4_t02, "page %d, XObject %s", pageNum, name)...)
+	}
+
 	// /Subtype2 with value /PS is forbidden.
 	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
 		sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
