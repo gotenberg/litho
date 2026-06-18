@@ -152,8 +152,13 @@ func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj a
 	return results
 }
 
-// checkAnnotAPTransparency1 walks each annotation's /AP normal appearance and
-// applies the part-1 transparency checks to the appearance form's resources.
+// checkAnnotAPTransparency1 applies the PDF/A-1 §6.4 transparency checks to
+// each annotation's appearance streams: the appearance form XObject's own
+// /Group and /SMask (veraPDF reaches the Group on a widget appearance form,
+// e.g. the 6-2-9-t05 fixtures fail 6.4 t3 on annots[0]/appearance[0]/Group
+// under PDF/A-1a) plus the ExtGStates and nested XObjects in its /Resources.
+// visited dedups appearance forms shared across annotations so a forbidden
+// Group fires once, matching veraPDF.
 func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, visited map[int]bool) []Violation {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
@@ -173,9 +178,59 @@ func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page
 		if err != nil || apDict == nil {
 			continue
 		}
-		results = append(results, walkNestedResources1(ctx, doc, apDict, pageNum, visited, 0)...)
+		for _, apName := range sortedNames(apDict) {
+			results = append(results, appearanceTransparency1(ctx, doc, apDict[apName], pageNum, visited)...)
+		}
 	}
 	return results
+}
+
+// appearanceTransparency1 checks one /AP entry — either an appearance form
+// XObject stream or a sub-dictionary of appearance states (e.g. a button's
+// /On and /Off) — for forbidden PDF/A-1 transparency.
+func appearanceTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, pageNum int, visited map[int]bool) []Violation {
+	if stream, err := document.ResolveStream(ctx, doc, entry); err == nil {
+		return appearanceStreamTransparency1(ctx, doc, entry, stream, pageNum, visited)
+	}
+	subDict, err := document.ResolveDict(ctx, doc, entry)
+	if err != nil || subDict == nil {
+		return nil
+	}
+	var results []Violation
+	for _, name := range sortedNames(subDict) {
+		sub := subDict[name]
+		if stream, err := document.ResolveStream(ctx, doc, sub); err == nil {
+			results = append(results, appearanceStreamTransparency1(ctx, doc, sub, stream, pageNum, visited)...)
+		}
+	}
+	return results
+}
+
+// appearanceStreamTransparency1 checks an appearance form XObject's own
+// transparency keys and recurses into its /Resources, deduping shared
+// appearance forms through visited.
+func appearanceStreamTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, stream ast.PdfStream, pageNum int, visited map[int]bool) []Violation {
+	if ref, ok := entry.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return nil
+		}
+		visited[ref.ObjectNum] = true
+	}
+	results := formXObjectTransparency1(ctx, doc, stream.Dict, pageNum, "annotation appearance")
+	if nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && nested != nil {
+		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, 0)...)
+	}
+	return results
+}
+
+// sortedNames returns the keys of a dict in deterministic order.
+func sortedNames(d ast.PdfDict) []ast.PdfName {
+	names := make([]ast.PdfName, 0, len(d))
+	for name := range d {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // checkPageTransparencyGroup1 checks for forbidden transparency Group on a page (PDF/A-1).
@@ -277,20 +332,28 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 		if xo == nil {
 			continue
 		}
+		results = append(results, formXObjectTransparency1(ctx, doc, xo, pageNum, "XObject "+string(xoName))...)
+	}
+	return results
+}
 
-		// SMask key must not be present on XObjects.
-		if _, hasSMask := xo["SMask"]; hasSMask {
-			results = append(results, failf(Rule_19005_1_6_4_t02, "page %d, XObject %s", pageNum, string(xoName))...)
-		}
+// formXObjectTransparency1 fires the PDF/A-1 §6.4 SMask (t2) and
+// transparency-Group (t3) checks for a single form XObject dictionary.
+// label identifies the XObject in the violation context.
+func formXObjectTransparency1(ctx context.Context, doc *document.Document, xo ast.PdfDict, pageNum int, label string) []Violation {
+	var results []Violation
 
-		// Check for transparency Group on form XObjects.
-		if groupObj, hasGroup := xo["Group"]; hasGroup {
-			group, err := document.ResolveDict(ctx, doc, groupObj)
-			if err == nil && group != nil {
-				sName, _ := document.ResolveName(ctx, doc, group["S"])
-				if sName == "Transparency" {
-					results = append(results, failf(Rule_19005_1_6_4_t03, "page %d, XObject %s", pageNum, string(xoName))...)
-				}
+	// SMask key must not be present on XObjects.
+	if _, hasSMask := xo["SMask"]; hasSMask {
+		results = append(results, failf(Rule_19005_1_6_4_t02, "page %d, %s", pageNum, label)...)
+	}
+
+	// Transparency Group is forbidden on form XObjects.
+	if groupObj, hasGroup := xo["Group"]; hasGroup {
+		group, err := document.ResolveDict(ctx, doc, groupObj)
+		if err == nil && group != nil {
+			if sName, _ := document.ResolveName(ctx, doc, group["S"]); sName == "Transparency" {
+				results = append(results, failf(Rule_19005_1_6_4_t03, "page %d, %s", pageNum, label)...)
 			}
 		}
 	}
