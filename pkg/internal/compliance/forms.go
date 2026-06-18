@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
 // checkFormGroup validates interactive form compliance for PDF/A and PDF/UA
@@ -68,21 +69,37 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // maxFieldTreeDepth limits recursion when walking the field tree.
 const maxFieldTreeDepth = 100
 
+// Anti-DoS caps for the signature byte-range recomputation. Not
+// spec-mandated; sized so a crafted signature cannot force an unbounded
+// scan. A signature dictionary header plus its /Contents hex string fit
+// well within maxSigDictScan; a revision's cross-reference table,
+// trailer, and %%EOF fit within maxSigEOFScan.
+const (
+	maxSigDictScan = 1 << 18 // 256 KiB
+	maxSigEOFScan  = 1 << 16 // 64 KiB
+)
+
 // checkSignatureByteRange validates ISO 19005-2/3 §6.4.3 t1
 // (veraPDF test: doesByteRangeCoverEntireDocument): a signed signature
-// field's four-integer /ByteRange shall start at byte 0 and its second
-// span shall end exactly at end of file, so every byte except the
-// /Contents hole is signed. Any update after signing, incremental or
-// full rewrite, breaks this. A missing or malformed ByteRange stays
-// silent: the veraPDF goldens fire t1 only on a present, non-covering
-// range (PDF_A-4__6-1-11-t01-pass-a under the part-2 profile) and use
-// the other 6.4.3 tests for shape problems.
+// field's four-integer /ByteRange must equal the range recomputed from
+// the file, so every byte except the /Contents hole inside the signed
+// revision is covered. Any modification after signing shifts the
+// /Contents position (full rewrite) or appends an uncovered revision
+// (incremental update), both of which this detects. It mirrors veraPDF
+// SignatureParser.getByteRangeBySignatureOffset and GFPDSignature
+// .getdoesByteRangeCoverEntireDocument. A missing or malformed
+// /ByteRange stays silent: the goldens use the other 6.4.3 tests for
+// shape problems.
 func checkSignatureByteRange(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, results *[]Violation) {
 	ft, _ := document.ResolveName(ctx, doc, field["FT"])
 	if ft != "Sig" {
 		return
 	}
-	sig, err := document.ResolveDict(ctx, doc, field["V"])
+	vRef, ok := field["V"].(ast.PdfIndirectRef)
+	if !ok {
+		return // signature value is not an indirect object; cannot locate it.
+	}
+	sig, err := document.ResolveDict(ctx, doc, vRef)
 	if err != nil || sig == nil {
 		return
 	}
@@ -90,24 +107,30 @@ func checkSignatureByteRange(ctx context.Context, doc *document.Document, field 
 	if err != nil || len(brArr) != 4 {
 		return
 	}
-	var br [4]int64
+	var declared [4]int64
 	for i, o := range brArr {
 		v, err := document.ResolveInt(ctx, doc, o)
 		if err != nil {
 			return
 		}
-		br[i] = int64(v)
+		declared[i] = int64(v)
 	}
-	size := doc.FileSize()
-	covers := br[0] == 0 && br[1] >= 0 && br[2] >= br[1] && br[2]+br[3] <= size
-	if covers && br[2]+br[3] < size {
-		// Incremental updates after signing are legal: veraPDF accepts a
-		// ByteRange that covers the entire SIGNED revision, i.e. the span
-		// ends at that revision's %%EOF, with later revisions appended
-		// behind it (verified live: the same [0 1022 4862 6654] range
-		// passes in an 11,516-byte file grown to 15,913 by remediation
-		// and fails in a 7,207-byte file it overruns).
-		covers = signedSpanEndsAtEOF(ctx, doc, br[2]+br[3])
+
+	actual, floating, streamEnd, ok := computeSignatureByteRange(ctx, doc, vRef.ObjectNum)
+	if !ok {
+		return // cannot recompute faithfully; stay silent rather than risk a false positive.
+	}
+
+	covers := declared[0] == actual[0] && declared[1] == actual[1] && declared[2] == actual[2]
+	if covers {
+		// veraPDF requires an exact match when the signed revision ends
+		// the file, but tolerates the trailing-EOL bytes after %%EOF when
+		// later revisions follow.
+		if streamEnd {
+			covers = declared[3] == actual[3]
+		} else {
+			covers = declared[3] >= actual[3]-floating && declared[3] <= actual[3]
+		}
 	}
 	if !covers {
 		rule := Rule_19005_2_6_4_3_t01
@@ -115,28 +138,141 @@ func checkSignatureByteRange(ctx context.Context, doc *document.Document, field 
 			rule = Rule_19005_3_6_4_3_t01
 		}
 		*results = append(*results, failf(rule,
-			"signature /ByteRange [%d %d %d %d] does not cover the signed revision (file size %d)",
-			br[0], br[1], br[2], br[3], size)...)
+			"signature /ByteRange [%d %d %d %d] does not match the signed revision (expected [%d %d %d %d])",
+			declared[0], declared[1], declared[2], declared[3],
+			actual[0], actual[1], actual[2], actual[3])...)
 	}
 }
 
-// sigEOFWindow bounds the tail read when checking that a signature's
-// ByteRange ends at a revision boundary. Anti-DoS sizing, not
-// spec-mandated: "%%EOF" plus one EOL is at most 7 bytes; 32 leaves
-// room for trailing whitespace real producers emit.
-const sigEOFWindow = 32
+// computeSignatureByteRange recomputes a signature's expected /ByteRange
+// from the file, mirroring veraPDF SignatureParser
+// .getByteRangeBySignatureOffset. actual[1]/actual[2] bound the
+// /Contents hex string; actual[3] spans from actual[2] to the %%EOF of
+// the revision whose cross-reference table is the first one after the
+// /Contents. floating counts the EOL bytes after that %%EOF; streamEnd
+// reports whether that %%EOF ends the file.
+func computeSignatureByteRange(ctx context.Context, doc *document.Document, sigObjNum int) (actual [4]int64, floating int64, streamEnd, ok bool) {
+	// litho records xref offsets from the physical file start while
+	// veraPDF uses header-relative offsets; they diverge only when junk
+	// precedes the %PDF- header, and such files must not be signed
+	// incrementally, so bail to avoid a divergent verdict.
+	if doc.HeaderOffset != 0 {
+		return actual, 0, false, false
+	}
+	entry, exists := doc.Index.Entries[sigObjNum]
+	if !exists || entry.Free || entry.Type == xref.XRefTypeCompressed {
+		return actual, 0, false, false
+	}
 
-// signedSpanEndsAtEOF reports whether the bytes immediately before
-// offset end with an %%EOF marker (optionally followed by EOL or
-// whitespace), meaning the span covers a complete revision.
-func signedSpanEndsAtEOF(ctx context.Context, doc *document.Document, end int64) bool {
-	start := max(end-sigEOFWindow, 0)
-	buf, err := doc.ReadFileBytes(ctx, start, end-start)
+	c1, c2, ok := contentsHexBounds(ctx, doc, entry.Offset)
+	if !ok {
+		return actual, 0, false, false
+	}
+	actual[1] = c1
+	actual[2] = c2
+
+	end, fl, se, ok := nextEOFEnd(ctx, doc, nextXRefOffset(doc, c2))
+	if !ok {
+		return actual, 0, false, false
+	}
+	actual[3] = end - c2
+	return actual, fl, se, true
+}
+
+// contentsHexBounds locates the /Contents hex string of the signature
+// dictionary that begins at objOffset, returning the absolute file
+// offsets of its opening '<' and of the byte after its closing '>'.
+func contentsHexBounds(ctx context.Context, doc *document.Document, objOffset int64) (lt, gt int64, ok bool) {
+	buf, err := doc.ReadFileBytes(ctx, objOffset, maxSigDictScan)
+	if err != nil || len(buf) == 0 {
+		return 0, 0, false
+	}
+	key := bytes.Index(buf, []byte("/Contents"))
+	if key < 0 {
+		return 0, 0, false
+	}
+	p := key + len("/Contents")
+	for p < len(buf) && isPdfWhitespaceByte(buf[p]) {
+		p++
+	}
+	if p >= len(buf) || buf[p] != '<' {
+		return 0, 0, false // indirect or non-hex /Contents; bail conservatively.
+	}
+	rel := bytes.IndexByte(buf[p:], '>')
+	if rel < 0 {
+		return 0, 0, false // hex string exceeds the scan window.
+	}
+	return objOffset + int64(p), objOffset + int64(p) + int64(rel) + 1, true
+}
+
+// nextXRefOffset returns the first cross-reference table offset greater
+// than off (veraPDF getOffsetOfNextXRef), or off when none follows.
+func nextXRefOffset(doc *document.Document, off int64) int64 {
+	best := off
+	found := false
+	for _, x := range doc.XRefTableOffsets {
+		if x > off && (!found || x < best) {
+			best, found = x, true
+		}
+	}
+	return best
+}
+
+// nextEOFEnd scans forward from off for the next line-initial %%EOF
+// marker, returning the absolute offset just past it (including a single
+// trailing LF, CR, or CR-LF), that EOL byte count, and whether the
+// marker ends the file. Mirrors veraPDF getOffsetOfNextEOF for the
+// no-stream region between a cross-reference table and its %%EOF.
+func nextEOFEnd(ctx context.Context, doc *document.Document, off int64) (end, floating int64, streamEnd, ok bool) {
+	buf, err := doc.ReadFileBytes(ctx, off, maxSigEOFScan)
 	if err != nil {
+		return 0, 0, false, false
+	}
+	marker := []byte("%%EOF")
+	idx := -1
+	for s := 0; ; {
+		rel := bytes.Index(buf[s:], marker)
+		if rel < 0 {
+			break
+		}
+		at := s + rel
+		// veraPDF requires %%EOF at the start of a line (any leading
+		// spaces aside), which excludes a match inside other content.
+		if at == 0 || buf[at-1] == '\n' || buf[at-1] == '\r' {
+			idx = at
+			break
+		}
+		s = at + len(marker)
+	}
+	if idx < 0 {
+		return 0, 0, false, false
+	}
+	after := idx + len(marker)
+	end = off + int64(after)
+	if after < len(buf) && buf[after] == '\n' {
+		end++
+		floating++
+	} else if after < len(buf) && buf[after] == '\r' {
+		end++
+		floating++
+		if after+1 < len(buf) && buf[after+1] == '\n' {
+			end++
+			floating++
+		}
+	}
+	streamEnd = end >= doc.FileSize()
+	return end, floating, streamEnd, true
+}
+
+// isPdfWhitespaceByte reports whether b is one of the six PDF whitespace
+// characters (ISO 32000-1 Table 1).
+func isPdfWhitespaceByte(b byte) bool {
+	switch b {
+	case 0x00, 0x09, 0x0A, 0x0C, 0x0D, 0x20:
+		return true
+	default:
 		return false
 	}
-	t := bytes.TrimRight(buf, " \t\r\n")
-	return bytes.HasSuffix(t, []byte("%%EOF"))
 }
 
 // checkFormField validates a single form field and recurses into child fields.
