@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -38,7 +39,7 @@ func jpxRulesForPart(part int) jpxRules {
 
 // checkJPXImage validates JPEG2000 data stream constraints for an Image XObject
 // with JPXDecode filter.
-func checkJPXImage(ctx context.Context, stream ast.PdfStream, name ast.PdfName, pageNum, part int) []Violation {
+func checkJPXImage(ctx context.Context, doc *document.Document, stream ast.PdfStream, name ast.PdfName, pageNum, part int) []Violation {
 	rules := jpxRulesForPart(part)
 	if rules.t1.Specification == "" {
 		return nil
@@ -50,7 +51,9 @@ func checkJPXImage(ctx context.Context, stream ast.PdfStream, name ast.PdfName, 
 	}
 
 	if isJP2Container(data) {
-		return checkJP2Container(data, name, pageNum, rules)
+		// Per ISO 19005-2 §6.2.8.3, the colour-spec checks (t2/t3/t4) are
+		// waived when the image XObject supplies its own /ColorSpace.
+		return checkJP2Container(data, name, pageNum, rules, imageHasColorSpace(ctx, doc, stream.Dict))
 	}
 	// Raw J2K codestream: FF 4F (SOC) FF 51 (SIZ).
 	if data[0] == 0xFF && data[1] == 0x4F && data[2] == 0xFF && data[3] == 0x51 {
@@ -58,6 +61,24 @@ func checkJPXImage(ctx context.Context, stream ast.PdfStream, name ast.PdfName, 
 	}
 
 	return nil
+}
+
+// imageHasColorSpace reports whether an image XObject dict supplies a usable
+// /ColorSpace. Mirrors veraPDF GFPDXImage, which treats a non-null, non-empty
+// /ColorSpace entry as the colour space (deferring to it over the JP2 boxes).
+func imageHasColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	obj, ok := dict["ColorSpace"]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+	if _, isNull := resolved.(ast.PdfNull); isNull {
+		return false
+	}
+	return resolved != nil
 }
 
 // isJP2Container checks for the JP2 signature box: 00 00 00 0C 6A 50 20 20 0D 0A 87 0A.
@@ -126,7 +147,52 @@ func parseCOLR(payload []byte) (colrInfo, bool) {
 	return ci, true
 }
 
-func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Violation {
+// selectedColr is veraPDF's effective colour specification for a JP2 container.
+// Per ISO 19005-2 §6.2.8.3, a conforming reader uses the colour spec whose
+// APPROX field is 0x01; its METH and enumerated colour space are the effective
+// ones. When no spec has APPROX 0x01 and there is exactly one spec, that sole
+// spec is used; otherwise no effective colour space is defined (methSet false).
+// Mirrors veraPDF JPEG2000.java builder population of colrMethod/colrEnumCS.
+type selectedColr struct {
+	methSet   bool
+	meth      byte
+	enumCSSet bool
+	enumCS    uint32
+}
+
+func selectColr(boxes []colrInfo) selectedColr {
+	var s selectedColr
+	anyApprox := false
+	for _, c := range boxes {
+		if c.approx != 0x01 {
+			continue
+		}
+		anyApprox = true
+		if !s.methSet {
+			s.methSet = true
+			s.meth = c.meth
+		}
+		// An enumerated colour space exists only for METH 0x01.
+		if c.meth == 0x01 && !s.enumCSSet {
+			s.enumCSSet = true
+			s.enumCS = c.enumCS
+		}
+	}
+	if anyApprox {
+		return s
+	}
+	if len(boxes) == 1 {
+		s.methSet = true
+		s.meth = boxes[0].meth
+		if boxes[0].meth == 0x01 {
+			s.enumCSSet = true
+			s.enumCS = boxes[0].enumCS
+		}
+	}
+	return s
+}
+
+func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRules, hasColorSpace bool) []Violation {
 	boxes := parseJP2Boxes(data)
 
 	// Find jp2h superbox.
@@ -177,36 +243,37 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 			"page %d, XObject %s: JPEG2000 has %d colour channels", pageNum, name, numComponents)...)
 	}
 
-	// t2: If multiple colr specs, exactly one must have APPROX=0x01.
-	if len(colrBoxes) > 1 {
-		approxCount := 0
-		for _, c := range colrBoxes {
-			if c.approx == 0x01 {
-				approxCount++
-			}
-		}
-		if approxCount != 1 {
-			results = append(results, failf(rules.t2,
-				"page %d, XObject %s: %d colr boxes with APPROX=0x01 (need exactly 1)", pageNum, name, approxCount)...)
+	// The colour-spec rules (t2/t3/t4) defer to an explicit image /ColorSpace.
+	approxCount := 0
+	for _, c := range colrBoxes {
+		if c.approx == 0x01 {
+			approxCount++
 		}
 	}
+	sel := selectColr(colrBoxes)
 
-	// t3: METH must be 0x01, 0x02, or 0x03.
-	for _, c := range colrBoxes {
-		if c.meth != 0x01 && c.meth != 0x02 && c.meth != 0x03 {
-			results = append(results, failf(rules.t3,
-				"page %d, XObject %s: colr METH=0x%02X", pageNum, name, c.meth)...)
-			break
-		}
+	// t2: there must be exactly one colour spec, or exactly one with APPROX=0x01.
+	if !hasColorSpace && len(colrBoxes) != 1 && approxCount != 1 {
+		results = append(results, failf(rules.t2,
+			"page %d, XObject %s: %d colr specs, %d with APPROX=0x01 (need exactly 1 spec or 1 with APPROX=0x01)",
+			pageNum, name, len(colrBoxes), approxCount)...)
 	}
 
-	// t4: Enumerated colour space 19 (CIEJab) forbidden.
-	for _, c := range colrBoxes {
-		if c.meth == 0x01 && c.enumCS == 19 {
-			results = append(results, failf(rules.t4,
-				"page %d, XObject %s: CIEJab colour space", pageNum, name)...)
-			break
+	// t3: the effective colour method (the APPROX=0x01 spec, or the sole spec)
+	// must be 0x01, 0x02, or 0x03. An undefined effective method also fails.
+	if !hasColorSpace && (!sel.methSet || (sel.meth != 0x01 && sel.meth != 0x02 && sel.meth != 0x03)) {
+		methDesc := "none"
+		if sel.methSet {
+			methDesc = fmt.Sprintf("0x%02X", sel.meth)
 		}
+		results = append(results, failf(rules.t3,
+			"page %d, XObject %s: effective colr METH=%s", pageNum, name, methDesc)...)
+	}
+
+	// t4: the effective enumerated colour space must not be 19 (CIEJab).
+	if !hasColorSpace && sel.enumCSSet && sel.enumCS == 19 {
+		results = append(results, failf(rules.t4,
+			"page %d, XObject %s: CIEJab colour space", pageNum, name)...)
 	}
 
 	// t5: Bit depth 1-38, all channels same bit depth.

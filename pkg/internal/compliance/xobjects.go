@@ -193,7 +193,7 @@ func checkXObject(
 			results = append(results, checkImageXObject(ctx, doc, xobjDict, name, pageNum, part)...)
 			// §6.2.8.3 / §6.2.7.3: JPEG2000 codestream constraints.
 			if hasJPXFilter(ctx, doc, xobjDict) {
-				results = append(results, checkJPXImage(ctx, stream, name, pageNum, part)...)
+				results = append(results, checkJPXImage(ctx, doc, stream, name, pageNum, part)...)
 			}
 		}
 	} else {

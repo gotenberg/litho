@@ -140,6 +140,138 @@ func TestParseCOLR(t *testing.T) {
 	})
 }
 
+func TestSelectColr(t *testing.T) {
+	t.Parallel()
+
+	box := func(meth, approx byte, enumCS uint32) colrInfo {
+		return colrInfo{meth: meth, approx: approx, enumCS: enumCS}
+	}
+
+	tests := []struct {
+		name          string
+		boxes         []colrInfo
+		wantMethSet   bool
+		wantMeth      byte
+		wantEnumCSSet bool
+		wantEnumCS    uint32
+	}{
+		{"empty", nil, false, 0, false, 0},
+		{"single meth1", []colrInfo{box(0x01, 0x00, 16)}, true, 0x01, true, 16},
+		{"single meth2 no enumCS", []colrInfo{box(0x02, 0x00, 0)}, true, 0x02, false, 0},
+		{"single meth4", []colrInfo{box(0x04, 0x00, 0)}, true, 0x04, false, 0},
+		// Two specs, neither APPROX=0x01: no effective colour space (t02-fail-a shape).
+		{"two no-approx", []colrInfo{box(0x01, 0x00, 16), box(0x01, 0x00, 16)}, false, 0, false, 0},
+		// APPROX=0x01 spec wins regardless of order.
+		{"approx wins late", []colrInfo{box(0x04, 0x00, 0), box(0x01, 0x01, 16)}, true, 0x01, true, 16},
+		// METH comes from first APPROX spec even if it lacks an enumCS.
+		{"approx meth2", []colrInfo{box(0x02, 0x01, 0), box(0x01, 0x00, 16)}, true, 0x02, false, 0},
+		{"approx enumCS 19", []colrInfo{box(0x01, 0x01, 19), box(0x01, 0x00, 16)}, true, 0x01, true, 19},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := selectColr(tc.boxes)
+			if got.methSet != tc.wantMethSet || got.meth != tc.wantMeth ||
+				got.enumCSSet != tc.wantEnumCSSet || got.enumCS != tc.wantEnumCS {
+				t.Errorf("selectColr(%+v) = %+v, want methSet=%v meth=%#x enumCSSet=%v enumCS=%d",
+					tc.boxes, got, tc.wantMethSet, tc.wantMeth, tc.wantEnumCSSet, tc.wantEnumCS)
+			}
+		})
+	}
+}
+
+func TestCheckJP2ContainerColrSpec(t *testing.T) {
+	t.Parallel()
+
+	mkBox := func(btype uint32, payload []byte) []byte {
+		b := make([]byte, 8+len(payload))
+		binary.BigEndian.PutUint32(b[0:4], uint32(8+len(payload)))
+		binary.BigEndian.PutUint32(b[4:8], btype)
+		copy(b[8:], payload)
+		return b
+	}
+	colrBox := func(meth, approx byte, enumCS uint32) []byte {
+		if meth == 0x01 {
+			pl := []byte{meth, 0x00, approx, 0, 0, 0, 0}
+			binary.BigEndian.PutUint32(pl[3:7], enumCS)
+			return mkBox(boxTypeCOLR, pl)
+		}
+		return mkBox(boxTypeCOLR, []byte{meth, 0x00, approx})
+	}
+	ihdrBox := func() []byte {
+		pl := make([]byte, 14)
+		binary.BigEndian.PutUint16(pl[8:10], 3) // 3 colour channels (valid)
+		pl[10] = 0x07                           // bit depth 8 (valid)
+		return mkBox(boxTypeIHDR, pl)
+	}
+	jp2 := func(colrs ...[]byte) []byte {
+		inner := ihdrBox()
+		for _, c := range colrs {
+			inner = append(inner, c...)
+		}
+		return mkBox(boxTypeJP2H, inner)
+	}
+	fired := func(vs []Violation) []int {
+		var out []int
+		seen := map[int]bool{}
+		for _, v := range vs {
+			if !seen[v.Rule.TestNumber] {
+				seen[v.Rule.TestNumber] = true
+				out = append(out, v.Rule.TestNumber)
+			}
+		}
+		return out
+	}
+	eq := func(a, b []int) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		m := map[int]int{}
+		for _, x := range a {
+			m[x]++
+		}
+		for _, x := range b {
+			m[x]--
+		}
+		for _, c := range m {
+			if c != 0 {
+				return false
+			}
+		}
+		return true
+	}
+	rules := jpxRulesForPart(2)
+
+	tests := []struct {
+		name          string
+		data          []byte
+		hasColorSpace bool
+		want          []int
+	}{
+		// Two specs, neither APPROX=0x01: no exactly-one-spec, no effective method.
+		{"two-no-approx", jp2(colrBox(0x01, 0x00, 16), colrBox(0x01, 0x00, 16)), false, []int{2, 3}},
+		// Same, but the image dict supplies /ColorSpace: all colour rules waived.
+		{"two-no-approx-hasCS", jp2(colrBox(0x01, 0x00, 16), colrBox(0x01, 0x00, 16)), true, nil},
+		// Single spec, invalid METH.
+		{"single-bad-meth", jp2(colrBox(0x04, 0x00, 0)), false, []int{3}},
+		// Single spec, CIEJab enumerated colour space forbidden.
+		{"single-ciejab", jp2(colrBox(0x01, 0x00, 19)), false, []int{4}},
+		// Single valid spec: clean.
+		{"single-valid", jp2(colrBox(0x01, 0x00, 16)), false, nil},
+		// Bad-METH on a non-selected spec must NOT fire t3 (APPROX spec is valid).
+		{"approx-valid-other-bad", jp2(colrBox(0x01, 0x01, 16), colrBox(0x04, 0x00, 0)), false, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := fired(checkJP2Container(tc.data, "Im0", 1, rules, tc.hasColorSpace))
+			if !eq(got, tc.want) {
+				t.Errorf("checkJP2Container fired tests %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseJ2KSIZMarker(t *testing.T) {
 	t.Parallel()
 
