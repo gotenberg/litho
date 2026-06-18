@@ -33,10 +33,10 @@ const (
 //
 //nolint:gochecknoglobals // static lookup table.
 var xmpPropertyRegistry = map[string]map[string]xmpPropType{
-	// Known schema namespaces with no predefined properties: veraPDF's
-	// XMPCore registers pdfx (custom Document Info keys) and adhocwf
-	// (Acrobat workflow) but defines no members, so every property used
-	// in them is an unknown name whose value type cannot be resolved.
+	// Known schema namespaces with no predefined properties: pdfx (custom
+	// Document Info keys) and adhocwf (Acrobat workflow) are recognized
+	// schemas, but neither standard defines named members, so every property
+	// used in them is an unknown name whose value type cannot be resolved.
 	// See the matching empty entries in xmpPredefinedCommon.
 	"http://ns.adobe.com/pdfx/1.3/":                 {},
 	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/": {},
@@ -417,10 +417,10 @@ func isValidXMPDate(s string) bool {
 		return false
 	}
 
-	// PDF date strings (D:YYYY...) are NOT valid XMP dates: XMP Date is
-	// ISO 8601 (XMP Specification part 2), and veraPDF fails
-	// 6.6.2.3.1 t2 on a D:-format xmp:CreateDate (verified live on
-	// PDF_A-4__6-1-5-t02-pass-a retargeted to PDF/A-2a; 294-cell pool).
+	// PDF date strings (D:YYYY...) are NOT valid XMP dates: the XMP Date
+	// type is ISO 8601 (XMP Specification part 2 / ISO 16684), and the
+	// PDF "D:" prefix is not ISO 8601 syntax, so such a value cannot
+	// satisfy a Date-typed XMP property.
 	if strings.HasPrefix(s, "D:") {
 		return false
 	}

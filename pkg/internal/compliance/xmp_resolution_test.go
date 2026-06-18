@@ -8,8 +8,10 @@ import (
 
 // resolutionXMP builds a packet that uses ex:part and declares it via one or
 // two pdfaSchema entries sharing the same namespace URI. With two entries the
-// second declares only "amd", so under veraPDF's replacement semantics the
-// value type of ex:part is no longer resolvable.
+// second declares only "amd". ISO 19005-2 §6.6.2.3 does not specify how to
+// merge two extension-schema container entries that share a namespace URI;
+// litho follows the interpretation that a later entry replaces the earlier
+// one, so the value type of ex:part is no longer resolvable.
 func resolutionXMP(duplicateEntry bool) []byte {
 	second := ""
 	if duplicateEntry {
@@ -47,11 +49,11 @@ func resolutionXMP(duplicateEntry bool) []byte {
 		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
 }
 
-// TestXMPExtensionPropertyResolution_DuplicateURIReplacement pins veraPDF's
-// extension type-map semantics: a later pdfaSchema entry with the same
-// namespace URI replaces the earlier one, so a property declared only by the
-// replaced entry fails 6.6.2.3.1 t2 (verified live on PDF_UA-1__5-t04-fail-a
-// under PDF/A-2b).
+// TestXMPExtensionPropertyResolution_DuplicateURIReplacement pins the
+// extension type-map merge interpretation under ISO 19005-2 §6.6.2.3.1: a
+// later pdfaSchema entry with the same namespace URI replaces the earlier one,
+// so a property declared only by the replaced entry has no resolvable value
+// type and fails t2.
 func TestXMPExtensionPropertyResolution_DuplicateURIReplacement(t *testing.T) {
 	var dup []Violation
 	xmpCheckExtensionPropertyResolution(resolutionXMP(true), 2, &dup)
@@ -67,8 +69,11 @@ func TestXMPExtensionPropertyResolution_DuplicateURIReplacement(t *testing.T) {
 }
 
 // TestXMPPropertyTypes_KnownNamespacesWithoutMembers pins the empty pdfx and
-// adhocwf catalogs: veraPDF registers both namespaces but predefines no
-// properties, so every member fails definedness (t1) and type resolution (t2).
+// adhocwf catalogs: both namespaces are recognized but predefine no
+// properties. Per ISO 19005-2 §6.6.2.3.1 a property is only valid when it
+// belongs to a predefined schema or a compliant extension schema, so absent
+// either, every member of these namespaces fails definedness (t1) and type
+// resolution (t2).
 func TestXMPPropertyTypes_KnownNamespacesWithoutMembers(t *testing.T) {
 	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
 		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"` +

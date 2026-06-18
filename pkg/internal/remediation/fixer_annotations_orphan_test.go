@@ -10,8 +10,11 @@ import (
 // TestFixAnnotations_NullsForbiddenObject verifies that removing a forbidden
 // annotation also nulls its indirect object, not just its /Annots slot. A
 // Rendition /Screen annotation carries its MediaClip embedded-file filespec
-// inline, so an object left live keeps the filespec visible to veraPDF's
-// object-wide scan (ISO 19005-3 §6.8 / 19005-4 §6.9).
+// inline, so an object left live still defines a reachable embedded file in
+// the document body. Dropping the /Annots reference alone does not detach it,
+// because conformance is assessed over all indirect objects, not only those
+// reachable from a page. The embedded-file filespec is forbidden by
+// ISO 19005-3 §6.8 / 19005-4 §6.9.
 func TestFixAnnotations_NullsForbiddenObject(t *testing.T) {
 	pdf := annotsPDF("[4 0 R 5 0 R]",
 		"<< /Type /Annot /Subtype /Screen /Rect [0 0 10 10] /A << /S /Rendition /R << /Type /Rendition /C << /Type /MediaClip /D << /Type /Filespec /F (clip) /EF << /F 9 0 R >> >> >> >> >> >>",

@@ -56,8 +56,9 @@ func TestFixJavaScript_RemovesForbiddenNamedAction(t *testing.T) {
 
 // TestFixJavaScript_RemovesNamesJavaScriptTree pins a swap bug where the
 // rebuilt /Names dict was written into the discarded catalog copy, so the
-// allocated catalog silently kept its /Names/JavaScript tree and litho's
-// post-fix validation kept failing 6.5.1/6.6.1 while veraPDF passed.
+// allocated catalog silently kept its /Names/JavaScript tree. JavaScript is a
+// forbidden action subtype (ISO 19005-2 §6.5.1, §6.6.1), so the surviving
+// /Names/JavaScript tree left the output non-conformant despite the fix.
 func TestFixJavaScript_RemovesNamesJavaScriptTree(t *testing.T) {
 	pdf := buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R /Names << /JavaScript << /Names [(init) << /S /JavaScript /JS (app.alert\\(1\\)) >>] >> /Dests << /Names [] >> >> >>",

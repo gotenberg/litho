@@ -171,6 +171,13 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 	return fixes, nil
 }
 
+// maxPlausibleObjNum caps the object numbers fixOutputIntent will tolerate
+// before treating the cross-reference index as structurally implausible.
+// Anti-DoS guard, not spec-mandated: real documents stay far below 100000
+// objects (the ISO 32000-1 architectural limit is 8388607), so a higher
+// number signals a damaged index that could corrupt newly added objects.
+const maxPlausibleObjNum = 100000
+
 func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, profile string) ([]string, error) {
 	// Skip structurally damaged documents where embedding a large ICC
 	// profile risks corruption during serialization.
@@ -181,7 +188,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	// Skip documents with implementation-limit or structural issues that
 	// can corrupt newly added objects during serialization.
 	for objNum, entry := range doc.Index.Entries {
-		if entry.Offset > doc.FileSize() || int64(objNum) > 100000 {
+		if entry.Offset > doc.FileSize() || int64(objNum) > maxPlausibleObjNum {
 			return nil, nil
 		}
 	}
@@ -249,8 +256,8 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 		// ISO 32000-2 Table 401 and ISO 19005-4 §6.2.3 keep GTS_PDFA1 as
 		// the PDF/A output-intent subtype for every part; a "GTS_PDFA"
-		// subtype does not exist, and veraPDF ignores intents carrying it
-		// (verified live: the 6.2.4.3 device-colour rules keep firing).
+		// subtype does not exist, so an intent carrying it does not satisfy
+		// the device-colour requirement of §6.2.4.3.
 		outputIntent := ast.PdfDict{
 			"Type":                      ast.PdfName("OutputIntent"),
 			"S":                         ast.PdfName("GTS_PDFA1"),
@@ -433,8 +440,8 @@ func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 // sub-dict defines `key` in its own /Resources ColorSpace, creating the
 // Resources dict when absent. CharProcs are a sub-scope like Form XObjects:
 // a page-level DefaultCS never covers their operators (ISO 32000-2
-// §8.6.5.7), so the Default must live on the font itself for veraPDF's
-// gOutputCS resolution to see it.
+// §8.6.5.7), so the Default must live on the font's own /Resources to
+// take effect inside the glyph descriptions.
 func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, key ast.PdfName, csArr ast.PdfArray, visited map[int]bool) bool {
 	fontObj, ok := newRes["Font"]
 	if !ok {

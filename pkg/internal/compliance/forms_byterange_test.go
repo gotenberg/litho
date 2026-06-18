@@ -28,8 +28,9 @@ func byteRangePDF(byteRange string) []byte {
 
 // TestSignatureByteRange pins ISO 19005-2 §6.4.3 t1: a /ByteRange that
 // does not cover the entire file fails, a missing ByteRange stays
-// silent (the veraPDF goldens fire t1 only on present, non-covering
-// ranges), and part 1 carries no such rule.
+// silent (t1 evaluates the coverage of a present /ByteRange, so with no
+// array there is nothing to measure against the file length), and part 1
+// carries no such rule.
 func TestSignatureByteRange(t *testing.T) {
 	run := func(data []byte, profile models.PDFAProfile) []Violation {
 		t.Helper()

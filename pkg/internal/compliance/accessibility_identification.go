@@ -32,10 +32,9 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 
 	// ISO 14289-2 §8.7 t1 requires a /Name on every OC config dict (including the
 	// default /D) ONLY when /OCProperties has a /Configs entry with at least one
-	// config dict; a UA-2 document with only /D and no /Configs passes (verified
-	// live on 6-10-t01 / 7.10-t01 remediated to PDF/UA-2). ISO 14289-1 §7.10 t1
-	// has no such condition: UA-1 requires /Name on /D unconditionally (verified:
-	// vera fires 7.10 t1 on /D-only docs). The /AS prohibition (t2) applies always.
+	// config dict; a UA-2 document with only /D and no /Configs passes. ISO
+	// 14289-1 §7.10 t1 has no such condition: UA-1 requires /Name on /D
+	// unconditionally. The /AS prohibition (t2) applies always.
 	configs, _ := document.ResolveArray(ctx, doc, ocProps["Configs"])
 	nameRequired := profile != "PDF/UA-2" || len(configs) >= 1
 
@@ -83,8 +82,8 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 
 // checkMetadataTypeSubtype validates ISO 14289-1 §7.1 t8 and ISO 14289-2
 // §8.11.1 t2: the catalog /Metadata entry shall be a metadata stream whose
-// dictionary has /Type Metadata and /Subtype XML. veraPDF's containsMetadata is
-// satisfied only when both name values are correct.
+// dictionary has /Type Metadata and /Subtype XML. Both name values must be
+// correct for the entry to conform.
 func checkMetadataTypeSubtype(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -154,9 +153,9 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 func checkPDFUAIdentificationIn(ctx context.Context, xmpData []byte, profile string) []Violation {
 	switch profile {
 	case "PDF/UA-1":
-		// veraPDF separates presence (t1, containsPDFUAIdentification)
-		// from value correctness (t2): a packet with no pdfuaid:part at
-		// all fails t1, not t2.
+		// ISO 14289-1 §5 splits presence (t1) from value correctness
+		// (t2): a packet with no pdfuaid:part at all fails t1, the
+		// missing-identifier rule, not t2, which targets a wrong value.
 		if !containsPDFUAIDProperty(ctx, xmpData) {
 			return fail(Rule_14289_1_5_t01, "pdfuaid:part missing from XMP")
 		}

@@ -18,13 +18,14 @@ func orphanMCIDRule(profile string) Rule {
 }
 
 // checkOrphanMCIDs fires when a page content stream carries marked content
-// with an /MCID that the ParentTree does not cover: veraPDF resolves
-// isTaggedContent exclusively through page /StructParents → ParentTree →
-// structure element, never by walking the structure tree downward, so a
-// correctly parented MCID with an empty ParentTree still reads as untagged
-// real content (verified live on PDF_A-1a__veraPDF_test_suite_6-8-4-t01-fail-a
-// remediated to PDF/UA-1: 7.1 t3 fires on contentItem{mcid:0} while the Span
-// holds /K [0]). Content inside an Artifact scope is exempt per the rule.
+// with an /MCID that the ParentTree does not cover. Per ISO 14289-1 §7.1
+// (and ISO 14289-2 §8.2.2), real content is "tagged" only when it is
+// reachable from a structure element, and the spec-defined link from a
+// content item back to its structure element runs forward through the page
+// /StructParents key into the ParentTree, not by walking the structure tree
+// downward. So a marked-content item that the ParentTree never maps is
+// untagged real content even if some structure element's /K happens to name
+// the same MCID. Content inside an Artifact scope is exempt per the rule.
 func checkOrphanMCIDs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -49,7 +50,7 @@ func checkOrphanMCIDs(ctx context.Context, doc *document.Document, catalog ast.P
 		if err != nil {
 			continue
 		}
-		mcids := collectNonArtifactMCIDs(ctx, doc, ops)
+		mcids := collectNonArtifactMCIDs(ctx, ops)
 		if len(mcids) == 0 {
 			continue
 		}
@@ -58,7 +59,7 @@ func checkOrphanMCIDs(ctx context.Context, doc *document.Document, catalog ast.P
 			if !covered[mcid] {
 				results = append(results, failf(rule,
 					"page %d: marked content MCID %d is not reachable through the ParentTree", pageIdx+1, mcid)...)
-				break // one finding per page mirrors veraPDF's verdict granularity
+				break // one finding per page: the page already fails, further MCIDs add no information
 			}
 		}
 	}
@@ -67,7 +68,7 @@ func checkOrphanMCIDs(ctx context.Context, doc *document.Document, catalog ast.P
 
 // collectNonArtifactMCIDs returns the MCIDs of BDC properties outside any
 // enclosing Artifact marked-content scope, in stream order.
-func collectNonArtifactMCIDs(ctx context.Context, doc *document.Document, ops []content.Operation) []int {
+func collectNonArtifactMCIDs(ctx context.Context, ops []content.Operation) []int {
 	var mcids []int
 	artifactDepth := 0
 	inArtifact := 0

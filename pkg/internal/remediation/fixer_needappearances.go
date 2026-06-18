@@ -43,6 +43,7 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 
 	newAcroForm := make(ast.PdfDict, len(acroForm))
 	maps.Copy(newAcroForm, acroForm)
+	// ISO 19005-2/3 §6.9/§6.4: the AcroForm /NeedAppearances flag shall not be true.
 	delete(newAcroForm, "NeedAppearances")
 
 	if ref, ok := acroFormObj.(ast.PdfIndirectRef); ok {

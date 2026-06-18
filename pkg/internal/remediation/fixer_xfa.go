@@ -49,6 +49,7 @@ func fixXFA(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 
 	newAcroForm := make(ast.PdfDict, len(acroForm))
 	maps.Copy(newAcroForm, acroForm)
+	// ISO 19005-2/3 §6.4.2: an interactive form shall not contain /XFA.
 	delete(newAcroForm, "XFA")
 
 	if acroFormRef.ObjectNum > 0 {

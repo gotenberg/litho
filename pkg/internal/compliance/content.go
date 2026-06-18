@@ -46,7 +46,10 @@ var validPDFOperators = map[string]bool{
 }
 
 // forbiddenInlineImageFilters lists filter names that are not permitted in
-// inline images for PDF/A conformance (parts 1-3).
+// inline images for PDF/A conformance. ISO 19005-1 §6.1.10 forbids
+// LZWDecode (and its inline abbreviation LZW) and Crypt; the abbreviated
+// filter names are those of ISO 32000-1 Table 92 (and the full names of
+// Table 6). Parts 2/3 use the positive allowedInlineImageFilters set.
 //
 //nolint:gochecknoglobals // package-level lookup table.
 var forbiddenInlineImageFilters = map[string]bool{
@@ -364,7 +367,7 @@ func isPDFWhitespace(b byte) bool {
 func unknownOperatorRule(part int) Rule {
 	// ISO 19005-1 numbers the undefined-operator rule §6.2.10 (Op_Undefined);
 	// §6.2.2 t1 in part 1 is the unrelated OutputIntent rule. Parts 2-4 renumber
-	// it to §6.2.2 t1. veraPDF fires 6.2.10 t1 under A-1.
+	// it to §6.2.2 t1.
 	return ruleByPart(part, Rule_19005_1_6_2_10_t01, Rule_19005_2_6_2_2_t01, Rule_19005_3_6_2_2_t01, Rule_19005_4_6_2_2_t01)
 }
 

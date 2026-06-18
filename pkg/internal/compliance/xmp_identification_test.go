@@ -16,7 +16,8 @@ func xmpPacket(description string) []byte {
 // TestXMPIdentification_ForeignPartNotFlagged guards the FP class where a
 // local name like "part" under a different namespace URI (pdfuaid:part on a
 // dual PDF/A + PDF/UA file) was reported as a pdfaid wrong-prefix violation.
-// veraPDF keys the identification rules to the pdfaid namespace URI only.
+// XMP properties are identified by namespace URI, not local name, so a "part"
+// bound to the PDF/UA URI is a distinct property and never aliases pdfaid:part.
 func TestXMPIdentification_ForeignPartNotFlagged(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"

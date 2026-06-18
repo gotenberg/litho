@@ -1,7 +1,7 @@
 package compliance
 
-// Hand-maintained rules not present in the VeraPDF validation profiles.
-// These are litho-specific additions based on ISO 19005-4 requirements.
+// Hand-maintained, litho-specific rules with no standalone profile entry.
+// These additions encode ISO 19005-4 requirements directly.
 
 //nolint:gochecknoglobals // package-level rule definitions are the core design.
 var (
@@ -318,9 +318,10 @@ var (
 		Description:   "Schematron assertion with warning or info severity fired on the embedded invoice",
 	}
 
-	// Parts 2/3 undefined-resource rules, mirroring the part-4 t3 and the
-	// veraPDF PDFA-2/3 profiles (test `undefinedResourceNames == ''`,
-	// verified live on PDF_A-4__veraPDF_test_suite_6-2-2-t03-fail-a).
+	// Parts 2/3 undefined-resource rules. ISO 19005-2 and ISO 19005-3
+	// §6.2.2 carry the same content-stream resource-definition requirement
+	// that ISO 19005-4 §6.2.2 enforces at test 3: every named resource an
+	// operator references shall be defined in the resource dictionary.
 	Rule_19005_2_6_2_2_t03 = Rule{
 		Specification: "ISO_19005_2",
 		Clause:        "6.2.2",

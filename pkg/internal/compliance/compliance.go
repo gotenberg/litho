@@ -101,7 +101,8 @@ func runValidation(ctx context.Context, doc *document.Document, profile string, 
 //
 //nolint:errname // Violation is the domain name; "ViolationError" would be redundant.
 type Violation struct {
-	// Rule is the VeraPDF validation rule that was violated.
+	// Rule is the conformance rule that was violated, identifying the
+	// governing ISO clause, test number, and description.
 	Rule Rule
 
 	// Context describes where the violation occurred (e.g., page number,

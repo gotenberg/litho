@@ -169,8 +169,10 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 		}
 		_, resolved := encodings.GlyphToRuneFull(string(name))
 		if !resolved {
-			// Also check Symbol encoding glyph names (e.g., alpha, beta, etc.)
-			// which are standard Adobe glyph names recognized by VeraPDF.
+			// Also check Symbol encoding glyph names (e.g., alpha, beta, etc.).
+			// These are standard Adobe glyph names from the Symbol font
+			// character set (PDF Reference Appendix D, Table D.5) and resolve
+			// to Unicode without a /ToUnicode CMap.
 			_, resolved = encodings.SymbolGlyphsUnicode[string(name)]
 		}
 		if !resolved {
@@ -335,7 +337,7 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 						code = int(v)
 					case ast.PdfName:
 						if code >= 0 && code <= 255 {
-							result[byte(code)] = string(v) //nolint:gosec
+							result[byte(code)] = string(v) //nolint:gosec // G115: code is bounded to 0..255 by the guard above.
 						}
 						code++
 					}
@@ -394,14 +396,11 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return nil
 	}
 
-	// Type3 fonts: PDF/A-4 tolerates a missing map (its only ToUnicode
-	// rule starts `toUnicode == null ||`), but PDF/UA does NOT: 7.21.7 t1
-	// and 8.4.5.8 t1 fail a Type 3 glyph with no resolvable Unicode
-	// (verified live on PDF_A-1b__veraPDF_test_suite_6-3-6-t01-fail-a
-	// remediated to PDF/UA-1; the previous blanket UA exemption here was
-	// a 38+38-cell vera-only pool). PDF/A parts 1-3 (levels a/u) and
-	// PDF/UA require either AGL-resolvable Differences names or a
-	// /ToUnicode CMap.
+	// Type3 fonts: PDF/A-4 tolerates a missing /ToUnicode map, but PDF/UA
+	// does not. ISO 14289-1 §7.21.7 and ISO 14289-2 §8.4.5.8 require every
+	// glyph to map to a Unicode value, so a Type 3 glyph with no resolvable
+	// Unicode fails under PDF/UA. PDF/A parts 1-3 (levels a/u) and PDF/UA
+	// require either AGL-resolvable Differences names or a /ToUnicode CMap.
 	if isType3Font(ctx, doc, fontDict) {
 		if PDFAPart(profile) == 4 {
 			return nil
@@ -598,11 +597,11 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 
 // checkToUnicodeCMapValues validates that a /ToUnicode CMap, if present, is
 // decodable and does not map to invalid Unicode values (U+0000, U+FEFF, U+FFFE).
-// The veraPDF rule (e.g. PDFA-4F 6.2.10.7 t1) is Glyph-scoped: only the
-// Unicode strings of glyphs referenced for rendering are tested, so a
-// forbidden destination behind an unused character code passes. usage
-// carries the rendered character codes; with no recorded usage the check
-// is vacuous, matching the absence of Glyph objects in veraPDF's model.
+// Per ISO 19005-4 §6.2.10.7, the requirement applies to the Unicode strings of
+// glyphs that are actually shown: the destination of a CMap entry behind a
+// character code that is never rendered cannot affect the displayed text, so it
+// passes. usage carries the rendered character codes; with no recorded usage no
+// glyph is shown and the check is vacuous.
 func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeCMapValuesRule(profile)
 	if rule.Specification == "" {
@@ -660,13 +659,12 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	}
 
 	// A used code that is absent from the ToUnicode CMap and carries no
-	// encoding glyph name renders .notdef, whose Unicode value is U+0000:
-	// veraPDF fires the value rule on it (verified live on
-	// PDF_A-2b__veraPDF_test_suite_6-2-11-8-t01-fail-a under PDF/A-2a,
-	// where <00> Tj against an 8-entry bfchar lacking code 0 fails
-	// 6.2.11.7.2 t2). A code with a real glyph name is skipped: veraPDF
-	// derives its Unicode from the name. Type0 fonts are excluded; their
-	// unmapped codes fail the per-glyph coverage rule (t1 family) instead.
+	// encoding glyph name renders .notdef, whose implied Unicode value is
+	// U+0000, a forbidden destination under ISO 19005-2 §6.2.11.7.2. A code
+	// with a real glyph name is skipped: its Unicode is derived from the name
+	// via the Adobe Glyph List, so no /ToUnicode entry is needed. Type0 fonts
+	// are excluded; their unmapped codes fail the per-glyph coverage rule
+	// (t1 family) instead.
 	if st := fontSubtype(ctx, doc, fontDict); st == "Type1" || st == "MMType1" {
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 		codes := make([]byte, 0, len(usage.charCodes))
@@ -680,9 +678,10 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 			}
 			// Mirror checkNotdefGlyph's encoding semantics: a missing
 			// explicit entry only implies .notdef in the control range,
-			// since standard encodings provide implicit names for
-			// printable codes (veraPDF derives Unicode from those; firing
-			// on them produced five PASS-fixture FPs in gate-41).
+			// since standard encodings provide implicit glyph names for
+			// printable codes (0x20 and above). Those names resolve to
+			// Unicode through the Adobe Glyph List, so the code is defined
+			// and must not fire the value rule.
 			name := enc[c]
 			if name != "" && name != ".notdef" {
 				continue
@@ -690,21 +689,21 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 			if name == "" && c >= 0x20 {
 				continue
 			}
-			// TrueType fonts never reach here: without glyph names
-			// veraPDF resolves no Unicode at all (toUnicode == null
-			// PASSES t2; gate-41 FP evidence: symbolic TrueType code 2
-			// in PDF_UA-1__7.1-t05-pass-a passes veraPDF). Only the
-			// Type1 family's name chain bottoms out at .notdef/U+0000.
+			// TrueType fonts never reach here: a symbolic TrueType font
+			// carries no PDF-level glyph names, so an unmapped code has no
+			// implied Unicode value at all (not even U+0000), and a missing
+			// /ToUnicode is therefore conformant. Only the Type1 family's
+			// name chain bottoms out at .notdef, whose value is U+0000.
 			return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and no glyph name (renders U+0000)",
 				fontName, pageNum, c)
 		}
 	} else if st == "TrueType" {
 		// A TrueType code absent from an explicit /Encoding renders .notdef
-		// (PDF 9.6.6.4, mirroring checkNotdefGlyph); veraPDF assigns it U+0000
-		// and fires the value rule when no ToUnicode entry overrides it. The
-		// len(enc)>0 guard restricts this to fonts with an explicit /Encoding:
-		// symbolic TrueType (no /Encoding) resolves no Unicode at all, so
-		// toUnicode==null PASSES t2 (gate-41: 7.1-t05-pass-a code 2).
+		// (PDF 9.6.6.4, mirroring checkNotdefGlyph), whose implied Unicode is
+		// U+0000, a forbidden destination when no ToUnicode entry overrides it.
+		// The len(enc)>0 guard restricts this to fonts with an explicit
+		// /Encoding: a symbolic TrueType font has no /Encoding and thus no
+		// implied Unicode, so a missing /ToUnicode is conformant.
 		if enc := resolveSimpleFontEncoding(ctx, doc, fontDict); len(enc) > 0 {
 			codes := make([]byte, 0, len(usage.charCodes))
 			for b := range usage.charCodes {

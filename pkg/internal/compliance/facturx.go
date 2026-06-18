@@ -257,6 +257,8 @@ var (
 		// the validator accepts both forms.
 		documentVersion: "1.0",
 		altVersions:     []string{"2.1"},
+		// Factur-X 1.0.07 conformance levels (fx:ConformanceLevel),
+		// EN 16931 / CEN/TS 16931-2 profiles plus the German XRECHNUNG.
 		allowedLevels: map[string]bool{
 			"MINIMUM": true, "BASIC WL": true, "BASIC": true,
 			"EN 16931": true, "EXTENDED": true, "XRECHNUNG": true,

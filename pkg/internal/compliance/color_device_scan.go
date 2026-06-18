@@ -282,12 +282,14 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	}
 
 	// Also suppress if the Form XObject's /Group/CS provides a device-
-	// independent blending colour space that covers the device CS. veraPDF
-	// only honours transparency-group blending-space coverage under PDF/A-4
-	// (PDF 2.0); the parts 2/3 device-colour tests are strictly gOutputCS-based
-	// (verified live on 6-2-4-3-t04-pass-e under PDF/A-2b: a CalRGB form /Group
-	// does not cover DeviceRGB when the OutputIntent is CMYK, so 6.2.4.3 t2
-	// fires). Mirror the page-level part==4 gate.
+	// independent blending colour space that covers the device CS. Only
+	// PDF/A-4 (ISO 19005-4, PDF 2.0) lets a transparency-group blending
+	// colour space cover device colour usage inside the group. Under
+	// PDF/A-2 and PDF/A-3 (ISO 19005-2/-3, PDF 1.7) device-colour
+	// conformance depends solely on the document OutputIntent destination
+	// colour space, so a CalRGB form /Group does not cover DeviceRGB when
+	// the OutputIntent is CMYK and §6.2.4.3 still fires. Mirror the
+	// page-level part==4 gate.
 	if part == 4 {
 		groupCS := formGroupICCColorSpace(ctx, doc, stream)
 		if groupCS == "RGB " {
@@ -392,9 +394,9 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 		// Type3 fonts may legally inherit resources from the page.
 		// CharProcs are a sub-scope like Form XObjects: only the FONT's
 		// own /Resources DefaultCS covers their operators, never the
-		// page's (ISO 32000-2 §8.6.5.7; veraPDF fails 6.2.4.3 t2 on a
-		// charproc rg despite an injected page DefaultRGB, verified live
-		// on PDF_A-2b__veraPDF_test_suite_6-2-4-3-t01-fail-h).
+		// page's (ISO 32000-2 §8.6.5.7). A charproc rg therefore still
+		// trips §6.2.4.3 even when the page defines a DefaultRGB, since
+		// that page-level default does not reach into the font sub-scope.
 		var charProcUsage deviceCSUsage
 		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
 		if err == nil && charProcs != nil {

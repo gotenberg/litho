@@ -110,9 +110,10 @@ func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 }
 
 // parseXMPSchemaContext extracts the namespace URI and local name from a
-// VeraPDF 6.6.2.3.1 context string. Format: "<URI>:<localName> <detail>"
-// where URI always ends with "/". Returns ok=false if the context does
-// not match this shape.
+// clause 6.6.2.3.1 violation context string. The compliance engine
+// encodes the offending XMP property as "<URI>:<localName> <detail>",
+// where the namespace URI always ends with "/". Returns ok=false if the
+// context does not match this shape.
 func parseXMPSchemaContext(s string) (nsURI, localName string, ok bool) {
 	idx := strings.Index(s, "/:")
 	if idx < 0 {

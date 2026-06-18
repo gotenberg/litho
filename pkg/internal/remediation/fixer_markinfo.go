@@ -27,6 +27,8 @@ func fixMarkInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
 	maps.Copy(newCatalog, catalogDict)
+	// ISO 14289-1 §7.1 / ISO 32000-1 §14.7: a tagged document's catalog
+	// requires /MarkInfo << /Marked true >>.
 	newCatalog["MarkInfo"] = ast.PdfDict{"Marked": ast.PdfBool(true)}
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 

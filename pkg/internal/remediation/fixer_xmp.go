@@ -363,8 +363,9 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	// PDF/A-4 identification schema; the XMP 2004/2005 catalogs that
 	// ISO 19005-1 §6.7.9 and 19005-2/3 §6.6.2.3.1 bind to predefine
 	// pdfaid part/conformance/amd/corr only, so a leftover rev (typical
-	// when re-targeting a PDF/A-4 document) fails veraPDF 6.6.2.3.1
-	// t1/t2 as a non-predefined property.
+	// when re-targeting a PDF/A-4 document) is a non-predefined property
+	// in those parts and must be declared in an extension schema or
+	// dropped. Dropping it is the conformant repair here.
 	if part >= 1 && part <= 3 {
 		if loc := findXMPProperty(buf, pdfaidNS, "rev"); loc.Form != xmpPropertyNotFound {
 			buf = removeXMPProperty(buf, loc)
@@ -381,7 +382,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 			// valid in one stroke, so the property must be re-checked
 			// before injecting: a second pdfaid:part would make the
 			// packet's XMP serialization invalid (ISO 16684-1 forbids
-			// duplicate properties, veraPDF 6.7.2.1 t4).
+			// duplicate properties on the same XMP node).
 			if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
 				buf = out
 			}
@@ -420,8 +421,9 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 
 	// Normalize PDF-format date values in XMP date properties. Some
 	// producers copy the Info dict D:YYYY... string verbatim into
-	// xmp:CreateDate and friends; XMP Date is ISO 8601 and veraPDF
-	// fails the value-type rule on the D: form, so convert in place.
+	// xmp:CreateDate and friends; the XMP Date value type is ISO 8601
+	// (ISO 16684-1), so the D: form is an invalid Date value. Convert
+	// in place.
 	for _, dateProp := range []string{"CreateDate", "ModifyDate", "MetadataDate"} {
 		loc := findXMPProperty(buf, xmpNS, dateProp)
 		if loc.Form == xmpPropertyNotFound {
@@ -669,9 +671,9 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	}
 
 	// Sync pdf:Keywords with Info /Keywords. A present-but-empty
-	// /Keywords also drives the sync: veraPDF compares the values
-	// verbatim, so a whitespace-only pdf:Keywords is not equivalent to
-	// an empty Info entry (§6.7.3 t5, verified live).
+	// /Keywords also drives the sync: ISO 19005 §6.7.3 requires the XMP
+	// property and the Info entry to match verbatim, so a whitespace-only
+	// pdf:Keywords is not equivalent to an empty Info entry.
 	if info.Keywords != "" || info.Present["Keywords"] {
 		escaped := xmlEscape(info.Keywords)
 		if findXMPProperty(buf, pdfNS, "Keywords").Form != xmpPropertyNotFound {
@@ -906,9 +908,9 @@ type extSchemaInfo struct {
 }
 
 // extPropInfo names one custom property and the XMP valueType matching its
-// serialized shape. veraPDF type-checks every declared property against its
-// actual container (ISO 19005-2 §6.6.2.3.1 t2), so declaring plain Text for
-// an rdf:Bag/Seq/Alt property trades the missing-schema violation for a
+// serialized shape. A declared property's valueType must match its actual
+// container (ISO 19005-2 §6.6.2.3.1 t2), so declaring plain Text for an
+// rdf:Bag/Seq/Alt property trades the missing-schema violation for a
 // type-mismatch one.
 type extPropInfo struct {
 	name      string
@@ -916,9 +918,9 @@ type extPropInfo struct {
 	// structNS, structPrefix, and structFields describe an inline
 	// structure property (rdf:parseType="Resource" or nested element
 	// fields). When structFields is non-empty the generator emits a
-	// matching pdfaSchema:valueType definition, because veraPDF
-	// type-checks every declared property and a structure declared as a
-	// simple type fails ISO 19005-2 §6.6.2.3.1 t2.
+	// matching pdfaSchema:valueType definition: a declared property's
+	// valueType must match its serialized shape, so a structure declared
+	// as a simple type fails ISO 19005-2 §6.6.2.3.1 t2.
 	structNS     string
 	structPrefix string
 	structFields []string
@@ -928,12 +930,12 @@ type extPropInfo struct {
 // must be declared in a PDF/A extension schema for the given PDF/A part.
 // Custom namespaces always qualify. Predefined XMP schema namespaces
 // qualify only for property names the XMP Specification variant for the
-// part does not define (e.g. exif:MakerNote under PDF/A-2): veraPDF
-// registers extension-schema properties per namespace and name with no
-// predefined-namespace restriction (veraPDF-library
-// SchemasDefinitionCreator.createExtendedSchemasDefinition), so extending
-// a predefined schema is an accepted repair. The pdfaid identification
-// namespace keeps its dedicated handling and is never collected here.
+// part does not define (e.g. exif:MakerNote under PDF/A-2): the PDF/A
+// extension schema mechanism keys declarations per namespace URI and
+// property name and does not forbid declaring a property that lives in a
+// predefined namespace, so extending a predefined schema is a conformant
+// repair. The pdfaid identification namespace keeps its dedicated
+// handling and is never collected here.
 func needsExtensionDeclaration(part int, ns, name string) bool {
 	if ns == pdfaidNS {
 		return false
@@ -1047,10 +1049,10 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 					curType = ""
 					// rdf:parseType="Resource" marks an inline structure:
 					// capture its field names so the generator can emit a
-					// matching pdfaSchema:valueType definition. veraPDF
-					// type-checks every declared property, so a structure
-					// declared as a simple type fails §6.6.2.3.1 t2, and
-					// an undeclared one fails t1.
+					// matching pdfaSchema:valueType definition. A declared
+					// property's valueType must match its serialized shape,
+					// so a structure declared as a simple type fails
+					// §6.6.2.3.1 t2, and an undeclared one fails t1.
 					for _, attr := range t.Attr {
 						if attr.Name.Local == "parseType" {
 							curType = "structPending"
@@ -1082,7 +1084,7 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 					// Structure field. Fields spanning more than one
 					// namespace cannot be described by a single pdfaType
 					// definition; drop the property rather than declare a
-					// type veraPDF would reject.
+					// type whose fields do not all share its namespace.
 					if curStructNS == "" {
 						curStructNS = t.Name.Space
 					}
@@ -1108,9 +1110,17 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 		}
 	}
 
-	// Build result.
+	// Build result. Iterate namespaces in sorted URI order so the
+	// synthesized fallback prefixes (nsN) - and therefore the emitted XMP
+	// bytes - are deterministic across runs.
 	schemas := make([]extSchemaInfo, 0, len(nsProps))
-	for nsURI, props := range nsProps {
+	nsURIs := make([]string, 0, len(nsProps))
+	for nsURI := range nsProps {
+		nsURIs = append(nsURIs, nsURI)
+	}
+	sort.Strings(nsURIs)
+	for _, nsURI := range nsURIs {
+		props := nsProps[nsURI]
 		prefix := nsPrefixes[nsURI]
 		if prefix == "" {
 			prefix = "ns" + fmt.Sprintf("%d", len(schemas)+1)

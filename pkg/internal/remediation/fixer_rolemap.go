@@ -132,8 +132,8 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 				continue
 			}
 			// Annot is a PDF 1.5 type: under PDF/A-1 (PDF 1.4) it is
-			// NON-standard and its mapping is the required repair, not a
-			// forbidden standard remap (veraPDF PDFA-1A 6.8.3.4 t1).
+			// NON-standard, so mapping it to a PDF 1.4 standard type is the
+			// required repair, not a forbidden standard remap.
 			if part1 && src == "Annot" {
 				continue
 			}

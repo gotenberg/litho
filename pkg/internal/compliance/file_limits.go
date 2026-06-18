@@ -11,21 +11,28 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
+// PDF implementation limits. The PDF/A-1 (suffix 1) values mirror
+// ISO 32000-1:2008 Annex C, Table C.1 (Architectural limits) and are
+// imposed as conformance limits by ISO 19005-1 §6.1.12. The PDF/A-2..4
+// values (suffix 2) reflect PDF 2.0 (ISO 32000-2), which raises the real
+// and string limits and the DeviceN colorant count; ISO 19005-2/3
+// §6.1.13 imposes them. maxQNesting (q/Q graphics-state nesting) and
+// maxCID (16-bit CID space) are spec structural maxima, not Table C.1.
 const (
-	maxIntegerValue = 2_147_483_647
-	minIntegerValue = -2_147_483_648
-	maxNameBytes    = 127
-	maxIndirectObjs = 8_388_607
-	maxStringBytes1 = 65535
-	maxStringBytes2 = 32767
-	maxArrayCap1    = 8191
-	maxDictCap1     = 4095
-	maxRealAbs1     = 32767.0
-	maxRealAbs2     = 3.403e38
-	maxDeviceN1     = 8
-	maxDeviceN2     = 32
-	maxQNesting     = 28
-	maxCID          = 65535
+	maxIntegerValue = 2_147_483_647  // ISO 32000-1 Table C.1: largest integer.
+	minIntegerValue = -2_147_483_648 // ISO 32000-1 Table C.1: smallest integer.
+	maxNameBytes    = 127            // ISO 32000-1 Table C.1: name length in bytes.
+	maxIndirectObjs = 8_388_607      // ISO 32000-1 Table C.1: objects in a single file.
+	maxStringBytes1 = 65535          // ISO 32000-1 Table C.1: string length.
+	maxStringBytes2 = 32767          // ISO 32000-2: PDF 2.0 string length.
+	maxArrayCap1    = 8191           // ISO 32000-1 Table C.1: array elements.
+	maxDictCap1     = 4095           // ISO 32000-1 Table C.1: dictionary entries.
+	maxRealAbs1     = 32767.0        // ISO 32000-1 Table C.1: largest real magnitude.
+	maxRealAbs2     = 3.403e38       // ISO 32000-2: PDF 2.0 real magnitude (IEEE single).
+	maxDeviceN1     = 8              // ISO 32000-1: DeviceN colorant count.
+	maxDeviceN2     = 32             // ISO 32000-2: PDF 2.0 DeviceN colorant count.
+	maxQNesting     = 28             // ISO 32000-1 Table C.1: graphics-state (q/Q) nesting.
+	maxCID          = 65535          // 16-bit CID space.
 )
 
 func integerRangeRule(profile string) Rule {

@@ -29,11 +29,14 @@ func matchFontFixes(v compliance.Violation) bool {
 }
 
 func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
-	// Width corrections are gated on a validator-reported width mismatch
-	// (ISO 19005-1 §6.3.6, 19005-2 §6.2.10.5/§6.2.11.5). Rewriting widths
-	// uninvited turned conforming /Widths arrays into new 6.3.6 violations
-	// whenever litho's font-program width extraction disagreed with
-	// veraPDF's.
+	// Width corrections are gated on a reported width mismatch
+	// (ISO 19005-1 §6.3.6, 19005-2 §6.2.10.5/§6.2.11.5). These clauses
+	// require /Widths to agree with the embedded font program's metrics,
+	// so a correction is warranted only where that disagreement is
+	// reported. Rewriting widths uninvited turned conforming /Widths
+	// arrays into new §6.3.6 violations whenever litho's font-program
+	// width extraction rounded or interpreted a metric differently from
+	// the value the original producer already wrote conformantly.
 	hasWidthViolation := false
 	for _, v := range violations {
 		if clausePrefix(v, "6.2.10.5", "6.2.11.5", "6.3.6") {
@@ -69,7 +72,10 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			continue
 		}
 
-		for _, fontEntry := range fontDict {
+		// Sorted iteration so CMap object allocation (and the output
+		// bytes) is deterministic across runs.
+		for _, fontName := range sortedDictKeys(fontDict) {
+			fontEntry := fontDict[fontName]
 			var fontRef ast.PdfIndirectRef
 			if ref, ok := fontEntry.(ast.PdfIndirectRef); ok {
 				fontRef = ref
@@ -145,9 +151,11 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	}
 
 	// Shared metrics with the width CHECK (compliance.ExpectedSimpleFontWidths):
-	// the old private mapping fell back to gid == charCode for codes absent
-	// from the cmap and lacked the Type1 glyph-name chain, so it wrote widths
-	// veraPDF then flagged (the 60-cell post-remediation 6.2.11.5 pool).
+	// the remediation must compute the same expected widths the check uses, or
+	// it writes values the check then rejects under ISO 19005-2 §6.2.11.5. The
+	// old private mapping fell back to gid == charCode for codes absent from the
+	// cmap and lacked the Type1 glyph-name chain, so it produced widths that
+	// disagreed with the font program and stayed non-conforming after the fix.
 	expectedWidths, okMetrics := compliance.ExpectedSimpleFontWidths(ctx, doc, fontDict)
 
 	modified := false

@@ -594,11 +594,12 @@ func canonicalizePrefix(xmp []byte, canonical, uri string) []byte {
 			}
 			// If the canonical prefix is already bound to this URI on the
 			// element, renaming the alias would create a second
-			// xmlns:<canonical> attribute, which is not well-formed XML and
-			// makes a strict parser (veraPDF) reject the whole packet. Drop
-			// the alias declaration instead; the usage rewrite below still
-			// merges the alias's properties into the existing canonical
-			// namespace.
+			// xmlns:<canonical> attribute. XML 1.0 forbids duplicate
+			// attribute names on one element, so the packet would no longer
+			// be well-formed and any conforming XMP parser would reject it.
+			// Drop the alias declaration instead; the usage rewrite below
+			// still merges the alias's properties into the existing
+			// canonical namespace.
 			declEnd := idx + len(marker)
 			if bytes.Contains(out, fmt.Appendf(nil, `xmlns:%s="%s"`, canonical, uri)) ||
 				bytes.Contains(out, fmt.Appendf(nil, `xmlns:%s='%s'`, canonical, uri)) {
@@ -701,11 +702,6 @@ func rewriteNamespaceURI(xmp []byte, prefix, uri string) []byte {
 	}
 	return out
 }
-
-// errXMPPropertyNotFound is returned by the splicer helpers when a
-// property lookup fails. It is kept internal; callers switch on it via
-// [errors.Is].
-var errXMPPropertyNotFound = fmt.Errorf("xmp property not found")
 
 // elementTextRange identifies the byte ranges of the opening-tag body
 // and the closing-tag opening for an element of the form
@@ -889,7 +885,7 @@ func splitPrefix(name string) (prefix, local string) {
 	return "", name
 }
 
-// xmpDebugDump returns a human-readable summary of a splice location for
+// String returns a human-readable summary of a splice location for
 // use in log messages and test failures.
 func (l xmpPropertyLocation) String() string {
 	switch l.Form {

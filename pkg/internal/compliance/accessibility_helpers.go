@@ -251,11 +251,12 @@ func containsPDFUAIDPart(ctx context.Context, xmpData []byte, part string) bool 
 }
 
 // containsPDFUAIDProperty reports whether pdfuaid:part is present at all,
-// regardless of its value. veraPDF separates presence (clause 5 t1,
-// containsPDFUAIdentification) from value correctness (t2), so a missing
-// property must not be reported under the value rule (verified live on
-// PDF_A-1b__veraPDF_test_suite_6-7-9-t04-pass-e remediated to PDF/UA-1:
-// veraPDF fails 5-t1, not 5-t2).
+// regardless of its value. ISO 14289-1 §5 splits identification into two
+// distinct requirements: presence of the pdfuaid:part property
+// ([Rule_14289_1_5_t01]) and correctness of its value
+// ([Rule_14289_1_5_t02]). A missing property fails the presence requirement,
+// not the value requirement, so the value check keys off presence first to
+// avoid reporting an absent property under the value rule.
 func containsPDFUAIDProperty(ctx context.Context, xmpData []byte) bool {
 	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
 	xmp := string(xmpData)

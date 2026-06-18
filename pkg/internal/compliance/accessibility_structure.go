@@ -65,7 +65,8 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 		if rmns == nil {
 			continue
 		}
-		for typeName, mappingObj := range rmns {
+		for _, typeName := range sortedNames(rmns) {
+			mappingObj := rmns[typeName]
 			// t03: same-namespace circular mapping.
 			if roleMapChainReturnsSameNS(ctx, doc, string(srcURI), string(typeName), nsByURI) {
 				results = append(results, failf(Rule_14289_2_8_2_4_t03,
@@ -96,7 +97,8 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 	// remapped to non-standard types. This applies when the PDF uses legacy RoleMap
 	// entries alongside namespace-based structure.
 	roleMap, _ := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
-	for src, dstObj := range roleMap {
+	for _, src := range sortedNames(roleMap) {
+		dstObj := roleMap[src]
 		if isStandardStructType(src, "PDF/UA-2") {
 			dstName, _ := document.ResolveName(ctx, doc, dstObj)
 			if dstName != "" && !isStandardStructType(dstName, "PDF/UA-2") {
@@ -151,8 +153,7 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 		// they belong to the default standard structure namespace
 		// (ISO 32000-2 §14.8.6), and non-standard NS-less types resolve
 		// through the legacy /RoleMap, which the structure-type walk
-		// already validates against 8.2.4 t1. veraPDF keys the rule on
-		// SENonStandard the same way.
+		// already validates against 8.2.4 t1.
 		if elemNSURI != "" && !standardNamespaceURIs[elemNSURI] {
 			// Namespace may have a RoleMapNS that maps to a standard NS.
 			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) {
@@ -543,8 +544,9 @@ func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.P
 
 	// Check that Link structure elements exist in the tree. Resolve each
 	// element's /S through the legacy /RoleMap so a non-standard type mapped
-	// to Link (e.g. /Link1 -> /Link) counts as a Link structure element,
-	// matching how veraPDF derives the standard type before applying the rule.
+	// to Link (e.g. /Link1 -> /Link) counts as a Link structure element.
+	// ISO 14289-2 §8.2.5.20 governs the standard type, so the effective
+	// (role-mapped) type, not the raw /S name, decides whether the rule applies.
 	roleMap := LoadRoleMap(ctx, doc, treeRoot)
 	var linkStructCount int
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {

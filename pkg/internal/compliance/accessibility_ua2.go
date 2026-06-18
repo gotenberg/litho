@@ -50,9 +50,10 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			if isAnnotHidden(ctx, doc, annot) {
 				continue
 			}
-			// veraPDF's 8.10.2.3 t1 escapes structParentType == null: a widget
-			// not linked into the structure tree (no /StructParent) is exempt
-			// (verified on field widgets without /StructParent that vera passes).
+			// A widget with no /StructParent is not linked into the structure
+			// tree, so it has no structure-element label path. The ISO 14289-2
+			// §8.10.2.3 labelling requirement applies only to widgets that
+			// participate in the structure tree, so an unlinked widget is exempt.
 			if _, ok := annot["StructParent"]; !ok {
 				continue
 			}
@@ -156,10 +157,10 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		}
 	}
 
-	// Annotation destinations: veraPDF's 8.8 rules cover every
-	// intra-document PDDestination and PDGoToAction, including Link
-	// /Dest entries and GoTo actions hanging off any annotation's /A or
-	// /AA (additional-actions) entries.
+	// ISO 14289-2 §8.8 requires every intra-document destination to be a
+	// structure destination, regardless of where it is reached from. That
+	// covers Link /Dest entries and GoTo actions hanging off any
+	// annotation's /A or /AA (additional-actions) entries.
 	for _, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return results
@@ -266,9 +267,9 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 // structure element (has /Type /StructElem or /S key) rather than a page.
 // goToHasStructDest reports whether a GoTo action dict satisfies the
 // PDF/UA-2 §8.8 t2 requirement: either the action carries an /SD entry
-// (the PDF 2.0 dual-destination form, ISO 32000-2 Table 202; veraPDF's
-// containsStructDestination accepts it, see 8.2.5.20-t02-pass-a) or its
-// /D is itself a structure destination.
+// (the PDF 2.0 dual-destination form, ISO 32000-2 Table 202, where /SD
+// holds the structure destination) or its /D is itself a structure
+// destination.
 func goToHasStructDest(ctx context.Context, doc *document.Document, act ast.PdfDict) bool {
 	if _, hasSD := act["SD"]; hasSD {
 		return true
@@ -289,8 +290,7 @@ func isStructureDestination(ctx context.Context, doc *document.Document, destObj
 	}
 
 	// Dictionary destination: a /SD entry makes it a structure
-	// destination (ISO 32000-2 §12.3.2.3). veraPDF's PDDestination
-	// model checks exactly this key.
+	// destination (ISO 32000-2 §12.3.2.3).
 	if dict, err := document.ResolveDict(ctx, doc, destObj); err == nil && dict != nil {
 		if _, hasSD := dict["SD"]; hasSD {
 			return true

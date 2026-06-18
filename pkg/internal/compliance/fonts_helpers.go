@@ -142,11 +142,11 @@ func fontNameUTF8Rule(profile string) Rule {
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
 // The check only applies to profiles that require text-to-Unicode
 // mapping (Level A under Part 1, Levels U/A under Parts 2/3, and all
-// PDF/A-4 profiles); Level B fixtures never trigger it. Parts 2/3 key
-// the forbidden-value test (U+0000, U+FFFE, U+FEFF) as §6.2.11.7.2 t2,
-// not §6.2.11.7.3 (verified live on
-// PDF_A-2b__veraPDF_test_suite_6-2-11-8-t01-fail-a remediated to
-// PDF/A-2a; the t3 emission was a 32-cell litho-only mislabel).
+// PDF/A-4 profiles); Level B never requires Unicode mapping and so
+// never triggers it. Parts 2/3 key the forbidden-value test (U+0000,
+// U+FFFE, U+FEFF) as §6.2.11.7.2 t2: that test belongs to the
+// ToUnicode CMap value requirement, not to the §6.2.11.7.3 ActualText
+// requirement.
 func toUnicodeCMapValuesRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		if PDFUAPart(profile) == 2 {
@@ -545,13 +545,11 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 	return dw
 }
 
-// perGlyphToUnicodeRule selects the rule veraPDF fires per used glyph whose
-// Unicode mapping cannot be resolved (usedGlyph test `toUnicode != null`).
-// Identical to the font-level selector: veraPDF keys both the missing-map
-// and the unmapped-code case as §6.2.11.7.2 t1 under parts 2/3 (verified
-// live on 6-1-12-t10-fail-a under PDF/A-2a, where a t2 emission here was a
-// 48-cell bidirectional mismatch against vera's t1) and shares the UA ids
-// 7.21.7 t1 / 8.4.5.8 t1.
+// perGlyphToUnicodeRule selects the rule fired per used glyph whose Unicode
+// mapping cannot be resolved. ISO 19005-2/3 §6.2.11.7.2 t1 governs both the
+// missing-map and the unmapped-code case, so this is identical to the
+// font-level selector [toUnicodeRule]. The same identity holds for PDF/UA
+// (ISO 14289-1 §7.21.7 t1, ISO 14289-2 §8.4.5.8 t1).
 func perGlyphToUnicodeRule(profile string) Rule {
 	return toUnicodeRule(profile)
 }

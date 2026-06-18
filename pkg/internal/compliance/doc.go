@@ -1,6 +1,6 @@
 // Package compliance validates PDFs against ISO 19005 (PDF/A) and
-// ISO 14289 (PDF/UA) using rules derived from the VeraPDF validation profiles
-// (https://github.com/veraPDF/veraPDF-validation-profiles).
+// ISO 14289 (PDF/UA). Each rule encodes a clause and test from those
+// standards, identified by (Specification, Clause, TestNumber).
 //
 // # Entry Points
 //
@@ -34,8 +34,8 @@
 // object stream, or a decryption failure, the check *skips* the affected
 // subtree rather than emitting a [Violation]. The rationale: no PDF/A or
 // PDF/UA rule directly covers "a referenced object could not be parsed",
-// and emitting a synthetic "structural corruption" violation would pollute
-// the report with noise that VeraPDF does not generate.
+// so a synthetic "structural corruption" violation has no governing clause
+// to cite and would report a verdict the standards do not define.
 //
 // These silent skips always log the underlying error at Debug level so an
 // operator running with [pdf.WithWriteLogger] (or equivalent) can see the
@@ -62,17 +62,18 @@
 // checks can start chasing indirect refs or logging without a signature
 // change.
 //
-// Rules are generated from VeraPDF XML profiles via go generate (see
-// cmd/gen-rules). Each [Rule] maps 1:1 to a VeraPDF validation rule, identified
-// by (Specification, Clause, TestNumber). 751 rules cover 6 ISO standards:
-// ISO 19005-1 through 19005-4 (PDF/A) and ISO 14289-1 through 14289-2 (PDF/UA).
+// Rules are generated via go generate (see cmd/gen-rules) so the constant set
+// stays in sync with the standards. Each [Rule] maps 1:1 to a clause-and-test
+// pair, identified by (Specification, Clause, TestNumber). 751 rules cover 6
+// ISO standards: ISO 19005-1 through 19005-4 (PDF/A) and ISO 14289-1 through
+// 14289-2 (PDF/UA).
 //
 // # File Organization
 //
 //   - compliance.go: public API ([ValidatePDFA], [ValidatePDFUA], [Violation])
 //   - check.go: internal orchestration (context building, parallel dispatch, helpers)
 //   - rules.go: generated rule constants (do not edit)
-//   - rules_extra.go: hand-maintained rules not in VeraPDF profiles
+//   - rules_extra.go: hand-maintained rules outside the generated set
 //   - color*.go: OutputIntent, device CS, ICCBased, Separation/DeviceN
 //   - fonts*.go: embedding, encoding, widths, ToUnicode, CharSet/CIDSet, CMap
 //   - structure.go: StructTreeRoot, RoleMap, heading/table/list hierarchy

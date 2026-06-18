@@ -38,8 +38,10 @@ func TestIsValidLangTag(t *testing.T) {
 		{"case insensitive script", "en-latn-us"},
 		{"single-letter language RFC 3066", "p"},
 		{"single-letter with region", "p-pt"},
-		// veraPDF's RFC 3066 regex accepts a lone letter and 1-char subtags
-		// that RFC 5646 would reject; litho matches the regex it is graded by.
+		// RFC 3066, referenced by ISO 32000-1:2008 14.9.2, permits a 1-8 ALPHA
+		// primary subtag and 1-8 alphanumeric subtags, so a lone letter and
+		// 1-char subtags are well-formed. RFC 5646 tightens this to 2-8 ALPHA,
+		// but the PDF spec grades against RFC 3066.
 		{"lone x", "x"},
 		{"lone i", "i"},
 		{"one-char subtag", "en-a"},

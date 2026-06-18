@@ -36,6 +36,7 @@ func fixViewerPrefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	if vpDict == nil {
 		vpDict = ast.PdfDict{}
 	}
+	// ISO 14289-1 §7.1 (UA-2 §8.11.2): /ViewerPreferences/DisplayDocTitle shall be true.
 	vpDict["DisplayDocTitle"] = ast.PdfBool(true)
 
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)

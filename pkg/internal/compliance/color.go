@@ -2,7 +2,7 @@ package compliance
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec
+	"crypto/md5" //nolint:gosec // G501: MD5 computes the ICC profile ID per ICC.1, not for security.
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -61,13 +61,18 @@ func parseICCHeader(data []byte) (iccProfileHeader, bool) {
 	return hdr, true
 }
 
-// validICCDeviceClasses are the allowed device classes for OutputIntent profiles.
+// validICCDeviceClasses are the allowed device classes for OutputIntent
+// profiles. Per ISO 19005-2/3 §6.2.2 the destination profile must be a
+// device class from ICC.1 (printer "prtr" or monitor "mntr").
 var validICCDeviceClasses = map[string]bool{ //nolint:gochecknoglobals // constant set.
 	"prtr": true,
 	"mntr": true,
 }
 
-// validICCColorSpaces are the allowed colour spaces for OutputIntent profiles.
+// validICCColorSpaces are the allowed colour spaces for OutputIntent
+// profiles: the ICC.1 data colour space signatures permitted by
+// ISO 19005-2/3 §6.2.2.
+// Note: ICC colour space signatures are exactly 4 bytes; "RGB " has a trailing space.
 // Note: ICC colour space signatures are exactly 4 bytes; "RGB " has a trailing space.
 var validICCColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant set.
 	"GRAY": true,
@@ -132,8 +137,9 @@ func bytesEqual(a, b []byte) bool {
 // iccProfilesEqual compares two decoded ICC profiles for equivalence.
 // If either profile has an all-zero Profile ID (bytes 84–99, meaning "not
 // computed"), the computed MD5 is substituted before a raw byte comparison.
-// This matches VeraPDF's behaviour: a zeroed Profile ID is treated as a
-// placeholder for the correct value, not as a distinct identity.
+// Per ICC.1, an all-zero Profile ID is a placeholder signalling the ID was
+// never computed, not a distinct value, so two profiles that differ only by a
+// missing versus computed ID are the same profile.
 func iccProfilesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
@@ -155,6 +161,11 @@ func iccProfilesEqual(a, b []byte) bool {
 func normaliseICCProfileID(data []byte) []byte {
 	const profileIDStart = 84
 	const profileIDEnd = 100
+	// iccProfilesEqual guarantees len(data) >= profileIDEnd; guard anyway so
+	// the function is panic-safe on arbitrary input (CONTRIBUTING fuzz contract).
+	if len(data) < profileIDEnd {
+		return data
+	}
 	allZero := true
 	for _, b := range data[profileIDStart:profileIDEnd] {
 		if b != 0 {
@@ -178,7 +189,7 @@ func normaliseICCProfileID(data []byte) []byte {
 	for i := profileIDStart; i < profileIDEnd; i++ {
 		buf[i] = 0
 	}
-	h := md5.Sum(buf) //nolint:gosec
+	h := md5.Sum(buf) //nolint:gosec // G401: MD5 computes the ICC profile ID per ICC.1 §7.2.18, not for security.
 	result := make([]byte, len(data))
 	copy(result, data)
 	copy(result[profileIDStart:profileIDEnd], h[:])

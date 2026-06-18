@@ -148,16 +148,18 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// visible (rendering mode != 3) and which character codes are used.
 		fontUsage := collectFontUsage(p.parsedOps(ctx))
 		// The conservative "check every declared font" fallback applies only
-		// when content is PRESENT but unparseable (parseFailed). Empty or
-		// fully-parsed content with no glyphs rendered exempts a declared-but-
-		// unused font, matching veraPDF's glyph-scoped model (verified on
-		// PDF_UA-1__7.15-t01-fail-a remediated to A-2/A-3: vera passes the
-		// unused T1_0, so litho must not fire 6.2.11.4.1 t1). Note: empty page
-		// content is one '\n' separator after stream concatenation, so a length
-		// test cannot distinguish it; parseFailed keys off the parser error.
+		// when content is PRESENT but unparseable (parseFailed). Embedding and
+		// width rules (§6.2.11.4.1) constrain glyphs actually rendered, so a
+		// font declared in /Font but never selected and shown renders no glyph
+		// and is out of scope. Empty or fully-parsed content with no glyphs
+		// rendered therefore exempts a declared-but-unused font. Note: empty
+		// page content is one '\n' separator after stream concatenation, so a
+		// length test cannot distinguish it; parseFailed keys off the parser
+		// error.
 		parseFailed := p.parseFailed
 
-		for fontName, fontRef := range fontDict {
+		for _, fontName := range sortedNames(fontDict) {
+			fontRef := fontDict[fontName]
 			if ctx.Err() != nil {
 				return results
 			}
@@ -296,7 +298,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 
 // structTreeHasActualText recursively checks if any structure element has /ActualText.
 func structTreeHasActualText(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) bool {
-	if depth > 30 {
+	if depth > maxStructAttrSearchDepth {
 		return false
 	}
 	if _, ok := node["ActualText"]; ok {
@@ -398,9 +400,9 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	}
 
 	// CIDFont glyph coverage (CIDSet for CIDFont subsets). Completeness
-	// is scoped to USED CIDs: veraPDF passes a CIDSet that omits unused
-	// glyphs (verified live on 6-2-11-4-1-t02-fail-e under PDF/A-2b,
-	// where flagging unused CID 4998 was a 30-cell litho-only pool).
+	// is scoped to USED CIDs: a CIDSet that omits a CID never rendered does
+	// not break the embedded subset for any glyph the page actually draws, so
+	// only used CIDs are required to be present.
 	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, type0UsedCIDs(ctx, doc, fontDict, usage))...)
 
 	// ToUnicode CMap values.
@@ -461,9 +463,9 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 			fontData := extractFontProgramData(ctx, doc, fd)
 			if fontData != nil {
 				enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
-				// veraPDF resolves a TrueType simple font's glyph through its
-				// /Encoding first (PDF 9.6.6.4): charCode 0 used but absent from
-				// an explicit /Encoding renders .notdef regardless of the font's
+				// A TrueType simple font resolves a glyph through its /Encoding
+				// first (PDF 9.6.6.4): charCode 0 used but absent from an
+				// explicit /Encoding renders .notdef regardless of the font's
 				// cmap. litho's no-post-table path otherwise trusts the cmap and
 				// misses this.
 				if len(enc) > 0 && usage.charCodes[0] && enc[0] == "" {
@@ -535,9 +537,10 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 // while unmapped codes are skipped to stay free of false positives.
 func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInfo) (cids map[uint16]bool, notdef, ok bool) {
 	// An embedded CMap stream resolves to an empty name; decode through the
-	// parsed stream instead so the used-glyph checks cover fonts the
-	// veraPDF test suite encodes with custom CMaps (the 6-1-12-t10 family
-	// was silent across every profile without this).
+	// parsed stream instead so the used-glyph checks cover fonts that map
+	// codes to CIDs with a custom CMap. Without this, a font whose /Encoding
+	// is a stream yields no used CIDs and every glyph check is silently
+	// skipped.
 	if encName == "" && embedded != nil {
 		cids = make(map[uint16]bool)
 		for _, s := range usage.rawStrings {
@@ -655,9 +658,9 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 	}
 	if notdef {
 		// A decode-level .notdef (odd-length tail or a CID beyond 65535)
-		// also means no real glyph backs the rendered code: veraPDF fires
-		// the glyph-presence rule alongside notdef (verified live on
-		// 6-1-12-t10-fail-a under UA-1: 7.21.4.1 t2 + 7.21.8 t1).
+		// also means no real glyph backs the rendered code, so both the
+		// .notdef rule and the glyph-presence rule apply: the rendered code
+		// resolves to .notdef and to no glyph in the embedded program.
 		results := failf(rule, "font %s on page %d: text renders .notdef (odd-length code tail or CID beyond 65535)", fontName, pageNum)
 		if pr := glyphPresenceRule(profile); pr.Specification != "" {
 			results = append(results, failf(pr,
@@ -707,11 +710,10 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		slices.Sort(cids)
 		for _, cid := range cids {
 			if !validCIDs[cid] {
-				// veraPDF fires BOTH the .notdef rule and the
-				// glyph-presence rule on a used CID absent from the
-				// charset (verified live on
-				// PDF_A-2b__veraPDF_test_suite_6-1-13-t10-fail-a:
-				// 6.2.11.8 t1 + 6.2.11.4.1 t2 on the same usedGlyph).
+				// A used CID absent from the CFF charset has no glyph in
+				// the program, so both the .notdef rule and the
+				// glyph-presence rule apply: the code renders .notdef and
+				// no glyph is present for it.
 				results := failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
 				if pr := glyphPresenceRule(profile); pr.Specification != "" {
 					results = append(results, failf(pr,
@@ -746,14 +748,14 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 // composite font's embedded program, plus the descendant CIDFont subtype. A CID
 // is absent when a CIDFontType0 (CFF) charset omits it, or a CIDFontType2
 // (TrueType, Identity CIDToGIDMap) maps it to an empty glyf entry with a zero
-// advance; CID 0 is always .notdef. veraPDF fires the glyph-presence and notdef
-// rules on these. The subtype lets callers apply the CFF-specific ToUnicode
-// exemption: veraPDF builds no Glyph object for a CFF charset-absent CID so it
-// skips the per-glyph ToUnicode rule there (verified live: 6-2-11-4-1-t02-fail-d
-// CFF CID 104 fires 6.2.11.4.1 t2 + 6.2.11.8 t1 without 6.2.11.7.2 t1), but a
-// TrueType empty glyph still gets a Glyph object and still fires ToUnicode
-// (6-2-11-4-1-t02-fail-e CID 9215). ok is false when litho cannot decode the
-// encoding to CIDs; callers then stay conservative.
+// advance; CID 0 is always .notdef. Such CIDs render .notdef and have no glyph,
+// so they fire both the glyph-presence and the .notdef rule. The subtype lets
+// callers apply the CFF-specific per-glyph ToUnicode exemption: a CFF charset
+// that omits a CID has no glyph for it at all, so there is no glyph to map and
+// the per-glyph ToUnicode rule does not apply. A TrueType empty glyph still
+// exists in the glyf table (it is present, just empty), so it remains a mappable
+// glyph and the ToUnicode rule still applies. ok is false when litho cannot
+// decode the encoding to CIDs; callers then stay conservative.
 func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (absent map[uint16]bool, subtype string, ok bool) {
 	absent = make(map[uint16]bool)
 	if usage == nil || len(usage.rawStrings) == 0 {
@@ -774,10 +776,10 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 		return absent, "", false
 	}
 	// CID 0 (.notdef) is deliberately NOT treated as absent here: its glyph IS
-	// present in the program (it is the .notdef glyph), so veraPDF's
-	// isGlyphPresent is true and neither the glyph-presence nor the per-glyph
-	// ToUnicode rule fires on it. A reference to CID 0 is a .notdef-reference
-	// concern handled by checkType0NotdefGlyph instead.
+	// present in the program (it is the .notdef glyph), so neither the
+	// glyph-presence nor the per-glyph ToUnicode rule fires on it. A reference
+	// to CID 0 is a .notdef-reference concern handled by checkType0NotdefGlyph
+	// instead.
 
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
@@ -825,8 +827,9 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 // PDF/UA emit glyph presence alongside the .notdef rule in
 // [checkType0NotdefGlyph]; this covers PDF/A-1, whose profiles define §6.3.5 t1
 // (glyph presence) but no .notdef rule, so checkType0NotdefGlyph returns before
-// reaching the emission. veraPDF fires §6.3.5 t1 on the same absent CIDs
-// (verified: native A-1a/A-1b 6-2-11-4-1-t02-fail-* and 6-2-10-4-1-t02-fail-*).
+// reaching the emission. A used CID absent from the embedded program has no
+// glyph, which violates §6.3.5 t1 regardless of the part, so PDF/A-1 must fire
+// it from here.
 func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := glyphPresenceRule(profile)
 	if rule.Specification == "" {

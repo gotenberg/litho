@@ -9,8 +9,9 @@ import (
 func TestIsForbiddenAction(t *testing.T) {
 	t.Parallel()
 
-	// veraPDF models §6.6.1/§6.5.1 t1 as a per-profile whitelist: any /S value
-	// outside the allowed set fails, including types the prose never enumerated.
+	// PDF/A permits only a whitelist of action types per profile (§6.6.1/§6.5.1).
+	// Any /S value outside the allowed set is non-conformant, including action
+	// types the prose never enumerated, since the whitelist is closed.
 
 	t.Run("non-whitelisted types forbidden for every profile", func(t *testing.T) {
 		t.Parallel()
@@ -29,7 +30,8 @@ func TestIsForbiddenAction(t *testing.T) {
 
 	t.Run("Rendition Trans GoToE forbidden under part 1 whitelist", func(t *testing.T) {
 		t.Parallel()
-		// Old blacklist allowed these on part 1; vera's PDFA-1B whitelist forbids them.
+		// The PDF/A-1 whitelist forbids these: a blacklist would miss them, but the
+		// closed whitelist admits only the action types part 1 explicitly allows.
 		for _, at := range []ast.PdfName{"Rendition", "Trans", "SetOCGState", "GoTo3DView", "GoToE"} {
 			if !isForbiddenAction(at, "PDF/A-1b") {
 				t.Errorf("isForbiddenAction(%q, PDF/A-1b) = false, want true", at)

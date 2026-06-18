@@ -145,8 +145,8 @@ func TestPatchExistingXMP_InjectsUARev(t *testing.T) {
 
 // TestReplacePropertyValue_SelfClosing pins the self-closing splice: the
 // naive byte splice on <pdf:Keywords/> left a stray "/>" behind, which
-// is stray text inside rdf:Description and invalidates the whole packet
-// for XMP readers (caused 94 veraPDF-regressed corpus cells).
+// is stray text inside rdf:Description and breaks the RDF/XML grammar,
+// so a conforming XMP parser rejects the whole packet.
 func TestReplacePropertyValue_SelfClosing(t *testing.T) {
 	xmp := []byte(`<rdf:Description rdf:about=""
   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -211,9 +211,10 @@ func TestPatchExistingXMP_SyncsEmptyKeywords(t *testing.T) {
 }
 
 // TestPatchExistingXMP_StripsPdfaidRevForParts1to3 pins the rev removal
-// when retargeting a PDF/A-4 document to parts 1-3: pdfaid:rev exists
-// only in the PDF/A-4 identification schema, and a leftover fails
-// veraPDF 6.6.2.3.1 t1/t2 under parts 2/3 (verified live).
+// when retargeting a PDF/A-4 document to parts 1-3: pdfaid:rev belongs
+// to the PDF/A-4 identification schema only. Under parts 1-3 the property
+// is not part of any defined schema, so a leftover violates the
+// XMP-properties-must-be-declared requirement (ISO 19005-2 §6.6.2.3.1).
 func TestPatchExistingXMP_StripsPdfaidRevForParts1to3(t *testing.T) {
 	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -454,9 +455,9 @@ func TestPatchExistingXMP_CorrectsPDFUAIDPart(t *testing.T) {
 
 // TestExtractUnknownNamespaceProperties_Typing pins the extension-schema
 // extractor: only direct children of rdf:Description are properties, the
-// declared valueType matches the serialized container (veraPDF checks it,
-// ISO 19005-2 §6.6.2.3.1 t2), inline structures are skipped rather than
-// mistyped, and attribute-form properties are simple Text.
+// declared valueType matches the serialized container (ISO 19005-2
+// §6.6.2.3.1 t2), inline structures are skipped rather than mistyped,
+// and attribute-form properties are simple Text.
 func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 	t.Parallel()
 	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">

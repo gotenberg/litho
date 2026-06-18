@@ -12,9 +12,9 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// mimeTypePattern matches a "type/subtype" MIME string. It mirrors veraPDF's
-// ISO 19005-3 §6.8 t1 test (^[-\w+.]+/[-\w+.]+$) exactly so the check never
-// rejects a /Subtype that veraPDF accepts.
+// mimeTypePattern matches a "type/subtype" MIME string. ISO 19005-3 §6.8
+// requires an embedded file's /Subtype to be a valid MIME media type, so the
+// pattern enforces the "type/subtype" shape with the RFC 2045 token charset.
 //
 //nolint:gochecknoglobals // compiled-once pattern shared by the MIME check.
 var mimeTypePattern = regexp.MustCompile(`^[-\w+.]+/[-\w+.]+$`)
@@ -33,10 +33,9 @@ var validAFRelationships = map[ast.PdfName]bool{
 	"Schema":           true,
 	"Unspecified":      true,
 	// "Undefined" is not an ISO 32000-2 §14.13 value (the spec value is
-	// "Unspecified"), but VeraPDF, the conformance oracle litho is scored
-	// against, accepts it. Rejecting it produces false positives versus
-	// VeraPDF on real PDF/A-3 files, so it is retained as an
-	// oracle-aligned tolerance rather than flagged.
+	// "Unspecified"). This relaxes §14.13: real PDF/A-3 producers emit
+	// "Undefined" as a synonym for "Unspecified", so accepting it avoids
+	// false positives on otherwise conformant files.
 	"Undefined": true,
 }
 
@@ -96,9 +95,9 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			return results
 		}
 
-		// Check /F and /UF keys (§7.11). The rule covers "the file
-		// specification dictionary for an embedded file": veraPDF does
-		// not fail t2 on a plain filespec without /EF.
+		// Check /F and /UF keys (§7.11). The rule scopes to "the file
+		// specification dictionary for an embedded file", so a plain
+		// filespec without /EF is out of scope and not flagged.
 		if fs.hasEF {
 			results = append(results, checkFileSpecFUF(ctx, doc, fs, part)...)
 		}
@@ -125,8 +124,8 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	// §6.8 t5 (PDF/A-2 only): embedded files shall comply with ISO
-	// 19005-1 or 19005-2 (veraPDF isValidPDFA12). Part 3 deliberately
-	// has no such rule: PDF/A-3 permits attachments of any type.
+	// 19005-1 or 19005-2. Part 3 deliberately has no such rule: PDF/A-3
+	// permits attachments of any type.
 	if part == 2 {
 		results = append(results, checkEmbeddedFileCompliance(ctx, vctx.doc, embeddedSpecs,
 			Rule_19005_2_6_8_t05,
@@ -261,11 +260,9 @@ func collectFileSpecs(ctx context.Context, doc *document.Document) []fileSpecEnt
 			continue
 		}
 
-		// veraPDF builds a CosFileSpecification for every /Type /Filespec
-		// dict, embedded or not: ISO 19005-3 §6.8 t3/t4 fail on a plain
-		// filespec without /EF (verified live on
-		// PDF_A-2b__veraPDF_test_suite_6-2-8-1-t01-fail-b under PDF/A-3b).
-		// Callers gate the embedded-only checks on hasEF.
+		// ISO 19005-3 §6.8 t3/t4 apply to every /Type /Filespec dict,
+		// embedded or not, so a plain filespec without /EF can still fail
+		// those rules. Callers gate the embedded-only checks on hasEF.
 		_, hasEF := dict["EF"]
 
 		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
@@ -334,12 +331,10 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil
 	}
 
-	// PDF/A-3 §6.8 t4 (isAssociatedFile) covers every file specification
-	// dictionary, with or without /EF or /AFRelationship: veraPDF fails a
-	// plain filespec carrying neither (verified live on
-	// PDF_A-2b__veraPDF_test_suite_6-2-8-1-t01-fail-b under PDF/A-3b).
-	// PDF/A-4 keeps the narrower scope: embedded specs that declare
-	// /AFRelationship (no corpus evidence of the wider scope there).
+	// PDF/A-3 §6.8 t4 covers every file specification dictionary, with or
+	// without /EF or /AFRelationship, so a plain filespec carrying neither
+	// must still be an associated file. PDF/A-4 keeps the narrower scope:
+	// embedded specs that declare /AFRelationship.
 	var associatedSpecs []fileSpecEntry
 	for _, fs := range fileSpecs {
 		if part == 3 {
@@ -361,11 +356,11 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	// The /AF array can appear on any of these per the spec.
 	afRefs := make(map[int]bool)
 	// fsAnnotRefs holds filespecs reached only through an annotation /FS (e.g. a
-	// Link's remote go-to). veraPDF's isAssociatedFile counts such a reference
-	// for a filespec WITHOUT /EF (an external file) but NOT for an embedded one:
-	// a filespec carrying /EF must appear in a real /AF array (verified vs the
-	// PDFA-3 goldens: every /EF-bearing FileAttachment spec absent from /AF
-	// fires 6.8 t4, while external /FS specs without /EF do not).
+	// Link's remote go-to). For §6.8 t4 association, an annotation /FS reference
+	// counts for a filespec WITHOUT /EF (an external file) but NOT for an
+	// embedded one: a filespec carrying /EF is data the document owns, so it
+	// must appear in a real /AF array, not merely be reachable via an
+	// annotation.
 	fsAnnotRefs := make(map[int]bool)
 	collectAFRefs(ctx, doc, catalog["AF"], afRefs)
 
@@ -427,11 +422,10 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		}
 	}
 
-	// /AF can also appear on structure elements (e.g. a Figure or formula
-	// associating a source data file). veraPDF's isAssociatedFile reaches these
-	// through the structure tree, so a spec associated only via a struct
-	// element's /AF must count (otherwise an accessible embedded file is a false
-	// positive, e.g. PDF_UA-1__7.7-t01-pass-a's H1 /AF).
+	// Per ISO 32000-2 §14.13, /AF can also appear on structure elements (e.g. a
+	// Figure or formula associating a source data file). A spec associated only
+	// via a struct element's /AF therefore counts as associated, otherwise an
+	// accessible embedded file (e.g. a heading's /AF) would be a false positive.
 	if structRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"]); err == nil && structRoot != nil {
 		walkStructureElements(ctx, doc, structRoot, func(elem ast.PdfDict, _ string) {
 			collectAFRefs(ctx, doc, elem["AF"], afRefs)
@@ -528,13 +522,10 @@ func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, a
 }
 
 func catalogAFRule(part int) Rule {
-	// Only PDF/A-3 requires associated-file linkage (§6.8 t4,
-	// isAssociatedFile). veraPDF's PDF/A-4 profile keys 6.9 t4 as the
-	// AFRelationship-presence rule and carries no association
-	// requirement: a filespec with /AFRelationship and no /AF array
-	// passes PDFA-4F (verified live on
-	// PDF_A-3b__veraPDF_test_suite_6-8-t02-fail-a remediated to
-	// PDF/A-4f; firing there was a 29-cell litho-only pool).
+	// Only PDF/A-3 §6.8 t4 requires associated-file linkage. PDF/A-4 §6.9
+	// t4 is the AFRelationship-presence rule and carries no association
+	// requirement, so a filespec with /AFRelationship and no /AF array
+	// passes PDF/A-4f.
 	return ruleByPart(part, Rule{}, Rule{}, Rule_19005_3_6_8_t04, Rule{})
 }
 
@@ -552,9 +543,9 @@ const maxEmbeddedFileSize = 50 * 1024 * 1024
 // checkEmbeddedFileCompliance validates that all embedded files are
 // themselves PDF/A-compliant. Two rules share the machinery: ISO
 // 19005-4 §6.9 t3 (embedded files shall comply with 19005-1, -2 or -4)
-// and ISO 19005-2 §6.8 t5 (veraPDF isValidPDFA12: embedded files in a
-// PDF/A-2 document shall comply with 19005-1 or -2). rule selects the
-// violation and accepted lists the profiles whose pass clears a file.
+// and ISO 19005-2 §6.8 t5 (embedded files in a PDF/A-2 document shall
+// comply with 19005-1 or -2). rule selects the violation and accepted
+// lists the profiles whose pass clears a file.
 //
 // Safety limits prevent abuse: maximum 50 MB per file, maximum recursion depth
 // of 2, and context cancellation is checked per file.

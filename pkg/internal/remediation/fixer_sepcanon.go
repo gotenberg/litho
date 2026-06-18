@@ -15,7 +15,7 @@ import (
 // sortedDictKeys returns a colour-space (or colorants) dictionary's keys in
 // deterministic order. Canonicalisation picks the first (alt, tintFunc) seen
 // per colorant; iterating the dict in Go's randomised map order would make that
-// choice — and therefore the remediated bytes — nondeterministic run to run
+// choice, and therefore the remediated bytes, nondeterministic run to run
 // (ISO contributing rule: deterministic output). Sorting the keys fixes the
 // canonical pick to the same Separation every run.
 func sortedDictKeys(d ast.PdfDict) []ast.PdfName {

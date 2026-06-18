@@ -31,6 +31,7 @@ func fixRequirements(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 	newCatalog := make(ast.PdfDict, len(catalogDict))
 	maps.Copy(newCatalog, catalogDict)
+	// ISO 19005-2/3 §6.11 (part 4 §6.12): the catalog shall not contain a /Requirements entry.
 	delete(newCatalog, "Requirements")
 
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)

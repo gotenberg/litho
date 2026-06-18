@@ -32,7 +32,8 @@ var knownXMPNamespaces = map[string]bool{
 	"http://www.aiim.org/pdfa/ns/id/":     true, // pdfaid
 
 	// XMP Specification predefined schemas (ISO 16684-1).
-	// VeraPDF accepts these without extension schema declarations.
+	// These are registered XMP schema namespaces, so properties under
+	// them need no PDF/A extension schema declaration.
 	"http://ns.adobe.com/photoshop/1.0/":           true, // photoshop
 	"http://ns.adobe.com/tiff/1.0/":                true, // tiff
 	"http://ns.adobe.com/exif/1.0/":                true, // exif
@@ -70,9 +71,8 @@ var knownXMPNamespaces = map[string]bool{
 
 	// PDF/A extension schema machinery. The bare family URI
 	// "http://www.aiim.org/pdfa/" is deliberately absent: it is not a
-	// registered XMP schema namespace and veraPDF's predefined-schema
-	// list does not include it, so properties under it need an extension
-	// schema like any other custom namespace.
+	// registered XMP schema namespace, so properties under it need an
+	// extension schema like any other custom namespace.
 	"http://www.aiim.org/pdfa/ns/extension/": true,
 	"http://www.aiim.org/pdfa/ns/schema#":    true,
 	"http://www.aiim.org/pdfa/ns/property#":  true,
@@ -108,9 +108,9 @@ var xmpPart1Properties = map[string]map[string]bool{
 	"http://ns.adobe.com/camera-raw-settings/1.0/": {},
 	// XMP Dynamic Media. NOT in the 2004 XMP spec.
 	"http://ns.adobe.com/xmp/1.0/DynamicMedia/": {},
-	// XMP Paged-Text (xmpTPg:): for PDF/A-1, VeraPDF only accepts
-	// MaxPageSize and NPages as predefined. Colorants, Fonts, PlateNames
-	// and SwatchGroups require extension schema declarations.
+	// XMP Paged-Text (xmpTPg:): the 2004 XMP Specification referenced by
+	// PDF/A-1 predefined only MaxPageSize and NPages. Colorants, Fonts,
+	// PlateNames and SwatchGroups require extension schema declarations.
 	"http://ns.adobe.com/xap/1.0/t/pg/": {
 		"MaxPageSize": true, "NPages": true,
 	},
@@ -380,12 +380,12 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 
 // xmpPacketSerializationValidity fires PDF/A-2/3 §6.6.2.1 t4
 // (isSerializationValid) and t5 (actualEncoding) together when the XMP
-// packet is not well-formed XML. veraPDF (GFPDMetadata) builds the
-// XMPPackage from VeraPDFMeta.parse; when that parse throws on malformed
-// XML the package is null, so isSerializationValid is false (t4) and
-// actualEncoding is null (t5). litho parses XMP leniently everywhere
-// else, so this dedicated strict pass catches a not-well-formed packet
-// (for example a start/end tag whose case does not match).
+// packet is not well-formed XML. A packet that does not parse has no
+// valid serialization (t4) and no determinable encoding (t5): both
+// derive from the same parse failure. litho parses XMP leniently
+// everywhere else, so this dedicated strict pass catches a
+// not-well-formed packet (for example a start/end tag whose case does
+// not match).
 func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 	var t4, t5 Rule
 	switch part {
@@ -403,8 +403,9 @@ func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 	return append(results, failf(t5, "XMP packet encoding cannot be determined: packet is not well-formed XML")...)
 }
 
-// xmpWellFormed reports whether data is well-formed XML, matching the
-// well-formedness gate veraPDF's XMP parser applies.
+// xmpWellFormed reports whether data is well-formed XML. An XMP packet
+// is an XML document, so a packet that is not well-formed XML cannot be
+// a valid serialization.
 func xmpWellFormed(data []byte) bool {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.Strict = true
@@ -576,9 +577,10 @@ func xmpCheckNamespaces(data []byte, part int, results *[]Violation) {
 // used by top-level properties (direct element children of rdf:Description
 // plus attribute-form properties on the Description tag) and the set of
 // namespace URIs declared in extension schemas. Nested elements are
-// excluded deliberately: veraPDF builds its property model from direct
-// schema children only, so a structure field's namespace needs no
-// declaration of its own and flagging it is a false positive.
+// excluded deliberately: ISO 19005 §6.7.9 / §6.6.2.3.1 govern
+// properties (direct schema children), not the fields of a structured
+// value, so a structure field's namespace needs no declaration of its
+// own and flagging it is a false positive.
 func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[string]bool) {
 	used = make(map[string]bool)
 	extensions = make(map[string]bool)
@@ -627,7 +629,7 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 				elemDepth++
 				// Only a direct child of a top-level rdf:Description is a
 				// property; deeper elements are array items and structure
-				// fields, which veraPDF never checks for declarations.
+				// fields, which carry no namespace-declaration obligation.
 				if elemDepth == 1 && !ignoredNS[t.Name.Space] {
 					used[t.Name.Space] = true
 				}
@@ -677,8 +679,8 @@ func xmpSchemaRule(part int, ns string) []Violation {
 		return failf(Rule_19005_3_6_6_2_3_1_t01, "namespace %s not predefined or in extension schema", ns)
 	case 4:
 		// ISO 19005-4 drops the extension-schema requirements of parts
-		// 1-3 (XMP 2010 packets are self-describing) and the veraPDF
-		// PDFA-4 profile carries no such rule; its 6.6.1 covers actions.
+		// 1-3 (XMP 2010 packets are self-describing); its §6.6.1 covers
+		// actions, not metadata.
 		return nil
 	}
 	return nil
@@ -693,11 +695,10 @@ type xmpTopLevelProperty struct {
 
 // xmpExtractTopLevelProperties parses XMP XML and returns the top-level
 // properties in document order, deduplicated by namespace and name. Only
-// direct children of a top-level rdf:Description count: veraPDF builds its
-// XMPProperty objects the same way (VeraPDFMeta.addSchema walks schema-node
-// children only), so fields of structured values, including ones serialized
-// as nested rdf:Description elements, must stay invisible here. ISO 19005
-// §6.7.9 / §6.6.2.3.1 apply to properties, not to structure fields.
+// direct children of a top-level rdf:Description count: ISO 19005 §6.7.9 /
+// §6.6.2.3.1 apply to properties, not to structure fields, so fields of
+// structured values, including ones serialized as nested rdf:Description
+// elements, must stay invisible here.
 func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 	// Ancestor classification: structural wrappers (document root,
 	// x:xmpmeta, rdf:RDF), a top-level rdf:Description, or content
@@ -799,15 +800,12 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, re
 		// The pdfaid identification schema participates like any other
 		// predefined namespace: the catalog for the part decides which
 		// names are predefined (the 2005 catalog lacks rev, the 2004 one
-		// lacks corr and rev), so a leftover PDF/A-4 pdfaid:rev fails here
-		// exactly as it does under veraPDF. Value-level pdfaid checks stay
-		// with xmpCheckPDFAIdentification.
-		// Extension schemas may extend predefined schemas: veraPDF
-		// registers extension properties per namespace and name with no
-		// predefined-namespace restriction (veraPDF-library
-		// SchemasDefinitionCreator.createExtendedSchemasDefinition), and
-		// litho keeps its namespace-level leniency for extension-declared
-		// namespaces.
+		// lacks corr and rev), so a leftover PDF/A-4 pdfaid:rev fails here.
+		// Value-level pdfaid checks stay with xmpCheckPDFAIdentification.
+		// Extension schemas may extend predefined schemas: a PDF/A
+		// extension schema declares properties by namespace and name with
+		// no restriction against predefined namespaces, so litho keeps its
+		// namespace-level leniency for extension-declared namespaces.
 		if extensionNS[p.ns] {
 			continue
 		}
@@ -827,10 +825,10 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, re
 	}
 }
 
-// xmpSchemaPropertyRule mirrors veraPDF rules ISO 19005-1 §6.7.9 t2 and
-// ISO 19005-2/3 §6.6.2.3.1 t1 for a property whose namespace is predefined
-// but whose name is not in the predefined property set and not declared by
-// an extension schema.
+// xmpSchemaPropertyRule returns ISO 19005-1 §6.7.9 t2 and ISO 19005-2/3
+// §6.6.2.3.1 t1 for a property whose namespace is predefined but whose
+// name is not in the predefined property set and not declared by an
+// extension schema.
 func xmpSchemaPropertyRule(part int, prop string) []Violation {
 	switch part {
 	case 1:
@@ -863,8 +861,8 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	// Only properties in the pdfaid namespace URI carry the identification
 	// and prefix obligations. A matching local name under a different URI
 	// (pdfuaid:part on a dual PDF/A + PDF/UA file, prism:part, ...) belongs
-	// to another schema and must not be flagged; veraPDF keys these rules
-	// to the pdfaid namespace only.
+	// to another schema and must not be flagged: these obligations are
+	// keyed to the pdfaid namespace alone.
 	var parseClean bool
 	for {
 		tok, err := decoder.Token()
@@ -1293,11 +1291,10 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	// Check that pdfa extension schema namespace URIs use the expected
 	// prefix names. Only a binding that is actually USED on elements
 	// counts: a dangling xmlns declaration aliasing one of these URIs
-	// (typical decoy in the veraPDF 6-6-2-3-3 suite, and a common
-	// leftover after remediation empties a defective rdf:Description)
-	// is harmless, and firing on it produced a 266-cell-per-profile
-	// litho-only pool. veraPDF evaluates prefix correctness per element
-	// (e.g. descriptionPrefix == "pdfaType"), never per declaration.
+	// (a common leftover after remediation empties a defective
+	// rdf:Description) binds no element, so it cannot violate the
+	// prefix requirement. Prefix correctness is a property of the
+	// elements that use a binding, not of the declaration itself.
 	for uri, expectedPrefix := range xmpExpectedPrefix {
 		actualPrefix := ""
 		for _, p := range xmpExtractAllPrefixesForURI(ctx, data, uri) {
@@ -1369,11 +1366,11 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	hasPending := false
 	// foreignDepth tracks descent into a non-pdfa subtree (dc:creator,
 	// xmp:* and friends that producers embed inside a schema's
-	// rdf:Description). veraPDF parses only pdfa-namespace content, so such
-	// a subtree must be skipped whole: its nested rdf:Seq/rdf:li would
-	// otherwise be misread as a second schema definition whose close
-	// resets currentSchema, making the real schema report every field
-	// missing (the 6.6.2.3.3 t2/t3/t4 litho-only pool).
+	// rdf:Description). Only pdfa-namespace content belongs to the
+	// extension schema grammar, so such a subtree must be skipped whole:
+	// its nested rdf:Seq/rdf:li would otherwise be misread as a second
+	// schema definition whose close resets currentSchema, making the real
+	// schema report every field missing.
 	foreignDepth := 0
 	// containerStack tracks, per OPEN rdf:Seq/rdf:Bag, the level its
 	// rdf:li items push. A stack, not a flag: a nested container (the
@@ -1468,9 +1465,9 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 
 			// Track fields within each definition level.
 			// For each known field local name, verify the namespace prefix
-			// matches the expected constant. If the local name matches but the
-			// namespace is wrong, emit the corresponding rule (VeraPDF checks
-			// namespace prefix correctness).
+			// matches the expected constant. Extension schema fields must use
+			// the canonical pdfa* namespaces, so a known local name under the
+			// wrong namespace is a prefix error and emits the matching rule.
 			switch {
 			case t.Name.Space == xmpPdfaSchemaPrefix:
 				switch t.Name.Local {
@@ -1733,8 +1730,7 @@ func xmpExtSchemaRule(part int, field string) []Violation {
 		}
 	case 4:
 		// ISO 19005-4 drops the extension-schema requirements of parts
-		// 1-3 (XMP 2010 packets are self-describing) and the veraPDF
-		// PDFA-4 profiles carry no such rule; 6.6.1 there covers
+		// 1-3 (XMP 2010 packets are self-describing); its §6.6.1 covers
 		// actions, not metadata.
 		return nil
 	}
@@ -1780,8 +1776,7 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t10, ctx)
 		}
 	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts
-		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		// ISO 19005-4 drops the extension-schema requirements of parts 1-3.
 		return nil
 	}
 	return nil
@@ -1789,9 +1784,9 @@ func xmpExtPropertyRule(part int, field string) []Violation {
 
 // xmpExtValueTypeRule returns the rule for a missing field in a valueType definition.
 // Mapping: type->t12, namespaceURI->t13, prefix->t14, description->t15.
-// A missing description IS flagged: veraPDF fails t14 on the
-// description-less valueType in 6-6-2-3-3-t03-fail-a (golden), so the
-// `isDescriptionValidText` test treats absence as invalid.
+// A missing description IS flagged: the extension schema grammar requires
+// a description on every valueType definition, so its absence is a missing
+// required field, not an empty optional one.
 func xmpExtValueTypeRule(part int, field string) []Violation {
 	ctx := fmt.Sprintf("extension valueType missing required field '%s'", field)
 	switch part {
@@ -1829,8 +1824,7 @@ func xmpExtValueTypeRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t14, ctx)
 		}
 	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts
-		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		// ISO 19005-4 drops the extension-schema requirements of parts 1-3.
 		return nil
 	}
 	return nil
@@ -1869,8 +1863,7 @@ func xmpExtFieldRule(part int, field string) []Violation {
 			return fail(Rule_19005_3_6_6_2_3_3_t18, ctx)
 		}
 	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts
-		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		// ISO 19005-4 drops the extension-schema requirements of parts 1-3.
 		return nil
 	}
 	return nil
@@ -1925,9 +1918,9 @@ type xmpExtSchemaDef struct {
 
 // xmpParseExtensionSchemas parses the pdfaExtension:schemas bag and returns
 // one entry per pdfaSchema rdf:li in document order. Entries with the same
-// namespace URI are NOT merged: veraPDF keys its extension type map by URI
-// with later entries replacing earlier ones, and callers need the order to
-// mirror that.
+// namespace URI are NOT merged: the effective extension type map is keyed
+// by URI, so a later same-URI entry replaces the earlier one, and callers
+// need document order to resolve which entry wins.
 func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 	var schemas []xmpExtSchemaDef
 	var current *xmpExtSchemaDef
@@ -2085,12 +2078,12 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 	}
 }
 
-// xmpCheckExtensionPropertyResolution mirrors veraPDF's value-type
-// resolution for properties used in extension-declared namespaces. veraPDF
-// keys its extension type map by namespace URI and a later pdfaSchema entry
-// with the same URI replaces the earlier one, so a property declared only
-// by a replaced entry has no resolvable value type and fails
-// isValueTypeCorrect (ISO 19005-2/3 §6.6.2.3.1 t2, ISO 19005-1 §6.7.9 t3).
+// xmpCheckExtensionPropertyResolution resolves the value type of every
+// property used in an extension-declared namespace. The effective
+// extension type map is keyed by namespace URI, so a later pdfaSchema
+// entry with the same URI replaces the earlier one. A property declared
+// only by a replaced entry then has no resolvable value type and violates
+// ISO 19005-2/3 §6.6.2.3.1 t2 / ISO 19005-1 §6.7.9 t3.
 // Verified live: PDF_UA-1__5-t04-fail-a under PDF/A-2b fails t2 on
 // pdfuaid:part, declared by the first of two same-URI entries; blanking the
 // second entry clears the failure.
@@ -2110,8 +2103,9 @@ func xmpCheckExtensionPropertyResolution(data []byte, part int, results *[]Viola
 		if !isExt {
 			continue
 		}
-		// Extension schemas may extend predefined schemas; veraPDF still
-		// resolves the predefined members from its built-in catalogs.
+		// Extension schemas may extend predefined schemas; a predefined
+		// member of the namespace stays resolvable from the predefined
+		// catalog even when an extension schema declares the same URI.
 		predefined := xmpPropertyRegistry[ns]
 		for prop := range props {
 			if _, ok := declared[prop]; ok {
@@ -2244,11 +2238,11 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 			if isContainerPropType(expectedType) {
 				expectedCont := propTypeToContainerType(expectedType)
 				if pv.containerType != expectedCont {
-					// No simple-as-Bag shorthand exemption: veraPDF 1.30
-					// fails isValueTypeCorrect for a simple-valued
-					// photoshop:SupplementalCategories under parts 2/3
-					// (verified live), and part 1 reads it as plain Text
-					// via xmpPart1TypeOverrides so it never reaches here.
+					// No simple-as-Bag shorthand exemption: in the 2005 XMP
+					// spec (parts 2/3) photoshop:SupplementalCategories is a
+					// Bag Text, so a simple value is a type mismatch. Part 1
+					// reads it as plain Text via xmpPart1TypeOverrides, so it
+					// never reaches here.
 					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
 						fmt.Sprintf("observed=%s expected=%s",
 							xmpContainerTypeName(pv.containerType),
@@ -2348,8 +2342,7 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 	case 3:
 		return fail(Rule_19005_3_6_6_2_3_1_t02, ctx)
 	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts
-		// 1-3; the veraPDF PDFA-4 profile carries no such rule.
+		// ISO 19005-4 drops the extension-schema requirements of parts 1-3.
 		return nil
 	}
 	return nil

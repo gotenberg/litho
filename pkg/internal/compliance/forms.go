@@ -79,16 +79,13 @@ const (
 	maxSigEOFScan  = 1 << 16 // 64 KiB
 )
 
-// checkSignatureByteRange validates ISO 19005-2/3 §6.4.3 t1
-// (veraPDF test: doesByteRangeCoverEntireDocument): a signed signature
-// field's four-integer /ByteRange must equal the range recomputed from
-// the file, so every byte except the /Contents hole inside the signed
-// revision is covered. Any modification after signing shifts the
-// /Contents position (full rewrite) or appends an uncovered revision
-// (incremental update), both of which this detects. It mirrors veraPDF
-// SignatureParser.getByteRangeBySignatureOffset and GFPDSignature
-// .getdoesByteRangeCoverEntireDocument. A missing or malformed
-// /ByteRange stays silent: the goldens use the other 6.4.3 tests for
+// checkSignatureByteRange validates ISO 19005-2/3 §6.4.3 t1: a signed
+// signature field's four-integer /ByteRange must equal the range
+// recomputed from the file, so every byte except the /Contents hole
+// inside the signed revision is covered. Any modification after signing
+// shifts the /Contents position (full rewrite) or appends an uncovered
+// revision (incremental update), both of which this detects. A missing
+// or malformed /ByteRange stays silent: the other §6.4.3 tests catch
 // shape problems.
 func checkSignatureByteRange(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, results *[]Violation) {
 	ft, _ := document.ResolveName(ctx, doc, field["FT"])
@@ -123,9 +120,11 @@ func checkSignatureByteRange(ctx context.Context, doc *document.Document, field 
 
 	covers := declared[0] == actual[0] && declared[1] == actual[1] && declared[2] == actual[2]
 	if covers {
-		// veraPDF requires an exact match when the signed revision ends
-		// the file, but tolerates the trailing-EOL bytes after %%EOF when
-		// later revisions follow.
+		// ISO 19005-2/3 §6.4.3 does not fix the exact end of the covered
+		// range relative to the trailing EOL after %%EOF. When the signed
+		// revision ends the file, require an exact match; when later
+		// revisions follow, tolerate the EOL bytes between the %%EOF and
+		// the next revision, since they fall outside the signed content.
 		if streamEnd {
 			covers = declared[3] == actual[3]
 		} else {
@@ -145,17 +144,17 @@ func checkSignatureByteRange(ctx context.Context, doc *document.Document, field 
 }
 
 // computeSignatureByteRange recomputes a signature's expected /ByteRange
-// from the file, mirroring veraPDF SignatureParser
-// .getByteRangeBySignatureOffset. actual[1]/actual[2] bound the
-// /Contents hex string; actual[3] spans from actual[2] to the %%EOF of
-// the revision whose cross-reference table is the first one after the
-// /Contents. floating counts the EOL bytes after that %%EOF; streamEnd
-// reports whether that %%EOF ends the file.
+// from the file. actual[1]/actual[2] bound the /Contents hex string;
+// actual[3] spans from actual[2] to the %%EOF of the revision whose
+// cross-reference table is the first one after the /Contents. floating
+// counts the EOL bytes after that %%EOF; streamEnd reports whether that
+// %%EOF ends the file.
 func computeSignatureByteRange(ctx context.Context, doc *document.Document, sigObjNum int) (actual [4]int64, floating int64, streamEnd, ok bool) {
-	// litho records xref offsets from the physical file start while
-	// veraPDF uses header-relative offsets; they diverge only when junk
-	// precedes the %PDF- header, and such files must not be signed
-	// incrementally, so bail to avoid a divergent verdict.
+	// litho records xref offsets from the physical file start, but a
+	// /ByteRange is measured from the %PDF- header. The two coincide only
+	// when no junk precedes the header. With a nonzero header offset the
+	// recomputed range would not be comparable to the declared one, so
+	// bail rather than risk a false positive.
 	if doc.HeaderOffset != 0 {
 		return actual, 0, false, false
 	}
@@ -206,7 +205,7 @@ func contentsHexBounds(ctx context.Context, doc *document.Document, objOffset in
 }
 
 // nextXRefOffset returns the first cross-reference table offset greater
-// than off (veraPDF getOffsetOfNextXRef), or off when none follows.
+// than off, or off when none follows.
 func nextXRefOffset(doc *document.Document, off int64) int64 {
 	best := off
 	found := false
@@ -221,8 +220,8 @@ func nextXRefOffset(doc *document.Document, off int64) int64 {
 // nextEOFEnd scans forward from off for the next line-initial %%EOF
 // marker, returning the absolute offset just past it (including a single
 // trailing LF, CR, or CR-LF), that EOL byte count, and whether the
-// marker ends the file. Mirrors veraPDF getOffsetOfNextEOF for the
-// no-stream region between a cross-reference table and its %%EOF.
+// marker ends the file. The scan targets the no-stream region between a
+// cross-reference table and its %%EOF.
 func nextEOFEnd(ctx context.Context, doc *document.Document, off int64) (end, floating int64, streamEnd, ok bool) {
 	buf, err := doc.ReadFileBytes(ctx, off, maxSigEOFScan)
 	if err != nil {
@@ -236,8 +235,9 @@ func nextEOFEnd(ctx context.Context, doc *document.Document, off int64) (end, fl
 			break
 		}
 		at := s + rel
-		// veraPDF requires %%EOF at the start of a line (any leading
-		// spaces aside), which excludes a match inside other content.
+		// The trailer's %%EOF marker stands at the start of a line, so a
+		// match must be line-initial (leading spaces aside); this excludes
+		// an incidental %%EOF byte sequence inside other content.
 		if at == 0 || buf[at-1] == '\n' || buf[at-1] == '\r' {
 			idx = at
 			break
@@ -369,11 +369,10 @@ func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast
 		return
 	}
 
-	// Zero-area widgets are exempt from appearance requirements, except under
-	// PDF/A-1: veraPDF's §6.9 t2 (PDWidgetAnnot) requires an appearance
-	// dictionary regardless of /Rect area (verified live on a zero-area
-	// signature field in 6-1-12-t02 remediated to A-1a, where vera fires
-	// 6.9 t2 and litho was silent).
+	// Zero-area widgets are exempt from appearance requirements, except
+	// under PDF/A-1. ISO 19005-1 §6.9 requires every widget annotation to
+	// carry an appearance dictionary regardless of its /Rect area, so the
+	// zero-area exemption does not apply to part 1.
 	if part != 1 && isZeroAreaRect(ctx, doc, field) {
 		return
 	}

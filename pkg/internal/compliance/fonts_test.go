@@ -35,8 +35,10 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 
 	t.Run("unused char skipped", func(t *testing.T) {
 		t.Parallel()
-		// veraPDF's test runs per USED glyph: a mismatching width on a
-		// charCode never referenced by a text operator passes.
+		// ISO 19005-1 §6.3.6 scopes the consistency requirement to glyphs
+		// "used for rendering". A charCode never referenced by a text
+		// operator is not used for rendering, so a width mismatch on it
+		// passes.
 		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{65: true}}
 		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
 		if len(results) != 0 {
@@ -54,7 +56,8 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 
 	t.Run("invisible-only usage skipped", func(t *testing.T) {
 		t.Parallel()
-		// renderingMode 3 (invisible) exempts the font per veraPDF's test.
+		// Text rendering mode 3 paints no glyphs, so nothing is "used for
+		// rendering" under ISO 19005-1 §6.3.6 and the font is exempt.
 		usage := &fontUsageInfo{visible: false, charCodes: map[byte]bool{32: true}}
 		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
 		if len(results) != 0 {
@@ -64,8 +67,11 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 
 	t.Run("missing Widths passes", func(t *testing.T) {
 		t.Parallel()
-		// veraPDF: widthFromDictionary == null PASSES the width rule; the
-		// missing key fails the font-dictionary key rules instead.
+		// ISO 19005-1 §6.3.6 compares the width in the font dictionary
+		// against the embedded program. With no /Widths there is no
+		// dictionary width to compare, so consistency holds vacuously and
+		// the width rule passes; a missing /Widths is caught by the
+		// font-dictionary key requirements instead.
 		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
 		results := checkSimpleFontWidths(ctx, nopDoc(), ast.PdfDict{"FirstChar": ast.PdfInt(32)}, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
 		if len(results) != 0 {

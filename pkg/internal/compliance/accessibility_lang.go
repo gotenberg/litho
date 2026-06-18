@@ -11,9 +11,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// langTagAlphaNum and langTagAlphaOnly mirror veraPDF's two CosLang grammars:
-// alphanumeric subtags for PDF/A-2/3/4 and PDF/UA, alpha-only subtags for the
-// stricter PDF/A-1 6.8.4 t1.
+// langTagAlphaNum and langTagAlphaOnly encode the two language-tag grammars the
+// profiles require: RFC 3066 / BCP 47 (alphanumeric subtags) for PDF/A-2/3/4 and
+// PDF/UA, and the stricter alpha-only subtags ISO 19005-1 §6.8.4 t1 demands for
+// PDF/A-1.
 //
 //nolint:gochecknoglobals // compiled-once regex tables.
 var (
@@ -22,12 +23,13 @@ var (
 )
 
 // checkMarkedContentLang validates the language tag of any /Lang set on a
-// marked-content sequence (BDC/DP) in a page content stream. veraPDF treats
-// each such /Lang as a CosLang and fails 7.2 t29 (UA-1) / 8.4.4 t2 (UA-2) when
-// it does not match the RFC 3066/BCP 47 grammar. The dict-based catalog and
-// structure-tree checks do not reach content-operator language tags (verified
-// live on 6-8-4-t01-fail-c remediated to PDF/UA-1: 7.2-t29 fires on
-// operators[5]/Lang). An empty tag is "not present" and passes [IsValidLangTag].
+// marked-content sequence (BDC/DP) in a page content stream. A /Lang on a
+// marked-content property list is a language tag like any other, so it must
+// match the RFC 3066 / BCP 47 grammar; an ill-formed value fails UA-1 §7.2 t29
+// or UA-2 §8.4.4 t2. The dict-based catalog and structure-tree checks operate on
+// object dictionaries and never reach content-operator language tags, so this
+// content-stream pass is required to cover them. An empty tag is "not present"
+// and passes [IsValidLangTag].
 func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -60,11 +62,15 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 			case ast.PdfName:
 				if !propsResolved {
 					if res := resolveResources(ctx, doc, page); res != nil {
+						// Best-effort: a missing/unresolvable /Properties dict
+						// leaves props nil, handled by the guard below.
 						props, _ = document.ResolveDict(ctx, doc, res["Properties"])
 					}
 					propsResolved = true
 				}
 				if props != nil {
+					// Best-effort: an unresolvable property entry leaves pd
+					// nil, handled by the pd == nil check below.
 					pd, _ = document.ResolveDict(ctx, doc, props[v])
 				}
 			}
@@ -97,10 +103,10 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 
 	if catalogLang == "" {
 		// A /Lang entry that is present but empty is an invalid Language-Tag,
-		// not an absent one: veraPDF fires the lang-valid rule (UA-1 §7.2 t29 /
-		// UA-2 §8.4.4 t2) with "Value \"\" is not a Language-Tag" on the catalog
-		// /Lang and does NOT report the language as undeterminable. Only a
-		// genuinely absent /Lang takes the determinability path below.
+		// not an absent one. The empty string fails the Language-Tag grammar, so
+		// it is the lang-valid rule (UA-1 §7.2 t29 / UA-2 §8.4.4 t2) that fires,
+		// not the undeterminable-language path. Only a genuinely absent /Lang
+		// takes the determinability path below.
 		if langPresentButEmpty(ctx, doc, catalog) {
 			return failf(validRule, "catalog /Lang is empty")
 		}
@@ -139,8 +145,8 @@ func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.P
 }
 
 // langPresentButEmpty reports whether dict carries a /Lang key that resolves to
-// an empty (or whitespace-only) string. veraPDF treats such a value as an
-// invalid Language-Tag rather than an absent one.
+// an empty (or whitespace-only) string. Such a value is an invalid Language-Tag,
+// not an absent one: the key exists but its value fails the tag grammar.
 func langPresentButEmpty(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
 	obj, ok := dict["Lang"]
 	if !ok {
@@ -361,12 +367,12 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
-// IsValidLangTag reports whether tag is a well-formed language identifier as
-// veraPDF tests it for PDF/A-2/3/4 and PDF/UA (ISO 19005-2/3 6.7.4 t1, ISO
-// 14289-1 7.2 t29, ISO 14289-2 8.4.4 t2): a 1-8 letter primary subtag followed
-// by any number of 1-8 alphanumeric subtags. An empty or whitespace-only tag is
-// "not present" and passes. PDF/A-1's stricter 6.8.4 t1 grammar (no digits in
-// subtags) is [isValidLangTagPDFA1].
+// IsValidLangTag reports whether tag is a well-formed language identifier for
+// PDF/A-2/3/4 and PDF/UA (ISO 19005-2/3 §6.7.4 t1, ISO 14289-1 §7.2 t29, ISO
+// 14289-2 §8.4.4 t2): a 1-8 letter primary subtag followed by any number of 1-8
+// alphanumeric subtags. An empty or whitespace-only tag is "not present" and
+// passes. PDF/A-1's stricter §6.8.4 t1 grammar (no digits in subtags) is
+// [isValidLangTagPDFA1].
 //
 // The grammar is RFC 3066 as referenced by ISO 32000-1:2008, 14.9.2, NOT the
 // tighter RFC 5646: subtags may be 1-8 alphanumerics (e.g. "en-12" is valid),
@@ -376,9 +382,9 @@ func IsValidLangTag(tag string) bool {
 	return trimmed == "" || langTagAlphaNum.MatchString(trimmed)
 }
 
-// isValidLangTagPDFA1 applies veraPDF's PDF/A-1 6.8.4 t1 grammar, whose subtags
-// are letters only (no digits), unlike the alphanumeric subtags every later
-// profile allows.
+// isValidLangTagPDFA1 applies the PDF/A-1 grammar of ISO 19005-1 §6.8.4 t1,
+// whose subtags are letters only (no digits), unlike the alphanumeric subtags
+// every later profile allows.
 func isValidLangTagPDFA1(tag string) bool {
 	trimmed := strings.TrimSpace(tag)
 	return trimmed == "" || langTagAlphaOnly.MatchString(trimmed)

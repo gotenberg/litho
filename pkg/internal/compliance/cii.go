@@ -99,6 +99,13 @@ func checkInvoiceCII(ctx context.Context, doc *document.Document, invoice invoic
 // validateCIIBytes runs the CII spine checks against an in-memory XML
 // payload. Extracted from [checkInvoiceCII] so unit tests can exercise
 // the structural rules without round-tripping through a PDF.
+//
+// The checks enforce the Factur-X 1.0.07 MINIMUM-profile spine, whose
+// elements back the EN 16931 business terms: the UN/CEFACT
+// CrossIndustryInvoice root (16931-3-3 syntax binding), ExchangedDocument
+// ID/IssueDateTime (BT-1/BT-2), SellerTradeParty Name (BT-27),
+// InvoiceCurrencyCode (BT-5), and GrandTotalAmount (BT-112). Business
+// content beyond presence is out of scope here.
 func validateCIIBytes(payload []byte, v hybridInvoiceVariant, lenient bool) []Violation {
 	presence, rootSeen, wellFormed, parseErr := scanCIIPresence(payload, lenient)
 	if !wellFormed {

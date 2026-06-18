@@ -43,8 +43,10 @@ func TestMixedHeadingT03(t *testing.T) {
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
 	)
-	// The first heading in document order sets the structure mode and veraPDF
-	// fires exactly one rule on the offending kind.
+	// Per ISO 14289-1 §7.4.4, a document uses either the generic [H] heading
+	// or the numbered [H1]..[Hn] headings, not both. The first heading in
+	// document order fixes the structure mode, so only the conflicting kind
+	// offends and exactly one rule fires on it.
 	//
 	// Weak-first ([H, H1]): the numbered H1 offends => §7.4.4 t3 only.
 	weakFirst := ast.PdfDict{"K": ast.PdfArray{

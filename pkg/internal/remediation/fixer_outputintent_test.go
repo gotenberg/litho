@@ -12,8 +12,9 @@ import (
 // TestFixOutputIntent_SubtypeIsAlwaysGTSPDFA1 pins the OutputIntent subtype
 // for every profile. The fixer used to write /S /GTS_PDFA for PDF/A-4, a
 // subtype that does not exist (ISO 32000-2 Table 401 keeps GTS_PDFA1 for
-// every PDF/A part); veraPDF ignores such intents, so the device-colour
-// rules kept firing on the "fixed" output.
+// every PDF/A part). An unrecognized subtype is not a PDF/A output intent,
+// so the device-colour rules still find no output intent to anchor to and
+// keep firing on the "fixed" output.
 func TestFixOutputIntent_SubtypeIsAlwaysGTSPDFA1(t *testing.T) {
 	for _, profile := range []string{"PDF/A-2b", "PDF/A-4"} {
 		pdf := buildStructPDF(

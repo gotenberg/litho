@@ -6,10 +6,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// TestCheckFieldAppearanceZeroArea pins the PDF/A-1 zero-area exemption split:
-// veraPDF's §6.9 t2 (PDWidgetAnnot) requires an appearance dictionary even for
-// a zero-area /Rect (e.g. an invisible signature field), so litho must fire
-// under part 1. Parts 2/3/4 keep the zero-area exemption.
+// TestCheckFieldAppearanceZeroArea pins the PDF/A-1 zero-area exemption split.
+// ISO 19005-1 §6.9 requires every widget annotation to carry an appearance
+// dictionary regardless of its /Rect area, so a zero-area /Rect (e.g. an
+// invisible signature field) still fires under part 1. Parts 2/3/4 keep the
+// zero-area exemption.
 func TestCheckFieldAppearanceZeroArea(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx()

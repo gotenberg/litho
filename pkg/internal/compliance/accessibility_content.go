@@ -12,7 +12,7 @@ import (
 // checkEncryptionPermissions validates PDF/UA-1 §7.16: if encrypted, the
 // /Encrypt dictionary must contain a /P key whose 10th bit is true
 // (accessibility content extraction permitted).
-func checkEncryptionPermissions(doc *document.Document, profile string) []Violation {
+func checkEncryptionPermissions(ctx context.Context, doc *document.Document, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
@@ -33,7 +33,7 @@ func checkEncryptionPermissions(doc *document.Document, profile string) []Violat
 	case ast.PdfDict:
 		encDict = v
 	case ast.PdfIndirectRef:
-		obj, err := doc.Resolve(context.Background(), v)
+		obj, err := doc.Resolve(ctx, v)
 		if err != nil {
 			return fail(Rule_14289_1_7_16_t01, "cannot resolve /Encrypt dictionary")
 		}
@@ -143,12 +143,11 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 			switch op.Operator {
 			case "BMC", "BDC":
 				kind := classifyMarker(op)
-				// t1/t2 (Artifact↔tagged nesting) are PDF/UA-1 §7.1 concepts.
-				// veraPDF's PDFUA-2 profile has no analogue (its §8.2.2 covers
-				// only unmarked content, handled as t3 below), so firing the
-				// UA-1 ids under PDF/UA-2 is a litho-over (verified live on
-				// 7.1-t01-fail-a / 7.1-t02-fail-a under PDF/UA-2: veraPDF reports
-				// no artifact-nesting rule).
+				// t1/t2 (Artifact-tagged nesting) are PDF/UA-1 §7.1 concepts.
+				// PDF/UA-2 has no equivalent rule: its §8.2.2 covers only
+				// unmarked content, which litho reports as t3 below. Firing the
+				// UA-1 ids under PDF/UA-2 would assert a requirement that part 2
+				// does not impose, so the t1/t2 checks stay gated to UA-1.
 				if profile == "PDF/UA-1" {
 					// t1: Artifact inside tagged content with MCID.
 					if kind == markerArtifact && !reportedT1 && inTaggedMCID() {

@@ -3,16 +3,18 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// allowedActionsPart1 is the §6.6.1 t1 action-type whitelist for PDF/A-1:
-// veraPDF tests `S == "GoTo" || ... || S == "SubmitForm"`, so any other /S
-// value (Rendition, GoToE, Launch, SetOCGState, ...) fails. Modelling this as
-// a whitelist, not a blacklist, is required to flag types the spec never
-// enumerated as forbidden but that are still not in the allowed set.
+// allowedActionsPart1 is the §6.6.1 t1 action-type whitelist for PDF/A-1: the
+// action /S must be one of GoTo, GoToR, Thread, URI, Named or SubmitForm, so
+// any other /S value (Rendition, GoToE, Launch, SetOCGState, ...) fails.
+// Modelling this as a whitelist, not a blacklist, is required to flag types
+// the spec never enumerated as forbidden but that are still not in the allowed
+// set.
 //
 //nolint:gochecknoglobals // package-level lookup table mirroring PDFA-1B.xml.
 var allowedActionsPart1 = map[ast.PdfName]bool{
@@ -222,7 +224,8 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	}
 
 	// Walk each action in the AA dict for forbidden types.
-	for key, actionObj := range aaDict {
+	for _, key := range sortedNames(aaDict) {
+		actionObj := aaDict[key]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -272,7 +275,8 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 		}
 
 		// Walk each action in the page AA dict for forbidden types.
-		for key, actionObj := range aaDict {
+		for _, key := range sortedNames(aaDict) {
+			actionObj := aaDict[key]
 			if ctx.Err() != nil {
 				return results
 			}
@@ -347,7 +351,8 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 						results = append(results, checkAAKeyRestrictions(ctx, doc, aaDict, location)...)
 					}
 
-					for key, actionObj := range aaDict {
+					for _, key := range sortedNames(aaDict) {
+						actionObj := aaDict[key]
 						if ctx.Err() != nil {
 							return results
 						}
@@ -421,7 +426,8 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	if hasAA {
 		aaDict, err := document.ResolveDict(ctx, doc, annotDict["AA"])
 		if err == nil && aaDict != nil {
-			for key, actionObj := range aaDict {
+			for _, key := range sortedNames(aaDict) {
+				actionObj := aaDict[key]
 				if ctx.Err() != nil {
 					return results
 				}
@@ -507,6 +513,7 @@ func checkAAKeyRestrictions(_ context.Context, _ *document.Document, aaDict ast.
 	if len(forbidden) == 0 {
 		return nil
 	}
+	slices.Sort(forbidden) // deterministic message order
 
 	return failf(Rule_19005_4_6_6_3_t01, "%v at %s", forbidden, location)
 }
@@ -607,8 +614,9 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 		// Check /A action on this outline item.
 		// For PDF/A, outline items are user-initiated (not automatic triggers).
 		// The spec restricts certain action types in /AA (additional actions)
-		// but outline /A is explicit user interaction. VeraPDF does not flag
-		// /JavaScript or /SetOCGState on outline items for PDF/A.
+		// but outline /A is explicit user interaction, so it carries the
+		// per-profile action-type whitelist via the outline-specific handling
+		// below rather than the /AA key restrictions.
 		if aObj, hasA := item["A"]; hasA {
 			aDict, err := document.ResolveDict(ctx, doc, aObj)
 			if err == nil && aDict != nil {
@@ -643,8 +651,8 @@ func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action 
 
 	var results []Violation
 
-	// veraPDF applies the same PDAction whitelist (6.6.1/6.5.1 t1) to outline
-	// /A actions as to every other action site, with no outline exemption.
+	// The §6.6.1/§6.5.1 t1 action-type whitelist applies to every PDAction
+	// site, including outline /A actions: the spec grants no outline exemption.
 	if isForbiddenAction(actionType, profile) {
 		rule := forbiddenActionTypeRule(part)
 		results = append(results, failf(rule, "%s at outline item", actionType)...)
@@ -704,9 +712,9 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		loc := fmt.Sprintf("form field %d", i)
 
 		// §6.6.2 t2 (PDF/A-1) / §6.4.1 t2 (PDF/A-2/3): a form field dictionary
-		// shall not contain an /AA additional-actions entry. veraPDF tests
-		// containsAA on the PDFormField object, so mere presence of the key is
-		// the violation, independent of the actions it holds.
+		// shall not contain an /AA additional-actions entry. The prohibition
+		// is on the key itself, so mere presence of /AA is the violation,
+		// independent of the actions it holds.
 		if _, hasAA := field["AA"]; hasAA {
 			if rule := fieldAARule(part); rule != (Rule{}) {
 				*results = append(*results, failf(rule, "%s contains forbidden /AA entry", loc)...)
@@ -727,7 +735,8 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		if aaObj, hasAA := field["AA"]; hasAA {
 			aaDict, err := document.ResolveDict(ctx, doc, aaObj)
 			if err == nil && aaDict != nil {
-				for key, valObj := range aaDict {
+				for _, key := range sortedNames(aaDict) {
+					valObj := aaDict[key]
 					actDict, err := document.ResolveDict(ctx, doc, valObj)
 					if err != nil || actDict == nil {
 						continue

@@ -244,13 +244,13 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			annots[i] = nil
 			removed = true
 			// Null the annotation object as well. Dropping it from /Annots
-			// alone leaves the object live, and veraPDF scans every object
-			// for /Type /Filespec: a Rendition /Screen annotation carries its
-			// MediaClip embedded-file filespec inline, so an orphaned object
-			// still fails ISO 19005-3 §6.8 / 19005-4 §6.9 (verified on
-			// PDF_UA-1__7.18.6.2-t01-fail-a remediated to A-2/3/4). Annotation
-			// rules are /Annots-array-scoped, so the nulled object is invisible
-			// to them.
+			// alone leaves the object live. A Rendition /Screen annotation
+			// carries its MediaClip embedded-file filespec inline, and the
+			// embedded-file requirements (ISO 19005-3 §6.8, 19005-4 §6.9)
+			// apply to every /Type /Filespec in the file, not just those
+			// reachable through /Annots, so an orphaned object still fails
+			// them. Annotation rules are /Annots-array-scoped, so the nulled
+			// object is invisible to them.
 			if annotRef.ObjectNum > 0 {
 				alloc.AllocAt(annotRef.ObjectNum, ast.PdfNull{})
 			}

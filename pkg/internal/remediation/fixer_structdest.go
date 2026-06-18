@@ -26,8 +26,9 @@ const maxOutlineFixWalk = 10000
 // fixStructDest rewrites explicit array destinations as structure
 // destinations: a dictionary destination carrying the original array
 // under /D plus an /SD array targeting a structure element on the
-// destination page (ISO 32000-2 §12.3.2.3). veraPDF's PDDestination
-// model accepts a dictionary destination once /SD is present. The
+// destination page (ISO 32000-2 §12.3.2.3). A structure destination is
+// a dictionary destination carrying /SD, so the original /D array stays
+// valid while /SD supplies the structure-element target. The
 // element is the page's first structure element via /StructParents and
 // the ParentTree, falling back to the structure tree root's first kid;
 // without a structure tree nothing is rewritten (an /SD pointing
@@ -172,11 +173,11 @@ func (p *structElemPicker) wrapDest(ctx context.Context, obj ast.PdfObject) (ast
 }
 
 // fixGoToAction adds an action-level /SD to a GoTo action, keeping /D
-// untouched: the PDF 2.0 dual-destination form (ISO 32000-2 Table 202)
-// that veraPDF's containsStructDestination accepts. Wrapping /D in a
-// dictionary destination is NOT enough for actions: veraPDF checks the
-// action's own /SD key (272 corpus cells stayed vera-failed with the
-// wrapped-/D form).
+// untouched: the PDF 2.0 dual-destination form (ISO 32000-2 Table 202).
+// A GoTo action resolves its destination from its own /D or /SD entry,
+// so wrapping /D in a dictionary destination is NOT enough for actions:
+// the action itself must carry /SD to count as a structure destination
+// under ISO 14289-2 §8.8.
 func (p *structElemPicker) fixGoToAction(ctx context.Context, alloc *writer.ObjAllocator, obj ast.PdfObject) bool {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	var dict ast.PdfDict

@@ -23,11 +23,15 @@ func matchParentTree(v compliance.Violation) bool {
 
 // fixParentTree rebuilds the StructTreeRoot /ParentTree from the structure
 // tree: every structure element holding integer /K marked-content ids with a
-// /Pg page gets registered under that page's /StructParents key. veraPDF
-// resolves isTaggedContent exclusively through this path, so structure
-// produced by the wrapping fixers stays invisible to it until the tree is
-// rebuilt. Existing Nums entries and /StructParents keys are preserved; only
-// missing registrations are added.
+// /Pg page gets registered under that page's /StructParents key. Per ISO
+// 32000-2 §14.7.4.4, the /ParentTree is the sole reverse link from a marked
+// content sequence back to its structure element: a consumer maps the page's
+// /StructParents key plus the operator's /MCID into the tree to decide whether
+// content is tagged. Content the wrapping fixers parent only through the /K
+// chain therefore reads as untagged until that reverse link exists, which is
+// what ISO 14289-1 §7.1 t3 and ISO 14289-2 §8.2.2 t1 flag. Existing Nums
+// entries and /StructParents keys are preserved; only missing registrations
+// are added.
 func fixParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {

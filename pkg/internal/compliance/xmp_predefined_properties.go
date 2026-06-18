@@ -1,42 +1,40 @@
 package compliance
 
-// Predefined XMP schema property catalogs, mirrored from veraPDF.
+// Predefined XMP schema property catalogs.
 //
 // Normative sources: XMP Specification (Adobe, January 2004) as referenced
 // by ISO 19005-1 §6.7.9, and XMP Specification (Adobe, September 2005,
 // later ISO 16684-1) as referenced by ISO 19005-2/3 §6.6.2.3.1. Those
 // clauses require every XMP property to use either a predefined schema or
 // a PDF/A extension schema, so the exact predefined property sets are
-// compliance-determining spec tables, not heuristics.
+// compliance-determining spec tables, not heuristics. The property names
+// and namespaces below are the schemas defined in those two XMP
+// Specifications (Dublin Core, XMP Basic, XMP Rights, XMP Media
+// Management, Adobe PDF, Photoshop, TIFF, EXIF and, for the 2005 variant,
+// Camera Raw, EXIF Auxiliary and XMP Dynamic Media), keyed by the version
+// that introduced each property so a packet is validated against the XMP
+// edition normative for its PDF/A part.
 //
-// Parity reference: veraPDF-library, class
-// org.verapdf.model.tools.xmp.SchemasDefinitionCreator (registration
-// recipe: common + per-variant lists) and
-// org.verapdf.model.tools.xmp.XMPConstants (property name/type arrays),
-// branch integration, commit b579315dce4ae7849c8b1774729dc7818536e82c:
-// https://github.com/veraPDF/veraPDF-library/blob/b579315dce4ae7849c8b1774729dc7818536e82c/core/src/main/java/org/verapdf/model/tools/xmp/SchemasDefinitionCreator.java
-// https://github.com/veraPDF/veraPDF-library/blob/b579315dce4ae7849c8b1774729dc7818536e82c/core/src/main/java/org/verapdf/model/tools/xmp/XMPConstants.java
-//
-// Value-type strings reuse veraPDF's lowercase notation ("rational",
-// "seq integer", "lang alt", ...) verbatim so a later value-type phase can
-// diff against the upstream arrays mechanically. This pass consumes
+// Value-type strings use the XMP lowercase notation ("rational",
+// "seq integer", "lang alt", ...) so a later value-type phase can match
+// each property against its declared XMP type. This pass consumes
 // presence only.
 
 import "maps"
 
-// xmpPredefinedCommon lists the properties registered for both catalog
-// variants (XMPConstants *_COMMON arrays plus the two seq-choice
-// registrations in SchemasDefinitionCreator.createBasicSchemasDefinition).
+// xmpPredefinedCommon lists the properties predefined identically by both
+// the 2004 and 2005 XMP Specifications, so they are valid in every PDF/A
+// part's catalog without an extension schema.
 //
 //nolint:gochecknoglobals // static spec table
 var xmpPredefinedCommon = map[string]map[string]string{
-	// PDF/A Identification (pdfaid:), PDFA_IDENTIFICATION_COMMON.
+	// PDF/A Identification (pdfaid:).
 	"http://www.aiim.org/pdfa/ns/id/": {
 		"part": "integer",
 		"amd":  "text",
 	},
 
-	// Dublin Core (dc:), DUBLIN_CORE_COMMON.
+	// Dublin Core (dc:).
 	"http://purl.org/dc/elements/1.1/": {
 		"contributor": "bag propername",
 		"coverage":    "text",
@@ -55,7 +53,7 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"type":        "bag text",
 	},
 
-	// XMP Basic (xmp:), XMP_BASIC_COMMON.
+	// XMP Basic (xmp:).
 	"http://ns.adobe.com/xap/1.0/": {
 		"Advisory":     "bag text",
 		"BaseURL":      "url",
@@ -68,7 +66,7 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"Thumbnails":   "alt thumbnail",
 	},
 
-	// XMP Rights (xmpRights:), XMP_RIGHTS_COMMON.
+	// XMP Rights (xmpRights:).
 	"http://ns.adobe.com/xap/1.0/rights/": {
 		"Certificate":  "url",
 		"Marked":       "boolean",
@@ -77,9 +75,10 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"WebStatement": "url",
 	},
 
-	// XMP Media Management (xmpMM:), XMP_MEDIA_MANAGEMENT_COMMON.
-	// Ingredients, OriginalDocumentID, Pantry and Subject are NOT
-	// predefined: veraPDF omits them and flags them when undeclared.
+	// XMP Media Management (xmpMM:). Ingredients, OriginalDocumentID,
+	// Pantry and Subject are NOT in the XMP Specification editions
+	// normative for PDF/A, so each one needs an extension schema
+	// declaration when used.
 	"http://ns.adobe.com/xap/1.0/mm/": {
 		"DerivedFrom":     "resourceref",
 		"DocumentID":      "uri",
@@ -99,25 +98,26 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"Versions":        "seq version",
 	},
 
-	// XMP Basic Job Ticket (xmpBJ:), XMP_BASIC_JOB_COMMON.
+	// XMP Basic Job Ticket (xmpBJ:).
 	"http://ns.adobe.com/xap/1.0/bj/": {
 		"JobRef": "bag job",
 	},
 
-	// XMP Paged-Text (xmpTPg:), XMP_PAGED_TEXT_COMMON.
+	// XMP Paged-Text (xmpTPg:).
 	"http://ns.adobe.com/xap/1.0/t/pg/": {
 		"MaxPageSize": "dimensions",
 		"NPages":      "integer",
 	},
 
-	// Adobe PDF (pdf:), ADOBE_PDF_COMMON. Trapped is NOT predefined.
+	// Adobe PDF (pdf:). Trapped is NOT predefined, so it needs an
+	// extension schema declaration when used.
 	"http://ns.adobe.com/pdf/1.3/": {
 		"Keywords":   "text",
 		"PDFVersion": "text",
 		"Producer":   "agentname",
 	},
 
-	// Photoshop (photoshop:), PHOTOSHOP_COMMON.
+	// Photoshop (photoshop:).
 	"http://ns.adobe.com/photoshop/1.0/": {
 		"AuthorsPosition":       "text",
 		"CaptionWriter":         "propername",
@@ -134,8 +134,7 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"Urgency":               "integer",
 	},
 
-	// TIFF (tiff:), TIFF_WITHOUT_RESTRICTED_FIELD_COMMON +
-	// TIFF_RESTRICTED_FIELD_COMMON + the YCbCrSubSampling seq-choice.
+	// TIFF (tiff:).
 	"http://ns.adobe.com/tiff/1.0/": {
 		"Artist":                    "propername",
 		"BitsPerSample":             "seq integer",
@@ -164,9 +163,7 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"YResolution":               "rational",
 	},
 
-	// EXIF (exif:), EXIF_WITHOUT_RESTRICTED_FIELD_COMMON +
-	// EXIF_RESTRICTED_FIELD_COMMON + the ComponentsConfiguration
-	// seq-choice.
+	// EXIF (exif:).
 	"http://ns.adobe.com/exif/1.0/": {
 		"ApertureValue":            "rational",
 		"BrightnessValue":          "rational",
@@ -243,30 +240,27 @@ var xmpPredefinedCommon = map[string]map[string]string{
 		"WhiteBalance":             "integer",
 	},
 
-	// Namespaces veraPDF's XMPCore registers as known schemas without
-	// predefining any properties. Every member used in a packet therefore
-	// needs an extension schema declaration, and veraPDF fails both
-	// definedness (6.7.9-t2 / 6.6.2.3.1-t1) and value-type resolution
-	// (6.7.9-t3 / 6.6.2.3.1-t2) on each one (verified live on
-	// PDF_UA-1__7.1-t03-pass-a pdfx:Company and
-	// PDF_UA-1__7-18.3-t01-pass-a adhocwf:state under PDF/A-2b).
+	// Known XMP namespaces that predefine no properties of their own. The
+	// XMP Specification editions normative for PDF/A do not list any
+	// property in these schemas, so every member used in a packet needs an
+	// extension schema declaration. Without one, the property fails both
+	// definedness (ISO 19005-1 §6.7.9 / ISO 19005-2/3 §6.6.2.3.1) and
+	// value-type resolution under those same clauses.
 	"http://ns.adobe.com/pdfx/1.3/":                 {},
 	"http://ns.adobe.com/AcrobatAdhocWorkflow/1.0/": {},
 
 	// The PDF/UA Identification schema is ISO 14289, not part of the XMP
-	// Specification or ISO 19005: under PDF/A parts 1-3 every pdfuaid
-	// property needs an extension schema declaration, and veraPDF fails
-	// both definedness and type resolution on undeclared ones (verified
-	// live on PDF_UA-2__5-t02-fail-a remediated to PDF/A-2b:
-	// 6.6.2.3.1 t2 on pdfuaid:part and pdfuaid:rev in attribute form).
+	// Specification or ISO 19005. Under PDF/A parts 1-3 every pdfuaid
+	// property is therefore not predefined and needs an extension schema
+	// declaration, failing both definedness and value-type resolution
+	// (ISO 19005-1 §6.7.9 / ISO 19005-2/3 §6.6.2.3.1) when undeclared.
 	"http://www.aiim.org/pdfua/ns/id/": {},
 }
 
-// xmpPredefined2004Extra lists the additions registered only by
-// SchemasDefinitionCreator.createPredefinedPDFA_1SchemasDefinition (the
-// XMP 2004 catalog used for PDF/A-1): PHOTOSHOP_DIFFER_1,
-// EXIF_WITHOUT_RESTRICTED_FIELD_DIFFER_1, EXIF_RESTRICTED_FIELD_DIFFER_1
-// and PDFA_IDENTIFICATION_RESTRICTED_FIELD_DIFFER_1.
+// xmpPredefined2004Extra lists the properties predefined only by the 2004
+// XMP Specification, the edition normative for PDF/A-1 (ISO 19005-1
+// §6.7.9). Where the 2004 and 2005 editions disagree on a property's
+// presence or value type, the 2004 form belongs here.
 //
 //nolint:gochecknoglobals // static spec table
 var xmpPredefined2004Extra = map[string]map[string]string{
@@ -286,12 +280,12 @@ var xmpPredefined2004Extra = map[string]map[string]string{
 	},
 }
 
-// xmpPredefined2005Extra lists the additions registered only by
-// SchemasDefinitionCreator.createPredefinedPDFA_2_3SchemasDefinition (the
-// XMP 2005 catalog used for PDF/A-2 and PDF/A-3): the *_SPECIFIED_2_3 and
-// *_DIFFER_2_3 arrays. exif:MakerNote is deliberately absent: the 2005 XMP
-// Specification dropped it, so veraPDF flags it under §6.6.2.3.1 for parts
-// 2 and 3 while accepting it for part 1.
+// xmpPredefined2005Extra lists the properties predefined only by the 2005
+// XMP Specification, the edition normative for PDF/A-2 and PDF/A-3 (ISO
+// 19005-2/3 §6.6.2.3.1). exif:MakerNote is deliberately absent: the 2005
+// edition dropped it, so under parts 2 and 3 it is no longer predefined
+// and needs an extension schema declaration, whereas part 1 (the 2004
+// edition, [xmpPredefined2004Extra]) still predefines it.
 //
 //nolint:gochecknoglobals // static spec table
 var xmpPredefined2005Extra = map[string]map[string]string{
@@ -318,15 +312,14 @@ var xmpPredefined2005Extra = map[string]map[string]string{
 		"GPSMeasureMode":  "text",
 		"LightSource":     "integer",
 	},
-	// EXIF Auxiliary (aux:), AUX_SPECIFIED_2_3. Absent from the 2004
-	// catalog entirely.
+	// EXIF Auxiliary (aux:). Introduced by the 2005 edition, absent from
+	// the 2004 catalog entirely.
 	"http://ns.adobe.com/exif/1.0/aux/": {
 		"Lens":         "text",
 		"SerialNumber": "text",
 	},
-	// Camera Raw (crs:), CAMERA_RAW_WITHOUT_RESTRICTED_FIELD_SPECIFIED_2_3
-	// + CAMERA_RAW_RESTRICTED_FIELD_SPECIFIED_2_3 +
-	// CAMERA_RAW_SEQ_OF_POINTS_SPECIFIED_2_3. Absent from the 2004 catalog.
+	// Camera Raw (crs:). Introduced by the 2005 edition, absent from the
+	// 2004 catalog.
 	"http://ns.adobe.com/camera-raw-settings/1.0/": {
 		"AutoBrightness":       "boolean",
 		"AutoContrast":         "boolean",
@@ -370,10 +363,8 @@ var xmpPredefined2005Extra = map[string]map[string]string{
 		"VignetteMidpoint":     "integer",
 		"WhiteBalance":         "text",
 	},
-	// XMP Dynamic Media (xmpDM:),
-	// XMP_DYNAMIC_MEDIA_WITHOUT_RESTRICTED_FIELD_SPECIFIED_2_3 +
-	// XMP_DYNAMIC_MEDIA_RESTRICTED_FIELD_SPECIFIED_2_3. Absent from the
-	// 2004 catalog.
+	// XMP Dynamic Media (xmpDM:). Introduced by the 2005 edition, absent
+	// from the 2004 catalog.
 	"http://ns.adobe.com/xmp/1.0/DynamicMedia/": {
 		"absPeakAudioFilePath":         "uri",
 		"album":                        "text",
@@ -470,8 +461,8 @@ func xmpMergePredefined(base, extra map[string]map[string]string) map[string]map
 // xmpPredefinedPropertyCatalog returns the predefined property catalog for
 // the given PDF/A part: XMP 2004 for part 1, XMP 2005 for parts 2 and 3.
 // Other parts return nil: ISO 19005-4 drops the extension-schema
-// requirements of parts 1-3 and the veraPDF PDFA-4 profile carries no
-// predefined-property rule (see [xmpSchemaRule]).
+// requirements of parts 1-3, so PDF/A-4 has no predefined-property rule
+// to enforce (see [xmpSchemaRule]).
 func xmpPredefinedPropertyCatalog(part int) map[string]map[string]string {
 	switch part {
 	case 1:

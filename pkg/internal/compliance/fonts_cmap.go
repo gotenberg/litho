@@ -10,8 +10,8 @@ import (
 )
 
 // cidToGIDMapRule returns the CIDToGIDMap rule for the given profile.
-// veraPDF's PDFA-1A profile carries this rule too (6.3.3.2 t1), keyed on
-// PDCIDFont; earlier litho skipped part 1.
+// ISO 19005-1 §6.3.3.2 applies the CIDToGIDMap requirement to part 1 as well,
+// keyed on the CIDFont dictionary; earlier litho skipped part 1.
 func cidToGIDMapRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		if PDFUAPart(profile) == 2 {
@@ -45,8 +45,8 @@ func cmapEmbeddingRules(profile string) (t1, t2, t3 Rule) {
 	}
 	switch PDFAPart(profile) {
 	case 1:
-		// veraPDF's PDFA-1A/1B profile has t1 (embedded/Identity) and t2
-		// (WMode) but no usecmap rule (t3).
+		// ISO 19005-1 §6.3.3.3 defines t1 (embedded/Identity) and t2 (WMode) but
+		// has no usecmap rule, so t3 is empty for part 1.
 		return Rule_19005_1_6_3_3_3_t01, Rule_19005_1_6_3_3_3_t02, Rule{}
 	case 2:
 		return Rule_19005_2_6_2_11_3_3_t01, Rule_19005_2_6_2_11_3_3_t02, Rule_19005_2_6_2_11_3_3_t03
@@ -211,11 +211,11 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		encName, _ := document.ResolveName(ctx, doc, encObj)
 		// A non-Identity encoding given as a name that is neither embedded nor a
 		// real predefined CMap supplies no resolvable CIDSystemInfo, so the
-		// required Registry/Ordering relationship cannot be established. A bogus
+		// CIDSystemInfo consistency check (ISO 19005-2 §6.2.11.3.1) cannot
+		// establish the required Registry/Ordering relationship and fails. A bogus
 		// name shaped like a CIDSystemInfo ("Adobe-Korea1-2") parses cleanly via
 		// parsePredefinedCMapName and would spuriously "match" the CIDFont;
-		// isPredefinedCMap rejects it. veraPDF fires 6.2.11.3.1 here alongside
-		// the not-embedded rule (verified on /Adobe-Korea1-2 in 7.21.3.3-t01-fail-a).
+		// isPredefinedCMap rejects it.
 		if !isPredefinedCMap(string(encName)) {
 			return failf(rule, "font %s on page %d: encoding %q is neither embedded nor a predefined CMap",
 				fontName, pageNum, string(encName))
@@ -309,11 +309,10 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 	}
 
 	// t1: If encoding is a name and NOT predefined, it must be embedded.
-	// For PDF/UA-2 (ISO 32000-2 Table 116) and PDF/A-1, only Identity-H/V are
-	// exempt: veraPDF's PDFA-1 6.3.3.3 t1 is `CMapName == Identity-H ||
-	// CMapName == Identity-V || containsEmbeddedFile`, so a predefined CJK CMap
-	// name that is not embedded fails (verified vs the goldens: a part-2 pass
-	// fixture using a predefined CMap fails 6.3.3.3-t1 when validated as A-1a).
+	// For PDF/UA-2 (ISO 32000-2 Table 116) and PDF/A-1 (§6.3.3.3), only
+	// Identity-H and Identity-V are exempt: those parts require every other CMap,
+	// including the predefined CJK CMaps, to be embedded, so a predefined CJK
+	// CMap name that is not embedded fails t1.
 	if streamErr != nil && string(encName) != "" {
 		predefined := isPredefinedCMap(string(encName))
 		if profile == "PDF/UA-2" || PDFAPart(profile) == 1 {
@@ -336,18 +335,17 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 	// PDF/A-1 §6.3.3.3 requires EVERY CMap used in the file, except Identity-H/V,
 	// to be embedded, including a base CMap that an embedded CMap pulls in via
 	// /UseCMap. A /UseCMap given as a NAME (rather than an embedded stream)
-	// references a non-embedded predefined CMap, so a non-Identity name fails t1
-	// (verified live on a /UseCMap /H chain in 7.21.3.3-t03 remediated to A-1a).
-	// Part 1 only: parts 2+/4 permit predefined CMaps, and PDF/UA-2's 8.4.5.4 t1
-	// does not extend the embedding requirement to the /UseCMap base (a /UseCMap
-	// /H pass fixture passes UA-2 live, so gating UA-2 here false-positives).
+	// references a non-embedded predefined CMap, so a non-Identity name fails t1.
+	// Part 1 only: parts 2+/4 permit predefined CMaps, and PDF/UA-2's §8.4.5.4 t1
+	// does not extend the embedding requirement to the /UseCMap base, so gating
+	// UA-2 here would false-positive a /UseCMap base named by a predefined CMap.
 	if useName, _ := document.ResolveName(ctx, doc, encStream.Dict["UseCMap"]); useName != "" {
 		// Part 1 (§6.3.3.3) requires every non-Identity CMap embedded, so any
 		// named /UseCMap base fails. Parts 2+/4 (§6.2.11.3.3 / §6.2.10.3.3)
 		// permit the Table-118 predefined CMaps by name, so only a NON-predefined
-		// named base fails (verified live on /UseCMap /Adobe-Korea1-2 in
-		// 7.21.3.3-t03 → A-2a: vera fires t1 alongside the t3 usecmap rule).
-		// UA profiles (PDFAPart==0) do not extend embedding to the base.
+		// named base fails the embedding rule t1; a CIDSystemInfo-shaped base also
+		// trips the t3 usecmap rule. UA profiles (PDFAPart==0) do not extend
+		// embedding to the base.
 		var unembedded bool
 		switch {
 		case PDFAPart(profile) == 1:
@@ -388,9 +386,9 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		// follow embedded CMap chains for non-predefined references.
 		usedCMap := findNonPredefinedUseCMap(ctx, doc, data, encStream.Dict, profile, 0)
 		if usedCMap != "" {
-			// PDF/A-1's 6.3.3.3 has no usecmap rule (ruleT3 is empty there);
-			// the central zero-Rule filter drops it, matching veraPDF, which
-			// does not report an embedded CMap's usecmap chain under part 1.
+			// PDF/A-1 §6.3.3.3 has no usecmap rule (ruleT3 is empty there); the
+			// central zero-Rule filter drops it, so an embedded CMap's usecmap
+			// chain is not reported under part 1.
 			results = append(results, failf(ruleT3,
 				"font %s on page %d: CMap chain references non-predefined CMap %q",
 				fontName, pageNum, usedCMap)...)
@@ -440,11 +438,16 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 	return nil
 }
 
+// maxUseCMapChainDepth bounds how far the embedded usecmap/UseCMap chain is
+// followed when reading attacker-controlled CMap stream data. Anti-DoS guard,
+// not spec-mandated: real usecmap chains are 1-2 deep.
+const maxUseCMapChainDepth = 5
+
 // findNonPredefinedUseCMap checks a CMap (stream data + dict) for references to
 // non-predefined CMaps, recursively following embedded CMap chains.
 // Returns the first non-predefined CMap name found, or "" if all are predefined.
 func findNonPredefinedUseCMap(ctx context.Context, doc *document.Document, data []byte, cmapDict ast.PdfDict, profile string, depth int) string {
-	if depth > 5 {
+	if depth > maxUseCMapChainDepth {
 		return ""
 	}
 

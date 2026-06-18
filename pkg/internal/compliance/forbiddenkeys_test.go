@@ -81,8 +81,10 @@ func TestPresStepsForbidden(t *testing.T) {
 
 func TestFormFieldAAForbidden(t *testing.T) {
 	ctx := context.Background()
-	// A form field carrying an (empty) /AA entry. veraPDF tests containsAA, so
-	// presence alone is the violation independent of the actions it holds.
+	// A form field carrying an (empty) /AA entry. ISO 19005-1 §6.6.2 and
+	// ISO 19005-2/3 §6.4.1 forbid the field additional-actions dictionary
+	// itself, so its mere presence is the violation independent of whether it
+	// holds any actions.
 	doc, cat := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

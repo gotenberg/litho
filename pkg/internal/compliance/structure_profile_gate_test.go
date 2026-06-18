@@ -28,8 +28,9 @@ func validateUA(t *testing.T, profile models.PDFUAProfile, objs ...string) []Vio
 }
 
 // assertNoUA1Rules sweeps every returned violation and fails on any rule from
-// the ISO 14289-1 specification. The veraPDF PDFUA-2 profile contains no
-// ISO_14289_1 rules, so a PDF/UA-2 run must never emit one.
+// the ISO 14289-1 specification. PDF/UA-2 conformance is governed by
+// ISO 14289-2, a distinct standard, so a PDF/UA-2 run must never emit an
+// ISO 14289-1 rule.
 func assertNoUA1Rules(t *testing.T, violations []Violation) {
 	t.Helper()
 	for _, v := range violations {
@@ -41,8 +42,9 @@ func assertNoUA1Rules(t *testing.T, violations []Violation) {
 }
 
 // tableDefectObjs is a tagged document with a UA-1-only structure defect: a
-// TD directly under a TBody (no TR). PDF/UA-1 §7.2 rejects this containment;
-// the veraPDF PDFUA-2 profile has no tag-containment rules.
+// TD directly under a TBody (no TR). PDF/UA-1 §7.2 rejects this containment.
+// PDF/UA-2 (ISO 14289-2) does not carry the fixed UA-1 tag-containment rules,
+// so the defect emits no ISO 14289-1 rule under PDF/UA-2.
 func tableDefectObjs() []string {
 	return []string{
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /MarkInfo << /Marked true >> >>",
@@ -57,8 +59,9 @@ func tableDefectObjs() []string {
 }
 
 // headingSkipObjs is a tagged document with a UA-1-only heading defect: H1
-// followed by H3 skips a level. PDF/UA-1 §7.4.2 rejects the skip; the veraPDF
-// PDFUA-2 profile leaves Hn sequences unconstrained.
+// followed by H3 skips a level. PDF/UA-1 §7.4.2 rejects the skip. PDF/UA-2
+// (ISO 14289-2) does not impose the strict numbered-heading sequence, so the
+// skip emits no ISO 14289-1 rule under PDF/UA-2.
 func headingSkipObjs() []string {
 	return []string{
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /MarkInfo << /Marked true >> >>",

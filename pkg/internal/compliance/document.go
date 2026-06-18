@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -87,7 +88,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 // checkVersionPart1 validates that the PDF header format is correct for PDF/A-1.
 // Per §6.1.2, the rule checks that the header is `%PDF-x.y` format, NOT the
-// version number value. VeraPDF does not enforce a maximum version here.
+// version number value.
 func checkVersionPart1(_ *document.Document, _ ast.PdfDict) []Violation {
 	// The header format is validated at parse time by the lexer.
 	// §6.1.2 does not restrict the version number for PDF/A-1.
@@ -213,10 +214,10 @@ func checkNeedsRenderingKey(catalog ast.PdfDict, part int) []Violation {
 }
 
 // checkOCGUsageApplication validates that no optional-content configuration
-// dictionary carries an /AS (usage application) array. veraPDF's PDFA-2/3 6.9
-// t4 is `AS == null`: a usage-application array would let viewers toggle
+// dictionary carries an /AS (usage application) array. ISO 19005-2/3 §6.9 t4
+// requires /AS to be absent: a usage-application array would let viewers toggle
 // content visibility automatically, which PDF/A forbids. PDF/A-4 drops the rule
-// (PDFA-4 6.10 has no AS test), so ocgASRule returns a zero Rule there.
+// (ISO 19005-4 §6.10 has no AS test), so ocgASRule returns a zero Rule there.
 func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	rule := ocgASRule(part)
 	if rule.Specification == "" {
@@ -291,6 +292,7 @@ func checkInfoDictPart4(ctx context.Context, doc *document.Document, catalog ast
 				badKeys = append(badKeys, string(key))
 			}
 		}
+		slices.Sort(badKeys) // deterministic message order
 		if len(badKeys) > 0 {
 			return failf(Rule_19005_4_6_1_3_t05,
 				"Info dictionary contains keys [%s] (only ModDate allowed)", strings.Join(badKeys, ", "))
@@ -320,6 +322,7 @@ func checkPermissionsDict(ctx context.Context, doc *document.Document, catalog a
 			badKeys = append(badKeys, string(key))
 		}
 	}
+	slices.Sort(badKeys) // deterministic message order
 
 	if len(badKeys) > 0 {
 		rule := permsDictRule(part)
@@ -355,8 +358,9 @@ func permsDictRule(part int) Rule {
 
 // checkForbiddenOCProperties validates ISO 19005-1 §6.1.13 t1: a PDF/A-1
 // document catalog shall not contain the OCProperties key. Optional content is
-// not permitted in PDF/A-1, and veraPDF derives isOptionalContentPresent from
-// the catalog OCProperties entry, so its presence is the conformance signal.
+// not permitted in PDF/A-1, and the catalog /OCProperties entry is the canonical
+// indicator that a document declares optional content, so its presence alone is
+// the conformance signal.
 func checkForbiddenOCProperties(catalog ast.PdfDict) []Violation {
 	if _, ok := catalog["OCProperties"]; ok {
 		return fail(Rule_19005_1_6_1_13_t01, "catalog contains /OCProperties (optional content forbidden in PDF/A-1)")
@@ -613,9 +617,14 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 	return nil
 }
 
+// maxOCGOrderDepth bounds recursion into the attacker-nested /Order array of
+// an optional-content configuration. Anti-DoS guard, not spec-mandated: real
+// /Order nesting is a handful of levels deep; 20 is far beyond that.
+const maxOCGOrderDepth = 20
+
 // collectOrderOCGRefs recursively collects OCG indirect refs from an Order array.
 func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, result map[int]bool, depth int) {
-	if depth > 20 {
+	if depth > maxOCGOrderDepth {
 		return
 	}
 	// Direct indirect ref = OCG.

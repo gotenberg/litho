@@ -145,10 +145,9 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			// A Popup inherits content from its parent markup annotation, so a
 			// Popup WITH a /Parent is exempt. A parentless Popup has no source
 			// of content and must itself satisfy the Contents-or-Alt
-			// requirement: veraPDF UA-1 §7.18.1 t2 exempts only Widget, hidden,
-			// and out-of-cropbox annotations (verified live on a parentless
-			// full-page Popup in 6-3-2-t01-pass-b remediated to PDF/UA-1).
-			// Under PDF/UA-2 the markup-subtype filter below still exempts
+			// requirement: ISO 14289-1 §7.18.1 t2 exempts only Widget, hidden,
+			// and out-of-cropbox annotations, and a parentless Popup is none of
+			// those. Under PDF/UA-2 the markup-subtype filter below still exempts
 			// every Popup (Popup is not a markup type).
 			if subtype == "Popup" {
 				if _, hasParent := annot["Parent"]; hasParent {
@@ -156,12 +155,11 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				}
 			}
 
-			// ISO 14289-2 §8.9.2.3 covers markup annotations only, and
-			// veraPDF's PDFUA-2 profile scopes it the same way: a
-			// /Contents-less RichMedia annotation fails 8.9.2.4.19, never
-			// 8.9.2.3 (verified live on
-			// PDF_A-2b__veraPDF_test_suite_6-3-1-t01-fail-a remediated to
-			// PDF/UA-2). PDF/UA-1 §7.18.1 keeps the wider scope.
+			// ISO 14289-2 §8.9.2.3 covers markup annotations only, so a
+			// non-markup subtype is out of its scope. A /Contents-less
+			// RichMedia annotation fails its per-subtype description rule
+			// (§8.9.2.4.19), never §8.9.2.3. PDF/UA-1 §7.18.1 keeps the
+			// wider scope.
 			if profile == "PDF/UA-2" && !markupAnnotationSubtypes[subtype] {
 				continue
 			}
@@ -301,8 +299,10 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			if profile != "PDF/UA-2" {
 				continue
 			}
-			// veraPDF's 8.10.2.3 t02 escapes structParentType == null: a widget
-			// not linked into the structure tree (no /StructParent) is exempt.
+			// ISO 14289-2 §8.10.2.3 t02 applies to a widget linked into the
+			// structure tree. A widget with no /StructParent is not linked, so
+			// it has no structure-element alternate description to govern and is
+			// exempt.
 			if _, inTree := annot["StructParent"]; !inTree {
 				continue
 			}

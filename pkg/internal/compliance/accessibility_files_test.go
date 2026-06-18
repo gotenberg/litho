@@ -8,12 +8,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// TestPDFUA2DescScope pins the veraPDF scoping of ISO 14289-2 §8.14.1 t1
-// learned live: the rule covers file specifications in the EmbeddedFiles name
-// tree only, and PRESENCE of /Desc suffices (an empty /Desc () passes; vera
-// passes the empty-Desc filespec of PDF_A-3b__veraPDF_test_suite_6-8-t01-fail-a
-// remediated to PDF/UA-2 while failing the Desc-less
-// PDF_UA-2__8.14.1-t01-fail-a).
+// TestPDFUA2DescScope pins the scope of ISO 14289-2 §8.14.1: the /Desc
+// requirement applies to file specifications reachable through the
+// EmbeddedFiles name tree, not to those reachable only via /AF. PRESENCE of
+// /Desc satisfies the clause, so an empty /Desc () passes while a Desc-less
+// in-tree filespec fails; §8.14.1 mandates the entry but does not constrain
+// its string value.
 func TestPDFUA2DescScope(t *testing.T) {
 	ctx := context.Background()
 

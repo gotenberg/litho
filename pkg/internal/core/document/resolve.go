@@ -23,13 +23,21 @@ import (
 // Float safely extracts a float64 from a [ast.PdfObject].
 // Returns 0 if the object is neither a [ast.PdfInt] nor a [ast.PdfReal].
 func Float(obj ast.PdfObject) float64 {
+	f, _ := Number(obj)
+	return f
+}
+
+// Number returns the value of a numeric object ([ast.PdfReal] or
+// [ast.PdfInt]) and whether obj was numeric. Unlike [Float] it reports
+// non-numeric objects, letting callers distinguish them from a real zero.
+func Number(obj ast.PdfObject) (float64, bool) {
 	switch v := obj.(type) {
 	case ast.PdfReal:
-		return float64(v)
+		return float64(v), true
 	case ast.PdfInt:
-		return float64(v)
+		return float64(v), true
 	}
-	return 0
+	return 0, false
 }
 
 // ResolveObject resolves an indirect reference through the [Document.Resolve]

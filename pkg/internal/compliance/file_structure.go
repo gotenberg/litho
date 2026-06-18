@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -21,6 +22,19 @@ const (
 	minPageBound   = 3.0
 	maxPageBound   = 14400.0
 )
+
+// sortedEntryNums returns the document's cross-reference object numbers in
+// ascending order. Per-object structure checks iterate it instead of ranging
+// the entries map directly, so violations emit in a deterministic order
+// (CONTRIBUTING "Deterministic output").
+func sortedEntryNums(doc *document.Document) []int {
+	nums := make([]int, 0, len(doc.Index.Entries))
+	for objNum := range doc.Index.Entries {
+		nums = append(nums, objNum)
+	}
+	slices.Sort(nums)
+	return nums
+}
 
 // checkFileStructureGroup validates PDF file structure rules (§6.1).
 func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
@@ -55,7 +69,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 		results = append(results, checkUTF8Names(ctx, doc, catalog, profile)...)
 	}
 	if part == 4 {
-		results = append(results, checkPDFA4TrailerInfo(doc, catalog, profile)...)
+		results = append(results, checkPDFA4TrailerInfo(ctx, doc, catalog, profile)...)
 	}
 
 	doc.Logger.Debug("compliance.file_structure: checks complete",
@@ -323,7 +337,8 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 	forbiddenKeys := []ast.PdfName{"F", "FFilter", "FDecodeParms"}
 	var results []Violation
 
-	for objNum, entry := range doc.Index.Entries {
+	for _, objNum := range sortedEntryNums(doc) {
+		entry := doc.Index.Entries[objNum]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -357,7 +372,8 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 func checkStreamLZW(ctx context.Context, doc *document.Document, profile string) []Violation {
 	var results []Violation
 
-	for objNum, entry := range doc.Index.Entries {
+	for _, objNum := range sortedEntryNums(doc) {
+		entry := doc.Index.Entries[objNum]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -430,10 +446,9 @@ var standardFilters = map[string]bool{
 //
 // This is scoped to parts 2-4. ISO 19005-1 §6.1.10 restricts only the LZWDecode
 // filter (handled by [checkStreamLZW]); it imposes no general standard-filter
-// requirement, so veraPDF does not fire a filter rule on a non-LZW non-standard
-// name under PDF/A-1 (verified live on 6-1-6-2-t01-fail-b, where /Flatedecode
-// fires §6.1.7.2 under A-2/A-3 and §6.1.6.2 under A-4, but no filter rule under
-// A-1). Parts 2-4 (§6.1.7.2 / §6.1.6.2) do require the standard filter set.
+// requirement, so a non-LZW non-standard name (for example /Flatedecode with the
+// wrong case) is not a filter violation under PDF/A-1. Parts 2-4 (§6.1.7.2 /
+// §6.1.6.2) do require the standard filter set, so the same name fails there.
 func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string) []Violation {
 	if PDFAPart(profile) == 1 {
 		return nil
@@ -444,7 +459,8 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 	}
 
 	var results []Violation
-	for objNum, entry := range doc.Index.Entries {
+	for _, objNum := range sortedEntryNums(doc) {
+		entry := doc.Index.Entries[objNum]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -516,7 +532,8 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	// Check file specification dictionaries for /EF key.
-	for objNum, entry := range doc.Index.Entries {
+	for _, objNum := range sortedEntryNums(doc) {
+		entry := doc.Index.Entries[objNum]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -586,7 +603,8 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 	var results []Violation
 	rule := streamLengthRule(profile)
 
-	for objNum, entry := range doc.Index.Entries {
+	for _, objNum := range sortedEntryNums(doc) {
+		entry := doc.Index.Entries[objNum]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -768,10 +786,10 @@ var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox
 // be within [3, 14400] units in both directions.
 func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := PDFAPart(profile)
-	// Page boundary size limits apply to PDF/A-2 and -3 only: PDF 2.0
-	// drops the ISO 32000-1 media-box implementation limit, the veraPDF
-	// PDFA-4 profile has no such rule, and an unguarded zero Rule here
-	// serialized as a clause-less "-t00" residual (21 cells).
+	// Page boundary size limits apply to PDF/A-2 and -3 only: PDF/A-4 builds
+	// on PDF 2.0, which drops the ISO 32000-1 media-box implementation limit,
+	// so ISO 19005-4 carries no equivalent rule. An unguarded zero Rule here
+	// would also serialize as a clause-less "-t00" residual (21 cells).
 	if part < 2 {
 		return nil
 	}
@@ -870,19 +888,15 @@ func resolveFloat(ctx context.Context, doc *document.Document, obj ast.PdfObject
 	if err != nil {
 		return 0, err
 	}
-	switch v := resolved.(type) {
-	case ast.PdfReal:
-		return float64(v), nil
-	case ast.PdfInt:
-		return float64(v), nil
-	default:
-		return 0, fmt.Errorf("expected numeric, got %T", resolved)
+	if f, ok := document.Number(resolved); ok {
+		return f, nil
 	}
+	return 0, fmt.Errorf("expected numeric, got %T", resolved)
 }
 
 // checkPDFA4TrailerInfo validates PDF/A-4 §6.1.3 t04/t05: /Info key
 // restrictions in PDF/A-4.
-func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, _ string) []Violation {
+func checkPDFA4TrailerInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict, _ string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		return nil
@@ -900,7 +914,7 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, _ string
 	}
 
 	// §6.1.3 t05: if Info dict is present, it may only contain /ModDate.
-	infoDict, _ := document.ResolveDict(context.Background(), doc, infoObj)
+	infoDict, _ := document.ResolveDict(ctx, doc, infoObj)
 	if infoDict != nil {
 		var badKeys []string
 		for key := range infoDict {
@@ -908,6 +922,7 @@ func checkPDFA4TrailerInfo(doc *document.Document, catalog ast.PdfDict, _ string
 				badKeys = append(badKeys, string(key))
 			}
 		}
+		slices.Sort(badKeys) // deterministic message order
 		if len(badKeys) > 0 {
 			return failf(Rule_19005_4_6_1_3_t05,
 				"Info dictionary contains keys %v (only ModDate allowed)", badKeys)
@@ -1047,7 +1062,8 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		// RoleMap names.
 		roleMap, err := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
 		if err == nil && roleMap != nil {
-			for srcName, dstObj := range roleMap {
+			for _, srcName := range sortedNames(roleMap) {
+				dstObj := roleMap[srcName]
 				checkNameUTF8(string(srcName), "RoleMap source", rule, seen, &results)
 				dstName, _ := document.ResolveName(ctx, doc, dstObj)
 				if dstName != "" {

@@ -55,9 +55,10 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0)...)
 		}
 
-		// Annotation appearance streams carry their own resources;
-		// veraPDF reaches ExtGStates there too (the 6-2-10 fixtures fail
-		// 6.4 t6 on a gs used only inside an appearance form).
+		// Annotation appearance streams carry their own /Resources, so an
+		// ExtGState reached only inside an appearance form is still part of
+		// the rendered content and falls under the PDF/A-1 §6.4 transparency
+		// restrictions.
 		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, visited)...)
 	}
 	return results
@@ -65,9 +66,11 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 
 // checkResourceTransparency1 applies the PDF/A-1 §6.4 ExtGState and XObject
 // transparency checks to one resource dict and recurses into the resources of
-// nested Form XObjects and tiling patterns, mirroring veraPDF's full content
-// walk. visited breaks resource cycles; depth is capped by
-// [maxFormXObjectDepth] (anti-DoS guard shared with the device-colour scan).
+// nested Form XObjects and tiling patterns. The §6.4 restrictions cover every
+// graphics state used to render the page, so the walk follows resources through
+// nested XObjects and patterns rather than stopping at the page dict. visited
+// breaks resource cycles; depth is capped by [maxFormXObjectDepth] (anti-DoS
+// guard shared with the device-colour scan).
 func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited map[int]bool, depth int) []Violation {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return nil
@@ -79,11 +82,11 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, depth)...)
 	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, depth)...)
 
-	// Type 3 font resources: CharProc operators can reference transparency
-	// Group XObjects through the font's own /Resources (verified live:
-	// veraPDF fails 6.4 t3 on a Group reached only via
-	// font[0]/charStrings[0] in PDF_A-2b__veraPDF_test_suite_6-2-10-t04-fail-e
-	// under PDF/A-1b).
+	// Type 3 font resources: a CharProc is a content stream, and its
+	// operators draw through the font's own /Resources. A transparency Group
+	// XObject reached only via a glyph procedure is therefore still rendered
+	// content and is forbidden under PDF/A-1 §6.4, so the walk descends into
+	// each Type 3 font's resources.
 	if fontDict, err := document.ResolveDict(ctx, doc, res["Font"]); err == nil && fontDict != nil {
 		names := make([]ast.PdfName, 0, len(fontDict))
 		for name := range fontDict {
@@ -154,11 +157,12 @@ func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj a
 
 // checkAnnotAPTransparency1 applies the PDF/A-1 §6.4 transparency checks to
 // each annotation's appearance streams: the appearance form XObject's own
-// /Group and /SMask (veraPDF reaches the Group on a widget appearance form,
-// e.g. the 6-2-9-t05 fixtures fail 6.4 t3 on annots[0]/appearance[0]/Group
-// under PDF/A-1a) plus the ExtGStates and nested XObjects in its /Resources.
-// visited dedups appearance forms shared across annotations so a forbidden
-// Group fires once, matching veraPDF.
+// /Group and /SMask, plus the ExtGStates and nested XObjects in its
+// /Resources. An appearance form is a form XObject that paints the
+// annotation, so a transparency Group or /SMask on it is rendered content and
+// falls under §6.4. visited dedups appearance forms shared across annotations
+// so a forbidden Group fires once per form, not once per referencing
+// annotation.
 func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, visited map[int]bool) []Violation {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
@@ -185,9 +189,9 @@ func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page
 	return results
 }
 
-// appearanceTransparency1 checks one /AP entry — either an appearance form
+// appearanceTransparency1 checks one /AP entry, either an appearance form
 // XObject stream or a sub-dictionary of appearance states (e.g. a button's
-// /On and /Off) — for forbidden PDF/A-1 transparency.
+// /On and /Off), for forbidden PDF/A-1 transparency.
 func appearanceTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, pageNum int, visited map[int]bool) []Violation {
 	if stream, err := document.ResolveStream(ctx, doc, entry); err == nil {
 		return appearanceStreamTransparency1(ctx, doc, entry, stream, pageNum, visited)
@@ -261,7 +265,8 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 	}
 
 	var results []Violation
-	for gsName, gsObj := range gsDict {
+	for _, gsName := range sortedNames(gsDict) {
+		gsObj := gsDict[gsName]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -314,7 +319,8 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 	}
 
 	var results []Violation
-	for xoName, xoObj := range xobjDict {
+	for _, xoName := range sortedNames(xobjDict) {
+		xoObj := xobjDict[xoName]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -422,7 +428,8 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// Check blend modes in ExtGState.
 		gsDict, err := document.ResolveDict(ctx, doc, res["ExtGState"])
 		if err == nil && gsDict != nil {
-			for gsName, gsObj := range gsDict {
+			for _, gsName := range sortedNames(gsDict) {
+				gsObj := gsDict[gsName]
 				if ctx.Err() != nil {
 					return results
 				}

@@ -84,7 +84,10 @@ func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 
 	count := 0
 	inlineCS := make(map[ast.PdfName]ast.PdfArray)
-	for key, entry := range csDict {
+	// Sorted iteration so object allocation (and the output bytes) is
+	// deterministic across runs.
+	for _, key := range sortedDictKeys(csDict) {
+		entry := csDict[key]
 		ref, isRef := entry.(ast.PdfIndirectRef)
 		if isRef {
 			if visited[ref.ObjectNum] {

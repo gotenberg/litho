@@ -17,14 +17,14 @@ const (
 	annotFlagToggleNoView = 1 << 8 // bit 9 (PDF/A-2+)
 )
 
-// annotWhitelistPart23 mirrors veraPDF's PDFA-2/3 §6.3.1 t1 test verbatim: the
-// permitted annotation subtypes. Modelled as a whitelist, not a blacklist:
-// veraPDF fails any /Subtype outside this set, so a type the prose never
-// enumerated as forbidden (Redact, included here) is still permitted while a
-// PDF 1.4 type omitted from it (Sound, Movie, Screen) is not. Notably Redact
-// is allowed for parts 2/3 even though it postdates ISO 32000-1 Table 169.
+// annotWhitelistPart23 lists the annotation subtypes ISO 19005-2/3 §6.3.1
+// permits. Modelled as a whitelist, not a blacklist: any /Subtype outside this
+// set is rejected, so a type the prose never enumerated as forbidden (Redact,
+// included here) is still permitted while a PDF 1.4 type omitted from it
+// (Sound, Movie, Screen) is not. Redact is allowed for parts 2/3 even though it
+// postdates ISO 32000-1 Table 169.
 //
-//nolint:gochecknoglobals // static spec table mirroring PDFA-2B.xml.
+//nolint:gochecknoglobals // static spec table mirroring ISO 19005-2/3 §6.3.1.
 var annotWhitelistPart23 = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -34,10 +34,10 @@ var annotWhitelistPart23 = map[ast.PdfName]bool{
 	"Watermark": true, "Redact": true,
 }
 
-// annotWhitelistPart4 mirrors PDFA-4 §6.3.1 t1: the part-2/3 set with
-// FileAttachment dropped and Projection added.
+// annotWhitelistPart4 lists the annotation subtypes ISO 19005-4 §6.3.1 permits:
+// the part-2/3 set with FileAttachment dropped and Projection added.
 //
-//nolint:gochecknoglobals // static spec table mirroring PDFA-4.xml.
+//nolint:gochecknoglobals // static spec table mirroring ISO 19005-4 §6.3.1.
 var annotWhitelistPart4 = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -47,10 +47,11 @@ var annotWhitelistPart4 = map[ast.PdfName]bool{
 	"Redact": true, "Projection": true,
 }
 
-// annotWhitelistPart4e mirrors PDFA-4E §6.3.1 t1: the PDFA-4 set plus 3D and
-// RichMedia (3D/interactive content is permitted in the -e conformance).
+// annotWhitelistPart4e lists the annotation subtypes ISO 19005-4 §6.3.1 permits
+// for conformance level E: the [annotWhitelistPart4] set plus 3D and RichMedia
+// (level E permits 3D and interactive content).
 //
-//nolint:gochecknoglobals // static spec table mirroring PDFA-4E.xml.
+//nolint:gochecknoglobals // static spec table mirroring ISO 19005-4 §6.3.1.
 var annotWhitelistPart4e = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -60,10 +61,10 @@ var annotWhitelistPart4e = map[ast.PdfName]bool{
 	"Redact": true, "Projection": true, "3D": true, "RichMedia": true,
 }
 
-// annotWhitelistPart4f mirrors PDFA-4F §6.3.1 t1: the PDFA-4 set plus
-// FileAttachment.
+// annotWhitelistPart4f lists the annotation subtypes ISO 19005-4 §6.3.1 permits
+// for conformance level F: the [annotWhitelistPart4] set plus FileAttachment.
 //
-//nolint:gochecknoglobals // static spec table mirroring PDFA-4F.xml.
+//nolint:gochecknoglobals // static spec table mirroring ISO 19005-4 §6.3.1.
 var annotWhitelistPart4f = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -160,8 +161,8 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 	return results
 }
 
-// pdfa1AnnotWhitelist mirrors veraPDF's PDFA-1 §6.5.2 t1 test verbatim: the
-// PDF 1.4 annotation types ISO 19005-1 permits.
+// pdfa1AnnotWhitelist lists the PDF 1.4 annotation types ISO 19005-1 §6.5.2
+// permits.
 //
 //nolint:gochecknoglobals // static spec table.
 var pdfa1AnnotWhitelist = map[ast.PdfName]bool{
@@ -337,10 +338,10 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 
 	apObj, hasAP := annot["AP"]
 	if !hasAP {
-		// PDF/A-1 never requires an appearance dictionary: every 6.5.3
-		// appearance test in the veraPDF PDFA-1 profiles passes when
-		// AP == null (t4 "AP == null || AP == N", t5/t6 likewise), so
-		// absence is only a violation under parts 2+ (6.3.3 t1).
+		// PDF/A-1 never requires an appearance dictionary: ISO 19005-1 §6.5.3
+		// only constrains the contents of an /AP that is present (its tests hold
+		// when /AP is null), so a missing /AP is conformant. Absence is only a
+		// violation under parts 2+, where ISO 19005-2/3/4 §6.3.3 mandates /AP.
 		if part == 1 {
 			return nil
 		}

@@ -6,11 +6,10 @@ import (
 	"regexp"
 )
 
-// ua1HeaderRe mirrors the veraPDF PDFUA-1 6.1 t1 test verbatim:
-// /^%PDF-1\.[0-7]$/.test(header). The header property is the first line of
-// the file up to (not including) the EOL marker, so a %PDF-2.0 source
-// validated as PDF/UA-1 fails (ISO 14289-1 targets ISO 32000-1, whose
-// versions stop at 1.7).
+// ua1HeaderRe matches the PDF/UA-1 file header, per ISO 14289-1 §6.1. The
+// header is the first line of the file up to (not including) the EOL marker,
+// so a %PDF-2.0 source validated as PDF/UA-1 fails: ISO 14289-1 targets ISO
+// 32000-1, whose versions stop at 1.7.
 var ua1HeaderRe = regexp.MustCompile(`^%PDF-1\.[0-7]$`)
 
 // checkUAHeaderGroup validates the PDF/UA-1 file header rule. It is a

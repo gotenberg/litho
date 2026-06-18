@@ -9,11 +9,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// ISO/TS 32005 Table 5 inclusion checks for PDF/UA-2. veraPDF's ua2
-// flavour validates the combined PDFUA-2-ISO32005 profile, so litho runs
-// the generated [iso32005Entries] table during the UA-2 structure walk.
-// The entries are mechanical: forbidden parent-child pairings, per-parent
-// kid-count constraints, and direct-content prohibitions.
+// ISO/TS 32005 Table 5 inclusion checks for PDF/UA-2. Table 5 is
+// normative for PDF/UA-2 structure, so litho runs the generated
+// [iso32005Entries] table during the UA-2 structure walk. The entries
+// are mechanical: forbidden parent-child pairings, per-parent kid-count
+// constraints, and direct-content prohibitions.
 
 // iso32005HnRe matches the numbered heading types the profile abbreviates
 // as "Hn" (ISO 32000-2 §14.8.4.6.2 allows unbounded levels in PDF 2.0).
@@ -64,14 +64,15 @@ func iso32005BuildIndexes() {
 const maxRoleMapHops = 8
 
 // iso32005Key normalizes a structure type for table lookups, following
-// the walk's RoleMap index until no mapping remains: veraPDF evaluates
-// the Table 5 rules over role-map-resolved standard types, and the role
-// map is consulted FIRST even for standard-named types (a RoleMap entry
-// /Document /Book makes the element a Book, not a Document; golden
-// PDF_UA-1__7.1-t07-fail-a fails "StructTreeRoot shall contain exactly
-// one Document" on exactly that shape). Numbered headings collapse to
-// the profile's "Hn" key. Returns "" when the resolved type is not
-// standard, which skips the checks rather than guessing.
+// the walk's RoleMap index until no mapping remains. Table 5 rules apply
+// to role-map-resolved standard types, so the role map is consulted FIRST
+// even for standard-named types: a RoleMap entry /Document /Book makes the
+// element a Book, not a Document, so a Document-named element that role-maps
+// away no longer satisfies "StructTreeRoot shall contain exactly one
+// Document" (golden PDF_UA-1__7.1-t07-fail-a is exactly that shape).
+// Numbered headings collapse to the profile's "Hn" key. Returns "" when
+// the resolved type is not standard, which skips the checks rather than
+// guessing.
 func iso32005Key(state *walkState, t string) string {
 	name := ast.PdfName(t)
 	for range maxRoleMapHops {
@@ -93,9 +94,10 @@ func iso32005Key(state *walkState, t string) string {
 // iso32005Kids resolves an element's direct /K children into resolved
 // standard-type names and reports whether any direct content items are
 // present: marked-content MCID integers, MCR dictionaries, and OBJR
-// object references all count. veraPDF's hasContentItems fires on an
-// OBJR-only Document (PDF_UA-1__7.18.4-t01-fail-a golden:
-// "Table 5. Document-content" fails with a single OBJR kid).
+// object references all count. An OBJR is a reference to a content-bearing
+// object, so it is itself a direct content item: a Document whose only kid
+// is an OBJR contains content directly and fails Table 5's Document-content
+// rule (golden PDF_UA-1__7.18.4-t01-fail-a is that single-OBJR shape).
 func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidTypes []string, hasContent bool) {
 	kObj, ok := elem["K"]
 	if !ok {

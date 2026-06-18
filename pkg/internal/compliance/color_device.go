@@ -103,11 +103,12 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		}
 
 		// Universal coverage: the OutputIntent applies to all scopes. The
-		// transparency-group blending CS counts only under PDF/A-4: the
-		// veraPDF parts-2/3 tests are strictly gOutputCS-based (6.2.4.3 t2
-		// is `gOutputCS != null && gOutputCS == "RGB "`; verified live on
-		// PDF_A-4__veraPDF_test_suite_6-2-4-3-t04-pass-a under PDF/A-2b,
-		// where an RGB group blending CS does not cover page-content rg).
+		// transparency-group blending CS counts only under PDF/A-4. ISO
+		// 19005-2/3 §6.2.4.3 conditions DeviceRGB/CMYK coverage on the
+		// OutputIntent ICC profile colour space alone, so a page-level RGB
+		// group blending CS does not cover page-content rg under those parts.
+		// ISO 19005-4 (PDF 2.0) admits the current blending colour space as
+		// coverage, following the PDF 2.0 transparency model.
 		rgbUniversalCover := (effectiveHasICC && effectiveICCCS == "RGB ") || (part == 4 && blendingCS == "RGB ")
 		cmykUniversalCover := (effectiveHasICC && effectiveICCCS == "CMYK") || (part == 4 && blendingCS == "CMYK")
 		grayUniversalCover := effectiveHasICC
@@ -261,9 +262,9 @@ func checkPageOutputIntent(ctx context.Context, doc *document.Document, page ast
 		}
 		// Only accept PDF/A OutputIntents, not PDF/X or others. The
 		// subtype is GTS_PDFA1 for every PDF/A part (ISO 32000-2 Table
-		// 401); "GTS_PDFA" does not exist, and veraPDF ignores intents
-		// carrying it, so accepting it here would pass documents veraPDF
-		// fails.
+		// 401). "GTS_PDFA" is not a defined subtype, so an intent carrying
+		// it is not a PDF/A OutputIntent and cannot supply device CS
+		// coverage.
 		s, _ := document.ResolveName(ctx, doc, intent["S"])
 		if s != "GTS_PDFA1" {
 			continue

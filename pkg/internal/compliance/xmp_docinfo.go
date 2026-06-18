@@ -101,11 +101,12 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		normXMP = xmpNormalizeISO8601(normXMP)
 
 		// A PDF Info date without a timezone has an unknown relationship to UT
-		// (ISO 32000-1 §7.9.4). veraPDF treats such a date as equivalent to an
-		// XMP date with the same wall-clock value regardless of the XMP zone, so
-		// drop both timezones before the equality test when the Info date
-		// carries none (verified: 6-1-5-t01-fail-g, /CreationDate "D:20150310"
-		// vs xmp:CreateDate "2015-03-10T00:00:00Z" passes §6.7.3 under veraPDF).
+		// (ISO 32000-1 §7.9.4). §6.7.3 does not specify how to compare a
+		// zoneless Info date against a zoned XMP date, so litho follows the
+		// interpretation that the two are equivalent when their wall-clock
+		// values match: drop both timezones before the equality test when the
+		// Info date carries none. Example: /CreationDate "D:20150310" and
+		// xmp:CreateDate "2015-03-10T00:00:00Z" are treated as equivalent.
 		if isDateField && !infoHadTZ {
 			normInfo = xmpStripTimezone(normInfo)
 			normXMP = xmpStripTimezone(normXMP)
@@ -113,11 +114,11 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 
 		// Non-date text fields compare exactly. The XMP parser already
 		// trims element-form text per XML rules and preserves attribute
-		// values as-is; the Info dict value is raw. That asymmetry
-		// lines up with how VeraPDF reads these pairs. Trimming the
-		// Info side hides a real §6.7.3 non-equivalence (trailing
-		// whitespace in /Author vs trimmed dc:creator); trimming the
-		// XMP side creates false positives when producers use
+		// values as-is; the Info dict value is raw. §6.7.3 requires the
+		// Info entry and its XMP equivalent to be equal, so neither side is
+		// trimmed here: trimming the Info side hides a real non-equivalence
+		// (trailing whitespace in /Author vs trimmed dc:creator), and
+		// trimming the XMP side creates false positives when producers use
 		// attribute-form properties like pdf:Producer="value ".
 		if normInfo != normXMP {
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
@@ -245,9 +246,9 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 
 	// simpleRaw accumulates the raw character data of a depth-1 simple
 	// property. XMP preserves element text verbatim (whitespace included),
-	// and veraPDF compares the un-trimmed value against the Info dict:
+	// and §6.7.3 compares that un-trimmed value against the Info dict:
 	// a pretty-printed "\n   " pdf:Keywords is NOT equivalent to an empty
-	// /Keywords (§6.7.3 t5, verified live). Trimming here hid that class.
+	// /Keywords (§6.7.3 t5). Trimming here would hide that class.
 	var simpleRaw strings.Builder
 	simpleHasChild := false
 
@@ -335,11 +336,12 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 			raw := string(t)
 			// Trimmed form gates structural whitespace (the pretty-print
 			// newlines between rdf:Seq and rdf:li). The stored value stays
-			// raw: veraPDF reads rdf:li text verbatim, so /Author=" x " is
-			// non-equivalent to a trimmed dc:creator "x" yet equivalent to
-			// a spaced dc:creator " x " (verified live, §6.7.3 t3). Trimming
-			// here would erase whitespace the sync fixer deliberately writes
-			// to match /Author, making litho unable to see its own fix.
+			// raw: rdf:li text is significant verbatim, so under §6.7.3
+			// /Author=" x " is non-equivalent to a trimmed dc:creator "x"
+			// yet equivalent to a spaced dc:creator " x " (§6.7.3 t3).
+			// Trimming here would erase whitespace the sync fixer
+			// deliberately writes to match /Author, making litho unable to
+			// see its own fix.
 			if strings.TrimSpace(raw) == "" {
 				continue
 			}

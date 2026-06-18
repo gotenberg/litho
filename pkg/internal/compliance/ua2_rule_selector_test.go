@@ -4,8 +4,9 @@ import "testing"
 
 // TestUA2RuleSelectors pins the PDF/UA-1 vs PDF/UA-2 rule-id selection for the
 // structure and form selectors. A prior off-by-one ("PDF/UA-2"[6] is '-', not
-// '2') made every selector fall through to the UA-1 rule id under PDF/UA-2, so
-// veraPDF saw 8.2.x while litho emitted 7.1.x on the same construct.
+// '2') made every selector fall through to the UA-1 rule id under PDF/UA-2, so a
+// PDF/UA-2 document was reported against ISO 14289-1 §7.1.x clauses instead of
+// the ISO 14289-2 §8.2.x clauses that govern it.
 func TestUA2RuleSelectors(t *testing.T) {
 	type want struct {
 		spec   string

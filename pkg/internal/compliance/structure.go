@@ -41,15 +41,13 @@ var standardStructTypesPDF2Only = map[ast.PdfName]bool{
 
 // standardStructTypesPDF15Plus lists types that ISO 32000-1 added after
 // PDF 1.4. PDF/A-1 (ISO 19005-1) is based on PDF 1.4, whose standard
-// structure-type table (PDF Reference 1.4, 9.7.4) lacks them; veraPDF's
-// PDFA-1A profile fails such an unmapped element under 6.8.3.4 t1.
+// structure-type table (PDF Reference 1.4, 9.7.4) lacks them, so under ISO
+// 19005-1 §6.8.3.4 such a type is non-standard and must be role-mapped.
 //
-// Annot verified live on PDF_UA-1__7.18.1-t02-fail-a remediated to PDF/A-1a.
-// The table-section types THead/TBody/TFoot verified live on
-// PDF_UA-1__7.2-t03/t43 and PDF_UA-2__8.2.5.26-t04 remediated to PDF/A-1a:
-// vera reports each as a non-standard SENonStandard not mapped to a standard
-// type. The Ruby/Warichu set (Ruby/RB/RT/RP/Warichu/WT/WP) is also a PDF 1.5
-// addition but stays standard until a fixture or profile extract confirms it.
+// Annot, THead, TBody, and TFoot are PDF 1.5 additions absent from the PDF 1.4
+// table, hence non-standard for PDF/A-1. The Ruby/Warichu set
+// (Ruby/RB/RT/RP/Warichu/WT/WP) is also a PDF 1.5 addition but stays standard
+// until a fixture or profile extract confirms it.
 //
 //nolint:gochecknoglobals // constant set.
 var standardStructTypesPDF15Plus = map[ast.PdfName]bool{
@@ -87,6 +85,13 @@ const MaxStructTreeWalkDepth = 200
 
 // maxStructTreeDepth is the recursion limit for walking the structure tree.
 const maxStructTreeDepth = MaxStructTreeWalkDepth
+
+// maxStructAttrSearchDepth bounds the depth-first searches that look for a
+// single attribute (e.g. /Alt, /ActualText) on a structure-tree branch.
+// Anti-DoS guard, not spec-mandated: deliberately tighter than
+// [maxStructTreeDepth] because such attributes appear near the element
+// being checked, so a deep crafted tree need not be fully descended.
+const maxStructAttrSearchDepth = 30
 
 // checkStructureGroup validates structure tree requirements for PDF/A and
 // PDF/UA profiles. For PDF/A level 'a' it checks MarkInfo and StructTreeRoot.
@@ -136,11 +141,11 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	// PDF/UA-1 §7.1: a non-standard structure type not role-mapped to a
-	// standard type fails 7.1 t5 (roleMapNonStandardRule). veraPDF reports it
-	// under UA-1 the same as PDF/A level 'a' (verified on the 6-8-3-4 / 6-7-3-4
-	// roleMap fixtures remediated to PDF/UA-1, where litho was silent). UA-2's
-	// equivalent (8.2.4) is covered by the namespace-aware structure check, so
-	// it is excluded here to avoid double-reporting.
+	// standard type fails 7.1 t5 (roleMapNonStandardRule). The check is the same
+	// for PDF/UA-1 as for PDF/A level 'a', since both require every non-standard
+	// type to map to a standard one. UA-2's equivalent (8.2.4) is covered by the
+	// namespace-aware structure check, so it is excluded here to avoid
+	// double-reporting.
 	if profile == "PDF/UA-1" && structTreeRoot != nil {
 		checkUnmappedStructTypes(ctx, doc, structTreeRoot, profile, &results)
 	}
@@ -250,9 +255,17 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		mapping[key] = target
 	}
 
+	// Sorted source names keep RoleMap violation order deterministic
+	// (CONTRIBUTING "Deterministic output").
+	srcNames := make([]ast.PdfName, 0, len(mapping))
+	for src := range mapping {
+		srcNames = append(srcNames, src)
+	}
+	slices.Sort(srcNames)
+
 	// Check standard types are not remapped (PDF/UA-1 only; PDF/UA-2 allows some).
 	if !IsPDFUA(profile) || profile == "PDF/UA-1" {
-		for src := range mapping {
+		for _, src := range srcNames {
 			if isStandardStructType(src, profile) {
 				*results = append(*results, failf(roleMapStandardRemapRule(profile), "standard type %s is remapped", src)...)
 			}
@@ -260,7 +273,8 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	}
 
 	// Check for self-mappings (A→A) which are always circular.
-	for src, target := range mapping {
+	for _, src := range srcNames {
+		target := mapping[src]
 		if src == target {
 			*results = append(*results, failf(roleMapCircularRule(profile),
 				"circular mapping for %s", src)...)
@@ -268,7 +282,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	}
 
 	// Check non-standard types resolve to standard type (no circularity).
-	for src := range mapping {
+	for _, src := range srcNames {
 		if ctx.Err() != nil {
 			return
 		}
@@ -336,20 +350,19 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 	walkChildren(ctx, state, kidsObj, "", 0, 0)
 
 	// Heading rules §7.4.2 t1 (no skipped levels) and §7.4.4 t2/t3 (no mixed
-	// H and H1-H6) are PDF/UA-1 only: the veraPDF PDFUA-2 profile carries no
-	// analogue. It forbids the H type entirely (§8.2.5.12 t1, emitted per
-	// element in walkElement) and leaves Hn sequences unconstrained.
+	// H and H1-H6) are PDF/UA-1 only. PDF/UA-2 has no analogue: ISO 14289-2
+	// §8.2.5.12 forbids the H type entirely (t1, emitted per element in
+	// walkElement) and leaves Hn sequences unconstrained.
 	if profile == "PDF/UA-1" {
 		checkHeadingHierarchy(state)
 
 		// §7.4.4 t2/t3: a document must be either strongly structured (H1-H6)
 		// or weakly structured (H), not both. The first heading in document
-		// order sets the mode; the other kind is the offender, and veraPDF
-		// fires exactly one rule on that kind: t2 (object SEH) when a generic H
-		// appears in a strongly structured document, t3 (object SEHn) when a
-		// numbered Hn appears in a weakly structured one. Firing both was a
-		// litho-over (verified live on 7-4-4-t02-fail-a => t2 only,
-		// 7-4-4-t03-fail-a => t3 only).
+		// order sets the mode and the other kind is the offender, so exactly one
+		// rule fires on that kind: t2 (object SEH) when a generic H appears in a
+		// strongly structured document, t3 (object SEHn) when a numbered Hn
+		// appears in a weakly structured one. Firing both would double-report a
+		// single mixed-heading defect.
 		if state.hasGenericH && state.hasSpecificH {
 			if state.firstHeadingSpecific {
 				*results = append(*results, failf(headingMixedRule(profile),
@@ -389,9 +402,10 @@ type walkState struct {
 	tableUsesHeaderIDs bool
 
 	// tableIrregular is true when the current enclosing Table failed the
-	// regularity check (§8.2.5.26 / §7.2). veraPDF evaluates header
-	// determination (§8.2.5.26 t5/t6, §7.5) only on a regular table, so the
-	// scope and per-TD header checks skip an irregular grid.
+	// regularity check (§8.2.5.26 / §7.2). Header determination (§8.2.5.26
+	// t5/t6, §7.5) is only well-defined on a regular grid, where every row has
+	// the same column count, so the scope and per-TD header checks skip an
+	// irregular table whose row/column geometry cannot be resolved.
 	tableIrregular bool
 
 	// roleMap is the StructTreeRoot /RoleMap as a name index, used to
@@ -401,12 +415,12 @@ type walkState struct {
 
 	// iso32005Parent is the effective Table 5 parent of the elements
 	// currently being walked. It differs from the walk's literal
-	// parentType in two ways veraPDF's parentStandardType exhibits:
+	// parentType in two ways the standard-type parent must reflect:
 	// children of the structure tree root carry the sentinel
 	// "StructTreeRoot", and NonStruct is transparent, so kids of a
-	// NonStruct inherit the NonStruct's own effective parent
-	// (ISO/TS 32005: NonStruct contents are treated as belonging to the
-	// enclosing element; verified against the PDF_UA-1__7.2-t26 golden).
+	// NonStruct inherit the NonStruct's own effective parent. Per
+	// ISO/TS 32005, NonStruct contents are treated as belonging to the
+	// enclosing element, so containment is evaluated against that element.
 	iso32005Parent ast.PdfName
 }
 
@@ -471,9 +485,9 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		}
 		// Only process structure elements (skip marked content refs, object refs).
 		if _, hasS := dict["S"]; hasS {
-			// §7.4.4 t1 (at most one H child per node) is PDF/UA-1 only: the
-			// veraPDF PDFUA-2 profile carries no analogue, it forbids H
-			// entirely (§8.2.5.12 t1, emitted per element in walkElement).
+			// §7.4.4 t1 (at most one H child per node) is PDF/UA-1 only.
+			// PDF/UA-2 has no analogue: ISO 14289-2 §8.2.5.12 forbids H
+			// entirely (t1, emitted per element in walkElement).
 			if state.profile == "PDF/UA-1" {
 				childType, _ := document.ResolveName(ctx, state.doc, dict["S"])
 				if childType == "H" {
@@ -486,7 +500,7 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 			}
 
 			walkElement(ctx, state, dict, parentType, depth, lastHeadingLevel)
-			validateCaptionPosition(state, dict, parentType, structIdx, totalStructChildren)
+			validateCaptionPosition(ctx, state, dict, parentType, structIdx, totalStructChildren)
 			structIdx++
 		}
 	}
@@ -513,19 +527,20 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// ISO/TS 32005 Table 5 inclusion rules: veraPDF's ua2 flavour runs
-	// the combined PDFUA-2-ISO32005 profile, so litho mirrors it for
-	// PDF/UA-2 only. The effective parent comes from the walk state, not
-	// the literal parentType: root children see "StructTreeRoot" and
-	// NonStruct wrappers are transparent.
+	// ISO/TS 32005 Table 5 inclusion rules apply to PDF/UA-2 only: PDF/UA-2
+	// adopts the PDF 2.0 standard structure namespace whose containment is
+	// defined by ISO/TS 32005, whereas PDF/UA-1 uses the ISO 32000-1 §7.2
+	// parent/child tables checked separately below. The effective parent comes
+	// from the walk state, not the literal parentType: root children see
+	// "StructTreeRoot" and NonStruct wrappers are transparent.
 	if state.profile == "PDF/UA-2" {
 		validateISO32005(ctx, state, elem, typeName, state.iso32005Parent)
 	}
 
-	// Tag-containment rules (§7.2 parent/child tables) are PDF/UA-1 only:
-	// the veraPDF PDFUA-2 profile defines no containment rules, only table
-	// regularity (§8.2.5.26, validateTableColumnConsistency) and list
-	// semantics (§8.2.5.25, checked below).
+	// Tag-containment rules (§7.2 parent/child tables) are PDF/UA-1 only.
+	// PDF/UA-2 defines no general containment tables; it constrains structure
+	// only through table regularity (§8.2.5.26, validateTableColumnConsistency)
+	// and list semantics (§8.2.5.25, checked below).
 	if state.profile == "PDF/UA-1" {
 		validateTableContainment(state, typeName, parentType)
 		validateTableChildren(state, typeName, parentType)
@@ -560,9 +575,9 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 			failf(Rule_14289_2_8_2_5_29_t01, "math type nested within %s instead of Formula", parentType)...)
 	}
 
-	// TOC/TOCI containment (§7.2 t26/t27) is PDF/UA-1 only: the veraPDF
-	// PDFUA-2 profile's only TOCI rule is §8.2.5.8 t1 (Ref presence), not
-	// containment.
+	// TOC/TOCI containment (§7.2 t26/t27) is PDF/UA-1 only. PDF/UA-2 imposes
+	// no TOC/TOCI containment; its only TOCI requirement is §8.2.5.8 t1 (a /Ref
+	// entry), checked below.
 	if state.profile == "PDF/UA-1" {
 		// TOCI must be inside TOC.
 		if typeName == "TOCI" && parentType != "TOC" && parentType != "" {
@@ -608,9 +623,9 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// TH /Scope (§7.5 t1) is PDF/UA-1 only: the veraPDF PDFUA-2 profile
-	// replaces it with the TD header-determination rules §8.2.5.26 t5/t6,
-	// a different test on a different object.
+	// TH /Scope (§7.5 t1) is PDF/UA-1 only. PDF/UA-2 replaces the per-TH /Scope
+	// requirement with the TD header-determination rules §8.2.5.26 t5/t6, a
+	// different test on a different object.
 	if typeName == "TH" && state.profile == "PDF/UA-1" {
 		validateTHScope(ctx, state, elem)
 	}
@@ -673,20 +688,20 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	}
 
 	if typeName == "Table" {
-		// Section counts (§7.2 t11-t14, t39) are PDF/UA-1 only: the veraPDF
-		// PDFUA-2 profile constrains tables through the regularity rules
-		// §8.2.5.26, not through THead/TFoot/Caption counts.
+		// Section counts (§7.2 t11-t14, t39) are PDF/UA-1 only. PDF/UA-2
+		// constrains tables through the regularity rules §8.2.5.26, not through
+		// THead/TFoot/Caption counts.
 		if state.profile == "PDF/UA-1" {
 			validateTableSectionCounts(ctx, state, elem)
 		}
 		// PDF/UA-2 §8.2.5.26 t5/t6 and PDF/UA-1 §7.5 t2: every TD in a
 		// table with header cells must have determinable headers (Scope
-		// coverage or /Headers IDs). veraPDF's UA-1 test is the same
-		// per-TD model under a single rule id
-		// (hasConnectedHeader != false || unknownHeaders == '').
-		// veraPDF evaluates header determination only on a regular table
-		// (SETable.checkRegular gates it); an irregular grid reports the
-		// regularity violation alone, so skip the header check here too.
+		// coverage or /Headers IDs). The PDF/UA-1 rule expresses the same
+		// per-TD requirement under a single rule id: each data cell must
+		// connect to a header by scope or by explicit /Headers reference.
+		// Header determination is only well-defined on a regular grid where
+		// every row shares the same column count; an irregular table reports
+		// the regularity violation alone, so skip the header check here too.
 		if (state.profile == "PDF/UA-2" || state.profile == "PDF/UA-1") && !state.tableIrregular {
 			validateTableHeaderDetermination(ctx, state, elem)
 		}
@@ -729,8 +744,8 @@ func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict,
 
 // validateCaptionPosition checks that Caption is the first child of Table,
 // Figure, or Form.
-func validateCaptionPosition(state *walkState, elem ast.PdfDict, parentType ast.PdfName, childIdx int, totalChildren int) {
-	typeName, _ := document.ResolveName(context.Background(), state.doc, elem["S"])
+func validateCaptionPosition(ctx context.Context, state *walkState, elem ast.PdfDict, parentType ast.PdfName, childIdx int, totalChildren int) {
+	typeName, _ := document.ResolveName(ctx, state.doc, elem["S"])
 	if typeName != "Caption" {
 		return
 	}
@@ -752,8 +767,9 @@ func validateCaptionPosition(state *walkState, elem ast.PdfDict, parentType ast.
 	switch parentType {
 	case "Table":
 		// PDF/UA-1 §7.2 t16: Table allows Caption as first or last child.
-		// (veraPDF defines no Caption-position rule for Figure or Form, so those
-		// parents are intentionally not checked here to avoid a false reject.)
+		// PDF/UA-1 §7.2 defines a Caption-position constraint only for Table, L,
+		// and TOC, so Figure and Form parents are intentionally not checked here
+		// to avoid a false reject.
 		if notFirstOrLast {
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_2_t16,
@@ -1308,11 +1324,9 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 const pdf2NamespaceURI = "http://iso.org/pdf2/ssn"
 
 // checkDocumentNamespace validates ISO 14289-2 §8.2.5.2 t2: the single Document
-// child of the structure tree root shall be declared in the PDF 2.0 namespace.
-// The veraPDF test is firstChildStandardTypeNamespaceURL == 'http://iso.org/pdf2/ssn',
-// which fails for any other namespace including none at all: an unnamespaced
-// Document (typical for legacy tagged PDFs) fails t2, verified live against
-// veraPDF 1.30.
+// child of the structure tree root shall be declared in the PDF 2.0 namespace
+// (http://iso.org/pdf2/ssn). Any other namespace, including none at all, fails
+// t2, so an unnamespaced Document (typical for legacy tagged PDFs) is rejected.
 func checkDocumentNamespace(ctx context.Context, doc *document.Document, treeRoot, docElem ast.PdfDict, results *[]Violation) {
 	r := newNSRoleResolver(ctx, doc, treeRoot)
 	stdType, stdNS, ok := r.elementStandardType(ctx, doc, docElem)
@@ -1334,7 +1348,7 @@ func checkDocumentNamespace(ctx context.Context, doc *document.Document, treeRoo
 // When the table uses ID-based header association (TH has /ID attribute),
 // /Scope is not required per ISO 14289-1, 7.5.
 func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
-	// veraPDF evaluates header determination only on a regular table; an
+	// Header determination is only well-defined on a regular table; an
 	// irregular grid reports the regularity violation alone.
 	if state.tableIrregular {
 		return
@@ -1608,7 +1622,8 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 			}
 		}
 
-		for propName, propObj := range propsDict {
+		for _, propName := range sortedNames(propsDict) {
+			propObj := propsDict[propName]
 			propDict, err := document.ResolveDict(ctx, doc, propObj)
 			if err != nil || propDict == nil {
 				continue

@@ -8,10 +8,12 @@ import (
 // TestExtensionSchemaPrefix_UnusedDecoyBindingIgnored pins the
 // usage-gated prefix check: an xmlns declaration aliasing the pdfaType
 // URI to a non-canonical prefix is harmless while no element uses it
-// (decoy shape of the veraPDF 6-6-2-3-3 suite, and the leftover shape
-// remediation produces when it empties a defective rdf:Description).
-// Firing on the bare declaration produced a 266-cell-per-profile
-// litho-only pool; veraPDF checks prefixes per element.
+// (this is also the leftover shape remediation produces when it empties
+// a defective rdf:Description). ISO 19005-2 §6.6.2.3.3 constrains the
+// prefixes that extension-schema elements actually carry, not bare
+// namespace declarations, so the check evaluates prefixes per element.
+// Firing on the unused declaration would flag a binding the document
+// never relies on.
 func TestExtensionSchemaPrefix_UnusedDecoyBindingIgnored(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"

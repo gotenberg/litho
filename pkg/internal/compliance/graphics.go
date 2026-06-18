@@ -32,10 +32,10 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// §6.2.2 t2/t3: resource completeness against the page's OWN
 		// Resources, with names resolvable only through Pages-tree
-		// inheritance reported separately (veraPDF splits
-		// `inheritedResourceNames` from `undefinedResourceNames`; litho's
-		// own-or-fallback page resources conflated them into a 57-cell
-		// t03 / 45-cell t02 pool pair).
+		// inheritance reported separately. A name resolved solely via the
+		// inherited Pages-tree /Resources is an inherited reference (t2); a
+		// name resolved nowhere is undefined (t3). Conflating own-or-fallback
+		// page resources hides this distinction.
 		if hasContent {
 			ops := p.parsedOps(ctx)
 			if ops != nil {
@@ -98,7 +98,8 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 	}
 
 	var results []Violation
-	for xoName, xoObj := range xoDict {
+	for _, xoName := range sortedNames(xoDict) {
+		xoObj := xoDict[xoName]
 		// Only check Form XObjects that are actually referenced by Do operators.
 		if referencedNames != nil && !referencedNames[string(xoName)] {
 			continue
@@ -123,10 +124,10 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		if formRes == nil {
 			formRes = make(ast.PdfDict)
 		}
-		// veraPDF's inheritedResourceNames for a Form XObject stream are the
-		// names it resolves only from the PAGE's resources rather than its
-		// own (verified live on 6-2-2-t04-fail-e: t2 fires on the form's
-		// content stream reached via the page xObject).
+		// Per ISO 19005-2 §6.2.2, a Form XObject content stream resolves
+		// resource names against its own /Resources first. A name found only
+		// in the PAGE's resources is an inherited reference (t2), so the page
+		// resources serve as the fallback scope when scanning the form stream.
 		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum)...)
 	}
 	return results
@@ -145,7 +146,8 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		return nil
 	}
 	var results []Violation
-	for _, fontRef := range fontDict {
+	for _, fontName := range sortedNames(fontDict) {
+		fontRef := fontDict[fontName]
 		fd, err := document.ResolveDict(ctx, doc, fontRef)
 		if err != nil || fd == nil {
 			continue
@@ -154,12 +156,11 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		if subtype != "Type3" {
 			continue
 		}
-		// veraPDF scopes 6.2.2 to the CharProc stream: a name resolved
-		// only through the page's resources is inherited (t2), one
-		// resolved nowhere is undefined (t3). A font without its own
+		// §6.2.2 scopes resource completeness to the CharProc stream: a name
+		// resolved only through the page's resources is inherited (t2), one
+		// resolved nowhere is undefined (t3). A Type3 font without its own
 		// /Resources therefore fires t2 per inherited name, never a
-		// blanket missing-dictionary violation (vera golden for
-		// 6-2-2-t04-fail-d: 6.2.2-t2 x3, no t3).
+		// blanket missing-dictionary violation.
 		type3Res, err := document.ResolveDict(ctx, doc, fd["Resources"])
 		if err != nil || type3Res == nil {
 			type3Res = make(ast.PdfDict)
@@ -168,7 +169,8 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		if err != nil || charProcs == nil {
 			continue
 		}
-		for _, cpObj := range charProcs {
+		for _, cpName := range sortedNames(charProcs) {
+			cpObj := charProcs[cpName]
 			stream, err := document.ResolveStream(ctx, doc, cpObj)
 			if err != nil {
 				doc.Logger.Debug("compliance.graphics: cannot resolve CharProc stream", "error", err)
@@ -231,7 +233,8 @@ func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, page
 		return nil
 	}
 	var results []Violation
-	for _, xoObj := range xoDict {
+	for _, xoName := range sortedNames(xoDict) {
+		xoObj := xoDict[xoName]
 		stream, err := document.ResolveStream(ctx, doc, xoObj)
 		if err != nil {
 			doc.Logger.Debug("compliance.graphics: cannot resolve XObject stream", "error", err)
@@ -258,7 +261,8 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 	}
 
 	var results []Violation
-	for gsName, gsObj := range gsDict {
+	for _, gsName := range sortedNames(gsDict) {
+		gsObj := gsDict[gsName]
 		if ctx.Err() != nil {
 			return results
 		}
@@ -383,8 +387,12 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 		}
 	}
 
-	// For Type 5 composite halftones (parts 2+): validate TransferFunction
-	// on sub-halftone dicts per the VeraPDF rule:
+	// For Type 5 composite halftones (parts 2+), §6.2.5 t06 governs the
+	// TransferFunction on each sub-halftone dict. A device colorant
+	// (Cyan/Magenta/Yellow/Black) already has a process transfer function, so
+	// a per-component TransferFunction would redefine tone reproduction and is
+	// forbidden. A non-process colorant (Red/Green/Blue/spots) needs its own
+	// transfer function to be reproducible, so it must be present:
 	//   - Default: always exempt
 	//   - CMYK primaries (Cyan/Magenta/Yellow/Black): TF must be absent
 	//   - Non-primary colorants (Red/Green/Blue/spots): TF must be present
@@ -395,7 +403,8 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 		htMetaKeys := map[ast.PdfName]bool{
 			"HalftoneType": true, "HalftoneName": true, "Type": true, "TransferFunction": true,
 		}
-		for key, subObj := range ht {
+		for _, key := range sortedNames(ht) {
+			subObj := ht[key]
 			if htMetaKeys[key] || key == "Default" {
 				continue
 			}
@@ -486,10 +495,10 @@ func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict,
 		return nil
 	}
 
-	// There is no dedicated VeraPDF rule variable for OPM alone in parts 2-4.
-	// This is typically caught as part of color-space-specific overprint
-	// validation. Log the condition for debugging but do not emit a violation
-	// without a matching rule, to avoid false positives.
+	// PDF/A parts 2-4 define no standalone rule for OPM=1; the restriction is
+	// expressed through colour-space-specific overprint validation, not a bare
+	// OPM check. Emitting a violation here without a matching rule would be a
+	// false positive, so OPM=1 with active overprint is left to those checks.
 
 	return nil
 }

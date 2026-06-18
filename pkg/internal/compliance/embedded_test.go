@@ -156,11 +156,12 @@ func TestResolveNamesDict(t *testing.T) {
 	})
 }
 
-// TestCheckCatalogAF_Part3Scope pins veraPDF's PDF/A-3 §6.8 t4 scope: every
-// /Type /Filespec dict must be associated, with or without /EF or
-// /AFRelationship (verified live on a plain filespec in
-// PDF_A-2b__veraPDF_test_suite_6-2-8-1-t01-fail-b under PDF/A-3b). PDF/A-4
-// keeps the narrower embedded-with-AFRelationship scope.
+// TestCheckCatalogAF_Part3Scope pins the PDF/A-3 §6.8 t4 scope: every
+// /Type /Filespec dict must be associated through the catalog /AF array,
+// whether or not it carries /EF or /AFRelationship. A plain filespec with
+// neither key is still a file specification, so part 3 requires its
+// association. PDF/A-4 narrows the rule to embedded files that carry an
+// /AFRelationship, so a loose filespec stays exempt there.
 func TestCheckCatalogAF_Part3Scope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -195,8 +195,9 @@ func TestInsertChildElement_NoDescription(t *testing.T) {
 // TestInsertChildElement_Minified guards against the indentation bug where a
 // packet with no newline before the close tag made the indent walk capture the
 // entire preceding document and splice a duplicate of it in, producing a second
-// <?xpacket>/<x:xmpmeta> preamble and non-well-formed XML (the source of three
-// PDF/A-2b remediation regressions on veraPDF-built, minified-XMP files).
+// <?xpacket>/<x:xmpmeta> preamble and non-well-formed XML. Minified XMP, where
+// the whole packet is one line with no newline before the close tag, triggers
+// the bug, so a remediated packet must stay well-formed for that shape.
 func TestInsertChildElement_Minified(t *testing.T) {
 	xmp := []byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">    <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>t</dc:title></rdf:Description>    <rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:conformance="B"/>  </rdf:RDF></x:xmpmeta><?xpacket end="w"?>`)
 
@@ -303,9 +304,11 @@ func TestEnsureNamespaceDecl_SkipsIfPresent(t *testing.T) {
 func TestCanonicalizePrefix_DropsAliasWhenCanonicalPresent(t *testing.T) {
 	// An alias prefix (pdfuaia) and the canonical prefix (pdfuaid) both bind
 	// the PDF/UA id namespace on one rdf:Description, with a property under
-	// the alias. Canonicalizing must not emit a second xmlns:pdfuaid: a
-	// duplicate attribute is malformed XML that a strict parser (veraPDF)
-	// rejects. The alias declaration is dropped and its usage merged.
+	// the alias. Canonicalizing must not emit a second xmlns:pdfuaid: XML
+	// well-formedness forbids two attributes with the same name on one
+	// element (XML 1.0 Unique Att Spec constraint), so a duplicate xmlns
+	// declaration makes the packet non-well-formed. The alias declaration is
+	// dropped and its usage merged.
 	xmp := []byte(`<?xpacket begin=""?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">

@@ -71,10 +71,10 @@ func tableSectionChildRule(parentType ast.PdfName) Rule {
 // same number of columns, accounting for ColSpan attributes on TD/TH cells.
 // PDF/UA-1 §7.2 t43 and PDF/UA-2 §8.2.5.26 t3/t4.
 // validateTableColumnConsistency checks table regularity (§8.2.5.26 / §7.2) and
-// reports whether the table is column-regular. veraPDF's SETable.checkRegular
-// returns false on any irregularity and the caller then skips header
-// determination (t5/t6); this function mirrors that contract by returning false
-// when it fires a regularity violation.
+// reports whether the table is column-regular. Header determination (t5/t6)
+// assumes a rectangular grid, so an irregular table makes the positional
+// header model meaningless. This function returns false when it fires a
+// regularity violation so the caller skips header determination.
 func validateTableColumnConsistency(ctx context.Context, state *walkState, tableElem ast.PdfDict) bool {
 	rows := collectTableRows(ctx, state.doc, tableElem)
 	if len(rows) < 2 {
@@ -89,12 +89,12 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 		return true
 	}
 
-	// veraPDF takes the first row's column count as the table width and splits
-	// the violation: a row WIDER than the first (a column span overflowing the
-	// grid, wrongColumnSpan == null) fires the overflow rule; a NARROWER or
-	// empty row (unfilled grid cells, wrongColumnSpan set) fires the gap rule.
-	// Overflow takes precedence (veraPDF detects it in its placement pass
-	// before the trailing empty-cell scan).
+	// The first row's column count defines the table width. Split the
+	// violation by direction: a row WIDER than the first means a column span
+	// overflows the grid, which fires the overflow rule; a NARROWER or empty
+	// row leaves grid cells unfilled, which fires the gap rule. Overflow is
+	// reported first because a span exceeding the grid is detectable during
+	// cell placement, before the trailing empty-cell scan.
 	n0 := effectiveCols[0]
 	widerRow, narrowerRow := -1, -1
 	for i := 1; i < len(effectiveCols); i++ {
@@ -319,9 +319,9 @@ func cellRowSpan(ctx context.Context, doc *document.Document, cell ast.PdfDict) 
 }
 
 // tableColumnRule selects the irregular-table rule by profile and direction.
-// veraPDF fires the overflow variant (ISO 14289-2 §8.2.5.26 t03 / ISO 14289-1
-// §7.2 t42) when a row is wider than the first, and the gap variant (t04 / t43)
-// when a row is narrower or empty.
+// A row wider than the first fires the overflow variant (ISO 14289-2
+// §8.2.5.26 t03 / ISO 14289-1 §7.2 t42); a narrower or empty row fires the
+// gap variant (t04 / t43).
 func tableColumnRule(profile string, wider bool) Rule {
 	if profile == "PDF/UA-2" {
 		if wider {
@@ -533,14 +533,14 @@ func overlaps(aStart, aSpan, bStart, bSpan int) bool {
 }
 
 // validateTableHeaderDetermination checks PDF/UA-2 §8.2.5.26 t5/t6 on every
-// TD of a table that contains TH cells, mirroring veraPDF's SETD model. A
-// TD is connected when its /Headers list names a TH /ID in the same table,
-// or when a TH /Scope covers the TD's grid position (Row: shared row;
+// TD of a table that contains TH cells. Per ISO 32000-2 Table 384, a TD is
+// connected to a header when its /Headers list names a TH /ID in the same
+// table, or when a TH /Scope covers the TD's grid position (Row: shared row;
 // Column: shared column; Both: either). /Headers entries naming no TH in
 // the table are unknown headers (t6); a TD with neither mechanism is
-// unconnected (t5). A TH without /Scope connects nothing: veraPDF's model
-// recognizes only the two explicit mechanisms (its 8.2.5.26-t05-fail-a
-// fixture has a scope-less header row and still fails).
+// unconnected (t5). A TH without /Scope connects nothing, because /Scope and
+// /Headers are the only two header-association mechanisms ISO 32000-2 Table
+// 384 defines: a header row that omits /Scope establishes no association.
 func validateTableHeaderDetermination(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
 	rows := collectTableRows(ctx, state.doc, tableElem)
 	if len(rows) == 0 {
@@ -586,9 +586,9 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 		// pertain to the REST of its column (cells below) or row (cells
 		// after). A TD with no positionally pertinent TH at all (e.g. the
 		// corner cell beside a header row) has nothing to determine and
-		// passes vacuously; veraPDF's 8.2.5.26-t01 pass fixtures leave
-		// such cells unflagged while its t05-fail fixture (pertinent THs
-		// whose /Scope names are broken) still fails.
+		// passes vacuously, since §8.2.5.26 only requires a header where one
+		// is positionally pertinent. A TD with pertinent THs whose /Scope
+		// fails to cover it remains unconnected and fails.
 		pertinent := false
 		if !connected {
 			for _, th := range cells {
@@ -618,12 +618,11 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 			}
 		}
 
-		// veraPDF's UA-1 7.5 tests split the same TD model into
-		// complementary halves: t1 fails an unconnected TD with NO unknown
-		// /Headers refs (test `hasConnectedHeader != false ||
-		// unknownHeaders != ''`), t2 fails an unconnected TD whose
-		// /Headers name unknown IDs (`... || unknownHeaders == ''`).
-		// PDF/UA-2 keys the same split as §8.2.5.26 t5/t6.
+		// PDF/UA-1 §7.5 splits the same TD model into complementary halves:
+		// t1 fails an unconnected TD with NO unknown /Headers refs (a missing
+		// association), t2 fails an unconnected TD whose /Headers name unknown
+		// IDs (a dangling reference). PDF/UA-2 keys the same split as
+		// §8.2.5.26 t5/t6.
 		ua1 := state.profile == "PDF/UA-1"
 		switch {
 		case connected:

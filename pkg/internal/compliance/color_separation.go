@@ -26,8 +26,8 @@ func deviceNComponentRule(part int) Rule {
 func separationConsistencyRule(part int) Rule {
 	// §6.2.4.4 t2: all Separation arrays with the same colorant name shall
 	// share alternateSpace and tintTransform. t1 is the separate
-	// Colorants-dictionary rule (see veraPDF profile descriptions; litho
-	// emitted t1 here historically, a 36-cell litho-only mislabel).
+	// Colorants-dictionary presence rule, a distinct sub-test of the same
+	// clause; emitting t1 here was a 36-cell litho-only mislabel.
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_4_4_t02, Rule_19005_3_6_2_4_4_t02, Rule_19005_4_6_2_4_4_t02)
 }
 
@@ -113,7 +113,8 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err == nil && csDict != nil {
-		for name, csObj := range csDict {
+		for _, name := range sortedNames(csDict) {
+			csObj := csDict[name]
 			if ctx.Err() != nil {
 				return
 			}
@@ -143,7 +144,8 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 	if err != nil || xobjDict == nil {
 		return
 	}
-	for _, xobjObj := range xobjDict {
+	for _, k := range sortedNames(xobjDict) {
+		xobjObj := xobjDict[k]
 		ref, ok := xobjObj.(ast.PdfIndirectRef)
 		if ok {
 			key := fmt.Sprintf("%d", ref.ObjectNum)
@@ -331,11 +333,11 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		cName := string(colorantName)
 		colorantNames = append(colorantNames, cName)
 
-		// veraPDF's 6.2.4.4 has no reserved-colorant-name rule: a DeviceN
-		// colorant named "None" or "All" is not flagged (verified live on
-		// 6-1-12-t09-fail-a remediated to PDF/A-2a, where vera fires no 6.2.4.4
-		// despite a DeviceN "None" colorant). litho only checks colorant
-		// tint/alternate consistency (t2) and Colorants-dict presence (t1).
+		// §6.2.4.4 constrains only colorant alternate/tintTransform
+		// consistency (t2) and Colorants-dict presence (t1); it imposes no
+		// constraint on the colorant identifier itself. The reserved names
+		// "None" and "All" are valid DeviceN colorants, so litho does not
+		// flag them here.
 
 		if prev, ok := colorantAlternates[cName]; ok {
 			if prev != alternateName {
@@ -391,7 +393,8 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 
 	// §6.2.4.4 t2: Separation arrays in Colorants dictionaries must also be
 	// consistent with all other Separation arrays with the same colorant name.
-	for cName, cObj := range colorantsDict {
+	for _, cName := range sortedNames(colorantsDict) {
+		cObj := colorantsDict[cName]
 		cArr, err := document.ResolveArray(ctx, doc, cObj)
 		if err != nil || len(cArr) < 4 {
 			continue

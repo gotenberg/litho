@@ -99,7 +99,7 @@ func TestCaptionPositionProfileSemantics(t *testing.T) {
 	caption := ast.PdfDict{"S": ast.PdfName("Caption")}
 	run := func(profile string, parent ast.PdfName, idx, total int) []Violation {
 		var r []Violation
-		validateCaptionPosition(&walkState{results: &r, profile: profile, doc: doc}, caption, parent, idx, total)
+		validateCaptionPosition(context.Background(), &walkState{results: &r, profile: profile, doc: doc}, caption, parent, idx, total)
 		return r
 	}
 
@@ -131,8 +131,9 @@ func TestCaptionPositionProfileSemantics(t *testing.T) {
 	if r := run("PDF/UA-1", "Table", 1, 3); !hasRule(r, Rule_14289_1_7_2_t16) {
 		t.Errorf("UA-1 middle Caption in Table: got %v, want §7.2 t16", r)
 	}
-	// veraPDF defines no Figure/Form Caption-position rule, so litho must not
-	// flag one (previously a latent false positive).
+	// ISO 14289-1 §7.2 constrains Caption position only for L and Table; it
+	// states no Caption-position requirement for Figure or Form, so litho must
+	// not flag one (previously a latent false positive).
 	if r := run("PDF/UA-1", "Figure", 1, 3); len(r) != 0 {
 		t.Errorf("UA-1 middle Caption in Figure wrongly flagged: %v", r)
 	}

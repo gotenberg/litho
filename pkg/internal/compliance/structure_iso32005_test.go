@@ -117,8 +117,9 @@ func TestISO32005_NotEmittedUnderUA1(t *testing.T) {
 
 // TestISO32005_RootForbiddenChild pins the StructTreeRoot sentinel: the
 // Table 5 rows "StructTreeRoot shall not contain X" key on the root
-// literally, so a P element directly under the root fails
-// (PDF_A-1a__veraPDF_test_suite_6-3-8-t01 golden family).
+// literally, so a P element directly under the root fails. ISO 32005
+// Table 5 lists no StructTreeRoot-P inclusion, so P is not a permitted
+// direct child of the root.
 func TestISO32005_RootForbiddenChild(t *testing.T) {
 	vs := iso32005Violations(t,
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",

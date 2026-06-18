@@ -108,12 +108,12 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
 // charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
-	// veraPDF's width test runs per USED glyph and passes whenever the
-	// dictionary width is unresolvable: the test is `renderingMode == 3 ||
-	// widthFromFontProgram == null || widthFromDictionary == null ||
-	// |diff| <= 1`, so a missing /Widths or /FirstChar never fails this
-	// rule (it fails the font-dict key rules instead), and a font used
-	// only invisibly is exempt.
+	// Width consistency is a property of a glyph the document actually
+	// paints: the rule compares the program advance against the declared
+	// width only when both are resolvable and the glyph is rendered
+	// visibly (rendering mode != 3). A missing /Widths or /FirstChar makes
+	// the declared width unresolvable, so it falls to the font-dict key
+	// rules rather than this one, and a font used only invisibly is exempt.
 	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
 		return nil
 	}
@@ -134,14 +134,13 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		return nil
 	}
 
-	// veraPDF builds a width Glyph for code 0 only when a text operator
-	// actually shows it; an unrendered NUL in /Widths is never tested
-	// (6-3-8-t01-fail-a passes the width rule despite /Widths[0]). When code 0
-	// IS rendered, the rule compares the resolved glyph's program advance (the
+	// Code 0 is a width-checkable glyph only when a text operator shows it.
+	// An unrendered NUL listed in /Widths is not a painted glyph, so it is
+	// not tested. When code 0 IS rendered, the comparison resolves it the
+	// same way as any code, the resolved glyph's program advance (the
 	// .notdef glyph's advance when the code maps to no glyph) against the
 	// declared width: /Widths[0-FirstChar] when code 0 is in range, else
-	// /MissingWidth (default 0). Verified live on 6-2-11-8-t01-fail-a/b, where
-	// the shown <00> maps to .notdef (advance 632/750) but declares width 0.
+	// /MissingWidth (default 0, ISO 32000-1 Table 111).
 	if usage.charCodes[0] {
 		if v := checkSimpleFontCode0Width(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, int(firstChar), widths); v != nil {
 			return v
@@ -153,9 +152,9 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if charCode < 0 || charCode > 255 {
 			continue
 		}
-		gid := uint16(charCode) //nolint:gosec
+		gid := uint16(charCode) //nolint:gosec // G115: charCode is bounded to 0..255 by the guard above.
 		if charCodeToGID != nil {
-			mappedGID, ok := charCodeToGID[uint16(charCode)] //nolint:gosec
+			mappedGID, ok := charCodeToGID[uint16(charCode)] //nolint:gosec // G115: charCode is bounded to 0..255 by the guard above.
 			if !ok {
 				continue
 			}
@@ -163,14 +162,14 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		}
 		// Width consistency applies only to glyphs referenced for
 		// rendering: skip charCodes not used in text operators.
-		charUsed := usage.charCodes[byte(charCode)] //nolint:gosec
+		charUsed := usage.charCodes[byte(charCode)] //nolint:gosec // G115: charCode is bounded to 0..255 by the guard above.
 		if !charUsed {
 			continue
 		}
-		// veraPDF's NUL handling: a 0x00 charCode never appears among its
-		// usedGlyphs (PDF_A-1a__veraPDF_test_suite_6-3-8-t01-fail-a
-		// passes PDFA-1B entirely despite /Widths[0]=826 on an absent
-		// glyph), so skip it here regardless of the GID mapping.
+		// Code 0 is handled above only when rendered. The main loop walks
+		// the /Widths array, which can list code 0 without it ever being
+		// shown by a text operator, so an unrendered /Widths[0] is not a
+		// painted glyph and is skipped here regardless of the GID mapping.
 		if charCode == 0 {
 			continue
 		}
@@ -178,18 +177,16 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		// A width outside the 32-bit integer range cannot be a real
 		// metric: it is crafted overflow input (implementation-limits
 		// fixtures write -2157483648). ISO 32000-2 §7.3.3 leaves
-		// out-of-range integer handling unspecified, and veraPDF treats
-		// such values as unparseable rather than mismatching, so skip
+		// out-of-range integer handling unspecified, so litho treats
+		// such values as unparseable rather than mismatching and skips
 		// the comparison instead of flagging it.
 		if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
 			continue
 		}
-		// Absent glyphs resolve to GID 0: veraPDF's widthFromFontProgram
-		// then carries the .notdef glyph's own advance width, and the
-		// width rule fires ALONGSIDE glyph presence when the declared
-		// width disagrees (verified live on
-		// PDF_A-2b__veraPDF_test_suite_6-2-11-4-1-t02-fail-a, where both
-		// 6.2.11.5 t1 and 6.2.11.4.1 t2 cite the same usedGlyph).
+		// A code that maps to no glyph resolves to GID 0 (.notdef), so the
+		// program width is the .notdef glyph's own advance. The width rule
+		// is independent of glyph presence: both can fire on the same glyph
+		// when the declared width disagrees with the .notdef advance.
 		bw, ok := binaryWidths[gid]
 		if !ok {
 			continue
@@ -206,24 +203,25 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 
 // checkSimpleFontCode0Width applies the glyph-width rule to a rendered code 0.
 // The main /Widths loop skips code 0 (it often falls below /FirstChar and so is
-// absent from the array), but veraPDF still tests it when shown: it resolves the
-// glyph the same way as any code (charCode → GID, falling back to GID 0 /.notdef
-// when the code maps to no glyph name) and compares the program advance against
-// the declared width. The declared width is /Widths[0-FirstChar] when code 0 is
-// covered by the array, otherwise /MissingWidth (default 0).
+// absent from the array), but a code 0 that is shown is a painted glyph and is
+// width-checked: it resolves the glyph the same way as any code (charCode → GID,
+// falling back to GID 0 /.notdef when the code maps to no glyph name) and
+// compares the program advance against the declared width. The declared width is
+// /Widths[0-FirstChar] when code 0 is covered by the array, otherwise
+// /MissingWidth (default 0, ISO 32000-1 Table 111).
 func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar int, widths []ast.PdfObject) []Violation {
 	// Symbolic fonts (FontDescriptor /Flags bit 3) map code 0 through the
 	// embedded program's built-in encoding, which litho does not reconstruct
 	// for CFF; the GID-0 fallback below would then read the wrong glyph and
-	// misfire (CMSY8 code 0 resolves to a real glyph veraPDF accepts). Restrict
-	// the code-0 check to non-symbolic fonts, where the /Encoding name path and
-	// the .notdef fallback match veraPDF (6-2-11-8-t01-fail-a/b are Flags 32).
+	// misfire (a symbolic CFF such as CMSY8 resolves code 0 to a real glyph,
+	// not .notdef). Restrict the code-0 check to non-symbolic fonts, where the
+	// /Encoding name path and the .notdef fallback are reliable.
 	if isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) {
 		return nil
 	}
 
-	// veraPDF resolves code 0 to GID 0 (.notdef) when no glyph name maps it,
-	// then reads that glyph's own advance from the program.
+	// A code with no glyph-name mapping resolves to GID 0 (.notdef), so its
+	// program width is that glyph's own advance.
 	gid := uint16(0)
 	if charCodeToGID != nil {
 		if mapped, ok := charCodeToGID[0]; ok {
@@ -232,8 +230,8 @@ func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, font
 	}
 	bw, ok := binaryWidths[gid]
 	if !ok {
-		// No program advance for the resolved glyph: veraPDF treats
-		// widthFromFontProgram as null and the rule passes.
+		// No program advance for the resolved glyph: the program width is
+		// unresolvable, so there is nothing to compare and the rule passes.
 		return nil
 	}
 
@@ -256,7 +254,7 @@ func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, font
 }
 
 // simpleFontMissingWidth returns the FontDescriptor /MissingWidth for a simple
-// font, the width veraPDF uses for a code outside the /Widths array. Defaults to
+// font, the declared width for a code outside the /Widths array. Defaults to
 // 0 when absent (ISO 32000-1 Table 111).
 func simpleFontMissingWidth(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) float64 {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
@@ -269,13 +267,13 @@ func simpleFontMissingWidth(ctx context.Context, doc *document.Document, fontDic
 
 // glyphPresenceRule selects the per-part "embedded font program defines all
 // glyphs referenced for rendering" rule: ISO 19005-1 §6.3.5 t1, ISO 19005-2/3
-// §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2. Both the PDFA-1A and PDFA-1B
-// veraPDF profiles carry §6.3.5 t1 (test `isGlyphPresent`); clause 6.3.8 t1 is
-// the unrelated ToUnicode requirement (`toUnicode != null`).
+// §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1 t2. ISO 19005-1 §6.3.5 t1 applies to
+// both PDF/A-1A and PDF/A-1B (the glyph-presence requirement); ISO 19005-1
+// §6.3.8 t1 is the unrelated ToUnicode requirement and is not this rule.
 func glyphPresenceRule(profile string) Rule {
-	// PDF/UA ids verified live on PDF_A-1b__veraPDF_test_suite
-	// _6-1-12-t10-fail-a remediated to UA-1/UA-2: 7.21.4.1 t2 and
-	// 8.4.5.5.1 t2 fire alongside the notdef and toUnicode rules.
+	// PDF/UA carries the same glyph-presence requirement: ISO 14289-1
+	// §7.21.4.1 t2 for UA-1 and ISO 14289-2 §8.4.5.5.1 t2 for UA-2, which
+	// fire alongside the notdef and ToUnicode rules on the same glyph.
 	if IsPDFUA(profile) {
 		if PDFUAPart(profile) == 2 {
 			return Rule_14289_2_8_4_5_5_1_t02
@@ -286,11 +284,11 @@ func glyphPresenceRule(profile string) Rule {
 }
 
 // checkSimpleGlyphPresence validates that every glyph referenced for visible
-// rendering exists in the embedded font program (veraPDF usedGlyph test
-// `renderingMode == 3 || isGlyphPresent == null || isGlyphPresent == true`).
-// A used charCode whose glyph name is absent from the program maps to GID 0
-// in simpleFontGlyphMetrics; that is the "glyph not present" signal. Codes
-// litho cannot map at all stay unchecked (isGlyphPresent == null passes).
+// rendering exists in the embedded font program. It applies only to glyphs
+// painted visibly (rendering mode != 3): a used charCode whose glyph name is
+// absent from the program maps to GID 0 in [simpleFontGlyphMetrics], which is
+// the "glyph not present" signal. Codes litho cannot map at all stay unchecked,
+// since glyph presence is then unresolvable.
 func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := glyphPresenceRule(profile)
 	if rule.Specification == "" {
@@ -418,7 +416,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 
 	// Compare /Widths against CharProc widths.
 	for i, wObj := range widths {
-		charCode := byte(int(firstChar) + i) //nolint:gosec
+		charCode := byte(int(firstChar) + i) //nolint:gosec // G115: simple-font char codes occupy the 8-bit space; a /Widths index past 255 is not a valid code and truncation is harmless.
 		glyphName := enc[charCode]
 		if glyphName == "" {
 			continue
@@ -484,7 +482,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if cid == 0 {
 					continue
 				}
-				gid := uint16(cid) //nolint:gosec
+				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
 				pdfWidth := document.Float(wEntry)
 				if pdfWidth == 0 {
 					continue
@@ -527,7 +525,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if cid == 0 {
 					continue
 				}
-				gid := uint16(cid) //nolint:gosec
+				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
 				bw, ok := binaryWidths[gid]
 				if !ok {
 					continue
@@ -576,10 +574,10 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 }
 
 // checkType0PerGlyphToUnicode validates that every code rendered through a
-// Type0 font resolves to a Unicode value via the font's /ToUnicode CMap
-// (veraPDF usedGlyph test `toUnicode != null`, verified live on
-// 6-1-12-t10-fail-a under UA-1/UA-2: 7.21.7 t1 / 8.4.5.8 t1 fire alongside
-// the presence and notdef rules). A missing /ToUnicode entirely is the
+// Type0 font resolves to a Unicode value via the font's /ToUnicode CMap. The
+// requirement is per painted glyph (ISO 14289-1 §7.21.7 t1 for UA-1,
+// ISO 14289-2 §8.4.5.8 t1 for UA-2), so it fires alongside the presence and
+// notdef rules on the same glyph. A missing /ToUnicode entirely is the
 // font-level rule's job; this check covers a present map with gaps.
 func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := perGlyphToUnicodeRule(profile)
@@ -602,14 +600,15 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 		return nil
 	}
 
-	// veraPDF does not fire the per-glyph ToUnicode rule on a code that does not
-	// resolve to a real renderable glyph: CID 0 is .notdef (covered by the
-	// notdef rule), and a CIDFontType0 (CFF) charset-absent CID gets no glyph
-	// object at all. Both are exempt. The exemption is CFF-specific for charset
-	// gaps: a CIDFontType2 (TrueType) empty glyph still gets a glyph object and
-	// still fires the rule, so the absent set is restricted to CFF descendants.
-	// For Identity-H/V an unmapped two-byte code is the CID directly, so skip it
-	// without disturbing the codespace-aware scan that handles mixed-width maps.
+	// The per-glyph ToUnicode rule applies only to a code that resolves to a
+	// real renderable glyph. CID 0 is .notdef (covered by the notdef rule),
+	// and a CIDFontType0 (CFF) charset-absent CID has no glyph in the program
+	// at all. Both are exempt. The exemption is CFF-specific for charset gaps:
+	// a CIDFontType2 (TrueType) maps any CID to a GID slot, so even an empty
+	// glyph is a renderable slot and still triggers the rule. The absent set
+	// is therefore restricted to CFF descendants. For Identity-H/V an unmapped
+	// two-byte code is the CID directly, so skip it without disturbing the
+	// codespace-aware scan that handles mixed-width maps.
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
 	identity := encName == "Identity-H" || encName == "Identity-V"
 	var cffAbsent map[uint16]bool
@@ -630,10 +629,10 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 			}
 			if !ok {
 				// The exemption is CFF-specific. For a CIDFontType0 descendant
-				// veraPDF builds no Glyph object for CID 0 (.notdef) or a
-				// charset-absent CID, so it never fires the rule there. A
-				// CIDFontType2 (TrueType) CID 0 maps to GID 0, a real glyph slot
-				// that still gets a Glyph object and still fires the rule.
+				// no glyph in the program for CID 0 (.notdef) or a
+				// charset-absent CID, so there is no renderable glyph to test.
+				// A CIDFontType2 (TrueType) CID 0 maps to GID 0, a real glyph
+				// slot, so it is renderable and the rule still applies.
 				skip := false
 				if cff && consumed == 2 && off+1 < len(b) {
 					cid := uint16(b[off])<<8 | uint16(b[off+1])
@@ -654,9 +653,9 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 // resolution the width check applies: the font program's metrics through
 // the cmap or glyph-name mapping, with codes that map to GID 0 carrying the
 // .notdef glyph's own advance width. Codes litho cannot map are absent from
-// the map and must keep their declared width (veraPDF treats them as
-// unresolvable). Remediation uses this so the repair and the check can
-// never drift.
+// the map and must keep their declared width, since their authoritative
+// width is unresolvable. Remediation uses this so the repair and the check
+// can never drift.
 func ExpectedSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (map[int]float64, bool) {
 	binaryWidths, unitsPerEm, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
 	if !ok || charCodeToGID == nil {

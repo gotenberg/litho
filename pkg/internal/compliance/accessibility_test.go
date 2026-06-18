@@ -141,9 +141,9 @@ func TestCheckPDFUAIDPrefixesIn(t *testing.T) {
 			wantRules: []Rule{Rule_14289_2_5_t05},
 		},
 		{
-			// VeraPDF fixture PDF_UA-2/5-t05-fail-b.pdf carries a
-			// well-formed but stale revision year. ISO 14289-2 §5
-			// pins the value to "2024" specifically.
+			// A well-formed but stale revision year. ISO 14289-2 §5
+			// pins the value to "2024" specifically, so any other year
+			// fires t05.
 			name: "pdfuaid:rev=2018 fires t5",
 			xmp: `<rdf:Description
   xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
@@ -162,10 +162,12 @@ func TestCheckPDFUAIDPrefixesIn(t *testing.T) {
 			wantRules: nil,
 		},
 		{
-			// VeraPDF fixture PDF_UA-1/5-t04-fail-a.pdf: both pdfuaid
-			// and the non-canonical pdfuaia bind the same PDF/UA URI.
-			// 'amd' appears under pdfuaia; 'part' uses the canonical
-			// prefix to satisfy t02. t04 must still fire.
+			// Both pdfuaid and the non-canonical pdfuaia bind the same
+			// PDF/UA URI. 'amd' appears under pdfuaia; 'part' uses the
+			// canonical prefix to satisfy t02. Per ISO 14289-1 §5,
+			// pdfuaid:amd is forbidden regardless of which prefix carries
+			// it, since detection keys off the namespace URI, so t04 must
+			// still fire.
 			name: "dual binding with non-canonical prefix on amd",
 			xmp: `<rdf:Description
   xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
@@ -177,8 +179,9 @@ func TestCheckPDFUAIDPrefixesIn(t *testing.T) {
 			wantRules: []Rule{Rule_14289_1_5_t04},
 		},
 		{
-			// VeraPDF fixture PDF_UA-1/5-t05-fail-a.pdf, same pattern
-			// as t04 but for 'corr'.
+			// Same pattern as t04 but for 'corr': ISO 14289-1 §5 forbids
+			// pdfuaid:corr under the PDF/UA URI even when a non-canonical
+			// prefix carries it, so t05 fires.
 			name: "dual binding with non-canonical prefix on corr",
 			xmp: `<rdf:Description
   xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
@@ -190,9 +193,11 @@ func TestCheckPDFUAIDPrefixesIn(t *testing.T) {
 			wantRules: []Rule{Rule_14289_1_5_t05},
 		},
 		{
-			// VeraPDF fixture PDF_UA-2/5-t03-fail-a.pdf: pdfuadd +
-			// pdfuaid both bind the UA URI; 'part' uses pdfuadd and
-			// 'rev' uses the canonical prefix. t03 must fire.
+			// pdfuadd and pdfuaid both bind the UA URI; 'part' uses
+			// pdfuadd and 'rev' uses the canonical prefix. Per ISO
+			// 14289-2 §5, the part property must appear under the
+			// canonical pdfuaid prefix, so binding it through pdfuadd
+			// fires t03.
 			name: "dual binding with non-canonical prefix on part (UA-2)",
 			xmp: `<rdf:Description
   xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"

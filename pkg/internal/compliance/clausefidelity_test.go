@@ -2,8 +2,11 @@ package compliance
 
 import "testing"
 
-// These selectors must emit the part-correct clause id so litho's rule-level
-// output matches veraPDF (the verdict was already correct under the part-1 id).
+// These selectors must emit the clause id for the ISO 19005 part being
+// validated. A PDF/A-2 or PDF/A-3 violation reports its own part's clause, not
+// the PDF/A-1 equivalent, even when the construct is forbidden across parts.
+// The verdict was already correct under the part-1 id; only the reported clause
+// was off, so the rule attribution traces to the right standard.
 func TestPartDispatchedRuleSelectors(t *testing.T) {
 	cases := []struct {
 		name string

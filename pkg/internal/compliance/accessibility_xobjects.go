@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -76,7 +77,15 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 	}
 
 	// t02: Form XObjects with MCIDs must not be referenced more than once.
-	for objNum, count := range doRefCounts {
+	// Sorted object numbers keep violation order deterministic
+	// (CONTRIBUTING "Deterministic output").
+	refNums := make([]int, 0, len(doRefCounts))
+	for objNum := range doRefCounts {
+		refNums = append(refNums, objNum)
+	}
+	slices.Sort(refNums)
+	for _, objNum := range refNums {
+		count := doRefCounts[objNum]
 		if count <= 1 {
 			continue
 		}
@@ -99,7 +108,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 // key forbidden. XObjects are streams, so the scanner resolves them via
 // ResolveStream. checkedForRef prevents reporting the same object twice.
 func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.PdfDict, results *[]Violation, checkedForRef map[int]bool, depth int) {
-	if depth > 10 || ctx.Err() != nil {
+	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
 
@@ -112,7 +121,8 @@ func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.Pdf
 		return
 	}
 
-	for _, xobjObj := range xobjects {
+	for _, name := range sortedNames(xobjects) {
+		xobjObj := xobjects[name]
 		ref, isRef := xobjObj.(ast.PdfIndirectRef)
 		if isRef && checkedForRef[ref.ObjectNum] {
 			continue

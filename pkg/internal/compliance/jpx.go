@@ -64,8 +64,8 @@ func checkJPXImage(ctx context.Context, doc *document.Document, stream ast.PdfSt
 }
 
 // imageHasColorSpace reports whether an image XObject dict supplies a usable
-// /ColorSpace. Mirrors veraPDF GFPDXImage, which treats a non-null, non-empty
-// /ColorSpace entry as the colour space (deferring to it over the JP2 boxes).
+// /ColorSpace. A present, non-null /ColorSpace entry defines the image's colour
+// space, so the JP2 colour-specification boxes are not consulted.
 func imageHasColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
 	obj, ok := dict["ColorSpace"]
 	if !ok {
@@ -147,12 +147,11 @@ func parseCOLR(payload []byte) (colrInfo, bool) {
 	return ci, true
 }
 
-// selectedColr is veraPDF's effective colour specification for a JP2 container.
+// selectedColr is the effective colour specification for a JP2 container.
 // Per ISO 19005-2 §6.2.8.3, a conforming reader uses the colour spec whose
 // APPROX field is 0x01; its METH and enumerated colour space are the effective
 // ones. When no spec has APPROX 0x01 and there is exactly one spec, that sole
 // spec is used; otherwise no effective colour space is defined (methSet false).
-// Mirrors veraPDF JPEG2000.java builder population of colrMethod/colrEnumCS.
 type selectedColr struct {
 	methSet   bool
 	meth      byte

@@ -36,10 +36,11 @@ func matchAnnotArtifact(v compliance.Violation) bool {
 
 // fixAnnotArtifact makes the offending annotations artifacts by removing their
 // /StructParent entry, which is the back-pointer that places an annotation in the
-// logical structure. Every governing veraPDF test passes once structParentType is
-// null, and removal is the semantically correct repair: Popups and PrinterMarks
-// are auxiliary content, and Invisible/NoView annotations must not appear in the
-// reading order.
+// logical structure. Once /StructParent is absent the annotation is no longer in
+// the structure, which is exactly what ISO 14289-2 §8.9.2.4.9, §8.9.2.4.14, and
+// §8.9.2.2 require, and removal is the semantically correct repair: Popups and
+// PrinterMarks are auxiliary content, and Invisible/NoView annotations must not
+// appear in the reading order.
 //
 // Only /StructParent is removed; the forward OBJR reference in the structure tree
 // is intentionally left in place. litho's annotation alt-text check exempts an

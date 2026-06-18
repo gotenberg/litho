@@ -35,11 +35,13 @@ func cidSetRule(profile string) Rule {
 // charset. Part 1 (§6.3.5 t2) is narrower. It only requires CharSet to
 // cover the glyphs actually rendered on pages that reference the font.
 // A Type 1 subsetter commonly packs extra glyphs into the subset that
-// the content stream never uses, and VeraPDF treats those unreachable
-// glyphs as outside the "subset" for §6.3.5 purposes. Litho therefore
-// runs the part 1 check one-directional against a rendered-glyph set
-// computed from content-stream usage, and reserves the bidirectional
-// full-charset check for parts 2/3.
+// the content stream never uses. ISO 19005-1 §6.3.5 does not specify
+// whether such unreachable glyphs belong to the "subset" that CharSet
+// must list; litho follows the interpretation that only glyphs actually
+// rendered count for part 1. Litho therefore runs the part 1 check
+// one-directional against a rendered-glyph set computed from
+// content-stream usage, and reserves the bidirectional full-charset
+// check for parts 2/3, whose §6.2.11.4.2 t1 rule is explicit.
 func charSetCompletenessRule(profile string) Rule {
 	if IsPDFUA(profile) {
 		if PDFUAPart(profile) == 2 {
@@ -128,10 +130,11 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 
 		// Part 1: §6.3.5 t2 completeness check skipped. The spec
 		// wording ("listing the character names defined in the font
-		// subset") reads strict, but VeraPDF and Acrobat accept any
-		// CharSet that covers the *rendered* glyph set, with names
-		// derived from the embedded font program's own encoding.
-		// Reproducing that requires parsing the Type 1 CharStrings
+		// subset") reads strict, but the operative requirement is only
+		// that every glyph the content stream actually paints is named
+		// in CharSet, with names derived from the embedded font
+		// program's own encoding. Reproducing that requires parsing the
+		// Type 1 CharStrings
 		// dict (no parser shipped) and the font program's encoding
 		// array (PDF /Encoding diverges on math fonts). The presence
 		// check above already catches the common offence (CharSet
@@ -244,11 +247,12 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 // checkCIDSetCompleteness decodes a CIDSet bitfield stream and verifies
 // it covers all GIDs with non-empty glyph data in the embedded font program.
 func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
-	// veraPDF scopes completeness to USED glyphs: a CIDSet omitting an
-	// unused glyph passes PDFA-2B (verified live on
-	// PDF_A-2b__veraPDF_test_suite_6-2-11-4-1-t02-fail-e, where flagging
-	// unused CID 4998 was a 30-cell litho-only pool). Unknown usage means
-	// nothing can be checked without over-firing.
+	// Completeness is scoped to USED glyphs. ISO 19005-2 §6.2.11.4.2 t2
+	// keys CIDSet on the CIDs the document actually renders: a glyph the
+	// content stream never paints cannot cause a rendering failure, so a
+	// CIDSet omitting an unused CID is conformant and flagging it would
+	// be a false positive. With usage unknown, nothing can be checked
+	// without over-firing.
 	if usedCIDs == nil {
 		return nil
 	}
@@ -267,7 +271,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	for i, b := range cidSetData {
 		for bit := 7; bit >= 0; bit-- {
 			if b&(1<<uint(bit)) != 0 {
-				cid := uint16(i*8 + (7 - bit)) //nolint:gosec,mnd
+				cid := uint16(i*8 + (7 - bit)) //nolint:gosec,mnd // G115: CID bit-index; a conformant CIDSet covers the 16-bit CID space (8 bits/byte, MSB-first).
 				cidSetBits[cid] = true
 			}
 		}
@@ -310,7 +314,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	}
 
 	// Find GIDs with actual glyph data (non-empty).
-	for gid := uint16(1); gid < uint16(len(cidSetData)*8); gid++ { //nolint:gosec,mnd
+	for gid := uint16(1); gid < uint16(len(cidSetData)*8); gid++ { //nolint:gosec,mnd // G115: len*8 is the CID count; a conformant CIDSet covers the 16-bit CID space.
 		if !usedCIDs[gid] {
 			continue
 		}
@@ -360,7 +364,7 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 	for i, b := range cidSetData {
 		for bit := 7; bit >= 0; bit-- {
 			if b&(1<<uint(bit)) != 0 {
-				cid := uint16(i*8 + (7 - bit)) //nolint:gosec,mnd
+				cid := uint16(i*8 + (7 - bit)) //nolint:gosec,mnd // G115: CID bit-index; a conformant CIDSet covers the 16-bit CID space (8 bits/byte, MSB-first).
 				cidSetBits[cid] = true
 			}
 		}

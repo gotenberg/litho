@@ -68,10 +68,10 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkPDFUAIDPrefixes(ctx, doc, catalog, profile)...)
 
 	// Namespace role mapping validation (PDF/UA-2 §8.2.4). A missing or
-	// empty /Namespaces array is not itself a violation: the veraPDF
-	// PDFUA-2 profile keys 8.2.4 on SENonStandard elements only, and
-	// unnamespaced standard types belong to the default standard
-	// namespace per ISO 32000-2 §14.8.6.
+	// empty /Namespaces array is not itself a violation: §8.2.4 constrains
+	// only non-standard structure types, and unnamespaced standard types
+	// belong to the default standard namespace per ISO 32000-2 §14.8.6,
+	// so they need no explicit role mapping.
 	results = append(results, checkNamespaceRoleMapping(ctx, doc, catalog, profile)...)
 
 	// Link nesting (PDF/UA-2): Link annotations must be nested in Link structure elements.
@@ -106,7 +106,7 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkContentMarking(ctx, doc, catalog, profile)...)
 
 	// Encryption permissions (PDF/UA-1 §7.16 t01).
-	results = append(results, checkEncryptionPermissions(doc, profile)...)
+	results = append(results, checkEncryptionPermissions(ctx, doc, profile)...)
 
 	// Annotation structure nesting (PDF/UA-1 §7.18.x).
 	results = append(results, checkAnnotationNesting(ctx, doc, catalog, profile)...)

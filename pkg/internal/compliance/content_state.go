@@ -297,9 +297,9 @@ func checkContentStreamResourcesOps(
 	part int,
 	pageNum int,
 ) []Violation {
-	// reportMiss applies veraPDF's §6.2.2 triage to a name absent from the
-	// stream's own resources: resolvable through Pages-tree inheritance is
-	// t2 (`inheritedResourceNames == ''`), truly undefined is t3.
+	// ISO 19005-2/3/4 §6.2.2 splits a name absent from the stream's own
+	// resources by where it does resolve: reachable only through Pages-tree
+	// inheritance is t2 (`inheritedResourceNames == ''`), truly undefined is t3.
 	inheritedHas := func(category, name ast.PdfName) bool {
 		if inherited == nil {
 			return false
@@ -485,24 +485,23 @@ func realRangeRuleByPart(part int) Rule {
 func undefinedOperatorRule(part int) Rule {
 	// ISO 19005-1 numbers the undefined-operator rule §6.2.10 (Op_Undefined);
 	// §6.2.2 t1 in part 1 is the unrelated OutputIntent rule. Parts 2-4 renumber
-	// it to §6.2.2 t1. veraPDF fires 6.2.10 t1 under A-1.
+	// it to §6.2.2 t1.
 	return ruleByPart(part, Rule_19005_1_6_2_10_t01, Rule_19005_2_6_2_2_t01, Rule_19005_3_6_2_2_t01, Rule_19005_4_6_2_2_t01)
 }
 
 func missingResourceRule(part int) Rule {
 	// The undefined-named-resource test (§6.2.2 t3, `undefinedResourceNames
-	// == ''`) exists only in ISO 19005-4: veraPDF's PDFA-2x/3x profiles
-	// define §6.2.2 with t1 and t2 alone (verified against PDFA-2A/2B/2U and
-	// PDFA-3A/3B/3U), while PDFA-4/4E/4F carry t3. PDF/A-1 carries no
-	// resource-completeness rule at all (an undefined cs name passes PDFA-1B).
-	// Emitting it under parts 1-3 was a litho-over against the conformance
-	// oracle, so it is gated to part 4.
+	// == ''`) exists only in ISO 19005-4: parts 2 and 3 state §6.2.2 with t1
+	// and t2 alone, while part 4 adds t3. ISO 19005-1 carries no
+	// resource-completeness rule at all (an undefined cs name conforms to
+	// PDF/A-1b). Emitting t3 under parts 1-3 would reject documents those
+	// parts permit, so it is gated to part 4.
 	return ruleByPart(part, Rule{}, Rule{}, Rule{}, Rule_19005_4_6_2_2_t03)
 }
 
 // inheritedResourceRule selects §6.2.2 t2: a content stream shall not use
-// resources it can only reach through Pages-tree inheritance (veraPDF test
-// `inheritedResourceNames == ”`). PDF/A-1 carries no resource rules.
+// resources it can only reach through Pages-tree inheritance
+// (`inheritedResourceNames == ”`). PDF/A-1 carries no resource rules.
 func inheritedResourceRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_2_t02, Rule_19005_3_6_2_2_t02, Rule_19005_4_6_2_2_t02)
 }

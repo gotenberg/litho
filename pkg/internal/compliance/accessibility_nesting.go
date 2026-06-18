@@ -81,12 +81,13 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 
 			stdType := structParentMap[annotObjNum] // "" if not in structure tree
 
-			// veraPDF keys §7.18.x nesting on structParentStandardType, which it
-			// derives from the annotation's /StructParent -> ParentTree (the
-			// reverse link), not from the forward /K OBJR chain litho walks. When
-			// the OBJR walk finds nothing, fall back to the reverse link so an
-			// annotation reachable only through /StructParent still counts as
-			// nested. Applied only to the rules that fire on a *missing* nesting
+			// ISO 14289-1 §7.18.x nesting depends on the annotation's enclosing
+			// structure element. PDF exposes that link two ways: the forward /K
+			// OBJR chain litho walks, and the annotation's /StructParent index
+			// into the ParentTree (the reverse link). The two can disagree when an
+			// annotation is reachable only through /StructParent, so when the OBJR
+			// walk finds nothing, fall back to the reverse link to still count it
+			// as nested. Applied only to the rules that fire on a *missing* nesting
 			// type (Widget/Link/other); §7.18.8 fires on the presence of any
 			// structure parent, so it keeps the OBJR-derived stdType to avoid a
 			// new firing direction.
@@ -145,10 +146,10 @@ func nestingDesc(stdType string) string {
 }
 
 // annotStructParentType resolves an annotation's enclosing structure element
-// standard type via its /StructParent index into the ParentTree, mirroring
-// veraPDF's structParentStandardType. The ParentTree entry for an annotation is
-// a single structure element reference (unlike a page's per-MCID array), so it
-// resolves to one element whose /S, role-mapped to a standard type, is returned.
+// standard type via its /StructParent index into the ParentTree. The ParentTree
+// entry for an annotation is a single structure element reference (unlike a
+// page's per-MCID array), so it resolves to one element whose /S, role-mapped to
+// a standard type, is returned.
 // Returns "" when no /StructParent, ParentTree entry, or element type resolves.
 func annotStructParentType(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName, profile string) string {
 	spObj, ok := annot["StructParent"]
@@ -270,10 +271,10 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
 			// §8.9.2.3 t1: a markup annotation shall be enclosed within an Annot
-			// structure element. veraPDF's test is structParentStandardType ==
-			// 'Annot', which fails when the type is absent (the annotation is an
-			// artifact) as well as when it is a non-Annot element, so this arm
-			// does not take the artifact exemption the rules below rely on.
+			// structure element. The requirement is that the enclosing type be
+			// exactly Annot, which fails when the type is absent (the annotation
+			// is an artifact) as well as when it is a non-Annot element, so this
+			// arm does not take the artifact exemption the rules below rely on.
 			if markupAnnotationSubtypes[subtype] {
 				stdType, inTree := structMap[objNum]
 				if !inTree || stdType != "Annot" {

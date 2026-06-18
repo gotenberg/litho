@@ -40,6 +40,7 @@ func fixPresSteps(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 
 		newDict := make(ast.PdfDict, len(pageDict))
 		maps.Copy(newDict, pageDict)
+		// ISO 19005-2/3 §6.10 t2 (part 4 §6.11 t2): a page shall not contain /PresSteps.
 		delete(newDict, "PresSteps")
 
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)

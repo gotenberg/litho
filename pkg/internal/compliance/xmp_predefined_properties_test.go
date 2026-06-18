@@ -70,9 +70,10 @@ func TestXMPPredefinedProperties_Part4NeverFlags(t *testing.T) {
 }
 
 // TestXMPPredefinedProperties_ExtensionSchemaExtendsPredefined pins
-// veraPDF's acceptance of extension schemas that extend predefined
-// namespaces: once the packet declares the exif namespace in
-// pdfaExtension:schemas, exif:MakerNote counts as declared.
+// extension schemas that extend predefined namespaces: PDF/A lets a
+// packet declare its own properties through pdfaExtension:schemas, so
+// once the schema describes exif:MakerNote it counts as declared and
+// the predefined-catalog audit must not flag it.
 func TestXMPPredefinedProperties_ExtensionSchemaExtendsPredefined(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:exif="http://ns.adobe.com/exif/1.0/"
@@ -126,9 +127,7 @@ func TestXMPPredefinedProperties_NestedFieldsInvisible(t *testing.T) {
 // property exists only in the PDF/A-4 identification schema. The XMP
 // 2005 catalog predefines pdfaid part/conformance/amd/corr, so a
 // leftover rev fails §6.6.2.3.1 t1 (name) and t2 (type, via the
-// registry narrowing) under parts 2/3, exactly as veraPDF 1.30 reports
-// (verified live on PDF_A-4__veraPDF_test_suite_6-1-11-t01-pass-a
-// retargeted to PDF/A-2b).
+// registry narrowing) under parts 2/3.
 func TestXMPPredefinedProperties_PdfaidRev(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
@@ -162,11 +161,11 @@ func TestXMPPredefinedProperties_PdfaidRev(t *testing.T) {
 }
 
 // TestXMPPropertyTypes_SupplementalCategoriesBag pins the removed
-// simple-as-Bag exemption: veraPDF 1.30 fails isValueTypeCorrect for a
-// simple-valued photoshop:SupplementalCategories under parts 2/3
-// (verified live on PDF_A-1b__veraPDF_test_suite_6-7-2-t13-pass-l
-// retargeted to PDF/A-2b), while part 1 reads the property as plain
-// Text per the 2004 XMP Specification.
+// simple-as-Bag exemption: the XMP 2005 Specification types
+// photoshop:SupplementalCategories as a Bag, so a simple scalar value
+// mismatches the declared type and fails §6.6.2.3.1 t2 under parts
+// 2/3, while part 1 reads the property as plain Text per the 2004 XMP
+// Specification.
 func TestXMPPropertyTypes_SupplementalCategoriesBag(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/">
@@ -196,8 +195,7 @@ func TestXMPPredefinedProperties_AttributeForm(t *testing.T) {
 
 	var got []Violation
 	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
-	// pdf:Trapped is not predefined by the XMP 2005 catalog veraPDF uses;
-	// pdf:Producer is.
+	// The XMP 2005 catalog predefines pdf:Producer but not pdf:Trapped.
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t01) {
 		t.Errorf("attribute-form pdf:Trapped: got %v, want §6.6.2.3.1 t1", got)
 	}

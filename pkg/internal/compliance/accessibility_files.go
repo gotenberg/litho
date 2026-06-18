@@ -18,13 +18,11 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		return nil
 	}
 
-	// veraPDF scopes the UA-2 /Desc requirement to file specifications
-	// reachable from the catalog /Names/EmbeddedFiles name tree, exactly as
-	// the rule text says: a Desc-less filespec referenced only from an /AF
-	// array or annotation passes (verified live: vera fails
-	// PDF_UA-2__8.14.1-t01-fail-a but passes
-	// PDF_A-3b__veraPDF_test_suite_6-8-t01-fail-a remediated to PDF/UA-2,
-	// whose filespec sits outside any EmbeddedFiles tree).
+	// ISO 14289-2 §8.14.1 scopes the /Desc requirement to file specifications
+	// reachable from the catalog /Names/EmbeddedFiles name tree. A Desc-less
+	// filespec referenced only from an /AF array or an annotation is out of
+	// scope, since it is not part of the document's named embedded-files
+	// collection that §8.14.1 governs.
 	inEFTree := collectEmbeddedFilesTreeSpecs(ctx, doc, catalog)
 
 	rule := Rule_14289_1_7_11_t01
@@ -69,10 +67,9 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 
 		// PDF/UA-2 §8.14.1: /Desc must be present on file specifications
 		// in the EmbeddedFiles name tree (and only there, see inEFTree).
-		// Presence suffices: veraPDF accepts an empty /Desc () (verified
-		// live on PDF_A-3b__veraPDF_test_suite_6-8-t01-fail-a remediated
-		// to PDF/UA-2, where vera passes the empty-Desc filespec litho
-		// used to flag).
+		// The clause requires the key to be present; it does not constrain
+		// its contents, so an empty /Desc () satisfies the requirement and
+		// only an absent /Desc is a violation.
 		if profile == "PDF/UA-2" && inEFTree[objNum] {
 			if _, hasDesc := dict["Desc"]; !hasDesc {
 				results = append(results, Violation{
@@ -438,7 +435,7 @@ func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot 
 // formStructElementHasAlt walks the structure tree looking for a Form element
 // with a non-empty /Alt entry. This is the alternative to /TU per §7.18.1 t3.
 func formStructElementHasAlt(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) bool {
-	if depth > 30 {
+	if depth > maxStructAttrSearchDepth {
 		return false
 	}
 	sType, _ := document.ResolveName(ctx, doc, node["S"])
@@ -465,9 +462,15 @@ func formStructElementHasAlt(ctx context.Context, doc *document.Document, node a
 	return false
 }
 
+// maxFieldTUSearchDepth bounds the /TU lookup walk over the AcroForm field
+// tree. Anti-DoS guard, not spec-mandated: deliberately tighter than
+// [maxFieldTreeDepth] (the general field-tree cap) because a /TU appears on
+// or near the terminal field, so a deep crafted tree need not be descended.
+const maxFieldTUSearchDepth = 10
+
 // checkFieldTURecursive checks a form field (and its children) for /TU.
 func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int) []Violation {
-	if depth > 10 {
+	if depth > maxFieldTUSearchDepth {
 		return nil
 	}
 	field, err := document.ResolveDict(ctx, doc, fieldObj)
