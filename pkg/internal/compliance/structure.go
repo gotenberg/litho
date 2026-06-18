@@ -577,6 +577,15 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
+	// PDF/UA-2 §8.2.5.8 t1: a TOCI element shall contain a /Ref entry
+	// (the reference to the structure element it points at).
+	if state.profile == "PDF/UA-2" && typeName == "TOCI" {
+		if _, hasRef := elem["Ref"]; !hasRef {
+			*state.results = append(*state.results,
+				failf(Rule_14289_2_8_2_5_8_t01, "TOCI element has no /Ref entry")...)
+		}
+	}
+
 	// Track heading levels and generic/specific heading usage.
 	if typeName == "H" {
 		state.hasGenericH = true
