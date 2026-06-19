@@ -392,8 +392,15 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 // determinable encoding (t5): both derive from the same parse failure. litho
 // parses XMP leniently everywhere else, so this dedicated strict pass catches a
 // not-well-formed packet (for example a start/end tag whose case does
-// not match). PDF/A-1 §6.7.2 carries no such rule, so part 1 returns nil.
+// not match). PDF/A-1 §6.7.9 t01 carries only the well-formedness half (there
+// is no part-1 UTF-8/encoding equivalent), so part 1 returns a single rule.
 func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
+	if part == 1 {
+		if xmpWellFormed(xmpData) {
+			return nil
+		}
+		return failf(Rule_19005_1_6_7_9_t01, "XMP packet is not well-formed XML")
+	}
 	var t4, t5 Rule
 	switch part {
 	case 2:
@@ -403,7 +410,7 @@ func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 	case 4:
 		t4, t5 = Rule_19005_4_6_7_2_1_t04, Rule_19005_4_6_7_2_1_t05
 	default:
-		return nil // PDF/A-1 §6.7.2 has no serialization/encoding rule
+		return nil
 	}
 	if xmpWellFormed(xmpData) {
 		return nil
