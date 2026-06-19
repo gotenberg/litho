@@ -67,7 +67,22 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 		}
 		for _, typeName := range sortedNames(rmns) {
 			mappingObj := rmns[typeName]
-			// t03: same-namespace circular mapping.
+			// A type mapped to ITSELF within the same namespace is a circular
+			// mapping (ISO 14289-2 §8.2.4 t2), which veraPDF reports distinctly
+			// from a same-namespace remap to a DIFFERENT type (t3). Detect the
+			// direct self-map first and skip the t3/t4 paths for it.
+			if targetArr, _ := document.ResolveArray(ctx, doc, mappingObj); len(targetArr) >= 2 {
+				targetType, _ := document.ResolveName(ctx, doc, targetArr[0])
+				targetNSDict, _ := document.ResolveDict(ctx, doc, targetArr[1])
+				targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
+				if string(targetType) == string(typeName) && string(targetURI) == string(srcURI) {
+					results = append(results, failf(Rule_14289_2_8_2_4_t02,
+						"namespace %q: type %s maps to itself", string(srcURI), typeName)...)
+					continue
+				}
+			}
+			// t03: same-namespace circular mapping (chain returns through a
+			// different type).
 			if roleMapChainReturnsSameNS(ctx, doc, string(srcURI), string(typeName), nsByURI) {
 				results = append(results, failf(Rule_14289_2_8_2_4_t03,
 					"namespace %q: type %s maps back to same namespace through chain",

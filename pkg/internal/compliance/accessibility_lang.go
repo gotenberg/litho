@@ -82,9 +82,14 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 				continue
 			}
 			lang, _ := document.ResolveString(ctx, doc, langObj)
-			if !IsValidLangTag(string(lang)) {
+			tag := strings.TrimSpace(document.DecodePdfString(lang))
+			// A /Lang present on a marked-content sequence must be a valid
+			// Language-Tag; for PDF/UA an empty value is invalid (UA-1 §7.2 t29
+			// / UA-2 §8.4.4 t2), unlike PDF/A where an empty text string is
+			// permitted. This pass runs only under PDF/UA (guarded above).
+			if tag == "" || !IsValidLangTag(tag) {
 				results = append(results, failf(rule,
-					"page %d: marked-content /Lang %q is not a valid language tag", pageIdx+1, string(lang))...)
+					"page %d: marked-content /Lang %q is not a valid language tag", pageIdx+1, tag)...)
 			}
 		}
 	}
@@ -111,9 +116,12 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 			return failf(validRule, "catalog /Lang is empty")
 		}
 
-		// PDF/UA-2 §8.4.4 requires catalog /Lang explicitly.
+		// PDF/UA-2 §8.4.4 requires catalog /Lang explicitly (t1); the grammar of
+		// any /Lang on a structure element is still validated (empty/malformed
+		// fires §8.4.4 t2), since the catalog-present struct-walk below is
+		// skipped on this early return.
 		if profile == "PDF/UA-2" {
-			return fail(langRule, "catalog")
+			return append(fail(langRule, "catalog"), validateStructureLangs(ctx, doc, catalog, validRule)...)
 		}
 
 		// PDF/UA-1 §7.2 t34: natural language must be determinable. If catalog
@@ -196,6 +204,14 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 
 	var results []Violation
 	walkStructureElementsWithLang(ctx, doc, treeRoot, rootLang, func(elem ast.PdfDict, path string, inheritedLang string) {
+		// A present-but-empty /Lang on a structure element is an invalid
+		// Language-Tag for PDF/UA (UA-1 §7.2 t29 / UA-2 §8.4.4 t2), not an
+		// absent one. Report it and stop, so the element is not also counted
+		// toward the undeterminable-language path below.
+		if langPresentButEmpty(ctx, doc, elem) {
+			results = append(results, Violation{Rule: validRule, Context: fmt.Sprintf("empty /Lang, %s", path)})
+			return
+		}
 		elemLang := resolveNonEmptyLang(ctx, doc, elem)
 		effectiveLang := inheritedLang
 		if elemLang != "" {
@@ -355,8 +371,10 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 		}
 		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
 		if trimmed == "" {
-			// Empty /Lang in structure element. Not an invalid-format error.
-			// The "language not determined" checks (t21-t24, t30-t34) handle this case separately.
+			// A present-but-empty /Lang is an invalid Language-Tag for PDF/UA
+			// (this walk runs only under PDF/UA via checkAccessibilityGroup).
+			// UA-1 §7.2 t29 / UA-2 §8.4.4 t2.
+			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("empty /Lang, %s", path)})
 			return
 		}
 		if !IsValidLangTag(trimmed) {

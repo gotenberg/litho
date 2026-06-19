@@ -386,13 +386,13 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 }
 
 // xmpPacketSerializationValidity fires PDF/A-2/3 §6.6.2.1 t4
-// (isSerializationValid) and t5 (actualEncoding) together when the XMP
-// packet is not well-formed XML. A packet that does not parse has no
-// valid serialization (t4) and no determinable encoding (t5): both
-// derive from the same parse failure. litho parses XMP leniently
-// everywhere else, so this dedicated strict pass catches a
+// (isSerializationValid) and t5 (actualEncoding), and the PDF/A-4 §6.7.2.1
+// t4/t5 equivalents, together when the XMP packet is not well-formed XML. A
+// packet that does not parse has no valid serialization (t4) and no
+// determinable encoding (t5): both derive from the same parse failure. litho
+// parses XMP leniently everywhere else, so this dedicated strict pass catches a
 // not-well-formed packet (for example a start/end tag whose case does
-// not match).
+// not match). PDF/A-1 §6.7.2 carries no such rule, so part 1 returns nil.
 func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 	var t4, t5 Rule
 	switch part {
@@ -400,8 +400,10 @@ func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 		t4, t5 = Rule_19005_2_6_6_2_1_t04, Rule_19005_2_6_6_2_1_t05
 	case 3:
 		t4, t5 = Rule_19005_3_6_6_2_1_t04, Rule_19005_3_6_6_2_1_t05
+	case 4:
+		t4, t5 = Rule_19005_4_6_7_2_1_t04, Rule_19005_4_6_7_2_1_t05
 	default:
-		return nil // only PDF/A-2 and PDF/A-3 carry §6.6.2.1 t4/t5
+		return nil // PDF/A-1 §6.7.2 has no serialization/encoding rule
 	}
 	if xmpWellFormed(xmpData) {
 		return nil

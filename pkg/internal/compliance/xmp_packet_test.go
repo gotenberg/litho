@@ -51,12 +51,18 @@ func TestXmpPacketSerializationValidity(t *testing.T) {
 			t.Errorf("well-formed packet must not fire, got %v", vs)
 		}
 	})
-	t.Run("parts 1 and 4 never fire", func(t *testing.T) {
+	t.Run("malformed fires t4+t5 part 4", func(t *testing.T) {
 		t.Parallel()
-		for _, p := range []int{1, 4} {
-			if vs := xmpPacketSerializationValidity(malformed, p); len(vs) != 0 {
-				t.Errorf("part %d has no §6.6.2.1 t4/t5, got %v", p, vs)
-			}
+		vs := xmpPacketSerializationValidity(malformed, 4)
+		if !hasRule(vs, Rule_19005_4_6_7_2_1_t04) || !hasRule(vs, Rule_19005_4_6_7_2_1_t05) {
+			t.Errorf("expected §6.7.2.1 t4+t5 (part 4), got %v", vs)
+		}
+	})
+	t.Run("part 1 never fires", func(t *testing.T) {
+		t.Parallel()
+		// PDF/A-1 §6.7.2 carries no serialization/encoding rule.
+		if vs := xmpPacketSerializationValidity(malformed, 1); len(vs) != 0 {
+			t.Errorf("part 1 has no serialization/encoding rule, got %v", vs)
 		}
 	})
 }
