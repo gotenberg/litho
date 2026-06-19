@@ -262,9 +262,15 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 		return nil
 	}
 	cidSetData, err := doc.DecodeStream(ctx, stream)
-	if err != nil || len(cidSetData) == 0 {
+	if err != nil {
 		return nil
 	}
+	// A present-but-empty CIDSet is not "nothing to check": when the document
+	// renders any CID, an empty set cannot identify it, so completeness fails
+	// (ISO 19005-2 §6.2.11.4.2 t2). veraPDF flags this; an empty cidSetData
+	// falls through with an empty cidSetBits map so the CFF coverage loop fires
+	// on the first used CID. No conforming file pairs used glyphs with an empty
+	// CIDSet (it would be self-contradictory), so this cannot misfire.
 
 	// Decode CIDSet bitfield: bit N of byte M represents CID (M*8 + (7-N)).
 	cidSetBits := make(map[uint16]bool)

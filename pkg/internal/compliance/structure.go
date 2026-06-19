@@ -272,7 +272,10 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		}
 	}
 
-	// Check for self-mappings (A→A) which are always circular.
+	// Check for self-mappings (A→A) which are always circular. veraPDF flags a
+	// standard type's identity self-map as a circular mapping too (e.g. /LI /LI
+	// under ISO 14289-1 §7.1 t6 / ISO 14289-2 §8.2.4 t2), so standard types are
+	// NOT exempt here.
 	for _, src := range srcNames {
 		target := mapping[src]
 		if src == target {

@@ -132,6 +132,12 @@ func TestIsPUAHex(t *testing.T) {
 		{"empty brackets", "<>", false},
 		{"lowercase hex rejected", "<e000>", false},
 		{"invalid hex char", "<GHIJ>", false},
+		{"surrogate pair PUA-B", "<DBC0DD6D>", true},    // U+10016D
+		{"surrogate pair PUA-A", "<DB80DC08>", true},    // U+F0008
+		{"surrogate pair non-PUA", "<D835DC00>", false}, // U+1D400 (math bold A)
+		{"PUA-B direct", "<100000>", true},
+		{"PUA-B end", "<10FFFD>", true},
+		{"above PUA-B", "<10FFFE>", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -156,6 +162,13 @@ func TestContainsPUAMapping(t *testing.T) {
 		{"no bfchar section", "/CMapType 1 def", false},
 		{"PUA in supplementary range", "1 beginbfchar\n<03> <F0000>\nendbfchar", true},
 		{"multiple mappings one PUA", "2 beginbfchar\n<01> <0041>\n<02> <E100>\nendbfchar", true},
+		// Packed entries with the end marker on the entry line, and the PUA
+		// destination past the second field, expressed as a surrogate pair.
+		{"packed line surrogate PUA-B", "6 beginbfchar\n<01> <0061> <02> <0062> <03> <DBC0DD6D> <04> <0064> endbfchar", true},
+		{"packed line no PUA", "2 beginbfchar\n<01> <0061> <02> <0062> endbfchar", false},
+		{"bfrange PUA dst", "1 beginbfrange\n<01> <01> <E000>\nendbfrange", true},
+		{"bfrange non-PUA", "1 beginbfrange\n<01> <03> <0041>\nendbfrange", false},
+		{"source in PUA range is not a mapping", "1 beginbfchar\n<E000> <0041>\nendbfchar", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

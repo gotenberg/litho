@@ -810,36 +810,74 @@ func isInvalidUnicodeDst(token string) bool {
 	return t == "<0000>" || t == "<FEFF>" || t == "<FFFE>"
 }
 
-// containsPUAMapping scans a ToUnicode CMap for destination values in the
-// Unicode Private Use Area (U+E000-U+F8FF BMP PUA).
+// containsPUAMapping scans a ToUnicode CMap for destination values in a Unicode
+// Private Use Area: BMP (U+E000-U+F8FF), Supplementary PUA-A (U+F0000-U+FFFFD),
+// or PUA-B (U+100000-U+10FFFD), including supplementary values written as
+// UTF-16BE surrogate pairs. bfchar entries pair <src> <dst>; bfrange entries are
+// <lo> <hi> <dst>. A single line may pack several entries, so every destination
+// token on the line is tested (the earlier parts[1]-only scan missed packed
+// fixtures where the PUA destination is not the second field).
 func containsPUAMapping(cmapData string) bool {
-	normalized := strings.ReplaceAll(cmapData, "\r\n", "\n")
-	normalized = strings.ReplaceAll(normalized, "\r", "\n")
-	upper := strings.ToUpper(normalized)
-
-	inBfchar := false
-	for line := range strings.SplitSeq(upper, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, "BEGINBFCHAR") {
-			inBfchar = true
-			continue
-		}
-		if inBfchar {
-			parts := strings.Fields(trimmed)
-			if len(parts) >= 2 {
-				if isPUAHex(parts[1]) {
-					return true
-				}
-			}
-		}
-		if strings.Contains(trimmed, "ENDBFCHAR") {
-			inBfchar = false
-		}
-	}
-	return false
+	// A begin/end marker may share a line with its entries
+	// ("... <06> <0066> endbfchar"), so scan whole begin..end regions rather
+	// than line by line. In a bfchar region destinations are the second token
+	// of each <src> <dst> pair; in a bfrange region they are the third token of
+	// each <lo> <hi> <dst> triple.
+	upper := strings.ToUpper(cmapData)
+	return scanBfRegions(upper, "BEGINBFCHAR", "ENDBFCHAR", 2, 1) ||
+		scanBfRegions(upper, "BEGINBFRANGE", "ENDBFRANGE", 3, 2)
 }
 
-// isPUAHex checks if a hex token like "<E000>" is in the Unicode PUA range.
+// scanBfRegions reports whether any destination token in a begin..end region of
+// s is a PUA scalar. stride/offset select the destination token within each
+// entry (bfchar: stride 2 offset 1; bfrange: stride 3 offset 2).
+func scanBfRegions(s, begin, end string, stride, offset int) bool {
+	for {
+		i := strings.Index(s, begin)
+		if i < 0 {
+			return false
+		}
+		s = s[i+len(begin):]
+		region := s
+		j := strings.Index(s, end)
+		if j >= 0 {
+			region = s[:j]
+			s = s[j+len(end):]
+		}
+		tokens := hexTokens(region)
+		for k := offset; k < len(tokens); k += stride {
+			if isPUAHex(tokens[k]) {
+				return true
+			}
+		}
+		if j < 0 {
+			return false
+		}
+	}
+}
+
+// hexTokens returns the angle-bracketed hex tokens (e.g. "<E000>") in s, in order.
+func hexTokens(s string) []string {
+	var out []string
+	for {
+		i := strings.IndexByte(s, '<')
+		if i < 0 {
+			break
+		}
+		j := strings.IndexByte(s[i:], '>')
+		if j < 0 {
+			break
+		}
+		out = append(out, s[i:i+j+1])
+		s = s[i+j+1:]
+	}
+	return out
+}
+
+// isPUAHex reports whether a hex token like "<E000>" denotes a Unicode Private
+// Use Area scalar. An 8-nibble token forming a UTF-16BE surrogate pair (high
+// D800-DBFF, low DC00-DFFF) is decoded to its supplementary scalar first, so
+// PUA-A/PUA-B destinations written as surrogate pairs are recognized.
 func isPUAHex(token string) bool {
 	t := strings.TrimSpace(token)
 	if len(t) < 3 || t[0] != '<' || t[len(t)-1] != '>' {
@@ -858,5 +896,13 @@ func isPUAHex(token string) bool {
 			return false
 		}
 	}
-	return (val >= 0xE000 && val <= 0xF8FF) || (val >= 0xF0000 && val <= 0xFFFFF)
+	if len(hex) == 8 {
+		hi, lo := val>>16, val&0xFFFF
+		if hi >= 0xD800 && hi <= 0xDBFF && lo >= 0xDC00 && lo <= 0xDFFF {
+			val = 0x10000 + (hi-0xD800)<<10 + (lo - 0xDC00)
+		}
+	}
+	return (val >= 0xE000 && val <= 0xF8FF) || // BMP PUA
+		(val >= 0xF0000 && val <= 0xFFFFF) || // Supplementary PUA-A
+		(val >= 0x100000 && val <= 0x10FFFD) // Supplementary PUA-B
 }

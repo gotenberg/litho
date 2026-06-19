@@ -614,7 +614,7 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 	var cffAbsent map[uint16]bool
 	cff := false
 	if identity {
-		if absent, subtype, _ := absentType0CIDs(ctx, doc, fontDict, usage); subtype == "CIDFontType0" {
+		if absent, subtype, _, _ := absentType0CIDs(ctx, doc, fontDict, usage); subtype == "CIDFontType0" {
 			cffAbsent = absent
 			cff = true
 		}

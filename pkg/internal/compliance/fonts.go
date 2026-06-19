@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -287,9 +288,12 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 		return nil
 	}
 
-	// Check for ActualText in content stream (BDC properties).
+	// Check for ActualText in content stream (BDC properties). Match the PDF
+	// name /ActualText, not the bare word: a content stream that draws the
+	// literal text "ActualText" (e.g. a fixture whose visible prose reads "an
+	// ActualText entry is not present") must not be read as carrying one.
 	contentData, _ := resolvePageContentBytes(ctx, doc, page)
-	if len(contentData) > 0 && bytes.Contains(contentData, []byte("ActualText")) {
+	if len(contentData) > 0 && bytes.Contains(contentData, []byte("/ActualText")) {
 		return nil
 	}
 
@@ -394,6 +398,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 				rule := glyphWidthRule(profile)
 				if rule.Specification != "" {
 					results = append(results, checkCIDFontWidths(ctx, doc, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule)...)
+					results = append(results, checkType0NotdefWidth(ctx, doc, fontDict, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, usage)...)
 				}
 			}
 		}
@@ -634,6 +639,68 @@ func type0UsedCIDs(ctx context.Context, doc *document.Document, fontDict ast.Pdf
 	return cids
 }
 
+// defaultCIDWidth returns the CIDFont /DW value, or the PDF default of 1000.
+func defaultCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict) float64 {
+	r, _ := document.ResolveObject(ctx, doc, cidFontDict["DW"])
+	if w := document.Float(r); w != 0 {
+		return w
+	}
+	return 1000
+}
+
+// checkType0NotdefWidth flags the glyph-width rule when a Type0 font renders
+// .notdef and the .notdef (GID 0) program advance differs from its declared
+// width. Per ISO 19005-2 §6.2.11.5 / 19005-4 §6.2.10.5, veraPDF resolves every
+// shown code to a GID and compares the program advance against the declared
+// width; a code shown as CID 0, or a decode-level .notdef from an odd-length
+// code tail or an out-of-range CID, resolves to GID 0. The /W-array width check
+// ([checkCIDFontWidths]) skips CID 0 and never produces the padded CID, so it
+// under-reports the width rule on the .notdef-rendering case. The declared width
+// is /DW for an out-of-/W padded code, and the CID 0 entry (/W[0] or /DW) for a
+// directly shown CID 0. Usage-scoped: fires only when .notdef is actually shown,
+// so it cannot flag a conforming file (a strict subset of the per-used-glyph
+// comparison veraPDF performs).
+func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+	if usage == nil || len(usage.rawStrings) == 0 {
+		return nil
+	}
+	bw, ok := binaryWidths[0]
+	if !ok {
+		return nil
+	}
+
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	var embedded *cmap.CIDMap
+	if encName == "" {
+		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
+			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
+				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
+			}
+		}
+	}
+	usedCIDs, notdef, ok := collectType0CIDs(string(encName), embedded, usage)
+	if !ok {
+		return nil
+	}
+
+	var declared float64
+	switch {
+	case notdef:
+		declared = defaultCIDWidth(ctx, doc, cidFontDict)
+	case usedCIDs[0]:
+		declared = lookupCIDWidth(ctx, doc, cidFontDict, 0)
+	default:
+		return nil
+	}
+
+	expected := float64(bw) * 1000.0 / float64(unitsPerEm)
+	if math.Abs(declared-expected) > widthTolerance {
+		return failf(rule, "font %s on page %d: .notdef glyph width mismatch (declared=%.1f, font=%.1f)",
+			fontName, pageNum, declared, expected)
+	}
+	return nil
+}
+
 func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {
@@ -756,10 +823,10 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 // exists in the glyf table (it is present, just empty), so it remains a mappable
 // glyph and the ToUnicode rule still applies. ok is false when litho cannot
 // decode the encoding to CIDs; callers then stay conservative.
-func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (absent map[uint16]bool, subtype string, ok bool) {
+func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (absent map[uint16]bool, subtype string, notdef bool, ok bool) {
 	absent = make(map[uint16]bool)
 	if usage == nil || len(usage.rawStrings) == 0 {
-		return absent, "", false
+		return absent, "", false, false
 	}
 
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
@@ -771,9 +838,9 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 			}
 		}
 	}
-	usedCIDs, _, decodeOK := collectType0CIDs(string(encName), embedded, usage)
+	usedCIDs, notdef, decodeOK := collectType0CIDs(string(encName), embedded, usage)
 	if !decodeOK {
-		return absent, "", false
+		return absent, "", notdef, false
 	}
 	// CID 0 (.notdef) is deliberately NOT treated as absent here: its glyph IS
 	// present in the program (it is the .notdef glyph), so neither the
@@ -783,20 +850,20 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
-		return absent, "", true
+		return absent, "", notdef, true
 	}
 	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
 	if err != nil || cidFontDict == nil {
-		return absent, "", true
+		return absent, "", notdef, true
 	}
 	subtype = fontSubtype(ctx, doc, cidFontDict)
 	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
-		return absent, subtype, true
+		return absent, subtype, notdef, true
 	}
 	fontData := extractFontProgramData(ctx, doc, fd)
 	if fontData == nil {
-		return absent, subtype, true
+		return absent, subtype, notdef, true
 	}
 
 	switch subtype {
@@ -819,7 +886,7 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 			}
 		}
 	}
-	return absent, subtype, true
+	return absent, subtype, notdef, true
 }
 
 // checkType0GlyphPresence emits the glyph-presence rule for a composite font's
@@ -840,8 +907,15 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	if notdefRule(profile).Specification != "" {
 		return nil
 	}
-	absent, _, ok := absentType0CIDs(ctx, doc, fontDict, usage)
-	if !ok || len(absent) == 0 {
+	absent, _, notdef, ok := absentType0CIDs(ctx, doc, fontDict, usage)
+	if !ok {
+		return nil
+	}
+	// A decode-level .notdef (odd-length code tail or a CID beyond 65535) means
+	// the rendered code resolves to no glyph. Parts 2-4 fire this via
+	// checkType0NotdefGlyph; PDF/A-1 has no Type0 .notdef rule and reaches only
+	// this path, so honor the decode signal here for parity.
+	if !notdef && len(absent) == 0 {
 		return nil
 	}
 	return failf(rule, "font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)

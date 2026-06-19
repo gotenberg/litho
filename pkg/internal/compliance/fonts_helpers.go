@@ -166,6 +166,14 @@ func toUnicodeCMapValuesRule(profile string) Rule {
 // Level U requires Unicode mapping but not tagging; Level B requires
 // neither.
 func puaActualTextRule(profile string) Rule {
+	if IsPDFUA(profile) {
+		// ISO 14289-2 §8.4.3 requires real content mapped to PUA to carry an
+		// ActualText or Alt entry. PDF/UA-1 has no equivalent rule wired here.
+		if PDFUAPart(profile) == 2 {
+			return Rule_14289_2_8_4_3_t01
+		}
+		return Rule{}
+	}
 	if PDFALevel(profile) != 'a' {
 		return Rule{}
 	}
