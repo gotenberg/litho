@@ -77,6 +77,16 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		offset += written
 	}
 
+	// A cross-reference section must begin with the object-0 free-list head
+	// (ISO 32000-1 §7.5.4). A trailer-only incremental update (e.g. adding /ID)
+	// changes no objects, leaving records empty; without the free head the
+	// traditional path would emit a subsection-less "xref\ntrailer", which is an
+	// invalid xref table. Emit the mandatory free entry so the appended section
+	// is well-formed.
+	if len(records) == 0 {
+		records = append(records, XRefRecord{ObjNum: 0, Generation: 65535, Free: true})
+	}
+
 	// Build the new trailer.
 	trailer := make(ast.PdfDict, len(cfg.Trailer)+2)
 	maps.Copy(trailer, cfg.Trailer)
