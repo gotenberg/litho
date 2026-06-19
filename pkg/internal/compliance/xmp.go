@@ -256,6 +256,13 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// XMP property types (§6.7.2 / §6.6.2.3.1).
 	xmpCheckPropertyTypes(xmpData, part, metaStream, &results)
 
+	if ctx.Err() != nil {
+		return results
+	}
+
+	// Structured value-type field names (§6.7.9 t3 / §6.6.2.3.1 t2).
+	xmpCheckStructFieldNames(xmpData, part, &results)
+
 	doc.Logger.Debug("compliance.xmp: XMP checks complete", "violations", len(results))
 	return results
 }
@@ -2045,17 +2052,26 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 	return schemas
 }
 
+// xmpCheckExtensionPropertyTypes flags an extension-schema property whose
+// declared valueType resolves to neither a predefined XMP type nor a custom
+// value type that declares fields, but only when the property is actually used
+// in the packet. ISO 19005-2/3 §6.6.2.3.1 t2 is an XMPProperty (usage) rule:
+// veraPDF flags fs:property1 on the 6-6-2-3-3-t03-fail-b original, where the
+// property is used as a struct whose field is not a member of its fieldless
+// type, yet judges the remediated output (same fieldless declaration, property
+// removed) compliant. Gating on usage matches both verdicts and stops the
+// remediated declaration from reporting a false positive.
 func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) {
 	schemas := xmpParseExtensionSchemas(data)
 
-	// Validate: for each property whose valueType is not predefined, check
-	// that the custom type is defined with field declarations. The
-	// declared string may wrap the custom element type in a container
-	// keyword ("Bag declaration" declares a bag of the custom type
-	// "declaration"), and the type definition may live in any schema
-	// entry of the packet, so the lookup strips the container prefix and
-	// searches every schema (the literal-string same-schema lookup
-	// produced a 798-cell phantom pool against pdfd:declarations).
+	// A custom type counts as resolvable only when it declares fields: a
+	// fieldless declaration cannot satisfy a struct-valued usage. The declared
+	// valueType may wrap the custom element type in a container keyword ("Bag
+	// declaration" declares a bag of the custom type "declaration"), and the
+	// type definition may live in any schema entry of the packet, so the lookup
+	// strips the container prefix and searches every schema (the literal-string
+	// same-schema lookup produced a 798-cell phantom pool against
+	// pdfd:declarations).
 	allTypes := make(map[string]bool)
 	for _, s := range schemas {
 		for name, hasFields := range s.typeFields {
@@ -2064,12 +2080,16 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 			}
 		}
 	}
+	used := xmpExtractPropertyValues(data)
 	for _, s := range schemas {
 		for pName, vt := range s.propTypes {
 			if xmpPredefinedValueTypes[vt] {
 				continue
 			}
 			if allTypes[vt] || allTypes[stripContainerKeyword(vt)] {
+				continue
+			}
+			if _, isUsed := used[s.nsURI][pName]; !isUsed {
 				continue
 			}
 			*results = append(*results, xmpPropertyTypeRule(part, s.nsURI, pName,
@@ -2346,6 +2366,121 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 		return nil
 	}
 	return nil
+}
+
+// xmpStructTypeFields maps each standard XMP structured value type namespace to
+// the field names it defines. Sourced from the Adobe XMP Specification Part 2
+// (Additional Properties), the structured types referenced by the predefined
+// PDF/A schemas. A struct field whose namespace is one of these but whose local
+// name is absent here is not a member of the type. Field sets are deliberately
+// comprehensive: an omitted-but-valid field would be a false positive, while a
+// listed-but-invalid one only costs a missed detection.
+//
+//nolint:gochecknoglobals // static lookup table mirroring the XMP Specification.
+var xmpStructTypeFields = map[string]map[string]bool{
+	// ResourceEvent (stEvt).
+	"http://ns.adobe.com/xap/1.0/sType/ResourceEvent#": {
+		"action": true, "changed": true, "instanceID": true,
+		"parameters": true, "softwareAgent": true, "when": true,
+	},
+	// ResourceRef (stRef).
+	"http://ns.adobe.com/xap/1.0/sType/ResourceRef#": {
+		"alternatePaths": true, "documentID": true, "filePath": true,
+		"fromPart": true, "instanceID": true, "lastModifyDate": true,
+		"manager": true, "managerVariant": true, "manageTo": true,
+		"manageUI": true, "maskMarkers": true, "originalDocumentID": true,
+		"partMapping": true, "renditionClass": true, "renditionParams": true,
+		"toPart": true, "versionID": true, "placedXResolution": true,
+		"placedYResolution": true, "placedResolutionUnit": true,
+	},
+	// Version (stVer).
+	"http://ns.adobe.com/xap/1.0/sType/Version#": {
+		"comments": true, "event": true, "modifyDate": true,
+		"modifier": true, "version": true,
+	},
+	// Job (stJob).
+	"http://ns.adobe.com/xap/1.0/sType/Job#": {
+		"id": true, "name": true, "url": true,
+	},
+	// Dimensions (stDim).
+	"http://ns.adobe.com/xap/1.0/sType/Dimensions#": {
+		"h": true, "w": true, "unit": true,
+	},
+	// Font (stFnt).
+	"http://ns.adobe.com/xap/1.0/sType/Font#": {
+		"childFontFiles": true, "composite": true, "fontFace": true,
+		"fontFamily": true, "fontFileName": true, "fontName": true,
+		"fontType": true, "versionString": true,
+	},
+}
+
+// xmpCheckStructFieldNames flags a property whose structured value carries a
+// field that belongs to a standard XMP value-type namespace (stEvt, stRef,
+// stVer, stJob, stDim, stFnt) but is not a member of that type. veraPDF reports
+// such a property as not corresponding to its declared structured type (e.g.
+// "does not correspond to type seq resourceevent"), violating ISO 19005-1
+// §6.7.9 t3 / ISO 19005-2/3 §6.6.2.3.1 t2. litho otherwise validates only a
+// property's container type and never descends into its struct fields, so a
+// misspelled field (stEvt:When for stEvt:when) slips through. The violation is
+// attributed to the enclosing top-level property, matching veraPDF's context
+// node; xmpPropertyTypeRule returns nil for part 4, which drops the requirement.
+func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+
+	inDescription := false
+	depth := 0
+	var propNS, propLocal string
+	flagged := make(map[string]bool) // dedup per enclosing property
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
+				inDescription = true
+				depth = 0
+				continue
+			}
+			if !inDescription {
+				continue
+			}
+			depth++
+			if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
+				propNS = t.Name.Space
+				propLocal = t.Name.Local
+				continue
+			}
+			fields, isStructType := xmpStructTypeFields[t.Name.Space]
+			if !isStructType || propLocal == "" || fields[t.Name.Local] {
+				continue
+			}
+			key := propNS + " " + propLocal
+			if flagged[key] {
+				continue
+			}
+			flagged[key] = true
+			*results = append(*results, xmpPropertyTypeRule(part, propNS, propLocal,
+				fmt.Sprintf("structured value contains field %s not defined by its value type", t.Name.Local))...)
+		case xml.EndElement:
+			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
+				inDescription = false
+				depth = 0
+				propNS, propLocal = "", ""
+				continue
+			}
+			if !inDescription {
+				continue
+			}
+			if depth == 1 {
+				propNS, propLocal = "", ""
+			}
+			depth--
+		}
+	}
 }
 
 // xmpPropertyValue holds the observed container type and text content of an XMP property.
