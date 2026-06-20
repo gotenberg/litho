@@ -475,6 +475,57 @@ func checkInlineImageIntent(ops []content.Operation, part int, pageNum int) []Vi
 	return results
 }
 
+// checkInlineImageLZW flags an inline image using the LZWDecode filter, which
+// PDF/A forbids (ISO 19005-1 §6.1.10 t2). Object-stream LZW is handled by
+// checkStreamLZW; inline images carry an abbreviated /F filter the stream scan
+// never sees. Only PDF/A-1 defines a distinct inline-image LZW rule (t02), so
+// the check is scoped there.
+func checkInlineImageLZW(ops []content.Operation, part int, pageNum int) []Violation {
+	if part != 1 {
+		return nil
+	}
+	var results []Violation
+	for _, op := range ops {
+		if op.Operator != "BI" || len(op.Operands) == 0 {
+			continue
+		}
+		dict, ok := op.Operands[0].(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		if inlineImageHasLZW(dict) {
+			results = append(results, failf(Rule_19005_1_6_1_10_t02,
+				"page %d: inline image uses LZWDecode filter", pageNum)...)
+			return results
+		}
+	}
+	return results
+}
+
+// inlineImageHasLZW reports whether an inline image dict's /F or /Filter entry
+// names the LZWDecode filter (abbreviated /LZW or full /LZWDecode).
+func inlineImageHasLZW(dict ast.PdfDict) bool {
+	for _, key := range []ast.PdfName{"F", "Filter"} {
+		val, ok := dict[key]
+		if !ok {
+			continue
+		}
+		switch v := val.(type) {
+		case ast.PdfName:
+			if v == "LZW" || v == "LZWDecode" {
+				return true
+			}
+		case ast.PdfArray:
+			for _, item := range v {
+				if name, ok := item.(ast.PdfName); ok && (name == "LZW" || name == "LZWDecode") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func realRangeRuleByPart(part int) Rule {
 	if part == 1 {
 		return Rule_19005_1_6_1_12_t02
