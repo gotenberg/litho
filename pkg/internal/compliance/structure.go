@@ -130,7 +130,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			puaTreeRoot, _ = document.ResolveDict(ctx, doc, catalog["StructTreeRoot"]) // Best-effort: nil dict means no structure tree to check.
 		}
 		if puaTreeRoot != nil {
-			results = append(results, checkActualTextPUA(ctx, doc, catalog, puaTreeRoot)...)
+			results = append(results, checkActualTextPUA(ctx, doc, catalog, puaTreeRoot, Rule_19005_4_6_2_10_8_t01, Rule_19005_4_6_2_10_8_t01)...)
 		}
 	}
 
@@ -159,6 +159,11 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// can still appear in PDF/UA-2 files and must not have cycles).
 		checkRoleMap(ctx, doc, structTreeRoot, profile, &results)
 		walkStructureTree(ctx, doc, structTreeRoot, profile, &results)
+
+		// PDF/UA-2 §8.4.3: /ActualText (t02) and /Alt (t03) shall not contain PUA.
+		if profile == "PDF/UA-2" {
+			results = append(results, checkActualTextPUA(ctx, doc, catalog, structTreeRoot, Rule_14289_2_8_4_3_t02, Rule_14289_2_8_4_3_t03)...)
+		}
 
 		// PDF/UA-2 §8.2.5.2: single Document root child.
 		if profile == "PDF/UA-2" {
@@ -1071,10 +1076,20 @@ func resolveAttributeValue(ctx context.Context, doc *document.Document, elem ast
 	return ""
 }
 
-// checkActualTextPUA validates PDF/A-4 §6.2.10.8: ActualText entries shall not
-// contain Unicode PUA values (U+E000-U+F8FF, U+F0000-U+FFFFD, U+100000-U+10FFFD).
-func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, treeRoot ast.PdfDict) []Violation {
+// checkActualTextPUA validates that /ActualText and /Alt entries do not contain
+// Unicode PUA values (U+E000-U+F8FF, U+F0000-U+FFFFD, U+100000-U+10FFFD). The
+// rule differs by profile: PDF/A-4 §6.2.10.8 uses one rule for both keys, while
+// PDF/UA-2 splits ActualText (§8.4.3 t02) and Alt (§8.4.3 t03), so the caller
+// supplies the per-key rule.
+func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, treeRoot ast.PdfDict, ruleActualText, ruleAlt Rule) []Violation {
 	var results []Violation
+
+	keyRule := func(key ast.PdfName) Rule {
+		if key == "Alt" {
+			return ruleAlt
+		}
+		return ruleActualText
+	}
 
 	// Check structure element ActualText and Alt.
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
@@ -1090,9 +1105,8 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 			}
 			decoded := document.DecodePdfString(atStr)
 			if containsPUARunes(decoded) || containsPUABytes([]byte(atStr)) {
-				results = append(results, failf(Rule_19005_4_6_2_10_8_t01,
+				results = append(results, failf(keyRule(key),
 					"structure element %s contains PUA at %s", key, path)...)
-				return
 			}
 		}
 	})
@@ -1110,7 +1124,7 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 		// Scan for /ActualText in BDC operands.
 		// BDC dict operands contain /ActualText as a key.
 		if containsPUAInContentStreamActualText(ctx, streamData) {
-			results = append(results, failf(Rule_19005_4_6_2_10_8_t01,
+			results = append(results, failf(ruleActualText,
 				"page %d: content stream ActualText contains PUA", pageIdx+1)...)
 		}
 	}
