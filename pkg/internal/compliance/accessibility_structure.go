@@ -218,8 +218,15 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 		// through the legacy /RoleMap, which the structure-type walk
 		// already validates against 8.2.4 t1.
 		if elemNSURI != "" && !standardNamespaceURIs[elemNSURI] {
-			// Namespace may have a RoleMapNS that maps to a standard NS.
-			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) {
+			// The type may resolve to a standard namespace via RoleMapNS, or be
+			// role-mapped at all. t01 (isNotMappedToStandardType) fires only when
+			// the type is genuinely unmapped: a type carrying a RoleMapNS entry or
+			// a legacy /RoleMap chain IS mapped, even if that mapping is circular
+			// or same-namespace, and those defects are reported by t02/t03, not
+			// t01. The standard-namespace branch below applies the same exclusions.
+			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) &&
+				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
+				!typeIsRoleMapNSKey(ctx, doc, sType, nsArr) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in namespace %q is not mapped to a standard namespace",
 					sType, elemNSURI)...)
