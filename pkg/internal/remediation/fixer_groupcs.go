@@ -11,11 +11,36 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// groupCSIsDevice reports whether a transparency group's /CS object is a device
+// colour space (DeviceRGB/DeviceCMYK/DeviceGray), given as a bare name or the
+// first element of a colour-space array.
+func groupCSIsDevice(ctx context.Context, doc *document.Document, csObj ast.PdfObject) bool {
+	name, err := document.ResolveName(ctx, doc, csObj)
+	if err != nil || name == "" {
+		if arr, aerr := document.ResolveArray(ctx, doc, csObj); aerr == nil && len(arr) > 0 {
+			name, _ = document.ResolveName(ctx, doc, arr[0])
+		}
+	}
+	switch name {
+	case "DeviceRGB", "DeviceCMYK", "DeviceGray":
+		return true
+	default:
+		return false
+	}
+}
+
 // matchGroupCS matches transparency /Group CS violations: mismatched
 // blending CS vs OutputIntent, or a page with transparency that lacks
 // any /Group entry at all. Covers ISO 19005-2/3 §6.2.10 and
 // ISO 19005-4 §6.2.9 test 2.
 func matchGroupCS(v compliance.Violation) bool {
+	// A device-colour transparency group blending space (ISO 19005 §6.2.3.3 /
+	// §6.2.4.3, flagged with a "transparency group" context) is repaired by
+	// dropping /CS so the blending space falls back to the OutputIntent
+	// profile, not by installing an OutputIntent for it.
+	if clausePrefix(v, "6.2.3.3", "6.2.4.3") && contextContains(v, "transparency group") {
+		return true
+	}
 	if !clausePrefix(v, "6.2.9", "6.2.10") {
 		return false
 	}
@@ -88,12 +113,28 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		if groupDict == nil {
 			continue
 		}
-		if _, hasCS := groupDict["CS"]; !hasCS {
+		csObj, hasCS := groupDict["CS"]
+		if !hasCS {
 			continue
 		}
 		newGroup := make(ast.PdfDict, len(groupDict))
 		maps.Copy(newGroup, groupDict)
-		delete(newGroup, "CS")
+		if groupCSIsDevice(ctx, doc, csObj) {
+			// A device blending space conforms only with a matching OutputIntent,
+			// which the document may lack. Replace it with device-independent
+			// ICCBased sRGB so the group is valid unconditionally, rather than
+			// dropping /CS (which would leave a transparency page without a
+			// blending space, itself an ISO 19005-2 §6.2.10 test 2 violation).
+			if blendingCSRef.ObjectNum == 0 {
+				blendingCSRef = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile))
+			}
+			newGroup["CS"] = ast.PdfArray{ast.PdfName("ICCBased"), blendingCSRef}
+		} else {
+			// A non-device (e.g. ICCBased) blending space incompatible with the
+			// OutputIntent: drop /CS so the renderer falls back to the intent
+			// profile (ISO 32000-1 §11.6.6).
+			delete(newGroup, "CS")
+		}
 
 		var groupRef ast.PdfIndirectRef
 		if r, ok := groupObj.(ast.PdfIndirectRef); ok {

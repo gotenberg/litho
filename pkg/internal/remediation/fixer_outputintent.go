@@ -52,6 +52,12 @@ func hasMatchingOutputIntent(ctx context.Context, doc *document.Document, arr as
 }
 
 func matchOutputIntent(v compliance.Violation) bool {
+	// A device-colour transparency group blending space is repaired structurally
+	// by fixGroupCS (drop /CS), not by installing an OutputIntent: installing one
+	// for the group can perturb a multi-scope file's existing intent coverage.
+	if contextContains(v, "transparency group") {
+		return false
+	}
 	return clausePrefix(v, "6.2.3.2", "6.2.3.3", "6.2.4.3") // device CS without OutputIntent
 }
 

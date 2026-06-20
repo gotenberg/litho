@@ -139,6 +139,28 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		if deviceCSUsed.subScopeGray && !grayUniversalCover {
 			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used in pattern/form without local DefaultGray or OutputIntent", i+1)...)
 		}
+
+		// A transparency group whose blending colour space is itself a device
+		// colour space is a device-colour usage that only an OutputIntent can
+		// cover, never a DefaultCS (ISO 19005-2/3 §6.2.4.3; veraPDF object
+		// PDDeviceRGB at context /Group/colorSpace requires gOutputCS match).
+		// The "transparency group" context routes the repair to fixGroupCS,
+		// which drops the /CS so the blending space falls back to the intent
+		// profile, rather than to the OutputIntent fixer.
+		switch pageTransparencyGroupCSName(ctx, doc, page) {
+		case "DeviceRGB":
+			if !rgbUniversalCover {
+				*results = append(*results, failf(deviceRGBRule(part), "page %d: transparency group blending colour space is DeviceRGB without RGB OutputIntent", i+1)...)
+			}
+		case "DeviceCMYK":
+			if !cmykUniversalCover {
+				*results = append(*results, failf(deviceCMYKRule(part), "page %d: transparency group blending colour space is DeviceCMYK without CMYK OutputIntent", i+1)...)
+			}
+		case "DeviceGray":
+			if !grayUniversalCover {
+				*results = append(*results, failf(deviceGrayRule(part), "page %d: transparency group blending colour space is DeviceGray without OutputIntent", i+1)...)
+			}
+		}
 	}
 }
 
@@ -196,6 +218,26 @@ func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page as
 	default:
 		return ""
 	}
+}
+
+// pageTransparencyGroupCSName returns the raw colour space name of the page's
+// transparency group blending space (/Group /CS), e.g. "DeviceRGB", or "" when
+// absent. Unlike [pageBlendingColorSpace] it does not resolve ICC signatures:
+// it exists to detect a device blending space, which veraPDF treats as a
+// device-colour usage coverable only by an OutputIntent.
+func pageTransparencyGroupCSName(ctx context.Context, doc *document.Document, page ast.PdfDict) string {
+	group, err := document.ResolveDict(ctx, doc, page["Group"])
+	if err != nil || group == nil {
+		return ""
+	}
+	if s, _ := document.ResolveName(ctx, doc, group["S"]); s != "Transparency" {
+		return ""
+	}
+	csObj, ok := group["CS"]
+	if !ok {
+		return ""
+	}
+	return resolveCSName(ctx, doc, csObj)
 }
 
 // collectDefaultColorSpaces extracts Default{RGB,CMYK,Gray} entries from a
