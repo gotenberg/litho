@@ -25,6 +25,7 @@ func matchFontFixes(v compliance.Violation) bool {
 		"6.2.10.3.1", "6.2.11.3.1", // CIDSystemInfo mismatch
 		"6.2.11.4.2", // CIDSet incomplete
 		"6.3.5",      // CharSet incomplete
+		"7.21.4.2",   // PDF/UA-1 CharSet/CIDSet incomplete
 	)
 }
 

@@ -96,14 +96,21 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return nil
 		}
 
-		charSetStr, _ := document.ResolveString(ctx, doc, fd["CharSet"])
+		charSetObj, hasCharSet := fd["CharSet"]
+		charSetStr, _ := document.ResolveString(ctx, doc, charSetObj)
 
 		// Part 1: CharSet presence is required.
 		if PDFAPart(profile) == 1 && charSetStr == "" {
 			return failf(rule, "font %s on page %d: Type1 subset missing /CharSet", fontName, pageNum)
 		}
 
-		if charSetStr == "" {
+		// Parts 2+/UA: an absent CharSet is conformant (the rule reads
+		// "CharSet == null || charSetListsAllGlyphs"). A present-but-empty
+		// CharSet is NOT absent: it lists zero glyphs while the subset font
+		// program defines some, so completeness fails (veraPDF fires
+		// §6.2.11.4.2 t1). Distinguish the two by key presence, not by the
+		// decoded value, so the completeness check below runs on /CharSet ().
+		if !hasCharSet {
 			return nil
 		}
 
