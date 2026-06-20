@@ -61,6 +61,20 @@ func parseICCHeader(data []byte) (iccProfileHeader, bool) {
 	return hdr, true
 }
 
+// iccVersionExceedsCeiling reports whether an ICC profile major version
+// exceeds the ceiling a PDF/A part inherits from its base PDF version. PDF/A-1
+// is based on PDF 1.4, which predates ICC v4, so a v4-or-higher profile fails
+// ISO 19005-1 §6.2.3.2 (veraPDF: ICCInputProfile version < 3.0; no ICC v3
+// exists, so this rejects v4). PDF/A-2/3 (PDF 1.7) and PDF/A-4 (PDF 2.0) admit
+// ICC v4 and reject only v5+ (veraPDF: version < 5.0). version is the ICC
+// header major-version byte (see [parseICCHeader]).
+func iccVersionExceedsCeiling(version, part int) bool {
+	if part == 1 {
+		return version >= 3
+	}
+	return version >= 5
+}
+
 // validICCDeviceClasses are the allowed device classes for OutputIntent
 // profiles. Per ISO 19005-2/3 §6.2.2 the destination profile must be a
 // device class from ICC.1 (printer "prtr" or monitor "mntr").

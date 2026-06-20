@@ -62,6 +62,35 @@ func TestParseICCHeader(t *testing.T) {
 	})
 }
 
+func TestICCVersionExceedsCeiling(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		version int
+		part    int
+		want    bool
+	}{
+		// PDF/A-1 (PDF 1.4) predates ICC v4: v2 passes, v4 fails (veraPDF < 3.0).
+		{"part1 v2 ok", 2, 1, false},
+		{"part1 v4 fails", 4, 1, true},
+		{"part1 v3 fails", 3, 1, true},
+		// PDF/A-2/3/4 admit ICC v4; reject only v5+ (veraPDF < 5.0).
+		{"part2 v4 ok", 4, 2, false},
+		{"part3 v4 ok", 4, 3, false},
+		{"part4 v4 ok", 4, 4, false},
+		{"part2 v5 fails", 5, 2, true},
+		{"part4 v5 fails", 5, 4, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := iccVersionExceedsCeiling(tc.version, tc.part); got != tc.want {
+				t.Errorf("iccVersionExceedsCeiling(%d, %d) = %v, want %v", tc.version, tc.part, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExpectedComponentCount(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

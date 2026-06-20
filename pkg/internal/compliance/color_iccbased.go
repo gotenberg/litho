@@ -136,6 +136,13 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 			continue
 		}
 		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		// Image XObjects carry an inline /ColorSpace [/ICCBased ref] that the
+		// named-resource scan in checkICCBasedInResources never reaches, so
+		// validate their ICC profile version here.
+		if st == "Image" {
+			checkImageICCBasedVersion(ctx, doc, stream, part, pageIdx, k, results)
+			continue
+		}
 		if st != "Form" {
 			continue
 		}
@@ -147,6 +154,34 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
 		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited)
 	}
+}
+
+// checkImageICCBasedVersion validates the ICC profile version of an image
+// XObject's ICCBased /ColorSpace against the PDF/A part ceiling. Image colour
+// spaces are inline ([/ICCBased ref]) rather than named resources, so the
+// resource scan in [checkICCBasedInResources] never reaches them.
+func checkImageICCBasedVersion(ctx context.Context, doc *document.Document, stream ast.PdfStream, part, pageIdx int, name ast.PdfName, results *[]Violation) {
+	arr, err := document.ResolveArray(ctx, doc, stream.Dict["ColorSpace"])
+	if err != nil || len(arr) < 2 {
+		return
+	}
+	if t, _ := document.ResolveName(ctx, doc, arr[0]); t != "ICCBased" {
+		return
+	}
+	profStream, err := document.ResolveStream(ctx, doc, arr[1])
+	if err != nil {
+		return
+	}
+	data, err := doc.DecodeStream(ctx, profStream)
+	if err != nil {
+		return
+	}
+	hdr, ok := parseICCHeader(data)
+	if !ok || !iccVersionExceedsCeiling(hdr.version, part) {
+		return
+	}
+	*results = append(*results, failf(iccBasedProfileRule(part),
+		"page %d, image %s: ICC profile version %d exceeds the PDF/A part ceiling", pageIdx+1, name, hdr.version)...)
 }
 
 // resolveFormBlendingRef extracts the ICCBased blending CS ref from a Form
@@ -260,6 +295,11 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			*results = append(*results, failf(iccBasedProfileRule(part),
 				"page %d, ColorSpace %s: ICC profile header too short", pageIdx+1, name)...)
 			continue
+		}
+
+		if iccVersionExceedsCeiling(hdr.version, part) {
+			*results = append(*results, failf(iccBasedProfileRule(part),
+				"page %d, ColorSpace %s: ICC profile version %d exceeds the PDF/A part ceiling", pageIdx+1, name, hdr.version)...)
 		}
 
 		expectedN := expectedComponentCount(hdr.colorSpace)
