@@ -223,8 +223,9 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	}
 
 	// Check ColorSpace dict in nested resources, including Indexed base
-	// spaces. Separation/DeviceN alternate spaces are NOT checked here
-	// because the Form XObject may have its own DefaultCS that covers them.
+	// spaces and Separation/DeviceN alternates. Device CS reached this way is
+	// covered by the Form XObject's own DefaultCS or (part 4) Group CS, both
+	// applied at the end of this function.
 	formCSDict, err := document.ResolveDict(ctx, doc, formRes["ColorSpace"])
 	if err == nil && formCSDict != nil {
 		formDefaults := collectDefaultColorSpaces(ctx, doc, formRes)
@@ -255,6 +256,17 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 							usage.gray = true
 						}
 					}
+				}
+			}
+
+			// Check Separation/DeviceN alternate space (arr[2]). The colorant
+			// tint transform targets this alternate; an uncovered device
+			// alternate fails ISO 19005-1 §6.2.3.3 / 19005-2/3 §6.2.4.3. The
+			// page-level scan already marks these via markDeviceCS; the form
+			// scan must too. End-of-function DefaultCS/Group suppression applies.
+			if resolved == "Separation" || resolved == "DeviceN" {
+				if arr, err := document.ResolveArray(ctx, doc, csObj); err == nil && len(arr) >= 3 {
+					markDeviceCS(resolveCSName(ctx, doc, arr[2]), &usage)
 				}
 			}
 		}
