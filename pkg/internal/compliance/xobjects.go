@@ -271,6 +271,16 @@ func checkImageXObjectPart1(
 		}
 	}
 
+	// /Intent must be a valid rendering intent (§6.2.9), the same constraint
+	// parts 2-4 enforce in checkImageXObject.
+	if intentObj, hasIntent := imgDict["Intent"]; hasIntent {
+		intent, _ := document.ResolveName(ctx, doc, intentObj)
+		if !validRenderingIntents[string(intent)] {
+			results = append(results, failf(renderingIntentRule(1),
+				"page %d, XObject %s: invalid rendering intent %q", pageNum, name, intent)...)
+		}
+	}
+
 	results = append(results, checkImageBitsPerComponent(ctx, doc, imgDict, name, pageNum, 1)...)
 
 	return results
