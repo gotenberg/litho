@@ -190,6 +190,86 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
+// checkAnnotContentsAltMatch validates PDF/UA-2 §8.9.4.2 t1: when an annotation
+// has a /Contents entry and its directly enclosing structure element has an /Alt
+// entry, the two decoded values shall be identical.
+func checkAnnotContentsAltMatch(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+	altValues := buildAnnotStructAltValueMap(ctx, doc, catalog)
+	if len(altValues) == 0 {
+		return nil
+	}
+
+	var results []Violation
+	for pageIdx, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return results
+		}
+		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for annotIdx, annotObj := range annots {
+			objNum := 0
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+				objNum = ref.ObjectNum
+			}
+			alt, hasAlt := altValues[objNum]
+			if !hasAlt {
+				continue
+			}
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+			contentsObj, hasContents := annot["Contents"]
+			if !hasContents {
+				continue
+			}
+			contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
+			if err != nil {
+				continue
+			}
+			if document.DecodePdfString(contentsStr) != alt {
+				results = append(results, failf(Rule_14289_2_8_9_4_2_t01,
+					"page %d, annot %d: /Contents differs from enclosing structure element /Alt", pageIdx, annotIdx)...)
+			}
+		}
+	}
+	return results
+}
+
+// buildAnnotStructAltValueMap maps an annotation object number to the decoded
+// /Alt value of its directly enclosing structure element. Mirror of
+// [buildAnnotStructAltMap] that captures the value for the §8.9.4.2 comparison.
+func buildAnnotStructAltValueMap(ctx context.Context, doc *document.Document, catalog ast.PdfDict) map[int]string {
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+	result := make(map[int]string)
+	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
+		altObj, ok := elem["Alt"]
+		if !ok {
+			return
+		}
+		altStr, err := document.ResolveString(ctx, doc, altObj)
+		if err != nil {
+			return
+		}
+		kObj, ok := elem["K"]
+		if !ok {
+			return
+		}
+		objNums := make(map[int]bool)
+		collectOBJRAnnotObjNums(ctx, doc, kObj, objNums)
+		alt := document.DecodePdfString(altStr)
+		for n := range objNums {
+			result[n] = alt
+		}
+	})
+	return result
+}
+
 // buildAnnotStructAltMap walks the structure tree and returns a set of annotation
 // object numbers whose enclosing structure element has a non-empty /Alt entry.
 // PDF structure elements reference annotations via OBJR (object reference) dicts

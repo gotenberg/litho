@@ -48,6 +48,10 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Annotation alt text (PDF/UA): non-Link/Widget annotations must have /Contents or structure element /Alt.
 	results = append(results, checkAnnotationAltText(ctx, doc, catalog, profile)...)
 
+	// Annotation /Contents vs enclosing /Alt (PDF/UA-2 §8.9.4.2 t1): if both are
+	// present, they must be identical.
+	results = append(results, checkAnnotContentsAltMatch(ctx, doc, catalog, profile)...)
+
 	// Orphan MCIDs (PDF/UA §7.1 t3 / §8.2.2 t1): marked content must be
 	// reachable through the ParentTree, not just parented in the tree.
 	results = append(results, checkOrphanMCIDs(ctx, doc, catalog, profile)...)
