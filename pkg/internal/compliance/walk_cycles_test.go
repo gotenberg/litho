@@ -99,7 +99,7 @@ func TestWalkNSCheck_KCycleTerminates(t *testing.T) {
 	}
 
 	var results []Violation
-	walkNSCheck(context.Background(), doc, elem, "", nil, &results, make(map[int]bool), 0)
+	walkNSCheck(context.Background(), doc, elem, "", nil, nil, &results, make(map[int]bool), 0)
 }
 
 // TestUA1Header pins the PDF/UA-1 header rule (PDFUA-1.xml 6.1 t1): the

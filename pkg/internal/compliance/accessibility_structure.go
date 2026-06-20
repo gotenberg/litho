@@ -135,8 +135,56 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 		}
 	}
 
-	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsArr, &results, make(map[int]bool), 0)
+	// The legacy /RoleMap lets a non-standard type name (in any namespace) be
+	// mapped to a standard type, which veraPDF honours for §8.2.4 t1.
+	classicRoleMap := LoadRoleMap(ctx, doc, treeRoot)
+
+	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsArr, classicRoleMap, &results, make(map[int]bool), 0)
 	return results
+}
+
+// typeIsRoleMapNSKey reports whether typeName appears as a key in any
+// namespace's /RoleMapNS dictionary. Such a type is "mapped" for §8.2.4 t1
+// purposes (even if the mapping is circular or same-namespace, which t02/t03
+// report), so it must not also trip the unmapped-type rule t01.
+func typeIsRoleMapNSKey(ctx context.Context, doc *document.Document, typeName ast.PdfName, nsArr ast.PdfArray) bool {
+	for _, nsObj := range nsArr {
+		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
+		if nsDict == nil {
+			continue
+		}
+		rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"])
+		if rmns == nil {
+			continue
+		}
+		if _, ok := rmns[typeName]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// roleMapChainReachesStandard reports whether typeName resolves to a standard
+// structure type by following the legacy /RoleMap chain. Used as the §8.2.4 t1
+// escape for a non-standard type name role-mapped to a standard one.
+func roleMapChainReachesStandard(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfName, profile string) bool {
+	seen := make(map[ast.PdfName]bool)
+	cur := typeName
+	for range maxStructTreeDepth {
+		if isStandardStructType(cur, profile) {
+			return true
+		}
+		if seen[cur] {
+			return false
+		}
+		seen[cur] = true
+		next, ok := roleMap[cur]
+		if !ok {
+			return false
+		}
+		cur = next
+	}
+	return false
 }
 
 // walkNSCheck recursively walks structure elements and checks namespace
@@ -144,7 +192,7 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 // walked: a crafted /K cycle would otherwise recurse forever, and stack
 // exhaustion is not recoverable in Go. The depth cap bounds inline-dict
 // nesting, which carries no object numbers for the visited set.
-func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, results *[]Violation, visited map[int]bool, depth int) {
+func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, roleMap map[ast.PdfName]ast.PdfName, results *[]Violation, visited map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxStructTreeDepth {
 		return
 	}
@@ -177,6 +225,28 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 					sType, elemNSURI)...)
 				return // One violation is enough per document.
 			}
+		} else if elemNSURI != "" && standardNamespaceURIs[elemNSURI] && !standardStructTypes[sType] {
+			// A type declared in a standard namespace but whose name is not a
+			// standard structure type is still SENonStandard (veraPDF
+			// isNotMappedToStandardType): the standard namespaces define a fixed
+			// vocabulary, so e.g. /PDFDocument in the PDF 1.7 namespace fails
+			// §8.2.4 t1 unless it is role-mapped to a standard type, via the
+			// namespace's RoleMapNS or the legacy /RoleMap (e.g. /Standard /P).
+			// standardStructTypes is the union of the ISO 32000-1 and -2
+			// vocabularies, so a 2.0-only name in the 1.7 namespace is treated
+			// leniently (under-detect) rather than risking a false positive.
+			// t01 (isNotMappedToStandardType) fires only when the type is
+			// genuinely unmapped. A type that carries a RoleMapNS entry IS
+			// mapped, even if that mapping is circular or same-namespace: those
+			// defects are reported by t02/t03, not t01, so exclude them here.
+			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) &&
+				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
+				!typeIsRoleMapNSKey(ctx, doc, sType, nsArr) {
+				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
+					"structure type %s in standard namespace %q is not a standard type and is not role-mapped",
+					sType, elemNSURI)...)
+				return // One violation is enough per document.
+			}
 		}
 	}
 
@@ -186,16 +256,16 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 	}
 	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
 		for _, kid := range arr {
-			walkNSCheckChild(ctx, doc, kid, defaultNSURI, nsArr, results, visited, depth)
+			walkNSCheckChild(ctx, doc, kid, defaultNSURI, nsArr, roleMap, results, visited, depth)
 		}
 	} else {
-		walkNSCheckChild(ctx, doc, kObj, defaultNSURI, nsArr, results, visited, depth)
+		walkNSCheckChild(ctx, doc, kObj, defaultNSURI, nsArr, roleMap, results, visited, depth)
 	}
 }
 
 // walkNSCheckChild resolves one /K child and recurses into it, skipping
 // references already walked.
-func walkNSCheckChild(ctx context.Context, doc *document.Document, kid ast.PdfObject, defaultNSURI string, nsArr ast.PdfArray, results *[]Violation, visited map[int]bool, depth int) {
+func walkNSCheckChild(ctx context.Context, doc *document.Document, kid ast.PdfObject, defaultNSURI string, nsArr ast.PdfArray, roleMap map[ast.PdfName]ast.PdfName, results *[]Violation, visited map[int]bool, depth int) {
 	if ref, ok := kid.(ast.PdfIndirectRef); ok {
 		if visited[ref.ObjectNum] {
 			return
@@ -206,7 +276,7 @@ func walkNSCheckChild(ctx context.Context, doc *document.Document, kid ast.PdfOb
 	if err != nil || d == nil {
 		return
 	}
-	walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, results, visited, depth+1)
+	walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, roleMap, results, visited, depth+1)
 }
 
 // typeMapsToStandardNS checks if a structure type in a given namespace has a
