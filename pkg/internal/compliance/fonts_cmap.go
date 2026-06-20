@@ -336,28 +336,23 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 	// to be embedded, including a base CMap that an embedded CMap pulls in via
 	// /UseCMap. A /UseCMap given as a NAME (rather than an embedded stream)
 	// references a non-embedded predefined CMap, so a non-Identity name fails t1.
-	// Part 1 only: parts 2+/4 permit predefined CMaps, and PDF/UA-2's §8.4.5.4 t1
-	// does not extend the embedding requirement to the /UseCMap base, so gating
-	// UA-2 here would false-positive a /UseCMap base named by a predefined CMap.
+	// A named /UseCMap base references a non-embedded CMap. Whether that fails
+	// the embedding rule depends on the profile.
 	if useName, _ := document.ResolveName(ctx, doc, encStream.Dict["UseCMap"]); useName != "" {
 		// Part 1 (§6.3.3.3) requires every non-Identity CMap embedded, so any
-		// named /UseCMap base fails. Parts 2+/4 (§6.2.11.3.3 / §6.2.10.3.3)
-		// permit the Table-118 predefined CMaps by name, so only a NON-predefined
-		// named base fails the embedding rule t1; a CIDSystemInfo-shaped base also
-		// trips the t3 usecmap rule. UA profiles (PDFAPart==0) do not extend
-		// embedding to the base.
+		// named /UseCMap base fails. Parts 2+/4 (§6.2.11.3.3 / §6.2.10.3.3) and
+		// PDF/UA (§7.21.3.3 / §8.4.5.4) permit the Table-118 predefined CMaps by
+		// name, so only a NON-predefined named base fails the embedding rule t1.
+		// litho's predefined-CMap prefix list is incomplete for legacy names
+		// (H, KSC-EUC-H, ...), so `!isPredefinedCMap` over-fires on a real
+		// predefined base; fire only on a CIDSystemInfo-shaped name
+		// ("Adobe-<Registry>-<Supplement>"), which is never a Table-118 CMap name
+		// (veraPDF fires §7.21.3.3 t1 / §8.4.5.4 t1 on /UseCMap /Adobe-Korea1-2).
 		var unembedded bool
 		switch {
 		case PDFAPart(profile) == 1:
 			unembedded = useName != "Identity-H" && useName != "Identity-V"
-		case PDFAPart(profile) >= 2:
-			// Parts 2+/4 permit Table-118 predefined CMaps by name. litho's
-			// predefined-CMap prefix list is incomplete for legacy names
-			// (H, KSC-EUC-H, ...), so `!isPredefinedCMap` over-fires on a real
-			// predefined base. Fire only on a name shaped like a CIDSystemInfo
-			// ("Adobe-<Registry>-<Supplement>"), which is never a Table-118 CMap
-			// name (the 6-2-11-3-3-t03 fail fixtures use /UseCMap /Adobe-Korea1-2;
-			// the pass fixtures use a real predefined base).
+		case PDFAPart(profile) >= 2 || IsPDFUA(profile):
 			unembedded = isCIDSystemInfoShapedCMapName(string(useName))
 		}
 		if unembedded {
