@@ -1388,6 +1388,9 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	// schema definition whose close resets currentSchema, making the real
 	// schema report every field missing.
 	foreignDepth := 0
+	// reportedUndefinedField guards the §6.6.2.3.2 t1 emit so a schema with
+	// several foreign fields reports the defect once for the document.
+	reportedUndefinedField := false
 	// containerStack tracks, per OPEN rdf:Seq/rdf:Bag, the level its
 	// rdf:li items push. A stack, not a flag: a nested container (the
 	// field Seq inside a valueType definition) must not destroy the
@@ -1426,6 +1429,16 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				continue
 			}
 			if t.Name.Space != xmpRDFNamespace && !strings.Contains(t.Name.Space, "pdfa/ns") {
+				// A field whose namespace is neither rdf nor a pdfa/ns/*
+				// namespace is outside the extension schema vocabulary, an
+				// undefined field per ISO 19005-2/3 §6.6.2.3.2 t1. The decision
+				// is by URI, not prefix: a wrong prefix bound to a real pdfa URI
+				// (e.g. nonpdfaSchema) keeps its pdfa namespace here and is
+				// reported as a §6.6.2.3.3 prefix defect, not this rule.
+				if !reportedUndefinedField {
+					*results = append(*results, xmpExtUndefinedFieldRule(part)...)
+					reportedUndefinedField = true
+				}
 				foreignDepth = 1
 				continue
 			}
@@ -1659,6 +1672,22 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 
 	// Pure-data helper (no *document.Document in scope): use slog.
 	slog.Debug("compliance.xmp: extension schema check complete")
+}
+
+// xmpExtUndefinedFieldRule returns the "extension schema object contains a
+// field not defined by the container schema" rule by part: ISO 19005-2/3
+// §6.6.2.3.2 t1. PDF/A-1 §6.7.8 defines no equivalent undefined-field test, so
+// part 1 (and part 4, which has no extension-schema vocabulary rule) returns
+// nothing.
+func xmpExtUndefinedFieldRule(part int) []Violation {
+	const ctx = "extension schema object contains a field outside the PDF/A extension schema vocabulary"
+	switch part {
+	case 2:
+		return fail(Rule_19005_2_6_6_2_3_2_t01, ctx)
+	case 3:
+		return fail(Rule_19005_3_6_6_2_3_2_t01, ctx)
+	}
+	return nil
 }
 
 // xmpExtBagRule returns the "extension schema container shall be a valid
