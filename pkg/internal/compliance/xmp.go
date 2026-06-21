@@ -1675,13 +1675,15 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 }
 
 // xmpExtUndefinedFieldRule returns the "extension schema object contains a
-// field not defined by the container schema" rule by part: ISO 19005-2/3
-// §6.6.2.3.2 t1. PDF/A-1 §6.7.8 defines no equivalent undefined-field test, so
-// part 1 (and part 4, which has no extension-schema vocabulary rule) returns
+// field not defined by the container schema" rule by part: ISO 19005-1 §6.7.8
+// t1, ISO 19005-2/3 §6.6.2.3.2 t1. All three are the same containsUndefinedFields
+// test. PDF/A-4 defines no extension-schema vocabulary rule, so part 4 returns
 // nothing.
 func xmpExtUndefinedFieldRule(part int) []Violation {
 	const ctx = "extension schema object contains a field outside the PDF/A extension schema vocabulary"
 	switch part {
+	case 1:
+		return fail(Rule_19005_1_6_7_8_t01, ctx)
 	case 2:
 		return fail(Rule_19005_2_6_6_2_3_2_t01, ctx)
 	case 3:
