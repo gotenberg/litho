@@ -138,6 +138,16 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		inTaggedMCID := func() bool {
 			return slices.Contains(markerStack, markerTaggedMCID)
 		}
+		// untaggedScope reports whether painting at the current marker depth is
+		// real content that is neither an Artifact nor tagged. Per ISO 14289-1
+		// §7.1 / -2 §8.2.2 (veraPDF SESimpleContentItem isTaggedContent), content
+		// is tagged only when an enclosing BDC carries an /MCID: a marked-content
+		// sequence with a structure tag but no /MCID (or a bare BMC) does not tag
+		// its content, so painting inside one with no MCID-bearing ancestor and
+		// no Artifact ancestor is untagged real content.
+		untaggedScope := func() bool {
+			return !inTaggedMCID() && !inArtifact()
+		}
 
 		for _, op := range ops {
 			switch op.Operator {
@@ -168,7 +178,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 					markerStack = markerStack[:len(markerStack)-1]
 				}
 			case "Do":
-				if len(markerStack) == 0 {
+				if untaggedScope() {
 					hasUntaggedPainting = true
 					if !doTargetIsTagged(ctx, doc, resources, op) {
 						allUntaggedIsTaggedDo = false
@@ -176,14 +186,14 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 				}
 			case "f", "F", "f*", "S", "s", "B", "B*", "b", "b*",
 				"Tj", "TJ", "'", "\"", "sh":
-				if len(markerStack) == 0 {
+				if untaggedScope() {
 					hasUntaggedPainting = true
 					allUntaggedIsTaggedDo = false
 				}
 			}
 		}
 
-		// t3: painting operators outside any marked content span.
+		// t3: real content that is not marked as Artifact and not tagged.
 		if hasUntaggedPainting && !allUntaggedIsTaggedDo {
 			rule := Rule_14289_1_7_1_t03
 			if profile == "PDF/UA-2" {
