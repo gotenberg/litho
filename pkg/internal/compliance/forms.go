@@ -19,51 +19,105 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	doc.Logger.Debug("compliance.forms: starting form checks", "profile", profile, "part", part, "ua", ua)
 
-	acroFormObj, ok := catalog["AcroForm"]
-	if !ok {
-		return nil
-	}
-
-	acroForm, err := document.ResolveDict(ctx, doc, acroFormObj)
-	if err != nil || acroForm == nil {
-		doc.Logger.Debug("compliance.forms: cannot resolve /AcroForm", "error", err)
-		return nil
-	}
-
 	var results []Violation
 
-	// §6.4.2 (parts 2+/4): XFA forbidden.
-	if part >= 2 || ua {
-		checkXFA(ctx, doc, acroForm, profile, part, ua, &results)
-	}
+	// Object numbers reached through /AcroForm /Fields, so the widget-annotation
+	// scan below does not re-check a widget already covered by the field walk.
+	covered := make(map[int]bool)
 
-	// §6.9/6.4: NeedAppearances flag must not be true.
-	if part > 0 {
-		checkNeedAppearances(ctx, doc, acroForm, part, &results)
-	}
-
-	// Iterate form fields.
-	fieldsObj, ok := acroForm["Fields"]
-	if !ok {
-		return results
-	}
-
-	fields, err := document.ResolveArray(ctx, doc, fieldsObj)
+	acroForm, err := document.ResolveDict(ctx, doc, catalog["AcroForm"])
 	if err != nil {
-		doc.Logger.Debug("compliance.forms: cannot resolve /Fields array", "error", err)
-		return results
+		doc.Logger.Debug("compliance.forms: cannot resolve /AcroForm", "error", err)
 	}
-
-	for i, fieldObj := range fields {
-		if ctx.Err() != nil {
-			return results
+	if acroForm != nil {
+		// §6.4.2 (parts 2+/4): XFA forbidden.
+		if part >= 2 || ua {
+			checkXFA(ctx, doc, acroForm, profile, part, ua, &results)
 		}
 
-		checkFormField(ctx, doc, fieldObj, profile, part, ua, i, &results, 0)
+		// §6.9/6.4: NeedAppearances flag must not be true.
+		if part > 0 {
+			checkNeedAppearances(ctx, doc, acroForm, part, &results)
+		}
+
+		// Iterate form fields.
+		if fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"]); err == nil {
+			collectFieldObjNums(ctx, doc, fields, covered, 0)
+			for i, fieldObj := range fields {
+				if ctx.Err() != nil {
+					return results
+				}
+				checkFormField(ctx, doc, fieldObj, profile, part, ua, i, &results, 0)
+			}
+		} else {
+			doc.Logger.Debug("compliance.forms: cannot resolve /Fields array", "error", err)
+		}
+	}
+
+	// §6.9 t2: a widget annotation reached through a page /Annots array but not
+	// through /AcroForm /Fields (an orphaned widget, or a document carrying
+	// widgets with no /AcroForm) still requires an appearance dictionary.
+	// veraPDF keys the rule on every widget annotation, so the field walk alone
+	// under-detects.
+	if part > 0 {
+		checkOrphanWidgetAppearances(ctx, doc, vctx, covered, part, &results)
 	}
 
 	doc.Logger.Debug("compliance.forms: form checks complete", "violations", len(results))
 	return results
+}
+
+// collectFieldObjNums records the object numbers of every field reachable from
+// the /AcroForm /Fields tree, including widget /Kids, so widget annotations
+// already validated by the field walk are not re-checked by the page /Annots
+// scan.
+func collectFieldObjNums(ctx context.Context, doc *document.Document, fields ast.PdfArray, seen map[int]bool, depth int) {
+	if ctx.Err() != nil || depth > maxFieldTreeDepth {
+		return
+	}
+	for _, fieldObj := range fields {
+		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+		}
+		field, err := document.ResolveDict(ctx, doc, fieldObj)
+		if err != nil || field == nil {
+			continue
+		}
+		if kids, err := document.ResolveArray(ctx, doc, field["Kids"]); err == nil && len(kids) > 0 {
+			collectFieldObjNums(ctx, doc, kids, seen, depth+1)
+		}
+	}
+}
+
+// checkOrphanWidgetAppearances applies the §6.9 appearance requirement to
+// widget annotations found through page /Annots whose object number is not in
+// covered (the /AcroForm /Fields tree).
+func checkOrphanWidgetAppearances(ctx context.Context, doc *document.Document, vctx *validationCtx, covered map[int]bool, part int, results *[]Violation) {
+	for pi := range vctx.pages {
+		if ctx.Err() != nil {
+			return
+		}
+		annots, err := document.ResolveArray(ctx, doc, vctx.pages[pi].dict["Annots"])
+		if err != nil {
+			continue
+		}
+		for ai, annotObj := range annots {
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok && covered[ref.ObjectNum] {
+				continue
+			}
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
+				continue
+			}
+			checkFieldAppearance(ctx, doc, annot, part, ai, results)
+		}
+	}
 }
 
 // maxFieldTreeDepth limits recursion when walking the field tree.
