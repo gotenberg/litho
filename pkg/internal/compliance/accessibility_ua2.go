@@ -165,6 +165,19 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		if ctx.Err() != nil {
 			return results
 		}
+		// Page /AA additional-actions (the /O open and /C close triggers) can
+		// carry a GoTo whose destination must also be a structure destination.
+		for _, actObj := range pageActionObjects(ctx, doc, page) {
+			act, err := document.ResolveDict(ctx, doc, actObj)
+			if err != nil || act == nil {
+				continue
+			}
+			if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, act) {
+				results = append(results, fail(Rule_14289_2_8_8_t02,
+					"page additional-action GoTo destination is not a structure destination")...)
+			}
+		}
+
 		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
 		for _, aObj := range annots {
 			annot, _ := document.ResolveDict(ctx, doc, aObj)
@@ -177,7 +190,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 						"Link annotation destination is not a structure destination")...)
 				}
 			}
-			for _, actObj := range annotActionObjects(ctx, doc, annot) {
+			for _, actObj := range actionObjects(ctx, doc, annot) {
 				act, err := document.ResolveDict(ctx, doc, actObj)
 				if err != nil || act == nil {
 					continue
@@ -193,14 +206,33 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 	return results
 }
 
-// annotActionObjects collects an annotation's /A action plus every value
-// of its /AA additional-actions dictionary.
-func annotActionObjects(ctx context.Context, doc *document.Document, annot ast.PdfDict) []ast.PdfObject {
+// pageActionObjects collects a page's additional-action entries. Per ISO
+// 32000-2 Table 197 a page dictionary defines only the /O (open) and /C (close)
+// triggers; other /AA keys are annotation triggers that do not name a page
+// action, so veraPDF does not treat their values as triggerable actions.
+func pageActionObjects(ctx context.Context, doc *document.Document, page ast.PdfDict) []ast.PdfObject {
+	aa, err := document.ResolveDict(ctx, doc, page["AA"])
+	if err != nil || aa == nil {
+		return nil
+	}
 	var out []ast.PdfObject
-	if a, ok := annot["A"]; ok {
+	for _, key := range []ast.PdfName{"O", "C"} {
+		if v, ok := aa[key]; ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// actionObjects collects a dictionary's /A action plus every value of its /AA
+// additional-actions dictionary. Used for annotations, whose /AA triggers are
+// all valid actions.
+func actionObjects(ctx context.Context, doc *document.Document, dict ast.PdfDict) []ast.PdfObject {
+	var out []ast.PdfObject
+	if a, ok := dict["A"]; ok {
 		out = append(out, a)
 	}
-	if aa, err := document.ResolveDict(ctx, doc, annot["AA"]); err == nil && aa != nil {
+	if aa, err := document.ResolveDict(ctx, doc, dict["AA"]); err == nil && aa != nil {
 		for _, v := range aa {
 			out = append(out, v)
 		}
