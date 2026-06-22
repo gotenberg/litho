@@ -286,19 +286,115 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 		}
 	}
 
-	// Part 1: also check CIDSet completeness for CFF CIDFonts.
-	// TrueType empty-glyph detection is unreliable for Part 1, so the
-	// check is limited to CFF fonts where ValidCIDs produces accurate
-	// results.
+	// Part 1 (§6.3.5 t3): unlike parts 2+ (full-program §6.2.11.4.2 t2), veraPDF
+	// scopes the part-1 CIDSet check to the glyphs the content actually renders,
+	// so a CIDSet omitting an unused or empty-outline glyph is conformant.
 	if PDFAPart(profile) == 1 {
 		cidSetObj, hasCIDSet := fd["CIDSet"]
 		if hasCIDSet {
+			// CFF subsets: ValidCIDs enumerates the embedded subset charset.
 			if r := checkCIDSetCompletenessCFF(ctx, doc, cidFontDict, cidSetObj, fontName, pageNum, rule); r != nil {
+				return r
+			}
+			// TrueType subsets: only a rendered glyph with outline data that is
+			// missing from the CIDSet is a defect.
+			if r := checkCIDSetCompletenessTrueTypeRendered(ctx, doc, cidFontDict, fd, cidSetObj, fontName, pageNum, rule, usedCIDs); r != nil {
 				return r
 			}
 		}
 	}
 
+	return nil
+}
+
+// decodeCIDSetBits decodes a /CIDSet bitfield: bit N of byte M (MSB first)
+// represents CID M*8 + (7-N).
+func decodeCIDSetBits(data []byte) map[uint16]bool {
+	bits := make(map[uint16]bool)
+	for i, b := range data {
+		for bit := 7; bit >= 0; bit-- {
+			if b&(1<<uint(bit)) != 0 {
+				bits[uint16(i*8+(7-bit))] = true //nolint:gosec,mnd // CID bit-index; a conformant CIDSet covers the 16-bit CID space, 8 bits/byte MSB-first.
+			}
+		}
+	}
+	return bits
+}
+
+// checkCIDSetCompletenessTrueType verifies that a TrueType (CIDFontType2) subset
+// /CIDSet identifies every glyph in the font program: all GIDs in 1..numGlyphs-1
+// under CIDToGIDMap=/Identity (ISO 19005 §6.2.11.4.2 t2 / §6.3.5 t3). veraPDF
+// requires this for unrendered and empty-outline slots a non-subsetted program
+// retains, not only the glyphs the content paints. GID 0 (.notdef) is exempt.
+// Non-Identity maps and non-TrueType programs return nil.
+func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document, cidFontDict, fd ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
+	if name, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); name != "Identity" {
+		return nil
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil
+	}
+	numGlyphs := typography.ExtractNumGlyphs(fontData)
+	if numGlyphs == 0 {
+		return nil // Not a parseable TrueType program (e.g. CFF).
+	}
+	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
+	if err != nil {
+		return nil
+	}
+	cidSetData, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil
+	}
+	cidSetBits := decodeCIDSetBits(cidSetData)
+	for gid := 1; gid < numGlyphs; gid++ {
+		if !cidSetBits[uint16(gid)] { //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
+			return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet",
+				fontName, pageNum, gid)
+		}
+	}
+	return nil
+}
+
+// checkCIDSetCompletenessTrueTypeRendered is the rendered-scoped TrueType CIDSet
+// check for PDF/A-1 §6.3.5 t3: a glyph the content renders (a used GID) that has
+// outline data must appear in the /CIDSet. Unused glyphs and empty-outline slots
+// are exempt, which is the part-1 scope (parts 2+ require the full program; see
+// [checkCIDSetCompletenessTrueType]). usedCIDs nil or a non-Identity map returns
+// nil.
+func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.Document, cidFontDict, fd ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
+	if usedCIDs == nil {
+		return nil
+	}
+	if name, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); name != "Identity" {
+		return nil
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil
+	}
+	emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
+	if emptyGIDs == nil {
+		return nil // Not a TrueType program.
+	}
+	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
+	if err != nil {
+		return nil
+	}
+	cidSetData, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil
+	}
+	cidSetBits := decodeCIDSetBits(cidSetData)
+	for gid := range usedCIDs {
+		if gid == 0 || emptyGIDs[gid] {
+			continue // .notdef or no outline data
+		}
+		if !cidSetBits[gid] {
+			return failf(rule, "font %s on page %d: rendered CID %d not in /CIDSet", fontName, pageNum, gid)
+		}
+	}
 	return nil
 }
 
@@ -330,18 +426,8 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	// on the first used CID. No conforming file pairs used glyphs with an empty
 	// CIDSet (it would be self-contradictory), so this cannot misfire.
 
-	// Decode CIDSet bitfield: bit N of byte M represents CID (M*8 + (7-N)).
-	cidSetBits := make(map[uint16]bool)
-	for i, b := range cidSetData {
-		for bit := 7; bit >= 0; bit-- {
-			if b&(1<<uint(bit)) != 0 {
-				cid := uint16(i*8 + (7 - bit)) //nolint:gosec,mnd // G115: CID bit-index; a conformant CIDSet covers the 16-bit CID space (8 bits/byte, MSB-first).
-				cidSetBits[cid] = true
-			}
-		}
-	}
+	cidSetBits := decodeCIDSetBits(cidSetData)
 
-	// Get font program and find non-empty GIDs.
 	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
 		return nil
@@ -351,44 +437,22 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 		return nil
 	}
 
-	// Check CIDToGIDMap to determine CID→GID mapping.
-	cidToGIDName, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"])
+	// TrueType subsets use the full-program check (every glyph in the program);
+	// CFF subsets are scoped to the CIDs the content actually renders.
+	if typography.ExtractNumGlyphs(fontData) > 0 {
+		return checkCIDSetCompletenessTrueType(ctx, doc, cidFontDict, fd, cidSetObj, fontName, pageNum, rule)
+	}
 
-	emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
-	if emptyGIDs == nil {
-		// Not a TrueType font or can't parse loca. Try CFF.
-		validCIDs := typography.ExtractValidCIDs(fontData)
-		for cid := range validCIDs {
-			if cid == 0 {
-				continue // .notdef
-			}
-			if !usedCIDs[cid] {
-				continue
-			}
-			if !cidSetBits[cid] {
-				return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
-			}
+	validCIDs := typography.ExtractValidCIDs(fontData)
+	for cid := range validCIDs {
+		if cid == 0 {
+			continue // .notdef
 		}
-		return nil
-	}
-
-	// TrueType: with CIDToGIDMap=/Identity, CID == GID. ISO 19005-2 §6.2.11.4.2
-	// t2 requires the CIDSet to identify every glyph present in the font program,
-	// i.e. all GIDs in 1..numGlyphs-1, not just the rendered or non-empty ones: a
-	// program that was not subsetted retains glyph slots the content never paints
-	// and slots with no outline, and veraPDF still requires the CIDSet to list
-	// them. GID 0 (.notdef) is not required.
-	if cidToGIDName != "Identity" {
-		return nil // Can't verify non-Identity mappings.
-	}
-	numGlyphs := typography.ExtractNumGlyphs(fontData)
-	if numGlyphs == 0 {
-		return nil // Not a parseable TrueType program.
-	}
-	for gid := 1; gid < numGlyphs; gid++ {
-		if !cidSetBits[uint16(gid)] { //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
-			return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet",
-				fontName, pageNum, gid)
+		if !usedCIDs[cid] {
+			continue
+		}
+		if !cidSetBits[cid] {
+			return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
 		}
 	}
 	return nil
@@ -425,15 +489,7 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 	}
 
 	// Decode CIDSet bitfield (may be empty for a zero-length stream).
-	cidSetBits := make(map[uint16]bool)
-	for i, b := range cidSetData {
-		for bit := 7; bit >= 0; bit-- {
-			if b&(1<<uint(bit)) != 0 {
-				cid := uint16(i*8 + (7 - bit)) //nolint:gosec,mnd // G115: CID bit-index; a conformant CIDSet covers the 16-bit CID space (8 bits/byte, MSB-first).
-				cidSetBits[cid] = true
-			}
-		}
-	}
+	cidSetBits := decodeCIDSetBits(cidSetData)
 
 	for cid := range validCIDs {
 		if cid == 0 {
