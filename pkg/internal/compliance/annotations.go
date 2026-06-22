@@ -97,9 +97,11 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 	// PDF/A-1 §6.5.3 t3 needs the OutputIntent destination colour space; resolve
 	// it once (it is empty when no embedded profile is present).
 	var outputCS string
+	var hasOutputProfile bool
 	if part == 1 {
 		_, hdr, _ := resolveOutputIntentICCInfo(ctx, doc, vctx.catalog)
 		outputCS = hdr.colorSpace
+		hasOutputProfile = outputIntentHasDestProfile(ctx, doc, vctx.catalog)
 	}
 
 	for pageIdx := range vctx.pages {
@@ -147,7 +149,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 			// Annotation opacity and colour arrays (PDF/A-1 only).
 			if part == 1 {
 				results = append(results, checkAnnotOpacity(ctx, doc, annot, loc)...)
-				results = append(results, checkAnnotColorArrays(annot, outputCS, loc)...)
+				results = append(results, checkAnnotColorArrays(annot, outputCS, hasOutputProfile, loc)...)
 			}
 
 			// 3D stream Subtype must be U3D or PRC (PDF/A-4e).
@@ -515,12 +517,19 @@ func nStreamRule(part int) Rule {
 
 // checkAnnotColorArrays validates ISO 19005-1 §6.5.3 t3: an annotation shall not
 // contain a /C or /IC colour array unless the PDF/A-1 OutputIntent destination
-// profile colour space is RGB. The check fires only when the OutputIntent colour
-// space was resolved to a known non-RGB value; an unresolved colour space (no
-// embedded profile) is left unflagged so the check never false-rejects.
-func checkAnnotColorArrays(annot ast.PdfDict, outputCS, loc string) []Violation {
+// profile colour space is RGB. hasOutputProfile reports whether a
+// /DestOutputProfile is present at all (parseable or not).
+func checkAnnotColorArrays(annot ast.PdfDict, outputCS string, hasOutputProfile bool, loc string) []Violation {
 	// "RGB " carries a trailing space: ICC colour space signatures are 4 bytes.
-	if outputCS == "" || outputCS == "RGB " {
+	if outputCS == "RGB " {
+		return nil
+	}
+	// outputCS is empty when litho read no colour space. Stay lenient only when
+	// a /DestOutputProfile is present but undecodable, to avoid false-rejecting a
+	// valid RGB profile litho cannot parse. With no output profile at all there
+	// is definitively no RGB OutputIntent, so a /C or /IC array is forbidden
+	// (veraPDF fires whenever gOutputCS != "RGB ").
+	if outputCS == "" && hasOutputProfile {
 		return nil
 	}
 	_, hasC := annot["C"]
@@ -529,7 +538,7 @@ func checkAnnotColorArrays(annot ast.PdfDict, outputCS, loc string) []Violation 
 		return nil
 	}
 	return failf(Rule_19005_1_6_5_3_t03,
-		"%s: /C or /IC colour array not permitted with %q OutputIntent", loc, outputCS)
+		"%s: /C or /IC colour array not permitted unless the OutputIntent colour space is RGB", loc)
 }
 
 // checkAnnotOpacity validates that /CA is 1.0 if present (§6.5.3 test 1, PDF/A-1 only).

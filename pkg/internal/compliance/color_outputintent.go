@@ -213,3 +213,25 @@ func resolveOutputIntentICCInfo(ctx context.Context, doc *document.Document, cat
 
 	return ast.PdfIndirectRef{}, iccProfileHeader{}, nil
 }
+
+// outputIntentHasDestProfile reports whether the catalog declares an
+// OutputIntent that carries a /DestOutputProfile, regardless of whether that
+// profile can be decoded. The §6.5.3 t3 annotation-colour check uses it to tell
+// "no output profile to read" (definitively not RGB) from "a profile is present
+// but litho could not parse it" (stay lenient to avoid a false reject).
+func outputIntentHasDestProfile(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	outputIntents, err := document.ResolveArray(ctx, doc, catalog["OutputIntents"])
+	if err != nil {
+		return false
+	}
+	for _, intentObj := range outputIntents {
+		intent, err := document.ResolveDict(ctx, doc, intentObj)
+		if err != nil || intent == nil {
+			continue
+		}
+		if _, ok := intent["DestOutputProfile"]; ok {
+			return true
+		}
+	}
+	return false
+}

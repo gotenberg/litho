@@ -7,6 +7,43 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+func TestCheckAnnotColorArrays(t *testing.T) {
+	t.Parallel()
+	withC := ast.PdfDict{"C": ast.PdfArray{ast.PdfReal(1), ast.PdfReal(0), ast.PdfReal(0)}}
+	withIC := ast.PdfDict{"IC": ast.PdfArray{ast.PdfReal(0)}}
+	noColor := ast.PdfDict{}
+
+	fires := func(annot ast.PdfDict, outputCS string, hasProfile bool) bool {
+		return len(checkAnnotColorArrays(annot, outputCS, hasProfile, "loc")) > 0
+	}
+
+	tests := []struct {
+		name       string
+		annot      ast.PdfDict
+		outputCS   string
+		hasProfile bool
+		want       bool
+	}{
+		{"RGB output intent permits /C", withC, "RGB ", true, false},
+		{"known non-RGB intent forbids /C", withC, "CMYK", true, true},
+		{"known non-RGB intent forbids /IC", withIC, "GRAY", true, true},
+		{"unparseable profile present stays lenient", withC, "", true, false},
+		{"no output profile forbids /C", withC, "", false, true},
+		{"no output profile forbids /IC", withIC, "", false, true},
+		{"no colour array never fires", noColor, "", false, false},
+		{"no colour array with non-RGB intent never fires", noColor, "CMYK", true, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := fires(tc.annot, tc.outputCS, tc.hasProfile); got != tc.want {
+				t.Errorf("checkAnnotColorArrays(%v, %q, %v) fired=%v, want %v",
+					tc.annot, tc.outputCS, tc.hasProfile, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCheckForbiddenAnnotType(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx()
