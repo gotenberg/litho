@@ -372,22 +372,23 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 		return nil
 	}
 
-	// TrueType: with CIDToGIDMap=/Identity, CID == GID.
+	// TrueType: with CIDToGIDMap=/Identity, CID == GID. ISO 19005-2 §6.2.11.4.2
+	// t2 requires the CIDSet to identify every glyph present in the font program,
+	// i.e. all GIDs in 1..numGlyphs-1, not just the rendered or non-empty ones: a
+	// program that was not subsetted retains glyph slots the content never paints
+	// and slots with no outline, and veraPDF still requires the CIDSet to list
+	// them. GID 0 (.notdef) is not required.
 	if cidToGIDName != "Identity" {
 		return nil // Can't verify non-Identity mappings.
 	}
-
-	// Find GIDs with actual glyph data (non-empty).
-	for gid := uint16(1); gid < uint16(len(cidSetData)*8); gid++ { //nolint:gosec,mnd // G115: len*8 is the CID count; a conformant CIDSet covers the 16-bit CID space.
-		if !usedCIDs[gid] {
-			continue
-		}
-		if !emptyGIDs[gid] {
-			// GID has data → CID (== GID under Identity) must be in CIDSet.
-			if !cidSetBits[gid] {
-				return failf(rule, "font %s on page %d: CID %d (GID %d) has glyph data but not in /CIDSet",
-					fontName, pageNum, gid, gid)
-			}
+	numGlyphs := typography.ExtractNumGlyphs(fontData)
+	if numGlyphs == 0 {
+		return nil // Not a parseable TrueType program.
+	}
+	for gid := 1; gid < numGlyphs; gid++ {
+		if !cidSetBits[uint16(gid)] { //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
+			return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet",
+				fontName, pageNum, gid)
 		}
 	}
 	return nil

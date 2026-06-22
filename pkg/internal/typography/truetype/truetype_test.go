@@ -41,6 +41,22 @@ func buildTableDirectory(tables map[string][]byte) []byte {
 	return buf
 }
 
+func TestNumGlyphs(t *testing.T) {
+	t.Parallel()
+	maxp := make([]byte, 6)
+	binary.BigEndian.PutUint16(maxp[4:6], 1674)
+	got, err := NumGlyphs(buildTableDirectory(map[string][]byte{"maxp": maxp}))
+	if err != nil {
+		t.Fatalf("NumGlyphs: %v", err)
+	}
+	if got != 1674 {
+		t.Errorf("NumGlyphs = %d, want 1674", got)
+	}
+	if _, err := NumGlyphs(buildTableDirectory(map[string][]byte{"head": make([]byte, 54)})); err == nil {
+		t.Error("NumGlyphs without a maxp table: want error, got nil")
+	}
+}
+
 // buildCmapFormat4 creates a Format 4 cmap subtable for the given char→GID mappings.
 // Only handles simple contiguous segments.
 func buildCmapFormat4(mappings map[uint16]uint16) []byte {

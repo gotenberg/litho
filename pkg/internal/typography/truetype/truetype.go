@@ -174,6 +174,23 @@ func EmptyGIDs(ctx context.Context, data []byte) (map[uint16]bool, error) {
 	return result, nil
 }
 
+// NumGlyphs returns the glyph count from the font's maxp table (the number of
+// glyph slots in the program, whether or not each carries an outline).
+func NumGlyphs(data []byte) (int, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return 0, err
+	}
+	maxpData, err := TableData(data, records, "maxp")
+	if err != nil {
+		return 0, err
+	}
+	if len(maxpData) < 6 { //nolint:mnd // maxp numGlyphs is at offset 4..6.
+		return 0, fmt.Errorf("%w: maxp table too short", ErrInvalidFont)
+	}
+	return int(binary.BigEndian.Uint16(maxpData[4:6])), nil
+}
+
 // CharCodeToGID extracts a character code → glyph ID mapping from the cmap
 // table. This is the inverse of GlyphToUnicode: it maps Unicode code points
 // (used as character codes in PDF TrueType fonts) to glyph IDs.
