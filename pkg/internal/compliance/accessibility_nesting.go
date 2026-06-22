@@ -101,6 +101,12 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 				// §7.18.2: TrapNet annotations are forbidden.
 				results = append(results, fail(Rule_14289_1_7_18_2_t01,
 					"TrapNet annotation exists")...)
+				// §7.18.1 t01: TrapNet is not exempt from the Annot-nesting
+				// requirement; veraPDF exempts only Widget, PrinterMark and Link.
+				if nestType != "Annot" {
+					results = append(results, failf(Rule_14289_1_7_18_1_t01,
+						"%s annotation nested within %s instead of Annot", subtype, nestingDesc(nestType))...)
+				}
 
 			case "PrinterMark":
 				// §7.18.8: PrinterMark must NOT be in logical structure.
