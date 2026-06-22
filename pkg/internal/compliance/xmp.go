@@ -1224,6 +1224,56 @@ var xmpExpectedPrefix = map[string]string{
 	xmpPdfaFieldPrefix:    "pdfaField",
 }
 
+// dcTitleLangAltMalformed reports whether the XMP dc:title is a language
+// alternative (rdf:Alt) that veraPDF cannot resolve to a default value: two or
+// more rdf:li entries with none qualified xml:lang="x-default". veraPDF's
+// dc_title getter returns null for that shape, so the document fails ISO
+// 14289-1 §7.1 t9 / ISO 14289-2 §8.11.1 t1 as if dc:title were absent. A single
+// li (implicitly the default) or an explicit x-default li resolves; any other
+// shape is treated as resolvable to avoid false positives.
+func dcTitleLangAltMalformed(data []byte) bool {
+	const dcNamespace = "http://purl.org/dc/elements/1.1/"
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+	depth := 0 // > 0 while inside a dc:title element
+	liCount := 0
+	hasXDefault := false
+	malformed := false
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if depth == 0 {
+				if t.Name.Space == dcNamespace && t.Name.Local == "title" {
+					depth = 1
+					liCount, hasXDefault = 0, false
+				}
+				continue
+			}
+			depth++
+			if t.Name.Local == "li" {
+				liCount++
+				for _, a := range t.Attr {
+					if a.Name.Local == "lang" && a.Value == "x-default" {
+						hasXDefault = true
+					}
+				}
+			}
+		case xml.EndElement:
+			if depth > 0 {
+				depth--
+				if depth == 0 && liCount >= 2 && !hasXDefault {
+					malformed = true
+				}
+			}
+		}
+	}
+	return malformed
+}
+
 // xmpExtractPrefixMap scans raw XMP bytes for xmlns:prefix="uri" declarations
 // and returns a map from namespace URI to the actual prefix name used. When
 // a URI is bound to multiple prefixes, the last occurrence wins; callers

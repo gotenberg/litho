@@ -275,3 +275,29 @@ func TestXMPNormalizeForChecks(t *testing.T) {
 		}
 	})
 }
+
+func TestDCTitleLangAltMalformed(t *testing.T) {
+	t.Parallel()
+	wrap := func(title string) []byte {
+		return []byte(`<?xpacket?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/">` + title + `</rdf:Description></rdf:RDF></x:xmpmeta>`)
+	}
+	tests := []struct {
+		name  string
+		title string
+		want  bool
+	}{
+		{"single li no lang", `<dc:title><rdf:Alt><rdf:li>T</rdf:li></rdf:Alt></dc:title>`, false},
+		{"single li specific lang", `<dc:title><rdf:Alt><rdf:li xml:lang="en-US">T</rdf:li></rdf:Alt></dc:title>`, false},
+		{"explicit x-default", `<dc:title><rdf:Alt><rdf:li xml:lang="x-default">T</rdf:li><rdf:li xml:lang="fr">Le</rdf:li></rdf:Alt></dc:title>`, false},
+		{"multi li no x-default", `<dc:title><rdf:Alt><rdf:li>T</rdf:li><rdf:li>T</rdf:li></rdf:Alt></dc:title>`, true},
+		{"no dc:title", ``, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := dcTitleLangAltMalformed(wrap(tc.title)); got != tc.want {
+				t.Errorf("dcTitleLangAltMalformed(%q) = %v, want %v", tc.title, got, tc.want)
+			}
+		})
+	}
+}

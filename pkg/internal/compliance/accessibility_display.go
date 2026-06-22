@@ -138,5 +138,12 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		return fail(rule, "")
 	}
 
+	// A dc:title language alternative with two or more entries but no
+	// xml:lang="x-default" does not resolve to a value: veraPDF treats it as a
+	// missing title (ISO 14289-1 §7.1 t9 / ISO 14289-2 §8.11.1 t1).
+	if dcTitleLangAltMalformed(xmpData) {
+		return fail(rule, "dc:title language alternative has no x-default value")
+	}
+
 	return nil
 }
