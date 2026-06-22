@@ -52,3 +52,31 @@ func TestCheckCharSetRenderedGlyphs(t *testing.T) {
 		})
 	}
 }
+
+func TestCIDToGIDMapping(t *testing.T) {
+	t.Parallel()
+	ctx := testCtx()
+	doc := nopDoc()
+	tests := []struct {
+		name   string
+		dict   ast.PdfDict
+		wantOK bool
+		nilFn  bool // expect a nil lookup (Identity)
+	}{
+		{"absent defaults to Identity", ast.PdfDict{}, true, true},
+		{"named Identity", ast.PdfDict{"CIDToGIDMap": ast.PdfName("Identity")}, true, true},
+		{"other named map unsupported", ast.PdfDict{"CIDToGIDMap": ast.PdfName("Custom")}, false, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fn, ok := cidToGIDMapping(ctx, doc, tc.dict)
+			if ok != tc.wantOK {
+				t.Errorf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if (fn == nil) != tc.nilFn {
+				t.Errorf("lookup nil = %v, want %v", fn == nil, tc.nilFn)
+			}
+		})
+	}
+}

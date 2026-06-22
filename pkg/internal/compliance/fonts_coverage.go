@@ -292,6 +292,13 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 	if PDFAPart(profile) == 1 {
 		cidSetObj, hasCIDSet := fd["CIDSet"]
 		if hasCIDSet {
+			// §6.3.5 t3 has no fontFile exemption (unlike parts 2+ §6.2.11.4.2
+			// t2): a subset CIDFont with a /CIDSet but no embedded program cannot
+			// satisfy cidSetListsAllGlyphs, since there is no program to list, so
+			// veraPDF fires (alongside the separate not-embedded rule).
+			if extractFontProgramData(ctx, doc, fd) == nil {
+				return failf(rule, "font %s on page %d: /CIDSet present but the CIDFont subset is not embedded", fontName, pageNum)
+			}
 			// CFF subsets: ValidCIDs enumerates the embedded subset charset.
 			if r := checkCIDSetCompletenessCFF(ctx, doc, cidFontDict, cidSetObj, fontName, pageNum, rule); r != nil {
 				return r
@@ -358,16 +365,14 @@ func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document
 }
 
 // checkCIDSetCompletenessTrueTypeRendered is the rendered-scoped TrueType CIDSet
-// check for PDF/A-1 §6.3.5 t3: a glyph the content renders (a used GID) that has
-// outline data must appear in the /CIDSet. Unused glyphs and empty-outline slots
-// are exempt, which is the part-1 scope (parts 2+ require the full program; see
-// [checkCIDSetCompletenessTrueType]). usedCIDs nil or a non-Identity map returns
-// nil.
+// check for PDF/A-1 §6.3.5 t3: a CID the content renders whose glyph has outline
+// data must appear in the /CIDSet. Unused CIDs and empty-outline glyphs are
+// exempt, which is the part-1 scope (parts 2+ require the full program; see
+// [checkCIDSetCompletenessTrueType]). The CIDSet is indexed by CID; the GID used
+// for the outline test comes from the /CIDToGIDMap (Identity, or a parsed
+// stream). usedCIDs nil returns nil.
 func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.Document, cidFontDict, fd ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
 	if usedCIDs == nil {
-		return nil
-	}
-	if name, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); name != "Identity" {
 		return nil
 	}
 	fontData := extractFontProgramData(ctx, doc, fd)
@@ -378,6 +383,10 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 	if emptyGIDs == nil {
 		return nil // Not a TrueType program.
 	}
+	cidToGID, ok := cidToGIDMapping(ctx, doc, cidFontDict)
+	if !ok {
+		return nil // A /CIDToGIDMap stream that cannot be read; skip rather than guess.
+	}
 	stream, err := document.ResolveStream(ctx, doc, cidSetObj)
 	if err != nil {
 		return nil
@@ -387,15 +396,51 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 		return nil
 	}
 	cidSetBits := decodeCIDSetBits(cidSetData)
-	for gid := range usedCIDs {
-		if gid == 0 || emptyGIDs[gid] {
-			continue // .notdef or no outline data
+	for cid := range usedCIDs {
+		if cid == 0 {
+			continue // .notdef
 		}
-		if !cidSetBits[gid] {
-			return failf(rule, "font %s on page %d: rendered CID %d not in /CIDSet", fontName, pageNum, gid)
+		gid := cid
+		if cidToGID != nil {
+			gid = cidToGID(cid)
+		}
+		if emptyGIDs[gid] {
+			continue // glyph has no outline data
+		}
+		if !cidSetBits[cid] {
+			return failf(rule, "font %s on page %d: rendered CID %d not in /CIDSet", fontName, pageNum, cid)
 		}
 	}
 	return nil
+}
+
+// cidToGIDMapping returns a CID→GID lookup for a CIDFontType2's /CIDToGIDMap. A
+// nil lookup means /Identity (CID == GID), the default when the entry is absent.
+// ok is false only when the entry is a stream that cannot be read, in which case
+// the caller skips the check rather than guess the mapping.
+func cidToGIDMapping(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict) (lookup func(uint16) uint16, ok bool) {
+	obj, has := cidFontDict["CIDToGIDMap"]
+	if !has {
+		return nil, true
+	}
+	if name, _ := document.ResolveName(ctx, doc, obj); name != "" {
+		return nil, name == "Identity"
+	}
+	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err != nil {
+		return nil, false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil, false
+	}
+	return func(cid uint16) uint16 {
+		i := int(cid) * 2
+		if i+1 >= len(data) {
+			return 0 // beyond the map → .notdef
+		}
+		return uint16(data[i])<<8 | uint16(data[i+1])
+	}, true
 }
 
 // checkCIDSetCompleteness decodes a CIDSet bitfield stream and verifies
