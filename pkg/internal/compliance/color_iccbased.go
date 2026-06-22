@@ -259,6 +259,20 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 					checkSingleICCBased(ctx, doc, altArr[1], part, pageIdx, name, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
 				}
 			}
+			// A DeviceN /Attributes/Process/ColorSpace (arr[4]) may itself be an
+			// ICCBased CMYK space identical to the OutputIntent (ISO 19005-4
+			// §6.2.4.2 t3); the alternate scan above never reaches it.
+			if len(arr) >= 5 {
+				if attrs, _ := document.ResolveDict(ctx, doc, arr[4]); attrs != nil {
+					if proc, _ := document.ResolveDict(ctx, doc, attrs["Process"]); proc != nil {
+						if procArr, _ := document.ResolveArray(ctx, doc, proc["ColorSpace"]); len(procArr) >= 2 {
+							if pt, _ := document.ResolveName(ctx, doc, procArr[0]); pt == "ICCBased" {
+								checkSingleICCBased(ctx, doc, procArr[1], part, pageIdx, name, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
+							}
+						}
+					}
+				}
+			}
 			continue
 		}
 
