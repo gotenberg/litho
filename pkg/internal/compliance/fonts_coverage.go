@@ -76,7 +76,7 @@ func cidSetCompletenessRule(profile string) Rule {
 // (§6.3.5 t2), where CharSet only has to cover rendered glyphs; it is
 // ignored for parts 2/3, whose rule requires the full font-program
 // charset to be listed.
-func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, _ *fontUsageInfo) []Violation {
+func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	basefont := fontBaseFont(ctx, doc, fontDict)
 	if !isSubsetFont(basefont) {
 		return nil
@@ -135,19 +135,20 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
 		}
 
-		// Part 1: §6.3.5 t2 completeness check skipped. The spec
-		// wording ("listing the character names defined in the font
-		// subset") reads strict, but the operative requirement is only
-		// that every glyph the content stream actually paints is named
-		// in CharSet, with names derived from the embedded font
-		// program's own encoding. Reproducing that requires parsing the
-		// Type 1 CharStrings
-		// dict (no parser shipped) and the font program's encoding
-		// array (PDF /Encoding diverges on math fonts). The presence
-		// check above already catches the common offence (CharSet
-		// missing entirely); deeper completeness verification is
-		// deferred to avoid false positives.
-		return nil
+		// Part 1: §6.3.5 t2 is one-directional and scoped to rendered glyphs:
+		// every glyph the content actually paints must be named in /CharSet,
+		// while glyphs a subsetter packed in but never uses need not be listed.
+		// The reference set is therefore the used character codes mapped through
+		// the font encoding to glyph names, intersected with the names the
+		// embedded program actually defines, so a /Encoding that names a glyph
+		// differently from the program (math/symbol fonts) cannot produce a
+		// false positive: only a name that is both rendered and present in the
+		// program, yet absent from /CharSet, is a genuine omission.
+		glyphNames := typography.ExtractGlyphNames(ctx, fontData)
+		if glyphNames == nil {
+			return nil
+		}
+		return checkCharSetRenderedGlyphs(ctx, doc, fontDict, glyphNames, string(charSetStr), fontName, pageNum, completenessRule, usage)
 	}
 
 	return nil
@@ -196,6 +197,56 @@ func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, f
 		}
 	}
 
+	return nil
+}
+
+// checkCharSetRenderedGlyphs implements ISO 19005-1 §6.3.5 t2 for part 1: every
+// glyph the content renders must be named in /CharSet, while glyphs a subsetter
+// packed in but never paints need not be listed. The reference set is the
+// rendered glyphs (used codes mapped through the font encoding) intersected with
+// glyphNames (the names the embedded program defines). The intersection makes
+// the check false-positive-safe: an /Encoding that names a glyph differently
+// from the program (math/symbol fonts) yields a name absent from glyphNames,
+// which is skipped, so only a name that is rendered, present in the program, and
+// absent from /CharSet is reported. A nil usage or unresolvable encoding defers.
+func checkCharSetRenderedGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, glyphNames map[uint16]string, charSetStr, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+	if usage == nil {
+		return nil
+	}
+	encoding := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	if encoding == nil {
+		return nil
+	}
+
+	programNames := make(map[string]bool, len(glyphNames))
+	for _, name := range glyphNames {
+		if name != "" {
+			programNames[name] = true
+		}
+	}
+	charSetNames := make(map[string]bool)
+	for name := range strings.SplitSeq(charSetStr, "/") {
+		if name != "" {
+			charSetNames[name] = true
+		}
+	}
+
+	for code := range usage.charCodes {
+		name := encoding[code]
+		if name == "" || name == ".notdef" {
+			continue
+		}
+		// Skip names the program does not define: an encoding/program name
+		// divergence is unresolvable here, so reporting it would risk a false
+		// positive.
+		if !programNames[name] {
+			continue
+		}
+		if !charSetNames[name] {
+			return failf(rule, "font %s on page %d: rendered glyph %q not listed in /CharSet",
+				fontName, pageNum, name)
+		}
+	}
 	return nil
 }
 
