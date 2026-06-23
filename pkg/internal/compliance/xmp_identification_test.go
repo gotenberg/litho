@@ -47,8 +47,8 @@ func TestXMPIdentification_WrongPrefixStillFlagged(t *testing.T) {
 
 // TestXMPIdentification_WrongURIIsMissing pins the wrong-URI case: text that
 // looks like pdfaid:part but is bound to a foreign URI is a missing
-// identification schema in well-formed XMP, not a silent pass. The byte-scan
-// fallback only applies to unparseable packets.
+// identification schema in well-formed XMP, not a silent pass. The packet
+// parses cleanly, so the pdfaid namespace URI is genuinely absent.
 func TestXMPIdentification_WrongURIIsMissing(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:pdfaid="http://example.com/not-pdfaid/"
@@ -61,21 +61,43 @@ func TestXMPIdentification_WrongURIIsMissing(t *testing.T) {
 	}
 }
 
-// TestXMPIdentification_UnparseableFallbackStillWorks keeps the byte-scan
-// fallback alive for truncated packets where the XML parser gives up early.
-func TestXMPIdentification_UnparseableFallbackStillWorks(t *testing.T) {
+// TestXMPIdentification_UnparseableReportsMissing pins the vera-aligned
+// behavior for a packet that is not well-formed XML. The pdfaid schema here is
+// present and valid (pdfaid:part="4", pdfaid:rev="2020"), but a case-mismatched
+// tag (<dc:creator> closed by </dc:Creator>) aborts the XML parse before the
+// pdfaid Description is reached. veraPDF models this as
+// MainXMPPackage.Identification_size == 0 and reports the missing-identification
+// rule (6.7.3 t01), never the field-level rev rule (t05), which is scoped to a
+// successfully extracted PDFAIdentification object. litho must do the same:
+// report t01, never claim "rev missing" for a rev litho simply could not parse.
+// This is the exact shape of veraPDF corpus fixture 6-7-2-1-t01-fail-d.
+func TestXMPIdentification_UnparseableReportsMissing(t *testing.T) {
 	data := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-    <rdf:Description rdf:about="" pdfaid:part="2" pdfaid:conformance="B" <<broken`)
+    <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+      <dc:creator><rdf:Seq><rdf:li>litho</rdf:li></rdf:Seq></dc:Creator>
+    </rdf:Description>
+    <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" rdf:about=""
+      pdfaid:part="4" pdfaid:rev="2020"/>
+  </rdf:RDF>
+</x:xmpmeta>`)
 
 	var results []Violation
-	xmpCheckPDFAIdentification(context.Background(), data, "PDF/A-2b", 2, &results)
-	// The fallback must detect pdfaid presence (no missing-schema verdict
-	// based on parse failure alone). Whatever else is reported, the
-	// missing-identification rule must not fire.
+	xmpCheckPDFAIdentification(context.Background(), data, "PDF/A-4", 4, &results)
+
+	var sawMissing, sawRev bool
 	for _, v := range results {
-		if v.Rule == Rule_19005_2_6_6_4_t01 {
-			t.Errorf("byte-scan fallback should have detected pdfaid presence, got %v", results)
+		switch v.Rule {
+		case Rule_19005_4_6_7_3_t01:
+			sawMissing = true
+		case Rule_19005_4_6_7_3_t05:
+			sawRev = true
 		}
+	}
+	if !sawMissing {
+		t.Errorf("unparseable packet must report missing identification (6.7.3 t01), got %v", results)
+	}
+	if sawRev {
+		t.Errorf("must not report rev missing (6.7.3 t05) for an unparseable packet, got %v", results)
 	}
 }

@@ -970,17 +970,20 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 		*results = append(*results, xmpPDFAIdPrefixRule(part, "corr")...)
 	}
 
-	// Fallback: byte scan for pdfaid presence in unparseable XMP only. In
-	// well-formed XMP, absence of the pdfaid namespace means the
-	// identification schema is missing, even when pdfaid-looking text
-	// appears under a different namespace URI.
+	// A packet that is not well-formed XML cannot carry a parseable PDF/A
+	// Identification schema. Per ISO 19005-4 §6.7.3 (and §6.7.11 / §6.6.4 for
+	// parts 1-3) the identification shall be present and valid. veraPDF models
+	// this as MainXMPPackage.Identification_size == 1, which is 0 for an
+	// unparseable packet: it reports the missing-identification rule (t01) and
+	// never evaluates the field-level rules (pdfaid:part / conformance / rev),
+	// which are scoped to a successfully extracted PDFAIdentification object.
+	// litho matches that object model: when the lenient XML parse did not reach
+	// a clean EOF and recovered no pdfaid field, report t01 rather than
+	// byte-scanning for field presence and emitting a value-level violation
+	// (for example "rev missing") for a packet litho never managed to parse.
 	if !parseClean && !hasPart && !hasConf && revValue == "" && !wrongPrefixPart && !wrongPrefixConf && !wrongPrefixRev {
-		hasPart = bytes.Contains(data, []byte("pdfaid:part")) ||
-			bytes.Contains(data, []byte("pdfa/ns/id"))
-		if !hasPart {
-			return
-		}
-		hasConf = bytes.Contains(data, []byte("pdfaid:conformance"))
+		*results = append(*results, xmpPDFAIdMissingRule(part)...)
+		return
 	}
 
 	level := PDFALevel(profile)
