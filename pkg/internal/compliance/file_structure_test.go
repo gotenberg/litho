@@ -42,6 +42,13 @@ func TestFindStreamDataStart(t *testing.T) {
 			buf:  "stream\ndata",
 			want: 7,
 		},
+		{
+			// A malformed keyword (followed by a space, not an EOL) still locates
+			// the data immediately after "stream" so the /Length check can run.
+			name: "malformed: stream followed by space",
+			buf:  "stream \nx",
+			want: 6,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -113,6 +120,32 @@ func TestHasEndstreamAt(t *testing.T) {
 			got := hasEndstreamAt([]byte(tc.buf))
 			if got != tc.want {
 				t.Errorf("hasEndstreamAt(%q) = %v, want %v", tc.buf, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEndstreamHasExtraSpacing(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		buf  string
+		want bool
+	}{
+		{"EOL then space then endstream", "data\r\n endstream", true},
+		{"EOL then tab then endstream", "data\n\tendstream", true},
+		{"valid LF before endstream", "data\nendstream", false},
+		{"valid CRLF before endstream", "data\r\nendstream", false},
+		{"no EOL, data byte before endstream", "dataendstream", false},
+		{"space but no preceding EOL", "data endstream", false},
+		{"no endstream", "some data", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := endstreamHasExtraSpacing([]byte(tc.buf))
+			if got != tc.want {
+				t.Errorf("endstreamHasExtraSpacing(%q) = %v, want %v", tc.buf, got, tc.want)
 			}
 		})
 	}

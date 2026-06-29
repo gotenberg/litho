@@ -671,9 +671,42 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 				Context: fmt.Sprintf("object %d: declared /Length=%d does not match actual stream data extent", objNum, declaredLen),
 			})
 		}
+
+		// §6.1.7 t2 / §6.1.7.1 t2: the endstream keyword shall be immediately
+		// preceded by an EOL marker. veraPDF reports extra whitespace inserted
+		// between the EOL and endstream independently of the /Length check. The
+		// check is conservative: it fires only when a valid EOL is present but
+		// separated from endstream by spaces or tabs, not when the EOL is absent
+		// entirely (a shape lenient real-world producers emit), to avoid a false
+		// positive the verapdf-only gate could not surface.
+		if eolRule := streamEOLRule(profile); eolRule.Specification != "" && endstreamHasExtraSpacing(tailBuf) {
+			results = append(results, Violation{
+				Rule:    eolRule,
+				Context: fmt.Sprintf("object %d: endstream keyword not immediately preceded by an EOL marker", objNum),
+			})
+		}
 	}
 
 	return results
+}
+
+// endstreamHasExtraSpacing reports whether the first endstream keyword in buf is
+// separated from its preceding EOL marker by spaces or tabs (ISO 19005 §6.1.7 t2
+// / §6.1.7.1 t2: "...\r\n   endstream"). It deliberately does not fire when no
+// EOL precedes endstream at all, keeping the check to the extra-spacing defect.
+func endstreamHasExtraSpacing(buf []byte) bool {
+	idx := bytes.Index(buf, []byte("endstream"))
+	if idx < 2 {
+		return false
+	}
+	if buf[idx-1] != ' ' && buf[idx-1] != '\t' {
+		return false
+	}
+	j := idx - 1
+	for j >= 0 && (buf[j] == ' ' || buf[j] == '\t') {
+		j--
+	}
+	return j >= 0 && (buf[j] == '\n' || buf[j] == '\r')
 }
 
 // findStreamDataStart locates the byte offset within buf where stream data
@@ -713,13 +746,12 @@ func findStreamDataStart(ctx context.Context, buf []byte) int {
 
 		afterKeyword := absIdx + 6 // position right after "stream"
 
-		// The stream keyword must be followed by an EOL character (\r or \n).
-		if afterKeyword < len(buf) && buf[afterKeyword] != '\r' && buf[afterKeyword] != '\n' {
-			searchFrom = afterKeyword
-			continue
-		}
-
-		// The data starts after "stream" + required EOL.
+		// A conforming stream keyword is followed by CRLF or a single LF; the data
+		// then begins after that EOL. A keyword followed by anything else is
+		// malformed (ISO 19005 §6.1.7 t2 / §6.1.7.1 t2, reported separately), but
+		// veraPDF still takes the stream data to begin immediately after "stream",
+		// so the /Length check proceeds from there rather than abandoning the
+		// stream and missing the length defect.
 		pos := afterKeyword
 		if pos < len(buf) && buf[pos] == '\r' {
 			pos++
