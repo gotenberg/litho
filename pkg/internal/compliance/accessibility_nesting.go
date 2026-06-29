@@ -151,6 +151,84 @@ func nestingDesc(stdType string) string {
 	return stdType
 }
 
+// checkPDFUA1FormRole validates ISO 14289-1 §7.18.4 t2: a Form structure
+// element that omits a PrintField Role attribute (ISO 32000-1 Table 348) shall
+// have exactly one child, an object reference identifying the widget annotation.
+// veraPDF keys this on the SEForm structure element (test
+// "roleAttribute != null || hasOneInteractiveChild == true"), so a Form with a
+// PrintField Role attribute, or whose only child is a single widget object
+// reference, is conformant and does not fire.
+func checkPDFUA1FormRole(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+	var results []Violation
+	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
+		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+		if typeName != "Form" {
+			return
+		}
+		if formHasPrintFieldRole(ctx, doc, elem) || formHasOneInteractiveChild(ctx, doc, elem) {
+			return
+		}
+		results = append(results, fail(Rule_14289_1_7_18_4_t02,
+			"Form element at "+path+" omits a Role attribute and does not have exactly one widget child")...)
+	})
+	return results
+}
+
+// formHasPrintFieldRole reports whether a Form structure element carries a
+// PrintField attribute owner with a /Role entry (ISO 32000-1 Table 348), which
+// satisfies veraPDF's roleAttribute != null. The /A entry may be a single
+// attribute dictionary or an array mixing attribute dictionaries and revision
+// numbers; a /Role under any /O /PrintField owner counts.
+func formHasPrintFieldRole(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
+	aObj, ok := elem["A"]
+	if !ok {
+		return false
+	}
+	if arr, err := document.ResolveArray(ctx, doc, aObj); err == nil {
+		for _, a := range arr {
+			if attrIsPrintFieldRole(ctx, doc, a) {
+				return true
+			}
+		}
+		return false
+	}
+	return attrIsPrintFieldRole(ctx, doc, aObj)
+}
+
+func attrIsPrintFieldRole(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
+	d, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || d == nil {
+		return false
+	}
+	if owner, _ := document.ResolveName(ctx, doc, d["O"]); owner != "PrintField" {
+		return false
+	}
+	_, hasRole := d["Role"]
+	return hasRole
+}
+
+// formHasOneInteractiveChild reports whether a Form structure element's /K
+// resolves to exactly one child that is an object reference identifying a widget
+// annotation (veraPDF hasOneInteractiveChild). A Form with multiple children, or
+// a single non-widget child, does not satisfy it.
+func formHasOneInteractiveChild(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
+	kObj, ok := elem["K"]
+	if !ok {
+		return false
+	}
+	if arr, err := document.ResolveArray(ctx, doc, kObj); err == nil {
+		return len(arr) == 1 && isWidgetOBJR(ctx, doc, arr[0])
+	}
+	return isWidgetOBJR(ctx, doc, kObj)
+}
+
 // annotStructParentType resolves an annotation's enclosing structure element
 // standard type via its /StructParent index into the ParentTree. The ParentTree
 // entry for an annotation is a single structure element reference (unlike a

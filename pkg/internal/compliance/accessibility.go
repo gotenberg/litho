@@ -115,6 +115,9 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Annotation structure nesting (PDF/UA-1 §7.18.x).
 	results = append(results, checkAnnotationNesting(ctx, doc, catalog, profile)...)
 
+	// Form element Role attribute / single-widget-child (PDF/UA-1 §7.18.4 t02).
+	results = append(results, checkPDFUA1FormRole(ctx, doc, catalog, profile)...)
+
 	// Form XObject restrictions (PDF/UA-1 §7.20).
 	results = append(results, checkFormXObjectRestrictions(ctx, doc, catalog, profile)...)
 
