@@ -47,30 +47,92 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			if subtype != "Widget" {
 				continue
 			}
-			if isAnnotHidden(ctx, doc, annot) {
+			// veraPDF §8.10.2.3 t1 test:
+			//   containsLbl || Contents != null || isFieldWidget == false ||
+			//   structParentType == null || isArtifact == true
+			// so it fires only for a FIELD widget that participates in the
+			// structure tree and supplies neither a Lbl structure element nor a
+			// /Contents entry. There is NO Hidden exemption (unlike the UA-1
+			// §7.18.1 alt-text rule): a hidden field widget may still be exposed,
+			// e.g. shown by script, so it must be labelled.
+			if !isFieldWidget(ctx, doc, annot) {
 				continue
 			}
-			// A widget with no /StructParent is not linked into the structure
-			// tree, so it has no structure-element label path. The ISO 14289-2
-			// §8.10.2.3 labelling requirement applies only to widgets that
-			// participate in the structure tree, so an unlinked widget is exempt.
-			if _, ok := annot["StructParent"]; !ok {
+			// structParentType == null / isArtifact: a widget not resolved to an
+			// enclosing structure element through its /StructParent is out of scope.
+			structElem := widgetStructElem(ctx, doc, treeRoot, annot)
+			if structElem == nil {
 				continue
 			}
-			// Widget has /Contents, satisfies labelling requirement.
-			if contentsObj, ok := annot["Contents"]; ok {
-				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
-				if err == nil && len(contentsStr) > 0 {
-					continue // has Contents
-				}
+			// containsLbl: an enclosing Lbl structure element supplies the label.
+			if liHasLblChild(ctx, doc, structElem) {
+				continue
 			}
-			// No label and no /Contents. Violation.
+			// /Contents supplies description and context for the widget.
+			if widgetHasContents(ctx, doc, annot) {
+				continue
+			}
 			results = append(results, fail(Rule_14289_2_8_10_2_3_t01,
-				"Widget annotation has no label and no /Contents entry")...)
+				"field Widget annotation has neither a Lbl structure element nor a /Contents entry")...)
 		}
 	}
 
 	return results
+}
+
+// isFieldWidget reports whether a Widget annotation participates in an
+// interactive form field. A widget that carries a field type (/FT), a partial
+// field name (/T, the merged terminal-field case), or a field parent (/Parent)
+// is a field widget; a pure decorative widget is not. veraPDF's §8.10.2.3 t1
+// exempts non-field widgets (isFieldWidget == false).
+func isFieldWidget(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
+	for _, k := range []ast.PdfName{"FT", "Parent", "T"} {
+		if _, ok := annot[k]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// widgetStructElem resolves the structure element that encloses a widget through
+// its /StructParent index into the ParentTree (a widget's entry is a single
+// element reference). It returns nil when the widget is not linked into the
+// structure tree (veraPDF structParentType == null / isArtifact).
+func widgetStructElem(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict) ast.PdfDict {
+	if treeRoot == nil {
+		return nil
+	}
+	spObj, ok := annot["StructParent"]
+	if !ok {
+		return nil
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return nil
+	}
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return nil
+	}
+	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0)
+	if elemObj == nil {
+		return nil
+	}
+	elem, err := document.ResolveDict(ctx, doc, elemObj)
+	if err != nil {
+		return nil
+	}
+	return elem
+}
+
+// widgetHasContents reports whether a widget carries a non-empty /Contents entry.
+func widgetHasContents(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
+	contentsObj, ok := annot["Contents"]
+	if !ok {
+		return false
+	}
+	s, err := document.ResolveString(ctx, doc, contentsObj)
+	return err == nil && len(s) > 0
 }
 
 // countOBJRWidgets counts OBJR children of a structure element that point to
