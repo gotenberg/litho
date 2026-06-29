@@ -67,9 +67,12 @@ func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDi
 }
 
 // markupAnnotationSubtypes lists the markup annotation types per ISO
-// 32000-2, 12.5.6.2 Table 374 (annotations that carry a /T entry and convey
-// user commentary). RichMedia, Screen, 3D, Movie, and the other non-markup
-// types are deliberately absent.
+// 32000-2, 12.5.6.2 (annotations that carry a /T entry and convey user
+// commentary). RichMedia, Screen, 3D, Movie, and the other non-markup types
+// are deliberately absent. Projection is also absent: ISO 32000-2 §12.5.6.2
+// does not classify it as a markup annotation, and veraPDF's markup model
+// (PDMarkupAnnot) omits it, so §8.9.2.3 t1 (markup-in-Annot nesting) does not
+// apply to a Projection annotation.
 //
 //nolint:gochecknoglobals // static spec table.
 var markupAnnotationSubtypes = map[ast.PdfName]bool{
@@ -77,7 +80,7 @@ var markupAnnotationSubtypes = map[ast.PdfName]bool{
 	"Circle": true, "Polygon": true, "PolyLine": true, "Highlight": true,
 	"Underline": true, "Squiggly": true, "StrikeOut": true, "Caret": true,
 	"Stamp": true, "Ink": true, "FileAttachment": true, "Sound": true,
-	"Redact": true, "Projection": true,
+	"Redact": true,
 }
 
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
