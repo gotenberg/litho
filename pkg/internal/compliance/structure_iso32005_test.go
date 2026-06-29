@@ -164,10 +164,11 @@ func TestISO32005_NonStructTransparent(t *testing.T) {
 	}
 }
 
-// TestISO32005_RoleMapRemapsStandardType pins role-map-first resolution:
-// a RoleMap entry /Document /Book turns the root's only Document into a
-// non-standard type, so "StructTreeRoot shall contain exactly one
-// Document" fails (PDF_UA-1__7.1-t07-fail-a golden).
+// TestISO32005_RoleMapRemapsStandardType pins standard-type-first resolution:
+// a legacy RoleMap entry /Document /Book is forbidden by ISO 32000-2 §14.8.6
+// and ignored (veraPDF reports nothing for PDF_UA-1__7.1-t07-fail-a's Table 5
+// root count). The standard Document keeps its type, so the root still holds
+// exactly one Document and the rule does NOT fire.
 func TestISO32005_RoleMapRemapsStandardType(t *testing.T) {
 	vs := iso32005Violations(t,
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
@@ -176,14 +177,29 @@ func TestISO32005_RoleMapRemapsStandardType(t *testing.T) {
 		"<< /Type /StructTreeRoot /K 5 0 R /RoleMap << /Document /Book >> >>",
 		"<< /Type /StructElem /S /Document /P 4 0 R >>",
 	)
-	found := false
 	for _, v := range vs {
+		if v.Rule.Clause == "Table 5. StructTreeRoot-Document" {
+			t.Errorf("standard Document remapped to /Book wrongly flagged at root: %v", vs)
+		}
+	}
+
+	// A StructTreeRoot whose only child is a non-Document standard type still
+	// fails the root-count rule (zero Document elements).
+	missing := iso32005Violations(t,
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R >>",
+		"<< /Type /StructElem /S /Part /P 4 0 R >>",
+	)
+	found := false
+	for _, v := range missing {
 		if v.Rule.Clause == "Table 5. StructTreeRoot-Document" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("role-mapped-away Document not flagged at root; got %v", vs)
+		t.Errorf("StructTreeRoot with no Document child should fail root-count; got %v", missing)
 	}
 }
 

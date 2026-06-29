@@ -76,17 +76,22 @@ const maxRoleMapHops = 8
 func iso32005Key(state *walkState, t string) string {
 	name := ast.PdfName(t)
 	for range maxRoleMapHops {
-		if next, ok := state.roleMap[name]; ok && next != name {
-			name = next
-			continue
-		}
+		// A standard structure type must not be remapped (ISO 32000-2 §14.8.6);
+		// veraPDF ignores any legacy /RoleMap entry whose key is standard. Resolve
+		// the standard type (or a heading Hn) before following the /RoleMap so a
+		// forbidden entry like << /Document /Book >> does not hide a standard
+		// Document element and trip the Table 5 root-count check.
 		if iso32005HnRe.MatchString(string(name)) {
 			return "Hn"
 		}
 		if isStandardStructType(name, "PDF/UA-2") {
 			return string(name)
 		}
-		return ""
+		next, ok := state.roleMap[name]
+		if !ok || next == name {
+			return ""
+		}
+		name = next
 	}
 	return ""
 }
