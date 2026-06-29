@@ -363,7 +363,7 @@ func checkAppearanceFontGlyphCoverage(ctx context.Context, doc *document.Documen
 		if err != nil || cidFontDict == nil {
 			return nil
 		}
-		return checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, type0UsedCIDs(ctx, doc, font, usage))
+		return checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, usage != nil && len(usage.charCodes) > 0, type0UsedCIDs(ctx, doc, font, usage))
 	}
 	return checkGlyphCoverage(ctx, doc, font, fontName, pageNum, profile, usage)
 }
@@ -579,7 +579,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// is scoped to USED CIDs: a CIDSet that omits a CID never rendered does
 	// not break the embedded subset for any glyph the page actually draws, so
 	// only used CIDs are required to be present.
-	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, type0UsedCIDs(ctx, doc, fontDict, usage))...)
+	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, usage != nil && len(usage.charCodes) > 0, type0UsedCIDs(ctx, doc, fontDict, usage))...)
 
 	// ToUnicode CMap values.
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)

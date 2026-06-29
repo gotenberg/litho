@@ -252,7 +252,7 @@ func checkCharSetRenderedGlyphs(ctx context.Context, doc *document.Document, fon
 
 // checkCIDFontGlyphCoverage validates that CIDFont subsets have a /CIDSet entry
 // in their FontDescriptor.
-func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, usedCIDs map[uint16]bool) []Violation {
+func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, rendered bool, usedCIDs map[uint16]bool) []Violation {
 	basefont := fontBaseFont(ctx, doc, cidFontDict)
 	if !isSubsetFont(basefont) {
 		return nil
@@ -269,7 +269,16 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 	}
 
 	// Part 1: CIDSet is required. Parts 2+: only check if present (correctness).
-	if PDFAPart(profile) == 1 {
+	// veraPDF keys §6.3.5 t3 on the Glyph object, so it fires only for a subset
+	// CIDFont that renders at least one glyph: a font declared in /Resources but
+	// never selected for text rendering produces no Glyph and is out of scope.
+	// "rendered" mirrors that scope: the font shows at least one character code,
+	// in any text-rendering mode. It is NOT the font's visibility (mode != 3):
+	// veraPDF builds a Glyph for invisible (mode 3) text too, so a subset CIDFont
+	// rendered only in mode 3 still fires. It is NOT the decoded CID set either:
+	// a CJK Identity-H font whose CIDs litho cannot enumerate has shown codes and
+	// must fire, so gating on usedCIDs would wrongly exempt it.
+	if PDFAPart(profile) == 1 && rendered {
 		if _, hasCIDSet := fd["CIDSet"]; !hasCIDSet {
 			return failf(rule, "font %s on page %d: CIDFont subset missing /CIDSet", fontName, pageNum)
 		}
