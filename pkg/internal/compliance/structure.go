@@ -268,11 +268,17 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	}
 	slices.Sort(srcNames)
 
-	// Check standard types are not remapped (PDF/UA-1 only; PDF/UA-2 allows some).
+	// Check standard types are not remapped. PDF/UA-1 and PDF/A parts 2/3 forbid
+	// it; PDF/UA-2 allows some (handled in accessibility_structure.go); PDF/A
+	// parts 1/4 have no such rule, so roleMapStandardRemapRule returns the zero
+	// Rule and the check is skipped (avoids a clause-less residual and a
+	// mislabeled UA rule under a PDF/A profile).
 	if !IsPDFUA(profile) || profile == "PDF/UA-1" {
-		for _, src := range srcNames {
-			if isStandardStructType(src, profile) {
-				*results = append(*results, failf(roleMapStandardRemapRule(profile), "standard type %s is remapped", src)...)
+		if remapRule := roleMapStandardRemapRule(profile); remapRule.Specification != "" {
+			for _, src := range srcNames {
+				if isStandardStructType(src, profile) {
+					*results = append(*results, failf(remapRule, "standard type %s is remapped", src)...)
+				}
 			}
 		}
 	}
@@ -1732,13 +1738,18 @@ func roleMapStandardRemapRule(profile string) Rule {
 		}
 		return Rule_14289_1_7_1_t07
 	}
-	// PDF/A level 'a' §6.7.3.4 t3 (parts 2/3 have a dedicated rule id).
+	// Parts 2/3 §6.7.3.4 t3 forbid remapping a standard structure type. Part 1
+	// (ISO 19005-1 §6.8.3.4 has only t1/t2: non-standard-must-map and circular)
+	// and part 4 (ISO 19005-4 carries no RoleMap rule at all) have no such
+	// requirement, so the check does not fire under those parts. veraPDF's
+	// PDFA-1A profile likewise omits a 6.8.3.4 standard-remap rule. Returning
+	// the zero Rule signals the caller to skip the check rather than emit a
+	// clause-less residual.
 	switch PDFAPart(profile) {
 	case 2:
 		return Rule_19005_2_6_7_3_4_t03
 	case 3:
 		return Rule_19005_3_6_7_3_4_t03
-	default:
-		return Rule_14289_1_7_1_t07
 	}
+	return Rule{}
 }
