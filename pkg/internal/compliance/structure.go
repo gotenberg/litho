@@ -1635,7 +1635,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 					}
 				}
 				trimmed := strings.TrimSpace(langVal)
-				if trimmed != "" && !IsValidLangTag(trimmed) {
+				if trimmed != "" && !validLang(trimmed) {
 					results = append(results, Violation{
 						Rule:    rule,
 						Context: fmt.Sprintf("lang=%s, page %d inline BDC", trimmed, pageIdx+1),
@@ -1661,7 +1661,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 				continue
 			}
 			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-			if trimmed != "" && !IsValidLangTag(trimmed) {
+			if trimmed != "" && !validLang(trimmed) {
 				results = append(results, Violation{
 					Rule:    rule,
 					Context: fmt.Sprintf("lang=%s, page %d property %s", trimmed, pageIdx+1, propName),
