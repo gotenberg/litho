@@ -79,6 +79,7 @@ func TestContentMarking_UntaggedScope(t *testing.T) {
 		{"painting with no marked content is untagged", "0 0 10 10 re\nf", true},
 		{"tag with MCID is tagged", "/P <</MCID 0>> BDC\n0 0 10 10 re\nf\nEMC", false},
 		{"Artifact scope is exempt", "/Artifact <<>> BDC\n0 0 10 10 re\nf\nEMC", false},
+		{"Do referencing an absent XObject paints nothing", "q\n/X0 Do\nQ", false},
 		{"non-MCID BDC nested in MCID BDC stays tagged", "/P <</MCID 0>> BDC\n/Span <<>> BDC\n0 0 10 10 re\nf\nEMC\nEMC", false},
 	}
 	for _, tc := range tests {
@@ -88,5 +89,46 @@ func TestContentMarking_UntaggedScope(t *testing.T) {
 				t.Errorf("checkContentMarking t3 = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestContentMarking_DoResourceScope covers ISO 14289-1 §7.1 t3 for a `Do`
+// whose XObject resolution depends on resource inheritance: a page with no
+// /Resources inherits the Pages-node resources (so the Do paints and fires),
+// while a page with its own (empty) /Resources does not inherit (so the Do is a
+// no-op and is exempt).
+func TestContentMarking_DoResourceScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	content := "q\n/X0 Do\nQ"
+	contentObj := fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content)
+	form := "<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length 0 >>\nstream\n\nendstream"
+
+	// Page inherits /X0 (an untagged Form) from the Pages node: the Do paints
+	// real, untagged content -> §7.1 t3 fires.
+	inheritDoc, inheritCat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 5 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /XObject << /X0 6 0 R >> >> >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+		contentObj,
+		"<< /Type /StructTreeRoot /K [] >>",
+		form,
+	)
+	if !hasRule(checkContentMarking(ctx, inheritDoc, inheritCat, "PDF/UA-1"), Rule_14289_1_7_1_t03) {
+		t.Errorf("inherited-XObject Do: want §7.1 t3, got none")
+	}
+
+	// Page declares its own empty /Resources, so it does not inherit; /X0 is
+	// absent, the Do is a no-op, and §7.1 t3 must not fire.
+	absentDoc, absentCat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 5 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /XObject << /X0 6 0 R >> >> >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >>",
+		contentObj,
+		"<< /Type /StructTreeRoot /K [] >>",
+		form,
+	)
+	if hasRule(checkContentMarking(ctx, absentDoc, absentCat, "PDF/UA-1"), Rule_14289_1_7_1_t03) {
+		t.Errorf("absent-XObject Do (own empty /Resources): want none, got §7.1 t3")
 	}
 }

@@ -87,6 +87,15 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
+	// Inherited resources from the Pages tree root: a page that declares no
+	// /Resources of its own inherits them (ISO 32000-1 §7.7.3.4), so a Do whose
+	// XObject is defined only on the Pages node must still resolve.
+	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
+	var inheritedRes ast.PdfDict
+	if pagesDict != nil {
+		inheritedRes = resolveResources(ctx, doc, pagesDict)
+	}
+
 	for _, page := range pages {
 		if ctx.Err() != nil {
 			return results
@@ -108,7 +117,12 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		allUntaggedIsTaggedDo := true
 		reportedT1 := false
 		reportedT2 := false
+		// A page with no own /Resources inherits the Pages-node resources; a page
+		// with its own (even empty) /Resources does not inherit.
 		resources := resolveResources(ctx, doc, page)
+		if resources == nil {
+			resources = inheritedRes
+		}
 
 		classifyMarker := func(op content.Operation) markerKind {
 			if len(op.Operands) < 1 {
@@ -178,7 +192,11 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 					markerStack = markerStack[:len(markerStack)-1]
 				}
 			case "Do":
-				if untaggedScope() {
+				// A Do whose XObject is absent from the page's effective
+				// resources (own or inherited) paints nothing (the operator is a
+				// no-op per ISO 32000-1 §8.10.1), so it is not untagged real
+				// content and veraPDF does not flag it.
+				if untaggedScope() && doTargetResolves(ctx, doc, resources, op) {
 					hasUntaggedPainting = true
 					if !doTargetIsTagged(ctx, doc, resources, op) {
 						allUntaggedIsTaggedDo = false
@@ -205,6 +223,25 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		}
 	}
 	return results
+}
+
+// doTargetResolves reports whether the XObject named by a Do operator is present
+// and resolvable in the given (effective) resources. A Do naming an absent
+// XObject is a no-op (ISO 32000-1 §8.10.1) and paints nothing.
+func doTargetResolves(ctx context.Context, doc *document.Document, resources ast.PdfDict, op content.Operation) bool {
+	if resources == nil || len(op.Operands) < 1 {
+		return false
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		return false
+	}
+	xoDict, _ := document.ResolveDict(ctx, doc, resources["XObject"])
+	if xoDict == nil {
+		return false
+	}
+	_, err := document.ResolveStream(ctx, doc, xoDict[name])
+	return err == nil
 }
 
 // doTargetIsTagged checks if a Do operator's target XObject is a Form XObject
