@@ -405,8 +405,13 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		if PDFAPart(profile) == 4 {
 			return nil
 		}
-		// For parts 1–3: check if all Differences glyph names are AGL-resolvable.
-		if allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict) {
+		// Parts 2/3 §6.2.11.7.2 and PDF/UA accept any glyph-level Unicode
+		// mechanism, including AGL-resolvable /Differences names, in place of a
+		// /ToUnicode entry. PDF/A-1 §6.3.8 t1 is stricter: it requires a /ToUnicode
+		// CMap entry specifically (its only exemptions are predefined encodings,
+		// standard-Latin Type 1, and Adobe-CID Type 0, none of which a Type 3 font
+		// meets), so an AGL-resolvable /Differences set does not substitute there.
+		if PDFAPart(profile) != 1 && allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict) {
 			return nil
 		}
 		// Fall through to the ToUnicode presence check below.
