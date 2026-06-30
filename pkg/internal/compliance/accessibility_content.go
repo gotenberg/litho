@@ -162,6 +162,19 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		untaggedScope := func() bool {
 			return !inTaggedMCID() && !inArtifact()
 		}
+		// flagTaggedInArtifact reports §7.1 t2 when real content is painted while
+		// marked BOTH as tagged (an enclosing MCID) AND as an Artifact. veraPDF
+		// reports such a contradictory content item as tagged-content-inside-an-
+		// artifact even when the Artifact sequence is nested inside the tagged one
+		// (so no tagged BDC opens inside the artifact and the BDC-open check above
+		// does not fire). PDF/UA-1 only; reported once per page.
+		flagTaggedInArtifact := func() {
+			if profile == "PDF/UA-1" && !reportedT2 && inTaggedMCID() && inArtifact() {
+				results = append(results, failf(Rule_14289_1_7_1_t02,
+					"tagged content inside content marked as Artifact")...)
+				reportedT2 = true
+			}
+		}
 
 		for _, op := range ops {
 			switch op.Operator {
@@ -192,6 +205,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 					markerStack = markerStack[:len(markerStack)-1]
 				}
 			case "Do":
+				flagTaggedInArtifact()
 				// A Do whose XObject is absent from the page's effective
 				// resources (own or inherited) paints nothing (the operator is a
 				// no-op per ISO 32000-1 §8.10.1), so it is not untagged real
@@ -204,6 +218,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 				}
 			case "f", "F", "f*", "S", "s", "B", "B*", "b", "b*",
 				"Tj", "TJ", "'", "\"", "sh":
+				flagTaggedInArtifact()
 				if untaggedScope() {
 					hasUntaggedPainting = true
 					allUntaggedIsTaggedDo = false

@@ -132,3 +132,30 @@ func TestContentMarking_DoResourceScope(t *testing.T) {
 		t.Errorf("absent-XObject Do (own empty /Resources): want none, got §7.1 t3")
 	}
 }
+
+// TestContentMarking_TaggedArtifactOverlap covers ISO 14289-1 §7.1 t2 for a
+// content item painted while marked both as tagged (an enclosing MCID) and as an
+// Artifact: veraPDF reports it as tagged-content-inside-an-artifact even when the
+// Artifact sequence is nested inside the tagged one.
+func TestContentMarking_TaggedArtifactOverlap(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	firesT2 := func(content string) bool {
+		doc, cat := contentMarkingDoc(t, content)
+		for _, v := range checkContentMarking(ctx, doc, cat, "PDF/UA-1") {
+			if v.Rule == Rule_14289_1_7_1_t02 {
+				return true
+			}
+		}
+		return false
+	}
+	if !firesT2("/Span <</MCID 0>> BDC\n/Artifact <<>> BDC\n0 0 10 10 re\nf\nEMC\nEMC") {
+		t.Error("tagged > artifact > painting: want §7.1 t2")
+	}
+	if firesT2("/Artifact <<>> BDC\n0 0 10 10 re\nf\nEMC") {
+		t.Error("artifact-only painting: want no §7.1 t2")
+	}
+	if firesT2("/Span <</MCID 0>> BDC\n0 0 10 10 re\nf\nEMC") {
+		t.Error("tagged-only painting: want no §7.1 t2")
+	}
+}
