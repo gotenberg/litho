@@ -428,11 +428,15 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 	return results
 }
 
-// checkPUAWithoutActualText flags fonts with PUA ToUnicode mappings when
-// neither the structure tree nor the page content stream has any ActualText.
-// This is a conservative check: it only fires when there is zero ActualText
-// anywhere, avoiding false positives from ActualText that covers a different
-// span than the PUA character.
+// checkPUAWithoutActualText flags a font whose ToUnicode maps a rendered
+// character to the Unicode Private Use Area when no /ActualText covers that
+// character (ISO 19005-2/3 §6.2.11.7.3, ISO 14289-2 §8.4.3, mirroring veraPDF's
+// per-glyph actualTextPresent). For a simple (one-byte) font it walks the page
+// content stream and fires only for a PUA code whose enclosing marked-content
+// sequence carries no /ActualText, so an /ActualText covering a different span
+// does not mask an uncovered PUA character. For a composite (Type 0) font, whose
+// multi-byte code decoding needs the font CMap, it stays conservative and
+// exempts the font when any marked-content /ActualText is present.
 func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict) []Violation {
 	rule := puaActualTextRule(profile)
 	if rule.Specification == "" {
@@ -453,22 +457,224 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 		return nil
 	}
 
-	// PUA mapping exists. Check for ActualText in structure tree.
 	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if treeRoot != nil && structTreeHasActualText(ctx, doc, treeRoot, 0) {
-		return nil
-	}
-
-	// Check for ActualText in content stream (BDC properties). Match the PDF
-	// name /ActualText, not the bare word: a content stream that draws the
-	// literal text "ActualText" (e.g. a fixture whose visible prose reads "an
-	// ActualText entry is not present") must not be read as carrying one.
 	contentData, _ := resolvePageContentBytes(ctx, doc, page)
-	if len(contentData) > 0 && bytes.Contains(contentData, []byte("/ActualText")) {
-		return nil
+	hasContentActualText := len(contentData) > 0 && bytes.Contains(contentData, []byte("/ActualText"))
+
+	// Composite fonts (and any font whose PUA codes litho cannot enumerate) use
+	// multi-byte codes that need the font CMap to decode, so litho stays
+	// conservative: any /ActualText anywhere (structure tree or content stream)
+	// exempts the font. Over-exemption is an under-report, never a false positive.
+	puaCodes := puaSourceCodes(string(data))
+	conservative := func() []Violation {
+		if (treeRoot != nil && structTreeHasActualText(ctx, doc, treeRoot, 0)) || hasContentActualText {
+			return nil
+		}
+		return failf(rule, "font %s on page %d: ToUnicode maps to PUA without ActualText", fontName, pageNum)
+	}
+	if fontSubtype(ctx, doc, fontDict) == "Type0" || len(puaCodes) == 0 {
+		return conservative()
+	}
+	ops, perr := content.ParseStreamData(ctx, contentData)
+	if perr != nil {
+		return conservative()
 	}
 
-	return failf(rule, "font %s on page %d: ToUnicode maps to PUA without ActualText", fontName, pageNum)
+	// A PUA character is covered when an enclosing marked-content sequence carries
+	// /ActualText, or when the structure element of its /MCID (or an ancestor)
+	// does. mcidCovered maps each MCID on the page to the latter.
+	mcidCovered := mcidActualTextCoverage(ctx, doc, treeRoot, page)
+
+	var props ast.PdfDict // page /Properties, resolved lazily for named BDC lists
+	propsResolved := false
+	resolveProps := func() ast.PdfDict {
+		if !propsResolved {
+			if res := resolveResources(ctx, doc, page); res != nil {
+				props, _ = document.ResolveDict(ctx, doc, res["Properties"])
+			}
+			propsResolved = true
+		}
+		return props
+	}
+
+	var actualTextStack []bool // per open BDC/BMC: does it carry /ActualText?
+	var mcidStack []int        // per open BDC/BMC: the effective /MCID (-1 if none)
+	currentFont := ""
+	currentMCID := -1
+	for _, op := range ops {
+		switch op.Operator {
+		case "BDC", "BMC":
+			actualTextStack = append(actualTextStack, bdcHasActualText(ctx, doc, op, resolveProps))
+			mcid := bdcMCID(ctx, doc, op, resolveProps)
+			if mcid < 0 {
+				mcid = currentMCID // inherit the enclosing MCID
+			}
+			mcidStack = append(mcidStack, mcid)
+			currentMCID = mcid
+		case "EMC":
+			if n := len(actualTextStack); n > 0 {
+				actualTextStack = actualTextStack[:n-1]
+			}
+			if n := len(mcidStack); n > 0 {
+				mcidStack = mcidStack[:n-1]
+			}
+			currentMCID = -1
+			if n := len(mcidStack); n > 0 {
+				currentMCID = mcidStack[n-1]
+			}
+		case "Tf":
+			if len(op.Operands) >= 1 {
+				if n, ok := op.Operands[0].(ast.PdfName); ok {
+					currentFont = string(n)
+				}
+			}
+		case "Tj", "TJ", "'", "\"":
+			if currentFont != fontName || sliceAnyTrue(actualTextStack) || mcidCovered[currentMCID] {
+				continue
+			}
+			if showPaintsPUACode(op, puaCodes) {
+				return failf(rule, "font %s on page %d: rendered character mapped to PUA has no ActualText", fontName, pageNum)
+			}
+		}
+	}
+	return nil
+}
+
+// mcidActualTextCoverage maps each marked-content identifier on a page to whether
+// the structure element it belongs to (resolved through the page /StructParents
+// entry in the ParentTree) or one of its ancestors carries an /ActualText entry.
+func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict) map[int]bool {
+	out := make(map[int]bool)
+	if treeRoot == nil {
+		return out
+	}
+	spObj, ok := page["StructParents"]
+	if !ok {
+		return out
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return out
+	}
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return out
+	}
+	arr, err := document.ResolveArray(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, int(key), 0))
+	if err != nil {
+		return out
+	}
+	for mcid, elemRef := range arr {
+		elem, derr := document.ResolveDict(ctx, doc, elemRef)
+		if derr != nil || elem == nil {
+			continue
+		}
+		if elemOrAncestorHasActualText(ctx, doc, elem, 0) {
+			out[mcid] = true
+		}
+	}
+	return out
+}
+
+// elemOrAncestorHasActualText reports whether a structure element or one of its
+// /P ancestors carries an /ActualText entry.
+func elemOrAncestorHasActualText(ctx context.Context, doc *document.Document, elem ast.PdfDict, depth int) bool {
+	if elem == nil || depth > maxStructTreeWalkDepth {
+		return false
+	}
+	if _, ok := elem["ActualText"]; ok {
+		return true
+	}
+	parent, err := document.ResolveDict(ctx, doc, elem["P"])
+	if err != nil {
+		return false
+	}
+	return elemOrAncestorHasActualText(ctx, doc, parent, depth+1)
+}
+
+// bdcMCID returns the /MCID value of a BDC operator's property list (inline or
+// named via the page /Properties), or -1 when absent.
+func bdcMCID(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) int {
+	if op.Operator != "BDC" || len(op.Operands) < 2 {
+		return -1
+	}
+	var pd ast.PdfDict
+	switch v := op.Operands[1].(type) {
+	case ast.PdfDict:
+		pd = v
+	case ast.PdfName:
+		if p := props(); p != nil {
+			pd, _ = document.ResolveDict(ctx, doc, p[v])
+		}
+	}
+	if pd == nil {
+		return -1
+	}
+	mcid, err := document.ResolveInt(ctx, doc, pd["MCID"])
+	if err != nil {
+		return -1
+	}
+	return int(mcid)
+}
+
+// bdcHasActualText reports whether a BDC/BMC operator's property list (inline
+// dictionary or a name resolved through the page /Properties) carries an
+// /ActualText entry.
+func bdcHasActualText(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) bool {
+	if op.Operator != "BDC" || len(op.Operands) < 2 {
+		return false
+	}
+	var pd ast.PdfDict
+	switch v := op.Operands[1].(type) {
+	case ast.PdfDict:
+		pd = v
+	case ast.PdfName:
+		if p := props(); p != nil {
+			pd, _ = document.ResolveDict(ctx, doc, p[v])
+		}
+	}
+	if pd == nil {
+		return false
+	}
+	_, ok := pd["ActualText"]
+	return ok
+}
+
+// showPaintsPUACode reports whether a text-showing operator paints any one-byte
+// code present in puaCodes.
+func showPaintsPUACode(op content.Operation, puaCodes map[uint32]bool) bool {
+	check := func(s ast.PdfString) bool {
+		for _, b := range []byte(s) {
+			if puaCodes[uint32(b)] {
+				return true
+			}
+		}
+		return false
+	}
+	for _, operand := range op.Operands {
+		switch v := operand.(type) {
+		case ast.PdfString:
+			if check(v) {
+				return true
+			}
+		case ast.PdfArray:
+			for _, item := range v {
+				if s, ok := item.(ast.PdfString); ok && check(s) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func sliceAnyTrue(b []bool) bool {
+	for _, v := range b {
+		if v {
+			return true
+		}
+	}
+	return false
 }
 
 // structTreeHasActualText recursively checks if any structure element has /ActualText.

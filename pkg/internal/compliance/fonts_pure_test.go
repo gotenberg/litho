@@ -179,3 +179,32 @@ func TestContainsPUAMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestPuaSourceCodes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		cmapData string
+		want     []uint32 // source codes expected in the PUA set
+	}{
+		{"bfchar PUA dst", "2 beginbfchar\n<01> <0061>\n<02> <E04A>\nendbfchar", []uint32{0x02}},
+		{"bfchar no PUA", "1 beginbfchar\n<01> <0061>\nendbfchar", nil},
+		{"bfrange whole range PUA", "1 beginbfrange\n<01> <03> <E000>\nendbfrange", []uint32{0x01, 0x02, 0x03}},
+		{"bfrange partial PUA at boundary", "1 beginbfrange\n<01> <03> <F8FE>\nendbfrange", []uint32{0x01, 0x02}},
+		{"bfrange non-PUA", "1 beginbfrange\n<01> <03> <0041>\nendbfrange", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := puaSourceCodes(tc.cmapData)
+			if len(got) != len(tc.want) {
+				t.Fatalf("puaSourceCodes(...) = %v, want codes %v", got, tc.want)
+			}
+			for _, c := range tc.want {
+				if !got[c] {
+					t.Errorf("puaSourceCodes(...) missing code %#x; got %v", c, got)
+				}
+			}
+		})
+	}
+}

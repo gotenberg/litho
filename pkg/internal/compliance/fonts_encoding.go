@@ -822,6 +822,101 @@ func isInvalidUnicodeDst(token string) bool {
 // <lo> <hi> <dst>. A single line may pack several entries, so every destination
 // token on the line is tested (the earlier parts[1]-only scan missed packed
 // fixtures where the PUA destination is not the second field).
+// puaSourceCodes parses a ToUnicode CMap and returns the set of source character
+// codes whose Unicode destination lies in a Private Use Area. bfchar entries map
+// a single code; bfrange entries map a contiguous code range to incrementing
+// destinations, so each code's own destination is tested. Array-form bfrange
+// destinations are skipped (conservative).
+func puaSourceCodes(cmapData string) map[uint32]bool {
+	out := make(map[uint32]bool)
+	upper := strings.ToUpper(cmapData)
+	collectPUASources(upper, "BEGINBFCHAR", "ENDBFCHAR", out, false)
+	collectPUASources(upper, "BEGINBFRANGE", "ENDBFRANGE", out, true)
+	return out
+}
+
+func collectPUASources(s, begin, end string, out map[uint32]bool, isRange bool) {
+	for {
+		i := strings.Index(s, begin)
+		if i < 0 {
+			return
+		}
+		s = s[i+len(begin):]
+		region := s
+		j := strings.Index(s, end)
+		if j >= 0 {
+			region = s[:j]
+			s = s[j+len(end):]
+		}
+		tokens := hexTokens(region)
+		if isRange {
+			for k := 0; k+2 < len(tokens) || k+2 == len(tokens); k += 3 {
+				if k+2 >= len(tokens) {
+					break
+				}
+				lo, okLo := hexVal(tokens[k])
+				hi, okHi := hexVal(tokens[k+1])
+				dst, okDst := hexVal(tokens[k+2])
+				if !okLo || !okHi || !okDst || hi < lo || hi-lo > 0xFFFF {
+					continue
+				}
+				for c := lo; c <= hi; c++ {
+					if isPUAScalar(dst + (c - lo)) {
+						out[c] = true
+					}
+				}
+			}
+		} else {
+			for k := 0; k+1 < len(tokens); k += 2 {
+				if isPUAHex(tokens[k+1]) {
+					if src, ok := hexVal(tokens[k]); ok {
+						out[src] = true
+					}
+				}
+			}
+		}
+		if j < 0 {
+			return
+		}
+	}
+}
+
+// hexVal parses an angle-bracketed hex token like "<0041>" into its integer
+// value, decoding a UTF-16BE surrogate pair to its supplementary scalar.
+func hexVal(token string) (uint32, bool) {
+	t := strings.TrimSpace(token)
+	if len(t) < 3 || t[0] != '<' || t[len(t)-1] != '>' {
+		return 0, false
+	}
+	hex := t[1 : len(t)-1]
+	val := uint32(0)
+	for _, c := range hex {
+		val <<= 4
+		switch {
+		case c >= '0' && c <= '9':
+			val |= uint32(c - '0') //nolint:gosec // c bounded by case guard.
+		case c >= 'A' && c <= 'F':
+			val |= uint32(c-'A') + 10 //nolint:gosec // c bounded by case guard.
+		default:
+			return 0, false
+		}
+	}
+	if len(hex) == 8 {
+		hi, lo := val>>16, val&0xFFFF
+		if hi >= 0xD800 && hi <= 0xDBFF && lo >= 0xDC00 && lo <= 0xDFFF {
+			val = 0x10000 + (hi-0xD800)<<10 + (lo - 0xDC00)
+		}
+	}
+	return val, true
+}
+
+// isPUAScalar reports whether a Unicode scalar lies in a Private Use Area.
+func isPUAScalar(val uint32) bool {
+	return (val >= 0xE000 && val <= 0xF8FF) ||
+		(val >= 0xF0000 && val <= 0xFFFFD) ||
+		(val >= 0x100000 && val <= 0x10FFFD)
+}
+
 func containsPUAMapping(cmapData string) bool {
 	// A begin/end marker may share a line with its entries
 	// ("... <06> <0066> endbfchar"), so scan whole begin..end regions rather
