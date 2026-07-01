@@ -550,6 +550,13 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 
 	thIDs := make(map[string]bool)
 	hasTH := false
+	// tableHasExplicitScope reports whether any TH carries a /Scope. veraPDF
+	// applies the ISO 32000-2 §14.8.5.7 implicit-scope model (a no-/Scope TH
+	// headers the cells below/right of it) only to a table that uses no explicit
+	// /Scope at all. Once any TH carries /Scope the table is in explicit mode, and
+	// a TH that omits /Scope connects nothing: §8.2.5.26 t5/t6 then fire on a TD
+	// whose only positional headers are those no-/Scope THs.
+	tableHasExplicitScope := false
 	for _, c := range cells {
 		if !c.isTH {
 			continue
@@ -557,6 +564,9 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 		hasTH = true
 		if id, ok := c.elem["ID"].(ast.PdfString); ok {
 			thIDs[string(id)] = true
+		}
+		if cellScope(ctx, state.doc, c.elem) != "" {
+			tableHasExplicitScope = true
 		}
 	}
 	if !hasTH {
@@ -608,6 +618,21 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 					connected = aboveInColumn
 				case "Both":
 					connected = true
+				default:
+					// No explicit /Scope. PDF/UA-1 §7.5 t1 literally requires TH
+					// cells to carry a /Scope when the structure is not determinable
+					// via Headers/IDs, so a no-/Scope TH connects nothing under UA-1.
+					// PDF/UA-2 §8.2.5.26 instead applies the ISO 32000-2:2020,
+					// 14.8.5.7 implicit-scope model: a TH with no /Scope headers the
+					// cells below it in its column and to the right in its row. This
+					// TH is positionally pertinent (above-in-column or left-in-row),
+					// so it connects the TD. veraPDF applies this implicit model only
+					// when the table uses no explicit /Scope anywhere; a table that
+					// mixes scoped and unscoped THs is in explicit mode, where an
+					// unscoped TH connects nothing.
+					if state.profile == "PDF/UA-2" && !tableHasExplicitScope {
+						connected = true
+					}
 				}
 				if connected {
 					break
