@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
 func TestMatchAnnotArtifact(t *testing.T) {
@@ -54,8 +55,10 @@ func TestFixAnnotArtifact_RemovesStructParent(t *testing.T) {
 }
 
 func TestFixAnnotArtifact_InvisibleFlag(t *testing.T) {
-	// A Text annotation with the Invisible flag (1) set and /StructParent loses it;
-	// a plain Text annotation without forbidden flags is untouched.
+	// A Text (markup) annotation with the Invisible flag (1) set keeps its
+	// /StructParent and instead loses the Invisible flag: §8.9.2.3 requires the
+	// markup annotation stay enclosed in its Annot structure element. A plain Text
+	// annotation without forbidden flags is untouched.
 	pdf := annotsPDF("[4 0 R 5 0 R]",
 		"<< /Type /Annot /Subtype /Text /Rect [0 0 10 10] /F 1 /StructParent 0 >>",
 		"<< /Type /Annot /Subtype /Text /Rect [0 0 10 10] /F 4 /StructParent 1 >>",
@@ -65,11 +68,31 @@ func TestFixAnnotArtifact_InvisibleFlag(t *testing.T) {
 	if _, err := fixAnnotArtifact(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
 		t.Fatalf("fixAnnotArtifact: %v", err)
 	}
-	if _, has := pendingDict(t, alloc, 4)["StructParent"]; has {
-		t.Error("Invisible annotation must lose /StructParent")
+	patched := pendingDict(t, alloc, 4)
+	if _, has := patched["StructParent"]; !has {
+		t.Error("Invisible markup annotation must keep /StructParent")
+	}
+	if f, ok := patched["F"].(ast.PdfInt); !ok || int(f)&annotFlagInvisible != 0 {
+		t.Errorf("Invisible markup annotation must have the Invisible flag cleared, got /F = %v", patched["F"])
 	}
 	if _, queued := alloc.Pending()[5]; queued {
 		t.Error("a visible (Print-only) annotation must not be modified")
+	}
+}
+
+func TestFixAnnotArtifact_InvisibleNonMarkupRemovesStructParent(t *testing.T) {
+	// A non-markup annotation (Screen) flagged Invisible is not subject to
+	// §8.9.2.3, so it is repaired by removing /StructParent as before.
+	pdf := annotsPDF("[4 0 R]",
+		"<< /Type /Annot /Subtype /Screen /Rect [0 0 10 10] /F 1 /StructParent 0 >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	if _, err := fixAnnotArtifact(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixAnnotArtifact: %v", err)
+	}
+	if _, has := pendingDict(t, alloc, 4)["StructParent"]; has {
+		t.Error("Invisible non-markup annotation must lose /StructParent")
 	}
 }
 
