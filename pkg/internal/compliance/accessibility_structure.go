@@ -109,13 +109,24 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 	}
 
 	// t04: also check the StructTreeRoot's old-style /RoleMap for standard types
-	// remapped to non-standard types. This applies when the PDF uses legacy RoleMap
-	// entries alongside namespace-based structure.
+	// remapped to non-standard types. veraPDF keys §8.2.4 t4 on the SENonStandard
+	// structure element (test remappedStandardType == null), not the /RoleMap
+	// entry: it fires only when a USED element of the standard type actually
+	// resolves to a non-standard type through the legacy /RoleMap. An element
+	// resolves through the legacy /RoleMap only when it carries no explicit /NS; an
+	// element of the same type with an explicit /NS resolves through that
+	// namespace, leaving the /RoleMap entry inert. Gating on a used no-/NS element
+	// of the source type matches veraPDF exactly and avoids a false positive when
+	// remediation adds /Namespaces and an explicit /NS to every element while
+	// leaving the now-inert legacy /RoleMap in place.
 	roleMap, _ := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
-	for _, src := range sortedNames(roleMap) {
-		dstObj := roleMap[src]
-		if isStandardStructType(src, "PDF/UA-2") {
-			dstName, _ := document.ResolveName(ctx, doc, dstObj)
+	if len(roleMap) > 0 {
+		usedNoNS := usedTypesWithoutNS(ctx, doc, treeRoot)
+		for _, src := range sortedNames(roleMap) {
+			if !usedNoNS[src] || !isStandardStructType(src, "PDF/UA-2") {
+				continue
+			}
+			dstName, _ := document.ResolveName(ctx, doc, roleMap[src])
 			if dstName != "" && !isStandardStructType(dstName, "PDF/UA-2") {
 				results = append(results, failf(Rule_14289_2_8_2_4_t04,
 					"standard type %s remapped to non-standard type %s in StructTreeRoot /RoleMap",
@@ -141,6 +152,26 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 
 	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsArr, classicRoleMap, &results, make(map[int]bool), 0)
 	return results
+}
+
+// usedTypesWithoutNS returns the structure types that have at least one used
+// element with no explicit /NS entry. Such an element resolves its type through
+// the legacy /RoleMap rather than a namespace's /RoleMapNS (ISO 32000-2 §14.8.6),
+// which is what makes a standard type remapped to a non-standard one in the
+// legacy /RoleMap an SENonStandard element under ISO 14289-2 §8.2.4 t4. An
+// element of the same type carrying an explicit /NS resolves through that
+// namespace instead, so the legacy /RoleMap entry does not apply to it.
+func usedTypesWithoutNS(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict) map[ast.PdfName]bool {
+	out := make(map[ast.PdfName]bool)
+	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
+		if _, hasNS := elem["NS"]; hasNS {
+			return
+		}
+		if sType, _ := document.ResolveName(ctx, doc, elem["S"]); sType != "" {
+			out[sType] = true
+		}
+	})
+	return out
 }
 
 // typeIsRoleMapNSKey reports whether typeName appears as a key in any
