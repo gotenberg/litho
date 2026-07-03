@@ -485,6 +485,42 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	return nil
 }
 
+// symbolicCmapViolation reports whether a symbolic TrueType font's cmap
+// subtable set violates the conformance level's requirement. The permitted
+// sets differ by part, mirroring the veraPDF test expressions exactly:
+//
+//   - PDF/A-1 §6.3.7 t3:              exactly one subtable.
+//   - PDF/A-2, 3 §6.2.11.6 t4 and
+//     PDF/UA-1 §7.21.6 t4:            one subtable, or a Microsoft Symbol (3,0).
+//   - PDF/A-4 §6.2.10.6 t4 and
+//     PDF/UA-2 §8.4.5.7 t4:           a Microsoft Symbol (3,0) or a Mac (1,0).
+func symbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool {
+	n := len(subs)
+	var cmap30, cmap10 bool
+	for _, s := range subs {
+		switch {
+		case s.PlatformID == 3 && s.EncodingID == 0:
+			cmap30 = true
+		case s.PlatformID == 1 && s.EncodingID == 0:
+			cmap10 = true
+		}
+	}
+	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return !cmap30 && !cmap10
+		}
+		return n != 1 && !cmap30
+	}
+	switch PDFAPart(profile) {
+	case 1:
+		return n != 1
+	case 4:
+		return !cmap30 && !cmap10
+	default:
+		return n != 1 && !cmap30
+	}
+}
+
 // checkTrueTypeEncoding validates TrueType-specific encoding rules (rule 7).
 func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	var results []Violation
@@ -501,14 +537,17 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 			}
 		}
 
-		// Per ISO 19005-1 §6.3.7, symbolic TrueType fonts must have exactly
-		// one cmap encoding subtable in the embedded font program.
+		// The permitted cmap subtable set for a symbolic TrueType font depends
+		// on the conformance level. PDF/A-1 §6.3.7 t3 requires exactly one
+		// encoding; PDF/A-2 and 3 §6.2.11.6 t4 (and PDF/UA-1 §7.21.6 t4) also
+		// accept any font whose cmap carries a Microsoft Symbol (3,0) encoding;
+		// PDF/A-4 §6.2.10.6 t4 (and PDF/UA-2 §8.4.5.7 t4) accept a (3,0) or a
+		// Macintosh (1,0) encoding irrespective of the subtable count.
 		cmapRule := trueTypeSymbolicCmapRule(profile)
 		if cmapRule.Specification != "" {
-			fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 			if fontData := extractFontProgramData(ctx, doc, fd); len(fontData) > 0 {
-				if n, err := truetype.CmapSubtableCount(fontData); err == nil && n != 1 {
-					results = append(results, failf(cmapRule, "font %s on page %d has %d cmap subtables (expected 1)", fontName, pageNum, n)...)
+				if subs, err := truetype.CmapSubtables(fontData); err == nil && symbolicCmapViolation(profile, subs) {
+					results = append(results, failf(cmapRule, "font %s on page %d: symbolic TrueType cmap subtable set is not permitted (%d subtables)", fontName, pageNum, len(subs))...)
 				}
 			}
 		}
