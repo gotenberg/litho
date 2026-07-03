@@ -69,9 +69,9 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 
 		// Scan content stream operators for device CS usage and collect
 		// XObject names referenced by Do operators.
-		contentCSUsed, referencedXObjects := scanContentStreamDeviceCS(ctx, doc, page, i)
+		contentCSUsed, referencedXObjects, contentCSNames := scanContentStreamDeviceCS(ctx, doc, page, i)
 
-		deviceCSUsed := scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, part)
+		deviceCSUsed := scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, part, contentCSNames)
 		deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
 		deviceCSUsed.cmyk = deviceCSUsed.cmyk || contentCSUsed.cmyk
 		deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.gray

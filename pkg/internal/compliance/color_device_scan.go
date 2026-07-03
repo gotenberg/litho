@@ -10,13 +10,23 @@ import (
 
 // scanForDeviceColorSpaces looks through page resources for uses of DeviceRGB,
 // DeviceCMYK, and DeviceGray colour spaces.
-func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool, part int) deviceCSUsage {
+func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool, part int, contentCSNames map[string]bool) deviceCSUsage {
 	var usage deviceCSUsage
 
-	// Check named colour spaces in the ColorSpace dictionary.
-	for _, csObj := range csDict {
+	// A named colour space in /Resources/ColorSpace counts only when it is
+	// actually referenced: selected by a cs/CS operator, or named as the
+	// /ColorSpace of a painted image or shading. A colour space that is merely
+	// DECLARED but never referenced is not "used" and does not trip §6.2.4.3.
+	// veraPDF, the PDF/A reference validator, is usage-driven here, so keying
+	// off declarations produced false positives on real documents that carry
+	// unused DeviceGray entries in their resource dictionaries.
+	usedNames := collectReferencedCSNames(ctx, doc, resources, referencedXObjects, contentCSNames)
+	for key, csObj := range csDict {
 		if ctx.Err() != nil {
 			return usage
+		}
+		if !usedNames[string(key)] {
+			continue
 		}
 		csName := resolveCSName(ctx, doc, csObj)
 		markDeviceCS(csName, &usage)
@@ -52,6 +62,50 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited, part)
 
 	return usage
+}
+
+// collectReferencedCSNames returns the set of /Resources/ColorSpace keys that
+// are actually referenced from a content scope: names selected by cs/CS
+// (contentCSNames), plus names used directly as the /ColorSpace of a painted
+// (Do-referenced) image or a shading. A colour space named this way resolves
+// against the resource ColorSpace dictionary, so its key must be treated as
+// used even when no cs/CS operator selects it.
+func collectReferencedCSNames(ctx context.Context, doc *document.Document, resources ast.PdfDict, referencedXObjects, contentCSNames map[string]bool) map[string]bool {
+	used := make(map[string]bool, len(contentCSNames))
+	for n := range contentCSNames {
+		used[n] = true
+	}
+
+	// Images invoked by Do whose /ColorSpace is a bare name reference.
+	if xobjDict, _ := document.ResolveDict(ctx, doc, resources["XObject"]); xobjDict != nil {
+		for name, obj := range xobjDict {
+			if referencedXObjects != nil && !referencedXObjects[string(name)] {
+				continue
+			}
+			stream, err := document.ResolveStream(ctx, doc, obj)
+			if err != nil {
+				continue
+			}
+			if n, err := document.ResolveName(ctx, doc, stream.Dict["ColorSpace"]); err == nil && n != "" {
+				used[string(n)] = true
+			}
+		}
+	}
+
+	// Shadings whose /ColorSpace is a bare name reference.
+	if shDict, _ := document.ResolveDict(ctx, doc, resources["Shading"]); shDict != nil {
+		for _, sh := range shDict {
+			sd, err := document.ResolveDict(ctx, doc, sh)
+			if err != nil || sd == nil {
+				continue
+			}
+			if n, err := document.ResolveName(ctx, doc, sd["ColorSpace"]); err == nil && n != "" {
+				used[string(n)] = true
+			}
+		}
+	}
+
+	return used
 }
 
 // scanXObjectColorSpaces checks XObject resources for device colour space usage.
@@ -139,10 +193,10 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		return usage
 	}
 
-	// Track Do operator targets so only referenced nested XObjects get scanned.
+	// Track Do targets and cs/CS names so only referenced nested XObjects and
+	// declared colour spaces are treated as used.
 	nestedXObjects := make(map[string]bool)
-	formFillCSSet := false
-	formStrokeCSSet := false
+	formCSNames := make(map[string]bool)
 
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(ctx, data)
@@ -151,68 +205,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		} else {
 			// Check inline image colour spaces from parsed BI operations.
 			scanInlineImageCSOps(ops, &usage)
-			for idx, op := range ops {
-				if idx%100 == 0 && ctx.Err() != nil {
-					return usage
-				}
-
-				switch op.Operator {
-				case "g":
-					usage.gray = true
-					formFillCSSet = true
-				case "G":
-					usage.gray = true
-					formStrokeCSSet = true
-				case "rg":
-					usage.rgb = true
-					formFillCSSet = true
-				case "RG":
-					usage.rgb = true
-					formStrokeCSSet = true
-				case "k":
-					usage.cmyk = true
-					formFillCSSet = true
-				case "K":
-					usage.cmyk = true
-					formStrokeCSSet = true
-				case "cs":
-					formFillCSSet = true
-					if len(op.Operands) >= 1 {
-						if name, ok := op.Operands[0].(ast.PdfName); ok {
-							markDeviceCS(string(name), &usage)
-						}
-					}
-				case "CS":
-					formStrokeCSSet = true
-					if len(op.Operands) >= 1 {
-						if name, ok := op.Operands[0].(ast.PdfName); ok {
-							markDeviceCS(string(name), &usage)
-						}
-					}
-				case "sc", "scn":
-					formFillCSSet = true
-				case "SC", "SCN":
-					formStrokeCSSet = true
-				case "f", "F", "f*":
-					if !formFillCSSet {
-						usage.gray = true
-					}
-				case "S", "s":
-					if !formStrokeCSSet {
-						usage.gray = true
-					}
-				case "B", "B*", "b", "b*":
-					if !formFillCSSet || !formStrokeCSSet {
-						usage.gray = true
-					}
-				case "Do":
-					if len(op.Operands) >= 1 {
-						if name, ok := op.Operands[0].(ast.PdfName); ok {
-							nestedXObjects[string(name)] = true
-						}
-					}
-				}
-			}
+			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames)
 		}
 	}
 
@@ -229,9 +222,13 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	formCSDict, err := document.ResolveDict(ctx, doc, formRes["ColorSpace"])
 	if err == nil && formCSDict != nil {
 		formDefaults := collectDefaultColorSpaces(ctx, doc, formRes)
-		for _, csObj := range formCSDict {
+		usedFormNames := collectReferencedCSNames(ctx, doc, formRes, nestedXObjects, formCSNames)
+		for key, csObj := range formCSDict {
 			if ctx.Err() != nil {
 				return usage
+			}
+			if !usedFormNames[string(key)] {
+				continue
 			}
 			resolved := resolveCSName(ctx, doc, csObj)
 			markDeviceCS(resolved, &usage)
@@ -487,49 +484,56 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 }
 
 // scanContentStreamDeviceCS parses the content stream of a page and detects
-// device-dependent colour space usage from operators:
-//   - g/G → DeviceGray
-//   - rg/RG → DeviceRGB
-//   - k/K → DeviceCMYK
-//   - cs/CS with operand "DeviceRGB", "DeviceCMYK", or "DeviceGray"
-func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool) {
+// device-dependent colour space usage from explicit colour operators. It also
+// returns the names of XObjects invoked by Do and the colour-space names
+// selected by cs/CS, so the resource scan can distinguish colour spaces that
+// are actually referenced from ones merely declared in /Resources/ColorSpace.
+func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool, map[string]bool) {
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)
+	referencedCSNames := make(map[string]bool)
 
 	streamData, err := resolvePageContentBytes(ctx, doc, page)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: failed to get content stream bytes for CS scan",
 			"page", pageIdx, "error", err)
-		return usage, referencedXObjects
+		return usage, referencedXObjects, referencedCSNames
 	}
 
 	if len(streamData) == 0 {
-		return usage, referencedXObjects
+		return usage, referencedXObjects, referencedCSNames
 	}
 
 	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)
-		return usage, referencedXObjects
+		return usage, referencedXObjects, referencedCSNames
 	}
 
 	// Check inline image colour spaces from parsed BI operations.
 	scanInlineImageCSOps(ops, &usage)
+	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames)
 
-	// Track whether fill/stroke CS has been explicitly set. If a painting
-	// operator runs without any prior CS setting, DeviceGray is implicitly used.
-	fillCSSet := false
-	strokeCSSet := false
+	return usage, referencedXObjects, referencedCSNames
+}
+
+// scanContentColorOps records device colour usage from a content stream:
+// explicit colour operators (g/G, rg/RG, k/K, cs/CS with a direct device
+// name), the colour-space names selected by cs/CS (referencedCSNames), and the
+// XObjects invoked by Do (referencedXObjects). A painting operator that runs
+// with no colour space yet selected uses the initial graphics-state colour
+// space, DeviceGray; veraPDF flags that implicit default use, so it counts as
+// DeviceGray usage here too (ISO 19005-2 §6.2.4.3).
+func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool) {
+	fillCSSet, strokeCSSet := false, false
 	type csState struct{ fill, stroke bool }
 	var csStack []csState
 
 	for idx, op := range ops {
-		// Check context every ~100 operators.
 		if idx%100 == 0 && ctx.Err() != nil {
-			return usage, referencedXObjects
+			return
 		}
-
 		switch op.Operator {
 		case "q":
 			csStack = append(csStack, csState{fillCSSet, strokeCSSet})
@@ -537,8 +541,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 			if len(csStack) > 0 {
 				prev := csStack[len(csStack)-1]
 				csStack = csStack[:len(csStack)-1]
-				fillCSSet = prev.fill
-				strokeCSSet = prev.stroke
+				fillCSSet, strokeCSSet = prev.fill, prev.stroke
 			}
 		case "g", "G":
 			usage.gray = true
@@ -561,25 +564,24 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 			} else {
 				strokeCSSet = true
 			}
-		case "cs":
-			fillCSSet = true
-			if len(op.Operands) >= 1 {
-				if name, ok := op.Operands[0].(ast.PdfName); ok {
-					markDeviceCS(string(name), &usage)
-				}
+		case "cs", "CS":
+			if op.Operator == "cs" {
+				fillCSSet = true
+			} else {
+				strokeCSSet = true
 			}
-		case "CS":
-			strokeCSSet = true
 			if len(op.Operands) >= 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
-					markDeviceCS(string(name), &usage)
+					markDeviceCS(string(name), usage)
+					if referencedCSNames != nil {
+						referencedCSNames[string(name)] = true
+					}
 				}
 			}
 		case "sc", "scn":
 			fillCSSet = true
 		case "SC", "SCN":
 			strokeCSSet = true
-		// Painting operators: if no CS has been set, implicit DeviceGray.
 		case "f", "F", "f*":
 			if !fillCSSet {
 				usage.gray = true
@@ -593,21 +595,18 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 				usage.gray = true
 			}
 		case "Tj", "TJ", "'", "\"":
-			// Text uses fill CS by default (Tr 0).
+			// Text is painted with the fill colour (text rendering mode 0).
 			if !fillCSSet {
 				usage.gray = true
 			}
 		case "Do":
-			// Track XObject names referenced by Do operators.
 			if len(op.Operands) >= 1 {
-				if name, ok := op.Operands[0].(ast.PdfName); ok {
+				if name, ok := op.Operands[0].(ast.PdfName); ok && referencedXObjects != nil {
 					referencedXObjects[string(name)] = true
 				}
 			}
 		}
 	}
-
-	return usage, referencedXObjects
 }
 
 // scanInlineImageCSOps checks parsed BI operations for inline image colour
