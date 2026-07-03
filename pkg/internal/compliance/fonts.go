@@ -844,6 +844,17 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 		if fd != nil {
 			fontData := extractFontProgramData(ctx, doc, fd)
 			if fontData != nil {
+				// A symbolic TrueType font (no /Encoding) resolves codes through
+				// its built-in (3,0)/(1,0) cmap, not glyph names (ISO 32000-1
+				// §9.6.6.4), so the glyph-name path below (which would read the
+				// absent encoding as every code mapping to .notdef) does not apply.
+				// A subset symbolic font routinely maps its unused codes to
+				// .notdef, and veraPDF does not treat that as a reference from a
+				// text-showing operator, so litho declines to report it too rather
+				// than emit a false positive.
+				if fontDict["Encoding"] == nil && isSymbolicFont(ctx, doc, fd) {
+					return nil
+				}
 				enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 				// A TrueType simple font resolves a glyph through its /Encoding
 				// first (PDF 9.6.6.4): charCode 0 used but absent from an

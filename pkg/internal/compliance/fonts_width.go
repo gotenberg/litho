@@ -72,6 +72,19 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
 	charCodeToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 
+	// A symbolic TrueType font carries no PDF /Encoding; its single-byte codes
+	// resolve through the embedded (3,0)/(1,0) cmap (ISO 32000-1 §9.6.6.4), not
+	// through glyph names. When that cmap is absent the codes are unresolvable,
+	// so an empty (non-nil) map makes the width and presence checks skip them
+	// rather than misreport against an empty encoding or an identity GID.
+	if charCodeToGID == nil && isSymbolicFont(ctx, doc, fd) && fontDict["Encoding"] == nil {
+		sym := typography.ExtractSymbolCharCodeToGID(ctx, fontData)
+		if sym == nil {
+			sym = map[uint16]uint16{}
+		}
+		return binaryWidths, unitsPerEm, sym, true
+	}
+
 	// For fonts without a cmap (Type1/CFF), build charCode→GID via glyph names:
 	// PDF encoding maps charCode→glyphName; font program maps GID→glyphName.
 	if charCodeToGID == nil {

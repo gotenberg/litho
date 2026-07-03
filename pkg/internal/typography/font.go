@@ -1086,6 +1086,23 @@ func ExtractCharCodeToGID(ctx context.Context, fontData []byte) map[uint16]uint1
 	return nil
 }
 
+// ExtractSymbolCharCodeToGID returns a character-code → GID mapping for a
+// symbolic TrueType font, resolved through its (3,0) Microsoft Symbol or (1,0)
+// Macintosh cmap subtable (ISO 32000-1 §9.6.6.4). Returns nil for non-TrueType
+// programs or when the font carries neither subtable.
+func ExtractSymbolCharCodeToGID(ctx context.Context, fontData []byte) map[uint16]uint16 {
+	if len(fontData) < 4 {
+		return nil
+	}
+	sig := fontData[:4]
+	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
+		string(sig) == "true" || string(sig) == "OTTO" {
+		m, _ := truetype.SymbolCharCodeToGID(ctx, fontData)
+		return m
+	}
+	return nil
+}
+
 // ExtractGlyphNames returns a GID → glyph name mapping from a font program.
 // For TrueType/OpenType: uses the post table.
 // For CFF: uses the charset + string table.

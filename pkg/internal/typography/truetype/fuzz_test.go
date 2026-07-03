@@ -27,5 +27,6 @@ func FuzzTrueType(f *testing.F) {
 		_, _ = CharCodeToGID(ctx, data)
 		_, _ = GlyphToUnicode(ctx, data)
 		_, _ = PostGlyphNames(ctx, data)
+		_, _ = SymbolCharCodeToGID(ctx, data)
 	})
 }
