@@ -59,7 +59,7 @@ func ExtractEncoding(data []byte) map[byte]string {
 	}
 
 	// Parse charset: GID → SID.
-	sids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
+	sids, err := resolveCharset(data, int(info.charsetOffset), numGlyphs)
 	if err != nil {
 		return nil
 	}
@@ -233,7 +233,7 @@ func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	}
 
 	// Parse charset: GID → SID mapping.
-	sids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
+	sids, err := resolveCharset(data, int(info.charsetOffset), numGlyphs)
 	if err != nil {
 		return nil, fmt.Errorf("charset: %w", err)
 	}
@@ -307,7 +307,7 @@ func GlyphNames(ctx context.Context, data []byte) (map[uint16]string, error) {
 		return nil, nil
 	}
 
-	sids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
+	sids, err := resolveCharset(data, int(info.charsetOffset), numGlyphs)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +362,7 @@ func ValidCIDs(data []byte) (map[uint16]bool, error) {
 	}
 
 	// In CID-keyed CFF, the charset entries are CIDs (not SIDs).
-	cids, err := parseCharset(data, int(info.charsetOffset), numGlyphs)
+	cids, err := resolveCharset(data, int(info.charsetOffset), numGlyphs)
 	if err != nil {
 		return nil, err
 	}
@@ -551,9 +551,10 @@ func parseTopDict(data []byte) topDictInfo {
 // GID 0 is always .notdef (SID 0).
 func parseCharset(data []byte, pos int, numGlyphs int) ([]int, error) {
 	if pos < 0 || pos >= len(data) {
-		// Predefined charsets: 0=ISOAdobe, 1=Expert, 2=ExpertSubset.
-		// For our purposes, return empty. These map to standard glyph names
-		// which are already in the encoding tables.
+		// Predefined charset offsets (0/1/2) are resolved by [resolveCharset]
+		// before reaching here, so pos is a byte offset into data. A pos past
+		// the end is a malformed offset: return no charset rather than read
+		// out of bounds.
 		return nil, nil
 	}
 
@@ -909,7 +910,7 @@ func CIDWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	if !info.isCID {
 		return byGID, nil
 	}
-	gidToCID, err := parseCharset(data, int(info.charsetOffset), len(byGID))
+	gidToCID, err := resolveCharset(data, int(info.charsetOffset), len(byGID))
 	if err != nil || gidToCID == nil {
 		return byGID, nil //nolint:nilerr // same fallback
 	}

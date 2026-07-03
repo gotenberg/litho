@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"slices"
 	"testing"
 )
 
@@ -350,14 +351,96 @@ func TestParseCharset_Format2(t *testing.T) {
 	}
 }
 
-func TestParseCharset_PredefinedReturnsNil(t *testing.T) {
-	// Charset offset 0 (predefined ISOAdobe) is signaled by pos == len(data).
+func TestParseCharset_OutOfBoundsReturnsNil(t *testing.T) {
+	// parseCharset decodes an in-font charset table at a byte offset. A pos at
+	// or past the end of data is a malformed offset (predefined charsets are
+	// resolved by resolveCharset before reaching here); it returns no charset
+	// rather than reading out of bounds.
 	sids, err := parseCharset(nil, 0, 3)
 	if err != nil {
 		t.Fatalf("parseCharset: %v", err)
 	}
 	if sids != nil {
-		t.Errorf("expected nil for predefined charset")
+		t.Errorf("expected nil for an out-of-bounds charset offset")
+	}
+}
+
+func TestResolveCharset_Predefined(t *testing.T) {
+	// A charset offset of 0/1/2 selects a predefined charset (Adobe TN #5176
+	// Appendix C) regardless of the data bytes. Pass a non-empty data slice
+	// whose byte 0 is a valid charset format (0) to prove the offset, not the
+	// data, drives the predefined dispatch.
+	data := []byte{0, 0x00, 0x05}
+
+	// ISOAdobe (0): identity, GID i -> SID i.
+	iso, err := resolveCharset(data, 0, 5)
+	if err != nil {
+		t.Fatalf("resolveCharset ISOAdobe: %v", err)
+	}
+	if want := []int{0, 1, 2, 3, 4}; !slices.Equal(iso, want) {
+		t.Errorf("ISOAdobe: got %v, want %v", iso, want)
+	}
+
+	// Expert (1) and ExpertSubset (2): GID 1 is space (SID 1); GID 2 is the
+	// first expert-specific glyph.
+	exp, err := resolveCharset(data, 1, 3)
+	if err != nil {
+		t.Fatalf("resolveCharset Expert: %v", err)
+	}
+	if want := []int{0, 1, 229}; !slices.Equal(exp, want) { // .notdef, space, exclamsmall
+		t.Errorf("Expert: got %v, want %v", exp, want)
+	}
+	sub, err := resolveCharset(data, 2, 3)
+	if err != nil {
+		t.Fatalf("resolveCharset ExpertSubset: %v", err)
+	}
+	if want := []int{0, 1, 231}; !slices.Equal(sub, want) { // .notdef, space, dollaroldstyle
+		t.Errorf("ExpertSubset: got %v, want %v", sub, want)
+	}
+
+	// A GID beyond a predefined table's length carries no name (SID 0).
+	over, err := resolveCharset(data, 2, len(expertSubsetCharsetSIDs)+2)
+	if err != nil {
+		t.Fatalf("resolveCharset overflow: %v", err)
+	}
+	if over[len(expertSubsetCharsetSIDs)] != 0 || over[len(expertSubsetCharsetSIDs)+1] != 0 {
+		t.Errorf("surplus glyphs should map to SID 0, got %v", over[len(expertSubsetCharsetSIDs):])
+	}
+}
+
+// TestPredefinedCharsets pins the generated Expert/ExpertSubset SID tables so a
+// transcription slip surfaces: the lengths match Appendix C, every SID resolves
+// to a standard string, and known anchor glyphs land where the spec places them.
+func TestPredefinedCharsets(t *testing.T) {
+	if len(expertCharsetSIDs) != 166 {
+		t.Errorf("Expert charset: got %d glyphs, want 166", len(expertCharsetSIDs))
+	}
+	if len(expertSubsetCharsetSIDs) != 87 {
+		t.Errorf("ExpertSubset charset: got %d glyphs, want 87", len(expertSubsetCharsetSIDs))
+	}
+	st := &stringTable{}
+	for name, table := range map[string][]int{"Expert": expertCharsetSIDs[:], "ExpertSubset": expertSubsetCharsetSIDs[:]} {
+		for gid, sid := range table {
+			if sid < 0 || sid >= len(cffStandardStrings) {
+				t.Errorf("%s GID %d: SID %d out of standard-string range", name, gid, sid)
+				continue
+			}
+			if st.get(sid) == "" {
+				t.Errorf("%s GID %d: SID %d resolves to empty name", name, gid, sid)
+			}
+		}
+		if got := st.get(table[0]); got != ".notdef" {
+			t.Errorf("%s GID 0: got %q, want .notdef", name, got)
+		}
+		if got := st.get(table[1]); got != "space" {
+			t.Errorf("%s GID 1: got %q, want space", name, got)
+		}
+	}
+	if got := st.get(expertCharsetSIDs[2]); got != "exclamsmall" {
+		t.Errorf("Expert GID 2: got %q, want exclamsmall", got)
+	}
+	if got := st.get(expertSubsetCharsetSIDs[2]); got != "dollaroldstyle" {
+		t.Errorf("ExpertSubset GID 2: got %q, want dollaroldstyle", got)
 	}
 }
 
