@@ -1,6 +1,8 @@
 package encodings
 
 import (
+	"maps"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -278,14 +280,37 @@ var (
 	runeToGlyphOnce sync.Once
 )
 
+// canonicalGlyphForRune pins the reverse mapping for the runes that more than
+// one name in [GlyphToRune] shares, to the Adobe Glyph List primary name. Without
+// it the reverse map's winner would depend on map iteration order (nondeterministic)
+// and could resolve to a non-standard alias (e.g. "circlecopyrt") that an embedded
+// font's charset does not contain, producing a spurious "glyph not present" report.
+var canonicalGlyphForRune = map[rune]string{
+	0x00A9: "copyright",  // not circlecopyrt (a TeX name)
+	0x0130: "Idotaccent", // not Idot
+	0x20AC: "Euro",       // not euro
+}
+
 // RuneToGlyph returns the Adobe standard glyph name for a given rune.
 // If no mapping exists, it returns the Unicode name form "uniXXXX".
 func RuneToGlyph(r rune) string {
 	runeToGlyphOnce.Do(func() {
 		runeToGlyph = make(map[rune]string, len(GlyphToRune))
-		for name, ru := range GlyphToRune {
-			runeToGlyph[ru] = name
+		// Build deterministically: iterate names in sorted order and keep the
+		// first winner per rune, so a rune shared by several names always
+		// resolves to the same one regardless of map iteration order.
+		names := make([]string, 0, len(GlyphToRune))
+		for name := range GlyphToRune {
+			names = append(names, name)
 		}
+		sort.Strings(names)
+		for _, name := range names {
+			if _, exists := runeToGlyph[GlyphToRune[name]]; !exists {
+				runeToGlyph[GlyphToRune[name]] = name
+			}
+		}
+		// Pin the Adobe Glyph List primary name for the shared runes.
+		maps.Copy(runeToGlyph, canonicalGlyphForRune)
 	})
 	if name, ok := runeToGlyph[r]; ok {
 		return name
