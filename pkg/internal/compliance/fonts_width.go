@@ -385,15 +385,17 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		return nil
 	}
 
-	// Extract FontMatrix scale factor. Type3 FontMatrix is typically
-	// [0.001 0 0 0.001 0 0], meaning glyph coordinates are in 1/1000 units
-	// and widths from d0/d1 are in glyph space. The PDF /Widths values are
-	// in text space (1/1000 of user space unit). Scale = FontMatrix[0] * 1000.
+	// Both the /Widths entries and the d0/d1 wx operands of a Type 3 font are
+	// expressed in glyph space (ISO 32000-1 §9.6.5.4). The FontMatrix maps
+	// glyph space to text space; normalise BOTH widths to text space (1/1000
+	// units) before comparing, so the 1-unit tolerance is applied in the same
+	// space veraPDF uses. Scaling only one operand (the original bug) turned a
+	// consistent font into a spurious ~x1000 mismatch. Standard FontMatrix
+	// [0.001 0 0 0.001 0 0] yields scale 1; a [1 0 0 -1 0 0] matrix yields 1000.
 	fmScale := 1.0
 	if fmArr, err := document.ResolveArray(ctx, doc, fontDict["FontMatrix"]); err == nil && len(fmArr) >= 1 {
-		sx := document.Float(fmArr[0])
-		if sx > 0 {
-			fmScale = sx * 1000.0
+		if sx := document.Float(fmArr[0]); sx != 0 {
+			fmScale = math.Abs(sx) * 1000.0
 		}
 	}
 
@@ -438,11 +440,11 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		if !ok {
 			continue
 		}
-		pdfWidth := document.Float(wObj)
-		expectedWidth := cpWidth * fmScale
-		if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
+		pdfWidth := document.Float(wObj) * fmScale
+		glyphWidth := cpWidth * fmScale
+		if math.Abs(pdfWidth-glyphWidth) > widthTolerance {
 			return failf(rule, "font %s on page %d: char %d (%s) width mismatch (PDF=%.1f, glyph=%.1f)",
-				fontName, pageNum, int(firstChar)+i, glyphName, pdfWidth, expectedWidth)
+				fontName, pageNum, int(firstChar)+i, glyphName, pdfWidth, glyphWidth)
 		}
 	}
 	return nil
