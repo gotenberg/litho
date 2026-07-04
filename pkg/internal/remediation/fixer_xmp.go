@@ -27,9 +27,13 @@ func matchXMP(v compliance.Violation) bool {
 }
 
 func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+	// A trailer with no /Root indirect reference cannot be patched in place
+	// (there is no catalog object number to write back to). Skip rather than
+	// error, matching every other catalog-dependent fixer (fixCatalogCleanup,
+	// fixXMPSchema): aborting here discarded the whole document's remediation.
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
-		return nil, fmt.Errorf("trailer missing /Root")
+		return nil, nil
 	}
 	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
 	if catalogDict == nil {
