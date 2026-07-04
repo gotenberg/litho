@@ -451,8 +451,17 @@ func checkFontNameUTF8(_ context.Context, _ *document.Document, fontDict ast.Pdf
 	return nil
 }
 
-// checkNotdefInDifferences checks /Encoding /Differences for explicit ".notdef" entries.
-func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Violation {
+// checkNotdefInDifferences reports a .notdef entry in /Encoding /Differences
+// only when the character code it maps is actually shown by a text operator.
+// ISO 19005-2 §6.2.11.8 forbids a reference to .notdef "from any of the text
+// showing operators"; veraPDF is usage-driven here. Keying off the mere
+// presence of .notdef in the array (a common font-setup artifact for slots the
+// content never draws) produced false positives, so the check requires the
+// mapped code to appear in usage.
+func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+	if usage == nil {
+		return nil
+	}
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
 		return nil
@@ -461,17 +470,20 @@ func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontD
 	if err != nil || encDict == nil {
 		return nil
 	}
-	diffObj, ok := encDict["Differences"]
-	if !ok {
-		return nil
-	}
-	diffArr, err := document.ResolveArray(ctx, doc, diffObj)
+	diffArr, err := document.ResolveArray(ctx, doc, encDict["Differences"])
 	if err != nil || diffArr == nil {
 		return nil
 	}
+	code := 0
 	for _, item := range diffArr {
-		if n, ok := item.(ast.PdfName); ok && n == ".notdef" {
-			return failf(rule, "font %s on page %d: .notdef glyph in /Differences", fontName, pageNum)
+		switch v := item.(type) {
+		case ast.PdfInt:
+			code = int(v)
+		case ast.PdfName:
+			if v == ".notdef" && code >= 0 && code <= 255 && usage.charCodes[byte(code)] { //nolint:gosec // G115: code is bounded to 0..255 by the guard.
+				return failf(rule, "font %s on page %d: charCode %d maps to .notdef via /Differences", fontName, pageNum, code)
+			}
+			code++
 		}
 	}
 	return nil

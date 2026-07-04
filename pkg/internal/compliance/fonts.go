@@ -805,13 +805,13 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 		return nil
 	}
 
-	// Check /Encoding /Differences for explicit ".notdef" entries.
-	if r := checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, rule); r != nil {
-		return r
-	}
-
 	if usage == nil || len(usage.charCodes) == 0 {
 		return nil
+	}
+
+	// Check /Encoding /Differences for a used ".notdef" entry.
+	if r := checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, rule, usage); r != nil {
+		return r
 	}
 
 	subtype := fontSubtype(ctx, doc, fontDict)
