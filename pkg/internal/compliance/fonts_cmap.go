@@ -126,6 +126,17 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 		return nil
 	}
 
+	// CIDToGIDMap maps CIDs into an embedded TrueType program's glyph space, so
+	// the requirement applies only when a font program is embedded. veraPDF's
+	// test carries a "containsFontFile == false" escape (ISO 32000-1 §9.7.4,
+	// Table 117). A non-embedded CIDFontType2 has nothing to map and instead
+	// fails the embedding rule (§6.2.11.4.1); flagging a missing CIDToGIDMap too
+	// is a false positive.
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
+	if fd == nil || !isFontEmbedded(ctx, doc, fd) {
+		return nil
+	}
+
 	// PDF/A-1 6.3.3.2 t1 carries a renderingMode == 3 escape: a font used only
 	// invisibly is exempt. Parts 2-4 instead key the escape on font embedding,
 	// handled by the callers that already gate on visibility.
