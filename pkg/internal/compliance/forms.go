@@ -516,11 +516,14 @@ func needAppearancesRule(part int) Rule {
 }
 
 // fieldAppearanceRule selects the field appearance rule based on PDF/A part.
+// fieldAppearanceRule returns the rule for a form field lacking an appearance
+// dictionary. PDF/A-1 has a dedicated §6.9 form-field requirement; PDF/A-2+
+// instead require the appearance on the widget annotation itself (§6.3.3), so
+// the field-level finding is reported under that clause rather than the
+// PDF/A-1 §6.9 rule.
 func fieldAppearanceRule(part int) Rule {
-	switch part {
-	case 1:
-		return Rule_19005_1_6_9_t02
-	default:
+	if part == 1 {
 		return Rule_19005_1_6_9_t02
 	}
+	return apRequiredRule(part)
 }
