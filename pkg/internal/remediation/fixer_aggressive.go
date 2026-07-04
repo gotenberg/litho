@@ -332,7 +332,16 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject, newData []byte, pageNum int) error {
 	ref, isRef := contentsObj.(ast.PdfIndirectRef)
 	if !isRef {
-		return fmt.Errorf("page %d /Contents is not an indirect reference", pageNum)
+		// A direct /Contents array [s1 s2 ...] holds the content across several
+		// indirect streams. Write the combined new content to the first stream
+		// and empty the rest: the concatenation is unchanged and the page dict's
+		// array keeps addressing the same objects, so no page-dict rewrite is
+		// needed. Without this a direct-array /Contents aborts the whole
+		// document's remediation.
+		if arr, ok := contentsObj.(ast.PdfArray); ok {
+			return replaceContentArrayStreams(alloc, arr, newData, pageNum)
+		}
+		return fmt.Errorf("page %d /Contents is not an indirect reference or array", pageNum)
 	}
 
 	// Decide stream-vs-array alloc-first: an earlier fixer (auto-tag,
@@ -364,6 +373,30 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		alloc.AllocAt(ref.ObjectNum, newRef)
 	default:
 		return fmt.Errorf("page %d /Contents has unexpected type %T", pageNum, resolved)
+	}
+	return nil
+}
+
+// replaceContentArrayStreams rewrites a direct /Contents array: the combined
+// new content goes to the first indirect stream element and every subsequent
+// stream element is emptied. Concatenating the streams then yields exactly
+// newData, so page rendering is preserved without touching the page dictionary.
+func replaceContentArrayStreams(alloc *writer.ObjAllocator, arr ast.PdfArray, newData []byte, pageNum int) error {
+	wrote := false
+	for _, elem := range arr {
+		eref, ok := elem.(ast.PdfIndirectRef)
+		if !ok {
+			continue
+		}
+		if !wrote {
+			alloc.AllocAt(eref.ObjectNum, ast.NewStream(ast.PdfDict{}, newData))
+			wrote = true
+			continue
+		}
+		alloc.AllocAt(eref.ObjectNum, ast.NewStream(ast.PdfDict{}, []byte{}))
+	}
+	if !wrote {
+		return fmt.Errorf("page %d /Contents array has no stream references", pageNum)
 	}
 	return nil
 }
