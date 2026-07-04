@@ -390,7 +390,11 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	}
 
 	// Test 3 & 4: Validate /N value type based on annotation subtype and field type.
-	results = append(results, checkNValueType(ctx, doc, nObj, isWidget, ft, part, loc)...)
+	// The Btn subdictionary check (test 3) applies only when the appearance dict
+	// contains only /N; an appearance dict carrying extra keys is already
+	// reported by test 2, and veraPDF's test 3 carries a matching "AP != N"
+	// escape that suppresses the /N-type check in that case.
+	results = append(results, checkNValueType(ctx, doc, nObj, isWidget, ft, part, loc, len(ap) == 1)...)
 
 	return results
 }
@@ -452,9 +456,12 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 }
 
 // checkNValueType validates the type of the /N value in the appearance dictionary.
-// For Widget annotations with FT=Btn, /N must be a subdictionary (test 3).
-// For all other annotations, /N must be a stream (test 4).
-func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string) []Violation {
+// For Widget annotations with FT=Btn whose appearance dict contains only /N,
+// /N must be a subdictionary keyed by appearance state (test 3). For all other
+// annotations, /N must be a stream (test 4). apOnlyN reports whether the
+// appearance dict contains only the /N key: veraPDF skips test 3 when it does
+// not, since test 2 already flags the extra keys.
+func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string, apOnlyN bool) []Violation {
 	resolved, err := document.ResolveObject(ctx, doc, nObj)
 	if err != nil {
 		doc.Logger.Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
@@ -462,6 +469,10 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 	}
 
 	if isWidget && ft == "Btn" {
+		// Test 3 applies only to a clean appearance dict (only /N).
+		if !apOnlyN {
+			return nil
+		}
 		// Test 3: /N must be an appearance subdictionary (PdfDict).
 		if _, ok := resolved.(ast.PdfDict); !ok {
 			rule := nSubdictRule(part)
