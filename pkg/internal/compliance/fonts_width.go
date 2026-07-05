@@ -92,12 +92,7 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 		if glyphNames != nil {
 			enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 			if len(enc) > 0 {
-				nameToGID := make(map[string]uint16, len(glyphNames))
-				for gid, name := range glyphNames {
-					if _, exists := nameToGID[name]; !exists {
-						nameToGID[name] = gid
-					}
-				}
+				nameToGID := buildNameToGID(glyphNames)
 				charCodeToGID = make(map[uint16]uint16)
 				for code, name := range enc {
 					if name == ".notdef" || name == "" {
@@ -113,9 +108,43 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 				}
 			}
 		}
+	} else if fontDict["Encoding"] != nil || !isSymbolicFont(ctx, doc, fd) {
+		// A non-symbolic TrueType font (or one with an explicit /Encoding)
+		// resolves a code through its glyph name (ISO 32000-1 §9.6.6.4), not a
+		// raw cmap lookup, which indexes whatever subtable the program exposes
+		// and can pick the wrong glyph: a MacRoman code such as 0xD1=emdash read
+		// against a Unicode cmap yields U+00D1=Ntilde. Override the cmap-derived
+		// GID with the name-derived one wherever the program names the glyph.
+		// Codes whose glyph name the program does not expose keep the cmap value
+		// rather than being forced to .notdef, so glyph-presence is unaffected.
+		glyphNames := typography.ExtractGlyphNames(ctx, fontData)
+		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+		if glyphNames != nil && len(enc) > 0 {
+			nameToGID := buildNameToGID(glyphNames)
+			for code, name := range enc {
+				if name == ".notdef" || name == "" {
+					continue
+				}
+				if gid, ok := nameToGID[name]; ok {
+					charCodeToGID[uint16(code)] = gid
+				}
+			}
+		}
 	}
 
 	return binaryWidths, unitsPerEm, charCodeToGID, true
+}
+
+// buildNameToGID inverts a GID→glyphName table into a glyphName→GID lookup,
+// keeping the lowest GID for a name that labels several glyphs.
+func buildNameToGID(glyphNames map[uint16]string) map[string]uint16 {
+	nameToGID := make(map[string]uint16, len(glyphNames))
+	for gid, name := range glyphNames {
+		if _, exists := nameToGID[name]; !exists {
+			nameToGID[name] = gid
+		}
+	}
+	return nameToGID
 }
 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
