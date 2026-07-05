@@ -1276,6 +1276,14 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 	}
 }
 
+// ExtractCFFEncodingNames reads the built-in encoding from a CFF (Type1C /
+// FontFile3) font program and returns a map of charCode → glyphName, or nil
+// when the program carries no encoding. It is the CFF analogue of
+// [ExtractType1EncodingNames].
+func ExtractCFFEncodingNames(fontData []byte) map[byte]string {
+	return cff.ExtractEncoding(fontData)
+}
+
 // ExtractType1EncodingNames reads the built-in encoding from a raw Type 1
 // font program (/FontFile stream) and returns a map of charCode → glyphName.
 // Returns nil if the encoding section cannot be found or parsed.

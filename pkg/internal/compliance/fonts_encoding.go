@@ -361,6 +361,22 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 				}
 			}
 		}
+
+		// Priority 3: CFF (Type1C /FontFile3) font program built-in encoding.
+		// A subset CFF with no PDF /Encoding still carries its own code→glyph
+		// mapping; without it the code cannot be resolved and callers fall back
+		// to an identity GID that reads the wrong glyph's metrics.
+		if fontFile3Obj, ok := fd["FontFile3"]; ok {
+			stream, err := document.ResolveStream(ctx, doc, fontFile3Obj)
+			if err == nil {
+				data, err := doc.DecodeStream(ctx, stream)
+				if err == nil {
+					if enc := typography.ExtractCFFEncodingNames(data); len(enc) > 0 {
+						return enc
+					}
+				}
+			}
+		}
 	}
 
 	return nil
