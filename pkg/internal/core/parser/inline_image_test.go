@@ -63,6 +63,27 @@ func TestSkipInlineImage_FalseEIInData(t *testing.T) {
 	}
 }
 
+func TestSkipInlineImage_FalseEIFollowedByNUL(t *testing.T) {
+	// FlateDecoded inline image data whose bytes contain "\rEI\x00" — a
+	// false terminator, because a genuine EI is followed by SPACE/LF/CR,
+	// never NUL. The real terminator "\nEI " comes later. Regression for
+	// spurious ISO 19005 §6.2.2 undefined-operator violations, where litho
+	// stopped at the false EI and lexed the trailing image bytes
+	// (\x82\xbb\x0f\xf8) as a content operator.
+	data := []byte("/W 20 /H 1 /BPC 8 /F /Fl ID \x78\x9c\x63\x01\rEI\x00\x82\xbb\x0f\xf8\nEI Q")
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	p := NewParser(lex)
+
+	if err := p.SkipInlineImage(context.Background()); err != nil {
+		t.Fatalf("SkipInlineImage failed: %v", err)
+	}
+
+	tok, _ := p.Peek(0)
+	if tok.Type != lexer.TokenKeyword || tok.Value != "Q" {
+		t.Errorf("expected Q keyword after real EI, got %v %q", tok.Type, tok.Value)
+	}
+}
+
 func TestSkipInlineImage_EmptyDict(t *testing.T) {
 	// Minimal inline image with no dictionary entries.
 	data := []byte("ID \x00 \nEI Q")

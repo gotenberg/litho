@@ -901,6 +901,8 @@ func scanToEI(reader io.Reader, ctx context.Context, ascii85 bool) error {
 	type readByteFunc interface {
 		ReadByte() (byte, error)
 		UnreadByte() error
+		Position() int64
+		ReaderAt() io.ReaderAt
 	}
 	r := reader.(readByteFunc)
 
@@ -946,6 +948,7 @@ func scanToEI(reader io.Reader, ctx context.Context, ascii85 bool) error {
 		case 2:
 			switch {
 			case c == 'I':
+				eiEnd := r.Position() // offset just past "EI", before reading the separator
 				next, err := r.ReadByte()
 				if err != nil {
 					if err == io.EOF {
@@ -954,6 +957,19 @@ func scanToEI(reader io.Reader, ctx context.Context, ascii85 bool) error {
 					return err
 				}
 				accepted := isInlineWS(next) || (!ascii85 && isInlineDelim(next))
+				// A NUL byte after "EI" is ambiguous: some producers terminate
+				// a real inline image with EI followed by NUL padding, but NUL
+				// also occurs inside binary image data (notably FlateDecoded
+				// streams), where the "EI" is coincidental. Disambiguate by the
+				// bytes that follow: content-stream text after a real EI,
+				// versus more binary after a false one. Matches the lookahead
+				// in PDF.js findDefaultInlineStreamEnd. Accepting a false EI
+				// stopped the scan early and lexed trailing image bytes as
+				// content operators (spurious ISO 19005 §6.2.2 undefined
+				// operators).
+				if accepted && next == 0x00 && !eiFollowedByContent(r.ReaderAt(), eiEnd) {
+					accepted = false
+				}
 				if accepted {
 					_ = r.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 					return nil
@@ -971,6 +987,37 @@ func scanToEI(reader io.Reader, ctx context.Context, ascii85 bool) error {
 			}
 		}
 	}
+}
+
+// eiFollowedByContent reports whether the bytes at offset at (immediately
+// after a candidate EI marker) look like content-stream text rather than
+// binary image data. A real EI is followed by the next operator or its
+// operands, which are whitespace and printable ASCII; a coincidental "EI"
+// inside binary image data is followed by more binary. Only whitespace and
+// printable ASCII count as content, with a lone NUL tolerated (some producers
+// pad with a single NUL); a NUL run or any byte outside 0x20-0x7E signals
+// binary. Called only for the ambiguous EI+NUL case, so it never alters the
+// common EI+space/newline path. An empty read (EI at EOF) is a valid
+// terminator.
+func eiFollowedByContent(ra io.ReaderAt, at int64) bool {
+	const window = 8 // small: enough to spot binary, short of any following string operand
+	var buf [window]byte
+	n, _ := ra.ReadAt(buf[:], at)
+	b := buf[:n]
+	for i := range b {
+		c := b[i]
+		switch {
+		case c == 0x00:
+			if i+1 < len(b) && b[i+1] == 0x00 {
+				return false // consecutive NULs: binary image data
+			}
+		case c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D || c == 0x20:
+		case c >= 0x21 && c <= 0x7E:
+		default:
+			return false // a byte outside printable ASCII: binary image data
+		}
+	}
+	return true
 }
 
 func isInlineDelim(c byte) bool {
