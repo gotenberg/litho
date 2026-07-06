@@ -958,13 +958,11 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 		cids = make(map[uint16]bool)
 		for _, s := range usage.rawStrings {
 			data := []byte(s)
-			// Decode the valid 2-byte codes. A trailing odd byte is an
-			// incomplete code, not a glyph reference: veraPDF does not treat
-			// such a partial byte as a .notdef reference (§6.2.11.8), and
-			// documents that write 1-byte codes into a 2-byte font still render,
-			// so litho ignores the dangling byte rather than flag a false
-			// .notdef for the whole font. A fully decoded code that resolves to
-			// CID 0 is still reported by the caller's CID-0 check.
+			// An odd-length string under a 2-byte CMap leaves a trailing byte
+			// that cannot form a CID; the renderer draws .notdef.
+			if len(data)%2 != 0 {
+				return nil, true, true
+			}
 			for i := 0; i+1 < len(data); i += 2 {
 				cids[uint16(data[i])<<8|uint16(data[i+1])] = true
 			}

@@ -25,17 +25,11 @@ func TestCollectType0CIDs(t *testing.T) {
 		}
 	})
 
-	t.Run("identity odd length ignores trailing byte", func(t *testing.T) {
+	t.Run("identity odd length is notdef", func(t *testing.T) {
 		t.Parallel()
-		// A trailing odd byte is an incomplete code, not a glyph reference.
-		// veraPDF does not treat it as a .notdef reference, so litho decodes
-		// the valid 2-byte prefix (0x0005) and ignores the dangling 0x01.
-		cids, notdef, ok := collectType0CIDs("Identity-V", nil, usage(0x00, 0x05, 0x01))
-		if !ok || notdef {
-			t.Errorf("odd-length trailing byte must not be notdef: ok=%v notdef=%v", ok, notdef)
-		}
-		if !cids[0x0005] {
-			t.Errorf("expected the valid 2-byte prefix 0x0005 to decode, got %v", cids)
+		_, notdef, ok := collectType0CIDs("Identity-V", nil, usage(0x00, 0x05, 0x01))
+		if !ok || !notdef {
+			t.Errorf("odd-length string under a 2-byte CMap must be notdef: ok=%v notdef=%v", ok, notdef)
 		}
 	})
 
