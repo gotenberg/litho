@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -251,8 +252,10 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 		}
 
 		dictBytes := data[offset:idIdx]
-		filterVal := extractInlineImageFilter(dictBytes)
-		if filterVal != "" {
+		for _, filterVal := range extractInlineImageFilters(dictBytes) {
+			if filterVal == "" {
+				continue
+			}
 			var forbidden bool
 			if part == 1 {
 				// PDF/A-1 forbids only the named filters (no "not in Table 6"
@@ -269,6 +272,7 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 			if forbidden {
 				results = append(results, failf(inlineImageFilterRule(part),
 					"page %d: inline image uses forbidden filter %q", pageNum, filterVal)...)
+				break
 			}
 		}
 
@@ -300,22 +304,44 @@ func findInlineImageID(data []byte, start int) int {
 // extractInlineImageFilter extracts the filter value from inline image
 // dictionary bytes. It looks for /F or /Filter keys and returns the
 // corresponding name value.
-func extractInlineImageFilter(dictBytes []byte) string {
+func extractInlineImageFilters(dictBytes []byte) []string {
 	// Tokenize the dictionary bytes looking for /F or /Filter keys.
-	// Inline image dictionaries use abbreviated key names.
+	// Inline image dictionaries use abbreviated key names. The value may be a
+	// single name (/AHx) or a filter-chain array ([/AHx /Fl]); both are legal.
 	tokens := tokenizeInlineDict(dictBytes)
 	for i := 0; i < len(tokens)-1; i++ {
 		key := tokens[i]
-		if key == "/F" || key == "/Filter" {
-			val := tokens[i+1]
-			// Strip leading '/' from name values.
-			if len(val) > 0 && val[0] == '/' {
-				return val[1:]
-			}
-			return val
+		if key != "/F" && key != "/Filter" {
+			continue
 		}
+		val := tokens[i+1]
+		if !strings.HasPrefix(val, "[") {
+			return []string{inlineFilterName(val)}
+		}
+		// Filter-chain array: collect the /Name tokens up to the closing ']'.
+		// The '[' may be its own token or glued to the first name.
+		var names []string
+		if rest := inlineFilterName(strings.TrimPrefix(val, "[")); rest != "" {
+			names = append(names, rest)
+		}
+		for j := i + 2; j < len(tokens); j++ {
+			if strings.HasPrefix(tokens[j], "]") {
+				break
+			}
+			if n := inlineFilterName(tokens[j]); n != "" {
+				names = append(names, n)
+			}
+		}
+		return names
 	}
-	return ""
+	return nil
+}
+
+// inlineFilterName normalises an inline-image filter token to a bare filter
+// name: it drops a leading '/' and any trailing ']' left by array tokenization.
+func inlineFilterName(tok string) string {
+	tok = strings.TrimSuffix(tok, "]")
+	return strings.TrimPrefix(tok, "/")
 }
 
 // tokenizeInlineDict performs a simple tokenization of inline image dictionary
