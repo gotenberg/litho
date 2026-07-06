@@ -711,11 +711,25 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		}
 		loc := fmt.Sprintf("form field %d", i)
 
+		// A /Kids entry that is a widget annotation without its own field
+		// identity (no /FT and no /T) is a pure widget, not a form field:
+		// ISO 32000-1 §12.7.3.1 lets a field's appearance be carried by child
+		// widget annotations that share the field's name. veraPDF scopes §6.4.1
+		// t2 to the PDFormField object, so such a widget's /AA is a t1
+		// (PDWidgetAnnot) violation only. A terminal field merged with its
+		// widget keeps /FT (or /T), so it stays a field here.
+		isPureWidget := false
+		if st, _ := document.ResolveName(ctx, doc, field["Subtype"]); st == "Widget" {
+			_, hasFT := field["FT"]
+			_, hasT := field["T"]
+			isPureWidget = !hasFT && !hasT
+		}
+
 		// §6.6.2 t2 (PDF/A-1) / §6.4.1 t2 (PDF/A-2/3): a form field dictionary
 		// shall not contain an /AA additional-actions entry. The prohibition
 		// is on the key itself, so mere presence of /AA is the violation,
 		// independent of the actions it holds.
-		if _, hasAA := field["AA"]; hasAA {
+		if _, hasAA := field["AA"]; hasAA && !isPureWidget {
 			if rule := fieldAARule(part); rule != (Rule{}) {
 				*results = append(*results, failf(rule, "%s contains forbidden /AA entry", loc)...)
 			}

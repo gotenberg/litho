@@ -1,10 +1,38 @@
 package compliance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
+
+func TestWalkFormFields_PureWidgetAANotFieldViolation(t *testing.T) {
+	t.Parallel()
+
+	// A pure widget-annotation kid (/Subtype /Widget, no /FT, no /T) carries a
+	// field's appearance, not its identity (ISO 32000-1 §12.7.3.1); its /AA is a
+	// §6.4.1 t1 (widget) violation only, never t2 (PDFormField). A terminal field
+	// merged with its widget keeps /FT (or /T) and stays a field.
+	fields := ast.PdfArray{
+		ast.PdfDict{"Subtype": ast.PdfName("Widget"), "AA": ast.PdfDict{}},                           // pure widget: no t2
+		ast.PdfDict{"Subtype": ast.PdfName("Widget"), "FT": ast.PdfName("Btn"), "AA": ast.PdfDict{}}, // merged terminal: t2
+		ast.PdfDict{"FT": ast.PdfName("Tx"), "T": ast.PdfString("f"), "AA": ast.PdfDict{}},           // plain field: t2
+	}
+
+	var results []Violation
+	walkFormFields(context.Background(), nil, fields, "PDF/A-2b", 2, &results, 0)
+
+	t2 := 0
+	for _, v := range results {
+		if v.Rule == Rule_19005_2_6_4_1_t02 {
+			t2++
+		}
+	}
+	if t2 != 2 {
+		t.Errorf("expected 2 field /AA (t2) violations (merged terminal + plain field), got %d", t2)
+	}
+}
 
 func TestIsForbiddenAction(t *testing.T) {
 	t.Parallel()
