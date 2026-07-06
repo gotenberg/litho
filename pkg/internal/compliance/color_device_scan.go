@@ -204,7 +204,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 			doc.Logger.Debug("compliance.color: cannot parse Form XObject content stream", "error", err)
 		} else {
 			// Check inline image colour spaces from parsed BI operations.
-			scanInlineImageCSOps(ops, &usage)
+			scanInlineImageCSOps(ops, &usage, formCSNames)
 			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames)
 		}
 	}
@@ -512,7 +512,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 	}
 
 	// Check inline image colour spaces from parsed BI operations.
-	scanInlineImageCSOps(ops, &usage)
+	scanInlineImageCSOps(ops, &usage, referencedCSNames)
 	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames)
 
 	return usage, referencedXObjects, referencedCSNames
@@ -612,8 +612,13 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 // scanInlineImageCSOps checks parsed BI operations for inline image colour
 // space usage. Inline images use abbreviated key names: /CS for ColorSpace.
 // Abbreviations: /CS /G = DeviceGray, /CS /RGB = DeviceRGB, /CS /CMYK = DeviceCMYK.
-// Also handles /CS /DeviceRGB etc. and /ColorSpace variants.
-func scanInlineImageCSOps(ops []content.Operation, usage *deviceCSUsage) {
+// Also handles /CS /DeviceRGB etc. and /ColorSpace variants. A /CS naming
+// anything else references a /Resources/ColorSpace entry (ISO 32000-1 §8.9.7):
+// its key is added to referencedCSNames so the declaration loop resolves the
+// underlying colour space (e.g. an Indexed base of DeviceRGB). veraPDF, the
+// reference validator, treats such an inline reference as real usage under
+// §6.2.4.3.
+func scanInlineImageCSOps(ops []content.Operation, usage *deviceCSUsage, referencedCSNames map[string]bool) {
 	for _, op := range ops {
 		if op.Operator != "BI" || len(op.Operands) == 0 {
 			continue
@@ -639,6 +644,10 @@ func scanInlineImageCSOps(ops []content.Operation, usage *deviceCSUsage) {
 				usage.rgb = true
 			case "CMYK", "DeviceCMYK":
 				usage.cmyk = true
+			default:
+				if referencedCSNames != nil {
+					referencedCSNames[string(csName)] = true
+				}
 			}
 		}
 	}
