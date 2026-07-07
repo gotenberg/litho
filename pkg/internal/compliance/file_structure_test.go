@@ -5,6 +5,46 @@ import (
 	"testing"
 )
 
+func TestCheckHeaderBytes(t *testing.T) {
+	t.Parallel()
+	// countRule returns how many violations carry the given rule.
+	countRule := func(vs []Violation, r Rule) int {
+		n := 0
+		for _, v := range vs {
+			if v.Rule == r {
+				n++
+			}
+		}
+		return n
+	}
+	t1 := Rule_19005_2_6_1_2_t01
+	t2 := Rule_19005_2_6_1_2_t02
+	tests := []struct {
+		name   string
+		buf    string
+		wantT1 int
+		wantT2 int
+	}{
+		{"conformant header + binary marker", "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj", 0, 0},
+		{"missing binary marker", "%PDF-1.4\n1 0 obj", 0, 1},
+		{"trailing space then no marker fires both t1 and t2", "%PDF-1.0 \r\n9 0 obj", 1, 1},
+		{"trailing space, CR only, no marker", "%PDF-1.0 \r17 0 obj", 1, 1},
+		{"binary marker byte not high", "%PDF-1.4\n%\xe2\x20\xcf\xd3\n1 0 obj", 0, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := checkHeaderBytes([]byte(tc.buf), "PDF/A-2b")
+			if c := countRule(got, t1); c != tc.wantT1 {
+				t.Errorf("t1 count = %d, want %d (got %v)", c, tc.wantT1, got)
+			}
+			if c := countRule(got, t2); c != tc.wantT2 {
+				t.Errorf("t2 count = %d, want %d (got %v)", c, tc.wantT2, got)
+			}
+		})
+	}
+}
+
 func TestFindStreamDataStart(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

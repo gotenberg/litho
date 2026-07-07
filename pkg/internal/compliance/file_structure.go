@@ -128,7 +128,14 @@ func checkFileHeader(ctx context.Context, doc *document.Document, profile string
 		doc.Logger.Debug("compliance.file_structure: cannot read header", "error", err)
 		return nil
 	}
+	return checkHeaderBytes(buf, profile)
+}
 
+// checkHeaderBytes validates the §6.1.2 header rules on the leading file bytes:
+// t1 (the %PDF-x.y version line) and t2 (the binary comment on the next line).
+// The two are independent, so a malformed version line still lets the binary
+// comment check run.
+func checkHeaderBytes(buf []byte, profile string) []Violation {
 	part := PDFAPart(profile)
 
 	// Check that file starts with %PDF-.
@@ -163,49 +170,59 @@ func checkFileHeader(ctx context.Context, doc *document.Document, profile string
 			fmt.Sprintf("header %q does not match required pattern", "%PDF-"+version))
 	}
 
-	// After %PDF-x.y, byte 8 must be an EOL marker immediately.
-	// No extra digits, spaces, or other characters between version and EOL.
+	// After %PDF-x.y, byte 8 should be an EOL marker immediately. A trailing
+	// character (e.g. a stray space) is a header-format violation, but the
+	// §6.1.2 t2 binary comment on the next line is evaluated independently:
+	// veraPDF reports both, so record the format issue and scan on to the EOL
+	// rather than stopping here.
 	var results []Violation
-	if len(buf) <= 8 || (buf[8] != '\n' && buf[8] != '\r') {
-		return fail(fileHeaderRule(profile),
-			fmt.Sprintf("header version not immediately followed by EOL marker (byte 8 = 0x%02X)", buf[8]))
+	eol := 8
+	if buf[eol] != '\n' && buf[eol] != '\r' {
+		results = append(results, fail(fileHeaderRule(profile),
+			fmt.Sprintf("header version not immediately followed by EOL marker (byte 8 = 0x%02X)", buf[8]))...)
+		for eol < len(buf) && buf[eol] != '\n' && buf[eol] != '\r' {
+			eol++
+		}
+		if eol >= len(buf) {
+			return results
+		}
 	}
 
 	// The EOL must be a single marker: LF, CR, or CR+LF.
-	// Double EOL (LF+LF, CR+CR) is a violation.
-	commentStart := 9
-	if buf[8] == '\r' && commentStart < len(buf) && buf[commentStart] == '\n' {
+	commentStart := eol + 1
+	if buf[eol] == '\r' && commentStart < len(buf) && buf[commentStart] == '\n' {
 		commentStart++ // CR+LF is a single EOL
 	}
 
-	// Verify no extra EOL before the binary comment.
-	if commentStart < len(buf) && (buf[commentStart] == '\r' || buf[commentStart] == '\n') {
-		return fail(fileBinaryCommentRule(profile),
-			"header followed by multiple EOL markers instead of single EOL")
+	// Verify no extra EOL before the binary comment. Only meaningful when the
+	// header line ended cleanly at byte 8; a scanned-past trailing run already
+	// consumed any stray characters.
+	if eol == 8 && commentStart < len(buf) && (buf[commentStart] == '\r' || buf[commentStart] == '\n') {
+		return append(results, fail(fileBinaryCommentRule(profile),
+			"header followed by multiple EOL markers instead of single EOL")...)
 	}
 
 	if commentStart >= len(buf) || buf[commentStart] != '%' {
-		return failf(fileBinaryCommentRule(profile), "missing %% binary comment after header")
+		return append(results, failf(fileBinaryCommentRule(profile), "missing %% binary comment after header")...)
 	}
 
 	// Check the 4 bytes after the %.
 	binaryStart := commentStart + 1
 	if binaryStart+minBinaryBytes > len(buf) {
-		return failf(fileBinaryCommentRule(profile), "binary comment has fewer than 4 bytes")
+		return append(results, failf(fileBinaryCommentRule(profile), "binary comment has fewer than 4 bytes")...)
 	}
 
 	for i := range minBinaryBytes {
 		b := buf[binaryStart+i]
 		if b <= 127 {
-			results = append(results, Violation{
+			return append(results, Violation{
 				Rule:    fileBinaryCommentRule(profile),
 				Context: fmt.Sprintf("binary comment byte %d has value %d (must be > 127)", i, b),
 			})
-			return results
 		}
 	}
 
-	return nil
+	return results
 }
 
 // checkTrailerID validates §6.1.3: trailer must contain /ID key.
