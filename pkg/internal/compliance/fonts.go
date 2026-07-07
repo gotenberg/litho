@@ -190,7 +190,18 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		}
 
 		fontKey := string(fontName)
-		if checked[fontKey] {
+		// Dedup by resolved object identity, not resource name: different pages
+		// may bind the same name to different font objects (e.g. an embedded
+		// subset "TT1" on one page and an unembedded standard "TT1" on another),
+		// and veraPDF checks each distinct font object. A direct (inline) font
+		// dict has no object number and is page-local, so it falls back to
+		// name dedup.
+		ref, isIndirect := fontRef.(ast.PdfIndirectRef)
+		if isIndirect {
+			if checkedObjs[ref.ObjectNum] {
+				continue
+			}
+		} else if checked[fontKey] {
 			continue
 		}
 
@@ -202,7 +213,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		}
 
 		checked[fontKey] = true
-		if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
+		if isIndirect {
 			checkedObjs[ref.ObjectNum] = true
 		}
 		// Skip width/embedding checks for fonts not used for visible rendering.
