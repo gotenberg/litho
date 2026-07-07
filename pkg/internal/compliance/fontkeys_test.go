@@ -126,9 +126,17 @@ func TestSimpleFontRequiredKeys(t *testing.T) {
 		t.Errorf("conformant simple font: got %v, want none", got)
 	}
 
-	// The standard 14 fonts are exempt from FirstChar/LastChar/Widths.
-	if got := chk(ast.PdfDict{"BaseFont": ast.PdfName("Helvetica")}, 2); len(got) != 0 {
-		t.Errorf("standard-14 font: got %v, want none (exempt)", got)
+	// The standard 14 fonts are Type1 programs; a Type1 font with a standard
+	// name is exempt from FirstChar/LastChar/Widths.
+	if got := chk(ast.PdfDict{"Subtype": ast.PdfName("Type1"), "BaseFont": ast.PdfName("Helvetica")}, 2); len(got) != 0 {
+		t.Errorf("standard-14 Type1 font: got %v, want none (exempt)", got)
+	}
+
+	// A /TrueType font merely sharing a standard name is NOT a standard-14 font
+	// (those are Type1), so it must carry /FirstChar, /LastChar, and /Widths,
+	// matching veraPDF's isStandard (PDType1Font) escape.
+	if got := chk(ast.PdfDict{"Subtype": ast.PdfName("TrueType"), "BaseFont": ast.PdfName("Helvetica")}, 2); !hasRule(got, Rule_19005_2_6_2_11_2_t04) {
+		t.Errorf("TrueType standard-named font: want §6.2.11.2 t4, got %v", got)
 	}
 
 	// Non-PDF/A (part 0) is not checked.

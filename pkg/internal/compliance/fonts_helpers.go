@@ -238,7 +238,7 @@ func isValidFontFileSubtype(part int, subtype string) bool {
 // matching the isStandard escape in each rule. Callers must invoke it only for
 // simple (non-Type0) fonts.
 func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, part int) []Violation {
-	if part == 0 || isStandard14Font(ctx, doc, fontDict) {
+	if part == 0 || isStandard14Type1Font(ctx, doc, fontDict) {
 		return nil
 	}
 
@@ -307,6 +307,21 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 		}
 	}
 	return results
+}
+
+// isStandard14Type1Font reports whether the font is one of the 14 standard
+// fonts used as such: a Type1 (or MMType1) font whose /BaseFont is a standard
+// name. The standard 14 fonts are Type1 programs, so veraPDF's isStandard
+// escape in ISO 19005-2 §6.2.11.2 t4-t6 (the PDType1Font standard-14 test) does
+// not cover a /TrueType font that merely shares a standard name, e.g. an
+// unembedded "Helvetica" TrueType: such a font is not standard and must carry
+// /FirstChar, /LastChar, and a /Widths array of LastChar - FirstChar + 1.
+func isStandard14Type1Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	if !isStandard14Font(ctx, doc, fontDict) {
+		return false
+	}
+	sub, _ := document.ResolveName(ctx, doc, fontDict["Subtype"])
+	return sub == "Type1" || sub == "MMType1"
 }
 
 // isStandard14Font returns true if the font's BaseFont is one of the 14
