@@ -9,6 +9,37 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
+func TestExtractGlyphNames_Type1(t *testing.T) {
+	// eexec-encrypt a minimal Type1 private section (standard R=55665 cipher),
+	// then confirm ExtractGlyphNames pulls the /CharStrings glyph names so the
+	// CharSet-completeness check works for classic Type1 (FontFile) programs.
+	plain := []byte("xxxx" + // 4-byte salt stripped on decrypt
+		"/CharStrings 3 dict dup begin\n" +
+		"/.notdef 4 RD AAAA ND\n" +
+		"/a 5 RD HELLO ND\n" +
+		"/k 4 RD WXYZ ND\n" +
+		"end")
+	enc := make([]byte, len(plain))
+	r := uint32(55665)
+	for i, p := range plain {
+		c := p ^ byte(r>>8)
+		enc[i] = c
+		r = (uint32(c)+r)*52845 + 22719
+	}
+	font := append([]byte("%!PS-AdobeFont-1.0\ncurrentfile eexec\n"), enc...)
+
+	got := ExtractGlyphNames(context.Background(), font)
+	names := map[string]bool{}
+	for _, n := range got {
+		names[n] = true
+	}
+	for _, want := range []string{".notdef", "a", "k"} {
+		if !names[want] {
+			t.Errorf("ExtractGlyphNames missing %q; got %v", want, got)
+		}
+	}
+}
+
 func TestExtractType3GlyphWidth_D0(t *testing.T) {
 	// A CharProc stream containing: "500 0 d0"
 	stream := ast.NewStream(ast.PdfDict{}, []byte("500 0 d0"))

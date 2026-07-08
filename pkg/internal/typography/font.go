@@ -1126,6 +1126,21 @@ func ExtractGlyphNames(ctx context.Context, fontData []byte) map[uint16]string {
 		return m
 	}
 
+	// Type1 (PFA "%!" or PFB 0x80): parse the eexec /CharStrings for glyph
+	// names. The GID keys are synthetic; callers that compare against /CharSet
+	// use the name values, so the keys need only be distinct.
+	if (sig[0] == '%' && sig[1] == '!') || sig[0] == 0x80 {
+		names := type1.ParseCharStringNames(fontData)
+		if len(names) == 0 {
+			return nil
+		}
+		m := make(map[uint16]string, len(names))
+		for i, n := range names {
+			m[uint16(i)] = n //nolint:gosec // A Type1 font holds at most 256 glyphs, so i fits in uint16.
+		}
+		return m
+	}
+
 	return nil
 }
 
