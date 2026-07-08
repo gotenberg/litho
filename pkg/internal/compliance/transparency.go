@@ -472,41 +472,13 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			}
 		}
 
-		// Check Image XObjects for /SMask (soft mask images).
+		// Check XObjects for transparency, recursing into Form XObjects whose
+		// own resources may nest soft-mask images, blend modes, or further
+		// forms. veraPDF walks the full resource tree, so a page that carries
+		// its transparency only inside a Form XObject still requires a blending
+		// colour space (ISO 19005-2 §6.2.10 t2).
 		if !pageUsesTransparency {
-			xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
-			if err == nil && xobjDict != nil {
-				for _, xobjObj := range xobjDict {
-					if pageUsesTransparency {
-						break
-					}
-					stream, err := document.ResolveStream(ctx, doc, xobjObj)
-					if err != nil {
-						doc.Logger.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
-						continue
-					}
-					subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-					switch string(subtype) {
-					case "Image":
-						// Image with /SMask triggers transparency.
-						if _, hasSMask := stream.Dict["SMask"]; hasSMask {
-							pageUsesTransparency = true
-						}
-					case "Form":
-						// Form XObject with transparency group triggers transparency.
-						groupObj, hasGroup := stream.Dict["Group"]
-						if hasGroup {
-							group, err := document.ResolveDict(ctx, doc, groupObj)
-							if err == nil && group != nil {
-								s, _ := document.ResolveName(ctx, doc, group["S"])
-								if s == "Transparency" {
-									pageUsesTransparency = true
-								}
-							}
-						}
-					}
-				}
-			}
+			pageUsesTransparency = resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{})
 		}
 
 		// Check tiling patterns for transparency triggers.
@@ -555,6 +527,82 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		}
 	}
 	return results
+}
+
+// resourcesUseTransparency reports whether a resource dictionary reaches any
+// transparency: an ExtGState with a non-isolating blend mode, a soft mask, or a
+// non-opaque constant alpha; an Image XObject with a /SMask; or a Form XObject
+// with a transparency /Group. It recurses into Form XObject resources, bounded
+// by maxFormXObjectDepth and a visited set of form-dict identities, so nested
+// transparency is detected while cyclic references cannot loop. This mirrors
+// veraPDF walking the full resource tree for §6.2.10.
+func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool) bool {
+	if res == nil || depth > maxFormXObjectDepth || ctx.Err() != nil {
+		return false
+	}
+
+	if gsDict, err := document.ResolveDict(ctx, doc, res["ExtGState"]); err == nil && gsDict != nil {
+		for _, name := range sortedNames(gsDict) {
+			gs, err := document.ResolveDict(ctx, doc, gsDict[name])
+			if err != nil || gs == nil {
+				continue
+			}
+			if bmObj, ok := gs["BM"]; ok {
+				bm := resolveBlendMode(ctx, doc, bmObj)
+				if bm != "" && bm != "Normal" && bm != "Compatible" {
+					return true
+				}
+			}
+			if smObj, ok := gs["SMask"]; ok {
+				if nm, _ := document.ResolveName(ctx, doc, smObj); nm != "None" {
+					return true
+				}
+			}
+			if v, ok := gs["CA"]; ok && !floatEquals1(document.Float(v)) {
+				return true
+			}
+			if v, ok := gs["ca"]; ok && !floatEquals1(document.Float(v)) {
+				return true
+			}
+		}
+	}
+
+	xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
+	if err != nil || xobjDict == nil {
+		return false
+	}
+	for _, name := range sortedNames(xobjDict) {
+		if ctx.Err() != nil {
+			return false
+		}
+		stream, err := document.ResolveStream(ctx, doc, xobjDict[name])
+		if err != nil {
+			continue
+		}
+		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		switch subtype {
+		case "Image":
+			if _, ok := stream.Dict["SMask"]; ok {
+				return true
+			}
+		case "Form":
+			if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
+				if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
+					return true
+				}
+			}
+			addr := formatDictAddr(stream.Dict)
+			if visited[addr] {
+				continue
+			}
+			visited[addr] = true
+			formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+			if resourcesUseTransparency(ctx, doc, formRes, depth+1, visited) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // checkAnnotationTransparency checks whether any annotation on the page
