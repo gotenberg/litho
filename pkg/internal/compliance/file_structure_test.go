@@ -1,9 +1,40 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"testing"
 )
+
+func TestStreamLengthMatches(t *testing.T) {
+	t.Parallel()
+	// win is laid out as <4 pre-window bytes><gap><endstream>, so expOff is 4.
+	const expOff = 4
+	tests := []struct {
+		name string
+		win  string
+		want bool
+	}{
+		{"LF gap (declared end + LF + endstream)", "AAAA\nendstream", true},
+		{"lone CR gap", "AAAA\rendstream", true},
+		{"CRLF gap (CR may be data)", "AAAA\r\nendstream", true},
+		{"no gap, last byte is data", "AAAAendstream", true},
+		{"no gap, last byte is LF (length counted the EOL)", "AAA\nendstream", false},
+		{"no gap, last byte is CR", "AAA\rendstream", false},
+		{"two-byte gap that is not CRLF", "AAAA\n\nendstream", false},
+		{"gap of three (length too small)", "AAAA\n\n\nendstream", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			win := []byte(tc.win)
+			esRel := bytes.Index(win, []byte("endstream"))
+			if got := streamLengthMatches(win, expOff, esRel); got != tc.want {
+				t.Errorf("streamLengthMatches(%q, %d, %d) = %v, want %v", tc.win, expOff, esRel, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestCheckHeaderBytes(t *testing.T) {
 	t.Parallel()
@@ -96,70 +127,6 @@ func TestFindStreamDataStart(t *testing.T) {
 			got := findStreamDataStart(context.Background(), []byte(tc.buf))
 			if got != tc.want {
 				t.Errorf("findStreamDataStart(%q) = %d, want %d", tc.buf, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestHasEndstreamAt(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		buf  string
-		want bool
-	}{
-		{
-			name: "endstream immediately",
-			buf:  "endstream",
-			want: true,
-		},
-		{
-			name: "LF then endstream",
-			buf:  "\nendstream",
-			want: true,
-		},
-		{
-			name: "CRLF then endstream",
-			buf:  "\r\nendstream",
-			want: true,
-		},
-		{
-			name: "CR then endstream",
-			buf:  "\rendstream",
-			want: true,
-		},
-		{
-			name: "no endstream",
-			buf:  "some other data",
-			want: false,
-		},
-		{
-			name: "empty buffer",
-			buf:  "",
-			want: false,
-		},
-		{
-			name: "partial endstream",
-			buf:  "endstrea",
-			want: false,
-		},
-		{
-			name: "endstream with trailing content",
-			buf:  "endstream\nendobj",
-			want: true,
-		},
-		{
-			name: "garbage then endstream",
-			buf:  "XX endstream",
-			want: false,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := hasEndstreamAt([]byte(tc.buf))
-			if got != tc.want {
-				t.Errorf("hasEndstreamAt(%q) = %v, want %v", tc.buf, got, tc.want)
 			}
 		})
 	}

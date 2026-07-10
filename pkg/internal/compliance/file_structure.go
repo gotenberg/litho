@@ -668,24 +668,32 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 			continue // not a stream, or header too small to find it
 		}
 
-		// Phase 2: Read a small window at where "endstream" should appear.
-		// The absolute file position of stream data start:
+		// Phase 2: byte-exact §6.1.7.1 t1. The real length is the number of
+		// bytes from the stream data start up to (but not including) the EOL
+		// marker preceding endstream (ISO 19005-2 §6.1.7.1 t1). Read a window
+		// spanning a few bytes before the declared end through where endstream
+		// should sit, locate endstream, back up over exactly one EOL marker, and
+		// require the length to equal the declared /Length. veraPDF is strict
+		// here: a /Length off by even the trailing EOL byte fails.
 		absDataStart := entry.Offset + int64(streamDataStart)
-		// The expected end of stream data:
 		absExpectedEnd := absDataStart + int64(declaredLen)
 
-		// Read enough bytes to find "endstream" after optional EOL.
-		// "endstream" is 9 bytes, plus up to 2 EOL bytes = 11 bytes needed.
+		const preWindow = 4
 		const tailBufSize = 32
-		tailBuf, err := doc.ReadFileBytes(ctx, absExpectedEnd, tailBufSize)
+		winStart := max(absExpectedEnd-preWindow, absDataStart)
+		win, err := doc.ReadFileBytes(ctx, winStart, preWindow+tailBufSize)
 		if err != nil {
 			continue
 		}
+		expOff := int(absExpectedEnd - winStart)
 
-		if !hasEndstreamAt(tailBuf) {
+		esRel := bytes.Index(win, []byte("endstream"))
+		if esRel < 0 || !streamLengthMatches(win, expOff, esRel) {
+			// endstream is not one valid EOL past the declared end (or not within
+			// the window at all): the /Length does not match the real length.
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: fmt.Sprintf("object %d: declared /Length=%d does not match actual stream data extent", objNum, declaredLen),
+				Context: fmt.Sprintf("object %d: declared /Length=%d does not match the stream data extent", objNum, declaredLen),
 			})
 		}
 
@@ -696,7 +704,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		// separated from endstream by spaces or tabs, not when the EOL is absent
 		// entirely (a shape lenient real-world producers emit), to avoid a false
 		// positive the verapdf-only gate could not surface.
-		if eolRule := streamEOLRule(profile); eolRule.Specification != "" && endstreamHasExtraSpacing(tailBuf) {
+		if eolRule := streamEOLRule(profile); eolRule.Specification != "" && expOff >= 0 && expOff <= len(win) && endstreamHasExtraSpacing(win[expOff:]) {
 			results = append(results, Violation{
 				Rule:    eolRule,
 				Context: fmt.Sprintf("object %d: endstream keyword not immediately preceded by an EOL marker", objNum),
@@ -792,34 +800,24 @@ func isPdfWhitespaceOrDelim(b byte) bool {
 	return false
 }
 
-// hasEndstreamAt checks whether buf (read from the expected stream-data end
-// position) contains an "endstream" keyword, optionally preceded by EOL bytes.
-// Per the PDF spec, the stream data may be followed by an optional EOL (CR,
-// LF, or CRLF) before "endstream".
-func hasEndstreamAt(buf []byte) bool {
-	endstream := []byte("endstream")
-
-	// Try: "endstream" immediately at position 0.
-	if bytes.HasPrefix(buf, endstream) {
-		return true
+// streamLengthMatches reports whether the endstream keyword (at offset esRel in
+// win) sits exactly one EOL marker past the declared stream end (at offset
+// expOff), which is how ISO 19005-2 §6.1.7.1 t1 accepts a stream. veraPDF is
+// lenient about the CR of a CRLF: the declared length may be followed by LF or
+// by CRLF before endstream (the CR of a CRLF may be counted as stream data), so
+// both a one-byte and a two-byte gap pass. An endstream sitting exactly at the
+// declared end fails when the last declared byte is itself an EOL that belongs
+// before endstream (the length counted the EOL); it passes when the last byte
+// is real data (no EOL present, a §6.1.7.1 t2 concern reported separately).
+func streamLengthMatches(win []byte, expOff, esRel int) bool {
+	switch esRel - expOff {
+	case 0:
+		return esRel < 1 || (win[esRel-1] != '\n' && win[esRel-1] != '\r')
+	case 1:
+		return expOff < len(win) && (win[expOff] == '\n' || win[expOff] == '\r')
+	case 2:
+		return expOff+1 < len(win) && win[expOff] == '\r' && win[expOff+1] == '\n'
 	}
-
-	// Try: optional EOL then "endstream".
-	off := 0
-	if off < len(buf) && buf[off] == '\r' {
-		off++
-	}
-	if off < len(buf) && buf[off] == '\n' {
-		off++
-	}
-	if off > 0 && bytes.HasPrefix(buf[off:], endstream) {
-		return true
-	}
-
-	// Try: single \n then "endstream" (already covered above if \r was absent).
-	// Try: single \r then "endstream" (some producers omit \n).
-	// Both cases are covered by the logic above.
-
 	return false
 }
 
