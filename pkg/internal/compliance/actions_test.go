@@ -34,6 +34,33 @@ func TestWalkFormFields_PureWidgetAANotFieldViolation(t *testing.T) {
 	}
 }
 
+func TestCheckPageActions_ForbiddenAAStillChecksActionTypes(t *testing.T) {
+	t.Parallel()
+
+	// A page /AA is forbidden outright for parts 2/3 (§6.5.2 t02), but the
+	// action-type restrictions (§6.5.1) still apply to the actions it holds:
+	// veraPDF fires both. The /O action is a forbidden Launch (§6.5.1 t01) and
+	// the /C action is a disallowed named action (§6.5.1 t02).
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /AA << /O 4 0 R /C 5 0 R >> >>",
+		"<< /Type /Action /S /Launch /F (setup.exe) >>",
+		"<< /Type /Action /S /Named /N /ShowBookmarks >>",
+	)
+
+	got := checkPageActions(context.Background(), doc, cat, "PDF/A-2b", 2)
+	for _, want := range []Rule{
+		Rule_19005_2_6_5_2_t02, // page /AA forbidden
+		Rule_19005_2_6_5_1_t01, // Launch action type
+		Rule_19005_2_6_5_1_t02, // disallowed named action
+	} {
+		if !hasRule(got, want) {
+			t.Errorf("page /AA with forbidden actions: missing %v (got %v)", want, got)
+		}
+	}
+}
+
 func TestIsForbiddenAction(t *testing.T) {
 	t.Parallel()
 

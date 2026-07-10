@@ -254,14 +254,17 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 			continue
 		}
 
-		// Parts 2/3: page /AA is entirely forbidden (§6.5.2 t02).
+		// Parts 2/3: the page /AA dictionary itself is forbidden (§6.5.2 t02).
+		// Record that, but do not stop here: per ISO 19005-2/3 §6.5.1, the
+		// action-type restrictions apply to every action in the file, so the
+		// actions inside a forbidden /AA are still checked for a disallowed /S
+		// (§6.5.1 t01) or named action (§6.5.1 t02). veraPDF fires both 6.5.2
+		// and 6.5.1 on such a page.
 		if part == 2 {
 			results = append(results, failf(Rule_19005_2_6_5_2_t02, "page %d", i+1)...)
-			continue
 		}
 		if part == 3 {
 			results = append(results, failf(Rule_19005_3_6_5_2_t02, "page %d", i+1)...)
-			continue
 		}
 
 		aaDict, err := document.ResolveDict(ctx, doc, aaObj)
