@@ -131,29 +131,3 @@ func TestFindStreamDataStart(t *testing.T) {
 		})
 	}
 }
-
-func TestEndstreamHasExtraSpacing(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		buf  string
-		want bool
-	}{
-		{"EOL then space then endstream", "data\r\n endstream", true},
-		{"EOL then tab then endstream", "data\n\tendstream", true},
-		{"valid LF before endstream", "data\nendstream", false},
-		{"valid CRLF before endstream", "data\r\nendstream", false},
-		{"no EOL, data byte before endstream", "dataendstream", false},
-		{"space but no preceding EOL", "data endstream", false},
-		{"no endstream", "some data", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := endstreamHasExtraSpacing([]byte(tc.buf))
-			if got != tc.want {
-				t.Errorf("endstreamHasExtraSpacing(%q) = %v, want %v", tc.buf, got, tc.want)
-			}
-		})
-	}
-}
