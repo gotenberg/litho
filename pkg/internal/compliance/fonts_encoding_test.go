@@ -1,10 +1,49 @@
 package compliance
 
 import (
+	"context"
+	"strconv"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
+
+// TestNotdefSymbolicType1ControlCode pins that a control-range charCode absent
+// from a symbolic Type1 font's /Differences does not fire the .notdef rule: a
+// symbolic font resolves such codes through its built-in encoding (ISO 32000-1
+// §9.6.6.2), which litho does not parse, so reporting .notdef would be a false
+// positive. A non-symbolic font keeps firing, since standard encodings define
+// no glyph for control characters.
+func TestNotdefSymbolicType1ControlCode(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 2 is the font, 3 the /Encoding (Differences omit code 15), 4 the
+	// descriptor. Flags is the only difference between the two runs.
+	build := func(flags int) []Violation {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /Type1 /Name /F4 /FirstChar 0 /LastChar 255 /Encoding 3 0 R /FontDescriptor 4 0 R >>",
+			"<< /Type /Encoding /Differences [ 0 /C0 13 /C13 ] >>",
+			"<< /Type /FontDescriptor /FontName /ABCDEF+AdvMT /Flags "+strconv.Itoa(flags)+" >>",
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{15: true}}
+		return checkNotdefGlyph(ctx, doc, fontDict, "F4", 1, "PDF/A-2b", usage)
+	}
+
+	if got := build(4); len(got) != 0 { // Flags bit 3 (=4): Symbolic
+		t.Errorf("symbolic Type1 control-code should not fire .notdef, got %v", got)
+	}
+	if got := build(32); len(got) == 0 { // Flags bit 6 (=32): Nonsymbolic
+		t.Error("non-symbolic Type1 control-code without an encoding entry should fire .notdef")
+	}
+}
 
 // TestSymbolicCmapViolation pins the part-aware symbolic TrueType cmap rule
 // against the veraPDF test expressions: PDF/A-1 requires exactly one subtable;

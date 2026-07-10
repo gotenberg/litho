@@ -836,12 +836,23 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	if subtype == "Type1" || subtype == "MMType1" {
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 		if len(enc) > 0 {
+			// A symbolic Type1 font resolves a code absent from /Differences
+			// through the font program's built-in encoding (ISO 32000-1
+			// §9.6.6.2), which litho does not parse. Such a control-range code
+			// is therefore not necessarily .notdef, so litho declines to report
+			// the implicit case rather than emit a false positive (mirroring the
+			// symbolic-TrueType handling below). An explicit ".notdef" in
+			// /Differences is still a real reference and fires regardless.
+			symbolic := false
+			if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
+				symbolic = isSymbolicFont(ctx, doc, fd)
+			}
 			for code := range usage.charCodes {
 				glyphName := enc[code]
 				if glyphName == ".notdef" {
 					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
 				}
-				if glyphName == "" && code < 0x20 {
+				if glyphName == "" && code < 0x20 && !symbolic {
 					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
 				}
 			}
