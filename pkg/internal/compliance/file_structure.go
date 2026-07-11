@@ -171,15 +171,20 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 	}
 
 	// After %PDF-x.y, byte 8 should be an EOL marker immediately. A trailing
-	// character (e.g. a stray space) is a header-format violation, but the
-	// §6.1.2 t2 binary comment on the next line is evaluated independently:
-	// veraPDF reports both, so record the format issue and scan on to the EOL
-	// rather than stopping here.
+	// character (e.g. a stray space) is a header-format violation for parts
+	// 2-4, whose §6.1.2 t1 anchors the header line to exactly %PDF-x.n
+	// (veraPDF `/^%PDF-1\.[0-7]$/`). ISO 19005-1 §6.1.2 is more lenient: its
+	// predicate `/%PDF-\d\.\d/` is unanchored, so any %PDF-d.d at byte zero
+	// conforms regardless of what follows on the line. Do not flag a trailing
+	// byte at part 1, but still scan on to the EOL so the t2 binary comment on
+	// the next line is evaluated (it is independent of the version line).
 	var results []Violation
 	eol := 8
 	if buf[eol] != '\n' && buf[eol] != '\r' {
-		results = append(results, fail(fileHeaderRule(profile),
-			fmt.Sprintf("header version not immediately followed by EOL marker (byte 8 = 0x%02X)", buf[8]))...)
+		if part >= 2 {
+			results = append(results, fail(fileHeaderRule(profile),
+				fmt.Sprintf("header version not immediately followed by EOL marker (byte 8 = 0x%02X)", buf[8]))...)
+		}
 		for eol < len(buf) && buf[eol] != '\n' && buf[eol] != '\r' {
 			eol++
 		}

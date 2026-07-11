@@ -76,6 +76,47 @@ func TestCheckHeaderBytes(t *testing.T) {
 	}
 }
 
+// TestCheckHeaderBytesPart1Lenient locks the ISO 19005-1 §6.1.2 t1 leniency:
+// its predicate `/%PDF-\d\.\d/` is unanchored, so a byte after the version
+// (e.g. a trailing space) does not fail the header rule at part 1, unlike the
+// anchored `/^%PDF-1\.[0-7]$/` of parts 2-4. The independent t2 binary comment
+// check still runs.
+func TestCheckHeaderBytesPart1Lenient(t *testing.T) {
+	t.Parallel()
+	countRule := func(vs []Violation, r Rule) int {
+		n := 0
+		for _, v := range vs {
+			if v.Rule == r {
+				n++
+			}
+		}
+		return n
+	}
+	t1 := Rule_19005_1_6_1_2_t01
+	t2 := Rule_19005_1_6_1_2_t02
+	tests := []struct {
+		name           string
+		buf            string
+		wantT1, wantT2 int
+	}{
+		{"trailing space then binary marker is conformant at part 1", "%PDF-1.2 \r%\xe2\xe3\xcf\xd3\r\n1 0 obj", 0, 0},
+		{"trailing space, no marker: t1 silent, t2 fires", "%PDF-1.0 \r\n9 0 obj", 0, 1},
+		{"clean header + marker", "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj", 0, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := checkHeaderBytes([]byte(tc.buf), "PDF/A-1b")
+			if c := countRule(got, t1); c != tc.wantT1 {
+				t.Errorf("t1 count = %d, want %d (got %v)", c, tc.wantT1, got)
+			}
+			if c := countRule(got, t2); c != tc.wantT2 {
+				t.Errorf("t2 count = %d, want %d (got %v)", c, tc.wantT2, got)
+			}
+		})
+	}
+}
+
 func TestFindStreamDataStart(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
