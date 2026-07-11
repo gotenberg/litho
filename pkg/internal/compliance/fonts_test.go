@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -31,6 +32,35 @@ func TestCheckFormXObjectFonts_NonEmbeddedFontInForm(t *testing.T) {
 	results := checkFormXObjectFonts(ctx, doc, ops, res, 1, "PDF/A-2b", map[int]bool{}, map[int]bool{}, 0)
 	if !hasRule(results, fontEmbeddingRule("PDF/A-2b")) {
 		t.Errorf("non-embedded font used inside a Form XObject should fire the embedding rule, got %v", results)
+	}
+}
+
+// TestCheckAnnotationAppearanceFonts_NonEmbeddedFont pins that a font used only
+// inside an annotation appearance stream is checked with the full font suite: a
+// non-embedded font shown in a widget appearance must fire the embedding rule
+// (ISO 19005-2 §6.2.11.4.1), matching veraPDF's descent into the appearance.
+func TestCheckAnnotationAppearanceFonts_NonEmbeddedFont(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 3 is the page (one Widget annot); object 5 is the /N appearance
+	// stream selecting /F1; object 6 is a non-embedded Helvetica.
+	doc, _ := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Widget /Rect [0 0 100 20] /AP << /N 5 0 R >> >>",
+		"<< /Type /XObject /Subtype /Form /BBox [0 0 100 20] /Resources << /Font << /F1 6 0 R >> >> /Length 15 >>\nstream\n/F1 12 Tf (x)Tj\nendstream",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	)
+	page, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
+	if err != nil {
+		t.Fatalf("resolve page: %v", err)
+	}
+
+	results := checkAnnotationAppearanceFonts(ctx, doc, page, 1, "PDF/A-2b", map[int]bool{})
+	if !hasRule(results, fontEmbeddingRule("PDF/A-2b")) {
+		t.Errorf("non-embedded font used inside an annotation appearance should fire the embedding rule, got %v", results)
 	}
 }
 

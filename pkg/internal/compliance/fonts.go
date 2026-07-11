@@ -344,18 +344,15 @@ func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.Pdf
 // states.
 const maxAppearanceStateFonts = 256
 
-// checkAnnotationAppearanceFonts checks subset fonts used inside a page's
-// annotation appearance streams for glyph-coverage completeness (/CharSet for
-// Type1 subsets, /CIDSet for CIDFont subsets). veraPDF reaches these fonts
-// through the appearance content stream and applies the same §6.3.5 / §6.2.11.4
-// glyph-coverage rules it applies to page fonts; litho's page pass only walks
-// /Resources/Font on the page, so a font referenced solely from an annotation
-// appearance is otherwise never reached. The scope is deliberately limited to
-// glyph coverage: /CharSet and /CIDSet presence and completeness depend only on
-// the font dictionary and the glyphs the appearance stream renders, which is
-// false-positive-safe to evaluate here. Embedding, widths, and ToUnicode are
-// not re-evaluated from appearance streams. checkedObjs deduplicates against
-// fonts already checked on the page and across appearance streams.
+// checkAnnotationAppearanceFonts checks fonts used for rendering inside a page's
+// annotation appearance streams. veraPDF reaches these fonts through the
+// appearance content stream and applies the same §6.2.11 font rules it applies
+// to page fonts (for example a non-embedded font or a .notdef reference in a
+// widget appearance); litho's page pass only walks /Resources/Font on the page,
+// so a font referenced solely from an annotation appearance is otherwise never
+// reached. The full single-font suite runs here, scoped to the glyphs the
+// appearance stream actually renders. checkedObjs deduplicates against fonts
+// already checked on the page and across appearance streams.
 func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, profile string, checkedObjs map[int]bool) []Violation {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
@@ -460,28 +457,9 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 		if err != nil || font == nil {
 			continue
 		}
-		results = append(results, checkAppearanceFontGlyphCoverage(ctx, doc, font, string(fontName), pageNum, profile, fontUsage)...)
+		results = append(results, checkSingleFont(ctx, doc, font, string(fontName), pageNum, profile, fontUsage.visible, fontUsage)...)
 	}
 	return results
-}
-
-// checkAppearanceFontGlyphCoverage runs the subset glyph-coverage checks for a
-// single font used in an annotation appearance stream, scoped to the glyphs that
-// stream renders: /CIDSet for a Type0 descendant CIDFont, /CharSet for a simple
-// Type1 subset.
-func checkAppearanceFontGlyphCoverage(ctx context.Context, doc *document.Document, font ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
-	if fontSubtype(ctx, doc, font) == "Type0" {
-		descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"])
-		if err != nil || len(descArr) == 0 {
-			return nil
-		}
-		cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
-		if err != nil || cidFontDict == nil {
-			return nil
-		}
-		return checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, usage != nil && len(usage.charCodes) > 0, type0UsedCIDs(ctx, doc, font, usage))
-	}
-	return checkGlyphCoverage(ctx, doc, font, fontName, pageNum, profile, usage)
 }
 
 // checkSingleFont runs all font checks against a single font dictionary.
