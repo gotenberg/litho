@@ -139,6 +139,13 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// annots[0]/appearance[0]/contentStream[0]/operators[N]/font[0]); litho
 		// matches by checking their subset glyph coverage here.
 		results = append(results, checkAnnotationAppearanceFonts(ctx, doc, p.dict, pageIdx+1, profile, checkedObjs)...)
+
+		// Fonts used only inside a Form XObject invoked from the page content
+		// (a Do operator) are likewise not reached by the page /Resources/Font
+		// walk. veraPDF descends into the form's content stream and applies the
+		// same font rules there; litho matches by walking invoked forms.
+		xobjVisited := make(map[int]bool)
+		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
 	}
 
 	doc.Logger.Debug("compliance: fonts: font checks complete",
@@ -227,6 +234,104 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 
 		// PUA ActualText check (needs page and catalog context).
 		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog)...)
+	}
+	return results
+}
+
+// checkFormXObjectFonts checks fonts used for rendering inside Form XObjects
+// invoked (via a Do operator) from a content stream's operations. veraPDF
+// descends into a Form XObject's content stream and applies the same font rules
+// to the fonts it selects (for example a non-embedded font referenced only from
+// a Do-invoked form, ISO 19005-2 §6.2.11.4.1); litho's page pass walks
+// /Resources/Font on the page only, so such a font is otherwise never reached.
+// Recursion into nested forms is bounded by [maxFormXObjectDepth]; visited
+// guards resource cycles; checkedObjs deduplicates against fonts already checked
+// on the page and across forms.
+func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+		return nil
+	}
+	xobjDict, _ := document.ResolveDict(ctx, doc, res["XObject"])
+	if len(xobjDict) == 0 {
+		return nil
+	}
+
+	var results []Violation
+	for _, op := range ops {
+		if op.Operator != "Do" || len(op.Operands) < 1 {
+			continue
+		}
+		name, ok := op.Operands[0].(ast.PdfName)
+		if !ok {
+			continue
+		}
+		xobjRef := xobjDict[name]
+		ref, isRef := xobjRef.(ast.PdfIndirectRef)
+		if isRef && visited[ref.ObjectNum] {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, xobjRef)
+		if err != nil || stream.Dict == nil {
+			continue
+		}
+		if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
+			continue
+		}
+		if isRef {
+			visited[ref.ObjectNum] = true
+		}
+		xobjRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if xobjRes == nil {
+			continue
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			doc.Logger.Debug("compliance: fonts: cannot decode Form XObject", "page", pageNum, "error", err)
+			continue
+		}
+		subOps, err := content.ParseStreamData(ctx, data)
+		if err != nil {
+			doc.Logger.Debug("compliance: fonts: cannot parse Form XObject", "page", pageNum, "error", err)
+			continue
+		}
+		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, pageNum, profile, checkedObjs)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, pageNum, profile, checkedObjs, visited, depth+1)...)
+	}
+	return results
+}
+
+// checkResourceFonts runs the full single-font check suite over the fonts a
+// content stream selects for rendering, resolved from res /Resources/Font. Only
+// fonts actually used (selected with Tf and shown) are checked; a font declared
+// in the resources but never selected renders no glyph and is out of scope.
+func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, pageNum int, profile string, checkedObjs map[int]bool) []Violation {
+	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
+	if len(fontDict) == 0 {
+		return nil
+	}
+	usage := collectFontUsage(ops)
+	if usage == nil {
+		return nil
+	}
+
+	var results []Violation
+	for _, fontName := range sortedNames(fontDict) {
+		fontUsage := usage[string(fontName)]
+		if fontUsage == nil {
+			continue // declared in the form resources but never selected
+		}
+		fontRef := fontDict[fontName]
+		if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
+			if checkedObjs[ref.ObjectNum] {
+				continue
+			}
+			checkedObjs[ref.ObjectNum] = true
+		}
+		font, err := document.ResolveDict(ctx, doc, fontRef)
+		if err != nil || font == nil {
+			continue
+		}
+		results = append(results, checkSingleFont(ctx, doc, font, string(fontName), pageNum, profile, fontUsage.visible, fontUsage)...)
 	}
 	return results
 }

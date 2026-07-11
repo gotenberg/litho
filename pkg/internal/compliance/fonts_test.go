@@ -5,7 +5,34 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
+
+// TestCheckFormXObjectFonts_NonEmbeddedFontInForm pins that a font used only
+// inside a Do-invoked Form XObject is reached by the font checks: a
+// non-embedded font selected in the form's content must fire the embedding rule
+// (ISO 19005-2 §6.2.11.4.1), matching veraPDF's descent into the form content.
+func TestCheckFormXObjectFonts_NonEmbeddedFontInForm(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 2 is the Form XObject (its content selects and shows /F1); object 3
+	// is a non-embedded Helvetica (no /FontDescriptor).
+	doc, _ := objsDocPDF(t,
+		"<< /Type /Catalog >>",
+		"<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Resources << /Font << /F1 3 0 R >> >> /Length 15 >>\nstream\n/F1 12 Tf (x)Tj\nendstream",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	)
+
+	// The page content invokes the form via Do.
+	ops := []content.Operation{{Operator: "Do", Operands: []ast.PdfObject{ast.PdfName("Fm0")}}}
+	res := ast.PdfDict{"XObject": ast.PdfDict{"Fm0": ast.PdfIndirectRef{ObjectNum: 2}}}
+
+	results := checkFormXObjectFonts(ctx, doc, ops, res, 1, "PDF/A-2b", map[int]bool{}, map[int]bool{}, 0)
+	if !hasRule(results, fontEmbeddingRule("PDF/A-2b")) {
+		t.Errorf("non-embedded font used inside a Form XObject should fire the embedding rule, got %v", results)
+	}
+}
 
 func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 	t.Parallel()
