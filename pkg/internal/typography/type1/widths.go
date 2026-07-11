@@ -22,6 +22,31 @@ const defaultLenIV = 4
 // entirely.
 var lenIVRe = regexp.MustCompile(`/lenIV\s+(-?\d+)\s+def`)
 
+// fontMatrixRe captures the first (x-scale) element of a Type 1
+// /FontMatrix declaration, which lives in the cleartext header before
+// eexec. The standard matrix is [0.001 0 0 0.001 0 0]; subset fonts
+// sometimes use a different scale, so charstring advances (in the
+// font's own design units) must be multiplied by this scale to reach
+// text space.
+var fontMatrixRe = regexp.MustCompile(`/FontMatrix\s*\[\s*([0-9.eE+-]+)`)
+
+// FontMatrixScale returns the x-scale of the Type 1 program's
+// /FontMatrix (its first element), which converts a charstring advance
+// width from design units to text space. Returns (0.001, false) when
+// the matrix is absent or unparseable so callers can fall back to the
+// 1000-unit default. A non-positive scale is rejected as unusable.
+func FontMatrixScale(data []byte) (float64, bool) {
+	m := fontMatrixRe.FindSubmatch(data)
+	if m == nil {
+		return 0.001, false
+	}
+	scale, err := strconv.ParseFloat(string(m[1]), 64)
+	if err != nil || scale <= 0 {
+		return 0.001, false
+	}
+	return scale, true
+}
+
 // decryptCharString removes the lenIV-byte random salt prefix that
 // every Type 1 charstring carries and returns the plaintext operator
 // bytes. The same (c₁, c₂) constants as eexec are used but the key is

@@ -1,6 +1,31 @@
 package type1
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
+
+func TestFontMatrixScale(t *testing.T) {
+	tests := []struct {
+		name   string
+		data   string
+		want   float64
+		wantOK bool
+	}{
+		{"standard", "/FontMatrix [0.001 0 0 0.001 0 0] readonly def", 0.001, true},
+		{"subset non-standard", "/FontMatrix[0.00048959 0 0 0.00048959 0 0]def", 0.00048959, true},
+		{"absent defaults", "no matrix here", 0.001, false},
+		{"non-positive rejected", "/FontMatrix [0 0 0 0.001 0 0]", 0.001, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := FontMatrixScale([]byte(tc.data))
+			if ok != tc.wantOK || math.Abs(got-tc.want) > 1e-9 {
+				t.Errorf("FontMatrixScale(%q) = %v, %v; want %v, %v", tc.data, got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}
 
 func TestParseLenIV_Default(t *testing.T) {
 	if got := parseLenIV([]byte("no lenIV here")); got != 4 {

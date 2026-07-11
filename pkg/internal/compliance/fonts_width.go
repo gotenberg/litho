@@ -30,7 +30,11 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 
 	binaryWidths, unitsPerEm, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
 	if !ok {
-		return nil
+		// A classic Type1 (/FontFile) program carries advance widths in each
+		// glyph's charstring rather than a GID-keyed hmtx/CFF table, so
+		// [typography.ExtractBinaryWidths] yields nothing. Compare against those
+		// charstring widths by glyph name instead.
+		return checkType1FontWidths(ctx, doc, fontDict, fontName, pageNum, rule, usage)
 	}
 
 	subtype := fontSubtype(ctx, doc, fontDict)
@@ -145,6 +149,80 @@ func buildNameToGID(glyphNames map[uint16]string) map[string]uint16 {
 		}
 	}
 	return nameToGID
+}
+
+// checkType1FontWidths compares a classic Type1 (/FontFile) simple font's
+// /Widths array against the advance widths in its embedded charstrings. It is
+// the counterpart to [checkSimpleFontWidths] for programs whose widths live in
+// each glyph's hsbw/sbw operator (which the GID-keyed [typography.ExtractBinaryWidths]
+// cannot read). A code is resolved to a glyph name through the program's own
+// built-in encoding (subset fonts routinely map codes to synthetic G-names the
+// PDF /Encoding's standard names do not cover), and the charstring advance is
+// scaled by the /FontMatrix to reach the 1000-unit text space of /Widths. A
+// glyph the program does not define is skipped so an incomplete map cannot
+// produce a false positive.
+func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
+		return nil
+	}
+	if subtype := fontSubtype(ctx, doc, fontDict); subtype != "Type1" && subtype != "MMType1" {
+		return nil
+	}
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return nil
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil
+	}
+	nameWidths := typography.ExtractType1AdvanceWidths(fontData)
+	if len(nameWidths) == 0 {
+		return nil
+	}
+	builtin := typography.ExtractType1BuiltinEncoding(fontData)
+	pdfEnc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	scale, _ := typography.ExtractType1FontMatrixScale(fontData)
+
+	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
+	if err != nil || len(widths) == 0 {
+		return nil
+	}
+	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
+	if err != nil {
+		return nil
+	}
+
+	for _, code := range sortedByteKeys(usage.charCodes) {
+		if code == 0 {
+			continue
+		}
+		idx := int(code) - int(firstChar)
+		if idx < 0 || idx >= len(widths) {
+			continue
+		}
+		// Prefer the PDF /Encoding name when the program defines a glyph for it;
+		// otherwise fall back to the program's built-in name for the code (the
+		// G-name subset case). Skip a code that resolves to no defined glyph.
+		name := pdfEnc[code]
+		if _, ok := nameWidths[name]; name == "" || name == ".notdef" || !ok {
+			name = builtin[code]
+		}
+		rawWidth, ok := nameWidths[name]
+		if !ok || name == ".notdef" {
+			continue
+		}
+		expected := rawWidth * scale * 1000.0
+		pdfWidth := document.Float(widths[idx])
+		if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
+			continue
+		}
+		if math.Abs(pdfWidth-expected) > widthTolerance {
+			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f, font=%.1f)",
+				fontName, pageNum, code, pdfWidth, expected)
+		}
+	}
+	return nil
 }
 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.

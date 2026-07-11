@@ -1299,6 +1299,31 @@ func ExtractCFFEncodingNames(fontData []byte) map[byte]string {
 	return cff.ExtractEncoding(fontData)
 }
 
+// ExtractType1AdvanceWidths returns the advance width, in the font's own design
+// units (before the /FontMatrix scale), of every glyph a raw Type 1 (/FontFile)
+// program defines, keyed by glyph name. Scale the values by
+// [ExtractType1FontMatrixScale] to reach text space. Returns nil when no
+// charstring widths can be read.
+func ExtractType1AdvanceWidths(fontData []byte) map[string]float64 {
+	return type1.ParseCharStringWidths(fontData)
+}
+
+// ExtractType1FontMatrixScale returns the x-scale of a raw Type 1 program's
+// /FontMatrix, which converts a charstring advance to text space (a 1000-unit
+// space corresponds to scale 0.001). The bool reports whether an explicit
+// matrix was found; false means the 0.001 default was assumed.
+func ExtractType1FontMatrixScale(fontData []byte) (float64, bool) {
+	return type1.FontMatrixScale(fontData)
+}
+
+// ExtractType1BuiltinEncoding returns the raw Type 1 program's built-in
+// encoding as a charCode → glyphName array. A subset font commonly maps codes
+// to synthetic G-names here that the PDF /Encoding's standard names do not
+// cover.
+func ExtractType1BuiltinEncoding(fontData []byte) [256]string {
+	return type1.ParseEncoding(fontData)
+}
+
 // ExtractType1EncodingNames reads the built-in encoding from a raw Type 1
 // font program (/FontFile stream) and returns a map of charCode → glyphName.
 // Returns nil if the encoding section cannot be found or parsed.
