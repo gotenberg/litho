@@ -45,12 +45,14 @@ func hasStandardBaseEncoding(ctx context.Context, doc *document.Document, fontDi
 	if baseEnc != "MacRomanEncoding" && baseEnc != "WinAnsiEncoding" && baseEnc != "MacExpertEncoding" {
 		return false
 	}
-	// If Differences are present, the exemption only applies if all
-	// glyph names in Differences are AGL-resolvable.
-	if _, hasDiffs := encDict["Differences"]; hasDiffs {
-		return false // fall through to the AGL check for full validation
-	}
-	return true
+	// A standard base encoding maps every base code to an AGL-resolvable name.
+	// When /Differences remap some codes, the exemption still holds as long as
+	// each remapped name also resolves to Unicode (AGL or the Symbol set): every
+	// used code then has a well-defined Unicode value without /ToUnicode. This is
+	// font-type agnostic (veraPDF resolves per-glyph Unicode for TrueType the
+	// same as Type1), so it also covers TrueType fonts, which the Type1-only AGL
+	// exemption in checkToUnicode would otherwise miss.
+	return allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict)
 }
 
 // hasIdentityCMap returns true if the font's /Encoding is Identity-H or

@@ -134,3 +134,34 @@ func TestSymbolicCmapViolation(t *testing.T) {
 		})
 	}
 }
+
+// TestToUnicodeTrueTypeStandardBaseDifferences pins that a nonsymbolic TrueType
+// font with a standard base encoding and fully AGL-resolvable /Differences is
+// exempt from the /ToUnicode requirement (§6.2.11.7.2): every code maps to an
+// AGL glyph name, hence to Unicode, without /ToUnicode. veraPDF resolves the
+// per-glyph Unicode for TrueType the same as Type1, so litho must not fire.
+func TestToUnicodeTrueTypeStandardBaseDifferences(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	build := func(diffs string) []Violation {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /TrueType /Name /TT0 /FirstChar 0 /LastChar 255 /Encoding 3 0 R /FontDescriptor 4 0 R >>",
+			"<< /Type /Encoding /BaseEncoding /MacRomanEncoding /Differences "+diffs+" >>",
+			"<< /Type /FontDescriptor /FontName /ABCDEF+CenturySchoolbook /Flags 34 >>",
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		return checkToUnicode(ctx, doc, fontDict, "TT0", 1, "PDF/A-2u", nil)
+	}
+
+	if got := build("[ 65 /A 219 /Euro ]"); len(got) != 0 {
+		t.Errorf("TrueType with standard base + AGL-resolvable Differences should be exempt, got %v", got)
+	}
+	if got := build("[ 65 /customGlyphNotInAGL ]"); len(got) == 0 {
+		t.Error("TrueType Differences with a non-AGL-resolvable name should still require /ToUnicode")
+	}
+}
