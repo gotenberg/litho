@@ -100,3 +100,24 @@ func TestMacExpertEncoding_Ligatures(t *testing.T) {
 		}
 	}
 }
+
+// TestGlyphToRuneFull_SpacingAccents locks resolution of the AGL spacing
+// accent names that appear in Type1 /Differences and /CharSet on real
+// documents. They are absent from the WinAnsi base 256, so an incomplete
+// table caused ToUnicode-exemption false positives. Values per glyphlist.txt.
+func TestGlyphToRuneFull_SpacingAccents(t *testing.T) {
+	want := map[string]rune{
+		"breve":        0x02D8,
+		"caron":        0x02C7,
+		"dotaccent":    0x02D9,
+		"hungarumlaut": 0x02DD,
+		"ogonek":       0x02DB,
+		"ring":         0x02DA,
+	}
+	for name, r := range want {
+		got, ok := GlyphToRuneFull(name)
+		if !ok || got != r {
+			t.Errorf("GlyphToRuneFull(%q) = %U, %v; want %U, true", name, got, ok, r)
+		}
+	}
+}

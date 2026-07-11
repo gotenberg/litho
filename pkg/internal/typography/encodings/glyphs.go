@@ -129,6 +129,15 @@ var GlyphToRune = map[string]rune{
 	"endash":         0x2013,
 	"emdash":         0x2014,
 	"tilde":          0x02DC,
+	// AGL spacing accent names reachable only through /Differences or /CharSet
+	// (absent from the WinAnsi base 256, so not added with the Latin-1 range
+	// above). Values per the Adobe Glyph List (glyphlist.txt).
+	"breve":          0x02D8,
+	"dotaccent":      0x02D9,
+	"ring":           0x02DA,
+	"ogonek":         0x02DB,
+	"caron":          0x02C7,
+	"hungarumlaut":   0x02DD,
 	"trademark":      0x2122,
 	"scaron":         0x0161,
 	"guilsinglright": 0x203A,
