@@ -45,6 +45,40 @@ func TestNotdefSymbolicType1ControlCode(t *testing.T) {
 	}
 }
 
+// TestNotdefTrueTypeControlCode pins that a used C0 control code in a
+// nonsymbolic, non-embedded TrueType font fires the .notdef rule: standard
+// encodings define no glyph for control characters, and the embedded-program
+// path cannot run for a non-embedded font. DEL (0x7F) is excluded (some fonts
+// define a glyph there), and a symbolic font is exempt.
+func TestNotdefTrueTypeControlCode(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	build := func(flags int, code byte) []Violation {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /TrueType /Name /TT0 /FirstChar 0 /LastChar 255 /Encoding /WinAnsiEncoding /FontDescriptor 3 0 R >>",
+			"<< /Type /FontDescriptor /FontName /Arial /Flags "+strconv.Itoa(flags)+" >>",
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{code: true}}
+		return checkNotdefGlyph(ctx, doc, fontDict, "TT0", 1, "PDF/A-2b", usage)
+	}
+
+	if got := build(32, 31); len(got) == 0 { // Nonsymbolic, C0 control code 31
+		t.Error("non-symbolic TrueType control code 31 should fire .notdef")
+	}
+	if got := build(4, 31); len(got) != 0 { // Symbolic: exempt
+		t.Errorf("symbolic TrueType control code should not fire .notdef, got %v", got)
+	}
+	if got := build(32, 0x7F); len(got) != 0 { // DEL is excluded
+		t.Errorf("DEL (0x7F) should not fire .notdef, got %v", got)
+	}
+}
+
 // TestSymbolicCmapViolation pins the part-aware symbolic TrueType cmap rule
 // against the veraPDF test expressions: PDF/A-1 requires exactly one subtable;
 // PDF/A-2/3 and PDF/UA-1 also accept a Microsoft Symbol (3,0); PDF/A-4 and

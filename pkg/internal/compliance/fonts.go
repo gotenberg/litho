@@ -916,21 +916,26 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	// don't define glyphs for control characters. For charCodes >= 0x20,
 	// absence of explicit encoding doesn't imply .notdef (standard encoding
 	// provides defaults for printable ASCII).
-	if subtype == "Type1" || subtype == "MMType1" {
+	if subtype == "Type1" || subtype == "MMType1" || subtype == "TrueType" {
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 		if len(enc) > 0 {
-			// A symbolic Type1 font resolves a code absent from /Differences
-			// through the font program's built-in encoding (ISO 32000-1
-			// §9.6.6.2), which litho does not parse. Such a control-range code
-			// is therefore not necessarily .notdef, so litho declines to report
-			// the implicit case rather than emit a false positive (mirroring the
-			// symbolic-TrueType handling below). An explicit ".notdef" in
-			// /Differences is still a real reference and fires regardless.
+			// An explicit /Differences ".notdef" fires for any used code. A C0
+			// control code (< 0x20) with no encoding entry renders .notdef
+			// because the ISO 32000-1 Annex D standard encodings define no glyph
+			// for control characters; this holds for a nonsymbolic simple font
+			// regardless of embedding, which is why it is evaluated here for
+			// Type1 and TrueType alike (the TrueType glyph-program path below
+			// cannot run for a non-embedded font, exactly where control-code
+			// .notdef references hide). DEL (0x7F) is deliberately excluded: some
+			// fonts do define a glyph there, so it is not universally .notdef.
+			// A symbolic font resolves codes through its built-in encoding (ISO
+			// 32000-1 §9.6.6.2), which litho does not parse, so the implicit case
+			// is declined rather than reported as a false positive.
 			symbolic := false
 			if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
 				symbolic = isSymbolicFont(ctx, doc, fd)
 			}
-			for code := range usage.charCodes {
+			for _, code := range sortedByteKeys(usage.charCodes) {
 				glyphName := enc[code]
 				if glyphName == ".notdef" {
 					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)

@@ -237,6 +237,17 @@ func sortedNames(d ast.PdfDict) []ast.PdfName {
 	return names
 }
 
+// sortedByteKeys returns the keys of a byte-keyed set in ascending order, so a
+// check that reports the first matching character code is deterministic.
+func sortedByteKeys(m map[byte]bool) []byte {
+	keys := make([]byte, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
 // checkPageTransparencyGroup1 checks for forbidden transparency Group on a page (PDF/A-1).
 func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int) []Violation {
 	groupObj, hasGroup := page["Group"]
