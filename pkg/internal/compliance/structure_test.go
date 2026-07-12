@@ -545,3 +545,25 @@ func TestResolveToStandard(t *testing.T) {
 		}
 	})
 }
+
+// TestCheckRoleMap_StandardRemapTargetScope pins ISO 19005-2/3 §6.7.3.4 t3
+// (veraPDF `remappedStandardType == null`): a standard structure type remapped
+// to another STANDARD type (e.g. /Caption -> /P) conforms; only a remap to a
+// NON-standard type fires. litho previously flagged any standard-type remap.
+func TestCheckRoleMap_StandardRemapTargetScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
+	mk := func(target ast.PdfName) []Violation {
+		str := ast.PdfDict{"RoleMap": ast.PdfDict{"Caption": target}}
+		var results []Violation
+		checkRoleMap(ctx, doc, str, "PDF/A-2a", &results)
+		return results
+	}
+	if got := mk(ast.PdfName("P")); hasRule(got, Rule_19005_2_6_7_3_4_t03) {
+		t.Errorf("standard->standard remap (/Caption->/P) must not fire §6.7.3.4 t3, got %v", got)
+	}
+	if got := mk(ast.PdfName("Foo")); !hasRule(got, Rule_19005_2_6_7_3_4_t03) {
+		t.Errorf("standard->non-standard remap (/Caption->/Foo) must fire §6.7.3.4 t3, got %v", got)
+	}
+}

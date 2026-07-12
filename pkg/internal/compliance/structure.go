@@ -275,10 +275,20 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 	// mislabeled UA rule under a PDF/A profile).
 	if !IsPDFUA(profile) || profile == "PDF/UA-1" {
 		if remapRule := roleMapStandardRemapRule(profile); remapRule.Specification != "" {
+			// ISO 19005-2/3 §6.7.3.4 t3 (veraPDF `remappedStandardType == null`)
+			// forbids remapping a standard type only to a NON-standard type; a
+			// standard→standard remap such as /Caption→/P conforms. PDF/UA-1 §7.1
+			// t7 forbids remapping a standard type at all, so it keeps the wider
+			// check (its behavior is gate-validated and left unchanged here).
+			targetMustBeNonStandard := !IsPDFUA(profile)
 			for _, src := range srcNames {
-				if isStandardStructType(src, profile) {
-					*results = append(*results, failf(remapRule, "standard type %s is remapped", src)...)
+				if !isStandardStructType(src, profile) {
+					continue
 				}
+				if targetMustBeNonStandard && isStandardStructType(mapping[src], profile) {
+					continue
+				}
+				*results = append(*results, failf(remapRule, "standard type %s is remapped to %s", src, mapping[src])...)
 			}
 		}
 	}
