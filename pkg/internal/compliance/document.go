@@ -30,7 +30,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	if vctx.ua {
 		if profile == "PDF/UA-2" {
-			results = append(results, checkVersionIs2(doc, catalog, Rule_14289_2_6_2_t01)...)
+			results = append(results, checkVersionIs2(doc, catalog, Rule_14289_2_6_2_t01, true)...)
 		}
 		doc.Logger.Debug("compliance.document: PDF/UA document checks complete", "violations", len(results))
 		return results
@@ -95,16 +95,23 @@ func checkVersionPart1(_ *document.Document, _ ast.PdfDict) []Violation {
 	return nil
 }
 
-// checkVersionPart4 validates that PDF/A-4 documents have PDF version 2.0.
-// Checks catalog /Version first, then falls back to the file header.
+// checkVersionPart4 validates the PDF/A-4 catalog /Version key (§6.1.12).
+// The rule constrains ONLY the catalog /Version entry when present: veraPDF
+// tests `Version == null || /^2\.[0-9]$/`. An absent /Version conforms, because
+// the file-header version is governed separately by §6.1.2 t1 (which requires
+// the header to be %PDF-2.n). Falling back to the header here would fire §6.1.12
+// on every non-2.0 header, duplicating §6.1.2 under the wrong clause.
 func checkVersionPart4(doc *document.Document, catalog ast.PdfDict) []Violation {
-	return checkVersionIs2(doc, catalog, Rule_19005_4_6_1_12_t01)
+	return checkVersionIs2(doc, catalog, Rule_19005_4_6_1_12_t01, false)
 }
 
-// checkVersionIs2 validates that the document uses PDF 2.0 version.
-func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule) []Violation {
+// checkVersionIs2 validates that the document uses PDF 2.0 version. When
+// fallbackToHeader is true, an absent catalog /Version defers to the file
+// header version; when false, only the catalog /Version key is checked (an
+// absent key conforms), matching ISO 19005-4 §6.1.12.
+func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule, fallbackToHeader bool) []Violation {
 	version := catalogVersion(catalog)
-	if version == "" {
+	if version == "" && fallbackToHeader {
 		version = doc.Version
 	}
 
