@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -55,5 +56,44 @@ func TestCheckVersionPart4_CatalogOnly(t *testing.T) {
 	// header still fires.
 	if got := checkVersionIs2(doc, ast.PdfDict{}, Rule_14289_2_6_2_t01, true); len(got) == 0 {
 		t.Error("UA-2 version check should fall back to the header and fire on a 1.7 header")
+	}
+}
+
+// TestCheckInfoDictPart4_T04AndT05Independent pins that PDF/A-4 §6.1.3 t4
+// (/Info requires /PieceInfo) and t5 (/Info may only contain /ModDate) fire
+// independently: an /Info with extra keys and no /PieceInfo must report BOTH,
+// not stop at t4. Previously litho returned after t4 and missed t5.
+func TestCheckInfoDictPart4_T04AndT05Independent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	has := func(vs []Violation, r Rule) bool {
+		for _, v := range vs {
+			if v.Rule == r {
+				return true
+			}
+		}
+		return false
+	}
+	t4 := Rule_19005_4_6_1_3_t04
+	t5 := Rule_19005_4_6_1_3_t05
+
+	// obj 2 = /Info with an extra key beyond /ModDate.
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog >>",
+		"<< /ModDate (D:20200101000000Z) /Creator (Acme) >>",
+	)
+	doc.Index.Trailer["Info"] = ast.PdfIndirectRef{ObjectNum: 2}
+
+	// No /PieceInfo in catalog + extra key: both t4 and t5 fire.
+	got := checkInfoDictPart4(ctx, doc, cat)
+	if !has(got, t4) || !has(got, t5) {
+		t.Errorf("want both t4 and t5, got t4=%v t5=%v (%v)", has(got, t4), has(got, t5), got)
+	}
+
+	// With /PieceInfo: t4 clears, t5 still fires (extra key).
+	catPI := ast.PdfDict{"PieceInfo": ast.PdfDict{}}
+	got = checkInfoDictPart4(ctx, doc, catPI)
+	if has(got, t4) || !has(got, t5) {
+		t.Errorf("with PieceInfo want only t5, got t4=%v t5=%v", has(got, t4), has(got, t5))
 	}
 }

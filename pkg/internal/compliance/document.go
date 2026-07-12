@@ -279,34 +279,43 @@ func checkInfoDictPart4(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 
-	// /Info is only allowed if /PieceInfo exists in catalog.
-	_, hasPieceInfo := catalog["PieceInfo"]
-	if !hasPieceInfo {
-		return fail(Rule_19005_4_6_1_3_t04, "Info key present in trailer but PieceInfo not in catalog")
+	var results []Violation
+
+	// t04: /Info is forbidden in the trailer unless /PieceInfo exists in the
+	// catalog (§6.1.3 t4: `containsPieceInfo || !containsInfo`).
+	if _, hasPieceInfo := catalog["PieceInfo"]; !hasPieceInfo {
+		results = append(results, fail(Rule_19005_4_6_1_3_t04, "Info key present in trailer but PieceInfo not in catalog")...)
 	}
 
-	// If Info dict is present, it may only contain /ModDate.
-	// Use ResolveDict to handle indirect references.
+	// t05: an /Info dict, when present, may contain ONLY /ModDate (§6.1.3 t5:
+	// `size == 1 && ModDate != null`). This is independent of the t04
+	// PieceInfo condition, so it is checked even when t04 fires. Use
+	// ResolveDict to handle indirect references.
 	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
 	if err != nil {
 		doc.Logger.Debug("compliance.document: cannot resolve Info dict", "error", err)
-		return nil
+		return results
 	}
 	if infoDict != nil {
-		var badKeys []string
-		for key := range infoDict {
-			if key != "ModDate" {
-				badKeys = append(badKeys, string(key))
+		_, hasModDate := infoDict["ModDate"]
+		if len(infoDict) != 1 || !hasModDate {
+			var badKeys []string
+			for key := range infoDict {
+				if key != "ModDate" {
+					badKeys = append(badKeys, string(key))
+				}
 			}
-		}
-		slices.Sort(badKeys) // deterministic message order
-		if len(badKeys) > 0 {
-			return failf(Rule_19005_4_6_1_3_t05,
-				"Info dictionary contains keys [%s] (only ModDate allowed)", strings.Join(badKeys, ", "))
+			slices.Sort(badKeys) // deterministic message order
+			detail := "only ModDate allowed"
+			if !hasModDate {
+				detail = "missing required ModDate; only ModDate allowed"
+			}
+			results = append(results, failf(Rule_19005_4_6_1_3_t05,
+				"Info dictionary contains keys [%s] (%s)", strings.Join(badKeys, ", "), detail)...)
 		}
 	}
 
-	return nil
+	return results
 }
 
 // checkPermissionsDict validates that the /Perms dict only contains /UR3 and
