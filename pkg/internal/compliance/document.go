@@ -523,30 +523,18 @@ func presStepsRule(part int) Rule {
 }
 
 // checkEmbeddedFileMIME validates PDF/A-4 §6.9 t1: embedded file streams must
-// have a valid /Subtype MIME type.
-func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
-	// Walk the /Names/EmbeddedFiles name tree.
-	names, err := document.ResolveDict(ctx, doc, catalog["Names"])
-	if err != nil || names == nil {
-		return nil
-	}
-	efTree, err := document.ResolveDict(ctx, doc, names["EmbeddedFiles"])
-	if err != nil || efTree == nil {
-		return nil
-	}
-	namesArr, err := document.ResolveArray(ctx, doc, efTree["Names"])
-	if err != nil || len(namesArr) == 0 {
-		return nil
-	}
-
+// have a valid /Subtype MIME type. Every /Type /Filespec object is examined via
+// [collectFileSpecs], so a file specification reachable only through an
+// intermediate /Kids node of the EmbeddedFiles name tree is not missed (a direct
+// /Names read would skip it). This overlaps the PDF/A-3 §6.8 t1 check
+// [checkEmbeddedSubtypeMIME]; consolidating the two is left to a reviewed change.
+func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, _ ast.PdfDict) []Violation {
 	var results []Violation
-	// Names array is [name1, filespec1, name2, filespec2, ...]
-	for i := 1; i < len(namesArr); i += 2 {
-		fileSpec, err := document.ResolveDict(ctx, doc, namesArr[i])
-		if err != nil || fileSpec == nil {
+	for _, fs := range collectFileSpecs(ctx, doc) {
+		if !fs.hasEF {
 			continue
 		}
-		efDict, err := document.ResolveDict(ctx, doc, fileSpec["EF"])
+		efDict, err := document.ResolveDict(ctx, doc, fs.dict["EF"])
 		if err != nil || efDict == nil {
 			continue
 		}

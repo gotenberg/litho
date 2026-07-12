@@ -82,3 +82,33 @@ func TestMetadataTypeSubtype(t *testing.T) {
 		t.Errorf("non-UA profile: got %v, want none", got)
 	}
 }
+
+// TestCheckEmbeddedFileMIME_KidsNested pins PDF/A-4 §6.9 t1 for a file
+// specification reachable only through an intermediate /Kids node of the
+// EmbeddedFiles name tree: the check walks every /Type /Filespec object via
+// collectFileSpecs, so nesting cannot hide a stream with a missing or invalid
+// /Subtype. A direct /Names read (the previous implementation) missed these.
+func TestCheckEmbeddedFileMIME_KidsNested(t *testing.T) {
+	ctx := context.Background()
+	mk := func(stream string) []Violation {
+		doc, cat := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Kids [4 0 R] >> >> >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Names [(f.dat) 5 0 R] >>", // intermediate /Kids node
+			"<< /Type /Filespec /F (f.dat) /EF << /F 6 0 R >> /AFRelationship /Data >>",
+			stream,
+		)
+		return checkEmbeddedFileMIME(ctx, doc, cat)
+	}
+	// Stream with no /Subtype at all: fires §6.9 t1.
+	noSub := "<< /Type /EmbeddedFile /Length 3 >>\nstream\nabc\nendstream"
+	if got := mk(noSub); !hasRule(got, Rule_19005_4_6_9_t01) {
+		t.Errorf("nested filespec with missing /Subtype: want §6.9 t1, got %v", got)
+	}
+	// Stream with a valid MIME /Subtype: no violation.
+	goodSub := "<< /Type /EmbeddedFile /Subtype /text#2Fplain /Length 3 >>\nstream\nabc\nendstream"
+	if got := mk(goodSub); hasRule(got, Rule_19005_4_6_9_t01) {
+		t.Errorf("nested filespec with valid MIME: want none, got %v", got)
+	}
+}
