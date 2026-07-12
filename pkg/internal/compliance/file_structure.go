@@ -165,9 +165,20 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 		valid = buf[5] == '2' && buf[6] == '.' && buf[7] >= '0' && buf[7] <= '9'
 	}
 
+	var results []Violation
 	if !valid {
-		return fail(fileHeaderRule(profile),
-			fmt.Sprintf("header %q does not match required pattern", "%PDF-"+version))
+		results = append(results, fail(fileHeaderRule(profile),
+			fmt.Sprintf("header %q does not match required pattern", "%PDF-"+version))...)
+		// The §6.1.2 t2 binary comment on the next line is an independent check
+		// veraPDF evaluates even when the version VALUE is wrong for the profile
+		// (e.g. %PDF-1.4 forced to PDF/A-4 fires both t1 and t2). Continue only
+		// when the header is structurally %PDF-d.d, so byte 8 reliably locates
+		// the EOL and the comment; a structurally malformed version line has no
+		// locatable comment to check.
+		structuralVersion := buf[5] >= '0' && buf[5] <= '9' && buf[6] == '.' && buf[7] >= '0' && buf[7] <= '9'
+		if !structuralVersion {
+			return results
+		}
 	}
 
 	// After %PDF-x.y, byte 8 should be an EOL marker immediately. A trailing
@@ -178,7 +189,6 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 	// conforms regardless of what follows on the line. Do not flag a trailing
 	// byte at part 1, but still scan on to the EOL so the t2 binary comment on
 	// the next line is evaluated (it is independent of the version line).
-	var results []Violation
 	eol := 8
 	if buf[eol] != '\n' && buf[eol] != '\r' {
 		if part >= 2 {

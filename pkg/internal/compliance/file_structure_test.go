@@ -172,3 +172,42 @@ func TestFindStreamDataStart(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckHeaderBytesPart4_VersionAndCommentIndependent pins that a PDF/A-4
+// header with a wrong version VALUE still gets its §6.1.2 t2 binary comment
+// checked: veraPDF fires t1 (version) and t2 (comment) independently. litho
+// previously returned after the failed version check and missed t2.
+func TestCheckHeaderBytesPart4_VersionAndCommentIndependent(t *testing.T) {
+	t.Parallel()
+	countRule := func(vs []Violation, r Rule) int {
+		n := 0
+		for _, v := range vs {
+			if v.Rule == r {
+				n++
+			}
+		}
+		return n
+	}
+	t1 := Rule_19005_4_6_1_2_t01
+	t2 := Rule_19005_4_6_1_2_t02
+	tests := []struct {
+		name           string
+		buf            string
+		wantT1, wantT2 int
+	}{
+		{"wrong version + missing binary comment fires both", "%PDF-1.4\n\xdb\xaf\x01\xfb\r\n1 0 obj", 1, 1},
+		{"wrong version + valid binary comment fires only t1", "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj", 1, 0},
+		{"correct 2.0 header + valid comment fires neither", "%PDF-2.0\n%\xe2\xe3\xcf\xd3\n1 0 obj", 0, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := checkHeaderBytes([]byte(tc.buf), "PDF/A-4")
+			if c := countRule(got, t1); c != tc.wantT1 {
+				t.Errorf("t1 = %d, want %d (%v)", c, tc.wantT1, got)
+			}
+			if c := countRule(got, t2); c != tc.wantT2 {
+				t.Errorf("t2 = %d, want %d (%v)", c, tc.wantT2, got)
+			}
+		})
+	}
+}
