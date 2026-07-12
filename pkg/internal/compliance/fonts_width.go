@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"maps"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -9,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
+	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
 // widthTolerance is the maximum allowed difference between PDF-declared
@@ -114,20 +116,31 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 		}
 	} else if fontDict["Encoding"] != nil || !isSymbolicFont(ctx, doc, fd) {
 		// A non-symbolic TrueType font (or one with an explicit /Encoding)
-		// resolves a code through its glyph name (ISO 32000-1 §9.6.6.4), not a
-		// raw cmap lookup, which indexes whatever subtable the program exposes
-		// and can pick the wrong glyph: a MacRoman code such as 0xD1=emdash read
-		// against a Unicode cmap yields U+00D1=Ntilde. Override the cmap-derived
-		// GID with the name-derived one wherever the program names the glyph.
-		// Codes whose glyph name the program does not expose keep the cmap value
-		// rather than being forced to .notdef, so glyph-presence is unaffected.
+		// resolves a code through its glyph name (ISO 32000-1 §9.6.6.4): the name
+		// maps to a Unicode value via the Adobe Glyph List, and that Unicode is
+		// looked up in the font's cmap (charCodeToGID is keyed by the cmap's
+		// Unicode value, see [typography.ExtractCharCodeToGID]). This differs from
+		// matching the glyph literally named `name`: a font may carry a distinct
+		// glyph under that name (e.g. a Greek "mu" beside the micro-sign "mu1"
+		// that WinAnsi code 0xB5 actually selects), and a raw code lookup picks
+		// the wrong glyph too (MacRoman 0xD1=emdash read as U+00D1=Ntilde). The
+		// AGL/cmap path resolves both. Fall back to a direct name match only when
+		// that path is empty, keeping codes the program does not name at their
+		// cmap value rather than forcing .notdef.
 		glyphNames := typography.ExtractGlyphNames(ctx, fontData)
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
-		if glyphNames != nil && len(enc) > 0 {
+		if len(enc) > 0 {
+			unicodeToGID := maps.Clone(charCodeToGID)
 			nameToGID := buildNameToGID(glyphNames)
 			for code, name := range enc {
 				if name == ".notdef" || name == "" {
 					continue
+				}
+				if r, ok := encodings.GlyphToRuneFull(name); ok && r >= 0 && r <= 0xFFFF {
+					if gid, ok := unicodeToGID[uint16(r)]; ok {
+						charCodeToGID[uint16(code)] = gid
+						continue
+					}
 				}
 				if gid, ok := nameToGID[name]; ok {
 					charCodeToGID[uint16(code)] = gid
