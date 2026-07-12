@@ -165,3 +165,39 @@ func TestToUnicodeTrueTypeStandardBaseDifferences(t *testing.T) {
 		t.Error("TrueType Differences with a non-AGL-resolvable name should still require /ToUnicode")
 	}
 }
+
+// TestToUnicodeSymbolicNonResolvableDifferences pins that a symbolic font whose
+// used codes are remapped by /Differences to glyph names with no Unicode value
+// (neither AGL- nor Symbol-encoding-resolvable, e.g. MathematicalPi's "H20850")
+// is NOT exempt from /ToUnicode: those codes have no Unicode mapping, which
+// veraPDF reports per glyph. A symbolic font whose used codes resolve (Symbol
+// encoding names, or the built-in encoding litho cannot parse) stays exempt.
+func TestToUnicodeSymbolicNonResolvableDifferences(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	build := func(diffs string, used byte) []Violation {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /Type1 /Name /F1 /FirstChar 0 /LastChar 255 /Encoding 3 0 R /FontDescriptor 4 0 R >>",
+			"<< /Type /Encoding /Differences "+diffs+" >>",
+			"<< /Type /FontDescriptor /FontName /GNDPAG+MathematicalPi-Three /Flags 4 >>", // 4 = Symbolic
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{used: true}}
+		return checkToUnicode(ctx, doc, fontDict, "F1", 1, "PDF/A-2u", usage)
+	}
+
+	if got := build("[ 65 /H20850 ]", 65); len(got) == 0 {
+		t.Error("symbolic font with a used non-resolvable Differences name should require /ToUnicode")
+	}
+	if got := build("[ 65 /alpha ]", 65); len(got) != 0 {
+		t.Errorf("symbolic font whose used Differences name is a Symbol-encoding name should be exempt, got %v", got)
+	}
+	if got := build("[ 65 /H20850 ]", 66); len(got) != 0 {
+		t.Errorf("symbolic font whose UNUSED code is non-resolvable should stay exempt, got %v", got)
+	}
+}

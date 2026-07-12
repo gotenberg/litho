@@ -452,11 +452,20 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 
 	// Exemption (b): symbolic font with single cmap and an explicit encoding.
 	// Symbolic fonts are only exempt when they define a character mapping via
-	// /Encoding; without it, /ToUnicode is still required.
+	// /Encoding; without it, /ToUnicode is still required. The mapping must also
+	// actually resolve to Unicode: a symbolic font whose /Differences remap the
+	// used codes to glyph names with no Unicode value (neither AGL- nor
+	// Symbol-encoding-resolvable, e.g. MathematicalPi's "H20850") has no Unicode
+	// mapping at all, which veraPDF reports per glyph. Codes left to the font's
+	// built-in encoding are skipped by [usedGlyphNamesResolvable] (litho cannot
+	// parse them), so this stays free of false positives; usage-less checks stay
+	// exempt for the same reason.
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if isSymbolicFont(ctx, doc, fd) {
 		if _, hasEncoding := fontDict["Encoding"]; hasEncoding {
-			return nil
+			if hasToUnicode(fontDict) || usage == nil || usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
+				return nil
+			}
 		}
 	}
 
