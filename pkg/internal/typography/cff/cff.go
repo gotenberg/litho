@@ -1183,8 +1183,12 @@ func extractCharstringWidth(cs []byte) *int32 {
 					return &w
 				}
 				return nil
-			case 14: // endchar, 0 operands
-				if len(stack) > 0 {
+			case 14: // endchar
+				// endchar takes 0 operands, or 4 for the deprecated seac accent
+				// composition (adx ady bchar achar). A leading width makes the
+				// count 1 or 5 respectively; 4 operands is seac with NO width
+				// (the glyph uses defaultWidthX). Only 1 or 5 carries a width.
+				if len(stack) == 1 || len(stack) == 5 {
 					w := stack[0]
 					return &w
 				}

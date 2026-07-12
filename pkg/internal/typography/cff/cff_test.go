@@ -496,6 +496,36 @@ func TestExtractCharstringWidth_NoWidthEndchar(t *testing.T) {
 	}
 }
 
+func TestExtractCharstringWidth_EndcharSeacNoWidth(t *testing.T) {
+	// endchar with 4 operands is the deprecated seac accent composition
+	// (adx ady bchar achar) and carries NO width: the glyph uses defaultWidthX.
+	// Reading the first operand as a width is a bug (produced 496 instead of a
+	// defaulted 500 on real Univers-Oblique accented glyphs).
+	cs := append(encodeCFFInt(111), encodeCFFInt(0)...)
+	cs = append(cs, encodeCFFInt(101)...)
+	cs = append(cs, encodeCFFInt(194)...)
+	cs = append(cs, 14)
+	if w := extractCharstringWidth(cs); w != nil {
+		t.Errorf("seac endchar (4 operands) carries no width; got %d", *w)
+	}
+}
+
+func TestExtractCharstringWidth_EndcharSeacWithWidth(t *testing.T) {
+	// endchar with 5 operands is width + seac (adx ady bchar achar).
+	cs := append(encodeCFFInt(250), encodeCFFInt(111)...)
+	cs = append(cs, encodeCFFInt(0)...)
+	cs = append(cs, encodeCFFInt(101)...)
+	cs = append(cs, encodeCFFInt(194)...)
+	cs = append(cs, 14)
+	w := extractCharstringWidth(cs)
+	if w == nil {
+		t.Fatal("expected width, got nil")
+	}
+	if *w != 250 {
+		t.Errorf("width: got %d, want 250", *w)
+	}
+}
+
 func TestExtractCharstringWidth_HMoveto(t *testing.T) {
 	// width 200, dx 50, hmoveto (op 22)
 	cs := append(encodeCFFInt(200), encodeCFFInt(50)...)
