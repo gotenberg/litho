@@ -1,10 +1,41 @@
 package compliance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
+
+// TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage covers §6.2.4.3: a Form
+// XObject whose transparency /Group /CS is a device colour space is itself a
+// device-colour usage (veraPDF PDDeviceRGB at /Group/colorSpace), coverable only
+// by a matching OutputIntent. A group with no device /CS is not.
+func TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	scan := func(t *testing.T, group string) deviceCSUsage {
+		t.Helper()
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] "+group+" /Length 0 >>\nstream\nendstream",
+		)
+		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve form: %v", err)
+		}
+		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, 4)
+	}
+
+	if !scan(t, "/Group << /S /Transparency /CS /DeviceRGB >>").rgb {
+		t.Error("DeviceRGB transparency group /CS must count as DeviceRGB usage")
+	}
+	if scan(t, "/Group << /S /Transparency >>").rgb {
+		t.Error("a transparency group without a device /CS must not count as DeviceRGB usage")
+	}
+}
 
 func TestParseICCHeader(t *testing.T) {
 	t.Parallel()
