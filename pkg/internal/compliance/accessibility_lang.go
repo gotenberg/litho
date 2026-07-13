@@ -37,9 +37,30 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 	rule := langValidRule(profile)
 
 	var results []Violation
+	forEachMarkedContentLang(ctx, doc, catalog, func(pageIdx int, tag string) bool {
+		// A /Lang present on a marked-content sequence must be a valid
+		// Language-Tag; for PDF/UA an empty value is invalid (UA-1 §7.2 t29
+		// / UA-2 §8.4.4 t2), unlike PDF/A where an empty text string is
+		// permitted. This pass runs only under PDF/UA (guarded above).
+		if tag == "" || !IsValidLangTag(tag) {
+			results = append(results, failf(rule,
+				"page %d: marked-content /Lang %q is not a valid language tag", pageIdx+1, tag)...)
+		}
+		return false
+	})
+	return results
+}
+
+// forEachMarkedContentLang invokes fn for every /Lang entry on a BDC or DP
+// marked-content operator across all page content streams. tag is the resolved,
+// trimmed Language-Tag ("" when the entry is present but empty). fn returns true
+// to stop the scan early. The dict-based catalog and structure-tree checks never
+// reach content-operator language tags, so this content-stream pass is the only
+// place they are observed.
+func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, tag string) bool) {
 	for pageIdx, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
-			return results
+			return
 		}
 		data, err := resolvePageContentBytes(ctx, doc, page)
 		if err != nil || len(data) == 0 {
@@ -82,18 +103,26 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 				continue
 			}
 			lang, _ := document.ResolveString(ctx, doc, langObj)
-			tag := strings.TrimSpace(document.DecodePdfString(lang))
-			// A /Lang present on a marked-content sequence must be a valid
-			// Language-Tag; for PDF/UA an empty value is invalid (UA-1 §7.2 t29
-			// / UA-2 §8.4.4 t2), unlike PDF/A where an empty text string is
-			// permitted. This pass runs only under PDF/UA (guarded above).
-			if tag == "" || !IsValidLangTag(tag) {
-				results = append(results, failf(rule,
-					"page %d: marked-content /Lang %q is not a valid language tag", pageIdx+1, tag)...)
+			if fn(pageIdx, strings.TrimSpace(document.DecodePdfString(lang))) {
+				return
 			}
 		}
 	}
-	return results
+}
+
+// documentHasMarkedContentLang reports whether any BDC or DP marked-content
+// operator carries a /Lang entry. veraPDF derives an SETextItem's language from
+// such inline tags, so their presence, even when the tag is empty or malformed
+// (which §7.2 t29 reports separately), makes the language determinable for the
+// §7.2 t34 coverage rule. The coverage check must honour them or it falsely
+// fires t34 on files whose only /Lang is inline.
+func documentHasMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	found := false
+	forEachMarkedContentLang(ctx, doc, catalog, func(_ int, _ string) bool {
+		found = true
+		return true
+	})
+	return found
 }
 
 // checkLangRequired ensures the catalog has a /Lang key with a valid RFC 3066 tag.
@@ -196,10 +225,20 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 			if anyLangFound {
 				return
 			}
-			if resolveNonEmptyLang(ctx, doc, elem) != "" {
+			// A present /Lang makes the language determinable (veraPDF: Lang !=
+			// null), even when empty. An empty value is still reported as invalid
+			// by t29, but it must not also count as undeterminable for t34.
+			if resolveNonEmptyLang(ctx, doc, elem) != "" || langPresentButEmpty(ctx, doc, elem) {
 				anyLangFound = true
 			}
 		})
+	}
+	// A /Lang set inline via a BDC/DP marked-content operator also makes the
+	// language determinable (veraPDF reads these tags for §7.2 t34), even though
+	// the structure-tree walk above cannot see them. Without this, t34 falsely
+	// fires on files whose only /Lang is inline.
+	if !anyLangFound {
+		anyLangFound = documentHasMarkedContentLang(ctx, doc, catalog)
 	}
 
 	var results []Violation
