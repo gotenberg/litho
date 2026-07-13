@@ -63,14 +63,12 @@ func TestRaceSeparationRemediation(t *testing.T) {
 	var mu sync.Mutex
 	shas := map[string]bool{}
 	var wg sync.WaitGroup
-	for round := 0; round < 20; round++ {
+	for range 20 {
 		for _, m := range others {
 			wg.Add(1)
 			go func(path string) { defer wg.Done(); _, _ = remediate(path) }(m)
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sum, ids := remediate(target[0])
 			mu.Lock()
 			shas[sum] = true
@@ -80,7 +78,7 @@ func TestRaceSeparationRemediation(t *testing.T) {
 				}
 			}
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 	if len(shas) > 1 {
