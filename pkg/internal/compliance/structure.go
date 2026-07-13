@@ -301,16 +301,21 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		}
 	}
 
-	// Check for self-mappings (A→A) which are always circular. veraPDF flags a
-	// standard type's identity self-map as a circular mapping too (e.g. /LI /LI
-	// under ISO 14289-1 §7.1 t6 / ISO 14289-2 §8.2.4 t2), so standard types are
-	// NOT exempt here.
+	// Check for self-mappings (A→A) which are always circular. veraPDF scopes the
+	// circular-mapping rule to non-standard structure elements under PDF/A
+	// (6.7.3.4 / 6.8.3.4 t2, object SENonStandard) but to ALL structure elements
+	// under PDF/UA (ISO 14289-1 §7.1 t6 / ISO 14289-2 §8.2.4 t2, object
+	// PDStructElem). A standard type's identity self-map is therefore circular
+	// only under PDF/UA; PDF/A treats a standard-type RoleMap entry as inert.
 	for _, src := range srcNames {
-		target := mapping[src]
-		if src == target {
-			*results = append(*results, failf(roleMapCircularRule(profile),
-				"circular mapping for %s", src)...)
+		if src != mapping[src] {
+			continue
 		}
+		if isStandardStructType(src, profile) && !IsPDFUA(profile) {
+			continue
+		}
+		*results = append(*results, failf(roleMapCircularRule(profile),
+			"circular mapping for %s", src)...)
 	}
 
 	// Check non-standard types resolve to standard type (no circularity).

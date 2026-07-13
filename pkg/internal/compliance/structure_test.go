@@ -595,3 +595,31 @@ func TestCheckRoleMap_UA1SelfMapNotStandardRemap(t *testing.T) {
 		t.Errorf("/Caption->/P remap: want §7.1 t7, got %v", diffMap)
 	}
 }
+
+// TestCheckRoleMap_StandardSelfMapCircularScope covers the profile-dependent scope
+// of the circular-mapping rule: veraPDF keys it on PDStructElem under PDF/UA (fires
+// on a standard type's self-map) but on SENonStandard under PDF/A (does not). A
+// non-standard self-map is circular in every profile.
+func TestCheckRoleMap_StandardSelfMapCircularScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
+	mk := func(profile string, rm ast.PdfDict) []Violation {
+		var results []Violation
+		checkRoleMap(ctx, doc, ast.PdfDict{"RoleMap": rm}, profile, &results)
+		return results
+	}
+
+	stdSelf := ast.PdfDict{"Document": ast.PdfName("Document")}
+	if got := mk("PDF/A-2a", stdSelf); hasRule(got, Rule_19005_2_6_7_3_4_t02) {
+		t.Errorf("PDF/A-2a: standard self-map /Document->/Document must NOT fire §6.7.3.4 t2, got %v", got)
+	}
+	if got := mk("PDF/UA-1", stdSelf); !hasRule(got, Rule_14289_1_7_1_t06) {
+		t.Errorf("PDF/UA-1: standard self-map /Document->/Document must fire §7.1 t6, got %v", got)
+	}
+
+	nonStdSelf := ast.PdfDict{"Foo": ast.PdfName("Foo")}
+	if got := mk("PDF/A-2a", nonStdSelf); !hasRule(got, Rule_19005_2_6_7_3_4_t02) {
+		t.Errorf("PDF/A-2a: non-standard self-map /Foo->/Foo must fire §6.7.3.4 t2, got %v", got)
+	}
+}
