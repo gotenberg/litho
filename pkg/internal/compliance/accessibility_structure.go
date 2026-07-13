@@ -19,6 +19,13 @@ var standardNamespaceURIs = map[string]bool{
 	"http://www.w3.org/1998/Math/MathML": true, // MathML
 }
 
+// defaultStandardNamespaceURI is the namespace a structure element without an
+// explicit /NS entry belongs to when the document declares no /Namespaces array.
+// Per ISO 32000-2:2020, 14.8.6, such an element is in the default standard
+// structure namespace, so a non-standard type name there is still SENonStandard
+// (ISO 14289-2 §8.2.4 t1), matching veraPDF's isNotMappedToStandardType.
+const defaultStandardNamespaceURI = "http://iso.org/pdf2/ssn"
+
 // checkNamespaceRoleMapping validates PDF/UA-2 §8.2.4:
 // - t1/t4: all structure elements must belong to or be role-mapped to a standard namespace
 // - t3: within a namespace, types shall not be role-mapped to types in the same namespace
@@ -136,13 +143,19 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 	}
 
 	// t1/t4: walk structure tree, check each element resolves to a standard namespace.
-	// Elements with no explicit /NS use the first namespace in the array.
-	defaultNSURI := ""
+	// Elements with no explicit /NS use the first namespace in the array. When the
+	// document declares no /Namespaces array, an NS-less element belongs to the
+	// default standard structure namespace (ISO 32000-2 §14.8.6), so a non-standard
+	// type name there is still SENonStandard (§8.2.4 t1). Defaulting to "" instead
+	// would skip the check entirely, under-detecting relative to veraPDF.
+	defaultNSURI := defaultStandardNamespaceURI
 	if len(nsArr) > 0 {
 		nsDict, _ := document.ResolveDict(ctx, doc, nsArr[0])
 		if nsDict != nil {
 			ns, _ := document.ResolveString(ctx, doc, nsDict["NS"])
-			defaultNSURI = string(ns)
+			if len(ns) > 0 {
+				defaultNSURI = string(ns)
+			}
 		}
 	}
 
@@ -172,6 +185,17 @@ func usedTypesWithoutNS(ctx context.Context, doc *document.Document, treeRoot as
 		}
 	})
 	return out
+}
+
+// typeInLegacyRoleMap reports whether typeName is a key in the structure tree
+// root's legacy /RoleMap. Such a type IS mapped per ISO 32000-2 §14.8.4, even
+// when the mapping is circular or same-namespace; those defects are reported by
+// §8.2.4 t02/t03, so the type must not also trip the unmapped-type rule t01.
+// roleMapChainReachesStandard alone does not cover circular chains, which never
+// reach a standard type yet are still "mapped".
+func typeInLegacyRoleMap(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfName) bool {
+	_, ok := roleMap[typeName]
+	return ok
 }
 
 // typeIsRoleMapNSKey reports whether typeName appears as a key in any
@@ -257,6 +281,7 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// t01. The standard-namespace branch below applies the same exclusions.
 			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) &&
 				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
+				!typeInLegacyRoleMap(roleMap, sType) &&
 				!typeIsRoleMapNSKey(ctx, doc, sType, nsArr) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in namespace %q is not mapped to a standard namespace",
@@ -279,6 +304,7 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// defects are reported by t02/t03, not t01, so exclude them here.
 			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) &&
 				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
+				!typeInLegacyRoleMap(roleMap, sType) &&
 				!typeIsRoleMapNSKey(ctx, doc, sType, nsArr) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in standard namespace %q is not a standard type and is not role-mapped",
