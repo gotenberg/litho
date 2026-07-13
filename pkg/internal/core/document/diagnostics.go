@@ -51,6 +51,15 @@ func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, 
 	return diags, nil
 }
 
+// StreamHasUndecodableFilter reports whether the stream's /Filter chain contains
+// a filter that neither a built-in decoder nor a registered plugin can decode, so
+// [Document.DecodeStream] would leave the bytes filter-encoded. Content-analysis
+// callers use it to skip operator parsing on such a stream, whose still-encoded
+// bytes would otherwise be misread as a run of undefined operators.
+func (d *Document) StreamHasUndecodableFilter(stream ast.PdfStream) bool {
+	return len(d.undecodableFilters(stream)) > 0
+}
+
 // undecodableFilters returns the names in the stream's /Filter chain that
 // no built-in decoder or registered plugin can decode.
 func (d *Document) undecodableFilters(stream ast.PdfStream) []string {

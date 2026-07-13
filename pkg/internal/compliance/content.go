@@ -206,6 +206,15 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 
 	var allData []byte
 	for _, s := range streams {
+		// A stream whose /Filter chain contains an undecodable filter (e.g. a
+		// misspelled "Flatedecode") stays filter-encoded after DecodeStream.
+		// Parsing those bytes as content operators yields a run of spurious
+		// "undefined operator" violations; the bad filter itself is reported
+		// separately (ISO 19005 §6.1.6.2). veraPDF likewise does not parse an
+		// undecodable content stream, so skip the page's operator analysis.
+		if doc.StreamHasUndecodableFilter(s) {
+			return nil, errUndecodableContent
+		}
 		data, err := doc.DecodeStream(ctx, s)
 		if err != nil {
 			return nil, fmt.Errorf("decoding content stream: %w", err)
