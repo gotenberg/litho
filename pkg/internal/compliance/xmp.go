@@ -989,20 +989,21 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	level := PDFALevel(profile)
 	expectedPart := fmt.Sprintf("%d", part)
 
-	// Check: pdfaid:part must exist.
-	if !hasPart {
+	// veraPDF fires the missing-identification rule (t1,
+	// MainXMPPackage.containsPDFAIdentification) only when the pdfaid schema is
+	// entirely absent. Any recovered pdfaid field (part, conformance, rev, amd or
+	// corr) means the PDFAIdentification object exists, so a missing or wrong
+	// part or conformance is a value-level violation (t2/t3) scoped to that
+	// object, not a missing-schema one.
+	if !hasPart && !hasConf && revValue == "" && !hasAmd && !hasCorr {
 		*results = append(*results, xmpPDFAIdMissingRule(part)...)
 		return
 	}
 
-	// For parts 1-3, pdfaid:conformance must exist (unless level is 0 for part 4).
-	if part < 4 && !hasConf {
-		*results = append(*results, xmpPDFAIdMissingRule(part)...)
-		return
-	}
-
-	// Validate pdfaid:part value.
-	if partValue != "" && partValue != expectedPart {
+	// Validate pdfaid:part presence and value (t2): an absent part fails the
+	// `part == expected` test just as a wrong value does. Absent conformance for
+	// parts 1-3 fails the ConformanceSatisfies check below (t3).
+	if !hasPart || (partValue != "" && partValue != expectedPart) {
 		*results = append(*results, xmpPDFAPartRule(part, partValue)...)
 	}
 

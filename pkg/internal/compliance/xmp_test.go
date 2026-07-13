@@ -301,3 +301,70 @@ func TestDCTitleLangAltMalformed(t *testing.T) {
 		})
 	}
 }
+
+// TestXMPCheckPDFAIdentification_PresentSchemaMissingField covers the
+// schema-present/value-missing split: veraPDF reports the missing-identification
+// rule (t1) only when the pdfaid schema is entirely absent. A present schema
+// (any pdfaid field) with a missing part or conformance is a value-level
+// violation (t2/t3), not t1.
+func TestXMPCheckPDFAIdentification_PresentSchemaMissingField(t *testing.T) {
+	t.Parallel()
+	wrap := func(body string) []byte {
+		return []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+` + body + `
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+	}
+	hasRule := func(results []Violation, clause string, test int) bool {
+		for _, v := range results {
+			if v.Rule.Clause == clause && v.Rule.TestNumber == test {
+				return true
+			}
+		}
+		return false
+	}
+
+	// PDF/A-4: rev present, part absent -> t2 (part), not t1.
+	t.Run("part missing with schema present fires t2 not t1", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		xmpCheckPDFAIdentification(context.Background(),
+			wrap(`<pdfaid:rev>2020</pdfaid:rev>`), "PDF/A-4", 4, &results)
+		if hasRule(results, "6.7.3", 1) {
+			t.Errorf("schema present (rev), part absent: must not fire §6.7.3 t1, got %v", results)
+		}
+		if !hasRule(results, "6.7.3", 2) {
+			t.Errorf("part absent: want §6.7.3 t2, got %v", results)
+		}
+	})
+
+	// PDF/A-2b: part present, conformance absent -> t3, not t1.
+	t.Run("conformance missing with schema present fires t3 not t1", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		xmpCheckPDFAIdentification(context.Background(),
+			wrap(`<pdfaid:part>2</pdfaid:part>`), "PDF/A-2b", 2, &results)
+		if hasRule(results, "6.6.4", 1) {
+			t.Errorf("schema present (part), conformance absent: must not fire §6.6.4 t1, got %v", results)
+		}
+		if !hasRule(results, "6.6.4", 3) {
+			t.Errorf("conformance absent: want §6.6.4 t3, got %v", results)
+		}
+	})
+
+	// No pdfaid field at all -> t1 (schema missing).
+	t.Run("no pdfaid field fires t1", func(t *testing.T) {
+		t.Parallel()
+		var results []Violation
+		xmpCheckPDFAIdentification(context.Background(),
+			wrap(``), "PDF/A-2b", 2, &results)
+		if !hasRule(results, "6.6.4", 1) {
+			t.Errorf("no pdfaid field: want §6.6.4 t1 (schema missing), got %v", results)
+		}
+	})
+}
