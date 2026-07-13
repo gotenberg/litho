@@ -567,3 +567,31 @@ func TestCheckRoleMap_StandardRemapTargetScope(t *testing.T) {
 		t.Errorf("standard->non-standard remap (/Caption->/Foo) must fire §6.7.3.4 t3, got %v", got)
 	}
 }
+
+// TestCheckRoleMap_UA1SelfMapNotStandardRemap covers ISO 14289-1 §7.1: a standard
+// type mapped to itself is an identity self-map, which veraPDF reports as a
+// circular mapping (t6) with remappedStandardType == null, not a standard remap
+// (t7). A standard type remapped to a DIFFERENT type still fires t7 under UA-1.
+func TestCheckRoleMap_UA1SelfMapNotStandardRemap(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
+	mk := func(rm ast.PdfDict) []Violation {
+		var results []Violation
+		checkRoleMap(ctx, doc, ast.PdfDict{"RoleMap": rm}, "PDF/UA-1", &results)
+		return results
+	}
+
+	selfMap := mk(ast.PdfDict{"LI": ast.PdfName("LI")})
+	if !hasRule(selfMap, Rule_14289_1_7_1_t06) {
+		t.Errorf("/LI->/LI self-map: want §7.1 t6 (circular), got %v", selfMap)
+	}
+	if hasRule(selfMap, Rule_14289_1_7_1_t07) {
+		t.Errorf("/LI->/LI self-map: want no §7.1 t7 (standard remap), got %v", selfMap)
+	}
+
+	diffMap := mk(ast.PdfDict{"Caption": ast.PdfName("P")})
+	if !hasRule(diffMap, Rule_14289_1_7_1_t07) {
+		t.Errorf("/Caption->/P remap: want §7.1 t7, got %v", diffMap)
+	}
+}

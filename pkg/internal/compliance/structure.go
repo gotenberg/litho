@@ -278,11 +278,19 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 			// ISO 19005-2/3 §6.7.3.4 t3 (veraPDF `remappedStandardType == null`)
 			// forbids remapping a standard type only to a NON-standard type; a
 			// standard→standard remap such as /Caption→/P conforms. PDF/UA-1 §7.1
-			// t7 forbids remapping a standard type at all, so it keeps the wider
-			// check (its behavior is gate-validated and left unchanged here).
+			// t7 forbids remapping a standard type to any DIFFERENT type, so it
+			// keeps the wider check and fires on /Caption→/P.
 			targetMustBeNonStandard := !IsPDFUA(profile)
 			for _, src := range srcNames {
 				if !isStandardStructType(src, profile) {
+					continue
+				}
+				// A standard type mapped to itself is an identity self-map. veraPDF
+				// reports it as a circular mapping (t6 above), leaving
+				// remappedStandardType == null, so it must not also fire the
+				// standard-remap rule. PDF/A already skips it via the
+				// standard-target exclusion below; PDF/UA-1 needs it explicitly.
+				if src == mapping[src] {
 					continue
 				}
 				if targetMustBeNonStandard && isStandardStructType(mapping[src], profile) {
