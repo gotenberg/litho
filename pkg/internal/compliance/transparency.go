@@ -640,32 +640,44 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 			if !ok {
 				continue
 			}
-			stream, err := document.ResolveStream(ctx, doc, apObj)
-			if err != nil {
-				doc.Logger.Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
-				continue
-			}
-			// Check for transparency group on the appearance Form XObject.
-			groupObj, hasGroup := stream.Dict["Group"]
-			if hasGroup {
-				group, err := document.ResolveDict(ctx, doc, groupObj)
-				if err == nil && group != nil {
-					s, _ := document.ResolveName(ctx, doc, group["S"])
-					if s == "Transparency" {
+			for _, stream := range appearanceStreams(ctx, doc, apObj) {
+				// Transparency group on the appearance Form XObject.
+				if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
+					if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
 						return true
 					}
 				}
-			}
-			// Check ExtGState in appearance resources.
-			apRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-			if err == nil && apRes != nil {
-				if resourcesHaveTransparency(ctx, doc, apRes) {
-					return true
+				// Transparency in the appearance's own resources.
+				if apRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && apRes != nil {
+					if resourcesHaveTransparency(ctx, doc, apRes) {
+						return true
+					}
 				}
 			}
 		}
 	}
 	return false
+}
+
+// appearanceStreams resolves an /AP entry to its appearance stream(s). The value
+// is either a single Form XObject stream, or a sub-dictionary of appearance
+// states (e.g. /On and /Off for a checkbox or radio-button widget) whose values
+// are each an appearance stream.
+func appearanceStreams(ctx context.Context, doc *document.Document, apObj ast.PdfObject) []ast.PdfStream {
+	if stream, err := document.ResolveStream(ctx, doc, apObj); err == nil {
+		return []ast.PdfStream{stream}
+	}
+	sub, err := document.ResolveDict(ctx, doc, apObj)
+	if err != nil || sub == nil {
+		return nil
+	}
+	var streams []ast.PdfStream
+	for _, name := range sortedNames(sub) {
+		if stream, err := document.ResolveStream(ctx, doc, sub[name]); err == nil {
+			streams = append(streams, stream)
+		}
+	}
+	return streams
 }
 
 // resourcesHaveTransparency checks if a resources dict contains ExtGState

@@ -167,3 +167,23 @@ func TestCheckAnnotAPTransparency1(t *testing.T) {
 		}
 	})
 }
+
+// TestCheckAnnotationTransparency_AppearanceSubStates covers a widget whose /AP /N
+// is a sub-dictionary of appearance states (e.g. /On, /Off), not a single stream.
+// Transparency inside a state's appearance form must still be detected.
+func TestCheckAnnotationTransparency_AppearanceSubStates(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Widget /Rect [0 0 10 10] /AP << /N << /Off 5 0 R /On 6 0 R >> >> >>",
+		formStream(""), // /Off: opaque
+		formStream("/Group << /S /Transparency >>"), // /On: transparency group
+	)
+	page := collectPages(ctx, doc, cat)[0]
+	if !checkAnnotationTransparency(ctx, doc, page) {
+		t.Error("transparency in a widget /AP /N sub-state (/On) must be detected")
+	}
+}
