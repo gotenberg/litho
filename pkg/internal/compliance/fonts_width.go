@@ -99,15 +99,31 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 			enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 			if len(enc) > 0 {
 				nameToGID := buildNameToGID(glyphNames)
+				// The font program's own built-in encoding is authoritative for a
+				// code whose PDF /Encoding name labels a glyph the program does not
+				// carry. A CFF names its WinAnsi 0xA0 (NO-BREAK SPACE) slot "space",
+				// but reverse Adobe Glyph List resolution yields the synthetic
+				// "uni00A0", which no charset holds; the code then falls to GID 0
+				// (.notdef) and misreports both a width mismatch and an absent glyph.
+				// Falling back to the program's built-in name for the code resolves
+				// the glyph the font author intended (mirrors [checkType1FontWidths]).
+				builtin := typography.ExtractCFFEncodingNames(fontData)
 				charCodeToGID = make(map[uint16]uint16)
 				for code, name := range enc {
 					if name == ".notdef" || name == "" {
 						continue
 					}
-					if gid, ok := nameToGID[name]; ok {
+					gid, ok := nameToGID[name]
+					if !ok {
+						if bn := builtin[code]; bn != "" && bn != ".notdef" {
+							gid, ok = nameToGID[bn]
+						}
+					}
+					if ok {
 						charCodeToGID[uint16(code)] = gid
 					} else {
-						// Glyph name not in font charset → maps to GID 0 (.notdef).
+						// Glyph name absent from both the PDF /Encoding's charset
+						// and the program's built-in encoding → GID 0 (.notdef).
 						// Include it so width comparison can detect the mismatch.
 						charCodeToGID[uint16(code)] = 0
 					}
