@@ -190,9 +190,14 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		}
 
 		modified := false
+		hasInlineImage := false
 		inCompat := 0
+		pageRI, pageUnknown := 0, 0
 
 		for i, op := range ops {
+			if op.Operator == "BI" {
+				hasInlineImage = true
+			}
 			if op.Operator == "BX" {
 				inCompat++
 			}
@@ -204,7 +209,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					if !isValidRenderingIntent(string(name)) {
 						ops[i].Operands[0] = ast.PdfName("RelativeColorimetric")
-						totalRI++
+						pageRI++
 						modified = true
 					}
 				}
@@ -216,7 +221,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 				// so strip them wherever they appear.
 				if !validOperators[op.Operator] {
 					ops[i].Operator = ""
-					totalUnknown++
+					pageUnknown++
 					modified = true
 				}
 			}
@@ -225,6 +230,19 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		if !modified {
 			continue
 		}
+
+		// serializeOps cannot round-trip an inline image: the content parser
+		// consumes the image's binary data off-token, so a BI operation retains
+		// only its dict. Re-serialising a content stream that contains one would
+		// drop the image data and emit invalid "<dict> BI" syntax. Leave such
+		// streams untouched; any rendering-intent or unknown-operator defect in
+		// them remains a reported residual rather than being silently corrupted.
+		if hasInlineImage {
+			continue
+		}
+
+		totalRI += pageRI
+		totalUnknown += pageUnknown
 
 		filtered := filterOps(ops)
 		newData := serializeOps(filtered)
