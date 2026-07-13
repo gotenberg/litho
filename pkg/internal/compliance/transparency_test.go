@@ -2,11 +2,52 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
+
+// TestCheckType3FontTransparency_RenderedGlyphsOnly covers the rendered-glyph
+// scope of Type 3 font transparency: a transparent CharProc that is never painted
+// does not make the page transparent (veraPDF PDPage containsTransparency), while
+// a rendered transparent glyph does. The font's /square glyph (code 97) paints
+// with /GS0 (ca 0.5); /triangle (code 98) is opaque.
+func TestCheckType3FontTransparency_RenderedGlyphsOnly(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	streamObj := func(body string) string {
+		return fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(body), body)
+	}
+	build := func(t *testing.T, shown string) bool {
+		t.Helper()
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Page /Contents 3 0 R /Resources << /Font << /F1 4 0 R >> >> >>",
+			streamObj("BT /F1 12 Tf 0 0 Td ("+shown+") Tj ET"),
+			"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 100 100] /FontMatrix [0.001 0 0 0.001 0 0] "+
+				"/CharProcs << /square 5 0 R /triangle 6 0 R >> /Encoding << /Differences [97 /square /triangle] >> "+
+				"/Resources << /ExtGState << /GS0 << /ca 0.5 >> >> >> /FirstChar 97 /LastChar 98 /Widths [1000 1000] >>",
+			streamObj("1000 0 d0\n/GS0 gs\n0 0 100 100 re f"), // /square: transparent
+			streamObj("1000 0 d0\n0 0 100 100 re f"),          // /triangle: opaque
+		)
+		page, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve page: %v", err)
+		}
+		res, _ := document.ResolveDict(ctx, doc, page["Resources"])
+		return checkType3FontTransparency(ctx, doc, page, res)
+	}
+
+	if build(t, "b") { // renders /triangle (opaque); /square never painted
+		t.Error("rendering only the opaque glyph must not report transparency")
+	}
+	if !build(t, "a") { // renders /square (transparent)
+		t.Error("rendering the transparent glyph must report transparency")
+	}
+}
 
 // TestCheckTransparency_DeviceGroupCSNeedNotMatchOutputIntent covers PDF/A-4 §6.2.9
 // t2 (and PDF/A-2/3 §6.2.10 t2): the rule requires a blending colour space to EXIST

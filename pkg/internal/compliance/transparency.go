@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // checkTransparencyGroup validates transparency restrictions required by
@@ -501,7 +502,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// Type 3 font CharProcs may use ExtGState with transparency or
 		// reference Form XObjects with transparency groups.
 		if !pageUsesTransparency {
-			pageUsesTransparency = checkType3FontTransparency(ctx, doc, res)
+			pageUsesTransparency = checkType3FontTransparency(ctx, doc, page, res)
 		}
 
 		// Also check annotations for transparency triggers.
@@ -803,80 +804,216 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 	return false
 }
 
-func checkType3FontTransparency(ctx context.Context, doc *document.Document, pageRes ast.PdfDict) bool {
+func checkType3FontTransparency(ctx context.Context, doc *document.Document, page, pageRes ast.PdfDict) bool {
 	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
 	if err != nil || fontDict == nil {
 		return false
 	}
-	for _, fontObj := range fontDict {
+	rendered := pageType3RenderedCodes(ctx, doc, page)
+	for fontName, fontObj := range fontDict {
 		fd, err := document.ResolveDict(ctx, doc, fontObj)
 		if err != nil || fd == nil {
 			continue
 		}
-		subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"])
-		if subtype != "Type3" {
+		if subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"]); subtype != "Type3" {
 			continue
 		}
 		fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"])
 		if err != nil || fontRes == nil {
 			continue
 		}
-		// Check Type 3 font's ExtGState for transparency.
-		gsDict, err := document.ResolveDict(ctx, doc, fontRes["ExtGState"])
-		if err == nil && gsDict != nil {
-			for _, gsObj := range gsDict {
-				gs, err := document.ResolveDict(ctx, doc, gsObj)
-				if err != nil || gs == nil {
-					continue
-				}
-				if bmObj, hasBM := gs["BM"]; hasBM {
-					bm := resolveBlendMode(ctx, doc, bmObj)
-					if bm != "" && bm != "Normal" && bm != "Compatible" {
-						return true
-					}
-				}
-				if smaskObj, hasSMask := gs["SMask"]; hasSMask {
-					smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
-					if smaskName != "None" {
-						return true
-					}
-				}
-				if caObj, hasCA := gs["CA"]; hasCA {
-					if !floatEquals1(document.Float(caObj)) {
-						return true
-					}
-				}
-				if caObj, hasCa := gs["ca"]; hasCa {
-					if !floatEquals1(document.Float(caObj)) {
-						return true
-					}
+		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
+		if err != nil || charProcs == nil {
+			continue
+		}
+
+		// veraPDF counts a Type 3 font's transparency only for glyphs the content
+		// actually paints: a transparent glyph that is never shown does not make
+		// the page transparent (ISO 19005-2 §6.2.10 / 19005-4 §6.2.9, PDPage
+		// containsTransparency). Scope the scan to the rendered glyphs' CharProcs.
+		// If the rendered set cannot be determined (unparsable content), fall back
+		// to every CharProc so real transparency is never missed.
+		var glyphs []ast.PdfName
+		if codes := rendered[string(fontName)]; len(codes) > 0 {
+			codeToName := type3EncodingCodeToName(ctx, doc, fd)
+			for code := range codes {
+				if name, ok := codeToName[code]; ok {
+					glyphs = append(glyphs, ast.PdfName(name))
 				}
 			}
+		} else {
+			for name := range charProcs {
+				glyphs = append(glyphs, name)
+			}
 		}
-		// Check Type 3 font's XObjects for transparency groups.
-		xobjDict, err := document.ResolveDict(ctx, doc, fontRes["XObject"])
-		if err == nil && xobjDict != nil {
-			for _, xobjObj := range xobjDict {
-				stream, err := document.ResolveStream(ctx, doc, xobjObj)
-				if err != nil {
-					doc.Logger.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
-					continue
+
+		for _, gname := range glyphs {
+			stream, err := document.ResolveStream(ctx, doc, charProcs[gname])
+			if err != nil {
+				continue
+			}
+			if type3CharProcTransparent(ctx, doc, stream, fontRes) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pageType3RenderedCodes returns, per font resource name, the set of single-byte
+// character codes shown by the page's own content stream. It scans only the page
+// content (matching the resource scope of [checkType3FontTransparency]).
+func pageType3RenderedCodes(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]map[int]bool {
+	out := map[string]map[int]bool{}
+	data, err := resolvePageContentBytes(ctx, doc, page)
+	if err != nil || len(data) == 0 {
+		return out
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return out
+	}
+	current := ""
+	record := func(s ast.PdfString) {
+		if current == "" {
+			return
+		}
+		codes := out[current]
+		if codes == nil {
+			codes = map[int]bool{}
+			out[current] = codes
+		}
+		for _, b := range []byte(s) {
+			codes[int(b)] = true
+		}
+	}
+	for _, op := range ops {
+		switch op.Operator {
+		case "Tf":
+			if len(op.Operands) >= 1 {
+				if n, ok := op.Operands[0].(ast.PdfName); ok {
+					current = string(n)
 				}
-				st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-				if st == "Form" {
-					groupObj, hasGroup := stream.Dict["Group"]
-					if hasGroup {
-						group, err := document.ResolveDict(ctx, doc, groupObj)
-						if err == nil && group != nil {
-							s, _ := document.ResolveName(ctx, doc, group["S"])
-							if s == "Transparency" {
-								return true
-							}
+			}
+		case "Tj", "'", "\"":
+			for _, operand := range op.Operands {
+				if s, ok := operand.(ast.PdfString); ok {
+					record(s)
+				}
+			}
+		case "TJ":
+			if len(op.Operands) >= 1 {
+				if arr, ok := op.Operands[0].(ast.PdfArray); ok {
+					for _, el := range arr {
+						if s, ok := el.(ast.PdfString); ok {
+							record(s)
 						}
 					}
 				}
 			}
 		}
+	}
+	return out
+}
+
+// type3EncodingCodeToName maps character codes to glyph names from a Type 3
+// font's /Encoding /Differences array. Codes absent from the array are omitted.
+func type3EncodingCodeToName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[int]string {
+	out := map[int]string{}
+	encDict, err := document.ResolveDict(ctx, doc, fontDict["Encoding"])
+	if err != nil || encDict == nil {
+		return out
+	}
+	diffArr, err := document.ResolveArray(ctx, doc, encDict["Differences"])
+	if err != nil {
+		return out
+	}
+	code := 0
+	for _, item := range diffArr {
+		switch v := item.(type) {
+		case ast.PdfInt:
+			code = int(v)
+		case ast.PdfName:
+			out[code] = string(v)
+			code++
+		}
+	}
+	return out
+}
+
+// type3CharProcTransparent reports whether a Type 3 glyph procedure paints with
+// transparency: a gs operator selecting an ExtGState with a non-opaque alpha,
+// soft mask, or non-standard blend mode, or a Do operator painting a Form
+// XObject that is a transparency group. The referenced resources resolve through
+// the font's own /Resources.
+func type3CharProcTransparent(ctx context.Context, doc *document.Document, charProc ast.PdfStream, fontRes ast.PdfDict) bool {
+	data, err := doc.DecodeStream(ctx, charProc)
+	if err != nil {
+		return false
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return false
+	}
+	gsDict, _ := document.ResolveDict(ctx, doc, fontRes["ExtGState"])
+	xobjDict, _ := document.ResolveDict(ctx, doc, fontRes["XObject"])
+	for _, op := range ops {
+		switch op.Operator {
+		case "gs":
+			if gsDict == nil || len(op.Operands) < 1 {
+				continue
+			}
+			name, ok := op.Operands[0].(ast.PdfName)
+			if !ok {
+				continue
+			}
+			if gs, err := document.ResolveDict(ctx, doc, gsDict[name]); err == nil && gs != nil && extGStateTransparent(ctx, doc, gs) {
+				return true
+			}
+		case "Do":
+			if xobjDict == nil || len(op.Operands) < 1 {
+				continue
+			}
+			name, ok := op.Operands[0].(ast.PdfName)
+			if !ok {
+				continue
+			}
+			stream, err := document.ResolveStream(ctx, doc, xobjDict[name])
+			if err != nil {
+				continue
+			}
+			if st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); st != "Form" {
+				continue
+			}
+			if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
+				if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// extGStateTransparent reports whether an ExtGState dictionary establishes
+// transparency: a non-standard blend mode, a soft mask, or a non-opaque
+// stroking or non-stroking constant alpha.
+func extGStateTransparent(ctx context.Context, doc *document.Document, gs ast.PdfDict) bool {
+	if bmObj, ok := gs["BM"]; ok {
+		if bm := resolveBlendMode(ctx, doc, bmObj); bm != "" && bm != "Normal" && bm != "Compatible" {
+			return true
+		}
+	}
+	if smaskObj, ok := gs["SMask"]; ok {
+		if smaskName, _ := document.ResolveName(ctx, doc, smaskObj); smaskName != "None" {
+			return true
+		}
+	}
+	if caObj, ok := gs["CA"]; ok && !floatEquals1(document.Float(caObj)) {
+		return true
+	}
+	if caObj, ok := gs["ca"]; ok && !floatEquals1(document.Float(caObj)) {
+		return true
 	}
 	return false
 }
