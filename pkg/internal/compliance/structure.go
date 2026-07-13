@@ -1132,8 +1132,12 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 				doc.Logger.Debug("compliance.structure: cannot resolve attribute string", "error", err)
 				continue
 			}
-			decoded := document.DecodePdfString(atStr)
-			if containsPUARunes(decoded) || containsPUABytes([]byte(atStr)) {
+			// DecodePdfString applies the PDF text-string rules (UTF-16BE with a
+			// 0xFE 0xFF BOM, UTF-8 with a 0xEF 0xBB 0xBF BOM per PDF 2.0, else
+			// PDFDocEncoding), matching how veraPDF reads a CosActualText. Scanning
+			// the raw bytes as UTF-16BE would misread a UTF-8 BOM (0xEF 0xBB 0xBF)
+			// as U+EFBB, a PUA code point, and fire a false positive.
+			if containsPUARunes(document.DecodePdfString(atStr)) {
 				results = append(results, failf(keyRule(key),
 					"structure element %s contains PUA at %s", key, path)...)
 			}
@@ -1159,27 +1163,6 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	return results
-}
-
-// containsPUABytes checks raw PDF string bytes (possibly UTF-16BE) for PUA code points.
-// Handles both UTF-16BE (with or without BOM) and raw byte strings.
-func containsPUABytes(data []byte) bool {
-	// Check for UTF-16BE format (with BOM).
-	start := 0
-	if len(data) >= 2 && data[0] == 0xFE && data[1] == 0xFF {
-		start = 2
-	}
-	// Scan as UTF-16BE pairs.
-	for i := start; i+1 < len(data); i += 2 {
-		hi := data[i]
-		lo := data[i+1]
-		cp := uint32(hi)<<8 | uint32(lo)
-		// BMP PUA: U+E000-U+F8FF.
-		if cp >= 0xE000 && cp <= 0xF8FF {
-			return true
-		}
-	}
-	return false
 }
 
 // containsPUARunes checks if a decoded string contains any Unicode PUA code points.

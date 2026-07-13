@@ -5,7 +5,27 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
+
+// TestActualTextPUA_UTF8BOMNotPUA covers the PDF 2.0 UTF-8 text-string form: a
+// UTF-8 BOM (0xEF 0xBB 0xBF) prefix on an /ActualText or /Alt value must not be
+// misread as the PUA code point U+EFBB. The check decodes per the PDF text-string
+// rules before scanning for PUA, matching veraPDF's CosActualText.
+func TestActualTextPUA_UTF8BOMNotPUA(t *testing.T) {
+	t.Parallel()
+
+	utf8Str := ast.PdfString(string([]byte{0xEF, 0xBB, 0xBF}) + "PDF 2.0 UTF-8")
+	if containsPUARunes(document.DecodePdfString(utf8Str)) {
+		t.Error("a UTF-8 BOM'd string must not be detected as PUA")
+	}
+
+	// Control: a genuine UTF-16BE PUA value is still detected.
+	utf16PUA := ast.PdfString(string([]byte{0xFE, 0xFF, 0xE0, 0x00}))
+	if !containsPUARunes(document.DecodePdfString(utf16PUA)) {
+		t.Error("a UTF-16BE value containing PUA must still be detected")
+	}
+}
 
 func TestContainsPUARunes(t *testing.T) {
 	t.Parallel()
@@ -33,33 +53,6 @@ func TestContainsPUARunes(t *testing.T) {
 			t.Parallel()
 			if got := containsPUARunes(tc.s); got != tc.want {
 				t.Errorf("containsPUARunes(%q) = %v, want %v", tc.s, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestContainsPUABytes(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		data []byte
-		want bool
-	}{
-		{"empty", nil, false},
-		{"ASCII UTF-16BE", []byte{0x00, 0x41}, false},               // 'A'
-		{"BMP PUA E000", []byte{0xE0, 0x00}, true},                  // U+E000
-		{"BMP PUA F8FF", []byte{0xF8, 0xFF}, true},                  // U+F8FF
-		{"just below PUA", []byte{0xDF, 0xFF}, false},               // U+DFFF
-		{"just above PUA", []byte{0xF9, 0x00}, false},               // U+F900
-		{"with BOM then PUA", []byte{0xFE, 0xFF, 0xE0, 0x00}, true}, // BOM + U+E000
-		{"with BOM no PUA", []byte{0xFE, 0xFF, 0x00, 0x41}, false},  // BOM + 'A'
-		{"odd length", []byte{0x00}, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := containsPUABytes(tc.data); got != tc.want {
-				t.Errorf("containsPUABytes(%v) = %v, want %v", tc.data, got, tc.want)
 			}
 		})
 	}
