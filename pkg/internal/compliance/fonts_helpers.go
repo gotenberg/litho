@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -126,17 +125,6 @@ func trueTypeSymbolicCmapRule(profile string) Rule {
 		return Rule_14289_1_7_21_6_t04
 	}
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_7_t03, Rule_19005_2_6_2_11_6_t04, Rule_19005_3_6_2_11_6_t04, Rule_19005_4_6_2_10_6_t04)
-}
-
-// fontNameUTF8Rule returns the font name UTF-8 rule.
-// Only applicable to parts 2+, 4, and PDF/UA.
-func fontNameUTF8Rule(profile string) Rule {
-	if IsPDFUA(profile) {
-		// PDF/UA reuses the font general rules but there is no specific
-		// BaseFont UTF-8 rule in 14289-1; skip.
-		return Rule{}
-	}
-	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_2_t03, Rule_19005_3_6_2_11_2_t03, Rule_19005_4_6_2_10_2_t03)
 }
 
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
@@ -433,34 +421,6 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 
 	if !isFontEmbedded(ctx, doc, fd) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
-	}
-
-	return nil
-}
-
-// checkFontNameUTF8 validates that the /BaseFont name is valid UTF-8 (rule 8).
-func checkFontNameUTF8(_ context.Context, _ *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
-	rule := fontNameUTF8Rule(profile)
-	if rule.Specification == "" {
-		return nil
-	}
-
-	basefontObj, ok := fontDict["BaseFont"]
-	if !ok {
-		// BaseFont key is truly absent. This is not a UTF-8 violation; the
-		// embedding check will catch the missing font program. Do not flag here
-		// to avoid false positives when the key exists but cannot be decoded.
-		return nil
-	}
-
-	basefontName, ok := basefontObj.(ast.PdfName)
-	if !ok {
-		// BaseFont resolves to a non-name type. Not a UTF-8 violation.
-		return nil
-	}
-
-	if !utf8.ValidString(string(basefontName)) {
-		return failf(rule, "font %s on page %d BaseFont=%s", fontName, pageNum, string(basefontName))
 	}
 
 	return nil

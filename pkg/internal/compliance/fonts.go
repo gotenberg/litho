@@ -499,9 +499,6 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 		results = append(results, checkTrueTypeEncoding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 	}
 
-	// Font name UTF-8.
-	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
-
 	// Glyph width consistency: only for fonts used for visible rendering.
 	if isVisible {
 		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
@@ -823,9 +820,6 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 
 	// Font embedding for the CIDFont.
 	results = append(results, checkFontEmbedding(ctx, doc, cidFontDict, fontName, pageNum, profile, false)...)
-
-	// Font name UTF-8 for the Type0 font.
-	results = append(results, checkFontNameUTF8(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
 	// CIDToGIDMap. A font with no recorded usage is treated as visible so the
 	// check still runs when content-stream usage could not be collected.
