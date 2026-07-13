@@ -7,6 +7,7 @@ import (
 	"crypto/md5" //nolint:gosec // Required for PDF standard encryption
 	"crypto/rc4" //nolint:gosec // Required for PDF standard encryption
 	"crypto/sha256"
+	"crypto/sha512"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -122,74 +123,109 @@ func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) 
 
 // Authenticate generates the global encryption key using the provided password
 // and verifies it against the document's U string (Algorithm 3.2).
+// hashV5 computes the password hash for the AES-256 security handler. Revision 6
+// uses the hardened hash of ISO 32000-2 Algorithm 2.B; the deprecated revision 5
+// uses a single SHA-256. udata is the 48-byte /U value when hashing an owner
+// password, empty otherwise.
+func (h *Handler) hashV5(password, salt, udata []byte) []byte {
+	if h.R == 5 {
+		s := sha256.New() //nolint:gosec // ISO 32000-2 revision 5 hash.
+		s.Write(password)
+		s.Write(salt)
+		s.Write(udata)
+		return s.Sum(nil)
+	}
+	return hash2B(password, salt, udata)
+}
+
+// hash2B implements the hardened password hash of ISO 32000-2 §7.6.4.3.4
+// (Algorithm 2.B) used by Standard security handler revision 6. It repeatedly
+// AES-128-CBC-encrypts a 64-fold repetition of (password || K || udata) and
+// re-hashes with SHA-256/384/512 selected by the first block modulo 3, until at
+// least 64 rounds have run and the last byte of the cipher text is within bound.
+func hash2B(password, salt, udata []byte) []byte {
+	sum := sha256.Sum256(append(append(append([]byte{}, password...), salt...), udata...))
+	k := sum[:]
+	for round := 1; ; round++ {
+		block := append(append(append([]byte{}, password...), k...), udata...)
+		k1 := bytes.Repeat(block, 64)
+		cipherBlock, err := aes.NewCipher(k[:16])
+		if err != nil {
+			return k[:32] // K is always >= 32 bytes; guards a would-be panic.
+		}
+		e := make([]byte, len(k1))
+		cipher.NewCBCEncrypter(cipherBlock, k[16:32]).CryptBlocks(e, k1)
+		mod := 0
+		for _, b := range e[:16] {
+			mod += int(b)
+		}
+		switch mod % 3 {
+		case 0:
+			s := sha256.Sum256(e)
+			k = s[:]
+		case 1:
+			s := sha512.Sum384(e)
+			k = s[:]
+		case 2:
+			s := sha512.Sum512(e)
+			k = s[:]
+		}
+		if round >= 64 && int(e[len(e)-1]) <= round-32 {
+			break
+		}
+	}
+	return k[:32]
+}
+
 func (h *Handler) Authenticate(password string) error {
 	pwBytes := []byte(password)
 
 	if h.V == 5 {
-		// ISO 32000-2 Revision 6 (AES-256)
-		// Truncate to 127 bytes
+		// AES-256 (ISO 32000-2 §7.6.4.3, Algorithm 2.A). The password is UTF-8,
+		// truncated to 127 bytes. The 48-byte /U and /O values each split into a
+		// 32-byte hash, an 8-byte validation salt (bytes 32-39), and an 8-byte key
+		// salt (bytes 40-47).
 		if len(pwBytes) > 127 {
 			pwBytes = pwBytes[:127]
 		}
-
 		if len(h.uVal) < 48 || len(h.oVal) < 48 || len(h.ueVal) < 32 {
 			return ErrUnsupportedEncryption
 		}
 
-		// Check User Password
-		// The salt is the last 16 bytes of U (bytes 32-47)
-		salt := h.uVal[32:48]
-
-		h256 := sha256.New() //nolint:gosec
-		h256.Write(pwBytes)
-		h256.Write(salt)
-		userHash := h256.Sum(nil)
-
-		match := bytes.Equal(userHash, h.uVal[:32])
-
-		if match {
-			// Decrypt UE string to get the file encryption key
-			block, err := aes.NewCipher(userHash)
+		// deriveKey decrypts a 32-byte encryption string (/UE or /OE) with an
+		// intermediate key computed from the key salt: AES-256-CBC, no padding,
+		// zero IV, per Algorithm 2.A.
+		deriveKey := func(intermediate, enc []byte) ([]byte, error) {
+			block, err := aes.NewCipher(intermediate)
 			if err != nil {
-				return fmt.Errorf("creating AES cipher for user key decryption: %w", err)
+				return nil, fmt.Errorf("creating AES cipher for V5 key decryption: %w", err)
 			}
+			fileKey := make([]byte, len(enc))
+			cipher.NewCBCDecrypter(block, make([]byte, aes.BlockSize)).CryptBlocks(fileKey, enc)
+			return fileKey, nil
+		}
 
-			// IV is zeroed for this decryption
-			iv := make([]byte, aes.BlockSize)
-
-			mode := cipher.NewCBCDecrypter(block, iv)
-			fileKey := make([]byte, len(h.ueVal))
-			mode.CryptBlocks(fileKey, h.ueVal)
-
+		// User password: validate against /U, then recover the key from /UE.
+		if bytes.Equal(h.hashV5(pwBytes, h.uVal[32:40], nil), h.uVal[:32]) {
+			fileKey, err := deriveKey(h.hashV5(pwBytes, h.uVal[40:48], nil), h.ueVal)
+			if err != nil {
+				return err
+			}
 			h.EncryptionKey = fileKey
 			h.Authenticated = true
 			return nil
 		}
 
-		// Owner check for V=5
-		ownerSalt := h.oVal[32:48]
-		h256O := sha256.New() //nolint:gosec
-		h256O.Write(pwBytes)
-		h256O.Write(ownerSalt)
-		ownerHash := h256O.Sum(nil)
-
-		matchO := bytes.Equal(ownerHash, h.oVal[:32])
-		if matchO {
-			if len(h.oeVal) >= 32 {
-				block, err := aes.NewCipher(ownerHash)
-				if err != nil {
-					return fmt.Errorf("creating AES cipher for owner key decryption: %w", err)
-				}
-
-				iv := make([]byte, aes.BlockSize)
-				mode := cipher.NewCBCDecrypter(block, iv)
-				fileKey := make([]byte, len(h.oeVal))
-				mode.CryptBlocks(fileKey, h.oeVal)
-
-				h.EncryptionKey = fileKey
-				h.Authenticated = true
-				return nil
+		// Owner password: the owner hash additionally salts with the full 48-byte
+		// /U value, and the key is recovered from /OE.
+		if len(h.oeVal) >= 32 && bytes.Equal(h.hashV5(pwBytes, h.oVal[32:40], h.uVal[:48]), h.oVal[:32]) {
+			fileKey, err := deriveKey(h.hashV5(pwBytes, h.oVal[40:48], h.uVal[:48]), h.oeVal)
+			if err != nil {
+				return err
 			}
+			h.EncryptionKey = fileKey
+			h.Authenticated = true
+			return nil
 		}
 
 		h.Authenticated = false

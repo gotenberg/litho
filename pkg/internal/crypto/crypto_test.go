@@ -318,3 +318,21 @@ func TestNewHandler_V4_CFM(t *testing.T) {
 		t.Errorf("CFM = %q, want %q", h.CFM, "AESV2")
 	}
 }
+
+// TestHash2B_Revision6Vector validates the ISO 32000-2 Algorithm 2.B hardened
+// hash against a real revision-6 (AES-256) PDF: the empty user password and the
+// file's /U validation salt reproduce the file's stored /U[0:32] hash. The
+// expected value was cross-checked with an independent implementation.
+func TestHash2B_Revision6Vector(t *testing.T) {
+	t.Parallel()
+	salt := []byte{0xfa, 0x49, 0x57, 0x16, 0x56, 0xd6, 0x62, 0x76}
+	want := []byte{
+		0x5d, 0x45, 0xf2, 0x3c, 0x23, 0x76, 0x6b, 0xb0,
+		0x12, 0x9e, 0x25, 0x56, 0xb4, 0x93, 0x7f, 0x9f,
+		0xdb, 0xeb, 0x81, 0x8f, 0x07, 0xb5, 0xa1, 0xa1,
+		0x26, 0x88, 0x51, 0x64, 0xb3, 0xde, 0xe3, 0x20,
+	}
+	if got := hash2B([]byte{}, salt, nil); !bytes.Equal(got, want) {
+		t.Errorf("hash2B(empty, salt) = %x, want %x", got, want)
+	}
+}

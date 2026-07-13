@@ -6,7 +6,6 @@ import (
 	"crypto/md5"  //nolint:gosec // Required for PDF standard encryption
 	"crypto/rand" //nolint:gosec // Required for PDF standard encryption
 	"crypto/rc4"  //nolint:gosec // Required for PDF standard encryption
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -144,42 +143,36 @@ func newEncryptorV5(userPw, ownerPw string, pVal, keyLen int, docID []byte) (*En
 	userBytes := truncate([]byte(userPw), 127)
 	ownerBytes := truncate([]byte(ownerPw), 127)
 
-	// Generate random salts (8 bytes each: validation salt + key salt).
-	userSalt := make([]byte, 16)  // [0:8] validation, [8:16] key
-	ownerSalt := make([]byte, 16) // same layout
-	if _, err := rand.Read(userSalt); err != nil {
-		return nil, nil, fmt.Errorf("generating user salt: %w", err)
-	}
-	if _, err := rand.Read(ownerSalt); err != nil {
-		return nil, nil, fmt.Errorf("generating owner salt: %w", err)
+	// Generate independent 8-byte validation and key salts for the user and owner
+	// entries (ISO 32000-2 §7.6.4.4.7, Algorithm 8/9).
+	userValSalt, userKeySalt := make([]byte, 8), make([]byte, 8)
+	ownerValSalt, ownerKeySalt := make([]byte, 8), make([]byte, 8)
+	for _, s := range [][]byte{userValSalt, userKeySalt, ownerValSalt, ownerKeySalt} {
+		if _, err := rand.Read(s); err != nil {
+			return nil, nil, fmt.Errorf("generating salt: %w", err)
+		}
 	}
 
-	// U value: SHA256(password | salt[0:16]) + salt[0:16] = 48 bytes
-	// The authenticate code uses uVal[32:48] as the full salt for the hash,
-	// so we include all 16 salt bytes in the hash for compatibility.
-	uHash := sha256.Sum256(append(userBytes, userSalt...))
-	uVal := make([]byte, 48)
-	copy(uVal[:32], uHash[:])
-	copy(uVal[32:48], userSalt)
+	// U = hash2B(userPw, validationSalt) || validationSalt || keySalt (48 bytes),
+	// using the revision-6 hardened hash.
+	uVal := make([]byte, 0, 48)
+	uVal = append(uVal, hash2B(userBytes, userValSalt, nil)...)
+	uVal = append(uVal, userValSalt...)
+	uVal = append(uVal, userKeySalt...)
 
-	// UE value: AES-CBC(key=SHA256(password | keySalt), IV=0) encrypt fileKey
-	// The key derivation uses the hash of the full U[32:48] salt too.
-	ueKeyHash := sha256.Sum256(append(userBytes, userSalt...))
-	ueVal, err := aesCBCEncryptZeroIV(ueKeyHash[:], fileKey)
+	// UE = AES-256-CBC(key = hash2B(userPw, keySalt), IV=0) of the file key.
+	ueVal, err := aesCBCEncryptZeroIV(hash2B(userBytes, userKeySalt, nil), fileKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encrypting UE: %w", err)
 	}
 
-	// O value: SHA256(password | salt[0:16]) + salt[0:16] = 48 bytes
-	// The authenticate code hashes password + oVal[32:48] without U.
-	oHash := sha256.Sum256(append(ownerBytes, ownerSalt...))
-	oVal := make([]byte, 48)
-	copy(oVal[:32], oHash[:])
-	copy(oVal[32:48], ownerSalt)
+	// O additionally salts the hash with the full 48-byte U value; OE mirrors UE.
+	oVal := make([]byte, 0, 48)
+	oVal = append(oVal, hash2B(ownerBytes, ownerValSalt, uVal[:48])...)
+	oVal = append(oVal, ownerValSalt...)
+	oVal = append(oVal, ownerKeySalt...)
 
-	// OE value: AES-CBC(key=ownerHash, IV=0) encrypt fileKey
-	// The authenticate code uses the same ownerHash to decrypt OE.
-	oeVal, err := aesCBCEncryptZeroIV(oHash[:], fileKey)
+	oeVal, err := aesCBCEncryptZeroIV(hash2B(ownerBytes, ownerKeySalt, uVal[:48]), fileKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encrypting OE: %w", err)
 	}
