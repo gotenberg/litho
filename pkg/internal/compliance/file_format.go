@@ -33,9 +33,13 @@ func xrefFormatRule(profile string) Rule {
 }
 
 // streamFormatRule returns the rule for stream format violations
-// (/Length mismatch, EOL after stream keyword, indirect /Length).
+// (/Length mismatch, EOL after stream keyword, indirect /Length). It mirrors
+// [streamLengthRule]: parts 2/3 attribute these to §6.1.7.1 t1 (CosStream), not
+// §6.1.8 (which is the CosUnicodeName UTF-8 rule). Attributing a /Length mismatch
+// to §6.1.8 produced a spurious UTF-8-name violation alongside the correct
+// §6.1.7.1 one.
 func streamFormatRule(profile string) Rule {
-	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_8_t01, Rule_19005_3_6_1_8_t01, Rule_19005_4_6_1_6_1_t01)
+	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
 // checkContentStreamHexStrings parses page content streams with format
