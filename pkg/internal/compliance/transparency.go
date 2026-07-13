@@ -410,7 +410,7 @@ func blendingCSRule(part int) Rule {
 }
 
 func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, _ string, part int) []Violation {
-	hasOutputIntent, oiColorSpace := documentOutputIntentInfo(ctx, doc, catalog)
+	hasOutputIntent, _ := documentOutputIntentInfo(ctx, doc, catalog)
 
 	var results []Violation
 	for i, page := range pages {
@@ -511,30 +511,20 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 
 		// PDF/A-4: page-level OutputIntents supplement catalog-level.
 		pageHasOI := false
-		pageOICS := ""
 		if part == 4 {
-			pageHasOI, pageOICS = checkPageOutputIntent(ctx, doc, page)
+			pageHasOI, _ = checkPageOutputIntent(ctx, doc, page)
 		}
 		effectiveHasOI := hasOutputIntent || pageHasOI
-		effectiveOICS := oiColorSpace
-		if pageHasOI && pageOICS != "" {
-			effectiveOICS = pageOICS
-		}
 
-		// If the page uses transparency, it must have a blending colour space.
-		// The OutputIntent ICC profile provides a default blending CS for the
-		// entire document, so pages without an explicit /Group /CS are valid
-		// when an OutputIntent exists.
-		if pageUsesTransparency && !effectiveHasOI {
-			if !pageHasBlendingCS(ctx, doc, page) {
-				results = append(results, failf(blendingCSRule(part), "page %d", i+1)...)
-			}
-		}
-
-		// Even when an OutputIntent exists, device CS used as blending CS
-		// must be compatible with the OutputIntent's ICC color space.
-		if pageUsesTransparency && effectiveHasOI && effectiveOICS != "" {
-			results = append(results, checkBlendingCSCompatibility(ctx, doc, page, res, effectiveOICS, i+1, part)...)
+		// A page that uses transparency must have a blending colour space: an
+		// explicit /Group /CS, or the document/page OutputIntent ICC profile as a
+		// default. veraPDF scopes §6.2.9 t2 / §6.2.10 t2 to that existence check
+		// (gOutputCS != null || containsGroupCS == true || containsTransparency ==
+		// false). It does NOT require a device /Group /CS to match the OutputIntent's
+		// colour space: a DeviceRGB blending CS under a CMYK OutputIntent is reported
+		// by §6.2.4.3, not here.
+		if pageUsesTransparency && !effectiveHasOI && !pageHasBlendingCS(ctx, doc, page) {
+			results = append(results, failf(blendingCSRule(part), "page %d", i+1)...)
 		}
 	}
 	return results
@@ -713,116 +703,6 @@ func resourcesHaveTransparency(ctx context.Context, doc *document.Document, reso
 		}
 	}
 	return false
-}
-
-// checkBlendingCSCompatibility validates that any device CS used as a blending
-// colour space on the page (or in XObjects, annotations, Type 3 fonts) is
-// compatible with the OutputIntent's ICC colour space.
-func checkBlendingCSCompatibility(ctx context.Context, doc *document.Document, page ast.PdfDict, resources ast.PdfDict, oiColorSpace string, pageNum int, part int) []Violation {
-	var results []Violation
-
-	// Check page-level /Group/CS.
-	pageBlendCS := resolveBlendingDeviceCS(ctx, doc, page)
-	if pageBlendCS != "" && !blendingCSMatchesOutputIntent(pageBlendCS, oiColorSpace) {
-		results = append(results, failf(blendingCSRule(part),
-			"page %d: blending CS %s incompatible with OutputIntent %s", pageNum, pageBlendCS, oiColorSpace)...)
-	}
-
-	// Check Form XObject /Group/CS entries.
-	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
-	if err == nil && xobjDict != nil {
-		for _, xobjObj := range xobjDict {
-			stream, err := document.ResolveStream(ctx, doc, xobjObj)
-			if err != nil {
-				doc.Logger.Debug("compliance.transparency: cannot resolve XObject stream", "error", err)
-				continue
-			}
-			subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-			if subtype != "Form" {
-				continue
-			}
-			xoCS := resolveBlendingDeviceCS(ctx, doc, stream.Dict)
-			if xoCS != "" && !blendingCSMatchesOutputIntent(xoCS, oiColorSpace) {
-				results = append(results, failf(blendingCSRule(part),
-					"page %d: Form XObject blending CS %s incompatible with OutputIntent %s", pageNum, xoCS, oiColorSpace)...)
-			}
-		}
-	}
-
-	// Check annotation appearance /Group/CS entries.
-	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
-	if err == nil {
-		for _, annotObj := range annotsArr {
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-			apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
-			if err != nil || apDict == nil {
-				continue
-			}
-			for _, key := range []ast.PdfName{"N", "R", "D"} {
-				apObj, ok := apDict[key]
-				if !ok {
-					continue
-				}
-				stream, err := document.ResolveStream(ctx, doc, apObj)
-				if err != nil {
-					doc.Logger.Debug("compliance.transparency: cannot resolve appearance stream", "error", err)
-					continue
-				}
-				apCS := resolveBlendingDeviceCS(ctx, doc, stream.Dict)
-				if apCS != "" && !blendingCSMatchesOutputIntent(apCS, oiColorSpace) {
-					results = append(results, failf(blendingCSRule(part),
-						"page %d: annotation blending CS %s incompatible with OutputIntent %s", pageNum, apCS, oiColorSpace)...)
-				}
-			}
-		}
-	}
-
-	return results
-}
-
-// resolveBlendingDeviceCS extracts the device CS name from a dict's
-// /Group << /S /Transparency /CS <cs> >>. Returns "DeviceRGB", "DeviceCMYK",
-// "DeviceGray", or "" if not a device CS or not present.
-func resolveBlendingDeviceCS(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
-	groupObj, ok := dict["Group"]
-	if !ok {
-		return ""
-	}
-	group, err := document.ResolveDict(ctx, doc, groupObj)
-	if err != nil || group == nil {
-		return ""
-	}
-	s, _ := document.ResolveName(ctx, doc, group["S"])
-	if s != "Transparency" {
-		return ""
-	}
-	csObj, ok := group["CS"]
-	if !ok {
-		return ""
-	}
-	csName, _ := document.ResolveName(ctx, doc, csObj)
-	cs := string(csName)
-	if cs == "DeviceRGB" || cs == "DeviceCMYK" || cs == "DeviceGray" {
-		return cs
-	}
-	return ""
-}
-
-// blendingCSMatchesOutputIntent checks if a device blending CS is compatible
-// with the OutputIntent's ICC colour space.
-func blendingCSMatchesOutputIntent(deviceCS string, oiColorSpace string) bool {
-	switch deviceCS {
-	case "DeviceRGB":
-		return oiColorSpace == "RGB "
-	case "DeviceCMYK":
-		return oiColorSpace == "CMYK"
-	case "DeviceGray":
-		return true // DeviceGray is compatible with any OutputIntent.
-	}
-	return true
 }
 
 // documentOutputIntentInfo returns whether the document has an OutputIntent

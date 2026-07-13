@@ -3,7 +3,35 @@ package compliance
 import (
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
+
+// TestCheckTransparency_DeviceGroupCSNeedNotMatchOutputIntent covers PDF/A-4 §6.2.9
+// t2 (and PDF/A-2/3 §6.2.10 t2): the rule requires a blending colour space to EXIST
+// for a transparent page, not that a device /Group /CS match the OutputIntent's
+// colour space. veraPDF's test is existence-only; a DeviceRGB blending CS under a
+// CMYK OutputIntent is reported by §6.2.4.3, not here.
+func TestCheckTransparency_DeviceGroupCSNeedNotMatchOutputIntent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	// ICC stream whose colour-space signature (bytes 16..20) is "CMYK".
+	icc := "<< /Length 20 >>\nstream\n                CMYK\nendstream"
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog /OutputIntents [<< /S /GTS_PDFA1 /DestOutputProfile 2 0 R >>] >>",
+		icc,
+		"<< /Type /Page /Group << /S /Transparency /CS /DeviceRGB >> /Resources << /ExtGState << /GS0 << /ca 0.5 >> >> >> >>",
+	)
+	page, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
+	if err != nil || page == nil {
+		t.Fatalf("resolve page: %v", err)
+	}
+	got := checkTransparencyParts2Plus(ctx, doc, cat, []ast.PdfDict{page}, "PDF/A-4", 4)
+	if hasRule(got, Rule_19005_4_6_2_9_t02) {
+		t.Errorf("DeviceRGB /Group /CS under a CMYK OutputIntent must not fire §6.2.9 t2, got %v", got)
+	}
+}
 
 // formStream builds a Form XObject stream object body with the given extra
 // dictionary entries (e.g. a /Group), for use with objsDocPDF.
