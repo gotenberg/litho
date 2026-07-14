@@ -464,25 +464,6 @@ func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontD
 	return nil
 }
 
-// simpleFontWidths extracts FirstChar and the /Widths array from a simple font dict.
-func simpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (int, []ast.PdfObject) {
-	firstChar := int(document.Float(fontDict["FirstChar"]))
-	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
-	if err != nil {
-		return firstChar, nil
-	}
-	return firstChar, widths
-}
-
-// simpleFontWidthIsZero returns true if the PDF /Widths entry for charCode is 0.
-func simpleFontWidthIsZero(firstChar int, widths []ast.PdfObject, charCode byte) bool {
-	idx := int(charCode) - firstChar
-	if idx < 0 || idx >= len(widths) {
-		return false // Not in range, can't determine.
-	}
-	return document.Float(widths[idx]) == 0
-}
-
 // lookupCIDWidth returns the PDF-declared width for a CID from the /W array
 // and /DW default of a CIDFont dict.
 func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cid uint16) float64 {

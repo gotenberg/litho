@@ -994,21 +994,15 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 						if usage.charCodes[0] && charToGID[0] == 0 {
 							return failf(rule, "font %s on page %d: charCode 0 maps to GID 0 (.notdef)", fontName, pageNum)
 						}
-						// For non-zero GIDs: empty glyph data + PDF width=0 → .notdef.
-						emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
-						if emptyGIDs != nil {
-							firstChar, widths := simpleFontWidths(ctx, doc, fontDict)
-							for code := range usage.charCodes {
-								gid, inCmap := charToGID[uint16(code)]
-								if !inCmap {
-									continue // No cmap entry, can't determine GID.
-								}
-								if gid == 0 {
-									return failf(rule, "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
-								}
-								if emptyGIDs[gid] && simpleFontWidthIsZero(firstChar, widths, code) {
-									return failf(rule, "font %s on page %d: charCode %d maps to empty glyph with width 0 (.notdef)", fontName, pageNum, code)
-								}
+						// A code renders .notdef only when its cmap resolves to
+						// GID 0. An in-range non-zero GID is a real glyph even with
+						// no contours and a zero advance (a "space" or control
+						// glyph), so an empty outline is not .notdef: ISO 19005-2
+						// §6.2.11.8 (veraPDF object Glyph, test name != ".notdef")
+						// keys on the glyph being .notdef, not on emptiness.
+						for _, code := range sortedByteKeys(usage.charCodes) {
+							if gid, inCmap := charToGID[uint16(code)]; inCmap && gid == 0 {
+								return failf(rule, "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
 							}
 						}
 					}
