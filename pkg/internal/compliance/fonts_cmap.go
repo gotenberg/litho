@@ -216,26 +216,25 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		cmapOrdering, _ = document.ResolveString(ctx, doc, cmapSysInfo["Ordering"])  // Best-effort: empty string on failure triggers mismatch below.
 		cmapSupplement, _ = document.ResolveInt(ctx, doc, cmapSysInfo["Supplement"]) // Best-effort: zero on failure triggers mismatch below.
 	} else {
-		// Named (predefined) CMap: extract CIDSystemInfo from the name.
-		// Predefined CMap names follow the pattern "Registry-Ordering-Supplement"
-		// (e.g., "Adobe-Japan1-2", "Adobe-Korea1-0").
+		// Named (predefined) CMap: its CIDSystemInfo (Registry, Ordering,
+		// Supplement) is fixed by ISO 32000-1 Table 118 and Adobe's registered
+		// CMap resources, resolved by [cmap.PredefinedCMapCIDSystemInfo]. The
+		// predefined encoding names (UniKS-UTF16-H, 90ms-RKSJ-H, ...) do not
+		// follow a Registry-Ordering-Supplement pattern, so the CIDSystemInfo
+		// comes from the tabulated resource, not the name text. A non-Identity
+		// name that is neither embedded nor a real predefined CMap (including
+		// CIDSystemInfo-shaped names like "Adobe-Korea1-2") supplies no resolvable
+		// CIDSystemInfo, so the §6.2.11.3.1 consistency check cannot establish the
+		// required Registry/Ordering relationship and fails.
 		encName, _ := document.ResolveName(ctx, doc, encObj)
-		// A non-Identity encoding given as a name that is neither embedded nor a
-		// real predefined CMap supplies no resolvable CIDSystemInfo, so the
-		// CIDSystemInfo consistency check (ISO 19005-2 §6.2.11.3.1) cannot
-		// establish the required Registry/Ordering relationship and fails. A bogus
-		// name shaped like a CIDSystemInfo ("Adobe-Korea1-2") parses cleanly via
-		// parsePredefinedCMapName and would spuriously "match" the CIDFont;
-		// isPredefinedCMap rejects it.
-		if !isPredefinedCMap(string(encName)) {
+		// The tabulated CIDSystemInfo of some predefined CMaps changed with the
+		// PDF generation (ISO 32000-2 widened UniKS/UniGB/UniJIS to newer Adobe
+		// character collections), so select by profile: PDF/A-4 and PDF/UA-2 are
+		// ISO 32000-2, the rest ISO 32000-1.
+		pdf20 := PDFAPart(profile) == 4 || (IsPDFUA(profile) && PDFUAPart(profile) == 2)
+		reg, ord, sup, ok := cmap.PredefinedCMapCIDSystemInfo(string(encName), pdf20)
+		if !ok {
 			return failf(rule, "font %s on page %d: encoding %q is neither embedded nor a predefined CMap",
-				fontName, pageNum, string(encName))
-		}
-		reg, ord, sup := parsePredefinedCMapName(string(encName))
-		if reg == "" {
-			// Non-Identity encoding that can't be resolved. The CIDSystemInfo
-			// relationship can't be satisfied.
-			return failf(rule, "font %s on page %d: encoding %q is not a valid predefined CMap",
 				fontName, pageNum, string(encName))
 		}
 		cmapRegistry = ast.PdfString(reg)
@@ -260,43 +259,6 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 	}
 
 	return nil
-}
-
-// parsePredefinedCMapName extracts Registry, Ordering, and Supplement from a
-// predefined CMap name like "Adobe-Japan1-2". Returns empty strings if the
-// name doesn't match the expected pattern.
-func parsePredefinedCMapName(name string) (registry, ordering string, supplement int) {
-	// Strip -H/-V suffix if present.
-	base := name
-	if strings.HasSuffix(base, "-H") || strings.HasSuffix(base, "-V") {
-		base = base[:len(base)-2]
-	}
-
-	// Expected format: Registry-Ordering-Supplement (e.g., "Adobe-Japan1-2").
-	// Find the last hyphen to split Supplement.
-	lastDash := strings.LastIndex(base, "-")
-	if lastDash < 0 {
-		return "", "", 0
-	}
-	supStr := base[lastDash+1:]
-	rest := base[:lastDash]
-
-	// Parse Supplement as integer.
-	sup := 0
-	for _, ch := range supStr {
-		if ch < '0' || ch > '9' {
-			return "", "", 0
-		}
-		sup = sup*10 + int(ch-'0')
-	}
-
-	// Find the first hyphen to split Registry from Ordering.
-	before, after, ok := strings.Cut(rest, "-")
-	if !ok {
-		return "", "", 0
-	}
-
-	return before, after, sup
 }
 
 // checkCMapEmbedding validates CMap-related rules for Type0 fonts:
