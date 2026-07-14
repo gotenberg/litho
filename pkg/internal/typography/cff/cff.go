@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
@@ -914,13 +915,28 @@ func CIDWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	if err != nil || gidToCID == nil {
 		return byGID, nil //nolint:nilerr // same fallback
 	}
+	// Invert GID→CID to CID→width. A subset CFF charset can map several GIDs to
+	// the same CID (a duplicate glyph); ranging the byGID map would then let a
+	// random iteration order decide which glyph's width a CID inherits, making
+	// the result nondeterministic. Walk GIDs in ascending order and keep the
+	// first (lowest-GID) glyph for each CID: that is the canonical glyph a
+	// consumer selects for the CID (matching veraPDF), and it is stable.
+	gids := make([]uint16, 0, len(byGID))
+	for gid := range byGID {
+		gids = append(gids, gid)
+	}
+	slices.Sort(gids)
 	byCID := make(map[uint16]uint16, len(byGID))
-	for gid, w := range byGID {
-		if int(gid) < len(gidToCID) {
-			cid := gidToCID[gid]
-			if cid >= 0 && cid <= 0xFFFF {
-				byCID[uint16(cid)] = w
-			}
+	for _, gid := range gids {
+		if int(gid) >= len(gidToCID) {
+			continue
+		}
+		cid := gidToCID[gid]
+		if cid < 0 || cid > 0xFFFF {
+			continue
+		}
+		if _, exists := byCID[uint16(cid)]; !exists {
+			byCID[uint16(cid)] = byGID[gid]
 		}
 	}
 	return byCID, nil
