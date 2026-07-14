@@ -1283,21 +1283,17 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		}
 
 	case "CIDFontType2":
-		// TrueType CIDFont: with CIDToGIDMap=/Identity, CID == GID.
-		cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"])
-		if cidToGIDMap != "Identity" {
-			return nil
-		}
-		// Empty glyph data + PDF width=0 → .notdef.
-		// Empty glyph data + PDF width>0 → valid invisible glyph (space, etc.).
-		emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
-		if emptyGIDs != nil {
-			for cid := range usedCIDs {
-				if emptyGIDs[cid] && lookupCIDWidth(ctx, doc, cidFontDict, cid) == 0 {
-					return failf(rule, "font %s on page %d: CID %d maps to empty glyph with width 0 (.notdef)", fontName, pageNum, cid)
-				}
-			}
-		}
+		// A TrueType CIDFont renders .notdef only when a used CID resolves to
+		// GID 0 (the ".notdef" glyph), already covered above by the CID 0 check
+		// (Identity /CIDToGIDMap) and the decode-level notdef flag. ISO 19005-2
+		// §6.2.11.8 (veraPDF object Glyph, test name != ".notdef") keys on the
+		// glyph being .notdef, NOT on an empty outline: an in-range non-zero GID
+		// is a real glyph even with no contours and a zero advance (a control-
+		// character glyph such as uni0000), so treating "empty outline + width 0"
+		// as .notdef was a false positive. A non-zero CID that a /CIDToGIDMap
+		// stream remaps to GID 0 is left unflagged here too: whether it is truly
+		// rendered depends on the font's embedded /Encoding CMap, which veraPDF
+		// decodes differently, so firing would reintroduce false positives.
 	}
 
 	return nil
