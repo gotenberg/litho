@@ -56,20 +56,25 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 // runValidation is the shared body of [ValidatePDFA] and [ValidatePDFUA].
 // The caller must hold the document's validation run mutex.
 func runValidation(ctx context.Context, doc *document.Document, profile string, groups []checkGroup) ([]error, error) {
+	// Clear any residual format violations from a prior run, enable
+	// parser-level format checking, resolve all objects upfront so the
+	// checks run against a fully-parsed document graph, then disable
+	// compliance mode again so concurrent reads after the run return
+	// to the non-validation hot path. Compliance mode is set BEFORE the
+	// catalog is resolved: an object first parsed while resolving the
+	// catalog or page tree would otherwise be cached without its header
+	// being format-checked, so a later §6.1.8/§6.1.9 defect on that object
+	// would be reported only when a run happened to parse it after the flag
+	// flipped, an order-dependent (nondeterministic) result.
+	doc.ResetFormatViolations()
+	doc.SetComplianceMode(true)
+	defer doc.SetComplianceMode(false)
+
 	catalog, err := resolveCatalog(ctx, doc)
 	if err != nil {
 		slog.Error("compliance: failed to get catalog", "error", err)
 		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
 	}
-
-	// Clear any residual format violations from a prior run, enable
-	// parser-level format checking, resolve all objects upfront so the
-	// checks run against a fully-parsed document graph, then disable
-	// compliance mode again so concurrent reads after the run return
-	// to the non-validation hot path.
-	doc.ResetFormatViolations()
-	doc.SetComplianceMode(true)
-	defer doc.SetComplianceMode(false)
 
 	resolveAllObjects(ctx, doc)
 
