@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"slices"
 )
 
 const (
@@ -200,14 +201,26 @@ func CharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, error) 
 		return nil, err
 	}
 
+	// Invert GID→rune to charCode→GID. Several GIDs can share a rune (glyph
+	// variants for the same Unicode value), so ranging the map would let a
+	// random iteration order decide which GID a charCode resolves to, making
+	// the width, glyph-presence and .notdef checks nondeterministic. Walk GIDs
+	// in ascending order and keep the lowest GID per charCode: a stable,
+	// canonical choice.
+	gids := make([]uint16, 0, len(gidToRune))
+	for gid := range gidToRune {
+		gids = append(gids, gid)
+	}
+	slices.Sort(gids)
 	result := make(map[uint16]uint16, len(gidToRune))
-	for gid, r := range gidToRune {
-		if r >= 0 && r <= 0xFFFF {
-			charCode := uint16(r) //nolint:gosec // BMP code point fits in uint16
-			// Only store first mapping per charCode.
-			if _, exists := result[charCode]; !exists {
-				result[charCode] = gid
-			}
+	for _, gid := range gids {
+		r := gidToRune[gid]
+		if r < 0 || r > 0xFFFF {
+			continue
+		}
+		charCode := uint16(r) //nolint:gosec // BMP code point fits in uint16
+		if _, exists := result[charCode]; !exists {
+			result[charCode] = gid
 		}
 	}
 	return result, nil
