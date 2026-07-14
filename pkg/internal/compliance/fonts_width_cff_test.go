@@ -59,7 +59,7 @@ func TestSimpleFontGlyphMetrics_CFFBuiltinEncodingFallback(t *testing.T) {
 	if v := checkSimpleFontWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, "T1_0", 8, Rule_19005_2_6_2_11_5_t01, charCodeToGID, usage); len(v) != 0 {
 		t.Errorf("width check fired on correctly-resolved nbsp: %v", v)
 	}
-	if v := checkSimpleGlyphPresence(ctx, doc, fontDict, "T1_0", 8, "PDF/A-2B", usage); len(v) != 0 {
+	if v := checkSimpleGlyphPresence(ctx, doc, fontDict, "T1_0", 8, "PDF/A-2b", usage); len(v) != 0 {
 		t.Errorf("glyph-presence check fired on correctly-resolved nbsp: %v", v)
 	}
 }
