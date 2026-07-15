@@ -299,15 +299,21 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 		}
 	}
 
-	// Decode the stream content.
-	xmpData, err := stream.Bytes(ctx)
+	// Decode the stream content: apply the stream's filters (a /Metadata stream
+	// may legitimately be Flate-encoded in parts 2+). The XMP well-formedness,
+	// encoding and property checks all run against the decoded XML packet, as
+	// veraPDF does; reading the raw (still-compressed) bytes made a filtered
+	// packet look like malformed XML (a spurious §6.6.2.1 t4/t5). Fall back to
+	// the raw bytes only when decoding fails, so an undecodable stream still
+	// gets checked rather than skipped.
+	xmpData, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(xmpData) == 0 {
-		decoded, decErr := doc.DecodeStream(ctx, stream)
-		if decErr != nil {
+		raw, rawErr := stream.Bytes(ctx)
+		if rawErr != nil || len(raw) == 0 {
 			*results = append(*results, xmpMetadataRule(part)...)
 			return nil, ast.PdfStream{}
 		}
-		xmpData = decoded
+		xmpData = raw
 	}
 
 	if len(xmpData) == 0 {
