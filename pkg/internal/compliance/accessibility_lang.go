@@ -373,34 +373,49 @@ func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.P
 
 	// Walk outline items and check for /Lang.
 	var results []Violation
-	walkOutlineItemsForLang(ctx, doc, outlines["First"], &results, 0)
+	walkOutlineItemsForLang(ctx, doc, outlines["First"], &results, 0, make(map[int]bool))
 	return results
 }
 
-func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Violation, depth int) {
-	if ctx.Err() != nil || depth > maxStructTreeWalkDepth || itemObj == nil {
+// walkOutlineItemsForLang checks each outline item for a determinable language,
+// walking siblings iteratively via /Next and recursing into children via /First.
+// visited tracks resolved item object numbers across the whole walk: a crafted
+// /Next or /First cycle would otherwise recurse forever (a 700-byte file
+// exhausts the goroutine stack, which is not recoverable in Go), and a long flat
+// /Next chain must not recurse one frame per sibling.
+func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Violation, depth int, visited map[int]bool) {
+	if depth > maxStructTreeWalkDepth {
 		return
 	}
+	for itemObj != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		if ref, ok := itemObj.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				return
+			}
+			visited[ref.ObjectNum] = true
+		}
 
-	item, err := document.ResolveDict(ctx, doc, itemObj)
-	if err != nil || item == nil {
-		return
+		item, err := document.ResolveDict(ctx, doc, itemObj)
+		if err != nil || item == nil {
+			return
+		}
+
+		if _, hasTitle := item["Title"]; !hasTitle {
+			return
+		}
+
+		// Outline items need /Lang when catalog /Lang is absent.
+		if resolveNonEmptyLang(ctx, doc, item) == "" {
+			*results = append(*results, fail(Rule_14289_1_7_2_t02, "outline item")...)
+		}
+
+		// Recurse into children; siblings continue the loop.
+		walkOutlineItemsForLang(ctx, doc, item["First"], results, depth+1, visited)
+		itemObj = item["Next"]
 	}
-
-	_, hasTitle := item["Title"]
-	if !hasTitle {
-		return
-	}
-
-	// Outline items need /Lang when catalog /Lang is absent.
-	lang := resolveNonEmptyLang(ctx, doc, item)
-	if lang == "" {
-		*results = append(*results, fail(Rule_14289_1_7_2_t02, "outline item")...)
-	}
-
-	// Recurse into children and siblings.
-	walkOutlineItemsForLang(ctx, doc, item["First"], results, depth+1)
-	walkOutlineItemsForLang(ctx, doc, item["Next"], results, depth)
 }
 
 // validateStructureLangs walks the structure tree and validates any /Lang entries.

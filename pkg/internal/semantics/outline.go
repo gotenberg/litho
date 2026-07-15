@@ -38,16 +38,35 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 		return nil, fmt.Errorf("failed to fetch pages for outline mapping: %w", err)
 	}
 
-	return parseOutlineItems(ctx, doc, firstObj, document.BuildPageMap(pages))
+	return parseOutlineItems(ctx, doc, firstObj, document.BuildPageMap(pages), make(map[int]bool), 0)
 }
 
-func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) ([]models.Bookmark, error) {
+// maxOutlineDepth caps outline /First nesting. Anti-DoS guard, not spec-mandated:
+// real outlines nest a handful of levels. Paired with visited (which breaks
+// /Next and /First cycles) it bounds a crafted outline tree.
+const maxOutlineDepth = 100
+
+// parseOutlineItems walks one outline level, iterating siblings via /Next and
+// recursing into children via /First. visited records resolved item object
+// numbers across the whole walk: a crafted /Next or /First cycle would otherwise
+// loop forever (a 700-byte file hangs until the caller's context deadline, and a
+// /First cycle exhausts the goroutine stack, which is not recoverable in Go).
+func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int, visited map[int]bool, depth int) ([]models.Bookmark, error) {
+	if depth > maxOutlineDepth {
+		return nil, nil
+	}
 	var bookmarks []models.Bookmark
 	currentObj := itemObj
 
 	for currentObj != nil {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("parsing outline items: %w", err)
+		}
+		if ref, ok := currentObj.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				break
+			}
+			visited[ref.ObjectNum] = true
 		}
 		dict, err := document.ResolveDict(ctx, doc, currentObj)
 		if err != nil {
@@ -96,7 +115,7 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 
 		// Recursively parse children
 		if firstChildObj, ok := dict["First"]; ok {
-			children, err := parseOutlineItems(ctx, doc, firstChildObj, pageMap)
+			children, err := parseOutlineItems(ctx, doc, firstChildObj, pageMap, visited, depth+1)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse outline children: %w", err)
 			}

@@ -187,7 +187,7 @@ func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog
 		return nil
 	}
 
-	return walkActionChain(ctx, doc, actionDict, profile, part, "catalog /OpenAction", 0)
+	return walkActionChain(ctx, doc, actionDict, profile, part, "catalog /OpenAction", 0, make(map[int]bool))
 }
 
 // checkCatalogAA checks the catalog /AA dictionary.
@@ -233,7 +233,7 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		if err != nil || actionDict == nil {
 			continue
 		}
-		results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("catalog /AA/%s", key), 0)...)
+		results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("catalog /AA/%s", key), 0, make(map[int]bool))...)
 	}
 
 	return results
@@ -287,7 +287,7 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 			if err != nil || actionDict == nil {
 				continue
 			}
-			results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("page %d /AA/%s", i+1, key), 0)...)
+			results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("page %d /AA/%s", i+1, key), 0, make(map[int]bool))...)
 		}
 	}
 
@@ -337,7 +337,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 				if aObj, hasA := annotDict["A"]; hasA {
 					aDict, err := document.ResolveDict(ctx, doc, aObj)
 					if err == nil && aDict != nil {
-						results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0)...)
+						results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0, make(map[int]bool))...)
 					}
 				}
 			}
@@ -363,7 +363,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 						if err != nil || actionDict == nil {
 							continue
 						}
-						results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0)...)
+						results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0, make(map[int]bool))...)
 					}
 				}
 			}
@@ -416,7 +416,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	if hasA {
 		aDict, err := document.ResolveDict(ctx, doc, annotDict["A"])
 		if err == nil && aDict != nil {
-			results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0)...)
+			results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0, make(map[int]bool))...)
 		}
 	}
 
@@ -438,7 +438,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 				if err != nil || actionDict == nil {
 					continue
 				}
-				results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0)...)
+				results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0, make(map[int]bool))...)
 			}
 		}
 	}
@@ -447,8 +447,11 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 }
 
 // walkActionChain recursively checks an action dict and its /Next chain for
-// forbidden action types and invalid named actions.
-func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int) []Violation {
+// forbidden action types and invalid named actions. visited records the object
+// numbers of actions already walked: a crafted /Next cycle would otherwise
+// recurse to the depth cap on every entry point, and a /Next array that lists
+// the same action repeatedly would fan out 2^depth (a denial of service).
+func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int, visited map[int]bool) []Violation {
 	if ctx.Err() != nil || depth > maxActionChainDepth {
 		return nil
 	}
@@ -479,26 +482,32 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 		return results
 	}
 
-	// /Next can be a single action dict or an array of action dicts.
-	nextDict, err := document.ResolveDict(ctx, doc, nextObj)
-	if err == nil && nextDict != nil {
-		results = append(results, walkActionChain(ctx, doc, nextDict, profile, part, location+" /Next", depth+1)...)
-		return results
+	// Recurse into one /Next action, skipping any action object already walked
+	// so a cyclic or repeated /Next cannot loop forever or fan out.
+	walkNext := func(obj ast.PdfObject, loc string) {
+		if ref, ok := obj.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				return
+			}
+			visited[ref.ObjectNum] = true
+		}
+		d, err := document.ResolveDict(ctx, doc, obj)
+		if err != nil || d == nil {
+			return
+		}
+		results = append(results, walkActionChain(ctx, doc, d, profile, part, loc, depth+1, visited)...)
 	}
 
-	nextArr, err := document.ResolveArray(ctx, doc, nextObj)
-	if err != nil {
-		return results
-	}
-	for i, item := range nextArr {
-		if ctx.Err() != nil {
-			return results
+	// /Next can be a single action dict or an array of action dicts.
+	if nextArr, err := document.ResolveArray(ctx, doc, nextObj); err == nil {
+		for i, item := range nextArr {
+			if ctx.Err() != nil {
+				return results
+			}
+			walkNext(item, fmt.Sprintf("%s /Next[%d]", location, i))
 		}
-		itemDict, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || itemDict == nil {
-			continue
-		}
-		results = append(results, walkActionChain(ctx, doc, itemDict, profile, part, fmt.Sprintf("%s /Next[%d]", location, i), depth+1)...)
+	} else {
+		walkNext(nextObj, location+" /Next")
 	}
 
 	return results
@@ -626,7 +635,7 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 				// Verify it's actually an action (has /S key), not a destination.
 				if _, hasS := aDict["S"]; hasS {
 					if IsPDFUA(profile) {
-						violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0)
+						violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0, make(map[int]bool))
 						*results = append(*results, violations...)
 					} else {
 						// PDF/A: check with outline-specific exemptions.
@@ -751,7 +760,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			aDict, err := document.ResolveDict(ctx, doc, aObj)
 			if err == nil && aDict != nil {
 				if _, hasS := aDict["S"]; hasS {
-					*results = append(*results, walkActionChain(ctx, doc, aDict, profile, part, loc, 0)...)
+					*results = append(*results, walkActionChain(ctx, doc, aDict, profile, part, loc, 0, make(map[int]bool))...)
 				}
 			}
 		}
@@ -768,7 +777,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 					}
 					if _, hasS := actDict["S"]; hasS {
 						*results = append(*results, walkActionChain(ctx, doc, actDict, profile, part,
-							fmt.Sprintf("%s /AA/%s", loc, key), 0)...)
+							fmt.Sprintf("%s /AA/%s", loc, key), 0, make(map[int]bool))...)
 					}
 				}
 			}
