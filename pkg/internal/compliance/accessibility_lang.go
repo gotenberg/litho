@@ -157,7 +157,16 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		// /Lang is absent, the language can still be determined through the
 		// structure tree. The tree root or individual elements may carry /Lang.
 		results := checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
-		return append(results, checkAnnotFormLang(ctx, doc, catalog)...)
+		results = append(results, checkAnnotFormLang(ctx, doc, catalog)...)
+
+		// §7.2 t33: the document metadata's natural language must be
+		// determinable. With no catalog /Lang, it is determined by a specific
+		// xml:lang in the XMP packet; a packet present but qualified only with
+		// "x-default" leaves it undetermined.
+		if xmpData, ok := readCatalogXMP(ctx, doc, catalog); ok && !xmpHasSpecificLang(xmpData) {
+			results = append(results, fail(Rule_14289_1_7_2_t33, "document metadata")...)
+		}
+		return results
 	}
 
 	if !IsValidLangTag(catalogLang) {

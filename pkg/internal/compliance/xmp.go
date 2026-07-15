@@ -1284,6 +1284,33 @@ func dcTitleLangAltMalformed(data []byte) bool {
 	return malformed
 }
 
+// xmpHasSpecificLang reports whether the XMP packet qualifies any property with
+// a specific natural language: an xml:lang attribute whose value is neither
+// empty nor "x-default". ISO 14289-1 §7.2 t33 requires the document metadata's
+// natural language to be determinable; when the catalog carries no /Lang, a
+// specific xml:lang in the metadata supplies it, while a packet using only
+// "x-default" (verapdf-corpus 7.2-t33-fail-a) does not.
+func xmpHasSpecificLang(data []byte) bool {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		se, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		for _, a := range se.Attr {
+			if a.Name.Local == "lang" && a.Value != "" && a.Value != "x-default" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // xmpExtractPrefixMap scans raw XMP bytes for xmlns:prefix="uri" declarations
 // and returns a map from namespace URI to the actual prefix name used. When
 // a URI is bound to multiple prefixes, the last occurrence wins; callers
