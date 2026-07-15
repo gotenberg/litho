@@ -156,7 +156,8 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		// PDF/UA-1 §7.2 t34: natural language must be determinable. If catalog
 		// /Lang is absent, the language can still be determined through the
 		// structure tree. The tree root or individual elements may carry /Lang.
-		return checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
+		results := checkStructureTreeLangCoverage(ctx, doc, catalog, langRule, validRule)
+		return append(results, checkAnnotFormLang(ctx, doc, catalog)...)
 	}
 
 	if !IsValidLangTag(catalogLang) {
@@ -200,6 +201,121 @@ func langPresentButEmpty(ctx context.Context, doc *document.Document, dict ast.P
 // determine their natural language through /Lang inheritance in the structure
 // tree, even when catalog /Lang is absent. An element inherits /Lang from its
 // nearest ancestor that carries a non-empty /Lang value.
+// checkAnnotFormLang reports ISO 14289-1 §7.2 t24/t25: the natural language for
+// text in an annotation's /Contents entry (t24) and in a form field's /TU key
+// (t25) must be determinable. It is called only when the catalog carries no
+// /Lang, so an object supplies its own determinable language only through its
+// own /Lang entry (verapdf-corpus 7.2-t24/t25-pass-a rely on catalog /Lang; the
+// fail files have neither catalog nor object /Lang, and their enclosing
+// structure element carries no /Lang either).
+func checkAnnotFormLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
+	var results []Violation
+	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return results
+		}
+		annots, err := document.ResolveArray(ctx, doc, page["Annots"])
+		if err != nil {
+			continue
+		}
+		for _, annotObj := range annots {
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+			contents, _ := document.ResolveString(ctx, doc, annot["Contents"])
+			if len(contents) == 0 {
+				continue
+			}
+			if !objLangDeterminable(ctx, doc, treeRoot, annot) {
+				results = append(results, fail(Rule_14289_1_7_2_t24, "annotation /Contents")...)
+			}
+		}
+	}
+
+	acroForm, err := document.ResolveDict(ctx, doc, catalog["AcroForm"])
+	if err == nil && acroForm != nil {
+		if fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"]); err == nil {
+			seen := make(map[int]bool)
+			checkFieldTULang(ctx, doc, treeRoot, fields, seen, 0, &results)
+		}
+	}
+
+	return results
+}
+
+// objLangDeterminable reports whether an annotation or form field supplies a
+// determinable natural language: its own /Lang, or the /Lang of the structure
+// element it is nested in (via /StructParent) or one of that element's
+// ancestors. The catalog-/Lang case is handled by the caller (this runs only
+// when the catalog carries no /Lang).
+func objLangDeterminable(ctx context.Context, doc *document.Document, treeRoot, obj ast.PdfDict) bool {
+	if resolveNonEmptyLang(ctx, doc, obj) != "" {
+		return true
+	}
+	return structElementLang(ctx, doc, treeRoot, obj) != ""
+}
+
+// structElementLang returns the /Lang of the structure element that obj's
+// /StructParent references directly, or "" if absent. veraPDF determines an
+// annotation's or form field's language from that element's own /Lang only, not
+// from an inherited ancestor value: verapdf-corpus 7.2-t25-fail-a has a /Form
+// element with no /Lang whose parent carries /Lang, and it still fails, while
+// 7.2-t24/t25-pass-b carry /Lang directly on the element and pass.
+func structElementLang(ctx context.Context, doc *document.Document, treeRoot, obj ast.PdfDict) string {
+	if treeRoot == nil {
+		return ""
+	}
+	spObj, ok := obj["StructParent"]
+	if !ok {
+		return ""
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return ""
+	}
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return ""
+	}
+	elem, err := document.ResolveDict(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool)))
+	if err != nil || elem == nil {
+		return ""
+	}
+	return resolveNonEmptyLang(ctx, doc, elem)
+}
+
+// checkFieldTULang walks the form-field tree, reporting §7.2 t25 for a field
+// whose /TU entry carries text but whose language is undeterminable. seen and
+// depth bound a shared or cyclic /Kids tree.
+func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, fields ast.PdfArray, seen map[int]bool, depth int, results *[]Violation) {
+	if ctx.Err() != nil || depth > maxFieldTreeDepth {
+		return
+	}
+	for _, fieldObj := range fields {
+		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+		}
+		field, err := document.ResolveDict(ctx, doc, fieldObj)
+		if err != nil || field == nil {
+			continue
+		}
+		if tu, _ := document.ResolveString(ctx, doc, field["TU"]); len(tu) > 0 {
+			if !objLangDeterminable(ctx, doc, treeRoot, field) {
+				*results = append(*results, fail(Rule_14289_1_7_2_t25, "form field /TU")...)
+			}
+		}
+		if kids, err := document.ResolveArray(ctx, doc, field["Kids"]); err == nil && len(kids) > 0 {
+			checkFieldTULang(ctx, doc, treeRoot, kids, seen, depth+1, results)
+		}
+	}
+}
+
 func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
