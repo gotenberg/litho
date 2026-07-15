@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -435,7 +436,7 @@ func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot 
 
 // formStructElementHasAlt walks the structure tree looking for a Form element
 // with a non-empty /Alt entry. This is the alternative to /TU per §7.18.1 t3.
-func formStructElementHasAlt(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) bool {
+func formStructElementHasAlt(ctx context.Context, doc *document.Document, node ast.PdfDict, seen map[int]bool, depth int) bool {
 	if depth > maxStructAttrSearchDepth {
 		return false
 	}
@@ -450,15 +451,22 @@ func formStructElementHasAlt(ctx context.Context, doc *document.Document, node a
 	if kObj == nil {
 		return false
 	}
-	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
-		for _, kid := range arr {
-			kidDict, _ := document.ResolveDict(ctx, doc, kid)
-			if kidDict != nil && formStructElementHasAlt(ctx, doc, kidDict, depth+1) {
-				return true
+	recurse := func(kid ast.PdfObject) bool {
+		if ref, ok := kid.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				return false
 			}
+			seen[ref.ObjectNum] = true
 		}
-	} else if kidDict, _ := document.ResolveDict(ctx, doc, kObj); kidDict != nil {
-		return formStructElementHasAlt(ctx, doc, kidDict, depth+1)
+		kidDict, _ := document.ResolveDict(ctx, doc, kid)
+		return kidDict != nil && formStructElementHasAlt(ctx, doc, kidDict, seen, depth+1)
+	}
+	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
+		if slices.ContainsFunc(arr, recurse) {
+			return true
+		}
+	} else {
+		return recurse(kObj)
 	}
 	return false
 }
@@ -516,7 +524,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 		// TU missing or empty. Check if widget has Alt in structure tree.
 		catalog, _ := document.ResolveCatalog(ctx, doc)
 		treeRoot, _ := document.ResolveDict(ctx, doc, catalog.Dict["StructTreeRoot"])
-		if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, 0) {
+		if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, make(map[int]bool), 0) {
 			return nil
 		}
 		fieldName, _ := document.ResolveString(ctx, doc, field["T"])

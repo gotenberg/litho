@@ -171,6 +171,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			rootState := &walkState{
 				doc: doc, profile: profile, results: &results,
 				roleMap: buildRoleMapIndex(ctx, doc, structTreeRoot),
+				seen:    make(map[int]bool),
 			}
 			validateISO32005Root(ctx, rootState, structTreeRoot)
 		}
@@ -382,6 +383,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 		results:        results,
 		roleMap:        buildRoleMapIndex(ctx, doc, structTreeRoot),
 		iso32005Parent: "StructTreeRoot",
+		seen:           make(map[int]bool),
 	}
 
 	walkChildren(ctx, state, kidsObj, "", 0, 0)
@@ -459,6 +461,12 @@ type walkState struct {
 	// ISO/TS 32005, NonStruct contents are treated as belonging to the
 	// enclosing element, so containment is evaluated against that element.
 	iso32005Parent ast.PdfName
+
+	// seen records every structure element visited so the walk processes each
+	// once. The structure tree is a strict tree (ISO 32000-1 §14.7.2); without
+	// this a crafted /K tree whose every node lists the same child twice fans
+	// out 2^depth (a denial of service).
+	seen map[int]bool
 }
 
 // buildRoleMapIndex resolves the StructTreeRoot /RoleMap into a plain
@@ -489,6 +497,12 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 	arr, err := document.ResolveArray(ctx, state.doc, kObj)
 	if err != nil {
 		// Try as a single element.
+		if ref, ok := kObj.(ast.PdfIndirectRef); ok {
+			if state.seen[ref.ObjectNum] {
+				return
+			}
+			state.seen[ref.ObjectNum] = true
+		}
 		dict, err := document.ResolveDict(ctx, state.doc, kObj)
 		if err != nil || dict == nil {
 			return
@@ -515,6 +529,12 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 	for _, item := range arr {
 		if ctx.Err() != nil {
 			return
+		}
+		if ref, ok := item.(ast.PdfIndirectRef); ok {
+			if state.seen[ref.ObjectNum] {
+				continue
+			}
+			state.seen[ref.ObjectNum] = true
 		}
 		dict, err := document.ResolveDict(ctx, state.doc, item)
 		if err != nil || dict == nil {
@@ -1451,12 +1471,14 @@ func tableHasHeaderIDs(ctx context.Context, doc *document.Document, tableElem as
 	if !ok {
 		return false
 	}
-	return scanForHeaders(ctx, doc, kObj, 0)
+	return scanForHeaders(ctx, doc, kObj, make(map[int]bool), 0)
 }
 
 // scanForHeaders recursively searches structure element children for TD/TH
 // elements that have /Headers in their attribute dict or directly on the element.
-func scanForHeaders(ctx context.Context, doc *document.Document, kObj ast.PdfObject, depth int) bool {
+// seen visits each element once so a shared or cyclic /K tree cannot fan out
+// 2^depth (a denial of service).
+func scanForHeaders(ctx context.Context, doc *document.Document, kObj ast.PdfObject, seen map[int]bool, depth int) bool {
 	if ctx.Err() != nil || depth > maxStructTreeDepth {
 		return false
 	}
@@ -1464,19 +1486,31 @@ func scanForHeaders(ctx context.Context, doc *document.Document, kObj ast.PdfObj
 	arr, err := document.ResolveArray(ctx, doc, kObj)
 	if err != nil {
 		// Single element.
+		if ref, ok := kObj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				return false
+			}
+			seen[ref.ObjectNum] = true
+		}
 		dict, err := document.ResolveDict(ctx, doc, kObj)
 		if err != nil || dict == nil {
 			return false
 		}
-		return elemHasHeaders(ctx, doc, dict, depth)
+		return elemHasHeaders(ctx, doc, dict, seen, depth)
 	}
 
 	for _, item := range arr {
+		if ref, ok := item.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+		}
 		dict, err := document.ResolveDict(ctx, doc, item)
 		if err != nil || dict == nil {
 			continue
 		}
-		if elemHasHeaders(ctx, doc, dict, depth) {
+		if elemHasHeaders(ctx, doc, dict, seen, depth) {
 			return true
 		}
 	}
@@ -1485,7 +1519,7 @@ func scanForHeaders(ctx context.Context, doc *document.Document, kObj ast.PdfObj
 
 // elemHasHeaders checks if a structure element is a TD/TH with /Headers,
 // or recurses into its children.
-func elemHasHeaders(ctx context.Context, doc *document.Document, elem ast.PdfDict, depth int) bool {
+func elemHasHeaders(ctx context.Context, doc *document.Document, elem ast.PdfDict, seen map[int]bool, depth int) bool {
 	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 	if typeName == "" {
 		return false
@@ -1503,7 +1537,7 @@ func elemHasHeaders(ctx context.Context, doc *document.Document, elem ast.PdfDic
 
 	// Recurse into children (TR, THead, TBody, TFoot, etc.).
 	if kObj, ok := elem["K"]; ok {
-		return scanForHeaders(ctx, doc, kObj, depth+1)
+		return scanForHeaders(ctx, doc, kObj, seen, depth+1)
 	}
 	return false
 }

@@ -280,21 +280,29 @@ func walkStructureElementsWithLang(ctx context.Context, doc *document.Document, 
 	if !ok {
 		return
 	}
-	walkStructKidsWithLang(ctx, doc, kidsObj, "root", 0, rootLang, fn)
+	walkStructKidsWithLang(ctx, doc, kidsObj, "root", make(map[int]bool), 0, rootLang, fn)
 }
 
-func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+// walkStructKidsWithLang is the /Lang-tracking twin of [walkStructKids]; seen
+// gives it the same one-visit-per-node guard against a fan-out denial of service.
+func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, seen map[int]bool, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
 	if ctx.Err() != nil || depth > maxStructTreeWalkDepth {
 		return
 	}
 
 	arr, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil {
+		if ref, ok := obj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				return
+			}
+			seen[ref.ObjectNum] = true
+		}
 		dict, err := document.ResolveDict(ctx, doc, obj)
 		if err != nil || dict == nil {
 			return
 		}
-		visitStructElemWithLang(ctx, doc, dict, path, depth, inheritedLang, fn)
+		visitStructElemWithLang(ctx, doc, dict, path, seen, depth, inheritedLang, fn)
 		return
 	}
 
@@ -302,16 +310,22 @@ func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast
 		if ctx.Err() != nil {
 			return
 		}
+		if ref, ok := kid.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+		}
 		kidDict, err := document.ResolveDict(ctx, doc, kid)
 		if err != nil || kidDict == nil {
 			continue
 		}
 		childPath := fmt.Sprintf("%s[%d]", path, i)
-		visitStructElemWithLang(ctx, doc, kidDict, childPath, depth, inheritedLang, fn)
+		visitStructElemWithLang(ctx, doc, kidDict, childPath, seen, depth, inheritedLang, fn)
 	}
 }
 
-func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
 	if _, hasS := elem["S"]; !hasS {
 		return
 	}
@@ -327,7 +341,7 @@ func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem a
 	}
 
 	if kidsObj, ok := elem["K"]; ok {
-		walkStructKidsWithLang(ctx, doc, kidsObj, elemPath, depth+1, childLang, fn)
+		walkStructKidsWithLang(ctx, doc, kidsObj, elemPath, seen, depth+1, childLang, fn)
 	}
 }
 

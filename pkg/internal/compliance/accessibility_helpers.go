@@ -76,10 +76,16 @@ func walkStructureElements(ctx context.Context, doc *document.Document, root ast
 	if !ok {
 		return
 	}
-	walkStructKids(ctx, doc, kidsObj, "root", 0, fn)
+	walkStructKids(ctx, doc, kidsObj, "root", make(map[int]bool), 0, fn)
 }
 
-func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, depth int, fn func(elem ast.PdfDict, path string)) {
+// walkStructKids walks a /K value (one element or an array). seen visits each
+// structure element once: the structure tree is a strict tree (ISO 32000-1
+// §14.7.2), so a node reached twice is malformed, and without the guard a
+// crafted /K tree whose every node lists the same child twice fans out 2^depth
+// (a denial of service). The inline-dict path carries no object number, so the
+// depth cap bounds that dimension.
+func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, seen map[int]bool, depth int, fn func(elem ast.PdfDict, path string)) {
 	if ctx.Err() != nil || depth > maxStructTreeWalkDepth {
 		return
 	}
@@ -88,11 +94,17 @@ func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObje
 	arr, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil {
 		// Try as a single dict (structure element).
+		if ref, ok := obj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				return
+			}
+			seen[ref.ObjectNum] = true
+		}
 		dict, err := document.ResolveDict(ctx, doc, obj)
 		if err != nil || dict == nil {
 			return
 		}
-		visitStructElem(ctx, doc, dict, path, depth, fn)
+		visitStructElem(ctx, doc, dict, path, seen, depth, fn)
 		return
 	}
 
@@ -100,16 +112,22 @@ func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObje
 		if ctx.Err() != nil {
 			return
 		}
+		if ref, ok := kid.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+		}
 		kidDict, err := document.ResolveDict(ctx, doc, kid)
 		if err != nil || kidDict == nil {
 			continue
 		}
 		childPath := fmt.Sprintf("%s[%d]", path, i)
-		visitStructElem(ctx, doc, kidDict, childPath, depth, fn)
+		visitStructElem(ctx, doc, kidDict, childPath, seen, depth, fn)
 	}
 }
 
-func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, depth int, fn func(elem ast.PdfDict, path string)) {
+func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth int, fn func(elem ast.PdfDict, path string)) {
 	// Only visit dicts that look like structure elements (have /S key).
 	if _, hasS := elem["S"]; hasS {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
@@ -118,7 +136,7 @@ func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDi
 
 		// Recurse into children.
 		if kidsObj, ok := elem["K"]; ok {
-			walkStructKids(ctx, doc, kidsObj, elemPath, depth+1, fn)
+			walkStructKids(ctx, doc, kidsObj, elemPath, seen, depth+1, fn)
 		}
 	}
 }
