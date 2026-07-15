@@ -224,7 +224,7 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		return 0, nil
 	}
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
 	count := 0
 	for _, pe := range pageEntries {

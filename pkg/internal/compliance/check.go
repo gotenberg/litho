@@ -240,7 +240,7 @@ func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDi
 		return nil
 	}
 	var pages []ast.PdfDict
-	collectPagesRecursive(ctx, doc, pagesObj, &pages, 0)
+	collectPagesRecursive(ctx, doc, pagesObj, &pages, make(map[int]bool), 0)
 	doc.Logger.Debug("compliance: collected pages", "count", len(pages))
 	return pages
 }
@@ -249,9 +249,20 @@ func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDi
 // typically shallow (a few levels deep), so 100 is conservative.
 const maxPageTreeDepth = 100
 
-func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, pages *[]ast.PdfDict, depth int) {
+// collectPagesRecursive walks the page tree, appending leaf page dicts. seen
+// records each node visited so a shared or cyclic /Kids tree is traversed once:
+// a page tree is a strict tree (ISO 32000-1 §7.7.3.2), so a node reached again
+// is malformed, and without the guard a crafted tree whose every node lists the
+// same child twice fans out 2^depth (a denial of service).
+func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, pages *[]ast.PdfDict, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
+	}
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return
+		}
+		seen[ref.ObjectNum] = true
 	}
 	dict, err := document.ResolveDict(ctx, doc, obj)
 	if err != nil || dict == nil {
@@ -265,7 +276,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 			return
 		}
 		for _, kid := range kids {
-			collectPagesRecursive(ctx, doc, kid, pages, depth+1)
+			collectPagesRecursive(ctx, doc, kid, pages, seen, depth+1)
 		}
 	case "Page":
 		*pages = append(*pages, dict)
@@ -277,7 +288,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 				return
 			}
 			for _, kid := range kids {
-				collectPagesRecursive(ctx, doc, kid, pages, depth+1)
+				collectPagesRecursive(ctx, doc, kid, pages, seen, depth+1)
 			}
 		} else {
 			*pages = append(*pages, dict)

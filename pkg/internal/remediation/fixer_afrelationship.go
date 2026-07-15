@@ -157,7 +157,7 @@ func fixAFInFileAttachmentAnnots(ctx context.Context, doc *document.Document, al
 		return 0
 	}
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
 
 	count := 0
 	for _, pe := range pages {

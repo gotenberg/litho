@@ -93,7 +93,7 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
 
 	var fixes []string
 	for i, pe := range pages {
@@ -153,7 +153,7 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 const maxPageTreeDepth = 100
 
 // collectPageRefs recursively collects page dicts with their indirect refs.
-func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, pages *[]annotPageEntry, depth int) {
+func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, pages *[]annotPageEntry, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
 	}
@@ -161,6 +161,12 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	var ref ast.PdfIndirectRef
 	if r, ok := obj.(ast.PdfIndirectRef); ok {
 		ref = r
+		// A page tree is a strict tree (ISO 32000-1 §7.7.3.2); visit each node
+		// once so a shared or cyclic /Kids tree cannot fan out 2^depth.
+		if seen[ref.ObjectNum] {
+			return
+		}
+		seen[ref.ObjectNum] = true
 	}
 
 	var dict ast.PdfDict
@@ -185,7 +191,7 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			return
 		}
 		for _, kid := range kids {
-			collectPageRefs(ctx, alloc, doc, kid, pages, depth+1)
+			collectPageRefs(ctx, alloc, doc, kid, pages, seen, depth+1)
 		}
 	case "Page":
 		*pages = append(*pages, annotPageEntry{ref: ref, dict: dict})
@@ -196,7 +202,7 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 				return
 			}
 			for _, kid := range kids {
-				collectPageRefs(ctx, alloc, doc, kid, pages, depth+1)
+				collectPageRefs(ctx, alloc, doc, kid, pages, seen, depth+1)
 			}
 		} else {
 			*pages = append(*pages, annotPageEntry{ref: ref, dict: dict})

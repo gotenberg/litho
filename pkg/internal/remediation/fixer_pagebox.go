@@ -48,7 +48,7 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	}
 
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
 	count := 0
 	for _, pe := range pageEntries {

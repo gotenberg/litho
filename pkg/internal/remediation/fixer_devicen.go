@@ -43,7 +43,7 @@ func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	}
 
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
 	visited := make(map[int]bool)
 	var total int

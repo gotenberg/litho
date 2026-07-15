@@ -54,7 +54,7 @@ func fixForbiddenAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		return nil, nil
 	}
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
 
 	removed := 0
 	for _, pe := range pages {

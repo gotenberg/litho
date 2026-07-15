@@ -99,7 +99,7 @@ func fixAnnotArtifact(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		return nil, nil
 	}
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
 
 	processed := make(map[int]bool)
 	removed, clearedInvisible := 0, 0

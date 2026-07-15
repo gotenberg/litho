@@ -241,7 +241,8 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 	// deeply nested but non-cyclic trees that would otherwise exhaust
 	// the stack.
 	visited := make(map[int]bool)
-	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, 0, &pages, visited, 0)
+	done := make(map[int]bool)
+	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, 0, &pages, visited, done, 0)
 	if err != nil {
 		return nil, fmt.Errorf("traversing page tree: %w", err)
 	}
@@ -300,7 +301,7 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 // PDFs never nest page trees more than a handful of levels.
 const maxPageTreeDepth = 256
 
-func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited map[int]bool, depth int) error {
+func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited, done map[int]bool, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("page tree traversal canceled: %w", err)
 	}
@@ -308,10 +309,21 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		return fmt.Errorf("page tree exceeds depth limit (%d)", maxPageTreeDepth)
 	}
 	if nodeRef.ObjectNum != 0 {
+		// visited is the current ancestor path: a node reached while still on
+		// its own path is a genuine cycle (a /Kids chain looping back).
 		if visited[nodeRef.ObjectNum] {
 			return fmt.Errorf("page tree cycle at object %d", nodeRef.ObjectNum)
 		}
+		// done is every node already fully traversed. A page tree is a strict
+		// tree (ISO 32000-1 §7.7.3.2), so a node reached again through a
+		// different /Kids path is malformed; traversing it once is correct and
+		// keeps the walk linear. Without this a crafted tree whose every node
+		// lists the same child twice fans out 2^depth, a denial of service.
+		if done[nodeRef.ObjectNum] {
+			return nil
+		}
 		visited[nodeRef.ObjectNum] = true
+		done[nodeRef.ObjectNum] = true
 		defer delete(visited, nodeRef.ObjectNum)
 	}
 
@@ -410,7 +422,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 				return fmt.Errorf("kid is not a dictionary")
 			}
 
-			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, currentRotate, pages, visited, depth+1)
+			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, currentRotate, pages, visited, done, depth+1)
 			if err != nil {
 				return fmt.Errorf("traversing page tree kid: %w", err)
 			}

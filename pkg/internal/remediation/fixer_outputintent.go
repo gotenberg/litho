@@ -295,7 +295,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 				visited := make(map[int]bool)
 				var entries []annotPageEntry
 				if pagesObj, ok := newCat["Pages"]; ok {
-					collectPageRefs(ctx, alloc, doc, pagesObj, &entries, 0)
+					collectPageRefs(ctx, alloc, doc, pagesObj, &entries, make(map[int]bool), 0)
 				}
 				for _, pe := range entries {
 					dedupICCInResources(ctx, alloc, doc, pe, profile, visited)
@@ -341,7 +341,7 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 		return 0, nil
 	}
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
 
 	visited := make(map[int]bool)
 	count := 0
