@@ -54,7 +54,12 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 			return
 		}
 
-		resources := resolveResources(ctx, doc, page)
+		// /Resources is an inheritable page attribute (ISO 32000-1 §7.7.3.4): a
+		// page with none of its own uses the nearest ancestor's. veraPDF checks
+		// device colour usage against the effective resources, so litho must
+		// resolve inheritance here or it skips colour checks on pages whose
+		// resources live on a Pages node (qpdf shared-images, form-xobjects-*).
+		resources := resolveInheritedResources(ctx, doc, page)
 		if resources == nil {
 			continue
 		}

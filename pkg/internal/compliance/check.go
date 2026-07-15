@@ -306,6 +306,26 @@ func resolveResources(ctx context.Context, doc *document.Document, page ast.PdfD
 	return res
 }
 
+// resolveInheritedResources returns a page's effective /Resources, honouring the
+// ISO 32000-1 §7.7.3.4 inheritance rule: a page that declares no /Resources of
+// its own uses the nearest ancestor Pages node that does. The upward /Parent
+// walk is bounded by [maxPageTreeDepth] so a malformed or cyclic /Parent chain
+// cannot loop.
+func resolveInheritedResources(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfDict {
+	node := page
+	for depth := 0; depth <= maxPageTreeDepth && node != nil; depth++ {
+		if res := resolveResources(ctx, doc, node); res != nil {
+			return res
+		}
+		parent, err := document.ResolveDict(ctx, doc, node["Parent"])
+		if err != nil || parent == nil {
+			return nil
+		}
+		node = parent
+	}
+	return nil
+}
+
 // fail creates a single-element Violation slice for a rule violation.
 func fail(rule Rule, context string) []Violation {
 	return []Violation{{Rule: rule, Context: context}}
