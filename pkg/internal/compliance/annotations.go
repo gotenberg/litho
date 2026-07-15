@@ -374,10 +374,14 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 
 	var results []Violation
 
-	// Test 1: /N must be present in the appearance dict.
+	// An /AP that is present but not exactly the single /N appearance is a
+	// test 2 defect, not test 1: veraPDF's t1 is "AP != null" (satisfied once an
+	// /AP dictionary exists at all), while t2 is "AP == null || AP == 'N'", which
+	// fails when /AP carries entries other than a lone /N, including the case of
+	// /AP present with no /N at all (qpdf need-appearances-more2 annot 10).
 	nObj, hasN := ap["N"]
 	if !hasN {
-		rule := apRequiredRule(part)
+		rule := apOnlyNRule(part)
 		results = append(results, failf(rule, "%s: appearance dictionary missing /N entry", loc)...)
 		return results
 	}

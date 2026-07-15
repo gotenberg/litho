@@ -35,7 +35,7 @@ func TestCheckFieldAppearanceZeroArea(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var results []Violation
-			checkFieldAppearance(ctx, nopDoc(), tc.field, tc.part, 0, &results)
+			checkFieldAppearance(ctx, nopDoc(), tc.field, tc.part, 0, true, &results)
 			if (len(results) > 0) != tc.wantFail {
 				t.Errorf("got %d violations, wantFail=%v", len(results), tc.wantFail)
 			}

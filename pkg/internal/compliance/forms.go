@@ -25,6 +25,11 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// scan below does not re-check a widget already covered by the field walk.
 	covered := make(map[int]bool)
 
+	// Object numbers of every annotation referenced by a page /Annots array.
+	// veraPDF scopes the §6.3.3 appearance rule to PDAnnot objects, i.e. rendered
+	// annotations, so the field walk fires only for a field that is one.
+	pageAnnotObjs := collectPageAnnotObjNums(ctx, vctx)
+
 	acroForm, err := document.ResolveDict(ctx, doc, catalog["AcroForm"])
 	if err != nil {
 		doc.Logger.Debug("compliance.forms: cannot resolve /AcroForm", "error", err)
@@ -53,7 +58,7 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				if ctx.Err() != nil {
 					return results
 				}
-				checkFormField(ctx, doc, fieldObj, profile, part, ua, i, &results, 0, seen)
+				checkFormField(ctx, doc, fieldObj, profile, part, ua, i, &results, 0, seen, pageAnnotObjs)
 			}
 		} else {
 			doc.Logger.Debug("compliance.forms: cannot resolve /Fields array", "error", err)
@@ -121,9 +126,32 @@ func checkOrphanWidgetAppearances(ctx context.Context, doc *document.Document, v
 			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
 				continue
 			}
-			checkFieldAppearance(ctx, doc, annot, part, ai, results)
+			// These annotations are reached through a page /Annots array, so they
+			// are in scope for the PDAnnot-keyed rule.
+			checkFieldAppearance(ctx, doc, annot, part, ai, true, results)
 		}
 	}
+}
+
+// collectPageAnnotObjNums returns the object numbers of every annotation
+// referenced by a page /Annots array across all pages.
+func collectPageAnnotObjNums(ctx context.Context, vctx *validationCtx) map[int]bool {
+	objs := make(map[int]bool)
+	for pi := range vctx.pages {
+		if ctx.Err() != nil {
+			return objs
+		}
+		annots, err := document.ResolveArray(ctx, vctx.doc, vctx.pages[pi].dict["Annots"])
+		if err != nil {
+			continue
+		}
+		for _, annotObj := range annots {
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+				objs[ref.ObjectNum] = true
+			}
+		}
+	}
+	return objs
 }
 
 // maxFieldTreeDepth limits recursion when walking the field tree.
@@ -338,16 +366,18 @@ func isPdfWhitespaceByte(b byte) bool {
 // checkFormField validates a single form field and recurses into child fields.
 // seen guards against a shared or cyclic /Kids tree: each field object is
 // processed at most once, so a crafted fan-out cannot force exponential work.
-func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, _ string, part int, _ bool, fieldIdx int, results *[]Violation, depth int, seen map[int]bool) {
+func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, _ string, part int, _ bool, fieldIdx int, results *[]Violation, depth int, seen, pageAnnotObjs map[int]bool) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
 		return
 	}
 
+	fieldObjNum := 0
 	if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
 		if seen[ref.ObjectNum] {
 			return
 		}
 		seen[ref.ObjectNum] = true
+		fieldObjNum = ref.ObjectNum
 	}
 
 	field, err := document.ResolveDict(ctx, doc, fieldObj)
@@ -358,7 +388,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 
 	// §6.9/6.4: Form field appearances. Every field must have /AP.
 	if part > 0 {
-		checkFieldAppearance(ctx, doc, field, part, fieldIdx, results)
+		checkFieldAppearance(ctx, doc, field, part, fieldIdx, pageAnnotObjs[fieldObjNum], results)
 	}
 
 	// §6.4.3 t1 (parts 2/3): signature ByteRange coverage.
@@ -386,7 +416,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 		if ctx.Err() != nil {
 			return
 		}
-		checkFormField(ctx, doc, kid, "", part, false, i, results, depth+1, seen)
+		checkFormField(ctx, doc, kid, "", part, false, i, results, depth+1, seen, pageAnnotObjs)
 	}
 }
 
@@ -419,8 +449,19 @@ func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm 
 }
 
 // checkFieldAppearance validates that a form field has an /AP appearance
-// dictionary.
-func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, fieldIdx int, results *[]Violation) {
+// dictionary. isPageAnnot reports whether the field is reached through a page
+// /Annots array, i.e. is a rendered annotation.
+func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, fieldIdx int, isPageAnnot bool, results *[]Violation) {
+	// veraPDF scopes §6.3.3 t1 to the PDAnnot object: an annotation reached
+	// through a page /Annots array. A widget present only in the /AcroForm
+	// /Fields tree but never referenced by a page /Annots array renders nothing
+	// and is out of scope, as is a broken /Kids reference resolving to an empty
+	// dict. Checking either reports a missing appearance veraPDF never raises
+	// (qpdf shared-unnamed-field obj 30, a /Fields-only widget; form-errors obj 0).
+	if !isPageAnnot {
+		return
+	}
+
 	// Fields with /Kids but no /FT are non-terminal; skip appearance check.
 	if _, hasKids := field["Kids"]; hasKids {
 		if _, hasFT := field["FT"]; !hasFT {

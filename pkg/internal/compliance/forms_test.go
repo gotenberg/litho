@@ -18,7 +18,7 @@ func TestCheckFieldAppearance(t *testing.T) {
 
 	fires := func(field ast.PdfDict, part int) bool {
 		var results []Violation
-		checkFieldAppearance(ctx, nopDoc(), field, part, 0, &results)
+		checkFieldAppearance(ctx, nopDoc(), field, part, 0, true, &results)
 		return len(results) > 0
 	}
 
