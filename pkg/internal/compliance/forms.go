@@ -43,11 +43,17 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// Iterate form fields.
 		if fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"]); err == nil {
 			collectFieldObjNums(ctx, doc, fields, covered, 0)
+			// One visited-set across all top fields: a field object reached
+			// through two parents (a shared widget) is a single object and is
+			// checked once. Without it, a crafted /Kids tree whose every node
+			// lists the same child twice fans out 2^depth and is a denial of
+			// service (qpdf shared-unnamed-field.pdf: obj N /Kids [N+1 N+1]).
+			seen := make(map[int]bool)
 			for i, fieldObj := range fields {
 				if ctx.Err() != nil {
 					return results
 				}
-				checkFormField(ctx, doc, fieldObj, profile, part, ua, i, &results, 0)
+				checkFormField(ctx, doc, fieldObj, profile, part, ua, i, &results, 0, seen)
 			}
 		} else {
 			doc.Logger.Debug("compliance.forms: cannot resolve /Fields array", "error", err)
@@ -330,9 +336,18 @@ func isPdfWhitespaceByte(b byte) bool {
 }
 
 // checkFormField validates a single form field and recurses into child fields.
-func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, _ string, part int, _ bool, fieldIdx int, results *[]Violation, depth int) {
+// seen guards against a shared or cyclic /Kids tree: each field object is
+// processed at most once, so a crafted fan-out cannot force exponential work.
+func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, _ string, part int, _ bool, fieldIdx int, results *[]Violation, depth int, seen map[int]bool) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
 		return
+	}
+
+	if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return
+		}
+		seen[ref.ObjectNum] = true
 	}
 
 	field, err := document.ResolveDict(ctx, doc, fieldObj)
@@ -371,7 +386,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 		if ctx.Err() != nil {
 			return
 		}
-		checkFormField(ctx, doc, kid, "", part, false, i, results, depth+1)
+		checkFormField(ctx, doc, kid, "", part, false, i, results, depth+1, seen)
 	}
 }
 

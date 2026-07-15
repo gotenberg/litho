@@ -21,7 +21,7 @@ func TestWalkFormFields_PureWidgetAANotFieldViolation(t *testing.T) {
 	}
 
 	var results []Violation
-	walkFormFields(context.Background(), nil, fields, "PDF/A-2b", 2, &results, 0)
+	walkFormFields(context.Background(), nil, fields, "PDF/A-2b", 2, &results, 0, make(map[int]bool))
 
 	t2 := 0
 	for _, v := range results {

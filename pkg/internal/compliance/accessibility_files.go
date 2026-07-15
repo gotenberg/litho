@@ -380,8 +380,9 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 	}
 
 	var results []Violation
+	seen := make(map[int]bool)
 	for _, fieldObj := range fields {
-		results = append(results, checkFieldTURecursive(ctx, doc, fieldObj, 0)...)
+		results = append(results, checkFieldTURecursive(ctx, doc, fieldObj, 0, seen)...)
 	}
 	return results
 }
@@ -468,10 +469,18 @@ func formStructElementHasAlt(ctx context.Context, doc *document.Document, node a
 // or near the terminal field, so a deep crafted tree need not be descended.
 const maxFieldTUSearchDepth = 10
 
-// checkFieldTURecursive checks a form field (and its children) for /TU.
-func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int) []Violation {
+// checkFieldTURecursive checks a form field (and its children) for /TU. seen
+// visits each field object once, so a shared or cyclic /Kids tree cannot force
+// exponential work.
+func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int, seen map[int]bool) []Violation {
 	if depth > maxFieldTUSearchDepth {
 		return nil
+	}
+	if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return nil
+		}
+		seen[ref.ObjectNum] = true
 	}
 	field, err := document.ResolveDict(ctx, doc, fieldObj)
 	if err != nil || field == nil {
@@ -523,7 +532,7 @@ func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj
 	}
 	var results []Violation
 	for _, kid := range kids {
-		results = append(results, checkFieldTURecursive(ctx, doc, kid, depth+1)...)
+		results = append(results, checkFieldTURecursive(ctx, doc, kid, depth+1, seen)...)
 	}
 	return results
 }

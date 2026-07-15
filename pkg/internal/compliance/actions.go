@@ -695,18 +695,26 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 	}
 
 	var results []Violation
-	walkFormFields(ctx, doc, fields, profile, part, &results, 0)
+	walkFormFields(ctx, doc, fields, profile, part, &results, 0, make(map[int]bool))
 	return results
 }
 
-// walkFormFields recursively checks form field dicts for forbidden actions.
-func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int) {
+// walkFormFields recursively checks form field dicts for forbidden actions. seen
+// processes each field object once, so a shared or cyclic /Kids tree (a node
+// whose children list the same object repeatedly) cannot force exponential work.
+func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int, seen map[int]bool) {
 	if depth > maxActionChainDepth {
 		return
 	}
 	for i, fieldObj := range fields {
 		if ctx.Err() != nil {
 			return
+		}
+		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
 		}
 		field, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil || field == nil {
@@ -770,7 +778,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		if kidsObj, hasKids := field["Kids"]; hasKids {
 			kids, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil {
-				walkFormFields(ctx, doc, kids, profile, part, results, depth+1)
+				walkFormFields(ctx, doc, kids, profile, part, results, depth+1, seen)
 			}
 		}
 	}

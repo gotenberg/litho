@@ -48,7 +48,7 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	}
 
 	var count int
-	walkFormTooltipFields(ctx, alloc, doc, fields, &count)
+	walkFormTooltipFields(ctx, alloc, doc, fields, &count, make(map[int]bool))
 
 	if count == 0 {
 		return nil, nil
@@ -57,8 +57,9 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 }
 
 // walkFormTooltipFields recursively walks form field tree and patches each
-// field that lacks a tooltip-equivalent entry.
-func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fields ast.PdfArray, count *int) {
+// field that lacks a tooltip-equivalent entry. seen processes each field object
+// once, so a shared or cyclic /Kids tree cannot force exponential work.
+func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fields ast.PdfArray, count *int, seen map[int]bool) {
 	for _, fieldObj := range fields {
 		if ctx.Err() != nil {
 			return
@@ -67,6 +68,10 @@ func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		var fieldRef ast.PdfIndirectRef
 		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
 			fieldRef = ref
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
 		}
 		field, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil || field == nil {
@@ -76,7 +81,7 @@ func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		// Recurse into /Kids first.
 		if kidsObj, ok := field["Kids"]; ok {
 			if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
-				walkFormTooltipFields(ctx, alloc, doc, kids, count)
+				walkFormTooltipFields(ctx, alloc, doc, kids, count, seen)
 			}
 		}
 
