@@ -51,7 +51,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 
 		visited := make(map[int]bool)
 
-		res := resolveResources(ctx, doc, page)
+		res := resolveInheritedResources(ctx, doc, page)
 		if res != nil {
 			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0)...)
 		}
@@ -419,7 +419,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			return results
 		}
 
-		res := resolveResources(ctx, doc, page)
+		res := resolveInheritedResources(ctx, doc, page)
 		if res == nil {
 			continue
 		}

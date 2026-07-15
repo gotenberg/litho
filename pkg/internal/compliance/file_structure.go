@@ -1042,7 +1042,7 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		if ctx.Err() != nil {
 			return results
 		}
-		res := resolveResources(ctx, doc, page)
+		res := resolveInheritedResources(ctx, doc, page)
 		if res == nil {
 			continue
 		}

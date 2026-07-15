@@ -44,7 +44,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 			return
 		}
 
-		resources := resolveResources(ctx, doc, page)
+		resources := resolveInheritedResources(ctx, doc, page)
 		if resources == nil {
 			continue
 		}

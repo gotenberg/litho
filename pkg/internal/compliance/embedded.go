@@ -402,7 +402,7 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		}
 
 		// XObject resources (Image and Form XObjects can have /AF).
-		res := resolveResources(ctx, doc, page)
+		res := resolveInheritedResources(ctx, doc, page)
 		if res != nil {
 			xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
 			if err == nil && xobjDict != nil {
