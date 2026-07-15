@@ -176,17 +176,11 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 	}
 
 	// Collect font usage from the page content stream: which fonts are
-	// visible (rendering mode != 3) and which character codes are used.
+	// visible (rendering mode != 3) and which character codes are used. The
+	// per-font skip below uses this to match veraPDF's "check only fonts a
+	// content operator selects" model; parseFailed drives the conservative
+	// "check every declared font" fallback for present-but-unparseable content.
 	fontUsage := collectFontUsage(p.parsedOps(ctx))
-	// The conservative "check every declared font" fallback applies only
-	// when content is PRESENT but unparseable (parseFailed). Embedding and
-	// width rules (§6.2.11.4.1) constrain glyphs actually rendered, so a
-	// font declared in /Font but never selected and shown renders no glyph
-	// and is out of scope. Empty or fully-parsed content with no glyphs
-	// rendered therefore exempts a declared-but-unused font. Note: empty
-	// page content is one '\n' separator after stream concatenation, so a
-	// length test cannot distinguish it; parseFailed keys off the parser
-	// error.
 	parseFailed := p.parseFailed
 
 	var results []Violation
@@ -212,6 +206,25 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 			continue
 		}
 
+		// veraPDF builds a font object only when a content operator selects it
+		// (Tf) and shows text with it, so a font declared in /Resources/Font but
+		// never selected on this page renders no glyph here and is out of scope
+		// for the page pass. Checking it would report encoding (§6.2.11.6),
+		// embedding (§6.2.11.4.1), or width defects veraPDF never raises, since
+		// those rules constrain glyphs actually shown. A font rendered instead by
+		// an annotation appearance or a Form XObject is reached by the dedicated
+		// passes in [checkFontGroup] with that context's usage, so it is left
+		// unmarked in checkedObjs here to avoid starving them. Only present but
+		// unparseable content forces the conservative "check every declared font"
+		// fallback (litho cannot prove non-use).
+		var usage *fontUsageInfo
+		if fontUsage != nil {
+			usage = fontUsage[fontKey]
+		}
+		if usage == nil && !parseFailed {
+			continue
+		}
+
 		font, err := document.ResolveDict(ctx, doc, fontRef)
 		if err != nil || font == nil {
 			doc.Logger.Debug("compliance: fonts: failed to resolve font dict",
@@ -224,10 +237,6 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 			checkedObjs[ref.ObjectNum] = true
 		}
 		// Skip width/embedding checks for fonts not used for visible rendering.
-		var usage *fontUsageInfo
-		if fontUsage != nil {
-			usage = fontUsage[fontKey]
-		}
 		isVisible := parseFailed || (usage != nil && usage.visible)
 
 		results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
