@@ -114,7 +114,7 @@ func widgetStructElem(ctx context.Context, doc *document.Document, treeRoot, ann
 	if err != nil || ptDict == nil {
 		return nil
 	}
-	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0)
+	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
 	if elemObj == nil {
 		return nil
 	}

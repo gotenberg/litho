@@ -61,15 +61,26 @@ const maxNameTreeDepth = 64
 // Name trees use /Kids for intermediate nodes and /Names for leaf nodes,
 // with optional /Limits [min max] arrays for efficient pruning.
 func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
-	return searchNameTreeAt(ctx, doc, nodeObj, key, 0)
+	return searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0)
 }
 
-func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, depth int) (ast.PdfArray, error) {
+// searchNameTreeAt searches a name-tree node for key. seen visits each node
+// once: a name tree is a strict tree, so a /Kids entry reached twice is
+// malformed, and without the guard a node whose /Kids lists the same child
+// twice (with no pruning /Limits) fans out 2^depth on a key that is absent (a
+// denial of service).
+func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, seen map[int]bool, depth int) (ast.PdfArray, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if depth > maxNameTreeDepth {
 		return nil, nil
+	}
+	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return nil, nil
+		}
+		seen[ref.ObjectNum] = true
 	}
 
 	nodeDict, err := ResolveDict(ctx, doc, nodeObj)
@@ -110,7 +121,7 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			result, err := searchNameTreeAt(ctx, doc, kid, key, depth+1)
+			result, err := searchNameTreeAt(ctx, doc, kid, key, seen, depth+1)
 			if err != nil {
 				return nil, err
 			}

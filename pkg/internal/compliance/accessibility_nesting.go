@@ -248,7 +248,7 @@ func annotStructParentType(ctx context.Context, doc *document.Document, treeRoot
 	if err != nil || ptDict == nil {
 		return ""
 	}
-	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0)
+	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
 	if elemObj == nil {
 		return ""
 	}
@@ -267,7 +267,7 @@ func annotStructParentType(ctx context.Context, doc *document.Document, treeRoot
 // It mirrors [numberTreeLookup] but returns the value as-is rather than forcing
 // an array, because an annotation /StructParent entry references a single
 // structure element. Depth is capped by [maxEFNameTreeDepth].
-func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int) ast.PdfObject {
+func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int, seen map[int]bool) ast.PdfObject {
 	if depth > maxEFNameTreeDepth || ctx.Err() != nil {
 		return nil
 	}
@@ -287,11 +287,17 @@ func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.P
 		kids, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil {
 			for _, kid := range kids {
+				if ref, ok := kid.(ast.PdfIndirectRef); ok {
+					if seen[ref.ObjectNum] {
+						continue
+					}
+					seen[ref.ObjectNum] = true
+				}
 				kd, kerr := document.ResolveDict(ctx, doc, kid)
 				if kerr != nil || kd == nil {
 					continue
 				}
-				if v := numberTreeLookupObj(ctx, doc, kd, key, depth+1); v != nil {
+				if v := numberTreeLookupObj(ctx, doc, kd, key, depth+1, seen); v != nil {
 					return v
 				}
 			}

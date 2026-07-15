@@ -660,7 +660,7 @@ func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoo
 	if err != nil || ptDict == nil {
 		return out
 	}
-	arr, err := document.ResolveArray(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, int(key), 0))
+	arr, err := document.ResolveArray(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool)))
 	if err != nil {
 		return out
 	}

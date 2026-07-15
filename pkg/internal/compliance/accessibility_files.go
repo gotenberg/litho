@@ -98,7 +98,7 @@ func collectEmbeddedFilesTreeSpecs(ctx context.Context, doc *document.Document, 
 		return nil
 	}
 	specs := make(map[int]bool)
-	collectNameTreeSpecRefs(ctx, doc, efObj, specs, 0)
+	collectNameTreeSpecRefs(ctx, doc, efObj, specs, make(map[int]bool), 0)
 	return specs
 }
 
@@ -110,10 +110,17 @@ const maxEFNameTreeDepth = 64
 
 // collectNameTreeSpecRefs walks a name tree, recording the object number of
 // every indirect value in leaf /Names arrays. Depth is capped by
-// [maxEFNameTreeDepth].
-func collectNameTreeSpecRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, specs map[int]bool, depth int) {
+// [maxEFNameTreeDepth]; seen visits each node once so a /Kids tree whose every
+// node lists the same child twice cannot fan out 2^depth (a denial of service).
+func collectNameTreeSpecRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, specs, seen map[int]bool, depth int) {
 	if depth > maxEFNameTreeDepth || ctx.Err() != nil {
 		return
+	}
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return
+		}
+		seen[ref.ObjectNum] = true
 	}
 	node, err := document.ResolveDict(ctx, doc, obj)
 	if err != nil || node == nil {
@@ -128,7 +135,7 @@ func collectNameTreeSpecRefs(ctx context.Context, doc *document.Document, obj as
 	}
 	if kids, err := document.ResolveArray(ctx, doc, node["Kids"]); err == nil {
 		for _, kid := range kids {
-			collectNameTreeSpecRefs(ctx, doc, kid, specs, depth+1)
+			collectNameTreeSpecRefs(ctx, doc, kid, specs, seen, depth+1)
 		}
 	}
 }

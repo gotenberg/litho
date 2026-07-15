@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
@@ -367,5 +368,57 @@ func TestSearchNameTree_RespectsContextCancel(t *testing.T) {
 	cancel()
 	if _, err := searchNameTree(ctx, doc, leafNode, "dest1"); err == nil {
 		t.Fatal("expected ctx.Err() when called with cancelled context")
+	}
+}
+
+// TestResolveNamedDest_FanoutBomb pins that a name tree whose every node lists
+// the same /Kids child twice (with no pruning /Limits) cannot fan out 2^depth
+// when the searched key is absent. Without a visited-set the search explored
+// every path and hung; the guard bounds it to one visit per node.
+func TestResolveNamedDest_FanoutBomb(t *testing.T) {
+	t.Parallel()
+
+	const levels = 60
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.4\n")
+	offs := []int{}
+	writeObj := func(body string) {
+		offs = append(offs, buf.Len())
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", len(offs), body)
+	}
+	writeObj("<< /Type /Catalog /Pages 2 0 R /Names << /Dests 5 0 R >> >>")
+	writeObj("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	writeObj("<< /Type /Page /Parent 2 0 R >>")
+	writeObj("<< /Length 0 >>\nstream\n\nendstream")
+	for i := range levels {
+		objn := 5 + i
+		child := objn + 1
+		if i == levels-1 {
+			writeObj("<< /Names [(zzz) [3 0 R /Fit]] >>")
+			continue
+		}
+		writeObj(fmt.Sprintf("<< /Kids [%d 0 R %d 0 R] >>", child, child))
+	}
+	xrefOff := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \n", len(offs)+1)
+	for _, off := range offs {
+		fmt.Fprintf(&buf, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offs)+1, xrefOff)
+
+	doc, err := NewDocument(context.Background(), bytes.NewReader(buf.Bytes()), int64(buf.Len()), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = ResolveNamedDest(context.Background(), doc, "missing-key")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("ResolveNamedDest did not complete: name-tree fan-out not bounded")
 	}
 }

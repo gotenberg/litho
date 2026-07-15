@@ -127,7 +127,7 @@ func parentTreeMCIDs(ctx context.Context, doc *document.Document, treeRoot, page
 	if err != nil || ptDict == nil {
 		return covered
 	}
-	arr := numberTreeLookup(ctx, doc, ptDict, int(key), 0)
+	arr := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
 	if arr == nil {
 		return covered
 	}
@@ -142,7 +142,7 @@ func parentTreeMCIDs(ctx context.Context, doc *document.Document, treeRoot, page
 // numberTreeLookup resolves a key in a number tree (Nums leaves, Kids
 // recursion) to its array value. Depth is capped by [maxEFNameTreeDepth],
 // the shared anti-DoS guard for tree walks.
-func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int) ast.PdfArray {
+func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int, seen map[int]bool) ast.PdfArray {
 	if depth > maxEFNameTreeDepth || ctx.Err() != nil {
 		return nil
 	}
@@ -166,11 +166,17 @@ func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfD
 		kids, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil {
 			for _, kid := range kids {
+				if ref, ok := kid.(ast.PdfIndirectRef); ok {
+					if seen[ref.ObjectNum] {
+						continue
+					}
+					seen[ref.ObjectNum] = true
+				}
 				kd, kerr := document.ResolveDict(ctx, doc, kid)
 				if kerr != nil || kd == nil {
 					continue
 				}
-				if arr := numberTreeLookup(ctx, doc, kd, key, depth+1); arr != nil {
+				if arr := numberTreeLookup(ctx, doc, kd, key, depth+1, seen); arr != nil {
 					return arr
 				}
 			}

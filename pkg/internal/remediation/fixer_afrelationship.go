@@ -144,7 +144,7 @@ func fixAFInEmbeddedFilesTree(ctx context.Context, doc *document.Document, alloc
 	if !ok {
 		return 0
 	}
-	return fixAFInNameTree(ctx, doc, alloc, efObj)
+	return fixAFInNameTree(ctx, doc, alloc, efObj, make(map[int]bool), 0)
 }
 
 // fixAFInFileAttachmentAnnots repairs the file specification referenced by each
@@ -185,7 +185,20 @@ func fixAFInFileAttachmentAnnots(ctx context.Context, doc *document.Document, al
 	return count
 }
 
-func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, obj ast.PdfObject) int {
+// fixAFInNameTree walks an EmbeddedFiles name tree, adding /AFRelationship to
+// each filespec. seen visits each node once and depth is capped: a name tree is
+// a strict tree, so a /Kids tree whose every node lists the same child twice
+// would otherwise fan out 2^depth (a denial of service).
+func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, obj ast.PdfObject, seen map[int]bool, depth int) int {
+	if depth > maxNameTreeWalkDepth {
+		return 0
+	}
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return 0
+		}
+		seen[ref.ObjectNum] = true
+	}
 	d, err := document.ResolveDict(ctx, doc, obj)
 	if err != nil || d == nil {
 		return 0
@@ -206,7 +219,7 @@ func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.
 	if kidsArr, ok := d["Kids"]; ok {
 		if arr, err := document.ResolveArray(ctx, doc, kidsArr); err == nil {
 			for _, kid := range arr {
-				count += fixAFInNameTree(ctx, doc, alloc, kid)
+				count += fixAFInNameTree(ctx, doc, alloc, kid, seen, depth+1)
 			}
 		}
 	}

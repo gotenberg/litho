@@ -57,17 +57,23 @@ func fixEmbeddedSubtype(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 
 	count := 0
-	walkEmbeddedFileTree(ctx, alloc, doc, efDict, &count)
+	walkEmbeddedFileTree(ctx, alloc, doc, efDict, &count, make(map[int]bool), 0)
 	if count == 0 {
 		return nil, nil
 	}
 	return []string{fmt.Sprintf("normalised /Subtype on %d embedded file(s)", count)}, nil
 }
 
-// walkEmbeddedFileTree recurses through an EmbeddedFiles name tree,
-// patching every filespec's /EF stream entries.
-func walkEmbeddedFileTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, node ast.PdfDict, count *int) {
-	if ctx.Err() != nil {
+// maxNameTreeWalkDepth caps name-tree recursion in remediation fixers. Anti-DoS
+// guard mirroring the compliance and core name-tree depth caps (64).
+const maxNameTreeWalkDepth = 64
+
+// walkEmbeddedFileTree recurses through an EmbeddedFiles name tree, patching
+// every filespec's /EF stream entries. seen visits each node once and depth is
+// capped: a name tree is a strict tree, so a /Kids tree whose every node lists
+// the same child twice would otherwise fan out 2^depth (a denial of service).
+func walkEmbeddedFileTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, node ast.PdfDict, count *int, seen map[int]bool, depth int) {
+	if ctx.Err() != nil || depth > maxNameTreeWalkDepth {
 		return
 	}
 	if names, err := document.ResolveArray(ctx, doc, node["Names"]); err == nil {
@@ -77,11 +83,17 @@ func walkEmbeddedFileTree(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	}
 	if kids, err := document.ResolveArray(ctx, doc, node["Kids"]); err == nil {
 		for _, kid := range kids {
+			if ref, ok := kid.(ast.PdfIndirectRef); ok {
+				if seen[ref.ObjectNum] {
+					continue
+				}
+				seen[ref.ObjectNum] = true
+			}
 			child, err := document.ResolveDict(ctx, doc, kid)
 			if err != nil || child == nil {
 				continue
 			}
-			walkEmbeddedFileTree(ctx, alloc, doc, child, count)
+			walkEmbeddedFileTree(ctx, alloc, doc, child, count, seen, depth+1)
 		}
 	}
 }
