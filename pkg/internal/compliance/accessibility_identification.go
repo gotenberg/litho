@@ -137,10 +137,12 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 
 	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
 	if !ok {
-		if profile == "PDF/UA-1" {
-			return fail(Rule_14289_1_5_t01, "no XMP metadata")
-		}
-		return fail(Rule_14289_2_5_t01, "no XMP metadata")
+		// No XMP metadata at all: veraPDF scopes the §5 identifier rule to the
+		// XMP package object, so with no package it does not fire. The missing
+		// metadata itself is reported by the §7.1 metadata-presence check, so
+		// firing the identifier rule here over-reports (verapdf-corpus
+		// 7.1-t08-fail-a fires only 7.1 t8).
+		return nil
 	}
 
 	return checkPDFUAIdentificationIn(ctx, xmpData, profile)

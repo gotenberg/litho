@@ -131,7 +131,11 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
 	if !ok {
-		return fail(rule, "no XMP metadata")
+		// No XMP metadata at all: veraPDF scopes the dc:title rule to the XMP
+		// package object, so with no package it does not fire. The missing
+		// metadata itself is reported by the §7.1 metadata-presence check, so
+		// firing here as well over-reports (verapdf-corpus 7.1-t08-fail-a).
+		return nil
 	}
 
 	if !containsDCTitle(ctx, xmpData) {
