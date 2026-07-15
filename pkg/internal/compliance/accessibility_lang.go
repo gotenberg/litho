@@ -262,6 +262,25 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 			effectiveLang = elemLang
 		}
 
+		// Text carried by the /ActualText, /Alt and /E attributes draws its
+		// natural language only from the structure tree (this element's /Lang or
+		// an ancestor's), never from a content-stream marked-content tag, so its
+		// determinability is decided here without parsing content. When no such
+		// /Lang covers the element (catalog /Lang is already known absent on this
+		// path), veraPDF reports the source-specific test (ISO 14289-1 §7.2
+		// t21/t22/t23) regardless of whether a sibling carries /Lang.
+		if effectiveLang == "" {
+			if _, ok := elem["ActualText"]; ok {
+				results = append(results, Violation{Rule: Rule_14289_1_7_2_t21, Context: path})
+			}
+			if _, ok := elem["Alt"]; ok {
+				results = append(results, Violation{Rule: Rule_14289_1_7_2_t22, Context: path})
+			}
+			if _, ok := elem["E"]; ok {
+				results = append(results, Violation{Rule: Rule_14289_1_7_2_t23, Context: path})
+			}
+		}
+
 		if effectiveLang == "" && !anyLangFound {
 			// No /Lang from self or any ancestor, and no /Lang anywhere in
 			// the tree. Language is truly not determinable.
