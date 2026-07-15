@@ -576,6 +576,15 @@ func trimStreamTail(src io.ReaderAt, streamStart, dataLen int64) int64 {
 // the caller explicitly asks for them.
 func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length int64) ast.PdfStream {
 	decryptFn := p.decryptFn
+	// A stream whose /Filter names the Crypt filter with an Identity crypt-filter
+	// name is not encrypted (ISO 32000-1 §7.6.5): the Identity crypt filter
+	// overrides the document's default stream crypt filter and passes the data
+	// through unchanged. Applying the document decryption to it would corrupt
+	// already-plaintext bytes, the pattern used to keep /Metadata readable in an
+	// encrypted file (/EncryptMetadata false).
+	if streamUsesIdentityCryptFilter(dict) {
+		decryptFn = nil
+	}
 	var once sync.Once
 	var cached []byte
 	var cachedErr error
@@ -602,6 +611,56 @@ func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length
 		})
 		return cached, cachedErr
 	})
+}
+
+// streamUsesIdentityCryptFilter reports whether the stream dictionary's /Filter
+// names the Crypt filter with an Identity crypt-filter /Name in the matching
+// /DecodeParms (ISO 32000-1 §7.6.5). Such a stream carries plaintext and must
+// not be decrypted with the document's default crypt filter. /Filter and
+// /DecodeParms are read as direct objects, which is how producers emit them on
+// the metadata streams that use this construct.
+func streamUsesIdentityCryptFilter(dict ast.PdfDict) bool {
+	filterObj, ok := dict["Filter"]
+	if !ok {
+		return false
+	}
+	parmsObj := dict["DecodeParms"]
+	if parmsObj == nil {
+		parmsObj = dict["DP"] // abbreviated key
+	}
+	switch f := filterObj.(type) {
+	case ast.PdfName:
+		return f == "Crypt" && cryptParmsIsIdentity(parmsObj)
+	case ast.PdfArray:
+		for i, e := range f {
+			if name, ok := e.(ast.PdfName); !ok || name != "Crypt" {
+				continue
+			}
+			var p ast.PdfObject
+			if arr, ok := parmsObj.(ast.PdfArray); ok && i < len(arr) {
+				p = arr[i]
+			}
+			if cryptParmsIsIdentity(p) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cryptParmsIsIdentity reports whether a Crypt filter's decode-params select the
+// Identity crypt filter. The /Name key defaults to Identity when the params or
+// the /Name are absent (ISO 32000-1 Table 14).
+func cryptParmsIsIdentity(parms ast.PdfObject) bool {
+	d, ok := parms.(ast.PdfDict)
+	if !ok {
+		return true
+	}
+	name, ok := d["Name"].(ast.PdfName)
+	if !ok {
+		return true
+	}
+	return name == "Identity"
 }
 
 func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
