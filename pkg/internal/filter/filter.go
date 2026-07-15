@@ -116,6 +116,10 @@ func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte
 				filters = append(filters, name)
 			}
 		}
+	case ast.PdfNull:
+		// An explicit null /Filter is equivalent to no filter (the data is
+		// unencoded). qpdf emits this on cross-reference streams; treating it
+		// as an error would make the whole document unreadable.
 	default:
 		return nil, false, fmt.Errorf("invalid type for /Filter: %T", filterObj)
 	}
