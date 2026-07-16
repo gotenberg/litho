@@ -40,10 +40,17 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		copier.WithOverrides(cfg.Overrides)
 	}
 
-	// Copy the catalog (root of the object graph).
+	// Copy the catalog (root of the object graph). Prefer the trailer /Root,
+	// but fall back to the document's catalog recovery so a file whose active
+	// trailer lost /Root (a damaged incremental update) still rewrites, the
+	// same way the reader resolves its catalog.
 	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
-		return fmt.Errorf("trailer missing /Root indirect reference")
+		if recovered, found := doc.CatalogRef(ctx); found {
+			catalogRef = recovered
+		} else {
+			return fmt.Errorf("trailer missing /Root indirect reference")
+		}
 	}
 	newCatalogRef, err := copier.CopyRef(ctx, catalogRef)
 	if err != nil {

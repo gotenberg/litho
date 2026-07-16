@@ -350,6 +350,62 @@ func TestWriter_FullRewrite_ToleratesDanglingRef(t *testing.T) {
 	}
 }
 
+// rootlessTrailerPDF builds a PDF whose trailer omits /Root entirely, but whose
+// object 1 is a /Type /Catalog with a resolvable /Pages tree. A damaged
+// incremental update whose active trailer dropped /Root produces this shape; the
+// reader recovers the catalog by scanning the object table.
+func rootlessTrailerPDF() []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+	}
+	// Trailer deliberately omits /Root.
+	fmt.Fprintf(&b, "trailer\n<< /Size %d >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestWriter_FullRewrite_RecoversRootlessTrailer pins the catalog-recovery
+// fallback: a full rewrite of a document whose trailer lost /Root finds the
+// catalog by scanning the object table (matching the reader) instead of failing
+// with "trailer missing /Root indirect reference" (govdocs thread_100_100982/3).
+func TestWriter_FullRewrite_RecoversRootlessTrailer(t *testing.T) {
+	ctx := context.Background()
+	data := rootlessTrailerPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out, WithFullRewrite()); err != nil {
+		t.Fatalf("WriteTo(WithFullRewrite): %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen rewritten output: %v", err)
+	}
+	defer r2.Close()
+	if pc, err := r2.PageCount(ctx); err != nil || pc != 1 {
+		t.Errorf("rewritten output: page count = %d, err = %v; want 1, nil", pc, err)
+	}
+}
+
 func TestWriter_MultipleMutations(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -77,6 +78,67 @@ func ResolveCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 		return nil, fmt.Errorf("catalog is not a dictionary")
 	}
 	return &Catalog{Dict: catalogDict}, nil
+}
+
+// CatalogRef returns the indirect reference to the document catalog. It
+// prefers the trailer /Root; when that is missing or does not resolve to a
+// catalog with a /Pages tree, it scans the object table for a /Type /Catalog
+// object and returns its reference, mirroring [ResolveCatalog]'s recovery.
+// This lets a full rewrite reproduce a document whose active trailer lost
+// /Root (a damaged incremental update, or a corrupted trailer) instead of
+// aborting. Returns ok=false only when no catalog object exists at all (a
+// synthesised catalog has no source object to reference). The reference is
+// what a full rewrite must copy so remediation catalog patches, keyed by the
+// source catalog's object number, still apply.
+func (d *Document) CatalogRef(ctx context.Context) (ast.PdfIndirectRef, bool) {
+	if rootRef, ok := d.Index.Trailer["Root"].(ast.PdfIndirectRef); ok {
+		if dict, err := ResolveDict(ctx, d, rootRef); err == nil && dict != nil && catalogHasPages(ctx, d, dict) {
+			return rootRef, true
+		}
+	}
+	// Pass 1: /Type /Catalog with a resolvable /Pages child.
+	if ref, ok := scanForCatalogObjRef(ctx, d, func(dict ast.PdfDict) bool {
+		typeName, _ := ResolveName(ctx, d, dict["Type"]) //nolint:errcheck // a malformed /Type just means "not a catalog".
+		return typeName == "Catalog" && catalogHasPages(ctx, d, dict)
+	}); ok {
+		return ref, true
+	}
+	// Pass 2: any dict with a resolvable /Pages child.
+	return scanForCatalogObjRef(ctx, d, func(dict ast.PdfDict) bool {
+		return catalogHasPages(ctx, d, dict)
+	})
+}
+
+// scanForCatalogObjRef returns the reference of the first matching indirect
+// object, scanning in ascending object-number order so the choice is
+// deterministic when several candidates match (a full rewrite must be
+// reproducible). It mirrors [scanObjects] but yields the reference, which a
+// writer needs, rather than the resolved dict.
+func scanForCatalogObjRef(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) (ast.PdfIndirectRef, bool) {
+	snapshot := doc.XRefEntriesSnapshot()
+	nums := make([]int, 0, len(snapshot))
+	for objNum := range snapshot {
+		nums = append(nums, objNum)
+	}
+	sort.Ints(nums)
+	for _, objNum := range nums {
+		if err := ctx.Err(); err != nil {
+			return ast.PdfIndirectRef{}, false
+		}
+		entry := snapshot[objNum]
+		if objNum == 0 || entry.Type != 1 {
+			continue
+		}
+		ref := ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}
+		resolved, err := doc.Resolve(ctx, ref)
+		if err != nil {
+			continue
+		}
+		if dict, ok := resolved.(ast.PdfDict); ok && match(dict) {
+			return ref, true
+		}
+	}
+	return ast.PdfIndirectRef{}, false
 }
 
 // catalogHasPages reports whether a candidate catalog dict points at a
