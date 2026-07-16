@@ -166,10 +166,12 @@ func arraysEqual(a, b ast.PdfArray) bool {
 	return true
 }
 
-// objectsEqual compares PDF name/indirect-ref pairs. Other PDF types
-// (arrays, dicts, strings) are treated as "possibly equal" by reference
-// comparison; this is sufficient for Separation alt-space / tintFunc
-// slots which canonicalise as names or indirect refs.
+// objectsEqual compares PDF name/indirect-ref pairs. Comparable scalars
+// (bool, int, real, string, null) fall through to value comparison. A
+// Separation alt-space / tintFunc slot canonicalises as a name or indirect
+// ref, so composite operands (arrays, dicts, streams) are treated as unequal:
+// they are uncomparable in Go and comparing them with == panics, and the
+// canonicaliser is safe declining to merge when a slot is a composite.
 func objectsEqual(a, b ast.PdfObject) bool {
 	switch av := a.(type) {
 	case ast.PdfName:
@@ -180,6 +182,11 @@ func objectsEqual(a, b ast.PdfObject) bool {
 		if bv, ok := b.(ast.PdfIndirectRef); ok {
 			return av.ObjectNum == bv.ObjectNum
 		}
+	case ast.PdfArray, ast.PdfDict, ast.PdfStream:
+		// A Separation array's /AlternateSpace can be an inline array (e.g.
+		// [/ICCBased 5 0 R]); reaching == with a map- or slice-backed dynamic
+		// type panics with "comparing uncomparable type". Decline to merge.
+		return false
 	}
 	return a == b
 }
