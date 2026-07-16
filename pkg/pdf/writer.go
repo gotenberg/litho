@@ -1240,6 +1240,17 @@ func (w *Writer) remediate(
 	preTrailerSnap := make(ast.PdfDict, len(doc.Index.Trailer))
 	maps.Copy(preTrailerSnap, doc.Index.Trailer)
 
+	// probeIntegrity warmed the object cache with compliance mode off, so the
+	// parser recorded no format violations for those objects. The compliance
+	// pass inside run() collects parser-level format violations (stream keyword
+	// EOL §6.1.7, header spacing §6.1.8/§6.1.9, hex string §6.1.6) only when an
+	// object is parsed fresh with the flag on; a warm cache hit re-collects
+	// nothing. Clear the caches here so run()'s validation re-parses under
+	// compliance mode and sees a defect whose sole symptom is a format
+	// violation. Otherwise remediation silently skips it and over-reports the
+	// file as fixed (verapdf-corpus 6-1-7-1-t01-fail-a).
+	doc.ClearCaches()
+
 	report, err := run(ctx, alloc, doc)
 	if err != nil {
 		return nil, err
