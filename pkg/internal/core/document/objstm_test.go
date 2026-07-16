@@ -113,3 +113,26 @@ func TestObjectStream_MultiObjectExtraction(t *testing.T) {
 		}
 	}
 }
+
+// TestObjStmData_SlotFor pins the recovery when a damaged xref points a
+// compressed object at the wrong index: the object number is located in the
+// header instead (qpdf override-compressed-object.pdf). The well-formed fast
+// path trusts the index; an absent object number falls back to the index.
+func TestObjStmData_SlotFor(t *testing.T) {
+	o := &objStmData{objNums: []int{5, 8, 12}, offsets: []int{0, 10, 20}}
+	cases := []struct {
+		idx, num, want int
+		note           string
+	}{
+		{1, 8, 1, "fast path: index matches object number"},
+		{2, 8, 1, "recover: xref index wrong, find object 8 by number"},
+		{99, 5, 0, "recover: out-of-range index, find object 5 by number"},
+		{2, 404, 2, "fallback: unknown object number, trust in-range index"},
+		{99, 404, -1, "not found: unknown object number and out-of-range index"},
+	}
+	for _, c := range cases {
+		if got := o.slotFor(c.idx, c.num); got != c.want {
+			t.Errorf("slotFor(%d, %d) = %d, want %d (%s)", c.idx, c.num, got, c.want, c.note)
+		}
+	}
+}

@@ -434,20 +434,25 @@ var pdfDocEncoding = map[byte]rune{
 // the cache never holds more than one worst-case decode's worth of memory.
 const maxObjStmCacheBytes = 256 << 20
 
-// objStmData is a decoded object stream plus its parsed header: the byte offset
-// of each contained object's data, relative to /First. Caching it makes
-// extracting object k an O(1) lookup instead of re-lexing k header pairs, so
-// resolving all N objects of a stream is O(N) rather than O(N^2). A byte offset
-// of -1 marks a header pair whose offset token was malformed.
+// objStmData is a decoded object stream plus its parsed header: the object
+// number and byte offset (relative to /First) of each contained object.
+// Caching it makes extracting object k an O(1) lookup instead of re-lexing k
+// header pairs, so resolving all N objects of a stream is O(N) rather than
+// O(N^2). objNums parallels offsets and lets a lookup recover from an xref that
+// points a compressed object at the wrong index. A byte offset of -1 marks a
+// header pair whose offset token was malformed.
 type objStmData struct {
 	decoded []byte
 	first   int
+	objNums []int
 	offsets []int
 }
 
-// extractFromObjectStream extracts an object from an Object Stream.
-// visited is the per-call-chain set for circular-reference detection.
-func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, targetIndex int, visited map[int]bool) (ast.PdfObject, error) {
+// extractFromObjectStream extracts an object from an Object Stream. targetObjNum
+// is the object number the xref claims lives at targetIndex; it lets the lookup
+// recover when a damaged xref points at the wrong index. visited is the
+// per-call-chain set for circular-reference detection.
+func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum, targetIndex, targetObjNum int, visited map[int]bool) (ast.PdfObject, error) {
 	d.mu.RLock()
 	data, cached := d.objStmCache[objStmNum]
 	d.mu.RUnlock()
@@ -460,18 +465,40 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 		d.cacheObjStm(objStmNum, data)
 	}
 
-	if targetIndex < 0 || targetIndex >= len(data.offsets) {
-		return nil, fmt.Errorf("target index %d out of bounds in object stream %d", targetIndex, objStmNum)
+	slot := data.slotFor(targetIndex, targetObjNum)
+	if slot < 0 {
+		return nil, fmt.Errorf("object %d not found in object stream %d (xref index %d of %d)", targetObjNum, objStmNum, targetIndex, len(data.offsets))
 	}
-	targetOffset := data.offsets[targetIndex]
+	targetOffset := data.offsets[slot]
 	if targetOffset < 0 {
-		return nil, fmt.Errorf("invalid offset for index %d in object stream %d", targetIndex, objStmNum)
+		return nil, fmt.Errorf("invalid offset for object %d in object stream %d", targetObjNum, objStmNum)
 	}
 
 	absoluteOffset := int64(data.first + targetOffset)
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data.decoded), int64(len(data.decoded)), absoluteOffset))
 	p := parser.NewParser(lex)
 	return p.ParseObject(ctx)
+}
+
+// slotFor returns the header index of the object to extract. It trusts the
+// xref-declared index when it is in range and its object number matches, and
+// otherwise locates the object number in the header: a damaged xref may point a
+// compressed object at the wrong index (qpdf override-compressed-object.pdf). It
+// falls back to the in-range index when the object number is absent, preserving
+// prior behaviour for headers that omit or corrupt the number.
+func (o *objStmData) slotFor(targetIndex, targetObjNum int) int {
+	if targetIndex >= 0 && targetIndex < len(o.objNums) && o.objNums[targetIndex] == targetObjNum {
+		return targetIndex
+	}
+	for i, num := range o.objNums {
+		if num == targetObjNum {
+			return i
+		}
+	}
+	if targetIndex >= 0 && targetIndex < len(o.offsets) {
+		return targetIndex
+	}
+	return -1
 }
 
 // parseObjectStream resolves, decompresses, and parses the header of an object
@@ -515,51 +542,58 @@ func (d *Document) parseObjectStream(ctx context.Context, objStmNum int, visited
 		return nil, fmt.Errorf("object stream /First is not an integer")
 	}
 
-	offsets, err := parseObjStmOffsets(ctx, decoded, n)
+	objNums, offsets, err := parseObjStmHeader(ctx, decoded, n)
 	if err != nil {
 		return nil, fmt.Errorf("reading object stream %d header: %w", objStmNum, err)
 	}
-	return &objStmData{decoded: decoded, first: int(firstInt), offsets: offsets}, nil
+	return &objStmData{decoded: decoded, first: int(firstInt), objNums: objNums, offsets: offsets}, nil
 }
 
-// parseObjStmOffsets reads up to n objNum/offset header pairs from the decoded
-// object-stream bytes, returning the offset of each object. It stops early at
-// end of data, so a bogus /N cannot force a long loop. The allocation hint is
-// bounded by the decoded size because there cannot be more header pairs than
-// fit in the bytes, per the untrusted-size rule.
-func parseObjStmOffsets(ctx context.Context, decoded []byte, n int) ([]int, error) {
+// parseObjStmHeader reads up to n objNum/offset header pairs from the decoded
+// object-stream bytes, returning the object number and offset of each object. It
+// stops early at end of data, so a bogus /N cannot force a long loop. The
+// allocation hint is bounded by the decoded size because there cannot be more
+// header pairs than fit in the bytes, per the untrusted-size rule. An
+// unparseable object number is stored as -1, which never matches a real lookup.
+func parseObjStmHeader(ctx context.Context, decoded []byte, n int) (objNums, offsets []int, err error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(decoded), int64(len(decoded)), 0))
 
 	capHint := n
 	if capHint < 0 || capHint > len(decoded) {
 		capHint = len(decoded)
 	}
-	offsets := make([]int, 0, min(capHint, 1<<16))
+	objNums = make([]int, 0, min(capHint, 1<<16))
+	offsets = make([]int, 0, min(capHint, 1<<16))
 
 	for i := 0; i < n; i++ {
 		if i%4096 == 0 {
 			if err := ctx.Err(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		numTok, err := lex.NextToken()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		offTok, err := lex.NextToken()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if numTok.Type == lexer.TokenEOF || offTok.Type == lexer.TokenEOF {
 			break // no more header pairs in the decoded data
 		}
+		num, err := strconv.Atoi(numTok.Value)
+		if err != nil {
+			num = -1 // malformed object number: never matches a lookup
+		}
 		off, err := strconv.Atoi(offTok.Value)
 		if err != nil {
-			off = -1 // malformed offset: extracting this index will error
+			off = -1 // malformed offset: extracting this slot will error
 		}
+		objNums = append(objNums, num)
 		offsets = append(offsets, off)
 	}
-	return offsets, nil
+	return objNums, offsets, nil
 }
 
 // cacheObjStm stores a parsed object stream for reuse, bounding the total cached
@@ -934,7 +968,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		)
 
 	case xref.XRefTypeCompressed:
-		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, visited)
+		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, ref.ObjectNum, visited)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %w", ref.ObjectNum, entry.ObjStmNum, err)
 		}
