@@ -58,7 +58,22 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 		return fmt.Errorf("%w: %w", ErrDamagedXRef, err)
 	}
 
+	// A /Prev chain must terminate (ISO 32000-1 §7.5.8). A cyclic or
+	// self-referential /Prev, from a crafted or corrupt file, would otherwise
+	// re-parse the same xref section forever and hang the reader. Track visited
+	// offsets and stop when one repeats, mirroring ResolveObject's cycle guard;
+	// the entries parsed so far are kept (lenient recovery). The set bounds the
+	// walk to the file's distinct offsets, so it is not a fixed anti-DoS cap.
+	visited := make(map[int64]struct{})
+
 	for currentOffset != 0 {
+		if _, seen := visited[currentOffset]; seen {
+			d.Logger.Debug("xref chain: /Prev cycle detected, stopping walk",
+				"offset", currentOffset)
+			break
+		}
+		visited[currentOffset] = struct{}{}
+
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
 		tok, err := lex.NextToken()
 		if err != nil {
