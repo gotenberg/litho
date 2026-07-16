@@ -789,6 +789,16 @@ done:
 		if expNeg {
 			exp = -exp
 		}
+		// Clamp the exponent before raising 10 to it. exp is parsed from the
+		// font's bytes; an unbounded value would spin the power loop billions
+		// of times on crafted input (a DoS). A font-matrix scale never needs a
+		// power beyond double precision, so ±308 covers every representable
+		// value and larger exponents just saturate.
+		if exp > 308 {
+			exp = 308
+		} else if exp < -308 {
+			exp = -308
+		}
 		mult := 1.0
 		for e := 0; e < exp; e++ {
 			mult *= 10
