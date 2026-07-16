@@ -265,6 +265,17 @@ func (p *Parser) parseIndirectObject(ctx context.Context) (ast.PdfObject, error)
 		return nil, err
 	}
 
+	// An indirect object with no value (`N G obj endobj`, or truncated at EOF)
+	// is the null object per ISO 32000-1 §7.3.9; qpdf and Acrobat tolerate it.
+	// Peek before parsing so the endobj keyword is not mistaken for an
+	// unexpected value token.
+	if t, _ := p.Peek(0); t.Type == lexer.TokenEOF || (t.Type == lexer.TokenKeyword && t.Value == "endobj") {
+		if t.Type == lexer.TokenKeyword {
+			_, _ = p.Consume() //nolint:errcheck // endobj already validated by Peek
+		}
+		return ast.PdfNull{}, nil
+	}
+
 	obj, err := p.ParseObject(ctx)
 	if err != nil {
 		return nil, err

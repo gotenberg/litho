@@ -198,6 +198,23 @@ func TestParseIndirectObject_MissingEndobj(t *testing.T) {
 	}
 }
 
+func TestParseIndirectObject_EmptyValue(t *testing.T) {
+	// An indirect object with no value between `obj` and `endobj` (or truncated
+	// at EOF) is the null object per ISO 32000-1 §7.3.9. qpdf's empty-object.pdf
+	// has `7 0 obj\nendobj`; litho used to reject it as "unexpected keyword:
+	// endobj", breaking a full rewrite of any file containing one.
+	for _, src := range []string{"7 0 obj\nendobj", "7 0 obj"} {
+		p := newParser(src)
+		obj, err := p.ParseObject(context.Background())
+		if err != nil {
+			t.Fatalf("ParseObject(%q): unexpected error %v", src, err)
+		}
+		if _, ok := obj.(ast.PdfNull); !ok {
+			t.Errorf("ParseObject(%q) = %T, want ast.PdfNull", src, obj)
+		}
+	}
+}
+
 func TestParseNestedDict_MissingInnerClose(t *testing.T) {
 	// Inner dict missing >> but outer has >>.
 	// << /Resources << /Font << /F1 1 0 R >> >>
