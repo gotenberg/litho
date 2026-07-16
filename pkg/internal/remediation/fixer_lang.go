@@ -30,7 +30,7 @@ func matchCatalogLang(v compliance.Violation) bool {
 // §14.9.2. Validity is the BCP 47 / RFC 3066 form §14.9.2 requires, checked via
 // [compliance.IsValidLangTag] (reused, not re-derived).
 func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}

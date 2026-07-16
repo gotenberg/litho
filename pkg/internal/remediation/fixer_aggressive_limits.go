@@ -211,7 +211,7 @@ func truncateDict(d ast.PdfDict) ast.PdfDict {
 // pdfADeviceNComponents. The tint-transform function won't be accurate
 // for the reduced component set; aggressive mode accepts that loss.
 func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (int, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return 0, nil
 	}

@@ -34,7 +34,7 @@ func matchXMPSchema(v compliance.Violation) bool {
 // would require fabricating plausible content. Both risk destroying user
 // intent. Removal leaves the rest of the XMP intact.
 func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

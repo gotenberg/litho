@@ -34,7 +34,7 @@ func matchPageBoxes(v compliance.Violation) bool {
 // runs; shrinking over-sized boxes can crop visible content and only
 // runs in aggressive mode.
 func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

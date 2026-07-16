@@ -41,7 +41,7 @@ func matchForbiddenAnnots(v compliance.Violation) bool {
 // writer's post-remediation integrity probe remains the backstop for any removal
 // that would unexpectedly drop page content.
 func fixForbiddenAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

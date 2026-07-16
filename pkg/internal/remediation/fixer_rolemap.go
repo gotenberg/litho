@@ -28,7 +28,7 @@ func matchRoleMap(v compliance.Violation) bool {
 // *name* there may belong to a custom namespace and still need its mapping, so
 // the standard-type drop does not apply on name alone.
 func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

@@ -30,7 +30,7 @@ func matchNoteID(v compliance.Violation) bool {
 // indirectly-referenced element is repaired, since an object number is needed to
 // queue the replacement.
 func fixNoteID(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

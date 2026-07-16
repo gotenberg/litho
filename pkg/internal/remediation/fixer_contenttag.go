@@ -22,7 +22,7 @@ func matchContentTag(v compliance.Violation) bool {
 // Not ideal for accessibility, but satisfies the spec requirement that
 // all content must be tagged or artifact.
 func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

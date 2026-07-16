@@ -51,7 +51,7 @@ func fixSepCanon(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	if opts.PreserveContent {
 		return nil, nil
 	}
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

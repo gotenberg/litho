@@ -32,7 +32,7 @@ func fixSignatureStrip(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	if opts.PreserveContent {
 		return nil, nil
 	}
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

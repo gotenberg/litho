@@ -31,7 +31,7 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	// (there is no catalog object number to write back to). Skip rather than
 	// error, matching every other catalog-dependent fixer (fixCatalogCleanup,
 	// fixXMPSchema): aborting here discarded the whole document's remediation.
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}
@@ -193,7 +193,7 @@ const maxFallbackTitleRunes = 256
 // dc:title synthesis when DocInfo carries none: the first outline item's
 // /Title, or "" when the document has no usable outline.
 func fallbackDocTitle(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) string {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return ""
 	}

@@ -19,7 +19,7 @@ func matchAnnotFlags(v compliance.Violation) bool {
 // fixAnnotFlags ensures every annotation (except Popup) has an /F key with the
 // Print flag set, per ISO 19005-2, clause 6.3.2.
 func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

@@ -29,7 +29,7 @@ func matchAFRelationship(v compliance.Violation) bool {
 // document records no relationship to infer. The repair is additive and never
 // changes what renders.
 func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

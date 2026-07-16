@@ -80,7 +80,7 @@ func enforceInfoDictLimits(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	if !ok {
 		return nil
 	}
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil
 	}

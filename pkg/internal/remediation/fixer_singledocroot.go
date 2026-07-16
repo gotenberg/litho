@@ -36,7 +36,7 @@ func matchSingleDocRoot(v compliance.Violation) bool {
 // The edit reorders the logical structure without changing page content, so it is
 // registered as safetyStructural.
 func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

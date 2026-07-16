@@ -58,7 +58,7 @@ func fixFigureAlt(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		synthesized = true
 	}
 
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}

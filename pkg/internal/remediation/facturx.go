@@ -89,7 +89,7 @@ func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer
 // The function assumes the PDF/A-3 remediation pass has already run, so
 // a Metadata stream is present and PDF/A-conformant before patching.
 func injectFacturXXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, cfg FacturXOptions) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}

@@ -86,7 +86,7 @@ const (
 // violation, whereas removing only /StructParent cannot. Neither edit changes
 // rendering, so both are registered as safetyResource.
 func fixAnnotArtifact(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

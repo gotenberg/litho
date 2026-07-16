@@ -15,7 +15,7 @@ func matchNeedAppearances(v compliance.Violation) bool {
 }
 
 func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}
@@ -57,6 +57,20 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 
 	return []string{"removed /NeedAppearances from AcroForm"}, nil
+}
+
+// catalogRefForFixer returns the catalog's indirect reference. It prefers the
+// trailer /Root and falls back to [document.Document.CatalogRef] recovery so a
+// file whose active trailer lost /Root (a damaged incremental update) still
+// remediates, matching the reader's and the full-rewrite writer's catalog
+// resolution. Present /Root is returned as-is, leaving the healthy path
+// untouched; recovery scans the object table only when /Root is absent. ok is
+// false only when no catalog object exists to reference at all.
+func catalogRefForFixer(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef, bool) {
+	if ref, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef); ok {
+		return ref, true
+	}
+	return doc.CatalogRef(ctx)
 }
 
 // resolveFromAllocOrDoc checks the allocator for a pending version, falling

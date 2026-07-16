@@ -39,7 +39,7 @@ func matchStructParent(v compliance.Violation) bool {
 // item is a structure element only when it carries an /S (structure type) key,
 // which excludes marked-content references, object references, and MCID integers.
 func fixStructParent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

@@ -31,7 +31,7 @@ func matchEmbeddedSubtype(v compliance.Violation) bool {
 // the existing value is malformed, fall back to application/octet-stream
 // as the spec's explicit default.
 func fixEmbeddedSubtype(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

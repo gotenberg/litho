@@ -30,7 +30,7 @@ func matchAnnotOpacity(v compliance.Violation) bool {
 // document carries no redundant entry. Only indirect annotations are rewritten;
 // an inline annotation has no object number to patch in place.
 func fixAnnotOpacity(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

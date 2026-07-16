@@ -34,7 +34,7 @@ const maxOutlineFixWalk = 10000
 // without a structure tree nothing is rewritten (an /SD pointing
 // nowhere would trade one violation for another).
 func fixStructDest(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}

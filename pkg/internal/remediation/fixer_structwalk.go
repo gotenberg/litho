@@ -48,7 +48,7 @@ func resolveStructKids(ctx context.Context, doc *document.Document, kObj ast.Pdf
 // (nil, nil) when the document has no StructTreeRoot. Reads are allocator-aware,
 // so a fixer sees the pending edits of earlier passes.
 func collectStructElems(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, role ast.PdfName) ([]structNode, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
 	}

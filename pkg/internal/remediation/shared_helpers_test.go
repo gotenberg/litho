@@ -78,3 +78,29 @@ func minimalCatalogPDF(extras string) []byte {
 			"trailer\n<< /Size 4 /Root 1 0 R >>\n" +
 			"startxref\n250\n%%EOF\n")
 }
+
+// rootlessCatalogPDF returns the same single-page document as
+// [minimalCatalogPDF] but with a trailer that omits /Root, mirroring a damaged
+// incremental update whose active trailer lost the catalog pointer. The reader
+// recovers the catalog (1 0 obj is a /Type /Catalog with /Pages), so a fixer
+// must recover it the same way instead of aborting on the missing /Root.
+func rootlessCatalogPDF(extras string) []byte {
+	catalog := "<< /Type /Catalog /Pages 2 0 R"
+	if extras != "" {
+		catalog += " " + extras
+	}
+	catalog += " >>"
+
+	return []byte(
+		"%PDF-1.4\n" +
+			"1 0 obj\n" + catalog + "\nendobj\n" +
+			"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n" +
+			"xref\n0 4\n" +
+			"0000000000 65535 f \r\n" +
+			"0000000009 00000 n \r\n" +
+			"0000000100 00000 n \r\n" +
+			"0000000160 00000 n \r\n" +
+			"trailer\n<< /Size 4 >>\n" +
+			"startxref\n250\n%%EOF\n")
+}

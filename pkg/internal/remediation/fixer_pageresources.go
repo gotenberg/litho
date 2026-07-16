@@ -28,7 +28,7 @@ func matchPageResources(v compliance.Violation) bool {
 // Resources. The copy walks up the /Parent chain once, finds the first
 // defined /Resources, and pins it to the page dict directly.
 func fixPageResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
 	}
