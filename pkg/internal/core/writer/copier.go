@@ -68,18 +68,24 @@ func (c *Copier) CopyRef(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfIn
 		var err error
 		srcObj, err = c.src.Resolve(ctx, ref)
 		if err != nil {
-			// ISO 32000-1 §7.3.10: an indirect reference to an object not
-			// present in the file is not an error; a conforming reader treats
-			// it as the null object. Copy a dangling reference (e.g. from a
-			// damaged xref that lost an object) as null instead of aborting
-			// the whole rewrite, so the rest of the document still round-trips.
-			// The placeholder allocated above is already null.
+			// Cancellation and deadline errors must abort the whole rewrite;
+			// never mask them as a recovered object.
+			if ctx.Err() != nil {
+				return dstRef, err
+			}
+			// A source object that is missing (ISO 32000-1 §7.3.10: a reference
+			// to an absent object is the null object) or unparseable (a damaged
+			// or garbage object, e.g. `7 0 obj 10P1 endobj`) is copied as null
+			// rather than aborting the whole rewrite, so the rest of the document
+			// still round-trips. The placeholder allocated above is already null.
 			if errors.Is(err, document.ErrObjectNotFound) {
 				c.src.Logger.Debug("copier: dangling reference copied as null",
 					slog.Int("obj", ref.ObjectNum))
-				return dstRef, nil
+			} else {
+				c.src.Logger.Debug("copier: unparseable source object copied as null",
+					slog.Int("obj", ref.ObjectNum), slog.Any("err", err))
 			}
-			return dstRef, fmt.Errorf("resolving source object %d: %w", ref.ObjectNum, err)
+			return dstRef, nil
 		}
 	}
 

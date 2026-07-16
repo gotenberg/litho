@@ -350,6 +350,62 @@ func TestWriter_FullRewrite_ToleratesDanglingRef(t *testing.T) {
 	}
 }
 
+// garbageObjectPDF builds a PDF whose catalog references object 4, whose body is
+// the unparseable token "10P1". qpdf's issue-117.pdf has exactly this shape
+// (`4 0 obj\n10P1\nendobj`).
+func garbageObjectPDF() []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /OpenAction 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"10P1",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestWriter_FullRewrite_ToleratesUnparseableObject pins that a full rewrite of a
+// document containing a garbage, unparseable indirect object copies it as null
+// instead of aborting the whole rewrite. Before this, one damaged object failed
+// the entire copy (qpdf issue-117/bad25/name-pound-images), so UA-1 remediation
+// of any file with a garbage object rolled back and errored.
+func TestWriter_FullRewrite_ToleratesUnparseableObject(t *testing.T) {
+	ctx := context.Background()
+	data := garbageObjectPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out, WithFullRewrite()); err != nil {
+		t.Fatalf("WriteTo(WithFullRewrite): %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen rewritten output: %v", err)
+	}
+	defer r2.Close()
+	if pc, err := r2.PageCount(ctx); err != nil || pc != 1 {
+		t.Errorf("rewritten output: page count = %d, err = %v; want 1, nil", pc, err)
+	}
+}
+
 // rootlessTrailerPDF builds a PDF whose trailer omits /Root entirely, but whose
 // object 1 is a /Type /Catalog with a resolvable /Pages tree. A damaged
 // incremental update whose active trailer dropped /Root produces this shape; the
