@@ -143,6 +143,38 @@ func TestPatchExistingXMP_InjectsUARev(t *testing.T) {
 	}
 }
 
+// TestPatchExistingXMP_SkipsMalformedPacket pins the malformed-XMP guard
+// (verapdf-corpus 6-7-2-1-t01-fail-d remediated against PDF/A-4e/4f): a packet
+// that is not well-formed XML is left untouched, so byte-level pdfaid injection
+// cannot shift how a lenient reader parses part/rev and introduce §6.7.3 t02/t05.
+func TestPatchExistingXMP_SkipsMalformedPacket(t *testing.T) {
+	// Well-formed apart from a mismatched-case end tag: readable enough for a
+	// lenient part/rev scan, but not well-formed XML.
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+  xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+  <pdfaid:part>4</pdfaid:part>
+  <pdfaid:rev>2020</pdfaid:rev>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpMeta>
+<?xpacket end="w"?>`
+
+	patched, fixes := patchExistingXMP(xmp, 4, "E", 0, infoMetadata{})
+
+	if patched != xmp {
+		t.Errorf("malformed packet must be left byte-identical, got:\n%s", patched)
+	}
+	if len(fixes) != 0 {
+		t.Errorf("malformed packet must yield no fixes, got %v", fixes)
+	}
+	if strings.Contains(patched, "conformance") {
+		t.Errorf("must not inject pdfaid:conformance into a malformed packet:\n%s", patched)
+	}
+}
+
 // TestReplacePropertyValue_SelfClosing pins the self-closing splice: the
 // naive byte splice on <pdf:Keywords/> left a stray "/>" behind, which
 // is stray text inside rdf:Description and breaks the RDF/XML grammar,

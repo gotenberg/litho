@@ -425,6 +425,15 @@ func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 	return append(results, failf(t5, "XMP packet encoding cannot be determined: packet is not well-formed XML")...)
 }
 
+// XMPWellFormed reports whether data is well-formed XML, the same test
+// §6.7.2.1 t04 / §6.6.2.1 t04 use to flag a metadata packet. The
+// remediation XMP fixer shares it so it never byte-patches a malformed
+// packet, which can shift how a lenient reader parses pdfaid:part and
+// pdfaid:rev and introduce §6.7.3 violations the input did not have.
+func XMPWellFormed(data []byte) bool {
+	return xmpWellFormed(data)
+}
+
 // xmpWellFormed reports whether data is well-formed XML. An XMP packet
 // is an XML document, so a packet that is not well-formed XML cannot be
 // a valid serialization.

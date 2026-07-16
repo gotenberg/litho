@@ -322,6 +322,17 @@ const (
 )
 
 func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info infoMetadata) (string, []string) {
+	// Byte-level property surgery assumes a parseable packet. On a packet
+	// that is not well-formed XML (itself an unfixable §6.7.2.1/§6.6.2.1 t04
+	// violation), injecting pdfaid:conformance shifts how a lenient reader
+	// parses pdfaid:part and pdfaid:rev, so the output newly fails §6.7.3 t02
+	// and t05. Leave a malformed packet untouched: the caller then writes no
+	// new stream and remediation reports the malformed-XMP defect as an
+	// honest residual instead of making the file worse.
+	if !compliance.XMPWellFormed([]byte(xmp)) {
+		return xmp, nil
+	}
+
 	var fixes []string
 	buf := []byte(xmp)
 
