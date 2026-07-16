@@ -21,8 +21,9 @@ import (
 //
 // Concurrent use. Document is safe for concurrent use by multiple
 // goroutines after construction completes. All mutable caches
-// (objectCache, fontCache, cmapCache) and the compliance scratch state
-// (ComplianceMode, FormatViolations) are protected by internal locks.
+// (objectCache, fontCache, cmapCache, objStmCache) and the compliance
+// scratch state (ComplianceMode, FormatViolations) are protected by
+// internal locks.
 // Concurrent read paths ([Resolve], [ResolveDict], [ResolveArray], etc.)
 // run in parallel through a read-write mutex. Concurrent validation
 // runs ([pdf.Reader.ValidatePDFA] / [pdf.Reader.ValidatePDFUA] on the
@@ -34,20 +35,24 @@ import (
 // use begins; it is part of the setup phase in [NewDocument] and
 // [pdf.Open] and is not safe to call in parallel with reads.
 type Document struct {
-	r             io.ReaderAt
-	size          int64
-	Index         xref.Index
-	objectCache   map[int]ast.PdfObject
-	fontCache     map[int]any
-	cmapCache     map[int]any  // parsed CMap by ToUnicode stream object number
-	mu            sync.RWMutex // protects objectCache, fontCache, cmapCache, FormatViolations, and the lazy Index.Entries augmentation
-	runMu         sync.Mutex   // serializes compliance-engine validation runs
-	xrefAugment   sync.Once    // guards the one-shot raw-bytes augmentation of Index
-	maxCacheSize  int          // evict all objects when cache exceeds this size
-	Crypto        *crypto.Handler
-	OCConfig      *OCConfig
-	IsEncrypted   bool
-	Authenticated bool
+	r                io.ReaderAt
+	size             int64
+	Index            xref.Index
+	objectCache      map[int]ast.PdfObject
+	fontCache        map[int]any
+	cmapCache        map[int]any         // parsed CMap by ToUnicode stream object number
+	objStmCache      map[int]*objStmData // parsed object streams by ObjStm object number
+	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by maxObjStmCacheBytes
+	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
+	sortedOffsetsLen int                 // len(Index.Entries) when sortedOffsets was built; rebuild on change
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, sortedOffsets, FormatViolations, and the lazy Index.Entries augmentation
+	runMu            sync.Mutex          // serializes compliance-engine validation runs
+	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of Index
+	maxCacheSize     int                 // evict all objects when cache exceeds this size
+	Crypto           *crypto.Handler
+	OCConfig         *OCConfig
+	IsEncrypted      bool
+	Authenticated    bool
 
 	// Logger is the structured logger used for debug output. It is never nil;
 	// when the caller does not supply a logger, a no-op logger that discards
@@ -371,6 +376,8 @@ func (d *Document) Authenticate(password string) error {
 	// (though we shouldn't have been able to read them).
 	d.mu.Lock()
 	d.objectCache = make(map[int]ast.PdfObject)
+	d.objStmCache = nil
+	d.objStmCacheBytes = 0
 	d.mu.Unlock()
 	return nil
 }
@@ -412,6 +419,8 @@ func (d *Document) ClearCaches() {
 	d.objectCache = make(map[int]ast.PdfObject)
 	d.fontCache = make(map[int]any)
 	d.cmapCache = make(map[int]any)
+	d.objStmCache = nil
+	d.objStmCacheBytes = 0
 	d.mu.Unlock()
 }
 

@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
+	"sort"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -285,19 +287,53 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 	d.validateEndobjFormat(offset, objNum)
 }
 
+// nextNormalObjectOffset returns the smallest normal indirect-object offset
+// strictly greater than off, or [math.MaxInt64] if none. It binary-searches an
+// ascending offset slice cached on the document, rebuilt only when the entry
+// set size changes (lazy xref augmentation grows it). This replaces a full scan
+// of every xref entry, which turned per-object endobj validation into an
+// O(N^2) cost on files packed with objects.
+func (d *Document) nextNormalObjectOffset(off int64) int64 {
+	d.mu.RLock()
+	offs := d.sortedOffsets
+	fresh := offs != nil && d.sortedOffsetsLen == len(d.Index.Entries)
+	d.mu.RUnlock()
+
+	if !fresh {
+		d.mu.Lock()
+		if d.sortedOffsets == nil || d.sortedOffsetsLen != len(d.Index.Entries) {
+			rebuilt := make([]int64, 0, len(d.Index.Entries))
+			for _, entry := range d.Index.Entries {
+				if entry.Type == xref.XRefTypeNormal {
+					rebuilt = append(rebuilt, entry.Offset)
+				}
+			}
+			sort.Slice(rebuilt, func(i, j int) bool { return rebuilt[i] < rebuilt[j] })
+			d.sortedOffsets = rebuilt
+			d.sortedOffsetsLen = len(d.Index.Entries)
+		}
+		offs = d.sortedOffsets
+		d.mu.Unlock()
+	}
+
+	i := sort.Search(len(offs), func(i int) bool { return offs[i] > off })
+	if i < len(offs) {
+		return offs[i]
+	}
+	return math.MaxInt64
+}
+
 // validateEndobjFormat scans the object body starting at offset to find
 // "endobj" and validates it is preceded by an EOL marker.
 func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 	// Cap the scan at the next indirect object's offset so "endobj"
-	// literals embedded in a later object's strings cannot be found.
+	// literals embedded in a later object's strings cannot be found. Using a
+	// binary search over cached ascending offsets keeps this O(log N) per
+	// object; scanning every entry here would be O(N^2) across a full pass on
+	// a file with many objects.
 	scanLimit := int64(16384)
-	for _, entry := range d.Index.Entries {
-		if entry.Type != xref.XRefTypeNormal {
-			continue
-		}
-		if entry.Offset > offset && entry.Offset-offset < scanLimit {
-			scanLimit = entry.Offset - offset
-		}
+	if next := d.nextNormalObjectOffset(offset); next < math.MaxInt64 && next-offset < scanLimit {
+		scanLimit = next - offset
 	}
 	buf := make([]byte, scanLimit)
 	n, _ := d.r.ReadAt(buf, offset)

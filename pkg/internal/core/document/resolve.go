@@ -427,28 +427,75 @@ var pdfDocEncoding = map[byte]rune{
 	// 0x9F: undefined
 }
 
+// maxObjStmCacheBytes bounds the total decoded object-stream bytes retained by
+// [Document.cacheObjStm]. It is an anti-DoS guard, not spec-mandated: a crafted
+// file could pack many large object streams, so the cache evicts rather than
+// grow without bound. 256 MB matches the single-stream decompression cap, so
+// the cache never holds more than one worst-case decode's worth of memory.
+const maxObjStmCacheBytes = 256 << 20
+
+// objStmData is a decoded object stream plus its parsed header: the byte offset
+// of each contained object's data, relative to /First. Caching it makes
+// extracting object k an O(1) lookup instead of re-lexing k header pairs, so
+// resolving all N objects of a stream is O(N) rather than O(N^2). A byte offset
+// of -1 marks a header pair whose offset token was malformed.
+type objStmData struct {
+	decoded []byte
+	first   int
+	offsets []int
+}
+
 // extractFromObjectStream extracts an object from an Object Stream.
 // visited is the per-call-chain set for circular-reference detection.
 func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, targetIndex int, visited map[int]bool) (ast.PdfObject, error) {
-	// Resolve the Object Stream itself.
+	d.mu.RLock()
+	data, cached := d.objStmCache[objStmNum]
+	d.mu.RUnlock()
+	if !cached {
+		var err error
+		data, err = d.parseObjectStream(ctx, objStmNum, visited)
+		if err != nil {
+			return nil, err
+		}
+		d.cacheObjStm(objStmNum, data)
+	}
+
+	if targetIndex < 0 || targetIndex >= len(data.offsets) {
+		return nil, fmt.Errorf("target index %d out of bounds in object stream %d", targetIndex, objStmNum)
+	}
+	targetOffset := data.offsets[targetIndex]
+	if targetOffset < 0 {
+		return nil, fmt.Errorf("invalid offset for index %d in object stream %d", targetIndex, objStmNum)
+	}
+
+	absoluteOffset := int64(data.first + targetOffset)
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data.decoded), int64(len(data.decoded)), absoluteOffset))
+	p := parser.NewParser(lex)
+	return p.ParseObject(ctx)
+}
+
+// parseObjectStream resolves, decompresses, and parses the header of an object
+// stream once. Decompressing and re-lexing the header on every object would be
+// O(N) per object, an O(N^2) CPU-DoS on a stream packed with objects (ISO
+// 32000-1 §7.5.7). The result is cached and its decoded bytes are read-only
+// downstream (a bytes.Reader), so sharing them across concurrent resolutions is
+// safe.
+func (d *Document) parseObjectStream(ctx context.Context, objStmNum int, visited map[int]bool) (*objStmData, error) {
 	objStmRef := ast.PdfIndirectRef{ObjectNum: objStmNum, GenNum: 0}
 	obj, err := d.resolveWith(ctx, objStmRef, visited)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve object stream %d: %w", objStmNum, err)
 	}
-
 	stream, ok := obj.(ast.PdfStream)
 	if !ok {
 		return nil, fmt.Errorf("object %d is not a stream", objStmNum)
 	}
 
-	// Decompress the stream using the filter package
-	decodedData, err := filter.DecodeStream(ctx, stream)
+	decoded, err := filter.DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode object stream %d: %w", objStmNum, err)
 	}
 
-	// Extract /N and /First.
 	nObj, ok := stream.Dict["N"]
 	if !ok {
 		return nil, fmt.Errorf("object stream missing /N")
@@ -467,47 +514,77 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum int, t
 	if !ok {
 		return nil, fmt.Errorf("object stream /First is not an integer")
 	}
-	first := int(firstInt)
 
-	// Loop N times to read the header integer pairs.
-	reader := bytes.NewReader(decodedData)
-	lex := lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), 0))
+	offsets, err := parseObjStmOffsets(ctx, decoded, n)
+	if err != nil {
+		return nil, fmt.Errorf("reading object stream %d header: %w", objStmNum, err)
+	}
+	return &objStmData{decoded: decoded, first: int(firstInt), offsets: offsets}, nil
+}
 
-	targetOffset := -1
-	for i := range n {
-		// Read objNum
-		_, err := lex.NextToken()
-		if err != nil {
-			return nil, err
-		}
-		// Read offset
-		tokOffset, err := lex.NextToken()
-		if err != nil {
-			return nil, err
-		}
+// parseObjStmOffsets reads up to n objNum/offset header pairs from the decoded
+// object-stream bytes, returning the offset of each object. It stops early at
+// end of data, so a bogus /N cannot force a long loop. The allocation hint is
+// bounded by the decoded size because there cannot be more header pairs than
+// fit in the bytes, per the untrusted-size rule.
+func parseObjStmOffsets(ctx context.Context, decoded []byte, n int) ([]int, error) {
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(decoded), int64(len(decoded)), 0))
 
-		if i == targetIndex {
-			offset, err := strconv.Atoi(tokOffset.Value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid offset in object stream %d: %w", objStmNum, err)
+	capHint := n
+	if capHint < 0 || capHint > len(decoded) {
+		capHint = len(decoded)
+	}
+	offsets := make([]int, 0, min(capHint, 1<<16))
+
+	for i := 0; i < n; i++ {
+		if i%4096 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
 			}
-			targetOffset = offset
-			break // We found our target offset, can stop reading pairs
 		}
+		numTok, err := lex.NextToken()
+		if err != nil {
+			return nil, err
+		}
+		offTok, err := lex.NextToken()
+		if err != nil {
+			return nil, err
+		}
+		if numTok.Type == lexer.TokenEOF || offTok.Type == lexer.TokenEOF {
+			break // no more header pairs in the decoded data
+		}
+		off, err := strconv.Atoi(offTok.Value)
+		if err != nil {
+			off = -1 // malformed offset: extracting this index will error
+		}
+		offsets = append(offsets, off)
 	}
+	return offsets, nil
+}
 
-	if targetOffset == -1 {
-		return nil, fmt.Errorf("target index %d out of bounds in object stream %d", targetIndex, objStmNum)
+// cacheObjStm stores a parsed object stream for reuse, bounding the total cached
+// decoded bytes with an evict-all policy. Object-stream resolution has strong
+// locality (a page's compressed objects share one stream), so evicting the
+// whole map on overflow rarely thrashes. A single stream larger than the budget
+// is not cached, so it cannot force repeated evictions.
+func (d *Document) cacheObjStm(objStmNum int, data *objStmData) {
+	if len(data.decoded) > maxObjStmCacheBytes {
+		return
 	}
-
-	// Calculate absolute position.
-	absoluteOffset := int64(first + targetOffset)
-
-	// Seek reader to absoluteOffset and parse.
-	lex = lexer.NewLexer(ioat.NewReader(reader, int64(len(decodedData)), absoluteOffset))
-	p := parser.NewParser(lex)
-
-	return p.ParseObject(ctx)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.objStmCache == nil {
+		d.objStmCache = make(map[int]*objStmData)
+	}
+	if _, ok := d.objStmCache[objStmNum]; ok {
+		return
+	}
+	if d.objStmCacheBytes+len(data.decoded) > maxObjStmCacheBytes {
+		d.objStmCache = make(map[int]*objStmData)
+		d.objStmCacheBytes = 0
+	}
+	d.objStmCache[objStmNum] = data
+	d.objStmCacheBytes += len(data.decoded)
 }
 
 // Resolve looks up an [ast.PdfIndirectRef] in the document's cross-reference
