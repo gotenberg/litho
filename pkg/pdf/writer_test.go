@@ -295,6 +295,61 @@ func TestWriter_NoMutations(t *testing.T) {
 	}
 }
 
+// danglingRefPDF builds a PDF whose catalog carries an /OpenAction pointing at
+// object 99, which the xref does not define. A damaged xref that loses an object
+// produces exactly this shape.
+func danglingRefPDF() []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /OpenAction 99 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestWriter_FullRewrite_ToleratesDanglingRef pins ISO 32000-1 §7.3.10: a full
+// rewrite of a document with an indirect reference to an absent object copies it
+// as null instead of aborting. Before this, the copier failed the entire rewrite
+// with "object not found in xref", so remediation of any file with a damaged xref
+// (pdfcpu T4) rolled back and errored instead of producing a valid output.
+func TestWriter_FullRewrite_ToleratesDanglingRef(t *testing.T) {
+	ctx := context.Background()
+	data := danglingRefPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out, WithFullRewrite()); err != nil {
+		t.Fatalf("WriteTo(WithFullRewrite): %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen rewritten output: %v", err)
+	}
+	defer r2.Close()
+	if pc, err := r2.PageCount(ctx); err != nil || pc != 1 {
+		t.Errorf("rewritten output: page count = %d, err = %v; want 1, nil", pc, err)
+	}
+}
+
 func TestWriter_MultipleMutations(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()
