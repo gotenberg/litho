@@ -12,27 +12,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// standardStructTypes lists structure types considered standard per
-// ISO 32000-1 §14.8.4 and ISO 32000-2 §14.8.4. Mappings of these types
-// in the StructTreeRoot /RoleMap are either redundant (standard to
-// standard) or forbidden by PDF/A-2a §7.1 (standard remapped at all).
-//
-//nolint:gochecknoglobals // static lookup table
-var standardStructTypes = map[ast.PdfName]bool{
-	"Document": true, "Part": true, "Art": true, "Sect": true, "Div": true,
-	"BlockQuote": true, "Caption": true, "TOC": true, "TOCI": true, "Index": true,
-	"NonStruct": true, "Private": true, "P": true, "H": true,
-	"H1": true, "H2": true, "H3": true, "H4": true, "H5": true, "H6": true,
-	"L": true, "LI": true, "Lbl": true, "LBody": true,
-	"Table": true, "TR": true, "TH": true, "TD": true, "THead": true, "TBody": true, "TFoot": true,
-	"Span": true, "Quote": true, "Note": true, "Reference": true, "BibEntry": true, "Code": true,
-	"Link": true, "Annot": true,
-	"Ruby": true, "RB": true, "RT": true, "RP": true,
-	"Warichu": true, "WT": true, "WP": true,
-	"Figure": true, "Formula": true, "Form": true,
-	"DocumentFragment": true, "Aside": true, "Title": true, "FENote": true, "Sub": true, "Em": true, "Strong": true,
-}
-
 func matchRoleMap(v compliance.Violation) bool {
 	return descriptionContains(v, "standard tags") && descriptionContains(v, "remapped") ||
 		descriptionContains(v, "circular mapping") ||
@@ -104,9 +83,14 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	var cyclesBroken, standardsDropped int
 
 	// Pass 1: break every circular mapping. Follow each source's chain; if it
-	// returns to that source, the entry closes a cycle, so drop it. Sorted
-	// iteration makes the dropped edge deterministic, and the step bound caps
-	// the walk on already-cyclic input.
+	// returns to that source, the entry closes a cycle. In a non-namespaced
+	// document remap that source to the nearest standard type (P) rather than
+	// dropping it: dropping would leave any other entry that targets this source
+	// pointing at an unmapped name, which fails the "maps to a standard type"
+	// rule (ISO 14289-1 §7.1 t5, qpdf-corpus 7.1-t05-fail-d). A namespaced
+	// (PDF 2.0) document keeps the drop, since a standard NAME there may belong
+	// to a custom namespace and P must not be assumed standard for it. Sorted
+	// iteration makes the broken edge deterministic; the step bound caps the walk.
 	for _, src := range srcs {
 		if _, ok := keep[src]; !ok {
 			continue
@@ -114,7 +98,12 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		cur := targets[src]
 		for steps := 0; steps < len(targets); steps++ {
 			if cur == src {
-				delete(keep, src)
+				if namespaced {
+					delete(keep, src)
+				} else {
+					keep[src] = ast.PdfName("P")
+					targets[src] = "P"
+				}
 				cyclesBroken++
 				break
 			}
@@ -125,7 +114,11 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		}
 	}
 
-	// Pass 2: drop standard-type sources only in non-namespaced documents.
+	// Pass 2: drop redundant standard-type sources only in non-namespaced
+	// documents. Standardness is profile-aware and shared with the compliance
+	// checker (compliance.IsStandardStructType): a PDF 2.0 type such as Title is
+	// non-standard under PDF/A-1/2/3 and PDF/UA-1, so its mapping to a standard
+	// type is a required repair there, not a forbidden standard-to-standard remap.
 	if !namespaced {
 		for _, src := range srcs {
 			if _, ok := keep[src]; !ok {
@@ -137,7 +130,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			if part1 && src == "Annot" {
 				continue
 			}
-			if standardStructTypes[src] {
+			if compliance.IsStandardStructType(src, profile) {
 				delete(keep, src)
 				standardsDropped++
 			}

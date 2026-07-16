@@ -57,6 +57,14 @@ var standardStructTypesPDF15Plus = map[ast.PdfName]bool{
 	"TFoot": true,
 }
 
+// IsStandardStructType reports whether name is a standard structure type for the
+// given profile. It is the profile-aware authority the remediation role-map
+// fixer shares so it does not remap or drop a type inconsistently with what the
+// compliance checker considers standard.
+func IsStandardStructType(name ast.PdfName, profile string) bool {
+	return isStandardStructType(name, profile)
+}
+
 // isStandardStructType returns true if the name is a standard structure type
 // for the given profile. ISO 32000-2 types (Title, Artifact, Em, Strong, etc.)
 // are only standard for PDF/A-4 and PDF/UA-2; PDF 1.5 additions are not

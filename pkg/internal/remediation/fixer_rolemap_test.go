@@ -99,10 +99,13 @@ func TestFixRoleMap_BreaksMultiHopCycle_KeepsNamespacedStandard(t *testing.T) {
 }
 
 func TestFixRoleMap_DropsStandardSourceAndSelfLoop_NonNamespaced(t *testing.T) {
-	// Legacy (no /Namespaces) document: a standard-typed source (Title) is
-	// dropped per PDF/A-2a §7.1, and a self-loop (X->X) is dropped as a
-	// 1-cycle. A plain custom mapping is preserved.
-	data := roleMapPDF("<< /Title /P /X /X /Custom /P >>", false)
+	// Legacy (no /Namespaces) PDF/A-2 document. Standardness is profile-aware and
+	// shared with the compliance checker: Div is standard under PDF/A-2, so its
+	// redundant Div->P mapping is dropped; Title was introduced by ISO 32000-2 and
+	// is NON-standard under PDF/A-2, so its Title->P mapping is a required repair
+	// and is kept. A self-loop X->X is remapped to P (not dropped), so any entry
+	// targeting X still terminates at a standard type. A custom mapping is kept.
+	data := roleMapPDF("<< /Div /P /X /X /Custom /P /Title /P >>", false)
 	doc, alloc := newTestDoc(t, data)
 
 	if _, err := fixRoleMap(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2A"); err != nil {
@@ -110,13 +113,42 @@ func TestFixRoleMap_DropsStandardSourceAndSelfLoop_NonNamespaced(t *testing.T) {
 	}
 	rm := resolvedRoleMap(t, alloc)
 
-	if _, ok := rm["Title"]; ok {
-		t.Errorf("standard source Title should be dropped in a non-namespaced document: %v", rm)
+	if _, ok := rm["Div"]; ok {
+		t.Errorf("standard source Div should be dropped in a non-namespaced document: %v", rm)
 	}
-	if _, ok := rm["X"]; ok {
-		t.Errorf("self-loop X->X should be dropped: %v", rm)
+	if rm["X"] != ast.PdfName("P") {
+		t.Errorf("self-loop X->X should be remapped to P, not dropped: %v", rm)
+	}
+	if rm["Title"] != ast.PdfName("P") {
+		t.Errorf("Title is non-standard under PDF/A-2; Title->P must be kept: %v", rm)
 	}
 	if rm["Custom"] != ast.PdfName("P") {
 		t.Errorf("custom->standard mapping should be kept: %v", rm)
+	}
+}
+
+// TestFixRoleMap_CycleRemapAvoidsOrphan pins the fix for verapdf-corpus
+// 7.1-t05-fail-d: a non-namespaced 2-cycle A<->B, where B is also targeted by
+// the cycle. Dropping the edge that closes the cycle would leave the other entry
+// pointing at an unmapped name (ISO 14289-1 §7.1 t5). The fix remaps the closing
+// source to P so every entry terminates at a standard type. Title, non-standard
+// under PDF/UA-1, keeps its mapping.
+func TestFixRoleMap_CycleRemapAvoidsOrphan(t *testing.T) {
+	data := roleMapPDF("<< /A /B /B /A /Title /P >>", false)
+	doc, alloc := newTestDoc(t, data)
+
+	if _, err := fixRoleMap(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-1"); err != nil {
+		t.Fatalf("fixRoleMap: %v", err)
+	}
+	rm := resolvedRoleMap(t, alloc)
+
+	if rm["A"] != ast.PdfName("P") {
+		t.Errorf("cycle-closing source A should be remapped to P, not dropped: %v", rm)
+	}
+	if rm["B"] != ast.PdfName("A") {
+		t.Errorf("B->A should be preserved and reach a standard type via A->P: %v", rm)
+	}
+	if rm["Title"] != ast.PdfName("P") {
+		t.Errorf("Title is non-standard under PDF/UA-1; Title->P must be kept: %v", rm)
 	}
 }
