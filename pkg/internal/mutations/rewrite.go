@@ -41,20 +41,30 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	}
 
 	// Copy the catalog (root of the object graph). Prefer the trailer /Root,
-	// but fall back to the document's catalog recovery so a file whose active
-	// trailer lost /Root (a damaged incremental update) still rewrites, the
-	// same way the reader resolves its catalog.
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
-	if !ok {
-		if recovered, found := doc.CatalogRef(ctx); found {
-			catalogRef = recovered
-		} else {
-			return fmt.Errorf("trailer missing /Root indirect reference")
+	// but only when it resolves to a real catalog. A file whose xref wrongly
+	// marks the catalog object free, or points /Root at a non-catalog, resolves
+	// the ref to null; copying that ref yields a rootless output with no pages
+	// (pdfjs issue18986/issue9418). In that case copy the recovered catalog
+	// dict the reader synthesises, so the rewrite reproduces what the reader
+	// reads, the same way it recovers a trailer that lost /Root entirely.
+	catalogRef, hasRef := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	var newCatalogRef ast.PdfIndirectRef
+	if hasRef && catalogRefResolves(ctx, doc, catalogRef) {
+		copied, err := copier.CopyRef(ctx, catalogRef)
+		if err != nil {
+			return fmt.Errorf("copying catalog: %w", err)
 		}
-	}
-	newCatalogRef, err := copier.CopyRef(ctx, catalogRef)
-	if err != nil {
-		return fmt.Errorf("copying catalog: %w", err)
+		newCatalogRef = copied
+	} else {
+		catalog, err := document.ResolveCatalog(ctx, doc)
+		if err != nil {
+			return fmt.Errorf("resolving catalog for rewrite: %w", err)
+		}
+		copied, err := copier.CopyObject(ctx, catalog.Dict)
+		if err != nil {
+			return fmt.Errorf("copying recovered catalog: %w", err)
+		}
+		newCatalogRef = alloc.Alloc(copied)
 	}
 
 	// Build trailer.
@@ -120,4 +130,17 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		Trailer:       trailer,
 		UseXRefStream: cfg.XRefStream,
 	})
+}
+
+// catalogRefResolves reports whether ref resolves to a catalog dictionary with
+// a resolvable /Pages tree. A false result means the xref misrepresents the
+// catalog (a wrongly-freed entry, or /Root pointing at a non-catalog), so the
+// rewrite must recover the catalog rather than copy a null reference.
+func catalogRefResolves(ctx context.Context, doc *document.Document, ref ast.PdfIndirectRef) bool {
+	dict, err := document.ResolveDict(ctx, doc, ref)
+	if err != nil || dict == nil {
+		return false
+	}
+	pages, err := document.ResolveDict(ctx, doc, dict["Pages"])
+	return err == nil && pages != nil
 }

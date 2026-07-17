@@ -406,6 +406,63 @@ func TestWriter_FullRewrite_ToleratesUnparseableObject(t *testing.T) {
 	}
 }
 
+// freeCatalogPDF builds a PDF whose xref marks object 1 — the /Root target — as
+// a free entry even though the object is physically present. A reader recovers
+// the catalog by scanning; a full rewrite that trusted the free entry would copy
+// a null catalog and drop every page. Reproduces pdfjs issue18986/issue9418.
+func freeCatalogPDF() []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "0000000000 00000 f \r\n") // obj 1 (catalog) wrongly marked free
+	fmt.Fprintf(&b, "%010d 00000 n \r\n", off[2])
+	fmt.Fprintf(&b, "%010d 00000 n \r\n", off[3])
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestWriter_FullRewrite_RecoversFreedCatalog pins the catalog recovery: when
+// /Root points at an object the xref wrongly marks free, a full rewrite must
+// copy the recovered catalog dict instead of a null, so the page survives.
+func TestWriter_FullRewrite_RecoversFreedCatalog(t *testing.T) {
+	ctx := context.Background()
+	data := freeCatalogPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if pc, err := r.PageCount(ctx); err != nil || pc != 1 {
+		t.Fatalf("original page count = %d, err = %v; want 1", pc, err)
+	}
+	w := NewWriter(r)
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out, WithFullRewrite()); err != nil {
+		t.Fatalf("WriteTo(WithFullRewrite): %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen rewritten output: %v", err)
+	}
+	defer r2.Close()
+	if pc, err := r2.PageCount(ctx); err != nil || pc != 1 {
+		t.Errorf("rewritten output: page count = %d, err = %v; want 1 (catalog recovered)", pc, err)
+	}
+}
+
 // rootlessTrailerPDF builds a PDF whose trailer omits /Root entirely, but whose
 // object 1 is a /Type /Catalog with a resolvable /Pages tree. A damaged
 // incremental update whose active trailer dropped /Root produces this shape; the
