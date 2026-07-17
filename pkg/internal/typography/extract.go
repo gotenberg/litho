@@ -177,8 +177,12 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		switch op.Operator {
 		case "Tf":
 			currentFont = handleTfOp(ctx, doc, resources, op, currentFont)
-			if name, ok := op.Operands[0].(ast.PdfName); ok {
-				currentFontName = string(name)
+			// A malformed content stream can carry a Tf with no operands;
+			// guard the operand access so a crafted page cannot panic.
+			if len(op.Operands) > 0 {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					currentFontName = string(name)
+				}
 			}
 		case "Tj":
 			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements); err != nil {

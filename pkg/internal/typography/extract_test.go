@@ -87,6 +87,35 @@ func TestExtractElements_MinimalPDF(t *testing.T) {
 	}
 }
 
+// TestExtractElements_MalformedTfNoOperands pins the operand guard: a Tf
+// operator with no operands, which a malformed content stream can carry, must
+// not panic. Before the guard, extractTextRecursive read op.Operands[0] and
+// crashed with "index out of range [0] with length 0". Reproduces pdfjs
+// bug1130815.pdf, which reached this path through ExtractTables.
+func TestExtractElements_MalformedTfNoOperands(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := minimalFontPDF()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("ResolvePages: %v (pages=%d)", err, len(pages))
+	}
+
+	ops := []content.Operation{{Operator: "Tf"}} // no operands
+	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
+	if _, err := ExtractElements(ctx, doc, machine, pages[0], ops); err != nil {
+		t.Fatalf("ExtractElements on Tf with no operands: %v", err)
+	}
+}
+
 // TestExtractText_MinimalPDF runs the higher-level ExtractText which
 // reconstructs a string from the element list. Asserts the text is
 // present.
