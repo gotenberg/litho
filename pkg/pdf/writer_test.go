@@ -1133,6 +1133,64 @@ func TestMerge_TwoDocuments(t *testing.T) {
 	}
 }
 
+// inlinePagePDF builds a PDF whose page tree inlines the page dict directly in
+// /Kids instead of referencing it indirectly. Such a page has no object number,
+// so a merge that copied pages only by reference dropped it. Reproduces qpdf
+// direct-pages.pdf / pages-is-page.pdf and pdfjs issue9105_other/issue9540.
+func inlinePagePDF() []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Count 1 /Kids [ << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >> ] >>",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestMerge_InlinePages pins that merging documents whose pages are inlined in
+// /Kids preserves every page. Before the fix, an inline page had no indirect
+// reference to copy, so the merged output had a null page and reported 0 pages.
+func TestMerge_InlinePages(t *testing.T) {
+	ctx := context.Background()
+	data := inlinePagePDF()
+
+	rc, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if pc, err := rc.PageCount(ctx); err != nil || pc != 1 {
+		t.Fatalf("source page count = %d, err = %v; want 1", pc, err)
+	}
+	rc.Close()
+
+	r1, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	r2, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	var out bytes.Buffer
+	if err := Merge(ctx, []*Reader{r1, r2}, &out); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	r3, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open merged: %v", err)
+	}
+	defer r3.Close()
+	if n, err := r3.PageCount(ctx); err != nil || n != 2 {
+		t.Errorf("merged page count = %d, err = %v; want 2 (inline pages preserved)", n, err)
+	}
+}
+
 func TestMerge_PreservesMetadata(t *testing.T) {
 	data := threePagePDF()
 	ctx := context.Background()

@@ -49,9 +49,22 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 				return fmt.Errorf("merge canceled: %w", err)
 			}
 
-			newRef, err := copier.CopyRef(ctx, page.Ref)
-			if err != nil {
-				return fmt.Errorf("copying page %d from source %d: %w", pageNum+1, srcIdx, err)
+			var newRef ast.PdfObject
+			if page.Ref.ObjectNum != 0 {
+				ref, err := copier.CopyRef(ctx, page.Ref)
+				if err != nil {
+					return fmt.Errorf("copying page %d from source %d: %w", pageNum+1, srcIdx, err)
+				}
+				newRef = ref
+			} else {
+				// A page inlined directly in the /Kids array has no indirect
+				// reference; copy its dict and allocate an object for it so an
+				// inline page tree (qpdf direct-pages.pdf) is not dropped.
+				copied, err := copier.CopyObject(ctx, page.Dict)
+				if err != nil {
+					return fmt.Errorf("copying inline page %d from source %d: %w", pageNum+1, srcIdx, err)
+				}
+				newRef = alloc.Alloc(copied)
 			}
 			allPageRefs = append(allPageRefs, newRef)
 		}
