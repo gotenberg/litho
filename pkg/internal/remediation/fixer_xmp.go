@@ -723,7 +723,11 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 	if !strings.Contains(string(buf), "pdfaExtension:schemas") {
-		schemas := extractUnknownNamespaceProperties(buf, part)
+		schemas, stripKeys := extractUnknownNamespaceProperties(buf, part)
+		if stripped, n := stripXMPPropertyKeys(buf, stripKeys); n > 0 {
+			buf = stripped
+			fixes = append(fixes, fmt.Sprintf("stripped %d XMP propert(ies) with untypeable structured values", n))
+		}
 		if len(schemas) > 0 {
 			decls := map[string]string{
 				"pdfaExtension": pdfaExtensionNS,
@@ -961,13 +965,25 @@ func needsExtensionDeclaration(part int, ns, name string) bool {
 	return !knownXMPNamespaces[ns]
 }
 
+// xmpPropKey identifies one XMP property by its namespace URI and local name.
+type xmpPropKey struct {
+	nsURI string
+	name  string
+}
+
 // extractUnknownNamespaceProperties parses XMP XML and returns the
 // namespaces holding properties that need an extension schema declaration
 // for the given PDF/A part, with their prefixes and property names: custom
 // namespaces in full, predefined namespaces restricted to the property
 // names absent from the part's predefined catalog (see
 // [needsExtensionDeclaration]).
-func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
+//
+// The second return lists properties whose value is a seq or bag of inline
+// structures (rdf:li rdf:parseType="Resource"). litho cannot declare an
+// arbitrarily nested structure type, and declaring such a property with a flat
+// "seq Text" type fails veraPDF's ISO 19005-2 §6.6.2.3.1 test 2. Callers strip
+// these from the XMP, the same safe repair [fixXMPSchema] applies.
+func extractUnknownNamespaceProperties(data []byte, part int) ([]extSchemaInfo, []xmpPropKey) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
@@ -1004,13 +1020,18 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 	curType := ""
 	var curStructNS string
 	var curStructFields []string
+	curUntypeable := false
+	var stripKeys []xmpPropKey
 
 	finishProp := func() {
 		if curName == "" {
-			curStructNS, curStructFields = "", nil
+			curStructNS, curStructFields, curUntypeable = "", nil, false
 			return
 		}
-		if len(curStructFields) > 0 {
+		switch {
+		case curUntypeable:
+			stripKeys = append(stripKeys, xmpPropKey{nsURI: curNS, name: curName})
+		case len(curStructFields) > 0:
 			record(curNS, extPropInfo{
 				name:         curName,
 				valueType:    curName + "Struct",
@@ -1018,7 +1039,7 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 				structPrefix: nsPrefixes[curStructNS],
 				structFields: curStructFields,
 			})
-		} else {
+		default:
 			if curType == "" || curType == "structPending" {
 				curType = "Text"
 			}
@@ -1026,6 +1047,7 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 		}
 		curNS, curName, curType = "", "", ""
 		curStructNS, curStructFields = "", nil
+		curUntypeable = false
 	}
 
 	for {
@@ -1109,6 +1131,20 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 						curName, curStructFields = "", nil
 					}
 				}
+			case elemDepth == 3 && curName != "":
+				// Items of a seq/bag container. When the container was typed as
+				// a flat "seq Text"/"bag Text" but its items are inline
+				// structures (rdf:li rdf:parseType="Resource", e.g. Adobe
+				// xapTPg:SwatchGroups), that type is wrong: §6.6.2.3.1 t2 rejects
+				// a structured value declared as text. Mark the property for
+				// stripping rather than declaring an untypeable nested structure.
+				if curType == "seq Text" || curType == "bag Text" {
+					for _, attr := range t.Attr {
+						if attr.Name.Local == "parseType" && attr.Value == "Resource" {
+							curUntypeable = true
+						}
+					}
+				}
 			}
 
 		case xml.EndElement:
@@ -1152,7 +1188,24 @@ func extractUnknownNamespaceProperties(data []byte, part int) []extSchemaInfo {
 		schemas = append(schemas, extSchemaInfo{nsURI: nsURI, prefix: prefix, properties: infos})
 	}
 	sort.Slice(schemas, func(i, j int) bool { return schemas[i].nsURI < schemas[j].nsURI })
-	return schemas
+	return schemas, stripKeys
+}
+
+// stripXMPPropertyKeys removes every occurrence of each property key from the
+// XMP bytes, returning the result and the number of properties removed.
+func stripXMPPropertyKeys(xmp []byte, keys []xmpPropKey) ([]byte, int) {
+	removed := 0
+	for _, k := range keys {
+		for {
+			loc := findXMPProperty(xmp, k.nsURI, k.name)
+			if loc.Form == xmpPropertyNotFound {
+				break
+			}
+			xmp = removeXMPProperty(xmp, loc)
+			removed++
+		}
+	}
+	return xmp, removed
 }
 
 // generateExtensionSchemaBlock builds the pdfaExtension:schemas XML block.

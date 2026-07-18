@@ -208,7 +208,11 @@ func refreshExtensionSchemaForFacturX(xmp []byte) ([]byte, []string, error) {
 	// Factur-X embeds its invoice in a PDF/A-3 container (Factur-X 1.0
 	// §5.2), so the XMP 2005 catalog for part 3 decides which properties
 	// need extension declarations.
-	schemas := extractUnknownNamespaceProperties(buf, 3)
+	schemas, stripKeys := extractUnknownNamespaceProperties(buf, 3)
+	if stripped, n := stripXMPPropertyKeys(buf, stripKeys); n > 0 {
+		buf = stripped
+		fixes = append(fixes, fmt.Sprintf("stripped %d XMP propert(ies) with untypeable structured values", n))
+	}
 	if len(schemas) == 0 {
 		return buf, fixes, nil
 	}

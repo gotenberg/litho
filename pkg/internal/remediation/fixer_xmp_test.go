@@ -504,7 +504,7 @@ func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 </rdf:RDF>
 </x:xmpmeta>`)
 
-	schemas := extractUnknownNamespaceProperties(xmp, 2)
+	schemas, _ := extractUnknownNamespaceProperties(xmp, 2)
 	if len(schemas) != 1 {
 		t.Fatalf("expected 1 schema, got %d: %+v", len(schemas), schemas)
 	}
@@ -532,6 +532,48 @@ func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 	}
 }
 
+// TestExtractUnknownNamespaceProperties_SeqOfStruct pins that a seq or bag
+// whose items are inline structures (rdf:li rdf:parseType="Resource") is
+// returned for stripping, not declared with a flat "seq Text" type that fails
+// veraPDF ISO 19005-2 §6.6.2.3.1 t2 (e.g. Adobe xapTPg:SwatchGroups). A sibling
+// simple property in the same namespace is still declared.
+func TestExtractUnknownNamespaceProperties_SeqOfStruct(t *testing.T) {
+	t.Parallel()
+	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:cu="http://example.com/custom/">
+  <cu:NPages>1</cu:NPages>
+  <cu:SwatchGroups><rdf:Seq><rdf:li rdf:parseType="Resource"><cu:groupName>g</cu:groupName></rdf:li></rdf:Seq></cu:SwatchGroups>
+  <cu:Fonts><rdf:Bag><rdf:li rdf:parseType="Resource"><cu:fontName>f</cu:fontName></rdf:li></rdf:Bag></cu:Fonts>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>`)
+
+	schemas, stripKeys := extractUnknownNamespaceProperties(xmp, 2)
+
+	declared := make(map[string]bool)
+	for _, s := range schemas {
+		for _, p := range s.properties {
+			declared[p.name] = true
+		}
+	}
+	if !declared["NPages"] {
+		t.Errorf("simple property NPages should be declared, schemas=%+v", schemas)
+	}
+	stripped := make(map[string]bool)
+	for _, k := range stripKeys {
+		stripped[k.name] = true
+	}
+	for _, name := range []string{"SwatchGroups", "Fonts"} {
+		if declared[name] {
+			t.Errorf("seq/bag-of-struct property %s must not be declared (flat type fails §6.6.2.3.1 t2)", name)
+		}
+		if !stripped[name] {
+			t.Errorf("seq/bag-of-struct property %s should be returned for stripping, stripKeys=%+v", name, stripKeys)
+		}
+	}
+}
+
 // TestExtractUnknownNamespaceProperties_PredefinedNamespaceExtras pins the
 // property-level handling of predefined schema namespaces: a property the
 // XMP Specification variant for the part does not define (exif:MakerNote
@@ -555,7 +597,7 @@ func TestExtractUnknownNamespaceProperties_PredefinedNamespaceExtras(t *testing.
 </rdf:RDF>
 </x:xmpmeta>`)
 
-	schemas := extractUnknownNamespaceProperties(xmp, 2)
+	schemas, _ := extractUnknownNamespaceProperties(xmp, 2)
 	if len(schemas) != 1 {
 		t.Fatalf("part 2: expected 1 schema, got %d: %+v", len(schemas), schemas)
 	}
@@ -567,7 +609,7 @@ func TestExtractUnknownNamespaceProperties_PredefinedNamespaceExtras(t *testing.
 	}
 
 	// XMP 2004 (PDF/A-1) predefines exif:MakerNote: nothing to declare.
-	if got := extractUnknownNamespaceProperties(xmp, 1); len(got) != 0 {
+	if got, _ := extractUnknownNamespaceProperties(xmp, 1); len(got) != 0 {
 		t.Errorf("part 1: expected no schemas, got %+v", got)
 	}
 }
