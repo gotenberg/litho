@@ -147,6 +147,67 @@ func TestFixGraphics_RepairsImageRenderingIntent(t *testing.T) {
 	}
 }
 
+// pdfWithSMaskInterpolate builds a page whose image XObject (obj 4) has a soft
+// mask (obj 5) that is itself an image carrying /Interpolate true. The page walk
+// never reaches obj 5 through a Resources/XObject tree, so the fixer must follow
+// the /SMask reference.
+func pdfWithSMaskInterpolate() []byte {
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.6\n")
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 4 0 R >> >> >>",
+	}
+	offsets := make([]int, 6)
+	for i, body := range objs {
+		offsets[i+1] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	offsets[4] = buf.Len()
+	buf.WriteString("4 0 obj\n<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB /SMask 5 0 R /Length 1 >>\nstream\n")
+	buf.WriteByte(0x7f)
+	buf.WriteString("\nendstream\nendobj\n")
+	offsets[5] = buf.Len()
+	buf.WriteString("5 0 obj\n<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceGray /Interpolate true /Length 1 >>\nstream\n")
+	buf.WriteByte(0x2a)
+	buf.WriteString("\nendstream\nendobj\n")
+	xrefStart := buf.Len()
+	buf.WriteString("xref\n0 6\n0000000000 65535 f \r\n")
+	for i := 1; i <= 5; i++ {
+		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefStart)
+	return buf.Bytes()
+}
+
+// TestFixGraphics_SetsInterpolateFalseOnSMask pins that the image walk descends
+// into a soft-mask sub-image and clears its /Interpolate (ISO 19005-2 §6.2.4),
+// while preserving the mask's stream bytes. Before the fix, an SMask with
+// /Interpolate true survived remediation and veraPDF rejected the output.
+func TestFixGraphics_SetsInterpolateFalseOnSMask(t *testing.T) {
+	doc, alloc := newTestDoc(t, pdfWithSMaskInterpolate())
+
+	if _, err := fixGraphics(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
+		t.Fatalf("fixGraphics: %v", err)
+	}
+
+	stream, ok := alloc.Pending()[5].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("expected SMask image (obj 5) rewritten as a stream, got %T", alloc.Pending()[5])
+	}
+	if v, ok := stream.Dict["Interpolate"].(ast.PdfBool); !ok || bool(v) {
+		t.Errorf("SMask /Interpolate: got %v, want false", stream.Dict["Interpolate"])
+	}
+	data, err := stream.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("reading repaired SMask stream: %v", err)
+	}
+	if !bytes.Equal(data, []byte{0x2a}) {
+		t.Errorf("SMask stream data not preserved: got %v, want [42]", data)
+	}
+}
+
 // TestFixGraphics_PreservesFilteredImageData is the realistic case: the image
 // data is FlateDecode-compressed. The fixer must carry the raw (still-encoded)
 // bytes across byte-for-byte while it only edits the dict.

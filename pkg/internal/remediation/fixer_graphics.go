@@ -365,6 +365,27 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 					notes = append(notes, fmt.Sprintf("replaced invalid rendering intent %q in image %s", string(intentName), string(name)))
 				}
 			}
+
+			// A soft-mask (/SMask) or explicit-mask (/Mask) image is itself an
+			// image XObject subject to the same repairs, but it is referenced
+			// from the image dict rather than a Resources/XObject tree, so the
+			// page walk never reaches it. veraPDF flags e.g. Interpolate==true on
+			// an SMask (ISO 19005-2 §6.2.4). Recurse by wrapping each mask ref as
+			// a one-entry XObject resource; /Mask may be a colour-key array, which
+			// the indirect-reference assertion skips.
+			for _, key := range []ast.PdfName{"SMask", "Mask"} {
+				maskRef, ok := xobjStream.Dict[key].(ast.PdfIndirectRef)
+				if !ok {
+					continue
+				}
+				maskNotes, err := fixXObjects(ctx, alloc, doc, ast.PdfDict{
+					"XObject": ast.PdfDict{key: maskRef},
+				}, visited)
+				if err != nil {
+					return nil, err
+				}
+				notes = append(notes, maskNotes...)
+			}
 		}
 
 		if subtype == "PS" {
