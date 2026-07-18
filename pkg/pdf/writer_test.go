@@ -1191,6 +1191,149 @@ func TestMerge_InlinePages(t *testing.T) {
 	}
 }
 
+// TestSplit_InlinePages pins that splitting a document whose page is inlined in
+// /Kids preserves the page. Before the fix, the inline page had no indirect
+// reference to copy, so the split output reported 0 pages.
+func TestSplit_InlinePages(t *testing.T) {
+	ctx := context.Background()
+	data := inlinePagePDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	var out bytes.Buffer
+	if err := Split(ctx, r, []int{1}, &out); err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	r.Close()
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open split: %v", err)
+	}
+	defer r2.Close()
+	if n, err := r2.PageCount(ctx); err != nil || n != 1 {
+		t.Errorf("split page count = %d, err = %v; want 1 (inline page preserved)", n, err)
+	}
+}
+
+// inheritedResourcesPDF builds a two-page PDF whose /Resources and /MediaBox
+// live on the /Pages node, so both pages inherit them (ISO 32000-1 §7.7.3.4).
+// The font uses an /Encoding /Differences that remaps the content bytes, so
+// extracted text depends on the inherited font: with it, "AB"/"CD" read back as
+// "56"/"78"; without it a viewer falls back to standard encoding and reads the
+// literal "AB"/"CD". A split or merge that drops the inherited /Resources is
+// therefore observable in the extracted text, not just the page count.
+func inheritedResourcesPDF() []byte {
+	c1 := "BT /F1 12 Tf 100 700 Td (AB) Tj ET"
+	c2 := "BT /F1 12 Tf 100 700 Td (CD) Tj ET"
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Count 2 /Kids [3 0 R 4 0 R] /Resources 5 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /Page /Parent 2 0 R /Contents 6 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /Contents 7 0 R >>",
+		"<< /Font << /F1 8 0 R >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(c1), c1),
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(c2), c2),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /Differences [65 /five /six 67 /seven /eight] >> >>",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestSplit_InheritedResources pins that splitting pages that inherit their
+// /Resources from an ancestor /Pages node carries the fonts onto the output
+// pages. Before the fix, split copied only the page object and the flat output
+// tree had no ancestor to inherit from, so the fonts vanished and text became
+// unextractable.
+func TestSplit_InheritedResources(t *testing.T) {
+	ctx := context.Background()
+	data := inheritedResourcesPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	var out bytes.Buffer
+	if err := Split(ctx, r, []int{1, 2}, &out); err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	r.Close()
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open split: %v", err)
+	}
+	defer r2.Close()
+
+	if n, err := r2.PageCount(ctx); err != nil || n != 2 {
+		t.Fatalf("split page count = %d, err = %v; want 2", n, err)
+	}
+	for _, tc := range []struct {
+		page int
+		want string
+	}{{1, "56"}, {2, "78"}} {
+		got, err := r2.ExtractText(ctx, tc.page)
+		if err != nil {
+			t.Fatalf("ExtractText page %d: %v", tc.page, err)
+		}
+		if got != tc.want {
+			t.Errorf("split page %d text = %q; want %q (inherited font dropped)", tc.page, got, tc.want)
+		}
+	}
+}
+
+// TestMerge_InheritedResources pins the same inheritance fix for merge: pages
+// that inherit /Resources keep their fonts in the merged output.
+func TestMerge_InheritedResources(t *testing.T) {
+	ctx := context.Background()
+	data := inheritedResourcesPDF()
+
+	r1, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	r2, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	var out bytes.Buffer
+	if err := Merge(ctx, []*Reader{r1, r2}, &out); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	r1.Close()
+	r2.Close()
+
+	r3, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open merged: %v", err)
+	}
+	defer r3.Close()
+
+	if n, err := r3.PageCount(ctx); err != nil || n != 4 {
+		t.Fatalf("merged page count = %d, err = %v; want 4", n, err)
+	}
+	for _, tc := range []struct {
+		page int
+		want string
+	}{{1, "56"}, {2, "78"}, {3, "56"}, {4, "78"}} {
+		got, err := r3.ExtractText(ctx, tc.page)
+		if err != nil {
+			t.Fatalf("ExtractText page %d: %v", tc.page, err)
+		}
+		if got != tc.want {
+			t.Errorf("merged page %d text = %q; want %q (inherited font dropped)", tc.page, got, tc.want)
+		}
+	}
+}
+
 func TestMerge_PreservesMetadata(t *testing.T) {
 	data := threePagePDF()
 	ctx := context.Background()
