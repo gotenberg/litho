@@ -18,6 +18,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -1418,6 +1419,258 @@ func TestInsertPages_InheritedResources(t *testing.T) {
 		}
 		if got != tc.want {
 			t.Errorf("page %d text = %q; want %q (inherited font dropped)", tc.page, got, tc.want)
+		}
+	}
+}
+
+// firstPageRawFontNames resolves the first page and returns the /Font resource
+// names present on the page's OWN /Resources dict, without the inheritance
+// merge litho applies at read time. A conforming reader stops inheriting once a
+// page defines /Resources (ISO 32000-1 §7.7.3.4), so this is what such a reader
+// sees.
+func firstPageRawFontNames(t *testing.T, ctx context.Context, data []byte) []string {
+	t.Helper()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	cat, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, cat)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("ResolvePages: %v (pages=%d)", err, len(pages))
+	}
+	resObj, ok := pages[0].Dict["Resources"]
+	if !ok {
+		return nil
+	}
+	resDict, err := document.ResolveDict(ctx, doc, resObj)
+	if err != nil || resDict == nil {
+		t.Fatalf("resolve page /Resources: %v", err)
+	}
+	fontDict, err := document.ResolveDict(ctx, doc, resDict["Font"])
+	if err != nil || fontDict == nil {
+		return nil
+	}
+	names := make([]string, 0, len(fontDict))
+	for k := range fontDict {
+		names = append(names, string(k))
+	}
+	return names
+}
+
+// TestStampText_InheritedResources pins that stamping a page that inherits its
+// /Resources writes a page-level /Resources carrying the inherited fonts, not
+// just the stamp's font. litho's own extraction merges inherited resources and
+// would hide the loss, so the test inspects the raw page dict a conforming
+// reader consults.
+func TestStampText_InheritedResources(t *testing.T) {
+	ctx := context.Background()
+	data := inheritedResourcesPDF()
+
+	// Source pages inherit /Resources: no page-level /Font names.
+	if got := firstPageRawFontNames(t, ctx, data); len(got) != 0 {
+		t.Fatalf("source page unexpectedly has own /Font names %v; fixture should inherit", got)
+	}
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if err := w.StampText(TextStamp{Text: "WM", X: 50, Y: 50}, 1); err != nil {
+		t.Fatalf("StampText: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r.Close()
+
+	names := firstPageRawFontNames(t, ctx, out.Bytes())
+	var hasF1, hasStamp bool
+	for _, n := range names {
+		switch {
+		case n == "F1":
+			hasF1 = true
+		case strings.HasPrefix(n, "StampF"):
+			hasStamp = true
+		}
+	}
+	if !hasF1 {
+		t.Errorf("stamped page /Resources /Font = %v; want inherited F1 materialized", names)
+	}
+	if !hasStamp {
+		t.Errorf("stamped page /Resources /Font = %v; want the stamp font", names)
+	}
+
+	// The original content still extracts correctly.
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open output: %v", err)
+	}
+	defer r2.Close()
+	got, err := r2.ExtractText(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractText: %v", err)
+	}
+	if !strings.Contains(got, "56") {
+		t.Errorf("stamped page text = %q; want to contain original %q", got, "56")
+	}
+}
+
+// formXObjectFontNames scans every object for a Form XObject and returns the
+// /Font resource names declared on it. StampPDF converts the source page into a
+// Form XObject, and a conforming reader renders the overlay against the
+// XObject's own /Resources, so those names must include the fonts the source
+// page used.
+func formXObjectFontNames(t *testing.T, ctx context.Context, data []byte) []string {
+	t.Helper()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	var names []string
+	for objNum := range doc.Index.Entries {
+		if objNum == 0 {
+			continue
+		}
+		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil {
+			continue
+		}
+		st, ok := obj.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		if sub, _ := st.Dict["Subtype"].(ast.PdfName); sub != "Form" {
+			continue
+		}
+		resDict, _ := document.ResolveDict(ctx, doc, st.Dict["Resources"])
+		fontDict, _ := document.ResolveDict(ctx, doc, resDict["Font"])
+		for k := range fontDict {
+			names = append(names, string(k))
+		}
+	}
+	return names
+}
+
+// TestStampPDF_InheritedResources pins that overlaying a source page that
+// inherits its /Resources produces a Form XObject carrying those resources.
+// Before the fix, the XObject was built from the raw page dict's (absent)
+// /Resources, so the overlay declared no fonts and rendered blank.
+func TestStampPDF_InheritedResources(t *testing.T) {
+	ctx := context.Background()
+	target := writerTestPDF()
+	source := inheritedResourcesPDF()
+
+	rt, err := Open(ctx, bytes.NewReader(target), int64(len(target)))
+	if err != nil {
+		t.Fatalf("Open target: %v", err)
+	}
+	rs, err := Open(ctx, bytes.NewReader(source), int64(len(source)))
+	if err != nil {
+		t.Fatalf("Open source: %v", err)
+	}
+	w := NewWriter(rt)
+	if err := w.StampPDF(PDFStamp{Source: rs, Page: 1}, 1); err != nil {
+		t.Fatalf("StampPDF: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	rt.Close()
+	rs.Close()
+
+	names := formXObjectFontNames(t, ctx, out.Bytes())
+	found := false
+	for _, n := range names {
+		if n == "F1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("stamp Form XObject /Font = %v; want inherited F1 present", names)
+	}
+}
+
+// firstPageContentsNested reports whether the first page's /Contents array
+// contains a nested array. A page's /Contents must be a single stream or a flat
+// array of streams (ISO 32000-1 §7.8.2); a nested array is malformed and a
+// conforming reader drops the content it holds.
+func firstPageContentsNested(t *testing.T, ctx context.Context, data []byte) bool {
+	t.Helper()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	cat, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, cat)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("ResolvePages: %v", err)
+	}
+	arr, ok := pages[0].Dict["Contents"].(ast.PdfArray)
+	if !ok {
+		return false
+	}
+	for _, elem := range arr {
+		if _, isArr := elem.(ast.PdfArray); isArr {
+			return true
+		}
+	}
+	return false
+}
+
+// TestStampText_MultipleStampsPreserveContents pins that stamping a page twice
+// keeps a flat /Contents array and preserves the original content. Before the
+// fix, the second stamp wrapped the array the first produced in another array,
+// nesting it, so a conforming reader dropped both the original content and the
+// first stamp.
+func TestStampText_MultipleStampsPreserveContents(t *testing.T) {
+	ctx := context.Background()
+	data := inheritedResourcesPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	// Lowercase stamp text stays outside the fixture font's remapped range,
+	// so it never collides with the original "56".
+	if err := w.StampText(TextStamp{Text: "xy", X: 10, Y: 10}, 1); err != nil {
+		t.Fatalf("StampText 1: %v", err)
+	}
+	if err := w.StampText(TextStamp{Text: "zw", X: 10, Y: 30}, 1); err != nil {
+		t.Fatalf("StampText 2: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r.Close()
+
+	if firstPageContentsNested(t, ctx, out.Bytes()) {
+		t.Error("page /Contents contains a nested array; want a flat stream array")
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open output: %v", err)
+	}
+	defer r2.Close()
+	got, err := r2.ExtractText(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractText: %v", err)
+	}
+	for _, want := range []string{"56", "xy", "zw"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stamped page text = %q; want to contain %q", got, want)
 		}
 	}
 }

@@ -246,7 +246,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 
 	// Merge XObject additions into /Resources.
 	if len(xobjectAdditions) > 0 {
-		newResources := mergeStampResources(ctx, doc, alloc, baseDict, xobjectAdditions)
+		newResources := mergeStampResources(ctx, doc, alloc, baseDict, page, xobjectAdditions)
 		newDict["Resources"] = newResources
 	}
 
@@ -258,11 +258,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		}
 		stampStream := ast.NewStream(ast.PdfDict{}, []byte(content.String()))
 		stampRef := alloc.Alloc(stampStream)
-		if existing, ok := baseDict["Contents"]; ok {
-			newDict["Contents"] = ast.PdfArray{existing, stampRef}
-		} else {
-			newDict["Contents"] = stampRef
-		}
+		newDict["Contents"] = appendPageContents(baseDict, stampRef)
 	}
 
 	// Update /Annots: keep non-widget annotations, drop the rest.

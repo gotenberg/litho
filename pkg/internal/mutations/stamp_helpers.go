@@ -65,21 +65,38 @@ func applyStampToPages(
 		baseDict := latestPageDict(alloc, page)
 
 		// Merge the requested resources into the current resource tree.
-		newResources := mergeStampResources(ctx, doc, alloc, baseDict, resources)
+		newResources := mergeStampResources(ctx, doc, alloc, baseDict, page, resources)
 
 		newDict := make(ast.PdfDict, len(baseDict)+1)
 		maps.Copy(newDict, baseDict)
 		newDict["Resources"] = newResources
 
-		if existing, ok := baseDict["Contents"]; ok {
-			newDict["Contents"] = ast.PdfArray{existing, stampRef}
-		} else {
-			newDict["Contents"] = stampRef
-		}
+		newDict["Contents"] = appendPageContents(baseDict, stampRef)
 
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
 	return nil
+}
+
+// appendPageContents returns the /Contents value for a page after appending a
+// new content stream. A page's /Contents is a single stream or a flat array of
+// streams (ISO 32000-1 §7.8.2). When the page already holds an array, from
+// multiple original streams or a prior stamp, the new stream is appended to it;
+// wrapping the array as one element would nest it, and a conforming reader
+// treats the nested array as a non-stream entry and drops all the content it
+// holds.
+func appendPageContents(baseDict ast.PdfDict, stampRef ast.PdfIndirectRef) ast.PdfObject {
+	existing, ok := baseDict["Contents"]
+	if !ok {
+		return stampRef
+	}
+	if arr, isArr := existing.(ast.PdfArray); isArr {
+		out := make(ast.PdfArray, 0, len(arr)+1)
+		out = append(out, arr...)
+		out = append(out, stampRef)
+		return out
+	}
+	return ast.PdfArray{existing, stampRef}
 }
 
 // latestPageDict returns the most recent version of a page's dict, preferring
@@ -101,6 +118,7 @@ func mergeStampResources(
 	doc *document.Document,
 	_alloc *writer.ObjAllocator,
 	baseDict ast.PdfDict,
+	page *document.Page,
 	additions []stampResource,
 ) ast.PdfDict {
 	// Group additions by category so we only rebuild each sub-dict once.
@@ -109,12 +127,21 @@ func mergeStampResources(
 		byCategory[r.category] = append(byCategory[r.category], r)
 	}
 
-	// Clone the current /Resources sub-tree one level deep.
+	// Clone the current /Resources sub-tree one level deep. When the page
+	// object carries no /Resources of its own it inherits them from an
+	// ancestor /Pages node (ISO 32000-1 §7.7.3.4). Writing a page-level
+	// /Resources holding only the stamp additions would, for a conforming
+	// reader that stops inheriting once a page defines /Resources, hide the
+	// inherited fonts and break the page's original content. Seed from the
+	// resolved (inheritance-merged) resources so the stamped page carries
+	// everything it needs.
 	var current ast.PdfDict
 	if resObj, ok := baseDict["Resources"]; ok {
 		if d, err := document.ResolveDict(ctx, doc, resObj); err == nil && d != nil {
 			current = d
 		}
+	} else if page != nil && page.Resources != nil {
+		current = page.Resources
 	}
 	newResources := make(ast.PdfDict, len(current)+len(byCategory))
 	maps.Copy(newResources, current)
