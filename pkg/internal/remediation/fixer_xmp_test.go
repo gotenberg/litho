@@ -3,6 +3,7 @@ package remediation
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"slices"
 	"strings"
 	"testing"
@@ -529,6 +530,53 @@ func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 	}
 	if _, present := got["field"]; present {
 		t.Error("nested structure field recorded as a property")
+	}
+}
+
+// TestPatchExistingXMP_SelfClosingDistillerUA pins UA-1 remediation of a legacy
+// Distiller packet: an attribute-form dc:title on a SELF-CLOSING rdf:Description.
+// The title must become an element-form dc:title (rdf:Alt) and pdfuaid:part must
+// be injected, both NESTED inside a now-open Description that carries the
+// namespaces, not spliced into an attribute value nor orphaned as a direct child
+// of rdf:RDF. Both mistakes corrupt the packet so veraPDF sees neither property.
+func TestPatchExistingXMP_SelfClosingDistillerUA(t *testing.T) {
+	t.Parallel()
+	xmp := `<?xpacket begin='' id='W5M0MpCehiHzreSzNTczkc9d'?>` +
+		`<rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>` +
+		`<rdf:Description about='' xmlns:dc='http://purl.org/dc/elements/1.1/' dc:title='Legacy Title'/>` +
+		`</rdf:RDF><?xpacket end='r'?>`
+
+	out, _ := patchExistingXMP(xmp, 0, "", 1, infoMetadata{Title: "Legacy Title"})
+
+	if !strings.Contains(out, "<dc:title><rdf:Alt>") {
+		t.Errorf("dc:title not converted to element form:\n%s", out)
+	}
+	if strings.Contains(out, "dc:title='<rdf:Alt") || strings.Contains(out, `dc:title="<rdf:Alt`) {
+		t.Errorf("dc:title spliced into an attribute value:\n%s", out)
+	}
+	if !strings.Contains(out, "<pdfuaid:part>1</pdfuaid:part>") {
+		t.Errorf("pdfuaid:part not injected:\n%s", out)
+	}
+
+	// The injected elements must sit inside the Description, before its close.
+	closeIdx := strings.Index(out, "</rdf:Description>")
+	titleIdx := strings.Index(out, "<dc:title>")
+	uaIdx := strings.Index(out, "<pdfuaid:part>")
+	if closeIdx < 0 || titleIdx < 0 || uaIdx < 0 || titleIdx > closeIdx || uaIdx > closeIdx {
+		t.Errorf("injected elements not nested inside the Description:\n%s", out)
+	}
+
+	// The whole packet must be well-formed XML: the attribute-splice bug
+	// produced dc:title='<rdf:Alt ... "..."' whose inner quotes break parsing.
+	dec := xml.NewDecoder(strings.NewReader(out))
+	for {
+		_, err := dec.Token()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatalf("remediated XMP is not well-formed XML: %v\n%s", err, out)
+		}
 	}
 }
 

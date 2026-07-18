@@ -321,6 +321,36 @@ const (
 	pdfaFieldNS     = "http://www.aiim.org/pdfa/ns/field#"
 )
 
+// setStructuredXMPProperty writes a property whose value is structured XMP
+// markup (an rdf:Alt or rdf:Seq container, as dc:title and dc:creator require).
+// An attribute-form property, e.g. the Distiller shorthand dc:title='text', can
+// only hold a simple string: splicing markup into the attribute value corrupts
+// the packet because the inner quotes close the attribute early. Such a property
+// is therefore removed and re-inserted in element form. element is the full
+// <ns:name>value</ns:name> to inject; value is the inner markup used when an
+// element already exists. Returns the updated bytes and whether it changed them.
+func setStructuredXMPProperty(buf []byte, nsURI, prefix, localName, value, element string) ([]byte, bool) {
+	loc := findXMPProperty(buf, nsURI, localName)
+	switch loc.Form {
+	case xmpPropertyAsElement:
+		if out, err := replacePropertyValue(buf, nsURI, localName, value); err == nil {
+			return out, true
+		}
+		return buf, false
+	case xmpPropertyAsAttribute:
+		buf = removeXMPProperty(buf, loc)
+	case xmpPropertyNotFound:
+		// Fall through to inject the element form below.
+	}
+	if out, err := ensureNamespaceDecl(buf, prefix, nsURI); err == nil {
+		buf = out
+	}
+	if out, err := insertChildElement(buf, element); err == nil {
+		return out, true
+	}
+	return buf, false
+}
+
 func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info infoMetadata) (string, []string) {
 	// Byte-level property surgery assumes a parseable packet. On a packet
 	// that is not well-formed XML (itself an unfixable §6.7.2.1/§6.6.2.1 t04
@@ -536,18 +566,13 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	if title != "" {
 		escaped := xmlEscape(title)
 		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
-		injection := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
-		if findXMPProperty(buf, dcNS, "title").Form != xmpPropertyNotFound {
-			if out, err := replacePropertyValue(buf, dcNS, "title", value); err == nil {
-				buf = out
+		element := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
+		existed := findXMPProperty(buf, dcNS, "title").Form != xmpPropertyNotFound
+		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "title", value, element); changed {
+			buf = out
+			if existed {
 				fixes = append(fixes, "synced dc:title with Info /Title")
-			}
-		} else {
-			if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
-				buf = out
-			}
-			if out, err := insertChildElement(buf, injection); err == nil {
-				buf = out
+			} else {
 				fixes = append(fixes, fmt.Sprintf("injected dc:title from %s", titleSource))
 			}
 		}
@@ -556,25 +581,14 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	// Sync dc:creator with Info /Author.
 	if info.Author != "" {
 		escaped := xmlEscape(info.Author)
-		injection := fmt.Sprintf(
-			`<dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>`,
-			escaped,
-		)
-		if findXMPProperty(buf, dcNS, "creator").Form != xmpPropertyNotFound {
-			// Element exists; try to replace via the splicer. If that
-			// fails (e.g., complex nested structure), leave the existing
-			// value alone rather than risk a malformed patch.
-			if out, err := replacePropertyValue(buf, dcNS, "creator", fmt.Sprintf(
-				`<rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq>`, escaped)); err == nil {
-				buf = out
+		value := fmt.Sprintf(`<rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq>`, escaped)
+		element := fmt.Sprintf(`<dc:creator>%s</dc:creator>`, value)
+		existed := findXMPProperty(buf, dcNS, "creator").Form != xmpPropertyNotFound
+		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "creator", value, element); changed {
+			buf = out
+			if existed {
 				fixes = append(fixes, "synced dc:creator with Info /Author")
-			}
-		} else {
-			if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
-				buf = out
-			}
-			if out, err := insertChildElement(buf, injection); err == nil {
-				buf = out
+			} else {
 				fixes = append(fixes, "injected dc:creator from Info /Author")
 			}
 		}

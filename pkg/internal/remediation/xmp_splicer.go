@@ -367,6 +367,24 @@ func insertAttrBeforeTagEnd(xmp []byte, tagEnd int, attrSuffix string) []byte {
 // Returns the original bytes unchanged plus an error if no
 // rdf:Description is found or if the XMP is not parseable.
 func insertChildElement(xmp []byte, elementXML string) ([]byte, error) {
+	// A self-closing first rdf:Description (Distiller attribute-form XMP,
+	// <rdf:Description .../>) has no close tag to insert before, and its
+	// namespace declarations live on that start tag. Convert it to open form
+	// and nest the element inside, so it inherits those namespaces. Inserting
+	// after the self-closing tag would orphan the element as a direct child of
+	// rdf:RDF, which is invalid RDF and invisible to conforming XMP readers.
+	if _, tagEnd, err := findRDFDescriptionOpenRange(xmp); err == nil &&
+		tagEnd >= 2 && xmp[tagEnd-2] == '/' && xmp[tagEnd-1] == '>' {
+		out := make([]byte, 0, len(xmp)+len(elementXML)+32)
+		out = append(out, xmp[:tagEnd-2]...)
+		out = append(out, '>')
+		out = append(out, "\n      "...)
+		out = append(out, elementXML...)
+		out = append(out, "\n    </rdf:Description>"...)
+		out = append(out, xmp[tagEnd:]...)
+		return out, nil
+	}
+
 	descEnd, err := findRDFDescriptionCloseOffset(xmp)
 	if err != nil {
 		return append([]byte(nil), xmp...), err
