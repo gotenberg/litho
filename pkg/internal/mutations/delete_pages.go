@@ -85,9 +85,10 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			return fmt.Errorf("rebuilding page tree canceled: %w", err)
 		}
 		page := allPages[idx]
-		newDict := make(ast.PdfDict, len(page.Dict)+1)
+		newDict := make(ast.PdfDict, len(page.Dict)+4)
 		maps.Copy(newDict, page.Dict)
 		newDict["Parent"] = pagesRef
+		materializeInheritedAttrs(newDict, page)
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
 

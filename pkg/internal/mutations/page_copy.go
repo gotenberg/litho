@@ -71,3 +71,31 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 
 	return ref, nil
 }
+
+// materializeInheritedAttrs writes the attributes a page inherits from ancestor
+// /Pages nodes (Resources, MediaBox, Rotate; ISO 32000-1 §7.7.3.4) directly
+// onto dict when dict lacks them, using the resolved values from page.
+//
+// Callers that flatten the page tree in the source document's own object
+// numbering (delete, insert) use this instead of copyPageForOutput: they reuse
+// each page object in place and rebuild /Pages as a single flat node, so a page
+// that inherited from the old tree has no ancestor left to inherit from. The
+// resolved values reference source objects; the full rewrite that follows
+// copies them like any other page content.
+func materializeInheritedAttrs(dict ast.PdfDict, page *document.Page) {
+	if page.Resources != nil {
+		if _, has := dict["Resources"]; !has {
+			dict["Resources"] = page.Resources
+		}
+	}
+	if page.MediaBox != nil {
+		if _, has := dict["MediaBox"]; !has {
+			dict["MediaBox"] = page.MediaBox
+		}
+	}
+	if page.Rotate != 0 {
+		if _, has := dict["Rotate"]; !has {
+			dict["Rotate"] = ast.PdfInt(page.Rotate)
+		}
+	}
+}

@@ -45,14 +45,17 @@ func InsertPages(
 		return nil
 	}
 
-	// Copy source page objects into the target allocator.
+	// Copy source page objects into the target allocator. copyPageForOutput
+	// carries the Resources, MediaBox, and Rotate the source pages inherited
+	// from their own tree, since the flat target tree gives them nothing to
+	// inherit.
 	copier := writer.NewCopier(srcDoc, alloc)
 	copiedRefs := make([]ast.PdfIndirectRef, len(pagesToInsert))
 	for i, page := range pagesToInsert {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("inserting pages canceled: %w", err)
 		}
-		ref, err := copier.CopyRef(ctx, page.Ref)
+		ref, err := copyPageForOutput(ctx, copier, alloc, page)
 		if err != nil {
 			return fmt.Errorf("copying source page %d: %w", i+1, err)
 		}
@@ -106,9 +109,10 @@ func InsertPages(
 			return fmt.Errorf("inserting pages canceled: %w", err)
 		}
 		page := targetPages[i]
-		newDict := make(ast.PdfDict, len(page.Dict)+1)
+		newDict := make(ast.PdfDict, len(page.Dict)+4)
 		maps.Copy(newDict, page.Dict)
 		newDict["Parent"] = pagesRef
+		materializeInheritedAttrs(newDict, page)
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
 
@@ -128,9 +132,10 @@ func InsertPages(
 			return fmt.Errorf("inserting pages canceled: %w", err)
 		}
 		page := targetPages[i]
-		newDict := make(ast.PdfDict, len(page.Dict)+1)
+		newDict := make(ast.PdfDict, len(page.Dict)+4)
 		maps.Copy(newDict, page.Dict)
 		newDict["Parent"] = pagesRef
+		materializeInheritedAttrs(newDict, page)
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
 

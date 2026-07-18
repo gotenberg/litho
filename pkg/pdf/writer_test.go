@@ -1334,6 +1334,94 @@ func TestMerge_InheritedResources(t *testing.T) {
 	}
 }
 
+// TestDeletePages_InheritedResources pins that deleting a page keeps the
+// inherited fonts on the surviving pages. DeletePages rebuilds /Pages as a flat
+// node; before the fix that node dropped the /Resources the old tree carried,
+// so the survivors lost their fonts and their text became unextractable.
+func TestDeletePages_InheritedResources(t *testing.T) {
+	ctx := context.Background()
+	data := inheritedResourcesPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if err := w.DeletePages(1); err != nil {
+		t.Fatalf("DeletePages: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r.Close()
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open output: %v", err)
+	}
+	defer r2.Close()
+	if n, err := r2.PageCount(ctx); err != nil || n != 1 {
+		t.Fatalf("page count = %d, err = %v; want 1", n, err)
+	}
+	got, err := r2.ExtractText(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractText: %v", err)
+	}
+	if got != "78" {
+		t.Errorf("surviving page text = %q; want %q (inherited font dropped)", got, "78")
+	}
+}
+
+// TestInsertPages_InheritedResources pins that inserting pages keeps the fonts
+// both the inserted and the existing pages inherited. InsertPages flattens the
+// target tree; before the fix that dropped the /Resources on every page.
+func TestInsertPages_InheritedResources(t *testing.T) {
+	ctx := context.Background()
+	data := inheritedResourcesPDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open target: %v", err)
+	}
+	src, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open source: %v", err)
+	}
+	w := NewWriter(r)
+	if err := w.InsertPages(1, src); err != nil {
+		t.Fatalf("InsertPages: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r.Close()
+	src.Close()
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open output: %v", err)
+	}
+	defer r2.Close()
+	if n, err := r2.PageCount(ctx); err != nil || n != 4 {
+		t.Fatalf("page count = %d, err = %v; want 4", n, err)
+	}
+	// Target page 1, inserted pages 1-2, target page 2.
+	for _, tc := range []struct {
+		page int
+		want string
+	}{{1, "56"}, {2, "56"}, {3, "78"}, {4, "78"}} {
+		got, err := r2.ExtractText(ctx, tc.page)
+		if err != nil {
+			t.Fatalf("ExtractText page %d: %v", tc.page, err)
+		}
+		if got != tc.want {
+			t.Errorf("page %d text = %q; want %q (inherited font dropped)", tc.page, got, tc.want)
+		}
+	}
+}
+
 func TestMerge_PreservesMetadata(t *testing.T) {
 	data := threePagePDF()
 	ctx := context.Background()
