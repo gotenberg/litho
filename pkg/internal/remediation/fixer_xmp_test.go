@@ -606,6 +606,76 @@ func TestFixXMP_DeclaresComponentMetadataSchema(t *testing.T) {
 	}
 }
 
+// compressedCatalogPDF builds a single-page document whose catalog /Metadata is
+// FlateDecode-compressed and holds the given XMP (a non-PDF/A producer's choice).
+func compressedCatalogPDF(catalogXMP string) []byte {
+	var cbuf bytes.Buffer
+	zw := zlib.NewWriter(&cbuf)
+	_, _ = zw.Write([]byte(catalogXMP))
+	_ = zw.Close()
+	comp := cbuf.Bytes()
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /Metadata 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Filter /FlateDecode /Length %d >>\nstream\n%s\nendstream", len(comp), comp),
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestFixXMP_DecodesCompressedCatalogMetadata pins that a FlateDecode-compressed
+// catalog XMP is decoded before patching: litho must inject pdfaid and preserve
+// the existing dc:title. Reading the raw compressed bytes parses as garbage, so
+// no pdfaid is injected and the file stays non-conforming (clause 6.6.4).
+func TestFixXMP_DecodesCompressedCatalogMetadata(t *testing.T) {
+	catalogXMP := `<?xpacket begin='' id='W5M0MpCehiHzreSzNTczkc9d'?>` +
+		`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
+		`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">MyOriginalTitle</rdf:li></rdf:Alt></dc:title>` +
+		`</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end='r'?>`
+
+	doc, alloc := newTestDoc(t, compressedCatalogPDF(catalogXMP))
+	if _, err := fixXMP(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
+		t.Fatalf("fixXMP: %v", err)
+	}
+
+	var patched []byte
+	for _, obj := range alloc.Pending() {
+		st, ok := obj.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		if ty, _ := st.Dict["Type"].(ast.PdfName); ty != "Metadata" {
+			continue
+		}
+		if data, err := st.Bytes(context.Background()); err == nil && bytes.Contains(data, []byte("pdfaid")) {
+			patched = data
+		}
+	}
+	if patched == nil {
+		t.Fatal("no rewritten catalog metadata containing pdfaid found")
+	}
+	if !bytes.Contains(patched, []byte("pdfaid:part")) {
+		t.Errorf("pdfaid:part not injected from compressed catalog metadata:\n%s", patched)
+	}
+	if !bytes.Contains(patched, []byte("MyOriginalTitle")) {
+		t.Errorf("existing dc:title lost when decoding compressed catalog metadata:\n%s", patched)
+	}
+}
+
 // TestPatchExistingXMP_SelfClosingDistillerUA pins UA-1 remediation of a legacy
 // Distiller packet: an attribute-form dc:title on a SELF-CLOSING rdf:Description.
 // The title must become an element-form dc:title (rdf:Alt) and pdfuaid:part must

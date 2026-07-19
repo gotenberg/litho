@@ -53,7 +53,11 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	var reencoded bool
 	if metaObj, ok := catalogDict["Metadata"]; ok {
 		if stream, err := document.ResolveStream(ctx, doc, metaObj); err == nil {
-			if data, err := stream.Bytes(ctx); err == nil {
+			// Decode the packet: a non-PDF/A input may store the catalog XMP
+			// FlateDecode-compressed, and the raw bytes would parse as garbage,
+			// so patchExistingXMP would inject no pdfaid and leave the file
+			// non-conforming. The XMP stream fixXMP writes back is uncompressed.
+			if data, err := doc.DecodeStream(ctx, stream); err == nil {
 				// The XMP package must be UTF-8 (ISO 19005-2/3 §6.6.2.1,
 				// ISO 19005-4 §6.7.2.1). A UTF-16 or UTF-32 packet also
 				// defeats the byte-range splicer, silently leaving stale
