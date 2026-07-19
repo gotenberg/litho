@@ -386,7 +386,16 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 	}
 	p.recordStreamLengthViolations(dict, dataLen, usedLength)
 
-	trimLen := trimStreamTail(reader.ReaderAt(), streamStart, dataLen)
+	// Trimming a trailing EOL handles producers that fold the newline before
+	// "endstream" into /Length. It must never run on an encrypted stream: there
+	// /Length is the exact IV+ciphertext byte count, the last byte is random
+	// ciphertext, and dropping one that happens to be CR/LF makes the ciphertext
+	// non-block-aligned, so AES decryption bails and the still-encrypted bytes
+	// reach the filter (a ~1/256-per-stream, IV-dependent content loss).
+	trimLen := dataLen
+	if p.decryptFn == nil || streamUsesIdentityCryptFilter(dict) {
+		trimLen = trimStreamTail(reader.ReaderAt(), streamStart, dataLen)
+	}
 	return p.newLazyStream(dict, reader.ReaderAt(), streamStart, trimLen), nil
 }
 
