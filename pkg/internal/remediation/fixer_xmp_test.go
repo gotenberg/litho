@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -530,6 +531,69 @@ func TestExtractUnknownNamespaceProperties_Typing(t *testing.T) {
 	}
 	if _, present := got["field"]; present {
 		t.Error("nested structure field recorded as a property")
+	}
+}
+
+// componentMetadataPDF builds a single-page document whose image XObject (obj
+// 5) carries a component /Metadata stream (obj 6) holding the given XMP, plus a
+// bare catalog /Metadata (obj 4). veraPDF validates component XMP too, so a
+// custom property there needs its own extension schema.
+func componentMetadataPDF(componentXMP string) []byte {
+	catalogXMP := `<?xpacket begin='' id='W5M0MpCehiHzreSzNTczkc9d'?>` +
+		`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about=""/></rdf:RDF></x:xmpmeta><?xpacket end='r'?>`
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /Metadata 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(catalogXMP), catalogXMP),
+		"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceGray /Metadata 6 0 R /Length 1 >>\nstream\n\x00\nendstream",
+		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(componentXMP), componentXMP),
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	off := make([]int, len(objs)+1)
+	for i, body := range objs {
+		off[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestFixXMP_DeclaresComponentMetadataSchema pins that a custom property on a
+// COMPONENT /Metadata stream (not just the catalog's) gets an extension schema
+// declaration. veraPDF validates component XMP against §6.6.2.3, but litho's
+// catalog-only pass used to leave it undeclared and over-report the file fixed.
+func TestFixXMP_DeclaresComponentMetadataSchema(t *testing.T) {
+	componentXMP := `<?xpacket begin='' id='W5M0MpCehiHzreSzNTczkc9d'?>` +
+		`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about="" xmlns:cu="http://example.com/custom/"><cu:Foo>bar</cu:Foo></rdf:Description>` +
+		`</rdf:RDF></x:xmpmeta><?xpacket end='r'?>`
+
+	doc, alloc := newTestDoc(t, componentMetadataPDF(componentXMP))
+	if _, err := fixXMP(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
+		t.Fatalf("fixXMP: %v", err)
+	}
+
+	stream, ok := alloc.Pending()[6].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("component metadata (obj 6) not rewritten as a stream, got %T", alloc.Pending()[6])
+	}
+	data, err := stream.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("reading rewritten component metadata: %v", err)
+	}
+	if !bytes.Contains(data, []byte("pdfaExtension:schemas")) {
+		t.Errorf("component metadata not given an extension schema for its custom property:\n%s", data)
+	}
+	if !bytes.Contains(data, []byte("http://example.com/custom/")) {
+		t.Errorf("component extension schema missing the custom namespace:\n%s", data)
 	}
 }
 

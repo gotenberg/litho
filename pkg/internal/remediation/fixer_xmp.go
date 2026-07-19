@@ -101,7 +101,67 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	newCatalog["Metadata"] = xmpRef
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
+	// Repair XMP on component /Metadata streams (image XObjects, embedded
+	// files, ...). veraPDF validates their custom properties against the same
+	// ISO 19005-2 §6.6.2.3 extension-schema rules, but the catalog-only pass
+	// above leaves them undeclared, so litho over-reports these files as fixed.
+	catalogMetaNum := 0
+	if ref, ok := catalogDict["Metadata"].(ast.PdfIndirectRef); ok {
+		catalogMetaNum = ref.ObjectNum
+	}
+	fixes = append(fixes, fixComponentMetadata(ctx, alloc, doc, catalogMetaNum, part)...)
+
 	return fixes, nil
+}
+
+// fixComponentMetadata applies the extension-schema declaration and untypeable
+// strip repairs to every /Type /Metadata stream other than the catalog's, which
+// [fixXMP] handles separately. veraPDF validates XMP on image XObjects and other
+// components, so their custom properties need the same treatment. Streams are
+// rewritten uncompressed (the fresh dict drops /Filter) to keep the edited XMP
+// readable, matching the catalog XMP stream fixXMP writes.
+func fixComponentMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogMetaNum, part int) []string {
+	// Iterate object numbers in sorted order so the emitted fix notes and the
+	// destination object numbering stay deterministic across runs.
+	objNums := make([]int, 0, len(doc.Index.Entries))
+	for objNum := range doc.Index.Entries {
+		objNums = append(objNums, objNum)
+	}
+	sort.Ints(objNums)
+
+	var fixes []string
+	for _, objNum := range objNums {
+		if objNum == 0 || objNum == catalogMetaNum {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return fixes
+		}
+		ref := ast.PdfIndirectRef{ObjectNum: objNum}
+		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, ref)
+		if !ok {
+			continue
+		}
+		if t, _ := stream.Dict["Type"].(ast.PdfName); t != "Metadata" {
+			continue
+		}
+		xmp, err := stream.Bytes(ctx)
+		if err != nil || len(xmp) == 0 {
+			continue
+		}
+		out, streamFixes := applyExtensionSchemas(xmp, part)
+		if len(streamFixes) == 0 {
+			continue
+		}
+		newDict := make(ast.PdfDict, len(stream.Dict))
+		maps.Copy(newDict, stream.Dict)
+		delete(newDict, "Filter")
+		delete(newDict, "DecodeParms")
+		delete(newDict, "Length")
+		alloc.AllocAt(objNum, ast.NewStream(newDict, out))
+		fixes = append(fixes, streamFixes...)
+	}
+	return fixes
 }
 
 type infoMetadata struct {
@@ -722,12 +782,21 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Generate extension schema declarations for non-predefined namespaces.
-	// The schema block is a large multi-element XML fragment; it still
-	// uses insertChildElement for placement so the indentation matches
-	// the surrounding rdf:Description. When the block already exists but
-	// is missing required pdfaSchema fields (§6.6.2.3.3), strip and
-	// regenerate from scratch.
+	buf, extFixes := applyExtensionSchemas(buf, part)
+	fixes = append(fixes, extFixes...)
+
+	return string(buf), fixes
+}
+
+// applyExtensionSchemas ensures buf declares an XMP extension schema for every
+// custom or non-predefined property it uses (ISO 19005-2 §6.6.2.3), and strips
+// properties whose value is an untypeable nested structure. An incomplete
+// existing block (§6.6.2.3.3) is regenerated. Returns the updated bytes and
+// human-readable fix notes. The schema block is a large multi-element XML
+// fragment placed with insertChildElement so its indentation matches the
+// surrounding rdf:Description.
+func applyExtensionSchemas(buf []byte, part int) ([]byte, []string) {
+	var fixes []string
 	if strings.Contains(string(buf), "pdfaExtension:schemas") {
 		if extensionSchemaIncomplete(buf) {
 			if stripped, ok := stripExtensionSchemasBlock(buf); ok {
@@ -768,8 +837,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 			}
 		}
 	}
-
-	return string(buf), fixes
+	return buf, fixes
 }
 
 // extensionSchemaIncomplete reports whether the pdfaExtension:schemas
