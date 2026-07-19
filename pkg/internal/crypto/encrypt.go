@@ -6,6 +6,7 @@ import (
 	"crypto/md5"  //nolint:gosec // Required for PDF standard encryption
 	"crypto/rand" //nolint:gosec // Required for PDF standard encryption
 	"crypto/rc4"  //nolint:gosec // Required for PDF standard encryption
+	"encoding/binary"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -177,6 +178,26 @@ func newEncryptorV5(userPw, ownerPw string, pVal, keyLen int, docID []byte) (*En
 		return nil, nil, fmt.Errorf("encrypting OE: %w", err)
 	}
 
+	// Perms (ISO 32000-2 §7.6.4.4.9, Algorithm 8 step f): AES-256 ECB of a
+	// 16-byte block encoding the permissions, so a conforming reader can verify
+	// /P was not tampered with. R6 requires it; omitting it makes the /Encrypt
+	// dictionary invalid for strict readers (Acrobat, pikepdf) even though a
+	// lenient reader still decrypts.
+	permsBlock := make([]byte, 16)
+	binary.LittleEndian.PutUint32(permsBlock[0:4], uint32(pVal)) //nolint:gosec // /P is a 32-bit flag field reinterpreted as-is.
+	permsBlock[4], permsBlock[5], permsBlock[6], permsBlock[7] = 0xFF, 0xFF, 0xFF, 0xFF
+	permsBlock[8] = 'T' // EncryptMetadata is true below.
+	permsBlock[9], permsBlock[10], permsBlock[11] = 'a', 'd', 'b'
+	if _, err := rand.Read(permsBlock[12:16]); err != nil {
+		return nil, nil, fmt.Errorf("generating perms salt: %w", err)
+	}
+	permsCipher, err := aes.NewCipher(fileKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating perms cipher: %w", err)
+	}
+	permsVal := make([]byte, 16)
+	permsCipher.Encrypt(permsVal, permsBlock)
+
 	// Build /Encrypt dictionary.
 	encDict := ast.PdfDict{
 		"Filter": ast.PdfName("Standard"),
@@ -187,6 +208,7 @@ func newEncryptorV5(userPw, ownerPw string, pVal, keyLen int, docID []byte) (*En
 		"U":      ast.PdfString(string(uVal)),
 		"OE":     ast.PdfString(string(oeVal)),
 		"UE":     ast.PdfString(string(ueVal)),
+		"Perms":  ast.PdfString(string(permsVal)),
 		"P":      ast.PdfInt(pVal),
 		"CF": ast.PdfDict{
 			"StdCF": ast.PdfDict{
