@@ -145,7 +145,11 @@ func fixComponentMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if t, _ := stream.Dict["Type"].(ast.PdfName); t != "Metadata" {
 			continue
 		}
-		xmp, err := stream.Bytes(ctx)
+		// Decode the stream: component metadata (unlike the catalog packet,
+		// which PDF/A requires uncompressed) may be FlateDecode-compressed, and
+		// the raw bytes would parse as garbage. The write-back below drops
+		// /Filter so the edited XMP is stored decoded.
+		xmp, err := doc.DecodeStream(ctx, stream)
 		if err != nil || len(xmp) == 0 {
 			continue
 		}

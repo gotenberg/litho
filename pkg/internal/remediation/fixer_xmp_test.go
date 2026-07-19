@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -542,13 +543,21 @@ func componentMetadataPDF(componentXMP string) []byte {
 	catalogXMP := `<?xpacket begin='' id='W5M0MpCehiHzreSzNTczkc9d'?>` +
 		`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
 		`<rdf:Description rdf:about=""/></rdf:RDF></x:xmpmeta><?xpacket end='r'?>`
+	// FlateDecode-compress the component metadata: component streams (unlike the
+	// catalog packet, which PDF/A requires uncompressed) may be compressed, and
+	// the fixer must decode before parsing. The raw bytes would parse as garbage.
+	var cbuf bytes.Buffer
+	zw := zlib.NewWriter(&cbuf)
+	_, _ = zw.Write([]byte(componentXMP))
+	_ = zw.Close()
+	compressed := cbuf.Bytes()
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R /Metadata 4 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 5 0 R >> >> >>",
 		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(catalogXMP), catalogXMP),
 		"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceGray /Metadata 6 0 R /Length 1 >>\nstream\n\x00\nendstream",
-		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(componentXMP), componentXMP),
+		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Filter /FlateDecode /Length %d >>\nstream\n%s\nendstream", len(compressed), compressed),
 	}
 	var b bytes.Buffer
 	b.WriteString("%PDF-1.7\n")
