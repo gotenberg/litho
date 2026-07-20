@@ -341,8 +341,11 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 			// yet equivalent to a spaced dc:creator " x " (§6.7.3 t3).
 			// Trimming here would erase whitespace the sync fixer
 			// deliberately writes to match /Author, making litho unable to
-			// see its own fix.
-			if strings.TrimSpace(raw) == "" {
+			// see its own fix. Skip only OUTSIDE an rdf:li: a whitespace-only
+			// li is a legitimate value (a title of " ", which Go's tokenizer
+			// emits as a single CharData token), and dropping it misreads it
+			// as empty, firing a spurious Info/XMP mismatch veraPDF does not.
+			if strings.TrimSpace(raw) == "" && !inLI {
 				continue
 			}
 			if inLI && propNS != "" {
