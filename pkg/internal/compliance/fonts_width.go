@@ -602,6 +602,17 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 		return nil
 	}
 
+	// A CIDFontType2 maps CID→GID through /CIDToGIDMap; the embedded program's
+	// per-GID widths must be looked up by the mapped GID, not the CID. Assuming
+	// Identity here misreads a non-Identity map's widths and fires a spurious
+	// mismatch (the map is authoritative, veraPDF follows it). A nil lookup means
+	// Identity (CID==GID); ok=false means the map stream is unreadable, so the
+	// GID is unknowable and the check is skipped rather than guessed.
+	cidToGID, ok := cidToGIDMapping(ctx, doc, cidFontDict)
+	if !ok {
+		return nil
+	}
+
 	// /W array format: [cid [w1 w2 ...]] or [cidFirst cidLast w]
 	i := 0
 	for i < len(wArr) {
@@ -634,6 +645,14 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 					continue
 				}
 				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
+				if cidToGID != nil {
+					gid = cidToGID(gid)
+				}
+				// A CID mapping to GID 0 renders .notdef; glyph presence is the
+				// coverage rule's concern, not width consistency.
+				if gid == 0 {
+					continue
+				}
 				pdfWidth := document.Float(wEntry)
 				if pdfWidth == 0 {
 					continue
@@ -677,6 +696,14 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 					continue
 				}
 				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
+				if cidToGID != nil {
+					gid = cidToGID(gid)
+				}
+				// A CID mapping to GID 0 renders .notdef; glyph presence is the
+				// coverage rule's concern, not width consistency.
+				if gid == 0 {
+					continue
+				}
 				bw, ok := binaryWidths[gid]
 				if !ok {
 					continue
