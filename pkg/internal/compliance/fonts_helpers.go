@@ -321,11 +321,29 @@ func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.
 
 // isFontEmbedded checks whether the font descriptor contains a FontFile,
 // FontFile2, or FontFile3 stream indicating an embedded font program.
-func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict) bool {
+// fontFileKeys returns the FontDescriptor font-file keys that constitute valid
+// embedding for a font of the given subtype, per ISO 32000-1 Table 126. A
+// CIDFont must carry its program in the key matching its glyph format:
+// CIDFontType0 (CFF) in /FontFile3, CIDFontType2 (TrueType) in /FontFile2 or an
+// OpenType /FontFile3. /FontFile holds a Type1 program, valid only for a simple
+// Type1 font, so it never embeds a CIDFont; counting it lets a mis-keyed
+// CIDFont pass the embedding rule that veraPDF fails (§6.2.10.4.1 / §6.2.11.4.1).
+func fontFileKeys(subtype string) []ast.PdfName {
+	switch subtype {
+	case "CIDFontType0":
+		return []ast.PdfName{"FontFile3"}
+	case "CIDFontType2":
+		return []ast.PdfName{"FontFile2", "FontFile3"}
+	default:
+		return []ast.PdfName{"FontFile", "FontFile2", "FontFile3"}
+	}
+}
+
+func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict, validKeys []ast.PdfName) bool {
 	if fd == nil {
 		return false
 	}
-	for _, key := range []ast.PdfName{"FontFile", "FontFile2", "FontFile3"} {
+	for _, key := range validKeys {
 		if obj, ok := fd[key]; ok {
 			resolved, err := document.ResolveObject(ctx, doc, obj)
 			if err != nil {
@@ -419,7 +437,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
-	if !isFontEmbedded(ctx, doc, fd) {
+	if !isFontEmbedded(ctx, doc, fd, fontFileKeys(fontSubtype(ctx, doc, fontDict))) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
