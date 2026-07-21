@@ -158,7 +158,7 @@ func TestCheckCIDFontWidths_SkipsNotdef(t *testing.T) {
 				ast.PdfArray{ast.PdfReal(250.0)},
 			},
 		}
-		results := checkCIDFontWidths(ctx, nopDoc(), cidFontDict, binaryWidths, unitsPerEm, "TestCID", 1, rule)
+		results := checkCIDFontWidths(ctx, nopDoc(), cidFontDict, binaryWidths, unitsPerEm, "TestCID", 1, rule, nil)
 		if len(results) != 0 {
 			t.Errorf("expected no violations for CID 0, got %d: %v", len(results), results)
 		}
@@ -174,7 +174,7 @@ func TestCheckCIDFontWidths_SkipsNotdef(t *testing.T) {
 				ast.PdfReal(250.0),
 			},
 		}
-		results := checkCIDFontWidths(ctx, nopDoc(), cidFontDict, binaryWidths, unitsPerEm, "TestCID", 1, rule)
+		results := checkCIDFontWidths(ctx, nopDoc(), cidFontDict, binaryWidths, unitsPerEm, "TestCID", 1, rule, nil)
 		if len(results) != 0 {
 			t.Errorf("expected no violations for CID 0 range, got %d: %v", len(results), results)
 		}
@@ -189,7 +189,7 @@ func TestCheckCIDFontWidths_SkipsNotdef(t *testing.T) {
 				ast.PdfArray{ast.PdfReal(800.0)},
 			},
 		}
-		results := checkCIDFontWidths(ctx, nopDoc(), cidFontDict, binaryWidths, unitsPerEm, "TestCID", 1, rule)
+		results := checkCIDFontWidths(ctx, nopDoc(), cidFontDict, binaryWidths, unitsPerEm, "TestCID", 1, rule, nil)
 		if len(results) == 0 {
 			t.Error("expected violation for CID 10 width mismatch, got none")
 		}

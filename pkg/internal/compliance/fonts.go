@@ -871,7 +871,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 				}
 				rule := glyphWidthRule(profile)
 				if rule.Specification != "" {
-					results = append(results, checkCIDFontWidths(ctx, doc, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule)...)
+					results = append(results, checkCIDFontWidths(ctx, doc, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, type0UsedCIDs(ctx, doc, fontDict, usage))...)
 					results = append(results, checkType0NotdefWidth(ctx, doc, fontDict, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, usage)...)
 				}
 			}

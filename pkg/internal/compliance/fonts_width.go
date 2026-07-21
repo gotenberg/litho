@@ -587,7 +587,14 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 }
 
 // checkCIDFontWidths compares /W array against binary widths for CIDFonts.
-func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule) []Violation {
+//
+// The comparison is usage-scoped to match veraPDF, which resolves every shown
+// code to a GID and checks only those glyphs (see [checkType0NotdefWidth]). A
+// /W entry for a CID the document never renders is not compared: its glyph may
+// legitimately carry a different advance (a subset placeholder, a zero-advance
+// combining glyph) without affecting any drawn text. usedCIDs nil means usage
+// could not be collected, so every declared CID is checked as a fail-safe.
+func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
 	wObj, ok := cidFontDict["W"]
 	if !ok {
 		return nil
@@ -644,6 +651,10 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if cid == 0 {
 					continue
 				}
+				// Usage-scoped: skip CIDs the document never renders.
+				if usedCIDs != nil && (cid < 0 || cid > 0xFFFF || !usedCIDs[uint16(cid)]) {
+					continue
+				}
 				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
 				if cidToGID != nil {
 					gid = cidToGID(gid)
@@ -693,6 +704,10 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			for cid := cidStart; cid <= cidEnd; cid++ {
 				// Skip .notdef (CID 0), no visible outlines.
 				if cid == 0 {
+					continue
+				}
+				// Usage-scoped: skip CIDs the document never renders.
+				if usedCIDs != nil && (cid < 0 || cid > 0xFFFF || !usedCIDs[uint16(cid)]) {
 					continue
 				}
 				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.

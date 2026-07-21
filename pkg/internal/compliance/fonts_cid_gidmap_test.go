@@ -35,7 +35,7 @@ func TestCheckCIDFontWidths_HonorsCIDToGIDMap(t *testing.T) {
 	t.Run("mapped GID width matches: no violation", func(t *testing.T) {
 		t.Parallel()
 		dict := ast.PdfDict{"W": wArr, "CIDToGIDMap": mapStream}
-		results := checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule)
+		results := checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule, nil)
 		if len(results) != 0 {
 			t.Errorf("expected no violation (CID 15 → GID 2 width 700 == /W 700), got %d: %v", len(results), results)
 		}
@@ -45,7 +45,7 @@ func TestCheckCIDFontWidths_HonorsCIDToGIDMap(t *testing.T) {
 		t.Parallel()
 		// Same /W but no map: CID 15 → GID 15 (width 600) ≠ 700 → real mismatch.
 		dict := ast.PdfDict{"W": wArr}
-		results := checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule)
+		results := checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule, nil)
 		if len(results) == 0 {
 			t.Error("expected a violation under Identity mapping (GID 15 width 600 != /W 700), got none")
 		}
@@ -59,9 +59,29 @@ func TestCheckCIDFontWidths_HonorsCIDToGIDMap(t *testing.T) {
 			"W":           ast.PdfArray{ast.PdfInt(7), ast.PdfArray{ast.PdfReal(123.0)}},
 			"CIDToGIDMap": mapStream,
 		}
-		results := checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule)
+		results := checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule, nil)
 		if len(results) != 0 {
 			t.Errorf("expected no violation for CID 7 → GID 0 (.notdef), got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("unused CID mismatch is not reported", func(t *testing.T) {
+		t.Parallel()
+		// /W [15 [600]]: CID 15 (Identity: GID 15, width 600) mismatches its
+		// declared 600 vs GID 2's 700... but here declare a real mismatch and
+		// prove usage scoping suppresses it. GID 15 width is 600, declare 999.
+		dict := ast.PdfDict{"W": ast.PdfArray{ast.PdfInt(15), ast.PdfArray{ast.PdfReal(999.0)}}}
+		// Usage collected, but CID 15 is not among the rendered CIDs.
+		usedCIDs := map[uint16]bool{3: true, 36: true}
+		results := checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule, usedCIDs)
+		if len(results) != 0 {
+			t.Errorf("expected no violation for unused CID 15, got %d: %v", len(results), results)
+		}
+		// Same font, but now CID 15 is rendered: the mismatch must fire.
+		usedCIDs[15] = true
+		results = checkCIDFontWidths(ctx, nopDoc(), dict, binaryWidths, unitsPerEm, "TestCID", 1, rule, usedCIDs)
+		if len(results) == 0 {
+			t.Error("expected a violation once CID 15 is rendered (GID 15 width 600 != /W 999), got none")
 		}
 	})
 }
