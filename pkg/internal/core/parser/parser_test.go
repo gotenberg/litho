@@ -260,6 +260,39 @@ func TestParseDict_NonNameKey_Skipped(t *testing.T) {
 	}
 }
 
+// TestParseDict_StrayKeywordKey_Recovered pins that a bare keyword where a key
+// is expected does not discard the whole dict. A space inside a name is the
+// real-world cause: `/BaseFont /AASGAA+Arial,Unicode MS` lexes as the name
+// `/AASGAA+Arial,Unicode` plus the keyword `MS`. Failing the object drops the
+// font entirely, so a rewrite emits a dangling resource reference (pdfjs
+// issue11549_reduced, veraPDF §6.2.2 t3). The stray token is skipped; every
+// valid pair, including those after it, survives.
+func TestParseDict_StrayKeywordKey_Recovered(t *testing.T) {
+	p := newParser("<<\n/BaseFont /AASGAA+Arial,Unicode MS\n/DescendantFonts [ 56 0 R ]\n/Subtype /Type0\n/Type /Font\n>>")
+	obj, err := p.ParseObject(context.Background())
+	if err != nil {
+		t.Fatalf("ParseObject failed: %v", err)
+	}
+	dict, ok := obj.(ast.PdfDict)
+	if !ok {
+		t.Fatalf("expected PdfDict, got %T", obj)
+	}
+	// The name keeps the part before the space; `MS` is dropped.
+	if dict["BaseFont"] != ast.PdfName("AASGAA+Arial,Unicode") {
+		t.Errorf("BaseFont = %v, want AASGAA+Arial,Unicode", dict["BaseFont"])
+	}
+	// Pairs after the stray token must not be shifted or lost.
+	if dict["Subtype"] != ast.PdfName("Type0") {
+		t.Errorf("Subtype = %v, want Type0", dict["Subtype"])
+	}
+	if dict["Type"] != ast.PdfName("Font") {
+		t.Errorf("Type = %v, want Font", dict["Type"])
+	}
+	if _, ok := dict["DescendantFonts"].(ast.PdfArray); !ok {
+		t.Errorf("DescendantFonts = %v, want an array", dict["DescendantFonts"])
+	}
+}
+
 func TestParseHexString_TolerateNonHex(t *testing.T) {
 	// veraPDF/Acrobat ignore stray non-hex bytes rather than failing the
 	// decode; litho must not drop the value (or, in a content stream, the

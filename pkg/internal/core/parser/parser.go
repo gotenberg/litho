@@ -3,6 +3,7 @@ package parser
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -205,7 +206,7 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 		case "false":
 			return ast.PdfBool(false), nil
 		default:
-			return nil, fmt.Errorf("unexpected keyword: %s", t0.Value)
+			return nil, fmt.Errorf("unexpected keyword %q: %w", t0.Value, errUnexpectedKeyword)
 		}
 	case lexer.TokenName:
 		if len(t0.Value) > 0 && t0.Value[0] == '/' {
@@ -340,6 +341,14 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 
 		keyObj, err := p.ParseObject(ctx)
 		if err != nil {
+			// A stray keyword where a key is expected (e.g. `/Name MS`, where a
+			// space inside a name splits it into a name plus the bare keyword
+			// `MS`) has already been consumed. Skip it and keep the dict rather
+			// than discarding the whole object; qpdf and veraPDF recover the
+			// same way. Other errors (EOF, lexer failures) are not recoverable.
+			if errors.Is(err, errUnexpectedKeyword) {
+				continue
+			}
 			return nil, err
 		}
 		key, ok := keyObj.(ast.PdfName)
