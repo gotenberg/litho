@@ -80,11 +80,15 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 		"FirstChar": ast.PdfInt(32),
 		"Widths":    ast.PdfArray{ast.PdfReal(226.0)},
 	}
+	// Explicit code→GID mapping. The check no longer assumes identity for a
+	// nil map (an unresolved cmap must not misread a proportional font), so the
+	// usage-gating cases below supply the mapping they exercise.
+	identMap := map[uint16]uint16{32: 32, 65: 65}
 
 	t.Run("used char with mismatch fires", func(t *testing.T) {
 		t.Parallel()
 		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
-		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
+		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, identMap, usage)
 		if len(results) == 0 {
 			t.Errorf("expected violation for used space char width mismatch (226 vs 488), got none")
 		}
@@ -97,7 +101,7 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 		// operator is not used for rendering, so a width mismatch on it
 		// passes.
 		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{65: true}}
-		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
+		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, identMap, usage)
 		if len(results) != 0 {
 			t.Errorf("expected no violations for unused char, got %d: %v", len(results), results)
 		}
@@ -105,7 +109,7 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 
 	t.Run("nil usage skipped", func(t *testing.T) {
 		t.Parallel()
-		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, nil)
+		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, identMap, nil)
 		if len(results) != 0 {
 			t.Errorf("expected no violations without usage tracking, got %d: %v", len(results), results)
 		}
@@ -116,7 +120,7 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 		// Text rendering mode 3 paints no glyphs, so nothing is "used for
 		// rendering" under ISO 19005-1 §6.3.6 and the font is exempt.
 		usage := &fontUsageInfo{visible: false, charCodes: map[byte]bool{32: true}}
-		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
+		results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, unitsPerEm, "TestFont", 1, rule, identMap, usage)
 		if len(results) != 0 {
 			t.Errorf("expected no violations for invisible-only usage, got %d: %v", len(results), results)
 		}
@@ -130,11 +134,30 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 		// the width rule passes; a missing /Widths is caught by the
 		// font-dictionary key requirements instead.
 		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
-		results := checkSimpleFontWidths(ctx, nopDoc(), ast.PdfDict{"FirstChar": ast.PdfInt(32)}, binaryWidths, unitsPerEm, "TestFont", 1, rule, nil, usage)
+		results := checkSimpleFontWidths(ctx, nopDoc(), ast.PdfDict{"FirstChar": ast.PdfInt(32)}, binaryWidths, unitsPerEm, "TestFont", 1, rule, identMap, usage)
 		if len(results) != 0 {
 			t.Errorf("expected no violations for missing /Widths, got %d: %v", len(results), results)
 		}
 	})
+}
+
+// TestCheckSimpleFontWidths_UnresolvedMappingSkipped pins that a nil code→GID
+// map (the font's cmap used a format litho does not parse, e.g. a format-2 CJK
+// subtable, and no glyph names were available) skips the width check instead of
+// assuming identity. Identity misreads a proportional font: code 32 would read
+// GID 32's advance (488) rather than the cmap's space glyph, a false positive
+// veraPDF does not raise (pdfjs issue14117 @PDF/A-3a).
+func TestCheckSimpleFontWidths_UnresolvedMappingSkipped(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	rule := Rule_19005_1_6_3_6_t01
+	binaryWidths := map[uint16]uint16{0: 500, 32: 488}
+	fontDict := ast.PdfDict{"FirstChar": ast.PdfInt(32), "Widths": ast.PdfArray{ast.PdfReal(226.0)}}
+	usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
+	results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, 1000, "TestFont", 1, rule, nil, usage)
+	if len(results) != 0 {
+		t.Errorf("nil code→GID map must skip (identity is a wrong guess), got %d: %v", len(results), results)
+	}
 }
 
 func TestCheckCIDFontWidths_SkipsNotdef(t *testing.T) {

@@ -301,14 +301,21 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if charCode < 0 || charCode > 255 {
 			continue
 		}
-		gid := uint16(charCode) //nolint:gosec // G115: charCode is bounded to 0..255 by the guard above.
-		if charCodeToGID != nil {
-			mappedGID, ok := charCodeToGID[uint16(charCode)] //nolint:gosec // G115: charCode is bounded to 0..255 by the guard above.
-			if !ok {
-				continue
-			}
-			gid = mappedGID
+		// Without a code→GID mapping litho cannot resolve the code to a glyph.
+		// A nil map means the font's cmap used a format litho does not parse (a
+		// format-2 CJK subtable, say) and no glyph names were available. Assuming
+		// identity (GID == code) then misreads a proportionally-encoded font: a
+		// WinAnsi space (code 32) would read GID 32's advance instead of the
+		// cmap's space glyph and fire a spurious mismatch veraPDF, which parses
+		// the cmap, does not. Skip the code rather than guess.
+		if charCodeToGID == nil {
+			continue
 		}
+		mappedGID, ok := charCodeToGID[uint16(charCode)] //nolint:gosec // G115: charCode is bounded to 0..255 by the guard above.
+		if !ok {
+			continue
+		}
+		gid := mappedGID
 		// Width consistency applies only to glyphs referenced for
 		// rendering: skip charCodes not used in text operators.
 		charUsed := usage.charCodes[byte(charCode)] //nolint:gosec // G115: charCode is bounded to 0..255 by the guard above.
