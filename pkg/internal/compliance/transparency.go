@@ -587,6 +587,13 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 			if _, ok := stream.Dict["SMask"]; ok {
 				return true
 			}
+			// A JPXDecode image can carry its opacity channel inside the JPEG2000
+			// codestream instead of an explicit /SMask, signalled by /SMaskInData
+			// 1 or 2 (ISO 32000-1 Table 89). That is still transparency, so the
+			// page needs a blending colour space (veraPDF §6.2.10 t2).
+			if document.Float(stream.Dict["SMaskInData"]) > 0 {
+				return true
+			}
 		case "Form":
 			if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
 				if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
