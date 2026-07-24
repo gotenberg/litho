@@ -63,3 +63,35 @@ func TestParseStream_EncryptedStreamNotTrimmed(t *testing.T) {
 		}
 	})
 }
+
+// TestParseStream_XRefStreamNotTrimmed pins that a cross-reference stream's
+// exact /Length is preserved even when its binary entry table ends in a real
+// 0x0A/0x0D byte. Trimming it (as for a plain textual stream) shortens the
+// table, fails the xref parse, and forces a raw-scan rebuild that loses every
+// compressed object — comments.pdf's 200-object ObjStm, holding the page-tree
+// root, vanished and 0 of 14 pages resolved.
+func TestParseStream_XRefStreamNotTrimmed(t *testing.T) {
+	t.Parallel()
+
+	// Data "Hello\n" (6 bytes, last byte 0x0A), then the separator EOL before
+	// "endstream" (ISO 32000-1 §7.3.8.1). A plain stream would trim to 5; a
+	// cross-reference stream must keep all 6.
+	const src = "<< /Type /XRef /Length 6 >>\nstream\nHello\n\nendstream"
+
+	p := newParser(src)
+	obj, err := p.ParseObject(context.Background())
+	if err != nil {
+		t.Fatalf("ParseObject: %v", err)
+	}
+	s, ok := obj.(ast.PdfStream)
+	if !ok {
+		t.Fatalf("got %T, want ast.PdfStream", obj)
+	}
+	b, err := s.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("Bytes: %v", err)
+	}
+	if len(b) != 6 {
+		t.Errorf("xref stream length = %d, want 6 (exact /Length must not be trimmed)", len(b))
+	}
+}

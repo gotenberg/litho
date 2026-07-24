@@ -396,16 +396,28 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 	p.recordStreamLengthViolations(dict, dataLen, usedLength)
 
 	// Trimming a trailing EOL handles producers that fold the newline before
-	// "endstream" into /Length. It must never run on an encrypted stream: there
-	// /Length is the exact IV+ciphertext byte count, the last byte is random
-	// ciphertext, and dropping one that happens to be CR/LF makes the ciphertext
-	// non-block-aligned, so AES decryption bails and the still-encrypted bytes
-	// reach the filter (a ~1/256-per-stream, IV-dependent content loss).
+	// "endstream" into /Length. It must never run on a stream whose /Length is
+	// the exact binary byte count and whose bytes are non-textual:
+	//   - Encrypted streams: /Length counts IV+ciphertext, the last byte is
+	//     random ciphertext; dropping a CR/LF makes it non-block-aligned so AES
+	//     decryption bails and still-encrypted bytes reach the filter
+	//     (~1/256-per-stream IV-dependent content loss).
+	//   - Cross-reference streams (ISO 32000-1 §7.5.8): /Length is the exact
+	//     entry-table size and the EOL before "endstream" is a separator outside
+	//     the data (§7.3.8.1). A real trailing 0x0A/0x0D field byte trimmed here
+	//     shortens the table, fails the parse, and forces a raw-scan rebuild that
+	//     cannot recover compressed objects (the whole page tree can be lost).
 	trimLen := dataLen
-	if p.decryptFn == nil || streamUsesIdentityCryptFilter(dict) {
+	if (p.decryptFn == nil || streamUsesIdentityCryptFilter(dict)) && !isXRefStream(dict) {
 		trimLen = trimStreamTail(reader.ReaderAt(), streamStart, dataLen)
 	}
 	return p.newLazyStream(dict, reader.ReaderAt(), streamStart, trimLen), nil
+}
+
+// isXRefStream reports whether dict is a cross-reference stream (/Type /XRef).
+func isXRefStream(dict ast.PdfDict) bool {
+	name, ok := dict["Type"].(ast.PdfName)
+	return ok && name == "XRef"
 }
 
 // consumeStreamEOL consumes the end-of-line marker that must follow the
