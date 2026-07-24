@@ -225,6 +225,26 @@ func TestParsePrivateDict_Empty(t *testing.T) {
 	}
 }
 
+// TestParsePrivateDict_RealNumberWidth guards against dropping a fractional
+// nominalWidthX/defaultWidthX (CFF real-number operator 30). Skipping the
+// operand leaves the width 0 and offsets every glyph advance by the true value.
+func TestParsePrivateDict_RealNumberWidth(t *testing.T) {
+	// nominalWidthX = 392.49 encoded as op 30: nibbles 3 9 2 . 4 9 END.
+	dict := []byte{0x1e, 0x39, 0x2a, 0x49, 0xff}
+	dict = append(dict, 21) // nominalWidthX
+	// defaultWidthX = 513.88 encoded as op 30: nibbles 5 1 3 . 8 8 END.
+	dict = append(dict, 0x1e, 0x51, 0x3a, 0x88, 0xff)
+	dict = append(dict, 20) // defaultWidthX
+
+	nominal, defaultW, _ := parsePrivateDict(dict)
+	if nominal != 392 {
+		t.Errorf("nominalWidthX = %d, want 392 (round 392.49)", nominal)
+	}
+	if defaultW != 514 {
+		t.Errorf("defaultWidthX = %d, want 514 (round 513.88)", defaultW)
+	}
+}
+
 func TestParseTopDict_OffsetOperators(t *testing.T) {
 	// charset (op 15) = 100, Encoding (op 16) = 200, CharStrings (op 17) = 300
 	// Private (op 18) = size 50, offset 400

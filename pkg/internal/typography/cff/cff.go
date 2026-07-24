@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
@@ -1141,14 +1142,12 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX, subrsOffset in
 			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5]))) //nolint:gosec // intentional two's-complement conversion
 			i += 5
 		case b == 30:
-			i++
-			for i < len(data) {
-				nibble := data[i]
-				i++
-				if nibble&0x0F == 0x0F || nibble>>4 == 0x0F {
-					break
-				}
-			}
+			// Real number (nibble-encoded): round to the nearest integer. A
+			// fractional nominalWidthX/defaultWidthX (op 30) would otherwise be
+			// skipped, leaving the width 0 and offsetting every glyph advance.
+			val, end := parseRealNumber(data, i+1)
+			operands = append(operands, int32(math.Round(val)))
+			i = end
 		default:
 			i++
 		}
