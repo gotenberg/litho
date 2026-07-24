@@ -104,7 +104,9 @@ func ExtractEncoding(data []byte) map[byte]string {
 	// Format 0: nCodes(1), code[nCodes](1 each). code[i] maps to GID i+1.
 	// Format 1: nRanges(1), {first(1), nLeft(1)}[nRanges], range mappings.
 	encOff := int(info.encodingOffset)
-	if encOff >= len(data) {
+	if encOff < 0 || encOff >= len(data) {
+		// A negative offset is malformed (predefined 0/1 are handled above);
+		// guard it before indexing to avoid a panic on crafted input.
 		return nil
 	}
 	formatByte := data[encOff]
