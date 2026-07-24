@@ -836,17 +836,30 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	}
 	info := parseTopDict(topDictEntries[0])
 
-	// topDictEnd marks where String INDEX begins; unused because we parse
-	// Private DICT via an absolute offset from the Top DICT.
-	_ = topDictEnd
+	// The Global Subr INDEX follows the String INDEX (CFF spec §16). topDictEnd
+	// marks where the String INDEX begins; skip it to reach the global subrs.
+	// A charstring may call a subroutine before its first stack-clearing
+	// operator, so the width scanner must be able to expand those subrs.
+	var globalSubrs [][]byte
+	if stringEnd, serr := skipINDEX(data, topDictEnd); serr == nil {
+		_, globalSubrs, _ = parseINDEX(data, stringEnd)
+	}
 
-	// Parse Private DICT for nominalWidthX and defaultWidthX.
+	// Parse Private DICT for nominalWidthX, defaultWidthX, and local subrs.
 	var nominalWidth, defaultWidth int32
+	var localSubrs [][]byte
 	if info.privateDictOffset > 0 && info.privateDictSize > 0 {
 		pdStart := int(info.privateDictOffset)
 		pdEnd := pdStart + int(info.privateDictSize)
 		if pdEnd <= len(data) {
-			nominalWidth, defaultWidth = parsePrivateDict(data[pdStart:pdEnd])
+			var subrsRel int32
+			nominalWidth, defaultWidth, subrsRel = parsePrivateDict(data[pdStart:pdEnd])
+			if subrsRel > 0 {
+				// The Subrs offset (op 19) is relative to the Private DICT start.
+				if sp := pdStart + int(subrsRel); sp > 0 && sp < len(data) {
+					_, localSubrs, _ = parseINDEX(data, sp)
+				}
+			}
 		}
 	}
 
@@ -874,10 +887,12 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 			}
 		}
 		nomW, defW := nominalWidth, defaultWidth
+		local := localSubrs
 		if fdWidths != nil {
 			nomW, defW = fdWidths.widthsFor(gid)
+			local = fdWidths.subrsFor(gid)
 		}
-		w := extractCharstringWidth(cs)
+		w := extractCharstringWidth(cs, local, globalSubrs)
 		var width int32
 		if w != nil {
 			width = nomW + *w
@@ -956,9 +971,10 @@ func CIDWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 // fonts: fdForGID maps each GID to an FDArray index whose Private DICT
 // supplied the widths.
 type fdWidthTable struct {
-	fdForGID []byte
-	nominal  []int32
-	defaults []int32
+	fdForGID   []byte
+	nominal    []int32
+	defaults   []int32
+	localSubrs [][][]byte // per-FD local subroutine INDEX
 }
 
 // widthsFor returns the nominal/default width pair for a GID, falling back
@@ -977,6 +993,20 @@ func (t *fdWidthTable) widthsFor(gid int) (int32, int32) {
 	return t.nominal[fd], t.defaults[fd]
 }
 
+// subrsFor returns the local subroutine INDEX for a GID's FDArray font dict,
+// falling back to FD 0. Used to expand callsubr while recovering the leading
+// width operand.
+func (t *fdWidthTable) subrsFor(gid int) [][]byte {
+	fd := 0
+	if gid >= 0 && gid < len(t.fdForGID) {
+		fd = int(t.fdForGID[gid])
+	}
+	if fd < 0 || fd >= len(t.localSubrs) {
+		return nil
+	}
+	return t.localSubrs[fd]
+}
+
 // parseFDWidths builds the per-FD width table for a CID-keyed CFF font.
 // Returns nil for non-CID fonts or when the FDArray is unreadable, in which
 // case the caller falls back to the top-level Private DICT values.
@@ -990,8 +1020,9 @@ func parseFDWidths(data []byte, info topDictInfo, numGlyphs int) *fdWidthTable {
 	}
 
 	t := &fdWidthTable{
-		nominal:  make([]int32, len(fdEntries)),
-		defaults: make([]int32, len(fdEntries)),
+		nominal:    make([]int32, len(fdEntries)),
+		defaults:   make([]int32, len(fdEntries)),
+		localSubrs: make([][][]byte, len(fdEntries)),
 	}
 	for i, fdDict := range fdEntries {
 		fdInfo := parseTopDict(fdDict)
@@ -999,7 +1030,13 @@ func parseFDWidths(data []byte, info topDictInfo, numGlyphs int) *fdWidthTable {
 			pdStart := int(fdInfo.privateDictOffset)
 			pdEnd := pdStart + int(fdInfo.privateDictSize)
 			if pdEnd <= len(data) && pdStart >= 0 && pdStart < pdEnd {
-				t.nominal[i], t.defaults[i] = parsePrivateDict(data[pdStart:pdEnd])
+				var subrsRel int32
+				t.nominal[i], t.defaults[i], subrsRel = parsePrivateDict(data[pdStart:pdEnd])
+				if subrsRel > 0 {
+					if sp := pdStart + int(subrsRel); sp > 0 && sp < len(data) {
+						_, t.localSubrs[i], _ = parseINDEX(data, sp)
+					}
+				}
 			}
 		}
 	}
@@ -1044,9 +1081,10 @@ func parseFDSelect(data []byte, offset, numGlyphs int) []byte {
 	return out
 }
 
-// parsePrivateDict extracts nominalWidthX (op 21) and defaultWidthX (op 20)
-// from a CFF Private DICT.
-func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX int32) {
+// parsePrivateDict extracts nominalWidthX (op 21), defaultWidthX (op 20), and
+// the local Subrs offset (op 19, relative to the Private DICT start) from a CFF
+// Private DICT.
+func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX, subrsOffset int32) {
 	operands := make([]int32, 0, 4)
 	for i := 0; i < len(data); {
 		b := data[i]
@@ -1058,6 +1096,10 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX int32) {
 				op = 1200 + int(data[i])
 			}
 			switch op {
+			case 19: // Subrs (local subroutine INDEX, offset from Private DICT)
+				if len(operands) > 0 {
+					subrsOffset = operands[len(operands)-1]
+				}
 			case 20: // defaultWidthX
 				if len(operands) > 0 {
 					defaultWidthX = operands[len(operands)-1]
@@ -1112,118 +1154,166 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX int32) {
 	return
 }
 
-// extractCharstringWidth parses a Type 2 charstring and returns the optional
-// width operand (the first "extra" operand before a stack-clearing command).
-// Returns nil if no explicit width is present.
-func extractCharstringWidth(cs []byte) *int32 {
-	// Type 2 charstring: numbers are pushed to the stack, operators consume them.
-	// The width is an optional first operand. It appears when a stack-clearing
-	// operator has one more operand than expected.
-	//
-	// Stack-clearing operators and their expected operand counts:
-	//   1  hstem:    even     14 endchar:   0
-	//   3  vstem:    even     18 hstemhm:   even
-	//   4  vmoveto:  1        21 rmoveto:   2
-	//   22 hmoveto:  1        23 vstemhm:   even
-	//
-	// If stackSize is odd for stem operators, or +1 for moveto, the extra is width.
+// maxSubrNesting bounds Type 2 subroutine recursion while recovering a glyph
+// width. The CFF spec caps subroutine nesting at 10; deeper is malformed or
+// adversarial. Anti-DoS guard, not a spec metric.
+const maxSubrNesting = 10
 
-	stack := make([]int32, 0, 48) //nolint:mnd // typical charstring stack depth
+// subrBias returns the Type 2 subroutine index bias for an INDEX of n subrs
+// (CFF spec, Type 2 Charstring Format, "Subroutine Operators").
+func subrBias(n int) int32 {
+	switch {
+	case n < 1240:
+		return 107
+	case n < 33900:
+		return 1131
+	default:
+		return 32768
+	}
+}
 
-	for i := 0; i < len(cs); {
-		if len(stack) >= maxCharstringStack {
-			// Adversarial charstring: too many operands pushed before
-			// any stack-clearing operator. Spec says CFF1 caps at 48,
-			// CFF2 at 513, so anything above the larger ceiling is
-			// outside both. Refuse to keep growing the slice.
-			return nil
-		}
+// widthScanner walks a Type 2 charstring far enough to recover the optional
+// leading width operand, expanding local/global subroutines. The width, if
+// present, precedes the first stack-clearing operator (CFF spec, Type 2
+// Charstring Format §3.1). A callsubr/callgsubr before that operator, or the
+// implicit-vstem hintmask/cntrmask form, splits or defers the operand; a
+// scanner that clears the stack on those loses the width and misreports
+// defaultWidthX.
+type widthScanner struct {
+	local, global [][]byte
+	lbias, gbias  int32
+	stack         []int32
+	width         *int32
+	done          bool
+}
+
+// push appends an operand, stopping the scan if the operand stack exceeds the
+// Type 2 ceiling (adversarial input pushing operands without a clearing op).
+func (s *widthScanner) push(v int32) {
+	if len(s.stack) >= maxCharstringStack {
+		s.done = true
+		return
+	}
+	s.stack = append(s.stack, v)
+}
+
+// takeWidth records the leading operand as the width when an extra operand is
+// present, then stops the scan (the first stack-clearing operator settles it).
+func (s *widthScanner) takeWidth(extra bool) {
+	if extra && len(s.stack) > 0 {
+		w := s.stack[0]
+		s.width = &w
+	}
+	s.done = true
+}
+
+// callSubr expands the subroutine indexed by the top operand (after bias),
+// sharing the operand stack with the calling frame.
+func (s *widthScanner) callSubr(subrs [][]byte, bias int32, depth int) {
+	if len(s.stack) == 0 {
+		s.done = true
+		return
+	}
+	idx := s.stack[len(s.stack)-1] + bias
+	s.stack = s.stack[:len(s.stack)-1]
+	if idx < 0 || int(idx) >= len(subrs) || subrs[idx] == nil {
+		s.done = true
+		return
+	}
+	s.scan(subrs[idx], depth+1)
+}
+
+// scan interprets one charstring (or subroutine) body.
+func (s *widthScanner) scan(cs []byte, depth int) {
+	if depth > maxSubrNesting {
+		s.done = true
+		return
+	}
+	for i := 0; i < len(cs) && !s.done; {
 		b := cs[i]
-
 		switch {
 		case b == 28:
 			if i+2 >= len(cs) {
-				return nil
+				s.done = true
+				return
 			}
-			stack = append(stack, int32(int16(binary.BigEndian.Uint16(cs[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
+			s.push(int32(int16(binary.BigEndian.Uint16(cs[i+1 : i+3])))) //nolint:gosec // intentional two's-complement conversion
 			i += 3
 		case b >= 32 && b <= 246:
-			stack = append(stack, int32(b)-139)
+			s.push(int32(b) - 139)
 			i++
 		case b >= 247 && b <= 250:
 			if i+1 >= len(cs) {
-				return nil
+				s.done = true
+				return
 			}
-			stack = append(stack, (int32(b)-247)*256+int32(cs[i+1])+108)
+			s.push((int32(b)-247)*256 + int32(cs[i+1]) + 108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(cs) {
-				return nil
+				s.done = true
+				return
 			}
-			stack = append(stack, -(int32(b)-251)*256-int32(cs[i+1])-108)
+			s.push(-(int32(b)-251)*256 - int32(cs[i+1]) - 108)
 			i += 2
 		case b == 255:
-			// 32-bit fixed point (16.16)
+			// 32-bit fixed point (16.16); the integer part suffices for a width.
 			if i+4 >= len(cs) {
-				return nil
+				s.done = true
+				return
 			}
-			stack = append(stack, int32(binary.BigEndian.Uint32(cs[i+1:i+5]))>>16) //nolint:gosec
+			s.push(int32(binary.BigEndian.Uint32(cs[i+1:i+5])) >> 16) //nolint:gosec
 			i += 5
 		default:
-			// Operator: check if this is a stack-clearing command.
 			op := int(b)
+			i++
 			if b == 12 {
-				i++
-				if i >= len(cs) {
-					return nil
+				// Two-byte escape (arithmetic/flex); never precedes the first
+				// width-determining operator in a well-formed glyph. Clear the
+				// stack and continue, matching a conforming interpreter.
+				if i < len(cs) {
+					i++
 				}
-				// Two-byte operators (12 xx), none are stack-clearing for width.
-				stack = stack[:0]
-				i++
+				s.stack = s.stack[:0]
 				continue
 			}
-			i++
-
 			switch op {
-			case 1, 3, 18, 23: // hstem, vstem, hstemhm, vstemhm, even operands
-				if len(stack)%2 != 0 {
-					w := stack[0]
-					return &w
-				}
-				return nil // no width
-			case 4: // vmoveto, 1 operand
-				if len(stack) > 1 {
-					w := stack[0]
-					return &w
-				}
-				return nil
-			case 22: // hmoveto, 1 operand
-				if len(stack) > 1 {
-					w := stack[0]
-					return &w
-				}
-				return nil
-			case 21: // rmoveto, 2 operands
-				if len(stack) > 2 {
-					w := stack[0]
-					return &w
-				}
-				return nil
-			case 14: // endchar
-				// endchar takes 0 operands, or 4 for the deprecated seac accent
-				// composition (adx ady bchar achar). A leading width makes the
-				// count 1 or 5 respectively; 4 operands is seac with NO width
-				// (the glyph uses defaultWidthX). Only 1 or 5 carries a width.
-				if len(stack) == 1 || len(stack) == 5 {
-					w := stack[0]
-					return &w
-				}
-				return nil
+			case 10: // callsubr (local)
+				s.callSubr(s.local, s.lbias, depth)
+			case 29: // callgsubr (global)
+				s.callSubr(s.global, s.gbias, depth)
+			case 11: // return: leave this subroutine frame
+				return
+			case 1, 3, 18, 23: // hstem, vstem, hstemhm, vstemhm (even operands)
+				s.takeWidth(len(s.stack)%2 != 0)
+			case 19, 20: // hintmask, cntrmask: implicit vstem hints, odd ⇒ width
+				s.takeWidth(len(s.stack)%2 != 0)
+			case 4, 22: // vmoveto, hmoveto (1 operand)
+				s.takeWidth(len(s.stack) > 1)
+			case 21: // rmoveto (2 operands)
+				s.takeWidth(len(s.stack) > 2)
+			case 14: // endchar (0 operands, or 4 for deprecated seac; +1 ⇒ width)
+				s.takeWidth(len(s.stack) == 1 || len(s.stack) == 5)
 			default:
-				// Non-stack-clearing operator: clear stack and continue.
-				stack = stack[:0]
+				// Non-width operator: clear the stack and keep scanning.
+				s.stack = s.stack[:0]
 			}
 		}
 	}
-	return nil
+}
+
+// extractCharstringWidth parses a Type 2 charstring and returns the optional
+// width operand (the first "extra" operand before the first stack-clearing
+// operator), expanding any subroutines it calls first. Returns nil if no
+// explicit width is present (the glyph then uses defaultWidthX).
+func extractCharstringWidth(cs []byte, localSubrs, globalSubrs [][]byte) *int32 {
+	s := &widthScanner{
+		local:  localSubrs,
+		global: globalSubrs,
+		lbias:  subrBias(len(localSubrs)),
+		gbias:  subrBias(len(globalSubrs)),
+		stack:  make([]int32, 0, 48), //nolint:mnd // typical charstring stack depth
+	}
+	s.scan(cs, 0)
+	return s.width
 }

@@ -209,7 +209,7 @@ func TestParsePrivateDict(t *testing.T) {
 	dict = append(dict, encodeCFFInt(250)...)
 	dict = append(dict, 21)
 
-	nominal, defaultW := parsePrivateDict(dict)
+	nominal, defaultW, _ := parsePrivateDict(dict)
 	if defaultW != 500 {
 		t.Errorf("defaultWidthX: got %d, want 500", defaultW)
 	}
@@ -219,7 +219,7 @@ func TestParsePrivateDict(t *testing.T) {
 }
 
 func TestParsePrivateDict_Empty(t *testing.T) {
-	nominal, defaultW := parsePrivateDict(nil)
+	nominal, defaultW, _ := parsePrivateDict(nil)
 	if nominal != 0 || defaultW != 0 {
 		t.Errorf("expected zero values, got nominal=%d default=%d", nominal, defaultW)
 	}
@@ -480,7 +480,7 @@ func TestStringTable_OutOfRange(t *testing.T) {
 func TestExtractCharstringWidth_Endchar(t *testing.T) {
 	// width 100, endchar (op 14)
 	cs := append(encodeCFFInt(100), 14)
-	w := extractCharstringWidth(cs)
+	w := extractCharstringWidth(cs, nil, nil)
 	if w == nil {
 		t.Fatal("expected width, got nil")
 	}
@@ -491,7 +491,7 @@ func TestExtractCharstringWidth_Endchar(t *testing.T) {
 
 func TestExtractCharstringWidth_NoWidthEndchar(t *testing.T) {
 	cs := []byte{14}
-	if w := extractCharstringWidth(cs); w != nil {
+	if w := extractCharstringWidth(cs, nil, nil); w != nil {
 		t.Errorf("expected nil, got %d", *w)
 	}
 }
@@ -505,7 +505,7 @@ func TestExtractCharstringWidth_EndcharSeacNoWidth(t *testing.T) {
 	cs = append(cs, encodeCFFInt(101)...)
 	cs = append(cs, encodeCFFInt(194)...)
 	cs = append(cs, 14)
-	if w := extractCharstringWidth(cs); w != nil {
+	if w := extractCharstringWidth(cs, nil, nil); w != nil {
 		t.Errorf("seac endchar (4 operands) carries no width; got %d", *w)
 	}
 }
@@ -517,7 +517,7 @@ func TestExtractCharstringWidth_EndcharSeacWithWidth(t *testing.T) {
 	cs = append(cs, encodeCFFInt(101)...)
 	cs = append(cs, encodeCFFInt(194)...)
 	cs = append(cs, 14)
-	w := extractCharstringWidth(cs)
+	w := extractCharstringWidth(cs, nil, nil)
 	if w == nil {
 		t.Fatal("expected width, got nil")
 	}
@@ -530,7 +530,7 @@ func TestExtractCharstringWidth_HMoveto(t *testing.T) {
 	// width 200, dx 50, hmoveto (op 22)
 	cs := append(encodeCFFInt(200), encodeCFFInt(50)...)
 	cs = append(cs, 22)
-	w := extractCharstringWidth(cs)
+	w := extractCharstringWidth(cs, nil, nil)
 	if w == nil {
 		t.Fatal("expected width, got nil")
 	}
@@ -545,7 +545,7 @@ func TestExtractCharstringWidth_HStem_OddOperands(t *testing.T) {
 	cs := append(encodeCFFInt(300), encodeCFFInt(0)...)
 	cs = append(cs, encodeCFFInt(50)...)
 	cs = append(cs, 1)
-	w := extractCharstringWidth(cs)
+	w := extractCharstringWidth(cs, nil, nil)
 	if w == nil {
 		t.Fatal("expected width, got nil")
 	}
@@ -556,7 +556,7 @@ func TestExtractCharstringWidth_HStem_OddOperands(t *testing.T) {
 
 func TestExtractCharstringWidth_NegativeWidth(t *testing.T) {
 	cs := append(encodeCFFInt(-50), 14)
-	w := extractCharstringWidth(cs)
+	w := extractCharstringWidth(cs, nil, nil)
 	if w == nil {
 		t.Fatal("expected width, got nil")
 	}
@@ -779,7 +779,7 @@ func TestExtractCharstringWidth_RejectsStackOverflow(t *testing.T) {
 	for i := range cs {
 		cs[i] = 100 // any operand byte in [32, 246]
 	}
-	if got := extractCharstringWidth(cs); got != nil {
+	if got := extractCharstringWidth(cs, nil, nil); got != nil {
 		t.Errorf("extractCharstringWidth on adversarial stack overflow returned %d, want nil", *got)
 	}
 }
