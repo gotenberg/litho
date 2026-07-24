@@ -27,7 +27,7 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 
 	// Type3 fonts: compare /Widths against CharProc d0/d1 widths.
 	if isType3Font(ctx, doc, fontDict) {
-		return checkType3FontWidths(ctx, doc, fontDict, fontName, pageNum, rule)
+		return checkType3FontWidths(ctx, doc, fontDict, fontName, pageNum, rule, usage)
 	}
 
 	binaryWidths, unitsPerEm, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
@@ -504,7 +504,7 @@ func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontD
 
 // checkType3FontWidths compares /Widths against glyph widths declared by
 // d0/d1 operators in Type3 font CharProcs.
-func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule) []Violation {
+func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
 		return nil
@@ -575,6 +575,14 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	// Compare /Widths against CharProc widths.
 	for i, wObj := range widths {
 		charCode := byte(int(firstChar) + i) //nolint:gosec // G115: simple-font char codes occupy the 8-bit space; a /Widths index past 255 is not a valid code and truncation is harmless.
+		// Width consistency applies only to glyphs referenced for rendering:
+		// veraPDF checks only shown codes. An unrendered /Widths entry (e.g. a
+		// code mapped to a .notdef placeholder such as /g0 with declared width 0,
+		// whose CharProc still carries a non-zero d0/d1 advance) is not compared.
+		// A nil usage map falls back to checking every code.
+		if usage != nil && !usage.charCodes[charCode] {
+			continue
+		}
 		glyphName := enc[charCode]
 		if glyphName == "" {
 			continue
