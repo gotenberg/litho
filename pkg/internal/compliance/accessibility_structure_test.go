@@ -94,6 +94,80 @@ func TestCheckNamespaceRoleMapping_CircularLegacyRoleMap(t *testing.T) {
 	}
 }
 
+// TestCheckNamespaceRoleMapping_RoleMapNSChain covers ISO 14289-2 §8.2.4 t1 for
+// types resolved through a namespace role map. veraPDF's rule is object
+// SENonStandard, test isNotMappedToStandardType == false, and its resolution
+// follows /RoleMapNS hop by hop through the namespace each type belongs to
+// (ISO 32000-2 §14.8.6). A type therefore counts as mapped only when the chain
+// REACHES a standard type: appearing as a /RoleMapNS key proves nothing, and a
+// key in an unrelated namespace proves less still. A circular chain is the one
+// exemption, because veraPDF reports the cycle through t2 instead.
+func TestCheckNamespaceRoleMapping_RoleMapNSChain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	build := func(t *testing.T, rmnsA, rmnsB string) []Violation {
+		t.Helper()
+		doc, cat := tableDoc(t, 1,
+			"<< /Type /Catalog /StructTreeRoot 2 0 R >>",
+			"<< /Type /StructTreeRoot /K [3 0 R] /Namespaces [5 0 R 6 0 R 7 0 R] >>",
+			"<< /Type /StructElem /S /Document /NS 5 0 R /P 2 0 R /K [4 0 R] >>",
+			"<< /Type /StructElem /S /Alpha /NS 6 0 R /P 3 0 R >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+			"<< /Type /Namespace /NS (http://litho.example/nsA) /RoleMapNS "+rmnsA+" >>",
+			"<< /Type /Namespace /NS (http://litho.example/nsB) /RoleMapNS "+rmnsB+" >>",
+		)
+		return checkNamespaceRoleMapping(ctx, doc, cat, "PDF/UA-2")
+	}
+
+	t.Run("chain stays non-standard", func(t *testing.T) {
+		t.Parallel()
+		// /Alpha in nsA maps to /Beta in nsB, which maps nothing back. The chain
+		// never reaches a standard type, so it is unmapped for t1.
+		got := build(t, "<< /Alpha [/Beta 7 0 R] >>", "<< /Zeta [/P 5 0 R] >>")
+		if !hasRule(got, Rule_14289_2_8_2_4_t01) {
+			t.Error("/RoleMapNS chain that never reaches a standard type: want §8.2.4 t1")
+		}
+	})
+
+	t.Run("chain reaches standard in two hops", func(t *testing.T) {
+		t.Parallel()
+		got := build(t, "<< /Alpha [/Beta 7 0 R] >>", "<< /Beta [/P 5 0 R] >>")
+		if hasRule(got, Rule_14289_2_8_2_4_t01) {
+			t.Error("/RoleMapNS chain reaching /P in the PDF 2.0 namespace: want no §8.2.4 t1")
+		}
+	})
+
+	t.Run("key in an unrelated namespace", func(t *testing.T) {
+		t.Parallel()
+		// nsB maps /Alpha, but the element belongs to nsA, whose /RoleMapNS has
+		// no entry for it. Only the element's own namespace resolves its type.
+		got := build(t, "<< /Gamma [/Delta 7 0 R] >>", "<< /Alpha [/P 5 0 R] >>")
+		if !hasRule(got, Rule_14289_2_8_2_4_t01) {
+			t.Error("/RoleMapNS key in a namespace the element does not belong to: want §8.2.4 t1")
+		}
+	})
+
+	t.Run("self map reports t2 only", func(t *testing.T) {
+		t.Parallel()
+		got := build(t, "<< /Alpha [/Alpha 6 0 R] >>", "<< /Zeta [/P 5 0 R] >>")
+		if !hasRule(got, Rule_14289_2_8_2_4_t02) {
+			t.Error("/RoleMapNS type mapped to itself: want §8.2.4 t2")
+		}
+		if hasRule(got, Rule_14289_2_8_2_4_t01) {
+			t.Error("/RoleMapNS type mapped to itself: want no §8.2.4 t1 (cycle is t2)")
+		}
+	})
+
+	t.Run("two hop cycle suppresses t1", func(t *testing.T) {
+		t.Parallel()
+		got := build(t, "<< /Alpha [/Beta 7 0 R] >>", "<< /Beta [/Alpha 6 0 R] >>")
+		if hasRule(got, Rule_14289_2_8_2_4_t01) {
+			t.Error("circular /RoleMapNS chain: want no §8.2.4 t1 (cycle is t2)")
+		}
+	})
+}
+
 func TestRoleMapChainReachesStandard(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

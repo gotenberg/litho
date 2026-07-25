@@ -163,7 +163,7 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 	// mapped to a standard type, which veraPDF honours for §8.2.4 t1.
 	classicRoleMap := LoadRoleMap(ctx, doc, treeRoot)
 
-	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsArr, classicRoleMap, &results, make(map[int]bool), 0)
+	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsByURI, classicRoleMap, &results, make(map[int]bool), 0)
 	return results
 }
 
@@ -198,25 +198,67 @@ func typeInLegacyRoleMap(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfNa
 	return ok
 }
 
-// typeIsRoleMapNSKey reports whether typeName appears as a key in any
-// namespace's /RoleMapNS dictionary. Such a type is "mapped" for §8.2.4 t1
-// purposes (even if the mapping is circular or same-namespace, which t02/t03
-// report), so it must not also trip the unmapped-type rule t01.
-func typeIsRoleMapNSKey(ctx context.Context, doc *document.Document, typeName ast.PdfName, nsArr ast.PdfArray) bool {
-	for _, nsObj := range nsArr {
-		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
-		if nsDict == nil {
-			continue
+// nsChainOutcome classifies where a namespace role-map (/RoleMapNS) chain ends.
+type nsChainOutcome int
+
+const (
+	// nsChainUnmapped: the chain dead-ends without ever entering a standard
+	// namespace, so the type is not mapped to a standard structure type.
+	nsChainUnmapped nsChainOutcome = iota
+	// nsChainStandard: the chain reaches a type in a standard namespace.
+	nsChainStandard
+	// nsChainCircular: the chain revisits a (namespace, type) pair.
+	nsChainCircular
+)
+
+// roleMapNSChainOutcome follows the /RoleMapNS chain starting at typeName in
+// nsURI and reports where it ends. Per ISO 32000-2 §14.8.6 a namespaced
+// structure type resolves through its own namespace's /RoleMapNS, one hop at a
+// time, so a chain that only ever names types in non-standard namespaces never
+// reaches a standard structure type: that is ISO 14289-2 §8.2.4 t1
+// (veraPDF SENonStandard, isNotMappedToStandardType). Merely appearing as a
+// /RoleMapNS key does not make a type mapped. A chain that loops is reported by
+// §8.2.4 t2 instead, so it is classified separately and must not also trip t1.
+//
+// nsRoleMaps holds only namespaces that declare a /RoleMapNS, so a namespace
+// absent from it ends the chain. Exhausting [maxRoleMapNSDepth] counts as
+// circular: a chain that long is pathological, and treating it as unmapped
+// would report t1 on input the depth guard, not the document, cut short.
+func roleMapNSChainOutcome(ctx context.Context, doc *document.Document, typeName ast.PdfName, nsURI string, nsRoleMaps map[string]ast.PdfDict) nsChainOutcome {
+	curType, curNS := typeName, nsURI
+	visited := map[string]bool{curNS + "\x00" + string(curType): true}
+
+	for range maxRoleMapNSDepth {
+		rmns, ok := nsRoleMaps[curNS]
+		if !ok {
+			return nsChainUnmapped
 		}
-		rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"])
-		if rmns == nil {
-			continue
+		mappingObj, ok := rmns[curType]
+		if !ok {
+			return nsChainUnmapped
 		}
-		if _, ok := rmns[typeName]; ok {
-			return true
+		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
+		if len(arr) < 2 {
+			return nsChainUnmapped
 		}
+		targetType, _ := document.ResolveName(ctx, doc, arr[0])
+		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
+		if targetType == "" || targetNSDict == nil {
+			return nsChainUnmapped
+		}
+		targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
+		if standardNamespaceURIs[string(targetURI)] {
+			return nsChainStandard
+		}
+
+		key := string(targetURI) + "\x00" + string(targetType)
+		if visited[key] {
+			return nsChainCircular
+		}
+		visited[key] = true
+		curType, curNS = targetType, string(targetURI)
 	}
-	return false
+	return nsChainCircular
 }
 
 // roleMapChainReachesStandard reports whether typeName resolves to a standard
@@ -247,7 +289,7 @@ func roleMapChainReachesStandard(roleMap map[ast.PdfName]ast.PdfName, typeName a
 // walked: a crafted /K cycle would otherwise recurse forever, and stack
 // exhaustion is not recoverable in Go. The depth cap bounds inline-dict
 // nesting, which carries no object numbers for the visited set.
-func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsArr ast.PdfArray, roleMap map[ast.PdfName]ast.PdfName, results *[]Violation, visited map[int]bool, depth int) {
+func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, defaultNSURI string, nsRoleMaps map[string]ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName, results *[]Violation, visited map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxStructTreeDepth {
 		return
 	}
@@ -273,16 +315,15 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 		// through the legacy /RoleMap, which the structure-type walk
 		// already validates against 8.2.4 t1.
 		if elemNSURI != "" && !standardNamespaceURIs[elemNSURI] {
-			// The type may resolve to a standard namespace via RoleMapNS, or be
-			// role-mapped at all. t01 (isNotMappedToStandardType) fires only when
-			// the type is genuinely unmapped: a type carrying a RoleMapNS entry or
-			// a legacy /RoleMap chain IS mapped, even if that mapping is circular
-			// or same-namespace, and those defects are reported by t02/t03, not
-			// t01. The standard-namespace branch below applies the same exclusions.
-			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) &&
+			// t01 (isNotMappedToStandardType) fires when the type does not reach
+			// a STANDARD type, not merely when it carries no mapping: a
+			// /RoleMapNS chain that stays inside non-standard namespaces leaves
+			// the type unmapped for ISO 14289-2 §8.2.4 t1. A circular chain, by
+			// contrast, is reported by t02/t03, so it is excluded here to avoid a
+			// double-fire. The standard-namespace branch below reads the same way.
+			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
 				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
-				!typeInLegacyRoleMap(roleMap, sType) &&
-				!typeIsRoleMapNSKey(ctx, doc, sType, nsArr) {
+				!typeInLegacyRoleMap(roleMap, sType) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in namespace %q is not mapped to a standard namespace",
 					sType, elemNSURI)...)
@@ -298,14 +339,11 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// standardStructTypes is the union of the ISO 32000-1 and -2
 			// vocabularies, so a 2.0-only name in the 1.7 namespace is treated
 			// leniently (under-detect) rather than risking a false positive.
-			// t01 (isNotMappedToStandardType) fires only when the type is
-			// genuinely unmapped. A type that carries a RoleMapNS entry IS
-			// mapped, even if that mapping is circular or same-namespace: those
-			// defects are reported by t02/t03, not t01, so exclude them here.
-			if !typeMapsToStandardNS(ctx, doc, string(sType), elemNSURI, nsArr) &&
+			// t01 fires when the type does not reach a standard type; a circular
+			// chain is reported by t02/t03, not t01, so exclude it here.
+			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
 				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
-				!typeInLegacyRoleMap(roleMap, sType) &&
-				!typeIsRoleMapNSKey(ctx, doc, sType, nsArr) {
+				!typeInLegacyRoleMap(roleMap, sType) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in standard namespace %q is not a standard type and is not role-mapped",
 					sType, elemNSURI)...)
@@ -320,16 +358,16 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 	}
 	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
 		for _, kid := range arr {
-			walkNSCheckChild(ctx, doc, kid, defaultNSURI, nsArr, roleMap, results, visited, depth)
+			walkNSCheckChild(ctx, doc, kid, defaultNSURI, nsRoleMaps, roleMap, results, visited, depth)
 		}
 	} else {
-		walkNSCheckChild(ctx, doc, kObj, defaultNSURI, nsArr, roleMap, results, visited, depth)
+		walkNSCheckChild(ctx, doc, kObj, defaultNSURI, nsRoleMaps, roleMap, results, visited, depth)
 	}
 }
 
 // walkNSCheckChild resolves one /K child and recurses into it, skipping
 // references already walked.
-func walkNSCheckChild(ctx context.Context, doc *document.Document, kid ast.PdfObject, defaultNSURI string, nsArr ast.PdfArray, roleMap map[ast.PdfName]ast.PdfName, results *[]Violation, visited map[int]bool, depth int) {
+func walkNSCheckChild(ctx context.Context, doc *document.Document, kid ast.PdfObject, defaultNSURI string, nsRoleMaps map[string]ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName, results *[]Violation, visited map[int]bool, depth int) {
 	if ref, ok := kid.(ast.PdfIndirectRef); ok {
 		if visited[ref.ObjectNum] {
 			return
@@ -340,42 +378,7 @@ func walkNSCheckChild(ctx context.Context, doc *document.Document, kid ast.PdfOb
 	if err != nil || d == nil {
 		return
 	}
-	walkNSCheck(ctx, doc, d, defaultNSURI, nsArr, roleMap, results, visited, depth+1)
-}
-
-// typeMapsToStandardNS checks if a structure type in a given namespace has a
-// RoleMapNS entry that ultimately resolves to a standard namespace.
-func typeMapsToStandardNS(ctx context.Context, doc *document.Document, typeName, nsURI string, nsArr ast.PdfArray) bool {
-	// Find the namespace dict for nsURI.
-	for _, nsObj := range nsArr {
-		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
-		if nsDict == nil {
-			continue
-		}
-		ns, _ := document.ResolveString(ctx, doc, nsDict["NS"])
-		if string(ns) != nsURI {
-			continue
-		}
-		rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"])
-		if rmns == nil {
-			return false
-		}
-		mappingObj, ok := rmns[ast.PdfName(typeName)]
-		if !ok {
-			return false
-		}
-		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
-		if len(arr) < 2 {
-			return false
-		}
-		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
-		if targetNSDict == nil {
-			return false
-		}
-		targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
-		return standardNamespaceURIs[string(targetURI)]
-	}
-	return false
+	walkNSCheck(ctx, doc, d, defaultNSURI, nsRoleMaps, roleMap, results, visited, depth+1)
 }
 
 // maxRoleMapNSDepth bounds the namespace role-map (/RoleMapNS) and legacy
