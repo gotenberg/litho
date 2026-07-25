@@ -94,11 +94,14 @@ def lzw_encode(data, early_change=1):
     return bytes(out)
 
 
-def xmp_packet(part=None, conformance=None, rev=None, ua_part=None, extra=""):
+def xmp_packet(
+    part=None, conformance=None, rev=None, ua_part=None, ua_rev=None, extra=""
+):
     """Build a minimal XMP packet, optionally carrying a conformance claim.
 
     Passing no identifiers yields a well-formed packet with no claim,
     which is what the "wrong claim" fixtures need as a starting point.
+    ua_rev feeds pdfuaid:rev, which ISO 14289-2, 5 requires to be 2024.
     """
     ids = []
     if part is not None:
@@ -109,6 +112,8 @@ def xmp_packet(part=None, conformance=None, rev=None, ua_part=None, extra=""):
         ids.append('    <pdfaid:rev>%s</pdfaid:rev>' % rev)
     if ua_part is not None:
         ids.append('    <pdfuaid:part>%s</pdfuaid:part>' % ua_part)
+    if ua_rev is not None:
+        ids.append('    <pdfuaid:rev>%s</pdfuaid:rev>' % ua_rev)
     return (
         '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n'
         '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
@@ -162,6 +167,37 @@ def type3_font(pdf, procs, widths, first=65):
         Widths=Array(widths),
         Resources=Dictionary(),
     )
+
+
+def tounicode_cmap(pdf, mapping):
+    """Build a ToUnicode CMap stream mapping single-byte codes to code points.
+
+    mapping is a dict of {code: codepoint}. Used to steer a glyph onto a
+    Unicode Private Use Area value (ISO 14289-2, 8.4.3) or to leave a code
+    unmapped (ISO 19005-2, 6.2.11.7.2).
+    """
+    lines = [
+        "/CIDInit /ProcSet findresource begin",
+        "12 dict begin",
+        "begincmap",
+        "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def",
+        "/CMapName /Adobe-Identity-UCS def",
+        "/CMapType 2 def",
+        "1 begincodespacerange",
+        "<00> <FF>",
+        "endcodespacerange",
+        "%d beginbfchar" % len(mapping),
+    ]
+    for code in sorted(mapping):
+        lines.append("<%02X> <%04X>" % (code, mapping[code]))
+    lines += [
+        "endbfchar",
+        "endcmap",
+        "CMapName currentdict /CMap defineresource pop",
+        "end",
+        "end",
+    ]
+    return pdf.make_indirect(Stream(pdf, ("\n".join(lines) + "\n").encode("ascii")))
 
 
 def unembedded_truetype(base="/Helvetica"):
@@ -238,6 +274,7 @@ __all__ = [
     "pikepdf",
     "rgb_image",
     "save",
+    "tounicode_cmap",
     "type3_font",
     "unembedded_truetype",
     "xmp_packet",

@@ -45,13 +45,18 @@ delete a planted violation.
 
 ## Fixtures
 
-| Fixture             | Home profile | Focus                                                   |
-| ------------------- | ------------ | ------------------------------------------------------- |
-| `complex_1b.pdf`    | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG  |
-| `complex_2b.pdf`    | PDF/A-2b     | Broadest mix; annotations, optional content, filters    |
-| `complex_ua1.pdf`   | PDF/UA-1     | Structure and accessibility defects in a wired tag tree |
-| `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW      |
-| `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                  |
+| Fixture             | Home profile | Focus                                                          |
+| ------------------- | ------------ | -------------------------------------------------------------- |
+| `complex_1b.pdf`    | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG         |
+| `complex_2a.pdf`    | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language       |
+| `complex_2b.pdf`    | PDF/A-2b     | Broadest mix; annotations, optional content, filters           |
+| `complex_2u.pdf`    | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings    |
+| `complex_3b.pdf`    | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment     |
+| `complex_4.pdf`     | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps |
+| `complex_ua1.pdf`   | PDF/UA-1     | Structure and accessibility defects in a wired tag tree        |
+| `complex_ua2.pdf`   | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
+| `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
+| `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                         |
 
 ### Must-not-fire controls
 
@@ -66,6 +71,20 @@ violation but is exempt, so a firing is a false positive.
 | `complex_1b`                              | Fully conforming annotation: `F=4`, `/AP` present, no `/C`           | ISO 19005-1, 6.5.3           |
 | `complex_1b`                              | File header pinned to `%PDF-1.4`                                     | ISO 19005-1, 6.1.2           |
 | `complex_ua1`                             | `pdfuaid:part=1` present and correct                                 | ISO 14289-1, 5               |
+| `complex_ua2`                             | `/Figure` carrying `/Alt` beside one that carries none               | ISO 14289-2, 8.2.5.28.2      |
+| `complex_ua2`                             | Well-formed `/Lang` beside a malformed one                           | ISO 14289-2, 8.4.4           |
+| `complex_ua2`                             | Invisible annotation outside the structure tree                      | ISO 14289-2, 8.9.2.2         |
+| `complex_ua2`                             | `/Document` declaring the PDF 2.0 standard namespace                 | ISO 14289-2, 8.2.5.2         |
+| `complex_2a`                              | `/Document`, a standard type absent from the `/RoleMap`              | ISO 19005-2, 6.7.3.4         |
+| `complex_2a`                              | Markup annotations wrapped in `/Annot` structure elements            | ISO 14289-2, 8.9.2.3         |
+| `complex_2u`                              | `/ToUnicode` onto a plain Latin letter                               | ISO 19005-2, 6.2.11.7.2      |
+| `complex_2u`                              | Unrendered code whose glyph name maps to nothing                     | glyph rules are usage-scoped |
+| `complex_2u`                              | Private Use glyph inside a marked-content `/ActualText`              | ISO 19005-2, 6.2.11.7.3      |
+| `complex_3b`                              | Attachment correct in all four respects, reachable from `/AF`        | ISO 19005-3, 6.8             |
+| `complex_4`                               | File header pinned to `%PDF-2.0`                                     | ISO 19005-4, 6.1.2           |
+| `complex_4`                               | Page-level `/OutputIntents`, a legal PDF 2.0 construct               | ISO 32000-2, 14.11.5         |
+| `complex_4`                               | `/AFRelationship` on one file specification and not the other        | ISO 19005-4, 6.9             |
+| `complex_4`                               | Second image carrying `/Interpolate false`                           | ISO 19005-4, 6.2.7.1         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -75,13 +94,19 @@ zero-area annotation.
 ## Expected firing sets
 
 Counts are distinct rule classes (`clause/test`) reported by litho. litho and
-veraPDF agree exactly on the set in every cell except the one noted below.
+veraPDF agree exactly on the set in every cell except the two marked `*`,
+which are covered under [Known divergences](#known-divergences).
 
 | Fixture             | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
 | ------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
 | `complex_1b.pdf`    | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
+| `complex_2a.pdf`    | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
 | `complex_2b.pdf`    | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
-| `complex_ua1.pdf`   | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 9    |
+| `complex_2u.pdf`    | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
+| `complex_3b.pdf`    | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
+| `complex_4.pdf`     | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
+| `complex_ua1.pdf`   | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
+| `complex_ua2.pdf`   | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
 | `forbidden_mix.pdf` | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `megafont_2b.pdf`   | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 
@@ -108,6 +133,63 @@ no appearance stream. `6.4.2/2` `/NeedsRendering`. `6.5.1/1` JavaScript action.
 `6.6.2.1/1` no XMP. `6.8/5` embedded file. `6.9/1` optional content
 configuration. `6.9/3` `/Order`. `6.9/4` `/AS`.
 
+### complex_2a.pdf at PDF/A-2a
+
+Level-A additions on top of the part-2 layer. `6.7.3.4/1` `/Unmapped` is in no
+role mapping. `6.7.3.4/2` `/MyType` loops through `/Foo` and `/Bar`.
+`6.7.3.4/3` the standard type `/Div` is remapped to `/Custom`. `6.7.4/1` a
+structure element `/Lang` of `english!`. Part-2 layer: `6.1.7.2/1` LZWDecode.
+`6.2.4.3/2` DeviceRGB. `6.2.4.3/3` DeviceCMYK. `6.2.4.3/4` DeviceGray.
+`6.2.6/1` invalid `ri`. `6.2.8/3` `/Interpolate true`. `6.2.9/3` PostScript
+XObject. `6.2.10/2` transparency group with no blending colour space.
+`6.2.11.4.1/1` font not embedded. `6.3.1/1` `/Movie` annotation. `6.3.2/2`
+annotation flags. `6.3.3/1` no appearance stream. `6.4.2/2` `/NeedsRendering`.
+`6.5.1/1` JavaScript action. `6.9/1` optional content configuration. `6.9/3`
+`/Order`. `6.9/4` `/AS`.
+
+### complex_2u.pdf at PDF/A-2u
+
+`6.2.11.7.2/1` a rendered glyph with no Unicode mapping. `6.2.11.7.2/2` a
+`/ToUnicode` entry mapping onto U+0000. The rest is the part-2 layer:
+`6.1.7.2/1` LZWDecode. `6.2.4.3/2` DeviceRGB. `6.2.4.3/3` DeviceCMYK.
+`6.2.4.3/4` DeviceGray. `6.2.6/1` invalid `ri`. `6.2.8/3` `/Interpolate true`.
+`6.2.9/3` PostScript XObject. `6.2.10/2` transparency group. `6.2.11.4.1/1`
+font not embedded. `6.3.1/1` `/Movie` annotation. `6.3.2/2` annotation flags.
+`6.3.3/1` no appearance stream. `6.4.2/2` `/NeedsRendering`. `6.5.1/1`
+JavaScript action. `6.6.2.1/1` no XMP. `6.9/1` optional content configuration.
+`6.9/3` `/Order`. `6.9/4` `/AS`. The Private Use mapping is silent here and
+fires `6.2.11.7.3/1` at PDF/A-2a, which is where that rule lives.
+
+### complex_3b.pdf at PDF/A-3b
+
+One attachment per test, each correct in every other respect: `6.8/1` no MIME
+type on the embedded file stream. `6.8/2` no `/UF`. `6.8/3` no
+`/AFRelationship`. `6.8/4` an attachment reachable only through the
+`/EmbeddedFiles` name tree. Part-2 layer: `6.1.7.2/1` LZWDecode. `6.2.4.3/2`
+DeviceRGB. `6.2.4.3/3` DeviceCMYK. `6.2.4.3/4` DeviceGray. `6.2.6/1` invalid
+`ri`. `6.2.8/3` `/Interpolate true`. `6.2.9/3` PostScript XObject. `6.2.10/2`
+transparency group. `6.2.11.4.1/1` font not embedded. `6.3.1/1` `/Movie`
+annotation. `6.3.2/2` annotation flags. `6.3.3/1` no appearance stream.
+`6.4.2/2` `/NeedsRendering`. `6.5.1/1` JavaScript action. `6.9/1` optional
+content configuration. `6.9/3` `/Order`. `6.9/4` `/AS`.
+
+### complex_4.pdf at PDF/A-4
+
+`6.1.3/4` a document information dictionary with no `/PieceInfo` to license
+it. `6.1.3/5` that dictionary holds `/Title` rather than `/ModDate`. `6.2.4.3/2`
+DeviceRGB. `6.2.4.3/3` DeviceCMYK. `6.2.4.3/4` DeviceGray. `6.2.5/1` `/TR` in
+a graphics state dictionary. `6.2.5/2` `/TR2` other than `/Default`.
+`6.2.7.1/3` `/Interpolate true`. `6.2.8.2/1` reference XObject. `6.2.9/2` page
+transparency with no output intent and no group colour space. `6.2.10.4.1/1`
+font not embedded. `6.3.1/1` `/Movie` is not in the ISO 32000-2 annotation
+table. `6.3.3/1` no appearance stream. `6.4.2/2` `/NeedsRendering`. `6.6.1/1`
+`/Launch` action, still banned where JavaScript is not. `6.7.3/5` `pdfaid:rev`
+is 2019. `6.9/1` no MIME type on an embedded file stream. `6.9/3` an
+attachment that is not itself a conforming file. `6.9/4` no
+`/AFRelationship`. `6.10/1` optional content configuration with no `/Name`.
+`6.10/3` `/Order` missing an optional content group. `6.11/2` `/PresSteps` on
+a page. `6.12/1` `/Requirements` in the catalog.
+
 ### complex_ua1.pdf at PDF/UA-1
 
 `7.1/3` untagged real content. `7.1/6` circular `/RoleMap`. `7.1/10` no
@@ -116,6 +198,21 @@ configuration. `6.9/3` `/Order`. `6.9/4` `/AS`.
 level skip (H1 to H3). `7.18.1/2` annotation with no `/Contents`. `7.18.3/1`
 page with annotations and no `/Tabs`. `7.18.5/2` link with no alternate
 description. `7.21.4.1/1` font not embedded.
+
+### complex_ua2.pdf at PDF/UA-2
+
+`5/2` `pdfuaid:part` is 1. `5/5` `pdfuaid:rev` is 2023. `8.2.1/2` a structure
+element with no `/P`. `8.2.2/1` untagged real content. `8.2.4/1` `/Gamma` is
+in a non-standard namespace and in no role mapping. `8.2.4/2` `/MyType` loops
+through `/Foo` and `/Bar`. `8.2.4/3` `/Alpha` is role mapped to another type
+in its own namespace. `8.2.5.28.2/1` a `/Figure` with no `/Alt`. `8.4.3/1`
+Private Use text with no `/ActualText`. `8.4.4/1` no catalog `/Lang`.
+`8.4.4/2` a structure element `/Lang` of `english!`. `8.4.5.5.1/1` font not
+embedded. `8.7/1` an optional content configuration with no `/Name`. `8.7/2`
+`/AS` in the default configuration. `8.8/2` a `/GoTo` action onto a page
+destination rather than a structure destination. `8.9.2.2/1` an invisible
+annotation that is not an artifact. `8.9.3.3/1` a page with annotations and no
+`/Tabs`.
 
 ### forbidden_mix.pdf at PDF/A-2b
 
@@ -152,6 +249,45 @@ breaks exactly one rule, so none carries both a wrong `pdfuaid:part` and a
 missing `pdfuaid:rev`. Re-running the fix against all 138 PDF/UA-2 corpus files
 changes nothing. A single-rule corpus is structurally unable to expose an
 early return, which is the whole argument for these fixtures.
+
+## Known divergences
+
+Two cells in the table above disagree, both on `complex_ua2.pdf` and both
+rooted in the same construct: the structure element that carries no `/P`.
+
+**`8.2.1/2` at PDF/UA-2 and `7.1/12` at PDF/UA-1.** Both rules read
+`containsParent == true`. litho reports the element; veraPDF reports nothing.
+veraPDF drops a `/P`-less element from the structure tree instead of
+validating it, which its own output confirms: it reports that element's
+marked content under `8.2.2/1` as untagged real content. ISO 14289-2, 8.2.1
+requires the `/P` entry, so litho is right and veraPDF has the gap. The
+construct stays because it is the only thing in the corpus that reaches
+either rule.
+
+**`7.2/34` at PDF/UA-1.** veraPDF reports it, litho does not. This one is a
+litho gap, not a veraPDF one, and it is the second masking bug this corpus
+found. See the section below.
+
+## Second bug found: PDF/UA-1 language coverage
+
+`checkStructureTreeLangCoverage` in
+`pkg/internal/compliance/accessibility_lang.go` computes a document-wide
+`anyLangFound` latch: true as soon as any one structure element carries a
+`/Lang`. The per-element report is then gated on `effectiveLang == "" &&
+!anyLangFound`, so a single `/Lang` anywhere in the tree silences ISO 14289-1
+7.2 t34 for every element that has none. veraPDF evaluates each text item on
+its own (`gContainsCatalogLang == true || Lang != null`).
+
+The A/B that proves it is masking rather than an absent implementation: take
+two structure elements, both fully tagged, with no catalog `/Lang`. Put
+`/Lang en-US` on the first and litho reports nothing; remove that one entry
+and litho reports t34 on both. veraPDF reports the uncovered element either
+way. The only difference between the two files is a `/Lang` on an unrelated
+sibling.
+
+The same latch is why `complex_ua2.pdf` diverges: its untagged real content
+has no determinable language, and litho's t34 walk visits structure elements
+only.
 
 ## Scope
 
