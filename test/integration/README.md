@@ -24,9 +24,15 @@ test/integration/
 │   ├── pdf20/
 │   │   ├── download.sh
 │   │   └── manifest.json
-│   └── pdfcpu/
-│       ├── download.sh
-│       └── manifest.json
+│   ├── pdfcpu/
+│   │   ├── download.sh
+│   │   └── manifest.json
+│   └── litho/                  Self-authored fixtures, committed (not downloaded)
+│       ├── download.sh         Copies pdfs/ into the output dir
+│       ├── manifest.json
+│       ├── build/*.py          pikepdf builders that regenerate the fixtures
+│       ├── pdfs/*.pdf
+│       └── README.md           Per-fixture expected firing set
 ├── testdata/<corpus>/          Provisioned output (gitignored)
 │   ├── pdfs/*.pdf
 │   ├── claims.csv              Auto-mode only: <basename>,<profile> per claimed PDF
@@ -101,6 +107,7 @@ Not every corpus runs every feature. Each corpus is the oracle for the feature i
 | `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | real-world canary; compliance/remediation use each file's claim |
 | `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
 | `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | ✓           | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
+| `litho`   | —    | —        | ✓          | ✓           | —         | —     | —     | —           | rule-masking oracle; hand-built multi-violation fixtures        |
 
 ### Comparison notes
 
@@ -127,6 +134,7 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 | `govdocs` | ~1,500 PDFs (1 fixture per claim) | Govdocs1 random-sample of five fixed thread archives (real-world PDFs) |
 | `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)       |
 | `pdfcpu`  | ~50 PDFs (1 fixture each)         | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)         |
+| `litho`   | 5 PDFs × 8 profiles               | Self-authored, committed in-tree; see `corpus/litho/README.md`         |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
@@ -138,7 +146,9 @@ Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after downlo
 
 Known limitation: the current govdocs sample (1,091 files) and the pdf20 examples contain zero PDF/A or PDF/UA claims (verified by byte-scanning for `pdfaid`), so their `claims.csv` files are legitimately empty and the compliance/remediation features run no fixtures there. Real-world compliance coverage needs a corpus sampled from documents that actually claim a profile; until one is added, the verapdf corpus is the only compliance oracle.
 
-Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`; nothing else changes.
+Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`, then adding the matching `COPY <name>/ ./<name>/` and `chmod +x <name>/download.sh` lines to `corpus/Dockerfile` so the provisioning image can reach the script. Nothing else changes: the CLI discovers corpora by scanning for `manifest.json`.
+
+A new corpus becomes regression-gated only after the next `make corpus-baseline` commit; until then it runs and scores but cannot fail `make corpus-check`.
 
 ## Manifest schema
 

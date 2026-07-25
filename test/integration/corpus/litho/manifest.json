@@ -1,0 +1,21 @@
+{
+  "name": "litho",
+  "source": "litho",
+  "pdf_root": "pdfs",
+  "profile_mode": "expand",
+  "profiles": [
+    "PDF_A-1b",
+    "PDF_A-2a",
+    "PDF_A-2b",
+    "PDF_A-2u",
+    "PDF_A-3b",
+    "PDF_A-4",
+    "PDF_UA-1",
+    "PDF_UA-2"
+  ],
+  "goldens": {
+    "compliance": "goldens/compliance",
+    "remediation": "goldens/compliance",
+    "remediation-aggressive": "goldens/compliance"
+  }
+}

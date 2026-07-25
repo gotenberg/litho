@@ -85,6 +85,9 @@ COPY govdocs/ ./govdocs/
 COPY pdf20/ ./pdf20/
 COPY pdfcpu/ ./pdfcpu/
 COPY facturx/ ./facturx/
+# The litho corpus ships its fixtures in git rather than downloading them,
+# so this COPY carries the PDFs themselves into the image.
+COPY litho/ ./litho/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/run-mustang.sh \
@@ -97,6 +100,7 @@ RUN chmod +x entrypoint.sh \
   govdocs/download.sh \
   pdf20/download.sh \
   pdfcpu/download.sh \
-  facturx/download.sh
+  facturx/download.sh \
+  litho/download.sh
 
 ENTRYPOINT ["/work/entrypoint.sh"]
