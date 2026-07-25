@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -95,45 +96,15 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			continue
 		}
 
-		stream, err := document.ResolveStream(ctx, doc, destProfileObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.color: cannot resolve DestOutputProfile stream", "index", i, "error", err)
-			continue
-		}
-
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			doc.Logger.Debug("compliance.color: cannot decode ICC profile stream", "index", i, "error", err)
-			*results = append(*results, failf(outputIntentICCRule(part), "OutputIntent[%d]: failed to decode ICC profile", i)...)
-			continue
-		}
-
-		hdr, ok := parseICCHeader(data)
+		hdr, ok := checkICCOutputProfileHeader(ctx, doc, destProfileObj, part, fmt.Sprintf("OutputIntent[%d]", i), results)
 		if !ok {
-			*results = append(*results, failf(outputIntentICCRule(part), "OutputIntent[%d]: ICC profile header too short", i)...)
 			continue
 		}
 
-		// Validate device class.
-		if !validICCDeviceClasses[hdr.deviceClass] {
-			*results = append(*results, failf(outputIntentICCRule(part),
-				"OutputIntent[%d]: invalid device class %q (expected prtr or mntr)", i, hdr.deviceClass)...)
-		}
-
-		// Validate colour space.
-		if !validICCColorSpaces[hdr.colorSpace] {
-			*results = append(*results, failf(outputIntentICCRule(part),
-				"OutputIntent[%d]: invalid colour space %q (expected GRAY, RGB  or CMYK)", i, hdr.colorSpace)...)
-		} else if isPDFAIntent {
-			// Only PDF/A OutputIntents grant device CS coverage.
+		// Only PDF/A OutputIntents grant device CS coverage.
+		if isPDFAIntent && validICCColorSpaces[hdr.colorSpace] {
 			iccColorSpace = hdr.colorSpace
 			hasValidICC = true
-		}
-
-		// Validate ICC profile version (must be 2 or 4, not 5+).
-		if hdr.version != 2 && hdr.version != 4 {
-			*results = append(*results, failf(outputIntentICCRule(part),
-				"OutputIntent[%d]: invalid ICC profile version %d (expected 2 or 4)", i, hdr.version)...)
 		}
 
 		// §6.2.2 t2 / §6.2.3 t2: multiple OutputIntents must be consistent.
@@ -164,6 +135,123 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 	}
 
 	return iccColorSpace, hasValidICC
+}
+
+// checkICCOutputProfileHeader validates the ICC profile stream referenced by an
+// output intent's /DestOutputProfile: device class prtr or mntr, colour space
+// GRAY, RGB or CMYK, ICC major version below 5 (ISO 19005-1 §6.2.2 t1,
+// ISO 19005-2/3/4 §6.2.3 t1). label locates the intent in every message.
+// It returns the parsed header and whether the profile decoded and parsed.
+func checkICCOutputProfileHeader(ctx context.Context, doc *document.Document, destProfileObj ast.PdfObject, part int, label string, results *[]Violation) (iccProfileHeader, bool) {
+	stream, err := document.ResolveStream(ctx, doc, destProfileObj)
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot resolve DestOutputProfile stream", "intent", label, "error", err)
+		return iccProfileHeader{}, false
+	}
+
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot decode ICC profile stream", "intent", label, "error", err)
+		*results = append(*results, failf(outputIntentICCRule(part), "%s: failed to decode ICC profile", label)...)
+		return iccProfileHeader{}, false
+	}
+
+	hdr, ok := parseICCHeader(data)
+	if !ok {
+		*results = append(*results, failf(outputIntentICCRule(part), "%s: ICC profile header too short", label)...)
+		return iccProfileHeader{}, false
+	}
+
+	if !validICCDeviceClasses[hdr.deviceClass] {
+		*results = append(*results, failf(outputIntentICCRule(part),
+			"%s: invalid device class %q (expected prtr or mntr)", label, hdr.deviceClass)...)
+	}
+
+	if !validICCColorSpaces[hdr.colorSpace] {
+		*results = append(*results, failf(outputIntentICCRule(part),
+			"%s: invalid colour space %q (expected GRAY, RGB  or CMYK)", label, hdr.colorSpace)...)
+	}
+
+	if hdr.version != 2 && hdr.version != 4 {
+		*results = append(*results, failf(outputIntentICCRule(part),
+			"%s: invalid ICC profile version %d (expected 2 or 4)", label, hdr.version)...)
+	}
+
+	return hdr, true
+}
+
+// checkPageOutputIntents applies ISO 19005-4 §6.2.3 to page-level
+// /OutputIntents arrays. PDF 2.0 admits /OutputIntents in a page dictionary
+// (ISO 32000-2:2020, 14.11.5), so the clause governs those arrays exactly as it
+// governs the catalog's. Parts 1-3 derive from PDF 1.4/1.7, where a page
+// dictionary has no /OutputIntents entry, so they stay catalog-only; veraPDF
+// 1.30.2 likewise reports §6.2.3 against page output intents for flavour 4
+// alone.
+//
+// Scope matches the profile rules: t1 and t3 apply to every output intent
+// whatever its /S subtype, and t2 compares entries within one array, so a page
+// array is never checked against the catalog array.
+func checkPageOutputIntents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) {
+	if part != 4 {
+		return
+	}
+
+	for pageIdx, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return
+		}
+
+		oiObj, ok := page["OutputIntents"]
+		if !ok {
+			continue
+		}
+
+		intents, err := document.ResolveArray(ctx, doc, oiObj)
+		if err != nil || len(intents) == 0 {
+			doc.Logger.Debug("compliance.color: cannot resolve page OutputIntents", "page", pageIdx+1, "error", err)
+			continue
+		}
+
+		var firstProfileRef ast.PdfObject
+
+		for i, intentObj := range intents {
+			intent, err := document.ResolveDict(ctx, doc, intentObj)
+			if err != nil || intent == nil {
+				doc.Logger.Debug("compliance.color: cannot resolve page OutputIntent dict", "page", pageIdx+1, "index", i, "error", err)
+				continue
+			}
+
+			label := fmt.Sprintf("page %d OutputIntent[%d]", pageIdx+1, i)
+
+			// §6.2.3 t3: /DestOutputProfileRef shall not appear in any output
+			// intent dictionary (ISO 32000-2:2020, 14.11.5, Table 401).
+			if _, has := intent["DestOutputProfileRef"]; has {
+				*results = append(*results, failf(Rule_19005_4_6_2_3_t03,
+					"%s: contains forbidden /DestOutputProfileRef", label)...)
+			}
+
+			destProfileObj, ok := intent["DestOutputProfile"]
+			if !ok {
+				continue
+			}
+
+			if _, ok := checkICCOutputProfileHeader(ctx, doc, destProfileObj, part, label, results); !ok {
+				continue
+			}
+
+			// §6.2.3 t2: every entry of one /OutputIntents array that carries
+			// /DestOutputProfile shall name the same indirect object.
+			if firstProfileRef == nil {
+				firstProfileRef = destProfileObj
+				continue
+			}
+
+			if !sameIndirectRef(firstProfileRef, destProfileObj) {
+				*results = append(*results, failf(outputIntentConsistencyRule(part),
+					"%s: DestOutputProfile does not reference same object as first entry", label)...)
+			}
+		}
+	}
 }
 
 // resolveOutputIntentICCInfo returns the indirect reference, parsed header, decoded

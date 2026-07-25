@@ -10,7 +10,8 @@ import (
 )
 
 // checkColorGroup validates colour-related PDF/A requirements:
-//   - §6.2.2/6.2.3: OutputIntent ICC profiles
+//   - §6.2.2/6.2.3: OutputIntent ICC profiles, in the catalog and (PDF/A-4
+//     only) on pages
 //   - §6.2.3.3 / §6.2.4.3: device-dependent colour space restrictions
 //   - §6.2.3.2 / §6.2.4.2: ICCBased profile restrictions
 func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
@@ -26,6 +27,7 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	var results []Violation
 
 	iccColorSpace, hasICC := checkOutputIntentICC(ctx, doc, catalog, part, &results)
+	checkPageOutputIntents(ctx, doc, catalog, part, &results)
 	checkDeviceColorSpaces(ctx, doc, catalog, part, hasICC, iccColorSpace, &results)
 	checkICCBasedProfiles(ctx, doc, catalog, part, &results)
 
