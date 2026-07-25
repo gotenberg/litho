@@ -168,15 +168,21 @@ func checkPDFUAIdentificationIn(ctx context.Context, xmpData []byte, profile str
 		if !containsPDFUAIDProperty(ctx, xmpData) {
 			return fail(Rule_14289_2_5_t01, "pdfuaid:part missing from XMP")
 		}
+		// ISO 14289-2 §5 states the part and rev requirements independently,
+		// and veraPDF evaluates its t02 and t05 tests separately against the
+		// same XMP package. Accumulate both: returning on a wrong part hid a
+		// missing pdfuaid:rev, so a file failing both was reported as failing
+		// only the part rule.
+		var violations []Violation
 		if !containsPDFUAIDPart(ctx, xmpData, "2") {
-			return fail(Rule_14289_2_5_t02, "pdfuaid:part is not 2")
+			violations = append(violations, fail(Rule_14289_2_5_t02, "pdfuaid:part is not 2")...)
 		}
-		// ISO 14289-2 §5 also requires pdfuaid:rev=2024. A present-but-wrong
-		// value is reported by checkPDFUAIDPrefixes (t05); detect the missing
-		// case here, where pdfuaid:part=2 confirms the file claims UA-2.
+		// A present-but-wrong pdfuaid:rev is reported by checkPDFUAIDPrefixes
+		// (t05); detect the missing case here.
 		if !containsPDFUAIDRev(ctx, xmpData) {
-			return fail(Rule_14289_2_5_t05, "pdfuaid:rev missing")
+			violations = append(violations, fail(Rule_14289_2_5_t05, "pdfuaid:rev missing")...)
 		}
+		return violations
 	}
 
 	return nil

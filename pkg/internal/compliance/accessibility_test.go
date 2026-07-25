@@ -471,12 +471,33 @@ func TestCheckPDFUAIdentificationIn(t *testing.T) {
 			wantRules: nil,
 		},
 		{
-			name: "UA-2 part not 2 fires t02",
+			// ISO 14289-2 §5 states the part and rev requirements
+			// independently, so a packet failing both reports both. Returning
+			// after the part rule hid the missing rev, which no single-rule
+			// conformance fixture exposes: they never break two rules at once.
+			name: "UA-2 part not 2 and rev missing fires t02 and t05",
 			body: `<rdf:Description xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
   <pdfuaid:part>1</pdfuaid:part>
 </rdf:Description>`,
 			profile:   "PDF/UA-2",
+			wantRules: []Rule{Rule_14289_2_5_t02, Rule_14289_2_5_t05},
+		},
+		{
+			name: "UA-2 part not 2 with valid rev fires t02 only",
+			body: `<rdf:Description xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
+  <pdfuaid:part>1</pdfuaid:part>
+  <pdfuaid:rev>2024</pdfuaid:rev>
+</rdf:Description>`,
+			profile:   "PDF/UA-2",
 			wantRules: []Rule{Rule_14289_2_5_t02},
+		},
+		{
+			name: "UA-2 part 2 with rev missing fires t05 only",
+			body: `<rdf:Description xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
+  <pdfuaid:part>2</pdfuaid:part>
+</rdf:Description>`,
+			profile:   "PDF/UA-2",
+			wantRules: []Rule{Rule_14289_2_5_t05},
 		},
 		{
 			name: "UA-1 part=1 passes (rev not required)",
