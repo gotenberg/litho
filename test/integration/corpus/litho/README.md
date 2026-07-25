@@ -265,29 +265,37 @@ construct stays because it is the only thing in the corpus that reaches
 either rule.
 
 **`7.2/34` at PDF/UA-1.** veraPDF reports it, litho does not. This one is a
-litho gap, not a veraPDF one, and it is the second masking bug this corpus
-found. See the section below.
+litho gap, not a veraPDF one. The masking bug behind it is fixed; what
+remains is a separate facet of the same rule, described below.
 
-## Second bug found: PDF/UA-1 language coverage
+## Second bug found: PDF/UA-1 language coverage (fixed, one facet remains)
 
 `checkStructureTreeLangCoverage` in
-`pkg/internal/compliance/accessibility_lang.go` computes a document-wide
-`anyLangFound` latch: true as soon as any one structure element carries a
-`/Lang`. The per-element report is then gated on `effectiveLang == "" &&
-!anyLangFound`, so a single `/Lang` anywhere in the tree silences ISO 14289-1
-7.2 t34 for every element that has none. veraPDF evaluates each text item on
+`pkg/internal/compliance/accessibility_lang.go` computed a document-wide
+`anyLangFound` latch: true as soon as any one structure element carried a
+`/Lang`. The per-element report was gated on `effectiveLang == "" &&
+!anyLangFound`, so a single `/Lang` anywhere in the tree silenced ISO 14289-1
+7.2 t34 for every element that had none. veraPDF evaluates each text item on
 its own (`gContainsCatalogLang == true || Lang != null`).
 
-The A/B that proves it is masking rather than an absent implementation: take
-two structure elements, both fully tagged, with no catalog `/Lang`. Put
-`/Lang en-US` on the first and litho reports nothing; remove that one entry
-and litho reports t34 on both. veraPDF reports the uncovered element either
-way. The only difference between the two files is a `/Lang` on an unrelated
-sibling.
+The A/B that proved it masking rather than an absent implementation: two
+structure elements, both fully tagged, no catalog `/Lang`. Put `/Lang en-US`
+on the first and litho reported nothing; remove that one entry and litho
+reported t34 on both. veraPDF reports the uncovered element either way. The
+only difference between the two files is a `/Lang` on an unrelated sibling.
 
-The same latch is why `complex_ua2.pdf` diverges: its untagged real content
-has no determinable language, and litho's t34 walk visits structure elements
-only.
+Fixed by dropping the latch, inheriting language by `/Lang` **presence** up
+the `/P` chain, and restricting the subject to elements that own text, via
+page `/StructParents` to the `ParentTree`. Scoping the subject is required,
+not incidental: a `/Figure` whose marked content draws only an image XObject
+is an `SEImageXObjectItem` to veraPDF and never reaches t34, which no
+structural test can tell without reading the content stream.
+
+The remaining `7.2/34` divergence on `complex_ua2.pdf` is a **different
+facet** of the same rule, not the latch: that file's real content sits
+outside the structure tree entirely, and litho's t34 walk visits structure
+elements only. Closing it means reaching content the tree never references,
+which is a larger change and is deliberately not attempted here.
 
 ## Scope
 
