@@ -63,47 +63,155 @@ func iso32005BuildIndexes() {
 // cycle rule is checked separately, so eight hops is generous.
 const maxRoleMapHops = 8
 
-// iso32005Key normalizes a structure type for table lookups, following
-// the walk's RoleMap index until no mapping remains. Table 5 rules apply
-// to role-map-resolved standard types, so the role map is consulted FIRST
-// even for standard-named types: a RoleMap entry /Document /Book makes the
-// element a Book, not a Document, so a Document-named element that role-maps
-// away no longer satisfies "StructTreeRoot shall contain exactly one
-// Document" (golden PDF_UA-1__7.1-t07-fail-a is exactly that shape).
-// Numbered headings collapse to the profile's "Hn" key. Returns "" when
-// the resolved type is not standard, which skips the checks rather than
-// guessing.
-func iso32005Key(state *walkState, t string) string {
-	name := ast.PdfName(t)
+// iso32005NSPDF17 is the PDF 1.7 standard structure namespace URI
+// (ISO 32000-2:2020, 14.8.6). It is the one explicit namespace whose
+// elements still resolve through the structure tree root's legacy /RoleMap.
+const iso32005NSPDF17 = "http://iso.org/pdf/ssn"
+
+// iso32005Ref is a structure type together with the namespace it was
+// declared in. ns is the resolved /NS dictionary and is nil for a legacy
+// element that carries no /NS entry; uri caches the namespace's /NS string.
+type iso32005Ref struct {
+	name ast.PdfName
+	ns   ast.PdfDict
+	uri  string
+}
+
+// iso32005Key resolves an element's structure type to its ISO/TS 32005
+// Table 5 key. Table 5 governs standard structure types, so a type is first
+// mapped to the standard type it stands for (ISO 32000-2:2020, 14.8.6).
+// Numbered headings collapse to the profile's "Hn" key. Returns "" when the
+// type resolves to no standard type, which skips the Table 5 checks rather
+// than guessing: a non-standard element is outside the matrix.
+func iso32005Key(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName) string {
+	return iso32005Resolve(ctx, state, iso32005RefOf(ctx, state, elem, typeName))
+}
+
+// iso32005RefOf pairs a structure type with the namespace dictionary its
+// element declares through /NS (ISO 32000-2:2020, 14.8.6).
+func iso32005RefOf(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName) iso32005Ref {
+	ref := iso32005Ref{name: typeName}
+	nsObj, ok := elem["NS"]
+	if !ok {
+		return ref
+	}
+	ns, err := document.ResolveDict(ctx, state.doc, nsObj)
+	if err != nil || ns == nil {
+		state.doc.Logger.Debug("compliance.structure: cannot resolve structure element /NS", "error", err)
+		return ref
+	}
+	ref.ns = ns
+	if uri, uerr := document.ResolveString(ctx, state.doc, ns["NS"]); uerr == nil {
+		ref.uri = string(uri)
+	}
+	return ref
+}
+
+// iso32005Resolve walks the role map to the standard type a structure type
+// stands for, mirroring ISO 32000-2:2020, 14.8.6: the mapping is applied
+// first, and only a type with no applicable mapping (or one whose chain
+// immediately loops back on itself) stands for itself. A standard type that
+// IS remapped therefore no longer denotes that standard type; ISO 14289-2
+// §8.2.4 t4 reports the forbidden remapping separately, so Table 5 must not
+// also judge the element as if the mapping were absent.
+func iso32005Resolve(ctx context.Context, state *walkState, ref iso32005Ref) string {
+	visited := map[string]bool{ref.visitKey(): true}
+
+	next, ok := iso32005Equivalent(ctx, state, ref)
+	if !ok || visited[next.visitKey()] {
+		return iso32005StandardKey(ref.name)
+	}
 	for range maxRoleMapHops {
-		// A standard structure type must not be remapped (ISO 32000-2 §14.8.6);
-		// veraPDF ignores any legacy /RoleMap entry whose key is standard. Resolve
-		// the standard type (or a heading Hn) before following the /RoleMap so a
-		// forbidden entry like << /Document /Book >> does not hide a standard
-		// Document element and trip the Table 5 root-count check.
-		if iso32005HnRe.MatchString(string(name)) {
-			return "Hn"
+		if key := iso32005StandardKey(next.name); key != "" {
+			return key
 		}
-		if isStandardStructType(name, "PDF/UA-2") {
-			return string(name)
-		}
-		next, ok := state.roleMap[name]
-		if !ok || next == name {
+		visited[next.visitKey()] = true
+		after, aok := iso32005Equivalent(ctx, state, next)
+		if !aok || visited[after.visitKey()] {
 			return ""
 		}
-		name = next
+		next = after
 	}
 	return ""
 }
 
-// iso32005Kids resolves an element's direct /K children into resolved
-// standard-type names and reports whether any direct content items are
-// present: marked-content MCID integers, MCR dictionaries, and OBJR
-// object references all count. An OBJR is a reference to a content-bearing
-// object, so it is itself a direct content item: a Document whose only kid
-// is an OBJR contains content directly and fails Table 5's Document-content
-// rule (golden PDF_UA-1__7.18.4-t01-fail-a is that single-OBJR shape).
-func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidTypes []string, hasContent bool) {
+// visitKey identifies a type within its namespace for cycle detection.
+func (r iso32005Ref) visitKey() string { return string(r.name) + "\x00" + r.uri }
+
+// iso32005Equivalent returns the role-map target of one structure type.
+// Per ISO 32000-2:2020, 14.8.6, an element that declares a namespace is
+// remapped through that namespace's /RoleMapNS, and the structure tree
+// root's legacy /RoleMap applies only to elements in the default namespace
+// or in the PDF 1.7 namespace. A namespace that declares a /RoleMapNS
+// without an entry for the type therefore has no equivalent at all: the
+// legacy /RoleMap does not fill the gap.
+func iso32005Equivalent(ctx context.Context, state *walkState, ref iso32005Ref) (iso32005Ref, bool) {
+	if ref.ns != nil {
+		rmns, err := document.ResolveDict(ctx, state.doc, ref.ns["RoleMapNS"])
+		if err != nil || rmns == nil {
+			if ref.uri != iso32005NSPDF17 {
+				return iso32005Ref{}, false
+			}
+		} else {
+			return iso32005RoleMapNSTarget(ctx, state, rmns[ref.name])
+		}
+	}
+	target, ok := state.roleMap[ref.name]
+	if !ok {
+		return iso32005Ref{}, false
+	}
+	return iso32005Ref{name: target}, true
+}
+
+// iso32005RoleMapNSTarget reads one /RoleMapNS value, which is either a bare
+// name (the target sits in the default namespace) or a [name namespace] pair
+// (ISO 32000-2:2020, Table 353).
+func iso32005RoleMapNSTarget(ctx context.Context, state *walkState, entry ast.PdfObject) (iso32005Ref, bool) {
+	if entry == nil {
+		return iso32005Ref{}, false
+	}
+	if arr, err := document.ResolveArray(ctx, state.doc, entry); err == nil && len(arr) >= 2 {
+		name, nerr := document.ResolveName(ctx, state.doc, arr[0])
+		ns, derr := document.ResolveDict(ctx, state.doc, arr[1])
+		if nerr != nil || name == "" || derr != nil || ns == nil {
+			return iso32005Ref{}, false
+		}
+		out := iso32005Ref{name: name, ns: ns}
+		if uri, uerr := document.ResolveString(ctx, state.doc, ns["NS"]); uerr == nil {
+			out.uri = string(uri)
+		}
+		return out, true
+	}
+	name, err := document.ResolveName(ctx, state.doc, entry)
+	if err != nil || name == "" {
+		return iso32005Ref{}, false
+	}
+	return iso32005Ref{name: name}, true
+}
+
+// iso32005StandardKey maps a standard structure type to its Table 5 key,
+// collapsing numbered headings onto "Hn" (ISO 32000-2 §14.8.4.6.2).
+// Returns "" for a non-standard type.
+func iso32005StandardKey(name ast.PdfName) string {
+	if iso32005HnRe.MatchString(string(name)) {
+		return "Hn"
+	}
+	if isStandardStructType(name, "PDF/UA-2") {
+		return string(name)
+	}
+	return ""
+}
+
+// iso32005Kids resolves an element's direct /K children into Table 5 keys
+// and reports whether any direct content items are present: marked-content
+// MCID integers, MCR dictionaries, and OBJR object references all count. An
+// OBJR is a reference to a content-bearing object, so it is itself a direct
+// content item: a Document whose only kid is an OBJR contains content
+// directly and fails Table 5's Document-content rule (golden
+// PDF_UA-1__7.18.4-t01-fail-a is that single-OBJR shape). Each kid resolves
+// in its own namespace, so the kid dictionary drives the lookup rather than
+// the type name alone.
+func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidKeys []string, hasContent bool) {
 	kObj, ok := elem["K"]
 	if !ok {
 		return nil, false
@@ -126,37 +234,36 @@ func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidT
 			case "MCR", "OBJR":
 				hasContent = true
 			default:
-				if s, serr := document.ResolveName(ctx, state.doc, v["S"]); serr == nil && s != "" {
-					kidTypes = append(kidTypes, string(s))
+				s, serr := document.ResolveName(ctx, state.doc, v["S"])
+				if serr != nil || s == "" {
+					continue
+				}
+				if key := iso32005Key(ctx, state, v, s); key != "" {
+					kidKeys = append(kidKeys, key)
 				}
 			}
 		}
 	}
-	return kidTypes, hasContent
+	return kidKeys, hasContent
 }
 
 // validateISO32005 evaluates the Table 5 entries for one element of the
-// PDF/UA-2 structure walk. typeName and parentType are the element's and
-// parent's structure types as written (role-mapped or namespaced types
-// that do not resolve to a standard type are skipped, never guessed).
-func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, typeName, parentType ast.PdfName) {
+// PDF/UA-2 structure walk. typeName is the element's structure type as
+// written; parentKey is the parent's already-resolved Table 5 key, or the
+// "StructTreeRoot" sentinel for a root child. Role-mapped or namespaced
+// types that do not resolve to a standard type are skipped, never guessed.
+func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName, parentKey string) {
 	iso32005Once.Do(iso32005BuildIndexes)
 
-	selfKey := iso32005Key(state, string(typeName))
+	selfKey := iso32005Key(ctx, state, elem, typeName)
 	if selfKey == "" {
 		return
 	}
 
-	parentKey := iso32005Key(state, string(parentType))
-	if parentType == "StructTreeRoot" {
-		// The root sentinel is not a structure type; the Table 5 rows
-		// "StructTreeRoot shall not contain X" key on it literally.
-		parentKey = "StructTreeRoot"
-	}
 	if parentKey != "" {
 		if rule, forbidden := iso32005ForbiddenParents[selfKey][parentKey]; forbidden {
 			*state.results = append(*state.results,
-				failf(rule, "%s inside %s", typeName, parentType)...)
+				failf(rule, "%s inside %s", typeName, parentKey)...)
 		}
 	}
 
@@ -164,12 +271,10 @@ func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, t
 	if len(constraints) == 0 {
 		return
 	}
-	kidTypes, hasContent := iso32005Kids(ctx, state, elem)
-	counts := make(map[string]int, len(kidTypes))
-	for _, k := range kidTypes {
-		if key := iso32005Key(state, k); key != "" {
-			counts[key]++
-		}
+	kidKeys, hasContent := iso32005Kids(ctx, state, elem)
+	counts := make(map[string]int, len(kidKeys))
+	for _, k := range kidKeys {
+		counts[k]++
 	}
 	grouping := iso32005GroupingTypes[selfKey]
 
@@ -201,12 +306,10 @@ func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, t
 // entries (kidExactlyOne: the root shall contain exactly one Document).
 func validateISO32005Root(ctx context.Context, state *walkState, structTreeRoot ast.PdfDict) {
 	iso32005Once.Do(iso32005BuildIndexes)
-	kidTypes, _ := iso32005Kids(ctx, state, structTreeRoot)
-	counts := make(map[string]int, len(kidTypes))
-	for _, k := range kidTypes {
-		if key := iso32005Key(state, k); key != "" {
-			counts[key]++
-		}
+	kidKeys, _ := iso32005Kids(ctx, state, structTreeRoot)
+	counts := make(map[string]int, len(kidKeys))
+	for _, k := range kidKeys {
+		counts[k]++
 	}
 	for _, e := range iso32005ParentRules["StructTreeRoot"] {
 		if e.Kind == "kidExactlyOne" && counts[e.Child] != 1 {

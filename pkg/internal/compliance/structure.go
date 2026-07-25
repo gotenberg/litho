@@ -460,15 +460,18 @@ type walkState struct {
 	// semantics (ISO/TS 32005 Table 5) are defined over standard types.
 	roleMap map[ast.PdfName]ast.PdfName
 
-	// iso32005Parent is the effective Table 5 parent of the elements
-	// currently being walked. It differs from the walk's literal
-	// parentType in two ways the standard-type parent must reflect:
-	// children of the structure tree root carry the sentinel
-	// "StructTreeRoot", and NonStruct is transparent, so kids of a
-	// NonStruct inherit the NonStruct's own effective parent. Per
-	// ISO/TS 32005, NonStruct contents are treated as belonging to the
-	// enclosing element, so containment is evaluated against that element.
-	iso32005Parent ast.PdfName
+	// iso32005Parent is the effective Table 5 key of the parent of the
+	// elements currently being walked, already resolved through the role
+	// map by [iso32005Key]. It differs from the walk's literal parentType
+	// in two ways the standard-type parent must reflect: children of the
+	// structure tree root carry the sentinel "StructTreeRoot", and
+	// NonStruct is transparent, so kids of a NonStruct inherit the
+	// NonStruct's own effective parent. Per ISO/TS 32005, NonStruct
+	// contents are treated as belonging to the enclosing element, so
+	// containment is evaluated against that element. It is empty when the
+	// parent resolves to no standard type, which leaves the child outside
+	// every Table 5 parent-child row.
+	iso32005Parent string
 
 	// seen records every structure element visited so the walk processes each
 	// once. The structure tree is a strict tree (ISO 32000-1 §14.7.2); without
@@ -745,8 +748,8 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// kids keep the current effective parent.
 	if kObj, ok := elem["K"]; ok {
 		prevISOParent := state.iso32005Parent
-		if iso32005Key(state, string(typeName)) != "NonStruct" {
-			state.iso32005Parent = typeName
+		if selfKey := iso32005Key(ctx, state, elem, typeName); selfKey != "NonStruct" {
+			state.iso32005Parent = selfKey
 		}
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
 		state.iso32005Parent = prevISOParent
