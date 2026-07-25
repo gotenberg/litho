@@ -242,7 +242,10 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 			continue
 		}
 		expected := rawWidth * scale * 1000.0
-		pdfWidth := document.Float(widths[idx])
+		pdfWidth, wOK := widthValue(ctx, doc, widths[idx])
+		if !wOK {
+			continue
+		}
 		if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
 			continue
 		}
@@ -256,6 +259,20 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
 // charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
+// widthValue resolves a width-array entry and returns its numeric value. A
+// /Widths or /W entry may be an indirect reference (ISO 32000-1 §7.3.10);
+// [document.Float] cannot chase references, so an unresolved one reads as 0 and
+// fires a spurious width mismatch veraPDF (which resolves it) does not. ok is
+// false only for an unresolvable reference, so the caller skips it rather than
+// misreading the declared width as zero.
+func widthValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) (float64, bool) {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return 0, false
+	}
+	return document.Float(resolved), true
+}
+
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
 	// Width consistency is a property of a glyph the document actually
 	// paints: the rule compares the program advance against the declared
@@ -329,7 +346,10 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if charCode == 0 {
 			continue
 		}
-		pdfWidth := document.Float(wObj)
+		pdfWidth, wOK := widthValue(ctx, doc, wObj)
+		if !wOK {
+			continue
+		}
 		// A width outside the 32-bit integer range cannot be a real
 		// metric: it is crafted overflow input (implementation-limits
 		// fixtures write -2157483648). ISO 32000-2 §7.3.3 leaves
@@ -395,7 +415,9 @@ func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, font
 	// else /MissingWidth (default 0, ISO 32000-1 Table 111).
 	pdfWidth := simpleFontMissingWidth(ctx, doc, fontDict)
 	if firstChar <= 0 && -firstChar < len(widths) {
-		pdfWidth = document.Float(widths[-firstChar])
+		if wv, wOK := widthValue(ctx, doc, widths[-firstChar]); wOK {
+			pdfWidth = wv
+		}
 	}
 	if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
 		return nil
@@ -591,7 +613,11 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		if !ok {
 			continue
 		}
-		pdfWidth := document.Float(wObj) * fmScale
+		pdfWidth, wOK := widthValue(ctx, doc, wObj)
+		if !wOK {
+			continue
+		}
+		pdfWidth *= fmScale
 		glyphWidth := cpWidth * fmScale
 		if math.Abs(pdfWidth-glyphWidth) > widthTolerance {
 			return failf(rule, "font %s on page %d: char %d (%s) width mismatch (PDF=%.1f, glyph=%.1f)",
@@ -679,8 +705,8 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if gid == 0 {
 					continue
 				}
-				pdfWidth := document.Float(wEntry)
-				if pdfWidth == 0 {
+				pdfWidth, wOK := widthValue(ctx, doc, wEntry)
+				if !wOK || pdfWidth == 0 {
 					continue
 				}
 				// Out-of-int32-range widths are crafted overflow input,
@@ -706,9 +732,9 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			if i >= len(wArr) {
 				break
 			}
-			pdfWidth := document.Float(wArr[i])
+			pdfWidth, wOK := widthValue(ctx, doc, wArr[i])
 			i++
-			if pdfWidth == 0 {
+			if !wOK || pdfWidth == 0 {
 				continue
 			}
 			// Out-of-int32-range widths are crafted overflow input,
