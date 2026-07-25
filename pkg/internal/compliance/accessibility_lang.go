@@ -114,8 +114,14 @@ func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catal
 // operator carries a /Lang entry. veraPDF derives an SETextItem's language from
 // such inline tags, so their presence, even when the tag is empty or malformed
 // (which §7.2 t29 reports separately), makes the language determinable for the
-// §7.2 t34 coverage rule. The coverage check must honour them or it falsely
-// fires t34 on files whose only /Lang is inline.
+// §7.2 t34 coverage rule.
+//
+// The answer is document-wide on purpose. veraPDF scopes an inline tag to the
+// marked-content sequence that carries it, but litho decides §7.2 t34 from the
+// structure tree and does not map a structure element back to the BDC that
+// wraps its marked-content identifier. Attributing an inline tag to the wrong
+// element would report a violation that veraPDF does not, so the check stays on
+// the safe side: one inline /Lang anywhere suppresses t34 for the document.
 func documentHasMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
 	found := false
 	forEachMarkedContentLang(ctx, doc, catalog, func(_ int, _ string) bool {
@@ -338,63 +344,44 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		return failf(validRule, "lang=%s, StructTreeRoot", rootLang)
 	}
 
-	// First pass: check if ANY element in the tree has /Lang. If so, language
-	// is at least partially determinable. Elements without structure-level /Lang
-	// may still have language set via BDC marked content operators in the content
-	// stream, which litho does not currently parse. To avoid false positives on
-	// files that use inline BDC /Lang, coverage violations only fire when the
-	// entire tree is devoid of /Lang.
-	anyLangFound := rootLang != ""
-	if !anyLangFound {
-		walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
-			if anyLangFound {
-				return
-			}
-			// A present /Lang makes the language determinable (veraPDF: Lang !=
-			// null), even when empty. An empty value is still reported as invalid
-			// by t29, but it must not also count as undeterminable for t34.
-			if resolveNonEmptyLang(ctx, doc, elem) != "" || langPresentButEmpty(ctx, doc, elem) {
-				anyLangFound = true
-			}
-		})
-	}
 	// A /Lang set inline via a BDC/DP marked-content operator also makes the
 	// language determinable (veraPDF reads these tags for §7.2 t34), even though
-	// the structure-tree walk above cannot see them. Without this, t34 falsely
+	// the structure-tree walk below cannot see them. Without this, t34 falsely
 	// fires on files whose only /Lang is inline.
-	if !anyLangFound {
-		anyLangFound = documentHasMarkedContentLang(ctx, doc, catalog)
-	}
+	inlineLang := documentHasMarkedContentLang(ctx, doc, catalog)
+
+	textElems := structElemsShowingText(ctx, doc, catalog, treeRoot)
 
 	var results []Violation
-	walkStructureElementsWithLang(ctx, doc, treeRoot, rootLang, func(elem ast.PdfDict, path string, inheritedLang string) {
-		// A present-but-empty /Lang on a structure element is an invalid
-		// Language-Tag for PDF/UA (UA-1 §7.2 t29 / UA-2 §8.4.4 t2), not an
-		// absent one. Report it and stop, so the element is not also counted
-		// toward the undeterminable-language path below.
-		if langPresentButEmpty(ctx, doc, elem) {
-			results = append(results, Violation{Rule: validRule, Context: fmt.Sprintf("empty /Lang, %s", path)})
-			return
-		}
-		elemLang := resolveNonEmptyLang(ctx, doc, elem)
-		effectiveLang := inheritedLang
-		if elemLang != "" {
-			// Validate format of this element's own /Lang.
-			if !IsValidLangTag(elemLang) {
+	walkStructureElementsWithLang(ctx, doc, treeRoot, hasStringKeyPresent(ctx, doc, treeRoot, "Lang"),
+		func(elem ast.PdfDict, path string, objNum int, ancestorLang bool) {
+			// A present-but-empty /Lang on a structure element is an invalid
+			// Language-Tag for PDF/UA (UA-1 §7.2 t29 / UA-2 §8.4.4 t2), not an
+			// absent one. Report it and stop, so the element is not also counted
+			// toward the undeterminable-language path below.
+			if langPresentButEmpty(ctx, doc, elem) {
+				results = append(results, Violation{Rule: validRule, Context: fmt.Sprintf("empty /Lang, %s", path)})
+				return
+			}
+			elemLang := resolveNonEmptyLang(ctx, doc, elem)
+			if elemLang != "" && !IsValidLangTag(elemLang) {
+				// Validate format of this element's own /Lang. A malformed tag is
+				// still a present one, so it determines the language for veraPDF
+				// (Lang != null) and only the format rule fires.
 				results = append(results, Violation{Rule: validRule, Context: fmt.Sprintf("lang=%s, %s", elemLang, path)})
 				return
 			}
-			effectiveLang = elemLang
-		}
+			if ancestorLang || elemLang != "" {
+				return
+			}
 
-		// Text carried by the /ActualText, /Alt and /E attributes draws its
-		// natural language only from the structure tree (this element's /Lang or
-		// an ancestor's), never from a content-stream marked-content tag, so its
-		// determinability is decided here without parsing content. When no such
-		// /Lang covers the element (catalog /Lang is already known absent on this
-		// path), veraPDF reports the source-specific test (ISO 14289-1 §7.2
-		// t21/t22/t23) regardless of whether a sibling carries /Lang.
-		if effectiveLang == "" {
+			// Text carried by the /ActualText, /Alt and /E attributes draws its
+			// natural language only from the structure tree (this element's /Lang or
+			// an ancestor's), never from a content-stream marked-content tag, so its
+			// determinability is decided here without parsing content. When no such
+			// /Lang covers the element (catalog /Lang is already known absent on this
+			// path), veraPDF reports the source-specific test (ISO 14289-1 §7.2
+			// t21/t22/t23) regardless of whether a sibling carries /Lang.
 			if _, ok := elem["ActualText"]; ok {
 				results = append(results, Violation{Rule: Rule_14289_1_7_2_t21, Context: path})
 			}
@@ -404,22 +391,137 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 			if _, ok := elem["E"]; ok {
 				results = append(results, Violation{Rule: Rule_14289_1_7_2_t23, Context: path})
 			}
-		}
 
-		if effectiveLang == "" && !anyLangFound {
-			// No /Lang from self or any ancestor, and no /Lang anywhere in
-			// the tree. Language is truly not determinable.
-			results = append(results, Violation{Rule: langRule, Context: path})
-		}
-	})
+			// Determinability is per element, never per document: veraPDF resolves
+			// an SETextItem's language from the /Lang of the structure element that
+			// owns its marked content or of one of that element's /P ancestors, so a
+			// /Lang on an unrelated sibling leaves this element undetermined.
+			if !inlineLang && textElems[objNum] {
+				results = append(results, Violation{Rule: langRule, Context: path})
+			}
+		})
 
 	return results
 }
 
-// walkStructureElementsWithLang is like walkStructureElements but tracks the
-// inherited /Lang value through the tree. The callback receives the effective
-// inherited language (from ancestors, not including the element's own /Lang).
-func walkStructureElementsWithLang(ctx context.Context, doc *document.Document, root ast.PdfDict, rootLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+// structElemsShowingText returns the object numbers of the structure elements
+// that own text shown by a page content stream.
+//
+// ISO 14289-1 §7.2 t34 has SETextItem as its object, so only an element that
+// owns a text-showing operator can carry one. Ownership follows the forward link
+// veraPDF uses: the page /StructParents key selects a ParentTree entry whose
+// array is indexed by marked-content identifier (ISO 32000-1 §14.7.4.4,
+// GFOp_BDC.getStructElem). An element that owns only images, line art or
+// nothing at all is not a subject: in verapdf-corpus 7.2-t22-fail-a the /Figure
+// owning MCID 6 carries no /Lang, yet veraPDF reports no t34 because that
+// sequence draws an image XObject rather than text.
+//
+// An element reached only through a direct (non-indirect) /K entry has no object
+// number and cannot be named here, so it is never a subject. Under-reporting is
+// the safe direction: veraPDF's own link runs through the ParentTree, which can
+// only name indirect elements.
+func structElemsShowingText(ctx context.Context, doc *document.Document, catalog, treeRoot ast.PdfDict) map[int]bool {
+	elems := make(map[int]bool)
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return elems
+	}
+
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return elems
+		}
+		spObj, ok := page["StructParents"]
+		if !ok {
+			continue
+		}
+		key, err := document.ResolveInt(ctx, doc, spObj)
+		if err != nil {
+			continue
+		}
+		data, err := resolvePageContentBytes(ctx, doc, page)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		ops, err := content.ParseStreamData(ctx, data)
+		if err != nil {
+			continue
+		}
+		arr := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+		for mcid := range mcidsShowingText(ctx, ops) {
+			if mcid >= len(arr) {
+				continue
+			}
+			if ref, ok := arr[mcid].(ast.PdfIndirectRef); ok {
+				elems[ref.ObjectNum] = true
+			}
+		}
+	}
+	return elems
+}
+
+// mcidsShowingText returns the marked-content identifiers whose sequence
+// contains a text-showing operator. A text-showing operator belongs to the
+// innermost enclosing sequence that carries an /MCID, matching how veraPDF
+// resolves a text item's owner through the enclosing marked content
+// (GFOpMarkedContent.getInheritedLang walks the same chain outwards).
+//
+// Only an inline property-list dict is read, never a named entry in the page
+// /Properties: an unresolved name leaves the element out of the subject set,
+// which under-reports rather than over-reports.
+func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool {
+	found := make(map[int]bool)
+	// One entry per open marked-content sequence, holding its /MCID or -1 when
+	// it carries none. Bounded by len(ops), which the caller already holds.
+	var open []int
+	for i, op := range ops {
+		if i%200 == 0 && ctx.Err() != nil {
+			return found
+		}
+		switch op.Operator {
+		case "BMC", "BDC":
+			open = append(open, markedContentID(op))
+		case "EMC":
+			if len(open) > 0 {
+				open = open[:len(open)-1]
+			}
+		case "Tj", "TJ", "'", "\"":
+			for j := len(open) - 1; j >= 0; j-- {
+				if open[j] >= 0 {
+					found[open[j]] = true
+					break
+				}
+			}
+		}
+	}
+	return found
+}
+
+// markedContentID returns the /MCID an inline BDC property list carries, or -1
+// when the operator has no inline property list or no /MCID in it.
+func markedContentID(op content.Operation) int {
+	if op.Operator != "BDC" || len(op.Operands) < 2 {
+		return -1
+	}
+	props, ok := op.Operands[1].(ast.PdfDict)
+	if !ok {
+		return -1
+	}
+	mcid, ok := props["MCID"].(ast.PdfInt)
+	if !ok || mcid < 0 {
+		return -1
+	}
+	return int(mcid)
+}
+
+// walkStructureElementsWithLang is like walkStructureElements but tracks /Lang
+// inheritance through the tree. The callback receives whether an ancestor
+// carries a /Lang entry, the element's own entry excluded. Presence is what
+// counts, not the value: veraPDF walks the /P chain to the first element with a
+// /Lang key and treats the language as determined from there, even when the tag
+// is empty or malformed (GFPDStructElem.getparentLang, GFOp_BDC
+// .getStructParentLang).
+func walkStructureElementsWithLang(ctx context.Context, doc *document.Document, root ast.PdfDict, rootLang bool, fn structLangVisitor) {
 	kidsObj, ok := root["K"]
 	if !ok {
 		return
@@ -427,26 +529,33 @@ func walkStructureElementsWithLang(ctx context.Context, doc *document.Document, 
 	walkStructKidsWithLang(ctx, doc, kidsObj, "root", make(map[int]bool), 0, rootLang, fn)
 }
 
+// structLangVisitor receives each structure element of a /Lang-tracking walk.
+// objNum is the element's object number, or 0 when a direct /K entry embeds it
+// inline and no ParentTree entry can name it.
+type structLangVisitor func(elem ast.PdfDict, path string, objNum int, ancestorLang bool)
+
 // walkStructKidsWithLang is the /Lang-tracking twin of [walkStructKids]; seen
 // gives it the same one-visit-per-node guard against a fan-out denial of service.
-func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, seen map[int]bool, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, seen map[int]bool, depth int, ancestorLang bool, fn structLangVisitor) {
 	if ctx.Err() != nil || depth > maxStructTreeWalkDepth {
 		return
 	}
 
 	arr, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil {
+		objNum := 0
 		if ref, ok := obj.(ast.PdfIndirectRef); ok {
 			if seen[ref.ObjectNum] {
 				return
 			}
 			seen[ref.ObjectNum] = true
+			objNum = ref.ObjectNum
 		}
 		dict, err := document.ResolveDict(ctx, doc, obj)
 		if err != nil || dict == nil {
 			return
 		}
-		visitStructElemWithLang(ctx, doc, dict, path, seen, depth, inheritedLang, fn)
+		visitStructElemWithLang(ctx, doc, dict, path, seen, depth, objNum, ancestorLang, fn)
 		return
 	}
 
@@ -454,36 +563,33 @@ func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast
 		if ctx.Err() != nil {
 			return
 		}
+		objNum := 0
 		if ref, ok := kid.(ast.PdfIndirectRef); ok {
 			if seen[ref.ObjectNum] {
 				continue
 			}
 			seen[ref.ObjectNum] = true
+			objNum = ref.ObjectNum
 		}
 		kidDict, err := document.ResolveDict(ctx, doc, kid)
 		if err != nil || kidDict == nil {
 			continue
 		}
 		childPath := fmt.Sprintf("%s[%d]", path, i)
-		visitStructElemWithLang(ctx, doc, kidDict, childPath, seen, depth, inheritedLang, fn)
+		visitStructElemWithLang(ctx, doc, kidDict, childPath, seen, depth, objNum, ancestorLang, fn)
 	}
 }
 
-func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth int, inheritedLang string, fn func(elem ast.PdfDict, path string, inheritedLang string)) {
+func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth, objNum int, ancestorLang bool, fn structLangVisitor) {
 	if _, hasS := elem["S"]; !hasS {
 		return
 	}
 	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 	elemPath := fmt.Sprintf("%s/%s", path, string(typeName))
 
-	fn(elem, elemPath, inheritedLang)
+	fn(elem, elemPath, objNum, ancestorLang)
 
-	// Compute the effective /Lang for children: own /Lang overrides inherited.
-	childLang := inheritedLang
-	if ownLang := resolveNonEmptyLang(ctx, doc, elem); ownLang != "" {
-		childLang = ownLang
-	}
-
+	childLang := ancestorLang || hasStringKeyPresent(ctx, doc, elem, "Lang")
 	if kidsObj, ok := elem["K"]; ok {
 		walkStructKidsWithLang(ctx, doc, kidsObj, elemPath, seen, depth+1, childLang, fn)
 	}
