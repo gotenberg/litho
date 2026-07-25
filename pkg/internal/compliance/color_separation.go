@@ -160,6 +160,22 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			continue
 		}
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+		if subtype == "Image" {
+			// An image XObject names its colour space inline rather than
+			// through /Resources/ColorSpace, so §6.2.4.4 t1 has to reach it
+			// here. veraPDF reports such a failure at
+			// .../xObject[0](n 0 obj PDXImage)/imageCS[0](n 0 obj PDDeviceN).
+			// Only t1 applies: the colorant-consistency scan (t2) keeps its
+			// existing resource-dictionary scope.
+			imgCS, err := document.ResolveArray(ctx, doc, stream.Dict["ColorSpace"])
+			if err != nil || len(imgCS) < 2 {
+				continue
+			}
+			if csType, err := document.ResolveName(ctx, doc, imgCS[0]); err == nil && csType == "DeviceN" {
+				checkDeviceNColorants(ctx, doc, imgCS, part, pageIdx, fmt.Sprintf("Image XObject %s", k), results)
+			}
+			continue
+		}
 		if subtype != "Form" {
 			continue
 		}
@@ -317,8 +333,6 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		return
 	}
 
-	// Collect colorant names from the names array.
-	var colorantNames []string
 	for _, nameObj := range names {
 		if ctx.Err() != nil {
 			return
@@ -331,7 +345,6 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		}
 
 		cName := string(colorantName)
-		colorantNames = append(colorantNames, cName)
 
 		// §6.2.4.4 constrains only colorant alternate/tintTransform
 		// consistency (t2) and Colorants-dict presence (t1); it imposes no
@@ -350,14 +363,6 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		}
 	}
 
-	// §6.2.4.4 t1: For each spot colorant in DeviceN/NChannel, an entry in
-	// the /Colorants dictionary (inside /Attributes) must be present.
-	// Process colorants only: skip if all names are process colors.
-	processColors := map[string]bool{
-		"Cyan": true, "Magenta": true, "Yellow": true, "Black": true,
-		"Red": true, "Green": true, "Blue": true,
-	}
-
 	var attrsDict ast.PdfDict
 	if len(arr) >= 5 {
 		attrsDict, _ = document.ResolveDict(ctx, doc, arr[4]) // Best-effort: nil dict skips colorant checks.
@@ -368,28 +373,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		colorantsDict, _ = document.ResolveDict(ctx, doc, attrsDict["Colorants"]) // Best-effort: nil dict skips colorant checks.
 	}
 
-	// §6.2.4.4 t1 exists for parts 2+ only; a zero Rule must never be
-	// emitted (it serializes as a clause-less "-t00" residual).
-	colorantsRule := separationColorantsRule(part)
-	if colorantsRule.Specification != "" {
-		for _, cName := range colorantNames {
-			if processColors[cName] || cName == "All" || cName == "None" {
-				continue
-			}
-			// Spot colorant: must have a Colorants entry.
-			if colorantsDict == nil {
-				*results = append(*results, failf(colorantsRule,
-					"page %d, ColorSpace %s: DeviceN spot colorant %q has no Colorants dictionary",
-					pageIdx+1, csName, cName)...)
-				break // Report once per DeviceN CS, not per colorant.
-			}
-			if _, ok := colorantsDict[ast.PdfName(cName)]; !ok {
-				*results = append(*results, failf(colorantsRule,
-					"page %d, ColorSpace %s: DeviceN spot colorant %q not found in Colorants dictionary",
-					pageIdx+1, csName, cName)...)
-			}
-		}
-	}
+	checkDeviceNColorants(ctx, doc, arr, part, pageIdx, fmt.Sprintf("ColorSpace %s", csName), results)
 
 	// §6.2.4.4 t2: Separation arrays in Colorants dictionaries must also be
 	// consistent with all other Separation arrays with the same colorant name.
@@ -431,4 +415,103 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 			colorantTintFuncs[name] = cArr[3]
 		}
 	}
+}
+
+// deviceNProcessColorants are the colorant names a DeviceN array may carry
+// without a /Colorants entry because they name process colorants rather than
+// spot colours. ISO 32000-1 §8.6.6.4 defines the DeviceCMYK process colorant
+// names as Cyan, Magenta, Yellow and Black; §8.6.6.5 lets an NChannel
+// /Process /Components array name further process colorants, collected
+// separately in [deviceNAllowedColorants]. veraPDF's PDDeviceN model exempts
+// this exact four-name set, so the additive names Red, Green and Blue are spot
+// colours here and do require a /Colorants entry.
+//
+//nolint:gochecknoglobals // immutable lookup set.
+var deviceNProcessColorants = map[string]bool{
+	"Cyan":    true,
+	"Magenta": true,
+	"Yellow":  true,
+	"Black":   true,
+}
+
+// checkDeviceNColorants validates §6.2.4.4 t1 for one DeviceN colour space
+// array: every spot colorant it names needs an entry in the /Colorants
+// dictionary of its attributes. where identifies the colour space in the
+// violation context.
+func checkDeviceNColorants(ctx context.Context, doc *document.Document, arr ast.PdfArray, part, pageIdx int, where string, results *[]Violation) {
+	// §6.2.4.4 t1 exists for parts 2+ only; a zero Rule must never be
+	// emitted (it serializes as a clause-less "-t00" residual).
+	rule := separationColorantsRule(part)
+	if rule.Specification == "" || len(arr) < 2 {
+		return
+	}
+
+	names, err := document.ResolveArray(ctx, doc, arr[1])
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot resolve DeviceN names array", "context", where, "error", err)
+		return
+	}
+
+	allowed := deviceNAllowedColorants(ctx, doc, arr)
+	for _, nameObj := range names {
+		if ctx.Err() != nil {
+			return
+		}
+		colorantName, err := document.ResolveName(ctx, doc, nameObj)
+		if err != nil {
+			doc.Logger.Debug("compliance.color: cannot resolve colorant name", "context", where, "error", err)
+			continue
+		}
+		cName := string(colorantName)
+		// ISO 32000-1 §8.6.6.5: None marks a component that never paints, so
+		// it names no ink and needs no Colorants entry.
+		if cName == "None" || deviceNProcessColorants[cName] || allowed[cName] {
+			continue
+		}
+		// Report every undeclared colorant, not just the first: veraPDF raises
+		// one failed check per offending colorant (its 6.2.4.4 t1 summary on
+		// veraPDF_test_suite_6-2-4-4-t02-fail-a carries seven checks), so
+		// stopping here would under-report a file's actual colorant defects.
+		*results = append(*results, failf(rule,
+			"page %d, %s: DeviceN spot colorant %q has no Colorants entry",
+			pageIdx+1, where, cName)...)
+	}
+}
+
+// deviceNAllowedColorants returns the colorant names a DeviceN array declares
+// through its attributes dictionary: the keys of /Colorants plus the process
+// colorants named in /Process /Components (ISO 32000-1 §8.6.6.5, Tables 72-73).
+func deviceNAllowedColorants(ctx context.Context, doc *document.Document, arr ast.PdfArray) map[string]bool {
+	allowed := make(map[string]bool)
+	if len(arr) < 5 {
+		return allowed
+	}
+	attrs, err := document.ResolveDict(ctx, doc, arr[4])
+	if err != nil || attrs == nil {
+		return allowed
+	}
+
+	if colorants, err := document.ResolveDict(ctx, doc, attrs["Colorants"]); err == nil {
+		for name := range colorants {
+			allowed[string(name)] = true
+		}
+	}
+
+	process, err := document.ResolveDict(ctx, doc, attrs["Process"])
+	if err != nil || process == nil {
+		return allowed
+	}
+	components, err := document.ResolveArray(ctx, doc, process["Components"])
+	if err != nil {
+		return allowed
+	}
+	for _, compObj := range components {
+		name, err := document.ResolveName(ctx, doc, compObj)
+		if err != nil {
+			doc.Logger.Debug("compliance.color: cannot resolve DeviceN process component", "error", err)
+			continue
+		}
+		allowed[string(name)] = true
+	}
+	return allowed
 }

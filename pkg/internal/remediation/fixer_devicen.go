@@ -157,22 +157,15 @@ func buildPatchedDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	}
 	// Mirror the DeviceN alternate space on the synthetic Separations:
 	// PDF/A §6.2.4.4 test 2 requires Separations with the same name to
-	// agree on alternate space, so reuse arr[2] rather than hardcoding
-	// DeviceCMYK.
-	alt := ast.PdfName("DeviceCMYK")
+	// agree on alternate space, so reuse arr[2] verbatim rather than
+	// hardcoding DeviceCMYK. Substituting a different space made the
+	// remediated file fail test 2 whenever the alternate was anything but
+	// a bare device name, an ICCBased alternate being the common case.
+	var alt ast.PdfObject = ast.PdfName("DeviceCMYK")
 	altComponents := 4
-	if len(arr) >= 3 {
-		if n, ok := arr[2].(ast.PdfName); ok {
-			alt = n
-			switch n {
-			case "DeviceGray":
-				altComponents = 1
-			case "DeviceRGB":
-				altComponents = 3
-			case "DeviceCMYK":
-				altComponents = 4
-			}
-		}
+	if len(arr) >= 3 && arr[2] != nil {
+		alt = arr[2]
+		altComponents = colorSpaceComponents(ctx, doc, arr[2])
 	}
 	var attrsDict ast.PdfDict
 	if len(arr) >= 5 {
@@ -235,13 +228,66 @@ func buildPatchedDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	return newArr, true
 }
 
+// colorSpaceComponents returns the number of colour components an alternate
+// colour space takes, so a synthetic tint transform can be sized to it. Per
+// ISO 32000-1 §8.6.5, DeviceGray and CalGray take 1, DeviceRGB, CalRGB and Lab
+// take 3, DeviceCMYK takes 4, and an ICCBased stream declares its own count in
+// /N. Unrecognised spaces fall back to 4, matching the previous behaviour: an
+// oversized tint transform still renders, and PDF/A only constrains the
+// Separation's alternate-space equivalence.
+func colorSpaceComponents(ctx context.Context, doc *document.Document, csObj ast.PdfObject) int {
+	const defaultComponents = 4
+
+	if name, err := document.ResolveName(ctx, doc, csObj); err == nil && name != "" {
+		switch name {
+		case "DeviceGray":
+			return 1
+		case "DeviceRGB":
+			return 3
+		case "DeviceCMYK":
+			return defaultComponents
+		}
+	}
+
+	arr, err := document.ResolveArray(ctx, doc, csObj)
+	if err != nil || len(arr) == 0 {
+		return defaultComponents
+	}
+	family, err := document.ResolveName(ctx, doc, arr[0])
+	if err != nil {
+		doc.Logger.Debug("remediation.devicen: cannot resolve alternate colour space family", "error", err)
+		return defaultComponents
+	}
+	switch family {
+	case "CalGray":
+		return 1
+	case "CalRGB", "Lab":
+		return 3
+	case "ICCBased":
+		if len(arr) < 2 {
+			return defaultComponents
+		}
+		stream, err := document.ResolveStream(ctx, doc, arr[1])
+		if err != nil {
+			doc.Logger.Debug("remediation.devicen: cannot resolve ICCBased stream", "error", err)
+			return defaultComponents
+		}
+		n, err := document.ResolveInt(ctx, doc, stream.Dict["N"])
+		if err != nil || n < 1 || n > defaultComponents {
+			return defaultComponents
+		}
+		return int(n)
+	}
+	return defaultComponents
+}
+
 // syntheticSeparation builds a [/Separation name alt tintFunc] array
 // whose tint function outputs a constant component vector sized to
 // match alt's component count. The resulting space satisfies PDF/A-2/3/4
 // §6.2.4.4 without requiring knowledge of the original spot ink's
 // appearance, and mirrors the DeviceN alternate so test 2's equivalence
 // check succeeds across Colorants entries in the same file.
-func syntheticSeparation(alloc *writer.ObjAllocator, name, alt ast.PdfName, components int) ast.PdfArray {
+func syntheticSeparation(alloc *writer.ObjAllocator, name ast.PdfName, alt ast.PdfObject, components int) ast.PdfArray {
 	zeros := make(ast.PdfArray, components)
 	maxVals := make(ast.PdfArray, components)
 	rangeArr := make(ast.PdfArray, 0, components*2)
