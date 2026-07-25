@@ -21,8 +21,9 @@ type IncrementalConfig struct {
 	StartXRefOffset int64
 	// Allocator holds the new/modified objects to append.
 	Allocator *ObjAllocator
-	// Trailer is the base trailer dict. The writer adds /Prev and updates
-	// /Size automatically.
+	// Trailer is the base trailer dict. The writer adds /Prev, updates /Size,
+	// and drops any /XRefStm carried over from the source, whose value applies
+	// only to the section it came from.
 	Trailer ast.PdfDict
 	// UseXRefStream forces xref stream format instead of a traditional table.
 	UseXRefStream bool
@@ -92,6 +93,17 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 	maps.Copy(trailer, cfg.Trailer)
 	trailer["Size"] = ast.PdfInt(cfg.Allocator.NextObjNum())
 	trailer["Prev"] = ast.PdfInt(cfg.StartXRefOffset)
+
+	// Per ISO 32000-1 §7.5.8.4, /XRefStm is the byte offset of the
+	// cross-reference stream that supplements the cross-reference section whose
+	// trailer carries it. The value is section-local: it describes the hybrid
+	// half of that one section, not of any section appended later. Copying the
+	// source trailer's /XRefStm into the section this update appends would point
+	// it at a stream belonging to an older revision, resurrecting that
+	// revision's entries for objects this update just rewrote. The appended
+	// section is a plain table with no hybrid half, so the key must be dropped.
+	// The older section keeps its own /XRefStm and stays reachable through /Prev.
+	delete(trailer, "XRefStm")
 
 	// Write xref section.
 	xrefOffset := offset
