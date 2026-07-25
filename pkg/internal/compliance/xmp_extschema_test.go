@@ -74,6 +74,130 @@ func extSchemaXMP(valueTypeContainer, fieldContainer string) []byte {
 		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
 }
 
+// zugferdExtSchemaXMP mirrors the ZUGFeRD/Factur-X catalog XMP: one extension
+// schema whose pdfaSchema:property Seq declares props in order, with every
+// property then used in attribute form on a separate rdf:Description.
+func zugferdExtSchemaXMP(props []string) []byte {
+	const ns = "urn:ferd:pdfa:CrossIndustryDocument:invoice:1p0#"
+
+	var decls, usage string
+	for _, p := range props {
+		decls += `<rdf:li rdf:parseType="Resource">` +
+			`<pdfaProperty:name>` + p + `</pdfaProperty:name>` +
+			`<pdfaProperty:valueType>Text</pdfaProperty:valueType>` +
+			`<pdfaProperty:category>external</pdfaProperty:category>` +
+			`<pdfaProperty:description>d</pdfaProperty:description>` +
+			`</rdf:li>`
+		usage += ` zf:` + p + `="v"`
+	}
+
+	return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about=""` +
+		` xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` +
+		` xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` +
+		` xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">` +
+		`<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+		`<pdfaSchema:schema>ZUGFeRD PDFA Extension Schema</pdfaSchema:schema>` +
+		`<pdfaSchema:namespaceURI>` + ns + `</pdfaSchema:namespaceURI>` +
+		`<pdfaSchema:prefix>zf</pdfaSchema:prefix>` +
+		`<pdfaSchema:property><rdf:Seq>` + decls + `</rdf:Seq></pdfaSchema:property>` +
+		`</rdf:li></rdf:Bag></pdfaExtension:schemas>` +
+		`</rdf:Description>` +
+		`<rdf:Description xmlns:zf="` + ns + `" rdf:about=""` + usage + `/>` +
+		`</rdf:RDF></x:xmpmeta>`)
+}
+
+// TestXMPExtSchemaMultiPropertySeq pins every rdf:li of a pdfaSchema:property
+// Seq as a separate declaration. Recording only at the end of the enclosing
+// block kept the last item alone, so the ZUGFeRD schema resolved just
+// ConformanceLevel and its three earlier properties reported a false
+// ISO 19005-3 §6.6.2.3.1 t2 on all 150 Factur-X corpus files.
+func TestXMPExtSchemaMultiPropertySeq(t *testing.T) {
+	props := []string{"DocumentFileName", "DocumentType", "Version", "ConformanceLevel"}
+
+	schemas := xmpParseExtensionSchemas(zugferdExtSchemaXMP(props))
+	if len(schemas) != 1 {
+		t.Fatalf("schema entries: got %d, want 1", len(schemas))
+	}
+	if len(schemas[0].propTypes) != len(props) {
+		t.Errorf("declared properties: got %d %v, want %d",
+			len(schemas[0].propTypes), schemas[0].propTypes, len(props))
+	}
+	for _, p := range props {
+		if schemas[0].propTypes[p] != "Text" {
+			t.Errorf("property %s: got type %q, want %q", p, schemas[0].propTypes[p], "Text")
+		}
+	}
+
+	// Every declared property is used, so a dropped declaration surfaces as an
+	// unresolvable value type. Rotating the Seq proves the result does not
+	// depend on document order: the pre-fix parser flagged whichever three
+	// properties were not last.
+	for shift := range props {
+		rotated := append(append([]string{}, props[shift:]...), props[:shift]...)
+		for _, part := range []int{2, 3} {
+			var got []Violation
+			xmpCheckExtensionPropertyResolution(zugferdExtSchemaXMP(rotated), part, &got)
+			if len(got) != 0 {
+				t.Errorf("part %d, order %v: got %d violations %v, want none",
+					part, rotated, len(got), got)
+			}
+		}
+	}
+}
+
+// TestXMPExtSchemaMultiValueTypeSeq pins the same per-item recording for the
+// pdfaSchema:valueType Seq: each rdf:li defines one custom type, and only the
+// last survived before the fix.
+func TestXMPExtSchemaMultiValueTypeSeq(t *testing.T) {
+	valueType := func(name string) string {
+		return `<rdf:li rdf:parseType="Resource">` +
+			`<pdfaType:type>` + name + `</pdfaType:type>` +
+			`<pdfaType:namespaceURI>http://example.com/t</pdfaType:namespaceURI>` +
+			`<pdfaType:prefix>t</pdfaType:prefix>` +
+			`<pdfaType:description>d</pdfaType:description>` +
+			`<pdfaType:field><rdf:Seq><rdf:li rdf:parseType="Resource">` +
+			`<pdfaField:name>f</pdfaField:name>` +
+			`<pdfaField:valueType>Text</pdfaField:valueType>` +
+			`<pdfaField:description>fd</pdfaField:description>` +
+			`</rdf:li></rdf:Seq></pdfaType:field>` +
+			`</rdf:li>`
+	}
+
+	data := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about=""` +
+		` xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` +
+		` xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` +
+		` xmlns:pdfaType="http://www.aiim.org/pdfa/ns/type#"` +
+		` xmlns:pdfaField="http://www.aiim.org/pdfa/ns/field#">` +
+		`<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+		`<pdfaSchema:schema>X</pdfaSchema:schema>` +
+		`<pdfaSchema:namespaceURI>http://example.com/x</pdfaSchema:namespaceURI>` +
+		`<pdfaSchema:prefix>x</pdfaSchema:prefix>` +
+		`<pdfaSchema:valueType><rdf:Seq>` +
+		valueType("TypeA") + valueType("TypeB") +
+		`</rdf:Seq></pdfaSchema:valueType>` +
+		`</rdf:li></rdf:Bag></pdfaExtension:schemas>` +
+		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
+
+	schemas := xmpParseExtensionSchemas(data)
+	if len(schemas) != 1 {
+		t.Fatalf("schema entries: got %d, want 1", len(schemas))
+	}
+	for _, name := range []string{"TypeA", "TypeB"} {
+		hasFields, ok := schemas[0].typeFields[name]
+		if !ok {
+			t.Errorf("custom type %s: not recorded, got %v", name, schemas[0].typeFields)
+			continue
+		}
+		if !hasFields {
+			t.Errorf("custom type %s: got hasFields=false, want true", name)
+		}
+	}
+}
+
 func TestXMPExtValueTypeAndFieldSeq(t *testing.T) {
 	ctx := context.Background()
 

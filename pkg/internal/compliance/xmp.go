@@ -2059,6 +2059,12 @@ type xmpExtSchemaDef struct {
 	typeFields map[string]bool   // custom type name → hasFields
 }
 
+// xmpExtSchemaItemDepth is the rdf:li nesting depth of a single property or
+// value-type declaration. Depth 1 is the pdfaSchema entry inside the
+// pdfaExtension:schemas bag; depth 2 is one item of its pdfaSchema:property
+// or pdfaSchema:valueType Seq (ISO 19005-2/3 §6.6.2.3.3 tests 5 and 6).
+const xmpExtSchemaItemDepth = 2
+
 // xmpParseExtensionSchemas parses the pdfaExtension:schemas bag and returns
 // one entry per pdfaSchema rdf:li in document order. Entries with the same
 // namespace URI are NOT merged: the effective extension type map is keyed
@@ -2077,6 +2083,27 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 	var vtName string
 	var vtHasField bool
 	depth := 0 // nesting depth within a schema rdf:li
+
+	// pdfaSchema:property and pdfaSchema:valueType each hold a Seq of
+	// declarations, so one accumulator has to be committed per Seq item.
+	// Committing only at the end of the enclosing block kept the last item
+	// alone and left every earlier property undeclared, which reported a
+	// false ISO 19005-2/3 §6.6.2.3.1 t2 on every ZUGFeRD/Factur-X file: the
+	// four-property zf schema resolved only its final entry.
+	flushProperty := func() {
+		if current != nil && propName != "" && propVT != "" {
+			current.propTypes[propName] = propVT
+		}
+		propName = ""
+		propVT = ""
+	}
+	flushValueType := func() {
+		if current != nil && vtName != "" {
+			current.typeFields[vtName] = vtHasField
+		}
+		vtName = ""
+		vtHasField = false
+	}
 
 	for {
 		tok, err := decoder.Token()
@@ -2161,25 +2188,25 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 
 			switch {
 			case t.Name.Local == "li" && t.Name.Space == xmpRDFNamespace:
+				if depth == xmpExtSchemaItemDepth {
+					if inProperty {
+						flushProperty()
+					}
+					if inValueType {
+						flushValueType()
+					}
+				}
 				depth--
 				if depth < 0 {
 					depth = 0
 				}
 			case t.Name.Space == xmpPdfaSchemaPrefix && t.Name.Local == "property":
-				// End of property block: record accumulated property.
-				if current != nil && propName != "" && propVT != "" {
-					current.propTypes[propName] = propVT
-				}
-				propName = ""
-				propVT = ""
+				// Catches a declaration written without the Seq/rdf:li
+				// wrapper; the well-formed case already flushed per item.
+				flushProperty()
 				inProperty = false
 			case t.Name.Space == xmpPdfaSchemaPrefix && t.Name.Local == "valueType":
-				// End of valueType block: record accumulated type.
-				if current != nil && vtName != "" {
-					current.typeFields[vtName] = vtHasField
-				}
-				vtName = ""
-				vtHasField = false
+				flushValueType()
 				inValueType = false
 			}
 		}
