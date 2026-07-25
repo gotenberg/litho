@@ -361,13 +361,15 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
 			// §8.9.2.3 t1: a markup annotation shall be enclosed within an Annot
-			// structure element. The requirement is that the enclosing type be
-			// exactly Annot, which fails when the type is absent (the annotation
-			// is an artifact) as well as when it is a non-Annot element, so this
-			// arm does not take the artifact exemption the rules below rely on.
+			// structure element. ISO 14289-2 §8.9.2.3 constrains the enclosing
+			// element, so it has nothing to say about an annotation that no
+			// element encloses: such an annotation is an artifact, and clause 8.9
+			// exempts artifacts from the structure requirements. An annotation
+			// absent from the structure tree therefore passes, and only one
+			// enclosed by an element other than Annot fails.
 			if markupAnnotationSubtypes[subtype] {
 				stdType, inTree := structMap[objNum]
-				if !inTree || stdType != "Annot" {
+				if inTree && stdType != "Annot" {
 					results = append(results, failf(Rule_14289_2_8_9_2_3_t01,
 						"%s markup annotation enclosed by %s instead of Annot",
 						subtype, nestingDesc(stdType))...)
