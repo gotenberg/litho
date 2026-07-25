@@ -666,13 +666,14 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	return nil
 }
 
-// checkToUnicodeCMapValues validates that a /ToUnicode CMap, if present, is
-// decodable and does not map to invalid Unicode values (U+0000, U+FEFF, U+FFFE).
+// checkToUnicodeCMapValues validates that a readable /ToUnicode CMap does not
+// map to invalid Unicode values (U+0000, U+FEFF, U+FFFE).
 // Per ISO 19005-4 §6.2.10.7, the requirement applies to the Unicode strings of
 // glyphs that are actually shown: the destination of a CMap entry behind a
 // character code that is never rendered cannot affect the displayed text, so it
 // passes. usage carries the rendered character codes; with no recorded usage no
-// glyph is shown and the check is vacuous.
+// glyph is shown and the check is vacuous. A /ToUnicode that cannot be read at
+// all specifies no value and is likewise vacuous here.
 func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeCMapValuesRule(profile)
 	if rule.Specification == "" {
@@ -687,14 +688,21 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		return nil
 	}
 
+	// A /ToUnicode that cannot be read as a CMap specifies no Unicode value at
+	// all, so the value constraint (ISO 14289-1 §7.21.7 t2, ISO 19005-2
+	// §6.2.11.7.2 and its part-3/4 counterparts, every one worded "the Unicode
+	// values specified in the ToUnicode CMap") is vacuous. Reporting it here
+	// diagnoses the wrong rule: a font left without a usable mapping is the
+	// presence rule's business. The common shape is a producer writing the CMap
+	// *name* /Identity-H where ISO 32000-1 §9.10.3 prescribes a stream.
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil {
 		doc.Logger.Debug("compliance: fonts: failed to resolve ToUnicode stream",
 			"font", fontName, "error", err)
-		return failf(rule, "font %s on page %d: cannot resolve /ToUnicode stream", fontName, pageNum)
+		return nil
 	}
 	if stream.Dict == nil {
-		return failf(rule, "font %s on page %d: /ToUnicode stream has no dictionary", fontName, pageNum)
+		return nil
 	}
 
 	data, err := doc.DecodeStream(ctx, stream)
@@ -704,7 +712,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		if err != nil || len(data) == 0 {
 			doc.Logger.Debug("compliance: fonts: failed to decode ToUnicode CMap",
 				"font", fontName, "error", err)
-			return failf(rule, "font %s on page %d: cannot decode /ToUnicode CMap", fontName, pageNum)
+			return nil
 		}
 	}
 
