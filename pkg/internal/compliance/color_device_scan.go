@@ -205,7 +205,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		} else {
 			// Check inline image colour spaces from parsed BI operations.
 			scanInlineImageCSOps(ops, &usage, formCSNames)
-			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames)
+			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames, false)
 		}
 	}
 
@@ -527,7 +527,7 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 
 	// Check inline image colour spaces from parsed BI operations.
 	scanInlineImageCSOps(ops, &usage, referencedCSNames)
-	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames)
+	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, true)
 
 	return usage, referencedXObjects, referencedCSNames
 }
@@ -539,7 +539,22 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 // with no colour space yet selected uses the initial graphics-state colour
 // space, DeviceGray; veraPDF flags that implicit default use, so it counts as
 // DeviceGray usage here too (ISO 19005-2 §6.2.4.3).
-func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool) {
+//
+// Only cs/CS and the shorthands g/G, rg/RG, k/K select a colour space. sc/scn
+// and SC/SCN set components within the space cs/CS already selected (ISO
+// 32000-1 §8.6.8, Table 74), so a bare "0.3 SC" leaves the initial DeviceGray
+// in place and veraPDF reports DeviceGray at the painting operator that
+// follows it.
+//
+// initialCSKnown says whether this scope starts in the PDF default graphics
+// state. A page content stream does (ISO 32000-1 §8.4.1), so its initial
+// colour space is DeviceGray. A Form XObject, tiling pattern, or appearance
+// stream instead inherits the graphics state in effect at the invoking Do
+// (ISO 32000-1 §8.10.2), which litho does not model: there a bare sc/scn may
+// legitimately name a component of an inherited ICCBased space, so treat the
+// operator as evidence that a space was already selected rather than report a
+// DeviceGray use veraPDF does not see.
+func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool, initialCSKnown bool) {
 	fillCSSet, strokeCSSet := false, false
 	type csState struct{ fill, stroke bool }
 	var csStack []csState
@@ -593,9 +608,9 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 				}
 			}
 		case "sc", "scn":
-			fillCSSet = true
+			fillCSSet = fillCSSet || !initialCSKnown
 		case "SC", "SCN":
-			strokeCSSet = true
+			strokeCSSet = strokeCSSet || !initialCSKnown
 		case "f", "F", "f*":
 			if !fillCSSet {
 				usage.gray = true

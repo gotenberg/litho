@@ -59,10 +59,14 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 		// device colour usage against the effective resources, so litho must
 		// resolve inheritance here or it skips colour checks on pages whose
 		// resources live on a Pages node (qpdf shared-images, form-xobjects-*).
+		// A page with no /Resources anywhere in its ancestry still paints: the
+		// initial graphics-state colour space is DeviceGray (ISO 32000-1
+		// §8.6.8), so a bare "0 0 m 10 10 l S" is a DeviceGray use that
+		// ISO 19005-1 §6.2.3.3 t3 requires an OutputIntent to cover. Keep
+		// scanning with a nil resource dict instead of skipping the page: every
+		// lookup below tolerates a nil dict, and a page with no resources can
+		// declare no DefaultCS to suppress the finding.
 		resources := resolveInheritedResources(ctx, doc, page)
-		if resources == nil {
-			continue
-		}
 
 		defaults := collectDefaultColorSpaces(ctx, doc, resources)
 
