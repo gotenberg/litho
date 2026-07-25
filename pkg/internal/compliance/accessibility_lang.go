@@ -22,6 +22,26 @@ var (
 	langTagAlphaOnly = regexp.MustCompile(`^[a-zA-Z]{1,8}(-[a-zA-Z]{1,8})*$`)
 )
 
+// spanLangSubjects pairs each /Span marked-content property whose text needs a
+// determinable natural language with the test that reports it. Mirrors the three
+// ISO 14289-1 §7.2 SEMarkedContent rules, which differ only in the property key.
+//
+//nolint:gochecknoglobals // static spec table (ISO 14289-1 §7.2 t30/t31/t32).
+var spanLangSubjects = []struct {
+	key  ast.PdfName
+	rule Rule
+}{
+	{"ActualText", Rule_14289_1_7_2_t30},
+	{"Alt", Rule_14289_1_7_2_t31},
+	{"E", Rule_14289_1_7_2_t32},
+}
+
+// contentOpCancelCheckInterval is how many content-stream operators a scan
+// processes between cancellation checks. Checking every operator would dominate
+// the scan, and 200 operators is short enough to abandon a crafted stream
+// promptly. Anti-DoS guard, not spec-mandated.
+const contentOpCancelCheckInterval = 200
+
 // checkMarkedContentLang validates the language tag of any /Lang set on a
 // marked-content sequence (BDC/DP) in a page content stream. A /Lang on a
 // marked-content property list is a language tag like any other, so it must
@@ -58,6 +78,36 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 // reach content-operator language tags, so this content-stream pass is the only
 // place they are observed.
 func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, tag string) bool) {
+	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page ast.PdfDict, ops []content.Operation) bool {
+		props := markedContentProps{doc: doc, page: page}
+		for _, op := range ops {
+			if op.Operator != "BDC" && op.Operator != "DP" {
+				continue
+			}
+			pd := props.dict(ctx, op)
+			if pd == nil {
+				continue
+			}
+			langObj, ok := pd["Lang"]
+			if !ok {
+				continue
+			}
+			// Best-effort: a /Lang that resolves to a non-string is reported by
+			// the caller as the empty tag it decodes to, which fails the
+			// Language-Tag grammar just as the malformed value does.
+			lang, _ := document.ResolveString(ctx, doc, langObj)
+			if fn(pageIdx, strings.TrimSpace(document.DecodePdfString(lang))) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// forEachPageContentOps parses every page content stream and invokes fn with the
+// page index, the page dict and the parsed operations. A page whose content is
+// absent or unparsable is skipped. fn returns true to stop the scan early.
+func forEachPageContentOps(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, page ast.PdfDict, ops []content.Operation) bool) {
 	for pageIdx, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return
@@ -70,44 +120,52 @@ func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catal
 		if err != nil {
 			continue
 		}
-		var props ast.PdfDict // page /Properties, resolved lazily for named property lists
-		propsResolved := false
-		for _, op := range ops {
-			if op.Operator != "BDC" && op.Operator != "DP" || len(op.Operands) < 2 {
-				continue
-			}
-			var pd ast.PdfDict
-			switch v := op.Operands[1].(type) {
-			case ast.PdfDict:
-				pd = v
-			case ast.PdfName:
-				if !propsResolved {
-					if res := resolveResources(ctx, doc, page); res != nil {
-						// Best-effort: a missing/unresolvable /Properties dict
-						// leaves props nil, handled by the guard below.
-						props, _ = document.ResolveDict(ctx, doc, res["Properties"])
-					}
-					propsResolved = true
-				}
-				if props != nil {
-					// Best-effort: an unresolvable property entry leaves pd
-					// nil, handled by the pd == nil check below.
-					pd, _ = document.ResolveDict(ctx, doc, props[v])
-				}
-			}
-			if pd == nil {
-				continue
-			}
-			langObj, ok := pd["Lang"]
-			if !ok {
-				continue
-			}
-			lang, _ := document.ResolveString(ctx, doc, langObj)
-			if fn(pageIdx, strings.TrimSpace(document.DecodePdfString(lang))) {
-				return
-			}
+		if fn(pageIdx, page, ops) {
+			return
 		}
 	}
+}
+
+// markedContentProps resolves the property list of a BDC or DP operator on one
+// page. A named property list is looked up in the page /Properties resource,
+// resolved once and reused: a content stream can carry thousands of
+// marked-content operators.
+type markedContentProps struct {
+	doc      *document.Document
+	page     ast.PdfDict
+	props    ast.PdfDict
+	resolved bool
+}
+
+// dict returns the property list op carries, or nil when it carries none or the
+// list cannot be resolved. veraPDF leaves its properties dict null in the same
+// cases (GFOpMarkedContent.initializePropertiesDict), so every property-derived
+// test passes for such an operator.
+func (m *markedContentProps) dict(ctx context.Context, op content.Operation) ast.PdfDict {
+	if len(op.Operands) < 2 {
+		return nil
+	}
+	switch v := op.Operands[1].(type) {
+	case ast.PdfDict:
+		return v
+	case ast.PdfName:
+		if !m.resolved {
+			if res := resolveResources(ctx, m.doc, m.page); res != nil {
+				// Best-effort: a missing/unresolvable /Properties dict leaves
+				// props nil, handled by the guard below.
+				m.props, _ = document.ResolveDict(ctx, m.doc, res["Properties"])
+			}
+			m.resolved = true
+		}
+		if m.props == nil {
+			return nil
+		}
+		// Best-effort: an unresolvable property entry yields nil, which callers
+		// treat as "no property list".
+		pd, _ := document.ResolveDict(ctx, m.doc, m.props[v])
+		return pd
+	}
+	return nil
 }
 
 // documentHasMarkedContentLang reports whether any BDC or DP marked-content
@@ -129,6 +187,207 @@ func documentHasMarkedContentLang(ctx context.Context, doc *document.Document, c
 		return true
 	})
 	return found
+}
+
+// checkSpanMarkedContentLang reports ISO 14289-1 §7.2 t30, t31 and t32: text
+// carried by the /ActualText, /Alt and /E entries of a /Span marked-content
+// sequence must have a determinable natural language.
+//
+// The three rules share one shape, differing only in the property key:
+//
+//	tag != 'Span' || <key> == null || Lang != null || inheritedLang != null ||
+//	gContainsCatalogLang == true
+//
+// A language is in scope when the catalog carries a /Lang
+// (GFPDDocument.getcontainsLang), when the sequence's own property list carries
+// one, or when an enclosing sequence or the structure element owning a
+// sequence's marked-content identifier supplies one
+// (GFOpMarkedContent.getInheritedLang, GFOp_BDC.getStructParentLang).
+//
+// Presence decides, never the value: an empty /Lang is a non-null COSString for
+// veraPDF and determines the language, exactly as §7.2 t34 already treats it. A
+// malformed tag is a present one here; its grammar is reported separately by
+// [checkMarkedContentLang] as §7.2 t29.
+//
+// PDF/UA-2 is out of scope: PDFUA-2-ISO32005.xml declares no SEMarkedContent
+// rule and no inheritedLang term, so ISO 32005 has no counterpart to implement.
+func checkSpanMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if profile != "PDF/UA-1" {
+		return nil
+	}
+
+	// gContainsCatalogLang: a catalog /Lang that resolves to a string, the empty
+	// string included, determines the language for every marked-content sequence.
+	if hasStringKeyPresent(ctx, doc, catalog, "Lang") {
+		return nil
+	}
+
+	var parentTree ast.PdfDict
+	if treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"]); err == nil && treeRoot != nil {
+		// Best-effort: without a resolvable ParentTree no sequence reaches a
+		// structure element, which is veraPDF's null struct-parent language.
+		parentTree, _ = document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	}
+
+	var results []Violation
+	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page ast.PdfDict, ops []content.Operation) bool {
+		results = append(results, spanLangViolations(ctx, doc, parentTree, page, pageIdx, ops)...)
+		return ctx.Err() != nil
+	})
+	return results
+}
+
+// spanLangViolations scans one page's operations for /Span marked-content
+// sequences whose natural language cannot be determined.
+func spanLangViolations(ctx context.Context, doc *document.Document, parentTree, page ast.PdfDict, pageIdx int, ops []content.Operation) []Violation {
+	props := markedContentProps{doc: doc, page: page}
+	owners := structElemLang{
+		doc:     doc,
+		entries: pageParentTreeEntries(ctx, doc, parentTree, page),
+		cache:   make(map[int]bool),
+	}
+
+	// open records, per open marked-content sequence, whether it supplies a
+	// language; inScope counts the ones that do, so testing the whole enclosing
+	// chain stays constant time. Nesting is bounded by len(ops), which the caller
+	// already holds.
+	var open []bool
+	inScope := 0
+
+	var results []Violation
+	for i, op := range ops {
+		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
+			return results
+		}
+		switch op.Operator {
+		case "BMC":
+			// BMC carries no property list, so it supplies neither /Lang nor an
+			// /MCID: veraPDF never initializes a properties dict for it.
+			open = append(open, false)
+		case "BDC":
+			pd := props.dict(ctx, op)
+			supplies := pd != nil && (hasStringKeyPresent(ctx, doc, pd, "Lang") || owners.hasLang(ctx, pd))
+			open = append(open, supplies)
+			if supplies {
+				inScope++
+			} else if inScope == 0 {
+				results = append(results, spanPropLangViolations(ctx, doc, op, pd, pageIdx)...)
+			}
+		case "EMC":
+			if n := len(open); n > 0 {
+				if open[n-1] {
+					inScope--
+				}
+				open = open[:n-1]
+			}
+		}
+	}
+	return results
+}
+
+// spanPropLangViolations reports §7.2 t30/t31/t32 for a marked-content sequence
+// already known to have no language in scope. Only a /Span tag is a subject, and
+// only a property that resolves to a string counts as present, matching
+// veraPDF's typed getStringAttribute accessors.
+func spanPropLangViolations(ctx context.Context, doc *document.Document, op content.Operation, pd ast.PdfDict, pageIdx int) []Violation {
+	if pd == nil || len(op.Operands) < 2 {
+		return nil
+	}
+	if tag, ok := op.Operands[0].(ast.PdfName); !ok || tag != "Span" {
+		return nil
+	}
+
+	var results []Violation
+	for _, subject := range spanLangSubjects {
+		if hasStringKeyPresent(ctx, doc, pd, subject.key) {
+			results = append(results, failf(subject.rule,
+				"page %d: /Span marked content /%s", pageIdx+1, subject.key)...)
+		}
+	}
+	return results
+}
+
+// structElemLang answers, for one page, whether the structure element owning a
+// marked-content identifier reaches a /Lang. entries is that page's ParentTree
+// array, indexed by marked-content identifier (ISO 32000-1 §14.7.4.4). cache
+// keeps a page whose thousands of sequences share a few identifiers from walking
+// the same /P chain over and over.
+type structElemLang struct {
+	doc     *document.Document
+	entries ast.PdfArray
+	cache   map[int]bool
+}
+
+// hasLang reports whether the structure element owning the /MCID in pd, or one
+// of that element's /P ancestors, carries a /Lang. It mirrors
+// GFOp_BDC.getStructParentLang: the identifier selects a ParentTree entry, and
+// the walk stops at the first ancestor holding a /Lang key whatever its value.
+func (s *structElemLang) hasLang(ctx context.Context, pd ast.PdfDict) bool {
+	if len(s.entries) == 0 {
+		return false
+	}
+	obj, ok := pd["MCID"]
+	if !ok {
+		return false
+	}
+	mcid, err := document.ResolveInt(ctx, s.doc, obj)
+	if err != nil || mcid < 0 || int(mcid) >= len(s.entries) {
+		return false
+	}
+	if found, ok := s.cache[int(mcid)]; ok {
+		return found
+	}
+	elem, err := document.ResolveDict(ctx, s.doc, s.entries[mcid])
+	found := err == nil && elem != nil && structElemChainHasLang(ctx, s.doc, elem)
+	s.cache[int(mcid)] = found
+	return found
+}
+
+// structElemChainHasLang reports whether elem or one of its /P ancestors carries
+// a /Lang key. Presence decides, not the value, matching veraPDF's
+// COSObject.getStringKey walk. seen breaks a crafted /P cycle and
+// maxStructTreeWalkDepth bounds a long chain.
+func structElemChainHasLang(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
+	seen := make(map[int]bool)
+	for depth := 0; elem != nil && depth <= maxStructTreeWalkDepth; depth++ {
+		if hasStringKeyPresent(ctx, doc, elem, "Lang") {
+			return true
+		}
+		parentObj, ok := elem["P"]
+		if !ok {
+			return false
+		}
+		if ref, ok := parentObj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				return false
+			}
+			seen[ref.ObjectNum] = true
+		}
+		parent, err := document.ResolveDict(ctx, doc, parentObj)
+		if err != nil {
+			return false
+		}
+		elem = parent
+	}
+	return false
+}
+
+// pageParentTreeEntries returns the ParentTree array a page's /StructParents key
+// selects, or nil when the page declares none or the lookup fails. The array is
+// indexed by marked-content identifier (ISO 32000-1 §14.7.4.4).
+func pageParentTreeEntries(ctx context.Context, doc *document.Document, parentTree, page ast.PdfDict) ast.PdfArray {
+	if parentTree == nil {
+		return nil
+	}
+	spObj, ok := page["StructParents"]
+	if !ok {
+		return nil
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return nil
+	}
+	return numberTreeLookup(ctx, doc, parentTree, int(key), 0, make(map[int]bool))
 }
 
 // checkLangRequired ensures the catalog has a /Lang key with a valid RFC 3066 tag.
@@ -427,27 +686,8 @@ func structElemsShowingText(ctx context.Context, doc *document.Document, catalog
 		return elems
 	}
 
-	for _, page := range collectPages(ctx, doc, catalog) {
-		if ctx.Err() != nil {
-			return elems
-		}
-		spObj, ok := page["StructParents"]
-		if !ok {
-			continue
-		}
-		key, err := document.ResolveInt(ctx, doc, spObj)
-		if err != nil {
-			continue
-		}
-		data, err := resolvePageContentBytes(ctx, doc, page)
-		if err != nil || len(data) == 0 {
-			continue
-		}
-		ops, err := content.ParseStreamData(ctx, data)
-		if err != nil {
-			continue
-		}
-		arr := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	forEachPageContentOps(ctx, doc, catalog, func(_ int, page ast.PdfDict, ops []content.Operation) bool {
+		arr := pageParentTreeEntries(ctx, doc, ptDict, page)
 		for mcid := range mcidsShowingText(ctx, ops) {
 			if mcid >= len(arr) {
 				continue
@@ -456,7 +696,8 @@ func structElemsShowingText(ctx context.Context, doc *document.Document, catalog
 				elems[ref.ObjectNum] = true
 			}
 		}
-	}
+		return ctx.Err() != nil
+	})
 	return elems
 }
 
@@ -475,7 +716,7 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool
 	// it carries none. Bounded by len(ops), which the caller already holds.
 	var open []int
 	for i, op := range ops {
-		if i%200 == 0 && ctx.Err() != nil {
+		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
 			return found
 		}
 		switch op.Operator {

@@ -24,6 +24,11 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// sequence must be a valid language tag.
 	results = append(results, checkMarkedContentLang(ctx, doc, catalog, profile)...)
 
+	// Span marked-content language (§7.2 t30/t31/t32, PDF/UA-1): text in the
+	// /ActualText, /Alt and /E entries of a /Span sequence needs a determinable
+	// language.
+	results = append(results, checkSpanMarkedContentLang(ctx, doc, catalog, profile)...)
+
 	// Outline language (§7.2 t2, PDF/UA-1): outline entries must have determinable language.
 	results = append(results, checkOutlineLang(ctx, doc, catalog, profile)...)
 
