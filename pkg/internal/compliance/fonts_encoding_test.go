@@ -201,3 +201,60 @@ func TestToUnicodeSymbolicNonResolvableDifferences(t *testing.T) {
 		t.Errorf("symbolic font whose UNUSED code is non-resolvable should stay exempt, got %v", got)
 	}
 }
+
+// TestToUnicodeStandard14Differences pins that a standard 14 /BaseFont name does
+// not excuse an /Encoding /Differences override with no Unicode value. The
+// standard 14 built-in encodings are AGL-based, which settles the base encoding
+// only: a rendered code remapped to a name outside the AGL and the Symbol set
+// maps to nothing, and ISO 19005-2 §6.2.11.7.2 (with ISO 14289-1 §7.21.7 and
+// ISO 14289-2 §8.4.5.8) demands a Unicode value for every used character code.
+// veraPDF 1.30.2 fires on such a font whatever its /BaseFont says. Scoping is by
+// rendered code, matching veraPDF's Glyph object: an override nothing shows maps
+// nothing, so it stays exempt.
+func TestToUnicodeStandard14Differences(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	build := func(baseFont, diffs string, usage *fontUsageInfo) []Violation {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /Type1 /Name /F1 /BaseFont /"+baseFont+" /Encoding 3 0 R >>",
+			"<< /Type /Encoding /Differences "+diffs+" >>",
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		return checkToUnicode(ctx, doc, fontDict, "F1", 1, "PDF/A-2u", usage)
+	}
+	used := func(codes ...byte) *fontUsageInfo {
+		u := &fontUsageInfo{visible: true, charCodes: map[byte]bool{}}
+		for _, c := range codes {
+			u.charCodes[c] = true
+		}
+		return u
+	}
+	bad := "[ 65 /lithoglyphone /lithoglyphtwo ]"
+
+	if got := build("Helvetica", bad, used(65, 66)); len(got) == 0 {
+		t.Error("standard 14 font with a rendered non-resolvable Differences name should require /ToUnicode")
+	}
+	if got := build("LithoCustom", bad, used(65, 66)); len(got) == 0 {
+		t.Error("non-standard font with a rendered non-resolvable Differences name should require /ToUnicode")
+	}
+	if got := build("Helvetica", bad, used(67)); len(got) != 0 {
+		t.Errorf("standard 14 font whose non-resolvable override is never rendered should stay exempt, got %v", got)
+	}
+	if got := build("Helvetica", bad, nil); len(got) != 0 {
+		t.Errorf("standard 14 font with no recorded usage should stay exempt, got %v", got)
+	}
+	if got := build("Helvetica", "[ 65 /eacute /Euro ]", used(65, 66)); len(got) != 0 {
+		t.Errorf("standard 14 font with AGL-resolvable Differences should stay exempt, got %v", got)
+	}
+	if got := build("Symbol", "[ 65 /summation /integral ]", used(65, 66)); len(got) != 0 {
+		t.Errorf("Symbol font with Symbol-set Differences should stay exempt, got %v", got)
+	}
+	if got := build("Helvetica", "[ 65 /.notdef ]", used(65)); len(got) != 0 {
+		t.Errorf("a /.notdef override is the .notdef rule's business, not this one, got %v", got)
+	}
+}

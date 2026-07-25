@@ -82,12 +82,20 @@ func hasIdentityCMap(ctx context.Context, doc *document.Document, fontDict ast.P
 
 // allGlyphNamesAGLResolvable returns true if all glyph names used by a Type 1
 // font are resolvable via the Adobe Glyph List. It checks multiple sources:
-// Standard 14 fonts (always AGL-based), /Encoding /Differences array glyph
-// names, and /FontDescriptor /CharSet (lists glyph names in Type 1 subsets).
-func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
-	// Standard 14 fonts always use AGL-resolvable names.
+// Standard 14 fonts (whose built-in encoding is AGL-based), /Encoding
+// /Differences array glyph names, and /FontDescriptor /CharSet (lists glyph
+// names in Type 1 subsets).
+func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
+	// A standard 14 font carries a well-known built-in encoding whose glyph
+	// names are all AGL-resolvable, so its base encoding needs no embedded
+	// program to prove it. /Differences is outside that guarantee: it can bind a
+	// rendered code to a name in neither the AGL nor the Symbol set, leaving
+	// that code with no Unicode value at all. ISO 19005-2 §6.2.11.7.2 (with ISO
+	// 14289-1 §7.21.7 and ISO 14289-2 §8.4.5.8) demands a Unicode value for
+	// every used character code, so a standard /BaseFont name does not excuse an
+	// unmappable override.
 	if isStandard14Font(ctx, doc, fontDict) {
-		return true
+		return usedDifferencesGlyphNamesResolvable(ctx, doc, fontDict, usage)
 	}
 
 	// Check /Encoding /Differences if present.
@@ -169,15 +177,49 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 		if string(name) == ".notdef" {
 			continue
 		}
-		_, resolved := encodings.GlyphToRuneFull(string(name))
-		if !resolved {
-			// Also check Symbol encoding glyph names (e.g., alpha, beta, etc.).
-			// These are standard Adobe glyph names from the Symbol font
-			// character set (PDF Reference Appendix D, Table D.5) and resolve
-			// to Unicode without a /ToUnicode CMap.
-			_, resolved = encodings.SymbolGlyphsUnicode[string(name)]
+		if !glyphNameHasUnicode(string(name)) {
+			return false
 		}
-		if !resolved {
+	}
+	return true
+}
+
+// glyphNameHasUnicode reports whether a glyph name yields a Unicode value on
+// its own, with no /ToUnicode CMap: through the Adobe Glyph List (including the
+// uniXXXX and subset spellings [encodings.GlyphToRuneFull] accepts) or through
+// the Symbol font character set (PDF Reference Appendix D, Table D.5), whose
+// names are standard Adobe glyph names.
+func glyphNameHasUnicode(name string) bool {
+	if _, ok := encodings.GlyphToRuneFull(name); ok {
+		return true
+	}
+	_, ok := encodings.SymbolGlyphsUnicode[name]
+	return ok
+}
+
+// usedDifferencesGlyphNamesResolvable reports whether every /Encoding
+// /Differences override behind a rendered character code yields a Unicode
+// value. Codes the array leaves alone keep the font's base encoding and are out
+// of scope here. With no recorded usage the check is vacuous: the rules it
+// backs are scoped to veraPDF's Glyph object, which exists only for a code the
+// content stream actually shows, so an override nothing renders maps nothing.
+func usedDifferencesGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
+	if usage == nil || len(usage.charCodes) == 0 {
+		return true
+	}
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return true
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return true
+	}
+	for code, name := range differencesGlyphNames(ctx, doc, encDict) {
+		if !usage.charCodes[code] || name == "" || name == ".notdef" {
+			continue
+		}
+		if !glyphNameHasUnicode(name) {
 			return false
 		}
 	}
@@ -330,21 +372,7 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 			if baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"]); err == nil && baseName != "" {
 				maps.Copy(result, predefinedEncodingNames(string(baseName)))
 			}
-			// Apply /Differences overrides.
-			if diffArr, err := document.ResolveArray(ctx, doc, encDict["Differences"]); err == nil {
-				code := 0
-				for _, item := range diffArr {
-					switch v := item.(type) {
-					case ast.PdfInt:
-						code = int(v)
-					case ast.PdfName:
-						if code >= 0 && code <= 255 {
-							result[byte(code)] = string(v) //nolint:gosec // G115: code is bounded to 0..255 by the guard above.
-						}
-						code++
-					}
-				}
-			}
+			maps.Copy(result, differencesGlyphNames(ctx, doc, encDict))
 			if len(result) > 0 {
 				return result
 			}
@@ -382,6 +410,32 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 	}
 
 	return nil
+}
+
+// differencesGlyphNames returns the charCode → glyphName overrides an
+// /Encoding dictionary declares through its /Differences array. Per ISO 32000-1
+// 9.6.6.1, each number in the array starts a run of names at that code.
+func differencesGlyphNames(ctx context.Context, doc *document.Document, encDict ast.PdfDict) map[byte]string {
+	diffArr, err := document.ResolveArray(ctx, doc, encDict["Differences"])
+	if err != nil {
+		return nil
+	}
+	// No capacity hint: the byte-keyed map holds at most 256 entries however
+	// long the file-supplied array is.
+	result := make(map[byte]string)
+	code := 0
+	for _, item := range diffArr {
+		switch v := item.(type) {
+		case ast.PdfInt:
+			code = int(v)
+		case ast.PdfName:
+			if code >= 0 && code <= 255 {
+				result[byte(code)] = string(v) //nolint:gosec // G115: code is bounded to 0..255 by the guard above.
+			}
+			code++
+		}
+	}
+	return result
 }
 
 // predefinedEncodingNames returns a charCode → glyphName mapping for a
@@ -475,7 +529,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// through the AGL, ToUnicode is not required.
 	subtype := fontSubtype(ctx, doc, fontDict)
 	if subtype == "Type1" || subtype == "MMType1" {
-		if allGlyphNamesAGLResolvable(ctx, doc, fontDict) {
+		if allGlyphNamesAGLResolvable(ctx, doc, fontDict, usage) {
 			return nil
 		}
 		// Exemption (b3): The Symbol font itself (BaseFont = Symbol or
