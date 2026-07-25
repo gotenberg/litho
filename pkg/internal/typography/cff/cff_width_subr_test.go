@@ -67,6 +67,22 @@ func TestExtractCharstringWidth_CallGSubrBeforeStem(t *testing.T) {
 	}
 }
 
+// TestReadUnitsPerEm_CIDFDArrayFontMatrix pins that a CID-keyed CFF whose
+// FontMatrix lives in the FDArray font dict (not the Top DICT) reports its true
+// units-per-em. cid_fdarray_matrix.cff (extracted from pdfjs text_clip_cff_cid)
+// has an FD FontMatrix of [0.00048828…] = 1/2048; reading only the Top DICT
+// yields the 1000 default and fires a spurious CIDFont /W width mismatch (CID
+// 20: /W 629 vs a program advance of 1289 = 629 × 2048/1000).
+func TestReadUnitsPerEm_CIDFDArrayFontMatrix(t *testing.T) {
+	data, err := os.ReadFile("testdata/cid_fdarray_matrix.cff")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if got := ReadUnitsPerEm(data); got != 2048 {
+		t.Errorf("ReadUnitsPerEm = %d, want 2048 (FDArray FontMatrix); a Top-DICT-only read gives 1000", got)
+	}
+}
+
 // TestExtractCharstringWidth_HintmaskWidth checks that hintmask, when it is the
 // first stack-clearing operator (implicit vstem hints), still surrenders the
 // leading width operand. An odd operand count carries a width.

@@ -643,6 +643,18 @@ func ReadUnitsPerEm(data []byte) uint16 {
 
 	scale := parseFontMatrixScale(topDictEntries[0])
 	if scale <= 0 {
+		// A CID-keyed CFF may carry its FontMatrix in the FDArray font dict
+		// rather than the Top DICT (CFF spec, TN 5176 §18). Fall back to the
+		// first FD's FontMatrix so a non-1000-upm CID subset scales correctly;
+		// otherwise widths read against a default 1000 upm fire spurious
+		// mismatches against the /W array.
+		if info := parseTopDict(topDictEntries[0]); info.isCID && info.fdArrayOffset > 0 && int(info.fdArrayOffset) < len(data) {
+			if _, fdEntries, err := parseINDEX(data, int(info.fdArrayOffset)); err == nil && len(fdEntries) > 0 {
+				scale = parseFontMatrixScale(fdEntries[0])
+			}
+		}
+	}
+	if scale <= 0 {
 		return 1000 //nolint:mnd // default CFF FontMatrix
 	}
 	upm := uint16(1.0/scale + 0.5) //nolint:gosec,mnd
