@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -104,6 +105,55 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 	d.Index.Trailer = trailer
 
 	return nil
+}
+
+// expandObjectStreamsForRebuild augments a raw-scan rebuild with the objects
+// held inside recovered object streams, registering each as a compressed entry.
+// It never overrides an entry already recovered (an uncompressed copy, or a
+// later incremental update, supersedes the stream copy) and tolerates
+// unparseable or encrypted streams: recovery is best-effort.
+func (d *Document) expandObjectStreamsForRebuild(ctx context.Context, entries map[int]xref.XRefEntry) {
+	stmCandidates := make([]int, 0, len(entries))
+	for objNum, e := range entries {
+		if e.Type == xref.XRefTypeNormal {
+			stmCandidates = append(stmCandidates, objNum)
+		}
+	}
+	slices.Sort(stmCandidates)
+
+	for _, objStmNum := range stmCandidates {
+		if ctx.Err() != nil {
+			return
+		}
+		obj, err := d.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objStmNum})
+		if err != nil {
+			continue
+		}
+		stream, ok := obj.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		if name, _ := stream.Dict["Type"].(ast.PdfName); name != "ObjStm" {
+			continue
+		}
+		data, err := d.parseObjectStream(ctx, objStmNum, map[int]bool{})
+		if err != nil || data == nil {
+			continue
+		}
+		for idx, contained := range data.objNums {
+			if contained <= 0 {
+				continue
+			}
+			if _, exists := entries[contained]; exists {
+				continue
+			}
+			entries[contained] = xref.XRefEntry{
+				Type:        xref.XRefTypeCompressed,
+				ObjStmNum:   objStmNum,
+				ObjStmIndex: idx,
+			}
+		}
+	}
 }
 
 // synthesizeTrailer builds a minimal trailer for documents whose
