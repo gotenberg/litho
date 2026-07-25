@@ -681,6 +681,24 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 				}
 			}
 
+			// RDF/XML §2.5 abbreviates a property as an attribute on the node
+			// element, so an iText-written Factur-X schema declares its URI as
+			// pdfaSchema:namespaceURI="..." on a nested rdf:Description. Reading
+			// only the child-element spelling left the declared namespace
+			// unknown, reporting a false ISO 19005-2/3 §6.6.2.3.1 t1 on every
+			// property that used it.
+			if inExtensionSchema {
+				for _, attr := range t.Attr {
+					if attr.Name.Local != "namespaceURI" ||
+						(attr.Name.Space != xmpPdfaSchemaPrefix && attr.Name.Space != xmpPdfaTypePrefix) {
+						continue
+					}
+					if ns := strings.TrimSpace(attr.Value); ns != "" {
+						extensions[ns] = true
+					}
+				}
+			}
+
 		case xml.EndElement:
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" && elemDepth == 0 {
 				descDepth--
@@ -1502,6 +1520,62 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 		return levelStack[len(levelStack)-1]
 	}
 
+	// RDF/XML §2.5 abbreviates a property as an attribute on the node
+	// element, so pdfaSchema:schema="X" satisfies the same requirement as a
+	// <pdfaSchema:schema>X</pdfaSchema:schema> child. iText writes Factur-X
+	// extension schemas in that form and veraPDF accepts it, so scanning
+	// child elements alone reported every required field of such a schema as
+	// missing (ISO 19005-2/3 §6.6.2.3.3 t2-t4 and t7-t10).
+	harvestAttrFields := func(attrs []xml.Attr) {
+		for _, a := range attrs {
+			if strings.TrimSpace(a.Value) == "" {
+				continue
+			}
+			switch {
+			case a.Name.Space == xmpPdfaSchemaPrefix && currentLevel() == xmpExtLevelSchema:
+				switch a.Name.Local {
+				case "schema":
+					currentSchema.hasSchema = true
+				case "namespaceURI":
+					currentSchema.hasNamespaceURI = true
+				case "prefix":
+					currentSchema.hasPrefix = true
+				}
+			case a.Name.Space == xmpPdfaPropertyPrefix && currentLevel() == xmpExtLevelProperty:
+				switch a.Name.Local {
+				case "name":
+					currentProp.hasName = true
+				case "valueType":
+					currentProp.hasValueType = true
+				case "category":
+					currentProp.hasCategory = true
+				case "description":
+					currentProp.hasDescription = true
+				}
+			case a.Name.Space == xmpPdfaTypePrefix && currentLevel() == xmpExtLevelValueType:
+				switch a.Name.Local {
+				case "type":
+					currentValueType.hasType = true
+				case "namespaceURI":
+					currentValueType.hasNamespaceURI = true
+				case "prefix":
+					currentValueType.hasPrefix = true
+				case "description":
+					currentValueType.hasDescription = true
+				}
+			case a.Name.Space == xmpPdfaFieldPrefix && currentLevel() == xmpExtLevelField:
+				switch a.Name.Local {
+				case "name":
+					currentField.hasName = true
+				case "valueType":
+					currentField.hasValueType = true
+				case "description":
+					currentField.hasDescription = true
+				}
+			}
+		}
+	}
+
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
@@ -1585,8 +1659,13 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				} else if len(levelStack) == 0 {
 					levelStack = append(levelStack, xmpExtLevelSchema)
 				}
+				// An attribute-form rdf:li carries its whole definition here
+				// and is usually self-closing, so harvest before descending.
+				harvestAttrFields(t.Attr)
 				continue
 			}
+
+			harvestAttrFields(t.Attr)
 
 			// Track fields within each definition level.
 			// For each known field local name, verify the namespace prefix
@@ -2105,6 +2184,41 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 		vtHasField = false
 	}
 
+	// RDF/XML §2.5 abbreviates a property as an attribute on the node
+	// element, so pdfaProperty:name="X" means the same as a
+	// <pdfaProperty:name>X</pdfaProperty:name> child. iText writes the whole
+	// Factur-X extension schema that way, and veraPDF accepts both spellings.
+	// Reading child elements alone left such a schema with no namespace URI
+	// and no properties, reporting a false ISO 19005-2/3 §6.6.2.3.1 t1.
+	harvestAttrs := func(attrs []xml.Attr) {
+		for _, a := range attrs {
+			value := strings.TrimSpace(a.Value)
+			if value == "" {
+				continue
+			}
+			switch a.Name.Space {
+			case xmpPdfaSchemaPrefix:
+				if a.Name.Local == "namespaceURI" && current != nil {
+					current.nsURI = value
+				}
+			case xmpPdfaPropertyPrefix:
+				if !inProperty {
+					continue
+				}
+				switch a.Name.Local {
+				case "name":
+					propName = value
+				case "valueType":
+					propVT = value
+				}
+			case xmpPdfaTypePrefix:
+				if inValueType && a.Name.Local == "type" {
+					vtName = value
+				}
+			}
+		}
+	}
+
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
@@ -2176,6 +2290,8 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 					vtHasField = true
 				}
 			}
+
+			harvestAttrs(t.Attr)
 
 		case xml.EndElement:
 			if t.Name.Local == "schemas" {

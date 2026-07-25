@@ -147,6 +147,89 @@ func TestXMPExtSchemaMultiPropertySeq(t *testing.T) {
 	}
 }
 
+// itextExtSchemaXMP mirrors the iText Factur-X catalog XMP: the schema and
+// every property are written in RDF/XML attribute form (RDF/XML §2.5), on a
+// nested rdf:Description and on self-closing rdf:li items, instead of as child
+// elements.
+func itextExtSchemaXMP(props []string) []byte {
+	var decls, usage string
+	for _, p := range props {
+		decls += `<rdf:li pdfaProperty:name="` + p + `"` +
+			` pdfaProperty:valueType="Text"` +
+			` pdfaProperty:category="external"` +
+			` pdfaProperty:description="d"/>`
+		usage += ` fx:` + p + `="v"`
+	}
+
+	return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about=""` +
+		` xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` +
+		` xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` +
+		` xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">` +
+		`<pdfaExtension:schemas><rdf:Bag><rdf:li>` +
+		`<rdf:Description pdfaSchema:schema="Factur-X PDFA Extension Schema"` +
+		` pdfaSchema:namespaceURI="` + itextExtNS + `"` +
+		` pdfaSchema:prefix="fx">` +
+		`<pdfaSchema:property><rdf:Seq>` + decls + `</rdf:Seq></pdfaSchema:property>` +
+		`</rdf:Description>` +
+		`</rdf:li></rdf:Bag></pdfaExtension:schemas>` +
+		`</rdf:Description>` +
+		`<rdf:Description xmlns:fx="` + itextExtNS + `" rdf:about=""` + usage + `/>` +
+		`</rdf:RDF></x:xmpmeta>`)
+}
+
+// itextExtNS is the Factur-X extension schema namespace iText declares.
+const itextExtNS = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"
+
+// TestXMPExtSchemaAttributeForm pins RDF/XML §2.5 attribute-form extension
+// schemas as equivalent to the child-element spelling. Reading child elements
+// alone made every field of an iText-written Factur-X schema look absent, so
+// one file reported 20 false violations: §6.6.2.3.3 t2-t4 and t7-t10 for the
+// missing fields, plus §6.6.2.3.1 t1 because the declared namespace never
+// registered. veraPDF accepts both spellings.
+func TestXMPExtSchemaAttributeForm(t *testing.T) {
+	ctx := context.Background()
+	props := []string{"DocumentFileName", "DocumentType", "Version", "ConformanceLevel"}
+	data := itextExtSchemaXMP(props)
+
+	schemas := xmpParseExtensionSchemas(data)
+	if len(schemas) != 1 {
+		t.Fatalf("schema entries: got %d, want 1", len(schemas))
+	}
+	if schemas[0].nsURI != itextExtNS {
+		t.Errorf("namespace URI: got %q, want %q", schemas[0].nsURI, itextExtNS)
+	}
+	for _, p := range props {
+		if schemas[0].propTypes[p] != "Text" {
+			t.Errorf("property %s: got type %q, want %q", p, schemas[0].propTypes[p], "Text")
+		}
+	}
+
+	// An unregistered namespace makes every property that uses it unknown.
+	if _, extensions := xmpExtractNamespaces(data); !extensions[itextExtNS] {
+		t.Errorf("extension namespaces: got %v, want %s registered", extensions, itextExtNS)
+	}
+
+	for _, part := range []int{1, 2, 3} {
+		var got []Violation
+		xmpCheckExtensionSchemas(ctx, data, part, &got)
+		if len(got) != 0 {
+			t.Errorf("part %d required fields: got %d violations %v, want none",
+				part, len(got), got)
+		}
+	}
+
+	for _, part := range []int{2, 3} {
+		var got []Violation
+		xmpCheckExtensionPropertyResolution(data, part, &got)
+		if len(got) != 0 {
+			t.Errorf("part %d resolution: got %d violations %v, want none",
+				part, len(got), got)
+		}
+	}
+}
+
 // TestXMPExtSchemaMultiValueTypeSeq pins the same per-item recording for the
 // pdfaSchema:valueType Seq: each rdf:li defines one custom type, and only the
 // last survived before the fix.
