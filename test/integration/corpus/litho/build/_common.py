@@ -247,7 +247,12 @@ def filespec(pdf, name, payload, relationship=None, subtype=None):
     ef = Stream(pdf, payload)
     ef.Type = Name.EmbeddedFile
     if subtype is not None:
-        ef.Subtype = Name(subtype)
+        # A MIME type contains '/', which a PDF name can only carry as the
+        # escape #2F. Name("/text#2Fxml") does NOT do that: pikepdf escapes the
+        # '#' itself and writes /text#232Fxml, whose one correct decoding is the
+        # literal "text#2Fxml", not a MIME type at all. Parsing the token
+        # instead honours the escape, so this really means "text/xml".
+        ef.Subtype = pikepdf.Object.parse(subtype.encode("ascii"))
     ef.Params = Dictionary(Size=len(payload))
     spec = Dictionary(
         Type=Name.Filespec,

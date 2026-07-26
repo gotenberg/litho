@@ -50,26 +50,28 @@ one deliberately rather than diffing it against a fresh build.
 
 ## Fixtures
 
-| Fixture             | Home profile | Focus                                                          |
-| ------------------- | ------------ | -------------------------------------------------------------- |
-| `complex_1b.pdf`    | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG         |
-| `complex_2a.pdf`    | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language       |
-| `complex_2b.pdf`    | PDF/A-2b     | Broadest mix; annotations, optional content, filters           |
-| `complex_2u.pdf`    | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings    |
-| `complex_3b.pdf`    | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment     |
-| `complex_4.pdf`     | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps |
-| `complex_ua1.pdf`   | PDF/UA-1     | Structure and accessibility defects in a wired tag tree        |
-| `complex_ua2.pdf`   | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
-| `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
-| `gstate_2b.pdf`     | PDF/A-2b     | Transfer functions and halftones in six graphics states        |
-| `limits_2b.pdf`     | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN          |
-| `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                         |
-| `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
-| `fontdict_2b.pdf`   | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
-| `tables_ua1.pdf`    | PDF/UA-1     | Tables and lists: header association, nested list structure    |
-| `tablespan_ua2.pdf` | PDF/UA-2     | Table cell geometry: row and column spans                      |
-| `extschema_2b.pdf`  | PDF/A-2b     | XMP extension schema structure across sibling entries          |
-| `trailer_2b.pdf`    | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                    |
+| Fixture              | Home profile | Focus                                                          |
+| -------------------- | ------------ | -------------------------------------------------------------- |
+| -------------------- | ------------ | -------------------------------------------------------------- |
+| `complex_1b.pdf`     | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG         |
+| `complex_2a.pdf`     | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language       |
+| `complex_2b.pdf`     | PDF/A-2b     | Broadest mix; annotations, optional content, filters           |
+| `complex_2u.pdf`     | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings    |
+| `complex_3b.pdf`     | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment     |
+| `complex_4.pdf`      | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps |
+| `complex_ua1.pdf`    | PDF/UA-1     | Structure and accessibility defects in a wired tag tree        |
+| `complex_ua2.pdf`    | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
+| `forbidden_mix.pdf`  | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
+| `gstate_2b.pdf`      | PDF/A-2b     | Transfer functions and halftones in six graphics states        |
+| `limits_2b.pdf`      | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN          |
+| `megafont_2b.pdf`    | PDF/A-2b     | Font embedding and glyph-width scoping                         |
+| `multipage_2b.pdf`   | PDF/A-2b     | Three pages, a violation class unique to each                  |
+| `fontdict_2b.pdf`    | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
+| `structnest_ua1.pdf` | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language  |
+| `tables_ua1.pdf`     | PDF/UA-1     | Tables and lists: header association, nested list structure    |
+| `tablespan_ua2.pdf`  | PDF/UA-2     | Table cell geometry: row and column spans                      |
+| `extschema_2b.pdf`   | PDF/A-2b     | XMP extension schema structure across sibling entries          |
+| `trailer_2b.pdf`     | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                    |
 
 ### Must-not-fire controls
 
@@ -77,33 +79,39 @@ Recent litho fixes added usage-scoping guards whose failure mode is
 over-suppression. Each control below is a construct that looks like a
 violation but is exempt, so a firing is a false positive.
 
-| Fixture                                   | Control                                                              | Grounding                    |
-| ----------------------------------------- | -------------------------------------------------------------------- | ---------------------------- |
-| `complex_1b`, `complex_2b`, `megafont_2b` | Type3 font `T3B`: skewed `/Widths` on a glyph that is never rendered | width rule is usage-scoped   |
-| `complex_2b`                              | Zero-area annotation with no appearance stream                       | ISO 19005-2, 6.3.3 exemption |
-| `complex_1b`                              | Fully conforming annotation: `F=4`, `/AP` present, no `/C`           | ISO 19005-1, 6.5.3           |
-| `complex_1b`                              | File header pinned to `%PDF-1.4`                                     | ISO 19005-1, 6.1.2           |
-| `complex_ua1`                             | `pdfuaid:part=1` present and correct                                 | ISO 14289-1, 5               |
-| `complex_ua2`                             | `/Figure` carrying `/Alt` beside one that carries none               | ISO 14289-2, 8.2.5.28.2      |
-| `complex_ua2`                             | Well-formed `/Lang` beside a malformed one                           | ISO 14289-2, 8.4.4           |
-| `complex_ua2`                             | Invisible annotation outside the structure tree                      | ISO 14289-2, 8.9.2.2         |
-| `complex_ua2`                             | `/Document` declaring the PDF 2.0 standard namespace                 | ISO 14289-2, 8.2.5.2         |
-| `complex_2a`                              | `/Document`, a standard type absent from the `/RoleMap`              | ISO 19005-2, 6.7.3.4         |
-| `complex_2a`                              | Markup annotations wrapped in `/Annot` structure elements            | ISO 14289-2, 8.9.2.3         |
-| `complex_2u`                              | `/ToUnicode` onto a plain Latin letter                               | ISO 19005-2, 6.2.11.7.2      |
-| `complex_2u`                              | Unrendered code whose glyph name maps to nothing                     | glyph rules are usage-scoped |
-| `complex_2u`                              | Private Use glyph inside a marked-content `/ActualText`              | ISO 19005-2, 6.2.11.7.3      |
-| `complex_3b`                              | Attachment correct in all four respects, reachable from `/AF`        | ISO 19005-3, 6.8             |
-| `complex_4`                               | File header pinned to `%PDF-2.0`                                     | ISO 19005-4, 6.1.2           |
-| `complex_4`                               | Page-level `/OutputIntents`, a legal PDF 2.0 construct               | ISO 32000-2, 14.11.5         |
-| `complex_4`                               | `/AFRelationship` on one file specification and not the other        | ISO 19005-4, 6.9             |
-| `complex_4`                               | Second image carrying `/Interpolate false`                           | ISO 19005-4, 6.2.7.1         |
-| `tables_ua1`                              | Second table: `TH` with `/Scope` and `/ID`, `TD` with `/Headers`     | ISO 14289-1, 7.5             |
-| `multipage_2b`                            | Page 1 annotation: `F=4`, `/AP` present, no `/C`                     | ISO 19005-2, 6.3.3           |
-| `fontdict_2b`                             | Fifth font conforming in every required key                          | ISO 19005-2, 6.2.11.2        |
-| `extschema_2b`                            | Third schema entry conforming in every field                         | ISO 19005-2, 6.6.2.3.3       |
-| `gstate_2b`                               | Sixth graphics state: `/TR2 /Default`, unnamed type 1 halftone       | ISO 19005-2, 6.2.5           |
-| `tablespan_ua2`                           | Second table spanning two columns with both headers referenced       | ISO 14289-2, 8.2.5.26        |
+| Fixture                                   | Control                                                                | Grounding                    |
+| ----------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
+| `complex_1b`, `complex_2b`, `megafont_2b` | Type3 font `T3B`: skewed `/Widths` on a glyph that is never rendered   | width rule is usage-scoped   |
+| `complex_2b`                              | Zero-area annotation with no appearance stream                         | ISO 19005-2, 6.3.3 exemption |
+| `complex_1b`                              | Fully conforming annotation: `F=4`, `/AP` present, no `/C`             | ISO 19005-1, 6.5.3           |
+| `complex_1b`                              | File header pinned to `%PDF-1.4`                                       | ISO 19005-1, 6.1.2           |
+| `complex_ua1`                             | `pdfuaid:part=1` present and correct                                   | ISO 14289-1, 5               |
+| `complex_ua2`                             | `/Figure` carrying `/Alt` beside one that carries none                 | ISO 14289-2, 8.2.5.28.2      |
+| `complex_ua2`                             | Well-formed `/Lang` beside a malformed one                             | ISO 14289-2, 8.4.4           |
+| `complex_ua2`                             | Invisible annotation outside the structure tree                        | ISO 14289-2, 8.9.2.2         |
+| `complex_ua2`                             | `/Document` declaring the PDF 2.0 standard namespace                   | ISO 14289-2, 8.2.5.2         |
+| `complex_2a`                              | `/Document`, a standard type absent from the `/RoleMap`                | ISO 19005-2, 6.7.3.4         |
+| `complex_2a`                              | Markup annotations wrapped in `/Annot` structure elements              | ISO 14289-2, 8.9.2.3         |
+| `complex_2u`                              | `/ToUnicode` onto a plain Latin letter                                 | ISO 19005-2, 6.2.11.7.2      |
+| `complex_2u`                              | Unrendered code whose glyph name maps to nothing                       | glyph rules are usage-scoped |
+| `complex_2u`                              | Private Use glyph inside a marked-content `/ActualText`                | ISO 19005-2, 6.2.11.7.3      |
+| `complex_3b`                              | Attachment correct in all four respects, reachable from `/AF`          | ISO 19005-3, 6.8             |
+| `complex_4`                               | File header pinned to `%PDF-2.0`                                       | ISO 19005-4, 6.1.2           |
+| `complex_4`                               | Page-level `/OutputIntents`, a legal PDF 2.0 construct                 | ISO 32000-2, 14.11.5         |
+| `complex_4`                               | `/AFRelationship` on one file specification and not the other          | ISO 19005-4, 6.9             |
+| `complex_4`                               | Second image carrying `/Interpolate false`                             | ISO 19005-4, 6.2.7.1         |
+| `structnest_ua1`                          | Fourteenth table: Caption first, one `THead`, one `TBody`, one `TFoot` | ISO 14289-1, 7.2             |
+| `structnest_ua1`                          | Fourth list: `L` > `LI` > `Lbl` + `LBody`                              | ISO 14289-1, 7.2             |
+| `structnest_ua1`                          | Third table of contents: `Caption` first, then a `TOCI`                | ISO 14289-1, 7.2             |
+| `structnest_ua1`                          | `/Span` carrying `/ActualText` beside its own `/Lang`                  | ISO 14289-1, 7.2 t21         |
+| `structnest_ua1`                          | Marked-content `/Span` declaring `/Lang` inline                        | ISO 14289-1, 7.2 t30         |
+| `structnest_ua1`                          | Form field whose `/TU` sits beside a field `/Lang`                     | ISO 14289-1, 7.2 t25         |
+| `tables_ua1`                              | Second table: `TH` with `/Scope` and `/ID`, `TD` with `/Headers`       | ISO 14289-1, 7.5             |
+| `multipage_2b`                            | Page 1 annotation: `F=4`, `/AP` present, no `/C`                       | ISO 19005-2, 6.3.3           |
+| `fontdict_2b`                             | Fifth font conforming in every required key                            | ISO 19005-2, 6.2.11.2        |
+| `extschema_2b`                            | Third schema entry conforming in every field                           | ISO 19005-2, 6.6.2.3.3       |
+| `gstate_2b`                               | Sixth graphics state: `/TR2 /Default`, unnamed type 1 halftone         | ISO 19005-2, 6.2.5           |
+| `tablespan_ua2`                           | Second table spanning two columns with both headers referenced         | ISO 14289-2, 8.2.5.26        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -116,26 +124,27 @@ Counts are distinct rule classes (`clause/test`) reported by litho. litho and
 veraPDF agree exactly on the set in every cell except the two marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
-| Fixture             | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
-| ------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
-| `complex_1b.pdf`    | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
-| `complex_2a.pdf`    | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
-| `complex_2b.pdf`    | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
-| `complex_2u.pdf`    | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
-| `complex_3b.pdf`    | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
-| `complex_4.pdf`     | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
-| `complex_ua1.pdf`   | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
-| `complex_ua2.pdf`   | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
-| `forbidden_mix.pdf` | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
-| `gstate_2b.pdf`     | 6    | 12   | 10   | 10   | 10   | 11  | 7    | 7    |
-| `limits_2b.pdf`     | 7    | 11   | 9    | 9    | 9    | 7   | 10   | 8    |
-| `megafont_2b.pdf`   | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
-| `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
-| `fontdict_2b.pdf`   | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
-| `tables_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
-| `tablespan_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
-| `extschema_2b.pdf`  | 8    | 10   | 7    | 8    | 8    | 6   | 8    | 8    |
-| `trailer_2b.pdf`    | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
+| Fixture              | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
+| -------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
+| `complex_1b.pdf`     | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
+| `complex_2a.pdf`     | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
+| `complex_2b.pdf`     | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
+| `complex_2u.pdf`     | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
+| `complex_3b.pdf`     | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
+| `complex_4.pdf`      | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
+| `complex_ua1.pdf`    | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
+| `complex_ua2.pdf`    | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
+| `extschema_2b.pdf`   | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
+| `fontdict_2b.pdf`    | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
+| `forbidden_mix.pdf`  | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
+| `gstate_2b.pdf`      | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
+| `limits_2b.pdf`      | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
+| `megafont_2b.pdf`    | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
+| `multipage_2b.pdf`   | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
+| `structnest_ua1.pdf` | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
+| `tables_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
+| `tablespan_ua2.pdf`  | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
+| `trailer_2b.pdf`     | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -319,6 +328,75 @@ The list is `L > LI > Lbl + LBody`, with the second `LI` omitting the `/Lbl`
 its sibling carries, so the nesting the Table 5 matrix governs is present
 alongside a real asymmetry between siblings.
 
+## Structure nesting and per-element language
+
+ISO 14289-1, 7.2 was the largest unreached cell in the corpus: 37 of its 41
+tests fired on no fixture. Despite the clause title it is a mixed clause. It
+governs where a table, list and table-of-contents element may sit in the
+structure tree, where a `Caption` may sit among its siblings, and whose
+natural language covers text that is not page content.
+`structnest_ua1.pdf` reaches 35 of the 37.
+
+Nine of the defects are siblings under one `Div`, so a check that reports the
+first misplaced element and stops reports one rule where nine are due:
+
+| Element under the `Div` | Rule     |
+| ----------------------- | -------- |
+| `TR` outside a table    | `7.2/4`  |
+| `THead` outside a table | `7.2/5`  |
+| `TBody` outside a table | `7.2/6`  |
+| `TFoot` outside a table | `7.2/7`  |
+| `TH` outside a `TR`     | `7.2/8`  |
+| `TD` outside a `TR`     | `7.2/9`  |
+| `LI` outside an `L`     | `7.2/17` |
+| `LBody` outside an `LI` | `7.2/18` |
+| `TOCI` outside a `TOC`  | `7.2/26` |
+
+Thirteen further tables carry one defect each, because the section-count and
+child-type tests interact: a table with a `THead` and no `TBody` fails `7.2/14`
+whatever else is wrong with it, so a fixture that piled the defects into one
+table could not tell a missing report from an absorbed one. `7.2/3` is a
+non-table kid, `7.2/10` a non-cell `TR` kid, `7.2/11` and `7.2/12` a duplicate
+`THead` and `TFoot`, `7.2/13` and `7.2/14` a `TFoot` and a `THead` with no
+`TBody`, `7.2/16` a mid-position `Caption`, `7.2/39` a second one, `7.2/36`,
+`7.2/37` and `7.2/38` a section holding a `P`, and `7.2/42` and `7.2/43` the
+two directions of an irregular grid. Three lists cover `7.2/19`, `7.2/20` and
+`7.2/40`, and two tables of contents cover `7.2/27` and `7.2/28`.
+
+The language half needs the opposite setup: no catalog `/Lang`, so nothing
+determines a language document-wide. `7.2/2` fires on an outline entry,
+`7.2/25` on a form field `/TU`, `7.2/21`, `7.2/22` and `7.2/23` on structure
+elements carrying `/ActualText`, `/Alt` and `/E`, and `7.2/30`, `7.2/31` and
+`7.2/32` on the same three properties set on a `/Span` marked-content
+sequence. The page shows no glyphs, only artifact and tagged vector content,
+so the document-wide `7.2/34` never competes with the per-element tests.
+
+Six controls conform where the defects break: the fourteenth table, the fourth
+list and the third table of contents are correct in every respect their
+siblings are not, a structure `/Span` carries `/ActualText` beside its own
+`/Lang`, a marked-content `/Span` declares `/Lang` inline, and a second form
+field carries `/Lang` beside its `/TU`. Every rule above fires exactly once on
+both litho and veraPDF, which is what proves the controls silent.
+
+Two tests stay unreached, and neither is a fixture shortcoming:
+
+- `7.2/41` is unreachable under PDF/UA-1. veraPDF sets
+  `numberOfColumnWithWrongRowSpan` in two places. The first fires when a cell's
+  `/RowSpan` runs past the last row, but the row count is itself computed as
+  the maximum of `row index + /RowSpan` over every cell, so the condition can
+  never hold. The second is a `/RowSpan` crossing a `THead`, `TBody` or
+  `TFoot` boundary, and it is guarded by `isPDFUA2RelatedFlavour`, so a
+  PDF/UA-1 run never evaluates it.
+- `7.2/15` is reachable but litho does not implement it, so planting it would
+  add a disagreeing cell rather than coverage. See
+  [Known divergences](#known-divergences).
+
+The other four tests of the clause were already covered: `7.2/24` by
+`complex_ua2.pdf` and `limits_2b.pdf`, `7.2/29` by `complex_2a.pdf` and
+`complex_ua2.pdf`, `7.2/33` and `7.2/34` by `complex_ua1.pdf`. `7.2/1` and
+`7.2/35` do not exist in the profile, which is why the clause holds 41 tests
+numbered up to 43.
+
 ## Font dictionary keys
 
 A coverage scan against the veraPDF profile showed this corpus reached only a
@@ -458,6 +536,28 @@ remains is a separate facet of the same rule, described below.
 veraPDF reports a property whose `pdfaProperty:category` is neither
 `external` nor `internal`; litho checks only that the field is present, never
 its value. A litho gap, under repair.
+
+Two more litho gaps surfaced while building `structnest_ua1.pdf`. Neither is
+in a committed fixture, because planting either would add a disagreeing cell
+rather than coverage. Both are worth a fixture the moment litho implements
+them.
+
+**`7.2/15`, a table cell intersection.** veraPDF sizes the grid, then places
+every cell and marks an intersection when two cells claim the same slot. A
+first row of `TH(RowSpan 2)`, `TH`, `TH(RowSpan 2)` over a second row holding
+one `TH(ColSpan 2)` puts that cell's second column on a slot the first row's
+last cell already carries down. veraPDF reports `7.2/15`; litho reports
+nothing, and `Rule_14289_1_7_2_t15` is referenced nowhere outside `rules.go`.
+
+**`7.2/2`, an outline entry with its own `/Lang`.** veraPDF reads
+`gContainsCatalogLang == true` on `PDOutline` and offers no per-entry escape,
+which matches ISO 32000-1 Table 153: an outline item dictionary defines no
+`/Lang` entry. `walkOutlineItemsForLang` in
+`pkg/internal/compliance/accessibility_lang.go` exempts an item carrying one
+anyway. Two files differing only in that entry make it visible: with it,
+veraPDF reports `7.2/2` and litho reports nothing; without it, both report it.
+`structnest_ua1.pdf` therefore uses a plain outline item, which both tools
+agree on.
 
 ## Second bug found: PDF/UA-1 language coverage (fixed, one facet remains)
 
