@@ -42,12 +42,19 @@ func TestFontRequiredKeys(t *testing.T) {
 		t.Errorf("conformant font: got %v, want none", got)
 	}
 
-	// PDF/A-2 emits its own t1/t2 ids; t3/BaseFont is PDF/A-1 only.
+	// PDF/A-2 emits its own ids for every test, t3 included: ISO 19005-2
+	// §6.2.11.2 t3 states the same requirement as ISO 19005-1 §6.3.2 t3.
 	if got := chk(ast.PdfDict{"Subtype": ast.PdfName("Type1")}, "Type1", 2); !hasRule(got, Rule_19005_2_6_2_11_2_t01) {
 		t.Errorf("A-2 missing /Type: got %v, want §6.2.11.2 t1", got)
 	}
 	if got := chk(ast.PdfDict{"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1")}, "Type1", 2); hasRule(got, Rule_19005_1_6_3_2_t03) {
 		t.Errorf("A-2 missing /BaseFont wrongly emitted PDF/A-1 t3: %v", got)
+	}
+	if got := chk(ast.PdfDict{"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1")}, "Type1", 2); !hasRule(got, Rule_19005_2_6_2_11_2_t03) {
+		t.Errorf("A-2 missing /BaseFont: got %v, want §6.2.11.2 t3", got)
+	}
+	if got := chk(ast.PdfDict{"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type3")}, "Type3", 2); hasRule(got, Rule_19005_2_6_2_11_2_t03) {
+		t.Errorf("A-2 Type3 is exempt from the name requirement: %v", got)
 	}
 
 	// Non-PDF/A (part 0) is not checked.

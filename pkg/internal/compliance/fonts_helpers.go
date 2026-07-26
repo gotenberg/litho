@@ -194,7 +194,11 @@ func fontReqKeyRule(part, test int) Rule {
 	case 2:
 		return ruleByPart(part, Rule_19005_1_6_3_2_t02, Rule_19005_2_6_2_11_2_t02, Rule_19005_3_6_2_11_2_t02, Rule_19005_4_6_2_10_2_t02)
 	case 3:
-		return ruleByPart(part, Rule_19005_1_6_3_2_t03, Rule{}, Rule{}, Rule{})
+		// Every part carries the rule, not just part 1: ISO 19005-2 and -3
+		// §6.2.11.2 t3 and ISO 19005-4 §6.2.10.2 t3 each state it as
+		// "Subtype == Type3 || fontName != null", the same shape as
+		// ISO 19005-1 §6.3.2 t3.
+		return ruleByPart(part, Rule_19005_1_6_3_2_t03, Rule_19005_2_6_2_11_2_t03, Rule_19005_3_6_2_11_2_t03, Rule_19005_4_6_2_10_2_t03)
 	case 4:
 		return ruleByPart(part, Rule_19005_1_6_3_2_t04, Rule_19005_2_6_2_11_2_t04, Rule_19005_3_6_2_11_2_t04, Rule_19005_4_6_2_10_2_t04)
 	case 5:

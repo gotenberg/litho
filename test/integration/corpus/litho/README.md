@@ -58,6 +58,7 @@ delete a planted violation.
 | `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
 | `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                         |
 | `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
+| `fontdict_2b.pdf`   | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
 | `tables_ua1.pdf`    | PDF/UA-1     | Tables and lists: header association, nested list structure    |
 
 ### Must-not-fire controls
@@ -89,6 +90,7 @@ violation but is exempt, so a firing is a false positive.
 | `complex_4`                               | Second image carrying `/Interpolate false`                           | ISO 19005-4, 6.2.7.1         |
 | `tables_ua1`                              | Second table: `TH` with `/Scope` and `/ID`, `TD` with `/Headers`     | ISO 14289-1, 7.5             |
 | `multipage_2b`                            | Page 1 annotation: `F=4`, `/AP` present, no `/C`                     | ISO 19005-2, 6.3.3           |
+| `fontdict_2b`                             | Fifth font conforming in every required key                          | ISO 19005-2, 6.2.11.2        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -114,6 +116,7 @@ which are covered under [Known divergences](#known-divergences).
 | `forbidden_mix.pdf` | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `megafont_2b.pdf`   | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
+| `fontdict_2b.pdf`   | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `tables_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 
 ### complex_1b.pdf at PDF/A-1b
@@ -297,6 +300,34 @@ double-count, and the rule-set comparison shows the difference.
 The list is `L > LI > Lbl + LBody`, with the second `LI` omitting the `/Lbl`
 its sibling carries, so the nesting the Table 5 matrix governs is present
 alongside a real asymmetry between siblings.
+
+## Font dictionary keys
+
+A coverage scan against the veraPDF profile showed this corpus reached only a
+third of the PDF/A-2b rule set, with the font dictionary requirements of
+ISO 19005-2, 6.2.11.2 entirely unvisited. They need no font program, so
+`fontdict_2b.pdf` plants them directly.
+
+Its shape is the point. Five fonts are drawn on one page and four carry a
+different defect, so a check that reports the first offending font and stops
+reports one rule where four are due:
+
+| Font | Defect                                    | Rule         |
+| ---- | ----------------------------------------- | ------------ |
+| F1   | no `/FirstChar`                           | `6.2.11.2/4` |
+| F2   | no `/LastChar`                            | `6.2.11.2/5` |
+| F3   | three codes declared, two widths supplied | `6.2.11.2/6` |
+| F4   | no `/BaseFont`                            | `6.2.11.2/3` |
+| F5   | none                                      | silent       |
+
+`6.2.11.2/3` is why the fixture exists. litho wired that test for part 1 only,
+and a unit test asserted the requirement was "PDF/A-1 only". All of
+`PDFA-2B.xml`, `PDFA-3B.xml` and `PDFA-4.xml` define it, and the rule
+constants were already present but unreferenced, so the gap was a mapping
+omission rather than a missing check.
+
+Page 2 is two units square, below the three-unit minimum of ISO 19005-2,
+6.1.13, so both edges fail its implementation limit.
 
 ## Known divergences
 
