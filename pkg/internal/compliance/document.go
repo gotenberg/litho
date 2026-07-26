@@ -555,14 +555,13 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, _ ast.Pd
 					"embedded file stream missing /Subtype MIME type")...)
 				break
 			}
-			// The MIME type is a PdfName which may have encoded '/' as '#2F'.
-			// Resolve it to get the decoded name.
+			// Per ISO 32000-1, 7.3.5, the lexer already resolves every #XX
+			// escape, so a name written /text#2Fxml arrives here as "text/xml".
+			// Decoding #2F a second time would turn /text#232Fxml, whose one
+			// correct decoding is the literal "text#2Fxml", back into a valid
+			// MIME type and accept a file this clause rejects.
 			subtype, _ := document.ResolveName(ctx, doc, subtypeObj)
-			decoded := string(subtype)
-			// Also try decoding #XX sequences for names not automatically decoded.
-			decoded = strings.ReplaceAll(decoded, "#2F", "/")
-			decoded = strings.ReplaceAll(decoded, "#2f", "/")
-			if decoded == "" || !strings.Contains(decoded, "/") {
+			if !mimeTypePattern.MatchString(string(subtype)) {
 				results = append(results, failf(Rule_19005_4_6_9_t01,
 					"embedded file stream invalid /Subtype MIME type: %q", subtype)...)
 				break

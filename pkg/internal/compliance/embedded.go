@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -161,10 +160,13 @@ func checkEmbeddedSubtypeMIME(ctx context.Context, doc *document.Document, fs fi
 			doc.Logger.Debug("compliance.embedded: cannot resolve embedded file stream", "error", err)
 			continue
 		}
+		// Per ISO 32000-1, 7.3.5, the lexer already resolves every #XX escape,
+		// so a name written /text#2Fxml arrives here as "text/xml". Decoding
+		// #2F a second time would turn /text#232Fxml, whose one correct
+		// decoding is the literal "text#2Fxml", back into a valid MIME type and
+		// accept a file this clause rejects.
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-		// /Subtype is a name that may encode '/' as #2F.
-		mime := strings.ReplaceAll(strings.ReplaceAll(string(subtype), "#2F", "/"), "#2f", "/")
-		if !mimeTypePattern.MatchString(mime) {
+		if !mimeTypePattern.MatchString(string(subtype)) {
 			results = append(results, failf(Rule_19005_3_6_8_t01,
 				"object %d: embedded file /Subtype %q is not a valid MIME type", fs.objNum, subtype)...)
 		}

@@ -112,3 +112,52 @@ func TestCheckEmbeddedFileMIME_KidsNested(t *testing.T) {
 		t.Errorf("nested filespec with valid MIME: want none, got %v", got)
 	}
 }
+
+// TestEmbeddedSubtypeMIMEDoubleEscape pins that the MIME check does not decode
+// #XX a second time. Per ISO 32000-1, 7.3.5 the lexer already resolves every
+// escape, so the raw name /text#232Fplain has exactly one decoding, the literal
+// "text#2Fplain", which is not a MIME type. Re-decoding #2F turned it back into
+// "text/plain" and accepted a file ISO 19005-3, 6.8 t1 and ISO 19005-4, 6.9 t1
+// both reject. veraPDF 1.30.2 reports the violation on the same input.
+func TestEmbeddedSubtypeMIMEDoubleEscape(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	mk := func(subtype string) ([]Violation, []Violation) {
+		doc, cat := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(f.txt) 4 0 R] >> >> >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /Filespec /F (f.txt) /UF (f.txt) /EF << /F 5 0 R >> /AFRelationship /Data >>",
+			"<< /Type /EmbeddedFile /Subtype /"+subtype+" /Length 3 >>\nstream\nabc\nendstream",
+		)
+		var part3 []Violation
+		for _, fs := range collectFileSpecs(ctx, doc) {
+			part3 = append(part3, checkEmbeddedSubtypeMIME(ctx, doc, fs)...)
+		}
+		return part3, checkEmbeddedFileMIME(ctx, doc, cat)
+	}
+
+	// "#23" is the escape for '#', so this name decodes to "text#2Fplain".
+	p3, p4 := mk("text#232Fplain")
+	if !hasRule(p3, Rule_19005_3_6_8_t01) {
+		t.Errorf("double-escaped name is not a MIME type: got %v, want includes 6.8 t1", p3)
+	}
+	if !hasRule(p4, Rule_19005_4_6_9_t01) {
+		t.Errorf("double-escaped name is not a MIME type: got %v, want includes 6.9 t1", p4)
+	}
+
+	// A single escape is the only legal way to write '/' in a name, and must pass.
+	p3, p4 = mk("text#2Fplain")
+	if hasRule(p3, Rule_19005_3_6_8_t01) {
+		t.Errorf("text/plain is valid: got %v, want none", p3)
+	}
+	if hasRule(p4, Rule_19005_4_6_9_t01) {
+		t.Errorf("text/plain is valid: got %v, want none", p4)
+	}
+
+	// The 6.9 t1 shape the old contains-a-slash test could not reject.
+	if _, p4 = mk("application#2F"); !hasRule(p4, Rule_19005_4_6_9_t01) {
+		t.Errorf("empty subtype is not a MIME type: got %v, want includes 6.9 t1", p4)
+	}
+}
