@@ -43,6 +43,11 @@ rebuild that changes nothing produces an empty diff. The decode level matters:
 qpdf's default silently rewrites an `LZWDecode` stream as Flate, which would
 delete a planted violation.
 
+`trailer_2b.pdf` is the one exception. It is encrypted, and qpdf derives a
+random file encryption key on every save with no way to pin it, so successive
+builds differ inside `/O`, `/U` and every encrypted string. Regenerate that
+one deliberately rather than diffing it against a fresh build.
+
 ## Fixtures
 
 | Fixture             | Home profile | Focus                                                          |
@@ -60,6 +65,8 @@ delete a planted violation.
 | `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
 | `fontdict_2b.pdf`   | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
 | `tables_ua1.pdf`    | PDF/UA-1     | Tables and lists: header association, nested list structure    |
+| `extschema_2b.pdf`  | PDF/A-2b     | XMP extension schema structure across sibling entries          |
+| `trailer_2b.pdf`    | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                    |
 
 ### Must-not-fire controls
 
@@ -91,6 +98,7 @@ violation but is exempt, so a firing is a false positive.
 | `tables_ua1`                              | Second table: `TH` with `/Scope` and `/ID`, `TD` with `/Headers`     | ISO 14289-1, 7.5             |
 | `multipage_2b`                            | Page 1 annotation: `F=4`, `/AP` present, no `/C`                     | ISO 19005-2, 6.3.3           |
 | `fontdict_2b`                             | Fifth font conforming in every required key                          | ISO 19005-2, 6.2.11.2        |
+| `extschema_2b`                            | Third schema entry conforming in every field                         | ISO 19005-2, 6.6.2.3.3       |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -118,6 +126,8 @@ which are covered under [Known divergences](#known-divergences).
 | `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `fontdict_2b.pdf`   | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `tables_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
+| `extschema_2b.pdf`  | 6    | 8    | 5    | 6    | 6    | 6   | 8    | 8    |
+| `trailer_2b.pdf`    | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -329,6 +339,29 @@ omission rather than a missing check.
 Page 2 is two units square, below the three-unit minimum of ISO 19005-2,
 6.1.13, so both edges fail its implementation limit.
 
+## Extension schemas and the trailer
+
+Two more fixtures come from the same coverage scan. `6.6.2.3.3` was the
+largest unreached cluster at 18 rules, and the whole `6.1` file-structure
+family was unvisited.
+
+`extschema_2b.pdf` puts three schema entries in one bag. The first is
+defective in its own fields (no `pdfaSchema:prefix`), the second has three
+sibling properties each defective differently (a category outside
+`{external, internal}`, a missing description, a missing name), and the third
+conforms completely. Sibling entries are the point: a check that reports the
+first bad schema and stops never reaches the second, and one that condemns
+the bag on first sight wrongly reports the third.
+
+`trailer_2b.pdf` is encrypted and carries junk after its last `%%EOF`, so it
+reaches `6.1.3/2` and `6.1.3/3`. Encryption is worth having in the corpus for
+its own sake: it changes how every string and stream is read, so a reader that
+gives up on it reports nothing rather than reporting the encryption.
+
+Both were built after the coverage scan showed the corpus firing 33 of the
+144 PDF/A-2b rules; the fixtures added since raised that to 40 before these
+two landed.
+
 ## Known divergences
 
 Two cells in the table above disagree, both on `complex_ua2.pdf` and both
@@ -346,6 +379,11 @@ either rule.
 **`7.2/34` at PDF/UA-1.** veraPDF reports it, litho does not. This one is a
 litho gap, not a veraPDF one. The masking bug behind it is fixed; what
 remains is a separate facet of the same rule, described below.
+
+**`6.6.2.3.3/9` on `extschema_2b.pdf`**, and its part-1 spelling `6.7.8/10`.
+veraPDF reports a property whose `pdfaProperty:category` is neither
+`external` nor `internal`; litho checks only that the field is present, never
+its value. A litho gap, under repair.
 
 ## Second bug found: PDF/UA-1 language coverage (fixed, one facet remains)
 
