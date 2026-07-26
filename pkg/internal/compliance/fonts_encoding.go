@@ -32,7 +32,7 @@ func hasStandardEncoding(ctx context.Context, doc *document.Document, fontDict a
 // WinAnsiEncoding, or MacExpertEncoding). Type 1 fonts using these base
 // encodings (even with /Differences) have character names from the Adobe
 // standard Latin set and are exempt from the /ToUnicode requirement.
-func hasStandardBaseEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+func hasStandardBaseEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
 		return false
@@ -47,12 +47,15 @@ func hasStandardBaseEncoding(ctx context.Context, doc *document.Document, fontDi
 	}
 	// A standard base encoding maps every base code to an AGL-resolvable name.
 	// When /Differences remap some codes, the exemption still holds as long as
-	// each remapped name also resolves to Unicode (AGL or the Symbol set): every
-	// used code then has a well-defined Unicode value without /ToUnicode. This is
-	// font-type agnostic (veraPDF resolves per-glyph Unicode for TrueType the
-	// same as Type1), so it also covers TrueType fonts, which the Type1-only AGL
-	// exemption in checkToUnicode would otherwise miss.
-	return allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict)
+	// each remapped name behind a rendered code also resolves to Unicode (AGL or
+	// the Symbol set): every used code then has a well-defined Unicode value
+	// without /ToUnicode. Scoping to rendered codes matches ISO 19005-2
+	// §6.2.11.7.2, which asks for "the map of all used character codes": an
+	// override the content stream never shows maps no used code, so it cannot
+	// leave one unmapped. This is font-type agnostic (veraPDF resolves per-glyph
+	// Unicode for TrueType the same as Type1), so it also covers TrueType fonts,
+	// which the Type1-only AGL exemption in checkToUnicode would otherwise miss.
+	return usedDifferencesGlyphNamesResolvable(ctx, doc, fontDict, usage)
 }
 
 // hasIdentityCMap returns true if the font's /Encoding is Identity-H or
@@ -224,6 +227,51 @@ func usedDifferencesGlyphNamesResolvable(ctx context.Context, doc *document.Docu
 		}
 	}
 	return true
+}
+
+// renderedNotdefDifferencesCode returns the lowest rendered character code whose
+// /Encoding /Differences entry names .notdef, and whether one exists. Same
+// subject and same scoping as [checkNotdefInDifferences], which reports the
+// reference half of the construct under ISO 19005-2 §6.2.11.8.
+func renderedNotdefDifferencesCode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (byte, bool) {
+	if usage == nil {
+		return 0, false
+	}
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return 0, false
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return 0, false
+	}
+	names := differencesGlyphNames(ctx, doc, encDict)
+	for _, code := range sortedByteKeys(usage.charCodes) {
+		if names[code] == ".notdef" {
+			return code, true
+		}
+	}
+	return 0, false
+}
+
+// notdefUnicodeViolation reports a rendered /.notdef override as a forbidden
+// Unicode value. ISO 32000-1 §9.6.6.1 gives .notdef the meaning "no glyph", so
+// the code behind it stands for no character and the Unicode value it maps to is
+// U+0000, which ISO 19005-2 §6.2.11.7.2 (and ISO 19005-3 §6.2.11.7.2, ISO
+// 19005-4 §6.2.10.7, ISO 14289-1 §7.21.7, ISO 14289-2 §8.4.5.8) forbid. A
+// /ToUnicode entry for the code supersedes the glyph name, since ISO 32000-1
+// §9.10.2 makes the CMap the primary text-extraction mapping: mapping carries
+// the CMap's entries and is nil when the font declares no /ToUnicode at all.
+func notdefUnicodeViolation(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo, mapping map[string]string) []Violation {
+	code, ok := renderedNotdefDifferencesCode(ctx, doc, fontDict, usage)
+	if !ok {
+		return nil
+	}
+	if _, mapped := mapping[string([]byte{code})]; mapped {
+		return nil
+	}
+	return failf(rule, "font %s on page %d: rendered code %d maps to .notdef via /Differences (renders U+0000)",
+		fontName, pageNum, code)
 }
 
 // symbolEncodingNames lists all glyph names from the Symbol font encoding
@@ -500,7 +548,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	}
 
 	// Exemption (a) extended: encoding dictionary with standard BaseEncoding.
-	if hasStandardBaseEncoding(ctx, doc, fontDict) {
+	if hasStandardBaseEncoding(ctx, doc, fontDict, usage) {
 		return nil
 	}
 
@@ -734,12 +782,15 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		return nil
 	}
 
-	tuObj, ok := fontDict["ToUnicode"]
-	if !ok {
-		return nil
-	}
 	if usage == nil || len(usage.charCodes) == 0 {
 		return nil
+	}
+
+	// With no /ToUnicode the glyph name is the only mapping the font offers, so
+	// a rendered .notdef override has nothing to override it.
+	tuObj, hasToUnicode := fontDict["ToUnicode"]
+	if !hasToUnicode {
+		return notdefUnicodeViolation(ctx, doc, fontDict, fontName, pageNum, rule, usage, nil)
 	}
 
 	// A /ToUnicode that cannot be read as a CMap specifies no Unicode value at
@@ -789,6 +840,13 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 			return failf(rule, "font %s on page %d: /ToUnicode maps a rendered code to U+0000, U+FEFF, or U+FFFE",
 				fontName, pageNum)
 		}
+	}
+
+	// A rendered code the CMap leaves alone falls back to its glyph name, so an
+	// explicit .notdef override still resolves to U+0000. This is font-type
+	// agnostic, unlike the name-absence reasoning below.
+	if v := notdefUnicodeViolation(ctx, doc, fontDict, fontName, pageNum, rule, usage, parsed.Mapping); v != nil {
+		return v
 	}
 
 	// A used code that is absent from the ToUnicode CMap and carries no

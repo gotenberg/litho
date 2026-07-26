@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -140,11 +141,14 @@ func TestSymbolicCmapViolation(t *testing.T) {
 // exempt from the /ToUnicode requirement (§6.2.11.7.2): every code maps to an
 // AGL glyph name, hence to Unicode, without /ToUnicode. veraPDF resolves the
 // per-glyph Unicode for TrueType the same as Type1, so litho must not fire.
+// A non-resolvable override still requires /ToUnicode, but only where the
+// content stream renders the code it sits on: §6.2.11.7.2 asks for "the map of
+// all used character codes", and veraPDF builds its Glyph object per shown code.
 func TestToUnicodeTrueTypeStandardBaseDifferences(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	build := func(diffs string) []Violation {
+	build := func(diffs string, usage *fontUsageInfo) []Violation {
 		doc, _ := objsDocPDF(t,
 			"<< /Type /Catalog >>",
 			"<< /Type /Font /Subtype /TrueType /Name /TT0 /FirstChar 0 /LastChar 255 /Encoding 3 0 R /FontDescriptor 4 0 R >>",
@@ -155,14 +159,24 @@ func TestToUnicodeTrueTypeStandardBaseDifferences(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve font: %v", err)
 		}
-		return checkToUnicode(ctx, doc, fontDict, "TT0", 1, "PDF/A-2u", nil)
+		return checkToUnicode(ctx, doc, fontDict, "TT0", 1, "PDF/A-2u", usage)
+	}
+	used := func(codes ...byte) *fontUsageInfo {
+		u := &fontUsageInfo{visible: true, charCodes: map[byte]bool{}}
+		for _, c := range codes {
+			u.charCodes[c] = true
+		}
+		return u
 	}
 
-	if got := build("[ 65 /A 219 /Euro ]"); len(got) != 0 {
+	if got := build("[ 65 /A 219 /Euro ]", used(65, 219)); len(got) != 0 {
 		t.Errorf("TrueType with standard base + AGL-resolvable Differences should be exempt, got %v", got)
 	}
-	if got := build("[ 65 /customGlyphNotInAGL ]"); len(got) == 0 {
-		t.Error("TrueType Differences with a non-AGL-resolvable name should still require /ToUnicode")
+	if got := build("[ 65 /customGlyphNotInAGL ]", used(65)); len(got) == 0 {
+		t.Error("TrueType Differences with a rendered non-AGL-resolvable name should still require /ToUnicode")
+	}
+	if got := build("[ 65 /customGlyphNotInAGL ]", used(66)); len(got) != 0 {
+		t.Errorf("TrueType Differences whose non-AGL name is never rendered should stay exempt, got %v", got)
 	}
 }
 
@@ -256,5 +270,140 @@ func TestToUnicodeStandard14Differences(t *testing.T) {
 	}
 	if got := build("Helvetica", "[ 65 /.notdef ]", used(65)); len(got) != 0 {
 		t.Errorf("a /.notdef override is the .notdef rule's business, not this one, got %v", got)
+	}
+}
+
+// TestToUnicodeStandardBaseEncodingScopedToRenderedCodes pins that a standard
+// /BaseEncoding exempts a font from /ToUnicode as long as the /Differences
+// overrides behind RENDERED codes resolve to Unicode. ISO 19005-2 §6.2.11.7.2
+// asks for "the map of all used character codes", and veraPDF builds its Glyph
+// object only for a code a text-showing operator draws, so an override the
+// content stream never reaches cannot leave a used code unmapped. veraPDF 1.30.2
+// passes such a file; litho validated every entry regardless of usage and
+// reported a false positive on it.
+func TestToUnicodeStandardBaseEncodingScopedToRenderedCodes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// /BaseFont is deliberately outside the standard 14, so the standard 14
+	// exemption cannot mask the /BaseEncoding path under test.
+	build := func(diffs string, usage *fontUsageInfo) []Violation {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /Type1 /Name /F1 /BaseFont /LithoCustom /Encoding 3 0 R >>",
+			"<< /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences "+diffs+" >>",
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		return checkToUnicode(ctx, doc, fontDict, "F1", 1, "PDF/A-2u", usage)
+	}
+	used := func(codes ...byte) *fontUsageInfo {
+		u := &fontUsageInfo{visible: true, charCodes: map[byte]bool{}}
+		for _, c := range codes {
+			u.charCodes[c] = true
+		}
+		return u
+	}
+	bad := "[ 200 /lithoglyphone /lithoglyphtwo ]"
+
+	if got := build(bad, used(65, 66)); len(got) != 0 {
+		t.Errorf("standard /BaseEncoding whose bad override is never rendered should stay exempt, got %v", got)
+	}
+	if got := build(bad, used(200)); len(got) == 0 {
+		t.Error("standard /BaseEncoding with a RENDERED non-resolvable override should require /ToUnicode")
+	}
+	if got := build(bad, nil); len(got) != 0 {
+		t.Errorf("standard /BaseEncoding with no recorded usage should stay exempt, got %v", got)
+	}
+	if got := build("[ 200 /eacute /Euro ]", used(200, 201)); len(got) != 0 {
+		t.Errorf("standard /BaseEncoding with AGL-resolvable overrides should stay exempt, got %v", got)
+	}
+}
+
+// TestToUnicodeCMapValuesRenderedNotdef pins that a rendered /Encoding
+// /Differences entry naming /.notdef fires the ToUnicode value rule. ISO 32000-1
+// §9.6.6.1 gives .notdef the meaning "no glyph", so the code maps to U+0000,
+// which ISO 19005-2 §6.2.11.7.2 t2 (and ISO 14289-1 §7.21.7 t2) forbid. veraPDF
+// 1.30.2 reports "The glyph has Unicode value 0" on such a code; litho reported
+// only the companion reference rule §6.2.11.8. A /ToUnicode entry for the code
+// supersedes the name (ISO 32000-1 §9.10.2), and an override nothing renders is
+// out of scope, matching veraPDF's per-Glyph scoping.
+func TestToUnicodeCMapValuesRenderedNotdef(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	build := func(subtype, diffs string, used byte) []Violation {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /"+subtype+" /Name /F1 /BaseFont /Helvetica /Encoding 3 0 R >>",
+			"<< /Type /Encoding /Differences "+diffs+" >>",
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		usage := &fontUsageInfo{
+			visible:    true,
+			charCodes:  map[byte]bool{used: true},
+			rawStrings: []ast.PdfString{ast.PdfString([]byte{used})},
+		}
+		return checkToUnicodeCMapValues(ctx, doc, fontDict, "F1", 1, "PDF/A-2u", usage)
+	}
+
+	if got := build("Type1", "[ 65 /.notdef ]", 65); len(got) == 0 {
+		t.Error("a rendered /.notdef override with no /ToUnicode must fire the value rule")
+	}
+	if got := build("TrueType", "[ 65 /.notdef ]", 65); len(got) == 0 {
+		t.Error("the rendered /.notdef rule is font-type agnostic; TrueType must fire too")
+	}
+	if got := build("Type3", "[ 65 /.notdef ]", 65); len(got) == 0 {
+		t.Error("the rendered /.notdef rule is font-type agnostic; Type3 must fire too")
+	}
+	if got := build("Type1", "[ 200 /.notdef ]", 65); len(got) != 0 {
+		t.Errorf("a /.notdef override nothing renders must stay silent, got %v", got)
+	}
+	if got := build("Type1", "[ 65 /eacute ]", 65); len(got) != 0 {
+		t.Errorf("a rendered AGL-resolvable override must stay silent, got %v", got)
+	}
+}
+
+// TestToUnicodeCMapValuesNotdefOverriddenByCMap pins the other half of the rule
+// above: a /ToUnicode entry for the code supersedes the .notdef glyph name, so
+// the font passes, while a /ToUnicode silent on that code leaves the name in
+// charge and still fires.
+func TestToUnicodeCMapValuesNotdefOverriddenByCMap(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	build := func(entries string) []Violation {
+		data := "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n" +
+			"/CMapName /Test def\n/CMapType 2 def\n" +
+			"1 begincodespacerange\n<00> <FF>\nendcodespacerange\n" + entries +
+			"endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n"
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Font /Subtype /Type1 /Name /F1 /BaseFont /Helvetica /Encoding 3 0 R /ToUnicode 4 0 R >>",
+			"<< /Type /Encoding /Differences [ 65 /.notdef ] >>",
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(data), data),
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		usage := &fontUsageInfo{
+			visible:    true,
+			charCodes:  map[byte]bool{0x41: true},
+			rawStrings: []ast.PdfString{"A"},
+		}
+		return checkToUnicodeCMapValues(ctx, doc, fontDict, "F1", 1, "PDF/A-2u", usage)
+	}
+
+	if got := build("1 beginbfchar\n<41> <0041>\nendbfchar\n"); len(got) != 0 {
+		t.Errorf("a /ToUnicode entry for the code supersedes the .notdef name, got %v", got)
+	}
+	if got := build("1 beginbfchar\n<42> <0042>\nendbfchar\n"); len(got) == 0 {
+		t.Error("a /ToUnicode silent on the rendered .notdef code must still fire the value rule")
 	}
 }
