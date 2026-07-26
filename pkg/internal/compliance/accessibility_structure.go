@@ -470,19 +470,20 @@ func (r *nsRoleResolver) declaredNSURI(ctx context.Context, doc *document.Docume
 // Resolution starts from the namespace the element declares, never from the
 // document default: the vocabulary a type is standard in follows its own
 // namespace (ISO 32000-2:2020, 14.8.6), so an /S of FENote without an /NS is
-// judged against ISO 32000-1:2008, 14.8.4 and is not a standard type. A type
-// that resolves while belonging to no namespace still reports the default
-// namespace litho attributes to an element without /NS.
+// judged against ISO 32000-1:2008, 14.8.4 and is not a standard type.
+//
+// stdNS is empty when the type belongs to no namespace, and the document
+// default is NOT substituted. An element that declares no /NS belongs to no
+// namespace, which is what ISO 32000-2:2020, 14.8.6 makes the vocabulary
+// question turn on: reporting the default instead let a Document without /NS
+// pass ISO 14289-2, 8.2.5.2 t2 whenever the default happened to be the PDF 2.0
+// namespace, and hid a standard Note from 8.2.5.14 t1.
 func (r *nsRoleResolver) elementStandardType(ctx context.Context, doc *document.Document, elem ast.PdfDict) (stdType, stdNS string, ok bool) {
 	sType, _ := document.ResolveName(ctx, doc, elem["S"])
 	if sType == "" {
 		return "", "", false
 	}
-	stdType, stdNS, ok = r.resolveStandardType(ctx, doc, string(sType), r.declaredNSURI(ctx, doc, elem))
-	if ok && stdNS == "" {
-		stdNS = r.defaultNSURI
-	}
-	return stdType, stdNS, ok
+	return r.resolveStandardType(ctx, doc, string(sType), r.declaredNSURI(ctx, doc, elem))
 }
 
 // resolveStandardType resolves (typeName, nsURI) to its effective standard type
@@ -683,8 +684,10 @@ func checkPDFUA2NamespaceStructTypes(ctx context.Context, doc *document.Document
 		case "Note":
 			// The standard Note belongs to the PDF 1.7 namespace; a Note
 			// role-mapped into the PDF 2.0 namespace resolves elsewhere and is
-			// exempt.
-			if stdNS == pdf1NamespaceURI {
+			// exempt. An element declaring no /NS belongs to no namespace and is
+			// judged against the PDF 1.7 vocabulary per ISO 32000-1:2008, 14.8.4,
+			// so it is a standard Note too.
+			if stdNS == pdf1NamespaceURI || stdNS == "" {
 				results = append(results, failf(Rule_14289_2_8_2_5_14_t01,
 					"standard Note structure type is present (use FENote in the PDF 2.0 namespace)")...)
 			}

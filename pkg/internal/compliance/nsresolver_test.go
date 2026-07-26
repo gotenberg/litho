@@ -66,9 +66,14 @@ func TestNSRoleResolver(t *testing.T) {
 	if gt, gn, ok := r.elementStandardType(ctx, doc, ast.PdfDict{"S": ast.PdfName("MyForm"), "NS": ref(6)}); !ok || gt != "Form" || gn != pdf2 {
 		t.Errorf("element MyForm in custom ns: got (%q,%q,%v)", gt, gn, ok)
 	}
-	// No /NS: inherits the default (first /Namespaces entry = pdf2).
-	if gt, gn, ok := r.elementStandardType(ctx, doc, ast.PdfDict{"S": ast.PdfName("Form")}); !ok || gt != "Form" || gn != pdf2 {
-		t.Errorf("element Form without /NS: got (%q,%q,%v)", gt, gn, ok)
+	// No /NS: the element belongs to NO namespace and the document default is
+	// not substituted. veraPDF reports null here, so reporting the default let a
+	// Document without /NS pass ISO 14289-2, 8.2.5.2 t2 whenever that default was
+	// the PDF 2.0 namespace, and hid a standard Note from 8.2.5.14 t1. The type
+	// still resolves: ISO 32000-1:2008, 14.8.4 judges an element in no namespace
+	// against the PDF 1.7 vocabulary, which contains Form.
+	if gt, gn, ok := r.elementStandardType(ctx, doc, ast.PdfDict{"S": ast.PdfName("Form")}); !ok || gt != "Form" || gn != "" {
+		t.Errorf("element Form without /NS: got (%q,%q,%v), want (%q,%q,%v)", gt, gn, ok, "Form", "", true)
 	}
 }
 
@@ -175,5 +180,50 @@ func TestSingleDocumentRootTestNumber(t *testing.T) {
 					!c.wantT2, c.wantT2, got)
 			}
 		})
+	}
+}
+
+// TestElementStandardTypeNoNamespaceIsNotTheDefault pins that an element which
+// declares no /NS belongs to no namespace, rather than inheriting the document
+// default from /Namespaces[0]. veraPDF 1.30.2 reports null for such an element,
+// so substituting the default let a Document without /NS satisfy
+// firstChildStandardTypeNamespaceURL and pass ISO 14289-2, 8.2.5.2 t2 whenever
+// the default happened to be the PDF 2.0 namespace, and hid a standard Note
+// from 8.2.5.14 t1.
+func TestElementStandardTypeNoNamespaceIsNotTheDefault(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// /Namespaces[0] is the PDF 2.0 namespace, so the old default-inheritance
+	// would have reported it for every element lacking /NS.
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K [5 0 R] /Namespaces [6 0 R 7 0 R] >>",
+		"<< /Type /StructElem /S /Document >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+	)
+
+	root, err := document.ResolveDict(ctx, doc, cat["StructTreeRoot"])
+	if err != nil || root == nil {
+		t.Fatalf("resolve StructTreeRoot: %v", err)
+	}
+	r := newNSRoleResolver(ctx, doc, root)
+
+	_, gotNS, ok := r.elementStandardType(ctx, doc, ast.PdfDict{"S": ast.PdfName("Document")})
+	if !ok {
+		t.Fatal("Document without /NS must still resolve to a standard type")
+	}
+	if gotNS != "" {
+		t.Errorf("namespace of an element without /NS: got %q, want empty", gotNS)
+	}
+
+	// The whole point: 8.2.5.2 t2 must fire for that Document.
+	var results []Violation
+	checkSingleDocumentRoot(ctx, doc, root, &results)
+	if !hasRule(results, Rule_14289_2_8_2_5_2_t02) {
+		t.Errorf("Document without /NS must fire §8.2.5.2 t2: got %v", results)
 	}
 }
