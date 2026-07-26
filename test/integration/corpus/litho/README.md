@@ -397,7 +397,8 @@ siblings are not, a structure `/Span` carries `/ActualText` beside its own
 field carries `/Lang` beside its `/TU`. Every rule above fires exactly once on
 both litho and veraPDF, which is what proves the controls silent.
 
-Two tests stay unreached, and neither is a fixture shortcoming:
+Two tests stay unreached. One cannot be reached at all, the other is a
+coverage opportunity:
 
 - `7.2/41` is unreachable under PDF/UA-1. veraPDF sets
   `numberOfColumnWithWrongRowSpan` in two places. The first fires when a cell's
@@ -406,9 +407,10 @@ Two tests stay unreached, and neither is a fixture shortcoming:
   never hold. The second is a `/RowSpan` crossing a `THead`, `TBody` or
   `TFoot` boundary, and it is guarded by `isPDFUA2RelatedFlavour`, so a
   PDF/UA-1 run never evaluates it.
-- `7.2/15` is reachable but litho does not implement it, so planting it would
-  add a disagreeing cell rather than coverage. See
-  [Known divergences](#known-divergences).
+- `7.2/15` is reachable, and litho did not implement it when this fixture
+  landed. `d61d0ba` implemented it, and the two tools now agree on the
+  intersecting grid that reaches it. See
+  [Closed since, not planted](#closed-since-not-planted).
 
 The other four tests of the clause were already covered: `7.2/24` by
 `complex_ua2.pdf` and `limits_2b.pdf`, `7.2/29` by `complex_2a.pdf` and
@@ -459,6 +461,12 @@ of its `pdfaField` entries without a name, and a second type conforming
 throughout. Sibling entries are the point: a check that reports the first bad
 schema and stops never reaches the second, and one that condemns the bag on
 first sight wrongly reports the conforming parts of the third.
+
+The category is the one field of the clause whose value is constrained rather
+than merely required. litho used to check only that `pdfaProperty:category` was
+present, so the `sideways` category above was a divergence until `da8cf69`
+compared the value the way veraPDF does. Both tools now report it once, as
+`6.6.2.3.3/9` at PDF/A-2b and `6.7.8/10` at PDF/A-1b.
 
 The value types matter separately. Half of 6.6.2.3.3 describes `pdfaType` and
 `pdfaField`, which no property entry reaches, so a fixture built only from
@@ -524,13 +532,17 @@ veraPDF, which is what proves the four controls silent.
 
 The page shows one line of text rather than nothing. An empty content stream
 presents no text item, and ISO 14289-1, 7.2 t34 takes a text item as its
-subject, so a blank page makes litho and veraPDF disagree for a reason that has
-nothing to do with extension schemas. See
-[Known divergences](#known-divergences).
+subject, so a blank page used to make litho and veraPDF disagree for a reason
+that has nothing to do with extension schemas. `188946e` closed that, and a
+text-free page now agrees too. The line stays because it is what makes both
+tools report `7.2/34` once at PDF/UA-1: without it both go quiet, and the
+fixture covers one cell less.
 
 `6.7.8/6` stays unreached, and so does the wrong-prefix half of every test.
-Both are litho gaps rather than fixture shortcomings, and both are described
-under [Known divergences](#known-divergences).
+The first is a litho gap, described under
+[Known divergences](#known-divergences). The second is not: `c104d24` brought
+the two tools into agreement on it, so it is a coverage opportunity, described
+under [Closed since, not planted](#closed-since-not-planted).
 
 ## Graphics states
 
@@ -586,11 +598,14 @@ carries real spans rather than a trivial grid, so its silence shows the check
 accepts a legitimate span rather than ignoring the attribute.
 
 Only `t3` of the clause is reached. `t1` needs two cells claiming one grid
-position, which a `/RowSpan` cannot produce: under the table model a spanning
-cell shifts the following row's cells rather than colliding with them, and
-veraPDF agrees the result is not an intersection. `t2` and `t4` need span
-geometries these builders could not produce, and `t5`/`t6` are the header
-association `tables_ua1.pdf` already covers.
+position, which a `/RowSpan` alone cannot produce: under the table model a
+spanning cell shifts the following row's cells rather than colliding with
+them, and veraPDF agrees the result is not an intersection. A `/RowSpan` and a
+`/ColSpan` together do produce one, but litho does not implement the PDF/UA-2
+test, so planting it would add a disagreeing cell. See
+[Known divergences](#known-divergences). `t2` and `t4` need span geometries
+these builders could not produce, and `t5`/`t6` are the header association
+`tables_ua1.pdf` already covers.
 
 ## Part-1 implementation limits
 
@@ -692,36 +707,37 @@ the declaration keeps an XMP schema clause out of a fixture about
 synchronisation.
 
 Remediation takes the file from 8 veraPDF violations to 0 at PDF/A-1b,
-introduces no class at any profile, and preserves the page. It also settles
-the PDF/A-4 divergence below by syncing the packet.
+introduces no class at any profile, and preserves the page.
 
-Two cells disagree, and neither is a fixture shortcoming.
+Two cells disagreed when the fixture landed. Both were litho bugs it found,
+and both are fixed.
 
-**`6.7.3/7` and `6.7.3/8` at PDF/A-4.** litho reports them, veraPDF reports
+**`6.7.3/7` and `6.7.3/8` at PDF/A-4.** litho reported them, veraPDF reported
 nothing. `PDFA-4.xml` defines clause 6.7.3 with six tests, `t1` to `t6`, all
 of them PDF/A identification checks on `PDFAIdentification` and
 `MainXMPPackage`. ISO 19005-4 states no docinfo-versus-XMP consistency
 requirement at all: 6.1.3 already reduces the information dictionary to
-`/ModDate` behind a `/PieceInfo`. litho carries
+`/ModDate` behind a `/PieceInfo`. litho carried
 `Rule_19005_4_6_7_3_t07` and `t08` in `rules_extra.go`, described there as
 "litho-specific rules with no standalone profile entry", and
-`xmpDocInfoSyncRulePart4` in `pkg/internal/compliance/xmp_docinfo.go` routes
-every part-4 sync mismatch to them. The two rule numbers collide with a real
-clause that means something else, and their `Object` reads `CIDSystemInfo`.
-veraPDF is right.
+`xmpDocInfoSyncRulePart4` in `pkg/internal/compliance/xmp_docinfo.go` routed
+every part-4 sync mismatch to them. The two rule numbers collided with a real
+clause that means something else, and their `Object` read `CIDSystemInfo`.
+`0bb0f82` dropped them. The fixture now reports `6.7.3/2`, `/3` and `/5` at
+PDF/A-4, the three identification tests, on both tools.
 
-**`7.2/34` at PDF/UA-1.** litho reports it, veraPDF reports nothing. The
+**`7.2/34` at PDF/UA-1.** litho reported it, veraPDF reported nothing. The
 rule's object is `SETextItem` and its test is
 `gContainsCatalogLang == true || Lang != null`, so its subject is a
 structure element that owns a text-showing operator. This fixture has no
 structure tree and its page shows no text, so veraPDF has no subject.
 `checkStructureTreeLangCoverage` in
-`pkg/internal/compliance/accessibility_lang.go` returns
-`fail(langRule, "catalog")` as soon as the catalog carries no
-`/StructTreeRoot`, without asking whether the document shows any text. Adding
-one `Tj` to the same file makes both tools report `7.2/34`; adding a catalog
-`/Lang` instead makes both go quiet. veraPDF is right, and the shortcut is a
-litho false positive on any text-free page.
+`pkg/internal/compliance/accessibility_lang.go` returned
+`fail(langRule, "catalog")` as soon as the catalog carried no
+`/StructTreeRoot`, without asking whether the document showed any text.
+`188946e` made a text item a precondition. Both tools now stay quiet here,
+and two files differing only in their content stream confirm the boundary:
+with one `Tj` both report `7.2/34`, with an empty stream neither does.
 
 ## Known divergences
 
@@ -739,52 +755,12 @@ either rule.
 
 **`7.2/34` at PDF/UA-1.** veraPDF reports it, litho does not. This one is a
 litho gap, not a veraPDF one. The masking bug behind it is fixed; what
-remains is a separate facet of the same rule, described below.
+remains is a separate facet of the same rule, described under
+[Second bug found](#second-bug-found-pdfua-1-language-coverage-fixed-one-facet-remains).
 
-**`6.6.2.3.3/9` on `extschema_2b.pdf`**, and its part-1 spelling `6.7.8/10`.
-veraPDF reports a property whose `pdfaProperty:category` is neither
-`external` nor `internal`; litho checks only that the field is present, never
-its value. A litho gap, under repair.
-
-Two more litho gaps surfaced while building `structnest_ua1.pdf`. Neither is
-in a committed fixture, because planting either would add a disagreeing cell
-rather than coverage. Both are worth a fixture the moment litho implements
-them.
-
-**`7.2/15`, a table cell intersection.** veraPDF sizes the grid, then places
-every cell and marks an intersection when two cells claim the same slot. A
-first row of `TH(RowSpan 2)`, `TH`, `TH(RowSpan 2)` over a second row holding
-one `TH(ColSpan 2)` puts that cell's second column on a slot the first row's
-last cell already carries down. veraPDF reports `7.2/15`; litho reports
-nothing, and `Rule_14289_1_7_2_t15` is referenced nowhere outside `rules.go`.
-
-**`7.2/2`, an outline entry with its own `/Lang`.** veraPDF reads
-`gContainsCatalogLang == true` on `PDOutline` and offers no per-entry escape,
-which matches ISO 32000-1 Table 153: an outline item dictionary defines no
-`/Lang` entry. `walkOutlineItemsForLang` in
-`pkg/internal/compliance/accessibility_lang.go` exempts an item carrying one
-anyway. Two files differing only in that entry make it visible: with it,
-veraPDF reports `7.2/2` and litho reports nothing; without it, both report it.
-`structnest_ua1.pdf` therefore uses a plain outline item, which both tools
-agree on.
-
-Four more surfaced while building `schemaprefix_1b.pdf`. None is in a
-committed fixture, for the same reason.
-
-**The wrong-prefix half of ISO 19005-1, 6.7.8.** Every test of the clause
-requires a specific namespace prefix, and a schema field carried under a second
-prefix bound to the same URI (`xSchema:schema` where `xmlns:xSchema` is
-`http://www.aiim.org/pdfa/ns/schema#`) is exactly that defect. veraPDF reports
-`6.7.8/3` and nothing else. litho reports `6.7.8/3`, `/4`, `/5` and `/6`, and
-then stops reading the packet: `xmpCheckExtensionSchemas` in
-`pkg/internal/compliance/xmp.go` scans the raw bytes for a non-canonical prefix
-on any of the four extension namespaces, emits every rule of that level, and
-returns before the walk that finds everything else. One prefix defect therefore
-both over-reports and masks. It is also nondeterministic, because the scan is a
-`range` over the `xmpExpectedPrefix` map and returns on its first hit: a packet
-misprefixed at the schema level and at the property level reported the schema
-set on eleven of twelve runs and the property set on the twelfth, where veraPDF
-reports `6.7.8/3` and `6.7.8/9` every time.
+Three more litho gaps sit outside the corpus, because planting any of them
+would add a disagreeing cell rather than coverage. Each is worth a fixture the
+moment litho implements it.
 
 **`6.7.8/6`, the property container.** `isPropertyValidSeq` fails when
 `pdfaSchema:property` holds an `rdf:Bag` or a bare literal instead of an
@@ -793,23 +769,64 @@ check covers the `valueType` and `field` containers and names the schema and
 property containers as validated elsewhere, which the property container is
 not. Omitting `pdfaSchema:property` altogether is silent on both, so the test
 has no route the two tools agree on and `schemaprefix_1b.pdf` leaves it alone.
+The part-2 spelling is `6.6.2.3.3/5`, and it behaves the same way.
 
 **`6.7.8/9` and `6.7.8/18`, a value type nothing defines.** Both tests read
 `isValueTypeDefined == true`. A `pdfaProperty:valueType` or `pdfaField:valueType`
 naming a type no `pdfaType` entry declares makes veraPDF report them; litho
 checks that the field is present, never that the type it names exists.
 `schemaprefix_1b.pdf` reaches both tests by omitting the field instead, so the
-cell is covered and this facet stays open.
+cell is covered and this facet stays open. The part-2 spellings are
+`6.6.2.3.3/8` and `6.6.2.3.3/17`.
 
-**`7.2/34` on a page with no text.** The rule's subject is a text item, so a
-document with no text-showing operator presents veraPDF with nothing to report.
-`checkStructureTreeLangCoverage` in
-`pkg/internal/compliance/accessibility_lang.go` returns the rule outright when
-the catalog has no `/StructTreeRoot`, without asking whether the document shows
-text. Two files differing only in their content stream make it visible: with a
-`Tj`, both tools report `7.2/34`; with an empty stream, litho reports it and
-veraPDF reports nothing. `schemaprefix_1b.pdf` therefore draws one line of
-text.
+**`8.2.5.26/1`, a table cell intersection at PDF/UA-2.** litho implements the
+PDF/UA-1 twin of this test and not this one: `Rule_14289_2_8_2_5_26_t01` is
+referenced nowhere outside `rules.go`. The grid that makes both tools report
+`7.2/15` twice at PDF/UA-1 therefore draws `8.2.5.26/1` twice from veraPDF and
+nothing from litho at PDF/UA-2. A pure `/RowSpan` layout stays silent on both,
+so the intersecting grid is the only route to the test.
+
+## Closed since, not planted
+
+Three constructs were divergences when the fixtures around them were built.
+Each now agrees, so each is a coverage opportunity rather than a gap. None is
+in a committed fixture yet.
+
+**The wrong-prefix half of ISO 19005-1, 6.7.8.** Every test of the clause
+requires a specific namespace prefix, and a schema field carried under a second
+prefix bound to the same URI (`xSchema:schema` where `xmlns:xSchema` is
+`http://www.aiim.org/pdfa/ns/schema#`) is exactly that defect.
+`xmpCheckExtensionSchemas` in `pkg/internal/compliance/xmp.go` used to emit
+every rule of the offending level and then return before the walk that finds
+everything else, so one prefix defect both over-reported and masked. It was
+also nondeterministic: the scan ranged the `xmpExpectedPrefix` map and returned
+on its first hit, so a packet misprefixed at two levels reported one level's
+set on eleven of twelve runs and the other's on the twelfth. `c104d24` narrowed
+the report to the fields that actually carry the wrong prefix, dropped the
+early return, and fixed the visit order. A single misprefixed
+`pdfaSchema:schema` now draws `6.7.8/3` from both tools and nothing else; the
+same packet with a property missing its description draws `6.7.8/3` and
+`6.7.8/11` from both, which is the masking gone; a packet misprefixed at the
+schema and the property level at once draws the same eight rules from both,
+identically on twelve consecutive runs. The part-2 spellings behave the same
+way, starting at `6.6.2.3.3/2`.
+
+**`7.2/15`, a table cell intersection at PDF/UA-1.** veraPDF sizes the grid,
+then places every cell and marks an intersection when two cells claim the same
+slot. A first row of `TH(RowSpan 2)`, `TH`, `TH(RowSpan 2)` over a second row
+holding one `TH(ColSpan 2)` puts that cell's second column on a slot the first
+row's last cell already carries down. `d61d0ba` implemented the check, and both
+tools now report `7.2/15` twice on that grid and nothing on two conforming span
+layouts beside it.
+
+**`7.2/2`, an outline entry with its own `/Lang`.** veraPDF reads
+`gContainsCatalogLang == true` on `PDOutline` and offers no per-entry escape,
+which matches ISO 32000-1 Table 153: an outline item dictionary defines no
+`/Lang` entry. `walkOutlineItemsForLang` in
+`pkg/internal/compliance/accessibility_lang.go` exempted an item carrying one
+anyway. `2c3be3f` removed the exemption. Two files differing only in that entry
+now report `7.2/2` on both tools, and a catalog `/Lang` silences both.
+`structnest_ua1.pdf` uses a plain outline item, which reaches the same test.
 
 ## Second bug found: PDF/UA-1 language coverage (fixed, one facet remains)
 
@@ -843,7 +860,7 @@ which is a larger change and is deliberately not attempted here.
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets, so this
-corpus scores 40/40 matched on verdict alone. The rule-set agreement above is
+corpus scores 176/176 matched on verdict alone. The rule-set agreement above is
 the property the fixtures actually protect, and it is verified by hand against
 a live veraPDF:
 
