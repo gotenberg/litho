@@ -150,7 +150,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_4.pdf`       | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
 | `complex_ua1.pdf`     | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
 | `complex_ua2.pdf`     | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
-| `docinfo_1b.pdf`      | 8    | 4    | 1    | 2    | 1    | 6   | 6\*  | 5    |
+| `docinfo_1b.pdf`      | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
 | `extschema_2b.pdf`    | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
 | `fontdict_2b.pdf`     | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `forbidden_mix.pdf`   | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |

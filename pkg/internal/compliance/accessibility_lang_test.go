@@ -201,6 +201,92 @@ func TestCheckLangRequired_InlineMarkedContentLangSuppressesT34(t *testing.T) {
 	}
 }
 
+// treelessLangDoc builds a one-page document with no /StructTreeRoot: stream is
+// the page content and catalogEntries are extra catalog keys (pass "" for none).
+func treelessLangDoc(t *testing.T, catalogEntries, stream string) (*document.Document, ast.PdfDict) {
+	t.Helper()
+	return tableDoc(t, 1,
+		"<< /Type /Catalog /Pages 2 0 R "+catalogEntries+">>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(stream), stream),
+	)
+}
+
+// TestCheckLangRequired_TreelessDocumentNeedsATextItem covers the subject of ISO
+// 14289-1 §7.2 t34 on a document with no /StructTreeRoot. The rule's object is
+// SETextItem, which veraPDF builds only where a content stream shows text, so a
+// page painting nothing but graphics leaves the rule with nothing to report. One
+// Tj brings the subject into existence, and a catalog /Lang then determines its
+// language (gContainsCatalogLang == true || Lang != null). The absent structure
+// tree is a violation of §7.1 t11, not of this rule.
+//
+// With no tree, the marked content wrapping a text run is the only other source
+// of a language, and it covers that run alone: a /Lang on one sequence leaves a
+// bare run elsewhere on the page undetermined, exactly as veraPDF's outward walk
+// from each text-showing operator does.
+func TestCheckLangRequired_TreelessDocumentNeedsATextItem(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		catalog string
+		stream  string
+		want    bool
+	}{
+		{"graphics only, no catalog /Lang", "", "0 0 1 rg 10 10 20 20 re f\n", false},
+		{"text, no catalog /Lang", "", "BT (x) Tj ET\n", true},
+		{"text, catalog /Lang", "/Lang (en-US) ", "BT (x) Tj ET\n", false},
+		{
+			"text under a marked-content /Lang", "",
+			"/Span <</Lang (en-US)>> BDC\nBT (x) Tj ET\nEMC\n", false,
+		},
+		{
+			"one covered run, one bare run", "",
+			"/Span <</Lang (en-US)>> BDC\nBT (x) Tj ET\nEMC\nBT (y) Tj ET\n", true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			doc, cat := treelessLangDoc(t, tc.catalog, tc.stream)
+			got := checkLangRequired(ctx, doc, cat, "PDF/UA-1")
+
+			if hasRule(got, Rule_14289_1_7_2_t34) != tc.want {
+				t.Errorf("§7.2 t34 on a tree-less document: want fired=%v, got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+// TestCheckLangRequired_TreelessFormXObjectTextIsATextItem extends the same
+// subject test through a Do. veraPDF builds an SETextItem for text a Form
+// XObject paints just as it does for text in a page stream, so text reachable
+// only through the XObject keeps ISO 14289-1 §7.2 t34 firing.
+func TestCheckLangRequired_TreelessFormXObjectTextIsATextItem(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	pageStream := "q /X0 Do Q\n"
+	formStream := "BT (x) Tj ET\n"
+	doc, cat := tableDoc(t, 1,
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "+
+			"/Resources << /XObject << /X0 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(pageStream), pageStream),
+		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Length %d >>\nstream\n%sendstream",
+			len(formStream), formStream),
+	)
+	got := checkLangRequired(ctx, doc, cat, "PDF/UA-1")
+
+	if !hasRule(got, Rule_14289_1_7_2_t34) {
+		t.Errorf("text painted by a Form XObject is still a text item: want §7.2 t34, got %v", got)
+	}
+}
+
 // outlineLangDoc builds a document whose catalog carries catalogEntries plus an
 // /Outlines pointing at two sibling items, the first of them carrying itemLang
 // verbatim (pass "" for none).

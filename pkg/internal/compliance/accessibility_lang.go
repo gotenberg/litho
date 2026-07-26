@@ -600,8 +600,21 @@ func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.
 func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
-		// No structure tree at all. Cannot determine language for anything.
-		return fail(langRule, "catalog")
+		// No structure tree, so no element can carry a /Lang. ISO 14289-1 §7.2
+		// t34 still needs a subject: its object is SETextItem, which exists only
+		// where a content stream shows text. A document that paints no text
+		// presents nothing whose language could be undetermined, and veraPDF
+		// reports nothing on it. The absent tree is itself a violation, but of
+		// §7.1 t11, reported by the structure-tree check.
+		//
+		// With no tree to walk, the marked content around each text-showing
+		// operator is the only source of a language, so the scan reads it per
+		// item rather than taking the document-wide answer the tree walk below
+		// has to settle for.
+		if documentShowsUndeterminedText(ctx, doc, catalog) {
+			return fail(langRule, "catalog")
+		}
+		return nil
 	}
 
 	// Structure tree root /Lang provides fallback for all elements.
@@ -743,6 +756,156 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool
 		}
 	}
 	return found
+}
+
+// documentShowsUndeterminedText reports whether any page paints text that no
+// enclosing marked-content /Lang covers, following a Do into the Form XObjects
+// the page invokes.
+//
+// ISO 14289-1 §7.2 t34 takes SETextItem as its object and passes it on
+// Lang != null, so the rule has a subject only where text is shown and nothing
+// around it names a language. veraPDF resolves that language by walking outwards
+// from the text-showing operator through the marked content enclosing it
+// (GFOpMarkedContent.getInheritedLang), which is the walk this scan mirrors.
+//
+// A page whose content litho cannot decode or parse counts as painting such
+// text. litho cannot prove that page shows none, and exempting it would drop a
+// violation veraPDF reports on the very files whose streams are damaged.
+func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return false
+		}
+		data, err := resolvePageContentBytes(ctx, doc, page)
+		if err != nil {
+			doc.Logger.Debug("compliance.accessibility: cannot read page content", "error", err)
+			return true
+		}
+		if len(data) == 0 {
+			continue
+		}
+		ops, err := content.ParseStreamData(ctx, data)
+		if err != nil {
+			doc.Logger.Debug("compliance.accessibility: cannot parse page content", "error", err)
+			return true
+		}
+		props := &markedContentProps{doc: doc, page: page}
+		// The visited set is per page: a Form XObject with no /Resources of its
+		// own resolves its nested names against the invoking page's, so the same
+		// XObject can reach different content from two pages.
+		res := resolveInheritedResources(ctx, doc, page)
+		if opsShowUndeterminedText(ctx, doc, ops, props, res, false, make(map[int]bool), 0) {
+			return true
+		}
+	}
+	return false
+}
+
+// opsShowUndeterminedText reports whether ops paint text no /Lang covers,
+// directly or through a Form XObject they invoke. covered carries the enclosing
+// scope's answer into a nested stream, seen skips an XObject already scanned,
+// and depth caps the invocation chain at [maxFormXObjectDepth], so a cyclic or
+// deeply nested chain cannot loop.
+func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []content.Operation, props *markedContentProps, res ast.PdfDict, covered bool, seen map[int]bool, depth int) bool {
+	if depth > maxFormXObjectDepth {
+		return false
+	}
+	// One entry per open marked-content sequence, true once the sequence or one
+	// enclosing it carries a /Lang. The bottom entry is the caller's scope.
+	stack := []bool{covered}
+	for i, op := range ops {
+		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
+			return false
+		}
+		cur := stack[len(stack)-1]
+		switch op.Operator {
+		case "BMC", "BDC":
+			stack = append(stack, cur || markedContentLangPresent(ctx, props, op))
+		case "EMC":
+			if len(stack) > 1 {
+				stack = stack[:len(stack)-1]
+			}
+		case "Tj", "TJ", "'", "\"":
+			if !cur {
+				return true
+			}
+		case "Do":
+			// The XObject paints inside the sequence the Do sits in (ISO 32000-1
+			// §14.6), so that sequence's /Lang covers its text too.
+			if formShowsUndeterminedText(ctx, doc, op, res, cur, seen, depth) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// markedContentLangPresent reports whether the property list of a marked-content
+// operator carries a /Lang key. Presence is what counts, not the value: veraPDF
+// takes the language as determined from the first enclosing sequence holding the
+// key even when the tag is empty or malformed, and judges that value under UA-1
+// §7.2 t29 instead (see [checkMarkedContentLang]).
+func markedContentLangPresent(ctx context.Context, props *markedContentProps, op content.Operation) bool {
+	pd := props.dict(ctx, op)
+	if pd == nil {
+		return false
+	}
+	_, ok := pd["Lang"]
+	return ok
+}
+
+// formShowsUndeterminedText reports whether the Form XObject a Do operator
+// invokes paints text no /Lang covers. A Do naming an absent or non-Form XObject
+// paints no text: per ISO 32000-1 §8.10.1 an unresolvable name makes the
+// operator a no-op.
+func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered bool, seen map[int]bool, depth int) bool {
+	if res == nil || len(op.Operands) < 1 {
+		return false
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		return false
+	}
+	xobjects, err := document.ResolveDict(ctx, doc, res["XObject"])
+	if err != nil || xobjects == nil {
+		return false
+	}
+	if ref, isRef := xobjects[name].(ast.PdfIndirectRef); isRef {
+		if seen[ref.ObjectNum] {
+			return false
+		}
+		seen[ref.ObjectNum] = true
+	}
+	stream, err := document.ResolveStream(ctx, doc, xobjects[name])
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
+		return false
+	}
+	if stream.Dict == nil {
+		return false
+	}
+	// An image XObject paints no text, and an unreadable /Subtype names no
+	// content this scan can follow, so both leave the operator out of the answer.
+	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
+		return false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot decode Form XObject stream", "error", err)
+		return true
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot parse Form XObject content stream", "error", err)
+		return true
+	}
+	// A Form XObject without its own /Resources inherits the invoking stream's
+	// (ISO 32000-1 §8.10.2), so nested names still resolve.
+	subRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if err != nil || subRes == nil {
+		subRes = res
+	}
+	return opsShowUndeterminedText(ctx, doc, ops, &markedContentProps{doc: doc, page: stream.Dict}, subRes, covered, seen, depth+1)
 }
 
 // markedContentID returns the /MCID an inline BDC property list carries, or -1
