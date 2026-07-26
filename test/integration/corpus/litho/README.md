@@ -57,6 +57,7 @@ delete a planted violation.
 | `complex_ua2.pdf`   | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
 | `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
 | `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                         |
+| `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
 
 ### Must-not-fire controls
 
@@ -109,6 +110,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua2.pdf`   | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
 | `forbidden_mix.pdf` | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `megafont_2b.pdf`   | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
+| `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -249,6 +251,29 @@ breaks exactly one rule, so none carries both a wrong `pdfuaid:part` and a
 missing `pdfuaid:rev`. Re-running the fix against all 138 PDF/UA-2 corpus files
 changes nothing. A single-rule corpus is structurally unable to expose an
 early return, which is the whole argument for these fixtures.
+
+## The multi-page axis
+
+Every other fixture is a single page, so none of them can catch a page-scoped
+check that stops after the first page, or one that answers from page one and
+never revisits. `multipage_2b.pdf` isolates that: each page carries a
+violation class that appears on no other page.
+
+| Page | Unique to that page                                                                                                                      |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `6.2.4.3/3` DeviceCMYK with no output intent                                                                                             |
+| 2    | `6.2.6/1` invalid `ri`, `6.2.8/3` `/Interpolate true`                                                                                    |
+| 3    | `6.2.9/3` PostScript XObject, `6.2.10/2` transparency group, `6.2.11.4.1/1` font not embedded, `6.3.1/1` + `6.3.3/1` `/Movie` annotation |
+
+Page 1 also carries a conforming counterpart of what fails later: an
+annotation with `F=4`, an appearance stream and no `/C`. A check that reads
+only page 1 therefore goes quiet rather than firing, so the failure mode is a
+missing rule, which the rule-set comparison catches, rather than a wrong one.
+
+litho reports all three pages' classes and agrees with veraPDF on all eight
+profiles, so no page-scoped check short-circuits today. Remediation takes it
+from 11 veraPDF violations to 1, introduces nothing, and preserves all three
+pages.
 
 ## Known divergences
 
