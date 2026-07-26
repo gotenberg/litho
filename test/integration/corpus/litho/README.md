@@ -50,31 +50,32 @@ one deliberately rather than diffing it against a fresh build.
 
 ## Fixtures
 
-| Fixture               | Home profile | Focus                                                          |
-| --------------------- | ------------ | -------------------------------------------------------------- |
-| --------------------  | ------------ | -------------------------------------------------------------- |
-| `complex_1b.pdf`      | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG         |
-| `complex_2a.pdf`      | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language       |
-| `complex_2b.pdf`      | PDF/A-2b     | Broadest mix; annotations, optional content, filters           |
-| `complex_2u.pdf`      | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings    |
-| `complex_3b.pdf`      | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment     |
-| `complex_4.pdf`       | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps |
-| `complex_ua1.pdf`     | PDF/UA-1     | Structure and accessibility defects in a wired tag tree        |
-| `complex_ua2.pdf`     | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
-| `forbidden_mix.pdf`   | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
-| `gstate_2b.pdf`       | PDF/A-2b     | Transfer functions and halftones in six graphics states        |
-| `limits_2b.pdf`       | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN          |
-| `megafont_2b.pdf`     | PDF/A-2b     | Font embedding and glyph-width scoping                         |
-| `multipage_2b.pdf`    | PDF/A-2b     | Three pages, a violation class unique to each                  |
-| `fontdict_2b.pdf`     | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
-| `structnest_ua1.pdf`  | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language  |
-| `tables_ua1.pdf`      | PDF/UA-1     | Tables and lists: header association, nested list structure    |
-| `tablespan_ua2.pdf`   | PDF/UA-2     | Table cell geometry: row and column spans                      |
-| `extschema_2b.pdf`    | PDF/A-2b     | XMP extension schema structure across sibling entries          |
-| `schemaprefix_1b.pdf` | PDF/A-1b     | Extension schema RDF container types and absent fields         |
-| `trailer_2b.pdf`      | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                    |
-| `limits_1b.pdf`       | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID   |
-| `docinfo_1b.pdf`      | PDF/A-1b     | Document information dictionary against its XMP analogues      |
+| Fixture               | Home profile | Focus                                                           |
+| --------------------- | ------------ | --------------------------------------------------------------- |
+| --------------------  | ------------ | --------------------------------------------------------------  |
+| `complex_1b.pdf`      | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG          |
+| `complex_2a.pdf`      | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language        |
+| `complex_2b.pdf`      | PDF/A-2b     | Broadest mix; annotations, optional content, filters            |
+| `complex_2u.pdf`      | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings     |
+| `complex_3b.pdf`      | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment      |
+| `complex_4.pdf`       | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps  |
+| `complex_ua1.pdf`     | PDF/UA-1     | Structure and accessibility defects in a wired tag tree         |
+| `complex_ua2.pdf`     | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations  |
+| `forbidden_mix.pdf`   | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW              |
+| `gstate_2b.pdf`       | PDF/A-2b     | Transfer functions and halftones in six graphics states         |
+| `limits_2b.pdf`       | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN           |
+| `megafont_2b.pdf`     | PDF/A-2b     | Font embedding and glyph-width scoping                          |
+| `multipage_2b.pdf`    | PDF/A-2b     | Three pages, a violation class unique to each                   |
+| `fontdict_2b.pdf`     | PDF/A-2b     | Font dictionary required keys; page box implementation limits   |
+| `structnest_ua1.pdf`  | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language   |
+| `tables_ua1.pdf`      | PDF/UA-1     | Tables and lists: header association, nested list structure     |
+| `tablespan_ua2.pdf`   | PDF/UA-2     | Table cell geometry: row and column spans                       |
+| `extschema_2b.pdf`    | PDF/A-2b     | XMP extension schema structure across sibling entries           |
+| `schemaprefix_1b.pdf` | PDF/A-1b     | Extension schema RDF container types and absent fields          |
+| `trailer_2b.pdf`      | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                     |
+| `limits_1b.pdf`       | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
+| `docinfo_1b.pdf`      | PDF/A-1b     | Document information dictionary against its XMP analogues       |
+| `imgxmp_4.pdf`        | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
 
 ### Must-not-fire controls
 
@@ -128,6 +129,12 @@ violation but is exempt, so a firing is a false positive.
 | `docinfo_1b`                              | `/Trapped` matching `pdf:Trapped`, an entry 6.7.3 does not name        | ISO 19005-1, 6.7.3           |
 | `docinfo_1b`                              | `/Company`, a docinfo entry with no XMP analogue at all                | ISO 19005-1, 6.7.3           |
 | `docinfo_1b`                              | Extension schema declaring `pdf:Trapped`, conforming in every field    | ISO 19005-1, 6.7.9           |
+| `imgxmp_4`                                | `ImOK`, an image conforming in all four respects its siblings break    | ISO 19005-4, 6.2.7.1         |
+| `imgxmp_4`                                | `ImMaskOK`, an image mask with `/BitsPerComponent 1`                   | ISO 19005-4, 6.2.7.1 t5      |
+| `imgxmp_4`                                | `/Interpolate false` on every image and every image mask               | ISO 19005-4, 6.2.7.1 t3      |
+| `imgxmp_4`                                | The alternate inside the `/Alternates` array, itself conforming        | ISO 19005-4, 6.2.7.1 t1      |
+| `imgxmp_4`                                | Page 1 `/Metadata`, a conforming page-level packet                     | ISO 19005-4, 6.7.2.1         |
+| `imgxmp_4`                                | Catalog packet: `pdfaid:part` 4, `pdfaid:rev` 2020                     | ISO 19005-4, 6.7.3           |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -155,6 +162,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontdict_2b.pdf`     | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `forbidden_mix.pdf`   | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `gstate_2b.pdf`       | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
+| `imgxmp_4.pdf`        | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
 | `limits_1b.pdf`       | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
 | `limits_2b.pdf`       | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
 | `megafont_2b.pdf`     | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
@@ -738,6 +746,105 @@ structure tree and its page shows no text, so veraPDF has no subject.
 `188946e` made a text item a precondition. Both tools now stay quiet here,
 and two files differing only in their content stream confirm the boundary:
 with one `Tj` both report `7.2/34`, with an empty stream neither does.
+
+### Image dictionaries and XMP packets
+
+A coverage scan put PDF/A-4 second from the bottom: 43 of the 109 rules in
+`PDFA-4.xml` fired on the corpus. Two clusters explain most of the gap.
+ISO 19005-4, 6.2.7.1 governs the image XObject dictionary and only its
+`/Interpolate` test was reached, by `complex_4.pdf`. ISO 19005-4, 6.7.2.1
+governs the XMP packet and only its "the catalog has a metadata stream" test was
+reached. `imgxmp_4.pdf` closes the other eight. It takes litho from 43 rules to
+47 and veraPDF from 43 to 51; the difference between those two numbers is the
+divergence below.
+
+Four sibling images carry one defect each, so a check that reports the first
+offending image and stops reports one rule where four are due:
+
+| XObject    | Defect                            | Rule        |
+| ---------- | --------------------------------- | ----------- |
+| `ImAlt`    | `/Alternates`                     | `6.2.7.1/1` |
+| `ImOPI`    | `/OPI`                            | `6.2.7.1/2` |
+| `ImBPC`    | `/BitsPerComponent 3`             | `6.2.7.1/4` |
+| `ImMask`   | image mask, `/BitsPerComponent 2` | `6.2.7.1/5` |
+| `ImBase`   | none, carries `/Mask ImMask`      | silent      |
+| `ImOK`     | none                              | silent      |
+| `ImMaskOK` | none                              | silent      |
+
+`ImMask` is one object reached two ways. The two validators disagree about what
+an image mask is: litho reads `/BitsPerComponent` on any image XObject whose
+`/ImageMask` is true, and veraPDF reads it only on an image it reaches through
+another image's `/Mask`, because `getisMask` returns false for every plain
+`PDXImage` and true only for a `PDMaskImage`. `ImMask` is drawn from the page
+resources and named as the `/Mask` of `ImBase`, so one object with one defect
+sits in both models and both tools report it once. 2 is a legal
+`/BitsPerComponent` for a regular image, so the defect stays inside t5 rather
+than also failing t4 on the drawn instance.
+
+Every image uses CalRGB, every image mask is painted through an explicit CalGray
+fill colour, and the file declares no fonts, so ISO 19005-4, 6.2.4.3 and the
+font clauses stay out of the way. At PDF/A-4 the fixture fires four rules and
+nothing else.
+
+The XMP half needs the opposite of a single loaded object. All four tests scope
+to veraPDF's `XMPPackage`, and one packet carrying all four defects would
+cascade: a packet that is not valid UTF-8 does not parse either, so the
+header-attribute tests would have nothing to read and the identification schema
+would go down with it. A PDF may carry a `/Metadata` stream on the catalog and
+on every page, and veraPDF models each one as its own `XMPPackage`, so each
+defect gets a packet of its own:
+
+| Page | Packet                                     | Rule                     |
+| ---- | ------------------------------------------ | ------------------------ |
+| 1    | conforming                                 | silent                   |
+| 2    | `bytes="1024"` in the `<?xpacket?>` header | `6.7.2.1/2`              |
+| 3    | `encoding="UTF-8"` in the header           | `6.7.2.1/3`              |
+| 4    | end tag differing in case                  | `6.7.2.1/4`, `6.7.2.1/5` |
+| 5    | UTF-16BE                                   | `6.7.2.1/5`              |
+
+Page 4 fires two rules, and that is both tools agreeing rather than one of them
+over-reporting: a packet that does not parse has no valid serialization and no
+determinable encoding. `6.7.2.1/5` therefore fires twice, once with an encoding
+of `null` and once with `UTF-16BE`. The catalog packet stays conforming, because
+the document has to keep declaring PDF/A-4.
+
+Page-level packets are also the only packets these builders can plant a header
+defect in. `pikepdf.Pdf.save` reserialises the catalog packet through its own
+XMP writer, which repairs a `bytes=` attribute, an `encoding=` attribute, broken
+markup and a UTF-16 encoding alike. Page-level metadata streams pass through
+untouched.
+
+At PDF/A-1b the cluster is unreachable and both tools agree. `GFPDMetadata`
+builds a non-main `XMPPackage` only when the flavour is not part 1, so under a
+PDF/A-1 flavour veraPDF models the catalog packet and nothing else. The part-1
+spellings of these tests, `6.7.5/1`, `6.7.5/2` and `6.7.9/1`, stay silent on
+both sides.
+
+### For the Known divergences section
+
+**`6.7.2.1/2`, `/3`, `/4` and `/5` at PDF/A-4, and their part-2 and part-3
+spelling `6.6.2.1/2` to `/5` at PDF/A-2a, PDF/A-2b, PDF/A-2u and PDF/A-3b.**
+veraPDF reports all four on `imgxmp_4.pdf`; litho reports none. ISO 19005-4,
+6.7.2.1 t4 reads "all content of all XMP packets located in any metadata stream
+present in the PDF", and veraPDF matches that: `GFCosDict` builds a `PDMetadata`
+for every dictionary carrying a `/Metadata` key whose `/Type` is not `/Catalog`,
+so a page-level packet is an `XMPPackage` like any other. litho reads
+`catalog["Metadata"]` and nothing else: `xmpLoadMetadata` in
+`pkg/internal/compliance/xmp.go` is the only entry point, and every packet check
+hangs off its return value. The implementation is right and its scope is wrong,
+which an A/B pins down: the same `bytes=` attribute in the catalog packet fires
+`6.7.2.1/2` on both tools, and in a page packet on veraPDF alone. litho has the
+gap.
+
+**`7.2/34` at PDF/UA-1.** litho reports it on `imgxmp_4.pdf`, veraPDF does not.
+The rule's subject is veraPDF's `SETextItem` and this fixture shows no glyphs,
+only image XObjects, so there is no text whose natural language could be
+undetermined. `checkStructureTreeLangCoverage` in
+`pkg/internal/compliance/accessibility_lang.go` returns the rule unconditionally
+when the catalog has no `/StructTreeRoot`, without first asking whether the
+document draws any text. Adding one `Tj` to the fixture makes veraPDF report it
+too, which is the whole difference between the two files. Every other fixture in
+this corpus draws text, so none of them could show this. litho has the gap.
 
 ## Known divergences
 
