@@ -31,6 +31,33 @@ var iso32005GroupingTypes = map[string]bool{
 	"NonStruct": true, "Private": true, "Art": true,
 }
 
+// iso32005PassThroughTypes lists the structure types Table 5 looks through
+// when it determines an element's parent, kids, and direct content. Table 5
+// declares no row for Part, Div, or NonStruct, so none of the three constrains
+// what it contains; ISO 32000-2:2020, 14.8.4.4 defines all three as pure
+// grouping wrappers whose descendants carry the structural meaning. Table 5
+// therefore judges a wrapped element against the nearest enclosing element the
+// matrix does constrain, and judges a wrapper's kids as kids of that element.
+// veraPDF 1.30 encodes the identical set in PDStructElem.isPassThroughTag and
+// applies it to parentStandardType, kidsStandardTypes, and hasContentItems.
+// Private is deliberately absent: Table 5 constrains it no more than the other
+// three, but its contents are private to one producer, so they are not
+// reattributed to the enclosing element.
+//
+//nolint:gochecknoglobals // static spec table
+var iso32005PassThroughTypes = map[string]bool{
+	"NonStruct": true, "Div": true, "Part": true,
+}
+
+// maxISO32005PassThroughDepth bounds how far the Table 5 kid lookup descends
+// through pass-through wrappers. Anti-DoS guard, not spec-mandated: the lookup
+// runs once per element, so an unbounded chain of nested Div elements would
+// make the structure walk quadratic. Real documents stack grouping wrappers a
+// handful of levels deep, so 32 leaves ample headroom. Beyond the cap the
+// wrapper contributes no kid keys, which cannot raise a kid count and so
+// cannot manufacture a violation.
+const maxISO32005PassThroughDepth = 32
+
 //nolint:gochecknoglobals // lazily built indexes over the generated table
 var (
 	iso32005Once             sync.Once
@@ -202,16 +229,27 @@ func iso32005StandardKey(name ast.PdfName) string {
 	return ""
 }
 
-// iso32005Kids resolves an element's direct /K children into Table 5 keys
-// and reports whether any direct content items are present: marked-content
-// MCID integers, MCR dictionaries, and OBJR object references all count. An
-// OBJR is a reference to a content-bearing object, so it is itself a direct
-// content item: a Document whose only kid is an OBJR contains content
-// directly and fails Table 5's Document-content rule (golden
-// PDF_UA-1__7.18.4-t01-fail-a is that single-OBJR shape). Each kid resolves
-// in its own namespace, so the kid dictionary drives the lookup rather than
-// the type name alone.
+// iso32005Kids resolves an element's /K children into Table 5 keys and reports
+// whether any content items are present: marked-content MCID integers, MCR
+// dictionaries, and OBJR object references all count. An OBJR is a reference to
+// a content-bearing object, so it is itself a content item: a Document whose
+// only kid is an OBJR contains content directly and fails Table 5's
+// Document-content rule (golden PDF_UA-1__7.18.4-t01-fail-a is that single-OBJR
+// shape). Each kid resolves in its own namespace, so the kid dictionary drives
+// the lookup rather than the type name alone.
+//
+// A kid whose own key is in [iso32005PassThroughTypes] contributes its kids and
+// its content items instead of itself, recursively: Table 5 attributes what a
+// Part, Div, or NonStruct wraps to the enclosing element.
 func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidKeys []string, hasContent bool) {
+	return iso32005KidsAt(ctx, state, elem, 0)
+}
+
+// iso32005KidsAt is [iso32005Kids] carrying the pass-through nesting depth.
+func iso32005KidsAt(ctx context.Context, state *walkState, elem ast.PdfDict, depth int) (kidKeys []string, hasContent bool) {
+	if ctx.Err() != nil {
+		return nil, false
+	}
 	kObj, ok := elem["K"]
 	if !ok {
 		return nil, false
@@ -238,7 +276,17 @@ func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidK
 				if serr != nil || s == "" {
 					continue
 				}
-				if key := iso32005Key(ctx, state, v, s); key != "" {
+				key := iso32005Key(ctx, state, v, s)
+				switch {
+				case key == "":
+				case iso32005PassThroughTypes[key]:
+					if depth >= maxISO32005PassThroughDepth {
+						continue
+					}
+					nested, nestedContent := iso32005KidsAt(ctx, state, v, depth+1)
+					kidKeys = append(kidKeys, nested...)
+					hasContent = hasContent || nestedContent
+				default:
 					kidKeys = append(kidKeys, key)
 				}
 			}

@@ -164,6 +164,141 @@ func TestISO32005_NonStructTransparent(t *testing.T) {
 	}
 }
 
+// TestISO32005_PassThroughParent pins the Table 5 pass-through set on the
+// parent side: Part, Div, and NonStruct are transparent, so an element wrapped
+// in one is judged against the nearest enclosing element Table 5 constrains.
+// Sect is the negative control: it is a grouping type Table 5 does constrain,
+// so it stays visible as the parent.
+//
+// Verified against live veraPDF 1.30.2 at PDF/UA-2 on the equivalent object
+// graph (/Document > wrapper > /Span holding marked content): veraPDF reports
+// "Table 5. Document-Span" test 1 for each of Part, Div, and NonStruct, and
+// "Table 5. Sect-Span" test 1 for Sect.
+func TestISO32005_PassThroughParent(t *testing.T) {
+	for _, tc := range []struct {
+		wrapper string
+		clause  string
+	}{
+		{"Div", "Table 5. Document-Span"},
+		{"Part", "Table 5. Document-Span"},
+		{"NonStruct", "Table 5. Document-Span"},
+		{"Sect", "Table 5. Sect-Span"},
+	} {
+		t.Run(tc.wrapper, func(t *testing.T) {
+			vs := iso32005Violations(t,
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /StructTreeRoot /K 5 0 R >>",
+				"<< /Type /StructElem /S /Document /P 4 0 R /K 6 0 R >>",
+				"<< /Type /StructElem /S /"+tc.wrapper+" /P 5 0 R /K 7 0 R >>",
+				"<< /Type /StructElem /S /Span /P 6 0 R /K 0 >>",
+			)
+			if !iso32005HasClause(vs, tc.clause) {
+				t.Errorf("Span under %s under Document: want %q; got %v", tc.wrapper, tc.clause, vs)
+			}
+		})
+	}
+}
+
+// TestISO32005_PassThroughKids pins the pass-through set on the kid side: a
+// wrapper contributes its own kids to the enclosing element's Table 5 kid
+// counts. Two H elements behind separate wrappers still breach the
+// at-most-one-H limit on Document. Sect is the negative control: it absorbs
+// the H into its own count, so Document sees none.
+//
+// veraPDF 1.30.2 builds the same flattened list in
+// GFPDStructTreeNode.getChildrenStandardTypes and reports
+// "Table 5. Document-H" test 1 on the Part, Div, and NonStruct shapes only.
+func TestISO32005_PassThroughKids(t *testing.T) {
+	for _, tc := range []struct {
+		wrapper string
+		want    bool
+	}{
+		{"Div", true},
+		{"Part", true},
+		{"NonStruct", true},
+		{"Sect", false},
+	} {
+		t.Run(tc.wrapper, func(t *testing.T) {
+			vs := iso32005Violations(t,
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /StructTreeRoot /K 5 0 R >>",
+				"<< /Type /StructElem /S /Document /P 4 0 R /K [6 0 R 8 0 R] >>",
+				"<< /Type /StructElem /S /"+tc.wrapper+" /P 5 0 R /K 7 0 R >>",
+				"<< /Type /StructElem /S /H /P 6 0 R /K 0 >>",
+				"<< /Type /StructElem /S /"+tc.wrapper+" /P 5 0 R /K 9 0 R >>",
+				"<< /Type /StructElem /S /H /P 8 0 R /K 1 >>",
+			)
+			if got := iso32005HasClause(vs, "Table 5. Document-H"); got != tc.want {
+				t.Errorf("two H behind %s wrappers: Table 5. Document-H fired=%v, want %v; got %v",
+					tc.wrapper, got, tc.want, vs)
+			}
+		})
+	}
+}
+
+// TestISO32005_PassThroughContent pins the pass-through set on the content
+// side: marked content inside a wrapper counts as content of the enclosing
+// element, so a Document whose only content sits inside a Part, Div, or
+// NonStruct still contains content directly. Sect is the negative control.
+//
+// veraPDF 1.30.2 recurses through the same set in
+// GFPDStructTreeNode.gethasContentItems and reports
+// "Table 5. Document-content" test 1 on the three pass-through shapes.
+func TestISO32005_PassThroughContent(t *testing.T) {
+	for _, tc := range []struct {
+		wrapper string
+		clause  string
+	}{
+		{"Div", "Table 5. Document-content"},
+		{"Part", "Table 5. Document-content"},
+		{"NonStruct", "Table 5. Document-content"},
+		{"Sect", "Table 5. Sect-content"},
+	} {
+		t.Run(tc.wrapper, func(t *testing.T) {
+			vs := iso32005Violations(t,
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /StructTreeRoot /K 5 0 R >>",
+				"<< /Type /StructElem /S /Document /P 4 0 R /K 6 0 R >>",
+				"<< /Type /StructElem /S /"+tc.wrapper+" /P 5 0 R /K 0 >>",
+			)
+			if !iso32005HasClause(vs, tc.clause) {
+				t.Errorf("content inside %s inside Document: want %q; got %v", tc.wrapper, tc.clause, vs)
+			}
+		})
+	}
+}
+
+// TestISO32005_PassThroughRootKids pins the pass-through set at the structure
+// tree root, where it suppresses a firing rather than adding one: a Document
+// reached through a wrapper still counts as the root's one Document, so the
+// exactly-one-Document rule shall stay silent. veraPDF 1.30.2 is silent on
+// this graph because getChildrenStandardTypes flattens the wrapper away.
+func TestISO32005_PassThroughRootKids(t *testing.T) {
+	for _, wrapper := range []string{"Div", "Part", "NonStruct"} {
+		t.Run(wrapper, func(t *testing.T) {
+			vs := iso32005Violations(t,
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /StructTreeRoot /K 5 0 R >>",
+				"<< /Type /StructElem /S /"+wrapper+" /P 4 0 R /K 6 0 R >>",
+				"<< /Type /StructElem /S /Document /P 5 0 R /K 7 0 R >>",
+				"<< /Type /StructElem /S /P /P 6 0 R /K 0 >>",
+			)
+			if iso32005HasClause(vs, "Table 5. StructTreeRoot-Document") {
+				t.Errorf("Document behind a %s wrapper should still count as the root's Document; got %v",
+					wrapper, vs)
+			}
+		})
+	}
+}
+
 // iso32005HasClause reports whether the Table 5 clause fired.
 func iso32005HasClause(vs []Violation, clause string) bool {
 	for _, v := range vs {

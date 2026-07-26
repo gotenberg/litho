@@ -464,13 +464,13 @@ type walkState struct {
 	// elements currently being walked, already resolved through the role
 	// map by [iso32005Key]. It differs from the walk's literal parentType
 	// in two ways the standard-type parent must reflect: children of the
-	// structure tree root carry the sentinel "StructTreeRoot", and
-	// NonStruct is transparent, so kids of a NonStruct inherit the
-	// NonStruct's own effective parent. Per ISO/TS 32005, NonStruct
-	// contents are treated as belonging to the enclosing element, so
-	// containment is evaluated against that element. It is empty when the
-	// parent resolves to no standard type, which leaves the child outside
-	// every Table 5 parent-child row.
+	// structure tree root carry the sentinel "StructTreeRoot", and the
+	// wrappers in [iso32005PassThroughTypes] are transparent, so their kids
+	// inherit the wrapper's own effective parent. Table 5 treats what those
+	// wrappers contain as belonging to the enclosing element, so containment
+	// is evaluated against that element. It is empty when the parent resolves
+	// to no standard type, which leaves the child outside every Table 5
+	// parent-child row.
 	iso32005Parent string
 
 	// seen records every structure element visited so the walk processes each
@@ -744,11 +744,11 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	}
 
 	// Recurse into children. The Table 5 effective parent follows the
-	// element type, except through NonStruct, which is transparent: its
-	// kids keep the current effective parent.
+	// element type, except through a pass-through wrapper, which is
+	// transparent: its kids keep the current effective parent.
 	if kObj, ok := elem["K"]; ok {
 		prevISOParent := state.iso32005Parent
-		if selfKey := iso32005Key(ctx, state, elem, typeName); selfKey != "NonStruct" {
+		if selfKey := iso32005Key(ctx, state, elem, typeName); !iso32005PassThroughTypes[selfKey] {
 			state.iso32005Parent = selfKey
 		}
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
