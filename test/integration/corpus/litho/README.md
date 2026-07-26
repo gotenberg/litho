@@ -58,6 +58,7 @@ delete a planted violation.
 | `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
 | `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                         |
 | `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
+| `tables_ua1.pdf`    | PDF/UA-1     | Tables and lists: header association, nested list structure    |
 
 ### Must-not-fire controls
 
@@ -86,6 +87,8 @@ violation but is exempt, so a firing is a false positive.
 | `complex_4`                               | Page-level `/OutputIntents`, a legal PDF 2.0 construct               | ISO 32000-2, 14.11.5         |
 | `complex_4`                               | `/AFRelationship` on one file specification and not the other        | ISO 19005-4, 6.9             |
 | `complex_4`                               | Second image carrying `/Interpolate false`                           | ISO 19005-4, 6.2.7.1         |
+| `tables_ua1`                              | Second table: `TH` with `/Scope` and `/ID`, `TD` with `/Headers`     | ISO 14289-1, 7.5             |
+| `multipage_2b`                            | Page 1 annotation: `F=4`, `/AP` present, no `/C`                     | ISO 19005-2, 6.3.3           |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -111,6 +114,7 @@ which are covered under [Known divergences](#known-divergences).
 | `forbidden_mix.pdf` | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `megafont_2b.pdf`   | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
+| `tables_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -274,6 +278,25 @@ litho reports all three pages' classes and agrees with veraPDF on all eight
 profiles, so no page-scoped check short-circuits today. Remediation takes it
 from 11 veraPDF violations to 1, introduces nothing, and preserves all three
 pages.
+
+## Tables and lists
+
+No other fixture contains a `/Table` or an `/L`, so ISO 14289-1, 7.5 and the
+table and list rows of the ISO/TS 32005 Table 5 matrix are unreached by the
+rest of the corpus. Both are nested structures, which is where a check that
+stops at the first defect, or one that never descends past the outer element,
+hides a second finding.
+
+`tables_ua1.pdf` holds two tables. The first is defective: its `TH` carries
+neither `/Scope` nor `/ID` and its `TD` carries no `/Headers`, so the header
+association is not determinable and `7.5/1` fires. The second conforms in all
+three respects. Its silence is the load-bearing part: a check that latched on
+the first table, or reported once per document, would either miss it or
+double-count, and the rule-set comparison shows the difference.
+
+The list is `L > LI > Lbl + LBody`, with the second `LI` omitting the `/Lbl`
+its sibling carries, so the nesting the Table 5 matrix governs is present
+alongside a real asymmetry between siblings.
 
 ## Known divergences
 
