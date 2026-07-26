@@ -128,13 +128,14 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 
 func xmpDocInfoSyncRule(part, testNum int, infoKey, infoVal, xmpKey, xmpVal string) []Violation {
 	ctx := fmt.Sprintf("/%s=%q vs %s=%q", infoKey, infoVal, xmpKey, xmpVal)
-	switch part {
-	case 1:
+	// Only ISO 19005-1 6.7.3 requires the document information dictionary to
+	// agree with the XMP. ISO 19005-2 and -3 dropped it, and ISO 19005-4 states
+	// no such requirement at all: its 6.1.3 test 5 already reduces /Info to a
+	// lone /ModDate, so there is nothing left to disagree. litho used to report
+	// part-4 mismatches under invented 6.7.3 test numbers 7 and 8, which collide
+	// with a clause that identifies the PDF/A version.
+	if part == 1 {
 		return xmpDocInfoSyncRulePart1(testNum, ctx)
-	case 4:
-		// Part 4 uses 6.7.3.3/6.7.3.4 clause numbering. Map test numbers
-		// to the appropriate rules.
-		return xmpDocInfoSyncRulePart4(testNum, ctx)
 	}
 	return nil
 }
@@ -157,31 +158,6 @@ func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Violation {
 		return fail(Rule_19005_1_6_7_3_t07, ctx)
 	case 8:
 		return fail(Rule_19005_1_6_7_3_t08, ctx)
-	}
-	return nil
-}
-
-func xmpDocInfoSyncRulePart4(testNum int, ctx string) []Violation {
-	// Part 4 uses Rule_19005_4_6_7_3_t07 for value mismatches and t08
-	// for missing XMP properties corresponding to Info dict entries.
-	// Rule t07 covers all sync mismatches uniformly.
-	switch testNum {
-	case 1:
-		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 2:
-		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 3:
-		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 4:
-		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 5:
-		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 6:
-		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 7:
-		return fail(Rule_19005_4_6_7_3_t07, ctx)
-	case 8:
-		return fail(Rule_19005_4_6_7_3_t08, ctx)
 	}
 	return nil
 }

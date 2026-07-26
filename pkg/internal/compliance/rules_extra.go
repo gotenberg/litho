@@ -1,26 +1,11 @@
 package compliance
 
-// Hand-maintained, litho-specific rules with no standalone profile entry.
-// These additions encode ISO 19005-4 requirements directly.
+// Hand-maintained, litho-specific rules with no standalone profile entry:
+// the hybrid-invoice, CII and CII schema families, plus the parts 2 and 3
+// spellings of a requirement veraPDF only enumerates for part 4.
 
 //nolint:gochecknoglobals // package-level rule definitions are the core design.
 var (
-	Rule_19005_4_6_7_3_t07 = Rule{
-		Specification: "ISO_19005_4",
-		Clause:        "6.7.3",
-		TestNumber:    7,
-		Object:        "CIDSystemInfo",
-		Description:   "If a document information dictionary is present in a conforming file, the value of each entry present in the document information dictionary shall be consistent with the corresponding XMP metadata entry",
-	}
-
-	Rule_19005_4_6_7_3_t08 = Rule{
-		Specification: "ISO_19005_4",
-		Clause:        "6.7.3",
-		TestNumber:    8,
-		Object:        "CIDSystemInfo",
-		Description:   "If a document information dictionary entry is present and non-empty, the corresponding XMP metadata property shall also be present",
-	}
-
 	// Hybrid-invoice rules covering the PDF/A-3 carrier requirements
 	// shared by Factur-X 1.0+ and every ZUGFeRD generation. Each rule
 	// is variant-agnostic; the offending filename, relationship, or
