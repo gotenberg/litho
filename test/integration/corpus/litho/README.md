@@ -67,6 +67,7 @@ one deliberately rather than diffing it against a fresh build.
 | `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
 | `fontdict_2b.pdf`   | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
 | `tables_ua1.pdf`    | PDF/UA-1     | Tables and lists: header association, nested list structure    |
+| `tablespan_ua2.pdf` | PDF/UA-2     | Table cell geometry: row and column spans                      |
 | `extschema_2b.pdf`  | PDF/A-2b     | XMP extension schema structure across sibling entries          |
 | `trailer_2b.pdf`    | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                    |
 
@@ -102,6 +103,7 @@ violation but is exempt, so a firing is a false positive.
 | `fontdict_2b`                             | Fifth font conforming in every required key                          | ISO 19005-2, 6.2.11.2        |
 | `extschema_2b`                            | Third schema entry conforming in every field                         | ISO 19005-2, 6.6.2.3.3       |
 | `gstate_2b`                               | Sixth graphics state: `/TR2 /Default`, unnamed type 1 halftone       | ISO 19005-2, 6.2.5           |
+| `tablespan_ua2`                           | Second table spanning two columns with both headers referenced       | ISO 14289-2, 8.2.5.26        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -131,6 +133,7 @@ which are covered under [Known divergences](#known-divergences).
 | `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `fontdict_2b.pdf`   | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `tables_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
+| `tablespan_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
 | `extschema_2b.pdf`  | 8    | 10   | 7    | 8    | 8    | 6   | 8    | 8    |
 | `trailer_2b.pdf`    | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 
@@ -412,6 +415,26 @@ which belongs in a small fixture. `t1`, `t2` and `t5` need numbers a writer
 will not emit: pikepdf normalises a denormal such as `1e-40` to plain `0`,
 which `t5` explicitly permits, so it cannot be planted through these builders
 at all.
+
+## Table cell geometry
+
+ISO 14289-2, 8.2.5.26 constrains the grid a table's cells describe through
+`/RowSpan` and `/ColSpan`. `tables_ua1.pdf` covers header association but
+declares no spans, so none of this clause is reachable from it.
+
+`tablespan_ua2.pdf` holds two tables. The first declares a two column grid
+and then gives its second row a cell spanning three, so the row's spans no
+longer add up and `8.2.5.26/3` fires. The second is a genuine spanning
+layout whose spans do add up and whose cells all reference a header; it
+carries real spans rather than a trivial grid, so its silence shows the check
+accepts a legitimate span rather than ignoring the attribute.
+
+Only `t3` of the clause is reached. `t1` needs two cells claiming one grid
+position, which a `/RowSpan` cannot produce: under the table model a spanning
+cell shifts the following row's cells rather than colliding with them, and
+veraPDF agrees the result is not an intersection. `t2` and `t4` need span
+geometries these builders could not produce, and `t5`/`t6` are the header
+association `tables_ua1.pdf` already covers.
 
 ## Known divergences
 
