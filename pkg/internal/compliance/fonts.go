@@ -488,7 +488,7 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 
 	// Type 0 (composite) fonts: check descendant CIDFonts.
 	if subtype == "Type0" {
-		results = append(results, checkType0Font(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
+		results = append(results, checkType0Font(ctx, doc, fontDict, fontName, pageNum, profile, isVisible, usage)...)
 		return results
 	}
 
@@ -803,8 +803,11 @@ func structTreeHasActualText(ctx context.Context, doc *document.Document, node a
 }
 
 // checkType0Font validates composite font properties including descendant
-// CIDFonts, CIDSystemInfo, CIDToGIDMap, and ToUnicode.
-func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+// CIDFonts, CIDSystemInfo, CIDToGIDMap, and ToUnicode. isVisible reports whether
+// a text-showing operator paints the font with a rendering mode other than 3; it
+// gates the embedding rule exactly as it does for simple fonts in
+// [checkSingleFont].
+func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
 	results := make([]Violation, 0, 4)
 
 	// Resolve /DescendantFonts array.
@@ -827,13 +830,22 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 
 	cidSubtype := fontSubtype(ctx, doc, cidFontDict)
 
-	// Font embedding for the CIDFont.
-	results = append(results, checkFontEmbedding(ctx, doc, cidFontDict, fontName, pageNum, profile, false)...)
+	// Font embedding for the CIDFont. The rendering-mode-3 exemption is not
+	// scoped to simple fonts: ISO 19005-1 §6.3.4 t1, ISO 19005-2/3 §6.2.11.4.1
+	// t1, ISO 19005-4 §6.2.10.4.1 t1, ISO 14289-1 §7.21.4.1 t1 and ISO 14289-2
+	// §8.4.5.5.1 t1 all exempt a font "used exclusively with text rendering mode
+	// 3", which is not rendered. veraPDF applies the same escape to the
+	// descendant CIDFont (its PDCIDFont is a PDFont), so an unembedded composite
+	// font drawn only invisibly must stay silent here too.
+	if isVisible {
+		results = append(results, checkFontEmbedding(ctx, doc, cidFontDict, fontName, pageNum, profile, false)...)
+	}
 
 	// CIDToGIDMap. A font with no recorded usage is treated as visible so the
-	// check still runs when content-stream usage could not be collected.
-	visible := usage == nil || usage.visible
-	results = append(results, checkCIDToGIDMap(ctx, doc, cidFontDict, cidSubtype, fontName, pageNum, profile, visible)...)
+	// check still runs when content-stream usage could not be collected. Every
+	// [checkSingleFont] caller supplies usage whenever it can prove non-use, so
+	// isVisible already carries that.
+	results = append(results, checkCIDToGIDMap(ctx, doc, cidFontDict, cidSubtype, fontName, pageNum, profile, isVisible)...)
 
 	// CIDSystemInfo consistency.
 	results = append(results, checkCIDSystemInfo(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
@@ -1222,9 +1234,11 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// A decode-level .notdef (odd-length tail or a CID beyond 65535)
 		// also means no real glyph backs the rendered code, so both the
 		// .notdef rule and the glyph-presence rule apply: the rendered code
-		// resolves to .notdef and to no glyph in the embedded program.
+		// resolves to .notdef and to no glyph in the embedded program. The
+		// glyph-presence half needs an embedded program to be missing from;
+		// see [type0HasEmbeddedProgram].
 		results := failf(rule, "font %s on page %d: text renders .notdef (odd-length code tail or CID beyond 65535)", fontName, pageNum)
-		if pr := glyphPresenceRule(profile); pr.Specification != "" {
+		if pr := glyphPresenceRule(profile); pr.Specification != "" && type0HasEmbeddedProgram(ctx, doc, fontDict) {
 			results = append(results, failf(pr,
 				"font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)...)
 		}
@@ -1300,6 +1314,31 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 	}
 
 	return nil
+}
+
+// type0HasEmbeddedProgram reports whether a composite font's descendant CIDFont
+// carries a readable embedded font program. The glyph-presence rule
+// (ISO 19005-1 §6.3.5 t1, ISO 19005-2/3 §6.2.11.4.1 t2, ISO 19005-4 §6.2.10.4.1
+// t2, ISO 14289-1 §7.21.4.1 t2, ISO 14289-2 §8.4.5.5.1 t2) constrains embedded
+// programs only: "Embedded font programs shall define all font glyphs referenced
+// for rendering". With nothing embedded there is no program a glyph could be
+// missing from, which is why veraPDF's test passes on `isGlyphPresent == null`.
+// The unembedded case is the embedding rule's concern (§6.3.4 t1 and its
+// per-part spellings), not this one.
+func type0HasEmbeddedProgram(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
+	if err != nil || len(descArr) == 0 {
+		return false
+	}
+	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
+	if err != nil || cidFontDict == nil {
+		return false
+	}
+	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
+	if fd == nil {
+		return false
+	}
+	return extractFontProgramData(ctx, doc, fd) != nil
 }
 
 // absentType0CIDs returns the set of used CIDs whose glyph is absent from the
@@ -1407,6 +1446,13 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	// checkType0NotdefGlyph; PDF/A-1 has no Type0 .notdef rule and reaches only
 	// this path, so honor the decode signal here for parity.
 	if !notdef && len(absent) == 0 {
+		return nil
+	}
+	// A non-empty absent set already implies an embedded program (absentType0CIDs
+	// populates it only from decoded program bytes); the decode signal does not,
+	// so recheck. See [type0HasEmbeddedProgram] for why an unembedded font is out
+	// of scope for §6.3.5 t1.
+	if !type0HasEmbeddedProgram(ctx, doc, fontDict) {
 		return nil
 	}
 	return failf(rule, "font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)
