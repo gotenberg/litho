@@ -4,7 +4,7 @@
 << /Metadata 2 0 R /Pages 3 0 R /Type /Catalog >>
 endobj
 2 0 obj
-<< /Subtype /XML /Type /Metadata /Length 3646 >>
+<< /Subtype /XML /Type /Metadata /Length 5719 >>
 stream
 <?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -13,7 +13,7 @@ stream
       <pdfaid:part>2</pdfaid:part>
       <pdfaid:conformance>B</pdfaid:conformance>
     </rdf:Description>
-    <rdf:Description xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#" rdf:about="">
+    <rdf:Description xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#" xmlns:pdfaType="http://www.aiim.org/pdfa/ns/type#" xmlns:pdfaField="http://www.aiim.org/pdfa/ns/field#" rdf:about="">
       <pdfaExtension:schemas>
         <rdf:Bag>
           <rdf:li rdf:parseType="Resource">
@@ -63,12 +63,49 @@ stream
               <rdf:Seq>
                 <rdf:li rdf:parseType="Resource">
                   <pdfaProperty:name>gammaOne</pdfaProperty:name>
-                  <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+                  <pdfaProperty:valueType>GammaRecord</pdfaProperty:valueType>
                   <pdfaProperty:category>internal</pdfaProperty:category>
-                  <pdfaProperty:description>fully conforming property</pdfaProperty:description>
+                  <pdfaProperty:description>uses the custom type below</pdfaProperty:description>
                 </rdf:li>
               </rdf:Seq>
             </pdfaSchema:property>
+            <pdfaSchema:valueType>
+              <rdf:Seq>
+                <rdf:li rdf:parseType="Resource">
+                  <pdfaType:type>GammaRecord</pdfaType:type>
+                  <pdfaType:namespaceURI>http://example.org/litho/gamma/record#</pdfaType:namespaceURI>
+                  <pdfaType:prefix>grec</pdfaType:prefix>
+                  <pdfaType:field>
+                    <rdf:Seq>
+                      <rdf:li rdf:parseType="Resource">
+                        <pdfaField:name>recordOne</pdfaField:name>
+                        <pdfaField:valueType>Text</pdfaField:valueType>
+                        <pdfaField:description>first field, conforming</pdfaField:description>
+                      </rdf:li>
+                      <rdf:li rdf:parseType="Resource">
+                        <pdfaField:valueType>Text</pdfaField:valueType>
+                        <pdfaField:description>this field has no name</pdfaField:description>
+                      </rdf:li>
+                    </rdf:Seq>
+                  </pdfaType:field>
+                </rdf:li>
+                <rdf:li rdf:parseType="Resource">
+                  <pdfaType:type>GammaOther</pdfaType:type>
+                  <pdfaType:namespaceURI>http://example.org/litho/gamma/other#</pdfaType:namespaceURI>
+                  <pdfaType:prefix>goth</pdfaType:prefix>
+                  <pdfaType:description>fully conforming value type</pdfaType:description>
+                  <pdfaType:field>
+                    <rdf:Seq>
+                      <rdf:li rdf:parseType="Resource">
+                        <pdfaField:name>otherOne</pdfaField:name>
+                        <pdfaField:valueType>Text</pdfaField:valueType>
+                        <pdfaField:description>conforming field</pdfaField:description>
+                      </rdf:li>
+                    </rdf:Seq>
+                  </pdfaType:field>
+                </rdf:li>
+              </rdf:Seq>
+            </pdfaSchema:valueType>
           </rdf:li>
         </rdf:Bag>
       </pdfaExtension:schemas>
@@ -101,11 +138,11 @@ xref
 0000000000 65535 f 
 0000000015 00000 n 
 0000000080 00000 n 
-0000003808 00000 n 
-0000003867 00000 n 
-0000003995 00000 n 
-0000004094 00000 n 
-trailer << /Root 1 0 R /Size 7 /ID [<85d7527ec08ab731d4d0d24e5e387a17><85d7527ec08ab731d4d0d24e5e387a17>] >>
+0000005881 00000 n 
+0000005940 00000 n 
+0000006068 00000 n 
+0000006167 00000 n 
+trailer << /Root 1 0 R /Size 7 /ID [<8e64f2ae1536d7c8dfbb703c2a5d88da><8e64f2ae1536d7c8dfbb703c2a5d88da>] >>
 startxref
-4191
+6264
 %%EOF

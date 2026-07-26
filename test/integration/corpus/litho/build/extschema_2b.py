@@ -54,7 +54,37 @@ def prop(name, value_type, category, description, name_prefix="pdfaProperty"):
     return '<rdf:li rdf:parseType="Resource">' + "".join(parts) + "</rdf:li>"
 
 
-def schema(name, uri, prefix, props):
+def field(name, value_type, description):
+    """One pdfaField rdf:li inside a value type. None omits that field."""
+    parts = []
+    if name is not None:
+        parts.append(f"<pdfaField:name>{name}</pdfaField:name>")
+    if value_type is not None:
+        parts.append(f"<pdfaField:valueType>{value_type}</pdfaField:valueType>")
+    if description is not None:
+        parts.append(f"<pdfaField:description>{description}</pdfaField:description>")
+    return '<rdf:li rdf:parseType="Resource">' + "".join(parts) + "</rdf:li>"
+
+
+def value_type(type_name, uri, prefix, description, fields=()):
+    """One pdfaType rdf:li. Any argument may be None to omit that field."""
+    parts = []
+    if type_name is not None:
+        parts.append(f"<pdfaType:type>{type_name}</pdfaType:type>")
+    if uri is not None:
+        parts.append(f"<pdfaType:namespaceURI>{uri}</pdfaType:namespaceURI>")
+    if prefix is not None:
+        parts.append(f"<pdfaType:prefix>{prefix}</pdfaType:prefix>")
+    if description is not None:
+        parts.append(f"<pdfaType:description>{description}</pdfaType:description>")
+    if fields:
+        parts.append(
+            "<pdfaType:field><rdf:Seq>" + "".join(fields) + "</rdf:Seq></pdfaType:field>"
+        )
+    return '<rdf:li rdf:parseType="Resource">' + "".join(parts) + "</rdf:li>"
+
+
+def schema(name, uri, prefix, props, value_types=()):
     parts = []
     if name is not None:
         parts.append(f"<pdfaSchema:schema>{name}</pdfaSchema:schema>")
@@ -65,6 +95,12 @@ def schema(name, uri, prefix, props):
     parts.append(
         "<pdfaSchema:property><rdf:Seq>" + "".join(props) + "</rdf:Seq></pdfaSchema:property>"
     )
+    if value_types:
+        parts.append(
+            "<pdfaSchema:valueType><rdf:Seq>"
+            + "".join(value_types)
+            + "</rdf:Seq></pdfaSchema:valueType>"
+        )
     return '<rdf:li rdf:parseType="Resource">' + "".join(parts) + "</rdf:li>"
 
 
@@ -92,14 +128,35 @@ s2 = schema(
     ],
 )
 
-# Schema three conforms in every respect. A firing against it would be a
-# false positive, and its silence shows the walk did not condemn the whole
-# bag once it saw a defect in an earlier entry.
+# Schema three carries value type definitions, the half of 6.6.2.3.3 the
+# property entries never reach. One type omits its pdfaType:description, one
+# of its fields omits pdfaField:name, and a second type is conforming
+# throughout. Its properties stay conforming so the defects are attributable
+# to the value types alone.
 s3 = schema(
     "Litho Gamma Schema",
     "http://example.org/litho/gamma#",
     "lgamma",
-    [prop("gammaOne", "Text", "internal", "fully conforming property")],
+    [prop("gammaOne", "GammaRecord", "internal", "uses the custom type below")],
+    [
+        value_type(
+            "GammaRecord",
+            "http://example.org/litho/gamma/record#",
+            "grec",
+            None,
+            [
+                field("recordOne", "Text", "first field, conforming"),
+                field(None, "Text", "this field has no name"),
+            ],
+        ),
+        value_type(
+            "GammaOther",
+            "http://example.org/litho/gamma/other#",
+            "goth",
+            "fully conforming value type",
+            [field("otherOne", "Text", "conforming field")],
+        ),
+    ],
 )
 
 packet = (
@@ -112,7 +169,9 @@ packet = (
     '<rdf:Description rdf:about=""'
     ' xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"'
     ' xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"'
-    ' xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">'
+    ' xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#"'
+    ' xmlns:pdfaType="http://www.aiim.org/pdfa/ns/type#"'
+    ' xmlns:pdfaField="http://www.aiim.org/pdfa/ns/field#">'
     "<pdfaExtension:schemas><rdf:Bag>" + s1 + s2 + s3 + "</rdf:Bag></pdfaExtension:schemas>"
     "</rdf:Description>"
     "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"

@@ -126,7 +126,7 @@ which are covered under [Known divergences](#known-divergences).
 | `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `fontdict_2b.pdf`   | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `tables_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
-| `extschema_2b.pdf`  | 6    | 8    | 5    | 6    | 6    | 6   | 8    | 8    |
+| `extschema_2b.pdf`  | 8    | 10   | 7    | 8    | 8    | 6   | 8    | 8    |
 | `trailer_2b.pdf`    | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
@@ -349,9 +349,15 @@ family was unvisited.
 defective in its own fields (no `pdfaSchema:prefix`), the second has three
 sibling properties each defective differently (a category outside
 `{external, internal}`, a missing description, a missing name), and the third
-conforms completely. Sibling entries are the point: a check that reports the
-first bad schema and stops never reaches the second, and one that condemns
-the bag on first sight wrongly reports the third.
+carries value type definitions: one `pdfaType` without its description, one
+of its `pdfaField` entries without a name, and a second type conforming
+throughout. Sibling entries are the point: a check that reports the first bad
+schema and stops never reaches the second, and one that condemns the bag on
+first sight wrongly reports the conforming parts of the third.
+
+The value types matter separately. Half of 6.6.2.3.3 describes `pdfaType` and
+`pdfaField`, which no property entry reaches, so a fixture built only from
+properties leaves that half unvisited.
 
 `trailer_2b.pdf` is encrypted and carries junk after its last `%%EOF`, so it
 reaches `6.1.3/2` and `6.1.3/3`. Encryption is worth having in the corpus for
