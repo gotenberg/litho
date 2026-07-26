@@ -76,6 +76,7 @@ one deliberately rather than diffing it against a fresh build.
 | `limits_1b.pdf`       | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
 | `docinfo_1b.pdf`      | PDF/A-1b     | Document information dictionary against its XMP analogues       |
 | `imgxmp_4.pdf`        | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
+| `idprefix_2b.pdf`     | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
 
 ### Must-not-fire controls
 
@@ -135,6 +136,8 @@ violation but is exempt, so a firing is a false positive.
 | `imgxmp_4`                                | The alternate inside the `/Alternates` array, itself conforming        | ISO 19005-4, 6.2.7.1 t1      |
 | `imgxmp_4`                                | Page 1 `/Metadata`, a conforming page-level packet                     | ISO 19005-4, 6.7.2.1         |
 | `imgxmp_4`                                | Catalog packet: `pdfaid:part` 4, `pdfaid:rev` 2020                     | ISO 19005-4, 6.7.3           |
+| `idprefix_2b`                             | `dc:title` and `xmp:CreatorTool` under their canonical prefixes        | ISO 19005-2, 6.6.4           |
+| `idprefix_2b`                             | An extension schema conforming in every field beside the defects       | ISO 19005-2, 6.6.2.3.3       |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -172,6 +175,7 @@ which are covered under [Known divergences](#known-divergences).
 | `tables_ua1.pdf`      | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 | `tablespan_ua2.pdf`   | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
 | `trailer_2b.pdf`      | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
+| `idprefix_2b.pdf`     | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 

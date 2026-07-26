@@ -1,0 +1,113 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /Metadata 2 0 R /Pages 3 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Subtype /XML /Type /Metadata /Length 1913 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description xmlns:xid="http://www.aiim.org/pdfa/ns/id/" rdf:about="">
+      <xid:part>2</xid:part>
+      <xid:conformance>B</xid:conformance>
+      <xid:amd>2005</xid:amd>
+      <xid:corr>1</xid:corr>
+    </rdf:Description>
+    <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" rdf:about="">
+      <dc:title>
+        <rdf:Alt>
+          <rdf:li xml:lang="x-default">identification prefixes</rdf:li>
+        </rdf:Alt>
+      </dc:title>
+      <xmp:CreatorTool>litho corpus builder</xmp:CreatorTool>
+    </rdf:Description>
+    <rdf:Description xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#" rdf:about="">
+      <pdfaExtension:schemas>
+        <rdf:Bag>
+          <rdf:li rdf:parseType="Resource">
+            <pdfaSchema:schema>Litho Control Schema</pdfaSchema:schema>
+            <pdfaSchema:namespaceURI>http://example.org/litho/control#</pdfaSchema:namespaceURI>
+            <pdfaSchema:prefix>lctl</pdfaSchema:prefix>
+            <pdfaSchema:property>
+              <rdf:Seq>
+                <rdf:li rdf:parseType="Resource">
+                  <pdfaProperty:name>controlOne</pdfaProperty:name>
+                  <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+                  <pdfaProperty:category>external</pdfaProperty:category>
+                  <pdfaProperty:description>conforming in every field</pdfaProperty:description>
+                </rdf:li>
+              </rdf:Seq>
+            </pdfaSchema:property>
+          </rdf:li>
+        </rdf:Bag>
+      </pdfaExtension:schemas>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+3 0 obj
+<< /Count 2 /Kids [ 4 0 R 5 0 R ] /Type /Pages >>
+endobj
+4 0 obj
+<< /Contents 6 0 R /MediaBox [ 0 0 612 792 ] /Parent 3 0 R /Resources << /ExtGState << /GS1 7 0 R >> /Font << /F1 8 0 R >> >> /Type /Page >>
+endobj
+5 0 obj
+<< /Contents 9 0 R /MediaBox [ 0 0 612 792 ] /Metadata 10 0 R /Parent 3 0 R /Resources << /Font << /F1 8 0 R >> >> /Type /Page >>
+endobj
+6 0 obj
+<< /Length 94 >>
+stream
+q /GS1 gs 0 0 0 rg 50 700 60 30 re f Q
+BT /F1 12 Tf 50 660 Td (identification prefixes) Tj ET
+
+endstream
+endobj
+7 0 obj
+<< /TR 11 0 R /Type /ExtGState >>
+endobj
+8 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+9 0 obj
+<< /Length 40 >>
+stream
+BT /F1 12 Tf 50 700 Td (page two) Tj ET
+
+endstream
+endobj
+10 0 obj
+<< /Subtype /XML /Type /Metadata /Length 386 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d" bytes="1024"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title><rdf:Alt><rdf:li xml:lang="x-default">page two</rdf:li></rdf:Alt></dc:title></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+endstream
+endobj
+11 0 obj
+<< /Domain [ 0 1 ] /FunctionType 4 /Range [ 0 1 ] /Length 14 >>
+stream
+{ 1 exch sub }
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000080 00000 n 
+0000002075 00000 n 
+0000002140 00000 n 
+0000002296 00000 n 
+0000002441 00000 n 
+0000002585 00000 n 
+0000002634 00000 n 
+0000002731 00000 n 
+0000002821 00000 n 
+0000003289 00000 n 
+trailer << /Root 1 0 R /Size 12 /ID [<92722ebb428227049b4dae7a1e09f7b9><92722ebb428227049b4dae7a1e09f7b9>] >>
+startxref
+3401
+%%EOF
