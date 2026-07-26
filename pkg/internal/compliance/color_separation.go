@@ -11,13 +11,16 @@ import (
 
 // deviceNComponentRule returns the rule for DeviceN component count limit.
 func deviceNComponentRule(part int) Rule {
-	// PDF/A-1 §6.1.12 t9; PDF/A-2/3 §6.1.13 t9. Part 4 reuses the part-1 id
-	// (no distinct PDF/A-4 DeviceN-colourant rule).
+	// PDF/A-1 §6.1.12 t9; PDF/A-2/3 §6.1.13 t9. ISO 19005-4 states no
+	// DeviceN colourant limit at all, so part 4 has no rule to report:
+	// emitting the part-1 id there flagged a construct that part permits.
 	switch part {
 	case 2:
 		return Rule_19005_2_6_1_13_t09
 	case 3:
 		return Rule_19005_3_6_1_13_t09
+	case 4:
+		return Rule{}
 	default:
 		return Rule_19005_1_6_1_12_t09
 	}
