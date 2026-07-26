@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 
 	"golang.org/x/text/encoding/unicode"
@@ -179,6 +181,14 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	// Catalog /Metadata required (§6.7.2 / §6.6.1).
 	xmpData, metaStream := xmpLoadMetadata(ctx, doc, catalog, part, &results)
+
+	// The packet tests govern "all content of all XMP packets located in any
+	// metadata stream present in the PDF" (ISO 19005-4 §6.7.2.1 t2..t5, ISO
+	// 19005-2/3 §6.6.2.1 t2..t5), so they run over every other metadata
+	// stream too. Independent of the catalog packet: a file whose catalog
+	// packet is absent still has to carry well-formed page packets.
+	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part)...)
+
 	if xmpData == nil {
 		return results
 	}
@@ -331,6 +341,188 @@ func xmpLoadMetadata(ctx context.Context, doc *document.Document, catalog ast.Pd
 	}
 
 	return xmpData, stream
+}
+
+// maxXMPMetadataStreams bounds how many distinct metadata streams the
+// non-catalog packet scan decodes. Every dictionary in the file may carry a
+// /Metadata key and each accepted one costs a stream decode plus an XML parse,
+// so a crafted file that hangs a metadata stream off thousands of objects
+// would otherwise turn one validation into an unbounded decode loop. This is
+// an anti-DoS guard, not spec-mandated: real producers attach XMP to the
+// catalog and, at most, to each page, XObject or embedded file, so 4096
+// packets covers even a per-page-XMP book.
+const maxXMPMetadataStreams = 4096
+
+// maxXMPContainerDepth bounds the descent into a container object's direct
+// (non-reference) values while looking for /Metadata keys. Indirect objects
+// are visited by the outer scan, so this recursion only ever walks the
+// direct value tree of a single object, which cannot cycle. This is an
+// anti-DoS guard, not spec-mandated: a real dictionary nests a handful of
+// levels, so 32 leaves genuine documents untouched while capping the work a
+// deeply nested crafted object can force.
+const maxXMPContainerDepth = 32
+
+// xmpCheckOtherPackets applies the packet-level XMP tests to every metadata
+// stream in the file other than the document catalog's. ISO 19005-4 §6.7.2.1
+// and ISO 19005-2/3 §6.6.2.1 scope those tests to "all content of all XMP
+// packets located in any metadata stream present in the PDF", so a packet
+// hanging off a page, XObject, annotation or embedded file is in scope for the
+// header attributes (t2, t3), well-formedness (t4) and UTF-8 encoding (t5).
+//
+// ISO 19005-1 carries no such scope: veraPDF models a non-catalog packet as an
+// XMPPackage only outside part 1 (GFPDMetadata.getXMPPackage guards the branch
+// with !PDFFlavours.isFlavourPart(flavour, ISO_19005_1)), and a part-1 run over
+// a page packet carrying bytes= reports nothing while the same attribute in the
+// catalog packet reports §6.7.5 t1. Part 1 therefore returns early: widening it
+// would raise violations no PDF/A-1 validator raises.
+func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
+	if part == 1 {
+		return nil
+	}
+
+	metaNums := xmpCollectMetadataStreams(ctx, doc, catalog)
+	if len(metaNums) == 0 {
+		return nil
+	}
+
+	var results []Violation
+	for _, objNum := range metaNums {
+		if ctx.Err() != nil {
+			return results
+		}
+		data := xmpPacketBytes(ctx, doc, objNum)
+		if len(data) == 0 {
+			continue
+		}
+
+		// t2, t3, t4 and t5 are the only rules a single packet can add.
+		packet := make([]Violation, 0, 4)
+		data = xmpNormalizeForChecks(data, part, &packet)
+		packet = append(packet, xmpPacketSerializationValidity(data, part)...)
+		xmpCheckPacketHeader(data, part, &packet)
+
+		for _, v := range packet {
+			results = append(results, xmpPacketViolation(v, objNum))
+		}
+	}
+	return results
+}
+
+// xmpCollectMetadataStreams returns the object numbers of the metadata streams
+// referenced by any object in the file except the catalog's own packet, sorted
+// ascending so the emitted violations keep a stable order. Each stream is
+// reported once however many objects reference it.
+func xmpCollectMetadataStreams(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []int {
+	// The catalog packet is the document's main packet and is checked by the
+	// caller. veraPDF skips it the same way, by /Type: GFCosDict.getMetadata
+	// builds a non-main PDMetadata only when the container's /Type is not
+	// /Catalog. Matching on the reference as well covers a catalog dict that
+	// omits /Type, which would otherwise be reported twice.
+	catalogMetaNum := -1
+	if ref, ok := catalog["Metadata"].(ast.PdfIndirectRef); ok {
+		catalogMetaNum = ref.ObjectNum
+	}
+
+	seen := make(map[int]bool)
+	var metaNums []int
+
+	for _, objNum := range sortedEntryNums(doc) {
+		if ctx.Err() != nil || len(metaNums) >= maxXMPMetadataStreams {
+			break
+		}
+		if doc.Index.Entries[objNum].Free {
+			continue
+		}
+		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil {
+			doc.Logger.Debug("compliance.xmp: cannot resolve object for metadata scan", "object", objNum, "error", err)
+			continue
+		}
+		xmpCollectMetadataRefs(obj, catalogMetaNum, seen, &metaNums, 0)
+	}
+
+	slices.Sort(metaNums)
+	return metaNums
+}
+
+// xmpCollectMetadataRefs appends the object number of obj's /Metadata
+// reference, and of those of the direct dictionaries nested inside it, to
+// metaNums. Indirect references other than the /Metadata value itself are not
+// followed: the caller already visits every indirect object, so the descent
+// stays inside one object's direct value tree and terminates.
+func xmpCollectMetadataRefs(obj ast.PdfObject, catalogMetaNum int, seen map[int]bool, metaNums *[]int, depth int) {
+	if depth > maxXMPContainerDepth || len(*metaNums) >= maxXMPMetadataStreams {
+		return
+	}
+
+	var dict ast.PdfDict
+	switch v := obj.(type) {
+	case ast.PdfDict:
+		dict = v
+	case ast.PdfStream:
+		dict = v.Dict
+	case ast.PdfArray:
+		for _, elem := range v {
+			xmpCollectMetadataRefs(elem, catalogMetaNum, seen, metaNums, depth+1)
+		}
+		return
+	default:
+		return
+	}
+
+	if typeName, _ := dict["Type"].(ast.PdfName); typeName != "Catalog" {
+		if ref, ok := dict["Metadata"].(ast.PdfIndirectRef); ok &&
+			ref.ObjectNum != catalogMetaNum && !seen[ref.ObjectNum] {
+			seen[ref.ObjectNum] = true
+			*metaNums = append(*metaNums, ref.ObjectNum)
+		}
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(dict)) {
+		if key == "Metadata" {
+			continue
+		}
+		xmpCollectMetadataRefs(dict[key], catalogMetaNum, seen, metaNums, depth+1)
+	}
+}
+
+// xmpPacketBytes returns the decoded XMP packet held by the metadata stream
+// objNum, or nil when the object is not an XMP metadata stream or its bytes
+// cannot be decoded. The /Type and /Subtype gate mirrors veraPDF's
+// PDMetadata.isMetadataObject, which accepts a stream only when /Type is
+// /Metadata and /Subtype is /XML. An undecodable stream yields nil rather than
+// its raw bytes: reporting a malformed packet litho merely failed to decode
+// would be a false positive.
+func xmpPacketBytes(ctx context.Context, doc *document.Document, objNum int) []byte {
+	stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+	if err != nil || stream.Dict == nil {
+		doc.Logger.Debug("compliance.xmp: cannot resolve metadata stream", "object", objNum, "error", err)
+		return nil
+	}
+
+	typeName, _ := document.ResolveName(ctx, doc, stream.Dict["Type"])
+	subtypeName, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+	if typeName != "Metadata" || subtypeName != "XML" {
+		return nil
+	}
+
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance.xmp: cannot decode metadata stream", "object", objNum, "error", err)
+		return nil
+	}
+	return data
+}
+
+// xmpPacketViolation names the metadata stream a packet violation came from,
+// so a report covering several packets stays traceable to an object.
+func xmpPacketViolation(v Violation, objNum int) Violation {
+	if v.Context == "" {
+		v.Context = fmt.Sprintf("object %d: XMP packet", objNum)
+		return v
+	}
+	v.Context = fmt.Sprintf("object %d: %s", objNum, v.Context)
+	return v
 }
 
 // xmpMetadataRule returns the correct rule for the missing/invalid metadata
