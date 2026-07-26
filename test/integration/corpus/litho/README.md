@@ -61,6 +61,7 @@ one deliberately rather than diffing it against a fresh build.
 | `complex_ua1.pdf`   | PDF/UA-1     | Structure and accessibility defects in a wired tag tree        |
 | `complex_ua2.pdf`   | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
 | `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
+| `gstate_2b.pdf`     | PDF/A-2b     | Transfer functions and halftones in six graphics states        |
 | `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                         |
 | `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
 | `fontdict_2b.pdf`   | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
@@ -99,6 +100,7 @@ violation but is exempt, so a firing is a false positive.
 | `multipage_2b`                            | Page 1 annotation: `F=4`, `/AP` present, no `/C`                     | ISO 19005-2, 6.3.3           |
 | `fontdict_2b`                             | Fifth font conforming in every required key                          | ISO 19005-2, 6.2.11.2        |
 | `extschema_2b`                            | Third schema entry conforming in every field                         | ISO 19005-2, 6.6.2.3.3       |
+| `gstate_2b`                               | Sixth graphics state: `/TR2 /Default`, unnamed type 1 halftone       | ISO 19005-2, 6.2.5           |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -122,6 +124,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua1.pdf`   | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
 | `complex_ua2.pdf`   | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
 | `forbidden_mix.pdf` | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
+| `gstate_2b.pdf`     | 6    | 12   | 10   | 10   | 10   | 11  | 7    | 7    |
 | `megafont_2b.pdf`   | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `fontdict_2b.pdf`   | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
@@ -367,6 +370,26 @@ gives up on it reports nothing rather than reporting the encryption.
 Both were built after the coverage scan showed the corpus firing 33 of the
 144 PDF/A-2b rules; the fixtures added since raised that to 40 before these
 two landed.
+
+## Graphics states
+
+ISO 19005-2, 6.2.5 forbids transfer functions and constrains halftones, and
+every one of its tests lives in an `ExtGState`, so the clause is authorable
+without unusual content. `gstate_2b.pdf` applies six states on one page:
+
+| State | Defect                                    | Rule      |
+| ----- | ----------------------------------------- | --------- |
+| GS1   | `/TR` present                             | `6.2.5/1` |
+| GS2   | `/TR2` with a value other than `/Default` | `6.2.5/2` |
+| GS3   | `/HTP` present                            | `6.2.5/3` |
+| GS4   | halftone of type 6                        | `6.2.5/4` |
+| GS5   | type 1 halftone carrying `/HalftoneName`  | `6.2.5/5` |
+| GS6   | none                                      | silent    |
+
+All six tests of the clause fire, including `6.2.5/6` on the colorant and
+transfer function pairing, and the conforming state stays silent. Five
+different states carrying five different defects is the point: a check that
+reported the first and stopped would report one rule where five are due.
 
 ## Known divergences
 
