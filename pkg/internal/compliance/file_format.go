@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -81,12 +83,17 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 	return results
 }
 
-// checkFormatViolations checks parser-level format violations collected during
-// resolveAllObjects. These include hex string format issues (§6.1.6) and
-// object header format issues (§6.1.8/§6.1.9) detected by the parser when
-// ComplianceMode is enabled.
-func checkFormatViolations(doc *document.Document, profile string) []Violation {
-	if len(doc.FormatViolations) == 0 {
+// checkFormatViolations maps the parser-level format violations collected
+// during resolveAllObjects onto rules. These include hex string format issues
+// (§6.1.6) and object header format issues (§6.1.8/§6.1.9) detected by the
+// parser when ComplianceMode is enabled.
+//
+// It reads the snapshot frozen in the validation context, not the live
+// document: the check groups run concurrently and keep resolving objects, so
+// a live read reported however many violations had been recorded at that
+// instant.
+func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
+	if len(vctx.formatViolations) == 0 {
 		return nil
 	}
 
@@ -96,7 +103,7 @@ func checkFormatViolations(doc *document.Document, profile string) []Violation {
 	streamRule := streamFormatRule(profile)
 	xrefRule := xrefFormatRule(profile)
 
-	for _, violation := range doc.FormatViolations {
+	for _, violation := range vctx.formatViolations {
 		msg := violation.Error()
 
 		rule := hexRule
@@ -199,7 +206,13 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []V
 	rule := objHeaderRule(profile)
 	var results []Violation
 
-	for objNum, entry := range doc.Index.Entries {
+	// Iterate the entries in object-number order, from a snapshot: ranging
+	// the map emitted the violations in a different order on every run
+	// (CONTRIBUTING "Deterministic output") and raced the lazy xref
+	// augmentation another check group can trigger.
+	entries := doc.XRefEntriesSnapshot()
+	for _, objNum := range slices.Sorted(maps.Keys(entries)) {
+		entry := entries[objNum]
 		if entry.Free || entry.Type != xref.XRefTypeNormal {
 			continue
 		}
@@ -246,27 +259,24 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []V
 }
 
 // checkXRefTableByteFormat validates xref table raw-byte formatting by calling
-// the document's ValidateXRefTableFormat for each recorded xref table offset.
-// Any violations are collected in doc.FormatViolations and then mapped to rules.
+// the document's ValidateXRefTableFormat for each recorded xref table offset,
+// then maps what it returns to rules. Reading the findings back out of the
+// document's shared violation slice used to hand this check whatever another
+// check group had recorded in the meantime, labelling an object-header defect
+// as an xref one.
 func checkXRefTableByteFormat(doc *document.Document, profile string) []Violation {
 	if len(doc.XRefTableOffsets) == 0 {
 		return nil
 	}
 
-	// Record count before validation so only new violations get processed.
-	prevCount := len(doc.FormatViolations)
-
+	var violations []error
 	for _, offset := range doc.XRefTableOffsets {
-		doc.ValidateXRefTableFormat(offset)
+		violations = append(violations, doc.ValidateXRefTableFormat(offset)...)
 	}
 
-	if len(doc.FormatViolations) == prevCount {
-		return nil
-	}
-
-	// Map new violations to rules.
+	// Map the violations to rules.
 	var results []Violation
-	for _, v := range doc.FormatViolations[prevCount:] {
+	for _, v := range violations {
 		rule := xrefFormatRule(profile)
 		// PDF/A-1 distinguishes t01 (subsection header spacing) from
 		// t02 (EOL after xref keyword). Other parts use a single rule.

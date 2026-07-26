@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -22,8 +24,10 @@ import (
 // Concurrent use. Document is safe for concurrent use by multiple
 // goroutines after construction completes. All mutable caches
 // (objectCache, fontCache, cmapCache, objStmCache) and the compliance
-// scratch state (ComplianceMode, FormatViolations) are protected by
-// internal locks.
+// scratch state (ComplianceMode, formatViolations) are protected by
+// internal locks. The format-violation record is keyed by object number
+// and written once per object, so concurrent resolutions of the same
+// object contribute one entry, not one per goroutine.
 // Concurrent read paths ([Resolve], [ResolveDict], [ResolveArray], etc.)
 // run in parallel through a read-write mutex. Concurrent validation
 // runs ([pdf.Reader.ValidatePDFA] / [pdf.Reader.ValidatePDFUA] on the
@@ -45,7 +49,7 @@ type Document struct {
 	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by maxObjStmCacheBytes
 	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
 	sortedOffsetsLen int                 // len(Index.Entries) when sortedOffsets was built; rebuild on change
-	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, sortedOffsets, FormatViolations, and the lazy Index.Entries augmentation
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of Index
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
@@ -92,12 +96,20 @@ type Document struct {
 	// [Document.SetComplianceMode].
 	complianceMode atomic.Bool
 
-	// FormatViolations collects parser-level format violations detected
-	// during object resolution when complianceMode is true. Access is
-	// serialized by d.mu. Callers that run a validation pass should
-	// snapshot and clear this slice through [Document.ResetFormatViolations]
-	// so that a later run starts from a clean state.
-	FormatViolations []error
+	// formatViolations records the parser-level format violations found on
+	// each object, keyed by object number, when complianceMode is true.
+	// Recording is idempotent per object (see
+	// [Document.RecordFormatViolations]), so the set is a function of the
+	// input bytes rather than of how often an object happened to be parsed.
+	// Access is serialized by d.mu.
+	//
+	// The key space is the set of object numbers that carry a normal xref
+	// entry, so the map holds at most len(Index.Entries) keys: an object
+	// number absent from the index fails resolution before anything is
+	// recorded. That is the same bound the index itself already lives
+	// under (an xref entry costs bytes in the file), so the store needs no
+	// cap of its own.
+	formatViolations map[int][]error
 
 	// XRefTableOffsets records the byte offsets of traditional xref tables
 	// encountered during parsing. Written once during construction and
@@ -126,26 +138,68 @@ func (d *Document) SetComplianceMode(enabled bool) {
 	d.complianceMode.Store(enabled)
 }
 
-// AppendFormatViolations adds violations collected by a parser to the
-// document's format-violation slice under the document mutex.
-func (d *Document) AppendFormatViolations(violations ...error) {
-	if len(violations) == 0 {
-		return
-	}
+// RecordFormatViolations records the format violations found while parsing
+// object objNum. The first recording for an object wins: a later call for
+// the same object is dropped, including when it carries a different list.
+// An object is parsed more than once whenever its parse fails (a failed
+// parse is never cached), whenever its cache entry is evicted, and whenever
+// two goroutines miss the cache for it at the same time, so counting per
+// parse made the reported violation set depend on scheduling. Counting per
+// object makes it a function of the input bytes.
+//
+// Recording an empty list still marks the object as visited, so a later
+// re-parse cannot add anything either.
+//
+// RecordFormatViolations is safe for concurrent use.
+func (d *Document) RecordFormatViolations(objNum int, violations ...error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.FormatViolations = append(d.FormatViolations, violations...)
+	if d.formatViolations == nil {
+		d.formatViolations = make(map[int][]error)
+	}
+	if _, ok := d.formatViolations[objNum]; ok {
+		return
+	}
+	d.formatViolations[objNum] = slices.Clone(violations)
 }
 
-// ResetFormatViolations clears the document's format-violation slice
-// and returns the previous contents. Used by validation callers to
-// snapshot the violations from one pass without leaking them into a
-// subsequent pass on the same Document.
+// FormatViolations returns the recorded format violations ordered by object
+// number, then by the order in which they were found within that object.
+// The order never depends on map iteration or on the order the objects were
+// resolved in (CONTRIBUTING "Deterministic output").
+//
+// The result is a fresh slice, so callers may hold it while resolution
+// continues. FormatViolations is safe for concurrent use.
+func (d *Document) FormatViolations() []error {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.formatViolationsLocked()
+}
+
+// ResetFormatViolations drops every recorded format violation and returns
+// the previous contents in [Document.FormatViolations] order.
+//
+// Recording is repopulated by parsing, so reset the record only together
+// with the object cache: an object still in the cache is never re-parsed
+// and would never record its violations again. [Document.ClearCaches] and
+// [Document.Authenticate] reset both at once for that reason. A validation
+// pass must not reset on its own, or a second pass over the same Document
+// would report only the violations of the objects that failed to parse.
 func (d *Document) ResetFormatViolations() []error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	out := d.FormatViolations
-	d.FormatViolations = nil
+	out := d.formatViolationsLocked()
+	d.formatViolations = nil
+	return out
+}
+
+// formatViolationsLocked returns the ordered violations. The caller must
+// hold d.mu.
+func (d *Document) formatViolationsLocked() []error {
+	out := make([]error, 0, len(d.formatViolations))
+	for _, objNum := range slices.Sorted(maps.Keys(d.formatViolations)) {
+		out = append(out, d.formatViolations[objNum]...)
+	}
 	return out
 }
 
@@ -384,11 +438,14 @@ func (d *Document) Authenticate(password string) error {
 	}
 	d.Authenticated = true
 	// Clear object cache in case we cached encrypted items
-	// (though we shouldn't have been able to read them).
+	// (though we shouldn't have been able to read them). The
+	// format-violation record is keyed to those same parses, so it goes
+	// with them: whatever is re-parsed re-records.
 	d.mu.Lock()
 	d.objectCache = make(map[int]ast.PdfObject)
 	d.objStmCache = nil
 	d.objStmCacheBytes = 0
+	d.formatViolations = nil
 	d.mu.Unlock()
 	return nil
 }
@@ -422,7 +479,9 @@ func (d *Document) IsLinearized() bool {
 }
 
 // ClearCaches releases the object cache and font cache to free memory.
-// Caches are transparently rebuilt on the next access.
+// Caches are transparently rebuilt on the next access. The
+// format-violation record is dropped with them, since re-parsing an object
+// is what records it again (see [Document.ResetFormatViolations]).
 //
 // ClearCaches must not be called concurrently with other [Document] methods.
 func (d *Document) ClearCaches() {
@@ -432,6 +491,7 @@ func (d *Document) ClearCaches() {
 	d.cmapCache = make(map[int]any)
 	d.objStmCache = nil
 	d.objStmCacheBytes = 0
+	d.formatViolations = nil
 	d.mu.Unlock()
 }
 

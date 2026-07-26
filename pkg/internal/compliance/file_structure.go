@@ -52,7 +52,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkStreamExternalKeys(ctx, doc, profile)...)
 	results = append(results, checkStreamLZW(ctx, doc, profile)...)
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
-	results = append(results, checkFormatViolations(doc, profile)...)
+	results = append(results, checkFormatViolations(vctx, profile)...)
 	results = append(results, checkObjHeaderLeadingWhitespace(doc, profile)...)
 	results = append(results, checkStreamLengths(ctx, doc, profile)...)
 	results = append(results, checkContentStreamHexStrings(ctx, doc, catalog, profile)...)

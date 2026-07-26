@@ -921,9 +921,6 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		// validator toggling the flag mid-resolution cannot change our
 		// branches after we started.
 		complianceMode := d.ComplianceMode()
-		if complianceMode {
-			d.validateObjectHeaderFormat(entry.Offset, ref.ObjectNum)
-		}
 
 		// Verify the object header at the xref-declared offset matches
 		// the expected number. A mismatch typically means the xref table
@@ -939,6 +936,15 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 			}
 		}
 
+		// Check the header bytes only once the offset is settled, so the
+		// check reads the same bytes the parse does. Reading the declared
+		// offset first made the result depend on whether some earlier
+		// resolution had already triggered the augmentation.
+		var formatViolations []error
+		if complianceMode {
+			formatViolations = d.validateObjectHeaderFormat(entry.Offset, ref.ObjectNum)
+		}
+
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
 		p := parser.NewParser(lex)
 		if d.Crypto != nil {
@@ -950,14 +956,22 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 
 		obj, err = p.ParseObject(ctx)
 		if err != nil {
+			// Record the header findings even though the body did not
+			// parse. A failed parse is never cached, so every later
+			// resolution of this object repeats the work, and only the
+			// per-object record keeps the retries from counting twice.
+			if complianceMode {
+				d.RecordFormatViolations(ref.ObjectNum, formatViolations...)
+			}
 			return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
 		}
 
-		// Collect parser-level format violations via the mutex-protected
-		// helper so a concurrent validation snapshot cannot observe a
-		// torn write.
-		if complianceMode && len(p.FormatViolations) > 0 {
-			d.AppendFormatViolations(p.FormatViolations...)
+		// Record the object's format violations, header findings first,
+		// then the parser's. Recording is keyed by object number, so a
+		// re-parse after an eviction and a second goroutine that missed
+		// the cache at the same time both add nothing.
+		if complianceMode {
+			d.RecordFormatViolations(ref.ObjectNum, append(formatViolations, p.FormatViolations...)...)
 		}
 
 		d.Logger.Debug("resolve object parsed",

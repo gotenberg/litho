@@ -204,15 +204,21 @@ func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64, skip
 // header "N G obj". The spec requires: object number and generation number
 // separated by a single white-space character, generation number and obj
 // keyword separated by a single white-space character, obj preceded by EOL,
-// endobj preceded by EOL.
-func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
+// endobj preceded by EOL. It returns the violations found, in byte order.
+//
+// The findings are returned rather than recorded on the document so the
+// caller records them once for the object, whatever the parse that follows
+// them does.
+func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error {
 	// Read enough bytes to cover the header: "NNNNNNNNN GGGGG obj\n" ≈ 25 bytes.
 	var buf [40]byte
 	n, _ := d.r.ReadAt(buf[:], offset)
 	if n < 5 { //nolint:mnd // need at least "N G obj"
-		return
+		return nil
 	}
 	data := buf[:n]
+
+	var violations []error
 
 	// Parse: <digits> <separator> <digits> <separator> "obj" <EOL>
 	pos := 0
@@ -222,14 +228,13 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 		pos++
 	}
 	if pos == 0 || pos >= len(data) {
-		return // Can't parse, skip.
+		return nil // Can't parse, skip.
 	}
 
 	// Separator between object number and generation: must be single SP (0x20).
 	if data[pos] != ' ' {
-		d.AppendFormatViolations(
+		return append(violations,
 			fmt.Errorf("compliance: obj header %d: object number not followed by single space (0x%02X)", objNum, data[pos]))
-		return
 	}
 	// Check for multiple spaces.
 	spCount := 0
@@ -238,7 +243,7 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 		pos++
 	}
 	if spCount > 1 {
-		d.AppendFormatViolations(
+		violations = append(violations,
 			fmt.Errorf("compliance: obj header %d: %d spaces between object number and generation (must be 1)", objNum, spCount))
 	}
 
@@ -248,14 +253,13 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 		pos++
 	}
 	if pos == genStart || pos >= len(data) {
-		return
+		return violations
 	}
 
 	// Separator between generation and "obj": must be single SP (0x20).
 	if data[pos] != ' ' {
-		d.AppendFormatViolations(
+		return append(violations,
 			fmt.Errorf("compliance: obj header %d: generation not followed by single space (0x%02X)", objNum, data[pos]))
-		return
 	}
 	spCount = 0
 	for pos < len(data) && data[pos] == ' ' {
@@ -263,13 +267,13 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 		pos++
 	}
 	if spCount > 1 {
-		d.AppendFormatViolations(
+		violations = append(violations,
 			fmt.Errorf("compliance: obj header %d: %d spaces between generation and obj keyword (must be 1)", objNum, spCount))
 	}
 
 	// "obj" keyword.
 	if pos+3 > len(data) || string(data[pos:pos+3]) != "obj" {
-		return // Not a valid object header, skip.
+		return violations // Not a valid object header, skip.
 	}
 	pos += 3
 
@@ -277,14 +281,14 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) {
 	if pos < len(data) {
 		ch := data[pos]
 		if ch != '\n' && ch != '\r' {
-			d.AppendFormatViolations(
+			violations = append(violations,
 				fmt.Errorf("compliance: obj header %d: obj keyword not followed by EOL marker (0x%02X)", objNum, ch))
 		}
 	}
 
 	// Validate endobj: scan forward to find "endobj" and check it's
 	// preceded by an EOL marker (LF or CR).
-	d.validateEndobjFormat(offset, objNum)
+	return append(violations, d.validateEndobjFormat(offset, objNum)...)
 }
 
 // nextNormalObjectOffset returns the smallest normal indirect-object offset
@@ -324,8 +328,9 @@ func (d *Document) nextNormalObjectOffset(off int64) int64 {
 }
 
 // validateEndobjFormat scans the object body starting at offset to find
-// "endobj" and validates it is preceded by an EOL marker.
-func (d *Document) validateEndobjFormat(offset int64, objNum int) {
+// "endobj" and validates it is preceded by an EOL marker. It returns the
+// violations found.
+func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	// Cap the scan at the next indirect object's offset so "endobj"
 	// literals embedded in a later object's strings cannot be found. Using a
 	// binary search over cached ascending offsets keeps this O(log N) per
@@ -338,7 +343,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 	buf := make([]byte, scanLimit)
 	n, _ := d.r.ReadAt(buf, offset)
 	if n < 10 { //nolint:mnd
-		return
+		return nil
 	}
 	data := buf[:n]
 
@@ -354,13 +359,15 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 		}
 	}
 	if endobjIdx < 1 {
-		return // Not found or at position 0.
+		return nil // Not found or at position 0.
 	}
+
+	var violations []error
 
 	// Check that endobj is preceded by EOL (LF or CR).
 	prevByte := data[endobjIdx-1] //nolint:gosec // endobjIdx >= 2 guaranteed by the check above
 	if prevByte != '\n' && prevByte != '\r' {
-		d.AppendFormatViolations(
+		violations = append(violations,
 			fmt.Errorf("compliance: obj %d: endobj not preceded by EOL marker (0x%02X)", objNum, prevByte))
 	}
 
@@ -369,18 +376,25 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) {
 	if afterIdx < len(data) {
 		afterByte := data[afterIdx]
 		if afterByte != '\n' && afterByte != '\r' {
-			d.AppendFormatViolations(
+			violations = append(violations,
 				fmt.Errorf("compliance: obj %d: endobj not followed by EOL marker (0x%02X)", objNum, afterByte))
 		}
 	}
+
+	return violations
 }
 
 // ValidateXRefTableFormat performs raw-byte validation of a traditional xref
-// table's format. It reads directly from the underlying io.ReaderAt to check
-// byte-level formatting that the lenient lexer-based parser cannot detect.
-// Violations are appended to d.FormatViolations. Called by the compliance
+// table's format and returns the violations found, in byte order. It reads
+// directly from the underlying io.ReaderAt to check byte-level formatting
+// that the lenient lexer-based parser cannot detect. Called by the compliance
 // engine after ComplianceMode is set.
-func (d *Document) ValidateXRefTableFormat(offset int64) {
+//
+// The findings belong to a table, not to an object, so they are returned to
+// the caller instead of joining the per-object record. Handing them back also
+// spares the caller from reading them back out of shared state that a
+// concurrent resolution is still writing.
+func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 	// Read a generous chunk from the xref table start.
 	// Most xref tables fit in 64KB; we only need to validate the header
 	// and first few entries to detect format issues.
@@ -388,19 +402,21 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 	buf := make([]byte, maxRead)
 	n, _ := d.r.ReadAt(buf, offset)
 	if n < 5 { //nolint:mnd // "xref" + at least 1 byte
-		return
+		return nil
 	}
 	buf = buf[:n]
 
 	// Must start with "xref".
 	if !bytes.HasPrefix(buf, []byte("xref")) {
-		return
+		return nil
 	}
 	pos := 4
 
+	var violations []error
+
 	// After "xref": must be a single EOL marker (\n or \r\n).
 	if pos >= len(buf) {
-		return
+		return nil
 	}
 	switch buf[pos] {
 	case '\r':
@@ -412,20 +428,19 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 	case '\n':
 		pos++
 	default:
-		d.AppendFormatViolations(
+		return append(violations,
 			fmt.Errorf("compliance: xref keyword not followed by EOL"))
-		return
 	}
 
 	// Check for multiple EOL markers (double LF, etc.). Must be a single EOL.
 	if pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r') {
-		d.AppendFormatViolations(
+		violations = append(violations,
 			fmt.Errorf("compliance: xref keyword and subsection header separated by multiple EOL markers"))
 	}
 
 	// Check for extra whitespace before subsection header (forbidden).
 	if pos < len(buf) && (buf[pos] == ' ' || buf[pos] == '\t') {
-		d.AppendFormatViolations(
+		violations = append(violations,
 			fmt.Errorf("compliance: xref keyword and subsection header separated by extra whitespace"))
 	}
 
@@ -453,7 +468,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 			break
 		}
 		if buf[pos] != ' ' {
-			d.AppendFormatViolations(
+			violations = append(violations,
 				fmt.Errorf("compliance: xref subsection header separator is not a single space (0x%02X)", buf[pos]))
 			break
 		}
@@ -463,7 +478,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 			pos++
 		}
 		if sepCount > 1 {
-			d.AppendFormatViolations(
+			violations = append(violations,
 				fmt.Errorf("compliance: xref subsection header has %d spaces between start and count (must be 1)", sepCount))
 		}
 
@@ -499,4 +514,6 @@ func (d *Document) ValidateXRefTableFormat(offset int64) {
 		}
 		pos += entryBytes
 	}
+
+	return violations
 }

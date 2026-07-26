@@ -21,6 +21,13 @@ type validationCtx struct {
 	level   byte // PDFALevel(profile), computed once
 	ua      bool // IsPDFUA(profile), computed once
 	pages   []pageCtx
+
+	// formatViolations is the document's parser-level format violations,
+	// snapshotted after every object has been resolved and before the check
+	// groups fan out. Reading the live document from a check group returned
+	// whatever prefix the goroutines happened to have recorded by then, so
+	// the reported count moved from run to run.
+	formatViolations []error
 }
 
 // pageCtx holds pre-resolved data for a single page.
@@ -143,6 +150,11 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 			content:   contentBytes,
 		}
 	}
+
+	// Freeze the format violations here, on the single goroutine that
+	// builds the context: every object has been resolved by now, and the
+	// check groups that run next resolve objects of their own.
+	vctx.formatViolations = doc.FormatViolations()
 
 	return vctx
 }
