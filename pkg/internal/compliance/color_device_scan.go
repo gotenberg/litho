@@ -532,6 +532,14 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 	return usage, referencedXObjects, referencedCSNames
 }
 
+// Text rendering modes that add no marks to the page. Per ISO 32000-1,
+// Table 106, mode 3 neither fills nor strokes and mode 7 only adds the glyphs
+// to the clipping path, so text shown in either selects no colour space.
+const (
+	textRenderInvisible = 3
+	textRenderClip      = 7
+)
+
 // scanContentColorOps records device colour usage from a content stream:
 // explicit colour operators (g/G, rg/RG, k/K, cs/CS with a direct device
 // name), the colour-space names selected by cs/CS (referencedCSNames), and the
@@ -556,7 +564,13 @@ func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page
 // DeviceGray use veraPDF does not see.
 func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool, initialCSKnown bool) {
 	fillCSSet, strokeCSSet := false, false
-	type csState struct{ fill, stroke bool }
+	// Text rendering mode is part of the text state, which q/Q saves and
+	// restores with the rest of the graphics state (ISO 32000-1, 9.3.1).
+	textRender := 0
+	type csState struct {
+		fill, stroke bool
+		textRender   int
+	}
 	var csStack []csState
 
 	for idx, op := range ops {
@@ -565,12 +579,18 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 		}
 		switch op.Operator {
 		case "q":
-			csStack = append(csStack, csState{fillCSSet, strokeCSSet})
+			csStack = append(csStack, csState{fillCSSet, strokeCSSet, textRender})
 		case "Q":
 			if len(csStack) > 0 {
 				prev := csStack[len(csStack)-1]
 				csStack = csStack[:len(csStack)-1]
-				fillCSSet, strokeCSSet = prev.fill, prev.stroke
+				fillCSSet, strokeCSSet, textRender = prev.fill, prev.stroke, prev.textRender
+			}
+		case "Tr":
+			if len(op.Operands) >= 1 {
+				if mode, ok := op.Operands[0].(ast.PdfInt); ok {
+					textRender = int(mode)
+				}
 			}
 		case "g", "G":
 			usage.gray = true
@@ -624,8 +644,12 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 				usage.gray = true
 			}
 		case "Tj", "TJ", "'", "\"":
-			// Text is painted with the fill colour (text rendering mode 0).
-			if !fillCSSet {
+			// Per ISO 32000-1, Table 106, modes 3 and 7 add no marks: 3 is
+			// invisible and 7 only adds the glyphs to the clipping path. Text
+			// shown in either paints nothing, so it selects no colour space,
+			// which is what veraPDF models. Reporting the initial DeviceGray
+			// there flagged an uncalibrated colour space the file never uses.
+			if textRender != textRenderInvisible && textRender != textRenderClip && !fillCSSet {
 				usage.gray = true
 			}
 		case "Do":

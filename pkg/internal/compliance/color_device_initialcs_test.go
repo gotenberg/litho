@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -66,5 +67,40 @@ func TestFormXObjectBareScn_NoFalsePositive(t *testing.T) {
 	)
 	if firesRule2b(t, data, "6.2.4.3", 4) {
 		t.Error("a bare scn inside a Form XObject must not fire §6.2.4.3 t4")
+	}
+}
+
+// TestTextRenderingModeSelectsNoColourSpace pins that text which adds no marks
+// selects no colour space. Per ISO 32000-1, Table 106, rendering mode 3 neither
+// fills nor strokes and mode 7 only adds the glyphs to the clipping path, so
+// neither paints in the initial DeviceGray. Reporting it there flagged an
+// uncalibrated colour space the file never uses; veraPDF 1.30.2 agrees, and it
+// diverged from litho on exactly modes 3 and 7 and on no other mode.
+func TestTextRenderingModeSelectsNoColourSpace(t *testing.T) {
+	t.Parallel()
+
+	// The content stream selects no colour space, so the only candidate is the
+	// initial DeviceGray of ISO 32000-1 8.4.1.
+	page := func(mode int) []byte {
+		body := fmt.Sprintf("BT /F1 12 Tf %d Tr 50 700 Td (AB) Tj ET\n", mode)
+		return cyclePDF(
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"+
+				" /Resources << /Font << /F1 5 0 R >> >> >>",
+			fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(body), body),
+			"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		)
+	}
+
+	for _, mode := range []int{0, 1, 2, 4, 5, 6} {
+		if !firesRule2b(t, page(mode), "6.2.4.3", 4) {
+			t.Errorf("rendering mode %d paints, so implicit DeviceGray must fire", mode)
+		}
+	}
+	for _, mode := range []int{textRenderInvisible, textRenderClip} {
+		if firesRule2b(t, page(mode), "6.2.4.3", 4) {
+			t.Errorf("rendering mode %d adds no marks, so it must select no colour space", mode)
+		}
 	}
 }
