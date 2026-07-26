@@ -107,3 +107,77 @@ func TestValidateTableHeaderDetermination_ImplicitScope(t *testing.T) {
 		t.Error("PDF/UA-2 explicit mode: a TD whose positional headers are all unscoped must fire §8.2.5.26 t5")
 	}
 }
+
+// TestTableCellIntersection covers ISO 14289-1 §7.2 t15: a table cell shall not
+// intersect another cell. A cell takes the first free slot of its row, so a
+// /RowSpan carried down from an earlier row SHIFTS the following row's cells
+// rather than colliding with them. An intersection needs a cell wide or tall
+// enough to reach past a free slot into a claimed one. veraPDF 1.30.2 reports
+// the intersecting layout below and stays silent on both others.
+func TestTableCellIntersection(t *testing.T) {
+	t.Parallel()
+
+	// row 0: TH(RowSpan 2) TH TH(RowSpan 2)
+	// row 1: TH(ColSpan 2)  -> takes column 1, and its second column lands on
+	//                          the slot row 0's last cell carries down into.
+	intersecting := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",                       // 1
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",               // 2
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>", // 3
+		"<< /Type /StructElem /S /Table /K [5 0 R 6 0 R] >>",      // 4
+		"<< /Type /StructElem /S /TR /K [7 0 R 8 0 R 9 0 R] >>",   // 5
+		"<< /Type /StructElem /S /TR /K [10 0 R] >>",              // 6
+		"<< /Type /StructElem /S /TH /A << /RowSpan 2 >> >>",      // 7
+		"<< /Type /StructElem /S /TH >>",                          // 8
+		"<< /Type /StructElem /S /TH /A << /RowSpan 2 >> >>",      // 9
+		"<< /Type /StructElem /S /TH /A << /ColSpan 2 >> >>",      // 10
+	}
+
+	// A /RowSpan that merely carries into the next row shifts that row's cells.
+	shifted := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",                        // 1
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",                // 2
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",  // 3
+		"<< /Type /StructElem /S /Table /K [5 0 R 6 0 R 7 0 R] >>", // 4
+		"<< /Type /StructElem /S /TR /K [8 0 R 9 0 R] >>",          // 5
+		"<< /Type /StructElem /S /TR /K [10 0 R 11 0 R] >>",        // 6
+		"<< /Type /StructElem /S /TR /K [12 0 R] >>",               // 7
+		"<< /Type /StructElem /S /TH >>",                           // 8
+		"<< /Type /StructElem /S /TH >>",                           // 9
+		"<< /Type /StructElem /S /TD /A << /RowSpan 2 >> >>",       // 10
+		"<< /Type /StructElem /S /TD >>",                           // 11
+		"<< /Type /StructElem /S /TD >>",                           // 12
+	}
+
+	// A conforming /ColSpan layout that exactly fills the grid width.
+	conforming := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",                       // 1
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",               // 2
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>", // 3
+		"<< /Type /StructElem /S /Table /K [5 0 R 6 0 R] >>",      // 4
+		"<< /Type /StructElem /S /TR /K [7 0 R 8 0 R] >>",         // 5
+		"<< /Type /StructElem /S /TR /K [9 0 R] >>",               // 6
+		"<< /Type /StructElem /S /TH >>",                          // 7
+		"<< /Type /StructElem /S /TH >>",                          // 8
+		"<< /Type /StructElem /S /TD /A << /ColSpan 2 >> >>",      // 9
+	}
+
+	fires := func(t *testing.T, objs []string) bool {
+		t.Helper()
+		doc, table := tableDoc(t, 4, objs...)
+		var results []Violation
+		state := &walkState{doc: doc, results: &results, profile: "PDF/UA-1"}
+		validateTableCellIntersection(context.Background(), state, table)
+		return hasRule(results, Rule_14289_1_7_2_t15)
+	}
+
+	if !fires(t, intersecting) {
+		t.Error("a cell reaching into a slot another cell already claims must fire §7.2 t15")
+	}
+	if fires(t, shifted) {
+		t.Error("a /RowSpan shifts the next row's cells, so it must not fire §7.2 t15")
+	}
+	if fires(t, conforming) {
+		t.Error("a /ColSpan filling the grid width must not fire §7.2 t15")
+	}
+}

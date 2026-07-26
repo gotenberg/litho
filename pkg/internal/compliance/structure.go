@@ -826,6 +826,15 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	if typeName == "Table" {
 		state.tableUsesHeaderIDs = tableHasHeaderIDs(ctx, state.doc, elem)
 		state.tableIrregular = !validateTableColumnConsistency(ctx, state, elem)
+		// ISO 14289-1 §7.2 t15 is a per-cell rule, but a cell only intersects
+		// relative to the table's grid, so the whole table is scanned once on
+		// entry rather than per cell during the recursion below. PDF/UA-2
+		// carries the same requirement under §8.2.5.26 t1 against a grid that
+		// also treats THead/TBody/TFoot boundaries as row-span limits, which is
+		// a different scan, so this stays scoped to PDF/UA-1.
+		if state.profile == "PDF/UA-1" {
+			validateTableCellIntersection(ctx, state, elem)
+		}
 	}
 
 	// Recurse into children. The Table 5 effective parent follows the

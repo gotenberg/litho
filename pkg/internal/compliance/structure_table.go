@@ -420,6 +420,152 @@ func validateTableSectionCounts(ctx context.Context, state *walkState, tableElem
 	}
 }
 
+// maxTableGridSlots bounds the notional slot count (rows times columns) of the
+// grid built for the cell-intersection scan. /ColSpan and /RowSpan are read
+// from the file, so a crafted table can declare a grid of billions of slots.
+// This is an anti-DoS guard, not spec-mandated: a real tagged table stays far
+// below a million slots, since even a 2000-row, 500-column table is an
+// outlier, so a table above the cap is left unscanned rather than expanded.
+const maxTableGridSlots = 1 << 20
+
+// tableGridSpan is one cell's grid extent, in the units the intersection scan
+// places cells with.
+type tableGridSpan struct {
+	row     int
+	col     int
+	colSpan int
+	rowSpan int
+}
+
+// tableGridRowCount returns the grid height, and reports false when the
+// declared spans exceed [maxTableGridSlots]. Only the first TD/TH of each row
+// contributes: a cell with /RowSpan n claims the next n-1 rows, which are then
+// skipped. This mirrors the height veraPDF derives for ISO 14289-1 §7.2 t15,
+// and the rule is a verdict on cell placement, so the grid it is evaluated
+// against has to be the same one.
+func tableGridRowCount(ctx context.Context, doc *document.Document, rows []ast.PdfDict) (int, bool) {
+	count := 0
+	for i := 0; i < len(rows); i++ {
+		if ctx.Err() != nil {
+			return 0, false
+		}
+		for _, cell := range resolveRowCells(ctx, doc, rows[i]) {
+			rowSpan := cellRowSpan(ctx, doc, cell)
+			if rowSpan > maxTableGridSlots || count > maxTableGridSlots-rowSpan {
+				return 0, false
+			}
+			count += rowSpan
+			if rowSpan > 1 {
+				i += rowSpan - 1
+			}
+			break
+		}
+	}
+	return count, true
+}
+
+// tableGridColumnCount returns the grid width, the sum of the /ColSpan values
+// of the first row's cells, and reports false when that sum exceeds
+// [maxTableGridSlots].
+func tableGridColumnCount(ctx context.Context, doc *document.Document, row ast.PdfDict) (int, bool) {
+	count := 0
+	for _, cell := range resolveRowCells(ctx, doc, row) {
+		colSpan := cellColSpan(ctx, doc, cell)
+		if colSpan > maxTableGridSlots || count > maxTableGridSlots-colSpan {
+			return 0, false
+		}
+		count += colSpan
+	}
+	return count, true
+}
+
+// tableCellIntersection places every TD/TH cell of the table on the grid and
+// returns the first pair of cells that claim the same slot: the cell being
+// placed, then the cell already holding the slot. found is false when the
+// table has no such pair.
+//
+// Per ISO 14289-1 §7.2, a table cell shall not intersect another cell. A cell
+// takes the first free slot of its row, then claims /RowSpan by /ColSpan slots
+// from there, so a /RowSpan carried down from an earlier row shifts the
+// following row's cells rather than colliding with them. An intersection needs
+// a cell wide or tall enough to reach past a free slot into a claimed one.
+//
+// The scan stops without a verdict at the first cell whose span leaves the
+// grid, and at the first row holding no cells: both are irregularities the
+// table-level rules report (§7.2 t41 for a /RowSpan past the last row, t42/t43
+// for a row whose columns do not add up), and a grid that is already
+// inconsistent says nothing about intersection.
+func tableCellIntersection(ctx context.Context, doc *document.Document, rows []ast.PdfDict) (placed, occupant tableGridSpan, found bool) {
+	numRows, ok := tableGridRowCount(ctx, doc, rows)
+	if !ok || numRows == 0 {
+		return placed, occupant, false
+	}
+	numCols, ok := tableGridColumnCount(ctx, doc, rows[0])
+	if !ok || numCols == 0 || numRows > maxTableGridSlots/numCols {
+		return placed, occupant, false
+	}
+
+	grid := make(map[[2]int]tableGridSpan)
+	for row := range rows {
+		if ctx.Err() != nil {
+			return placed, occupant, false
+		}
+		col, hasCell := 0, false
+		for _, cell := range resolveRowCells(ctx, doc, rows[row]) {
+			hasCell = true
+			colSpan := cellColSpan(ctx, doc, cell)
+			rowSpan := cellRowSpan(ctx, doc, cell)
+			for col < numCols {
+				if _, taken := grid[[2]int{row, col}]; !taken {
+					break
+				}
+				col++
+			}
+			// The first half of each guard keeps the sum from overflowing;
+			// both spans are capped by the grid they are compared against.
+			if colSpan > numCols || col+colSpan > numCols {
+				return placed, occupant, false
+			}
+			if rowSpan > numRows || row+rowSpan > numRows {
+				return placed, occupant, false
+			}
+			span := tableGridSpan{row: row, col: col, colSpan: colSpan, rowSpan: rowSpan}
+			for r := range rowSpan {
+				for c := range colSpan {
+					slot := [2]int{row + r, col + c}
+					if held, taken := grid[slot]; taken {
+						return span, held, true
+					}
+					grid[slot] = span
+				}
+			}
+			col += colSpan
+		}
+		if !hasCell {
+			return placed, occupant, false
+		}
+	}
+	return placed, occupant, false
+}
+
+// validateTableCellIntersection fires ISO 14289-1 §7.2 t15 on each of the two
+// cells that first claim the same grid slot. The rule is scoped to the cell,
+// not the table, so an intersection is two findings: the cell being placed and
+// the cell it lands on.
+func validateTableCellIntersection(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
+	rows := collectTableRows(ctx, state.doc, tableElem)
+	placed, occupant, found := tableCellIntersection(ctx, state.doc, rows)
+	if !found {
+		return
+	}
+	*state.results = append(*state.results,
+		failf(Rule_14289_1_7_2_t15, "table cell at row %d column %d intersects the cell at row %d column %d",
+			placed.row+1, placed.col+1, occupant.row+1, occupant.col+1)...)
+	*state.results = append(*state.results,
+		failf(Rule_14289_1_7_2_t15, "table cell at row %d column %d is intersected by the cell at row %d column %d",
+			occupant.row+1, occupant.col+1, placed.row+1, placed.col+1)...)
+}
+
 // tableGridCell records one logical cell's placement in the table grid,
 // using the same ColSpan/RowSpan carry model as computeEffectiveColumns.
 type tableGridCell struct {
