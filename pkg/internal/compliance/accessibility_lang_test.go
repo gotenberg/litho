@@ -200,3 +200,41 @@ func TestCheckLangRequired_InlineMarkedContentLangSuppressesT34(t *testing.T) {
 		t.Errorf("inline marked-content /Lang: want no §7.2 t34, got %v", got)
 	}
 }
+
+// xdefaultXMP builds a catalog XMP packet whose dc:title alternative carries
+// the given xml:lang qualifiers. Passing none omits the alternative entirely.
+func xdefaultXMP(langs ...string) string {
+	alt := ""
+	if len(langs) > 0 {
+		items := ""
+		for _, l := range langs {
+			items += `<rdf:li xml:lang="` + l + `">T</rdf:li>`
+		}
+		alt = `<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
+			`<dc:title><rdf:Alt>` + items + `</rdf:Alt></dc:title></rdf:Description>`
+	}
+	return `<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		alt + `</rdf:RDF></x:xmpmeta>`
+}
+
+// TestXMPHasXDefaultLangAlt pins the subject of ISO 14289-1 §7.2 t33. veraPDF
+// scopes the rule to a language alternative (XMPLangAlt), so a packet holding
+// none presents nothing whose language could be undeterminable. Reporting on a
+// bare packet flagged every metadata stream without a dc:title.
+func TestXMPHasXDefaultLangAlt(t *testing.T) {
+	t.Parallel()
+
+	if !xmpHasXDefaultLangAlt([]byte(xdefaultXMP("x-default"))) {
+		t.Error("alternative qualified x-default: want detected")
+	}
+	if !xmpHasXDefaultLangAlt([]byte(xdefaultXMP("x-default", "en-US"))) {
+		t.Error("alternative carrying x-default beside a specific tag: want detected")
+	}
+	if xmpHasXDefaultLangAlt([]byte(xdefaultXMP())) {
+		t.Error("packet with no alternative: want none, the rule has no subject")
+	}
+	if xmpHasXDefaultLangAlt([]byte(xdefaultXMP("en-US"))) {
+		t.Error("alternative qualified only en-US: want none, xDefault is false")
+	}
+}

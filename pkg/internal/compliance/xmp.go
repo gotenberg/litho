@@ -1338,6 +1338,31 @@ func xmpHasSpecificLang(data []byte) bool {
 	return false
 }
 
+// xmpHasXDefaultLangAlt reports whether the packet contains a language
+// alternative qualified with xml:lang="x-default". ISO 14289-1 §7.2 t33
+// constrains such an alternative (veraPDF's XMPLangAlt), so a packet holding
+// none presents nothing whose language could be undeterminable.
+func xmpHasXDefaultLangAlt(data []byte) bool {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		se, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		for _, a := range se.Attr {
+			if a.Name.Local == "lang" && a.Value == "x-default" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // xmpExtractPrefixMap scans raw XMP bytes for xmlns:prefix="uri" declarations
 // and returns a map from namespace URI to the actual prefix name used. When
 // a URI is bound to multiple prefixes, the last occurrence wins; callers

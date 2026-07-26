@@ -428,7 +428,14 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		// determinable. With no catalog /Lang, it is determined by a specific
 		// xml:lang in the XMP packet; a packet present but qualified only with
 		// "x-default" leaves it undetermined.
-		if xmpData, ok := readCatalogXMP(ctx, doc, catalog); ok && !xmpHasSpecificLang(xmpData) {
+		//
+		// The rule's subject is a language alternative (veraPDF's XMPLangAlt,
+		// test xDefault == false || gContainsCatalogLang == true), so a packet
+		// carrying no alternative at all presents nothing to qualify and passes.
+		// Reporting on a bare packet flagged every metadata stream without a
+		// dc:title or dc:description.
+		if xmpData, ok := readCatalogXMP(ctx, doc, catalog); ok &&
+			xmpHasXDefaultLangAlt(xmpData) && !xmpHasSpecificLang(xmpData) {
 			results = append(results, fail(Rule_14289_1_7_2_t33, "document metadata")...)
 		}
 		return results
