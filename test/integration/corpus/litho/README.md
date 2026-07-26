@@ -50,28 +50,31 @@ one deliberately rather than diffing it against a fresh build.
 
 ## Fixtures
 
-| Fixture              | Home profile | Focus                                                          |
-| -------------------- | ------------ | -------------------------------------------------------------- |
-| -------------------- | ------------ | -------------------------------------------------------------- |
-| `complex_1b.pdf`     | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG         |
-| `complex_2a.pdf`     | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language       |
-| `complex_2b.pdf`     | PDF/A-2b     | Broadest mix; annotations, optional content, filters           |
-| `complex_2u.pdf`     | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings    |
-| `complex_3b.pdf`     | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment     |
-| `complex_4.pdf`      | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps |
-| `complex_ua1.pdf`    | PDF/UA-1     | Structure and accessibility defects in a wired tag tree        |
-| `complex_ua2.pdf`    | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
-| `forbidden_mix.pdf`  | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
-| `gstate_2b.pdf`      | PDF/A-2b     | Transfer functions and halftones in six graphics states        |
-| `limits_2b.pdf`      | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN          |
-| `megafont_2b.pdf`    | PDF/A-2b     | Font embedding and glyph-width scoping                         |
-| `multipage_2b.pdf`   | PDF/A-2b     | Three pages, a violation class unique to each                  |
-| `fontdict_2b.pdf`    | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
-| `structnest_ua1.pdf` | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language  |
-| `tables_ua1.pdf`     | PDF/UA-1     | Tables and lists: header association, nested list structure    |
-| `tablespan_ua2.pdf`  | PDF/UA-2     | Table cell geometry: row and column spans                      |
-| `extschema_2b.pdf`   | PDF/A-2b     | XMP extension schema structure across sibling entries          |
-| `trailer_2b.pdf`     | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                    |
+| Fixture               | Home profile | Focus                                                          |
+| --------------------- | ------------ | -------------------------------------------------------------- |
+| --------------------  | ------------ | -------------------------------------------------------------- |
+| `complex_1b.pdf`      | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG         |
+| `complex_2a.pdf`      | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language       |
+| `complex_2b.pdf`      | PDF/A-2b     | Broadest mix; annotations, optional content, filters           |
+| `complex_2u.pdf`      | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings    |
+| `complex_3b.pdf`      | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment     |
+| `complex_4.pdf`       | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps |
+| `complex_ua1.pdf`     | PDF/UA-1     | Structure and accessibility defects in a wired tag tree        |
+| `complex_ua2.pdf`     | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
+| `forbidden_mix.pdf`   | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
+| `gstate_2b.pdf`       | PDF/A-2b     | Transfer functions and halftones in six graphics states        |
+| `limits_2b.pdf`       | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN          |
+| `megafont_2b.pdf`     | PDF/A-2b     | Font embedding and glyph-width scoping                         |
+| `multipage_2b.pdf`    | PDF/A-2b     | Three pages, a violation class unique to each                  |
+| `fontdict_2b.pdf`     | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
+| `structnest_ua1.pdf`  | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language  |
+| `tables_ua1.pdf`      | PDF/UA-1     | Tables and lists: header association, nested list structure    |
+| `tablespan_ua2.pdf`   | PDF/UA-2     | Table cell geometry: row and column spans                      |
+| `extschema_2b.pdf`    | PDF/A-2b     | XMP extension schema structure across sibling entries          |
+| `schemaprefix_1b.pdf` | PDF/A-1b     | Extension schema RDF container types and absent fields         |
+| `trailer_2b.pdf`      | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                    |
+| `limits_1b.pdf`       | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID   |
+| `docinfo_1b.pdf`      | PDF/A-1b     | Document information dictionary against its XMP analogues      |
 
 ### Must-not-fire controls
 
@@ -110,8 +113,21 @@ violation but is exempt, so a firing is a false positive.
 | `multipage_2b`                            | Page 1 annotation: `F=4`, `/AP` present, no `/C`                       | ISO 19005-2, 6.3.3           |
 | `fontdict_2b`                             | Fifth font conforming in every required key                            | ISO 19005-2, 6.2.11.2        |
 | `extschema_2b`                            | Third schema entry conforming in every field                           | ISO 19005-2, 6.6.2.3.3       |
+| `schemaprefix_1b`                         | Seventh schema entry: every field present, its value type defined      | ISO 19005-1, 6.7.8 t9        |
+| `schemaprefix_1b`                         | Sixth value type of the sixth entry, conforming in every field         | ISO 19005-1, 6.7.8 t12-t16   |
+| `schemaprefix_1b`                         | Third field of the fifth value type, beside two defective ones         | ISO 19005-1, 6.7.8 t17-t19   |
+| `schemaprefix_1b`                         | Second property of the fifth schema entry, conforming                  | ISO 19005-1, 6.7.8 t8-t11    |
 | `gstate_2b`                               | Sixth graphics state: `/TR2 /Default`, unnamed type 1 halftone         | ISO 19005-2, 6.2.5           |
 | `tablespan_ua2`                           | Second table spanning two columns with both headers referenced         | ISO 14289-2, 8.2.5.26        |
+| `limits_1b`                               | Integers of `2147483647` and `-2147483648`                             | ISO 19005-1, 6.1.12 t1       |
+| `limits_1b`                               | Reals of `32767.0` and `-32767.0`                                      | ISO 19005-1, 6.1.12 t2       |
+| `limits_1b`                               | An annotation `/Contents` of exactly 65535 bytes                       | ISO 19005-1, 6.1.12 t3       |
+| `limits_1b`                               | An array of exactly 8191 elements                                      | ISO 19005-1, 6.1.12 t5       |
+| `limits_1b`                               | A dictionary of exactly 4095 entries                                   | ISO 19005-1, 6.1.12 t6       |
+| `limits_1b`                               | A CMap whose maximal CID is exactly 65535                              | ISO 19005-1, 6.1.12 t10      |
+| `docinfo_1b`                              | `/Trapped` matching `pdf:Trapped`, an entry 6.7.3 does not name        | ISO 19005-1, 6.7.3           |
+| `docinfo_1b`                              | `/Company`, a docinfo entry with no XMP analogue at all                | ISO 19005-1, 6.7.3           |
+| `docinfo_1b`                              | Extension schema declaring `pdf:Trapped`, conforming in every field    | ISO 19005-1, 6.7.9           |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -124,27 +140,30 @@ Counts are distinct rule classes (`clause/test`) reported by litho. litho and
 veraPDF agree exactly on the set in every cell except the two marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
-| Fixture              | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
-| -------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
-| `complex_1b.pdf`     | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
-| `complex_2a.pdf`     | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
-| `complex_2b.pdf`     | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
-| `complex_2u.pdf`     | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
-| `complex_3b.pdf`     | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
-| `complex_4.pdf`      | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
-| `complex_ua1.pdf`    | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
-| `complex_ua2.pdf`    | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
-| `extschema_2b.pdf`   | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
-| `fontdict_2b.pdf`    | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
-| `forbidden_mix.pdf`  | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
-| `gstate_2b.pdf`      | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
-| `limits_2b.pdf`      | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
-| `megafont_2b.pdf`    | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
-| `multipage_2b.pdf`   | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
-| `structnest_ua1.pdf` | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
-| `tables_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
-| `tablespan_ua2.pdf`  | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
-| `trailer_2b.pdf`     | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
+| Fixture               | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
+| --------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
+| `complex_1b.pdf`      | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
+| `complex_2a.pdf`      | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
+| `complex_2b.pdf`      | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
+| `complex_2u.pdf`      | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
+| `complex_3b.pdf`      | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
+| `complex_4.pdf`       | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
+| `complex_ua1.pdf`     | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
+| `complex_ua2.pdf`     | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
+| `docinfo_1b.pdf`      | 8    | 4    | 1    | 2    | 1    | 6   | 6\*  | 5    |
+| `extschema_2b.pdf`    | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
+| `fontdict_2b.pdf`     | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
+| `forbidden_mix.pdf`   | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
+| `gstate_2b.pdf`       | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
+| `limits_1b.pdf`       | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
+| `limits_2b.pdf`       | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
+| `megafont_2b.pdf`     | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
+| `multipage_2b.pdf`    | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
+| `schemaprefix_1b.pdf` | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
+| `structnest_ua1.pdf`  | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
+| `tables_ua1.pdf`      | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
+| `tablespan_ua2.pdf`   | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
+| `trailer_2b.pdf`      | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -454,6 +473,65 @@ Both were built after the coverage scan showed the corpus firing 33 of the
 144 PDF/A-2b rules; the fixtures added since raised that to 40 before these
 two landed.
 
+## Extension schema containers
+
+`extschema_2b.pdf` reaches six tests of the clause and reaches every one of
+them the same way, by omitting a required field from a schema, a property or a
+field. Twelve more stayed unreached, and they are unreached because they need
+the other halves of the same conjunctions. Every test of the clause reads
+`isXValid... == true && ...Prefix == "pdfaN"`, so a wrong RDF container type or
+an absent field fires it exactly as a wrong namespace prefix does.
+`schemaprefix_1b.pdf` takes the container route and the absence route. The
+clause is 6.7.8 in ISO 19005-1 and 6.6.2.3.3 in ISO 19005-2/3, so one fixture
+closes both cells.
+
+| Construct                                   | A-1b       | A-2b, A-2u, A-3b |
+| ------------------------------------------- | ---------- | ---------------- |
+| `pdfaExtension:schemas` is an `rdf:Seq`     | `6.7.8/2`  | `6.6.2.3.3/1`    |
+| schema entry carrying a `litho:extra` field | `6.7.8/1`  | `6.6.2.3.2/1`    |
+| no `pdfaSchema:schema`                      | `6.7.8/3`  | `6.6.2.3.3/2`    |
+| no `pdfaSchema:namespaceURI`                | `6.7.8/4`  | `6.6.2.3.3/3`    |
+| `pdfaSchema:valueType` holds an `rdf:Bag`   | `6.7.8/7`  | `6.6.2.3.3/6`    |
+| property with no `pdfaProperty:valueType`   | `6.7.8/9`  | `6.6.2.3.3/8`    |
+| value type with no `pdfaType:type`          | `6.7.8/12` | `6.6.2.3.3/11`   |
+| value type with no `pdfaType:namespaceURI`  | `6.7.8/13` | `6.6.2.3.3/12`   |
+| value type with no `pdfaType:prefix`        | `6.7.8/14` | `6.6.2.3.3/13`   |
+| `pdfaType:field` holds an `rdf:Bag`         | `6.7.8/16` | `6.6.2.3.3/15`   |
+| field with no `pdfaField:valueType`         | `6.7.8/18` | `6.6.2.3.3/17`   |
+| field with no `pdfaField:description`       | `6.7.8/19` | `6.6.2.3.3/18`   |
+
+The undefined-field test moves clause between the parts. ISO 19005-1 numbers it
+`6.7.8/1` alongside the rest; ISO 19005-2/3 split it out as `6.6.2.3.2/1`.
+
+The grouping is the masking probe. Seven schema entries share the one
+container, and the sixth entry holds six sibling value types in a single
+`rdf:Seq`: four break a different field or container of their own, the fifth
+carries the two defective fields, and the sixth conforms. A check that reports
+the first offending value type and stops reports one rule where four are due,
+and a check that condemns a container once a member fails wrongly reports the
+sixth. The `rdf:Seq` around the schemas is load-bearing in the same way:
+veraPDF reports it and still descends, so the container defect and the twelve
+entry defects appear side by side.
+
+Four controls conform where their siblings break. The seventh schema entry is
+complete in every field, and its property names a value type the same entry
+defines, so `isValueTypeDefined` is exercised in the passing direction beside
+the entries that break everything else. The sixth value type and the third
+field of the fifth are conforming siblings of defective ones, and the second
+property of the fifth schema entry is a conforming sibling of the property that
+declares no value type. Every rule above fires exactly once on both litho and
+veraPDF, which is what proves the four controls silent.
+
+The page shows one line of text rather than nothing. An empty content stream
+presents no text item, and ISO 14289-1, 7.2 t34 takes a text item as its
+subject, so a blank page makes litho and veraPDF disagree for a reason that has
+nothing to do with extension schemas. See
+[Known divergences](#known-divergences).
+
+`6.7.8/6` stays unreached, and so does the wrong-prefix half of every test.
+Both are litho gaps rather than fixture shortcomings, and both are described
+under [Known divergences](#known-divergences).
+
 ## Graphics states
 
 ISO 19005-2, 6.2.5 forbids transfer functions and constrains halftones, and
@@ -514,6 +592,137 @@ veraPDF agrees the result is not an intersection. `t2` and `t4` need span
 geometries these builders could not produce, and `t5`/`t6` are the header
 association `tables_ua1.pdf` already covers.
 
+## Part-1 implementation limits
+
+Part 1 and part 2 cap different things, so `limits_2b.pdf` reaches none of
+ISO 19005-1, 6.1.12 beyond the three tests the two parts share. Its
+40000-byte string breaks the part-2 cap of 32767 and sits well inside the
+part-1 cap of 65535, and the array and dictionary caps exist in part 1 only.
+`limits_1b.pdf` plants the rest of the cluster:
+
+| Defect                                 | Rule        |
+| -------------------------------------- | ----------- |
+| integers of 2147483648 and -2147483649 | `6.1.12/1`  |
+| reals of 32767.5 and -32767.5          | `6.1.12/2`  |
+| annotation `/Contents` of 65536 bytes  | `6.1.12/3`  |
+| an array of 8192 elements              | `6.1.12/5`  |
+| a dictionary of 4096 entries           | `6.1.12/6`  |
+| a CMap whose maximal CID is 65536      | `6.1.12/10` |
+
+Every breach sits one step past its limit and every one is paired with a
+control sitting exactly on it, in its own object, so an off-by-one in either
+direction shows as a wrong firing count rather than as silence. veraPDF
+reports two checks under `6.1.12/1` and two under `6.1.12/2`, one under each
+of the rest, and litho reports the same, so all six controls are silent on
+both tools.
+
+The four numeric and container pairs are sibling entries of one page-piece
+dictionary, and that bag is the masking probe: a check that reports the first
+breach in it and stops reports one rule where four are due. PDF defines no
+standard dictionary that carries an arbitrary number, and ISO 32000-1, 14.5
+reserves `/PieceInfo` for private application data, which is why the probes
+live there rather than under invented page keys. The two strings are sibling
+annotations, conforming in every other respect so 6.5.3 stays out of the way,
+and the two CMaps are sibling fonts.
+
+The overflowing CMap range is one the content never renders. Both fonts draw
+codes the CMap maps to low CIDs, and the range that overshoots is `<F000>` to
+`<F0FF>`, which nothing selects. A rendered CID above 65535 additionally
+trips litho's part-1 glyph-presence check on a font that embeds no font
+program, which veraPDF exempts, and this fixture is about implementation
+limits rather than that divergence.
+
+`t7` stays unreached on purpose: it needs more than 8388607 indirect objects,
+whose cross-reference table alone runs to 168 MB at 20 bytes an entry. `t4`,
+`t8` and `t9` are the name, nesting and DeviceN tests `limits_2b.pdf` already
+reaches at PDF/A-1b, which leaves `t7` as the only test of the clause no
+fixture covers.
+
+Two part-2 tests come free. ISO 19005-2, 6.1.13 t1 shares part 1's integer
+range and its t10 shares the CID cap, so both fire here at PDF/A-2b, where
+`limits_2b.pdf` reaches neither. Part 2 caps a real at 3.403e38 and a string
+at 32767, so `6.1.13/3` fires on both strings at that profile and the reals
+stay silent.
+
+### Document information dictionary and XMP
+
+ISO 19005-1, 6.7.3 requires every entry of the document information
+dictionary that is present to equal its XMP analogue. The clause holds eight
+tests, one per entry, all scoped to the information dictionary itself. No
+other fixture carries an information dictionary beside an XMP packet, so all
+eight were unreached. `docinfo_1b.pdf` reaches all eight.
+
+Every entry is mismatched at once, so a check that reports the first
+offending entry and stops reports one rule where eight are due. Each
+mismatch is a different kind, so the fixture probes how the two values are
+compared and not only whether they are compared:
+
+| Entry           | Mismatch                                      | Rule      |
+| --------------- | --------------------------------------------- | --------- |
+| `/CreationDate` | same wall clock, `+01:00` against `Z`         | `6.7.3/1` |
+| `/Title`        | the same letters in a different case          | `6.7.3/2` |
+| `/Author`       | value matches, `dc:creator` holds two entries | `6.7.3/3` |
+| `/Subject`      | an unrelated value                            | `6.7.3/4` |
+| `/Keywords`     | the same three keywords in a different order  | `6.7.3/5` |
+| `/Creator`      | present here, absent from the packet          | `6.7.3/6` |
+| `/Producer`     | one trailing space                            | `6.7.3/7` |
+| `/ModDate`      | same wall clock, `+02:00` against `-05:00`    | `6.7.3/8` |
+
+`t3` is the one test that is not a plain inequality. Its condition is
+`Author == XMPCreator && XMPCreatorSize == 1`, so `dc:creator` carries
+`/Author` verbatim as its first entry and a second entry behind it. Only the
+size condition fails, which a check that compares values alone cannot see.
+
+The page is empty on purpose. Colour, font and content rules would add
+classes that say nothing about metadata synchronisation. At the home profile
+the fixture fires the eight tests of the clause and nothing else, on both
+litho and veraPDF, one check each.
+
+Reaching all eight tests needs all eight entries mismatched, so the controls
+come from a second dimension. `/Trapped` matches `pdf:Trapped` exactly and no
+test of 6.7.3 names it, so a firing means the check generalised past the
+entries the clause lists. `/Company` has no XMP analogue at all, so a firing
+means the check condemns every unmatched entry. `pdf:Trapped` is not one of
+the three properties the predefined Adobe PDF schema carries, so 6.7.9
+requires a declaration for it: the packet ends with an extension schema that
+conforms in every field, and its silence is the third control. Without that
+declaration veraPDF and litho both report `6.7.9/2` and `6.7.9/3` at
+PDF/A-1b, and the part-2 and part-3 profiles split on the same property, so
+the declaration keeps an XMP schema clause out of a fixture about
+synchronisation.
+
+Remediation takes the file from 8 veraPDF violations to 0 at PDF/A-1b,
+introduces no class at any profile, and preserves the page. It also settles
+the PDF/A-4 divergence below by syncing the packet.
+
+Two cells disagree, and neither is a fixture shortcoming.
+
+**`6.7.3/7` and `6.7.3/8` at PDF/A-4.** litho reports them, veraPDF reports
+nothing. `PDFA-4.xml` defines clause 6.7.3 with six tests, `t1` to `t6`, all
+of them PDF/A identification checks on `PDFAIdentification` and
+`MainXMPPackage`. ISO 19005-4 states no docinfo-versus-XMP consistency
+requirement at all: 6.1.3 already reduces the information dictionary to
+`/ModDate` behind a `/PieceInfo`. litho carries
+`Rule_19005_4_6_7_3_t07` and `t08` in `rules_extra.go`, described there as
+"litho-specific rules with no standalone profile entry", and
+`xmpDocInfoSyncRulePart4` in `pkg/internal/compliance/xmp_docinfo.go` routes
+every part-4 sync mismatch to them. The two rule numbers collide with a real
+clause that means something else, and their `Object` reads `CIDSystemInfo`.
+veraPDF is right.
+
+**`7.2/34` at PDF/UA-1.** litho reports it, veraPDF reports nothing. The
+rule's object is `SETextItem` and its test is
+`gContainsCatalogLang == true || Lang != null`, so its subject is a
+structure element that owns a text-showing operator. This fixture has no
+structure tree and its page shows no text, so veraPDF has no subject.
+`checkStructureTreeLangCoverage` in
+`pkg/internal/compliance/accessibility_lang.go` returns
+`fail(langRule, "catalog")` as soon as the catalog carries no
+`/StructTreeRoot`, without asking whether the document shows any text. Adding
+one `Tj` to the same file makes both tools report `7.2/34`; adding a catalog
+`/Lang` instead makes both go quiet. veraPDF is right, and the shortcut is a
+litho false positive on any text-free page.
+
 ## Known divergences
 
 Two cells in the table above disagree, both on `complex_ua2.pdf` and both
@@ -558,6 +767,49 @@ anyway. Two files differing only in that entry make it visible: with it,
 veraPDF reports `7.2/2` and litho reports nothing; without it, both report it.
 `structnest_ua1.pdf` therefore uses a plain outline item, which both tools
 agree on.
+
+Four more surfaced while building `schemaprefix_1b.pdf`. None is in a
+committed fixture, for the same reason.
+
+**The wrong-prefix half of ISO 19005-1, 6.7.8.** Every test of the clause
+requires a specific namespace prefix, and a schema field carried under a second
+prefix bound to the same URI (`xSchema:schema` where `xmlns:xSchema` is
+`http://www.aiim.org/pdfa/ns/schema#`) is exactly that defect. veraPDF reports
+`6.7.8/3` and nothing else. litho reports `6.7.8/3`, `/4`, `/5` and `/6`, and
+then stops reading the packet: `xmpCheckExtensionSchemas` in
+`pkg/internal/compliance/xmp.go` scans the raw bytes for a non-canonical prefix
+on any of the four extension namespaces, emits every rule of that level, and
+returns before the walk that finds everything else. One prefix defect therefore
+both over-reports and masks. It is also nondeterministic, because the scan is a
+`range` over the `xmpExpectedPrefix` map and returns on its first hit: a packet
+misprefixed at the schema level and at the property level reported the schema
+set on eleven of twelve runs and the property set on the twelfth, where veraPDF
+reports `6.7.8/3` and `6.7.8/9` every time.
+
+**`6.7.8/6`, the property container.** `isPropertyValidSeq` fails when
+`pdfaSchema:property` holds an `rdf:Bag` or a bare literal instead of an
+`rdf:Seq`. veraPDF reports it for either; litho reports neither. Its container
+check covers the `valueType` and `field` containers and names the schema and
+property containers as validated elsewhere, which the property container is
+not. Omitting `pdfaSchema:property` altogether is silent on both, so the test
+has no route the two tools agree on and `schemaprefix_1b.pdf` leaves it alone.
+
+**`6.7.8/9` and `6.7.8/18`, a value type nothing defines.** Both tests read
+`isValueTypeDefined == true`. A `pdfaProperty:valueType` or `pdfaField:valueType`
+naming a type no `pdfaType` entry declares makes veraPDF report them; litho
+checks that the field is present, never that the type it names exists.
+`schemaprefix_1b.pdf` reaches both tests by omitting the field instead, so the
+cell is covered and this facet stays open.
+
+**`7.2/34` on a page with no text.** The rule's subject is a text item, so a
+document with no text-showing operator presents veraPDF with nothing to report.
+`checkStructureTreeLangCoverage` in
+`pkg/internal/compliance/accessibility_lang.go` returns the rule outright when
+the catalog has no `/StructTreeRoot`, without asking whether the document shows
+text. Two files differing only in their content stream make it visible: with a
+`Tj`, both tools report `7.2/34`; with an empty stream, litho reports it and
+veraPDF reports nothing. `schemaprefix_1b.pdf` therefore draws one line of
+text.
 
 ## Second bug found: PDF/UA-1 language coverage (fixed, one facet remains)
 
