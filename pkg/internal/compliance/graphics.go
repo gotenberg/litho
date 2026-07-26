@@ -320,17 +320,20 @@ func htpForbiddenRule(part int) Rule {
 }
 
 func checkHTPKey(_ context.Context, _ *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
-	// HTP check applies to parts 2+ and 4 only.
+	// The forbidden key differs by part: ISO 19005-2 and -3 §6.2.5 t3 read
+	// "containsHTP == false", while ISO 19005-4 §6.2.5 t3 reads
+	// "containsHTO == false". Checking both keys under every part reported
+	// /HTP against part 4 and /HTO against parts 2 and 3, neither of which
+	// the governing rule constrains.
+	key := ast.PdfName("HTP")
+	if part == 4 {
+		key = ast.PdfName("HTO")
+	}
 	if part < 2 {
 		return nil
 	}
-
-	if _, hasHTP := gs["HTP"]; hasHTP {
-		return failf(htpForbiddenRule(part), "page %d, ExtGState %s", pageNum, gsName)
-	}
-	// HTO key is also forbidden (PDF/A-4 §6.2.5 t3).
-	if _, hasHTO := gs["HTO"]; hasHTO {
-		return failf(htpForbiddenRule(part), "page %d, ExtGState %s: HTO key forbidden", pageNum, gsName)
+	if _, has := gs[key]; has {
+		return failf(htpForbiddenRule(part), "page %d, ExtGState %s: %s key forbidden", pageNum, gsName, key)
 	}
 	return nil
 }
