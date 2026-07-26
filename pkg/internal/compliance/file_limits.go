@@ -21,7 +21,7 @@ import (
 const (
 	maxIntegerValue = 2_147_483_647  // ISO 32000-1 Table C.1: largest integer.
 	minIntegerValue = -2_147_483_648 // ISO 32000-1 Table C.1: smallest integer.
-	maxNameBytes    = 127            // ISO 32000-1 Table C.1: name length in bytes.
+	maxNameBytes    = MaxNameBytes   // ISO 32000-1 Table C.1: name length in bytes.
 	maxIndirectObjs = 8_388_607      // ISO 32000-1 Table C.1: objects in a single file.
 	maxStringBytes1 = 65535          // ISO 32000-1 Table C.1: string length.
 	maxStringBytes2 = 32767          // ISO 32000-2: PDF 2.0 string length.
@@ -34,6 +34,13 @@ const (
 	maxQNesting     = 28             // ISO 32000-1 Table C.1: graphics-state (q/Q) nesting.
 	maxCID          = 65535          // 16-bit CID space.
 )
+
+// MaxNameBytes is the 127-byte cap on PDF name length from ISO 32000-1
+// Table C.1, imposed as a conformance limit by ISO 19005-1 §6.1.12 test 4
+// and ISO 19005-2/3/4 §6.1.13 test 4. Exported so the remediation package
+// repairs against the identical bound this package detects with, instead
+// of redefining it and letting the two drift apart.
+const MaxNameBytes = 127
 
 func integerRangeRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t01, Rule_19005_2_6_1_13_t01, Rule_19005_3_6_1_13_t01, Rule{})
