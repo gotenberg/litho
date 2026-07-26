@@ -311,3 +311,198 @@ func TestXMPExtValueTypeAndFieldSeq(t *testing.T) {
 		t.Errorf("valueType+field as rdf:Seq: got %v, want neither t7 nor t16", okv)
 	}
 }
+
+// categoryExtSchemaXMP wraps one otherwise-conforming extension schema property
+// whose pdfaProperty:category is spelled by categoryXML, so a case varies the
+// category alone. An empty categoryXML omits the field. propertyPrefixDecl adds
+// a second binding of the property namespace, for the wrong-prefix case.
+func categoryExtSchemaXMP(propertyPrefixDecl, categoryXML string) []byte {
+	return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"` +
+		` xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` +
+		` xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` +
+		` xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#"` + propertyPrefixDecl + `>` +
+		`<rdf:Description rdf:about="">` +
+		`<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+		`<pdfaSchema:schema>X</pdfaSchema:schema>` +
+		`<pdfaSchema:namespaceURI>http://example.com/x</pdfaSchema:namespaceURI>` +
+		`<pdfaSchema:prefix>x</pdfaSchema:prefix>` +
+		`<pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource">` +
+		`<pdfaProperty:name>p</pdfaProperty:name>` +
+		`<pdfaProperty:valueType>Text</pdfaProperty:valueType>` +
+		categoryXML +
+		`<pdfaProperty:description>d</pdfaProperty:description>` +
+		`</rdf:li></rdf:Seq></pdfaSchema:property>` +
+		`</rdf:li></rdf:Bag></pdfaExtension:schemas>` +
+		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
+}
+
+// TestXMPExtSchemaCategoryValue pins the constrained value of an extension
+// schema property's category. ISO 19005-1 §6.7.8 t10 and ISO 19005-2/3
+// §6.6.2.3.3 t9 both read
+//
+//	isCategoryValidText == true && (category == "external" ||
+//	category == "internal") && categoryPrefix == "pdfaProperty"
+//
+// so presence alone satisfies nothing: recording only that the field existed
+// passed <pdfaProperty:category>sideways</pdfaProperty:category>. The
+// comparison is verbatim, which live veraPDF 1.30.2 confirms by failing
+// " external", "External" and "" exactly as it fails "sideways".
+func TestXMPExtSchemaCategoryValue(t *testing.T) {
+	ctx := context.Background()
+
+	cases := []struct {
+		name     string
+		category string
+		want     bool
+	}{
+		{"external", `<pdfaProperty:category>external</pdfaProperty:category>`, false},
+		{"internal", `<pdfaProperty:category>internal</pdfaProperty:category>`, false},
+		{"outside the set", `<pdfaProperty:category>sideways</pdfaProperty:category>`, true},
+		{"empty", `<pdfaProperty:category></pdfaProperty:category>`, true},
+		{"whitespace padded", `<pdfaProperty:category> external </pdfaProperty:category>`, true},
+		{"wrong case", `<pdfaProperty:category>External</pdfaProperty:category>`, true},
+		{"missing", ``, true},
+	}
+
+	rules := map[int]Rule{
+		1: Rule_19005_1_6_7_8_t10,
+		2: Rule_19005_2_6_6_2_3_3_t09,
+		3: Rule_19005_3_6_6_2_3_3_t09,
+	}
+
+	for _, tc := range cases {
+		data := categoryExtSchemaXMP("", tc.category)
+		for part, rule := range rules {
+			var got []Violation
+			xmpCheckExtensionSchemas(ctx, data, part, &got)
+			if hasRule(got, rule) != tc.want {
+				t.Errorf("category %s at part %d: got %v, want fired=%v",
+					tc.name, part, got, tc.want)
+			}
+		}
+
+		// ISO 19005-4 drops the extension schema requirements entirely.
+		var part4 []Violation
+		xmpCheckExtensionSchemas(ctx, data, 4, &part4)
+		if len(part4) != 0 {
+			t.Errorf("category %s at part 4: got %v, want none", tc.name, part4)
+		}
+	}
+}
+
+// TestXMPExtSchemaCategoryPrefix pins the third term of the category test: a
+// value of "external" under a prefix other than pdfaProperty still fails.
+func TestXMPExtSchemaCategoryPrefix(t *testing.T) {
+	ctx := context.Background()
+
+	data := categoryExtSchemaXMP(
+		` xmlns:nonpdfaProperty="http://www.aiim.org/pdfa/ns/property#"`,
+		`<nonpdfaProperty:category>external</nonpdfaProperty:category>`)
+
+	var got []Violation
+	xmpCheckExtensionSchemas(ctx, data, 2, &got)
+	if !hasRule(got, Rule_19005_2_6_6_2_3_3_t09) {
+		t.Errorf("category under a non-pdfaProperty prefix: got %v, want §6.6.2.3.3 t9", got)
+	}
+}
+
+// TestXMPExtSchemaCategoryAttributeForm pins the same value constraint on the
+// RDF/XML §2.5 attribute spelling iText writes for Factur-X. veraPDF parses
+// that form and applies the identical comparison, so a padded or out-of-set
+// attribute fails there too.
+func TestXMPExtSchemaCategoryAttributeForm(t *testing.T) {
+	ctx := context.Background()
+
+	attrSchemaXMP := func(category string) []byte {
+		return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+			`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"` +
+			` xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` +
+			` xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` +
+			` xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">` +
+			`<rdf:Description rdf:about="">` +
+			`<pdfaExtension:schemas><rdf:Bag><rdf:li>` +
+			`<rdf:Description pdfaSchema:schema="X"` +
+			` pdfaSchema:namespaceURI="http://example.com/x"` +
+			` pdfaSchema:prefix="x">` +
+			`<pdfaSchema:property><rdf:Seq>` +
+			`<rdf:li pdfaProperty:name="p" pdfaProperty:valueType="Text"` +
+			` pdfaProperty:category="` + category + `"` +
+			` pdfaProperty:description="d"/>` +
+			`</rdf:Seq></pdfaSchema:property>` +
+			`</rdf:Description>` +
+			`</rdf:li></rdf:Bag></pdfaExtension:schemas>` +
+			`</rdf:Description></rdf:RDF></x:xmpmeta>`)
+	}
+
+	for _, tc := range []struct {
+		category string
+		want     bool
+	}{
+		{"external", false},
+		{"internal", false},
+		{"sideways", true},
+		{" external ", true},
+	} {
+		var got []Violation
+		xmpCheckExtensionSchemas(ctx, attrSchemaXMP(tc.category), 2, &got)
+		if hasRule(got, Rule_19005_2_6_6_2_3_3_t09) != tc.want {
+			t.Errorf("attribute category %q: got %v, want fired=%v", tc.category, got, tc.want)
+		}
+	}
+}
+
+// categoryXMP builds an extension schema whose single property carries the
+// given pdfaProperty:category value. Passing an empty string omits the field.
+func categoryXMP(category string) []byte {
+	field := ""
+	if category != "" {
+		field = `<pdfaProperty:category>` + category + `</pdfaProperty:category>`
+	}
+	return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"` +
+		` xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` +
+		` xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` +
+		` xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">` +
+		`<rdf:Description rdf:about="">` +
+		`<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+		`<pdfaSchema:schema>X</pdfaSchema:schema>` +
+		`<pdfaSchema:namespaceURI>http://example.com/x</pdfaSchema:namespaceURI>` +
+		`<pdfaSchema:prefix>x</pdfaSchema:prefix>` +
+		`<pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource">` +
+		`<pdfaProperty:name>p</pdfaProperty:name>` +
+		`<pdfaProperty:valueType>Text</pdfaProperty:valueType>` +
+		field +
+		`<pdfaProperty:description>d</pdfaProperty:description>` +
+		`</rdf:li></rdf:Seq></pdfaSchema:property>` +
+		`</rdf:li></rdf:Bag></pdfaExtension:schemas>` +
+		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
+}
+
+// TestXMPExtPropertyCategoryValue pins the value half of ISO 19005-2
+// §6.6.2.3.3 t9. The rule reads "category == external || category ==
+// internal", so a present but unrecognised value fails it. litho recorded
+// only that the field existed, which let any value through.
+func TestXMPExtPropertyCategoryValue(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	fires := func(category string) bool {
+		var got []Violation
+		xmpCheckExtensionSchemas(ctx, categoryXMP(category), 2, &got)
+		return hasRule(got, Rule_19005_2_6_6_2_3_3_t09)
+	}
+
+	if fires("external") {
+		t.Error(`category "external": want no §6.6.2.3.3 t9`)
+	}
+	if fires("internal") {
+		t.Error(`category "internal": want no §6.6.2.3.3 t9`)
+	}
+	if !fires("sideways") {
+		t.Error(`category "sideways": want §6.6.2.3.3 t9, the value is outside the set`)
+	}
+	if !fires("") {
+		t.Error("category absent: want §6.6.2.3.3 t9")
+	}
+}

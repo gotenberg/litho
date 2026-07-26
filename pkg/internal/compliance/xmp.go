@@ -146,6 +146,15 @@ const (
 	xmpRDFNamespace       = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 )
 
+// The only two values an extension schema property's category may take, per
+// ISO 19005-1 §6.7.8 t10 and ISO 19005-2/3 §6.6.2.3.3 t9. The comparison is
+// verbatim: neither case folding nor whitespace trimming applies, so " external"
+// and "External" fail exactly as "sideways" does.
+const (
+	xmpCategoryExternal = "external"
+	xmpCategoryInternal = "internal"
+)
+
 // xmpPacketHeaderSize is the maximum number of bytes to scan for the XMP
 // processing instruction header.
 const xmpPacketHeaderSize = 200
@@ -1503,6 +1512,11 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	}
 	type propInfo struct {
 		hasName, hasValueType, hasCategory, hasDescription bool
+		// category holds the value as written, so the constrained-value check
+		// can compare it the way veraPDF does. Presence alone satisfies no
+		// rule: ISO 19005-1 §6.7.8 t10 and ISO 19005-2/3 §6.6.2.3.3 t9 both
+		// require the value itself to be "external" or "internal".
+		category string
 	}
 	type valueTypeInfo struct {
 		hasType, hasNamespaceURI, hasPrefix, hasDescription bool
@@ -1537,6 +1551,12 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	// the outer Seq is evaluated at the wrong level (the phantom
 	// missing-field storms of the 792-cell corpus pool).
 	var containerStack []xmpExtSchemaLevel
+	// inCategory marks an open pdfaProperty:category element, whose character
+	// data carries the value the category rule constrains. The text arrives as
+	// its own token after the start element, and may arrive in several pieces,
+	// so it is accumulated until the matching end element.
+	inCategory := false
+	var categoryText strings.Builder
 
 	currentLevel := func() xmpExtSchemaLevel {
 		if len(levelStack) == 0 {
@@ -1574,6 +1594,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 					currentProp.hasValueType = true
 				case "category":
 					currentProp.hasCategory = true
+					currentProp.category = a.Value
 				case "description":
 					currentProp.hasDescription = true
 				}
@@ -1732,6 +1753,8 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 					currentProp.hasValueType = true
 				case "category":
 					currentProp.hasCategory = true
+					inCategory = true
+					categoryText.Reset()
 				case "description":
 					currentProp.hasDescription = true
 				}
@@ -1782,6 +1805,11 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				}
 			}
 
+		case xml.CharData:
+			if inCategory {
+				categoryText.Write(t)
+			}
+
 		case xml.EndElement:
 			if !inSchemas {
 				continue
@@ -1791,6 +1819,11 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 			if foreignDepth > 0 {
 				foreignDepth--
 				continue
+			}
+
+			if inCategory && t.Name.Space == xmpPdfaPropertyPrefix && t.Name.Local == "category" {
+				inCategory = false
+				currentProp.category = categoryText.String()
 			}
 
 			// Close the innermost container when its Seq/Bag closes.
@@ -1846,8 +1879,11 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				if !currentProp.hasValueType {
 					*results = append(*results, xmpExtPropertyRule(part, "valueType")...)
 				}
-				if !currentProp.hasCategory {
+				switch {
+				case !currentProp.hasCategory:
 					*results = append(*results, xmpExtPropertyRule(part, "category")...)
+				case currentProp.category != xmpCategoryExternal && currentProp.category != xmpCategoryInternal:
+					*results = append(*results, xmpExtPropertyCategoryRule(part, currentProp.category)...)
 				}
 				if !currentProp.hasDescription {
 					*results = append(*results, xmpExtPropertyRule(part, "description")...)
@@ -1987,7 +2023,20 @@ func xmpExtSchemaRule(part int, field string) []Violation {
 // xmpExtPropertyRule returns the rule for a missing field in a property definition.
 // Mapping: name->t08, valueType->t09, category->t10, description->t11.
 func xmpExtPropertyRule(part int, field string) []Violation {
-	ctx := fmt.Sprintf("extension property missing required field '%s'", field)
+	return xmpExtPropertyRuleCtx(part, field, fmt.Sprintf("extension property missing required field '%s'", field))
+}
+
+// xmpExtPropertyCategoryRule reports a category outside {external, internal}.
+// ISO 19005-1 §6.7.8 t10 and ISO 19005-2/3 §6.6.2.3.3 t9 constrain the value,
+// not just its presence, and compare it verbatim.
+func xmpExtPropertyCategoryRule(part int, value string) []Violation {
+	return xmpExtPropertyRuleCtx(part, "category",
+		fmt.Sprintf("extension property category %q is neither %q nor %q", value, xmpCategoryExternal, xmpCategoryInternal))
+}
+
+// xmpExtPropertyRuleCtx maps a property field to its per-part rule, reporting it
+// with the caller's context.
+func xmpExtPropertyRuleCtx(part int, field, ctx string) []Violation {
 	switch part {
 	case 1:
 		switch field {
