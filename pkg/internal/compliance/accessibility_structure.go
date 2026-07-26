@@ -14,9 +14,9 @@ import (
 //
 //nolint:gochecknoglobals // static lookup table
 var standardNamespaceURIs = map[string]bool{
-	"http://iso.org/pdf/ssn":             true, // PDF 1.7
-	"http://iso.org/pdf2/ssn":            true, // PDF 2.0
-	"http://www.w3.org/1998/Math/MathML": true, // MathML
+	pdf1NamespaceURI:   true,
+	pdf2NamespaceURI:   true,
+	mathMLNamespaceURI: true,
 }
 
 // defaultStandardNamespaceURI is the namespace a structure element without an
@@ -261,14 +261,20 @@ func roleMapNSChainOutcome(ctx context.Context, doc *document.Document, typeName
 	return nsChainCircular
 }
 
-// roleMapChainReachesStandard reports whether typeName resolves to a standard
-// structure type by following the legacy /RoleMap chain. Used as the §8.2.4 t1
-// escape for a non-standard type name role-mapped to a standard one.
-func roleMapChainReachesStandard(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfName, profile string) bool {
+// roleMapChainReachesStandard reports whether typeName, declared in namespace
+// nsURI, resolves to a standard structure type by following the legacy /RoleMap
+// chain. Used as the §8.2.4 t1 escape for a non-standard type name role-mapped
+// to a standard one.
+//
+// nsURI selects the vocabulary the first link is judged against, because a type
+// is standard only in the namespace that defines it (ISO 32000-2:2020, 14.8.6).
+// A legacy /RoleMap value is a bare name that belongs to no namespace, so every
+// later link is judged against the PDF 1.7 vocabulary.
+func roleMapChainReachesStandard(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfName, nsURI string) bool {
 	seen := make(map[ast.PdfName]bool)
-	cur := typeName
+	cur, curNS := typeName, nsURI
 	for range maxStructTreeDepth {
-		if isStandardStructType(cur, profile) {
+		if isStandardStructTypeInNS(cur, curNS) {
 			return true
 		}
 		if seen[cur] {
@@ -279,7 +285,7 @@ func roleMapChainReachesStandard(roleMap map[ast.PdfName]ast.PdfName, typeName a
 		if !ok {
 			return false
 		}
-		cur = next
+		cur, curNS = next, ""
 	}
 	return false
 }
@@ -296,14 +302,21 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 
 	sType, _ := document.ResolveName(ctx, doc, node["S"])
 	if sType != "" {
-		// Determine the element's namespace URI.
+		// Determine the element's namespace URI. declaredNSURI holds only what
+		// the element itself declares through /NS and stays empty otherwise: the
+		// standard structure vocabulary an element is judged against follows the
+		// namespace it declares, never the document default, because
+		// ISO 32000-1:2008, 14.8.4 governs an element that belongs to no
+		// namespace.
 		elemNSURI := defaultNSURI
+		declaredNSURI := ""
 		if nsObj, ok := node["NS"]; ok {
 			nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
 			if nsDict != nil {
 				ns, _ := document.ResolveString(ctx, doc, nsDict["NS"])
 				if len(ns) > 0 {
 					elemNSURI = string(ns)
+					declaredNSURI = string(ns)
 				}
 			}
 		}
@@ -322,27 +335,27 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// contrast, is reported by t02/t03, so it is excluded here to avoid a
 			// double-fire. The standard-namespace branch below reads the same way.
 			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
-				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
+				!roleMapChainReachesStandard(roleMap, sType, declaredNSURI) &&
 				!typeInLegacyRoleMap(roleMap, sType) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in namespace %q is not mapped to a standard namespace",
 					sType, elemNSURI)...)
 				return // One violation is enough per document.
 			}
-		} else if elemNSURI != "" && standardNamespaceURIs[elemNSURI] && !standardStructTypes[sType] {
+		} else if elemNSURI != "" && standardNamespaceURIs[elemNSURI] && !isStandardStructTypeInNS(sType, declaredNSURI) {
 			// A type declared in a standard namespace but whose name is not a
 			// standard structure type is still SENonStandard (veraPDF
 			// isNotMappedToStandardType): the standard namespaces define a fixed
 			// vocabulary, so e.g. /PDFDocument in the PDF 1.7 namespace fails
 			// §8.2.4 t1 unless it is role-mapped to a standard type, via the
 			// namespace's RoleMapNS or the legacy /RoleMap (e.g. /Standard /P).
-			// standardStructTypes is the union of the ISO 32000-1 and -2
-			// vocabularies, so a 2.0-only name in the 1.7 namespace is treated
-			// leniently (under-detect) rather than risking a false positive.
+			// Each namespace carries its own vocabulary (ISO 32000-2:2020,
+			// 14.8.6), so BlockQuote fails here in the PDF 2.0 namespace and
+			// FENote fails in the PDF 1.7 one.
 			// t01 fires when the type does not reach a standard type; a circular
 			// chain is reported by t02/t03, not t01, so exclude it here.
 			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
-				!roleMapChainReachesStandard(roleMap, sType, "PDF/UA-2") &&
+				!roleMapChainReachesStandard(roleMap, sType, declaredNSURI) &&
 				!typeInLegacyRoleMap(roleMap, sType) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in standard namespace %q is not a standard type and is not role-mapped",
@@ -433,28 +446,43 @@ func newNSRoleResolver(ctx context.Context, doc *document.Document, treeRoot ast
 	return r
 }
 
-// elementNSURI returns the namespace URI an element belongs to: its own /NS, or
-// the document default namespace when /NS is absent.
-func (r *nsRoleResolver) elementNSURI(ctx context.Context, doc *document.Document, elem ast.PdfDict) string {
-	if nsObj, ok := elem["NS"]; ok {
-		if nsDict, _ := document.ResolveDict(ctx, doc, nsObj); nsDict != nil {
-			if uri, _ := document.ResolveString(ctx, doc, nsDict["NS"]); len(uri) > 0 {
-				return string(uri)
-			}
-		}
+// declaredNSURI returns the namespace URI an element declares through /NS, or
+// "" when it declares none. An element that declares no namespace belongs to
+// none, which is what selects the standard structure vocabulary it is judged
+// against (ISO 32000-1:2008, 14.8.4).
+func (r *nsRoleResolver) declaredNSURI(ctx context.Context, doc *document.Document, elem ast.PdfDict) string {
+	nsObj, ok := elem["NS"]
+	if !ok {
+		return ""
 	}
-	return r.defaultNSURI
+	nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
+	if nsDict == nil {
+		return ""
+	}
+	uri, _ := document.ResolveString(ctx, doc, nsDict["NS"])
+	return string(uri)
 }
 
 // elementStandardType resolves an element to its effective standard structure
 // type and the standard namespace URI it lands in. ok is false when the element
 // has no /S or cannot be resolved to a type in a standard namespace.
+//
+// Resolution starts from the namespace the element declares, never from the
+// document default: the vocabulary a type is standard in follows its own
+// namespace (ISO 32000-2:2020, 14.8.6), so an /S of FENote without an /NS is
+// judged against ISO 32000-1:2008, 14.8.4 and is not a standard type. A type
+// that resolves while belonging to no namespace still reports the default
+// namespace litho attributes to an element without /NS.
 func (r *nsRoleResolver) elementStandardType(ctx context.Context, doc *document.Document, elem ast.PdfDict) (stdType, stdNS string, ok bool) {
 	sType, _ := document.ResolveName(ctx, doc, elem["S"])
 	if sType == "" {
 		return "", "", false
 	}
-	return r.resolveStandardType(ctx, doc, string(sType), r.elementNSURI(ctx, doc, elem))
+	stdType, stdNS, ok = r.resolveStandardType(ctx, doc, string(sType), r.declaredNSURI(ctx, doc, elem))
+	if ok && stdNS == "" {
+		stdNS = r.defaultNSURI
+	}
+	return stdType, stdNS, ok
 }
 
 // resolveStandardType resolves (typeName, nsURI) to its effective standard type
@@ -470,14 +498,17 @@ func (r *nsRoleResolver) resolveStandardType(ctx context.Context, doc *document.
 		}
 		visited[key] = true
 
-		if standardNamespaceURIs[nsURI] {
+		// Landing in a standard namespace is not enough: each standard namespace
+		// defines its own vocabulary (ISO 32000-2:2020, 14.8.6), so a name that
+		// namespace does not define keeps resolving through /RoleMapNS.
+		if standardNamespaceURIs[nsURI] && isStandardStructTypeInNS(ast.PdfName(typeName), nsURI) {
 			return typeName, nsURI, true
 		}
 
 		if nsURI == "" {
 			// No namespace mechanism: the legacy /RoleMap targets standard type
 			// names with no namespace.
-			if isStandardStructType(ast.PdfName(typeName), "PDF/UA-2") {
+			if isStandardStructTypeInNS(ast.PdfName(typeName), "") {
 				return typeName, "", true
 			}
 			next, exists := r.classicRole[ast.PdfName(typeName)]
@@ -552,6 +583,72 @@ func (r *nsRoleResolver) childStandardTypes(ctx context.Context, doc *document.D
 		}
 	}
 	return types, true
+}
+
+// significantChild is one structurally significant child of a structure tree
+// node, reduced to the standard structure type it resolves to and the standard
+// namespace that type lands in. Both fields are empty when the child resolves
+// to no standard type at all.
+type significantChild struct {
+	stdType string
+	stdNS   string
+}
+
+// significantChildren returns a node's structurally significant children in
+// order, looking through the pass-through grouping wrappers listed in
+// [iso32005PassThroughTypes]: a Part, Div, or NonStruct contributes its own
+// children instead of itself, recursively, because ISO 32000-2:2020, 14.8.4.4
+// defines the three as pure grouping wrappers whose descendants carry the
+// structural meaning. Nesting is bounded by [maxISO32005PassThroughDepth] and
+// by the visited set, so a cyclic or fan-out-heavy wrapper chain cannot make
+// the walk diverge.
+//
+// Content items are skipped: per ISO 32000-2:2020, Table 355 a structure
+// element dictionary either omits /Type or sets it to StructElem, while the
+// marked-content and object references of Tables 356 and 357 carry /MCR and
+// /OBJR.
+func (r *nsRoleResolver) significantChildren(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) []significantChild {
+	return r.significantChildrenAt(ctx, doc, node, depth, make(map[int]bool))
+}
+
+// significantChildrenAt is [nsRoleResolver.significantChildren] carrying the
+// object numbers already expanded on the current pass-through spine.
+func (r *nsRoleResolver) significantChildrenAt(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int, visited map[int]bool) []significantChild {
+	if ctx.Err() != nil || depth > maxISO32005PassThroughDepth {
+		return nil
+	}
+	kObj, ok := node["K"]
+	if !ok {
+		return nil
+	}
+	items, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		items = ast.PdfArray{kObj}
+	}
+
+	var out []significantChild
+	for _, item := range items {
+		d, derr := document.ResolveDict(ctx, doc, item)
+		if derr != nil || d == nil {
+			continue
+		}
+		if typeName, _ := document.ResolveName(ctx, doc, d["Type"]); typeName != "" && typeName != "StructElem" {
+			continue
+		}
+		stdType, stdNS, _ := r.elementStandardType(ctx, doc, d)
+		if !iso32005PassThroughTypes[stdType] {
+			out = append(out, significantChild{stdType: stdType, stdNS: stdNS})
+			continue
+		}
+		if ref, isRef := item.(ast.PdfIndirectRef); isRef {
+			if visited[ref.ObjectNum] {
+				continue
+			}
+			visited[ref.ObjectNum] = true
+		}
+		out = append(out, r.significantChildrenAt(ctx, doc, d, depth+1, visited)...)
+	}
+	return out
 }
 
 // pdf1NamespaceURI is the legacy PDF 1.7 standard structure namespace.

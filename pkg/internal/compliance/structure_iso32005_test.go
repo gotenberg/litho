@@ -399,6 +399,37 @@ func TestISO32005_RoleMapInertUnderExplicitNamespace(t *testing.T) {
 	}
 }
 
+// TestISO32005_NamespaceVocabularyGatesTable5 pins the namespace gate on the
+// Table 5 key. A type is standard only in the namespace that defines it
+// (ISO 32000-2:2020, 14.8.6), so TOC and BlockQuote key into Table 5 from the
+// PDF 1.7 namespace and key into nothing from the PDF 2.0 one, where neither is
+// a standard structure type. veraPDF 1.30.2 reports the pairing on the first
+// graph and reports ISO 14289-2 §8.2.4 t1 instead of any Table 5 rule on the
+// second, because both elements become SENonStandard there.
+func TestISO32005_NamespaceVocabularyGatesTable5(t *testing.T) {
+	build := func(t *testing.T, ns string) []Violation {
+		t.Helper()
+		return iso32005Violations(t,
+			"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /StructTreeRoot /K 5 0 R /Namespaces [8 0 R 9 0 R] >>",
+			"<< /Type /StructElem /S /Document /P 4 0 R /NS 8 0 R /K [6 0 R] >>",
+			"<< /Type /StructElem /S /TOC /P 5 0 R /NS "+ns+" /K [7 0 R] >>",
+			"<< /Type /StructElem /S /BlockQuote /P 6 0 R /NS "+ns+" >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+		)
+	}
+
+	if vs := build(t, "9 0 R"); !iso32005HasClause(vs, "Table 5. TOC-BlockQuote") {
+		t.Errorf("BlockQuote inside TOC in the PDF 1.7 namespace must fail Table 5; got %v", vs)
+	}
+	if vs := build(t, "8 0 R"); iso32005HasClause(vs, "Table 5. TOC-BlockQuote") {
+		t.Errorf("neither TOC nor BlockQuote is standard in the PDF 2.0 namespace, so Table 5 must not judge the pairing; got %v", vs)
+	}
+}
+
 // TestISO32005_OBJRIsContent pins OBJR counting as a content item for
 // "Table 5. Document-content" (PDF_UA-1__7.18.4-t01-fail-a golden: the
 // rule fails with a single OBJR kid).

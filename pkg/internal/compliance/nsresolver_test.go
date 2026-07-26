@@ -102,3 +102,78 @@ func TestDocumentNamespaceRule(t *testing.T) {
 		t.Errorf("Document in PDF 2.0 namespace: got %v, want no §8.2.5.2 t2", ok)
 	}
 }
+
+// TestSingleDocumentRootTestNumber pins which of the two ISO 14289-2 §8.2.5.2
+// tests fires per failure shape. t1 constrains the root children's resolved
+// standard types; t2 constrains only the namespace of an otherwise conforming
+// single Document. Deciding either on the raw /S name swaps the two verdicts,
+// which reads as a clean result under a clause-only comparison because the
+// false positive on one test cancels the false negative on the other.
+func TestSingleDocumentRootTestNumber(t *testing.T) {
+	ctx := context.Background()
+
+	cases := []struct {
+		name           string
+		objs           []string
+		wantT1, wantT2 bool
+	}{
+		{
+			// /MyDoc role-maps to Document, so the resolved kid type is
+			// Document: t1 holds and only the namespace is at fault.
+			name: "legacy RoleMap to Document",
+			objs: []string{
+				"<< /Type /StructTreeRoot /RoleMap << /MyDoc /Document >> /K [5 0 R] >>",
+				"<< /Type /StructElem /S /MyDoc /P 4 0 R >>",
+			},
+			wantT2: true,
+		},
+		{
+			// Named Document but in a namespace that maps nowhere, so it
+			// resolves to no standard type at all: the root has no Document.
+			name: "Document in unmapped namespace",
+			objs: []string{
+				"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K [6 0 R] >>",
+				"<< /Type /Namespace /NS (http://example.com/ns) >>",
+				"<< /Type /StructElem /S /Document /NS 5 0 R /P 4 0 R >>",
+			},
+			wantT1: true,
+		},
+		{
+			// Part is a pass-through wrapper, so the Document it groups is
+			// the root's effective only child and the file conforms.
+			name: "Document behind a pass-through Part",
+			objs: []string{
+				"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K [6 0 R] >>",
+				"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+				"<< /Type /StructElem /S /Part /NS 5 0 R /P 4 0 R /K [7 0 R] >>",
+				"<< /Type /StructElem /S /Document /NS 5 0 R /P 6 0 R >>",
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			objs := append([]string{
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			}, c.objs...)
+			doc, cat := objsDocPDF(t, objs...)
+			root, err := document.ResolveDict(ctx, doc, cat["StructTreeRoot"])
+			if err != nil || root == nil {
+				t.Fatalf("resolve StructTreeRoot: %v", err)
+			}
+
+			var got []Violation
+			checkSingleDocumentRoot(ctx, doc, root, &got)
+			if hasRule(got, Rule_14289_2_8_2_5_2_t01) != c.wantT1 {
+				t.Errorf("§8.2.5.2 t1: got fired=%v, want %v (violations %v)",
+					!c.wantT1, c.wantT1, got)
+			}
+			if hasRule(got, Rule_14289_2_8_2_5_2_t02) != c.wantT2 {
+				t.Errorf("§8.2.5.2 t2: got fired=%v, want %v (violations %v)",
+					!c.wantT2, c.wantT2, got)
+			}
+		})
+	}
+}

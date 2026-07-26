@@ -10,10 +10,13 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// standardStructTypes lists all standard structure types across both
-// ISO 32000-1:2008 and ISO 32000-2:2020. Used for general lookups.
-var standardStructTypes = map[ast.PdfName]bool{ //nolint:gochecknoglobals // constant set.
-	// ISO 32000-1 types (14.8.4).
+// standardStructTypesPDF17 is the vocabulary of the PDF 1.7 standard structure
+// namespace http://iso.org/pdf/ssn: the standard structure types of
+// ISO 32000-1:2008, 14.8.4 (Table 333 onward), which ISO 32000-2:2020, 14.8.6
+// designates as that namespace.
+//
+//nolint:gochecknoglobals // static spec table
+var standardStructTypesPDF17 = map[ast.PdfName]bool{
 	"Document": true, "Part": true, "Art": true, "Sect": true, "Div": true,
 	"BlockQuote": true, "Caption": true, "TOC": true, "TOCI": true, "Index": true,
 	"NonStruct": true, "Private": true, "H": true, "H1": true, "H2": true,
@@ -24,19 +27,101 @@ var standardStructTypes = map[ast.PdfName]bool{ //nolint:gochecknoglobals // con
 	"Code": true, "Link": true, "Annot": true, "Ruby": true, "Warichu": true,
 	"RB": true, "RT": true, "RP": true, "WT": true, "WP": true,
 	"Figure": true, "Formula": true, "Form": true,
-	// ISO 32000-2 additional types (PDF 2.0 / PDF/UA-2).
-	"DocumentFragment": true, "Aside": true, "Title": true, "Sub": true,
-	"Em": true, "Strong": true, "Artifact": true, "FENote": true,
 }
+
+// standardStructTypesPDF20 is the vocabulary of the PDF 2.0 standard structure
+// namespace http://iso.org/pdf2/ssn: the standard structure types of
+// ISO 32000-2:2020, 14.8.4 (Table 364), designated as that namespace by 14.8.6.
+//
+// It is not a superset of [standardStructTypesPDF17]. PDF 2.0 dropped Art,
+// BlockQuote, TOC, TOCI, Index, Private, Quote, Note, Reference, BibEntry and
+// Code, and added DocumentFragment, Aside, Title, Sub, Em, Strong, Artifact and
+// FENote. Numbered headings are unbounded in this namespace
+// (ISO 32000-2:2020, 14.8.4.6.2), so [iso32005HnRe] matches them instead of the
+// table enumerating H1 to H6.
+//
+//nolint:gochecknoglobals // static spec table
+var standardStructTypesPDF20 = map[ast.PdfName]bool{
+	"Document": true, "DocumentFragment": true, "Part": true, "Sect": true,
+	"Div": true, "Aside": true, "NonStruct": true, "Title": true, "Sub": true,
+	"H": true, "P": true, "L": true, "LI": true, "Lbl": true, "LBody": true,
+	"Table": true, "TR": true, "TH": true, "TD": true, "THead": true,
+	"TBody": true, "TFoot": true, "Caption": true, "Span": true, "Link": true,
+	"Annot": true, "Form": true, "Ruby": true, "RB": true, "RT": true,
+	"RP": true, "Warichu": true, "WT": true, "WP": true, "FENote": true,
+	"Figure": true, "Formula": true, "Artifact": true, "Em": true,
+	"Strong": true,
+}
+
+// standardStructTypes lists every standard structure type of either standard
+// structure namespace. It answers the profile-scoped question "does any version
+// of the spec define this type", which is all a caller holding no namespace can
+// ask. A caller that knows the namespace an element declares must use
+// [isStandardStructTypeInNS] instead: the union accepts a type in a namespace
+// that does not define it.
+//
+//nolint:gochecknoglobals // derived from the two spec tables above
+var standardStructTypes = unionStructTypes(standardStructTypesPDF17, standardStructTypesPDF20)
 
 // standardStructTypesPDF2Only lists types added in ISO 32000-2 that are NOT
 // standard structure types in ISO 32000-1. For PDF/UA-1 and PDF/A-1/2/3,
 // these are non-standard and CAN be legitimately remapped.
 //
-//nolint:gochecknoglobals // constant set.
-var standardStructTypesPDF2Only = map[ast.PdfName]bool{
-	"DocumentFragment": true, "Aside": true, "Title": true, "Sub": true,
-	"Em": true, "Strong": true, "Artifact": true, "FENote": true,
+//nolint:gochecknoglobals // derived from the two spec tables above
+var standardStructTypesPDF2Only = differenceStructTypes(standardStructTypesPDF20, standardStructTypesPDF17)
+
+// unionStructTypes returns the names present in either table.
+func unionStructTypes(a, b map[ast.PdfName]bool) map[ast.PdfName]bool {
+	out := make(map[ast.PdfName]bool, len(a)+len(b))
+	for name := range a {
+		out[name] = true
+	}
+	for name := range b {
+		out[name] = true
+	}
+	return out
+}
+
+// differenceStructTypes returns the names present in a but absent from b.
+func differenceStructTypes(a, b map[ast.PdfName]bool) map[ast.PdfName]bool {
+	out := make(map[ast.PdfName]bool, len(a))
+	for name := range a {
+		if !b[name] {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// mathMLNamespaceURI is the MathML namespace ISO 32000-2:2020, 14.8.6 admits
+// as a standard structure namespace alongside the two PDF ones.
+const mathMLNamespaceURI = "http://www.w3.org/1998/Math/MathML"
+
+// isStandardStructTypeInNS reports whether name is a standard structure type of
+// the standard structure namespace nsURI.
+//
+// The set is namespace-parameterised, not a union: ISO 32000-2:2020, 14.8.6
+// gives the PDF 1.7 and PDF 2.0 namespaces different vocabularies, so
+// BlockQuote is standard only in the former and FENote only in the latter.
+// Judging either against the union accepts a type in a namespace that does not
+// define it. The MathML namespace constrains no element name
+// (ISO 32000-2:2020, 14.8.6), so every type in it is standard.
+//
+// An empty nsURI means the element declares no /NS and so belongs to no
+// namespace, in which case ISO 32000-1:2008, 14.8.4 governs and the PDF 1.7
+// vocabulary applies. A namespace litho does not recognise defines no standard
+// type at all, so it answers false rather than falling back to a vocabulary.
+func isStandardStructTypeInNS(name ast.PdfName, nsURI string) bool {
+	switch nsURI {
+	case pdf1NamespaceURI, "":
+		return standardStructTypesPDF17[name]
+	case pdf2NamespaceURI:
+		return standardStructTypesPDF20[name] || iso32005HnRe.MatchString(string(name))
+	case mathMLNamespaceURI:
+		return true
+	default:
+		return false
+	}
 }
 
 // standardStructTypesPDF15Plus lists types that ISO 32000-1 added after
@@ -1328,81 +1413,50 @@ func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, struc
 	})
 }
 
-// checkSingleDocumentRoot validates PDF/UA-2 §8.2.5.2: StructTreeRoot must
-// contain exactly one child with type Document.
+// checkSingleDocumentRoot validates ISO 14289-2, 8.2.5.2: the structure tree
+// root shall contain a single Document structure element as its only child
+// (t1), and that element shall be declared in the PDF 2.0 standard structure
+// namespace (t2).
+//
+// Both tests are decided on each child's effective standard structure type
+// (ISO 32000-2:2020, 14.7.4 role mapping), never on the raw /S name. A child
+// whose /S is role-mapped to Document therefore satisfies t1 and is judged by
+// t2, and a child literally named Document that resolves to no standard type
+// fails t1 rather than t2. That is what the two rules constrain: t1 tests the
+// resolved kid types, t2 tests only the namespace of an otherwise conforming
+// single Document.
 func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, results *[]Violation) {
-	kObj, ok := structTreeRoot["K"]
-	if !ok {
-		*results = append(*results, fail(Rule_14289_2_8_2_5_2_t01,
-			"StructTreeRoot has no /K entry")...)
-		return
-	}
+	r := newNSRoleResolver(ctx, doc, structTreeRoot)
+	kids := r.significantChildren(ctx, doc, structTreeRoot, 0)
 
-	// /K can be a single element or an array.
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		// Single element: check if it's a Document.
-		d, err := document.ResolveDict(ctx, doc, kObj)
-		if err != nil || d == nil {
-			return
-		}
-		typeName, _ := document.ResolveName(ctx, doc, d["S"])
-		if typeName != "Document" {
-			*results = append(*results, failf(Rule_14289_2_8_2_5_2_t01,
-				"StructTreeRoot child is %s instead of Document", typeName)...)
-			return
-		}
-		checkDocumentNamespace(ctx, doc, structTreeRoot, d, results)
-		return
-	}
-
-	// Count Document children.
-	docCount := 0
-	var docElem ast.PdfDict
-	for _, item := range arr {
-		d, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || d == nil {
-			continue
-		}
-		typeName, _ := document.ResolveName(ctx, doc, d["S"])
-		if typeName == "Document" {
-			docCount++
-			docElem = d
+	// A child that resolves to no standard type contributes no type to the t1
+	// comparison, so a root holding only such children reads as empty.
+	types := make([]string, 0, len(kids))
+	for _, kid := range kids {
+		if kid.stdType != "" {
+			types = append(types, kid.stdType)
 		}
 	}
 
-	if docCount != 1 || len(arr) != 1 {
+	if len(types) != 1 || types[0] != "Document" {
 		*results = append(*results, failf(Rule_14289_2_8_2_5_2_t01,
-			"StructTreeRoot has %d children (%d Document) instead of single Document", len(arr), docCount)...)
+			"StructTreeRoot children resolve to [%s] instead of a single Document",
+			strings.Join(types, ", "))...)
 		return
 	}
-	checkDocumentNamespace(ctx, doc, structTreeRoot, docElem, results)
+
+	// t2 scopes to the first structurally significant child, which the t1
+	// verdict above has established is the single Document.
+	if kids[0].stdNS != pdf2NamespaceURI {
+		*results = append(*results, failf(Rule_14289_2_8_2_5_2_t02,
+			"Document structure element is in namespace %q, not the PDF 2.0 namespace",
+			kids[0].stdNS)...)
+	}
 }
 
 // pdf2NamespaceURI is the PDF 2.0 standard structure namespace (ISO 32000-2
 // §14.8.6).
 const pdf2NamespaceURI = "http://iso.org/pdf2/ssn"
-
-// checkDocumentNamespace validates ISO 14289-2 §8.2.5.2 t2: the single Document
-// child of the structure tree root shall be declared in the PDF 2.0 namespace
-// (http://iso.org/pdf2/ssn). Any other namespace, including none at all, fails
-// t2, so an unnamespaced Document (typical for legacy tagged PDFs) is rejected.
-func checkDocumentNamespace(ctx context.Context, doc *document.Document, treeRoot, docElem ast.PdfDict, results *[]Violation) {
-	r := newNSRoleResolver(ctx, doc, treeRoot)
-	stdType, stdNS, ok := r.elementStandardType(ctx, doc, docElem)
-	if !ok || stdType != "Document" {
-		// Raw S=Document with no resolvable namespace still counts: the
-		// kid's standard type is Document, its namespace URL is null.
-		if s, err := document.ResolveName(ctx, doc, docElem["S"]); err != nil || s != "Document" {
-			return
-		}
-		stdNS = ""
-	}
-	if stdNS != pdf2NamespaceURI {
-		*results = append(*results, failf(Rule_14289_2_8_2_5_2_t02,
-			"Document structure element is in namespace %q, not the PDF 2.0 namespace", stdNS)...)
-	}
-}
 
 // validateTHScope checks that TH elements have a /Scope attribute.
 // When the table uses ID-based header association (TH has /ID attribute),

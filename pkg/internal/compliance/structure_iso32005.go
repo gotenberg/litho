@@ -146,10 +146,10 @@ func iso32005Resolve(ctx context.Context, state *walkState, ref iso32005Ref) str
 
 	next, ok := iso32005Equivalent(ctx, state, ref)
 	if !ok || visited[next.visitKey()] {
-		return iso32005StandardKey(ref.name)
+		return iso32005StandardKey(ref)
 	}
 	for range maxRoleMapHops {
-		if key := iso32005StandardKey(next.name); key != "" {
+		if key := iso32005StandardKey(next); key != "" {
 			return key
 		}
 		visited[next.visitKey()] = true
@@ -219,14 +219,20 @@ func iso32005RoleMapNSTarget(ctx context.Context, state *walkState, entry ast.Pd
 // iso32005StandardKey maps a standard structure type to its Table 5 key,
 // collapsing numbered headings onto "Hn" (ISO 32000-2 §14.8.4.6.2).
 // Returns "" for a non-standard type.
-func iso32005StandardKey(name ast.PdfName) string {
-	if iso32005HnRe.MatchString(string(name)) {
+//
+// A type is standard only within the namespace that defines it
+// (ISO 32000-2:2020, 14.8.6), so the namespace the reference carries selects
+// the vocabulary: TOC keys as TOC in the PDF 1.7 namespace and as nothing in
+// the PDF 2.0 one. Table 5 covers the two PDF standard structure namespaces
+// alone, so a MathML type keys as nothing even though 14.8.6 makes it standard.
+func iso32005StandardKey(ref iso32005Ref) string {
+	if ref.uri == mathMLNamespaceURI || !isStandardStructTypeInNS(ref.name, ref.uri) {
+		return ""
+	}
+	if iso32005HnRe.MatchString(string(ref.name)) {
 		return "Hn"
 	}
-	if isStandardStructType(name, "PDF/UA-2") {
-		return string(name)
-	}
-	return ""
+	return string(ref.name)
 }
 
 // iso32005Kids resolves an element's /K children into Table 5 keys and reports

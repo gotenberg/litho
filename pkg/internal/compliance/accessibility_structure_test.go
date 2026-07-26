@@ -174,21 +174,126 @@ func TestRoleMapChainReachesStandard(t *testing.T) {
 		name    string
 		roleMap map[ast.PdfName]ast.PdfName
 		typ     ast.PdfName
+		ns      string
 		want    bool
 	}{
-		{"direct standard", nil, "P", true},
-		{"single hop to standard", map[ast.PdfName]ast.PdfName{"Standard": "P"}, "Standard", true},
-		{"two hops to standard", map[ast.PdfName]ast.PdfName{"A": "B", "B": "Div"}, "A", true},
-		{"unmapped non-standard", nil, "PDFDocument", false},
-		{"maps to non-standard dead end", map[ast.PdfName]ast.PdfName{"X": "Y"}, "X", false},
-		{"circular never reaches standard", map[ast.PdfName]ast.PdfName{"Q": "Q"}, "Q", false},
-		{"circular pair", map[ast.PdfName]ast.PdfName{"A": "B", "B": "A"}, "A", false},
+		{"direct standard", nil, "P", "", true},
+		{"single hop to standard", map[ast.PdfName]ast.PdfName{"Standard": "P"}, "Standard", "", true},
+		{"two hops to standard", map[ast.PdfName]ast.PdfName{"A": "B", "B": "Div"}, "A", "", true},
+		{"unmapped non-standard", nil, "PDFDocument", "", false},
+		{"maps to non-standard dead end", map[ast.PdfName]ast.PdfName{"X": "Y"}, "X", "", false},
+		{"circular never reaches standard", map[ast.PdfName]ast.PdfName{"Q": "Q"}, "Q", "", false},
+		{"circular pair", map[ast.PdfName]ast.PdfName{"A": "B", "B": "A"}, "A", "", false},
+		// The vocabulary follows the namespace the type is declared in.
+		{"pdf 1.7 type in the pdf 1.7 namespace", nil, "BlockQuote", pdf1NamespaceURI, true},
+		{"pdf 1.7 type in the pdf 2.0 namespace", nil, "BlockQuote", pdf2NamespaceURI, false},
+		{"pdf 2.0 type in the pdf 2.0 namespace", nil, "FENote", pdf2NamespaceURI, true},
+		{"pdf 2.0 type in the pdf 1.7 namespace", nil, "FENote", pdf1NamespaceURI, false},
+		{"pdf 2.0 type in no namespace", nil, "FENote", "", false},
+		// A legacy /RoleMap target belongs to no namespace, so the PDF 1.7
+		// vocabulary judges it however the first link was namespaced.
+		{"remap out of a namespace lacking the type", map[ast.PdfName]ast.PdfName{"FENote": "P"}, "FENote", pdf1NamespaceURI, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := roleMapChainReachesStandard(tc.roleMap, tc.typ, "PDF/UA-2"); got != tc.want {
-				t.Errorf("roleMapChainReachesStandard(%v, %q) = %v, want %v", tc.roleMap, tc.typ, got, tc.want)
+			if got := roleMapChainReachesStandard(tc.roleMap, tc.typ, tc.ns); got != tc.want {
+				t.Errorf("roleMapChainReachesStandard(%v, %q, %q) = %v, want %v", tc.roleMap, tc.typ, tc.ns, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestIsStandardStructTypeInNS pins the namespace-parameterised standard
+// structure vocabulary. ISO 32000-2:2020, 14.8.6 gives the PDF 1.7 and PDF 2.0
+// standard structure namespaces different type sets, so neither the union nor
+// either set alone answers for both: BlockQuote is standard only in the PDF 1.7
+// namespace, FENote only in the PDF 2.0 one, and headings past H6 only in the
+// PDF 2.0 one (ISO 32000-2:2020, 14.8.4.6.2). veraPDF 1.30 encodes the same
+// split in TaggedPDFHelper.isStandardType.
+func TestIsStandardStructTypeInNS(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		typ  ast.PdfName
+		ns   string
+		want bool
+	}{
+		{"shared type in the pdf 1.7 namespace", "P", pdf1NamespaceURI, true},
+		{"shared type in the pdf 2.0 namespace", "P", pdf2NamespaceURI, true},
+		{"pdf 1.7 only type in its namespace", "BlockQuote", pdf1NamespaceURI, true},
+		{"pdf 1.7 only type in the pdf 2.0 namespace", "BlockQuote", pdf2NamespaceURI, false},
+		{"note in the pdf 1.7 namespace", "Note", pdf1NamespaceURI, true},
+		{"note in the pdf 2.0 namespace", "Note", pdf2NamespaceURI, false},
+		{"pdf 2.0 only type in its namespace", "FENote", pdf2NamespaceURI, true},
+		{"pdf 2.0 only type in the pdf 1.7 namespace", "FENote", pdf1NamespaceURI, false},
+		{"emphasis in the pdf 2.0 namespace", "Em", pdf2NamespaceURI, true},
+		{"emphasis in the pdf 1.7 namespace", "Em", pdf1NamespaceURI, false},
+		{"numbered heading within the pdf 1.7 table", "H6", pdf1NamespaceURI, true},
+		{"numbered heading past the pdf 1.7 table", "H7", pdf1NamespaceURI, false},
+		{"numbered heading past h6 in the pdf 2.0 namespace", "H7", pdf2NamespaceURI, true},
+		{"multi digit heading in the pdf 2.0 namespace", "H42", pdf2NamespaceURI, true},
+		{"zero heading in the pdf 2.0 namespace", "H0", pdf2NamespaceURI, false},
+		{"any name in the mathml namespace", "math", mathMLNamespaceURI, true},
+		{"no namespace uses the pdf 1.7 vocabulary", "BlockQuote", "", true},
+		{"no namespace rejects a pdf 2.0 only type", "FENote", "", false},
+		{"unknown namespace defines nothing", "P", "http://litho.example/ns", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isStandardStructTypeInNS(tc.typ, tc.ns); got != tc.want {
+				t.Errorf("isStandardStructTypeInNS(%q, %q) = %v, want %v", tc.typ, tc.ns, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCheckNamespaceRoleMapping_NamespaceVocabulary covers ISO 14289-2 §8.2.4 t1
+// for a standard structure type placed in the standard namespace that does NOT
+// define it. Per ISO 32000-2:2020, 14.8.6 the PDF 1.7 and PDF 2.0 namespaces
+// carry different vocabularies, so BlockQuote in the PDF 2.0 namespace and
+// FENote in the PDF 1.7 namespace are both non-standard and fire t1, while the
+// mirrored placements do not. Judging both against the union of the two
+// vocabularies silently accepts either.
+func TestCheckNamespaceRoleMapping_NamespaceVocabulary(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 5 is the PDF 2.0 namespace, object 6 the PDF 1.7 namespace.
+	build := func(t *testing.T, childType, childNS string) []Violation {
+		t.Helper()
+		doc, cat := tableDoc(t, 1,
+			"<< /Type /Catalog /StructTreeRoot 2 0 R >>",
+			"<< /Type /StructTreeRoot /K [3 0 R] /Namespaces [5 0 R 6 0 R] >>",
+			"<< /Type /StructElem /S /Document /NS 5 0 R /P 2 0 R /K [4 0 R] >>",
+			"<< /Type /StructElem /S "+childType+" /NS "+childNS+" /P 3 0 R >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+		)
+		return checkNamespaceRoleMapping(ctx, doc, cat, "PDF/UA-2")
+	}
+
+	const pdf20, pdf17 = "5 0 R", "6 0 R"
+
+	tests := []struct {
+		name    string
+		typ, ns string
+		wantT01 bool
+	}{
+		{"pdf 1.7 type in its own namespace", "/BlockQuote", pdf17, false},
+		{"pdf 1.7 type in the pdf 2.0 namespace", "/BlockQuote", pdf20, true},
+		{"pdf 2.0 type in its own namespace", "/FENote", pdf20, false},
+		{"pdf 2.0 type in the pdf 1.7 namespace", "/FENote", pdf17, true},
+		{"heading past h6 in the pdf 2.0 namespace", "/H7", pdf20, false},
+		{"heading past h6 in the pdf 1.7 namespace", "/H7", pdf17, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := hasRule(build(t, tc.typ, tc.ns), Rule_14289_2_8_2_4_t01)
+			if got != tc.wantT01 {
+				t.Errorf("%s in %s: §8.2.4 t1 fired = %v, want %v", tc.typ, tc.ns, got, tc.wantT01)
 			}
 		})
 	}
