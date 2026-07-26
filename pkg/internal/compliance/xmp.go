@@ -447,7 +447,7 @@ func XMPWellFormed(data []byte) bool {
 // is an XML document, so a packet that is not well-formed XML cannot be
 // a valid serialization.
 func xmpWellFormed(data []byte) bool {
-	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
 	dec.Strict = true
 	for {
 		_, err := dec.Token()
@@ -458,6 +458,92 @@ func xmpWellFormed(data []byte) bool {
 			return false
 		}
 	}
+}
+
+// maxXMPCharRefDigits bounds the digit run a numeric character reference may
+// carry before [xmpFixControlChars] stops looking for its terminator. It
+// mirrors the 8-character pushback buffer of veraPDF's
+// FixASCIIControlsReader, and doubles as an anti-DoS guard, not spec-mandated:
+// no legal reference needs more digits, so a crafted "&#000...0;" run cannot
+// force an unbounded scan.
+const maxXMPCharRefDigits = 8
+
+// xmpFixControlChars replaces every character veraPDF repairs before it calls
+// a packet unparseable: a raw C0 control character, and a numeric character
+// reference denoting one, both become a space.
+//
+// XML 1.0 (Third Edition) §2.2 excludes those characters from the Char
+// production, so a packet carrying one is not well-formed by the letter of
+// §6.6.2.1 t4 / §6.7.2.1 t4. veraPDF relaxes exactly this: its default
+// ParseOptions sets FIX_CONTROL_CHARS (ParseOptions.<init> sets bits 8|16), so
+// XMPMetaParser re-parses through FixASCIIControlsReader, which substitutes a
+// space for any character matching Utils.isControlChar (c <= 0x1F or c ==
+// 0x7F, excluding tab, LF and CR). Real producers emit these: Adobe Illustrator
+// writes dc:description values holding "&#x5;" (seen on the govdocs corpus),
+// and reporting them as malformed packets diverges from every validator built
+// on XMPCore.
+func xmpFixControlChars(data []byte) []byte {
+	if !bytes.ContainsFunc(data, func(r rune) bool { return xmpIsControlChar(int(r)) }) &&
+		!bytes.Contains(data, []byte("&#")) {
+		return data
+	}
+
+	out := make([]byte, 0, len(data))
+	for i := 0; i < len(data); {
+		if xmpIsControlChar(int(data[i])) {
+			out = append(out, ' ')
+			i++
+			continue
+		}
+		if value, width, ok := xmpCharRef(data[i:]); ok && xmpIsControlChar(value) {
+			out = append(out, ' ')
+			i += width
+			continue
+		}
+		out = append(out, data[i])
+		i++
+	}
+	return out
+}
+
+// xmpIsControlChar mirrors org.verapdf.xmp.impl.Utils.isControlChar, the
+// predicate veraPDF's parser uses to decide a character needs repairing.
+func xmpIsControlChar(c int) bool {
+	return (c <= 0x1F || c == 0x7F) && c != '\t' && c != '\n' && c != '\r'
+}
+
+// xmpCharRef decodes the numeric character reference starting at data[0],
+// returning its value and total byte width. Named entities, malformed
+// references and references longer than [maxXMPCharRefDigits] digits report
+// false and are left untouched.
+func xmpCharRef(data []byte) (value int, width int, ok bool) {
+	if len(data) < 4 || data[0] != '&' || data[1] != '#' {
+		return 0, 0, false
+	}
+	pos, base := 2, 10
+	if data[pos] == 'x' || data[pos] == 'X' {
+		pos, base = pos+1, 16
+	}
+	digits := 0
+	for pos < len(data) && digits <= maxXMPCharRefDigits {
+		d := int(data[pos])
+		switch {
+		case d >= '0' && d <= '9':
+			d -= '0'
+		case base == 16 && d >= 'a' && d <= 'f':
+			d = d - 'a' + 10
+		case base == 16 && d >= 'A' && d <= 'F':
+			d = d - 'A' + 10
+		case d == ';' && digits > 0:
+			return value, pos + 1, true
+		default:
+			return 0, 0, false
+		}
+		value = value*base + d
+		digits++
+		pos++
+	}
+	return 0, 0, false
 }
 
 // xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.

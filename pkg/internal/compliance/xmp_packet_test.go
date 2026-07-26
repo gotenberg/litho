@@ -25,6 +25,41 @@ func TestXmpWellFormed(t *testing.T) {
 	}
 }
 
+// TestXmpWellFormed_ControlChars pins the one relaxation of XML 1.0 §2.2 that
+// litho grants: a C0 control character, raw or written as a numeric character
+// reference, does not by itself make a packet malformed. veraPDF parses with
+// FIX_CONTROL_CHARS on by default and substitutes a space for each such
+// character, so reporting §6.6.2.1 t4 / §6.7.2.1 t4 on that construct alone
+// diverges from every XMPCore-based validator. Real files depend on it: the
+// govdocs corpus file thread_300_300842.pdf holds "&#x5;" inside a
+// dc:description, and veraPDF reports schema violations against that packet's
+// properties, proving it parsed. Defects that are not control characters still
+// fail.
+func TestXmpWellFormed_ControlChars(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{"hex reference to control char", `<a>&#x5;x</a>`, true},
+		{"decimal reference to control char", `<a>&#5;x</a>`, true},
+		{"raw control char", "<a>\x05x</a>", true},
+		{"legal reference untouched", `<a>&#x41;</a>`, true},
+		{"tab reference untouched", `<a>&#x9;</a>`, true},
+		{"malformed reference is not a control char", `<a>&#xZZ;</a>`, false},
+		{"mismatched tag still fails", "<a>\x05</b>", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := xmpWellFormed([]byte(tc.data)); got != tc.want {
+				t.Errorf("xmpWellFormed(%q) = %v, want %v", tc.data, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestXmpPacketSerializationValidity(t *testing.T) {
 	t.Parallel()
 	// A mismatched start/end tag, the 6-7-2-1-t01-fail-d defect.
