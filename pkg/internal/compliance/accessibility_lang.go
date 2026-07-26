@@ -844,9 +844,12 @@ func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem a
 }
 
 // checkOutlineLang verifies that outline entries (bookmarks) have a determinable
-// natural language. Per PDF/UA-1 §7.2 t2, each outline item's /Title text
-// must have a determinable language: either the item itself has /Lang, or
-// the catalog has /Lang.
+// natural language. Per ISO 14289-1:2014 §7.2 t2, an outline item's /Title text
+// needs a determinable language, and the document catalog /Lang is its only
+// source: ISO 32000-1:2008 Table 153 (entries in an outline item dictionary)
+// defines no /Lang entry, and ISO 32000-1:2008 §14.9.2 attaches language to the
+// catalog, to structure elements, and to marked content, none of which covers an
+// outline title. So the catalog /Lang decides the whole outline tree.
 func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
@@ -869,14 +872,16 @@ func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.P
 		return nil
 	}
 
-	// Walk outline items and check for /Lang.
+	// The catalog declares no /Lang, so no outline item's language is
+	// determinable: report one violation per item, as veraPDF does per PDOutline.
 	var results []Violation
 	walkOutlineItemsForLang(ctx, doc, outlines["First"], &results, 0, make(map[int]bool))
 	return results
 }
 
-// walkOutlineItemsForLang checks each outline item for a determinable language,
+// walkOutlineItemsForLang reports every outline item as undeterminable-language,
 // walking siblings iteratively via /Next and recursing into children via /First.
+// The caller established that the catalog declares no /Lang.
 // visited tracks resolved item object numbers across the whole walk: a crafted
 // /Next or /First cycle would otherwise recurse forever (a 700-byte file
 // exhausts the goroutine stack, which is not recoverable in Go), and a long flat
@@ -905,10 +910,11 @@ func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemOb
 			return
 		}
 
-		// Outline items need /Lang when catalog /Lang is absent.
-		if resolveNonEmptyLang(ctx, doc, item) == "" {
-			*results = append(*results, fail(Rule_14289_1_7_2_t02, "outline item")...)
-		}
+		// A /Lang on the item itself grants no exemption: ISO 32000-1:2008
+		// Table 153 defines no /Lang entry on an outline item dictionary, so a
+		// consumer has no defined way to read one. ISO 14289-1:2014 §7.2 t2 is
+		// therefore unsatisfiable here once the catalog omits /Lang.
+		*results = append(*results, fail(Rule_14289_1_7_2_t02, "outline item")...)
 
 		// Recurse into children; siblings continue the loop.
 		walkOutlineItemsForLang(ctx, doc, item["First"], results, depth+1, visited)

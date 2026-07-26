@@ -201,6 +201,54 @@ func TestCheckLangRequired_InlineMarkedContentLangSuppressesT34(t *testing.T) {
 	}
 }
 
+// outlineLangDoc builds a document whose catalog carries catalogEntries plus an
+// /Outlines pointing at two sibling items, the first of them carrying itemLang
+// verbatim (pass "" for none).
+func outlineLangDoc(t *testing.T, catalogEntries, itemLang string) (*document.Document, ast.PdfDict) {
+	t.Helper()
+	return tableDoc(t, 1,
+		"<< /Type /Catalog /Pages 2 0 R /Outlines 4 0 R "+catalogEntries+">>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /Outlines /First 5 0 R /Last 6 0 R /Count 2 >>",
+		"<< /Title (Chapter 1) /Parent 4 0 R /Next 6 0 R "+itemLang+">>",
+		"<< /Title (Chapter 2) /Parent 4 0 R /Prev 5 0 R >>",
+	)
+}
+
+// TestCheckOutlineLang_ItemLangDoesNotExemptEntry pins ISO 14289-1 §7.2 t2 for an
+// outline item carrying its own /Lang. ISO 32000-1 Table 153 defines no /Lang on
+// an outline item dictionary, so such a key is undefined and cannot make the
+// title's language determinable: veraPDF's PDOutline rule tests only
+// gContainsCatalogLang == true and its PDOutline model object exposes no
+// per-item language at all. Both items must be reported.
+func TestCheckOutlineLang_ItemLangDoesNotExemptEntry(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	doc, cat := outlineLangDoc(t, "", "/Lang (en-US) ")
+	got := checkOutlineLang(ctx, doc, cat, "PDF/UA-1")
+
+	if n := countRuleLang(got, Rule_14289_1_7_2_t02); n != 2 {
+		t.Errorf("undefined /Lang on an outline item grants no exemption: want 2 §7.2 t2, got %d (%v)", n, got)
+	}
+}
+
+// TestCheckOutlineLang_CatalogLangCoversOutline is the control: the catalog
+// /Lang of ISO 32000-1 §14.9.2 is the one source that determines an outline
+// title's language, so no item is reported when it is present.
+func TestCheckOutlineLang_CatalogLangCoversOutline(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	doc, cat := outlineLangDoc(t, "/Lang (en-US) ", "")
+	got := checkOutlineLang(ctx, doc, cat, "PDF/UA-1")
+
+	if hasRule(got, Rule_14289_1_7_2_t02) {
+		t.Errorf("catalog /Lang determines every outline title: want no §7.2 t2, got %v", got)
+	}
+}
+
 // xdefaultXMP builds a catalog XMP packet whose dc:title alternative carries
 // the given xml:lang qualifiers. Passing none omits the alternative entirely.
 func xdefaultXMP(langs ...string) string {
