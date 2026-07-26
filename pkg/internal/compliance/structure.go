@@ -828,11 +828,12 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		state.tableIrregular = !validateTableColumnConsistency(ctx, state, elem)
 		// ISO 14289-1 §7.2 t15 is a per-cell rule, but a cell only intersects
 		// relative to the table's grid, so the whole table is scanned once on
-		// entry rather than per cell during the recursion below. PDF/UA-2
-		// carries the same requirement under §8.2.5.26 t1 against a grid that
-		// also treats THead/TBody/TFoot boundaries as row-span limits, which is
-		// a different scan, so this stays scoped to PDF/UA-1.
-		if state.profile == "PDF/UA-1" {
+		// entry rather than per cell during the recursion below. ISO 14289-2
+		// §8.2.5.26 t1 is the same rule: both scope to SETableCell and both
+		// read "hasIntersection != true", so one scan serves both. The
+		// THead/TBody/TFoot row-span limit belongs to §8.2.5.26 t2, which
+		// scopes to SETable and is a different test.
+		if state.profile == "PDF/UA-1" || state.profile == "PDF/UA-2" {
 			validateTableCellIntersection(ctx, state, elem)
 		}
 	}

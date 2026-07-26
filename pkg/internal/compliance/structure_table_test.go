@@ -162,22 +162,33 @@ func TestTableCellIntersection(t *testing.T) {
 		"<< /Type /StructElem /S /TD /A << /ColSpan 2 >> >>",      // 9
 	}
 
-	fires := func(t *testing.T, objs []string) bool {
+	fires := func(t *testing.T, objs []string, profile string) bool {
 		t.Helper()
 		doc, table := tableDoc(t, 4, objs...)
 		var results []Violation
-		state := &walkState{doc: doc, results: &results, profile: "PDF/UA-1"}
+		state := &walkState{doc: doc, results: &results, profile: profile}
 		validateTableCellIntersection(context.Background(), state, table)
-		return hasRule(results, Rule_14289_1_7_2_t15)
+		want := Rule_14289_1_7_2_t15
+		if profile == "PDF/UA-2" {
+			want = Rule_14289_2_8_2_5_26_t01
+		}
+		return hasRule(results, want)
 	}
 
-	if !fires(t, intersecting) {
-		t.Error("a cell reaching into a slot another cell already claims must fire §7.2 t15")
-	}
-	if fires(t, shifted) {
-		t.Error("a /RowSpan shifts the next row's cells, so it must not fire §7.2 t15")
-	}
-	if fires(t, conforming) {
-		t.Error("a /ColSpan filling the grid width must not fire §7.2 t15")
+	// ISO 14289-2 §8.2.5.26 t1 is the same rule as ISO 14289-1 §7.2 t15: both
+	// scope to SETableCell and both read "hasIntersection != true", so one scan
+	// serves both profiles. The THead/TBody/TFoot row-span limit belongs to
+	// §8.2.5.26 t2, which scopes to SETable and is a different test. veraPDF
+	// 1.30.2 reports each of these identically under both profiles.
+	for _, profile := range []string{"PDF/UA-1", "PDF/UA-2"} {
+		if !fires(t, intersecting, profile) {
+			t.Errorf("%s: a cell reaching into a slot another cell already claims must fire", profile)
+		}
+		if fires(t, shifted, profile) {
+			t.Errorf("%s: a /RowSpan shifts the next row's cells, so it must not fire", profile)
+		}
+		if fires(t, conforming, profile) {
+			t.Errorf("%s: a /ColSpan filling the grid width must not fire", profile)
+		}
 	}
 }

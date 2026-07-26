@@ -558,11 +558,15 @@ func validateTableCellIntersection(ctx context.Context, state *walkState, tableE
 	if !found {
 		return
 	}
+	rule := Rule_14289_1_7_2_t15
+	if state.profile == "PDF/UA-2" {
+		rule = Rule_14289_2_8_2_5_26_t01
+	}
 	*state.results = append(*state.results,
-		failf(Rule_14289_1_7_2_t15, "table cell at row %d column %d intersects the cell at row %d column %d",
+		failf(rule, "table cell at row %d column %d intersects the cell at row %d column %d",
 			placed.row+1, placed.col+1, occupant.row+1, occupant.col+1)...)
 	*state.results = append(*state.results,
-		failf(Rule_14289_1_7_2_t15, "table cell at row %d column %d is intersected by the cell at row %d column %d",
+		failf(rule, "table cell at row %d column %d is intersected by the cell at row %d column %d",
 			occupant.row+1, occupant.col+1, placed.row+1, placed.col+1)...)
 }
 
