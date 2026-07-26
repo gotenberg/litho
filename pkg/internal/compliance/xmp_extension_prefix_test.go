@@ -2,6 +2,9 @@ package compliance
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -131,4 +134,96 @@ func TestExtensionSchema_MultipleDefsAfterNestedContainer(t *testing.T) {
 			t.Errorf("only the description is missing; got phantom %v", v)
 		}
 	}
+}
+
+// TestExtensionSchemaPrefix_ReportsOnlyTheFieldsCarryingIt pins two facets of
+// the wrong-prefix scan that veraPDF 1.30.2 settles. Each test of ISO 19005-1
+// §6.7.8 and ISO 19005-2/3 §6.6.2.3.3 names one field, so only the fields the
+// packet actually carries under the wrong prefix may be reported: emitting
+// every field of the level invented violations for fields that are correct.
+// And a wrong prefix at one level must not stop the scan, or every other defect
+// in the packet goes unreported.
+func TestExtensionSchemaPrefix_ReportsOnlyTheFieldsCarryingIt(t *testing.T) {
+	t.Parallel()
+
+	// Only pdfaSchema:schema carries the non-canonical prefix; namespaceURI,
+	// prefix and property are all correct, so only t2 may fire (part 2).
+	oneField := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+      xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"
+      xmlns:xSchema="http://www.aiim.org/pdfa/ns/schema#"
+      xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+      <pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+        <xSchema:schema>s</xSchema:schema>
+        <pdfaSchema:namespaceURI>http://x/</pdfaSchema:namespaceURI>
+        <pdfaSchema:prefix>x</pdfaSchema:prefix>
+        <pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource">
+          <pdfaProperty:name>n</pdfaProperty:name>
+          <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+          <pdfaProperty:category>external</pdfaProperty:category>
+          <pdfaProperty:description>d</pdfaProperty:description>
+        </rdf:li></rdf:Seq></pdfaSchema:property>
+      </rdf:li></rdf:Bag></pdfaExtension:schemas>
+    </rdf:Description>`)
+
+	var got []Violation
+	xmpCheckExtensionSchemas(context.Background(), oneField, 2, &got)
+	if !hasRule(got, Rule_19005_2_6_6_2_3_3_t02) {
+		t.Errorf("the misprefixed schema field must fire §6.6.2.3.3 t2: got %v", got)
+	}
+	for _, r := range []Rule{Rule_19005_2_6_6_2_3_3_t03, Rule_19005_2_6_6_2_3_3_t04} {
+		if hasRule(got, r) {
+			t.Errorf("field %s carries the canonical prefix and must not fire: got %v", r.Description, got)
+		}
+	}
+
+	// Both the schema and the property level are misprefixed. Reporting the
+	// first level and returning hid the second entirely.
+	twoLevels := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+      xmlns:xSchema="http://www.aiim.org/pdfa/ns/schema#"
+      xmlns:xProp="http://www.aiim.org/pdfa/ns/property#">
+      <pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+        <xSchema:schema>s</xSchema:schema>
+        <xSchema:namespaceURI>http://x/</xSchema:namespaceURI>
+        <xSchema:prefix>x</xSchema:prefix>
+        <xSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource">
+          <xProp:name>n</xProp:name>
+          <xProp:valueType>Text</xProp:valueType>
+          <xProp:category>external</xProp:category>
+          <xProp:description>d</xProp:description>
+        </rdf:li></rdf:Seq></xSchema:property>
+      </rdf:li></rdf:Bag></pdfaExtension:schemas>
+    </rdf:Description>`)
+
+	var both []Violation
+	xmpCheckExtensionSchemas(context.Background(), twoLevels, 2, &both)
+	if !hasRule(both, Rule_19005_2_6_6_2_3_3_t02) {
+		t.Errorf("schema level must still fire: got %v", both)
+	}
+	if !hasRule(both, Rule_19005_2_6_6_2_3_3_t07) {
+		t.Errorf("the property level must not be masked by the schema level: got %v", both)
+	}
+
+	// The same bytes must always produce the same violations. Ranging the
+	// prefix map and returning on the first hit made this depend on Go's
+	// randomised map iteration order.
+	first := violationRuleSet(both)
+	for range 32 {
+		var again []Violation
+		xmpCheckExtensionSchemas(context.Background(), twoLevels, 2, &again)
+		if got := violationRuleSet(again); got != first {
+			t.Fatalf("nondeterministic output: %q then %q", first, got)
+		}
+	}
+}
+
+// violationRuleSet renders a violation slice as a sorted, comparable key.
+func violationRuleSet(vs []Violation) string {
+	keys := make([]string, 0, len(vs))
+	for _, v := range vs {
+		keys = append(keys, fmt.Sprintf("%s-t%d", v.Rule.Clause, v.Rule.TestNumber))
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
 }

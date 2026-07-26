@@ -1270,6 +1270,28 @@ var xmpExpectedPrefix = map[string]string{
 	xmpPdfaFieldPrefix:    "pdfaField",
 }
 
+// xmpExtensionLevel is one level of the PDF/A extension schema, its fields, and
+// the rule that reports a field of that level.
+type xmpExtensionLevel struct {
+	uri    string
+	fields []string
+	rule   func(part int, field string) []Violation
+}
+
+// xmpExtensionLevels lists the extension schema levels in a fixed order so the
+// prefix scan emits the same violations for the same bytes. Ranging
+// [xmpExpectedPrefix] instead made the report depend on Go's map iteration
+// order. The field lists mirror the per-field tests of ISO 19005-1 §6.7.8 and
+// ISO 19005-2/3 §6.6.2.3.3.
+//
+//nolint:gochecknoglobals // static lookup table
+var xmpExtensionLevels = []xmpExtensionLevel{
+	{xmpPdfaSchemaPrefix, []string{"schema", "namespaceURI", "prefix", "property", "valueType"}, xmpExtSchemaRule},
+	{xmpPdfaPropertyPrefix, []string{"name", "valueType", "category", "description"}, xmpExtPropertyRule},
+	{xmpPdfaTypePrefix, []string{"type", "namespaceURI", "prefix", "description", "field"}, xmpExtValueTypeRule},
+	{xmpPdfaFieldPrefix, []string{"name", "valueType", "description"}, xmpExtFieldRule},
+}
+
 // dcTitleLangAltMalformed reports whether the XMP dc:title is a language
 // alternative (rdf:Alt) that veraPDF cannot resolve to a default value: two or
 // more rdf:li entries with none qualified xml:lang="x-default". veraPDF's
@@ -1459,42 +1481,31 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	// rdf:Description) binds no element, so it cannot violate the
 	// prefix requirement. Prefix correctness is a property of the
 	// elements that use a binding, not of the declaration itself.
-	for uri, expectedPrefix := range xmpExpectedPrefix {
+	// Each rule of the clause names one field, so only the fields the packet
+	// actually carries under the wrong prefix are reported. Reporting every
+	// field of the level instead invented violations for fields that are not
+	// there, and returning early hid every other defect in the packet.
+	//
+	// The URIs are visited in a fixed order. Ranging the map and returning on
+	// the first hit made the output depend on Go's randomised map iteration:
+	// on a packet misprefixed at two levels, repeated runs over identical
+	// bytes reported different rule sets.
+	for _, level := range xmpExtensionLevels {
+		expectedPrefix := xmpExpectedPrefix[level.uri]
 		actualPrefix := ""
-		for _, p := range xmpExtractAllPrefixesForURI(ctx, data, uri) {
+		for _, p := range xmpExtractAllPrefixesForURI(ctx, data, level.uri) {
 			if p != expectedPrefix && bytes.Contains(data, []byte("<"+p+":")) {
 				actualPrefix = p
 				break
 			}
 		}
-		if actualPrefix != "" {
-			switch uri {
-			case xmpPdfaSchemaPrefix:
-				*results = append(*results, xmpExtSchemaRule(part, "schema")...)
-				*results = append(*results, xmpExtSchemaRule(part, "namespaceURI")...)
-				*results = append(*results, xmpExtSchemaRule(part, "prefix")...)
-				*results = append(*results, xmpExtSchemaRule(part, "property")...)
-				*results = append(*results, xmpExtSchemaRule(part, "valueType")...)
-			case xmpPdfaPropertyPrefix:
-				*results = append(*results, xmpExtPropertyRule(part, "name")...)
-				*results = append(*results, xmpExtPropertyRule(part, "valueType")...)
-				*results = append(*results, xmpExtPropertyRule(part, "category")...)
-				*results = append(*results, xmpExtPropertyRule(part, "description")...)
-			case xmpPdfaTypePrefix:
-				*results = append(*results, xmpExtValueTypeRule(part, "type")...)
-				*results = append(*results, xmpExtValueTypeRule(part, "namespaceURI")...)
-				*results = append(*results, xmpExtValueTypeRule(part, "prefix")...)
-				*results = append(*results, xmpExtValueTypeRule(part, "description")...)
-				*results = append(*results, xmpExtValueTypeRule(part, "field")...)
-			case xmpPdfaFieldPrefix:
-				*results = append(*results, xmpExtFieldRule(part, "name")...)
-				*results = append(*results, xmpExtFieldRule(part, "valueType")...)
-				*results = append(*results, xmpExtFieldRule(part, "description")...)
+		if actualPrefix == "" {
+			continue
+		}
+		for _, field := range level.fields {
+			if bytes.Contains(data, []byte("<"+actualPrefix+":"+field)) {
+				*results = append(*results, level.rule(part, field)...)
 			}
-			// Skip SAX-based checks. Prefix mismatch means Go's XML parser
-			// resolved the URI correctly but the document uses the wrong prefix.
-			// The SAX parser would see correct URIs and not detect the issue.
-			return
 		}
 	}
 
