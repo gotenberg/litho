@@ -62,6 +62,7 @@ one deliberately rather than diffing it against a fresh build.
 | `complex_ua2.pdf`   | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations |
 | `forbidden_mix.pdf` | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW             |
 | `gstate_2b.pdf`     | PDF/A-2b     | Transfer functions and halftones in six graphics states        |
+| `limits_2b.pdf`     | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN          |
 | `megafont_2b.pdf`   | PDF/A-2b     | Font embedding and glyph-width scoping                         |
 | `multipage_2b.pdf`  | PDF/A-2b     | Three pages, a violation class unique to each                  |
 | `fontdict_2b.pdf`   | PDF/A-2b     | Font dictionary required keys; page box implementation limits  |
@@ -125,6 +126,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua2.pdf`   | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
 | `forbidden_mix.pdf` | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `gstate_2b.pdf`     | 6    | 12   | 10   | 10   | 10   | 11  | 7    | 7    |
+| `limits_2b.pdf`     | 7    | 11   | 9    | 9    | 9    | 7   | 10   | 8    |
 | `megafont_2b.pdf`   | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`  | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `fontdict_2b.pdf`   | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
@@ -390,6 +392,26 @@ All six tests of the clause fire, including `6.2.5/6` on the colorant and
 transfer function pairing, and the conforming state stays silent. Five
 different states carrying five different defects is the point: a check that
 reported the first and stopped would report one rule where five are due.
+
+## Implementation limits
+
+ISO 19005-2, 6.1.13 scatters its tests across object types rather than
+gathering them in one dictionary, so `limits_2b.pdf` plants each in a
+different part of the file:
+
+| Defect                                  | Rule       |
+| --------------------------------------- | ---------- |
+| annotation `/Contents` of 40000 bytes   | `6.1.13/3` |
+| resource key name longer than 127 bytes | `6.1.13/4` |
+| content nesting `q` 30 deep             | `6.1.13/8` |
+| DeviceN naming 33 colorants             | `6.1.13/9` |
+
+Four tests of the clause stay uncovered on purpose. `t7` needs more than
+8388607 indirect objects and `t10` a CMap with an out-of-range CID, neither of
+which belongs in a small fixture. `t1`, `t2` and `t5` need numbers a writer
+will not emit: pikepdf normalises a denormal such as `1e-40` to plain `0`,
+which `t5` explicitly permits, so it cannot be planted through these builders
+at all.
 
 ## Known divergences
 
