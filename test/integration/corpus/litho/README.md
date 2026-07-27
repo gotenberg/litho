@@ -171,6 +171,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontdict_2b.pdf`     | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `forbidden_mix.pdf`   | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `gstate_2b.pdf`       | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
+| `idprefix_2b.pdf`     | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
 | `imgxmp_4.pdf`        | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
 | `limits_1b.pdf`       | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
 | `limits_2b.pdf`       | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
@@ -181,9 +182,8 @@ which are covered under [Known divergences](#known-divergences).
 | `tables_ua1.pdf`      | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 | `tablespan_ua2.pdf`   | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
 | `trailer_2b.pdf`      | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
-| `idprefix_2b.pdf`     | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
-| `uaid_ua1.pdf`        | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
 | `ttencoding_2b.pdf`   | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
+| `uaid_ua1.pdf`        | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
 
 ### complex_1b.pdf at PDF/A-1b
 
