@@ -1961,21 +1961,29 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 			// rdf:Seq/rdf:Bag: open a container whose rdf:li items push the
 			// pending definition level (or the enclosing container's when
 			// no definition element preceded it).
-			if t.Name.Local == "Seq" || t.Name.Local == "Bag" {
+			// rdf:Alt counts as a container even though no rule requires one:
+			// an unrecognised container leaves its rdf:li children attributed to
+			// the enclosing schema container, which read them as a second schema
+			// entry and reported its fields missing.
+			if t.Name.Local == "Seq" || t.Name.Local == "Bag" || t.Name.Local == "Alt" {
 				level := xmpExtLevelSchema
 				switch {
 				case hasPending:
-					// §6.7.8 t7/t16: the valueType and field containers must be
-					// rdf:Seq; flag an explicit rdf:Bag.
+					// The valueType, field and property containers must each be an
+					// rdf:Seq: ISO 19005-1 §6.7.8 t7, t16 and t6, ISO 19005-2/3
+					// §6.6.2.3.3 t6, t15 and t5. Only an explicit rdf:Bag is
+					// flagged; veraPDF 1.30.2 accepts an rdf:Alt in all three.
 					if t.Name.Local == "Bag" {
 						switch pendingLevel {
 						case xmpExtLevelValueType:
 							*results = append(*results, xmpExtValueTypeSeqRule(part)...)
 						case xmpExtLevelField:
 							*results = append(*results, xmpExtFieldSeqRule(part)...)
-						case xmpExtLevelSchema, xmpExtLevelProperty:
-							// The schema and property containers are validated
-							// elsewhere (isValidBag and the existing property checks).
+						case xmpExtLevelProperty:
+							*results = append(*results, xmpExtPropertySeqRule(part)...)
+						case xmpExtLevelSchema:
+							// The schemas container is an rdf:Bag by definition
+							// (ISO 19005-1 §6.7.8 t2), checked by isValidBag.
 						}
 					}
 					level = pendingLevel
@@ -2115,11 +2123,23 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				currentProp.category = categoryText.String()
 			}
 
-			// Close the innermost container when its Seq/Bag closes.
-			if t.Name.Local == "Seq" || t.Name.Local == "Bag" {
+			// Close the innermost container. Alt opens one too, so it has to
+			// close one or the stack leaks into the following siblings.
+			if t.Name.Local == "Seq" || t.Name.Local == "Bag" || t.Name.Local == "Alt" {
 				if len(containerStack) > 0 {
 					containerStack = containerStack[:len(containerStack)-1]
 				}
+			}
+
+			// A definition element that closes while its level is still pending
+			// never opened a container at all, so it holds a bare value where the
+			// clause requires an rdf:Seq. ISO 19005-1 §6.7.8 t6 and
+			// ISO 19005-2/3 §6.6.2.3.3 t5 report that for the property container.
+			if hasPending && t.Name.Space == xmpPdfaSchemaPrefix && t.Name.Local == "property" {
+				if pendingLevel == xmpExtLevelProperty {
+					*results = append(*results, xmpExtPropertySeqRule(part)...)
+				}
+				hasPending = false
 			}
 
 			if strings.Contains(t.Name.Space, "pdfa/ns/extension") && t.Name.Local == "schemas" {
@@ -2243,6 +2263,21 @@ func xmpExtValueTypeSeqRule(part int) []Violation {
 		return fail(Rule_19005_2_6_6_2_3_3_t06, ctx)
 	case 3:
 		return fail(Rule_19005_3_6_6_2_3_3_t06, ctx)
+	}
+	return nil
+}
+
+// xmpExtPropertySeqRule returns the "schema property container shall be a valid
+// rdf:Seq" rule by part: ISO 19005-1 §6.7.8 t6, ISO 19005-2/3 §6.6.2.3.3 t5.
+func xmpExtPropertySeqRule(part int) []Violation {
+	const ctx = "pdfaSchema:property container is not a valid rdf:Seq"
+	switch part {
+	case 1:
+		return fail(Rule_19005_1_6_7_8_t06, ctx)
+	case 2:
+		return fail(Rule_19005_2_6_6_2_3_3_t05, ctx)
+	case 3:
+		return fail(Rule_19005_3_6_6_2_3_3_t05, ctx)
 	}
 	return nil
 }

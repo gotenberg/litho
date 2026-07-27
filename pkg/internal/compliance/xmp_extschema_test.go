@@ -506,3 +506,72 @@ func TestXMPExtPropertyCategoryValue(t *testing.T) {
 		t.Error("category absent: want §6.6.2.3.3 t9")
 	}
 }
+
+// TestExtensionSchemaPropertyContainer pins the container the schema property
+// list must use. ISO 19005-1 §6.7.8 t6 and ISO 19005-2/3 §6.6.2.3.3 t5 require
+// an rdf:Seq, and litho reported nothing at all for that container: the code
+// said the property level was "validated elsewhere" and no other check covered
+// it. veraPDF 1.30.2 fires on an rdf:Bag and on a bare value, and stays silent
+// on an rdf:Alt and on an omitted container, which is what these cases mirror.
+//
+// rdf:Alt also had to become a recognised container. While it was not, its
+// rdf:li children were attributed to the enclosing schemas container and read
+// as a second schema entry, so litho reported that entry's schema, namespaceURI
+// and prefix as missing: three false positives from one accepted construct.
+func TestExtensionSchemaPropertyContainer(t *testing.T) {
+	t.Parallel()
+
+	const prop = `<pdfaProperty:name>one</pdfaProperty:name>` +
+		`<pdfaProperty:valueType>Text</pdfaProperty:valueType>` +
+		`<pdfaProperty:category>external</pdfaProperty:category>` +
+		`<pdfaProperty:description>d</pdfaProperty:description>`
+
+	packet := func(container string) []byte {
+		return xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+      xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"
+      xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+      <pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+        <pdfaSchema:schema>Probe</pdfaSchema:schema>
+        <pdfaSchema:namespaceURI>http://example.org/probe#</pdfaSchema:namespaceURI>
+        <pdfaSchema:prefix>probe</pdfaSchema:prefix>
+        ` + container + `
+      </rdf:li></rdf:Bag></pdfaExtension:schemas>
+    </rdf:Description>`)
+	}
+
+	seq := func(kind string) string {
+		return `<pdfaSchema:property><rdf:` + kind + `><rdf:li rdf:parseType="Resource">` +
+			prop + `</rdf:li></rdf:` + kind + `></pdfaSchema:property>`
+	}
+
+	fires := func(t *testing.T, container string) []Violation {
+		t.Helper()
+		var got []Violation
+		xmpCheckExtensionSchemas(context.Background(), packet(container), 1, &got)
+		return got
+	}
+
+	if got := fires(t, seq("Bag")); !hasRule(got, Rule_19005_1_6_7_8_t06) {
+		t.Errorf("an rdf:Bag property container must fire §6.7.8 t6: got %v", got)
+	}
+	if got := fires(t, `<pdfaSchema:property>literal</pdfaSchema:property>`); !hasRule(got, Rule_19005_1_6_7_8_t06) {
+		t.Errorf("a bare value where an rdf:Seq belongs must fire §6.7.8 t6: got %v", got)
+	}
+	if got := fires(t, seq("Seq")); len(got) != 0 {
+		t.Errorf("a conforming rdf:Seq must fire nothing: got %v", got)
+	}
+	if got := fires(t, ""); len(got) != 0 {
+		t.Errorf("an omitted property container must fire nothing: got %v", got)
+	}
+	// The three schema-level fields are present, so an accepted rdf:Alt must
+	// not make them look missing.
+	for _, r := range []Rule{Rule_19005_1_6_7_8_t03, Rule_19005_1_6_7_8_t04, Rule_19005_1_6_7_8_t05} {
+		if got := fires(t, seq("Alt")); hasRule(got, r) {
+			t.Errorf("an rdf:Alt property container must not report a schema field missing: got %v", got)
+		}
+	}
+	if got := fires(t, seq("Alt")); len(got) != 0 {
+		t.Errorf("veraPDF accepts an rdf:Alt property container: got %v", got)
+	}
+}
