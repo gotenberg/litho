@@ -869,39 +869,48 @@ litho gap, not a veraPDF one. The masking bug behind it is fixed; what
 remains is a separate facet of the same rule, described under
 [Second bug found](#second-bug-found-pdfua-1-language-coverage-fixed-one-facet-remains).
 
-Three more litho gaps sit outside the corpus, because planting any of them
-would add a disagreeing cell rather than coverage. Each is worth a fixture the
-moment litho implements it.
+One litho gap and one veraPDF gap sit outside the corpus, because planting
+either would add a disagreeing cell rather than coverage.
 
-**`6.7.8/6`, the property container.** `isPropertyValidSeq` fails when
-`pdfaSchema:property` holds an `rdf:Bag` or a bare literal instead of an
-`rdf:Seq`. veraPDF reports it for either; litho reports neither. Its container
-check covers the `valueType` and `field` containers and names the schema and
-property containers as validated elsewhere, which the property container is
-not. Omitting `pdfaSchema:property` altogether is silent on both, so the test
-has no route the two tools agree on and `schemaprefix_1b.pdf` leaves it alone.
-The part-2 spelling is `6.6.2.3.3/5`, and it behaves the same way.
-
-**`6.7.8/9` and `6.7.8/18`, a value type nothing defines.** Both tests read
-`isValueTypeDefined == true`. A `pdfaProperty:valueType` or `pdfaField:valueType`
-naming a type no `pdfaType` entry declares makes veraPDF report them; litho
-checks that the field is present, never that the type it names exists.
-`schemaprefix_1b.pdf` reaches both tests by omitting the field instead, so the
-cell is covered and this facet stays open. The part-2 spellings are
-`6.6.2.3.3/8` and `6.6.2.3.3/17`.
-
-**`8.2.5.26/1`, a table cell intersection at PDF/UA-2.** litho implements the
-PDF/UA-1 twin of this test and not this one: `Rule_14289_2_8_2_5_26_t01` is
-referenced nowhere outside `rules.go`. The grid that makes both tools report
-`7.2/15` twice at PDF/UA-1 therefore draws `8.2.5.26/1` twice from veraPDF and
-nothing from litho at PDF/UA-2. A pure `/RowSpan` layout stays silent on both,
-so the intersecting grid is the only route to the test.
+**`6.1.9/1`, an `endobj` with no preceding EOL, where litho is right.** The
+clause reads "The object number and endobj keyword shall each be preceded by an
+EOL marker". An indirect object holding a bare integer, written
+`56 0 obj` then `20184endobj`, breaks it: `endobj` follows the digit `4`
+directly. litho reports it. veraPDF reports nothing, and the difference is the
+object's shape rather than the defect: the same missing EOL on a dictionary
+object draws `6.1.9/1` from both tools, while on an indirect integer only litho
+reports. veraPDF builds no `CosIndirect` for the scalar, so its
+`spacingCompliesPDFA` never runs. The clause names no object shape, so litho is
+right and veraPDF under-reports, the same way it drops a `/P`-less structure
+element under `8.2.1/2`. `pdfjs/issue1045.pdf`, `bug1011159.pdf` and
+`issue3566.pdf` all carry the construct.
 
 ## Closed since, not planted
 
-Three constructs were divergences when the fixtures around them were built.
-Each now agrees, so each is a coverage opportunity rather than a gap. None is
-in a committed fixture yet.
+Six constructs were divergences when the fixtures around them were built. Each
+now agrees, so each is a coverage opportunity rather than a gap. None is in a
+committed fixture yet.
+
+**`6.7.8/6`, the property container.** `pdfaSchema:property` holding an
+`rdf:Bag` or a bare value instead of an `rdf:Seq`. `817080d` wired the rule,
+which the container check had named as validated elsewhere while nothing
+validated it. An `rdf:Alt` there is accepted by both tools; until that commit it
+also made litho report the entry's schema, namespaceURI and prefix as missing,
+because an unrecognised container left its children attributed to the enclosing
+schemas container. The part-2 spelling is `6.6.2.3.3/5`.
+
+**`6.7.8/9` and `6.7.8/18`, a value type nothing defines.** `fa8e408`
+implemented `isValueTypeDefined` against the vocabulary veraPDF predefines: 26
+types for part 1 and 36 for parts 2 and 3, so `Colorant` and `Timecode` are
+undefined under part 1 and defined under the later parts. A type the same schema
+entry declares resolves in either order; one declared by a different entry
+resolves for neither. The part-2 spellings are `6.6.2.3.3/8` and `6.6.2.3.3/17`.
+
+**`8.2.5.26/1`, a table cell intersection at PDF/UA-2.** `8d6c3ab` widened the
+PDF/UA-1 scan to PDF/UA-2. Both tests scope to `SETableCell` and read
+`hasIntersection != true`, so one scan serves both; the `THead`/`TBody`/`TFoot`
+row-span limit that had been given as the reason for keeping them apart belongs
+to `8.2.5.26/2`, which scopes to `SETable`.
 
 **The wrong-prefix half of ISO 19005-1, 6.7.8.** Every test of the clause
 requires a specific namespace prefix, and a schema field carried under a second
