@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -1847,6 +1848,18 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	inCategory := false
 	var categoryText strings.Builder
 
+	// A schema entry's value-type references are judged against the types that
+	// same entry declares, so both are collected and evaluated when the entry
+	// closes. The usual XMP layout puts pdfaSchema:property before
+	// pdfaSchema:valueType, so the decision cannot be made when a property
+	// closes, and veraPDF 1.30.2 confirms a type declared in a different entry
+	// satisfies nothing in either direction.
+	inTypeText := false
+	typeTextKind := xmpTypeTextProperty
+	var typeText strings.Builder
+	var entryRefs []xmpTypeRef
+	entryDeclared := map[string]bool{}
+
 	currentLevel := func() xmpExtSchemaLevel {
 		if len(levelStack) == 0 {
 			return xmpExtLevelSchema
@@ -1881,6 +1894,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 					currentProp.hasName = true
 				case "valueType":
 					currentProp.hasValueType = true
+					entryRefs = append(entryRefs, xmpTypeRef{name: a.Value})
 				case "category":
 					currentProp.hasCategory = true
 					currentProp.category = a.Value
@@ -1891,6 +1905,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				switch a.Name.Local {
 				case "type":
 					currentValueType.hasType = true
+					entryDeclared[xmpSimplifyValueType(a.Value)] = true
 				case "namespaceURI":
 					currentValueType.hasNamespaceURI = true
 				case "prefix":
@@ -1904,6 +1919,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 					currentField.hasName = true
 				case "valueType":
 					currentField.hasValueType = true
+					entryRefs = append(entryRefs, xmpTypeRef{name: a.Value, field: true})
 				case "description":
 					currentField.hasDescription = true
 				}
@@ -2048,6 +2064,8 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 					currentProp.hasName = true
 				case "valueType":
 					currentProp.hasValueType = true
+					inTypeText, typeTextKind = true, xmpTypeTextProperty
+					typeText.Reset()
 				case "category":
 					currentProp.hasCategory = true
 					inCategory = true
@@ -2065,6 +2083,8 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				switch t.Name.Local {
 				case "type":
 					currentValueType.hasType = true
+					inTypeText, typeTextKind = true, xmpTypeTextDeclaration
+					typeText.Reset()
 				case "namespaceURI":
 					currentValueType.hasNamespaceURI = true
 				case "prefix":
@@ -2091,6 +2111,8 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 					currentField.hasName = true
 				case "valueType":
 					currentField.hasValueType = true
+					inTypeText, typeTextKind = true, xmpTypeTextField
+					typeText.Reset()
 				case "description":
 					currentField.hasDescription = true
 				}
@@ -2103,6 +2125,9 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 			}
 
 		case xml.CharData:
+			if inTypeText {
+				typeText.Write(t)
+			}
 			if inCategory {
 				categoryText.Write(t)
 			}
@@ -2121,6 +2146,19 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 			if inCategory && t.Name.Space == xmpPdfaPropertyPrefix && t.Name.Local == "category" {
 				inCategory = false
 				currentProp.category = categoryText.String()
+			}
+
+			if inTypeText && t.Name.Local == "valueType" || inTypeText && t.Name.Local == "type" {
+				inTypeText = false
+				value := strings.TrimSpace(typeText.String())
+				switch typeTextKind {
+				case xmpTypeTextDeclaration:
+					entryDeclared[xmpSimplifyValueType(value)] = true
+				case xmpTypeTextField:
+					entryRefs = append(entryRefs, xmpTypeRef{name: value, field: true})
+				default:
+					entryRefs = append(entryRefs, xmpTypeRef{name: value})
+				}
 			}
 
 			// Close the innermost container. Alt opens one too, so it has to
@@ -2210,6 +2248,9 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				}
 				// pdfaSchema:property and pdfaSchema:valueType are optional.
 				// A schema may declare only properties, only valueTypes, or both.
+				*results = append(*results, xmpExtUndefinedValueTypes(part, entryRefs, entryDeclared)...)
+				entryRefs = nil
+				entryDeclared = map[string]bool{}
 				currentSchema = schemaInfo{}
 			}
 		}
@@ -3359,4 +3400,110 @@ func acceptsRationalNotation(ns string) bool {
 		ns == "http://ns.adobe.com/exif/1.0/aux/" ||
 		ns == "http://ns.adobe.com/tiff/1.0/" ||
 		ns == "http://ns.adobe.com/xmp/1.0/DynamicMedia/"
+}
+
+// xmpTypeRef is one value-type reference made by a schema entry, either from a
+// pdfaProperty:valueType or, when field is true, a pdfaField:valueType.
+type xmpTypeRef struct {
+	name  string
+	field bool
+}
+
+// Which element a captured type name came from.
+const (
+	xmpTypeTextProperty = iota
+	xmpTypeTextField
+	xmpTypeTextDeclaration
+)
+
+// xmpValueTypeArrayPrefixes are the array wrappers veraPDF resolves before
+// looking a type up, so "Bag Text" resolves through "text".
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpValueTypeArrayPrefixes = []string{"alt ", "bag ", "seq "}
+
+// xmpChoicePattern mirrors veraPDF's ValidatorsContainer.getSimplifiedType,
+// which strips an open or closed choice qualifier before the lookup. That is
+// why "Closed Choice of Text" resolves through "text".
+//
+//nolint:gochecknoglobals // compiled-once pattern.
+var xmpChoicePattern = regexp.MustCompile(`^(open |closed )?(choice |choice$)(of )?`)
+
+// xmpSimplifyValueType normalises a value type the way veraPDF does before
+// looking it up: lower-case, choice qualifier removed, array wrapper removed,
+// surrounding space collapsed.
+func xmpSimplifyValueType(name string) string {
+	v := strings.ToLower(strings.TrimSpace(name))
+	v = strings.TrimSpace(xmpChoicePattern.ReplaceAllString(v, ""))
+	for _, prefix := range xmpValueTypeArrayPrefixes {
+		if strings.HasPrefix(v, prefix) {
+			v = strings.TrimSpace(strings.TrimPrefix(v, prefix))
+			break
+		}
+	}
+	return v
+}
+
+// xmpPredefinedValueTypes1 is the value-type vocabulary ISO 19005-1 files are
+// judged against. Taken from veraPDF 1.30.2's
+// ValidatorsContainerCreator.getPredefinedContainerForPDFA_1, whose registry
+// this mirrors key for key.
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpPredefinedValueTypes1 = map[string]bool{
+	"agentname": true, "boolean": true, "cfapattern": true, "date": true,
+	"devicesettings": true, "dimensions": true, "flash": true, "gpscoordinate": true,
+	"integer": true, "job": true, "lang alt": true, "locale": true, "mimetype": true,
+	"oecf/sfr": true, "propername": true, "rational": true, "real": true,
+	"renditionclass": true, "resourceevent": true, "resourceref": true, "text": true,
+	"thumbnail": true, "uri": true, "url": true, "version": true, "xpath": true,
+}
+
+// xmpPredefinedValueTypes23 extends [xmpPredefinedValueTypes1] with the ten
+// types ISO 19005-2 and -3 add, from veraPDF's
+// getPredefinedContainerForPDFA_2_3. The split is real: Colorant and Timecode
+// are undefined under part 1 and predefined under parts 2 and 3.
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpPredefinedValueTypes23 = map[string]bool{
+	"beatsplicestretch": true, "colorant": true, "font": true, "marker": true,
+	"media": true, "projectlink": true, "resamplestretch": true, "time": true,
+	"timecode": true, "timescalestretch": true,
+}
+
+// xmpValueTypeDefined reports whether a normalised type resolves for the part,
+// either as a predefined type or as one the schema entry declares itself.
+func xmpValueTypeDefined(part int, simplified string, declared map[string]bool) bool {
+	if simplified == "" || declared[simplified] || xmpPredefinedValueTypes1[simplified] {
+		return true
+	}
+	return part != 1 && xmpPredefinedValueTypes23[simplified]
+}
+
+// xmpExtUndefinedValueTypes reports every value type a schema entry names that
+// neither the part's predefined vocabulary nor the entry itself defines, per
+// ISO 19005-1 §6.7.8 t9 and t18 and ISO 19005-2/3 §6.6.2.3.3 t8 and t17.
+func xmpExtUndefinedValueTypes(part int, refs []xmpTypeRef, declared map[string]bool) []Violation {
+	var results []Violation
+	for _, ref := range refs {
+		if xmpValueTypeDefined(part, xmpSimplifyValueType(ref.name), declared) {
+			continue
+		}
+		ctx := fmt.Sprintf("value type %q is not defined", ref.name)
+		switch {
+		case ref.field && part == 1:
+			results = append(results, fail(Rule_19005_1_6_7_8_t18, ctx)...)
+		case ref.field && part == 2:
+			results = append(results, fail(Rule_19005_2_6_6_2_3_3_t17, ctx)...)
+		case ref.field && part == 3:
+			results = append(results, fail(Rule_19005_3_6_6_2_3_3_t17, ctx)...)
+		case part == 1:
+			results = append(results, fail(Rule_19005_1_6_7_8_t09, ctx)...)
+		case part == 2:
+			results = append(results, fail(Rule_19005_2_6_6_2_3_3_t08, ctx)...)
+		case part == 3:
+			results = append(results, fail(Rule_19005_3_6_6_2_3_3_t08, ctx)...)
+		}
+	}
+	return results
 }

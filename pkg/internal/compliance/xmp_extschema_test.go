@@ -575,3 +575,90 @@ func TestExtensionSchemaPropertyContainer(t *testing.T) {
 		t.Errorf("veraPDF accepts an rdf:Alt property container: got %v", got)
 	}
 }
+
+// TestExtensionSchemaValueTypeDefined pins ISO 19005-1 §6.7.8 t9 and t18 and
+// ISO 19005-2/3 §6.6.2.3.3 t8 and t17: a property or field may only name a
+// value type the part predefines or the same schema entry declares.
+//
+// The predefined vocabulary is part-dependent and was read out of veraPDF
+// 1.30.2 rather than guessed: its ValidatorsContainerCreator registers 26 types
+// for ISO 19005-1 and 36 for ISO 19005-2 and -3. Colorant and Timecode sit in
+// the second set only, which is what the part-split cases below check.
+func TestExtensionSchemaValueTypeDefined(t *testing.T) {
+	t.Parallel()
+
+	entry := func(body string) []byte {
+		return xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+      xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"
+      xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#"
+      xmlns:pdfaType="http://www.aiim.org/pdfa/ns/type#">
+      <pdfaExtension:schemas><rdf:Bag>` + body + `</rdf:Bag></pdfaExtension:schemas>
+    </rdf:Description>`)
+	}
+	schema := func(name, body string) string {
+		return `<rdf:li rdf:parseType="Resource">` +
+			`<pdfaSchema:schema>` + name + `</pdfaSchema:schema>` +
+			`<pdfaSchema:namespaceURI>http://example.org/` + name + `#</pdfaSchema:namespaceURI>` +
+			`<pdfaSchema:prefix>` + name + `</pdfaSchema:prefix>` + body + `</rdf:li>`
+	}
+	prop := func(vt string) string {
+		return `<pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource">` +
+			`<pdfaProperty:name>one</pdfaProperty:name>` +
+			`<pdfaProperty:valueType>` + vt + `</pdfaProperty:valueType>` +
+			`<pdfaProperty:category>external</pdfaProperty:category>` +
+			`<pdfaProperty:description>d</pdfaProperty:description>` +
+			`</rdf:li></rdf:Seq></pdfaSchema:property>`
+	}
+	declare := func(name string) string {
+		return `<pdfaSchema:valueType><rdf:Seq><rdf:li rdf:parseType="Resource">` +
+			`<pdfaType:type>` + name + `</pdfaType:type>` +
+			`<pdfaType:namespaceURI>http://example.org/` + name + `#</pdfaType:namespaceURI>` +
+			`<pdfaType:prefix>cus</pdfaType:prefix>` +
+			`<pdfaType:description>a custom type</pdfaType:description>` +
+			`</rdf:li></rdf:Seq></pdfaSchema:valueType>`
+	}
+
+	fires := func(t *testing.T, body string, part int, rule Rule) bool {
+		t.Helper()
+		var got []Violation
+		xmpCheckExtensionSchemas(context.Background(), entry(body), part, &got)
+		return hasRule(got, rule)
+	}
+
+	// Undefined everywhere.
+	if !fires(t, schema("s", prop("LithoBogusType")), 1, Rule_19005_1_6_7_8_t09) {
+		t.Error("a type nothing defines must fire §6.7.8 t9")
+	}
+	// Predefined, so silent. GUID is deliberately absent from veraPDF's
+	// registry, so it is undefined despite looking standard.
+	for _, vt := range []string{"Text", "Lang Alt", "Closed Choice of Text", "Bag Text", "RenditionClass"} {
+		if fires(t, schema("s", prop(vt)), 1, Rule_19005_1_6_7_8_t09) {
+			t.Errorf("%q is predefined and must not fire", vt)
+		}
+	}
+	if !fires(t, schema("s", prop("GUID")), 1, Rule_19005_1_6_7_8_t09) {
+		t.Error("GUID is not in veraPDF's registry, so it must fire")
+	}
+	// Part split: Colorant is defined for parts 2 and 3 only.
+	if !fires(t, schema("s", prop("Colorant")), 1, Rule_19005_1_6_7_8_t09) {
+		t.Error("Colorant is undefined under part 1")
+	}
+	if fires(t, schema("s", prop("Colorant")), 2, Rule_19005_2_6_6_2_3_3_t08) {
+		t.Error("Colorant is predefined under part 2")
+	}
+	// Declared by the same entry, in either order.
+	if fires(t, schema("s", prop("CustomKind")+declare("CustomKind")), 1, Rule_19005_1_6_7_8_t09) {
+		t.Error("a type the same entry declares after the property must resolve")
+	}
+	if fires(t, schema("s", declare("CustomKind")+prop("CustomKind")), 1, Rule_19005_1_6_7_8_t09) {
+		t.Error("a type the same entry declares before the property must resolve")
+	}
+	// Declared by a different entry: veraPDF resolves nothing across entries.
+	if !fires(t, schema("a", prop("CustomKind"))+schema("b", declare("CustomKind")), 1, Rule_19005_1_6_7_8_t09) {
+		t.Error("a type declared in another entry must not resolve")
+	}
+	if !fires(t, schema("a", declare("CustomKind"))+schema("b", prop("CustomKind")), 1, Rule_19005_1_6_7_8_t09) {
+		t.Error("a type declared in an earlier entry must not resolve either")
+	}
+}
