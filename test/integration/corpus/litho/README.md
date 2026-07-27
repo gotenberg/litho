@@ -79,6 +79,7 @@ one deliberately rather than diffing it against a fresh build.
 | `idprefix_2b.pdf`     | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
 | `uaid_ua1.pdf`        | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
 | `ttencoding_2b.pdf`   | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
+| `ttcmap_2b.pdf`       | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
 
 ### Must-not-fire controls
 
@@ -144,6 +145,8 @@ violation but is exempt, so a firing is a false positive.
 | `uaid_ua1`                                | `dc:title` present, with `/ViewerPreferences /DisplayDocTitle`         | ISO 14289-1, 7.1             |
 | `ttencoding_2b`                           | A symbolic TrueType carrying no `/Encoding`                            | ISO 19005-2, 6.2.11.6 t3     |
 | `ttencoding_2b`                           | A non-symbolic TrueType carrying `WinAnsiEncoding`                     | ISO 19005-2, 6.2.11.6 t2     |
+| `ttcmap_2b`                               | A non-symbolic program carrying both a (3,1) and a (1,0) subtable      | ISO 19005-2, 6.2.11.6 t1     |
+| `ttcmap_2b`                               | A symbolic program whose single subtable is the Microsoft Symbol (3,0) | ISO 19005-2, 6.2.11.6 t4     |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -182,6 +185,7 @@ which are covered under [Known divergences](#known-divergences).
 | `tables_ua1.pdf`      | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 | `tablespan_ua2.pdf`   | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
 | `trailer_2b.pdf`      | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
+| `ttcmap_2b.pdf`       | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
 | `ttencoding_2b.pdf`   | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
 | `uaid_ua1.pdf`        | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
 
@@ -465,6 +469,50 @@ omission rather than a missing check.
 
 Page 2 is two units square, below the three-unit minimum of ISO 19005-2,
 6.1.13, so both edges fail its implementation limit.
+
+## TrueType cmap subtable sets
+
+`ttencoding_2b.pdf` reaches ISO 19005-2, 6.2.11.6 t2 and t3, which read the font
+dictionary. Tests t1 and t4 of the same clause are scoped to
+`TrueTypeFontProgram` instead, so they need a real embedded program whose 'cmap'
+table carries particular (platformID, encodingID) subtables, and no fixture
+embedded a TrueType program at all. `build/_truetype.py` emits them, so the
+builders still depend on nothing but pikepdf.
+
+t1 judges non-symbolic programs and t4 symbolic ones, so no single font reaches
+both. `ttcmap_2b.pdf` draws four:
+
+| Font | Flags        | `cmap` subtables | Rule         |
+| ---- | ------------ | ---------------- | ------------ |
+| T1   | non-symbolic | (3,0) only       | `6.2.11.6/1` |
+| T2   | symbolic     | (1,0) and (3,1)  | `6.2.11.6/4` |
+| T3   | non-symbolic | (3,1) and (1,0)  | silent       |
+| T4   | symbolic     | (3,0) only       | silent       |
+
+Both defects are `TrueTypeFontProgram` rules, so a check that reports the first
+offending program and stops reports one rule where two are due, and the two
+conforming programs catch a check that condemns every embedded program once it
+sees one.
+
+The part split is real, and the same file exercises it at its other profiles.
+Parts 2 and 3 and PDF/UA-1 ask a non-symbolic program for at least one subtable,
+and for more than one when a Microsoft Symbol (3,0) is present, since a symbol
+subtable supplies no non-symbolic lookup. PDF/A-4 and PDF/UA-2 instead ask for a
+Microsoft Unicode (3,1) or a Macintosh Roman (1,0), whatever the count. PDF/A-1
+states no non-symbolic requirement at all, and reports T2 under its own symbolic
+rule `6.3.7/3` instead, since that part permits exactly one subtable.
+
+Two details are load-bearing and were measured rather than assumed. The programs
+carry their glyph names in a `post` table in format 2.0: with format 3.0 a
+non-symbolic font whose 'cmap' offers no usable subtable fails the glyph lookup
+as well and drags in `6.2.11.4.1/2`, which would mask the 'cmap' verdict. And
+the two defective fonts are drawn inside a `q`/`Q` pair, because ISO 32000-1,
+8.4.2 and Table 104 make the text font part of the graphics state: a validator
+that ignores the restore attributes the codes after it to the wrong font.
+
+litho reported t4 correctly at every part when the fixture was written, and t1
+at none of them. The rule constants existed but nothing referenced them, so the
+non-symbolic half of the check was absent while the symbolic half was complete.
 
 ## Extension schemas and the trailer
 
