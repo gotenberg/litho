@@ -136,6 +136,84 @@ func TestSymbolicCmapViolation(t *testing.T) {
 	}
 }
 
+// TestNonSymbolicCmapViolation pins the per-part cmap requirement for a
+// non-symbolic TrueType font program. PDF/A-1 states none. PDF/A-2, PDF/A-3 and
+// PDF/UA-1 require at least one subtable, and more than one when a Microsoft
+// Symbol (3,0) is present. PDF/A-4 and PDF/UA-2 instead require a Microsoft
+// Unicode (3,1) or a Macintosh Roman (1,0), whatever the count.
+func TestNonSymbolicCmapViolation(t *testing.T) {
+	sub := func(p, e uint16) truetype.CmapSubtable {
+		return truetype.CmapSubtable{PlatformID: p, EncodingID: e}
+	}
+	symbolOnly := []truetype.CmapSubtable{sub(3, 0)}
+	symbolAndUnicode := []truetype.CmapSubtable{sub(3, 0), sub(3, 1)}
+	unicodeOnly := []truetype.CmapSubtable{sub(3, 1)}
+	macOnly := []truetype.CmapSubtable{sub(1, 0)}
+	twoExotic := []truetype.CmapSubtable{sub(3, 2), sub(0, 3)}
+	none := []truetype.CmapSubtable{}
+
+	cases := []struct {
+		name    string
+		profile string
+		subs    []truetype.CmapSubtable
+		want    bool
+	}{
+		// A lone Microsoft Symbol carries no non-symbolic lookup, so the
+		// count-based levels reject it; PDF/A-4 and PDF/UA-2 reject it because
+		// it is neither (3,1) nor (1,0).
+		{"A2 symbol-only", "PDF/A-2b", symbolOnly, true},
+		{"A3 symbol-only", "PDF/A-3b", symbolOnly, true},
+		{"UA1 symbol-only", "PDF/UA-1", symbolOnly, true},
+		{"A4 symbol-only", "PDF/A-4", symbolOnly, true},
+		{"UA2 symbol-only", "PDF/UA-2", symbolOnly, true},
+
+		// Adding a Unicode subtable beside the Symbol satisfies every level.
+		{"A2 symbol+unicode", "PDF/A-2b", symbolAndUnicode, false},
+		{"UA1 symbol+unicode", "PDF/UA-1", symbolAndUnicode, false},
+		{"A4 symbol+unicode", "PDF/A-4", symbolAndUnicode, false},
+		{"UA2 symbol+unicode", "PDF/UA-2", symbolAndUnicode, false},
+
+		// A single Unicode or Mac subtable is fine everywhere.
+		{"A2 unicode-only", "PDF/A-2b", unicodeOnly, false},
+		{"A4 unicode-only", "PDF/A-4", unicodeOnly, false},
+		{"A2 mac-only", "PDF/A-2b", macOnly, false},
+		{"A4 mac-only", "PDF/A-4", macOnly, false},
+		{"UA2 mac-only", "PDF/UA-2", macOnly, false},
+
+		// Two subtables, neither Symbol nor Unicode nor Mac: the count-based
+		// levels accept them, PDF/A-4 and PDF/UA-2 do not. This is the case
+		// that discriminates the two predicates.
+		{"A2 two-exotic", "PDF/A-2b", twoExotic, false},
+		{"UA1 two-exotic", "PDF/UA-1", twoExotic, false},
+		{"A4 two-exotic", "PDF/A-4", twoExotic, true},
+		{"UA2 two-exotic", "PDF/UA-2", twoExotic, true},
+
+		// No cmap at all is a violation at every level that states the rule.
+		{"A2 none", "PDF/A-2b", none, true},
+		{"A4 none", "PDF/A-4", none, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := nonSymbolicCmapViolation(tc.profile, tc.subs); got != tc.want {
+				t.Errorf("nonSymbolicCmapViolation(%q) = %v, want %v", tc.profile, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNonSymbolicCmapRuleIsAbsentUnderPart1 pins that PDF/A-1 states no
+// non-symbolic cmap requirement, so the caller skips the check entirely.
+func TestNonSymbolicCmapRuleIsAbsentUnderPart1(t *testing.T) {
+	if rule := trueTypeNonSymbolicCmapRule("PDF/A-1b"); rule.Specification != "" {
+		t.Errorf("PDF/A-1b: got rule %s %s, want none", rule.Specification, rule.Clause)
+	}
+	for _, profile := range []string{"PDF/A-2b", "PDF/A-3b", "PDF/A-4", "PDF/UA-1", "PDF/UA-2"} {
+		if rule := trueTypeNonSymbolicCmapRule(profile); rule.Specification == "" {
+			t.Errorf("%s: got no rule, want one", profile)
+		}
+	}
+}
+
 // TestToUnicodeTrueTypeStandardBaseDifferences pins that a nonsymbolic TrueType
 // font with a standard base encoding and fully AGL-resolvable /Differences is
 // exempt from the /ToUnicode requirement (§6.2.11.7.2): every code maps to an

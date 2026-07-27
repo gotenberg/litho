@@ -127,6 +127,19 @@ func trueTypeSymbolicCmapRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_3_7_t03, Rule_19005_2_6_2_11_6_t04, Rule_19005_3_6_2_11_6_t04, Rule_19005_4_6_2_10_6_t04)
 }
 
+// trueTypeNonSymbolicCmapRule returns the rule for non-symbolic TrueType cmap
+// requirements. PDF/A-1 states no such requirement, so it returns the zero Rule
+// there and the caller skips the check.
+func trueTypeNonSymbolicCmapRule(profile string) Rule {
+	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return Rule_14289_2_8_4_5_7_t01
+		}
+		return Rule_14289_1_7_21_6_t01
+	}
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_2_11_6_t01, Rule_19005_3_6_2_11_6_t01, Rule_19005_4_6_2_10_6_t01)
+}
+
 // toUnicodeCMapValuesRule returns the ToUnicode CMap values rule.
 // The check only applies to profiles that require text-to-Unicode
 // mapping (Level A under Part 1, Levels U/A under Parts 2/3, and all

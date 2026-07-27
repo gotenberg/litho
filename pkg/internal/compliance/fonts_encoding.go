@@ -667,6 +667,43 @@ func symbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool {
 	}
 }
 
+// nonSymbolicCmapViolation reports whether a non-symbolic TrueType font's cmap
+// subtable set violates the conformance level's requirement. The permitted sets
+// differ by part, mirroring the veraPDF test expressions exactly:
+//
+//   - PDF/A-1:                        no such requirement at all.
+//   - PDF/A-2, 3 §6.2.11.6 t1 and
+//     PDF/UA-1 §7.21.6 t1:            at least one subtable, and more than one
+//     when a Microsoft Symbol (3,0) is present, since a symbol subtable alone
+//     carries no non-symbolic lookup.
+//   - PDF/A-4 §6.2.10.6 t1 and
+//     PDF/UA-2 §8.4.5.7 t1:           a Microsoft Unicode (3,1) or a Macintosh
+//     Roman (1,0) subtable, irrespective of the subtable count.
+func nonSymbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool {
+	var cmap30, cmap31, cmap10 bool
+	for _, s := range subs {
+		switch {
+		case s.PlatformID == 3 && s.EncodingID == 0:
+			cmap30 = true
+		case s.PlatformID == 3 && s.EncodingID == 1:
+			cmap31 = true
+		case s.PlatformID == 1 && s.EncodingID == 0:
+			cmap10 = true
+		}
+	}
+	if IsPDFUA(profile) {
+		if PDFUAPart(profile) == 2 {
+			return !cmap31 && !cmap10
+		}
+	} else if PDFAPart(profile) == 4 {
+		return !cmap31 && !cmap10
+	}
+	if cmap30 {
+		return len(subs) <= 1
+	}
+	return len(subs) == 0
+}
+
 // checkTrueTypeEncoding validates TrueType-specific encoding rules (rule 7).
 func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	var results []Violation
@@ -698,6 +735,17 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 			}
 		}
 	} else {
+		// The permitted cmap subtable set for a non-symbolic TrueType font
+		// depends on the conformance level the same way the symbolic set does.
+		// PDF/A-1 states no such requirement, so the rule is empty there.
+		if cmapRule := trueTypeNonSymbolicCmapRule(profile); cmapRule.Specification != "" {
+			if fontData := extractFontProgramData(ctx, doc, fd); len(fontData) > 0 {
+				if subs, err := truetype.CmapSubtables(fontData); err == nil && nonSymbolicCmapViolation(profile, subs) {
+					results = append(results, failf(cmapRule, "font %s on page %d: non-symbolic TrueType cmap subtable set is not permitted (%d subtables)", fontName, pageNum, len(subs))...)
+				}
+			}
+		}
+
 		// Non-symbolic TrueType must use MacRomanEncoding or WinAnsiEncoding.
 		rule := trueTypeEncodingNonSymbolicRule(profile)
 		if rule.Specification != "" {
