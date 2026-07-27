@@ -486,6 +486,11 @@ func differencesGlyphNames(ctx context.Context, doc *document.Document, encDict 
 	return result
 }
 
+// winAnsiBulletFloor is the highest WinAnsiEncoding code that stays undefined
+// when the table leaves it unused. Per ISO 32000-1, Annex D.2, every unused
+// code above octal 40 maps to the bullet character instead.
+const winAnsiBulletFloor = 0o40
+
 // predefinedEncodingNames returns a charCode → glyphName mapping for a
 // named PDF encoding.
 func predefinedEncodingNames(name string) map[byte]string {
@@ -504,6 +509,18 @@ func predefinedEncodingNames(name string) map[byte]string {
 	for code, r := range table {
 		if glyphName := encodings.RuneToGlyph(r); glyphName != "" {
 			result[code] = glyphName
+		}
+	}
+	// Per ISO 32000-1, Annex D.2, all unused WinAnsiEncoding codes greater than
+	// octal 40 map to the bullet character. Reading those codes as undefined
+	// reported a .notdef reference where the encoding in fact selects a glyph.
+	// The rule is specific to WinAnsiEncoding: MacRomanEncoding and
+	// MacExpertEncoding leave their unused codes undefined.
+	if name == "WinAnsiEncoding" {
+		for code := winAnsiBulletFloor + 1; code <= 0xFF; code++ {
+			if _, ok := result[byte(code)]; !ok {
+				result[byte(code)] = "bullet"
+			}
 		}
 	}
 	return result

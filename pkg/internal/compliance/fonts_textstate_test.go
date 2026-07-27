@@ -84,3 +84,45 @@ func TestCollectFontUsageRestoresTextStateOnQ(t *testing.T) {
 		}
 	})
 }
+
+// Per ISO 32000-1, Annex D.2, all unused WinAnsiEncoding codes greater than
+// octal 40 map to the bullet character rather than staying undefined. The rule
+// is specific to WinAnsiEncoding.
+func TestPredefinedEncodingNamesWinAnsiUnusedCodesMapToBullet(t *testing.T) {
+	winAnsi := predefinedEncodingNames("WinAnsiEncoding")
+	if winAnsi == nil {
+		t.Fatal("WinAnsiEncoding table missing")
+	}
+
+	// Codes the table leaves unused, all above octal 40.
+	for _, code := range []byte{0x7F, 0x81, 0x8D, 0x8F, 0x90, 0x9D} {
+		if got := winAnsi[code]; got != "bullet" {
+			t.Errorf("WinAnsi code %#x: got %q, want \"bullet\"", code, got)
+		}
+	}
+
+	// Assigned codes keep their own glyph, so the fill must not overwrite.
+	if got := winAnsi['A']; got != "A" {
+		t.Errorf("WinAnsi code 'A': got %q, want \"A\"", got)
+	}
+
+	// At and below octal 40 the codes stay undefined.
+	for code := 0; code <= winAnsiBulletFloor; code++ {
+		if got, ok := winAnsi[byte(code)]; ok && got == "bullet" {
+			t.Errorf("WinAnsi code %#x is at or below the floor and must not map to bullet", code)
+		}
+	}
+
+	// The bullet rule does not extend to the other predefined encodings.
+	for _, name := range []string{"MacRomanEncoding", "MacExpertEncoding"} {
+		table := predefinedEncodingNames(name)
+		if table == nil {
+			t.Fatalf("%s table missing", name)
+		}
+		for _, code := range []byte{0x81, 0x8D} {
+			if got, ok := table[code]; ok && got == "bullet" {
+				t.Errorf("%s code %#x must not be filled with bullet", name, code)
+			}
+		}
+	}
+}
