@@ -78,6 +78,7 @@ one deliberately rather than diffing it against a fresh build.
 | `imgxmp_4.pdf`        | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
 | `idprefix_2b.pdf`     | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
 | `uaid_ua1.pdf`        | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
+| `ttencoding_2b.pdf`   | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
 
 ### Must-not-fire controls
 
@@ -141,6 +142,8 @@ violation but is exempt, so a firing is a false positive.
 | `idprefix_2b`                             | An extension schema conforming in every field beside the defects       | ISO 19005-2, 6.6.2.3.3       |
 | `uaid_ua1`                                | `pdfuaid:part` keeps its canonical prefix and fires on value only      | ISO 14289-1, 5 t3            |
 | `uaid_ua1`                                | `dc:title` present, with `/ViewerPreferences /DisplayDocTitle`         | ISO 14289-1, 7.1             |
+| `ttencoding_2b`                           | A symbolic TrueType carrying no `/Encoding`                            | ISO 19005-2, 6.2.11.6 t3     |
+| `ttencoding_2b`                           | A non-symbolic TrueType carrying `WinAnsiEncoding`                     | ISO 19005-2, 6.2.11.6 t2     |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -180,6 +183,7 @@ which are covered under [Known divergences](#known-divergences).
 | `trailer_2b.pdf`      | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 | `idprefix_2b.pdf`     | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
 | `uaid_ua1.pdf`        | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
+| `ttencoding_2b.pdf`   | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
 
 ### complex_1b.pdf at PDF/A-1b
 
