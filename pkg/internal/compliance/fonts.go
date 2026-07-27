@@ -33,6 +33,20 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 	currentFont := ""
 	renderMode := 0 // default rendering mode is 0 (fill)
 
+	// Per ISO 32000-1, 8.4.2 the graphics state includes the text state, and
+	// Table 104 counts the text font and the text rendering mode among its
+	// parameters, so Q restores both. Reading Tf as if it persisted past the
+	// enclosing Q attributes character codes to whichever font happens to have
+	// been selected last, which is how an unrelated font came to be reported
+	// for glyphs it never showed. The stack holds one entry per q operator
+	// already present in the materialized operator slice, so it needs no bound
+	// of its own.
+	type savedTextState struct {
+		font       string
+		renderMode int
+	}
+	var gsStack []savedTextState
+
 	getOrCreate := func(name string) *fontUsageInfo {
 		if u, ok := usage[name]; ok {
 			return u
@@ -67,6 +81,13 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 
 	for _, op := range ops {
 		switch op.Operator {
+		case "q":
+			gsStack = append(gsStack, savedTextState{font: currentFont, renderMode: renderMode})
+		case "Q":
+			if n := len(gsStack); n > 0 {
+				currentFont, renderMode = gsStack[n-1].font, gsStack[n-1].renderMode
+				gsStack = gsStack[:n-1]
+			}
 		case "Tf":
 			if len(op.Operands) >= 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
@@ -599,10 +620,20 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 
 	var actualTextStack []bool // per open BDC/BMC: does it carry /ActualText?
 	var mcidStack []int        // per open BDC/BMC: the effective /MCID (-1 if none)
+	var fontStack []string     // per open q: the text font Q restores
 	currentFont := ""
 	currentMCID := -1
 	for _, op := range ops {
 		switch op.Operator {
+		case "q":
+			// The text font is part of the graphics state, so Q restores it.
+			// See ISO 32000-1, 8.4.2 and Table 104.
+			fontStack = append(fontStack, currentFont)
+		case "Q":
+			if n := len(fontStack); n > 0 {
+				currentFont = fontStack[n-1]
+				fontStack = fontStack[:n-1]
+			}
 		case "BDC", "BMC":
 			actualTextStack = append(actualTextStack, bdcHasActualText(ctx, doc, op, resolveProps))
 			mcid := bdcMCID(ctx, doc, op, resolveProps)

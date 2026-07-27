@@ -893,6 +893,10 @@ func pageType3RenderedCodes(ctx context.Context, doc *document.Document, page as
 		return out
 	}
 	current := ""
+	// The text font belongs to the graphics state, so Q restores it. See ISO
+	// 32000-1, 8.4.2 and Table 104. Without this the codes shown after a
+	// restore are attributed to whichever font Tf named last.
+	var fontStack []string
 	record := func(s ast.PdfString) {
 		if current == "" {
 			return
@@ -908,6 +912,13 @@ func pageType3RenderedCodes(ctx context.Context, doc *document.Document, page as
 	}
 	for _, op := range ops {
 		switch op.Operator {
+		case "q":
+			fontStack = append(fontStack, current)
+		case "Q":
+			if n := len(fontStack); n > 0 {
+				current = fontStack[n-1]
+				fontStack = fontStack[:n-1]
+			}
 		case "Tf":
 			if len(op.Operands) >= 1 {
 				if n, ok := op.Operands[0].(ast.PdfName); ok {
