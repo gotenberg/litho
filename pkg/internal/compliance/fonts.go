@@ -146,13 +146,19 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	checked := make(map[string]bool)
 	checkedObjs := make(map[int]bool)
 
+	// The embedding rule runs once per font object, on the first page that
+	// selects it, but it is gated on visible rendering. A font drawn invisibly
+	// on that page and visibly on a later one must still be judged, so
+	// visibility is answered for the whole document rather than one page.
+	visibleAnywhere := collectVisibleFontObjects(ctx, doc, vctx)
+
 	for pageIdx := range vctx.pages {
 		p := &vctx.pages[pageIdx]
 		if ctx.Err() != nil {
 			return results
 		}
 
-		results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, pageIdx+1, profile, checked, checkedObjs)...)
+		results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, pageIdx+1, profile, checked, checkedObjs, visibleAnywhere)...)
 
 		// Fonts referenced only from annotation appearance streams are never
 		// reached by the page /Resources/Font walk above. veraPDF validates them
@@ -178,7 +184,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // in a page's /Resources/Font. It records each resolved font object number in
 // checkedObjs so [checkAnnotationAppearanceFonts] does not re-check a font that
 // is also declared on the page.
-func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog ast.PdfDict, p *pageCtx, pageNum int, profile string, checked map[string]bool, checkedObjs map[int]bool) []Violation {
+func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog ast.PdfDict, p *pageCtx, pageNum int, profile string, checked map[string]bool, checkedObjs map[int]bool, visibleAnywhere map[int]bool) []Violation {
 	resources := p.resources
 	if resources == nil {
 		return nil
@@ -219,10 +225,12 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		// dict has no object number and is page-local, so it falls back to
 		// name dedup.
 		ref, isIndirect := fontRef.(ast.PdfIndirectRef)
+		// A font object already seen has had its dictionary rules reported, but
+		// this page's usage is still unjudged: the codes it shows here may
+		// differ from those on the page that first selected it.
+		dictRulesDone := false
 		if isIndirect {
-			if checkedObjs[ref.ObjectNum] {
-				continue
-			}
+			dictRulesDone = checkedObjs[ref.ObjectNum]
 		} else if checked[fontKey] {
 			continue
 		}
@@ -257,10 +265,25 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		if isIndirect {
 			checkedObjs[ref.ObjectNum] = true
 		}
-		// Skip width/embedding checks for fonts not used for visible rendering.
+		// Skip width checks for fonts not used for visible rendering here.
 		isVisible := parseFailed || (usage != nil && usage.visible)
+		// Embedding is judged once per object, so it asks whether any page
+		// renders the font visibly.
+		embedVisible := isVisible
+		if isIndirect && visibleAnywhere[ref.ObjectNum] {
+			embedVisible = true
+		}
 
-		results = append(results, checkSingleFont(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
+		if !dictRulesDone {
+			results = append(results, checkFontDictRules(ctx, doc, font, fontKey, pageNum, profile, embedVisible, usage)...)
+		}
+		if fontSubtype(ctx, doc, font) == "Type0" {
+			if !dictRulesDone {
+				results = append(results, checkType0Font(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
+			}
+		} else {
+			results = append(results, checkFontUsageRules(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
+		}
 
 		// PUA ActualText check (needs page and catalog context).
 		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog)...)
@@ -497,43 +520,68 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 // (the font is not used for visible rendering). Usage provides per-charCode
 // usage information for ToUnicode exemption checks.
 func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
+	results := checkFontDictRules(ctx, doc, fontDict, fontName, pageNum, profile, isVisible, usage)
+	if fontSubtype(ctx, doc, fontDict) == "Type0" {
+		return append(results, checkType0Font(ctx, doc, fontDict, fontName, pageNum, profile, isVisible, usage)...)
+	}
+	return append(results, checkFontUsageRules(ctx, doc, fontDict, fontName, pageNum, profile, isVisible, usage)...)
+}
+
+// checkFontDictRules runs the checks that read only the font dictionary, so
+// they hold for the font object wherever it is used. A page pass runs them once
+// per font object: repeating them per page would report the same dictionary
+// defect once for every page that selects the font.
+func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
 	var results []Violation
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 
 	// Required font-dictionary keys (PDFont): §6.3.2 / §6.2.11.2 / §6.2.10.2.
 	results = append(results, checkFontRequiredKeys(ctx, doc, fontDict, subtype, PDFAPart(profile))...)
-
-	// Type 3 fonts have no font program, so skip embedding checks.
-	isType3 := isType3Font(ctx, doc, fontDict)
-
-	// Type 0 (composite) fonts: check descendant CIDFonts.
 	if subtype == "Type0" {
-		results = append(results, checkType0Font(ctx, doc, fontDict, fontName, pageNum, profile, isVisible, usage)...)
 		return results
 	}
 
 	// Required keys for simple fonts: /FirstChar, /LastChar, /Widths.
 	results = append(results, checkSimpleFontRequiredKeys(ctx, doc, fontDict, PDFAPart(profile))...)
 
-	// Font embedding: only for fonts used for visible rendering.
+	// Font embedding: only for fonts used for visible rendering. Type 3 fonts
+	// have no font program, so they are exempt.
 	if isVisible {
-		results = append(results, checkFontEmbedding(ctx, doc, fontDict, fontName, pageNum, profile, isType3)...)
+		results = append(results, checkFontEmbedding(ctx, doc, fontDict, fontName, pageNum, profile, isType3Font(ctx, doc, fontDict))...)
 	}
-
-	// ToUnicode mapping.
-	results = append(results, checkToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// TrueType encoding.
 	if subtype == "TrueType" {
 		results = append(results, checkTrueTypeEncoding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 	}
 
-	// Glyph width consistency: only for fonts used for visible rendering.
+	// Glyph widths compare the /Widths array against the font program, which is
+	// a property of the font object rather than of one page's codes, so this
+	// belongs with the dictionary rules. Judging it per page reported width
+	// defects veraPDF does not raise.
 	if isVisible {
 		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
-		// Glyph presence (§6.3.8 / §6.2.11.4.1 t2 / §6.2.10.4.1 t2): every
-		// glyph referenced for visible rendering must exist in the program.
+	}
+
+	return results
+}
+
+// checkFontUsageRules runs the checks whose verdict depends on which character
+// codes a content stream actually shows. veraPDF builds a glyph per
+// text-showing operator, so these hold per page rather than per font object: a
+// font object shared by several pages must be judged against each page's own
+// usage, or a glyph defect that first appears on a later page is never seen.
+// Simple fonts only; [checkType0Font] covers the composite path.
+func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
+	var results []Violation
+
+	// ToUnicode mapping.
+	results = append(results, checkToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
+
+	// Glyph presence (§6.3.8 / §6.2.11.4.1 t2 / §6.2.10.4.1 t2): every glyph
+	// referenced for visible rendering must exist in the program.
+	if isVisible {
 		results = append(results, checkSimpleGlyphPresence(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 	}
 
@@ -1508,4 +1556,41 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 		return nil
 	}
 	return failf(rule, "font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)
+}
+
+// collectVisibleFontObjects returns the font object numbers that at least one
+// page renders visibly. The embedding rule is reported once per font object, so
+// it cannot ask a single page whether the font is visible: a font drawn in
+// rendering mode 3 on the page that happens to declare it first, and normally on
+// a later page, is embedded-or-not regardless of which page is asked.
+func collectVisibleFontObjects(ctx context.Context, doc *document.Document, vctx *validationCtx) map[int]bool {
+	visible := make(map[int]bool)
+	for pageIdx := range vctx.pages {
+		if ctx.Err() != nil {
+			return visible
+		}
+		p := &vctx.pages[pageIdx]
+		if p.resources == nil {
+			continue
+		}
+		fontDict, err := document.ResolveDict(ctx, doc, p.resources["Font"])
+		if err != nil || fontDict == nil {
+			continue
+		}
+		pageUsage := collectFontUsage(p.parsedOps(ctx))
+		for name, ref := range fontDict {
+			indirect, ok := ref.(ast.PdfIndirectRef)
+			if !ok {
+				continue
+			}
+			if p.parseFailed {
+				visible[indirect.ObjectNum] = true
+				continue
+			}
+			if u := pageUsage[string(name)]; u != nil && u.visible {
+				visible[indirect.ObjectNum] = true
+			}
+		}
+	}
+	return visible
 }
