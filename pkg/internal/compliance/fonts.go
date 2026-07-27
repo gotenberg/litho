@@ -950,10 +950,31 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 			if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
 				symbolic = isSymbolicFont(ctx, doc, fd)
 			}
+			// veraPDF names a glyph ".notdef" exactly when the font program does
+			// not contain the code (GFGlyph: containsCode(code) ? getGlyphName
+			// : ".notdef"). With no program embedded there is nothing to consult,
+			// so the declared encoding decides: a code its table leaves undefined
+			// selects no glyph. MacExpertEncoding is the case that exposed this,
+			// defining nothing at 'A' or 'B'. An embedded program is NOT judged
+			// this way, because it can still supply a code the encoding omits
+			// (ISO 32000-1, 9.6.6.2); answering that needs the program's own
+			// charset, which this check does not read, so it stays silent there.
+			namedTable := ""
+			if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd == nil ||
+				extractFontProgramData(ctx, doc, fd) == nil {
+				namedTable = namedEncodingTable(ctx, doc, fontDict)
+			}
 			for _, code := range sortedByteKeys(usage.charCodes) {
 				glyphName := enc[code]
 				if glyphName == ".notdef" {
 					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+				}
+				// The symbolic and DEL exemptions below apply here too: a
+				// symbolic font resolves codes through its built-in encoding
+				// (ISO 32000-1, 9.6.6.2) and some fonts do define a DEL glyph.
+				if glyphName == "" && namedTable != "" && !symbolic && code != 0x7F {
+					return failf(rule, "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
+						fontName, pageNum, code, namedTable)
 				}
 				if glyphName == "" && code < 0x20 && !symbolic {
 					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)

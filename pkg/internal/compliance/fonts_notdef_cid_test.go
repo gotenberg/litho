@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -67,5 +68,67 @@ func TestCheckType0NotdefGlyph_CIDFontType2(t *testing.T) {
 	// so firing 6.2.11.8 here would be a false positive.
 	if v := check(100); len(v) != 0 {
 		t.Errorf("CID 100 (beyond the glyph table) must not fire the .notdef rule, got %v", v)
+	}
+}
+
+// TestNotdefUnembeddedNamedEncodingGap pins that a code the declared encoding
+// leaves undefined references .notdef when no font program is embedded.
+//
+// veraPDF names a glyph ".notdef" exactly when the font program does not
+// contain the code, which its GFGlyph constructor expresses as
+// containsCode(code) ? getGlyphName(code) : ".notdef". With nothing embedded
+// there is no program to consult, so the declared encoding decides.
+// MacExpertEncoding defines no glyph at 'A' or 'B', so showing those codes
+// references .notdef under ISO 19005-2, 6.2.11.8 t1.
+//
+// An embedded program is deliberately not judged this way: per ISO 32000-1,
+// 9.6.6.2 it can supply a code the encoding omits, and answering that needs the
+// program's own charset.
+func TestNotdefUnembeddedNamedEncodingGap(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	fires := func(t *testing.T, encoding string, flags int) bool {
+		t.Helper()
+		enc := ""
+		if encoding != "" {
+			enc = " /Encoding /" + encoding
+		}
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> >>",
+			"<< /Type /FontDescriptor /FontName /LithoTT /Flags "+strconv.Itoa(flags)+" /ItalicAngle 0"+
+				" /Ascent 718 /Descent -207 /CapHeight 718 /StemV 88 /FontBBox [-166 -225 1000 931] >>",
+			"<< /Type /Font /Subtype /TrueType /BaseFont /LithoTT /FirstChar 65 /LastChar 66"+
+				" /Widths [722 722] /FontDescriptor 4 0 R"+enc+" >>",
+		)
+		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 5})
+		if err != nil {
+			t.Fatalf("resolve font: %v", err)
+		}
+		usage := &fontUsageInfo{charCodes: map[byte]bool{65: true, 66: true}}
+		got := checkNotdefGlyph(ctx, doc, fontDict, "F1", 1, "PDF/A-2b", usage)
+		return hasRule(got, Rule_19005_2_6_2_11_8_t01)
+	}
+
+	const nonSymbolic, symbolic = 32, 4
+
+	if !fires(t, "MacExpertEncoding", nonSymbolic) {
+		t.Error("MacExpertEncoding defines no glyph at 'A', so the code references .notdef")
+	}
+	for _, encoding := range []string{"WinAnsiEncoding", "MacRomanEncoding"} {
+		if fires(t, encoding, nonSymbolic) {
+			t.Errorf("%s defines 'A', so nothing may fire", encoding)
+		}
+	}
+	// No declared encoding keeps the Annex D standard-encoding default, which
+	// covers printable ASCII, so an absent table entry says nothing.
+	if fires(t, "", nonSymbolic) {
+		t.Error("a font declaring no encoding must keep the standard-encoding default")
+	}
+	// A symbolic font resolves codes through its built-in encoding.
+	if fires(t, "MacExpertEncoding", symbolic) {
+		t.Error("a symbolic font is exempt, per ISO 32000-1 9.6.6.2")
 	}
 }

@@ -1192,3 +1192,30 @@ func isPUAHex(token string) bool {
 		(val >= 0xF0000 && val <= 0xFFFFF) || // Supplementary PUA-A
 		(val >= 0x100000 && val <= 0x10FFFD) // Supplementary PUA-B
 }
+
+// namedEncodingTable returns the predefined encoding a simple font declares,
+// either as a direct /Encoding name or as the /BaseEncoding of an encoding
+// dictionary, and an empty string when the font declares none. Per
+// ISO 32000-1, 9.6.6.1 a named encoding replaces the font's built-in one, so a
+// code that table leaves undefined selects no glyph.
+func namedEncodingTable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) string {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return ""
+	}
+	if encName, err := document.ResolveName(ctx, doc, encObj); err == nil && encName != "" {
+		if predefinedEncodingNames(string(encName)) != nil {
+			return string(encName)
+		}
+		return ""
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return ""
+	}
+	baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
+	if err != nil || baseName == "" || predefinedEncodingNames(string(baseName)) == nil {
+		return ""
+	}
+	return string(baseName)
+}
