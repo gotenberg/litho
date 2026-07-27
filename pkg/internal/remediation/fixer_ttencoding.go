@@ -64,6 +64,14 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if subtype != "TrueType" {
 			continue
 		}
+		// A symbolic TrueType font resolves codes through its own built-in
+		// encoding, and ISO 19005-2, 6.2.11.6 t3 (ISO 19005-1, 6.3.7 t2, and
+		// ISO 19005-4, 6.2.10.6 t3) forbid it an /Encoding entry outright.
+		// Normalising one onto it would introduce the very violation this
+		// package exists to remove.
+		if isSymbolicTrueType(ctx, doc, fontDict) {
+			continue
+		}
 
 		encObj := fontDict["Encoding"]
 		switch enc := encObj.(type) {
@@ -111,6 +119,26 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		return nil, nil
 	}
 	return []string{fmt.Sprintf("normalised TrueType /Encoding on %d font(s)", count)}, nil
+}
+
+// symbolicFontFlag is bit 3 of the font descriptor /Flags, which per ISO
+// 32000-1, Table 123 marks a font whose character set lies outside the
+// Adobe standard Latin set.
+const symbolicFontFlag = 1 << 2
+
+// isSymbolicTrueType reports whether a font dictionary's descriptor marks it
+// symbolic. A font with no readable descriptor is treated as non-symbolic,
+// matching the encoding rules that apply when the flag cannot be established.
+func isSymbolicTrueType(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	descriptor, err := document.ResolveDict(ctx, doc, fontDict["FontDescriptor"])
+	if err != nil || descriptor == nil {
+		return false
+	}
+	flags, err := document.ResolveInt(ctx, doc, descriptor["Flags"])
+	if err != nil {
+		return false
+	}
+	return flags&symbolicFontFlag != 0
 }
 
 // patchEncodingDict sets /BaseEncoding to WinAnsiEncoding when it is
