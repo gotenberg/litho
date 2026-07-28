@@ -1,0 +1,74 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /Lang (en-US) /MarkInfo << /Marked true /Suspects true >> /Pages 2 0 R /StructTreeRoot 3 0 R /Type /Catalog /ViewerPreferences << /DisplayDocTitle true >> >>
+endobj
+2 0 obj
+<< /Count 1 /Kids [ 4 0 R ] /Type /Pages >>
+endobj
+3 0 obj
+<< /K [ 5 0 R ] /ParentTree 6 0 R /ParentTreeNextKey 1 /Type /StructTreeRoot >>
+endobj
+4 0 obj
+<< /Contents 7 0 R /MediaBox [ 0 0 612 792 ] /Parent 2 0 R /Resources << /Font << /F1 8 0 R >> >> /StructParents 0 /Type /Page >>
+endobj
+5 0 obj
+<< /K [ 9 0 R 10 0 R 11 0 R ] /Lang (en-US) /P 3 0 R /S /Document /Type /StructElem >>
+endobj
+6 0 obj
+<< /Nums [ 0 [ 9 0 R 10 0 R 11 0 R ] ] >>
+endobj
+7 0 obj
+<< /Length 490 >>
+stream
+/P <</MCID 0>> BDC
+BT /F1 12 Tf 50 730 Td (a conforming paragraph) Tj ET
+EMC
+/Artifact BMC
+BT /F1 12 Tf 50 710 Td (a conforming artifact) Tj ET
+EMC
+/P <</MCID 1>> BDC
+BT /F1 12 Tf 50 690 Td (tagged, and below it an artifact) Tj ET
+/Artifact BMC
+BT /F1 12 Tf 50 670 Td (artifact inside tagged content) Tj ET
+EMC
+EMC
+/Artifact BMC
+BT /F1 12 Tf 50 650 Td (artifact, and below it tagged content) Tj ET
+/P <</MCID 2>> BDC
+BT /F1 12 Tf 50 630 Td (tagged content inside an artifact) Tj ET
+EMC
+EMC
+
+endstream
+endobj
+8 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+9 0 obj
+<< /K 0 /P 5 0 R /Pg 4 0 R /S /P /Type /StructElem >>
+endobj
+10 0 obj
+<< /K 1 /P 5 0 R /Pg 4 0 R /S /P /Type /StructElem >>
+endobj
+11 0 obj
+<< /K 2 /P 5 0 R /Pg 4 0 R /S /P /Type /StructElem >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000191 00000 n 
+0000000250 00000 n 
+0000000345 00000 n 
+0000000490 00000 n 
+0000000592 00000 n 
+0000000649 00000 n 
+0000001190 00000 n 
+0000001287 00000 n 
+0000001356 00000 n 
+0000001426 00000 n 
+trailer << /Root 1 0 R /Size 12 /ID [<ea18a1b405eeb6c19df42a263c539ff5><ea18a1b405eeb6c19df42a263c539ff5>] >>
+startxref
+1496
+%%EOF

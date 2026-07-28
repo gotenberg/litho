@@ -51,8 +51,9 @@ one deliberately rather than diffing it against a fresh build.
 ## Fixtures
 
 | Fixture                | Home profile | Focus                                                           |
-| ---------------------- | ------------ | --------------------------------------------------------------- |
+| ---------------------- | ------------ | --------------------------------------------------------------- | --- | --- | --- | --- | --- | --- |
 | --------------------   | ------------ | --------------------------------------------------------------  |
+| `artifact_ua1.pdf`     | 3            | 3                                                               | 3   | 3   | 3   | 4   | 5   | 3   |
 | `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG          |
 | `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language        |
 | `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters            |
@@ -82,6 +83,7 @@ one deliberately rather than diffing it against a fresh build.
 | `ttcmap_2b.pdf`        | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
 | `fenote_ua2.pdf`       | PDF/UA-2     | Footnote and endnote structure: type, namespace, `/Ref` pairing |
 | `tableregular_ua2.pdf` | PDF/UA-2     | Table regularity: cell intersection and section row groupings   |
+| `artifact_ua1.pdf`     | PDF/UA-1     | Artifact and real-content marking; suspect tagging              |
 
 ### Must-not-fire controls
 
@@ -154,6 +156,7 @@ violation but is exempt, so a firing is a false positive.
 | `tableregular_ua2`                        | A sectioned table whose `THead` and `TBody` groupings are regular      | ISO 14289-2, 8.2.5.26 t2     |
 | `tableregular_ua2`                        | A flat table carrying a real `/ColSpan` that adds up                   | ISO 14289-2, 8.2.5.26 t3     |
 | `tableregular_ua2`                        | A table whose every `TH` carries a `/Scope`, settling determination    | ISO 14289-2, 8.2.5.26 t5, t6 |
+| `artifact_ua1`                            | A tagged paragraph and a top-level artifact, neither one nested        | ISO 14289-1, 7.1 t1, t2      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -613,6 +616,29 @@ target an explicit valid `/Headers`, which makes the target the first failure
 under both. The file reports t6 at PDF/UA-2 and its PDF/UA-1 spelling 7.5 t2,
 and litho matches both.
 
+## Artifacts and real content
+
+ISO 14289-1, clause 7.1 was the largest unreached cluster in PDF/UA-1. It draws
+the line between real content and artifacts, and `artifact_ua1.pdf` plants three
+independent defects across it:
+
+| Construct                                    | Rule    |
+| -------------------------------------------- | ------- |
+| an `/Artifact` sequence nested inside a `/P` | `7.1/1` |
+| a `/P` sequence nested inside an `/Artifact` | `7.1/2` |
+| catalog `/MarkInfo << /Suspects true >>`     | `7.1/4` |
+| a plain tagged paragraph                     | silent  |
+| a plain top-level artifact                   | silent  |
+
+The two controls matter because the clause is about nesting, not about tags or
+artifacts as such: a check that condemns every artifact, or every tagged
+sequence, fires on them.
+
+The fixture caught a profile-mapping bug. litho reported `7.1/4`, an
+ISO 14289-1 clause, while validating against PDF/UA-2, whose profile carries no
+rule against `/Suspects` at all. A comment in `accessibility_helpers.go`
+asserted the two parts shared the requirement; they do not.
+
 ## Extension schemas and the trailer
 
 Two more fixtures come from the same coverage scan. `6.6.2.3.3` was the
@@ -1006,6 +1032,18 @@ too, which is the whole difference between the two files. Every other fixture in
 this corpus draws text, so none of them could show this. litho has the gap.
 
 ## Known divergences
+
+**`7.1/12` at PDF/UA-1.** litho reports a structure element missing its `/P`
+entry; veraPDF cannot. `GFPDStructElem.getcontainsParent` returns
+`getParent() != null`, and `PDStructElem.getParent` builds its result from
+`getKey(ASAtom.P)`, which yields an empty but non-null `COSObject` for an absent
+key, so `containsParent` is true whatever the dictionary says. Three probes
+confirm it: an element with no `/P` at all, one whose `/P`-less parent breaks
+its subtree, and a content-free `/P`-less sibling all leave the test silent,
+while the first two report `7.1/3` instead because the missing link untags their
+content. litho is right on the spec, ISO 32000-1, 14.7.2, Table 355 requires
+`/P`, so no code changed and no fixture plants it. Same shape as the `6.1.9`
+entry below.
 
 Two cells in the table above disagree, both on `complex_ua2.pdf` and both
 rooted in the same construct: the structure element that carries no `/P`.
