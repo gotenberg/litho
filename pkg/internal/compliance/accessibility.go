@@ -110,6 +110,7 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 
 	// Namespace-resolved struct-type constraints (PDF/UA-2 §8.2.5.14/.23/.24).
 	results = append(results, checkPDFUA2NamespaceStructTypes(ctx, doc, catalog, profile)...)
+	results = append(results, checkPDFUA2FENoteRefs(ctx, doc, catalog, profile)...)
 
 	// Content marking (PDF/UA-1 §7.1 t3).
 	results = append(results, checkContentMarking(ctx, doc, catalog, profile)...)

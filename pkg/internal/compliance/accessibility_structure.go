@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -708,6 +709,125 @@ func checkPDFUA2NamespaceStructTypes(ctx context.Context, doc *document.Document
 			}
 		}
 	})
+	return results
+}
+
+// sortedIntKeys returns the keys of an int-keyed set in ascending order, so a
+// check that reports the first matching object is deterministic.
+func sortedIntKeys[V any](m map[int]V) []int {
+	keys := make([]int, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// feNoteRefGraph records, per structure element object number, the object
+// numbers its /Ref entry points at, and which of those elements are FENotes.
+type feNoteRefGraph struct {
+	refs    map[int]map[int]bool
+	feNotes []int
+}
+
+// collectFENoteRefGraph walks the structure tree recording each element's /Ref
+// targets by object number. Object identity is what the two-way association
+// test needs, and [walkStructureElements] surfaces only the resolved
+// dictionaries, so this walk keeps the numbers.
+func collectFENoteRefGraph(ctx context.Context, doc *document.Document, r *nsRoleResolver, treeRoot ast.PdfDict) feNoteRefGraph {
+	graph := feNoteRefGraph{refs: make(map[int]map[int]bool)}
+	seen := make(map[int]bool)
+
+	var visit func(obj ast.PdfObject, depth int)
+	visit = func(obj ast.PdfObject, depth int) {
+		if ctx.Err() != nil || depth > maxStructTreeWalkDepth {
+			return
+		}
+		if arr, err := document.ResolveArray(ctx, doc, obj); err == nil {
+			for _, kid := range arr {
+				visit(kid, depth+1)
+			}
+			return
+		}
+		ref, isRef := obj.(ast.PdfIndirectRef)
+		if !isRef || seen[ref.ObjectNum] {
+			return
+		}
+		seen[ref.ObjectNum] = true
+		elem, err := document.ResolveDict(ctx, doc, obj)
+		if err != nil || elem == nil {
+			return
+		}
+		targets := make(map[int]bool)
+		if refArr, err := document.ResolveArray(ctx, doc, elem["Ref"]); err == nil {
+			for _, target := range refArr {
+				if t, ok := target.(ast.PdfIndirectRef); ok {
+					targets[t.ObjectNum] = true
+				}
+			}
+		}
+		graph.refs[ref.ObjectNum] = targets
+		if stdType, _, ok := r.elementStandardType(ctx, doc, elem); ok && stdType == "FENote" {
+			graph.feNotes = append(graph.feNotes, ref.ObjectNum)
+		}
+		if kids, hasKids := elem["K"]; hasKids {
+			visit(kids, depth+1)
+		}
+	}
+
+	visit(treeRoot["K"], 0)
+	return graph
+}
+
+// checkPDFUA2FENoteRefs validates the two-way /Ref association between a FENote
+// and the content that refers to it (ISO 14289-2, 8.2.5.14 t2 and t3). Content
+// referring to a note points at it with /Ref, and the note points back the same
+// way. veraPDF names the two halves separately, which the tests mirror:
+//
+//   - t2, orphanRefs: an element points at the FENote and the FENote does not
+//     point back.
+//   - t3, ghostRefs:  the FENote points at an element that does not point back.
+//
+// Both were measured against veraPDF on isolated fixtures rather than inferred
+// from the clause text, which names neither direction explicitly.
+func checkPDFUA2FENoteRefs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if profile != "PDF/UA-2" {
+		return nil
+	}
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
+		return nil
+	}
+	r := newNSRoleResolver(ctx, doc, treeRoot)
+	graph := collectFENoteRefGraph(ctx, doc, r, treeRoot)
+
+	var results []Violation
+	for _, note := range graph.feNotes {
+		if ctx.Err() != nil {
+			return results
+		}
+		noteRefs := graph.refs[note]
+
+		// t2: someone points at this note without the note pointing back.
+		for _, source := range sortedIntKeys(graph.refs) {
+			if source == note || !graph.refs[source][note] || noteRefs[source] {
+				continue
+			}
+			results = append(results, failf(Rule_14289_2_8_2_5_14_t02,
+				"FENote object %d is referenced by object %d but does not reference it back", note, source)...)
+			break
+		}
+
+		// t3: this note points at something that does not point back.
+		for _, target := range sortedIntKeys(noteRefs) {
+			if graph.refs[target][note] {
+				continue
+			}
+			results = append(results, failf(Rule_14289_2_8_2_5_14_t03,
+				"FENote object %d references object %d, which does not reference it back", note, target)...)
+			break
+		}
+	}
 	return results
 }
 
