@@ -32,8 +32,13 @@ func displayDocTitleRule(profile string) Rule {
 	return Rule_14289_1_7_1_t10
 }
 
+// suspectsRule returns the /Suspects rule, which only PDF/UA-1 states. The
+// PDF/UA-2 profile carries no rule against /Suspects at all, so returning the
+// PDF/UA-1 rule there reported an ISO 14289-1 clause against a PDF/UA-2 file.
 func suspectsRule(profile string) Rule {
-	// Both PDF/UA-1 and PDF/UA-2 share the same Suspects requirement.
+	if profile == "PDF/UA-2" {
+		return Rule{}
+	}
 	return Rule_14289_1_7_1_t04
 }
 

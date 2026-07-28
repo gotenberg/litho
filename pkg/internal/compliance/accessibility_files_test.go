@@ -58,3 +58,24 @@ func TestPDFUA2DescScope(t *testing.T) {
 		}
 	})
 }
+
+// TestSuspectsIsPDFUA1Only pins the profile scope of the /Suspects rule. Only
+// ISO 14289-1 states it, as 7.1 t4; the PDF/UA-2 profile carries no rule
+// against /Suspects at all, so reporting one there named an ISO 14289-1 clause
+// against a PDF/UA-2 file.
+func TestSuspectsIsPDFUA1Only(t *testing.T) {
+	ctx := context.Background()
+
+	doc, catalog := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true /Suspects true >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	)
+
+	if got := checkSuspects(ctx, doc, catalog, "PDF/UA-1"); !hasRule(got, Rule_14289_1_7_1_t04) {
+		t.Errorf("PDF/UA-1: got %v, want §7.1 t4", got)
+	}
+	if got := checkSuspects(ctx, doc, catalog, "PDF/UA-2"); len(got) != 0 {
+		t.Errorf("PDF/UA-2: got %v, want none", got)
+	}
+}

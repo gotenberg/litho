@@ -37,6 +37,9 @@ func checkDisplayDocTitle(ctx context.Context, doc *document.Document, catalog a
 
 func checkSuspects(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := suspectsRule(profile)
+	if rule.Specification == "" {
+		return nil
+	}
 
 	miObj, ok := catalog["MarkInfo"]
 	if !ok {
