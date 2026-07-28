@@ -57,3 +57,56 @@ func TestCheckCIDSystemInfo_PredefinedCMap(t *testing.T) {
 		t.Error("a non-predefined CMap name must fire")
 	}
 }
+
+// TestFindNonPredefinedUseCMap_EmbeddedName covers the /UseCMap chain of
+// ISO 19005-2 §6.2.11.3.3 t3. A name scraped from the CMap program can pick up
+// a stray token, so it is trusted only when it is CMap-shaped; a name read from
+// an embedded CMap's own /CMapName is authoritative, and applying the shape
+// guard to it silently dropped every unhyphenated name, which is what an
+// embedded CMap usually carries.
+func TestFindNonPredefinedUseCMap_EmbeddedName(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 4 is the outer CMap, whose /UseCMap points at object 5.
+	build := func(innerName string) (*document.Document, ast.PdfDict) {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /CMap /CMapName /LithoOuter /UseCMap 5 0 R /Length 0 >>\nstream\n\nendstream",
+			"<< /Type /CMap /CMapName /"+innerName+" /Length 0 >>\nstream\n\nendstream",
+		)
+		outer, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: 4})
+		if err != nil {
+			t.Fatalf("resolve outer CMap: %v", err)
+		}
+		return doc, outer.Dict
+	}
+
+	t.Run("unhyphenated embedded name is still judged", func(t *testing.T) {
+		doc, outer := build("LithoInnerCMap")
+		if got := findNonPredefinedUseCMap(ctx, doc, nil, outer, "PDF/A-2b", 0); got != "LithoInnerCMap" {
+			t.Errorf("got %q, want LithoInnerCMap", got)
+		}
+	})
+
+	t.Run("a predefined embedded name passes", func(t *testing.T) {
+		doc, outer := build("Identity-H")
+		if got := findNonPredefinedUseCMap(ctx, doc, nil, outer, "PDF/A-2b", 0); got != "" {
+			t.Errorf("got %q, want none", got)
+		}
+	})
+
+	t.Run("an unhyphenated scraped name is not judged", func(t *testing.T) {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		)
+		program := []byte("/StrayToken usecmap\n")
+		if got := findNonPredefinedUseCMap(ctx, doc, program, nil, "PDF/A-2b", 0); got != "" {
+			t.Errorf("got %q, want none", got)
+		}
+	})
+}

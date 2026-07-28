@@ -419,8 +419,12 @@ func findNonPredefinedUseCMap(ctx context.Context, doc *document.Document, data 
 		return ""
 	}
 
-	// Check usecmap keyword in stream program text.
+	// Check usecmap keyword in stream program text. A name scraped from the
+	// program can pick up a stray token, so it is trusted only when it is
+	// CMap-shaped; a name read from an embedded CMap's own /CMapName is
+	// authoritative and carries no such doubt.
 	usedCMap := extractUseCMap(data)
+	authoritative := false
 	// Also check /UseCMap dict key.
 	if usedCMap == "" && cmapDict != nil {
 		if ucObj := cmapDict["UseCMap"]; ucObj != nil {
@@ -436,6 +440,7 @@ func findNonPredefinedUseCMap(ctx context.Context, doc *document.Document, data 
 				cmapName := extractCMapName(ctx, doc, ucStream)
 				if cmapName != "" {
 					usedCMap = cmapName
+					authoritative = true
 				}
 				// If no name found, also recurse to check the inner CMap's
 				// own /UseCMap references.
@@ -450,7 +455,7 @@ func findNonPredefinedUseCMap(ctx context.Context, doc *document.Document, data 
 		}
 	}
 
-	if usedCMap == "" || !strings.Contains(usedCMap, "-") {
+	if usedCMap == "" || (!authoritative && !strings.Contains(usedCMap, "-")) {
 		return ""
 	}
 
