@@ -794,6 +794,7 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 	// a TH that omits /Scope connects nothing: §8.2.5.26 t5/t6 then fire on a TD
 	// whose only positional headers are those no-/Scope THs.
 	tableHasExplicitScope := false
+	tableHasUnscopedTH := false
 	for _, c := range cells {
 		if !c.isTH {
 			continue
@@ -804,9 +805,22 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 		}
 		if cellScope(ctx, state.doc, c.elem) != "" {
 			tableHasExplicitScope = true
+		} else {
+			tableHasUnscopedTH = true
 		}
 	}
 	if !hasTH {
+		return
+	}
+
+	// veraPDF settles header determination by /Scope first and only falls back
+	// to /Headers and a positional search when at least one TH carries no
+	// /Scope (GFSETable.checkTable calls hasScope, and reaches hasHeaders only
+	// when it returns false). A table whose TH cells are all scoped therefore
+	// reaches neither t5 nor t6. The clause says nothing about that order, so
+	// it is taken from the implementation and confirmed by probe: the same
+	// table fires t5 with an unscoped TH and is silent with a scoped one.
+	if state.profile == "PDF/UA-2" && !tableHasUnscopedTH {
 		return
 	}
 
@@ -816,6 +830,11 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 		}
 		if ctx.Err() != nil {
 			return
+		}
+		// veraPDF exempts the cell in the top left corner from the fallback,
+		// which is the one position no header can precede in either direction.
+		if state.profile == "PDF/UA-2" && td.row == 0 && td.col == 0 {
+			continue
 		}
 
 		headers := cellHeaders(ctx, state.doc, td.elem)
@@ -875,7 +894,11 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 					break
 				}
 			}
-			if !pertinent && len(headers) == 0 {
+			// A TD with no positionally pertinent TH is the case veraPDF
+			// reports as "Headers for this table cell cannot be determined
+			// algorithmically", so under PDF/UA-2 it stays unconnected.
+			// PDF/UA-1 keeps the vacuous pass, which matches veraPDF there.
+			if !pertinent && len(headers) == 0 && state.profile != "PDF/UA-2" {
 				connected = true
 			}
 		}
@@ -888,6 +911,7 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 		ua1 := state.profile == "PDF/UA-1"
 		switch {
 		case connected:
+			continue
 		case len(unknown) > 0:
 			rule := Rule_14289_2_8_2_5_26_t06
 			if ua1 {
@@ -902,6 +926,15 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 			}
 			*state.results = append(*state.results,
 				fail(rule, "TD has no determinable header cells in a table containing TH")...)
+		}
+
+		// veraPDF's fallback stops at the first cell whose headers it cannot
+		// determine, so one table yields one verdict rather than one per cell.
+		// Reporting every cell would name the same defect repeatedly and, since
+		// the two tests split by whether the cell named unknown IDs, could
+		// report both halves of the split for a single table.
+		if state.profile == "PDF/UA-2" {
+			return
 		}
 	}
 }

@@ -257,3 +257,45 @@ func TestValidateTableColumnConsistency_RowSpanInsideSection(t *testing.T) {
 		t.Errorf("span inside its section: got %v, want no t2", results)
 	}
 }
+
+// TestHeaderDetermination_ScopeFirst pins the order veraPDF applies, which the
+// clause does not state and which was read from GFSETable.checkTable: /Scope
+// settles header determination, and the /Headers and positional route runs only
+// when at least one TH carries no /Scope. A table whose TH cells are all scoped
+// therefore reaches neither §8.2.5.26 t5 nor t6.
+func TestHeaderDetermination_ScopeFirst(t *testing.T) {
+	// A regular 2x3 whose single TH sits at the exempt top-left corner. The
+	// cell at row 1 column 1 shares its row and column with no TH.
+	objs := func(scope string) []string {
+		th := "<< /Type /StructElem /S /TH /P 6 0 R /ID (h1) /A << /O /Table" + scope + " >> >>"
+		return []string{
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /StructElem /S /Table /K [6 0 R 7 0 R] >>",
+			"<< /Type /StructElem /S /Document /K [4 0 R] >>",
+			"<< /Type /StructElem /S /TR /P 4 0 R /K [8 0 R 9 0 R 10 0 R] >>",
+			"<< /Type /StructElem /S /TR /P 4 0 R /K [11 0 R 12 0 R 13 0 R] >>",
+			th,
+			"<< /Type /StructElem /S /TD /P 6 0 R /A << /O /Table >> >>",
+			"<< /Type /StructElem /S /TD /P 6 0 R /A << /O /Table >> >>",
+			"<< /Type /StructElem /S /TD /P 7 0 R /A << /O /Table >> >>",
+			"<< /Type /StructElem /S /TD /P 7 0 R /A << /O /Table >> >>",
+			"<< /Type /StructElem /S /TD /P 7 0 R /A << /O /Table >> >>",
+		}
+	}
+	run := func(scope string) []Violation {
+		doc, table := tableDoc(t, 4, objs(scope)...)
+		var results []Violation
+		state := &walkState{doc: doc, results: &results, profile: "PDF/UA-2"}
+		validateTableHeaderDetermination(context.Background(), state, table)
+		return results
+	}
+
+	if got := run(""); !hasRule(got, Rule_14289_2_8_2_5_26_t05) {
+		t.Errorf("unscoped TH: got %v, want §8.2.5.26 t5", got)
+	}
+	if got := run(" /Scope /Column"); len(got) != 0 {
+		t.Errorf("every TH scoped: got %v, want none", got)
+	}
+}
