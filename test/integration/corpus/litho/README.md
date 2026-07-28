@@ -83,6 +83,7 @@ one deliberately rather than diffing it against a fresh build.
 | `tableregular_ua2.pdf` | PDF/UA-2     | Table regularity: cell intersection and section row groupings   |
 | `artifact_ua1.pdf`     | PDF/UA-1     | Artifact and real-content marking; suspect tagging              |
 | `annots_1b.pdf`        | PDF/A-1b     | Annotation dictionary constraints and additional actions        |
+| `fontkeys_1b.pdf`      | PDF/A-1b     | Part-1 font dictionary required keys and embedded file subtype  |
 
 ### Must-not-fire controls
 
@@ -156,6 +157,8 @@ violation but is exempt, so a firing is a false positive.
 | `tableregular_ua2`                        | A flat table carrying a real `/ColSpan` that adds up                   | ISO 14289-2, 8.2.5.26 t3     |
 | `tableregular_ua2`                        | A table whose every `TH` carries a `/Scope`, settling determination    | ISO 14289-2, 8.2.5.26 t5, t6 |
 | `artifact_ua1`                            | A tagged paragraph and a top-level artifact, neither one nested        | ISO 14289-1, 7.1 t1, t2      |
+| `annots_1b`                               | A plain square and a plain widget, both with `/F 4` and an `/N` stream | ISO 19005-1, 6.5.3           |
+| `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -184,6 +187,7 @@ which are covered under [Known divergences](#known-divergences).
 | `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
 | `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
+| `fontkeys_1b.pdf`      | 10   | 13   | 10   | 11   | 10   | 11  | 8    | 8    |
 | `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
 | `idprefix_2b.pdf`      | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
@@ -673,6 +677,47 @@ there is nothing to permit it.
 
 At its home profile the file fires 14 rules, the densest in the corpus, and
 remediation takes it to 4 without introducing anything.
+
+## Part-1 font dictionary keys
+
+`fontdict_2b.pdf` covers this requirement as ISO 19005-2, 6.2.11.2, which has
+four tests. Part 1 states it as ISO 19005-1, 6.3.2 and splits it into seven, so
+two of them are reachable from no other fixture: the `/Type` key of the font
+dictionary itself and the subtype of an embedded font file.
+
+| Font | Defect                                    | Rule      |
+| ---- | ----------------------------------------- | --------- |
+| F1   | no `/Type`                                | `6.3.2/1` |
+| F4   | no `/FirstChar`                           | `6.3.2/4` |
+| F5   | no `/LastChar`                            | `6.3.2/5` |
+| F6   | two codes declared, three widths supplied | `6.3.2/6` |
+| F7   | `/FontFile3` whose `/Subtype` is `/Type1` | `6.3.2/7` |
+| F8   | none: a standard font with no width keys  | silent    |
+| F9   | none                                      | silent    |
+
+Tests 4, 5 and 6 exempt a standard font, so the fonts carrying them name a face
+outside the standard 14, and F8 plants that exemption as a control: a Helvetica
+with none of the three keys conforms, and a check that ignores `isStandard`
+fires on it.
+
+Two tests of the clause cannot be reached, and both were measured rather than
+assumed:
+
+- **Test 2**, a `/Subtype` outside the five the clause permits. veraPDF builds a
+  font object only for those five, so a font naming anything else reaches no
+  test at all. Probed with `/Litho`, `/CIDFontType0`, `/CIDFontType2`, `/Type1C`
+  and `/MMType1`: all silent.
+- **Test 3**, a font with no `/BaseFont`. veraPDF 1.30.2 throws on it at
+  PDF/A-1b and abandons the whole run, while the identical file validates at
+  PDF/A-2b and reports the part-2 spelling of the same requirement. The
+  reduction is a single Type1 font with `/BaseFont` removed.
+
+litho reports both. Neither is planted, because a fixture carrying them would
+carry a divergence, and in the second case no verdict at all.
+
+The file also plants a form XObject with an `/F` key, which ISO 19005-1, 6.1.7
+forbids: it belongs to no font clause, so a font verdict is visibly separate
+from it.
 
 ## Extension schemas and the trailer
 
