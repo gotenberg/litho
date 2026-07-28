@@ -80,6 +80,7 @@ one deliberately rather than diffing it against a fresh build.
 | `uaid_ua1.pdf`        | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
 | `ttencoding_2b.pdf`   | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
 | `ttcmap_2b.pdf`       | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
+| `fenote_ua2.pdf`      | PDF/UA-2     | Footnote and endnote structure: type, namespace, `/Ref` pairing |
 
 ### Must-not-fire controls
 
@@ -147,6 +148,8 @@ violation but is exempt, so a firing is a false positive.
 | `ttencoding_2b`                           | A non-symbolic TrueType carrying `WinAnsiEncoding`                     | ISO 19005-2, 6.2.11.6 t2     |
 | `ttcmap_2b`                               | A non-symbolic program carrying both a (3,1) and a (1,0) subtable      | ISO 19005-2, 6.2.11.6 t1     |
 | `ttcmap_2b`                               | A symbolic program whose single subtable is the Microsoft Symbol (3,0) | ISO 19005-2, 6.2.11.6 t4     |
+| `fenote_ua2`                              | An `FENote` whose `/Ref` pairing is complete in both directions        | ISO 14289-2, 8.2.5.14 t2, t3 |
+| `fenote_ua2`                              | An `FENote` that refers to nothing and that nothing refers to          | ISO 14289-2, 8.2.5.14 t2, t3 |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -172,6 +175,7 @@ which are covered under [Known divergences](#known-divergences).
 | `docinfo_1b.pdf`      | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
 | `extschema_2b.pdf`    | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
 | `fontdict_2b.pdf`     | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
+| `fenote_ua2.pdf`      | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
 | `forbidden_mix.pdf`   | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `gstate_2b.pdf`       | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
 | `idprefix_2b.pdf`     | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
@@ -513,6 +517,38 @@ that ignores the restore attributes the codes after it to the wrong font.
 litho reported t4 correctly at every part when the fixture was written, and t1
 at none of them. The rule constants existed but nothing referenced them, so the
 non-symbolic half of the check was absent while the symbolic half was complete.
+
+## Footnotes and endnotes
+
+PDF/UA-2 was the corpus's weakest profile, and ISO 14289-2, 8.2.5.14 was wholly
+unreached. It governs how a document marks up notes: PDF 2.0 retires the PDF 1.7
+`Note` type in favour of `FENote`, requires the referring content and the note
+to point at each other through `/Ref`, and constrains the note's `/NoteType`.
+All four tests are independent, so `fenote_ua2.pdf` plants them together:
+
+| Element | Defect                                             | Rule         |
+| ------- | -------------------------------------------------- | ------------ |
+| N1      | legacy `Note`, bound to the PDF 1.7 namespace      | `8.2.5.14/1` |
+| N2      | the paragraph points at the note, note silent      | `8.2.5.14/2` |
+| N3      | the note points at the paragraph, paragraph silent | `8.2.5.14/3` |
+| N4      | `/NoteType /Sidenote`, `/Ref` complete both ways   | `8.2.5.14/4` |
+| N5      | none                                               | silent       |
+| N6      | none: refers to nothing, nothing refers to it      | silent       |
+
+The two `/Ref` directions are measured, not read out of the clause, which names
+neither. veraPDF calls them `orphanRefs` and `ghostRefs`, and an isolated probe
+per direction settles which is which: a referrer pointing at a silent note fires
+t2, a note pointing at a silent referrer fires t3, and wiring both directions or
+neither conforms. N5 and N6 are those last two cases, kept as controls, because
+"absent" and "half-built" are exactly what a naive check would conflate.
+
+Test 1 turns on the namespace rather than the type name. The same `Note`
+element claimed in the PDF 2.0 namespace resolves elsewhere and reports 8.2.4 t1
+instead, so N1 binds it to the PDF 1.7 namespace deliberately.
+
+litho reported t1 and t4 and neither `/Ref` test when the fixture was written.
+`Rule_14289_2_8_2_5_14_t02` and `t03` existed but nothing referenced them, so
+both were dead rules; `checkPDFUA2FENoteRefs` wires them.
 
 ## Extension schemas and the trailer
 
