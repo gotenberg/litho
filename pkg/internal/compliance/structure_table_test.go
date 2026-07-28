@@ -192,3 +192,68 @@ func TestTableCellIntersection(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateTableColumnConsistency_RowSpanCrossesSection covers the profile
+// split for a /RowSpan that starts in a THead and reaches into the TBody.
+// PDF/UA-2 judges the grouping the sections form and reports §8.2.5.26 t2;
+// PDF/UA-1 draws no section boundary, carries the span into the next row and
+// reports its column rule §7.2 t42. Both were measured against veraPDF.
+func TestValidateTableColumnConsistency_RowSpanCrossesSection(t *testing.T) {
+	// Object 4 is the Table: a THead of one row whose first cell spans two
+	// rows, then a TBody of one row with two cells.
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructElem /S /Table /K [5 0 R 6 0 R] >>",
+		"<< /Type /StructElem /S /THead /P 4 0 R /K [7 0 R] >>",
+		"<< /Type /StructElem /S /TBody /P 4 0 R /K [8 0 R] >>",
+		"<< /Type /StructElem /S /TR /P 5 0 R /K [9 0 R 10 0 R] >>",
+		"<< /Type /StructElem /S /TR /P 6 0 R /K [11 0 R 12 0 R] >>",
+		"<< /Type /StructElem /S /TH /P 7 0 R /A << /O /Table /RowSpan 2 >> >>",
+		"<< /Type /StructElem /S /TH /P 7 0 R /A << /O /Table >> >>",
+		"<< /Type /StructElem /S /TD /P 8 0 R /A << /O /Table >> >>",
+		"<< /Type /StructElem /S /TD /P 8 0 R /A << /O /Table >> >>",
+	}
+	run := func(profile string) []Violation {
+		doc, table := tableDoc(t, 4, objs...)
+		var results []Violation
+		state := &walkState{doc: doc, results: &results, profile: profile}
+		validateTableColumnConsistency(context.Background(), state, table)
+		return results
+	}
+
+	if got := run("PDF/UA-2"); !hasRule(got, Rule_14289_2_8_2_5_26_t02) {
+		t.Errorf("PDF/UA-2: got %v, want §8.2.5.26 t2", got)
+	}
+	if got := run("PDF/UA-2"); hasRule(got, Rule_14289_2_8_2_5_26_t03) {
+		t.Errorf("PDF/UA-2: got %v, want no column-rule verdict", got)
+	}
+	if got := run("PDF/UA-1"); !hasRule(got, Rule_14289_1_7_2_t42) {
+		t.Errorf("PDF/UA-1: got %v, want §7.2 t42", got)
+	}
+}
+
+// A /RowSpan that stays inside its own section is regular, and so is a table
+// whose rows sit directly under it with no section at all.
+func TestValidateTableColumnConsistency_RowSpanInsideSection(t *testing.T) {
+	inSection := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructElem /S /Table /K [5 0 R] >>",
+		"<< /Type /StructElem /S /TBody /P 4 0 R /K [6 0 R 7 0 R] >>",
+		"<< /Type /StructElem /S /TR /P 5 0 R /K [8 0 R 9 0 R] >>",
+		"<< /Type /StructElem /S /TR /P 5 0 R /K [10 0 R] >>",
+		"<< /Type /StructElem /S /TD /P 6 0 R /A << /O /Table /RowSpan 2 >> >>",
+		"<< /Type /StructElem /S /TD /P 6 0 R /A << /O /Table >> >>",
+		"<< /Type /StructElem /S /TD /P 7 0 R /A << /O /Table >> >>",
+	}
+	doc, table := tableDoc(t, 4, inSection...)
+	var results []Violation
+	state := &walkState{doc: doc, results: &results, profile: "PDF/UA-2"}
+	validateTableColumnConsistency(context.Background(), state, table)
+	if hasRule(results, Rule_14289_2_8_2_5_26_t02) {
+		t.Errorf("span inside its section: got %v, want no t2", results)
+	}
+}

@@ -81,6 +81,23 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 		return true
 	}
 
+	// Under PDF/UA-2 a /RowSpan reaching past the last row of its THead, TBody
+	// or TFoot is a row-span defect rather than a column-count one: ISO 14289-2,
+	// 8.2.5.26 t2 requires the groupings those sections form to be regular.
+	// Carrying such a span into the next section would widen its first row and
+	// report the column rule instead, which is the wrong test of the clause.
+	// PDF/UA-1 draws no section boundary here and reports its column rule §7.2
+	// t42 for the same table, which is measured rather than assumed, so the
+	// whole branch is scoped to PDF/UA-2.
+	if state.profile == "PDF/UA-2" {
+		if row, ok := rowSpanCrossingSection(ctx, state.doc, tableElem, rows); ok {
+			*state.results = append(*state.results,
+				failf(Rule_14289_2_8_2_5_26_t02,
+					"Table row %d has a RowSpan reaching past the end of its section", row+1)...)
+			return false
+		}
+	}
+
 	// Build effective column count per row using a proper grid model.
 	// RowSpan causes a cell to occupy column positions in subsequent rows.
 	// Columns "occupied" by RowSpan carry-over affect effective counts.
@@ -118,6 +135,76 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 		failf(rule, "Table row 1 has %d columns, row %d has %d columns",
 			n0, row+1, effectiveCols[row])...)
 	return false
+}
+
+// rowSpanCrossingSection reports the first row holding a cell whose /RowSpan
+// reaches past the last row of the THead, TBody or TFoot it belongs to. Rows
+// placed directly under the Table belong to no section and are exempt, since
+// there is no grouping for the span to escape.
+func rowSpanCrossingSection(ctx context.Context, doc *document.Document, tableElem ast.PdfDict, rows []ast.PdfDict) (int, bool) {
+	ends := tableSectionRowEnds(ctx, doc, tableElem)
+	if len(ends) == 0 {
+		return 0, false
+	}
+	for ri, row := range rows {
+		if ctx.Err() != nil {
+			return 0, false
+		}
+		end, sectioned := ends[ri]
+		if !sectioned {
+			continue
+		}
+		for _, cell := range resolveRowCells(ctx, doc, row) {
+			if rs := cellRowSpan(ctx, doc, cell); rs > 1 && ri+rs-1 > end {
+				return ri, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// tableSectionRowEnds maps each row index that sits inside a THead, TBody or
+// TFoot to the last row index of that section. Rows directly under the Table
+// are absent from the map. The row order matches [collectTableRows], which
+// walks the same children in the same order.
+func tableSectionRowEnds(ctx context.Context, doc *document.Document, tableElem ast.PdfDict) map[int]int {
+	ends := make(map[int]int)
+	index := 0
+
+	children, err := document.ResolveArray(ctx, doc, tableElem["K"])
+	if err != nil {
+		child, derr := document.ResolveDict(ctx, doc, tableElem["K"])
+		if derr != nil || child == nil {
+			return ends
+		}
+		children = ast.PdfArray{child}
+	}
+
+	for _, item := range children {
+		child, err := document.ResolveDict(ctx, doc, item)
+		if err != nil || child == nil {
+			continue
+		}
+		typeName, _ := document.ResolveName(ctx, doc, child["S"])
+		if typeName == "TR" {
+			index++
+			continue
+		}
+		if typeName != "THead" && typeName != "TBody" && typeName != "TFoot" {
+			continue
+		}
+		var sectionRows []ast.PdfDict
+		collectRowsFrom(ctx, doc, child, &sectionRows)
+		if len(sectionRows) == 0 {
+			continue
+		}
+		last := index + len(sectionRows) - 1
+		for i := index; i <= last; i++ {
+			ends[i] = last
+		}
+		index = last + 1
+	}
+	return ends
 }
 
 // computeEffectiveColumns builds the effective column count for each row,
