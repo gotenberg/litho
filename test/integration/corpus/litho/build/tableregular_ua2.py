@@ -27,11 +27,22 @@ PDF/UA-1 reports the column rule 7.2 t42 instead, because PDF/UA-1 draws no
 section boundary, so the two profiles disagree by design and the fixture
 exercises both.
 
-Tests 5 and 6 of the clause are deliberately absent. They need the header
-determination to fall through to the `/Headers` route, which veraPDF reaches
-only after scope-based determination fails; no arrangement tried here produced
-that, so planting a guess would add a disagreeing cell rather than coverage.
-See ../README.md.
+Tables E and F reach tests 5 and 6, the two halves of header determination.
+Getting there needed the order veraPDF applies, which no amount of probing
+revealed and which the clause does not state: determination is settled by
+`/Scope` first, and the `/Headers` route runs only when at least one TH carries
+no `/Scope`. Both tables therefore leave their single TH unscoped. The cell that
+cannot be resolved sits at row 1 column 1, where no TH shares its row or its
+column, and the cell at row 0 column 0 is exempt from the fallback altogether,
+which is why the TH occupies it. Table E's cell names no header at all, which is test 5.
+
+Test 6, the same cell naming a header id no TH declares, is deliberately
+absent. It is reachable under PDF/UA-2, but PDF/UA-1 spells the identical
+predicate as 7.5 t2 and veraPDF does not report it there for that construct,
+while litho does. Planting it would make this file carry a divergence it was
+built to reveal, so the construct is recorded in ../README.md instead.
+
+Tests 3 and 4 belong to `tablespan_ua2.pdf` and are not repeated here.
 
 See ../README.md for the authoritative expected firing set.
 """
@@ -51,7 +62,7 @@ font = pdf.make_indirect(
     )
 )
 
-CELL_COUNT = 20
+CELL_COUNT = 26
 content = b"".join(
     b"/TD <</MCID %d>> BDC\nBT /F1 9 Tf 40 %d Td (c%d) Tj ET\nEMC\n"
     % (i, 750 - i * 17, i)
@@ -87,16 +98,22 @@ leaves = []
 next_mcid = 0
 
 
-def cell(kind, parent, colspan=None, rowspan=None, scope="Column", cid=None):
-    """One TH or TD, owning the next marked content sequence on the page."""
+def cell(kind, parent, colspan=None, rowspan=None, scope="Column", cid=None, headers=None):
+    """One TH or TD, owning the next marked content sequence on the page.
+
+    scope=None omits /Scope from a TH, which is what pushes header
+    determination onto the /Headers route.
+    """
     global next_mcid
     attrs = {"O": Name("/Table")}
     if colspan is not None:
         attrs["ColSpan"] = colspan
     if rowspan is not None:
         attrs["RowSpan"] = rowspan
-    if kind == "TH":
+    if kind == "TH" and scope is not None:
         attrs["Scope"] = Name("/" + scope)
+    if headers is not None:
+        attrs["Headers"] = Array([String(h) for h in headers])
     d = Dictionary(
         Type=Name.StructElem,
         S=Name("/" + kind),
@@ -196,7 +213,18 @@ table_d = table(
     ]
 )
 
-document.K = Array([table_a, table_b, table_c, table_d])
+# Table E: regular, and its only TH carries no /Scope, so header determination
+# falls through to the /Headers route. The cell at row 1 column 1 has no TH in
+# its row or its column, so no header can be determined for it (t5). The cell
+# at row 0 column 0 is exempt, which is why the TH sits there.
+table_e = table(
+    lambda t: [
+        row(t, lambda r: [cell("TH", r, scope=None, cid="e1"), cell("TD", r), cell("TD", r)]),
+        row(t, lambda r: [cell("TD", r), cell("TD", r), cell("TD", r)]),
+    ]
+)
+
+document.K = Array([table_a, table_b, table_c, table_d, table_e])
 struct_root.K = Array([document])
 struct_root.ParentTree = pdf.make_indirect(Dictionary(Nums=Array([0, Array(leaves)])))
 struct_root.ParentTreeNextKey = 1

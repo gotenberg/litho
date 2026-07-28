@@ -153,6 +153,7 @@ violation but is exempt, so a firing is a false positive.
 | `fenote_ua2`                              | An `FENote` that refers to nothing and that nothing refers to          | ISO 14289-2, 8.2.5.14 t2, t3 |
 | `tableregular_ua2`                        | A sectioned table whose `THead` and `TBody` groupings are regular      | ISO 14289-2, 8.2.5.26 t2     |
 | `tableregular_ua2`                        | A flat table carrying a real `/ColSpan` that adds up                   | ISO 14289-2, 8.2.5.26 t3     |
+| `tableregular_ua2`                        | A table whose every `TH` carries a `/Scope`, settling determination    | ISO 14289-2, 8.2.5.26 t5, t6 |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -190,7 +191,7 @@ which are covered under [Known divergences](#known-divergences).
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
-| `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 6    | 5    |
+| `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 7    | 6    |
 | `tablespan_ua2.pdf`    | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
 | `trailer_2b.pdf`       | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 | `ttcmap_2b.pdf`        | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
@@ -582,15 +583,30 @@ column rule `8.2.5.26/3` for this table, which was an FP and an FN in one
 construct: the wrong test of the right clause. `rowSpanCrossingSection` scopes
 the section model to PDF/UA-2 so both profiles now match.
 
-Tests 5 and 6 are deliberately absent, and the reason is recorded so the next
-attempt does not repeat the search. They fire on `SETD`, and veraPDF only
-evaluates them after scope-based header determination fails: `GFSETable.checkTable`
-calls `hasHeaders`, which is what sets `hasConnectedHeader` and populates
-`unknownHeaders`, only on that fallback path. Eight arrangements were probed,
-including `TH` cells with no `/Scope`, no `/ID`, a `/Headers` array naming an
-id that does not exist, and a table with no `TH` at all. None reached the
-fallback, so all eight stayed silent on both tools. Planting a guess would add
-a disagreeing cell rather than coverage.
+Table E reaches test 5, and getting there needed an order the clause does not
+state. Eight arrangements probed blind all stayed silent on both tools; the
+bytecode gave the answer. `GFSETable.checkTable` settles header determination in
+sequence, and only the last step reports:
+
+1. `checkRegular` fails, or the table has no rows: determination stops.
+2. `hasScope` succeeds: determination stops. It succeeds when **every** `TH`
+   carries a `/Scope`, so one scoped `TH` silences the whole clause.
+3. Otherwise `hasHeaders` runs, and it alone sets `hasConnectedHeader` and fills
+   `unknownHeaders`. It skips the cell at row 0 column 0 and stops at the first
+   cell it cannot resolve, so one table yields one verdict.
+
+Table E is that shape: regular, its single `TH` unscoped and parked in the
+exempt corner, and the cell at row 1 column 1 sharing its row and column with no
+`TH`. litho matched none of this. It fired t5 for tables whose `TH` cells were
+all scoped, where veraPDF is silent, and stayed silent on the undeterminable
+cell, where veraPDF fires: a false positive and a false negative in one clause.
+
+Test 6 is the same cell naming a header id no `TH` declares. It is reachable
+under PDF/UA-2 and is **deliberately not planted**, because PDF/UA-1 spells the
+identical predicate as 7.5 t2 on the same `SETD` object and veraPDF does not
+report it there for this construct, while litho does. The construct is
+`[TH(id, no /Scope), TD, TD]` over `[TD, TD(/Headers [(nosuch)]), TD]`. Closing
+that PDF/UA-1 divergence is a prerequisite for planting it.
 
 ## Extension schemas and the trailer
 
