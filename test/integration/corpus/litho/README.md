@@ -84,6 +84,7 @@ one deliberately rather than diffing it against a fresh build.
 | `artifact_ua1.pdf`     | PDF/UA-1     | Artifact and real-content marking; suspect tagging              |
 | `annots_1b.pdf`        | PDF/A-1b     | Annotation dictionary constraints and additional actions        |
 | `fontkeys_1b.pdf`      | PDF/A-1b     | Part-1 font dictionary required keys and embedded file subtype  |
+| `cmaps_2b.pdf`         | PDF/A-2b     | CMap embedding, WMode consistency and `/UseCMap` chains         |
 
 ### Must-not-fire controls
 
@@ -159,6 +160,7 @@ violation but is exempt, so a firing is a false positive.
 | `artifact_ua1`                            | A tagged paragraph and a top-level artifact, neither one nested        | ISO 14289-1, 7.1 t1, t2      |
 | `annots_1b`                               | A plain square and a plain widget, both with `/F 4` and an `/N` stream | ISO 19005-1, 6.5.3           |
 | `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
+| `cmaps_2b`                                | A font naming `/Identity-H`, and one embedding a self-consistent CMap  | ISO 19005-2, 6.2.11.3.3      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -175,6 +177,7 @@ which are covered under [Known divergences](#known-divergences).
 | ---------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
 | `annots_1b.pdf`        | 14   | 14   | 12   | 12   | 12   | 10  | 12   | 8    |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 3    |
+| `cmaps_2b.pdf`         | 6    | 10   | 7    | 8    | 7    | 8   | 12   | 12   |
 | `complex_1b.pdf`       | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
 | `complex_2a.pdf`       | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
 | `complex_2b.pdf`       | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
@@ -718,6 +721,34 @@ carry a divergence, and in the second case no verdict at all.
 The file also plants a form XObject with an `/F` key, which ISO 19005-1, 6.1.7
 forbids: it belongs to no font clause, so a font verdict is visibly separate
 from it.
+
+## CMap embedding and UseCMap chains
+
+ISO 19005-2, 6.2.11.3.3 was the largest cluster shared by all four part-2 and
+part-3 profiles. It governs the CMaps a Type 0 font uses, and its three tests
+are three different questions:
+
+| Font | Construct                                                       | Rule           |
+| ---- | --------------------------------------------------------------- | -------------- |
+| T1   | names a CMap that is neither predefined nor embedded            | `6.2.11.3.3/1` |
+| T2   | embeds a CMap whose dictionary `/WMode` contradicts its program | `6.2.11.3.3/2` |
+| T3   | embeds a CMap pulling in another embedded CMap, not predefined  | `6.2.11.3.3/3` |
+| T4   | names `/Identity-H`                                             | silent         |
+| T5   | embeds a self-consistent CMap pulling in `/Identity-H`          | silent         |
+
+T3's `/UseCMap` references an embedded CMap **stream** rather than naming one,
+and that is forced rather than chosen: a `/UseCMap` naming a CMap veraPDF
+cannot resolve makes it throw and abandon the run. Only a reference to a real
+stream reaches the test.
+
+litho reported nothing for T3. `findNonPredefinedUseCMap` discarded any name
+without a hyphen, which is a reasonable guard for a name scraped out of the
+CMap program, where a stray token can be picked up, but wrong for a name read
+from an embedded CMap's own `/CMapName`: that name is authoritative and usually
+carries no hyphen at all. The guard now applies only to scraped names.
+
+The part-1 spelling 6.3.3.3 has no third test, so at PDF/A-1b the file reports
+t1 and t2 only, and PDF/A-4 states all three as 6.2.10.3.3.
 
 ## Extension schemas and the trailer
 

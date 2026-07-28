@@ -1,0 +1,193 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /Pages 2 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Count 1 /Kids [ 3 0 R ] /Type /Pages >>
+endobj
+3 0 obj
+<< /Contents 4 0 R /MediaBox [ 0 0 612 792 ] /Parent 2 0 R /Resources << /Font << /T1 5 0 R /T2 6 0 R /T3 7 0 R /T4 8 0 R /T5 9 0 R >> >> /Type /Page >>
+endobj
+4 0 obj
+<< /Length 180 >>
+stream
+BT /T1 12 Tf 50 720 Td <0041> Tj ET
+BT /T2 12 Tf 50 700 Td <0041> Tj ET
+BT /T3 12 Tf 50 680 Td <0041> Tj ET
+BT /T4 12 Tf 50 660 Td <0041> Tj ET
+BT /T5 12 Tf 50 640 Td <0041> Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /BaseFont /LithoNamedCMap /DescendantFonts [ 10 0 R ] /Encoding /LithoCustomCMap /Subtype /Type0 /Type /Font >>
+endobj
+6 0 obj
+<< /BaseFont /LithoWModeSplit /DescendantFonts [ 11 0 R ] /Encoding 12 0 R /Subtype /Type0 /Type /Font >>
+endobj
+7 0 obj
+<< /BaseFont /LithoChained /DescendantFonts [ 13 0 R ] /Encoding 14 0 R /Subtype /Type0 /Type /Font >>
+endobj
+8 0 obj
+<< /BaseFont /LithoIdentity /DescendantFonts [ 15 0 R ] /Encoding /Identity-H /Subtype /Type0 /Type /Font >>
+endobj
+9 0 obj
+<< /BaseFont /LithoEmbeddedOK /DescendantFonts [ 16 0 R ] /Encoding 17 0 R /Subtype /Type0 /Type /Font >>
+endobj
+10 0 obj
+<< /BaseFont /LithoNamedCMap /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /DW 1000 /FontDescriptor 18 0 R /Subtype /CIDFontType0 /Type /Font >>
+endobj
+11 0 obj
+<< /BaseFont /LithoWModeSplit /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /DW 1000 /FontDescriptor 19 0 R /Subtype /CIDFontType0 /Type /Font >>
+endobj
+12 0 obj
+<< /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /CMapName /LithoWModeCMap /Type /CMap /WMode 1 /Length 414 >>
+stream
+%!PS-Adobe-3.0 Resource-CMap
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo 3 dict dup begin /Registry (Adobe) def /Ordering (Identity) def /Supplement 0 def end def
+/CMapName /LithoWModeCMap def
+/CMapType 1 def
+/WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 begincidrange
+<0000> <FFFF> 0
+endcidrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+13 0 obj
+<< /BaseFont /LithoChained /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /DW 1000 /FontDescriptor 20 0 R /Subtype /CIDFontType0 /Type /Font >>
+endobj
+14 0 obj
+<< /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /CMapName /LithoOuterCMap /Type /CMap /UseCMap 21 0 R /WMode 0 /Length 414 >>
+stream
+%!PS-Adobe-3.0 Resource-CMap
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo 3 dict dup begin /Registry (Adobe) def /Ordering (Identity) def /Supplement 0 def end def
+/CMapName /LithoOuterCMap def
+/CMapType 1 def
+/WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 begincidrange
+<0000> <FFFF> 0
+endcidrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+15 0 obj
+<< /BaseFont /LithoIdentity /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /DW 1000 /FontDescriptor 22 0 R /Subtype /CIDFontType0 /Type /Font >>
+endobj
+16 0 obj
+<< /BaseFont /LithoEmbeddedOK /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /DW 1000 /FontDescriptor 23 0 R /Subtype /CIDFontType0 /Type /Font >>
+endobj
+17 0 obj
+<< /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /CMapName /LithoConformingCMap /Type /CMap /UseCMap /Identity-H /WMode 0 /Length 419 >>
+stream
+%!PS-Adobe-3.0 Resource-CMap
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo 3 dict dup begin /Registry (Adobe) def /Ordering (Identity) def /Supplement 0 def end def
+/CMapName /LithoConformingCMap def
+/CMapType 1 def
+/WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 begincidrange
+<0000> <FFFF> 0
+endcidrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+18 0 obj
+<< /Ascent 880 /CapHeight 700 /Descent -120 /Flags 4 /FontBBox [ 0 -120 1000 880 ] /FontName /LithoNamedCMap /ItalicAngle 0 /StemV 80 /Type /FontDescriptor >>
+endobj
+19 0 obj
+<< /Ascent 880 /CapHeight 700 /Descent -120 /Flags 4 /FontBBox [ 0 -120 1000 880 ] /FontName /LithoWModeSplit /ItalicAngle 0 /StemV 80 /Type /FontDescriptor >>
+endobj
+20 0 obj
+<< /Ascent 880 /CapHeight 700 /Descent -120 /Flags 4 /FontBBox [ 0 -120 1000 880 ] /FontName /LithoChained /ItalicAngle 0 /StemV 80 /Type /FontDescriptor >>
+endobj
+21 0 obj
+<< /CIDSystemInfo << /Ordering (Identity) /Registry (Adobe) /Supplement 0 >> /CMapName /LithoInnerCMap /Type /CMap /WMode 0 /Length 414 >>
+stream
+%!PS-Adobe-3.0 Resource-CMap
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo 3 dict dup begin /Registry (Adobe) def /Ordering (Identity) def /Supplement 0 def end def
+/CMapName /LithoInnerCMap def
+/CMapType 1 def
+/WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 begincidrange
+<0000> <FFFF> 0
+endcidrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+22 0 obj
+<< /Ascent 880 /CapHeight 700 /Descent -120 /Flags 4 /FontBBox [ 0 -120 1000 880 ] /FontName /LithoIdentity /ItalicAngle 0 /StemV 80 /Type /FontDescriptor >>
+endobj
+23 0 obj
+<< /Ascent 880 /CapHeight 700 /Descent -120 /Flags 4 /FontBBox [ 0 -120 1000 880 ] /FontName /LithoEmbeddedOK /ItalicAngle 0 /StemV 80 /Type /FontDescriptor >>
+endobj
+xref
+0 24
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000123 00000 n 
+0000000291 00000 n 
+0000000522 00000 n 
+0000000652 00000 n 
+0000000773 00000 n 
+0000000891 00000 n 
+0000001015 00000 n 
+0000001136 00000 n 
+0000001325 00000 n 
+0000001515 00000 n 
+0000002102 00000 n 
+0000002289 00000 n 
+0000002892 00000 n 
+0000003080 00000 n 
+0000003270 00000 n 
+0000003888 00000 n 
+0000004063 00000 n 
+0000004239 00000 n 
+0000004412 00000 n 
+0000004999 00000 n 
+0000005173 00000 n 
+trailer << /Root 1 0 R /Size 24 /ID [<6e2adfc6205b28e728d73cd89983702c><6e2adfc6205b28e728d73cd89983702c>] >>
+startxref
+5349
+%%EOF
