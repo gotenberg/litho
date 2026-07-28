@@ -50,37 +50,38 @@ one deliberately rather than diffing it against a fresh build.
 
 ## Fixtures
 
-| Fixture               | Home profile | Focus                                                           |
-| --------------------- | ------------ | --------------------------------------------------------------- |
-| --------------------  | ------------ | --------------------------------------------------------------  |
-| `complex_1b.pdf`      | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG          |
-| `complex_2a.pdf`      | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language        |
-| `complex_2b.pdf`      | PDF/A-2b     | Broadest mix; annotations, optional content, filters            |
-| `complex_2u.pdf`      | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings     |
-| `complex_3b.pdf`      | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment      |
-| `complex_4.pdf`       | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps  |
-| `complex_ua1.pdf`     | PDF/UA-1     | Structure and accessibility defects in a wired tag tree         |
-| `complex_ua2.pdf`     | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations  |
-| `forbidden_mix.pdf`   | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW              |
-| `gstate_2b.pdf`       | PDF/A-2b     | Transfer functions and halftones in six graphics states         |
-| `limits_2b.pdf`       | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN           |
-| `megafont_2b.pdf`     | PDF/A-2b     | Font embedding and glyph-width scoping                          |
-| `multipage_2b.pdf`    | PDF/A-2b     | Three pages, a violation class unique to each                   |
-| `fontdict_2b.pdf`     | PDF/A-2b     | Font dictionary required keys; page box implementation limits   |
-| `structnest_ua1.pdf`  | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language   |
-| `tables_ua1.pdf`      | PDF/UA-1     | Tables and lists: header association, nested list structure     |
-| `tablespan_ua2.pdf`   | PDF/UA-2     | Table cell geometry: row and column spans                       |
-| `extschema_2b.pdf`    | PDF/A-2b     | XMP extension schema structure across sibling entries           |
-| `schemaprefix_1b.pdf` | PDF/A-1b     | Extension schema RDF container types and absent fields          |
-| `trailer_2b.pdf`      | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                     |
-| `limits_1b.pdf`       | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
-| `docinfo_1b.pdf`      | PDF/A-1b     | Document information dictionary against its XMP analogues       |
-| `imgxmp_4.pdf`        | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
-| `idprefix_2b.pdf`     | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
-| `uaid_ua1.pdf`        | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
-| `ttencoding_2b.pdf`   | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
-| `ttcmap_2b.pdf`       | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
-| `fenote_ua2.pdf`      | PDF/UA-2     | Footnote and endnote structure: type, namespace, `/Ref` pairing |
+| Fixture                | Home profile | Focus                                                           |
+| ---------------------- | ------------ | --------------------------------------------------------------- |
+| --------------------   | ------------ | --------------------------------------------------------------  |
+| `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG          |
+| `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language        |
+| `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters            |
+| `complex_2u.pdf`       | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings     |
+| `complex_3b.pdf`       | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment      |
+| `complex_4.pdf`        | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps  |
+| `complex_ua1.pdf`      | PDF/UA-1     | Structure and accessibility defects in a wired tag tree         |
+| `complex_ua2.pdf`      | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations  |
+| `forbidden_mix.pdf`    | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW              |
+| `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states         |
+| `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN           |
+| `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                          |
+| `multipage_2b.pdf`     | PDF/A-2b     | Three pages, a violation class unique to each                   |
+| `fontdict_2b.pdf`      | PDF/A-2b     | Font dictionary required keys; page box implementation limits   |
+| `structnest_ua1.pdf`   | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language   |
+| `tables_ua1.pdf`       | PDF/UA-1     | Tables and lists: header association, nested list structure     |
+| `tablespan_ua2.pdf`    | PDF/UA-2     | Table cell geometry: row and column spans                       |
+| `extschema_2b.pdf`     | PDF/A-2b     | XMP extension schema structure across sibling entries           |
+| `schemaprefix_1b.pdf`  | PDF/A-1b     | Extension schema RDF container types and absent fields          |
+| `trailer_2b.pdf`       | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                     |
+| `limits_1b.pdf`        | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
+| `docinfo_1b.pdf`       | PDF/A-1b     | Document information dictionary against its XMP analogues       |
+| `imgxmp_4.pdf`         | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
+| `idprefix_2b.pdf`      | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
+| `uaid_ua1.pdf`         | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
+| `ttencoding_2b.pdf`    | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
+| `ttcmap_2b.pdf`        | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
+| `fenote_ua2.pdf`       | PDF/UA-2     | Footnote and endnote structure: type, namespace, `/Ref` pairing |
+| `tableregular_ua2.pdf` | PDF/UA-2     | Table regularity: cell intersection and section row groupings   |
 
 ### Must-not-fire controls
 
@@ -150,6 +151,8 @@ violation but is exempt, so a firing is a false positive.
 | `ttcmap_2b`                               | A symbolic program whose single subtable is the Microsoft Symbol (3,0) | ISO 19005-2, 6.2.11.6 t4     |
 | `fenote_ua2`                              | An `FENote` whose `/Ref` pairing is complete in both directions        | ISO 14289-2, 8.2.5.14 t2, t3 |
 | `fenote_ua2`                              | An `FENote` that refers to nothing and that nothing refers to          | ISO 14289-2, 8.2.5.14 t2, t3 |
+| `tableregular_ua2`                        | A sectioned table whose `THead` and `TBody` groupings are regular      | ISO 14289-2, 8.2.5.26 t2     |
+| `tableregular_ua2`                        | A flat table carrying a real `/ColSpan` that adds up                   | ISO 14289-2, 8.2.5.26 t3     |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -162,36 +165,37 @@ Counts are distinct rule classes (`clause/test`) reported by litho. litho and
 veraPDF agree exactly on the set in every cell except the two marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
-| Fixture               | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
-| --------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
-| `complex_1b.pdf`      | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
-| `complex_2a.pdf`      | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
-| `complex_2b.pdf`      | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
-| `complex_2u.pdf`      | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
-| `complex_3b.pdf`      | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
-| `complex_4.pdf`       | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
-| `complex_ua1.pdf`     | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
-| `complex_ua2.pdf`     | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
-| `docinfo_1b.pdf`      | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
-| `extschema_2b.pdf`    | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
-| `fontdict_2b.pdf`     | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
-| `fenote_ua2.pdf`      | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
-| `forbidden_mix.pdf`   | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
-| `gstate_2b.pdf`       | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
-| `idprefix_2b.pdf`     | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
-| `imgxmp_4.pdf`        | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
-| `limits_1b.pdf`       | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
-| `limits_2b.pdf`       | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
-| `megafont_2b.pdf`     | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
-| `multipage_2b.pdf`    | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
-| `schemaprefix_1b.pdf` | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
-| `structnest_ua1.pdf`  | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
-| `tables_ua1.pdf`      | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
-| `tablespan_ua2.pdf`   | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
-| `trailer_2b.pdf`      | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
-| `ttcmap_2b.pdf`       | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
-| `ttencoding_2b.pdf`   | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
-| `uaid_ua1.pdf`        | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
+| Fixture                | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
+| ---------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
+| `complex_1b.pdf`       | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
+| `complex_2a.pdf`       | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
+| `complex_2b.pdf`       | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
+| `complex_2u.pdf`       | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
+| `complex_3b.pdf`       | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
+| `complex_4.pdf`        | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
+| `complex_ua1.pdf`      | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
+| `complex_ua2.pdf`      | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
+| `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
+| `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
+| `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
+| `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
+| `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
+| `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
+| `idprefix_2b.pdf`      | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
+| `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
+| `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
+| `limits_2b.pdf`        | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
+| `megafont_2b.pdf`      | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
+| `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
+| `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
+| `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
+| `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
+| `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 6    | 5    |
+| `tablespan_ua2.pdf`    | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
+| `trailer_2b.pdf`       | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
+| `ttcmap_2b.pdf`        | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
+| `ttencoding_2b.pdf`    | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
+| `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -549,6 +553,44 @@ instead, so N1 binds it to the PDF 1.7 namespace deliberately.
 litho reported t1 and t4 and neither `/Ref` test when the fixture was written.
 `Rule_14289_2_8_2_5_14_t02` and `t03` existed but nothing referenced them, so
 both were dead rules; `checkPDFUA2FENoteRefs` wires them.
+
+## Table regularity and section row groupings
+
+`tablespan_ua2.pdf` reaches ISO 14289-2, 8.2.5.26 t3 and records t1 and t2 as
+constructs it could not produce. `tableregular_ua2.pdf` produces both.
+
+The intersection t1 needs is not the naive one. A `/RowSpan` of 2 does not
+collide with the row below it: the table model shifts that row's cells past the
+occupied slot rather than overlapping them, a mistake made three times in this
+project. A real intersection needs a row whose own spans reach into a slot a
+previous row already carries down into. Table A is
+TH(RowSpan 2), TH, TH(RowSpan 2) over a single TH(ColSpan 2), whose second
+column lands on the slot the last cell of row 1 occupies.
+
+Test 2 is decided by a section boundary. Table B's `/RowSpan` starts in the
+`THead` and reaches into the `TBody`, and the two profiles judge that
+differently, which is measured on both tools rather than assumed:
+
+| profile  | verdict                                   |
+| -------- | ----------------------------------------- |
+| PDF/UA-2 | `8.2.5.26/2`, the grouping is not regular |
+| PDF/UA-1 | `7.2/42`, its column rule                 |
+
+PDF/UA-1 draws no section boundary, so it carries the span into the next row,
+sees a wider row and reports the column count. litho reported the PDF/UA-2
+column rule `8.2.5.26/3` for this table, which was an FP and an FN in one
+construct: the wrong test of the right clause. `rowSpanCrossingSection` scopes
+the section model to PDF/UA-2 so both profiles now match.
+
+Tests 5 and 6 are deliberately absent, and the reason is recorded so the next
+attempt does not repeat the search. They fire on `SETD`, and veraPDF only
+evaluates them after scope-based header determination fails: `GFSETable.checkTable`
+calls `hasHeaders`, which is what sets `hasConnectedHeader` and populates
+`unknownHeaders`, only on that fallback path. Eight arrangements were probed,
+including `TH` cells with no `/Scope`, no `/ID`, a `/Headers` array naming an
+id that does not exist, and a table with no `TH` at all. None reached the
+fallback, so all eight stayed silent on both tools. Planting a guess would add
+a disagreeing cell rather than coverage.
 
 ## Extension schemas and the trailer
 
