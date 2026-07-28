@@ -34,13 +34,10 @@ revealed and which the clause does not state: determination is settled by
 no `/Scope`. Both tables therefore leave their single TH unscoped. The cell that
 cannot be resolved sits at row 1 column 1, where no TH shares its row or its
 column, and the cell at row 0 column 0 is exempt from the fallback altogether,
-which is why the TH occupies it. Table E's cell names no header at all, which is test 5.
-
-Test 6, the same cell naming a header id no TH declares, is deliberately
-absent. It is reachable under PDF/UA-2, but PDF/UA-1 spells the identical
-predicate as 7.5 t2 and veraPDF does not report it there for that construct,
-while litho does. Planting it would make this file carry a divergence it was
-built to reveal, so the construct is recorded in ../README.md instead.
+which is why the TH occupies it. Table E's cell names no header at all (t5) and table F's names one no TH
+declares (t6). veraPDF stops at the first cell it cannot resolve, so the two
+halves need a table each, and table F's earlier cells all carry a valid
+/Headers so its target cell is the one that fails.
 
 Tests 3 and 4 belong to `tablespan_ua2.pdf` and are not repeated here.
 
@@ -62,7 +59,7 @@ font = pdf.make_indirect(
     )
 )
 
-CELL_COUNT = 26
+CELL_COUNT = 32
 content = b"".join(
     b"/TD <</MCID %d>> BDC\nBT /F1 9 Tf 40 %d Td (c%d) Tj ET\nEMC\n"
     % (i, 750 - i * 17, i)
@@ -224,7 +221,35 @@ table_e = table(
     ]
 )
 
-document.K = Array([table_a, table_b, table_c, table_d, table_e])
+# Table F is the other half of the same split: the undeterminable cell names a
+# header id no TH declares (t6). Every cell before it carries a valid /Headers
+# so that it is the FIRST cell veraPDF cannot resolve, which matters because
+# the fallback stops there. It also makes the fixture profile-agnostic: under
+# PDF/UA-1 an unscoped TH has no default scope at all, so without the valid
+# /Headers an earlier cell would fail first and the file would report the other
+# half of the split under the two profiles.
+table_f = table(
+    lambda t: [
+        row(
+            t,
+            lambda r: [
+                cell("TH", r, scope=None, cid="f1"),
+                cell("TD", r, headers=["f1"]),
+                cell("TD", r, headers=["f1"]),
+            ],
+        ),
+        row(
+            t,
+            lambda r: [
+                cell("TD", r, headers=["f1"]),
+                cell("TD", r, headers=["nosuchheader"]),
+                cell("TD", r, headers=["f1"]),
+            ],
+        ),
+    ]
+)
+
+document.K = Array([table_a, table_b, table_c, table_d, table_e, table_f])
 struct_root.K = Array([document])
 struct_root.ParentTree = pdf.make_indirect(Dictionary(Nums=Array([0, Array(leaves)])))
 struct_root.ParentTreeNextKey = 1

@@ -191,7 +191,7 @@ which are covered under [Known divergences](#known-divergences).
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
-| `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 7    | 6    |
+| `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 8    | 7    |
 | `tablespan_ua2.pdf`    | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
 | `trailer_2b.pdf`       | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 | `ttcmap_2b.pdf`        | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
@@ -601,12 +601,17 @@ exempt corner, and the cell at row 1 column 1 sharing its row and column with no
 all scoped, where veraPDF is silent, and stayed silent on the undeterminable
 cell, where veraPDF fires: a false positive and a false negative in one clause.
 
-Test 6 is the same cell naming a header id no `TH` declares. It is reachable
-under PDF/UA-2 and is **deliberately not planted**, because PDF/UA-1 spells the
-identical predicate as 7.5 t2 on the same `SETD` object and veraPDF does not
-report it there for this construct, while litho does. The construct is
-`[TH(id, no /Scope), TD, TD]` over `[TD, TD(/Headers [(nosuch)]), TD]`. Closing
-that PDF/UA-1 divergence is a prerequisite for planting it.
+Table F is the other half of the split: the same cell naming a header id no
+`TH` declares (t6). It needs one more thing than table E, and the reason is the
+last piece of the model. `GFSETH.getDefaultScope` gives an unscoped `TH` an
+implicit scope from its position under PDF/UA-2, and returns null under
+PDF/UA-1. So a table whose earlier cells rely on that implicit scope resolves
+them under PDF/UA-2 and fails an earlier cell under PDF/UA-1, and since the
+fallback stops at the first failure the same file reports opposite halves of
+the split on the two profiles. Table F therefore gives every cell before the
+target an explicit valid `/Headers`, which makes the target the first failure
+under both. The file reports t6 at PDF/UA-2 and its PDF/UA-1 spelling 7.5 t2,
+and litho matches both.
 
 ## Extension schemas and the trailer
 
