@@ -51,7 +51,7 @@ one deliberately rather than diffing it against a fresh build.
 ## Fixtures
 
 | Fixture                | Home profile | Focus                                                           |
-| ---------------------- | ------------ | --------------------------------------------------------------- |
+| ---------------------- | ------------ | --------------------------------------------------------------- | --- | --- | --- | --- | --- | --- |
 | `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG          |
 | `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language        |
 | `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters            |
@@ -70,6 +70,7 @@ one deliberately rather than diffing it against a fresh build.
 | `tables_ua1.pdf`       | PDF/UA-1     | Tables and lists: header association, nested list structure     |
 | `tablespan_ua2.pdf`    | PDF/UA-2     | Table cell geometry: row and column spans                       |
 | `extschema_2b.pdf`     | PDF/A-2b     | XMP extension schema structure across sibling entries           |
+| `outputintent_2b.pdf`  | 4            | 7                                                               | 5   | 5   | 5   | 6   | 7   | 7   |
 | `schemaprefix_1b.pdf`  | PDF/A-1b     | Extension schema RDF container types and absent fields          |
 | `trailer_2b.pdf`       | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                     |
 | `limits_1b.pdf`        | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
@@ -85,6 +86,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annots_1b.pdf`        | PDF/A-1b     | Annotation dictionary constraints and additional actions        |
 | `fontkeys_1b.pdf`      | PDF/A-1b     | Part-1 font dictionary required keys and embedded file subtype  |
 | `cmaps_2b.pdf`         | PDF/A-2b     | CMap embedding, WMode consistency and `/UseCMap` chains         |
+| `outputintent_2b.pdf`  | PDF/A-2b     | OutputIntent array and ICC destination profile headers          |
 
 ### Must-not-fire controls
 
@@ -161,6 +163,7 @@ violation but is exempt, so a firing is a false positive.
 | `annots_1b`                               | A plain square and a plain widget, both with `/F 4` and an `/N` stream | ISO 19005-1, 6.5.3           |
 | `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
 | `cmaps_2b`                                | A font naming `/Identity-H`, and one embedding a self-consistent CMap  | ISO 19005-2, 6.2.11.3.3      |
+| `outputintent_2b`                         | A well-formed `prtr`/`RGB ` destination profile beside the bad one     | ISO 19005-2, 6.2.3 t1        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -750,6 +753,37 @@ carries no hyphen at all. The guard now applies only to scraped names.
 The part-1 spelling 6.3.3.3 has no third test, so at PDF/A-1b the file reports
 t1 and t2 only, and PDF/A-4 states all three as 6.2.10.3.3.
 
+## Output intents and ICC destination profiles
+
+Every other fixture omits `/OutputIntents`, which is what keeps the colour
+clauses reachable elsewhere. This one is the opposite case, and the only fixture
+that declares an output intent at all, so it exercises the paths that run only
+when a destination profile is present. ISO 19005-2, 6.2.3 was unreached across
+all four part-2 and part-3 profiles.
+
+| Intent | Construct                                                   | Rule      |
+| ------ | ----------------------------------------------------------- | --------- |
+| A      | ICC profile whose device class is `scnr`                    | `6.2.3/1` |
+| B      | a second intent whose destination profile is another object | `6.2.3/2` |
+| B      | `/S /GTS_PDFX` carrying `/DestOutputProfileRef`             | `6.2.3/3` |
+
+Intent B's own profile is well formed, a `prtr` device class over `RGB `, which
+makes it the control for test 1: the verdict lands on the offending profile
+rather than on every profile in the array.
+
+The ICC profiles are built by the fixture rather than shipped. These tests read
+the profile header, so each is a 128-byte header plus an empty tag table, and
+the header carries a real size, an `acsp` signature and a PCS illuminant because
+veraPDF parses profile bytes eagerly and throws on a placeholder.
+
+Test 1 is reached through the device class rather than the data colour space.
+Both routes fire it, but a profile declaring `Lab ` makes litho report
+ISO 19005-2, 6.2.4.3 t4 against the page's device colour operators while veraPDF
+does not, so the `scnr` route is the one planted. That divergence is recorded
+below rather than built into a fixture.
+
+At PDF/A-1b the same file reports the part-1 spelling 6.2.2 t1 and t2.
+
 ## Extension schemas and the trailer
 
 Two more fixtures come from the same coverage scan. `6.6.2.3.3` was the
@@ -1143,6 +1177,14 @@ too, which is the whole difference between the two files. Every other fixture in
 this corpus draws text, so none of them could show this. litho has the gap.
 
 ## Known divergences
+
+**`6.2.4.3/4` on a `Lab ` destination profile.** litho reports the device
+colour-space rule against a page whose output intent declares an ICC profile
+with a `Lab ` data colour space; veraPDF does not. The reduction is a single
+page painting `0 0 0 rg` under one output intent whose profile header carries
+`prtr` and `Lab `. Both tools agree once the profile declares `RGB `, `CMYK` or
+`GRAY`, so the disagreement is about whether a Lab destination profile
+establishes a device colour space at all. Not planted in any fixture.
 
 **`7.1/12` at PDF/UA-1.** litho reports a structure element missing its `/P`
 entry; veraPDF cannot. `GFPDStructElem.getcontainsParent` returns
