@@ -288,3 +288,45 @@ func TestForbiddenAnnotTypeRule(t *testing.T) {
 
 // testCtx returns a background context for test use.
 func testCtx() context.Context { return context.Background() }
+
+// TestCheckNValueType_ExtraAppearanceKeysEscapeBothTests pins that an
+// appearance dictionary carrying more than /N is judged by neither /N-type
+// test. ISO 19005-1, 6.5.3 states both t5 and t6 with the same opening escape,
+// `AP != "N"`, which holds for any such dictionary: the extra keys are already
+// reported by t4. litho applied the escape to the Btn test alone, so a
+// non-widget with extra keys and a dictionary /N reported t6 where veraPDF is
+// silent.
+func TestCheckNValueType_ExtraAppearanceKeysEscapeBothTests(t *testing.T) {
+	ctx := context.Background()
+	doc, _ := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	)
+
+	streamN := ast.PdfStream{Dict: ast.PdfDict{"Subtype": ast.PdfName("Form")}}
+	dictN := ast.PdfDict{"Off": ast.PdfName("x")}
+
+	cases := []struct {
+		name     string
+		n        ast.PdfObject
+		isWidget bool
+		ft       ast.PdfName
+		apOnlyN  bool
+		wantFire bool
+	}{
+		{"Btn widget, stream /N, clean dict", streamN, true, "Btn", true, true},
+		{"Btn widget, stream /N, extra keys", streamN, true, "Btn", false, false},
+		{"non-widget, dict /N, clean dict", dictN, false, "", true, true},
+		{"non-widget, dict /N, extra keys", dictN, false, "", false, false},
+		{"non-widget, stream /N, clean dict", streamN, false, "", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := checkNValueType(ctx, doc, tc.n, tc.isWidget, tc.ft, 1, "annot", tc.apOnlyN)
+			if fired := len(got) > 0; fired != tc.wantFire {
+				t.Errorf("fired=%v, want %v: %v", fired, tc.wantFire, got)
+			}
+		})
+	}
+}

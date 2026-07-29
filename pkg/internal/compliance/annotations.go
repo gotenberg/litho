@@ -393,11 +393,10 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 		results = append(results, failf(rule, "%s: appearance dictionary contains extra entries: %s", loc, extras)...)
 	}
 
-	// Test 3 & 4: Validate /N value type based on annotation subtype and field type.
-	// The Btn subdictionary check (test 3) applies only when the appearance dict
-	// contains only /N; an appearance dict carrying extra keys is already
-	// reported by test 2, and veraPDF's test 3 carries a matching "AP != N"
-	// escape that suppresses the /N-type check in that case.
+	// Test 3 & 4: Validate /N value type based on annotation subtype and field
+	// type. Both apply only when the appearance dict contains just /N: a dict
+	// carrying extra keys is already reported by test 2, and BOTH veraPDF tests
+	// open with an "AP != N" escape that passes such a dict.
 	results = append(results, checkNValueType(ctx, doc, nObj, isWidget, ft, part, loc, len(ap) == 1)...)
 
 	return results
@@ -472,11 +471,16 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 		return nil
 	}
 
+	// Both /N-type tests open with the same escape, `AP != "N"`, which holds
+	// whenever the appearance dictionary carries anything besides /N. Such a
+	// dictionary is already reported by the only-/N test, and neither /N-type
+	// test judges it. Applying the escape to the Btn test alone left the
+	// stream test reporting an appearance dictionary veraPDF passes.
+	if !apOnlyN {
+		return nil
+	}
+
 	if isWidget && ft == "Btn" {
-		// Test 3 applies only to a clean appearance dict (only /N).
-		if !apOnlyN {
-			return nil
-		}
 		// Test 3: /N must be an appearance subdictionary (PdfDict).
 		if _, ok := resolved.(ast.PdfDict); !ok {
 			rule := nSubdictRule(part)
