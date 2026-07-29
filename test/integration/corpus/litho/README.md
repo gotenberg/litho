@@ -91,6 +91,7 @@ one deliberately rather than diffing it against a fresh build.
 | `outputintent_2b.pdf`  | PDF/A-2b     | OutputIntent array and ICC destination profile headers          |
 | `formstruct_ua2.pdf`   | PDF/UA-2     | Widget annotations, Form structure elements and XFA             |
 | `xref_1b.pdf`          | PDF/A-1b     | Cross reference table formatting, patched as bytes              |
+| `contentstream_4.pdf`  | PDF/A-4      | Content stream operators and the resources it names             |
 
 ### Must-not-fire controls
 
@@ -171,6 +172,7 @@ violation but is exempt, so a firing is a false positive.
 | `formstruct_ua2`                          | A `Form` element enclosing exactly one widget                          | ISO 14289-2, 8.10.1 t2       |
 | `formstruct_ua2`                          | A widget with no `/StructParent`, outside the structure tree           | ISO 14289-2, 8.10.1 t1       |
 | `xref_1b`                                 | Every object offset and `startxref` value left valid by the patch      | ISO 19005-1, 6.1.4           |
+| `contentstream_4`                         | `/F1`, a name the inherited dictionary does define                     | ISO 19005-4, 6.2.2 t3        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -188,6 +190,7 @@ which are covered under [Known divergences](#known-divergences).
 | `annots_1b.pdf`        | 14   | 14   | 12   | 12   | 12   | 10  | 12   | 8    |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 3    |
 | `cmaps_2b.pdf`         | 6    | 10   | 7    | 8    | 7    | 8   | 12   | 12   |
+| `contentstream_4.pdf`  | 4    | 8    | 6    | 6    | 6    | 6   | 8    | 7    |
 | `complex_1b.pdf`       | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
 | `complex_2a.pdf`       | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
 | `complex_2b.pdf`       | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
@@ -845,6 +848,35 @@ now steps over surplus EOL markers and whitespace so the header is still read.
 
 Test 3 forbids a cross reference stream, which cannot coexist with a table, so
 it needs a file of its own and is not planted here.
+
+## Content stream operators and resources
+
+ISO 19005-4, 6.2.2 is the only clause that judges a content stream as a whole
+rather than the objects it references: its operators must be defined, and the
+resources it names must be enumerated by a dictionary the stream itself
+carries.
+
+| Construct                                                      | Rule      |
+| -------------------------------------------------------------- | --------- |
+| an undefined operator inside a `BX`/`EX` pair                  | `6.2.2/1` |
+| the page carries no `/Resources` and inherits them             | `6.2.2/2` |
+| the stream names `/F99`, which no dictionary defines           | `6.2.2/3` |
+| the stream also draws with `/F1`, which the dictionary defines | silent    |
+
+Tests 2 and 3 both concern resources and are easy to conflate, so each is
+planted separately: one page that inherits its dictionary, and one name that
+resolves nowhere. The undefined operator sits inside a compatibility section
+because the clause forbids it "even if such operators are bracketed by the
+BX/EX compatibility operators", so a check that treats the bracket as an escape
+misses it.
+
+The fixture found a content-destroying remediation bug. Adding a `/DefaultCMYK`
+colour space to a page that carries no `/Resources` wrote a fresh dictionary
+holding only `/ColorSpace`, which **shadowed** the inherited one and made every
+inherited font and XObject unreachable: the remediated page lost its `/Font`
+entirely. The fixer now starts from the inherited dictionary, which litho
+already had a helper to find, and only builds a new one for a page that truly
+inherits nothing.
 
 ## Extension schemas and the trailer
 
