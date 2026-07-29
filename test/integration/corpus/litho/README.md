@@ -51,7 +51,7 @@ one deliberately rather than diffing it against a fresh build.
 ## Fixtures
 
 | Fixture                | Home profile | Focus                                                           |
-| ---------------------- | ------------ | --------------------------------------------------------------- | --- | --- | --- | --- | --- | --- |
+| ---------------------- | ------------ | --------------------------------------------------------------- |
 | `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG          |
 | `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language        |
 | `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters            |
@@ -61,7 +61,6 @@ one deliberately rather than diffing it against a fresh build.
 | `complex_ua1.pdf`      | PDF/UA-1     | Structure and accessibility defects in a wired tag tree         |
 | `complex_ua2.pdf`      | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations  |
 | `forbidden_mix.pdf`    | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW              |
-| `formstruct_ua2.pdf`   | 4            | 6                                                               | 6   | 6   | 6   | 5   | 7   | 7   |
 | `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states         |
 | `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: real, string, name, nesting, DeviceN     |
 | `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                          |
@@ -71,15 +70,12 @@ one deliberately rather than diffing it against a fresh build.
 | `tables_ua1.pdf`       | PDF/UA-1     | Tables and lists: header association, nested list structure     |
 | `tablespan_ua2.pdf`    | PDF/UA-2     | Table cell geometry: row and column spans                       |
 | `extschema_2b.pdf`     | PDF/A-2b     | XMP extension schema structure across sibling entries           |
-| `outputintent_2b.pdf`  | 4            | 7                                                               | 5   | 5   | 5   | 6   | 7   | 7   |
 | `schemaprefix_1b.pdf`  | PDF/A-1b     | Extension schema RDF container types and absent fields          |
 | `trailer_2b.pdf`       | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                     |
 | `limits_1b.pdf`        | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
 | `docinfo_1b.pdf`       | PDF/A-1b     | Document information dictionary against its XMP analogues       |
 | `imgxmp_4.pdf`         | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
-| `iccbased_4.pdf`       | 3            | 7                                                               | 5   | 5   | 5   | 5   | 8   | 7   |
 | `idprefix_2b.pdf`      | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
-| `xref_1b.pdf`          | 5            | 6                                                               | 4   | 4   | 4   | 5   | 7   | 7   |
 | `uaid_ua1.pdf`         | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
 | `ttencoding_2b.pdf`    | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
 | `ttcmap_2b.pdf`        | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
@@ -94,6 +90,7 @@ one deliberately rather than diffing it against a fresh build.
 | `xref_1b.pdf`          | PDF/A-1b     | Cross reference table formatting, patched as bytes              |
 | `contentstream_4.pdf`  | PDF/A-4      | Content stream operators and the resources it names             |
 | `iccbased_4.pdf`       | PDF/A-4      | ICCBased profiles, overprint mode and the destination profile   |
+| `headings_ua1.pdf`     | PDF/UA-1     | Heading structure: one H per node, strong or weak but not both  |
 
 ### Must-not-fire controls
 
@@ -176,6 +173,7 @@ violation but is exempt, so a firing is a false positive.
 | `xref_1b`                                 | Every object offset and `startxref` value left valid by the patch      | ISO 19005-1, 6.1.4           |
 | `contentstream_4`                         | `/F1`, a name the inherited dictionary does define                     | ISO 19005-4, 6.2.2 t3        |
 | `iccbased_4`                              | An RGB ICCBased space, valid and unrelated to the OutputIntent         | ISO 19005-4, 6.2.4.2         |
+| `headings_ua1`                            | `Sect2`, a node holding exactly one `H` child                          | ISO 14289-1, 7.4.4 t1        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -193,7 +191,6 @@ which are covered under [Known divergences](#known-divergences).
 | `annots_1b.pdf`        | 14   | 14   | 12   | 12   | 12   | 10  | 12   | 8    |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 3    |
 | `cmaps_2b.pdf`         | 6    | 10   | 7    | 8    | 7    | 8   | 12   | 12   |
-| `contentstream_4.pdf`  | 4    | 8    | 6    | 6    | 6    | 6   | 8    | 7    |
 | `complex_1b.pdf`       | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
 | `complex_2a.pdf`       | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
 | `complex_2b.pdf`       | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
@@ -202,28 +199,34 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_4.pdf`        | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
 | `complex_ua1.pdf`      | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
 | `complex_ua2.pdf`      | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
+| `contentstream_4.pdf`  | 4    | 8    | 6    | 6    | 6    | 6   | 8    | 7    |
 | `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
 | `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
-| `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
+| `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `fontkeys_1b.pdf`      | 10   | 13   | 10   | 11   | 10   | 11  | 8    | 8    |
 | `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
+| `formstruct_ua2.pdf`   | 4    | 6    | 6    | 6    | 6    | 5   | 7    | 7    |
 | `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
+| `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 5    |
+| `iccbased_4.pdf`       | 3    | 7    | 5    | 5    | 5    | 5   | 8    | 7    |
 | `idprefix_2b.pdf`      | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
 | `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
 | `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
 | `limits_2b.pdf`        | 8    | 12   | 10   | 10   | 10   | 6   | 10   | 8    |
 | `megafont_2b.pdf`      | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
+| `outputintent_2b.pdf`  | 4    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
-| `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 | `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 8    | 7    |
+| `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 | `tablespan_ua2.pdf`    | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
 | `trailer_2b.pdf`       | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 | `ttcmap_2b.pdf`        | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
 | `ttencoding_2b.pdf`    | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
+| `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -910,6 +913,32 @@ identical profiles differ byte for byte.
 
 At PDF/A-2b the same file reports tests 1 and 2, and at PDF/A-1b the part-1
 spelling 6.2.3.2 t1.
+
+## Heading structure
+
+ISO 14289-1, 7.4.4 asks two things of a document's headings: no node may hold
+more than one `H` child, and a document is either weakly structured with `H` or
+strongly structured with `H1` to `H6`, never both.
+
+| Element          | Construct                              | Rule      |
+| ---------------- | -------------------------------------- | --------- |
+| `Sect1`          | two `H` children under one node        | `7.4.4/1` |
+| the `H` elements | a generic `H` beside numbered ones     | `7.4.4/2` |
+| `H1`             | a numbered heading beside generic ones | `7.4.4/3` |
+| `Sect2`          | exactly one `H` child                  | silent    |
+
+The second requirement is stated **twice, once per object**: test 2 against
+`SEH` and test 3 against `SEHn`. A document carrying both kinds therefore fails
+both, because each kind offends from the other's point of view.
+
+litho reported only one of them. It picked a structure "mode" from whichever
+heading came first and blamed the other kind, with a comment explaining that
+firing both would double-report a single defect, and a unit test had pinned
+that. Either kind alone agreed with veraPDF; only a document mixing them
+revealed it. Six real-world files gained the missing half once the two were
+separated, four of them veraPDF's own designed-to-fail files for these tests:
+its `7.4.4-t02-fail` files also fail t03, and its `t03-fail` files also fail
+t02.
 
 ## Extension schemas and the trailer
 
