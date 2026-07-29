@@ -168,27 +168,6 @@ func (m *markedContentProps) dict(ctx context.Context, op content.Operation) ast
 	return nil
 }
 
-// documentHasMarkedContentLang reports whether any BDC or DP marked-content
-// operator carries a /Lang entry. veraPDF derives an SETextItem's language from
-// such inline tags, so their presence, even when the tag is empty or malformed
-// (which §7.2 t29 reports separately), makes the language determinable for the
-// §7.2 t34 coverage rule.
-//
-// The answer is document-wide on purpose. veraPDF scopes an inline tag to the
-// marked-content sequence that carries it, but litho decides §7.2 t34 from the
-// structure tree and does not map a structure element back to the BDC that
-// wraps its marked-content identifier. Attributing an inline tag to the wrong
-// element would report a violation that veraPDF does not, so the check stays on
-// the safe side: one inline /Lang anywhere suppresses t34 for the document.
-func documentHasMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
-	found := false
-	forEachMarkedContentLang(ctx, doc, catalog, func(_ int, _ string) bool {
-		found = true
-		return true
-	})
-	return found
-}
-
 // checkSpanMarkedContentLang reports ISO 14289-1 §7.2 t30, t31 and t32: text
 // carried by the /ActualText, /Alt and /E entries of a /Span marked-content
 // sequence must have a determinable natural language.
@@ -623,13 +602,13 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		return failf(validRule, "lang=%s, StructTreeRoot", rootLang)
 	}
 
-	// A /Lang set inline via a BDC/DP marked-content operator also makes the
+	// A /Lang set inline via a BDC marked-content operator also makes the
 	// language determinable (veraPDF reads these tags for §7.2 t34), even though
-	// the structure-tree walk below cannot see them. Without this, t34 falsely
-	// fires on files whose only /Lang is inline.
-	inlineLang := documentHasMarkedContentLang(ctx, doc, catalog)
-
-	textElems := structElemsShowingText(ctx, doc, catalog, treeRoot)
+	// the structure-tree walk below cannot see them. The answer is per element,
+	// resolved through the marked-content sequence that owns each element's
+	// text: a tag on one sequence leaves the text of every other sequence
+	// undetermined.
+	textElems, inlineLangElems := structElemsShowingText(ctx, doc, catalog, treeRoot)
 
 	var results []Violation
 	walkStructureElementsWithLang(ctx, doc, treeRoot, hasStringKeyPresent(ctx, doc, treeRoot, "Lang"),
@@ -675,7 +654,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 			// an SETextItem's language from the /Lang of the structure element that
 			// owns its marked content or of one of that element's /P ancestors, so a
 			// /Lang on an unrelated sibling leaves this element undetermined.
-			if !inlineLang && textElems[objNum] {
+			if textElems[objNum] && !inlineLangElems[objNum] {
 				results = append(results, Violation{Rule: langRule, Context: path})
 			}
 		})
@@ -699,26 +678,29 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 // number and cannot be named here, so it is never a subject. Under-reporting is
 // the safe direction: veraPDF's own link runs through the ParentTree, which can
 // only name indirect elements.
-func structElemsShowingText(ctx context.Context, doc *document.Document, catalog, treeRoot ast.PdfDict) map[int]bool {
-	elems := make(map[int]bool)
+func structElemsShowingText(ctx context.Context, doc *document.Document, catalog, treeRoot ast.PdfDict) (elems, inlineLang map[int]bool) {
+	elems, inlineLang = make(map[int]bool), make(map[int]bool)
 	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
 	if err != nil || ptDict == nil {
-		return elems
+		return elems, inlineLang
 	}
 
 	forEachPageContentOps(ctx, doc, catalog, func(_ int, page ast.PdfDict, ops []content.Operation) bool {
 		arr := pageParentTreeEntries(ctx, doc, ptDict, page)
-		for mcid := range mcidsShowingText(ctx, ops) {
+		for mcid, covered := range mcidsShowingText(ctx, ops) {
 			if mcid >= len(arr) {
 				continue
 			}
 			if ref, ok := arr[mcid].(ast.PdfIndirectRef); ok {
 				elems[ref.ObjectNum] = true
+				if covered {
+					inlineLang[ref.ObjectNum] = true
+				}
 			}
 		}
 		return ctx.Err() != nil
 	})
-	return elems
+	return elems, inlineLang
 }
 
 // mcidsShowingText returns the marked-content identifiers whose sequence
@@ -732,24 +714,39 @@ func structElemsShowingText(ctx context.Context, doc *document.Document, catalog
 // which under-reports rather than over-reports.
 func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool {
 	found := make(map[int]bool)
-	// One entry per open marked-content sequence, holding its /MCID or -1 when
-	// it carries none. Bounded by len(ops), which the caller already holds.
-	var open []int
+	// One entry per open marked-content sequence: its /MCID (or -1) and whether
+	// it carries a /Lang. Bounded by len(ops), which the caller already holds.
+	type openSeq struct {
+		mcid    int
+		hasLang bool
+	}
+	var open []openSeq
 	for i, op := range ops {
 		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
 			return found
 		}
 		switch op.Operator {
 		case "BMC", "BDC":
-			open = append(open, markedContentID(op))
+			open = append(open, openSeq{mcid: markedContentID(op), hasLang: markedContentHasLang(op)})
 		case "EMC":
 			if len(open) > 0 {
 				open = open[:len(open)-1]
 			}
 		case "Tj", "TJ", "'", "\"":
+			// veraPDF resolves a text item's language by walking the enclosing
+			// sequences outwards (GFOp_BDC.getInheritedLang), so a /Lang on any
+			// of them covers this text, not only one on the sequence that owns
+			// the /MCID.
+			covered := false
 			for j := len(open) - 1; j >= 0; j-- {
-				if open[j] >= 0 {
-					found[open[j]] = true
+				if open[j].hasLang {
+					covered = true
+					break
+				}
+			}
+			for j := len(open) - 1; j >= 0; j-- {
+				if open[j].mcid >= 0 {
+					found[open[j].mcid] = found[open[j].mcid] || covered
 					break
 				}
 			}
@@ -923,6 +920,23 @@ func markedContentID(op content.Operation) int {
 		return -1
 	}
 	return int(mcid)
+}
+
+// markedContentHasLang reports whether a BDC operator's inline property list
+// carries a /Lang entry. Presence is what counts, as for a structure element:
+// veraPDF treats an empty or malformed tag as determining the language, and
+// reports its format separately. Only an inline dict is read, never a named
+// entry in the page /Properties, matching [markedContentID].
+func markedContentHasLang(op content.Operation) bool {
+	if op.Operator != "BDC" || len(op.Operands) < 2 {
+		return false
+	}
+	props, ok := op.Operands[1].(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	_, has := props["Lang"]
+	return has
 }
 
 // walkStructureElementsWithLang is like walkStructureElements but tracks /Lang

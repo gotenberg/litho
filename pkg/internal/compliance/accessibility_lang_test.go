@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // firstLangElemObj is the object number of the first structure element
@@ -371,4 +372,61 @@ func TestXMPHasXDefaultLangAlt(t *testing.T) {
 	if xmpHasXDefaultLangAlt([]byte(xdefaultXMP("en-US"))) {
 		t.Error("alternative qualified only en-US: want none, xDefault is false")
 	}
+}
+
+// TestMcidsShowingText_InlineLangIsPerSequence pins that an inline /Lang covers
+// only the text inside the marked-content sequence carrying it, and the
+// sequences nested in that one. ISO 14289-1 §7.2 t34 is decided per text item,
+// and veraPDF resolves an item's language by walking the enclosing sequences
+// outwards, so a tag on one sequence leaves a sibling's text undetermined.
+// litho used to take the answer document-wide, which silenced the rule for
+// every file carrying a single inline tag anywhere.
+func TestMcidsShowingText_InlineLangIsPerSequence(t *testing.T) {
+	ctx := context.Background()
+
+	bdc := func(mcid int, lang bool) content.Operation {
+		props := ast.PdfDict{"MCID": ast.PdfInt(mcid)}
+		if lang {
+			props["Lang"] = ast.PdfString("en-US")
+		}
+		return content.Operation{
+			Operator: "BDC",
+			Operands: []ast.PdfObject{ast.PdfName("P"), props},
+		}
+	}
+	show := content.Operation{Operator: "Tj", Operands: []ast.PdfObject{ast.PdfString("x")}}
+	emc := content.Operation{Operator: "EMC"}
+
+	t.Run("a tag covers its own sequence only", func(t *testing.T) {
+		got := mcidsShowingText(ctx, []content.Operation{
+			bdc(0, true), show, emc,
+			bdc(1, false), show, emc,
+		})
+		if !got[0] {
+			t.Error("MCID 0 carries the /Lang and should be covered")
+		}
+		if got[1] {
+			t.Error("MCID 1 has no /Lang and must not be covered by its sibling's")
+		}
+	})
+
+	t.Run("a tag covers nested sequences", func(t *testing.T) {
+		// The outer sequence carries the tag; the inner one owns the text.
+		got := mcidsShowingText(ctx, []content.Operation{
+			bdc(0, true), bdc(1, false), show, emc, emc,
+		})
+		if !got[1] {
+			t.Error("MCID 1 is nested inside a tagged sequence and should be covered")
+		}
+	})
+
+	t.Run("no tag anywhere covers nothing", func(t *testing.T) {
+		got := mcidsShowingText(ctx, []content.Operation{bdc(0, false), show, emc})
+		if _, owns := got[0]; !owns {
+			t.Fatal("MCID 0 owns the text and should be present")
+		}
+		if got[0] {
+			t.Error("MCID 0 has no /Lang and must not be covered")
+		}
+	})
 }
