@@ -73,3 +73,56 @@ func TestNewDocument_CyclicPrevTerminates(t *testing.T) {
 		t.Fatal("NewDocument hung on a cyclic /Prev chain: cycle guard missing")
 	}
 }
+
+// TestValidateXRefTableFormat_SurplusEOLDoesNotMaskSpacing pins that a defect
+// between the xref keyword and the subsection header does not hide a defect in
+// the header itself. ISO 19005-1, 6.1.4 states the two as separate tests, t2
+// and t1, so a file carrying both must report both. The scanner used to stop on
+// the surplus EOL, read no digits from the header and give up, so the spacing
+// defect went unreported and only the pair revealed it.
+func TestValidateXRefTableFormat_SurplusEOLDoesNotMaskSpacing(t *testing.T) {
+	table := func(header string) *Document {
+		body := "xref" + header + "0000000000 65535 f \r\ntrailer\n<< /Size 1 >>\n"
+		return &Document{r: bytes.NewReader([]byte(body))}
+	}
+
+	count := func(violations []error, needle string) int {
+		n := 0
+		for _, v := range violations {
+			if bytes.Contains([]byte(v.Error()), []byte(needle)) {
+				n++
+			}
+		}
+		return n
+	}
+
+	t.Run("surplus EOL alone", func(t *testing.T) {
+		got := table("\n\n0 1\n").ValidateXRefTableFormat(0)
+		if count(got, "multiple EOL markers") != 1 {
+			t.Errorf("got %v, want the EOL defect", got)
+		}
+		if count(got, "spaces between start and count") != 0 {
+			t.Errorf("got %v, want no spacing defect", got)
+		}
+	})
+
+	t.Run("wide separator alone", func(t *testing.T) {
+		got := table("\n0  1\n").ValidateXRefTableFormat(0)
+		if count(got, "spaces between start and count") != 1 {
+			t.Errorf("got %v, want the spacing defect", got)
+		}
+	})
+
+	t.Run("both are reported", func(t *testing.T) {
+		got := table("\n\n0  1\n").ValidateXRefTableFormat(0)
+		if count(got, "multiple EOL markers") != 1 || count(got, "spaces between start and count") != 1 {
+			t.Errorf("got %v, want both the EOL and the spacing defect", got)
+		}
+	})
+
+	t.Run("a conforming header reports nothing", func(t *testing.T) {
+		if got := table("\n0 1\n").ValidateXRefTableFormat(0); len(got) != 0 {
+			t.Errorf("got %v, want none", got)
+		}
+	})
+}
