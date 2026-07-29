@@ -78,6 +78,7 @@ one deliberately rather than diffing it against a fresh build.
 | `docinfo_1b.pdf`       | PDF/A-1b     | Document information dictionary against its XMP analogues       |
 | `imgxmp_4.pdf`         | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
 | `idprefix_2b.pdf`      | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
+| `xref_1b.pdf`          | 5            | 6                                                               | 4   | 4   | 4   | 5   | 7   | 7   |
 | `uaid_ua1.pdf`         | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
 | `ttencoding_2b.pdf`    | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
 | `ttcmap_2b.pdf`        | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
@@ -89,6 +90,7 @@ one deliberately rather than diffing it against a fresh build.
 | `cmaps_2b.pdf`         | PDF/A-2b     | CMap embedding, WMode consistency and `/UseCMap` chains         |
 | `outputintent_2b.pdf`  | PDF/A-2b     | OutputIntent array and ICC destination profile headers          |
 | `formstruct_ua2.pdf`   | PDF/UA-2     | Widget annotations, Form structure elements and XFA             |
+| `xref_1b.pdf`          | PDF/A-1b     | Cross reference table formatting, patched as bytes              |
 
 ### Must-not-fire controls
 
@@ -168,6 +170,7 @@ violation but is exempt, so a firing is a false positive.
 | `outputintent_2b`                         | A well-formed `prtr`/`RGB ` destination profile beside the bad one     | ISO 19005-2, 6.2.3 t1        |
 | `formstruct_ua2`                          | A `Form` element enclosing exactly one widget                          | ISO 14289-2, 8.10.1 t2       |
 | `formstruct_ua2`                          | A widget with no `/StructParent`, outside the structure tree           | ISO 14289-2, 8.10.1 t1       |
+| `xref_1b`                                 | Every object offset and `startxref` value left valid by the patch      | ISO 19005-1, 6.1.4           |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -817,6 +820,31 @@ PDF/UA-2 forbid the `/XFA` key outright, but ISO 14289-1, 7.15 forbids only
 the mere presence of the key, so the static XFA that real forms carry reported
 7.15 at PDF/UA-1. Eight pdfjs files stopped firing it once the two were
 separated.
+
+## Cross reference table formatting
+
+ISO 19005-1, 6.1.4 constrains the bytes of the cross reference table itself: the
+`xref` keyword and the subsection header are separated by exactly one EOL
+marker, and the header's starting object number and count by exactly one SPACE.
+No writer emits either defect, so `xref_1b.pdf` plants both as bytes after the
+save, turning `xref\n0 6\n` into `xref\n\n0  6\n`.
+
+The patch is safe because of where it lands. `startxref` records where the table
+begins, and inserting bytes inside the table does not move that offset; every
+object offset is earlier in the file and unaffected. This is the same technique
+`limits_2b.pdf` uses for a value pikepdf will not emit, and both fixtures rebuild
+byte for byte.
+
+**Both defects sit on the same header line on purpose, and that is the point of
+the fixture.** They are separate tests of one clause, so a scanner that stops at
+the first reports one rule where two are due. litho did exactly that: the
+surplus EOL left its parser standing on the extra byte, the subsection header
+scan then read no digits and gave up, and the spacing defect went unreported.
+Either defect alone agreed with veraPDF; only the pair revealed it. The scanner
+now steps over surplus EOL markers and whitespace so the header is still read.
+
+Test 3 forbids a cross reference stream, which cannot coexist with a table, so
+it needs a file of its own and is not planted here.
 
 ## Extension schemas and the trailer
 
