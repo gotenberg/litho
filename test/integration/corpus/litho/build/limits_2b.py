@@ -7,17 +7,29 @@ dictionary, which is what makes them worth planting together: each defect
 lives in a different part of the file, so a check that stops at the first
 limit breach reports one rule where four are due.
 
-Not every test in the clause is reachable this way. `t7` needs more than
-8388607 indirect objects and `t10` needs a CMap with an out-of-range CID,
-neither of which belongs in a small fixture. `t1`, `t2` and `t5` need numbers
-a writer will not emit: pikepdf normalises a denormal such as 1e-40 to plain
-`0`, which `t5` explicitly permits, so planting one through this builder is
-not possible. Those stay uncovered deliberately.
+Test 2 needs a real number beyond +/-3.403e38, which no writer emits directly:
+pikepdf renders such a value as a plain integer, and veraPDF then judges it
+under the integer limit t1 rather than the real one. The value is therefore
+planted as bytes after the save, replacing the last two digits of the emitted
+integer with ".0". That keeps the token the same length, so every cross
+reference offset stays valid, and turns it into a real that is still far above
+the limit.
+
+Not every test in the clause is reachable. `t7` needs more than 8388607
+indirect objects and `t10` needs a CMap with an out-of-range CID, neither of
+which belongs in a small fixture. `t5` needs a real closer to zero than
+1.175e-38, and pikepdf normalises such a denormal to plain `0`, which the test
+explicitly permits; the same byte patch cannot help, because a denormal written
+long enough to patch is a different value. Those stay uncovered deliberately.
 
 See ../README.md for the authoritative expected firing set.
 """
 
-from _common import Array, Dictionary, Name, Stream, String, pikepdf, save
+import pathlib
+import re
+from decimal import Decimal
+
+from _common import Array, Dictionary, Name, Stream, String, out_path, pikepdf, save
 
 pdf = pikepdf.new()
 
@@ -80,5 +92,20 @@ pdf.pages[0].Annots = Array(
     ]
 )
 
+# The real that breaches 6.1.13 t2. pikepdf emits it as a 46 digit integer; the
+# patch below turns those digits into a real of the same byte length.
+pdf.Root["/LithoLargeReal"] = Decimal("1E45")
+
 # Deliberately no /Metadata and no /OutputIntents.
 save(pdf, "limits_2b.pdf", min_version="1.7")
+
+path = out_path("limits_2b.pdf")
+raw = bytearray(pathlib.Path(path).read_bytes())
+match = re.search(rb"/LithoLargeReal (\d+)", bytes(raw))
+if match is None:
+    raise SystemExit("limits_2b: /LithoLargeReal was not emitted as an integer")
+digits = match.group(1)
+real = digits[: len(digits) - 2] + b".0"
+raw[match.start(1) : match.end(1)] = real
+pathlib.Path(path).write_bytes(bytes(raw))
+print("patched /LithoLargeReal to a", len(real), "byte real")

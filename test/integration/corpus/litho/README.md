@@ -63,7 +63,7 @@ one deliberately rather than diffing it against a fresh build.
 | `forbidden_mix.pdf`    | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW              |
 | `formstruct_ua2.pdf`   | 4            | 6                                                               | 6   | 6   | 6   | 5   | 7   | 7   |
 | `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states         |
-| `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN           |
+| `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: real, string, name, nesting, DeviceN     |
 | `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                          |
 | `multipage_2b.pdf`     | PDF/A-2b     | Three pages, a violation class unique to each                   |
 | `fontdict_2b.pdf`      | PDF/A-2b     | Font dictionary required keys; page box implementation limits   |
@@ -203,7 +203,7 @@ which are covered under [Known divergences](#known-divergences).
 | `idprefix_2b.pdf`      | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
 | `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
 | `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
-| `limits_2b.pdf`        | 7    | 11   | 9    | 9    | 9    | 6   | 10   | 8    |
+| `limits_2b.pdf`        | 8    | 12   | 10   | 10   | 10   | 6   | 10   | 8    |
 | `megafont_2b.pdf`      | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
@@ -944,17 +944,25 @@ different part of the file:
 
 | Defect                                  | Rule       |
 | --------------------------------------- | ---------- |
+| a real beyond +/-3.403e38               | `6.1.13/2` |
 | annotation `/Contents` of 40000 bytes   | `6.1.13/3` |
 | resource key name longer than 127 bytes | `6.1.13/4` |
 | content nesting `q` 30 deep             | `6.1.13/8` |
 | DeviceN naming 33 colorants             | `6.1.13/9` |
 
-Four tests of the clause stay uncovered on purpose. `t7` needs more than
-8388607 indirect objects and `t10` a CMap with an out-of-range CID, neither of
-which belongs in a small fixture. `t1`, `t2` and `t5` need numbers a writer
-will not emit: pikepdf normalises a denormal such as `1e-40` to plain `0`,
-which `t5` explicitly permits, so it cannot be planted through these builders
-at all.
+Test 2 needs a byte patch. No writer emits a real that large: pikepdf renders
+`1e45` as a 46 digit integer, and veraPDF then judges it under the integer
+limit t1 rather than the real one. The builder therefore rewrites the token
+after saving, replacing its last two digits with `.0`. The token keeps its
+length, so every cross reference offset stays valid, and the value is still far
+above the limit. Both tools report t2 and neither reports t1.
+
+Three tests stay uncovered on purpose. `t7` needs more than 8388607 indirect
+objects and `t10` a CMap with an out-of-range CID, neither of which belongs in
+a small fixture. `t5` needs a real closer to zero than `1.175e-38`, and pikepdf
+normalises such a denormal to plain `0`, which the test explicitly permits; the
+byte patch does not help there, because a denormal written long enough to patch
+is a different value.
 
 ## Table cell geometry
 
