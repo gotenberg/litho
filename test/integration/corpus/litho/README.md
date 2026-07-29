@@ -77,6 +77,7 @@ one deliberately rather than diffing it against a fresh build.
 | `limits_1b.pdf`        | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
 | `docinfo_1b.pdf`       | PDF/A-1b     | Document information dictionary against its XMP analogues       |
 | `imgxmp_4.pdf`         | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
+| `iccbased_4.pdf`       | 3            | 7                                                               | 5   | 5   | 5   | 5   | 8   | 7   |
 | `idprefix_2b.pdf`      | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
 | `xref_1b.pdf`          | 5            | 6                                                               | 4   | 4   | 4   | 5   | 7   | 7   |
 | `uaid_ua1.pdf`         | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
@@ -92,6 +93,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formstruct_ua2.pdf`   | PDF/UA-2     | Widget annotations, Form structure elements and XFA             |
 | `xref_1b.pdf`          | PDF/A-1b     | Cross reference table formatting, patched as bytes              |
 | `contentstream_4.pdf`  | PDF/A-4      | Content stream operators and the resources it names             |
+| `iccbased_4.pdf`       | PDF/A-4      | ICCBased profiles, overprint mode and the destination profile   |
 
 ### Must-not-fire controls
 
@@ -173,6 +175,7 @@ violation but is exempt, so a firing is a false positive.
 | `formstruct_ua2`                          | A widget with no `/StructParent`, outside the structure tree           | ISO 14289-2, 8.10.1 t1       |
 | `xref_1b`                                 | Every object offset and `startxref` value left valid by the patch      | ISO 19005-1, 6.1.4           |
 | `contentstream_4`                         | `/F1`, a name the inherited dictionary does define                     | ISO 19005-4, 6.2.2 t3        |
+| `iccbased_4`                              | An RGB ICCBased space, valid and unrelated to the OutputIntent         | ISO 19005-4, 6.2.4.2         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -877,6 +880,36 @@ inherited font and XObject unreachable: the remediated page lost its `/Font`
 entirely. The fixer now starts from the inherited dictionary, which litho
 already had a helper to find, and only builds a new one for a page that truly
 inherits nothing.
+
+## ICCBased colour spaces
+
+ISO 19005-4, 6.2.4.2 judges the ICC profile an ICCBased colour space carries and
+the two ways such a space may conflict with the file's destination profile.
+Four spaces are drawn on one page:
+
+| Space | Construct                                               | Rule        |
+| ----- | ------------------------------------------------------- | ----------- |
+| CS0   | profile version 5.0                                     | `6.2.4.2/1` |
+| CS1   | CMYK, stroked with `/OP true` and `/OPM 1`              | `6.2.4.2/2` |
+| CS2   | the OutputIntent's own destination profile              | `6.2.4.2/3` |
+| CS3   | RGB, `mntr`, version 2.1, unrelated to the OutputIntent | silent      |
+
+Two of the three are easy to trigger by accident, which decides the design.
+Test 3 compares the ICCBased profile against the destination one by object
+**and by MD5**, so any CMYK space carrying the same bytes fires it. A first
+attempt at a control did exactly that: its profile happened to be byte-identical
+to the destination, so the "conforming" space reported test 3. CS1 therefore
+uses a profile that differs from the destination, or its overprint verdict would
+be masked, and CS3 is RGB rather than CMYK so test 3 does not reach it at all.
+
+The profiles are built by the fixture, as in `outputintent_2b.pdf`: a 128-byte
+header plus an empty tag table, with a real size, an `acsp` signature and a PCS
+illuminant, because veraPDF parses profile bytes eagerly. The preferred-CMM
+field carries no meaning for these tests and is used only to make otherwise
+identical profiles differ byte for byte.
+
+At PDF/A-2b the same file reports tests 1 and 2, and at PDF/A-1b the part-1
+spelling 6.2.3.2 t1.
 
 ## Extension schemas and the trailer
 
