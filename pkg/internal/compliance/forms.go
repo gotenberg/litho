@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -420,14 +421,92 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 	}
 }
 
-// checkXFA validates that /AcroForm does not contain the /XFA key.
-func checkXFA(_ context.Context, _ *document.Document, acroForm ast.PdfDict, profile string, part int, ua bool, results *[]Violation) {
-	if _, hasXFA := acroForm["XFA"]; !hasXFA {
+// maxXFAScanBytes bounds how much of an XFA packet set is read when looking for
+// the dynamic-render setting. It is an anti-DoS guard rather than a spec limit:
+// the setting lives in the small config packet, and a crafted file could
+// otherwise present an arbitrarily large XFA for scanning.
+const maxXFAScanBytes = 1 << 20
+
+// checkXFA validates the /XFA key of /AcroForm. Every PDF/A part and PDF/UA-2
+// forbid the key outright, but ISO 14289-1, 7.15 forbids only DYNAMIC XFA: its
+// test reads `dynamicRender != 'required'`, so a static XFA form conforms under
+// PDF/UA-1 and fails everywhere else.
+func checkXFA(ctx context.Context, doc *document.Document, acroForm ast.PdfDict, profile string, part int, ua bool, results *[]Violation) {
+	xfa, hasXFA := acroForm["XFA"]
+	if !hasXFA {
+		return
+	}
+
+	if ua && profile != "PDF/UA-2" && !xfaRendersDynamically(ctx, doc, xfa) {
 		return
 	}
 
 	rule := xfaRule(profile, part, ua)
 	*results = append(*results, fail(rule, "/AcroForm contains /XFA key")...)
+}
+
+// xfaRendersDynamically reports whether an XFA packet set asks to be rendered
+// dynamically. The setting is `<dynamicRender>required</dynamicRender>` in the
+// config packet. /XFA is either one stream or an array alternating packet names
+// with their streams (ISO 32000-1, Table 224), so both shapes are walked.
+func xfaRendersDynamically(ctx context.Context, doc *document.Document, xfa ast.PdfObject) bool {
+	packets := []ast.PdfObject{xfa}
+	if arr, err := document.ResolveArray(ctx, doc, xfa); err == nil {
+		packets = arr
+	}
+
+	scanned := 0
+	for _, packet := range packets {
+		if ctx.Err() != nil || scanned >= maxXFAScanBytes {
+			return false
+		}
+		stream, err := document.ResolveStream(ctx, doc, packet)
+		if err != nil {
+			// Array entries alternate names and streams, so a name here is
+			// expected rather than a defect.
+			continue
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			doc.Logger.Debug("compliance.forms: cannot decode XFA packet", "error", err)
+			continue
+		}
+		if len(data) > maxXFAScanBytes-scanned {
+			data = data[:maxXFAScanBytes-scanned]
+		}
+		scanned += len(data)
+		if xfaDynamicRenderRequired(data) {
+			return true
+		}
+	}
+	return false
+}
+
+// xfaDynamicRenderRequired reports whether an XFA packet carries a
+// dynamicRender element whose value is "required".
+func xfaDynamicRenderRequired(data []byte) bool {
+	const open = "<dynamicRender"
+	for i := 0; ; {
+		start := bytes.Index(data[i:], []byte(open))
+		if start < 0 {
+			return false
+		}
+		i += start + len(open)
+		// Skip any attributes to the end of the start tag.
+		end := bytes.IndexByte(data[i:], '>')
+		if end < 0 {
+			return false
+		}
+		i += end + 1
+		close := bytes.Index(data[i:], []byte("</dynamicRender"))
+		if close < 0 {
+			return false
+		}
+		if strings.TrimSpace(string(data[i:i+close])) == "required" {
+			return true
+		}
+		i += close
+	}
 }
 
 // checkNeedAppearances validates the NeedAppearances flag is not true.
