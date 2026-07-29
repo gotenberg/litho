@@ -165,6 +165,7 @@ violation but is exempt, so a firing is a false positive.
 | `tableregular_ua2`                        | A table whose every `TH` carries a `/Scope`, settling determination    | ISO 14289-2, 8.2.5.26 t5, t6 |
 | `artifact_ua1`                            | A tagged paragraph and a top-level artifact, neither one nested        | ISO 14289-1, 7.1 t1, t2      |
 | `annots_1b`                               | A plain square and a plain widget, both with `/F 4` and an `/N` stream | ISO 19005-1, 6.5.3           |
+| `annots_1b`                               | An appearance dict carrying `/D` beside an `/N` of the wrong type      | ISO 19005-1, 6.5.3 t5, t6    |
 | `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
 | `cmaps_2b`                                | A font naming `/Identity-H`, and one embedding a self-consistent CMap  | ISO 19005-2, 6.2.11.3.3      |
 | `outputintent_2b`                         | A well-formed `prtr`/`RGB ` destination profile beside the bad one     | ISO 19005-2, 6.2.3 t1        |
@@ -672,18 +673,19 @@ PDF/A-1b was the weakest PDF/A profile in the corpus, with ISO 19005-1, 6.5.3
 and 6.6.2 unreached between them. Both are annotation clauses and both are
 cheap, so `annots_1b.pdf` takes all nine of their tests at once:
 
-| Object                         | Defect                                | Rule      |
-| ------------------------------ | ------------------------------------- | --------- |
-| Square                         | `/CA 0.5`                             | `6.5.3/1` |
-| Square                         | no `/F`, so Print cannot be set       | `6.5.3/2` |
-| Square                         | `/C` array with no RGB OutputIntent   | `6.5.3/3` |
-| Square                         | `/AP` carrying `/D` beside `/N`       | `6.5.3/4` |
-| Widget, `/FT /Btn`             | `/N` is a stream, not a subdictionary | `6.5.3/5` |
-| Square                         | `/N` is a subdictionary, not a stream | `6.5.3/6` |
-| Widget                         | `/AA`                                 | `6.6.2/1` |
-| parent form field              | `/AA`                                 | `6.6.2/2` |
-| catalog                        | `/AA`                                 | `6.6.2/3` |
-| a plain Square, a plain Widget | none                                  | silent    |
+| Object                         | Defect                                    | Rule           |
+| ------------------------------ | ----------------------------------------- | -------------- |
+| Square                         | `/CA 0.5`                                 | `6.5.3/1`      |
+| Square                         | no `/F`, so Print cannot be set           | `6.5.3/2`      |
+| Square                         | `/C` array with no RGB OutputIntent       | `6.5.3/3`      |
+| Square                         | `/AP` carrying `/D` beside `/N`           | `6.5.3/4`      |
+| Widget, `/FT /Btn`             | `/N` is a stream, not a subdictionary     | `6.5.3/5`      |
+| Square                         | `/N` is a subdictionary, not a stream     | `6.5.3/6`      |
+| Widget                         | `/AA`                                     | `6.6.2/1`      |
+| parent form field              | `/AA`                                     | `6.6.2/2`      |
+| catalog                        | `/AA`                                     | `6.6.2/3`      |
+| Square                         | `/AP` with `/D` beside a wrong-typed `/N` | `6.5.3/4` only |
+| a plain Square, a plain Widget | none                                      | silent         |
 
 The clauses split by object, which decides where each defect has to live.
 6.5.3 is scoped to `PDAnnot`, so its six tests are six sibling annotations on
@@ -696,6 +698,14 @@ annotation with their `/N` values swapped.
 Test 3 is reachable only because the file declares no OutputIntent: the test
 permits `/C` when the destination profile is RGB, and with no output intent
 there is nothing to permit it.
+
+The last defective annotation is a must-not-fire control as much as a defect.
+Tests 5 and 6 both open with the same escape, `AP != "N"`, which holds for any
+appearance dictionary carrying more than `/N`: such a dictionary is already
+reported by test 4, and neither `/N`-type test judges it. litho applied that
+escape to test 5 alone, so a non-widget with extra keys and a dictionary `/N`
+reported test 6 where veraPDF is silent. Neither of the two defects that
+compose this case shows it on its own.
 
 At its home profile the file fires 14 rules, the densest in the corpus, and
 remediation takes it to 4 without introducing anything.

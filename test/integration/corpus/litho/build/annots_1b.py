@@ -145,6 +145,20 @@ field_aa = pdf.make_indirect(
 field_kid.Parent = field_aa
 annots.append(field_kid)
 
+# An appearance dictionary carrying /D beside an /N of the wrong type. Both
+# /N-type tests open with the same escape, `AP != "N"`, which holds for any
+# dictionary carrying more than /N, so this annotation fails t4 alone: neither
+# t5 nor t6 judges it. litho applied that escape to t5 only and reported t6
+# here, which is why the case is planted rather than left to the two defects
+# that produce it separately.
+annots.append(
+    annot(
+        "Square",
+        300,
+        AP=Dictionary(N=Dictionary(Off=appearance()), D=appearance()),
+    )
+)
+
 # Two conforming annotations: a plain square and a plain widget. Both carry a
 # correct /F and an /N stream, so a firing against either is over-suppression.
 annots.append(annot("Square", 360, AP=Dictionary(N=appearance())))
