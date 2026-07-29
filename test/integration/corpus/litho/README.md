@@ -61,6 +61,7 @@ one deliberately rather than diffing it against a fresh build.
 | `complex_ua1.pdf`      | PDF/UA-1     | Structure and accessibility defects in a wired tag tree         |
 | `complex_ua2.pdf`      | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations  |
 | `forbidden_mix.pdf`    | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW              |
+| `formstruct_ua2.pdf`   | 4            | 6                                                               | 6   | 6   | 6   | 5   | 7   | 7   |
 | `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states         |
 | `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: string, name, nesting, DeviceN           |
 | `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                          |
@@ -87,6 +88,7 @@ one deliberately rather than diffing it against a fresh build.
 | `fontkeys_1b.pdf`      | PDF/A-1b     | Part-1 font dictionary required keys and embedded file subtype  |
 | `cmaps_2b.pdf`         | PDF/A-2b     | CMap embedding, WMode consistency and `/UseCMap` chains         |
 | `outputintent_2b.pdf`  | PDF/A-2b     | OutputIntent array and ICC destination profile headers          |
+| `formstruct_ua2.pdf`   | PDF/UA-2     | Widget annotations, Form structure elements and XFA             |
 
 ### Must-not-fire controls
 
@@ -164,6 +166,8 @@ violation but is exempt, so a firing is a false positive.
 | `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
 | `cmaps_2b`                                | A font naming `/Identity-H`, and one embedding a self-consistent CMap  | ISO 19005-2, 6.2.11.3.3      |
 | `outputintent_2b`                         | A well-formed `prtr`/`RGB ` destination profile beside the bad one     | ISO 19005-2, 6.2.3 t1        |
+| `formstruct_ua2`                          | A `Form` element enclosing exactly one widget                          | ISO 14289-2, 8.10.1 t2       |
+| `formstruct_ua2`                          | A widget with no `/StructParent`, outside the structure tree           | ISO 14289-2, 8.10.1 t1       |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -783,6 +787,36 @@ does not, so the `scnr` route is the one planted. That divergence is recorded
 below rather than built into a fixture.
 
 At PDF/A-1b the same file reports the part-1 spelling 6.2.2 t1 and t2.
+
+## Widget annotations and Form structure
+
+ISO 14289-2, 8.10.1 ties interactive form fields to the structure tree, and it
+was the last unreached PDF/UA-2 cluster outside the ones deliberately skipped.
+
+| Construct                                      | Rule       |
+| ---------------------------------------------- | ---------- |
+| a field widget enclosed by a `P`, not a `Form` | `8.10.1/1` |
+| one `Form` element enclosing two widgets       | `8.10.1/2` |
+| `/XFA` on the AcroForm                         | `8.10.1/3` |
+| a `Form` enclosing exactly one widget          | silent     |
+| a widget with no `/StructParent`               | silent     |
+
+The second control is the interesting one. Test 1's predicate passes when the
+structure parent type is null, so a widget outside the structure tree entirely
+conforms, and the natural reading of the clause, "every widget must sit under a
+Form", fires on it.
+
+Widgets reach the tree through `/StructParent` and an `/OBJR` entry in the
+element's `/K`, with the parent tree mapping each widget's number back to its
+element. Getting that wiring wrong makes every widget look unparented, which
+fires test 1 everywhere and masks the rest.
+
+The fixture found a profile split litho had collapsed. Every PDF/A part and
+PDF/UA-2 forbid the `/XFA` key outright, but ISO 14289-1, 7.15 forbids only
+**dynamic** XFA: its test reads `dynamicRender != 'required'`. litho fired on
+the mere presence of the key, so the static XFA that real forms carry reported
+7.15 at PDF/UA-1. Eight pdfjs files stopped firing it once the two were
+separated.
 
 ## Extension schemas and the trailer
 
