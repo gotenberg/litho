@@ -489,20 +489,16 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 		checkHeadingHierarchy(state)
 
 		// §7.4.4 t2/t3: a document must be either strongly structured (H1-H6)
-		// or weakly structured (H), not both. The first heading in document
-		// order sets the mode and the other kind is the offender, so exactly one
-		// rule fires on that kind: t2 (object SEH) when a generic H appears in a
-		// strongly structured document, t3 (object SEHn) when a numbered Hn
-		// appears in a weakly structured one. Firing both would double-report a
-		// single mixed-heading defect.
+		// or weakly structured (H), not both. The clause states the same
+		// requirement once per object, t2 against SEH and t3 against SEHn, so a
+		// document carrying both kinds fails both: each kind is the offender
+		// from the other's point of view. Picking a single "mode" from the first
+		// heading and reporting only the other kind reports half the defect.
 		if state.hasGenericH && state.hasSpecificH {
-			if state.firstHeadingSpecific {
-				*results = append(*results, failf(headingMixedRule(profile),
-					"document uses a generic H heading while strongly structured with H1-H6 headings")...)
-			} else {
-				*results = append(*results, failf(Rule_14289_1_7_4_4_t03,
-					"document uses numbered H1-H6 headings while weakly structured with generic H headings")...)
-			}
+			*results = append(*results, failf(headingMixedRule(profile),
+				"document uses a generic H heading while also using H1-H6 headings")...)
+			*results = append(*results, failf(Rule_14289_1_7_4_4_t03,
+				"document uses numbered H1-H6 headings while also using generic H headings")...)
 		}
 	}
 }
