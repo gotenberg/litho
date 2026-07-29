@@ -351,6 +351,16 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 		}
 		resolved, ok := pe.dict["Resources"]
 		if !ok {
+			// A page with no /Resources of its own inherits them from an
+			// ancestor (ISO 32000-2, 7.7.3.4). Writing a fresh dictionary here
+			// would SHADOW the inherited one, making every inherited font and
+			// XObject unreachable, so the inherited dictionary is the base to
+			// patch. Only a page that truly inherits nothing gets a new one.
+			if inherited := findInheritedResources(ctx, alloc, doc, pe.dict); inherited != nil {
+				resolved, ok = inherited, true
+			}
+		}
+		if !ok {
 			newRes := ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr}}
 			newPage := make(ast.PdfDict, len(pe.dict)+1)
 			maps.Copy(newPage, pe.dict)
