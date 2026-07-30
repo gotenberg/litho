@@ -26,9 +26,17 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		return
 	}
 
+	// A file with no XMP packet at all still has to answer §6.7.3: every test
+	// reads "Key == null || Key == XMPKey", so an Info entry that is present
+	// cannot match an absent XMP property and the rule fires. Substituting an
+	// empty result makes the absent-property branch below cover that case, the
+	// same way it covers a packet that simply omits one property.
 	syncResult := xmpParseForSync(xmpData)
 	if syncResult == nil {
-		return
+		syncResult = &xmpSyncResult{
+			values:      map[string]string{},
+			entryCounts: map[string]int{},
+		}
 	}
 
 	syncPairs := []struct {

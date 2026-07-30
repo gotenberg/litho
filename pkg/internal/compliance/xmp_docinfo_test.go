@@ -1,6 +1,11 @@
 package compliance
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+)
 
 // TestXMPParseForSync_PreservesSimpleWhitespace pins the raw capture of
 // depth-1 simple property values: XMP preserves element text verbatim,
@@ -59,5 +64,48 @@ func TestXMPParseForSync_PreservesWhitespaceOnlyAltValue(t *testing.T) {
 	}
 	if v != " " {
 		t.Errorf("dc:title = %q, want a single space", v)
+	}
+}
+
+// TestXMPCheckDocInfoSync_NoPacket covers a document information dictionary in
+// a file carrying no XMP packet at all. Every §6.7.3 test reads
+// "Key == null || Key == XMPKey", so an Info entry that is present cannot match
+// an absent XMP property and the rule fires. veraPDF reports it; litho used to
+// return before reaching the check, because the surrounding packet tests have
+// nothing to examine without a packet.
+func TestXMPCheckDocInfoSync_NoPacket(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	doc, _ := objsDocPDF(t,
+		"<< /Type /Catalog >>",
+		"<< /Title (DocTitle) /Creator (DocCreator) /Producer (DocProducer) >>",
+	)
+	doc.Index.Trailer["Info"] = ast.PdfIndirectRef{ObjectNum: 2}
+
+	var results []Violation
+	xmpCheckDocInfoSync(ctx, doc, nil, 1, &results)
+
+	got := map[Rule]bool{}
+	for _, v := range results {
+		got[v.Rule] = true
+	}
+	for _, want := range []Rule{
+		Rule_19005_1_6_7_3_t02, // Title against dc:title
+		Rule_19005_1_6_7_3_t06, // Creator against xmp:CreatorTool
+		Rule_19005_1_6_7_3_t07, // Producer against pdf:Producer
+	} {
+		if !got[want] {
+			t.Errorf("missing violation for %v, got %d violations", want, len(results))
+		}
+	}
+
+	// An Info dictionary with no entries has nothing to disagree with.
+	docEmpty, _ := objsDocPDF(t, "<< /Type /Catalog >>", "<< >>")
+	docEmpty.Index.Trailer["Info"] = ast.PdfIndirectRef{ObjectNum: 2}
+	var none []Violation
+	xmpCheckDocInfoSync(ctx, docEmpty, nil, 1, &none)
+	if len(none) != 0 {
+		t.Errorf("empty Info dict reported %d violations, want 0", len(none))
 	}
 }

@@ -190,7 +190,23 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// packet is absent still has to carry well-formed page packets.
 	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part)...)
 
+	// §6.7.3 compares the document information dictionary against XMP, and a
+	// document carrying no metadata stream at all is one of the ways the two can
+	// disagree: the XMP side reads as null, so any Info entry present fails.
+	// Run it before the early return below, which exists because the remaining
+	// packet checks have nothing to examine without a packet.
+	//
+	// Gate on the catalog key, not on xmpData: xmpLoadMetadata also returns nil
+	// for a /Metadata stream that is present but unusable (unresolvable, wrong
+	// /Type or /Subtype, or undecodable). Treating those as "no XMP" reported
+	// all eight tests on a file where veraPDF reads the packet successfully and
+	// reports two, because veraPDF resolves properties litho failed to load.
+	// An unreadable packet is a defect the §6.7.2 rules already report; it is
+	// not evidence that every Info entry is unmatched.
 	if xmpData == nil {
+		if _, hasMetadata := catalog["Metadata"]; !hasMetadata && (part == 1 || part == 4) {
+			xmpCheckDocInfoSync(ctx, doc, nil, part, &results)
+		}
 		return results
 	}
 
