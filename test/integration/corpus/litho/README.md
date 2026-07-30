@@ -1373,6 +1373,33 @@ page painting `0 0 0 rg` under one output intent whose profile header carries
 `GRAY`, so the disagreement is about whether a Lab destination profile
 establishes a device colour space at all. Not planted in any fixture.
 
+**`6.2.4.3/2` when an uncoloured pattern is painted.** litho reports DeviceRGB
+used inside a coloured (`/PaintType 1`) tiling pattern; veraPDF does not, but
+only when the same page also paints an uncoloured (`/PaintType 2`) pattern.
+Painting one appears to abandon veraPDF's pattern colour traversal for the whole
+page: no `PDTilingPattern` context appears anywhere in its report, so the device
+colour inside every sibling coloured pattern goes unexamined.
+
+The minimal pair is two files differing by one content line. Both declare a
+coloured pattern whose cell is `0.2 0.4 0.8 rg 5 5 40 40 re f`, painted through
+`[/Pattern]`, with no OutputIntent and no `/DefaultRGB`:
+
+| file                                     | veraPDF     | litho       |
+| ---------------------------------------- | ----------- | ----------- |
+| coloured pattern painted alone           | `6.2.4.3/2` | `6.2.4.3/2` |
+| the same, plus an uncoloured one painted | silent      | `6.2.4.3/2` |
+
+Confirmed on a real file as well: `pdfjs/tiling_patterns_variations.pdf` paints
+four coloured patterns carrying `rg` and one uncoloured pattern. Deleting the
+uncoloured pattern makes veraPDF report the rule; reducing the page to a single
+coloured fill while leaving the uncoloured pattern declared but unpainted also
+makes it report. Only painting the uncoloured one suppresses it.
+
+litho is right on the spec: ISO 19005-2, 6.2.4.3 constrains DeviceRGB wherever
+content paints with it, and a coloured pattern's cell supplies its own colour
+(ISO 32000-1, 8.7.3.3). No code changed and no fixture plants it. Same treatment
+as the `7.1/12` entry below.
+
 **`7.1/12` at PDF/UA-1.** litho reports a structure element missing its `/P`
 entry; veraPDF cannot. `GFPDStructElem.getcontainsParent` returns
 `getParent() != null`, and `PDStructElem.getParent` builds its result from
