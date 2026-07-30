@@ -10,7 +10,7 @@ import (
 
 // scanForDeviceColorSpaces looks through page resources for uses of DeviceRGB,
 // DeviceCMYK, and DeviceGray colour spaces.
-func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool, inherited map[string]inheritedCS, part int, contentCSNames map[string]bool) deviceCSUsage {
+func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects, referencedPatterns map[string]bool, inherited map[string]inheritedCS, part int, contentCSNames map[string]bool) deviceCSUsage {
 	var usage deviceCSUsage
 
 	// A named colour space in /Resources/ColorSpace counts only when it is
@@ -59,7 +59,7 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 	scanXObjectColorSpaces(ctx, doc, resources, &usage, 0, visited, referencedXObjects, inherited, part)
 	scanFontColorSpaces(ctx, doc, resources, &usage)
 	scanShadingColorSpaces(ctx, doc, resources, &usage)
-	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited, part)
+	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited, referencedPatterns, part)
 
 	return usage
 }
@@ -173,7 +173,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 // (ColorSpace, XObject, Shading, Pattern) within the Form XObject.
 //
 // entryCS is the colour-space state the scope inherits (ISO 32000-1 §8.10.2):
-// the state observed at the invoking Do, or [inheritedCSUnknown] when this scope
+// the state observed at the invoking Do, or [inheritedCSDefault] when this scope
 // is a tiling pattern or an appearance stream that no Do invokes.
 func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool, entryCS inheritedCS, part int) deviceCSUsage {
 	var usage deviceCSUsage
@@ -202,6 +202,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	nestedXObjects := make(map[string]bool)
 	formCSNames := make(map[string]bool)
 	nestedInherited := make(map[string]inheritedCS)
+	nestedPatterns := make(map[string]bool)
 
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(ctx, data)
@@ -210,7 +211,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		} else {
 			// Check inline image colour spaces from parsed BI operations.
 			scanInlineImageCSOps(ops, &usage, formCSNames)
-			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames, nestedInherited, entryCS)
+			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames, nestedPatterns, nestedInherited, entryCS)
 		}
 	}
 
@@ -293,7 +294,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 
 	// Check nested Shading and Pattern resources.
 	scanShadingColorSpaces(ctx, doc, formRes, &usage)
-	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, part)
+	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, nestedPatterns, part)
 
 	// Suppress device CS usage that is covered by the Form/Pattern's own
 	// DefaultCS entries. Device CS operators in the content stream are
@@ -508,35 +509,36 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 // by cs/CS, so the resource scan can distinguish colour spaces that are
 // actually referenced from ones merely declared in /Resources/ColorSpace, and
 // the colour-space state in effect at each Do, which a Form XObject inherits.
-func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool, map[string]bool, map[string]inheritedCS) {
+func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool, map[string]bool, map[string]bool, map[string]inheritedCS) {
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)
 	referencedCSNames := make(map[string]bool)
+	referencedPatterns := make(map[string]bool)
 	inherited := make(map[string]inheritedCS)
 
 	streamData, err := resolvePageContentBytes(ctx, doc, page)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: failed to get content stream bytes for CS scan",
 			"page", pageIdx, "error", err)
-		return usage, referencedXObjects, referencedCSNames, inherited
+		return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
 	}
 
 	if len(streamData) == 0 {
-		return usage, referencedXObjects, referencedCSNames, inherited
+		return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
 	}
 
 	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)
-		return usage, referencedXObjects, referencedCSNames, inherited
+		return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
 	}
 
 	// Check inline image colour spaces from parsed BI operations.
 	scanInlineImageCSOps(ops, &usage, referencedCSNames)
-	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, inherited, inheritedCSDefault())
+	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited, inheritedCSDefault())
 
-	return usage, referencedXObjects, referencedCSNames, inherited
+	return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
 }
 
 // Text rendering modes that add no marks to the page. Per ISO 32000-1,
@@ -550,15 +552,8 @@ const (
 // inheritedCS is the colour-space selection state a nested scope inherits from
 // the scope that invokes it: whether a fill and a stroke space were selected at
 // that point (ISO 32000-1 §8.10.2).
-//
-// known distinguishes a state litho actually observed from one it never saw. A
-// Form XObject reached through a Do carries the observed state. A tiling pattern
-// or an annotation appearance stream is reached from a resource dictionary with
-// no invoking Do, so its entry state is unknown and [scanContentColorOps] falls
-// back to a heuristic instead.
 type inheritedCS struct {
 	fill, stroke bool
-	known        bool
 }
 
 // recordInheritedCS notes the state in effect at one Do. An XObject invoked
@@ -574,29 +569,27 @@ func recordInheritedCS(states map[string]inheritedCS, name string, fillCSSet, st
 		fillCSSet = fillCSSet && prev.fill
 		strokeCSSet = strokeCSSet && prev.stroke
 	}
-	states[name] = inheritedCS{fill: fillCSSet, stroke: strokeCSSet, known: true}
+	states[name] = inheritedCS{fill: fillCSSet, stroke: strokeCSSet}
 }
 
-// inheritedCSUnknown is the entry state for a scope litho does not reach through
-// a Do: tiling patterns and annotation appearance streams. See [inheritedCS].
-func inheritedCSUnknown() inheritedCS {
+// inheritedCSDefault is the entry state of a scope that inherits nothing: a page
+// content stream, which begins in the default graphics state with no colour
+// space selected (ISO 32000-1 §8.4.1), and equally a tiling pattern or an
+// annotation appearance stream. Neither of the latter two is invoked by a Do,
+// and veraPDF was measured to start both in the default state rather than in the
+// state selected where the pattern or annotation is painted: a bare sc/scn in
+// either reports the initial DeviceGray on both tools.
+func inheritedCSDefault() inheritedCS {
 	return inheritedCS{}
 }
 
-// inheritedCSDefault is the entry state of a page content stream, which begins
-// in the default graphics state with no colour space selected (ISO 32000-1
-// §8.4.1), so the initial DeviceGray applies until an operator selects one.
-func inheritedCSDefault() inheritedCS {
-	return inheritedCS{known: true}
-}
-
 // inheritedCSFor reports the state a nested scope starts from, falling back to
-// [inheritedCSUnknown] for an XObject with no recorded Do.
+// [inheritedCSDefault] for an XObject with no recorded Do.
 func inheritedCSFor(states map[string]inheritedCS, name string) inheritedCS {
 	if state, ok := states[name]; ok {
 		return state
 	}
-	return inheritedCSUnknown()
+	return inheritedCSDefault()
 }
 
 // scanContentColorOps records device colour usage from a content stream:
@@ -620,16 +613,12 @@ func inheritedCSFor(states map[string]inheritedCS, name string) inheritedCS {
 // recorded there, which is what lets a bare sc/scn name a component of an
 // inherited space without being read as a DeviceGray use.
 //
-// When entry.known is false litho never observed the invocation, so it cannot
-// tell an inherited space from the default. It then treats a bare sc/scn as
-// evidence that some space was already selected. That is a heuristic, not the
-// spec: it errs toward silence, because reporting the initial DeviceGray for a
-// scope whose entry state is unknown produced false positives veraPDF does not
-// raise.
+// referencedPatterns collects the /Resources/Pattern keys the stream actually
+// paints with, so the pattern walk can skip patterns that are merely declared.
 //
 // inheritedXObjectCS records, per XObject name, the state in effect at each Do
 // that invokes it, so a nested form scan starts from the observed state.
-func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool, inheritedXObjectCS map[string]inheritedCS, entry inheritedCS) {
+func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames, referencedPatterns map[string]bool, inheritedXObjectCS map[string]inheritedCS, entry inheritedCS) {
 	fillCSSet, strokeCSSet := entry.fill, entry.stroke
 	// Text rendering mode is part of the text state, which q/Q saves and
 	// restores with the rest of the graphics state (ISO 32000-1, 9.3.1).
@@ -694,14 +683,6 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 					}
 				}
 			}
-		case "sc", "scn":
-			if !entry.known {
-				fillCSSet = true
-			}
-		case "SC", "SCN":
-			if !entry.known {
-				strokeCSSet = true
-			}
 		case "f", "F", "f*":
 			if !fillCSSet {
 				usage.gray = true
@@ -722,6 +703,16 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			// there flagged an uncalibrated colour space the file never uses.
 			if textRender != textRenderInvisible && textRender != textRenderClip && !fillCSSet {
 				usage.gray = true
+			}
+		case "sc", "scn", "SC", "SCN":
+			// Per ISO 32000-1, Table 74 the only form of scn/SCN that takes a
+			// name operand is the pattern form, so a trailing name is a
+			// /Resources/Pattern key. sc/SC never take one; they are listed here
+			// only so a malformed stream cannot smuggle a name past this case.
+			if len(op.Operands) > 0 {
+				if name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName); ok && referencedPatterns != nil {
+					referencedPatterns[string(name)] = true
+				}
 			}
 		case "Do":
 			if len(op.Operands) >= 1 {
@@ -821,7 +812,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 			// Appearance can be a stream (single) or dict of streams.
 			stream, err := document.ResolveStream(ctx, doc, apObj)
 			if err == nil {
-				formUsage := scanFormXObjectCS(ctx, doc, stream, 0, visited, inheritedCSUnknown(), part)
+				formUsage := scanFormXObjectCS(ctx, doc, stream, 0, visited, inheritedCSDefault(), part)
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
@@ -841,7 +832,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 					doc.Logger.Debug("compliance.color: cannot resolve sub-XObject stream", "error", err)
 					continue
 				}
-				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited, inheritedCSUnknown(), part)
+				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited, inheritedCSDefault(), part)
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
@@ -928,15 +919,22 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 // scanPatternColorSpaces checks Pattern resources for device colour space usage.
 // Tiling patterns (Type 1) have their own content streams and resources that may
 // use device-dependent colour spaces.
-func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, part int) {
+func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, referencedPatterns map[string]bool, part int) {
 	patternDict, err := document.ResolveDict(ctx, doc, resources["Pattern"])
 	if err != nil || patternDict == nil {
 		return
 	}
 
-	for _, patternObj := range patternDict {
+	for name, patternObj := range patternDict {
 		if ctx.Err() != nil {
 			return
+		}
+
+		// Only patterns a scn/SCN operator actually names are used. A pattern
+		// merely declared in /Resources/Pattern paints nothing, so its content
+		// cannot be a device-colour use (ISO 19005-2 §6.2.4.3 is usage-driven).
+		if referencedPatterns != nil && !referencedPatterns[string(name)] {
+			continue
 		}
 
 		// Patterns can be streams (tiling) or dicts (shading patterns).
@@ -965,7 +963,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		}
 
 		// Scan the tiling pattern's content stream as a Form XObject.
-		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, inheritedCSUnknown(), part)
+		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, inheritedCSDefault(), part)
 		usage.rgb = usage.rgb || formUsage.rgb
 		usage.cmyk = usage.cmyk || formUsage.cmyk
 		usage.gray = usage.gray || formUsage.gray

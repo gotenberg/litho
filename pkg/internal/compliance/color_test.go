@@ -27,7 +27,7 @@ func TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve form: %v", err)
 		}
-		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, inheritedCSUnknown(), 4)
+		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, inheritedCSDefault(), 4)
 	}
 
 	if !scan(t, "/Group << /S /Transparency /CS /DeviceRGB >>").rgb {
@@ -296,7 +296,7 @@ func TestScanContentColorOps_InheritedColorSpace(t *testing.T) {
 		{
 			name:       "bare scn with an inherited space selects nothing new",
 			stream:     "0.5 scn 0 0 50 50 re f",
-			entry:      inheritedCS{fill: true, stroke: true, known: true},
+			entry:      inheritedCS{fill: true, stroke: true},
 			expectGray: false,
 		},
 		{
@@ -314,7 +314,7 @@ func TestScanContentColorOps_InheritedColorSpace(t *testing.T) {
 		{
 			name:       "a bare SCN paints a stroke with the inherited stroke space",
 			stream:     "0.5 SCN 0 0 50 50 re S",
-			entry:      inheritedCS{fill: true, stroke: true, known: true},
+			entry:      inheritedCS{fill: true, stroke: true},
 			expectGray: false,
 		},
 		{
@@ -331,7 +331,7 @@ func TestScanContentColorOps_InheritedColorSpace(t *testing.T) {
 				t.Fatalf("parse content stream: %v", err)
 			}
 			var usage deviceCSUsage
-			scanContentColorOps(ctx, ops, &usage, nil, nil, nil, tc.entry)
+			scanContentColorOps(ctx, ops, &usage, nil, nil, nil, nil, tc.entry)
 			if usage.gray != tc.expectGray {
 				t.Errorf("DeviceGray usage = %v, want %v", usage.gray, tc.expectGray)
 			}
@@ -349,13 +349,70 @@ func TestRecordInheritedCS_CombinesInvocations(t *testing.T) {
 	recordInheritedCS(states, "Fm0", true, true)
 	recordInheritedCS(states, "Fm0", false, true)
 	got := inheritedCSFor(states, "Fm0")
-	if !got.known || got.fill || !got.stroke {
-		t.Errorf("Fm0 inherited = %+v, want known with fill false and stroke true", got)
+	if got.fill || !got.stroke {
+		t.Errorf("Fm0 inherited = %+v, want fill false and stroke true", got)
 	}
 
-	// An XObject litho never sees invoked has an unknown entry state, which is
-	// what puts the tiling-pattern and appearance-stream paths on the heuristic.
-	if got := inheritedCSFor(states, "Fm1"); got.known {
-		t.Errorf("unrecorded XObject inherited = %+v, want known false", got)
+	// An XObject litho never sees invoked starts from the default state, which is
+	// also what a tiling pattern and an appearance stream start from.
+	if got := inheritedCSFor(states, "Fm1"); got != inheritedCSDefault() {
+		t.Errorf("unrecorded XObject inherited = %+v, want the default state", got)
+	}
+}
+
+// TestScanContentColorOps_ReferencedPatterns covers the usage gate on
+// /Resources/Pattern. Per ISO 32000-1, Table 74 the only form of scn/SCN that
+// takes a name operand is the pattern form, so that name identifies the pattern
+// a stream actually paints with. A pattern merely declared in the resource
+// dictionary paints nothing and so is not a colour usage under ISO 19005-2
+// §6.2.4.3, which veraPDF was measured to agree with.
+func TestScanContentColorOps_ReferencedPatterns(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name   string
+		stream string
+		want   []string
+	}{
+		{
+			name:   "a fill pattern is recorded",
+			stream: "/Pattern cs /P1 scn 0 0 50 50 re f",
+			want:   []string{"P1"},
+		},
+		{
+			name:   "a stroke pattern is recorded",
+			stream: "/Pattern CS /P2 SCN 0 0 50 50 re S",
+			want:   []string{"P2"},
+		},
+		{
+			name:   "numeric scn operands name no pattern",
+			stream: "/CS0 cs 0.1 0.2 0.3 scn 0 0 50 50 re f",
+			want:   nil,
+		},
+		{
+			name:   "a declared but unpainted pattern is not recorded",
+			stream: "/CS0 cs 0.1 0.2 0.3 scn 0 0 50 50 re f",
+			want:   nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ops, err := content.ParseStreamData(ctx, []byte(tc.stream))
+			if err != nil {
+				t.Fatalf("parse content stream: %v", err)
+			}
+			var usage deviceCSUsage
+			patterns := map[string]bool{}
+			scanContentColorOps(ctx, ops, &usage, nil, nil, patterns, nil, inheritedCSDefault())
+			if len(patterns) != len(tc.want) {
+				t.Fatalf("recorded patterns = %v, want %v", patterns, tc.want)
+			}
+			for _, name := range tc.want {
+				if !patterns[name] {
+					t.Errorf("pattern %q not recorded, got %v", name, patterns)
+				}
+			}
+		})
 	}
 }
