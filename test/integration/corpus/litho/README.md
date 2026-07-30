@@ -91,6 +91,7 @@ one deliberately rather than diffing it against a fresh build.
 | `contentstream_4.pdf`  | PDF/A-4      | Content stream operators and the resources it names             |
 | `iccbased_4.pdf`       | PDF/A-4      | ICCBased profiles, overprint mode and the destination profile   |
 | `headings_ua1.pdf`     | PDF/UA-1     | Heading structure: one H per node, strong or weak but not both  |
+| `formcs_2b.pdf`        | PDF/A-2b     | The colour space a Form XObject inherits at its invoking `Do`   |
 
 ### Must-not-fire controls
 
@@ -175,6 +176,8 @@ violation but is exempt, so a firing is a false positive.
 | `contentstream_4`                         | `/F1`, a name the inherited dictionary does define                     | ISO 19005-4, 6.2.2 t3        |
 | `iccbased_4`                              | An RGB ICCBased space, valid and unrelated to the OutputIntent         | ISO 19005-4, 6.2.4.2         |
 | `headings_ua1`                            | `Sect2`, a node holding exactly one `H` child                          | ISO 14289-1, 7.4.4 t1        |
+| `formcs_2b`                               | `Fm0`, a bare `scn` under an inherited ICCBased space                  | ISO 32000-1, 8.10.2          |
+| `formcs_2b`                               | `Fm1`, a form selecting its own ICCBased space before painting         | ISO 19005-2, 6.2.4.3 t4      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -207,6 +210,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `fontkeys_1b.pdf`      | 10   | 13   | 10   | 11   | 10   | 11  | 8    | 8    |
 | `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
+| `formcs_2b.pdf`        | 4    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
 | `formstruct_ua2.pdf`   | 4    | 6    | 6    | 6    | 6    | 5   | 7    | 7    |
 | `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 5    |
@@ -1497,12 +1501,66 @@ outside the structure tree entirely, and litho's t34 walk visits structure
 elements only. Closing it means reaching content the tree never references,
 which is a larger change and is deliberately not attempted here.
 
+## Inherited colour spaces
+
+`formcs_2b.pdf` covers ISO 19005-2, 6.2.4.3 test 4 for content that does not
+choose its own colour space. Per ISO 32000-1 §8.6.8 Table 74 `sc`/`scn` set
+components within the space `cs`/`CS` already selected and never select one, and
+per §8.10.2 a Form XObject begins in the graphics state in effect at the
+invoking `Do`. A bare `scn` inside a form therefore paints in whatever the
+invoker had selected, which decides the verdict without appearing anywhere in
+the form.
+
+Four forms are invoked from one page and differ only in the state at their `Do`:
+
+| Form  | State at its `Do`                    | Form content         | Rule        |
+| ----- | ------------------------------------ | -------------------- | ----------- |
+| `Fm0` | ICCBased selected, still in scope    | bare `scn`           | silent      |
+| `Fm1` | nothing selected                     | `/CS0 cs` then `scn` | silent      |
+| `Fm2` | ICCBased selected, then `Q`-restored | bare `scn`           | `6.2.4.3/4` |
+| `Fm3` | ICCBased selected, still in scope    | `0 0 0 1 k`          | `6.2.4.3/3` |
+
+`Fm2` is the case the fixture exists for. Its `Do` sits after a `Q` that pops
+the scope where the ICCBased space was selected, so the initial DeviceGray is
+back in effect even though a `cs` operator appears earlier in the stream.
+Reading the page without honouring `q`/`Q` puts `Fm2` in the same class as
+`Fm0`.
+
+Two decisions keep the verdict attributable to `Fm2` alone, and both were
+forced by measurement rather than chosen. `Fm3` names DeviceCMYK rather than
+DeviceGray, so it answers test 3: an earlier draft used `0 g` and both litho and
+veraPDF reported test 4 from `Fm3`, which let an implementation that misses the
+inherited-state case still report the rule. The page also paints its own text
+inside the ICCBased scope, because text drawn with no colour space selected is
+itself a DeviceGray use and reported the clause from the page.
+
+The file declares no OutputIntent. Test 4 is `gOutputCS != null`, so a PDF/A
+OutputIntent of any destination colour space permits DeviceGray: an RGB one
+silences the clause as thoroughly as a grayscale one.
+
+litho previously read a bare `sc`/`scn` in any form as evidence that some space
+was already selected, on the grounds that it did not model the inherited state.
+Measurement contradicted the premise: veraPDF does model it, `Q` restore
+included. litho now carries the state observed at each `Do` into the form, and
+falls back to the old heuristic only for a tiling pattern or an annotation
+appearance stream, which no `Do` invokes and whose entry state it therefore
+never observes.
+
 ## Scope
 
-The runner's `compliance` feature compares verdicts, not rule sets, so this
-corpus scores 176/176 matched on verdict alone. The rule-set agreement above is
-the property the fixtures actually protect, and it is verified by hand against
-a live veraPDF:
+The runner's `compliance` feature compares verdicts, not rule sets. Every
+fixture is expanded across all eight profiles, so the matrix is 40 x 8 = 320
+cells, and litho and veraPDF return the same verdict in all of them: in each
+cell either both report nothing or both report something.
+
+Verdict agreement is the weaker property. Rule-set agreement is what these
+fixtures exist to protect, and it holds in 318 of the 320 cells. The two
+exceptions are both `complex_ua2`, both marked `*` in the counts table and both
+covered under [Known divergences](#known-divergences); veraPDF reports a
+non-empty set in each, which is why the verdict still matches.
+
+Both figures are measured by hand against a live veraPDF rather than taken from
+the runner:
 
 ```bash
 go build -o /tmp/litho ./cmd/litho
