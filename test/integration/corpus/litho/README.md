@@ -94,6 +94,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formcs_2b.pdf`        | PDF/A-2b     | The colour space a Form XObject inherits at its invoking `Do`   |
 | `patterncs_2b.pdf`     | PDF/A-2b     | Colour in a tiling pattern and an annotation appearance stream  |
 | `usedcs_2b.pdf`        | PDF/A-2b     | Which declared resources count as colour usage                  |
+| `filestruct_1b.pdf`    | PDF/A-1b     | File header, trailer identifier, hex strings and AcroForm       |
 
 ### Must-not-fire controls
 
@@ -185,6 +186,8 @@ violation but is exempt, so a firing is a false positive.
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `PUnc`, an uncoloured pattern writing colour into its cell             | ISO 32000-1, 8.7.3.3         |
+| `filestruct_1b`                           | A hexadecimal string with an even count of hex digits only             | ISO 19005-1, 6.1.6           |
+| `filestruct_1b`                           | A widget that does carry an appearance dictionary                      | ISO 19005-1, 6.9 t2          |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -214,6 +217,7 @@ which are covered under [Known divergences](#known-divergences).
 | `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
 | `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
 | `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
+| `filestruct_1b.pdf`    | 13   | 12   | 10   | 10   | 10   | 13  | 10   | 8    |
 | `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
 | `fontkeys_1b.pdf`      | 10   | 13   | 10   | 11   | 10   | 11  | 8    | 8    |
 | `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
@@ -1655,15 +1659,51 @@ and both binaries agreed. Every declared-only object now paints DeviceCMYK and
 the two painted ones paint DeviceGray, which puts the two failure directions on
 different tests: before the fix litho reported an extra test 3, after it agrees.
 
+## File-level syntax and forms
+
+`filestruct_1b.pdf` covers four PDF/A-1b clauses that judge the file rather than
+any page, all of which the coverage scan showed unreached: the header comment,
+the trailer identifier, the lexical form of hexadecimal strings, and the
+interactive form dictionary.
+
+| Construct                                         | Rule      |
+| ------------------------------------------------- | --------- |
+| header comment bytes below 128                    | `6.1.2/2` |
+| no `/ID` in the trailer                           | `6.1.3/1` |
+| hexadecimal string with an odd digit count        | `6.1.6/1` |
+| hexadecimal string containing a non-hex character | `6.1.6/2` |
+| `/NeedAppearances true` on the AcroForm           | `6.9/1`   |
+| a form field with no appearance dictionary        | `6.9/2`   |
+
+The two `6.1.6` defects are kept on separate strings deliberately. veraPDF tests
+them independently, `hexCount % 2 == 0` against `containsOnlyHex == true`, so one
+string breaking both would report a single rule and leave the other unproven. A
+third, well-formed string sits beside them as the control.
+
+Three of the six cannot be written by pikepdf, which emits a conforming header
+comment, always writes an `/ID`, and normalises every string it serialises. They
+are patched into the saved bytes, each replacement exactly as long as what it
+replaces, so no cross-reference offset moves. The builder refuses any patch that
+would change a length rather than silently corrupting the file.
+
+The fixture found a bug on its first build, which is the argument for writing
+them. veraPDF reported `6.7.3` tests 2, 6 and 7 that litho did not: those compare
+`/Title`, `/Creator` and `/Producer` against their XMP counterparts, and this
+file sets all three while carrying no XMP packet at all. Each test reads
+`Key == null || Key == XMPKey`, so a present Info entry cannot match an absent
+XMP property. litho compared the two only when a packet existed, returning early
+otherwise because the surrounding packet checks have nothing to examine. It now
+runs the comparison against an empty XMP result instead.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 42 x 8 = 336
+fixture is expanded across all eight profiles, so the matrix is 43 x 8 = 344
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 334 of the 336 cells. The two
+fixtures exist to protect, and it holds in 342 of the 344 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
