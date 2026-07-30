@@ -93,6 +93,7 @@ one deliberately rather than diffing it against a fresh build.
 | `headings_ua1.pdf`     | PDF/UA-1     | Heading structure: one H per node, strong or weak but not both  |
 | `formcs_2b.pdf`        | PDF/A-2b     | The colour space a Form XObject inherits at its invoking `Do`   |
 | `patterncs_2b.pdf`     | PDF/A-2b     | Colour in a tiling pattern and an annotation appearance stream  |
+| `usedcs_2b.pdf`        | PDF/A-2b     | Which declared resources count as colour usage                  |
 
 ### Must-not-fire controls
 
@@ -181,6 +182,9 @@ violation but is exempt, so a firing is a false positive.
 | `formcs_2b`                               | `Fm1`, a form selecting its own ICCBased space before painting         | ISO 19005-2, 6.2.4.3 t4      |
 | `patterncs_2b`                            | `P2`, a tiling pattern declared in /Resources but never painted        | ISO 19005-2, 6.2.4.3         |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
+| `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
+| `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
+| `usedcs_2b`                               | `PUnc`, an uncoloured pattern writing colour into its cell             | ISO 32000-1, 8.7.3.3         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -235,6 +239,7 @@ which are covered under [Known divergences](#known-divergences).
 | `ttcmap_2b.pdf`        | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
 | `ttencoding_2b.pdf`    | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
+| `usedcs_2b.pdf`        | 3    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
 | `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
@@ -1588,15 +1593,50 @@ with veraPDF for the wrong reasons. Giving `P2` a DeviceCMYK fill separates them
 and the file now shows litho wrong in both directions at once: it reported test 3
 that veraPDF does not, and missed test 4 that veraPDF does.
 
+## Declared versus painted resources
+
+`usedcs_2b.pdf` covers the usage gate on the three resource categories that carry
+their own colour. ISO 19005-2, 6.2.4.3 constrains a colour space when content
+paints with it, not when a resource dictionary declares it, and each category is
+reached by its own operator:
+
+| Resource            | Painted by              | veraPDF on declared-only |
+| ------------------- | ----------------------- | ------------------------ |
+| `/Pattern` entry    | a name operand of `scn` | silent                   |
+| `/Shading` entry    | `sh`                    | silent                   |
+| `/Font` Type3 entry | selected by `Tf`        | silent                   |
+
+litho gated none of the three. The pattern gate landed with `patterncs_2b`; this
+fixture adds the other two and a fourth construct that is not about usage at all.
+
+An uncoloured tiling pattern (`/PaintType 2`) shall not specify any colour in its
+content stream: the colour comes from the operands of the `scn` that selects it,
+interpreted in the underlying space of `[/Pattern base]` (ISO 32000-1 §8.7.3.3,
+Table 75). The initial DeviceGray of §8.6.8 therefore never applies inside the
+cell. Measured, veraPDF reports nothing for such a cell, not even for an explicit
+device colour written into it, and litho was applying its implicit-DeviceGray
+inference there.
+
+That last one was the root cause of two long-standing corpus divergences,
+`govdocs/thread_000_000324` and `pdfjs/quadpoints`. Both draw with an uncoloured
+pattern whose cell ends in a bare `S`, and both now agree with veraPDF.
+
+Building the file exposed the same cancellation trap as `patterncs_2b`, in a
+sharper form. `Sh1` and `T3Used` legitimately report test 4, so on the first
+build litho reported test 4 whether or not it scanned the four ungated objects,
+and both binaries agreed. Every declared-only object now paints DeviceCMYK and
+the two painted ones paint DeviceGray, which puts the two failure directions on
+different tests: before the fix litho reported an extra test 3, after it agrees.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 41 x 8 = 328
+fixture is expanded across all eight profiles, so the matrix is 42 x 8 = 336
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 326 of the 328 cells. The two
+fixtures exist to protect, and it holds in 334 of the 336 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
