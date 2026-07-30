@@ -36,6 +36,7 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		syncResult = &xmpSyncResult{
 			values:      map[string]string{},
 			entryCounts: map[string]int{},
+			present:     map[string]bool{},
 		}
 	}
 
@@ -57,14 +58,20 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 	for _, pair := range syncPairs {
 		infoVal := xmpGetInfoString(ctx, doc, infoDict, pair.infoKey)
 		if infoVal == "" {
-			// If the key exists and the value is a non-null indirect
-			// reference that can't be resolved as a string, it's a sync
-			// violation when XMP has a non-empty value.
+			// An Info entry that is present but empty is still present: every
+			// §6.7.3 test reads "Key == null || Key == XMPKey", and an empty
+			// string is not null. So it must have a corresponding XMP property,
+			// and the comparison turns on whether that property EXISTS, not on
+			// its value. Measured on all four combinations: an empty /Title with
+			// no packet, or with a packet that omits dc:title, fails on both
+			// tools; an empty /Title against an empty dc:title passes on both.
+			// The same shape covers a non-null value litho cannot resolve to a
+			// string, which reads as empty here.
 			if xmpInfoKeyPresent(infoDict, pair.infoKey) &&
 				!xmpInfoValueIsNull(ctx, doc, infoDict, pair.infoKey) {
 				xmpVal := syncResult.values[pair.xmpKey]
-				if xmpVal != "" {
-					*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, "(unresolvable)", pair.xmpKey, xmpVal)...)
+				if !syncResult.present[pair.xmpKey] || xmpVal != "" {
+					*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, "(empty)", pair.xmpKey, xmpVal)...)
 				}
 			}
 			continue
@@ -209,6 +216,12 @@ func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.
 type xmpSyncResult struct {
 	values      map[string]string // Property key → first value
 	entryCounts map[string]int    // Property key → number of rdf:li entries (Seq/Bag only)
+	// present records every property the packet declares, whether or not it
+	// carries a value. §6.7.3 compares an Info entry against its XMP analogue,
+	// and an empty property that IS declared compares equal to an empty Info
+	// entry, while an undeclared one does not. values alone cannot tell those
+	// apart: a property with no character data leaves no entry there.
+	present map[string]bool
 }
 
 // xmpParseForSync extracts key XMP property values for DocInfo comparison.
@@ -219,6 +232,7 @@ type xmpSyncResult struct {
 func xmpParseForSync(data []byte) *xmpSyncResult {
 	result := make(map[string]string)
 	entryCounts := make(map[string]int)
+	present := make(map[string]bool)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
@@ -275,6 +289,7 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 						attr.Name.Space != "http://www.w3.org/XML/1998/namespace" {
 						key := makeKey(attr.Name.Space, attr.Name.Local)
 						result[key] = attr.Value
+						present[key] = true
 					}
 				}
 				continue
@@ -284,6 +299,7 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 				if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
 					propNS = t.Name.Space
 					propLocal = t.Name.Local
+					present[makeKey(propNS, propLocal)] = true
 					simpleRaw.Reset()
 					simpleHasChild = false
 				}
@@ -395,7 +411,7 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 
 	// Pure-data helper (no *document.Document in scope): use slog.
 	slog.Debug("compliance.xmp: sync parsing complete", "values", len(result))
-	return &xmpSyncResult{values: result, entryCounts: entryCounts}
+	return &xmpSyncResult{values: result, entryCounts: entryCounts, present: present}
 }
 
 // xmpNormalizePDFDate converts a PDF date string (D:YYYYMMDDHHmmSS+HH'mm')

@@ -109,3 +109,66 @@ func TestXMPCheckDocInfoSync_NoPacket(t *testing.T) {
 		t.Errorf("empty Info dict reported %d violations, want 0", len(none))
 	}
 }
+
+// TestXMPCheckDocInfoSync_EmptyInfoEntry covers an Info entry that is present
+// but empty. Every §6.7.3 test reads "Key == null || Key == XMPKey" and an empty
+// string is not null, so the comparison turns on whether the XMP property is
+// DECLARED, not on its value: an empty /Title against a declared-but-empty
+// dc:title passes, against an undeclared one fails. Values alone cannot tell
+// those apart, because a property carrying no character data leaves no entry in
+// the value map, which is why xmpSyncResult tracks presence separately.
+func TestXMPCheckDocInfoSync_EmptyInfoEntry(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	title := func(inner string) []byte {
+		return xmpPacket(`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
+			inner + `</rdf:Description>`)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		xmp      []byte
+		wantFire bool
+	}{
+		{
+			name:     "no packet at all",
+			xmp:      nil,
+			wantFire: true,
+		},
+		{
+			name:     "packet declares no dc:title",
+			xmp:      title(`<dc:description><rdf:Alt><rdf:li xml:lang="x-default">d</rdf:li></rdf:Alt></dc:description>`),
+			wantFire: true,
+		},
+		{
+			name:     "dc:title declared and empty",
+			xmp:      title(`<dc:title><rdf:Alt><rdf:li xml:lang="x-default"></rdf:li></rdf:Alt></dc:title>`),
+			wantFire: false,
+		},
+		{
+			name:     "dc:title declared with a value",
+			xmp:      title(`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">Real</rdf:li></rdf:Alt></dc:title>`),
+			wantFire: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, _ := objsDocPDF(t, "<< /Type /Catalog >>", "<< /Title () >>")
+			doc.Index.Trailer["Info"] = ast.PdfIndirectRef{ObjectNum: 2}
+
+			var results []Violation
+			xmpCheckDocInfoSync(ctx, doc, tc.xmp, 1, &results)
+
+			fired := false
+			for _, v := range results {
+				if v.Rule == Rule_19005_1_6_7_3_t02 {
+					fired = true
+				}
+			}
+			if fired != tc.wantFire {
+				t.Errorf("Title violation fired = %v, want %v (%d violations)", fired, tc.wantFire, len(results))
+			}
+		})
+	}
+}
