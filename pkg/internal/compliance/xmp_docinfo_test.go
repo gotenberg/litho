@@ -172,3 +172,46 @@ func TestXMPCheckDocInfoSync_EmptyInfoEntry(t *testing.T) {
 		})
 	}
 }
+
+// TestXMPDateInstant covers §6.7.3 date equivalence across timezones. The tests
+// ask whether the Info entry and its XMP analogue are equivalent, not whether
+// they are spelled alike, so two zoned dates naming the same instant compare
+// equal. Measured against veraPDF: "D:20220406201541+02'00'" is equivalent to
+// both "2022-04-06T13:15:41-05:00" and "2022-04-06T18:15:41Z", and not to
+// "2022-04-06T14:15:41-05:00", which is an hour later.
+func TestXMPDateInstant(t *testing.T) {
+	t.Parallel()
+
+	same := []string{
+		"2022-04-06T20:15:41+02:00",
+		"2022-04-06T13:15:41-05:00",
+		"2022-04-06T18:15:41Z",
+	}
+	var want string
+	for i, s := range same {
+		got, ok := xmpDateInstant(s)
+		if !ok {
+			t.Fatalf("xmpDateInstant(%q) failed to parse", s)
+		}
+		if i == 0 {
+			want = got
+			continue
+		}
+		if got != want {
+			t.Errorf("xmpDateInstant(%q) = %q, want %q", s, got, want)
+		}
+	}
+
+	if got, _ := xmpDateInstant("2022-04-06T14:15:41-05:00"); got == want {
+		t.Errorf("an instant an hour apart must not normalize to %q", want)
+	}
+
+	// A value with no timezone is not an instant, so the caller keeps its own
+	// zone-agnostic comparison rather than inventing UTC.
+	if _, ok := xmpDateInstant("2022-04-06T20:15:41"); ok {
+		t.Error("a zoneless datetime must not parse as an instant")
+	}
+	if _, ok := xmpDateInstant("not a date"); ok {
+		t.Error("unparseable input must report false")
+	}
+}

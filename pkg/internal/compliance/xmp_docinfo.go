@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"maps"
 	"strings"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -125,6 +126,15 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		if isDateField && !infoHadTZ {
 			normInfo = xmpStripTimezone(normInfo)
 			normXMP = xmpStripTimezone(normXMP)
+		} else if isDateField {
+			// Both sides carry a zone, so they denote absolute instants and the
+			// comparison is between those instants, not between their local
+			// wall-clock spellings.
+			if utcInfo, ok := xmpDateInstant(normInfo); ok {
+				if utcXMP, ok := xmpDateInstant(normXMP); ok {
+					normInfo, normXMP = utcInfo, utcXMP
+				}
+			}
 		}
 
 		// Non-date text fields compare exactly. The XMP parser already
@@ -492,6 +502,21 @@ func xmpStripTimezone(s string) string {
 		}
 	}
 	return s[:tIdx+1] + timePart
+}
+
+// xmpDateInstant converts a normalized ISO 8601 datetime carrying an explicit
+// timezone into a canonical UTC form, so two dates naming the same instant in
+// different zones compare equal. §6.7.3 asks whether the Info entry and its XMP
+// analogue are EQUIVALENT, not whether they are spelled alike: veraPDF treats
+// "2022-04-06T20:15:41+02:00" and "2022-04-06T13:15:41-05:00" as equivalent,
+// and both as equivalent to "2022-04-06T18:15:41Z". It reports false when the
+// string cannot be parsed, leaving the caller on its literal comparison.
+func xmpDateInstant(s string) (string, bool) {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return "", false
+	}
+	return t.UTC().Format(time.RFC3339), true
 }
 
 // xmpNormalizeISO8601 canonicalizes an ISO 8601 date string for comparison.
