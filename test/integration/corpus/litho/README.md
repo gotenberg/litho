@@ -92,6 +92,7 @@ one deliberately rather than diffing it against a fresh build.
 | `iccbased_4.pdf`       | PDF/A-4      | ICCBased profiles, overprint mode and the destination profile   |
 | `headings_ua1.pdf`     | PDF/UA-1     | Heading structure: one H per node, strong or weak but not both  |
 | `formcs_2b.pdf`        | PDF/A-2b     | The colour space a Form XObject inherits at its invoking `Do`   |
+| `patterncs_2b.pdf`     | PDF/A-2b     | Colour in a tiling pattern and an annotation appearance stream  |
 
 ### Must-not-fire controls
 
@@ -178,6 +179,8 @@ violation but is exempt, so a firing is a false positive.
 | `headings_ua1`                            | `Sect2`, a node holding exactly one `H` child                          | ISO 14289-1, 7.4.4 t1        |
 | `formcs_2b`                               | `Fm0`, a bare `scn` under an inherited ICCBased space                  | ISO 32000-1, 8.10.2          |
 | `formcs_2b`                               | `Fm1`, a form selecting its own ICCBased space before painting         | ISO 19005-2, 6.2.4.3 t4      |
+| `patterncs_2b`                            | `P2`, a tiling pattern declared in /Resources but never painted        | ISO 19005-2, 6.2.4.3         |
+| `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -222,6 +225,7 @@ which are covered under [Known divergences](#known-divergences).
 | `megafont_2b.pdf`      | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `outputintent_2b.pdf`  | 4    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
+| `patterncs_2b.pdf`     | 3    | 5    | 3    | 3    | 3    | 4   | 10   | 8    |
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
 | `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 8    | 7    |
@@ -1546,15 +1550,53 @@ falls back to the old heuristic only for a tiling pattern or an annotation
 appearance stream, which no `Do` invokes and whose entry state it therefore
 never observes.
 
+## Pattern and appearance-stream colour
+
+`patterncs_2b.pdf` covers the two content scopes `formcs_2b` cannot reach. A
+tiling pattern and an annotation appearance stream each carry a content stream
+that no `Do` invokes, so neither the invoking state nor the object itself decides
+what colour space they begin in.
+
+Measured against veraPDF, both begin in the **default** graphics state, and a
+space the page selected before painting the pattern does not carry into it:
+
+| probe                                                 | veraPDF |
+| ----------------------------------------------------- | ------- |
+| pattern with a bare `f`, page selected nothing        | `t4`    |
+| pattern with a bare `f`, page selected ICCBased first | `t4`    |
+| pattern selecting its own ICCBased space              | silent  |
+| appearance stream with a bare `f`                     | `t4`    |
+| appearance stream selecting its own space             | silent  |
+
+That is the opposite of a Form XObject, which does inherit. So the heuristic that
+read a bare `sc`/`scn` in these scopes as evidence a space was already selected
+was wrong for both, and it is now gone: every scope no `Do` invokes starts from
+the default state.
+
+The same measurement exposed a second, opposite defect. litho's pattern walk had
+no usage gate, so it scanned every entry in `/Resources/Pattern` whether or not a
+`scn` named it. veraPDF is usage-driven, so a declared-but-unpainted pattern was a
+false positive. Pattern names are now collected from `scn`/`SCN`: per ISO 32000-1
+Table 74 the only form of those operators taking a name operand is the pattern
+form, so a trailing name identifies the pattern without tracking whether a
+`/Pattern` space is current.
+
+The fixture had to be built so the two defects cannot cancel. An earlier draft
+gave the unpainted pattern a DeviceGray fill, and litho before the fix still
+reported test 4 on the file: it missed `P0` and `A0` but scanned `P2`, agreeing
+with veraPDF for the wrong reasons. Giving `P2` a DeviceCMYK fill separates them,
+and the file now shows litho wrong in both directions at once: it reported test 3
+that veraPDF does not, and missed test 4 that veraPDF does.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 40 x 8 = 320
+fixture is expanded across all eight profiles, so the matrix is 41 x 8 = 328
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 318 of the 320 cells. The two
+fixtures exist to protect, and it holds in 326 of the 328 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
