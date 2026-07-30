@@ -215,3 +215,63 @@ func TestXMPDateInstant(t *testing.T) {
 		t.Error("unparseable input must report false")
 	}
 }
+
+// TestXMPParseForSync_ContainerTypedProperties covers the XMP type of the three
+// §6.7.3 analogues that are RDF containers: dc:title and dc:description are
+// language alternatives and dc:creator is an ordered array. veraPDF resolves
+// them through that container, so a value written as an attribute or as a plain
+// element does not answer the lookup and must not be recorded. Measured: an
+// attribute-form or simple-element dc:title reports t2 even when its text equals
+// /Title, while an rdf:Alt passes whether or not its entry is x-default.
+func TestXMPParseForSync_ContainerTypedProperties(t *testing.T) {
+	t.Parallel()
+
+	const dc = `xmlns:dc="http://purl.org/dc/elements/1.1/"`
+	for _, tc := range []struct {
+		name     string
+		desc     string
+		wantHave bool
+	}{
+		{
+			name:     "attribute form is not a container",
+			desc:     `<rdf:Description rdf:about="" ` + dc + ` dc:title="V"/>`,
+			wantHave: false,
+		},
+		{
+			name:     "plain element is not a container",
+			desc:     `<rdf:Description rdf:about="" ` + dc + `><dc:title>V</dc:title></rdf:Description>`,
+			wantHave: false,
+		},
+		{
+			name:     "rdf:Alt with x-default counts",
+			desc:     `<rdf:Description rdf:about="" ` + dc + `><dc:title><rdf:Alt><rdf:li xml:lang="x-default">V</rdf:li></rdf:Alt></dc:title></rdf:Description>`,
+			wantHave: true,
+		},
+		{
+			name:     "rdf:Alt without x-default still counts",
+			desc:     `<rdf:Description rdf:about="" ` + dc + `><dc:title><rdf:Alt><rdf:li xml:lang="en">V</rdf:li></rdf:Alt></dc:title></rdf:Description>`,
+			wantHave: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := xmpParseForSync(xmpPacket(tc.desc))
+			if got == nil {
+				t.Fatal("xmpParseForSync returned nil")
+			}
+			if got.present["dc:title"] != tc.wantHave {
+				t.Errorf("dc:title present = %v, want %v (values=%v)", got.present["dc:title"], tc.wantHave, got.values)
+			}
+			if _, ok := got.values["dc:title"]; ok != tc.wantHave {
+				t.Errorf("dc:title value recorded = %v, want %v", ok, tc.wantHave)
+			}
+		})
+	}
+
+	// A simple property is not container-typed: attribute form is its normal
+	// spelling and must keep working.
+	got := xmpParseForSync(xmpPacket(`<rdf:Description rdf:about="" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" pdf:Producer="P"/>`))
+	if got.values["pdf:Producer"] != "P" {
+		t.Errorf("pdf:Producer = %q, want %q", got.values["pdf:Producer"], "P")
+	}
+}

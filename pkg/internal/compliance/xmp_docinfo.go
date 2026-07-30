@@ -222,6 +222,20 @@ func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.
 	return ""
 }
 
+// xmpContainerTypedProperties are the §6.7.3 XMP analogues whose XMP type is an
+// RDF container rather than a simple value: dc:title and dc:description are
+// language alternatives (rdf:Alt) and dc:creator is an ordered array (rdf:Seq).
+// veraPDF resolves them through that container, so a value written as an
+// attribute or as a plain element does not satisfy the lookup and the Info entry
+// has nothing to match. Measured: an attribute-form or simple-element dc:title
+// reports 6.7.3 t2 on veraPDF even when its text equals /Title, while an rdf:Alt
+// passes whether or not its entry carries xml:lang="x-default".
+var xmpContainerTypedProperties = map[string]bool{
+	"dc:title":       true,
+	"dc:creator":     true,
+	"dc:description": true,
+}
+
 // xmpSyncResult holds the parsed XMP values and container entry counts.
 type xmpSyncResult struct {
 	values      map[string]string // Property key → first value
@@ -243,6 +257,8 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	result := make(map[string]string)
 	entryCounts := make(map[string]int)
 	present := make(map[string]bool)
+	// Properties whose value came from an rdf:Alt, rdf:Seq or rdf:Bag.
+	fromContainer := make(map[string]bool)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
@@ -320,8 +336,10 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 					switch t.Name.Local {
 					case "Alt":
 						inAlt = true
+						fromContainer[makeKey(propNS, propLocal)] = true
 					case "Seq", "Bag":
 						inSeqOrBag = true
+						fromContainer[makeKey(propNS, propLocal)] = true
 					}
 				}
 				if (inAlt || inSeqOrBag) && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
@@ -416,6 +434,16 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	for key, val := range altFirst {
 		if _, exists := result[key]; !exists {
 			result[key] = val
+		}
+	}
+
+	// A container-typed property written as an attribute or a plain element
+	// carries no container, so it does not answer the lookup veraPDF performs.
+	// Drop it entirely rather than leaving a value that would compare equal.
+	for key := range xmpContainerTypedProperties {
+		if !fromContainer[key] {
+			delete(result, key)
+			delete(present, key)
 		}
 	}
 
