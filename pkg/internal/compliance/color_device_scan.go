@@ -10,7 +10,7 @@ import (
 
 // scanForDeviceColorSpaces looks through page resources for uses of DeviceRGB,
 // DeviceCMYK, and DeviceGray colour spaces.
-func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects, referencedPatterns map[string]bool, inherited map[string]inheritedCS, part int, contentCSNames map[string]bool) deviceCSUsage {
+func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool, used *usedResources, inherited map[string]inheritedCS, part int, contentCSNames map[string]bool) deviceCSUsage {
 	var usage deviceCSUsage
 
 	// A named colour space in /Resources/ColorSpace counts only when it is
@@ -57,9 +57,9 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 	// content stream; unreferenced XObjects are not "used" per the spec.
 	visited := make(map[string]bool)
 	scanXObjectColorSpaces(ctx, doc, resources, &usage, 0, visited, referencedXObjects, inherited, part)
-	scanFontColorSpaces(ctx, doc, resources, &usage)
-	scanShadingColorSpaces(ctx, doc, resources, &usage)
-	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited, referencedPatterns, part)
+	scanFontColorSpaces(ctx, doc, resources, &usage, used)
+	scanShadingColorSpaces(ctx, doc, resources, &usage, used)
+	scanPatternColorSpaces(ctx, doc, resources, &usage, 0, visited, used, part)
 
 	return usage
 }
@@ -202,7 +202,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	nestedXObjects := make(map[string]bool)
 	formCSNames := make(map[string]bool)
 	nestedInherited := make(map[string]inheritedCS)
-	nestedPatterns := make(map[string]bool)
+	nestedUsed := newUsedResources()
 
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(ctx, data)
@@ -211,7 +211,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		} else {
 			// Check inline image colour spaces from parsed BI operations.
 			scanInlineImageCSOps(ops, &usage, formCSNames)
-			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames, nestedPatterns, nestedInherited, entryCS)
+			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames, nestedUsed, nestedInherited, entryCS)
 		}
 	}
 
@@ -293,8 +293,8 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	scanXObjectColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, nestedXObjects, nestedInherited, part)
 
 	// Check nested Shading and Pattern resources.
-	scanShadingColorSpaces(ctx, doc, formRes, &usage)
-	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, nestedPatterns, part)
+	scanShadingColorSpaces(ctx, doc, formRes, &usage, nestedUsed)
+	scanPatternColorSpaces(ctx, doc, formRes, &usage, depth+1, visited, nestedUsed, part)
 
 	// Suppress device CS usage that is covered by the Form/Pattern's own
 	// DefaultCS entries. Device CS operators in the content stream are
@@ -397,15 +397,21 @@ func formGroupICCColorSpace(ctx context.Context, doc *document.Document, stream 
 
 // scanFontColorSpaces checks Font resources for device colour space references
 // (e.g., Type 3 fonts with their own Resources).
-func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage) {
+func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, used *usedResources) {
 	fontDict, err := document.ResolveDict(ctx, doc, resources["Font"])
 	if err != nil || fontDict == nil {
 		return
 	}
 
-	for _, fontObj := range fontDict {
+	for name, fontObj := range fontDict {
 		if ctx.Err() != nil {
 			return
+		}
+
+		// A Type3 font's CharProcs paint only once a Tf has selected the font.
+		// A font merely declared in /Resources/Font draws nothing.
+		if used != nil && !used.fonts[string(name)] {
+			continue
 		}
 
 		fd, err := document.ResolveDict(ctx, doc, fontObj)
@@ -509,36 +515,36 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 // by cs/CS, so the resource scan can distinguish colour spaces that are
 // actually referenced from ones merely declared in /Resources/ColorSpace, and
 // the colour-space state in effect at each Do, which a Form XObject inherits.
-func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool, map[string]bool, map[string]bool, map[string]inheritedCS) {
+func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)
 	referencedCSNames := make(map[string]bool)
-	referencedPatterns := make(map[string]bool)
+	used := newUsedResources()
 	inherited := make(map[string]inheritedCS)
 
 	streamData, err := resolvePageContentBytes(ctx, doc, page)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: failed to get content stream bytes for CS scan",
 			"page", pageIdx, "error", err)
-		return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
+		return usage, referencedXObjects, referencedCSNames, used, inherited
 	}
 
 	if len(streamData) == 0 {
-		return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
+		return usage, referencedXObjects, referencedCSNames, used, inherited
 	}
 
 	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: failed to parse content stream for CS scan",
 			"page", pageIdx, "error", err)
-		return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
+		return usage, referencedXObjects, referencedCSNames, used, inherited
 	}
 
 	// Check inline image colour spaces from parsed BI operations.
 	scanInlineImageCSOps(ops, &usage, referencedCSNames)
-	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited, inheritedCSDefault())
+	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, used, inherited, inheritedCSDefault())
 
-	return usage, referencedXObjects, referencedCSNames, referencedPatterns, inherited
+	return usage, referencedXObjects, referencedCSNames, used, inherited
 }
 
 // Text rendering modes that add no marks to the page. Per ISO 32000-1,
@@ -548,6 +554,25 @@ const (
 	textRenderInvisible = 3
 	textRenderClip      = 7
 )
+
+// usedResources holds the resource-dictionary keys a content stream actually
+// paints with, per category. ISO 19005-2 §6.2.4.3 is usage-driven: a resource
+// merely declared in /Resources paints nothing and so uses no colour space, which
+// veraPDF was measured to agree with for patterns, shadings and Type3 fonts
+// alike.
+type usedResources struct {
+	patterns map[string]bool
+	shadings map[string]bool
+	fonts    map[string]bool
+}
+
+func newUsedResources() *usedResources {
+	return &usedResources{
+		patterns: make(map[string]bool),
+		shadings: make(map[string]bool),
+		fonts:    make(map[string]bool),
+	}
+}
 
 // inheritedCS is the colour-space selection state a nested scope inherits from
 // the scope that invokes it: whether a fill and a stroke space were selected at
@@ -613,12 +638,12 @@ func inheritedCSFor(states map[string]inheritedCS, name string) inheritedCS {
 // recorded there, which is what lets a bare sc/scn name a component of an
 // inherited space without being read as a DeviceGray use.
 //
-// referencedPatterns collects the /Resources/Pattern keys the stream actually
-// paints with, so the pattern walk can skip patterns that are merely declared.
+// used collects the resource keys the stream actually paints with, so each
+// resource walk can skip entries that are merely declared. See [usedResources].
 //
 // inheritedXObjectCS records, per XObject name, the state in effect at each Do
 // that invokes it, so a nested form scan starts from the observed state.
-func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames, referencedPatterns map[string]bool, inheritedXObjectCS map[string]inheritedCS, entry inheritedCS) {
+func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool, used *usedResources, inheritedXObjectCS map[string]inheritedCS, entry inheritedCS) {
 	fillCSSet, strokeCSSet := entry.fill, entry.stroke
 	// Text rendering mode is part of the text state, which q/Q saves and
 	// restores with the rest of the graphics state (ISO 32000-1, 9.3.1).
@@ -709,9 +734,25 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			// name operand is the pattern form, so a trailing name is a
 			// /Resources/Pattern key. sc/SC never take one; they are listed here
 			// only so a malformed stream cannot smuggle a name past this case.
-			if len(op.Operands) > 0 {
-				if name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName); ok && referencedPatterns != nil {
-					referencedPatterns[string(name)] = true
+			if len(op.Operands) > 0 && used != nil {
+				if name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName); ok {
+					used.patterns[string(name)] = true
+				}
+			}
+		case "sh":
+			// sh names a /Resources/Shading key and paints it (ISO 32000-1
+			// §8.7.4.2). It is the only operator that does.
+			if len(op.Operands) >= 1 && used != nil {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					used.shadings[string(name)] = true
+				}
+			}
+		case "Tf":
+			// Tf selects a /Resources/Font key (ISO 32000-1 §9.3.1). A Type3
+			// font's CharProcs paint only once some Tf has selected it.
+			if len(op.Operands) >= 1 && used != nil {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					used.fonts[string(name)] = true
 				}
 			}
 		case "Do":
@@ -887,7 +928,7 @@ func mark3DStreamCS(ctx context.Context, doc *document.Document, stream ast.PdfS
 
 // scanShadingColorSpaces checks Shading resources for device colour space usage.
 // Shading dictionaries contain a /ColorSpace entry that may reference a device CS.
-func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage) {
+func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, used *usedResources) {
 	shadingDict, err := document.ResolveDict(ctx, doc, resources["Shading"])
 	if err != nil || shadingDict == nil {
 		return
@@ -896,6 +937,12 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 	for name, shadingObj := range shadingDict {
 		if ctx.Err() != nil {
 			return
+		}
+
+		// Only shadings an sh operator paints are used. A shading merely
+		// declared in /Resources/Shading paints nothing.
+		if used != nil && !used.shadings[string(name)] {
+			continue
 		}
 
 		sd, err := document.ResolveDict(ctx, doc, shadingObj)
@@ -919,7 +966,7 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 // scanPatternColorSpaces checks Pattern resources for device colour space usage.
 // Tiling patterns (Type 1) have their own content streams and resources that may
 // use device-dependent colour spaces.
-func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, referencedPatterns map[string]bool, part int) {
+func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, used *usedResources, part int) {
 	patternDict, err := document.ResolveDict(ctx, doc, resources["Pattern"])
 	if err != nil || patternDict == nil {
 		return
@@ -933,7 +980,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// Only patterns a scn/SCN operator actually names are used. A pattern
 		// merely declared in /Resources/Pattern paints nothing, so its content
 		// cannot be a device-colour use (ISO 19005-2 §6.2.4.3 is usage-driven).
-		if referencedPatterns != nil && !referencedPatterns[string(name)] {
+		if used != nil && !used.patterns[string(name)] {
 			continue
 		}
 
@@ -959,6 +1006,18 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 
 		patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"])
 		if patternType != 1 {
+			continue
+		}
+
+		// An uncoloured tiling pattern (/PaintType 2) shall not specify any
+		// colour in its content stream: the colour comes from the operands of
+		// the scn/SCN that selects it, interpreted in the underlying space of
+		// [/Pattern base] (ISO 32000-1 §8.7.3.3, Table 75). The initial
+		// DeviceGray of §8.6.8 therefore never applies inside the cell, so a
+		// bare painting operator there is not a DeviceGray use. veraPDF reports
+		// nothing for such a cell, not even an explicit "0 g" in it.
+		paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"])
+		if paintType == 2 {
 			continue
 		}
 

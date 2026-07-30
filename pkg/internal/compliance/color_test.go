@@ -403,14 +403,14 @@ func TestScanContentColorOps_ReferencedPatterns(t *testing.T) {
 				t.Fatalf("parse content stream: %v", err)
 			}
 			var usage deviceCSUsage
-			patterns := map[string]bool{}
-			scanContentColorOps(ctx, ops, &usage, nil, nil, patterns, nil, inheritedCSDefault())
-			if len(patterns) != len(tc.want) {
-				t.Fatalf("recorded patterns = %v, want %v", patterns, tc.want)
+			used := newUsedResources()
+			scanContentColorOps(ctx, ops, &usage, nil, nil, used, nil, inheritedCSDefault())
+			if len(used.patterns) != len(tc.want) {
+				t.Fatalf("recorded patterns = %v, want %v", used.patterns, tc.want)
 			}
 			for _, name := range tc.want {
-				if !patterns[name] {
-					t.Errorf("pattern %q not recorded, got %v", name, patterns)
+				if !used.patterns[name] {
+					t.Errorf("pattern %q not recorded, got %v", name, used.patterns)
 				}
 			}
 		})
