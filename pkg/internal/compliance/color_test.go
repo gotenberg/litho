@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage covers §6.2.4.3: a Form
@@ -26,7 +27,7 @@ func TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve form: %v", err)
 		}
-		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, 4)
+		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, inheritedCSUnknown(), 4)
 	}
 
 	if !scan(t, "/Group << /S /Transparency /CS /DeviceRGB >>").rgb {
@@ -274,4 +275,87 @@ func TestSameIndirectRef(t *testing.T) {
 			t.Error("expected false for non-ref objects")
 		}
 	})
+}
+
+// TestScanContentColorOps_InheritedColorSpace covers §6.2.4.3 for a scope that
+// starts from an inherited graphics state. Per ISO 32000-1 §8.6.8 Table 74,
+// sc/scn set components within the space cs/CS already selected and never
+// select one, so whether a bare scn leaves DeviceGray in effect depends
+// entirely on what the invoking Do inherited (§8.10.2). veraPDF models that,
+// including the q/Q restore that puts the default space back before the Do.
+func TestScanContentColorOps_InheritedColorSpace(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name       string
+		stream     string
+		entry      inheritedCS
+		expectGray bool
+	}{
+		{
+			name:       "bare scn with an inherited space selects nothing new",
+			stream:     "0.5 scn 0 0 50 50 re f",
+			entry:      inheritedCS{fill: true, stroke: true, known: true},
+			expectGray: false,
+		},
+		{
+			name:       "bare scn with no inherited space leaves the default DeviceGray",
+			stream:     "0.5 scn 0 0 50 50 re f",
+			entry:      inheritedCSDefault(),
+			expectGray: true,
+		},
+		{
+			name:       "an explicit cs overrides an unset inherited state",
+			stream:     "/CS0 cs 0.5 scn 0 0 50 50 re f",
+			entry:      inheritedCSDefault(),
+			expectGray: false,
+		},
+		{
+			name:       "a bare SCN paints a stroke with the inherited stroke space",
+			stream:     "0.5 SCN 0 0 50 50 re S",
+			entry:      inheritedCS{fill: true, stroke: true, known: true},
+			expectGray: false,
+		},
+		{
+			name:       "a bare SCN strokes with the default when nothing is inherited",
+			stream:     "0.5 SCN 0 0 50 50 re S",
+			entry:      inheritedCSDefault(),
+			expectGray: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ops, err := content.ParseStreamData(ctx, []byte(tc.stream))
+			if err != nil {
+				t.Fatalf("parse content stream: %v", err)
+			}
+			var usage deviceCSUsage
+			scanContentColorOps(ctx, ops, &usage, nil, nil, nil, tc.entry)
+			if usage.gray != tc.expectGray {
+				t.Errorf("DeviceGray usage = %v, want %v", usage.gray, tc.expectGray)
+			}
+		})
+	}
+}
+
+// TestRecordInheritedCS_CombinesInvocations covers an XObject invoked more than
+// once. veraPDF reports the invocation that runs with no space selected, so the
+// recorded states combine by AND.
+func TestRecordInheritedCS_CombinesInvocations(t *testing.T) {
+	t.Parallel()
+
+	states := map[string]inheritedCS{}
+	recordInheritedCS(states, "Fm0", true, true)
+	recordInheritedCS(states, "Fm0", false, true)
+	got := inheritedCSFor(states, "Fm0")
+	if !got.known || got.fill || !got.stroke {
+		t.Errorf("Fm0 inherited = %+v, want known with fill false and stroke true", got)
+	}
+
+	// An XObject litho never sees invoked has an unknown entry state, which is
+	// what puts the tiling-pattern and appearance-stream paths on the heuristic.
+	if got := inheritedCSFor(states, "Fm1"); got.known {
+		t.Errorf("unrecorded XObject inherited = %+v, want known false", got)
+	}
 }
