@@ -233,22 +233,27 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	return data, true
 }
 
-// containsDCTitle reports whether the XMP declares the Dublin Core
-// namespace and binds it to a prefix under which a title element or
-// attribute appears. A producer that binds the "dc" literal prefix to a
-// non-DC namespace URI does not satisfy the Dublin Core title
-// requirement, so the check keys off the URI rather than the prefix
-// substring.
-func containsDCTitle(ctx context.Context, xmpData []byte) bool {
-	const dcNamespace = "http://purl.org/dc/elements/1.1/"
-	prefix := xmpExtractPrefixMap(ctx, xmpData)[dcNamespace]
-	if prefix == "" {
-		return false
-	}
-	raw := string(xmpData)
-	return strings.Contains(raw, "<"+prefix+":title>") ||
-		strings.Contains(raw, "<"+prefix+":title ") ||
-		strings.Contains(raw, prefix+":title=")
+// containsDCTitle reports whether the XMP resolves a Dublin Core title.
+//
+// dc:title is container-typed in XMP: it is a language alternative, so veraPDF
+// resolves it through an rdf:Alt. A title written as an attribute of
+// rdf:Description or as a plain element is a simple value and answers nothing,
+// so the title reads as absent. Measured: both spellings report ISO 14289-1
+// §7.1 t9 and ISO 14289-2 §8.11.1 t1 on veraPDF even though the text is there,
+// while an rdf:Alt passes whether or not its entry is x-default.
+//
+// The resolution is shared with the §6.7.3 document-information comparison,
+// which keys off the namespace URI rather than the literal prefix: a producer
+// that binds "dc" to a non-Dublin-Core URI does not satisfy the requirement.
+func containsDCTitle(xmpData []byte) bool {
+	// Presence, not a non-empty value: an rdf:Alt whose x-default entry is empty
+	// still satisfies the rule (measured on pdfjs/issue7229 and the ZUGFeRD
+	// corpus, where veraPDF is silent). pdfjs/issue20453 looks like the same
+	// shape and does report, but its dc:title sits on an rdf:Description that
+	// binds only xmlns:pdf, so the prefix is unbound and it is not a dc:title at
+	// all: the namespace-keyed lookup below already tells those two apart.
+	sync := xmpParseForSync(xmpData)
+	return sync != nil && sync.present["dc:title"]
 }
 
 // containsPDFUAIDPart reports whether the XMP declares the PDF/UA

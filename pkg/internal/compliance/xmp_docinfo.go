@@ -267,6 +267,9 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	var liLang string // xml:lang attribute on current rdf:li
 	depth := 0
 	inDesc := false
+	// descDepth counts nested rdf:Description elements; only the outermost
+	// starts a property scope.
+	descDepth := 0
 
 	// simpleRaw accumulates the raw character data of a depth-1 simple
 	// property. XMP preserves element text verbatim (whitespace included),
@@ -295,6 +298,16 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 		if prefix, ok := nsToPrefix[ns]; ok {
 			return prefix + ":" + local
 		}
+		// An unbound prefix must not masquerade as the namespace it resembles.
+		// The decoder runs non-strict, so a document that writes dc:title while
+		// declaring no xmlns:dc yields the bare prefix "dc" as the namespace,
+		// which would collide with the canonical key built from the Dublin Core
+		// URI. Keys built from anything that is not a URI are namespaced apart
+		// (measured on pdfjs/issue20453, where veraPDF reports the title as
+		// absent for exactly this reason).
+		if !strings.Contains(ns, ":") {
+			return "?" + ns + ":" + local
+		}
 		return ns + ":" + local
 	}
 
@@ -306,6 +319,17 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
+				// XMP allows an rdf:Description as a structured property value,
+				// nested inside a container (dc:date/rdf:Seq/rdf:li in the
+				// wild). Only the outermost one starts a property scope:
+				// resetting depth for a nested one loses the depth of every
+				// property that follows it in the outer Description, so those
+				// properties stop being recognised at all.
+				descDepth++
+				if descDepth > 1 {
+					depth++
+					continue
+				}
 				inDesc = true
 				depth = 0
 				for _, attr := range t.Attr {
@@ -396,6 +420,12 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 			}
 		case xml.EndElement:
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
+				if descDepth > 1 {
+					descDepth--
+					depth--
+					continue
+				}
+				descDepth = 0
 				inDesc = false
 				depth = 0
 				propNS = ""

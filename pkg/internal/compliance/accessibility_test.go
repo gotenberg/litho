@@ -229,10 +229,14 @@ func TestCheckPDFUAIDPrefixesIn(t *testing.T) {
 	}
 }
 
-// TestContainsDCTitle_NamespaceAware verifies containsDCTitle only
-// returns true when the "dc" prefix is bound to the Dublin Core URI. A
-// rogue XMP that binds "dc" to a different namespace and defines
-// <dc:title> must not count as a compliant title.
+// TestContainsDCTitle_NamespaceAware verifies containsDCTitle resolves a title
+// only when the Dublin Core URI is bound and the title sits in its container.
+// Two independent requirements meet here. A rogue XMP that binds "dc" to a
+// different namespace does not count, so the check keys off the URI rather than
+// the prefix. And dc:title is container-typed in XMP, a language alternative, so
+// veraPDF resolves it through an rdf:Alt: an attribute or a plain element is a
+// simple value that answers nothing, and both spellings report ISO 14289-1
+// §7.1 t9 on veraPDF even though the text is present.
 func TestContainsDCTitle_NamespaceAware(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -242,32 +246,39 @@ func TestContainsDCTitle_NamespaceAware(t *testing.T) {
 	}{
 		{
 			name: "canonical element form",
-			xmp: `<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/">
+			xmp: `<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Doc</rdf:li></rdf:Alt></dc:title>
 </rdf:Description>`,
 			want: true,
 		},
 		{
-			name: "canonical attribute form",
-			xmp:  `<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" dc:title="Doc"/>`,
-			want: true,
+			name: "attribute form is a simple value, not a container",
+			xmp:  `<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" dc:title="Doc"/>`,
+			want: false,
+		},
+		{
+			name: "plain element is a simple value, not a container",
+			xmp: `<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:title>Doc</dc:title>
+</rdf:Description>`,
+			want: false,
 		},
 		{
 			name: "rogue namespace bound to dc prefix",
-			xmp: `<rdf:Description xmlns:dc="http://example.org/imposter/">
-  <dc:title>Impostor</dc:title>
+			xmp: `<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://example.org/imposter/">
+  <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Impostor</rdf:li></rdf:Alt></dc:title>
 </rdf:Description>`,
 			want: false,
 		},
 		{
 			name: "no dc binding",
-			xmp:  `<rdf:Description><other:title>Doc</other:title></rdf:Description>`,
+			xmp:  `<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><other:title>Doc</other:title></rdf:Description>`,
 			want: false,
 		},
 		{
 			name: "DC namespace bound to non-canonical prefix",
-			xmp: `<rdf:Description xmlns:dublin="http://purl.org/dc/elements/1.1/">
-  <dublin:title>Doc</dublin:title>
+			xmp: `<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dublin="http://purl.org/dc/elements/1.1/">
+  <dublin:title><rdf:Alt><rdf:li xml:lang="x-default">Doc</rdf:li></rdf:Alt></dublin:title>
 </rdf:Description>`,
 			want: true,
 		},
@@ -275,7 +286,7 @@ func TestContainsDCTitle_NamespaceAware(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := containsDCTitle(context.Background(), []byte(tc.xmp)); got != tc.want {
+			if got := containsDCTitle([]byte(tc.xmp)); got != tc.want {
 				t.Errorf("containsDCTitle = %v, want %v\n%s", got, tc.want, tc.xmp)
 			}
 		})
