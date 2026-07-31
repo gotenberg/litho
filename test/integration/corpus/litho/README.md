@@ -101,6 +101,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annotstruct_ua2.pdf`  | PDF/UA-2     | Annotations judged by the structure element that encloses them   |
 | `a4syntax_4.pdf`       | PDF/A-4      | Part-4 file and catalog rules: syntax, actions, optional content |
 | `glyphs_2b.pdf`        | PDF/A-2b     | Composite fonts and the glyphs a page actually paints            |
+| `structkinds_ua2.pdf`  | PDF/UA-2     | Structure element kinds: Ruby, Warichu, LI, MathML, root         |
 
 ### Must-not-fire controls
 
@@ -204,6 +205,10 @@ violation but is exempt, so a firing is a false positive.
 | `a4syntax_4`                              | A widget with no `/A`, beside one that carries an action               | ISO 19005-4, 6.4.1 t1        |
 | `glyphs_2b`                               | A composite font painting a present, named glyph                       | ISO 19005-2, 6.2.11.4.1 t2   |
 | `glyphs_2b`                               | The missing glyph painted in mode 3, through a font of its own         | ISO 19005-2, 6.2.11.4.1 t2   |
+| `structkinds_ua2`                         | A `Ruby` of RB then RT, and one of RB, RP, RT, RP                      | ISO 14289-2, 8.2.5.23 t1     |
+| `structkinds_ua2`                         | A `Warichu` of WP, WT, WP                                              | ISO 14289-2, 8.2.5.24 t1     |
+| `structkinds_ua2`                         | An `LI` holding `Lbl` and `LBody` rather than content directly         | ISO 14289-2, 8.2.5.25 t2     |
+| `structkinds_ua2`                         | A `math` element parented by a `Formula`                               | ISO 14289-2, 8.2.5.29 t1     |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -267,6 +272,7 @@ which are covered under [Known divergences](#known-divergences).
 | `outputintent_2b.pdf`  | 4    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 | `patterncs_2b.pdf`     | 3    | 5    | 3    | 3    | 3    | 4   | 10   | 8    |
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
+| `structkinds_ua2.pdf`  | 5    | 7    | 6    | 6    | 6    | 3   | 5    | 7    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
 | `syntax_1b.pdf`        | 9    | 11   | 9    | 9    | 9    | 9   | 12   | 8    |
 | `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 8    | 7    |
@@ -1933,15 +1939,47 @@ normalises object headers, and refuses to emit a name that is not valid UTF-8.
 They are patched into the saved bytes at identical length so no cross-reference
 offset moves, and the builder refuses any patch that would change a length.
 
+## Structure element kinds
+
+`structkinds_ua2.pdf` covers five ISO 14289-2 rules that judge what a structure
+element may contain, or what may contain it. Each is scoped to one veraPDF
+object, so a file reaches a test only by carrying that exact element kind.
+
+| Construct                              | Rule         |
+| -------------------------------------- | ------------ |
+| a root holding two `Document` elements | `8.2.5.2/1`  |
+| `Ruby` whose kids are RB, RP, RT       | `8.2.5.23/1` |
+| `Warichu` whose kids are WP, WT        | `8.2.5.24/1` |
+| `LI` holding a marked-content item     | `8.2.5.25/2` |
+| `math` whose parent is a `P`           | `8.2.5.29/1` |
+
+The root defect is the one that interacts, since `8.2.5.2/1` judges the very
+kids the other four hang from. Two `Document` elements break it while leaving
+both subtrees walkable, and the `Warichu` pair lives under the SECOND `Document`
+on purpose, so a walk that reads only the first root kid loses `8.2.5.24/1`
+outright. The construct also fires ISO/TS 32005 `Table 5. StructTreeRoot-Document`,
+which counts `Document` kids rather than comparing the whole kid sequence.
+
+Controls sit beside every defect, because each of these tests judges a shape
+rather than a kind: a `Ruby` of RB, RT and another of RB, RP, RT, RP, a
+`Warichu` of WP, WT, WP, an `LI` holding `Lbl` and `LBody` beside one holding
+content directly, and a `math` element parented by a `Formula`.
+
+The MathML namespace is load-bearing. veraPDF decides `SEMathMLStructElem` by
+namespace rather than by type name, so the same element declared in the PDF 2.0
+namespace, or declaring none, is not a math element to it and reports `8.2.4/1`
+instead. The `math` elements here bind to the MathML namespace deliberately, and
+it is declared in the structure tree root's `/Namespaces`.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 49 x 8 = 392
+fixture is expanded across all eight profiles, so the matrix is 50 x 8 = 400
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 390 of the 392 cells. The two
+fixtures exist to protect, and it holds in 398 of the 400 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
