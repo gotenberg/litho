@@ -102,6 +102,7 @@ one deliberately rather than diffing it against a fresh build.
 | `a4syntax_4.pdf`       | PDF/A-4      | Part-4 file and catalog rules: syntax, actions, optional content |
 | `glyphs_2b.pdf`        | PDF/A-2b     | Composite fonts and the glyphs a page actually paints            |
 | `structkinds_ua2.pdf`  | PDF/UA-2     | Structure element kinds: Ruby, Warichu, LI, MathML, root         |
+| `xobjstate_2b.pdf`     | PDF/A-2b     | Form XObject keys, blend modes, page actions, Separations        |
 
 ### Must-not-fire controls
 
@@ -209,6 +210,9 @@ violation but is exempt, so a firing is a false positive.
 | `structkinds_ua2`                         | A `Warichu` of WP, WT, WP                                              | ISO 14289-2, 8.2.5.24 t1     |
 | `structkinds_ua2`                         | An `LI` holding `Lbl` and `LBody` rather than content directly         | ISO 14289-2, 8.2.5.25 t2     |
 | `structkinds_ua2`                         | A `math` element parented by a `Formula`                               | ISO 14289-2, 8.2.5.29 t1     |
+| `xobjstate_2b`                            | A Form XObject carrying no `/OPI`                                      | ISO 19005-2, 6.2.9 t1        |
+| `xobjstate_2b`                            | An `ExtGState` naming `/Multiply`, a blend mode PDF defines            | ISO 19005-2, 6.2.10 t1       |
+| `xobjstate_2b`                            | A third Separation naming a colorant of its own                        | ISO 19005-2, 6.2.4.4 t2      |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -284,6 +288,7 @@ which are covered under [Known divergences](#known-divergences).
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
 | `usedcs_2b.pdf`        | 3    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
 | `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
+| `xobjstate_2b.pdf`     | 6    | 11   | 9    | 9    | 9    | 10  | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -1971,15 +1976,43 @@ namespace, or declaring none, is not a math element to it and reports `8.2.4/1`
 instead. The `math` elements here bind to the MathML namespace deliberately, and
 it is declared in the structure tree root's `/Namespaces`.
 
+## Form XObject keys, blend modes and page actions
+
+`xobjstate_2b.pdf` covers four ISO 19005-2 rules that judge different parts of
+one page: what a Form XObject dictionary may carry, what a graphics state may
+name as a blend mode, whether a page may act on being opened, and whether two
+Separations agreeing on a colorant name agree on how to render it.
+
+| Construct                                       | Rule        |
+| ----------------------------------------------- | ----------- |
+| a Form XObject carrying `/OPI`                  | `6.2.9/1`   |
+| an `ExtGState` naming a blend mode outside PDF  | `6.2.10/1`  |
+| a page carrying `/AA`                           | `6.5.2/2`   |
+| two Separations sharing a colorant, disagreeing | `6.2.4.4/2` |
+
+Four independent axes in one file, so a check that abandons a page after its
+first complaint reports one rule where four are due. Each defect has a
+conforming neighbour, because every one of these tests turns on a value rather
+than on a kind.
+
+`6.2.9/1` reads `(Subtype2 == null || Subtype2 != "PS") && containsPS == false
+&& containsOPI == false`, so three different keys break one test. Only `/OPI` is
+planted: the other two collapse onto the same rule and would prove nothing
+extra, while `/OPI` is the one a real producer emits.
+
+`6.2.4.4/2` is reported once per offending Separation by veraPDF and once per
+disagreeing pair by litho, so their instance counts differ by one. Both leave
+the third Separation silent, which is what the control exists to show.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 50 x 8 = 400
+fixture is expanded across all eight profiles, so the matrix is 51 x 8 = 408
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 398 of the 400 cells. The two
+fixtures exist to protect, and it holds in 406 of the 408 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
