@@ -1,0 +1,65 @@
+%PDF-1.4
+%¿÷¢þ
+1 0 obj
+<< /Metadata 3 0 R /Pages 4 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Author (Ada Lovelace) /CreationDate (D:20220406201541+02'00') /Creator (litho corpus) /Keywords () /ModDate (D:20220406201541+02'00') /Producer (litho) /Subject () /Title (Synchronized Title) >>
+endobj
+3 0 obj
+<< /Subtype /XML /Type /Metadata /Length 1182 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+   <!-- The same instant as /CreationDate, in another timezone: equivalent. -->
+   <xmp:CreateDate>2022-04-06T13:15:41-05:00</xmp:CreateDate>
+   <!-- An hour later than /ModDate: not equivalent. -->
+   <xmp:ModifyDate>2022-04-06T19:15:41+02:00</xmp:ModifyDate>
+   <!-- A different value from /Creator. -->
+   <xmp:CreatorTool>another tool</xmp:CreatorTool>
+   <!-- dc:creator in its rdf:Seq container, equal to /Author. -->
+   <dc:creator><rdf:Seq><rdf:li>Ada Lovelace</rdf:li></rdf:Seq></dc:creator>
+   <!-- dc:description declared and empty, like /Subject. -->
+   <dc:description><rdf:Alt><rdf:li xml:lang="x-default"/></rdf:Alt></dc:description>
+  </rdf:Description>
+  <!-- dc:title as an attribute: a simple value where an rdf:Alt is required. -->
+  <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="" dc:title="Synchronized Title"/>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+4 0 obj
+<< /Count 1 /Kids [ 5 0 R ] /Type /Pages >>
+endobj
+5 0 obj
+<< /Contents 6 0 R /MediaBox [ 0 0 612 792 ] /Parent 4 0 R /Resources << /Font << /F1 7 0 R >> >> /Type /Page >>
+endobj
+6 0 obj
+<< /Length 47 >>
+stream
+BT /F1 12 Tf 50 700 Td (docinfo and XMP) Tj ET
+
+endstream
+endobj
+7 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000080 00000 n 
+0000000294 00000 n 
+0000001558 00000 n 
+0000001617 00000 n 
+0000001745 00000 n 
+0000001842 00000 n 
+trailer << /Info 2 0 R /Root 1 0 R /Size 8 /ID [<e43366b67e2f5fa95018a64cf4c4acdd><e43366b67e2f5fa95018a64cf4c4acdd>] >>
+startxref
+1939
+%%EOF

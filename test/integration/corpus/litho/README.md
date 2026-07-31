@@ -95,6 +95,7 @@ one deliberately rather than diffing it against a fresh build.
 | `patterncs_2b.pdf`     | PDF/A-2b     | Colour in a tiling pattern and an annotation appearance stream  |
 | `usedcs_2b.pdf`        | PDF/A-2b     | Which declared resources count as colour usage                  |
 | `filestruct_1b.pdf`    | PDF/A-1b     | File header, trailer identifier, hex strings and AcroForm       |
+| `docsync_1b.pdf`       | PDF/A-1b     | Document information entries against their XMP analogues        |
 
 ### Must-not-fire controls
 
@@ -188,6 +189,9 @@ violation but is exempt, so a firing is a false positive.
 | `usedcs_2b`                               | `PUnc`, an uncoloured pattern writing colour into its cell             | ISO 32000-1, 8.7.3.3         |
 | `filestruct_1b`                           | A hexadecimal string with an even count of hex digits only             | ISO 19005-1, 6.1.6           |
 | `filestruct_1b`                           | A widget that does carry an appearance dictionary                      | ISO 19005-1, 6.9 t2          |
+| `docsync_1b`                              | `/CreationDate` and `xmp:CreateDate`, same instant, other zone         | ISO 19005-1, 6.7.3 t1        |
+| `docsync_1b`                              | `/Author` against `dc:creator` in its `rdf:Seq`                        | ISO 19005-1, 6.7.3 t3        |
+| `docsync_1b`                              | `/Subject` empty against a declared, empty `dc:description`            | ISO 19005-1, 6.7.3 t4        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -215,6 +219,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua2.pdf`      | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
 | `contentstream_4.pdf`  | 4    | 8    | 6    | 6    | 6    | 6   | 8    | 7    |
 | `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
+| `docsync_1b.pdf`       | 9    | 6    | 4    | 4    | 4    | 6   | 9    | 8    |
 | `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
 | `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
 | `filestruct_1b.pdf`    | 13   | 12   | 10   | 10   | 10   | 13  | 10   | 8    |
@@ -1695,15 +1700,58 @@ XMP property. litho compared the two only when a packet existed, returning early
 otherwise because the surrounding packet checks have nothing to examine. It now
 runs the comparison against an empty XMP result instead.
 
+## Document information against XMP
+
+`docsync_1b.pdf` covers ISO 19005-1, 6.7.3, which compares eight document
+information entries with their XMP analogues. Every test reads
+`Key == null || Key == XMPKey`, so an entry that is present must have a matching
+XMP property. The interesting question is what "matching" means, and four
+different wrong answers were four real litho defects.
+
+| Info entry      | XMP side                                   | Rule      |
+| --------------- | ------------------------------------------ | --------- |
+| `/Title`        | `dc:title` written as an attribute         | `6.7.3/2` |
+| `/Keywords`     | empty, `pdf:Keywords` undeclared           | `6.7.3/5` |
+| `/Creator`      | `xmp:CreatorTool` with another value       | `6.7.3/6` |
+| `/Producer`     | `pdf:Producer` absent from the packet      | `6.7.3/7` |
+| `/ModDate`      | an hour away from `xmp:ModifyDate`         | `6.7.3/8` |
+| `/CreationDate` | `xmp:CreateDate`, same instant, other zone | silent    |
+| `/Author`       | `dc:creator` in an `rdf:Seq`, equal        | silent    |
+| `/Subject`      | empty, `dc:description` declared empty     | silent    |
+
+The three controls are the point of the file, because each is the exact shape a
+naive comparison reports:
+
+- `D:20220406201541+02'00'` against `2022-04-06T13:15:41-05:00` is the same
+  instant, 18:15:41 UTC. The clause asks whether the two are equivalent, not
+  whether they are spelled alike, so comparing normalised local wall-clock
+  strings reports a mismatch veraPDF does not.
+- `/Subject` is present but empty and `dc:description` is declared empty. An
+  empty string is not null, so the entry is still compared, and it matches
+  because the comparison turns on whether the property is DECLARED rather than
+  on whether it carries text. `/Keywords` beside it is the same empty entry
+  whose property is _not_ declared, and that one fails.
+- `/Author` uses `dc:creator` in an `rdf:Seq` and `/Title` uses `dc:title` as an
+  attribute. Both look equal to a comparison that reads a property's text, but
+  these are container-typed in XMP and veraPDF resolves them through the
+  container, so an attribute answers nothing.
+
+The file is a regression lock for the whole sequence of fixes, not just the last
+one. Run against the binaries from each stage it reports, in order: an extra
+`t1` with `t2` and `t5` missing, then `t2` missing, then agreement. The fourth
+defect in that sequence, skipping the clause entirely when a document carries no
+XMP packet, is locked by [filestruct_1b](#file-level-syntax-and-forms) instead,
+which has no `/Metadata` at all.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 43 x 8 = 344
+fixture is expanded across all eight profiles, so the matrix is 44 x 8 = 352
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 342 of the 344 cells. The two
+fixtures exist to protect, and it holds in 350 of the 352 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
