@@ -97,6 +97,7 @@ one deliberately rather than diffing it against a fresh build.
 | `filestruct_1b.pdf`    | PDF/A-1b     | File header, trailer identifier, hex strings and AcroForm       |
 | `docsync_1b.pdf`       | PDF/A-1b     | Document information entries against their XMP analogues        |
 | `syntax_1b.pdf`        | PDF/A-1b     | Stream length and end-of-line, and interactive actions          |
+| `annotkinds_ua2.pdf`   | PDF/UA-2     | Annotation subtypes, each judged by its own accessibility test  |
 
 ### Must-not-fire controls
 
@@ -184,6 +185,9 @@ violation but is exempt, so a firing is a false positive.
 | `formcs_2b`                               | `Fm0`, a bare `scn` under an inherited ICCBased space                  | ISO 32000-1, 8.10.2          |
 | `formcs_2b`                               | `Fm1`, a form selecting its own ICCBased space before painting         | ISO 19005-2, 6.2.4.3 t4      |
 | `patterncs_2b`                            | `P2`, a tiling pattern declared in /Resources but never painted        | ISO 19005-2, 6.2.4.3         |
+| `annotkinds_ua2`                          | A `Screen` carrying `/Contents`, beside one that carries none          | ISO 14289-2, 8.9.2.4.12 t1   |
+| `annotkinds_ua2`                          | An `Ink` carrying `/Contents`, beside one that carries none            | ISO 14289-2, 8.9.2.4.8 t1    |
+| `annotkinds_ua2`                          | A `Stamp` carrying `/Name`, the branch `/Contents` alone leaves unmet  | ISO 14289-2, 8.9.2.4.7 t1    |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -209,6 +213,7 @@ which are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
 | ---------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
+| `annotkinds_ua2.pdf`   | 7    | 8    | 8    | 8    | 8    | 5   | 8    | 10   |
 | `annots_1b.pdf`        | 14   | 14   | 12   | 12   | 12   | 10  | 12   | 8    |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 3    |
 | `cmaps_2b.pdf`         | 6    | 10   | 7    | 8    | 7    | 8   | 12   | 12   |
@@ -1783,15 +1788,59 @@ reordering attributes and rewriting the header, so those two attributes survive
 neither authoring nor a length-preserving patch. Reaching that clause needs a
 hand-assembled file.
 
+## Annotation subtypes
+
+`annotkinds_ua2.pdf` covers ISO 14289-2, 8.9.2.4, which the coverage scan showed
+almost wholly unreached. The clause judges annotations subtype by subtype, and
+each of its tests is scoped to one veraPDF object, so a file reaches a test only
+by carrying that exact annotation kind. Eleven annotations sit on one page.
+
+| Annotation                                   | Rule           |
+| -------------------------------------------- | -------------- |
+| `Sound`, any                                 | `8.9.2.4.11/1` |
+| `TrapNet`, any                               | `8.9.2.4.15/1` |
+| `Screen` with no `/Contents`                 | `8.9.2.4.12/1` |
+| `3D` with no `/Contents`                     | `8.9.2.4.19/1` |
+| `RichMedia` with no `/Contents`              | `8.9.2.4.19/2` |
+| `Ink` with no `/Contents`                    | `8.9.2.4.8/1`  |
+| `Stamp` with neither `/Name` nor `/Contents` | `8.9.2.4.7/1`  |
+| `PrinterMark` inside the structure tree      | `8.9.2.4.14/1` |
+
+The clause splits one idea, "an annotation must be describable or be an
+artifact", across nine independent tests, so a check that reports the first
+offending annotation and stops reports one rule where eight are due.
+
+Two of the eleven need no defect at all. `Sound` and `TrapNet` are forbidden
+outright, so their tests read simply `false`: the annotation's presence is the
+violation. They are the reason the file cannot be reduced to "annotations
+missing a description".
+
+`PrinterMark` is the opposite shape. Its rule is satisfied when the annotation is
+outside the structure tree or marked as an artifact, so reaching it means putting
+the annotation into the tree, wired the way a real one is: a `/StructParent` on
+the annotation, an `/OBJR` in the enclosing element's `/K`, and a `ParentTree`
+entry mapping the number back. Wire it wrong and the annotation looks unparented,
+which silences the test rather than firing it.
+
+Three conforming twins sit beside the defects, one per subtype where the test
+turns on an entry rather than on the subtype itself. Rule-set agreement alone
+cannot see them, because veraPDF reports a rule once however many annotations
+break it, so a check condemning every `Screen` would produce the same rule set as
+a correct one. The per-rule instance counts are what prove them: `8.9.2.4.12/1`,
+`8.9.2.4.8/1` and `8.9.2.4.7/1` each report one failed check, not two, in both
+implementations. The `Stamp` twin uses `/Name` rather than `/Contents`
+deliberately: the test accepts either, and only the `/Name` branch is otherwise
+unexercised.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 45 x 8 = 360
+fixture is expanded across all eight profiles, so the matrix is 46 x 8 = 368
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 358 of the 360 cells. The two
+fixtures exist to protect, and it holds in 366 of the 368 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
