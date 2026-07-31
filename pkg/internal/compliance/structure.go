@@ -223,7 +223,9 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			puaTreeRoot, _ = document.ResolveDict(ctx, doc, catalog["StructTreeRoot"]) // Best-effort: nil dict means no structure tree to check.
 		}
 		if puaTreeRoot != nil {
-			results = append(results, checkActualTextPUA(ctx, doc, catalog, puaTreeRoot, Rule_19005_4_6_2_10_8_t01, Rule_19005_4_6_2_10_8_t01)...)
+			// ISO 19005-4 §6.2.10.8 is scoped to CosActualText; the profile
+			// defines no CosAlt rule, so /Alt is not judged at PDF/A-4.
+			results = append(results, checkActualTextPUA(ctx, doc, catalog, puaTreeRoot, Rule_19005_4_6_2_10_8_t01, Rule{})...)
 		}
 	}
 
@@ -256,6 +258,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// PDF/UA-2 §8.4.3: /ActualText (t02) and /Alt (t03) shall not contain PUA.
 		if profile == "PDF/UA-2" {
 			results = append(results, checkActualTextPUA(ctx, doc, catalog, structTreeRoot, Rule_14289_2_8_4_3_t02, Rule_14289_2_8_4_3_t03)...)
+			results = append(results, checkOutlineTitlePUA(ctx, doc, catalog)...)
 		}
 
 		// PDF/UA-2 §8.2.5.2: single Document root child.
@@ -1279,10 +1282,13 @@ func resolveAttributeValue(ctx context.Context, doc *document.Document, elem ast
 }
 
 // checkActualTextPUA validates that /ActualText and /Alt entries do not contain
-// Unicode PUA values (U+E000-U+F8FF, U+F0000-U+FFFFD, U+100000-U+10FFFD). The
-// rule differs by profile: PDF/A-4 §6.2.10.8 uses one rule for both keys, while
-// PDF/UA-2 splits ActualText (§8.4.3 t02) and Alt (§8.4.3 t03), so the caller
-// supplies the per-key rule.
+// Unicode PUA values (U+E000-U+F8FF, U+F0000-U+FFFFD, U+100000-U+10FFFD).
+//
+// Which keys are in scope differs by profile, so the caller supplies a rule per
+// key and passes the zero Rule for a key the profile does not judge. PDF/UA-2
+// splits ActualText (§8.4.3 t02) from Alt (§8.4.3 t03); ISO 19005-4 §6.2.10.8
+// covers ActualText ALONE, so /Alt is out of scope there and firing the same
+// rule for it reported a violation veraPDF does not.
 func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, treeRoot ast.PdfDict, ruleActualText, ruleAlt Rule) []Violation {
 	var results []Violation
 
@@ -1296,6 +1302,9 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 	// Check structure element ActualText and Alt.
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		for _, key := range []ast.PdfName{"ActualText", "Alt"} {
+			if keyRule(key).Specification == "" {
+				continue
+			}
 			atObj, ok := elem[key]
 			if !ok {
 				continue
@@ -1914,4 +1923,63 @@ func roleMapStandardRemapRule(profile string) Rule {
 		return Rule_19005_3_6_7_3_4_t03
 	}
 	return Rule{}
+}
+
+// checkOutlineTitlePUA validates ISO 14289-2 §8.6 t1 for outline item titles: a
+// text string a consumer reads out shall carry no Private Use Area code point,
+// because nothing outside the producing system knows what one means.
+//
+// The clause is scoped to veraPDF's CosTextString, and which strings that
+// covers was established by measurement rather than from the clause text: an
+// outline item's /Title reaches it, while a document information /Title and an
+// annotation /Contents were both silent. Only the measured position fires here,
+// so an unmeasured one is a missing report rather than a wrong one.
+func checkOutlineTitlePUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
+	outlinesObj, ok := catalog["Outlines"]
+	if !ok {
+		return nil
+	}
+	outlines, err := document.ResolveDict(ctx, doc, outlinesObj)
+	if err != nil || outlines == nil {
+		doc.Logger.Debug("compliance.structure: cannot resolve /Outlines", "error", err)
+		return nil
+	}
+
+	var results []Violation
+	walkOutlineTitlePUA(ctx, doc, outlines["First"], &results, 0, map[int]bool{})
+	return results
+}
+
+// walkOutlineTitlePUA reports every outline item whose /Title carries a PUA code
+// point, following /Next across siblings and /First into children.
+func walkOutlineTitlePUA(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Violation, depth int, visited map[int]bool) {
+	if depth > maxStructTreeWalkDepth {
+		return
+	}
+	for itemObj != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		if ref, ok := itemObj.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				return
+			}
+			visited[ref.ObjectNum] = true
+		}
+
+		item, err := document.ResolveDict(ctx, doc, itemObj)
+		if err != nil || item == nil {
+			return
+		}
+
+		if title, terr := document.ResolveString(ctx, doc, item["Title"]); terr == nil {
+			if containsPUARunes(document.DecodePdfString(title)) {
+				*results = append(*results, failf(Rule_14289_2_8_6_t01,
+					"outline item /Title contains PUA")...)
+			}
+		}
+
+		walkOutlineTitlePUA(ctx, doc, item["First"], results, depth+1, visited)
+		itemObj = item["Next"]
+	}
 }
