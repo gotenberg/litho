@@ -83,9 +83,6 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// so they need no explicit role mapping.
 	results = append(results, checkNamespaceRoleMapping(ctx, doc, catalog, profile)...)
 
-	// Link nesting (PDF/UA-2): Link annotations must be nested in Link structure elements.
-	results = append(results, checkLinkNesting(ctx, doc, catalog, profile)...)
-
 	// Annotation artifact flags (PDF/UA-2 §8.9.2.2): Invisible (t1) or
 	// NoView-without-ToggleNoView (t2) annotations must be artifacts.
 	results = append(results, checkAnnotArtifactFlags(ctx, doc, catalog, profile)...)

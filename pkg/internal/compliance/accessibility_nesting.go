@@ -330,6 +330,8 @@ func buildAnnotStructTypeMapNS(ctx context.Context, doc *document.Document, tree
 //   - §8.10.1 t1: a field widget annotation shall be enclosed by a Form element.
 //   - §8.9.2.4.16 t1: a Watermark annotation used as real content shall be
 //     enclosed by an Annot element.
+//   - §8.2.5.20 t1: a Link annotation shall be enclosed by a Link or Reference
+//     element.
 //
 // Annotations that are artifacts (absent from the structure tree) are exempt
 // from both, matching the rules' structParentType/isArtifact conditions.
@@ -398,6 +400,16 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 				if stdType != "Annot" {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_16_t01,
 						"Watermark annotation enclosed by %s instead of Annot", nestingDesc(stdType))...)
+				}
+			case "Link":
+				// §8.2.5.20 t1: a Link annotation shall be enclosed by a Link or
+				// Reference element. Artifact is excluded explicitly because it is
+				// a PDF 2.0 standard type and so resolves here, where veraPDF
+				// exempts it through its separate isArtifact condition.
+				if stdType != "Link" && stdType != "Reference" && stdType != "Artifact" {
+					results = append(results, failf(Rule_14289_2_8_2_5_20_t01,
+						"Link annotation enclosed by %s instead of Link or Reference",
+						nestingDesc(stdType))...)
 				}
 			}
 		}

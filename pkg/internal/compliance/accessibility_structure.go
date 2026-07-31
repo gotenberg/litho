@@ -875,67 +875,6 @@ func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcN
 	return false
 }
 
-func checkLinkNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	if profile != "PDF/UA-2" {
-		return nil
-	}
-
-	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if err != nil || treeRoot == nil {
-		return nil
-	}
-
-	// Collect all Link annotations from pages.
-	pages := collectPages(ctx, doc, catalog)
-	linkAnnotCount := 0
-	for _, page := range pages {
-		annotsObj, ok := page["Annots"]
-		if !ok {
-			continue
-		}
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
-			continue
-		}
-		for _, annotObj := range annots {
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			if subtype == "Link" {
-				linkAnnotCount++
-			}
-		}
-	}
-
-	if linkAnnotCount == 0 {
-		return nil
-	}
-
-	// Check that Link structure elements exist in the tree. Resolve each
-	// element's /S through the legacy /RoleMap so a non-standard type mapped
-	// to Link (e.g. /Link1 -> /Link) counts as a Link structure element.
-	// ISO 14289-2 §8.2.5.20 governs the standard type, so the effective
-	// (role-mapped) type, not the raw /S name, decides whether the rule applies.
-	roleMap := LoadRoleMap(ctx, doc, treeRoot)
-	var linkStructCount int
-	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
-		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		std := resolveStandardType(typeName, roleMap, profile)
-		if std == "Link" || std == "Reference" {
-			linkStructCount++
-		}
-	})
-
-	if linkStructCount == 0 && linkAnnotCount > 0 {
-		return fail(Rule_14289_2_8_2_5_20_t01, "link annotations exist but no Link/Reference structure elements found")
-	}
-
-	return nil
-}
-
 // checkAnnotArtifactFlags validates ISO 14289-2 §8.9.2.2: an annotation that is
 // part of the logical structure (has /StructParent) must not be effectively
 // hidden. An Invisible annotation violates t1; a NoView annotation without

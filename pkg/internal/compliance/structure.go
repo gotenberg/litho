@@ -1005,42 +1005,93 @@ func validateLinkDestConsistency(ctx context.Context, state *walkState, elem ast
 	}
 }
 
-// linkAnnotDest extracts a comparable destination string from a Link annotation.
-// Handles both /Dest and /A (GoTo action with /D) forms.
+// linkAnnotDest returns the identity of the structure destination a Link
+// annotation targets, or "" when it targets none.
+//
+// ISO 14289-2 §8.2.5.20 t2 asks whether the Link annotations grouped under one
+// element point at the same place, and ISO 32000-2 §12.3.2.3 makes a structure
+// destination the thing being pointed at: a destination whose target is a
+// structure element. A page destination, a URI action, and a destination naming
+// no structure element leave nothing to compare and so return "". Only the
+// target's identity decides the answer; the view parameters that follow it in
+// the destination array do not, so two links onto the same element with
+// different zoom agree.
 func linkAnnotDest(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
-	// Direct /Dest
-	if dest := annot["Dest"]; dest != nil {
-		return fmt.Sprintf("%v", dest)
-	}
-	// Action /A with /S=GoTo and /D
-	aDict, _ := document.ResolveDict(ctx, doc, annot["A"])
-	if aDict == nil {
-		return ""
-	}
-	aType, _ := document.ResolveName(ctx, doc, aDict["S"])
-	if aType == "GoTo" {
-		// PDF 2.0 §12.6.4.2: /SD (structured destination) takes precedence
-		// over /D when both are present.
-		d := aDict["SD"]
-		if d == nil {
-			d = aDict["D"]
-		}
-		if d == nil {
+	dest := annot["Dest"]
+	if dest == nil {
+		aDict, _ := document.ResolveDict(ctx, doc, annot["A"])
+		if aDict == nil {
 			return ""
 		}
-		// Resolve indirect refs to get the actual destination array.
-		resolved, _ := document.ResolveObject(ctx, doc, d)
-		if resolved != nil {
-			return fmt.Sprintf("%v", resolved)
+		if aType, _ := document.ResolveName(ctx, doc, aDict["S"]); aType != "GoTo" {
+			return ""
 		}
-		return fmt.Sprintf("%v", d)
+		// ISO 32000-2 §12.6.4.2: /SD takes precedence over /D when both appear.
+		if dest = aDict["SD"]; dest == nil {
+			dest = aDict["D"]
+		}
 	}
-	// URI action
-	if aType == "URI" {
-		uri, _ := document.ResolveString(ctx, doc, aDict["URI"])
-		return "URI:" + string(uri)
+	if dest == nil {
+		return ""
 	}
-	return ""
+	return structDestTarget(ctx, doc, dest)
+}
+
+// structDestTarget resolves a destination to the structure element it names and
+// returns that element's identity, or "" when it names none.
+func structDestTarget(ctx context.Context, doc *document.Document, dest ast.PdfObject) string {
+	// A name or string destination stands for the array it maps to, through
+	// either the /Names /Dests name tree or the legacy catalog /Dests.
+	switch named := dest.(type) {
+	case ast.PdfName:
+		arr, err := document.ResolveNamedDest(ctx, doc, string(named))
+		if err != nil {
+			doc.Logger.Debug("compliance.structure: named destination unresolved", "name", string(named), "error", err)
+			return ""
+		}
+		dest = arr
+	case ast.PdfString:
+		name := document.DecodePdfString(named)
+		arr, err := document.ResolveNamedDest(ctx, doc, name)
+		if err != nil {
+			doc.Logger.Debug("compliance.structure: named destination unresolved", "name", name, "error", err)
+			return ""
+		}
+		dest = arr
+	}
+
+	resolved, _ := document.ResolveObject(ctx, doc, dest)
+
+	// A destination dictionary carries its structure destination under /SD.
+	if d, ok := resolved.(ast.PdfDict); ok {
+		return structElemIdentity(ctx, doc, d["SD"])
+	}
+	arr, ok := resolved.(ast.PdfArray)
+	if !ok || len(arr) == 0 {
+		return ""
+	}
+	return structElemIdentity(ctx, doc, arr[0])
+}
+
+// structElemIdentity returns the object identity of a reference to a structure
+// element, or "" when obj is not one.
+//
+// A structure element is what carries /S; a page dictionary, which is what a
+// page destination names, does not. Identity is the indirect reference, so a
+// direct object never matches: it has no identity to compare.
+func structElemIdentity(ctx context.Context, doc *document.Document, obj ast.PdfObject) string {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return ""
+	}
+	elem, _ := document.ResolveDict(ctx, doc, ref)
+	if elem == nil {
+		return ""
+	}
+	if _, isStructElem := elem["S"]; !isStructElem {
+		return ""
+	}
+	return fmt.Sprintf("%d %d", ref.ObjectNum, ref.GenNum)
 }
 
 func headingMixedRule(profile string) Rule {
