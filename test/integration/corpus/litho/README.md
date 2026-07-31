@@ -100,6 +100,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annotkinds_ua2.pdf`   | PDF/UA-2     | Annotation subtypes, each judged by its own accessibility test   |
 | `annotstruct_ua2.pdf`  | PDF/UA-2     | Annotations judged by the structure element that encloses them   |
 | `a4syntax_4.pdf`       | PDF/A-4      | Part-4 file and catalog rules: syntax, actions, optional content |
+| `glyphs_2b.pdf`        | PDF/A-2b     | Composite fonts and the glyphs a page actually paints            |
 
 ### Must-not-fire controls
 
@@ -201,6 +202,8 @@ violation but is exempt, so a firing is a false positive.
 | `a4syntax_4`                              | A Separation whose colorant name is plain ASCII                        | ISO 19005-4, 6.1.7 t1        |
 | `a4syntax_4`                              | A `/NextPage` named action, one of the four permitted                  | ISO 19005-4, 6.6.1 t2        |
 | `a4syntax_4`                              | A widget with no `/A`, beside one that carries an action               | ISO 19005-4, 6.4.1 t1        |
+| `glyphs_2b`                               | A composite font painting a present, named glyph                       | ISO 19005-2, 6.2.11.4.1 t2   |
+| `glyphs_2b`                               | The missing glyph painted in mode 3, through a font of its own         | ISO 19005-2, 6.2.11.4.1 t2   |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -251,6 +254,7 @@ which are covered under [Known divergences](#known-divergences).
 | `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `formcs_2b.pdf`        | 4    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
 | `formstruct_ua2.pdf`   | 4    | 6    | 6    | 6    | 6    | 5   | 7    | 7    |
+| `glyphs_2b.pdf`        | 4    | 8    | 5    | 6    | 5    | 6   | 10   | 10   |
 | `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 5    |
 | `iccbased_4.pdf`       | 3    | 7    | 5    | 5    | 5    | 5   | 8    | 7    |
@@ -1932,12 +1936,12 @@ offset moves, and the builder refuses any patch that would change a length.
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 48 x 8 = 384
+fixture is expanded across all eight profiles, so the matrix is 49 x 8 = 392
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 382 of the 384 cells. The two
+fixtures exist to protect, and it holds in 390 of the 392 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
