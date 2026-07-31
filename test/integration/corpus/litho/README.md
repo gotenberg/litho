@@ -103,6 +103,7 @@ one deliberately rather than diffing it against a fresh build.
 | `glyphs_2b.pdf`        | PDF/A-2b     | Composite fonts and the glyphs a page actually paints            |
 | `structkinds_ua2.pdf`  | PDF/UA-2     | Structure element kinds: Ruby, Warichu, LI, MathML, root         |
 | `xobjstate_2b.pdf`     | PDF/A-2b     | Form XObject keys, blend modes, page actions, Separations        |
+| `puatext_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in the strings that describe         |
 
 ### Must-not-fire controls
 
@@ -213,6 +214,9 @@ violation but is exempt, so a firing is a false positive.
 | `xobjstate_2b`                            | A Form XObject carrying no `/OPI`                                      | ISO 19005-2, 6.2.9 t1        |
 | `xobjstate_2b`                            | An `ExtGState` naming `/Multiply`, a blend mode PDF defines            | ISO 19005-2, 6.2.10 t1       |
 | `xobjstate_2b`                            | A third Separation naming a colorant of its own                        | ISO 19005-2, 6.2.4.4 t2      |
+| `puatext_ua2`                             | An `/ActualText` carrying the same words without the PUA character     | ISO 14289-2, 8.4.3 t2        |
+| `puatext_ua2`                             | An `/Alt` carrying the same words without the PUA character            | ISO 14289-2, 8.4.3 t3        |
+| `puatext_ua2`                             | An outline title carrying no PUA character                             | ISO 14289-2, 8.6 t1          |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -275,6 +279,7 @@ which are covered under [Known divergences](#known-divergences).
 | `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `outputintent_2b.pdf`  | 4    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
 | `patterncs_2b.pdf`     | 3    | 5    | 3    | 3    | 3    | 4   | 10   | 8    |
+| `puatext_ua2.pdf`      | 5    | 6    | 6    | 6    | 6    | 4   | 3    | 4    |
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
 | `structkinds_ua2.pdf`  | 5    | 7    | 6    | 6    | 6    | 3   | 5    | 7    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
@@ -2004,15 +2009,42 @@ extra, while `/OPI` is the one a real producer emits.
 disagreeing pair by litho, so their instance counts differ by one. Both leave
 the third Separation silent, which is what the control exists to show.
 
+## Private Use Area characters
+
+`puatext_ua2.pdf` covers the ISO 14289-2 rules that forbid a Private Use Area
+code point in text a consumer reads out, because nothing outside the producing
+system knows what one means. The requirement is split across three veraPDF
+objects, so a file reaches each only by putting the character in that position.
+
+| Construct                            | Rule      |
+| ------------------------------------ | --------- |
+| `/ActualText` on a structure element | `8.4.3/2` |
+| `/Alt` on a structure element        | `8.4.3/3` |
+| an outline item `/Title`             | `8.6/1`   |
+
+The same `/ActualText` answers ISO 19005-4 `6.2.10.8/1`, the PDF/A-4 spelling of
+the first row. That clause covers `CosActualText` ALONE: the PDF/A-4 profile
+defines no `CosAlt` rule, so an `/Alt` carrying a PUA character is out of scope
+there. litho reported it anyway, a false positive this file's PDF/A-4 column
+would have hidden, because the conforming `/ActualText` beside it fires the same
+rule. Only the instance counts separated them.
+
+Where the third character goes was measured rather than read off the clause.
+`CosTextString` sounds like any string, but a document information `/Title` and
+an annotation `/Contents` were both silent; an outline item's `/Title` reaches
+it. Each defect sits beside a twin carrying the same words without the PUA
+character, so a check condemning every `/ActualText`, `/Alt` or title fires on
+the control.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 51 x 8 = 408
+fixture is expanded across all eight profiles, so the matrix is 52 x 8 = 416
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 406 of the 408 cells. The two
+fixtures exist to protect, and it holds in 414 of the 416 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
