@@ -106,6 +106,14 @@ func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 	for _, violation := range vctx.formatViolations {
 		msg := violation.Error()
 
+		// Object headers are judged by checkObjHeaderByteFormat, which sweeps
+		// every cross-reference entry. What resolution happened to record here
+		// is a subset of that, so passing it on would report the same defect
+		// twice for any object that missed the cache.
+		if containsObjHeaderPattern(msg) && !containsXRefPattern(msg) && !containsStreamPattern(msg) {
+			continue
+		}
+
 		rule := hexRule
 		//nolint:gocritic // if-else chain uses function-call predicates; switch is not applicable.
 		if containsXRefPattern(msg) {
@@ -190,14 +198,16 @@ func isXrefEOLViolation(msg string) bool {
 	return bytes.Contains([]byte(msg), []byte("EOL")) || bytes.Contains([]byte(msg), []byte("not followed by"))
 }
 
-// checkObjHeaderLeadingWhitespace performs a direct raw-byte scan of every
-// indirect object header in the xref table. The existing validateObjectHeaderFormat
-// (called during object resolution) only runs for uncached objects. Objects that
-// were resolved during pdf.Open (before ComplianceMode was enabled) are already
-// cached and skip header validation. This function reads from the underlying
-// io.ReaderAt to check that there is no non-EOL whitespace between the
-// preceding EOL marker and the object number digits (§6.1.8/§6.1.9).
-func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []Violation {
+// checkObjHeaderByteFormat performs a direct raw-byte scan of every indirect
+// object header in the xref table (§6.1.8/§6.1.9).
+//
+// It is the only place object headers are judged. Validating them during
+// resolution instead reaches an object only when it misses the cache, so
+// whatever pdf.Open resolved before compliance mode was enabled, the catalog
+// among it, was never checked at all, and which objects those were varied with
+// the shape of the file. Iterating the cross-reference entries judges every
+// object, and in object-number order, so the findings are also deterministic.
+func checkObjHeaderByteFormat(doc *document.Document, profile string) []Violation {
 	r := doc.RawReader()
 	if r == nil {
 		return nil
@@ -251,6 +261,15 @@ func checkObjHeaderLeadingWhitespace(doc *document.Document, profile string) []V
 			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("compliance.file_structure: obj header %d: object number not preceded by EOL marker (0x%02X)", objNum, prevByte),
+			})
+		}
+
+		// The separators inside the header, and the EOL around the obj and
+		// endobj keywords, are judged from the same offset.
+		for _, violation := range doc.ValidateObjectHeaderFormat(entry.Offset, objNum) {
+			results = append(results, Violation{
+				Rule:    rule,
+				Context: violation.Error(),
 			})
 		}
 	}

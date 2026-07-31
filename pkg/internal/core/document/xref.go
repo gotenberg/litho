@@ -200,6 +200,18 @@ func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64, skip
 	return nil
 }
 
+// ValidateObjectHeaderFormat performs raw-byte validation of the indirect
+// object header at offset, reporting the violations found in byte order.
+//
+// Resolution validates a header only when it misses the cache, so an object
+// already resolved during open escapes the check. Callers that need every
+// object judged, rather than whichever ones happened to be resolved, iterate
+// the cross-reference entries and call this directly. See
+// [Document.ValidateXRefTableFormat] for the same arrangement on xref tables.
+func (d *Document) ValidateObjectHeaderFormat(offset int64, objNum int) []error {
+	return d.validateObjectHeaderFormat(offset, objNum)
+}
+
 // validateObjectHeaderFormat performs raw-byte validation of an indirect object
 // header "N G obj". The spec requires: object number and generation number
 // separated by a single white-space character, generation number and obj
