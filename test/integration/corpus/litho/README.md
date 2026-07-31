@@ -50,54 +50,56 @@ one deliberately rather than diffing it against a fresh build.
 
 ## Fixtures
 
-| Fixture                | Home profile | Focus                                                           |
-| ---------------------- | ------------ | --------------------------------------------------------------- |
-| `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG          |
-| `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language        |
-| `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters            |
-| `complex_2u.pdf`       | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings     |
-| `complex_3b.pdf`       | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment      |
-| `complex_4.pdf`        | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps  |
-| `complex_ua1.pdf`      | PDF/UA-1     | Structure and accessibility defects in a wired tag tree         |
-| `complex_ua2.pdf`      | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations  |
-| `forbidden_mix.pdf`    | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW              |
-| `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states         |
-| `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: real, string, name, nesting, DeviceN     |
-| `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                          |
-| `multipage_2b.pdf`     | PDF/A-2b     | Three pages, a violation class unique to each                   |
-| `fontdict_2b.pdf`      | PDF/A-2b     | Font dictionary required keys; page box implementation limits   |
-| `structnest_ua1.pdf`   | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language   |
-| `tables_ua1.pdf`       | PDF/UA-1     | Tables and lists: header association, nested list structure     |
-| `tablespan_ua2.pdf`    | PDF/UA-2     | Table cell geometry: row and column spans                       |
-| `extschema_2b.pdf`     | PDF/A-2b     | XMP extension schema structure across sibling entries           |
-| `schemaprefix_1b.pdf`  | PDF/A-1b     | Extension schema RDF container types and absent fields          |
-| `trailer_2b.pdf`       | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                     |
-| `limits_1b.pdf`        | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID    |
-| `docinfo_1b.pdf`       | PDF/A-1b     | Document information dictionary against its XMP analogues       |
-| `imgxmp_4.pdf`         | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each |
-| `idprefix_2b.pdf`      | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema           |
-| `uaid_ua1.pdf`         | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes         |
-| `ttencoding_2b.pdf`    | PDF/A-2b     | TrueType encoding keys in the font dictionary                   |
-| `ttcmap_2b.pdf`        | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs         |
-| `fenote_ua2.pdf`       | PDF/UA-2     | Footnote and endnote structure: type, namespace, `/Ref` pairing |
-| `tableregular_ua2.pdf` | PDF/UA-2     | Table regularity: cell intersection and section row groupings   |
-| `artifact_ua1.pdf`     | PDF/UA-1     | Artifact and real-content marking; suspect tagging              |
-| `annots_1b.pdf`        | PDF/A-1b     | Annotation dictionary constraints and additional actions        |
-| `fontkeys_1b.pdf`      | PDF/A-1b     | Part-1 font dictionary required keys and embedded file subtype  |
-| `cmaps_2b.pdf`         | PDF/A-2b     | CMap embedding, WMode consistency and `/UseCMap` chains         |
-| `outputintent_2b.pdf`  | PDF/A-2b     | OutputIntent array and ICC destination profile headers          |
-| `formstruct_ua2.pdf`   | PDF/UA-2     | Widget annotations, Form structure elements and XFA             |
-| `xref_1b.pdf`          | PDF/A-1b     | Cross reference table formatting, patched as bytes              |
-| `contentstream_4.pdf`  | PDF/A-4      | Content stream operators and the resources it names             |
-| `iccbased_4.pdf`       | PDF/A-4      | ICCBased profiles, overprint mode and the destination profile   |
-| `headings_ua1.pdf`     | PDF/UA-1     | Heading structure: one H per node, strong or weak but not both  |
-| `formcs_2b.pdf`        | PDF/A-2b     | The colour space a Form XObject inherits at its invoking `Do`   |
-| `patterncs_2b.pdf`     | PDF/A-2b     | Colour in a tiling pattern and an annotation appearance stream  |
-| `usedcs_2b.pdf`        | PDF/A-2b     | Which declared resources count as colour usage                  |
-| `filestruct_1b.pdf`    | PDF/A-1b     | File header, trailer identifier, hex strings and AcroForm       |
-| `docsync_1b.pdf`       | PDF/A-1b     | Document information entries against their XMP analogues        |
-| `syntax_1b.pdf`        | PDF/A-1b     | Stream length and end-of-line, and interactive actions          |
-| `annotkinds_ua2.pdf`   | PDF/UA-2     | Annotation subtypes, each judged by its own accessibility test  |
+| Fixture                | Home profile | Focus                                                            |
+| ---------------------- | ------------ | ---------------------------------------------------------------- |
+| `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG           |
+| `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language         |
+| `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters             |
+| `complex_2u.pdf`       | PDF/A-2u     | Level-U Unicode: absent, forbidden and Private Use mappings      |
+| `complex_3b.pdf`       | PDF/A-3b     | Embedded and associated files, one 6.8 test per attachment       |
+| `complex_4.pdf`        | PDF/A-4      | Part-4 and PDF 2.0: rev 2020, docinfo, Requirements, PresSteps   |
+| `complex_ua1.pdf`      | PDF/UA-1     | Structure and accessibility defects in a wired tag tree          |
+| `complex_ua2.pdf`      | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations   |
+| `forbidden_mix.pdf`    | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW               |
+| `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states          |
+| `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: real, string, name, nesting, DeviceN      |
+| `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                           |
+| `multipage_2b.pdf`     | PDF/A-2b     | Three pages, a violation class unique to each                    |
+| `fontdict_2b.pdf`      | PDF/A-2b     | Font dictionary required keys; page box implementation limits    |
+| `structnest_ua1.pdf`   | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language    |
+| `tables_ua1.pdf`       | PDF/UA-1     | Tables and lists: header association, nested list structure      |
+| `tablespan_ua2.pdf`    | PDF/UA-2     | Table cell geometry: row and column spans                        |
+| `extschema_2b.pdf`     | PDF/A-2b     | XMP extension schema structure across sibling entries            |
+| `schemaprefix_1b.pdf`  | PDF/A-1b     | Extension schema RDF container types and absent fields           |
+| `trailer_2b.pdf`       | PDF/A-2b     | Encrypted, with data after the last `%%EOF`                      |
+| `limits_1b.pdf`        | PDF/A-1b     | Part-1 limits: integer, real, string, array, dictionary, CID     |
+| `docinfo_1b.pdf`       | PDF/A-1b     | Document information dictionary against its XMP analogues        |
+| `imgxmp_4.pdf`         | PDF/A-4      | Image dictionary keys; one XMP packet per page, one defect each  |
+| `idprefix_2b.pdf`      | PDF/A-2b     | Namespace prefixes on the PDF/A Identification Schema            |
+| `uaid_ua1.pdf`         | PDF/UA-1     | The PDF/UA Identification Schema: part number, prefixes          |
+| `ttencoding_2b.pdf`    | PDF/A-2b     | TrueType encoding keys in the font dictionary                    |
+| `ttcmap_2b.pdf`        | PDF/A-2b     | `cmap` subtable sets in embedded TrueType font programs          |
+| `fenote_ua2.pdf`       | PDF/UA-2     | Footnote and endnote structure: type, namespace, `/Ref` pairing  |
+| `tableregular_ua2.pdf` | PDF/UA-2     | Table regularity: cell intersection and section row groupings    |
+| `artifact_ua1.pdf`     | PDF/UA-1     | Artifact and real-content marking; suspect tagging               |
+| `annots_1b.pdf`        | PDF/A-1b     | Annotation dictionary constraints and additional actions         |
+| `fontkeys_1b.pdf`      | PDF/A-1b     | Part-1 font dictionary required keys and embedded file subtype   |
+| `cmaps_2b.pdf`         | PDF/A-2b     | CMap embedding, WMode consistency and `/UseCMap` chains          |
+| `outputintent_2b.pdf`  | PDF/A-2b     | OutputIntent array and ICC destination profile headers           |
+| `formstruct_ua2.pdf`   | PDF/UA-2     | Widget annotations, Form structure elements and XFA              |
+| `xref_1b.pdf`          | PDF/A-1b     | Cross reference table formatting, patched as bytes               |
+| `contentstream_4.pdf`  | PDF/A-4      | Content stream operators and the resources it names              |
+| `iccbased_4.pdf`       | PDF/A-4      | ICCBased profiles, overprint mode and the destination profile    |
+| `headings_ua1.pdf`     | PDF/UA-1     | Heading structure: one H per node, strong or weak but not both   |
+| `formcs_2b.pdf`        | PDF/A-2b     | The colour space a Form XObject inherits at its invoking `Do`    |
+| `patterncs_2b.pdf`     | PDF/A-2b     | Colour in a tiling pattern and an annotation appearance stream   |
+| `usedcs_2b.pdf`        | PDF/A-2b     | Which declared resources count as colour usage                   |
+| `filestruct_1b.pdf`    | PDF/A-1b     | File header, trailer identifier, hex strings and AcroForm        |
+| `docsync_1b.pdf`       | PDF/A-1b     | Document information entries against their XMP analogues         |
+| `syntax_1b.pdf`        | PDF/A-1b     | Stream length and end-of-line, and interactive actions           |
+| `annotkinds_ua2.pdf`   | PDF/UA-2     | Annotation subtypes, each judged by its own accessibility test   |
+| `annotstruct_ua2.pdf`  | PDF/UA-2     | Annotations judged by the structure element that encloses them   |
+| `a4syntax_4.pdf`       | PDF/A-4      | Part-4 file and catalog rules: syntax, actions, optional content |
 
 ### Must-not-fire controls
 
@@ -188,6 +190,17 @@ violation but is exempt, so a firing is a false positive.
 | `annotkinds_ua2`                          | A `Screen` carrying `/Contents`, beside one that carries none          | ISO 14289-2, 8.9.2.4.12 t1   |
 | `annotkinds_ua2`                          | An `Ink` carrying `/Contents`, beside one that carries none            | ISO 14289-2, 8.9.2.4.8 t1    |
 | `annotkinds_ua2`                          | A `Stamp` carrying `/Name`, the branch `/Contents` alone leaves unmet  | ISO 14289-2, 8.9.2.4.7 t1    |
+| `annotstruct_ua2`                         | A `Link` under a `/Link` element, beside one under a `/P`              | ISO 14289-2, 8.2.5.20 t1     |
+| `annotstruct_ua2`                         | Two `Link` annotations onto one element, differing only in zoom        | ISO 14289-2, 8.2.5.20 t2     |
+| `annotstruct_ua2`                         | A `Square` whose `/RC` rich text carries the words of its `/Contents`  | ISO 14289-2, 8.9.2.3 t2      |
+| `annotstruct_ua2`                         | A file spec declaring `/AFRelationship`, beside one that does not      | ISO 14289-2, 8.9.2.4.10 t1   |
+| `annotstruct_ua2`                         | A `Popup` left outside the structure tree                              | ISO 14289-2, 8.9.2.4.9 t1    |
+| `annotstruct_ua2`                         | `NoView` accompanied by `ToggleNoView`, which the test permits         | ISO 14289-2, 8.9.2.2 t2      |
+| `a4syntax_4`                              | An inline image declaring `/AHx`, one of the permitted filters         | ISO 19005-4, 6.1.9 t1        |
+| `a4syntax_4`                              | A third optional content configuration whose `/Name` is distinct       | ISO 19005-4, 6.10 t2         |
+| `a4syntax_4`                              | A Separation whose colorant name is plain ASCII                        | ISO 19005-4, 6.1.7 t1        |
+| `a4syntax_4`                              | A `/NextPage` named action, one of the four permitted                  | ISO 19005-4, 6.6.1 t2        |
+| `a4syntax_4`                              | A widget with no `/A`, beside one that carries an action               | ISO 19005-4, 6.4.1 t1        |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -213,8 +226,10 @@ which are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
 | ---------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
+| `a4syntax_4.pdf`       | 15   | 21   | 19   | 19   | 19   | 16  | 13   | 8    |
 | `annotkinds_ua2.pdf`   | 7    | 8    | 8    | 8    | 8    | 5   | 8    | 10   |
 | `annots_1b.pdf`        | 14   | 14   | 12   | 12   | 12   | 10  | 12   | 8    |
+| `annotstruct_ua2.pdf`  | 12   | 12   | 12   | 12   | 14   | 10  | 8    | 13   |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 3    |
 | `cmaps_2b.pdf`         | 6    | 10   | 7    | 8    | 7    | 8   | 12   | 12   |
 | `complex_1b.pdf`       | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
@@ -1832,15 +1847,97 @@ implementations. The `Stamp` twin uses `/Name` rather than `/Contents`
 deliberately: the test accepts either, and only the `/Name` branch is otherwise
 unexercised.
 
+## Annotations in the structure tree
+
+`annotstruct_ua2.pdf` covers the rest of ISO 14289-2 clause 8.9, the rules that
+turn on where an annotation sits rather than on what subtype it is. Almost every
+one of them is satisfied by `structParentType == null`, so an annotation reaches
+the test only by being wired into the structure tree, and reaching a test is the
+hard part rather than failing it.
+
+Wiring means three things agreeing: a `/StructParent` on the annotation, an
+`/OBJR` in the enclosing element's `/K`, and a `ParentTree` entry mapping the
+number back to that element. Miss one and the annotation reads as unparented,
+which silences the test rather than firing it.
+
+| Annotation                                         | Rule           |
+| -------------------------------------------------- | -------------- |
+| `Link` under a `/P`                                | `8.2.5.20/1`   |
+| `NoView` set without `ToggleNoView`                | `8.9.2.2/2`    |
+| `Square` under a `/P`                              | `8.9.2.3/1`    |
+| `Square` whose `/RC` differs from `/Contents`      | `8.9.2.3/2`    |
+| `Popup` inside the tree                            | `8.9.2.4.9/1`  |
+| `FileAttachment` with `/FS`, no `/AFRelationship`  | `8.9.2.4.10/1` |
+| zero-area `Widget` inside the tree                 | `8.9.2.4.13/1` |
+| `Watermark` under a `/P`                           | `8.9.2.4.16/1` |
+| `/Contents` against the element's differing `/Alt` | `8.9.4.2/1`    |
+| a field widget with `/AA` and no `/Contents`       | `8.10.2.3/2`   |
+
+The enclosing element's type is the discriminator for four of these, so the file
+carries `/Link`, `/Annot`, `/Form` and plain `/P` elements. Moving an annotation
+between them changes the verdict without changing one byte of the annotation, so
+a check that reads only the annotation dictionary cannot pass this file.
+
+Two entries are placed where measurement put them rather than where their names
+suggest. `/AFRelationship` is a file specification entry, so an
+annotation-level one leaves `8.9.2.4.10/1` firing and makes no control at all.
+`8.9.4.2/1` compares the annotation's `/Contents` with the `/Alt` of the element
+enclosing it, so an annotation-level `/Alt` never reaches the test.
+
+The file found three litho defects on its first build, which is the argument for
+writing them. `8.9.2.3/2` was a dead rule, declared and registered but never
+fired. `8.2.5.20/1` was approximated by a document-level count that fired only
+when a file held no `Link` element at all, so a single well-placed Link masked
+every misplaced one: exactly the masking this corpus exists to expose.
+`8.2.5.20/2` compared whole destination arrays, so it reported two links onto
+the same structure element with different zoom as disagreeing, and reported page
+destinations and URI actions that veraPDF never examines.
+
+## Part-4 file and catalog rules
+
+`a4syntax_4.pdf` covers eleven ISO 19005-4 rules the coverage scan showed
+unreached. All eleven judge the file or the catalog rather than any page, and
+they sit on eight independent axes, so a check that abandons a document after
+the first syntax complaint reports one rule where eight are due.
+
+| Construct                                             | Rule        |
+| ----------------------------------------------------- | ----------- |
+| a stream whose `/Length` is not its byte count        | `6.1.6.1/1` |
+| a name object that is not valid UTF-8                 | `6.1.7/1`   |
+| an object header with non-conforming spacing          | `6.1.8/1`   |
+| an inline image declaring the `/LZW` filter           | `6.1.9/1`   |
+| a `/Perms` entry other than `UR3` or `DocMDP`         | `6.1.11/1`  |
+| a catalog `/Version` that is not 2.x                  | `6.1.12/1`  |
+| a widget annotation carrying `/A`                     | `6.4.1/1`   |
+| a named action other than the four permitted          | `6.6.1/2`   |
+| `pdfaid:rev` bound to a prefix other than `pdfaid`    | `6.7.3/6`   |
+| two optional content configurations sharing a `/Name` | `6.10/2`    |
+| `/AlternatePresentations` in the name dictionary      | `6.11/1`    |
+
+Three of these are narrower than their clause text suggests, and each was
+settled by measurement rather than by reading. `6.1.9` judges an INLINE image
+filter: an `LZWDecode` stream sits in the same file and does not reach it.
+`6.10/2` judges optional content CONFIGURATIONS, so the two groups carry
+distinct names on purpose and the duplicate is between the default
+configuration and one entry of `/Configs`. `6.1.7` visits names in only a few
+modelled positions; a Separation colorant name works, while an unknown catalog
+key, a resource key, a `/Differences` glyph name and an annotation `/Name` were
+each measured silent.
+
+Four constructs are beyond pikepdf, which computes `/Length` from the data,
+normalises object headers, and refuses to emit a name that is not valid UTF-8.
+They are patched into the saved bytes at identical length so no cross-reference
+offset moves, and the builder refuses any patch that would change a length.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 46 x 8 = 368
+fixture is expanded across all eight profiles, so the matrix is 48 x 8 = 384
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 366 of the 368 cells. The two
+fixtures exist to protect, and it holds in 382 of the 384 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
