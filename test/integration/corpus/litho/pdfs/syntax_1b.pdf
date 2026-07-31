@@ -1,0 +1,105 @@
+%PDF-1.4
+%¿÷¢þ
+1 0 obj
+<< /AcroForm << /Fields [ 2 0 R 3 0 R ] >> /Metadata 4 0 R /Outlines 5 0 R /Pages 6 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /A << /N /NextPage /S /Named >> /AP << /N 7 0 R >> /F 4 /FT /Btn /Rect [ 50 600 110 620 ] /Subtype /Widget /T (acts) /Type /Annot >>
+endobj
+3 0 obj
+<< /AP << /N 8 0 R >> /F 4 /FT /Btn /Rect [ 50 560 110 580 ] /Subtype /Widget /T (inert) /Type /Annot >>
+endobj
+4 0 obj
+<< /Subtype /XML /Type /Metadata /Length 390 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">syntax</rdf:li></rdf:Alt></dc:title>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+5 0 obj
+<< /Count 2 /First 9 0 R /Last 10 0 R /Type /Outlines >>
+endobj
+6 0 obj
+<< /Count 1 /Kids [ 11 0 R ] /Type /Pages >>
+endobj
+7 0 obj
+<< /BBox [ 0 0 60 20 ] /Subtype /Form /Type /XObject /Length 24 >>
+stream
+0 0 0 rg 0 0 60 20 re f
+
+endstream
+endobj
+8 0 obj
+<< /BBox [ 0 0 60 20 ] /Subtype /Form /Type /XObject /Length 24 >>
+stream
+0 0 0 rg 0 0 60 20 re f
+
+endstream
+endobj
+9 0 obj
+<< /A << /N /GoForward /S /Named >> /Next 10 0 R /Parent 5 0 R /Title (forbidden named action) >>
+endobj
+10 0 obj
+<< /A << /N /NextPage /S /Named >> /Parent 5 0 R /Prev 9 0 R /Title (permitted named action) >>
+endobj
+11 0 obj
+<< /Annots [ 2 0 R 3 0 R ] /Contents 12 0 R /MediaBox [ 0 0 612 792 ] /Parent 6 0 R /Resources << /Font << /F1 13 0 R >> /XObject << /FmE 14 0 R /FmL 15 0 R >> >> /Type /Page >>
+endobj
+12 0 obj
+<< /Length 118 >>
+stream
+BT /F1 12 Tf 50 700 Td (stream syntax and actions) Tj ET
+q 1 0 0 1 60 400 cm /FmL Do Q
+q 1 0 0 1 120 400 cm /FmE Do Q
+
+endstream
+endobj
+13 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+14 0 obj
+<< /BBox [ 0 0 20 20 ] /Resources << >> /Subtype /Form /Type /XObject /Length 53 >>
+stream% litho bad eol marker
+0.5 0.5 0.5 rg 0 0 20 20 re f
+
+endstream
+endobj
+15 0 obj
+<< /BBox [ 0 0 20 20 ] /Resources << >> /Subtype /Form /Type /XObject /Length 57 >>
+stream
+% litho bad length marker
+0.5 0.5 0.5 rg 0 0 20 20 re f
+
+endstream
+endobj
+xref
+0 16
+0000000000 65535 f 
+0000000015 00000 n 
+0000000136 00000 n 
+0000000287 00000 n 
+0000000407 00000 n 
+0000000878 00000 n 
+0000000950 00000 n 
+0000001010 00000 n 
+0000001134 00000 n 
+0000001258 00000 n 
+0000001371 00000 n 
+0000001483 00000 n 
+0000001677 00000 n 
+0000001847 00000 n 
+0000001945 00000 n 
+0000002116 00000 n 
+trailer << /Root 1 0 R /Size 16 /ID [<80f6e2f2f90e2a5405fad76fd1b24113><80f6e2f2f90e2a5405fad76fd1b24113>] >>
+startxref
+2290
+%%EOF

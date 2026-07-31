@@ -96,6 +96,7 @@ one deliberately rather than diffing it against a fresh build.
 | `usedcs_2b.pdf`        | PDF/A-2b     | Which declared resources count as colour usage                  |
 | `filestruct_1b.pdf`    | PDF/A-1b     | File header, trailer identifier, hex strings and AcroForm       |
 | `docsync_1b.pdf`       | PDF/A-1b     | Document information entries against their XMP analogues        |
+| `syntax_1b.pdf`        | PDF/A-1b     | Stream length and end-of-line, and interactive actions          |
 
 ### Must-not-fire controls
 
@@ -192,6 +193,8 @@ violation but is exempt, so a firing is a false positive.
 | `docsync_1b`                              | `/CreationDate` and `xmp:CreateDate`, same instant, other zone         | ISO 19005-1, 6.7.3 t1        |
 | `docsync_1b`                              | `/Author` against `dc:creator` in its `rdf:Seq`                        | ISO 19005-1, 6.7.3 t3        |
 | `docsync_1b`                              | `/Subject` empty against a declared, empty `dc:description`            | ISO 19005-1, 6.7.3 t4        |
+| `syntax_1b`                               | A `/NextPage` named action, one of the four permitted                  | ISO 19005-1, 6.6.1 t2        |
+| `syntax_1b`                               | A second form field carrying no action at all                          | ISO 19005-1, 6.6.1 t3        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -241,6 +244,7 @@ which are covered under [Known divergences](#known-divergences).
 | `patterncs_2b.pdf`     | 3    | 5    | 3    | 3    | 3    | 4   | 10   | 8    |
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
+| `syntax_1b.pdf`        | 9    | 11   | 9    | 9    | 9    | 9   | 12   | 8    |
 | `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 8    | 7    |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
 | `tablespan_ua2.pdf`    | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
@@ -1743,15 +1747,51 @@ defect in that sequence, skipping the clause entirely when a document carries no
 XMP packet, is locked by [filestruct_1b](#file-level-syntax-and-forms) instead,
 which has no `/Metadata` at all.
 
+## Stream syntax and interactive actions
+
+`syntax_1b.pdf` covers ISO 19005-1 6.1.7 and 6.6.1, two independent axes the
+coverage scan showed unreached.
+
+| Construct                                           | Rule      |
+| --------------------------------------------------- | --------- |
+| a stream whose `/Length` is not its byte count      | `6.1.7/1` |
+| a stream keyword followed by a lone CARRIAGE RETURN | `6.1.7/2` |
+| a named action other than the four permitted        | `6.6.1/2` |
+| a form field carrying an `/A` action                | `6.6.1/3` |
+
+The two `6.1.7` defects sit on separate Form XObjects deliberately. A single
+stream that both mis-declares its length and breaks its end-of-line leaves the
+second condition unproven, because a parser that gives up on the first never
+reaches it. The page content stream beside them is well formed and is the control
+for both.
+
+`6.6.1` splits by object: test 2 judges a named action, so it rides on an outline
+item, and test 3 judges a form field, so it needs an AcroForm field carrying
+`/A`. Each has a conforming neighbour: a `/NextPage` action, which is one of the
+four the clause permits, and a second field with no action at all.
+
+Both `6.1.7` defects are beyond pikepdf, which computes `/Length` from the data
+and emits a conforming end-of-line, so they are patched into the saved bytes at
+identical length. Finding the declared length needs care: searching backwards for
+the nearest `<<` lands on the empty `/Resources` dictionary nested in the same
+object, not on the stream dictionary, so the builder scans forward for the
+`/Length ... >> stream` that introduces the marked payload instead.
+
+`6.7.5`, which forbids `bytes` and `encoding` in the XMP packet header, is
+deliberately absent. pikepdf reserialises any packet assigned to the catalog,
+reordering attributes and rewriting the header, so those two attributes survive
+neither authoring nor a length-preserving patch. Reaching that clause needs a
+hand-assembled file.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 44 x 8 = 352
+fixture is expanded across all eight profiles, so the matrix is 45 x 8 = 360
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 350 of the 352 cells. The two
+fixtures exist to protect, and it holds in 358 of the 360 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
