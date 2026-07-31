@@ -104,6 +104,7 @@ one deliberately rather than diffing it against a fresh build.
 | `structkinds_ua2.pdf`  | PDF/UA-2     | Structure element kinds: Ruby, Warichu, LI, MathML, root         |
 | `xobjstate_2b.pdf`     | PDF/A-2b     | Form XObject keys, blend modes, page actions, Separations        |
 | `puatext_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in the strings that describe         |
+| `formmedia_ua1.pdf`    | PDF/UA-1     | Formulas, notes, shared XObjects and media clips                 |
 
 ### Must-not-fire controls
 
@@ -217,6 +218,10 @@ violation but is exempt, so a firing is a false positive.
 | `puatext_ua2`                             | An `/ActualText` carrying the same words without the PUA character     | ISO 14289-2, 8.4.3 t2        |
 | `puatext_ua2`                             | An `/Alt` carrying the same words without the PUA character            | ISO 14289-2, 8.4.3 t3        |
 | `puatext_ua2`                             | An outline title carrying no PUA character                             | ISO 14289-2, 8.6 t1          |
+| `formmedia_ua1`                           | A `Formula` carrying `/Alt`                                            | ISO 14289-1, 7.7 t1          |
+| `formmedia_ua1`                           | A third `Note` whose `/ID` is its own                                  | ISO 14289-1, 7.9 t2          |
+| `formmedia_ua1`                           | A form carrying `/StructParents` but painted once                      | ISO 14289-1, 7.20 t2         |
+| `formmedia_ua1`                           | A media clip carrying both `/CT` and usable `/Alt` text                | ISO 14289-1, 7.18.6.2        |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -266,6 +271,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontkeys_1b.pdf`      | 10   | 13   | 10   | 11   | 10   | 11  | 8    | 8    |
 | `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
 | `formcs_2b.pdf`        | 4    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
+| `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 5    |
 | `formstruct_ua2.pdf`   | 4    | 6    | 6    | 6    | 6    | 5   | 7    | 7    |
 | `glyphs_2b.pdf`        | 4    | 8    | 5    | 6    | 5    | 6   | 10   | 10   |
 | `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
@@ -2036,15 +2042,42 @@ it. Each defect sits beside a twin carrying the same words without the PUA
 character, so a check condemning every `/ActualText`, `/Alt` or title fires on
 the control.
 
+## Formulas, notes, shared XObjects and media clips
+
+`formmedia_ua1.pdf` covers five ISO 14289-1 rules, each scoped to a different
+veraPDF object, so a file reaches each only by carrying that exact construct.
+
+| Construct                                         | Rule         |
+| ------------------------------------------------- | ------------ |
+| a `Formula` with neither `/Alt` nor `/ActualText` | `7.7/1`      |
+| two `Note` elements sharing an `/ID`              | `7.9/2`      |
+| a Form XObject painted under two elements         | `7.20/2`     |
+| a media clip with no `/CT`                        | `7.18.6.2/1` |
+| a media clip whose `/Alt` carries no text         | `7.18.6.2/2` |
+
+The two media clip tests sit on separate clips deliberately. One clip missing
+both `/CT` and usable `/Alt` text would report one rule and leave the other
+unproven, so one clip carries a valid `/Alt` and no `/CT`, the next carries
+`/CT` and an `/Alt` whose only text is empty, and a third carries both.
+
+`7.20/2` turns on something the clause text does not say. veraPDF exits the
+check early for a Form XObject carrying no `/StructParents`, so such a form can
+be painted any number of times and answer nothing; reaching the rule needs the
+key AND the same indirect object encountered twice. Painting a form twice under
+two `P` elements without the key was measured silent, as were the same construct
+spread across two pages and one whose own content is marked. The control beside
+it therefore carries `/StructParents` too and is painted once, which is what
+shows the discriminator is the repetition rather than the key.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 52 x 8 = 416
+fixture is expanded across all eight profiles, so the matrix is 53 x 8 = 424
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 414 of the 416 cells. The two
+fixtures exist to protect, and it holds in 422 of the 424 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
