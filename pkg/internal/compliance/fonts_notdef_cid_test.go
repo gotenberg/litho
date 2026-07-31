@@ -65,9 +65,14 @@ func TestCheckType0NotdefGlyph_CIDFontType2(t *testing.T) {
 	// CID 100 is beyond the 38-glyph program. Under Identity /CIDToGIDMap it is
 	// a missing glyph handled by the glyph-presence rule, not the .notdef rule:
 	// veraPDF does not consistently treat an out-of-range CID as a .notdef Glyph,
-	// so firing 6.2.11.8 here would be a false positive.
-	if v := check(100); len(v) != 0 {
+	// so firing 6.2.11.8 here would be a false positive. It does report the
+	// glyph as absent, so the presence rule is what must come back.
+	v := check(100)
+	if hasRule(v, notdefRule("PDF/A-2b")) {
 		t.Errorf("CID 100 (beyond the glyph table) must not fire the .notdef rule, got %v", v)
+	}
+	if !hasRule(v, glyphPresenceRule("PDF/A-2b")) {
+		t.Errorf("CID 100 (beyond the glyph table) must fire the glyph-presence rule, got %v", v)
 	}
 }
 

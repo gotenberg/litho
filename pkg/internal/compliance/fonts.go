@@ -1411,9 +1411,49 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// stream remaps to GID 0 is left unflagged here too: whether it is truly
 		// rendered depends on the font's embedded /Encoding CMap, which veraPDF
 		// decodes differently, so firing would reintroduce false positives.
+		//
+		// Glyph presence is a separate question, and one case of it is not
+		// ambiguous at all: a CID at or beyond numGlyphs names a glyph the
+		// program does not contain, so there is no outline to be uncertain
+		// about. That fires the glyph-presence rule on its own, without the
+		// .notdef rule the reasoning above rules out.
+		// renderingMode == 3 exempts the glyph, so a font every one of whose
+		// uses was invisible has nothing to answer for.
+		if pr := glyphPresenceRule(profile); pr.Specification != "" && usage.visible {
+			if cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); cidToGIDMap == "Identity" {
+				if outside := outOfProgramCIDs(fontData, usedCIDs); len(outside) > 0 {
+					return failf(pr, "font %s on page %d: CID %d not present in embedded font program",
+						fontName, pageNum, outside[0])
+				}
+			}
+		}
 	}
 
 	return nil
+}
+
+// outOfProgramCIDs returns the used CIDs that an Identity /CIDToGIDMap resolves
+// past the end of the embedded program, in ascending order.
+//
+// Under an Identity map the glyph index equals the CID (ISO 32000-2, 9.7.4.2),
+// so numGlyphs from 'maxp' bounds what the program can define. Such a CID names
+// no glyph at all, which is a different thing from naming an empty one: there is
+// no glyf entry to be empty, and no width to consult either, so the zero-width
+// condition that guards the empty-glyph case does not apply. An unreadable or
+// zero numGlyphs yields nothing rather than a guess.
+func outOfProgramCIDs(fontData []byte, usedCIDs map[uint16]bool) []uint16 {
+	numGlyphs := typography.ExtractNumGlyphs(fontData)
+	if numGlyphs <= 0 {
+		return nil
+	}
+	var outside []uint16
+	for cid := range usedCIDs {
+		if int(cid) >= numGlyphs {
+			outside = append(outside, cid)
+		}
+	}
+	slices.Sort(outside)
+	return outside
 }
 
 // type0HasEmbeddedProgram reports whether a composite font's descendant CIDFont
@@ -1507,6 +1547,13 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 		}
 	case "CIDFontType2":
 		if cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); cidToGIDMap == "Identity" {
+			// renderingMode == 3 exempts a glyph outright, and usage.visible is
+			// false only when every use of this font was in that mode.
+			if usage.visible {
+				for _, cid := range outOfProgramCIDs(fontData, usedCIDs) {
+					absent[cid] = true
+				}
+			}
 			if emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData); emptyGIDs != nil {
 				for cid := range usedCIDs {
 					if emptyGIDs[cid] && lookupCIDWidth(ctx, doc, cidFontDict, cid) == 0 {

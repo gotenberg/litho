@@ -174,3 +174,57 @@ func TestGlyphPresence_RequiresEmbeddedProgram(t *testing.T) {
 		})
 	}
 }
+
+// TestGlyphPresence_CIDBeyondProgram pins the unambiguous half of the
+// glyph-presence rule: under an Identity /CIDToGIDMap the glyph index equals the
+// CID (ISO 32000-2, 9.7.4.2), so a CID at or beyond numGlyphs names a glyph the
+// program does not contain.
+//
+// litho detected only CIDs that resolved to an EMPTY glyf entry, which a CID
+// past the end of the table never does: there is no entry for it to be empty.
+// The testdata program holds 38 glyphs.
+func TestGlyphPresence_CIDBeyondProgram(t *testing.T) {
+	t.Parallel()
+
+	ttf, err := os.ReadFile("testdata/cidfont_notdef_min.ttf")
+	if err != nil {
+		t.Fatalf("read TTF fixture: %v", err)
+	}
+	embed := func(content string) []byte {
+		return type0FontPDF(content, "/FontFile2 8 0 R ",
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(ttf), string(ttf)))
+	}
+
+	// CID 0x0040 is 64, past the 38 glyphs the program defines. CID 0x0005 is
+	// within it and is the control. Both strings are an even number of bytes,
+	// so neither carries the odd-length .notdef signal that fires the rule by
+	// another route, and neither is CID 0.
+	beyond := embed("BT /F1 12 Tf 0 Tr 10 50 Td <0040> Tj ET")
+	within := embed("BT /F1 12 Tf 0 Tr 10 50 Td <0005> Tj ET")
+	invisible := embed("BT /F1 12 Tf 3 Tr 10 50 Td <0040> Tj ET")
+
+	parts := []struct {
+		profile models.PDFAProfile
+		clause  string
+		test    int
+	}{
+		{models.PDFA1b, "6.3.5", 1},
+		{models.PDFA2b, "6.2.11.4.1", 2},
+		{models.PDFA4, "6.2.10.4.1", 2},
+	}
+	for _, p := range parts {
+		t.Run(string(p.profile), func(t *testing.T) {
+			t.Parallel()
+			if !firesRuleProfile(t, beyond, p.profile, p.clause, p.test) {
+				t.Errorf("a CID past the end of the program must fire §%s t%d", p.clause, p.test)
+			}
+			if firesRuleProfile(t, within, p.profile, p.clause, p.test) {
+				t.Errorf("a CID the program defines must not fire §%s t%d", p.clause, p.test)
+			}
+			// renderingMode == 3 exempts the glyph, whatever it resolves to.
+			if firesRuleProfile(t, invisible, p.profile, p.clause, p.test) {
+				t.Errorf("a CID painted in mode 3 must not fire §%s t%d", p.clause, p.test)
+			}
+		})
+	}
+}
