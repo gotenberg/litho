@@ -164,6 +164,13 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 				continue
 			}
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+
+			// §8.9.2.3 t2 applies to every markup annotation rather than to one
+			// subtype, so it sits outside the switch below.
+			if markupAnnotationSubtypes[subtype] {
+				results = append(results, checkMarkupAnnotRichText(ctx, doc, annot)...)
+			}
+
 			switch subtype {
 			case "Sound":
 				results = append(results, failf(Rule_14289_2_8_9_2_4_11_t01,
