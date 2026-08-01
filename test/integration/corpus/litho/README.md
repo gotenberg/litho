@@ -108,6 +108,7 @@ one deliberately rather than diffing it against a fresh build.
 | `idfields_ua2.pdf`     | PDF/UA-2     | Identification prefixes, destinations and text fields            |
 | `linkfont_ua2.pdf`     | PDF/UA-2     | Link target identity and a symbolic font's character map         |
 | `xfatable_ua1.pdf`     | PDF/UA-1     | A dynamic XFA configuration beside a conforming table            |
+| `extprop_2b.pdf`       | PDF/A-2b     | The container an extension schema's properties live in           |
 
 ### Must-not-fire controls
 
@@ -231,6 +232,8 @@ violation but is exempt, so a firing is a false positive.
 | `linkfont_ua2`                            | Two links onto differing page destinations, never compared             | ISO 14289-2, 8.2.5.20 t2     |
 | `linkfont_ua2`                            | The same font program declared non-symbolic                            | ISO 14289-2, 8.4.5.7 t4      |
 | `xfatable_ua1`                            | A table whose `/RowSpan` covers exactly the rows it has                | ISO 14289-1, 7.2 t41         |
+| `extprop_2b`                              | A schema holding one property in a proper `rdf:Seq`                    | ISO 19005-2, 6.6.2.3.3 t5    |
+| `extprop_2b`                              | A schema holding two properties in a proper `rdf:Seq`                  | ISO 19005-2, 6.6.2.3.3 t5    |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -274,6 +277,7 @@ which are covered under [Known divergences](#known-divergences).
 | `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
 | `docsync_1b.pdf`       | 9    | 6    | 4    | 4    | 4    | 6   | 9    | 8    |
 | `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
+| `extprop_2b.pdf`       | 4    | 6    | 3    | 4    | 4    | 6   | 8    | 7    |
 | `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
 | `filestruct_1b.pdf`    | 13   | 12   | 10   | 10   | 10   | 13  | 10   | 8    |
 | `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
@@ -2174,15 +2178,36 @@ compared only declared rows, so every row still agreed and nothing fired;
 span covering exactly the rows the table declares, which is what shows the
 geometry check accepts a legitimate span rather than ignoring the attribute.
 
+## The container an extension schema's properties live in
+
+`extprop_2b.pdf` reaches ISO 19005-2 `6.6.2.3.3/5`, which reads
+
+    isPropertyValidSeq == true && (propertyPrefix == null || propertyPrefix == "pdfaSchema")
+
+so it judges the CONTAINER holding a schema's property list rather than any
+property inside it. `extschema_2b.pdf` covers the tests judging a schema's own
+fields and its individual properties, and none of those reach the container,
+because a well-formed `rdf:Seq` is what carries them there.
+
+Three schemas sit side by side and only the first offends, holding its property
+list in an `rdf:Bag`. The second holds one property in a proper `rdf:Seq`; the
+third holds two, because a container check that accepted a one-entry list and
+rejected a longer one would otherwise pass unnoticed.
+
+Every property inside all three schemas is complete and well formed, and the
+three carry the same property shape deliberately. If a check condemned a schema
+for something a property carries, all three would fire and the file would prove
+nothing about the container.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 56 x 8 = 448
+fixture is expanded across all eight profiles, so the matrix is 57 x 8 = 456
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 446 of the 448 cells. The two
+fixtures exist to protect, and it holds in 454 of the 456 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.

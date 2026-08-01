@@ -1,0 +1,52 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /Metadata 2 0 R /Pages 3 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Subtype /XML /Type /Metadata /Length 2786 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/" xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">litho corpus fixture</rdf:li></rdf:Alt></dc:title>
+    <pdfaid:part>2</pdfaid:part>
+    <pdfaid:conformance>B</pdfaid:conformance>
+   <pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource"><pdfaSchema:schema>Litho Bag Schema</pdfaSchema:schema><pdfaSchema:namespaceURI>http://example.org/litho/bag#</pdfaSchema:namespaceURI><pdfaSchema:prefix>lbag</pdfaSchema:prefix><pdfaSchema:property><rdf:Bag><rdf:li rdf:parseType="Resource"><pdfaProperty:name>bagOne</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>a property in the wrong container</pdfaProperty:description></rdf:li></rdf:Bag></pdfaSchema:property></rdf:li><rdf:li rdf:parseType="Resource"><pdfaSchema:schema>Litho Seq Schema</pdfaSchema:schema><pdfaSchema:namespaceURI>http://example.org/litho/seq#</pdfaSchema:namespaceURI><pdfaSchema:prefix>lseq</pdfaSchema:prefix><pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource"><pdfaProperty:name>seqOne</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>a property in the right container</pdfaProperty:description></rdf:li></rdf:Seq></pdfaSchema:property></rdf:li><rdf:li rdf:parseType="Resource"><pdfaSchema:schema>Litho Pair Schema</pdfaSchema:schema><pdfaSchema:namespaceURI>http://example.org/litho/pair#</pdfaSchema:namespaceURI><pdfaSchema:prefix>lpair</pdfaSchema:prefix><pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource"><pdfaProperty:name>pairOne</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>first property of the pair</pdfaProperty:description></rdf:li><rdf:li rdf:parseType="Resource"><pdfaProperty:name>pairTwo</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>second property of the pair</pdfaProperty:description></rdf:li></rdf:Seq></pdfaSchema:property></rdf:li></rdf:Bag></pdfaExtension:schemas>  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+3 0 obj
+<< /Count 1 /Kids [ 4 0 R ] /Type /Pages >>
+endobj
+4 0 obj
+<< /Contents 5 0 R /MediaBox [ 0 0 612 792 ] /Parent 3 0 R /Resources << /Font << /F1 6 0 R >> >> /Type /Page >>
+endobj
+5 0 obj
+<< /Length 57 >>
+stream
+BT /F1 12 Tf 50 700 Td (extension schema property) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000080 00000 n 
+0000002948 00000 n 
+0000003007 00000 n 
+0000003135 00000 n 
+0000003242 00000 n 
+trailer << /Root 1 0 R /Size 7 /ID [<9431e9ac5951dc5c8b9c1b8c9d4eb4ad><9431e9ac5951dc5c8b9c1b8c9d4eb4ad>] >>
+startxref
+3339
+%%EOF
