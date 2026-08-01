@@ -123,7 +123,11 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 		}
 	}
 	if widerRow < 0 && narrowerRow < 0 {
-		return true
+		// Every row the table declares agrees on its column count, but a
+		// /RowSpan may still reach past the last one. Those rows exist in the
+		// grid without a TR to declare them, so comparing declared rows cannot
+		// see the defect at all.
+		return !reportRowSpanOverrun(ctx, state, rows)
 	}
 	wider := widerRow >= 0
 	row := narrowerRow
@@ -937,4 +941,77 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 			return
 		}
 	}
+}
+
+// reportRowSpanOverrun fires when a /RowSpan reaches past the last row the
+// table declares, and reports whether it did.
+//
+// Such a span puts cells in rows no TR declares, so the row-by-row column
+// comparison never sees them: every declared row still agrees. Which rule
+// answers for it turns on where the overrunning cell sits, measured against
+// veraPDF across two, three and four column tables: a span starting in the
+// first column answers the column-gap rule (ISO 14289-1 7.2 t43, ISO 14289-2
+// 8.2.5.26 t4), and a span starting anywhere else answers the row-span rule
+// (7.2 t41, 8.2.5.26 t2). That split follows veraPDF's cell placement rather
+// than anything the clauses say, so it is recorded as measured behaviour.
+func reportRowSpanOverrun(ctx context.Context, state *walkState, rows []ast.PdfDict) bool {
+	col, row, ok := firstRowSpanOverrun(ctx, state.doc, rows)
+	if !ok {
+		return false
+	}
+
+	rule := Rule_14289_1_7_2_t41
+	if state.profile == "PDF/UA-2" {
+		rule = Rule_14289_2_8_2_5_26_t02
+	}
+	if col == 0 {
+		rule = tableColumnRule(state.profile, false)
+	}
+	if rule.Specification == "" {
+		return false
+	}
+	*state.results = append(*state.results,
+		failf(rule, "Table row %d has a RowSpan reaching past the last row of the table",
+			row+1)...)
+	return true
+}
+
+// firstRowSpanOverrun returns the starting column and row of the first cell
+// whose /RowSpan reaches past the last declared row.
+//
+// The placement mirrors [computeEffectiveColumns]: a cell takes the first
+// column no carried span already holds, so the column reported is the one the
+// cell actually occupies rather than its index among its row's cells.
+func firstRowSpanOverrun(ctx context.Context, doc *document.Document, rows []ast.PdfDict) (col, row int, ok bool) {
+	carry := make(map[int]int)
+	for ri, rowDict := range rows {
+		if ctx.Err() != nil {
+			return 0, 0, false
+		}
+		colPos := 0
+		for _, cell := range resolveRowCells(ctx, doc, rowDict) {
+			for carry[colPos] > 0 {
+				colPos++
+			}
+			cs := cellColSpan(ctx, doc, cell)
+			rs := cellRowSpan(ctx, doc, cell)
+			if ri+rs > len(rows) {
+				return colPos, ri, true
+			}
+			if rs > 1 {
+				for c := range cs {
+					carry[colPos+c] = rs
+				}
+			}
+			colPos += cs
+		}
+		for k, v := range carry {
+			if v <= 1 {
+				delete(carry, k)
+			} else {
+				carry[k] = v - 1
+			}
+		}
+	}
+	return 0, 0, false
 }

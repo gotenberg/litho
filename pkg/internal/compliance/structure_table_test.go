@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -297,5 +298,105 @@ func TestHeaderDetermination_ScopeFirst(t *testing.T) {
 	}
 	if got := run(" /Scope /Column"); len(got) != 0 {
 		t.Errorf("every TH scoped: got %v, want none", got)
+	}
+}
+
+// TestRowSpanOverrunSelectsRuleByColumn pins which rule answers for a /RowSpan
+// reaching past the last row a table declares.
+//
+// Such a span puts cells in rows no TR declares, so the row-by-row column
+// comparison never sees them: every declared row still agrees on its count.
+// Which rule fires turns on where the span starts, measured against veraPDF
+// across two, three and four column tables: the first column answers the
+// column-gap rule, any other column answers the row-span rule.
+func TestRowSpanOverrunSelectsRuleByColumn(t *testing.T) {
+	t.Parallel()
+
+	// rows describes the table as one list of /RowSpan values per row, 0
+	// meaning the cell declares none.
+	build := func(t *testing.T, rows [][]int) []Violation {
+		t.Helper()
+
+		// Objects 1-6 are fixed; the TR and TD dictionaries follow, each row's
+		// TR immediately before its own cells.
+		const tableObj = 6
+		next := tableObj + 1
+		rowRefs := make([]string, 0, len(rows))
+		tail := make([]string, 0, len(rows))
+		for _, row := range rows {
+			rowRef := next
+			next++
+			kids := make([]string, 0, len(row))
+			cells := make([]string, 0, len(row))
+			for _, span := range row {
+				attrs := ""
+				if span > 0 {
+					attrs = fmt.Sprintf(" /A << /O /Table /RowSpan %d >>", span)
+				}
+				cells = append(cells, fmt.Sprintf(
+					"<< /Type /StructElem /S /TD /P %d 0 R /Pg 3 0 R /K 0%s >>", rowRef, attrs))
+				kids = append(kids, fmt.Sprintf("%d 0 R", next))
+				next++
+			}
+			rowRefs = append(rowRefs, fmt.Sprintf("%d 0 R", rowRef))
+			tail = append(tail, fmt.Sprintf(
+				"<< /Type /StructElem /S /TR /P %d 0 R /Pg 3 0 R /K [%s] >>",
+				tableObj, strings.Join(kids, " ")))
+			tail = append(tail, cells...)
+		}
+
+		objs := append([]string{
+			"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /StructTreeRoot /K 5 0 R >>",
+			fmt.Sprintf("<< /Type /StructElem /S /Document /P 4 0 R /K %d 0 R >>", tableObj),
+			fmt.Sprintf("<< /Type /StructElem /S /Table /P 5 0 R /Pg 3 0 R /K [%s] >>",
+				strings.Join(rowRefs, " ")),
+		}, tail...)
+
+		ctx := context.Background()
+		doc, cat := objsDocPDF(t, objs...)
+		treeRoot, err := document.ResolveDict(ctx, doc, cat["StructTreeRoot"])
+		if err != nil {
+			t.Fatalf("resolve StructTreeRoot: %v", err)
+		}
+		docElem, err := document.ResolveDict(ctx, doc, treeRoot["K"])
+		if err != nil {
+			t.Fatalf("resolve Document element: %v", err)
+		}
+		tableElem, err := document.ResolveDict(ctx, doc, docElem["K"])
+		if err != nil {
+			t.Fatalf("resolve Table element: %v", err)
+		}
+		var results []Violation
+		state := &walkState{doc: doc, profile: "PDF/UA-1", results: &results}
+		validateTableColumnConsistency(ctx, state, tableElem)
+		return results
+	}
+
+	for _, tc := range []struct {
+		name string
+		rows [][]int
+		want Rule
+	}{
+		{name: "overrun in the first column", rows: [][]int{{0, 0}, {2, 0}}, want: Rule_14289_1_7_2_t43},
+		{name: "overrun in the second column", rows: [][]int{{0, 0}, {0, 2}}, want: Rule_14289_1_7_2_t41},
+		{name: "overrun in the last of three", rows: [][]int{{0, 0, 0}, {0, 0, 2}}, want: Rule_14289_1_7_2_t41},
+		{name: "span that fits", rows: [][]int{{2, 0}, {0}}, want: Rule{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := build(t, tc.rows)
+			if tc.want.Specification == "" {
+				if len(got) != 0 {
+					t.Errorf("a span covering exactly the declared rows must stay silent, got %v", got)
+				}
+				return
+			}
+			if !hasRule(got, tc.want) {
+				t.Errorf("want %s t%d, got %v", tc.want.Clause, tc.want.TestNumber, got)
+			}
+		})
 	}
 }
