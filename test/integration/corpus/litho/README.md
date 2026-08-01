@@ -107,6 +107,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formmedia_ua1.pdf`    | PDF/UA-1     | Formulas, notes, shared XObjects and media clips                 |
 | `idfields_ua2.pdf`     | PDF/UA-2     | Identification prefixes, destinations and text fields            |
 | `linkfont_ua2.pdf`     | PDF/UA-2     | Link target identity and a symbolic font's character map         |
+| `xfatable_ua1.pdf`     | PDF/UA-1     | A dynamic XFA configuration beside a conforming table            |
 
 ### Must-not-fire controls
 
@@ -229,6 +230,7 @@ violation but is exempt, so a firing is a false positive.
 | `linkfont_ua2`                            | Two links onto the same element, differing only in zoom                | ISO 14289-2, 8.2.5.20 t2     |
 | `linkfont_ua2`                            | Two links onto differing page destinations, never compared             | ISO 14289-2, 8.2.5.20 t2     |
 | `linkfont_ua2`                            | The same font program declared non-symbolic                            | ISO 14289-2, 8.4.5.7 t4      |
+| `xfatable_ua1`                            | A table whose `/RowSpan` covers exactly the rows it has                | ISO 14289-1, 7.2 t41         |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -309,6 +311,7 @@ which are covered under [Known divergences](#known-divergences).
 | `usedcs_2b.pdf`        | 3    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
 | `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
 | `xobjstate_2b.pdf`     | 6    | 11   | 9    | 9    | 9    | 10  | 7    | 7    |
+| `xfatable_ua1.pdf`     | 5    | 6    | 6    | 6    | 6    | 5   | 2    | 5    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -2139,15 +2142,39 @@ about the character map. Reaching that false negative needs the font painted
 visibly, and closing it means turning an unresolvable code into a firing one,
 which has produced false positives on real-world corpora before.
 
+## A dynamic XFA configuration
+
+`xfatable_ua1.pdf` reaches ISO 14289-1 `7.15/1`, which reads `dynamicRender !=
+'required'`. That is not a PDF key at all: it lives inside the XFA packet the
+`/AcroForm` carries, so reaching the rule means writing XFA XML rather than
+setting a dictionary entry. The packet rides as an array of alternating name and
+stream so the configuration can be addressed on its own.
+
+The table beside it conforms and exists to stay silent. The geometry checks are
+the ones most likely to condemn a legitimate `/RowSpan`, and a document whose
+only defect sat in the XFA packet would let a check that stops at the first
+structural complaint look correct.
+
+`7.2/41` is deliberately absent, and the reason is worth recording. It reads
+`numberOfColumnWithWrongRowSpan == null`, and two constructs failed to reach it.
+A `/RowSpan` in an earlier row SHIFTS the following row's cells rather than
+colliding with them, so it reads as a column count mismatch and answers `7.2/42`,
+which `tablespan_ua2.pdf` already covers. A `/RowSpan` overrunning the last row
+answers `7.2/43` instead: that and `7.2/42` are the two branches of one
+column-span requirement, split on whether `wrongColumnSpan` is null, so exactly
+one of them fires. On that second construct **litho reported neither**, which is
+a real false negative. It is recorded rather than planted, because the grid model
+it turns on is not yet understood well enough to build a fixture on.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 55 x 8 = 440
+fixture is expanded across all eight profiles, so the matrix is 56 x 8 = 448
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 438 of the 440 cells. The two
+fixtures exist to protect, and it holds in 446 of the 448 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
