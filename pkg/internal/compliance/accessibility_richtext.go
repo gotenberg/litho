@@ -155,3 +155,118 @@ func richTextContent(data []byte) (string, error) {
 	}
 	return text.String(), nil
 }
+
+// maxTextFieldTreeDepth bounds the /Kids descent when looking for text fields.
+// Anti-DoS guard, not spec-mandated: a field tree is a shallow grouping device,
+// and a crafted one could otherwise nest without limit. It matches the depth the
+// sibling field walk in accessibility_files.go uses.
+const maxTextFieldTreeDepth = 10
+
+// checkTextFieldRichValue validates ISO 14289-2, 8.10.3.3 t1: a text field
+// carrying rich text in /RV shall also carry /V, and the two shall say the same
+// thing.
+//
+// veraPDF reads /RV through the same rich text helper as a markup annotation's
+// /RC, so the comparison is the one [richTextContent] implements: parse as XML,
+// concatenate the text nodes, compare exactly. /V is read as a plain string or
+// stream with no such treatment.
+func checkTextFieldRichValue(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	if PDFUAPart(profile) != 2 {
+		return nil
+	}
+	acroForm, err := document.ResolveDict(ctx, doc, catalog["AcroForm"])
+	if err != nil || acroForm == nil {
+		return nil
+	}
+	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot resolve form fields array", "error", err)
+		return nil
+	}
+
+	var results []Violation
+	seen := make(map[int]bool)
+	for _, fieldObj := range fields {
+		results = append(results, walkTextFieldRichValue(ctx, doc, fieldObj, "", 0, seen)...)
+	}
+	return results
+}
+
+// walkTextFieldRichValue descends a field tree, carrying the inherited /FT down
+// to the terminal fields that ISO 32000-2, 12.7.4.3 lets omit it.
+func walkTextFieldRichValue(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, inheritedFT ast.PdfName, depth int, seen map[int]bool) []Violation {
+	if depth > maxTextFieldTreeDepth || ctx.Err() != nil {
+		return nil
+	}
+	if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return nil
+		}
+		seen[ref.ObjectNum] = true
+	}
+	field, err := document.ResolveDict(ctx, doc, fieldObj)
+	if err != nil || field == nil {
+		return nil
+	}
+
+	fieldType := inheritedFT
+	if ft, ferr := document.ResolveName(ctx, doc, field["FT"]); ferr == nil && ft != "" {
+		fieldType = ft
+	}
+
+	var results []Violation
+	if fieldType == "Tx" {
+		results = append(results, textFieldRichValueViolation(ctx, doc, field)...)
+	}
+
+	kids, err := document.ResolveArray(ctx, doc, field["Kids"])
+	if err != nil {
+		return results
+	}
+	for _, kid := range kids {
+		results = append(results, walkTextFieldRichValue(ctx, doc, kid, fieldType, depth+1, seen)...)
+	}
+	return results
+}
+
+// textFieldRichValueViolation reports one text field whose /RV does not answer
+// for its /V.
+func textFieldRichValueViolation(ctx context.Context, doc *document.Document, field ast.PdfDict) []Violation {
+	if _, hasRV := field["RV"]; !hasRV {
+		return nil
+	}
+
+	value, err := document.ResolveString(ctx, doc, field["V"])
+	if err != nil {
+		// A /V that is absent, or is a stream rather than a string, leaves
+		// nothing for /RV to agree with. veraPDF requires V != null.
+		if stream, serr := document.ResolveStream(ctx, doc, field["V"]); serr == nil {
+			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
+				return compareRichValue(ctx, doc, field, string(data))
+			}
+		}
+		return failf(Rule_14289_2_8_10_3_3_t01,
+			"text field carries /RV with no /V to agree with")
+	}
+	return compareRichValue(ctx, doc, field, document.DecodePdfString(value))
+}
+
+// compareRichValue compares the text of a field's /RV with its plain value.
+func compareRichValue(ctx context.Context, doc *document.Document, field ast.PdfDict, value string) []Violation {
+	rich, err := richTextPayload(ctx, doc, field["RV"])
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: failed to read /RV", "error", err)
+		return failf(Rule_14289_2_8_10_3_3_t01,
+			"text field /RV is unreadable and so cannot match /V %q", value)
+	}
+	text, err := richTextContent(rich)
+	if err != nil {
+		return failf(Rule_14289_2_8_10_3_3_t01,
+			"text field /RV yields no text and so cannot match /V %q", value)
+	}
+	if text != value {
+		return failf(Rule_14289_2_8_10_3_3_t01,
+			"text field /RV text %q differs from /V %q", text, value)
+	}
+	return nil
+}

@@ -113,3 +113,60 @@ func TestOutlineTitlePUA(t *testing.T) {
 		t.Error("§8.6 t1 must not be reported outside PDF/UA-2")
 	}
 }
+
+// textFieldPDF builds a PDF/UA-2 document whose AcroForm holds one text field
+// carrying the given /V and /RV entries verbatim.
+func textFieldPDF(entries string) []byte {
+	return cyclePDF(
+		"<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /Lang (en-US) "+
+			"/ViewerPreferences << /DisplayDocTitle true >> /AcroForm << /Fields [5 0 R] >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [5 0 R] /StructParents 0 >>",
+		"<< /Length 0 >>\nstream\n\nendstream",
+		"<< /Type /Annot /Subtype /Widget /Rect [0 0 100 20] /F 4 /FT /Tx /T (f) "+entries+" >>",
+	)
+}
+
+// TestTextFieldRichValue pins ISO 14289-2 §8.10.3.3 t1, which reads
+// `containsRV == false || (V != null && RV == V)`.
+//
+// veraPDF reads /RV through the same rich text helper as a markup annotation's
+// /RC: parsed as XML and reduced to its text nodes, then compared to the plain
+// /V exactly. The rule was declared and registered but never fired.
+func TestTextFieldRichValue(t *testing.T) {
+	t.Parallel()
+
+	const (
+		body    = "<?xml version='1.0'?><body xmlns='http://www.w3.org/1999/xhtml'><p>agreed text</p></body>"
+		other   = "<?xml version='1.0'?><body xmlns='http://www.w3.org/1999/xhtml'><p>something else</p></body>"
+		clause  = "8.10.3.3"
+		testNum = 1
+	)
+
+	for _, tc := range []struct {
+		name    string
+		entries string
+		want    bool
+	}{
+		{name: "no /RV at all", entries: "/V (agreed text)", want: false},
+		{name: "agreeing", entries: "/V (agreed text) /RV (" + body + ")", want: false},
+		{name: "disagreeing", entries: "/V (the plain text) /RV (" + other + ")", want: true},
+		{name: "/RV with no /V", entries: "/RV (" + body + ")", want: true},
+		// Markup contributes nothing, so the tags around the text drop out.
+		{name: "nested markup", entries: "/V (agreed text) /RV (" +
+			"<?xml version='1.0'?><body xmlns='http://www.w3.org/1999/xhtml'><p>agreed <b>text</b></p></body>)", want: false},
+		// Whitespace is significant on both sides.
+		{name: "whitespace differs", entries: "/V (agreed text) /RV (" +
+			"<?xml version='1.0'?><body xmlns='http://www.w3.org/1999/xhtml'> <p>agreed text</p></body>)", want: true},
+		// An /RV that is not a parseable document yields no text to compare.
+		{name: "not XML", entries: "/V (agreed text) /RV (agreed text)", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := firesRuleUA(t, textFieldPDF(tc.entries), models.PDFUA2, clause, testNum)
+			if got != tc.want {
+				t.Errorf("%s: fired=%v, want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}

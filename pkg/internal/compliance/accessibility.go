@@ -93,6 +93,9 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Form field TU key (PDF/UA-1 §7.18.1 t03).
 	results = append(results, checkFormFieldTU(ctx, doc, catalog, profile)...)
 
+	// ISO 14289-2 §8.10.3.3 t1: a text field's /RV shall agree with its /V.
+	results = append(results, checkTextFieldRichValue(ctx, doc, catalog, profile)...)
+
 	// Link annotation Contents (PDF/UA-1 §7.18.5 t02).
 	results = append(results, checkLinkContents(ctx, doc, catalog, profile)...)
 
