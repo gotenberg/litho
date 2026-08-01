@@ -1,32 +1,35 @@
 #!/usr/bin/env python3
-"""Build xfatable_ua1.pdf: a dynamic XFA form beside a conforming table.
+"""Build xfatable_ua1.pdf: a dynamic XFA form and row spans past the last row.
 
-One ISO 14289-1 rule the coverage scan showed unreached, beside a table that
-exists to stay silent:
+Three ISO 14289-1 rules the coverage scan showed unreached, on unrelated parts
+of the document:
 
 | Construct                                          | Rule      |
 | -------------------------------------------------- | --------- |
 | an XFA configuration asking for dynamic rendering  | `7.15/1`  |
+| a `/RowSpan` past the last row, in a later column  | `7.2/41`  |
+| a `/RowSpan` past the last row, in the first column | `7.2/43` |
 
 `7.15/1` reads `dynamicRender != 'required'`, which is not a PDF key at all: it
 lives inside the XFA packet the `/AcroForm` carries, so reaching the rule means
 writing the XFA XML rather than setting a dictionary entry.
 
-The table carries a real `/RowSpan` and conforms, so a firing against it is
-over-suppression. It is worth carrying because the table geometry checks are the
-ones most likely to condemn a legitimate span, and because a document whose only
-defect sits in the XFA packet would let a check that stops at the first
-structural complaint look correct.
+The two table rules are one defect placed a column apart. A `/RowSpan` reaching
+past the last declared row puts cells in rows no `TR` declares, and which rule
+answers for it turns on where that span starts: the first column answers
+`7.2/43`, any other column answers `7.2/41`. That split follows veraPDF's cell
+placement rather than anything the clauses say, and was measured across two,
+three and four column tables before being relied on.
 
-`7.2/41` is deliberately absent. It reads `numberOfColumnWithWrongRowSpan ==
-null`, and two constructs were tried without reaching it: a span in an earlier
-row SHIFTS the following row's cells rather than colliding with them, so it reads
-as a column count mismatch and answers `7.2/42`, which `tablespan_ua2.pdf`
-already covers; a span overrunning the last row answers `7.2/43`, the other
-branch of that same column-span requirement, and litho reported neither. That
-second construct is a real divergence, recorded in the README rather than planted
-here, because the grid model it turns on is not yet understood well enough to
-plant a fixture on.
+Neither is a span in an EARLIER row, which is a different defect: such a span
+SHIFTS the following row's cells rather than colliding with them, so it reads as
+a column count mismatch and answers `7.2/42`, which `tablespan_ua2.pdf` covers.
+
+A third table conforms and exists to stay silent, its span covering exactly the
+rows the table declares. It is worth carrying because the geometry checks are the
+ones most likely to condemn a legitimate span, and because a document whose only
+defect sat in the XFA packet would let a check that stops at the first structural
+complaint look correct.
 
 See ../README.md for the authoritative expected firing set.
 """
@@ -45,7 +48,7 @@ font = pdf.make_indirect(
 )
 
 # One marked-content sequence per table cell, plus the leading paragraph.
-CELL_COUNT = 3
+CELL_COUNT = 11
 content = [b"/P <</MCID 0>> BDC\nBT /F1 12 Tf 50 750 Td (tables and XFA) Tj ET\nEMC\n"]
 for mcid in range(1, CELL_COUNT + 1):
     y = 720 - mcid * 20
@@ -107,22 +110,21 @@ def table(rows_spec):
     return tbl
 
 
-# A conforming table carrying a real /RowSpan: the first column's cell covers
-# both rows, and the second row supplies only the cell that span does not cover.
-# It is a control rather than a defect, and it is here because the geometry
-# checks are the ones most likely to condemn a legitimate span: its silence
-# shows they accept one rather than merely ignoring the attribute.
-#
-# 7.2 t41 is deliberately not planted. It reads
-# `numberOfColumnWithWrongRowSpan == null`, and neither construct tried reaches
-# it: a span in an earlier row SHIFTS the following row's cells rather than
-# colliding with them, so it reads as a column count mismatch and answers t42,
-# which `tablespan_ua2.pdf` already covers; and a span overrunning the last row
-# answers t43, the other branch of that same column-span requirement. See the
-# README for the divergence that second construct exposed.
-table_ok = table([[(1, 2), (2, None)], [(3, None)]])
+# Both defective tables carry a /RowSpan reaching past the last row they
+# declare, and they differ only in which column it starts in. That is what
+# selects the rule: a span starting in the first column answers the column-gap
+# rule (t43), one starting anywhere else answers the row-span rule (t41). The
+# split follows veraPDF's cell placement rather than anything the clauses say,
+# and was measured across two, three and four column tables.
+table_t41 = table([[(1, None), (2, None)], [(3, None), (4, 2)]])
+table_t43 = table([[(5, None), (6, None)], [(7, 2), (8, None)]])
 
-document.K = Array([paragraph, table_ok])
+# The control: a real /RowSpan covering exactly the rows the table has, so a
+# firing against it is over-suppression rather than a missing case. The geometry
+# checks are the ones most likely to condemn a legitimate span.
+table_ok = table([[(9, 2), (10, None)], [(11, None)]])
+
+document.K = Array([paragraph, table_t41, table_t43, table_ok])
 struct_root.K = Array([document])
 struct_root.ParentTree = pdf.make_indirect(Dictionary(Nums=Array([0, Array(kids)])))
 struct_root.ParentTreeNextKey = 1

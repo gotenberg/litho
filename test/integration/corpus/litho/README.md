@@ -311,7 +311,7 @@ which are covered under [Known divergences](#known-divergences).
 | `usedcs_2b.pdf`        | 3    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
 | `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
 | `xobjstate_2b.pdf`     | 6    | 11   | 9    | 9    | 9    | 10  | 7    | 7    |
-| `xfatable_ua1.pdf`     | 5    | 6    | 6    | 6    | 6    | 5   | 2    | 5    |
+| `xfatable_ua1.pdf`     | 5    | 6    | 6    | 6    | 6    | 5   | 4    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -2142,29 +2142,37 @@ about the character map. Reaching that false negative needs the font painted
 visibly, and closing it means turning an unresolvable code into a firing one,
 which has produced false positives on real-world corpora before.
 
-## A dynamic XFA configuration
+## A dynamic XFA configuration and row spans past the last row
 
-`xfatable_ua1.pdf` reaches ISO 14289-1 `7.15/1`, which reads `dynamicRender !=
-'required'`. That is not a PDF key at all: it lives inside the XFA packet the
-`/AcroForm` carries, so reaching the rule means writing XFA XML rather than
-setting a dictionary entry. The packet rides as an array of alternating name and
-stream so the configuration can be addressed on its own.
+`xfatable_ua1.pdf` reaches three ISO 14289-1 rules.
 
-The table beside it conforms and exists to stay silent. The geometry checks are
-the ones most likely to condemn a legitimate `/RowSpan`, and a document whose
-only defect sat in the XFA packet would let a check that stops at the first
-structural complaint look correct.
+| Construct                                           | Rule     |
+| --------------------------------------------------- | -------- |
+| an XFA configuration asking for dynamic rendering   | `7.15/1` |
+| a `/RowSpan` past the last row, in a later column   | `7.2/41` |
+| a `/RowSpan` past the last row, in the first column | `7.2/43` |
 
-`7.2/41` is deliberately absent, and the reason is worth recording. It reads
-`numberOfColumnWithWrongRowSpan == null`, and two constructs failed to reach it.
-A `/RowSpan` in an earlier row SHIFTS the following row's cells rather than
-colliding with them, so it reads as a column count mismatch and answers `7.2/42`,
-which `tablespan_ua2.pdf` already covers. A `/RowSpan` overrunning the last row
-answers `7.2/43` instead: that and `7.2/42` are the two branches of one
-column-span requirement, split on whether `wrongColumnSpan` is null, so exactly
-one of them fires. On that second construct **litho reported neither**, which is
-a real false negative. It is recorded rather than planted, because the grid model
-it turns on is not yet understood well enough to build a fixture on.
+`7.15/1` reads `dynamicRender != 'required'`, which is not a PDF key at all: it
+lives inside the XFA packet the `/AcroForm` carries, so reaching the rule means
+writing XFA XML rather than setting a dictionary entry.
+
+The two table rules are one defect placed a column apart. A `/RowSpan` reaching
+past the last declared row puts cells in rows no `TR` declares, and which rule
+answers for it turns on where that span starts: the first column answers
+`7.2/43`, any other column answers `7.2/41`. That split follows veraPDF's cell
+placement rather than anything the clauses say, and was measured across two,
+three and four column tables before being relied on.
+
+Neither is a span in an EARLIER row, which is a different defect: such a span
+SHIFTS the following row's cells rather than colliding with them, so it reads as
+a column count mismatch and answers `7.2/42`, which `tablespan_ua2.pdf` covers.
+
+Both rules were unreachable in litho before this fixture. Rows a span reaches
+past the last `TR` exist in the grid with nothing to declare them, and litho
+compared only declared rows, so every row still agreed and nothing fired;
+`7.2/41` had no firing site at all. A third table conforms and stays silent, its
+span covering exactly the rows the table declares, which is what shows the
+geometry check accepts a legitimate span rather than ignoring the attribute.
 
 ## Scope
 
