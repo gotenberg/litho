@@ -106,6 +106,7 @@ one deliberately rather than diffing it against a fresh build.
 | `puatext_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in the strings that describe         |
 | `formmedia_ua1.pdf`    | PDF/UA-1     | Formulas, notes, shared XObjects and media clips                 |
 | `idfields_ua2.pdf`     | PDF/UA-2     | Identification prefixes, destinations and text fields            |
+| `linkfont_ua2.pdf`     | PDF/UA-2     | Link target identity and a symbolic font's character map         |
 
 ### Must-not-fire controls
 
@@ -225,6 +226,9 @@ violation but is exempt, so a firing is a false positive.
 | `formmedia_ua1`                           | A media clip carrying both `/CT` and usable `/Alt` text                | ISO 14289-1, 7.18.6.2        |
 | `idfields_ua2`                            | An outline destination naming the `Document` element                   | ISO 14289-2, 8.8 t1          |
 | `idfields_ua2`                            | A text field whose `/RV` text equals its `/V`                          | ISO 14289-2, 8.10.3.3 t1     |
+| `linkfont_ua2`                            | Two links onto the same element, differing only in zoom                | ISO 14289-2, 8.2.5.20 t2     |
+| `linkfont_ua2`                            | Two links onto differing page destinations, never compared             | ISO 14289-2, 8.2.5.20 t2     |
+| `linkfont_ua2`                            | The same font program declared non-symbolic                            | ISO 14289-2, 8.4.5.7 t4      |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -285,6 +289,7 @@ which are covered under [Known divergences](#known-divergences).
 | `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
 | `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
 | `limits_2b.pdf`        | 8    | 12   | 10   | 10   | 10   | 6   | 10   | 8    |
+| `linkfont_ua2.pdf`     | 6    | 8    | 7    | 8    | 7    | 5   | 4    | 5    |
 | `megafont_2b.pdf`      | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
 | `outputintent_2b.pdf`  | 4    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
@@ -2102,15 +2107,47 @@ helper as a markup annotation's `/RC`, parsing it as XML and reducing it to its
 text nodes before comparing with the plain `/V`, and litho read `/RV` nowhere at
 all.
 
+## Link target identity and a symbolic character map
+
+`linkfont_ua2.pdf` covers two ISO 14289-2 rules on unrelated parts of the file.
+
+| Construct                                                   | Rule         |
+| ----------------------------------------------------------- | ------------ |
+| two links under one `Link` element onto different targets   | `8.2.5.20/2` |
+| a symbolic TrueType with neither a (3,0) nor a (1,0) `cmap` | `8.4.5.7/4`  |
+
+`8.2.5.20/2` is the reason for the file. veraPDF compares only STRUCTURE
+destinations, and compares them by object identity alone: a destination array's
+first element must be a dictionary carrying `/S`, and the view parameters after
+it are ignored. A page destination, a URI action, or a destination naming no
+structure element leaves nothing to compare and is never evaluated.
+
+Three groups of links sit side by side and only the first offends. Two name
+different structure elements and fire. Two name the SAME element with different
+view parameters and stay silent, which is the control that matters: comparing
+whole destination arrays rather than target identity reports that pair as
+disagreeing, and litho once did. Two more carry ordinary page destinations that
+differ from each other, and are silent because a page destination never reaches
+the comparison at all.
+
+The symbolic font is painted in rendering mode 3, which is a recorded divergence
+rather than a preference. A symbolic TrueType with neither subtable cannot map
+its codes, so veraPDF reports every code it paints as a glyph that is not
+present; litho leaves a code it cannot map unchecked, on the ground that presence
+is then unresolvable. Mode 3 exempts the glyphs on both sides, keeping this file
+about the character map. Reaching that false negative needs the font painted
+visibly, and closing it means turning an unresolvable code into a firing one,
+which has produced false positives on real-world corpora before.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 54 x 8 = 432
+fixture is expanded across all eight profiles, so the matrix is 55 x 8 = 440
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 430 of the 432 cells. The two
+fixtures exist to protect, and it holds in 438 of the 440 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
