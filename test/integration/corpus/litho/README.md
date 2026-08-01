@@ -105,6 +105,7 @@ one deliberately rather than diffing it against a fresh build.
 | `xobjstate_2b.pdf`     | PDF/A-2b     | Form XObject keys, blend modes, page actions, Separations        |
 | `puatext_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in the strings that describe         |
 | `formmedia_ua1.pdf`    | PDF/UA-1     | Formulas, notes, shared XObjects and media clips                 |
+| `idfields_ua2.pdf`     | PDF/UA-2     | Identification prefixes, destinations and text fields            |
 
 ### Must-not-fire controls
 
@@ -222,6 +223,8 @@ violation but is exempt, so a firing is a false positive.
 | `formmedia_ua1`                           | A third `Note` whose `/ID` is its own                                  | ISO 14289-1, 7.9 t2          |
 | `formmedia_ua1`                           | A form carrying `/StructParents` but painted once                      | ISO 14289-1, 7.20 t2         |
 | `formmedia_ua1`                           | A media clip carrying both `/CT` and usable `/Alt` text                | ISO 14289-1, 7.18.6.2        |
+| `idfields_ua2`                            | An outline destination naming the `Document` element                   | ISO 14289-2, 8.8 t1          |
+| `idfields_ua2`                            | A text field whose `/RV` text equals its `/V`                          | ISO 14289-2, 8.10.3.3 t1     |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -277,6 +280,7 @@ which are covered under [Known divergences](#known-divergences).
 | `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 5    |
 | `iccbased_4.pdf`       | 3    | 7    | 5    | 5    | 5    | 5   | 8    | 7    |
+| `idfields_ua2.pdf`     | 6    | 7    | 7    | 7    | 7    | 4   | 4    | 6    |
 | `idprefix_2b.pdf`      | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
 | `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
 | `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
@@ -2069,15 +2073,44 @@ spread across two pages and one whose own content is marked. The control beside
 it therefore carries `/StructParents` too and is painted once, which is what
 shows the discriminator is the repetition rather than the key.
 
+## Identification prefixes, destinations and text fields
+
+`idfields_ua2.pdf` covers four ISO 14289-2 rules on four unrelated parts of the
+document, so a check that stops after the first complaint visibly under-reports.
+
+| Construct                                        | Rule         |
+| ------------------------------------------------ | ------------ |
+| `part` bound to a prefix other than `pdfuaid`    | `5/3`        |
+| `rev` bound to a prefix other than `pdfuaid`     | `5/4`        |
+| an outline destination naming a page             | `8.8/1`      |
+| a text field whose `/RV` disagrees with its `/V` | `8.10.3.3/1` |
+
+The two identification defects are load-bearing. XMP identifies a schema by
+NAMESPACE, not by prefix, so declaring a second prefix on the PDF/UA
+identification namespace and hanging `part` and `rev` off it keeps the file
+identifiable as PDF/UA-2 while making both prefixes wrong. Had it stopped being
+identifiable, the other rules would go unevaluated and the file would report
+almost nothing, so those two firing alongside the rest is the proof it worked.
+
+`8.8` splits by object: test 1 judges a `PDDestination` and test 2 a
+`PDGoToAction`. Only test 1 is planted here, on an outline item's `/Dest`;
+`annotstruct_ua2.pdf` covers test 2 through link annotations. The outline item
+beside it names the `Document` element and is the control.
+
+`8.10.3.3/1` found a dead rule. veraPDF reads `/RV` through the same rich text
+helper as a markup annotation's `/RC`, parsing it as XML and reducing it to its
+text nodes before comparing with the plain `/V`, and litho read `/RV` nowhere at
+all.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 53 x 8 = 424
+fixture is expanded across all eight profiles, so the matrix is 54 x 8 = 432
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 422 of the 424 cells. The two
+fixtures exist to protect, and it holds in 430 of the 432 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.

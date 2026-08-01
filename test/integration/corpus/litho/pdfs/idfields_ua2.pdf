@@ -1,0 +1,118 @@
+%PDF-2.0
+%¿÷¢þ
+1 0 obj
+<< /AcroForm << /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 2 0 R >> >> /Fields [ 3 0 R 4 0 R ] >> /Lang (en-US) /MarkInfo << /Marked true >> /Metadata 5 0 R /Outlines 6 0 R /Pages 7 0 R /StructTreeRoot 8 0 R /Type /Catalog /ViewerPreferences << /DisplayDocTitle true >> >>
+endobj
+2 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+3 0 obj
+<< /AP << /N 9 0 R >> /F 4 /FT /Tx /RV (<?xml version='1.0'?><body xmlns='http://www.w3.org/1999/xhtml'><p>something else</p></body>) /Rect [ 50 600 170 620 ] /StructParent 1 /Subtype /Widget /T (disagreeing) /TU (a field whose rich text disagrees) /Type /Annot /V (the plain text) >>
+endobj
+4 0 obj
+<< /AP << /N 10 0 R >> /F 4 /FT /Tx /RV (<?xml version='1.0'?><body xmlns='http://www.w3.org/1999/xhtml'><p>agreed text</p></body>) /Rect [ 50 560 170 580 ] /StructParent 2 /Subtype /Widget /T (agreeing) /TU (a field whose rich text agrees) /Type /Annot /V (agreed text) >>
+endobj
+5 0 obj
+<< /Subtype /XML /Type /Metadata /Length 549 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/" xmlns:ua="http://www.aiim.org/pdfua/ns/id/" rdf:about="">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">identification prefixes</rdf:li></rdf:Alt></dc:title>
+   <ua:part>2</ua:part>
+   <ua:rev>2024</ua:rev>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+6 0 obj
+<< /Count 2 /First 11 0 R /Last 12 0 R /Type /Outlines >>
+endobj
+7 0 obj
+<< /Count 1 /Kids [ 13 0 R ] /Type /Pages >>
+endobj
+8 0 obj
+<< /K [ 14 0 R ] /Namespaces [ 15 0 R ] /ParentTree 16 0 R /ParentTreeNextKey 3 /Type /StructTreeRoot >>
+endobj
+9 0 obj
+<< /BBox [ 0 0 120 20 ] /Subtype /Form /Type /XObject /Length 31 >>
+stream
+0.9 0.9 0.9 rg 0 0 120 20 re f
+
+endstream
+endobj
+10 0 obj
+<< /BBox [ 0 0 120 20 ] /Subtype /Form /Type /XObject /Length 31 >>
+stream
+0.9 0.9 0.9 rg 0 0 120 20 re f
+
+endstream
+endobj
+11 0 obj
+<< /Dest [ 13 0 R /Fit ] /Next 12 0 R /Parent 6 0 R /Title (a page destination) >>
+endobj
+12 0 obj
+<< /Dest [ 14 0 R /Fit ] /Parent 6 0 R /Prev 11 0 R /Title (a structure destination) >>
+endobj
+13 0 obj
+<< /Annots [ 3 0 R 4 0 R ] /Contents 17 0 R /MediaBox [ 0 0 612 792 ] /Parent 7 0 R /Resources << /Font << /F1 2 0 R >> >> /StructParents 0 /Tabs /S /Type /Page >>
+endobj
+14 0 obj
+<< /K [ 18 0 R 19 0 R 20 0 R ] /Lang (en-US) /NS 15 0 R /P 8 0 R /S /Document /Type /StructElem >>
+endobj
+15 0 obj
+<< /NS (http://iso.org/pdf2/ssn) /Type /Namespace >>
+endobj
+16 0 obj
+<< /Nums [ 0 [ 18 0 R ] 1 19 0 R 2 20 0 R ] >>
+endobj
+17 0 obj
+<< /Length 86 >>
+stream
+/P <</MCID 0>> BDC
+BT /F1 12 Tf 50 750 Td (identification and destinations) Tj ET
+EMC
+
+endstream
+endobj
+18 0 obj
+<< /K 0 /NS 15 0 R /P 14 0 R /Pg 13 0 R /S /P /Type /StructElem >>
+endobj
+19 0 obj
+<< /K [ << /Obj 3 0 R /Type /OBJR >> ] /NS 15 0 R /P 14 0 R /Pg 13 0 R /S /Form /Type /StructElem >>
+endobj
+20 0 obj
+<< /K [ << /Obj 4 0 R /Type /OBJR >> ] /NS 15 0 R /P 14 0 R /Pg 13 0 R /S /Form /Type /StructElem >>
+endobj
+xref
+0 21
+0000000000 65535 f 
+0000000015 00000 n 
+0000000303 00000 n 
+0000000400 00000 n 
+0000000700 00000 n 
+0000000989 00000 n 
+0000001619 00000 n 
+0000001692 00000 n 
+0000001752 00000 n 
+0000001872 00000 n 
+0000002004 00000 n 
+0000002137 00000 n 
+0000002236 00000 n 
+0000002340 00000 n 
+0000002520 00000 n 
+0000002635 00000 n 
+0000002704 00000 n 
+0000002767 00000 n 
+0000002904 00000 n 
+0000002987 00000 n 
+0000003104 00000 n 
+trailer << /Root 1 0 R /Size 21 /ID [<b325ed7fba94ed3460ee910482a63e2d><b325ed7fba94ed3460ee910482a63e2d>] >>
+startxref
+3221
+%%EOF
