@@ -1233,7 +1233,20 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	var wrongPrefixPart, wrongPrefixConf, wrongPrefixRev bool
 	var wrongPrefixAmd, wrongPrefixCorr bool
 
-	decoder := xml.NewDecoder(bytes.NewReader(data))
+	// A packet that is not well-formed XML carries no PDFAIdentification at
+	// all. veraPDF's XMPCore parse fails outright, Identification_size reads 0,
+	// and it reports the missing-identification rule without evaluating any
+	// field. litho's lenient scan used to recover pdfaid:part out of a packet
+	// whose defect sits AFTER it, so a packet litho had just reported as an
+	// invalid serialization still counted as identified.
+	if !xmpWellFormed(data) {
+		*results = append(*results, xmpPDFAIdMissingRule(part)...)
+		return
+	}
+
+	// Scan the same bytes xmpWellFormed judged, so a control character veraPDF
+	// repairs before parsing does not cost the packet its identification here.
+	decoder := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
 	decoder.Strict = false
 
 	// Only properties in the pdfaid namespace URI carry the identification
