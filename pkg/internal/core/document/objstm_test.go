@@ -96,7 +96,7 @@ func TestObjectStream_MultiObjectExtraction(t *testing.T) {
 
 	// Resolve twice: the first pass builds the offset table, the second hits
 	// the cache. Both must return the correct object per index.
-	for pass := 0; pass < 2; pass++ {
+	for pass := range 2 {
 		for objNum, exp := range want {
 			obj, err := doc.Resolve(context.Background(), ast.PdfIndirectRef{ObjectNum: objNum})
 			if err != nil {

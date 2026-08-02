@@ -341,12 +341,12 @@ func TestCheckOutlineLang_CatalogLangCoversOutline(t *testing.T) {
 func xdefaultXMP(langs ...string) string {
 	alt := ""
 	if len(langs) > 0 {
-		items := ""
+		var items strings.Builder
 		for _, l := range langs {
-			items += `<rdf:li xml:lang="` + l + `">T</rdf:li>`
+			items.WriteString(`<rdf:li xml:lang="` + l + `">T</rdf:li>`)
 		}
 		alt = `<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
-			`<dc:title><rdf:Alt>` + items + `</rdf:Alt></dc:title></rdf:Description>`
+			`<dc:title><rdf:Alt>` + items.String() + `</rdf:Alt></dc:title></rdf:Description>`
 	}
 	return `<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
 		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +

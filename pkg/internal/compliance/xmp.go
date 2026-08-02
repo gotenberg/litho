@@ -3452,8 +3452,8 @@ func xmpSimplifyValueType(name string) string {
 	v := strings.ToLower(strings.TrimSpace(name))
 	v = strings.TrimSpace(xmpChoicePattern.ReplaceAllString(v, ""))
 	for _, prefix := range xmpValueTypeArrayPrefixes {
-		if strings.HasPrefix(v, prefix) {
-			v = strings.TrimSpace(strings.TrimPrefix(v, prefix))
+		if after, ok := strings.CutPrefix(v, prefix); ok {
+			v = strings.TrimSpace(after)
 			break
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -324,7 +325,7 @@ func (d *Document) nextNormalObjectOffset(off int64) int64 {
 					rebuilt = append(rebuilt, entry.Offset)
 				}
 			}
-			sort.Slice(rebuilt, func(i, j int) bool { return rebuilt[i] < rebuilt[j] })
+			slices.Sort(rebuilt)
 			d.sortedOffsets = rebuilt
 			d.sortedOffsetsLen = len(d.Index.Entries)
 		}

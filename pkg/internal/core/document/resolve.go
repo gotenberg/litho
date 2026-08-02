@@ -565,7 +565,7 @@ func parseObjStmHeader(ctx context.Context, decoded []byte, n int) (objNums, off
 	objNums = make([]int, 0, min(capHint, 1<<16))
 	offsets = make([]int, 0, min(capHint, 1<<16))
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i%4096 == 0 {
 			if err := ctx.Err(); err != nil {
 				return nil, nil, err

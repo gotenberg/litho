@@ -127,13 +127,11 @@ func TestRecordFormatViolations_ConcurrentResolveRecordsOnce(t *testing.T) {
 	const goroutines = 16
 	var wg sync.WaitGroup
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for objNum := 1; objNum <= 3; objNum++ {
 				_, _ = doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum}) // Object 2 never parses; resolve errors are the point.
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
