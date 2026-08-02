@@ -141,6 +141,15 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		return nil
 	}
 
+	// A packet that is not well-formed XML yields no property at all. XML 1.0
+	// §2.1 gives a document that is not well-formed no infoset, and veraPDF's
+	// XMPCore parse fails outright, so its dc_title reads null. litho parses
+	// XMP leniently everywhere else, which recovered a title out of a packet
+	// litho had already reported as malformed under §6.7.9 / §6.6.2.1 t4.
+	if !xmpWellFormed(xmpData) {
+		return fail(rule, "XMP packet is not well-formed XML")
+	}
+
 	if !containsDCTitle(xmpData) {
 		return fail(rule, "")
 	}

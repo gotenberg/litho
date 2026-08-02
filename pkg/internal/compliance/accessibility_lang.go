@@ -413,7 +413,12 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		// carrying no alternative at all presents nothing to qualify and passes.
 		// Reporting on a bare packet flagged every metadata stream without a
 		// dc:title or dc:description.
-		if xmpData, ok := readCatalogXMP(ctx, doc, catalog); ok &&
+		//
+		// A packet that is not well-formed XML presents no alternative either:
+		// XML 1.0 §2.1 gives it no infoset, so veraPDF builds no XMPLangAlt
+		// from it. Reading one out of a malformed packet condemned a document
+		// on a qualifier only litho's lenient scan could see.
+		if xmpData, ok := readCatalogXMP(ctx, doc, catalog); ok && xmpWellFormed(xmpData) &&
 			xmpHasXDefaultLangAlt(xmpData) && !xmpHasSpecificLang(xmpData) {
 			results = append(results, fail(Rule_14289_1_7_2_t33, "document metadata")...)
 		}
