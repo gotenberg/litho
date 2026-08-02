@@ -659,14 +659,39 @@ func xmpWellFormed(data []byte) bool {
 	dec := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
 	dec.Strict = true
 	for {
-		_, err := dec.Token()
+		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
 			return true
 		}
 		if err != nil {
 			return false
 		}
+		if start, ok := tok.(xml.StartElement); ok && hasDuplicateAttr(start) {
+			return false
+		}
 	}
+}
+
+// hasDuplicateAttr reports whether start carries the same attribute twice.
+//
+// XML 1.0, §3.1 (WFC: Unique Att Spec) forbids a name appearing more than once
+// in a start tag, and Namespaces in XML 1.0, §5.3 extends that to two prefixes
+// bound to the same URI. Go's encoding/xml accepts both, so a packet carrying
+// `rdf:about` twice parsed cleanly here while veraPDF's XMPCore rejected it,
+// and litho reported neither the invalid serialization nor the identification
+// the unparseable packet takes with it.
+func hasDuplicateAttr(start xml.StartElement) bool {
+	if len(start.Attr) < 2 {
+		return false
+	}
+	seen := make(map[xml.Name]bool, len(start.Attr))
+	for _, attr := range start.Attr {
+		if seen[attr.Name] {
+			return true
+		}
+		seen[attr.Name] = true
+	}
+	return false
 }
 
 // maxXMPCharRefDigits bounds the digit run a numeric character reference may
