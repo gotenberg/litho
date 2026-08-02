@@ -357,10 +357,23 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		mapping[key] = target
 	}
 
+	// Every /RoleMap rule is scoped to a structure ELEMENT, not to the map:
+	// ISO 14289-1 7.1 t5/t6/t7, ISO 14289-2 8.2.4 t1/t2/t3 and ISO 19005-2
+	// 6.7.3.4 t1/t2/t3 all carry veraPDF's SENonStandard or PDStructElem as
+	// their object, and each judges an element whose type resolves through the
+	// map. An entry no element uses has no element to answer for it, so a
+	// circular or dangling chain sitting there is inert. Reporting it condemned
+	// documents veraPDF passes, and on a cycle spanning several entries it
+	// reported one violation per entry where veraPDF reports one per element.
+	used := collectUsedStructTypes(ctx, doc, structTreeRoot)
+
 	// Sorted source names keep RoleMap violation order deterministic
 	// (CONTRIBUTING "Deterministic output").
 	srcNames := make([]ast.PdfName, 0, len(mapping))
 	for src := range mapping {
+		if !used[src] {
+			continue
+		}
 		srcNames = append(srcNames, src)
 	}
 	slices.Sort(srcNames)
@@ -425,6 +438,56 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		}
 		resolveToStandard(src, mapping, results, profile)
 	}
+}
+
+// collectUsedStructTypes returns every type a structure element in the tree
+// carries as its /S. It is what scopes the /RoleMap rules to the elements they
+// judge; see [checkRoleMap] for the clauses.
+//
+// The walk is bounded by maxStructTreeDepth and by an object-number visited
+// set, so a tree that points back at itself terminates.
+func collectUsedStructTypes(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) map[ast.PdfName]bool {
+	used := make(map[ast.PdfName]bool)
+	seen := make(map[int]bool)
+
+	var walk func(obj ast.PdfObject, depth int)
+	walk = func(obj ast.PdfObject, depth int) {
+		if ctx.Err() != nil || depth > maxStructTreeDepth {
+			return
+		}
+
+		if ref, ok := obj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				return
+			}
+			seen[ref.ObjectNum] = true
+		}
+
+		if arr, err := document.ResolveArray(ctx, doc, obj); err == nil {
+			for _, item := range arr {
+				walk(item, depth+1)
+			}
+			return
+		}
+
+		dict, err := document.ResolveDict(ctx, doc, obj)
+		if err != nil || dict == nil {
+			return
+		}
+		if sObj, hasS := dict["S"]; hasS {
+			if name, err := document.ResolveName(ctx, doc, sObj); err == nil {
+				used[name] = true
+			}
+		}
+		if kids, hasK := dict["K"]; hasK {
+			walk(kids, depth+1)
+		}
+	}
+
+	if kids, ok := structTreeRoot["K"]; ok {
+		walk(kids, 0)
+	}
+	return used
 }
 
 // resolveToStandard follows the role map chain from src and returns true if it

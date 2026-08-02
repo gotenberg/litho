@@ -547,8 +547,13 @@ func TestCheckRoleMap_StandardRemapTargetScope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
+	// The rule is scoped to the element, so the tree must hold one that uses
+	// the remapped type; see TestRoleMapRulesAreElementScoped.
 	mk := func(target ast.PdfName) []Violation {
-		str := ast.PdfDict{"RoleMap": ast.PdfDict{"Caption": target}}
+		str := ast.PdfDict{
+			"RoleMap": ast.PdfDict{"Caption": target},
+			"K":       ast.PdfDict{"S": ast.PdfName("Caption")},
+		}
 		var results []Violation
 		checkRoleMap(ctx, doc, str, "PDF/A-2a", &results)
 		return results
@@ -569,13 +574,16 @@ func TestCheckRoleMap_UA1SelfMapNotStandardRemap(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
-	mk := func(rm ast.PdfDict) []Violation {
+	// used names the type an element in the tree carries, which is what the
+	// rule judges; see TestRoleMapRulesAreElementScoped.
+	mk := func(rm ast.PdfDict, used ast.PdfName) []Violation {
 		var results []Violation
-		checkRoleMap(ctx, doc, ast.PdfDict{"RoleMap": rm}, "PDF/UA-1", &results)
+		root := ast.PdfDict{"RoleMap": rm, "K": ast.PdfDict{"S": used}}
+		checkRoleMap(ctx, doc, root, "PDF/UA-1", &results)
 		return results
 	}
 
-	selfMap := mk(ast.PdfDict{"LI": ast.PdfName("LI")})
+	selfMap := mk(ast.PdfDict{"LI": ast.PdfName("LI")}, ast.PdfName("LI"))
 	if !hasRule(selfMap, Rule_14289_1_7_1_t06) {
 		t.Errorf("/LI->/LI self-map: want §7.1 t6 (circular), got %v", selfMap)
 	}
@@ -583,7 +591,7 @@ func TestCheckRoleMap_UA1SelfMapNotStandardRemap(t *testing.T) {
 		t.Errorf("/LI->/LI self-map: want no §7.1 t7 (standard remap), got %v", selfMap)
 	}
 
-	diffMap := mk(ast.PdfDict{"Caption": ast.PdfName("P")})
+	diffMap := mk(ast.PdfDict{"Caption": ast.PdfName("P")}, ast.PdfName("Caption"))
 	if !hasRule(diffMap, Rule_14289_1_7_1_t07) {
 		t.Errorf("/Caption->/P remap: want §7.1 t7, got %v", diffMap)
 	}
@@ -597,22 +605,25 @@ func TestCheckRoleMap_StandardSelfMapCircularScope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
-	mk := func(profile string, rm ast.PdfDict) []Violation {
+	// used names the type an element in the tree carries, which is what the
+	// rule judges; see TestRoleMapRulesAreElementScoped.
+	mk := func(profile string, rm ast.PdfDict, used ast.PdfName) []Violation {
 		var results []Violation
-		checkRoleMap(ctx, doc, ast.PdfDict{"RoleMap": rm}, profile, &results)
+		root := ast.PdfDict{"RoleMap": rm, "K": ast.PdfDict{"S": used}}
+		checkRoleMap(ctx, doc, root, profile, &results)
 		return results
 	}
 
 	stdSelf := ast.PdfDict{"Document": ast.PdfName("Document")}
-	if got := mk("PDF/A-2a", stdSelf); hasRule(got, Rule_19005_2_6_7_3_4_t02) {
+	if got := mk("PDF/A-2a", stdSelf, ast.PdfName("Document")); hasRule(got, Rule_19005_2_6_7_3_4_t02) {
 		t.Errorf("PDF/A-2a: standard self-map /Document->/Document must NOT fire §6.7.3.4 t2, got %v", got)
 	}
-	if got := mk("PDF/UA-1", stdSelf); !hasRule(got, Rule_14289_1_7_1_t06) {
+	if got := mk("PDF/UA-1", stdSelf, ast.PdfName("Document")); !hasRule(got, Rule_14289_1_7_1_t06) {
 		t.Errorf("PDF/UA-1: standard self-map /Document->/Document must fire §7.1 t6, got %v", got)
 	}
 
 	nonStdSelf := ast.PdfDict{"Foo": ast.PdfName("Foo")}
-	if got := mk("PDF/A-2a", nonStdSelf); !hasRule(got, Rule_19005_2_6_7_3_4_t02) {
+	if got := mk("PDF/A-2a", nonStdSelf, ast.PdfName("Foo")); !hasRule(got, Rule_19005_2_6_7_3_4_t02) {
 		t.Errorf("PDF/A-2a: non-standard self-map /Foo->/Foo must fire §6.7.3.4 t2, got %v", got)
 	}
 }
