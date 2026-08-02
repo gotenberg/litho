@@ -24,7 +24,7 @@ def out_path(basename):
     return os.path.normpath(os.path.join(PDFS_DIR, basename))
 
 
-def save(pdf, basename, min_version="1.7"):
+def save(pdf, basename, min_version="1.7", **extra):
     """Write pdf to ../pdfs/<basename> with a deterministic /ID.
 
     Deterministic IDs keep the committed bytes stable across rebuilds so a
@@ -33,6 +33,12 @@ def save(pdf, basename, min_version="1.7"):
     Stream data is written through untouched. qpdf's default generalized
     decode level silently rewrites an LZWDecode stream as Flate, which would
     delete a planted violation; `none` keeps every declared filter intact.
+
+    extra passes further pikepdf save options through. Two matter to fixtures
+    that plant a defect in the XMP: pikepdf defaults `preserve_pdfa` and
+    `fix_metadata_version` to True, and both REGENERATE the packet, silently
+    repairing whatever the builder planted. Pass them as False to keep the
+    bytes the builder wrote.
     """
     path = out_path(basename)
     pdf.save(
@@ -41,6 +47,7 @@ def save(pdf, basename, min_version="1.7"):
         deterministic_id=True,
         compress_streams=False,
         stream_decode_level=pikepdf.StreamDecodeLevel.none,
+        **extra,
     )
     print("wrote", path, os.path.getsize(path), "bytes")
 

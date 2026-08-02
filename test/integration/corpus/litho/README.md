@@ -51,7 +51,7 @@ one deliberately rather than diffing it against a fresh build.
 ## Fixtures
 
 | Fixture                | Home profile | Focus                                                            |
-| ---------------------- | ------------ | ---------------------------------------------------------------- |
+| ---------------------- | ------------ | ---------------------------------------------------------------- | --- | --- | --- | --- | --- | --- |
 | `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG           |
 | `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language         |
 | `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters             |
@@ -64,6 +64,7 @@ one deliberately rather than diffing it against a fresh build.
 | `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states          |
 | `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: real, string, name, nesting, DeviceN      |
 | `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                           |
+| `metafilter_1b.pdf`    | 3            | 6                                                                | 3   | 4   | 3   | 6   | 8   | 7   |
 | `multipage_2b.pdf`     | PDF/A-2b     | Three pages, a violation class unique to each                    |
 | `fontdict_2b.pdf`      | PDF/A-2b     | Font dictionary required keys; page box implementation limits    |
 | `structnest_ua1.pdf`   | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language    |
@@ -110,6 +111,8 @@ one deliberately rather than diffing it against a fresh build.
 | `xfatable_ua1.pdf`     | PDF/UA-1     | A dynamic XFA configuration beside a conforming table            |
 | `extprop_2b.pdf`       | PDF/A-2b     | The container an extension schema's properties live in           |
 | `gstateform_1b.pdf`    | PDF/A-1b     | Graphics states, form XObjects and an ICC component count        |
+| `xmpsyntax_1b.pdf`     | PDF/A-1b     | A defect in each of the header, cross reference and XMP layers   |
+| `metafilter_1b.pdf`    | PDF/A-1b     | A filtered metadata stream, and one that is allowed to be        |
 
 ### Must-not-fire controls
 
@@ -241,6 +244,9 @@ violation but is exempt, so a firing is a false positive.
 | `gstateform_1b`                           | A PostScript form XObject judged at part 4, which has no such rule     | ISO 19005-4, 6.2.8.1 t1      |
 | `gstateform_1b`                           | An ICC profile whose `/N` agrees with its header                       | ISO 19005-1, 6.2.3.2 t2      |
 | `gstateform_1b`                           | An ICC `/N` mismatch judged at parts 2 to 4, which have no such rule   | ISO 19005-2, 6.2.4.2 t1      |
+| `xmpsyntax_1b`                            | A second page carrying no defect of its own                            | ISO 19005-1, 6.1.2 t1        |
+| `xmpsyntax_1b`                            | An x-default alternative inside a packet that does not parse           | ISO 14289-1, 7.2 t33         |
+| `metafilter_1b`                           | A page's metadata stream carrying the same `/Filter`                   | ISO 19005-1, 6.7.2 t2        |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -322,6 +328,7 @@ which are covered under [Known divergences](#known-divergences).
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
 | `usedcs_2b.pdf`        | 3    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
 | `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
+| `xmpsyntax_1b.pdf`     | 7    | 9    | 7    | 7    | 7    | 7   | 9    | 8    |
 | `xobjstate_2b.pdf`     | 6    | 11   | 9    | 9    | 9    | 10  | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 6    | 6    | 6    | 6    | 5   | 4    | 7    |
 
@@ -2231,15 +2238,70 @@ Every graphics state is invoked with `gs` and every form is drawn with `Do`. An
 same dictionaries left unused fire nothing in veraPDF. That was measured before
 the fixture relied on it.
 
+### `xmpsyntax_1b.pdf`
+
+`xmpsyntax_1b.pdf` carries one defect in each of three layers of the file: the
+first eight bytes, the format of the cross-reference section, and the XML inside
+the metadata stream. `6.1.2/1` answers for the header, `6.1.4/3` for the
+cross-reference stream, `6.7.9/1` for a raw `<` in the XMP character data.
+
+The layering is the point. A reader that gave up on the malformed header never
+reaches the cross-reference section, and one that gave up there never reaches
+the metadata, so each rule firing is evidence that the reader kept going past
+the layer above it.
+
+`6.1.2/1` reads `headerOffset == 0 && /%PDF-\d\.\d/.test(header)`. Rewriting
+`%PDF-1.7` as `%PDF-17.` breaks the pattern in place: the header stays at offset
+zero and no byte after it moves, so the cross-reference offsets stay valid.
+Prepending junk instead shifts every offset in the file, which makes veraPDF
+fail to parse rather than report, and a report with zero rules is
+indistinguishable from a pass.
+
+The raw `<` also costs the file its PDF/A identification and its `dc:title`,
+because the packet carrying them cannot be parsed: `6.7.11/1` fires alongside at
+part 1, `7.1/9` and `8.11.1/1` at the accessibility profiles. That is one
+construct, not three defects. It is also what the file protects: litho used to
+read properties out of a packet it had already reported as malformed, resolving
+a title veraPDF cannot see and qualifying a language alternative veraPDF never
+builds.
+
+pikepdf regenerates the XMP packet on save unless both `preserve_pdfa` and
+`fix_metadata_version` are off, silently repairing the planted `<`. The builder
+asserts the byte survived rather than trusting the flags.
+
+### `metafilter_1b.pdf`
+
+`metafilter_1b.pdf` reaches ISO 19005-1 `6.7.2/2`, which reads
+
+    isCatalogMetadata == false || Filter == null
+
+so the prohibition is on the CATALOG's packet alone. A metadata stream hanging
+off anything else may be filtered.
+
+The file carries both, encoded identically: the catalog's packet offends, and a
+page's packet with the same `/Filter /FlateDecode` over the same kind of
+compressed payload is the control. A checker matching on the filter rather than
+on whose packet it is condemns both; a checker that skipped metadata streams
+condemns neither. One stream cannot tell those apart.
+
+Both packets are well-formed XML, and only the catalog's carries a PDF/A claim,
+so the filter is the only thing either can answer for.
+
+qpdf strips `/Filter` off a metadata stream on every save path tried, including
+with `preserve_pdfa` and `fix_metadata_version` off. Each stream is therefore
+planted after the save, its dictionary padded with spaces so the object keeps
+its byte length and no cross-reference offset moves. Padding after `endobj`
+instead would cost a `6.1.8/1`.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 58 x 8 = 464
+fixture is expanded across all eight profiles, so the matrix is 60 x 8 = 480
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 462 of the 464 cells. The two
+fixtures exist to protect, and it holds in 478 of the 480 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
