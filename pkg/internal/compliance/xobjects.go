@@ -314,7 +314,15 @@ func checkFormXObject(
 		results = append(results, failf(formRule, "page %d, XObject %s: OPI key present", pageNum, name)...)
 	}
 
-	// Parts 2/3/4: /Subtype2 with value /PS forbidden, /PS key forbidden.
+	// ISO 19005-4, 6.2.8.1 forbids the OPI key and nothing else: ISO 32000-2
+	// removed PostScript XObjects from the format, so part 4 has no PostScript
+	// prohibition left to make. Only ISO 19005-2 and -3, 6.2.9 fold the three
+	// prohibitions into one rule.
+	if part == 4 {
+		return results
+	}
+
+	// Parts 2/3: /Subtype2 with value /PS forbidden, /PS key forbidden.
 	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
 		sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
 		if sub2Name == "PS" {
