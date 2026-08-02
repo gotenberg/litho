@@ -109,6 +109,7 @@ one deliberately rather than diffing it against a fresh build.
 | `linkfont_ua2.pdf`     | PDF/UA-2     | Link target identity and a symbolic font's character map         |
 | `xfatable_ua1.pdf`     | PDF/UA-1     | A dynamic XFA configuration beside a conforming table            |
 | `extprop_2b.pdf`       | PDF/A-2b     | The container an extension schema's properties live in           |
+| `gstateform_1b.pdf`    | PDF/A-1b     | Graphics states, form XObjects and an ICC component count        |
 
 ### Must-not-fire controls
 
@@ -234,6 +235,12 @@ violation but is exempt, so a firing is a false positive.
 | `xfatable_ua1`                            | A table whose `/RowSpan` covers exactly the rows it has                | ISO 14289-1, 7.2 t41         |
 | `extprop_2b`                              | A schema holding one property in a proper `rdf:Seq`                    | ISO 19005-2, 6.6.2.3.3 t5    |
 | `extprop_2b`                              | A schema holding two properties in a proper `rdf:Seq`                  | ISO 19005-2, 6.6.2.3.3 t5    |
+| `gstateform_1b`                           | An `ExtGState` whose `/SMask` is `/None`                               | ISO 19005-1, 6.4 t1          |
+| `gstateform_1b`                           | An `ExtGState` carrying no halftone origin                             | ISO 19005-4, 6.2.5 t3        |
+| `gstateform_1b`                           | A form XObject carrying neither `/OPI` nor PostScript                  | ISO 19005-1, 6.2.5 t1        |
+| `gstateform_1b`                           | A PostScript form XObject judged at part 4, which has no such rule     | ISO 19005-4, 6.2.8.1 t1      |
+| `gstateform_1b`                           | An ICC profile whose `/N` agrees with its header                       | ISO 19005-1, 6.2.3.2 t2      |
+| `gstateform_1b`                           | An ICC `/N` mismatch judged at parts 2 to 4, which have no such rule   | ISO 19005-2, 6.2.4.2 t1      |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -288,6 +295,7 @@ which are covered under [Known divergences](#known-divergences).
 | `formstruct_ua2.pdf`   | 4    | 6    | 6    | 6    | 6    | 5   | 7    | 7    |
 | `glyphs_2b.pdf`        | 4    | 8    | 5    | 6    | 5    | 6   | 10   | 10   |
 | `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
+| `gstateform_1b.pdf`    | 6    | 8    | 5    | 6    | 5    | 9   | 8    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 5    |
 | `iccbased_4.pdf`       | 3    | 7    | 5    | 5    | 5    | 5   | 8    | 7    |
 | `idfields_ua2.pdf`     | 6    | 7    | 7    | 7    | 7    | 4   | 4    | 6    |
@@ -2199,15 +2207,39 @@ three carry the same property shape deliberately. If a check condemned a schema
 for something a property carries, all three would fire and the file would prove
 nothing about the container.
 
+### `gstateform_1b.pdf`
+
+`gstateform_1b.pdf` reaches four rules the coverage scan showed unreached and
+separates two prohibitions that different parts spell differently.
+
+ISO 19005-1 splits the form XObject prohibitions: 6.2.4 test 2 answers for
+`/OPI` on any XObject, 6.2.5 test 1 for a PostScript one. ISO 19005-2 and -3
+fold `/OPI`, `/Subtype2 /PS` and `/PS` into 6.2.9 test 1. ISO 19005-4, 6.2.8.1
+covers `/OPI` alone, because ISO 32000-2 removed PostScript XObjects from the
+format and left part 4 nothing to prohibit. The file carries one form of each
+kind, so a checker that answered with the wrong rule of that set is visible as a
+count rather than hidden behind a firing neighbour.
+
+The ICC constructs work the same way. Only ISO 19005-1, 6.2.3.2 test 2 measures
+`/N` against the component count the profile header implies; parts 2 to 4 spell
+6.2.4.2 test 1 as a requirement on the profile's own conformance instead. The
+file carries one profile whose `/N` disagrees with its header and one whose `/N`
+agrees, both CMYK, so the mismatch answers only where a rule states it.
+
+Every graphics state is invoked with `gs` and every form is drawn with `Do`. An
+`ExtGState` no content stream selects is not part of the page's state, and the
+same dictionaries left unused fire nothing in veraPDF. That was measured before
+the fixture relied on it.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 57 x 8 = 456
+fixture is expanded across all eight profiles, so the matrix is 58 x 8 = 464
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 454 of the 456 cells. The two
+fixtures exist to protect, and it holds in 462 of the 464 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
