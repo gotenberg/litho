@@ -65,10 +65,14 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Resolve /Names dictionary from catalog.
 	namesDict, hasNames := resolveNamesDict(ctx, doc, catalog)
 
-	// §6.1.11: PDF/A-1 forbids embedded files.
+	// §6.1.11: PDF/A-1 forbids embedded files. checkEmbeddedFiles states both
+	// halves of the clause, t1 against every file specification carrying /EF
+	// and t2 against /Names /EmbeddedFiles, so stating them here as well
+	// reported each offending object twice. It also sweeps the xref entries in
+	// sorted order, which this file's copy did not (CONTRIBUTING
+	// "Deterministic output").
 	if part == 1 {
-		results = append(results, checkEmbeddedForbiddenPart1(ctx, doc, catalog, namesDict, hasNames)...)
-		doc.Logger.Debug("compliance.embedded: part 1 checks complete", "violations", len(results))
+		doc.Logger.Debug("compliance.embedded: part 1 handled by checkEmbeddedFiles")
 		return results
 	}
 
@@ -186,50 +190,6 @@ func resolveNamesDict(ctx context.Context, doc *document.Document, catalog ast.P
 		return nil, false
 	}
 	return namesDict, true
-}
-
-// checkEmbeddedForbiddenPart1 validates that PDF/A-1 documents do not contain
-// embedded files (§6.1.11). /EmbeddedFiles key is forbidden in /Names, and
-// file specification dicts must not contain /EF.
-func checkEmbeddedForbiddenPart1(ctx context.Context, doc *document.Document, _ ast.PdfDict, namesDict ast.PdfDict, hasNames bool) []Violation {
-	var results []Violation
-
-	// Check /EmbeddedFiles in /Names.
-	if hasNames {
-		if _, hasEF := namesDict["EmbeddedFiles"]; hasEF {
-			results = append(results, fail(Rule_19005_1_6_1_11_t02,
-				"EmbeddedFiles key present in Names dictionary")...)
-		}
-	}
-
-	// Check file spec dicts for /EF key.
-	for objNum, entry := range doc.Index.Entries {
-		if ctx.Err() != nil {
-			return results
-		}
-		if entry.Free {
-			continue
-		}
-
-		dict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || dict == nil {
-			continue
-		}
-
-		typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-		if typeName != "Filespec" {
-			continue
-		}
-
-		if _, hasEF := dict["EF"]; hasEF {
-			results = append(results, Violation{
-				Rule:    Rule_19005_1_6_1_11_t01,
-				Context: fmt.Sprintf("object %d: file specification contains EF key", objNum),
-			})
-		}
-	}
-
-	return results
 }
 
 // fileSpecEntry holds a resolved file specification dict and its object number.
