@@ -13,8 +13,16 @@ func iccBasedProfileRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_3_2_t01, Rule_19005_2_6_2_4_2_t01, Rule_19005_3_6_2_4_2_t01, Rule_19005_4_6_2_4_2_t01)
 }
 
+// iccBasedNRule returns the rule that measures /N against the profile's own
+// colour space.
 func iccBasedNRule(part int) Rule {
-	return ruleByPart(part, Rule_19005_1_6_2_3_2_t02, Rule_19005_2_6_2_4_2_t01, Rule_19005_3_6_2_4_2_t01, Rule_19005_4_6_2_4_2_t01)
+	// Only ISO 19005-1, 6.2.3.2 test 2 states this requirement. Parts 2 to 4
+	// have no equivalent: their 6.2.4.2 test 1 judges whether the profile
+	// conforms to the ICC specifications, which iccBasedProfileRule already
+	// answers for, and their remaining 6.2.4.2 tests judge CMYK overprint and
+	// OutputIntent identity. Reporting a component-count mismatch under test 1
+	// there labelled it with a requirement it does not break.
+	return ruleByPart(part, Rule_19005_1_6_2_3_2_t02, Rule{}, Rule{}, Rule{})
 }
 
 // iccBasedIdentityRule returns the rule for ICCBased profiles identical to
@@ -288,11 +296,16 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			continue
 		}
 
-		// Validate /N matches the ICC profile colour space.
+		// Validate /N matches the ICC profile colour space. Only part 1 states
+		// the requirement, so nRule is empty elsewhere and the mismatch goes
+		// unreported rather than borrowing a neighbouring rule.
+		nRule := iccBasedNRule(part)
 		nVal, err := document.ResolveInt(ctx, doc, stream.Dict["N"])
 		if err != nil {
-			*results = append(*results, failf(iccBasedNRule(part),
-				"page %d, ColorSpace %s: ICCBased profile missing /N entry", pageIdx+1, name)...)
+			if nRule.Specification != "" {
+				*results = append(*results, failf(nRule,
+					"page %d, ColorSpace %s: ICCBased profile missing /N entry", pageIdx+1, name)...)
+			}
 			continue
 		}
 
@@ -317,8 +330,8 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 		}
 
 		expectedN := expectedComponentCount(hdr.colorSpace)
-		if expectedN == 0 || int(nVal) != expectedN {
-			*results = append(*results, failf(iccBasedNRule(part),
+		if nRule.Specification != "" && (expectedN == 0 || int(nVal) != expectedN) {
+			*results = append(*results, failf(nRule,
 				"page %d, ColorSpace %s: /N=%d does not match ICC colour space %q", pageIdx+1, name, nVal, hdr.colorSpace)...)
 		}
 
