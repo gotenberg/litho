@@ -127,9 +127,14 @@ func TestXMPDetectEncoding(t *testing.T) {
 			want: "UTF-32BE",
 		},
 		{
-			name: "UTF-8 with explicit UTF-16 declaration in header",
+			// The bytes are UTF-8 and only the declaration says otherwise, so
+			// the declaration is wrong: XML opens with "<?xml", which in
+			// UTF-16 would interleave NUL bytes, and these carry none.
+			// veraPDF's XMPCore reads such a packet as UTF-8 and reports
+			// neither an encoding violation nor a lost identification.
+			name: "UTF-8 bytes with an explicit UTF-16 declaration stay UTF-8",
 			data: []byte(`<?xml version="1.0" encoding="UTF-16LE"?>`),
-			want: "UTF-16LE",
+			want: "UTF-8",
 		},
 		{
 			name: "empty input is UTF-8",

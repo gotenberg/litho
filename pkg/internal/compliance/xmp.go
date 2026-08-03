@@ -577,7 +577,18 @@ func xmpCheckPacketHeader(data []byte, part int, results *[]Violation) {
 		header = header[:xmpPacketHeaderSize]
 	}
 
-	before, _, ok := bytes.Cut(header, []byte("?>"))
+	// Both rules judge the xpacket processing instruction, not whatever
+	// instruction comes first. A packet may legitimately open with an XML
+	// declaration, and the encoding= that declaration carries is its own;
+	// cutting at the first "?>" read the declaration as the packet header and
+	// reported an attribute the xpacket instruction does not carry. A packet
+	// with no xpacket header at all carries neither attribute.
+	start := bytes.Index(header, []byte("<?xpacket"))
+	if start < 0 {
+		return
+	}
+
+	before, _, ok := bytes.Cut(header[start:], []byte("?>"))
 	if !ok {
 		return
 	}
@@ -663,11 +674,26 @@ func XMPWellFormed(data []byte) bool {
 	return xmpWellFormed(data)
 }
 
+// xmpPassThroughCharset hands the decoder its own bytes back whatever encoding
+// the packet declares.
+//
+// [xmpNormalizeForChecks] has already decoded a genuinely wide packet to UTF-8
+// by the time any of these decoders run, so the bytes here are UTF-8 and the
+// declaration is stale. Go's encoding/xml refuses outright when a declaration
+// names anything but UTF-8 and no CharsetReader is set, which cost a UTF-8
+// packet declaring encoding="UTF-16" both its serialization verdict and its
+// whole PDF/A identification. veraPDF's XMPCore reads the bytes and reports
+// neither, because a declaration is not evidence about the bytes.
+func xmpPassThroughCharset(_ string, input io.Reader) (io.Reader, error) {
+	return input, nil
+}
+
 // xmpWellFormed reports whether data is well-formed XML. An XMP packet
 // is an XML document, so a packet that is not well-formed XML cannot be
 // a valid serialization.
 func xmpWellFormed(data []byte) bool {
 	dec := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
+	dec.CharsetReader = xmpPassThroughCharset
 	dec.Strict = true
 	declared := map[string]bool{xmlBuiltinNamespace: true}
 	for {
@@ -893,6 +919,17 @@ func xmpDetectEncoding(data []byte) string {
 	}
 
 	headerLen := min(len(data), xmpPacketHeaderSize)
+
+	// A declaration is only worth consulting when the bytes could be wide. XML
+	// opens with "<?xml" or "<?xpacket", so a UTF-16 or UTF-32 packet
+	// necessarily interleaves NUL bytes through that syntax, and a prefix
+	// carrying none is UTF-8 whatever it claims. Believing the declaration
+	// instead decoded a UTF-8 packet as UTF-16, which cost it its encoding
+	// verdict and its whole identification; veraPDF's XMPCore reports neither.
+	if !bytes.ContainsRune(data[:headerLen], 0) {
+		return "UTF-8"
+	}
+
 	header := strings.ToLower(string(data[:headerLen]))
 	switch {
 	case strings.Contains(header, "encoding=\"utf-32le") || strings.Contains(header, "encoding='utf-32le"):
@@ -999,6 +1036,7 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 	extensions = make(map[string]bool)
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
 	// ignoredNS lists structural namespaces that should not be counted as
@@ -1152,6 +1190,7 @@ func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 	}
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
 	seen := make(map[xmpTopLevelProperty]bool)
@@ -1300,6 +1339,7 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	// Scan the same bytes xmpWellFormed judged, so a control character veraPDF
 	// repairs before parsing does not cost the packet its identification here.
 	decoder := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
 	// Only properties in the pdfaid namespace URI carry the identification
@@ -1688,6 +1728,7 @@ var xmpExtensionLevels = []xmpExtensionLevel{
 func dcTitleLangAltMalformed(data []byte) bool {
 	const dcNamespace = "http://purl.org/dc/elements/1.1/"
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 	depth := 0 // > 0 while inside a dc:title element
 	liCount := 0
@@ -1736,6 +1777,7 @@ func dcTitleLangAltMalformed(data []byte) bool {
 // "x-default" (verapdf-corpus 7.2-t33-fail-a) does not.
 func xmpHasSpecificLang(data []byte) bool {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 	for {
 		tok, err := decoder.Token()
@@ -1761,6 +1803,7 @@ func xmpHasSpecificLang(data []byte) bool {
 // none presents nothing whose language could be undeterminable.
 func xmpHasXDefaultLangAlt(data []byte) bool {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 	for {
 		tok, err := decoder.Token()
@@ -1896,6 +1939,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	}
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
 	var inSchemas bool
@@ -2700,6 +2744,7 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 	var current *xmpExtSchemaDef
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
 	var inSchemas bool
@@ -3251,6 +3296,7 @@ var xmpStructTypeFields = map[string]map[string]bool{
 // node; xmpPropertyTypeRule returns nil for part 4, which drops the requirement.
 func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
 	inDescription := false
@@ -3322,6 +3368,7 @@ type xmpPropertyValue struct {
 func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValue {
 	result := make(map[string]map[string]xmpPropertyValue)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
 	inDescription := false
