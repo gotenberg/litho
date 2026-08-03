@@ -542,8 +542,15 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 		return results
 	}
 
-	// Required keys for simple fonts: /FirstChar, /LastChar, /Widths.
-	results = append(results, checkSimpleFontRequiredKeys(ctx, doc, fontDict, PDFAPart(profile))...)
+	// Required keys for simple fonts: /FirstChar, /LastChar, /Widths. These are
+	// scoped to veraPDF's PDSimpleFont, which its font factory builds only for a
+	// known simple subtype. A dictionary whose /Subtype is absent or is not a
+	// font type at all is not a simple font, and reporting a missing /FirstChar
+	// against it accused it of three further defects on top of the invalid
+	// subtype checkFontRequiredKeys already reports.
+	if simpleFontSubtypes[subtype] {
+		results = append(results, checkSimpleFontRequiredKeys(ctx, doc, fontDict, PDFAPart(profile))...)
+	}
 
 	// Font embedding: only for fonts used for visible rendering. Type 3 fonts
 	// have no font program, so they are exempt.

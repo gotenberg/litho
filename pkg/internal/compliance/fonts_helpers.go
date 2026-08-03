@@ -197,6 +197,16 @@ var validFontSubtypes = map[string]bool{
 	"Type0": true, "CIDFontType0": true, "CIDFontType2": true,
 }
 
+// simpleFontSubtypes lists the /Subtype values that make a font dictionary a
+// simple font, which is what veraPDF's PDSimpleFont covers. Type0 is composite
+// and the CIDFontType values name a descendant, so none of them belong here,
+// and a subtype outside the table is not a font type at all.
+//
+//nolint:gochecknoglobals // static lookup table.
+var simpleFontSubtypes = map[string]bool{
+	"Type1": true, "MMType1": true, "TrueType": true, "Type3": true,
+}
+
 // fontReqKeyRule selects the font required-key rule by PDF/A part and test
 // number: ISO 19005-1 §6.3.2 tN, ISO 19005-2/3 §6.2.11.2 tN, ISO 19005-4
 // §6.2.10.2 tN.
