@@ -114,6 +114,7 @@ one deliberately rather than diffing it against a fresh build.
 | `xmpsyntax_1b.pdf`     | PDF/A-1b     | A defect in each of the header, cross reference and XMP layers   |
 | `metafilter_1b.pdf`    | PDF/A-1b     | A filtered metadata stream, and one that is allowed to be        |
 | `xpacket_1b.pdf`       | PDF/A-1b     | The attributes an XMP packet header may not carry                |
+| `encperm_ua1.pdf`      | PDF/UA-1     | An encrypted document that forbids accessible extraction         |
 
 ### Must-not-fire controls
 
@@ -249,6 +250,7 @@ violation but is exempt, so a firing is a false positive.
 | `xmpsyntax_1b`                            | An x-default alternative inside a packet that does not parse           | ISO 14289-1, 7.2 t33         |
 | `metafilter_1b`                           | A page's metadata stream carrying the same `/Filter`                   | ISO 19005-1, 6.7.2 t2        |
 | `xpacket_1b`                              | A page's packet header carrying the same two attributes                | ISO 19005-1, 6.7.5 t1 and t2 |
+| `encperm_ua1`                             | An otherwise conformant encrypted document, so only `/P` answers       | ISO 14289-1, 7.16 t1         |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -291,6 +293,7 @@ which are covered under [Known divergences](#known-divergences).
 | `contentstream_4.pdf`  | 4    | 8    | 6    | 6    | 6    | 6   | 8    | 7    |
 | `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
 | `docsync_1b.pdf`       | 9    | 6    | 4    | 4    | 4    | 6   | 9    | 8    |
+| `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 5   | 2    | 4    |
 | `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
 | `extprop_2b.pdf`       | 4    | 6    | 3    | 4    | 4    | 6   | 8    | 7    |
 | `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
@@ -2317,15 +2320,42 @@ pikepdf regenerates the packet on save unless both `preserve_pdfa` and
 `fix_metadata_version` are off, and the regenerated header carries neither
 attribute. The builder asserts both survived rather than trusting the flags.
 
+### `encperm_ua1.pdf`
+
+`encperm_ua1.pdf` reaches ISO 14289-1 `7.16/1`, which reads
+`P != null && (P & 512) == 512`. Bit 10 is "extract for accessibility", and a
+document withholding it denies assistive technology the text.
+
+It is the one fixture written byte by byte rather than through pikepdf. qpdf
+never clears bit 10, whatever `pikepdf.Permissions(accessibility=False)` asks
+for: measured at revision 4 and revision 6, `/P` comes out `-1028` either way,
+and `extract=False` clears bit 5 instead. So the builder writes the standard
+security handler directly, ISO 32000-1 Algorithms 2, 3 and 5, with V=4, R=4 and
+a V2 crypt filter.
+
+Writing it by hand buys back determinism the qpdf path cannot offer: qpdf
+refuses a deterministic `/ID` together with encryption, which is why
+`trailer_2b.pdf` is not reproducible. Here the `/ID` is fixed, so the whole
+file, keys included, rebuilds byte for byte.
+
+The metadata stream is encrypted like every other stream. Leaving it in the
+clear made the packet unreadable to both engines, which cost the file its title
+and its `pdfuaid:part` and buried the permissions rule under three unrelated
+ones. That was measured before the fixture settled on encrypting it.
+
+Apart from its unembedded font the document conforms, so at PDF/UA-1 exactly two
+rules answer: the permissions and `7.21.4.1`. A checker reading the permissions
+wrongly shows up immediately rather than behind a neighbour.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 61 x 8 = 488
+fixture is expanded across all eight profiles, so the matrix is 62 x 8 = 496
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 486 of the 488 cells. The two
+fixtures exist to protect, and it holds in 494 of the 496 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
