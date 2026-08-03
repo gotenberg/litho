@@ -237,15 +237,26 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
+	// The property-level audits below are scoped to veraPDF's XMPProperty
+	// object, which XMPCore builds only from a packet it parsed. A packet that
+	// is not well-formed yields none, so it answers for its serialization
+	// (reported just above) and for nothing inside it. Reporting a property
+	// there named a schema violation in a packet litho could not read.
+	packetParses := xmpWellFormed(xmpData)
+
 	// XMP schema validation (§6.7.9 / §6.6.2.3.1).
-	xmpCheckNamespaces(xmpData, part, &results)
+	if packetParses {
+		xmpCheckNamespaces(xmpData, part, &results)
+	}
 
 	if ctx.Err() != nil {
 		return results
 	}
 
 	// Property-level predefined-schema audit (§6.7.9 / §6.6.2.3.1).
-	xmpCheckPredefinedProperties(ctx, xmpData, part, &results)
+	if packetParses {
+		xmpCheckPredefinedProperties(ctx, xmpData, part, &results)
+	}
 
 	if ctx.Err() != nil {
 		return results
@@ -658,6 +669,7 @@ func XMPWellFormed(data []byte) bool {
 func xmpWellFormed(data []byte) bool {
 	dec := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
 	dec.Strict = true
+	declared := map[string]bool{xmlBuiltinNamespace: true}
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
@@ -666,10 +678,51 @@ func xmpWellFormed(data []byte) bool {
 		if err != nil {
 			return false
 		}
-		if start, ok := tok.(xml.StartElement); ok && hasDuplicateAttr(start) {
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if hasDuplicateAttr(start) {
+			return false
+		}
+		if usesUndeclaredPrefix(start, declared) {
 			return false
 		}
 	}
+}
+
+// xmlBuiltinNamespace is the URI the xml prefix is bound to without any
+// declaration (Namespaces in XML 1.0, §3).
+const xmlBuiltinNamespace = "http://www.w3.org/XML/1998/namespace"
+
+// usesUndeclaredPrefix reports whether start names anything through a prefix no
+// declaration binds, recording the declarations start itself carries.
+//
+// Namespaces in XML 1.0, §3 requires every prefix to be declared, and veraPDF's
+// XMPCore treats a violation as a parse failure. Go's encoding/xml does not:
+// it leaves the raw prefix in Name.Space instead of a URI and reads on, so a
+// packet naming <zz:bogus> with no xmlns:zz parsed cleanly here. That is the
+// signal this uses, because a resolved name always carries the declared URI.
+func usesUndeclaredPrefix(start xml.StartElement, declared map[string]bool) bool {
+	for _, attr := range start.Attr {
+		// xmlns:foo="uri" arrives as space "xmlns", local "foo"; the default
+		// declaration xmlns="uri" as local "xmlns" with no space.
+		if attr.Name.Space == "xmlns" || (attr.Name.Space == "" && attr.Name.Local == "xmlns") {
+			declared[attr.Value] = true
+		}
+	}
+	if start.Name.Space != "" && !declared[start.Name.Space] {
+		return true
+	}
+	for _, attr := range start.Attr {
+		if attr.Name.Space == "" || attr.Name.Space == "xmlns" {
+			continue
+		}
+		if !declared[attr.Name.Space] {
+			return true
+		}
+	}
+	return false
 }
 
 // hasDuplicateAttr reports whether start carries the same attribute twice.
