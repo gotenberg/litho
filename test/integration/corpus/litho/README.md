@@ -113,6 +113,7 @@ one deliberately rather than diffing it against a fresh build.
 | `gstateform_1b.pdf`    | PDF/A-1b     | Graphics states, form XObjects and an ICC component count        |
 | `xmpsyntax_1b.pdf`     | PDF/A-1b     | A defect in each of the header, cross reference and XMP layers   |
 | `metafilter_1b.pdf`    | PDF/A-1b     | A filtered metadata stream, and one that is allowed to be        |
+| `xpacket_1b.pdf`       | PDF/A-1b     | The attributes an XMP packet header may not carry                |
 
 ### Must-not-fire controls
 
@@ -247,6 +248,7 @@ violation but is exempt, so a firing is a false positive.
 | `xmpsyntax_1b`                            | A second page carrying no defect of its own                            | ISO 19005-1, 6.1.2 t1        |
 | `xmpsyntax_1b`                            | An x-default alternative inside a packet that does not parse           | ISO 14289-1, 7.2 t33         |
 | `metafilter_1b`                           | A page's metadata stream carrying the same `/Filter`                   | ISO 19005-1, 6.7.2 t2        |
+| `xpacket_1b`                              | A page's packet header carrying the same two attributes                | ISO 19005-1, 6.7.5 t1 and t2 |
 | `patterncs_2b`                            | `P1` and `A1`, each selecting its own ICCBased space                   | ISO 32000-1, 8.6.8           |
 | `usedcs_2b`                               | `Sh0`, a shading declared in /Resources but no `sh` paints             | ISO 19005-2, 6.2.4.3         |
 | `usedcs_2b`                               | `T3Unused`, a Type3 font no `Tf` ever selects                          | ISO 19005-2, 6.2.4.3         |
@@ -327,6 +329,7 @@ which are covered under [Known divergences](#known-divergences).
 | `ttencoding_2b.pdf`    | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
 | `usedcs_2b.pdf`        | 3    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
+| `xpacket_1b.pdf`       | 5    | 9    | 6    | 7    | 6    | 9   | 8    | 7    |
 | `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
 | `xmpsyntax_1b.pdf`     | 7    | 9    | 7    | 7    | 7    | 7   | 9    | 8    |
 | `xobjstate_2b.pdf`     | 6    | 11   | 9    | 9    | 9    | 10  | 7    | 7    |
@@ -2293,15 +2296,36 @@ planted after the save, its dictionary padded with spaces so the object keeps
 its byte length and no cross-reference offset moves. Padding after `endobj`
 instead would cost a `6.1.8/1`.
 
+### `xpacket_1b.pdf`
+
+`xpacket_1b.pdf` reaches ISO 19005-1 `6.7.5/1` and `6.7.5/2`, which read
+`bytes == null` and `encoding == null`. Both attributes ride in the
+`<?xpacket ...?>` processing instruction rather than in any PDF dictionary, so
+reaching the clause means writing the packet header.
+
+The catalog's packet carries both, and they are answered separately, so a
+checker recognising one attribute and not the other shows up as a missing rule
+rather than hidden behind its neighbour.
+
+A second packet hangs off the page carrying the same two attributes. It is the
+control: measured against veraPDF, a packet outside the catalog answers for
+neither test, so a checker matching any packet header rather than the
+document's own shows up as an extra firing. That scope was measured before the
+fixture relied on it.
+
+pikepdf regenerates the packet on save unless both `preserve_pdfa` and
+`fix_metadata_version` are off, and the regenerated header carries neither
+attribute. The builder asserts both survived rather than trusting the flags.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 60 x 8 = 480
+fixture is expanded across all eight profiles, so the matrix is 61 x 8 = 488
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 478 of the 480 cells. The two
+fixtures exist to protect, and it holds in 486 of the 488 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
