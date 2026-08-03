@@ -692,7 +692,7 @@ func xmpPassThroughCharset(_ string, input io.Reader) (io.Reader, error) {
 // is an XML document, so a packet that is not well-formed XML cannot be
 // a valid serialization.
 func xmpWellFormed(data []byte) bool {
-	dec := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
+	dec := xml.NewDecoder(bytes.NewReader(xmpRepairForParse(data)))
 	dec.CharsetReader = xmpPassThroughCharset
 	dec.Strict = true
 	declared := map[string]bool{xmlBuiltinNamespace: true}
@@ -771,6 +771,20 @@ func hasDuplicateAttr(start xml.StartElement) bool {
 		seen[attr.Name] = true
 	}
 	return false
+}
+
+// xmpRepairForParse returns data with everything veraPDF repairs before it
+// parses a packet: a C0 control character (see [xmpFixControlChars]) and a byte
+// run that is not valid UTF-8.
+//
+// XML 1.0 (Fifth Edition) §2.2 admits only characters, so a malformed byte run
+// is not well-formed by the letter of the clause. XMPCore relaxes exactly this:
+// measured against veraPDF 1.30.2, a packet carrying a raw 0xFF 0xFE run in
+// character data draws neither an invalid-serialization verdict (§6.6.2.1 t4 /
+// §6.7.2.1 t4 / §6.7.9 t1) nor an encoding one (t5), and its PDF/A
+// identification still reads. Refusing to parse cost litho all three.
+func xmpRepairForParse(data []byte) []byte {
+	return bytes.ToValidUTF8(xmpFixControlChars(data), []byte(" "))
 }
 
 // maxXMPCharRefDigits bounds the digit run a numeric character reference may
@@ -1338,7 +1352,7 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 
 	// Scan the same bytes xmpWellFormed judged, so a control character veraPDF
 	// repairs before parsing does not cost the packet its identification here.
-	decoder := xml.NewDecoder(bytes.NewReader(xmpFixControlChars(data)))
+	decoder := xml.NewDecoder(bytes.NewReader(xmpRepairForParse(data)))
 	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
 
