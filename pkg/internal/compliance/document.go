@@ -268,6 +268,10 @@ func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catal
 // checkInfoDictPart4 validates Info dict restrictions for PDF/A-4:
 //   - /Info key forbidden in trailer unless /PieceInfo exists in catalog.
 //   - If /Info exists, only /ModDate key allowed.
+//
+// This is the only site that states ISO 19005-4, 6.1.3 t4 and t5. Both tests
+// are once-per-document (veraPDF objects CosDocument and CosInfo), so a second
+// reporter states them twice.
 func checkInfoDictPart4(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {

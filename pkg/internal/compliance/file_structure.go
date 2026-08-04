@@ -68,9 +68,8 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	if part >= 2 {
 		results = append(results, checkUTF8Names(ctx, doc, catalog, profile)...)
 	}
-	if part == 4 {
-		results = append(results, checkPDFA4TrailerInfo(ctx, doc, catalog, profile)...)
-	}
+	// ISO 19005-4, 6.1.3 t4 and t5 are stated once, by checkInfoDictPart4 in
+	// document.go.
 
 	doc.Logger.Debug("compliance.file_structure: checks complete",
 		"profile", profile,
@@ -932,44 +931,6 @@ func resolveFloat(ctx context.Context, doc *document.Document, obj ast.PdfObject
 		return f, nil
 	}
 	return 0, fmt.Errorf("expected numeric, got %T", resolved)
-}
-
-// checkPDFA4TrailerInfo validates PDF/A-4 §6.1.3 t04/t05: /Info key
-// restrictions in PDF/A-4.
-func checkPDFA4TrailerInfo(ctx context.Context, doc *document.Document, catalog ast.PdfDict, _ string) []Violation {
-	trailer := doc.Index.Trailer
-	if trailer == nil {
-		return nil
-	}
-
-	infoObj, hasInfo := trailer["Info"]
-	if !hasInfo {
-		return nil
-	}
-
-	// §6.1.3 t04: /Info is only allowed if /PieceInfo exists in catalog.
-	_, hasPieceInfo := catalog["PieceInfo"]
-	if !hasPieceInfo {
-		return fail(Rule_19005_4_6_1_3_t04, "Info key present in trailer but PieceInfo not in catalog")
-	}
-
-	// §6.1.3 t05: if Info dict is present, it may only contain /ModDate.
-	infoDict, _ := document.ResolveDict(ctx, doc, infoObj)
-	if infoDict != nil {
-		var badKeys []string
-		for key := range infoDict {
-			if key != "ModDate" {
-				badKeys = append(badKeys, string(key))
-			}
-		}
-		slices.Sort(badKeys) // deterministic message order
-		if len(badKeys) > 0 {
-			return failf(Rule_19005_4_6_1_3_t05,
-				"Info dictionary contains keys %v (only ModDate allowed)", badKeys)
-		}
-	}
-
-	return nil
 }
 
 // checkSignatureReferences validates §6.1.12 t02 (PDF/A-2+): if /Perms/DocMDP
