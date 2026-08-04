@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -290,21 +291,30 @@ func checkObjHeaderByteFormat(doc *document.Document, profile string) []Violatio
 			continue
 		}
 
+		// veraPDF keys the rule on the CosIndirect object and asks it the single
+		// boolean spacingCompliesPDFA, which covers the separators and the EOLs
+		// alike, so an object failing several of them answers once. Collect the
+		// reasons and state them together.
+		var reasons []string
+
 		// The byte immediately before the first digit must be an EOL (LF or CR).
 		prevByte := data[digitPos-1]
 		if prevByte != '\n' && prevByte != '\r' {
-			results = append(results, Violation{
-				Rule:    rule,
-				Context: fmt.Sprintf("compliance.file_structure: obj header %d: object number not preceded by EOL marker (0x%02X)", objNum, prevByte),
-			})
+			reasons = append(reasons, fmt.Sprintf(
+				"compliance: obj header %d: object number not preceded by EOL marker (0x%02X)",
+				objNum, prevByte))
 		}
 
 		// The separators inside the header, and the EOL around the obj and
 		// endobj keywords, are judged from the same offset.
 		for _, violation := range doc.ValidateObjectHeaderFormat(entry.Offset, objNum) {
+			reasons = append(reasons, violation.Error())
+		}
+
+		if len(reasons) > 0 {
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: violation.Error(),
+				Context: strings.Join(reasons, "; "),
 			})
 		}
 	}
