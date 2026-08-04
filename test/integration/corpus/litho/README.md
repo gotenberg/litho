@@ -115,6 +115,7 @@ one deliberately rather than diffing it against a fresh build.
 | `metafilter_1b.pdf`    | PDF/A-1b     | A filtered metadata stream, and one that is allowed to be        |
 | `xpacket_1b.pdf`       | PDF/A-1b     | The attributes an XMP packet header may not carry                |
 | `encperm_ua1.pdf`      | PDF/UA-1     | An encrypted document that forbids accessible extraction         |
+| `sigcms_2b.pdf`        | PDF/A-2b     | One signature per digital-signature verdict, and one conforming  |
 
 ### Must-not-fire controls
 
@@ -262,6 +263,9 @@ violation but is exempt, so a firing is a false positive.
 | `docsync_1b`                              | `/Subject` empty against a declared, empty `dc:description`            | ISO 19005-1, 6.7.3 t4        |
 | `syntax_1b`                               | A `/NextPage` named action, one of the four permitted                  | ISO 19005-1, 6.6.1 t2        |
 | `syntax_1b`                               | A second form field carrying no action at all                          | ISO 19005-1, 6.6.1 t3        |
+| `sigcms_2b`                               | `sig0`, a signature conforming on all three of 6.4.3's tests           | ISO 19005-2, 6.4.3           |
+| `sigcms_2b`                               | `sigempty`, a signature field with no `/V` and so no CMS blob          | ISO 19005-2, 6.4.3 t2 and t3 |
+| `sigcms_2b`                               | `text`, a text field the signature tests must not read                 | ISO 32000-1, 12.7.4.1        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -321,6 +325,7 @@ which are covered under [Known divergences](#known-divergences).
 | `patterncs_2b.pdf`     | 3    | 5    | 3    | 3    | 3    | 4   | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 6    | 6    | 6    | 6    | 4   | 3    | 4    |
 | `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
+| `sigcms_2b.pdf`        | 4    | 9    | 7    | 7    | 7    | 5   | 10   | 8    |
 | `structkinds_ua2.pdf`  | 5    | 7    | 6    | 6    | 6    | 3   | 5    | 7    |
 | `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
 | `syntax_1b.pdf`        | 9    | 11   | 9    | 9    | 9    | 9   | 12   | 8    |
@@ -2347,15 +2352,55 @@ Apart from its unembedded font the document conforms, so at PDF/UA-1 exactly two
 rules answer: the permissions and `7.21.4.1`. A checker reading the permissions
 wrongly shows up immediately rather than behind a neighbour.
 
+### `sigcms_2b.pdf`
+
+ISO 19005-2, 6.4.3 splits into three tests over two objects. Test 1 asks the
+PDSignature whether its `/ByteRange` covers the whole document. Tests 2 and 3
+ask the CMS SignedData in `/Contents` whether a signing certificate rides along
+and whether there is exactly one SignerInfo. Nothing about the first is visible
+from the second, so a checker reading only `/ByteRange` reports one third of the
+clause and passes the rest.
+
+Four signature fields carry one verdict each:
+
+| Field  | `/Contents`                | `/ByteRange`    | Answers   |
+| ------ | -------------------------- | --------------- | --------- |
+| `sig0` | one signer, certificate    | covers the file | nothing   |
+| `sig1` | one signer, certificate    | 64 bytes short  | `6.4.3/1` |
+| `sig2` | one signer, no certificate | covers the file | `6.4.3/2` |
+| `sig3` | two signers, certificate   | covers the file | `6.4.3/3` |
+
+Each defect sits on a field that conforms on the other two, and `sig0` conforms
+on all three, so a verdict attached to the wrong field answers on `sig0` too.
+
+The blobs are genuine `openssl cms -sign` output, embedded in the builder rather
+than generated at build time: openssl stamps a signingTime, so its output is not
+reproducible across runs. They are the same bytes as
+`pkg/internal/compliance/testdata/cms_{real,nocert,two}.der`, which is what
+veraPDF 1.30.2 was measured against. An unparseable blob answers tests 2 and 3
+together and would mask the split, so every blob here is real CMS.
+
+`/ByteRange` is written as a ten-digit zero-padded placeholder and patched after
+the save against the offset the signature's own `/Contents` landed at. A
+signature cannot know its offset before the file is laid out, and padding to a
+fixed width is what keeps the patch from moving an xref offset.
+
+`sigempty` and `text` carry no `/AP`, which answers `6.3.3/1` twice. That is the
+fixture's second purpose. A widget annotation is normally merged with its form
+field, per ISO 32000-1, 12.7.4.1, so it is reached by the page `/Annots` walk
+and the `/AcroForm` `/Fields` walk alike, and a checker running both states the
+same missing appearance twice. The four signature widgets carry an `/AP`, so
+this lands on two objects rather than six and the instance count is meaningful.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 62 x 8 = 496
+fixture is expanded across all eight profiles, so the matrix is 63 x 8 = 504
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 494 of the 496 cells. The two
+fixtures exist to protect, and it holds in 502 of the 504 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
