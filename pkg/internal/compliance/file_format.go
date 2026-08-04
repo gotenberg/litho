@@ -118,15 +118,40 @@ func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 		//nolint:gocritic // if-else chain uses function-call predicates; switch is not applicable.
 		if containsXRefPattern(msg) {
 			rule = xrefRule
-			// PDF/A-1 distinguishes t01 (spacing) from t02 (EOL).
-			if PDFAPart(profile) == 1 && isXrefEOLViolation(msg) {
-				rule = Rule_19005_1_6_1_4_t02
+			if PDFAPart(profile) == 1 {
+				// ISO 19005-1, 6.1.4 splits the table in two:
+				// t1 subsectionHeaderSpaceSeparated, t2 xrefEOLMarkersComplyPDFA.
+				if isXrefEOLViolation(msg) {
+					rule = Rule_19005_1_6_1_4_t02
+				}
+			} else if !isXrefEOLViolation(msg) {
+				// Parts 2 and up kept only xrefEOLMarkersComplyPDFA and dropped
+				// the subsection-header spacing requirement, so a spacing defect
+				// has no rule to answer to. Measured: veraPDF 1.30.2 reports
+				// nothing at all for an xref whose only defect is two spaces in
+				// the subsection header.
+				continue
 			}
 		} else if containsStreamPattern(msg) {
+			if isStreamLengthMismatch(msg) {
+				// checkStreamLengths sweeps every stream and states this rule
+				// there, so passing resolution's copy on states it twice. A
+				// stream with no /Length key at all is not swept, and its
+				// message is not this one.
+				continue
+			}
+			eolRule := streamEOLRule(profile)
+			if isStreamEOLViolation(msg) && eolRule.Specification == "" {
+				// ISO 19005-4, 6.1.6.1 states only Length == realLength and the
+				// F/FFilter/FDecodeParms prohibition. Part 4 dropped the
+				// stream-keyword EOL requirement, so there is no rule to answer
+				// to and folding it into t1 states a defect the clause does not.
+				continue
+			}
 			rule = streamRule
 			// PDF/A-1/2/3 attribute a stream-keyword EOL defect to a dedicated
 			// rule (t02), distinct from the /Length-mismatch rule (t01).
-			if eolRule := streamEOLRule(profile); eolRule.Specification != "" && isStreamEOLViolation(msg) {
+			if eolRule.Specification != "" && isStreamEOLViolation(msg) {
 				rule = eolRule
 			}
 		} else if containsObjHeaderPattern(msg) {
@@ -175,6 +200,16 @@ func streamEOLRule(profile string) Rule {
 // isStreamEOLViolation reports whether a format-violation message describes the
 // stream keyword not being followed by a valid EOL, as opposed to a /Length
 // defect (which keeps the t01 attribution).
+// isStreamLengthMismatch reports the parser message for a declared /Length that
+// disagrees with the bytes found. It deliberately does not match "stream missing
+// /Length key": checkStreamLengths skips a stream with no /Length, so that one
+// still has to come through here.
+func isStreamLengthMismatch(msg string) bool {
+	b := []byte(msg)
+	return bytes.Contains(b, []byte("stream /Length")) &&
+		bytes.Contains(b, []byte("does not match actual byte count"))
+}
+
 func isStreamEOLViolation(msg string) bool {
 	b := []byte(msg)
 	return bytes.Contains(b, []byte("stream keyword")) &&
@@ -297,10 +332,19 @@ func checkXRefTableByteFormat(doc *document.Document, profile string) []Violatio
 	var results []Violation
 	for _, v := range violations {
 		rule := xrefFormatRule(profile)
-		// PDF/A-1 distinguishes t01 (subsection header spacing) from
-		// t02 (EOL after xref keyword). Other parts use a single rule.
-		if PDFAPart(profile) == 1 && isXrefEOLViolation(v.Error()) {
-			rule = Rule_19005_1_6_1_4_t02
+		if PDFAPart(profile) == 1 {
+			// ISO 19005-1, 6.1.4 distinguishes t01 (subsection header spacing)
+			// from t02 (EOL after the xref keyword).
+			if isXrefEOLViolation(v.Error()) {
+				rule = Rule_19005_1_6_1_4_t02
+			}
+		} else if !isXrefEOLViolation(v.Error()) {
+			// Parts 2 and up kept only xrefEOLMarkersComplyPDFA. They have no
+			// subsection-header spacing requirement, so a spacing defect has no
+			// rule to answer to. Measured: veraPDF 1.30.2 reports nothing at all
+			// for an xref whose only defect is two spaces in its subsection
+			// header, while ISO 19005-1 answers 6.1.4 t1 for the same bytes.
+			continue
 		}
 		results = append(results, Violation{
 			Rule:    rule,
