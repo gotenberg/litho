@@ -189,6 +189,8 @@ func checkSignatureByteRange(ctx context.Context, doc *document.Document, field 
 	if err != nil || sig == nil {
 		return
 	}
+	checkSignatureContents(ctx, doc, sig, part, results)
+
 	brArr, err := document.ResolveArray(ctx, doc, sig["ByteRange"])
 	if err != nil || len(brArr) != 4 {
 		return
@@ -229,6 +231,48 @@ func checkSignatureByteRange(ctx context.Context, doc *document.Document, field 
 			"signature /ByteRange [%d %d %d %d] does not match the signed revision (expected [%d %d %d %d])",
 			declared[0], declared[1], declared[2], declared[3],
 			actual[0], actual[1], actual[2], actual[3])...)
+	}
+}
+
+// checkSignatureContents validates ISO 19005-2/3 §6.4.3 t2 and t3 against the
+// CMS SignedData a signature carries in /Contents: the signature shall be
+// accompanied by its signing certificate (t2), and shall have exactly one
+// signer (t3).
+//
+// A blob that does not parse fails both, which is what veraPDF reports: with no
+// SignedData there is no certificate and no signer. Measured against veraPDF
+// 1.30.2 on four blobs built with openssl cms: one signer with its certificate
+// fires neither test, `-nocerts` fires t2 alone, two `-signer` arguments fire
+// t3 alone, and a junk blob fires both.
+func checkSignatureContents(ctx context.Context, doc *document.Document, sig ast.PdfDict, part int, results *[]Violation) {
+	contents, ok := sig["Contents"]
+	if !ok {
+		return // no blob to judge; §6.4.3 t1 answers for a malformed signature.
+	}
+	raw, err := document.ResolveString(ctx, doc, contents)
+	if err != nil {
+		doc.Logger.Debug("compliance.forms: cannot resolve signature /Contents", "error", err)
+		return
+	}
+
+	certRule, signerRule := Rule_19005_2_6_4_3_t02, Rule_19005_2_6_4_3_t03
+	if part == 3 {
+		certRule, signerRule = Rule_19005_3_6_4_3_t02, Rule_19005_3_6_4_3_t03
+	}
+
+	info, err := parseCMSSignature([]byte(raw))
+	if err != nil {
+		*results = append(*results, failf(certRule, "signature /Contents is not parseable CMS SignedData")...)
+		*results = append(*results, failf(signerRule, "signature /Contents is not parseable CMS SignedData")...)
+		return
+	}
+
+	if !info.HasCertificate {
+		*results = append(*results, failf(certRule, "signature carries no signing certificate")...)
+	}
+	if info.SignerCount != 1 {
+		*results = append(*results, failf(signerRule,
+			"signature has %d SignerInfo entries, expected exactly 1", info.SignerCount)...)
 	}
 }
 

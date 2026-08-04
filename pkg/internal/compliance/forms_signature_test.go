@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -50,7 +51,12 @@ func sigFieldViolations(t *testing.T, data []byte) []Violation {
 	}
 	var results []Violation
 	checkSignatureByteRange(ctx, doc, field, 2, &results)
-	return results
+	// These fixtures carry a placeholder /Contents rather than real CMS
+	// SignedData, so the §6.4.3 t2 and t3 checks legitimately answer for it.
+	// This helper is about the /ByteRange rule, so keep only t1.
+	return slices.DeleteFunc(results, func(v Violation) bool {
+		return v.Rule != Rule_19005_2_6_4_3_t01
+	})
 }
 
 func TestCheckSignatureByteRange(t *testing.T) {
@@ -83,7 +89,7 @@ func TestCheckSignatureByteRange(t *testing.T) {
 	t.Run("correct range passes", func(t *testing.T) {
 		t.Parallel()
 		if v := sigFieldViolations(t, buildSignedPDF(actual)); len(v) != 0 {
-			t.Errorf("expected no violation for a correct /ByteRange, got %v", v)
+			t.Errorf("expected no §6.4.3 t1 violation for a correct /ByteRange, got %v", v)
 		}
 	})
 
