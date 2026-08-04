@@ -3101,122 +3101,130 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 		}
 
 		for prop, pv := range props {
-			expectedType, known := registry[prop]
-			// pdfaid:rev exists only in the PDF/A-4 identification schema.
-			// The XMP 2005 catalog (ISO 19005-2/3 §6.6.2.3.1, mirrored in
-			// xmpPredefined2005Extra) predefines part/conformance/amd/corr
-			// only, so rev is an unknown property for parts 2 and 3.
-			if known && (part == 2 || part == 3) && ns == xmpPdfaIDNamespace && prop == "rev" {
+			// veraPDF instantiates one object per observed property and asks it
+			// `isValueTypeCorrect`, so however many ways a property fails its
+			// predefined type, the rule answers for it once.
+			if details := xmpPropertyTypeDetails(part, ns, prop, pv, registry); len(details) > 0 {
+				*results = append(*results, xmpPropertyTypeRule(part, ns, prop, strings.Join(details, "; "))...)
+			}
+		}
+	}
+}
+
+// xmpPropertyTypeDetails reports every way one observed XMP property fails the
+// type its predefined schema gives it. The caller states the rule once for the
+// property, whatever comes back.
+func xmpPropertyTypeDetails(part int, ns, prop string, pv xmpPropertyValue, registry map[string]xmpPropType) []string {
+	expectedType, known := registry[prop]
+	// pdfaid:rev exists only in the PDF/A-4 identification schema. The XMP 2005
+	// catalog (ISO 19005-2/3 §6.6.2.3.1, mirrored in xmpPredefined2005Extra)
+	// predefines part/conformance/amd/corr only, so rev is an unknown property
+	// for parts 2 and 3.
+	if known && (part == 2 || part == 3) && ns == xmpPdfaIDNamespace && prop == "rev" {
+		known = false
+	}
+	// For PDF/A-1: properties must be in the 2004 XMP spec. Properties added in
+	// later spec versions are "unknown."
+	if known && part == 1 {
+		if part1Props, ok := xmpPart1Properties[ns]; ok {
+			if _, inPart1 := part1Props[prop]; !inPart1 {
 				known = false
 			}
-			// For PDF/A-1: properties must be in the 2004 XMP spec.
-			// Properties added in later spec versions are "unknown."
-			if known && part == 1 {
-				if part1Props, ok := xmpPart1Properties[ns]; ok {
-					if _, inPart1 := part1Props[prop]; !inPart1 {
-						known = false
-					}
-				}
-				// Apply part-1-specific type overrides for properties
-				// whose type differs between the 2004 and later XMP specs.
-				if known {
-					if nsOverrides, ok := xmpPart1TypeOverrides[ns]; ok {
-						if overrideType, ok := nsOverrides[prop]; ok {
-							expectedType = overrideType
-						}
-					}
-				}
-			}
-			if !known {
-				// Property name not defined in predefined schema. Violation.
-				*results = append(*results, xmpPropertyTypeRule(part, ns, prop, "unknown property name")...)
-				continue
-			}
-
-			// xmpPropAny matches anything.
-			if expectedType == xmpPropAny {
-				continue
-			}
-
-			// Check container type properties (Alt/Seq/Bag).
-			if isContainerPropType(expectedType) {
-				expectedCont := propTypeToContainerType(expectedType)
-				if pv.containerType != expectedCont {
-					// No simple-as-Bag shorthand exemption: in the 2005 XMP
-					// spec (parts 2/3) photoshop:SupplementalCategories is a
-					// Bag Text, so a simple value is a type mismatch. Part 1
-					// reads it as plain Text via xmpPart1TypeOverrides, so it
-					// never reaches here.
-					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-						fmt.Sprintf("observed=%s expected=%s",
-							xmpContainerTypeName(pv.containerType),
-							xmpContainerTypeName(expectedCont)))...)
-				}
-
-				// Validate Alt container items have xml:lang attribute.
-				// Struct-valued Alt items (e.g., xmp:Thumbnails) don't need xml:lang.
-				if expectedType == xmpPropAlt && !pv.hasLangAttr && !pv.isStructured {
-					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-						"Alt container items missing xml:lang attribute")...)
-				}
-
-				// Validate container item value formats using the element type registry.
-				if elemTypes, nsOK := xmpContainerElementType[ns]; nsOK {
-					if elemType, propOK := elemTypes[prop]; propOK {
-						for i, item := range pv.items {
-							if !validateXMPValue(elemType, item) {
-								*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-									fmt.Sprintf("item[%d] value %q does not match expected type", i, item))...)
-							}
-						}
-					}
-				}
-
-				continue
-			}
-
-			// Check simple value type properties.
-			if isSimplePropType(expectedType) {
-				// Expected simple value. Should NOT be in a container.
-				if pv.containerType != xmpContSimple {
-					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-						fmt.Sprintf("observed=%s expected=Simple",
-							xmpContainerTypeName(pv.containerType)))...)
-				}
-
-				// Validate simple property value format.
-				if pv.containerType == xmpContSimple && pv.value != "" {
-					valid := validateXMPValue(expectedType, pv.value)
-					// EXIF, TIFF, and xmpDM properties typed as Real accept rational "N/D" notation.
-					if !valid && expectedType == xmpPropReal && acceptsRationalNotation(ns) {
-						valid = isValidXMPRealOrRational(pv.value)
-					}
-					if !valid {
-						*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-							fmt.Sprintf("value %q does not match expected type", pv.value))...)
-					}
-				}
-
-				continue
-			}
-
-			// Check struct type properties.
-			if expectedType == xmpPropStruct {
-				// Expected struct. Should NOT be in a container.
-				if pv.containerType != xmpContSimple {
-					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-						fmt.Sprintf("observed=%s expected=Simple",
-							xmpContainerTypeName(pv.containerType)))...)
-				}
-
-				// Verify struct property has sub-elements, not plain text.
-				if !pv.isStructured && pv.containerType == xmpContSimple {
-					*results = append(*results, xmpPropertyTypeRule(part, ns, prop,
-						"struct property has plain text value instead of sub-elements")...)
+		}
+		// Apply part-1-specific type overrides for properties whose type
+		// differs between the 2004 and later XMP specs.
+		if known {
+			if nsOverrides, ok := xmpPart1TypeOverrides[ns]; ok {
+				if overrideType, ok := nsOverrides[prop]; ok {
+					expectedType = overrideType
 				}
 			}
 		}
 	}
+	if !known {
+		return []string{"unknown property name"}
+	}
+
+	// xmpPropAny matches anything.
+	if expectedType == xmpPropAny {
+		return nil
+	}
+
+	var details []string
+
+	// Check container type properties (Alt/Seq/Bag).
+	if isContainerPropType(expectedType) {
+		expectedCont := propTypeToContainerType(expectedType)
+		if pv.containerType != expectedCont {
+			// No simple-as-Bag shorthand exemption: in the 2005 XMP spec (parts
+			// 2/3) photoshop:SupplementalCategories is a Bag Text, so a simple
+			// value is a type mismatch. Part 1 reads it as plain Text via
+			// xmpPart1TypeOverrides, so it never reaches here.
+			details = append(details, fmt.Sprintf("observed=%s expected=%s",
+				xmpContainerTypeName(pv.containerType),
+				xmpContainerTypeName(expectedCont)))
+		}
+
+		// Validate Alt container items have xml:lang attribute. Struct-valued
+		// Alt items (e.g., xmp:Thumbnails) don't need xml:lang.
+		if expectedType == xmpPropAlt && !pv.hasLangAttr && !pv.isStructured {
+			details = append(details, "Alt container items missing xml:lang attribute")
+		}
+
+		// Validate container item value formats using the element type registry.
+		if elemTypes, nsOK := xmpContainerElementType[ns]; nsOK {
+			if elemType, propOK := elemTypes[prop]; propOK {
+				for i, item := range pv.items {
+					if !validateXMPValue(elemType, item) {
+						details = append(details,
+							fmt.Sprintf("item[%d] value %q does not match expected type", i, item))
+					}
+				}
+			}
+		}
+
+		return details
+	}
+
+	// Check simple value type properties.
+	if isSimplePropType(expectedType) {
+		// Expected simple value. Should NOT be in a container.
+		if pv.containerType != xmpContSimple {
+			details = append(details, fmt.Sprintf("observed=%s expected=Simple",
+				xmpContainerTypeName(pv.containerType)))
+		}
+
+		// Validate simple property value format.
+		if pv.containerType == xmpContSimple && pv.value != "" {
+			valid := validateXMPValue(expectedType, pv.value)
+			// EXIF, TIFF, and xmpDM properties typed as Real accept rational "N/D" notation.
+			if !valid && expectedType == xmpPropReal && acceptsRationalNotation(ns) {
+				valid = isValidXMPRealOrRational(pv.value)
+			}
+			if !valid {
+				details = append(details,
+					fmt.Sprintf("value %q does not match expected type", pv.value))
+			}
+		}
+
+		return details
+	}
+
+	// Check struct type properties.
+	if expectedType == xmpPropStruct {
+		// Expected struct. Should NOT be in a container.
+		if pv.containerType != xmpContSimple {
+			details = append(details, fmt.Sprintf("observed=%s expected=Simple",
+				xmpContainerTypeName(pv.containerType)))
+		}
+
+		// Verify struct property has sub-elements, not plain text.
+		if !pv.isStructured && pv.containerType == xmpContSimple {
+			details = append(details, "struct property has plain text value instead of sub-elements")
+		}
+	}
+
+	return details
 }
 
 // propTypeToContainerType converts a container xmpPropType to xmpContainerType.
