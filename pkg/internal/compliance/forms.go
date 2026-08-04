@@ -66,12 +66,14 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 	}
 
-	// §6.9 t2: a widget annotation reached through a page /Annots array but not
-	// through /AcroForm /Fields (an orphaned widget, or a document carrying
-	// widgets with no /AcroForm) still requires an appearance dictionary.
-	// veraPDF keys the rule on every widget annotation, so the field walk alone
-	// under-detects.
-	if part > 0 {
+	// ISO 19005-1, 6.9 t2: a widget annotation reached through a page /Annots
+	// array but not through /AcroForm /Fields (an orphaned widget, or a document
+	// carrying widgets with no /AcroForm) still requires an appearance
+	// dictionary. veraPDF keys the rule on every widget annotation, so the field
+	// walk alone under-detects. Parts 2 and up state the requirement on the
+	// annotation instead, and checkAnnotAppearance already walks every page
+	// /Annots entry for them.
+	if part == 1 {
 		checkOrphanWidgetAppearances(ctx, doc, vctx, covered, part, &results)
 	}
 
@@ -431,8 +433,8 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 		return
 	}
 
-	// §6.9/6.4: Form field appearances. Every field must have /AP.
-	if part > 0 {
+	// ISO 19005-1, 6.9 t2: form field appearances. Every field must have /AP.
+	if part == 1 {
 		checkFieldAppearance(ctx, doc, field, part, fieldIdx, pageAnnotObjs[fieldObjNum], results)
 	}
 
@@ -572,15 +574,20 @@ func checkNeedAppearances(ctx context.Context, doc *document.Document, acroForm 
 }
 
 // checkFieldAppearance validates that a form field has an /AP appearance
-// dictionary. isPageAnnot reports whether the field is reached through a page
-// /Annots array, i.e. is a rendered annotation.
+// dictionary under ISO 19005-1, 6.9 t2. isPageAnnot reports whether the field
+// is reached through a page /Annots array, i.e. is a rendered annotation.
+//
+// Only part 1 states the requirement on the field. ISO 19005-2/3/4, 6.3.3 t1
+// states it on the widget annotation, which checkAnnotAppearance already
+// reports for every page /Annots entry, so running this as well stated the
+// same violation twice for every merged field/widget (ISO 32000-1, 12.7.4.1).
 func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast.PdfDict, part int, fieldIdx int, isPageAnnot bool, results *[]Violation) {
-	// veraPDF scopes §6.3.3 t1 to the PDAnnot object: an annotation reached
-	// through a page /Annots array. A widget present only in the /AcroForm
-	// /Fields tree but never referenced by a page /Annots array renders nothing
-	// and is out of scope, as is a broken /Kids reference resolving to an empty
-	// dict. Checking either reports a missing appearance veraPDF never raises
-	// (qpdf shared-unnamed-field obj 30, a /Fields-only widget; form-errors obj 0).
+	// veraPDF scopes the rule to the annotation object: one reached through a
+	// page /Annots array. A widget present only in the /AcroForm /Fields tree
+	// but never referenced by a page /Annots array renders nothing and is out of
+	// scope, as is a broken /Kids reference resolving to an empty dict. Checking
+	// either reports a missing appearance veraPDF never raises (qpdf
+	// shared-unnamed-field obj 30, a /Fields-only widget; form-errors obj 0).
 	if !isPageAnnot {
 		return
 	}
@@ -602,40 +609,10 @@ func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast
 		return
 	}
 
-	// Zero-area widgets are exempt from appearance requirements, except
-	// under PDF/A-1. ISO 19005-1 §6.9 requires every widget annotation to
-	// carry an appearance dictionary regardless of its /Rect area, so the
-	// zero-area exemption does not apply to part 1.
-	if part != 1 && isZeroAreaRect(ctx, doc, field) {
-		return
-	}
-
+	// No zero-area exemption here: ISO 19005-1, 6.9 requires every widget
+	// annotation to carry an appearance dictionary whatever its /Rect area.
+	// Parts 2 and up do exempt one, and checkAnnotAppearance applies it.
 	*results = append(*results, failf(fieldAppearanceRule(part), "field %d: missing /AP appearance dictionary", fieldIdx)...)
-}
-
-// isZeroAreaRect returns true if the field's /Rect has zero area
-// (x1==x3 && y1==y4), which exempts annotations from requiring appearances.
-func isZeroAreaRect(ctx context.Context, doc *document.Document, field ast.PdfDict) bool {
-	rectObj, ok := field["Rect"]
-	if !ok {
-		return false
-	}
-
-	rect, err := document.ResolveArray(ctx, doc, rectObj)
-	if err != nil || len(rect) != 4 {
-		return false
-	}
-
-	var vals [4]float64
-	for i, obj := range rect {
-		v, err := resolveNumber(obj)
-		if err != nil {
-			return false
-		}
-		vals[i] = v
-	}
-
-	return vals[0] == vals[2] && vals[1] == vals[3]
 }
 
 // widgetHasAppearance checks whether any widget annotation child (/Kids) of

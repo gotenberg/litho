@@ -372,12 +372,3 @@ func safeReadHeader(ctx context.Context, doc *document.Document, n int64) ([]byt
 	}
 	return doc.ReadFileBytes(ctx, 0, n)
 }
-
-// resolveNumber resolves a PdfObject to a float64, handling both PdfInt and
-// PdfReal types. Returns (0, error) if the object is neither type.
-func resolveNumber(obj ast.PdfObject) (float64, error) {
-	if f, ok := document.Number(obj); ok {
-		return f, nil
-	}
-	return 0, fmt.Errorf("expected number, got %T", obj)
-}
