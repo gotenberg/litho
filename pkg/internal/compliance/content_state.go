@@ -262,6 +262,11 @@ var operatorResourceCategory = map[string]ast.PdfName{
 // checkContentStreamResources validates that all named resources referenced by
 // operators in the content stream exist in the associated Resources dictionary,
 // and that no undefined operators are used.
+//
+// reportUndefinedOps selects who states ISO 19005-2/3/4, 6.2.2 t1. A page
+// content stream is already walked by checkPageContent, which states it there;
+// pass false for those and true for the streams that walk does not reach, so
+// the rule is stated exactly once per undefined operator.
 func checkContentStreamResources(
 	ctx context.Context,
 	doc *document.Document,
@@ -270,6 +275,7 @@ func checkContentStreamResources(
 	inherited ast.PdfDict,
 	part int,
 	pageNum int,
+	reportUndefinedOps bool,
 ) []Violation {
 	ops, err := content.ParseStreamData(ctx, streamData)
 	if err != nil {
@@ -277,7 +283,7 @@ func checkContentStreamResources(
 		return nil
 	}
 
-	results := checkContentStreamResourcesOps(ctx, doc, ops, resources, inherited, part, pageNum)
+	results := checkContentStreamResourcesOps(ctx, doc, ops, resources, inherited, part, pageNum, reportUndefinedOps)
 
 	// Check inline image /Intent values from parsed BI operations.
 	results = append(results, checkInlineImageIntent(ops, part, pageNum)...)
@@ -296,6 +302,7 @@ func checkContentStreamResourcesOps(
 	inherited ast.PdfDict,
 	part int,
 	pageNum int,
+	reportUndefinedOps bool,
 ) []Violation {
 	// ISO 19005-2/3/4 §6.2.2 splits a name absent from the stream's own
 	// resources by where it does resolve: reachable only through Pages-tree
@@ -360,13 +367,15 @@ func checkContentStreamResourcesOps(
 			}
 		}
 
-		// Test 1: check for undefined operators.
-		if !validPDFOperators[op.Operator] && undefinedRule.Specification != "" {
-			key := "op:" + op.Operator
-			if !reported[key] {
-				reported[key] = true
+		// Test 1: check for undefined operators. veraPDF keys the rule on the
+		// operator occurrence rather than the operator name, so a repeated
+		// undefined operator answers once per use.
+		if !validPDFOperators[op.Operator] {
+			if reportUndefinedOps && undefinedRule.Specification != "" {
 				results = append(results, failf(undefinedRule, "page %d: undefined operator %q", pageNum, op.Operator)...)
 			}
+			// No operator outside validPDFOperators carries a resource
+			// category, so nothing below applies to it.
 			continue
 		}
 

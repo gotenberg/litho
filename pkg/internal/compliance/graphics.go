@@ -44,7 +44,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				if pagesDict, err := document.ResolveDict(ctx, doc, vctx.catalog["Pages"]); err == nil && pagesDict != nil {
 					inheritedRes = resolveResources(ctx, doc, pagesDict)
 				}
-				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, ownRes, inheritedRes, part, i+1)...)
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, ownRes, inheritedRes, part, i+1, false)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 				// Check inline image filters for forbidden LZWDecode (§6.1.10 t2).
@@ -130,7 +130,7 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		// resource names against its own /Resources first. A name found only
 		// in the PAGE's resources is an inherited reference (t2), so the page
 		// resources serve as the fallback scope when scanning the form stream.
-		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum)...)
+		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum, true)...)
 	}
 	return results
 }
@@ -182,7 +182,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 			if err != nil || len(data) == 0 {
 				continue
 			}
-			results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum)...)
+			results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum, true)...)
 		}
 	}
 	return results
