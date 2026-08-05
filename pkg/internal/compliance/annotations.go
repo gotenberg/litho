@@ -152,8 +152,12 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 				results = append(results, checkAnnotColorArrays(annot, outputCS, hasOutputProfile, loc)...)
 			}
 
-			// 3D stream Subtype must be U3D or PRC (PDF/A-4e).
-			if part == 4 && subtype == "3D" {
+			// 3D stream Subtype must be U3D or PRC. Only ISO 19005-4's
+			// engineering conformance states it: PDF/A-4 and PDF/A-4f forbid
+			// the 3D annotation outright and carry no PD3DStream rule, so
+			// reading its stream there answers a question those levels never
+			// ask.
+			if part == 4 && level == 'e' && subtype == "3D" {
 				results = append(results, check3DStreamSubtype(ctx, doc, annot, loc)...)
 			}
 		}
