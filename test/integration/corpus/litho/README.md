@@ -117,6 +117,7 @@ one deliberately rather than diffing it against a fresh build.
 | `encperm_ua1.pdf`      | PDF/UA-1     | An encrypted document that forbids accessible extraction         |
 | `sigcms_2b.pdf`        | PDF/A-2b     | One signature per digital-signature verdict, and one conforming  |
 | `docmdp_2b.pdf`        | PDF/A-2b     | A certifying signature's references, and a real too small to be  |
+| `charset_1b.pdf`       | PDF/A-1b     | What a subset font's `/CharSet` and `/CIDSet` have to list       |
 
 ### Must-not-fire controls
 
@@ -269,6 +270,8 @@ violation but is exempt, so a firing is a false positive.
 | `sigcms_2b`                               | `text`, a text field the signature tests must not read                 | ISO 32000-1, 12.7.4.1        |
 | `docmdp_2b`                               | Second `/Reference` entry, carrying no digest key at all               | ISO 19005-2, 6.1.12 t2       |
 | `docmdp_2b`                               | A real of `1` beside the denormal, and a conforming signature          | ISO 19005-2, 6.1.13 t5       |
+| `charset_1b`                              | `T1Full` and `CIDFull`, subsets whose entry lists every glyph          | ISO 19005-1, 6.3.5           |
+| `charset_1b`                              | `T1Whole` and `CIDWhole`, embedded fonts with no subset prefix         | subset-prefix exemption      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -288,6 +291,7 @@ which are covered under [Known divergences](#known-divergences).
 | `annots_1b.pdf`        | 14   | 14   | 12   | 12   | 12   | 10  | 12   | 8    |
 | `annotstruct_ua2.pdf`  | 12   | 12   | 12   | 12   | 14   | 10  | 8    | 13   |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 3    |
+| `charset_1b.pdf`       | 4    | 7    | 4    | 5    | 4    | 3   | 9    | 7    |
 | `cmaps_2b.pdf`         | 6    | 10   | 7    | 8    | 7    | 8   | 12   | 12   |
 | `complex_1b.pdf`       | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
 | `complex_2a.pdf`       | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
@@ -2432,15 +2436,65 @@ dropped: veraPDF builds no font object for an unrecognised subtype, so it
 reaches neither 6.2.11.2 t2 nor the embedding rules behind it. Carrying it would
 have baked a permanent rule-set divergence into the corpus.
 
+### `charset_1b.pdf`
+
+A subset font has to declare which glyphs it kept. Two entries carry that
+declaration, `/CharSet` for a Type 1 subset and `/CIDSet` for a CID subset, and
+four rules read them at two different strictnesses:
+
+| Rule                         | Reads                                    |
+| ---------------------------- | ---------------------------------------- |
+| ISO 19005-1, 6.3.5 t2/t3     | the entry has to be there                |
+| ISO 19005-2/3, 6.2.11.4.2 t1 | a `/CharSet` present lists every glyph   |
+| ISO 19005-2/3, 6.2.11.4.2 t2 | a `/CIDSet` present identifies every CID |
+| ISO 14289-1, 7.21.4.2 t1/t2  | the PDF/UA-1 spelling of the same two    |
+
+Part 1 requires the entry to exist. Parts 2 and 3 permit it to be absent and
+judge it only once present, so an absent entry and an incomplete one are
+different defects and no single font can carry both. Eight fonts carry one
+status each, four per family:
+
+| Font       | Entry             | Answers                |
+| ---------- | ----------------- | ---------------------- |
+| `T1None`   | no `/CharSet`     | 6.3.5 t2, part 1 only  |
+| `T1Short`  | `/CharSet (/A)`   | the completeness tests |
+| `T1Full`   | `/CharSet (/A/B)` | nothing                |
+| `T1Whole`  | no `/CharSet`     | nothing: not a subset  |
+| `CIDNone`  | no `/CIDSet`      | 6.3.5 t3, part 1 only  |
+| `CIDShort` | `/CIDSet` less 2  | the completeness tests |
+| `CIDFull`  | full `/CIDSet`    | nothing                |
+| `CIDWhole` | no `/CIDSet`      | nothing: not a subset  |
+
+Both families answer at every profile, so the file is a masking probe twice
+over: a checker that reports the first offending font and stops reports one
+rule where two are due. The `Full` fonts are the conforming case of the entry
+the others break, and the `Whole` fonts are the subset-prefix exemption planted
+as a control.
+
+Every subset prefix differs. veraPDF keys a font object on its name, so two
+fonts sharing `ABCDEF+LithoCFF` would collapse into one and the control would
+never be judged apart from the defect.
+
+`T1Short` paints `B`, which is what makes it answer at part 1 too. ISO 19005-1,
+6.3.5 t2 is one-directional and scoped to the glyphs the content paints, while
+ISO 19005-2, 6.2.11.4.2 t1 compares against the whole program. A `/CharSet` of
+`(/A)` on a font that paints `B` fails both readings.
+
+The font programs come from `_cff.py` and `_truetype.py`. A validator has to
+parse a real program to know which glyphs it defines, so a placeholder stream
+leaves every completeness test silent. `_cff.py` emits a bare CFF, the `Type1C`
+form of `/FontFile3`, the same way `_truetype.py` emits a TrueType: writing
+them keeps the builders' one dependency, pikepdf, the only one.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 64 x 8 = 512
+fixture is expanded across all eight profiles, so the matrix is 65 x 8 = 520
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 510 of the 512 cells. The two
+fixtures exist to protect, and it holds in 518 of the 520 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
