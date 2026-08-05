@@ -240,60 +240,90 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 }
 
 // checkTrailerID validates §6.1.3: trailer must contain /ID key.
+//
+// The presence rule and the linearized-consistency rule are separate tests over
+// the same key, so a trailer with no /ID answers both: it fails presence, and
+// its absent value cannot equal the /ID the last trailer carries.
 func checkTrailerID(doc *document.Document, profile string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		return fail(trailerIDRule(profile), "no trailer dictionary")
 	}
 
+	var results []Violation
 	idObj, hasID := trailer["ID"]
-	if !hasID {
-		return fail(trailerIDRule(profile), "missing ID in trailer")
-	}
-
-	// Validate the ID array: must have 2 non-empty string elements.
-	if arr, ok := idObj.(ast.PdfArray); ok {
-		if len(arr) == 0 {
-			return fail(trailerIDRule(profile), "empty ID array in trailer")
-		}
-		if len(arr) >= 2 {
-			id0, _ := arr[0].(ast.PdfString)
-			id1, _ := arr[1].(ast.PdfString)
-			if len(id0) == 0 || len(id1) == 0 {
-				return fail(trailerIDRule(profile), "ID array contains empty string element")
+	switch {
+	case !hasID:
+		results = fail(trailerIDRule(profile), "missing ID in trailer")
+	default:
+		// Validate the ID array: must have 2 non-empty string elements.
+		if arr, ok := idObj.(ast.PdfArray); ok {
+			switch {
+			case len(arr) == 0:
+				results = fail(trailerIDRule(profile), "empty ID array in trailer")
+			case len(arr) >= 2:
+				id0, _ := arr[0].(ast.PdfString)
+				id1, _ := arr[1].(ast.PdfString)
+				if len(id0) == 0 || len(id1) == 0 {
+					results = fail(trailerIDRule(profile), "ID array contains empty string element")
+				}
 			}
 		}
 	}
 
 	// Check linearized ID consistency (§6.1.3 t04). PDF/A-1 only.
 	if PDFAPart(profile) == 1 && doc.Linearization != nil {
-		results := checkLinearizedID(doc, profile)
-		if len(results) > 0 {
-			return results
-		}
+		results = append(results, checkLinearizedID(doc)...)
 	}
 
-	return nil
+	return results
 }
 
-// checkLinearizedID validates §6.1.3 t04: in a linearized PDF, the trailer must
-// have an /ID key. The two entries in the ID array represent the original file
-// ID and the modified file ID. They legitimately differ in linearized PDFs
-// (the second entry is updated during linearization), so only presence is
-// checked, not equality.
-func checkLinearizedID(doc *document.Document, _ string) []Violation {
-	trailer := doc.Index.Trailer
-	idObj, hasID := trailer["ID"]
-	if !hasID {
+// checkLinearizedID validates ISO 19005-1, 6.1.3 test 4: when a linearized file
+// states /ID in both the first-page trailer and the last trailer, the two shall
+// be identical. The test reads `(isLinearized != true) || lastID == null ||
+// (firstPageID == lastID)`, so a last trailer with no /ID passes and a
+// first-page trailer with no /ID fails: an absent value equals nothing.
+//
+// Both array elements count. A file whose first-page trailer differs from the
+// last one in either element was measured to fail on veraPDF 1.30.2.
+func checkLinearizedID(doc *document.Document) []Violation {
+	last := doc.Index.LastTrailer
+	if last == nil {
 		return nil
 	}
-
-	idArr, ok := idObj.(ast.PdfArray)
-	if !ok || len(idArr) < 2 {
+	lastID, hasLast := last["ID"]
+	if !hasLast {
 		return nil
 	}
+	if sameFileID(doc.Index.Trailer["ID"], lastID) {
+		return nil
+	}
+	return fail(Rule_19005_1_6_1_3_t04,
+		"linearized file: first-page trailer /ID differs from the last trailer /ID")
+}
 
-	return nil
+// sameFileID reports whether two trailer /ID values are the same file
+// identifier: the same number of elements, each holding the same bytes. A
+// missing value equals nothing, including another missing value, because the
+// caller only reaches it once one side is known present.
+func sameFileID(a, b ast.PdfObject) bool {
+	aArr, aOK := a.(ast.PdfArray)
+	bArr, bOK := b.(ast.PdfArray)
+	if !aOK || !bOK || len(aArr) != len(bArr) {
+		return false
+	}
+	for i := range aArr {
+		aStr, ok := aArr[i].(ast.PdfString)
+		if !ok {
+			return false
+		}
+		bStr, ok := bArr[i].(ast.PdfString)
+		if !ok || aStr != bStr {
+			return false
+		}
+	}
+	return true
 }
 
 // checkEncryptionForbidden validates §6.1.3: /Encrypt must not be in trailer.

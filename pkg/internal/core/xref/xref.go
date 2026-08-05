@@ -34,6 +34,13 @@ type XRefEntry struct {
 type Index struct {
 	Entries map[int]XRefEntry
 	Trailer ast.PdfDict
+
+	// LastTrailer is the trailer of the oldest section on the /Prev chain. In
+	// a linearized file that is the main trailer at the end, while Trailer is
+	// the first-page trailer at the top. ISO 19005-1, 6.1.3 test 4 compares
+	// the two /ID values, which Trailer alone cannot answer. It is nil when no
+	// trailer was parsed and equal to Trailer when the file has one section.
+	LastTrailer ast.PdfDict
 }
 
 func readInt(data []byte, width int) int64 {

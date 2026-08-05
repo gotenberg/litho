@@ -101,6 +101,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
 			}
 			prev = p
+			d.Index.LastTrailer = trailerDict
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = trailerDict
 			} else {
@@ -136,6 +137,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 				return fmt.Errorf("parsing xref stream at offset %d: %w", currentOffset, err)
 			}
 			prev = pVal
+			d.Index.LastTrailer = stream.Dict
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = stream.Dict
 			} else {
