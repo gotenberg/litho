@@ -29,6 +29,7 @@ const (
 	maxDictCap1     = 4095           // ISO 32000-1 Table C.1: dictionary entries.
 	maxRealAbs1     = 32767.0        // ISO 32000-1 Table C.1: largest real magnitude.
 	maxRealAbs2     = 3.403e38       // ISO 32000-2: PDF 2.0 real magnitude (IEEE single).
+	minRealAbs2     = 1.175e-38      // ISO 32000-2: smallest normal IEEE single magnitude.
 	maxDeviceN1     = 8              // ISO 32000-1: DeviceN colorant count.
 	maxDeviceN2     = 32             // ISO 32000-2: PDF 2.0 DeviceN colorant count.
 	maxQNesting     = 28             // ISO 32000-1 Table C.1: graphics-state (q/Q) nesting.
@@ -44,6 +45,13 @@ const MaxNameBytes = 127
 
 func integerRangeRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t01, Rule_19005_2_6_1_13_t01, Rule_19005_3_6_1_13_t01, Rule{})
+}
+
+// realDenormalRule returns the rule for a real too close to zero to be an IEEE
+// single. Only ISO 19005-2/3, 6.1.13 t5 states it: ISO 19005-1 caps the
+// magnitude alone and ISO 19005-4 has no CosReal rule at all.
+func realDenormalRule(profile string) Rule {
+	return ruleByPart(PDFAPart(profile), Rule{}, Rule_19005_2_6_1_13_t05, Rule_19005_3_6_1_13_t05, Rule{})
 }
 
 func realRangeRule(profile string) Rule {
@@ -170,6 +178,8 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 		doc.Logger.Debug("compliance.file_structure: cannot parse content stream", "error", err)
 		return nil
 	}
+	part := PDFAPart(profile)
+	where := fmt.Sprintf("object %d (stream content)", objNum)
 	var results []Violation
 	for _, op := range ops {
 		for _, operand := range op.Operands {
@@ -178,7 +188,7 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 				if len(v) > maxStr {
 					results = append(results, Violation{
 						Rule:    stringLengthRule(profile),
-						Context: fmt.Sprintf("object %d (stream content): string length %d exceeds %d", objNum, len(v), maxStr),
+						Context: fmt.Sprintf("%s: string length %d exceeds %d", where, len(v), maxStr),
 					})
 				}
 			case ast.PdfInt:
@@ -186,20 +196,62 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 				if val > maxIntegerValue || val < minIntegerValue {
 					results = append(results, Violation{
 						Rule:    integerRangeRule(profile),
-						Context: fmt.Sprintf("object %d (stream content): integer %d out of range", objNum, val),
+						Context: fmt.Sprintf("%s: integer %d out of range", where, val),
 					})
 				}
+			case ast.PdfReal:
+				results = append(results, checkRealLimits(float64(v), part, profile, where)...)
 			case ast.PdfArray:
-				// TJ arrays can contain strings.
+				// TJ arrays carry strings and displacement numbers alike.
 				for _, elem := range v {
-					if s, ok := elem.(ast.PdfString); ok && len(s) > maxStr {
-						results = append(results, Violation{
-							Rule:    stringLengthRule(profile),
-							Context: fmt.Sprintf("object %d (stream content): string length %d exceeds %d", objNum, len(s), maxStr),
-						})
+					switch e := elem.(type) {
+					case ast.PdfString:
+						if len(e) > maxStr {
+							results = append(results, Violation{
+								Rule:    stringLengthRule(profile),
+								Context: fmt.Sprintf("%s: string length %d exceeds %d", where, len(e), maxStr),
+							})
+						}
+					case ast.PdfReal:
+						results = append(results, checkRealLimits(float64(e), part, profile, where)...)
 					}
 				}
 			}
+		}
+	}
+	return results
+}
+
+// checkRealLimits checks one real against the magnitude cap its part states,
+// and against the denormal floor parts 2 and 3 add. where names the carrier
+// for the violation context.
+func checkRealLimits(fval float64, part int, profile, where string) []Violation {
+	var results []Violation
+	switch part {
+	case 1:
+		if math.Abs(fval) > maxRealAbs1 {
+			results = append(results, Violation{
+				Rule:    realRangeRule(profile),
+				Context: fmt.Sprintf("%s: real %g exceeds +/-%g", where, fval, maxRealAbs1),
+			})
+		}
+	case 2, 3:
+		if math.Abs(fval) > maxRealAbs2 {
+			results = append(results, Violation{
+				Rule:    realRangeRule(profile),
+				Context: fmt.Sprintf("%s: real %g exceeds +/-%g", where, fval, maxRealAbs2),
+			})
+		}
+		// A magnitude below the smallest normal IEEE single is a denormal,
+		// which ISO 19005-2/3, 6.1.13 t5 forbids separately from the magnitude
+		// cap: `realValue == 0.0 || realValue <= -1.175e-38 ||
+		// realValue >= 1.175e-38`. Zero is expressly permitted. Parts 1 and 4
+		// state no such requirement, so they stay silent.
+		if fval != 0 && math.Abs(fval) < minRealAbs2 {
+			results = append(results, Violation{
+				Rule:    realDenormalRule(profile),
+				Context: fmt.Sprintf("%s: real %g is closer to zero than +/-%g", where, fval, minRealAbs2),
+			})
 		}
 	}
 	return results
@@ -221,23 +273,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		}
 
 	case ast.PdfReal:
-		fval := float64(v)
-		switch part {
-		case 1:
-			if math.Abs(fval) > maxRealAbs1 {
-				results = append(results, Violation{
-					Rule:    realRangeRule(profile),
-					Context: fmt.Sprintf("object %d: real %g exceeds +/-%g", objNum, fval, maxRealAbs1),
-				})
-			}
-		case 2, 3:
-			if math.Abs(fval) > maxRealAbs2 {
-				results = append(results, Violation{
-					Rule:    realRangeRule(profile),
-					Context: fmt.Sprintf("object %d: real %g exceeds +/-%g", objNum, fval, maxRealAbs2),
-				})
-			}
-		}
+		results = append(results, checkRealLimits(float64(v), part, profile, fmt.Sprintf("object %d", objNum))...)
 
 	case ast.PdfString:
 		maxStr := maxStringBytes1
