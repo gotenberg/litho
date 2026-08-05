@@ -116,6 +116,7 @@ one deliberately rather than diffing it against a fresh build.
 | `xpacket_1b.pdf`       | PDF/A-1b     | The attributes an XMP packet header may not carry                |
 | `encperm_ua1.pdf`      | PDF/UA-1     | An encrypted document that forbids accessible extraction         |
 | `sigcms_2b.pdf`        | PDF/A-2b     | One signature per digital-signature verdict, and one conforming  |
+| `docmdp_2b.pdf`        | PDF/A-2b     | A certifying signature's references, and a real too small to be  |
 
 ### Must-not-fire controls
 
@@ -266,6 +267,8 @@ violation but is exempt, so a firing is a false positive.
 | `sigcms_2b`                               | `sig0`, a signature conforming on all three of 6.4.3's tests           | ISO 19005-2, 6.4.3           |
 | `sigcms_2b`                               | `sigempty`, a signature field with no `/V` and so no CMS blob          | ISO 19005-2, 6.4.3 t2 and t3 |
 | `sigcms_2b`                               | `text`, a text field the signature tests must not read                 | ISO 32000-1, 12.7.4.1        |
+| `docmdp_2b`                               | Second `/Reference` entry, carrying no digest key at all               | ISO 19005-2, 6.1.12 t2       |
+| `docmdp_2b`                               | A real of `1` beside the denormal, and a conforming signature          | ISO 19005-2, 6.1.13 t5       |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -296,6 +299,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua2.pdf`      | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
 | `contentstream_4.pdf`  | 4    | 8    | 6    | 6    | 6    | 6   | 8    | 7    |
 | `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
+| `docmdp_2b.pdf`        | 4    | 8    | 6    | 6    | 6    | 5   | 10   | 8    |
 | `docsync_1b.pdf`       | 9    | 6    | 4    | 4    | 4    | 6   | 9    | 8    |
 | `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 5   | 2    | 4    |
 | `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
@@ -2392,15 +2396,51 @@ and the `/AcroForm` `/Fields` walk alike, and a checker running both states the
 same missing appearance twice. The four signature widgets carry an `/AP`, so
 this lands on two objects rather than six and the instance count is meaningful.
 
+### `docmdp_2b.pdf`
+
+Two clauses answer here, and nothing connects them. ISO 19005-2, 6.1.12 t2 reads
+the `/Reference` entries of the signature the catalog `/Perms /DocMDP` names.
+ISO 19005-2, 6.1.13 t5 reads a real in a page content stream. A checker that
+abandons the document after its first structural verdict reports one of the two.
+
+6.1.12 t2 is `permsContainDocMDP == false || entries.split('&').filter(elem =>
+elem == 'DigestLocation' || elem == 'DigestMethod' || elem == 'DigestValue')
+.length == 0`, so it only bites once the catalog certifies the document. Two
+`/Reference` entries sit under that signature: the first names a
+`/DigestMethod`, the second carries only `/TransformMethod` and
+`/TransformParams`. A check that condemns the array rather than the entry fires
+twice.
+
+Nothing else about the signature is wrong, which is the point. Its `/Contents`
+is the same genuine `openssl cms -sign` blob `sigcms_2b.pdf` uses, one signer
+with its certificate, and its `/ByteRange` is patched after the save to cover
+the file exactly. All three tests of 6.4.3 therefore stay silent and the 6.1.12
+verdict is attributable to the `/Reference` entry alone.
+
+6.1.13 t5 is `realValue == 0.0 || (realValue <= -1.175e-38) || (realValue >=
+1.175e-38)`, the smallest normal single-precision magnitude. The page paints a
+rectangle whose width is `0.000000000000000000000000000000000000000001`, a
+denormal, beside one of `1`. Writing it as a literal rather than in exponent
+form matters: ISO 32000-1, 7.3.3 gives PDF reals no exponent syntax at all.
+
+The clause is stated by parts 2 and 3 only. ISO 19005-1, 6.1.12 t2 caps the
+magnitude and says nothing about the floor, and ISO 19005-4 has no CosReal rule
+at all, so the row reads 4 at A-1b and 5 at A-4 where the other profiles read 6.
+
+A third construct, a font `/Subtype` naming no font type, was built and then
+dropped: veraPDF builds no font object for an unrecognised subtype, so it
+reaches neither 6.2.11.2 t2 nor the embedding rules behind it. Carrying it would
+have baked a permanent rule-set divergence into the corpus.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 63 x 8 = 504
+fixture is expanded across all eight profiles, so the matrix is 64 x 8 = 512
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 502 of the 504 cells. The two
+fixtures exist to protect, and it holds in 510 of the 512 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
