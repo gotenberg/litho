@@ -135,7 +135,9 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 			}
 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx, annotIdx, subtype)
+			// Pages read 1-based everywhere else a violation names one, so the
+			// zero-based loop index is not what goes into the context.
+			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
 
 			// Forbidden annotation types.
 			results = append(results, checkForbiddenAnnotType(ctx, doc, annot, subtype, part, level, loc)...)
