@@ -272,15 +272,24 @@ func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fo
 		results = append(results, failf(fontReqKeyRule(part, 6), "simple font missing /Widths")...)
 		return results
 	}
-	// Size check only when /FirstChar and /LastChar resolve to a sensible range,
-	// so a malformed or absent bound never causes a false reject.
+	// The clause reads Widths_size == LastChar - FirstChar + 1 with no escape
+	// for a bound that is absent or unreadable, and a font missing one cannot
+	// size its /Widths correctly whatever the array holds. veraPDF evaluates it
+	// with the missing bound as zero, so a font declaring /LastChar 66 and no
+	// /FirstChar is told to carry 67 entries, and one declaring /FirstChar 65
+	// and no /LastChar is told to carry -64. Skipping those reported the missing
+	// key alone and left the sizing requirement unanswered.
 	first, errF := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
+	if errF != nil {
+		first = 0
+	}
 	last, errL := document.ResolveInt(ctx, doc, fontDict["LastChar"])
-	if hasFirst && hasLast && errF == nil && errL == nil && last >= first {
-		if expected := int(last - first + 1); len(widths) != expected {
-			results = append(results, failf(fontReqKeyRule(part, 6),
-				"simple font /Widths has %d entries, expected %d", len(widths), expected)...)
-		}
+	if errL != nil {
+		last = 0
+	}
+	if expected := int(last - first + 1); len(widths) != expected {
+		results = append(results, failf(fontReqKeyRule(part, 6),
+			"simple font /Widths has %d entries, expected %d", len(widths), expected)...)
 	}
 	return results
 }

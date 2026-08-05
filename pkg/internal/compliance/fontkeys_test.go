@@ -124,6 +124,26 @@ func TestSimpleFontRequiredKeys(t *testing.T) {
 		t.Errorf("wrong /Widths size: got %v, want §6.2.11.2 t6", got)
 	}
 
+	// A font missing one bound still answers the sizing test: the clause reads
+	// Widths_size == LastChar - FirstChar + 1 with no escape for an absent
+	// bound, and veraPDF evaluates it with the missing one as zero. /LastChar 66
+	// alone therefore asks for 67 entries, and /FirstChar 65 alone for -64,
+	// which no array can satisfy.
+	missingFirst := ast.PdfDict{
+		"BaseFont": ast.PdfName("X"), "LastChar": ast.PdfInt(66),
+		"Widths": ast.PdfArray{ast.PdfInt(722), ast.PdfInt(722)},
+	}
+	if got := chk(missingFirst, 2); !hasRule(got, Rule_19005_2_6_2_11_2_t06) {
+		t.Errorf("missing /FirstChar: want §6.2.11.2 t6 beside t4, got %v", got)
+	}
+	missingLast := ast.PdfDict{
+		"BaseFont": ast.PdfName("X"), "FirstChar": ast.PdfInt(65),
+		"Widths": ast.PdfArray{ast.PdfInt(722), ast.PdfInt(722)},
+	}
+	if got := chk(missingLast, 2); !hasRule(got, Rule_19005_2_6_2_11_2_t06) {
+		t.Errorf("missing /LastChar: want §6.2.11.2 t6 beside t5, got %v", got)
+	}
+
 	// A correctly-sized /Widths array (LastChar - FirstChar + 1) is conformant.
 	okFont := ast.PdfDict{
 		"BaseFont": ast.PdfName("X"), "FirstChar": ast.PdfInt(0), "LastChar": ast.PdfInt(2),
