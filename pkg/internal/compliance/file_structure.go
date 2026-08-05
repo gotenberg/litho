@@ -937,6 +937,10 @@ func resolveFloat(ctx context.Context, doc *document.Document, obj ast.PdfObject
 // is present, the Signature References dictionary shall not contain
 // DigestLocation, DigestMethod, or DigestValue keys.
 func checkSignatureReferences(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	rule := sigRefRule(PDFAPart(profile))
+	if rule.Specification == "" {
+		return nil
+	}
 	permsObj, ok := catalog["Perms"]
 	if !ok {
 		return nil
@@ -963,7 +967,6 @@ func checkSignatureReferences(ctx context.Context, doc *document.Document, catal
 	}
 
 	var results []Violation
-	part := PDFAPart(profile)
 	forbidden := []ast.PdfName{"DigestLocation", "DigestMethod", "DigestValue"}
 
 	for i, refObj := range refArr {
@@ -973,16 +976,21 @@ func checkSignatureReferences(ctx context.Context, doc *document.Document, catal
 		}
 		for _, key := range forbidden {
 			if _, has := refDict[key]; has {
-				results = append(results, failf(sigRefRule(part),
-					"Signature Reference[%d] contains forbidden key /%s", i, key)...)
+				results = append(results, failf(rule,
+					"Signature Reference[%d] contains forbidden key %s", i, key)...)
 			}
 		}
 	}
 	return results
 }
 
+// sigRefRule returns the rule forbidding a digest key on a signature reference
+// under /Perms /DocMDP. Only ISO 19005-2/3, 6.1.12 t2 states it: ISO 19005-4
+// has no PDSigRef rule at all, and its 6.1.12 t1 is the unrelated PDDocument
+// requirement that the catalog /Version read 2.n. Reporting a reference defect
+// there answered a signature question with the catalog's rule.
 func sigRefRule(part int) Rule {
-	return ruleByPart(part, Rule{}, Rule_19005_2_6_1_12_t02, Rule_19005_3_6_1_12_t02, Rule_19005_4_6_1_12_t01)
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_1_12_t02, Rule_19005_3_6_1_12_t02, Rule{})
 }
 
 // utf8NameRule returns the rule for UTF-8 name validation based on part.
