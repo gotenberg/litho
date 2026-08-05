@@ -118,6 +118,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sigcms_2b.pdf`        | PDF/A-2b     | One signature per digital-signature verdict, and one conforming  |
 | `docmdp_2b.pdf`        | PDF/A-2b     | A certifying signature's references, and a real too small to be  |
 | `charset_1b.pdf`       | PDF/A-1b     | What a subset font's `/CharSet` and `/CIDSet` have to list       |
+| `linearized_1b.pdf`    | PDF/A-1b     | A linearized file whose two trailers disagree on `/ID`           |
 
 ### Must-not-fire controls
 
@@ -272,6 +273,7 @@ violation but is exempt, so a firing is a false positive.
 | `docmdp_2b`                               | A real of `1` beside the denormal, and a conforming signature          | ISO 19005-2, 6.1.13 t5       |
 | `charset_1b`                              | `T1Full` and `CIDFull`, subsets whose entry lists every glyph          | ISO 19005-1, 6.3.5           |
 | `charset_1b`                              | `T1Whole` and `CIDWhole`, embedded fonts with no subset prefix         | subset-prefix exemption      |
+| `linearized_1b`                           | Both trailers hold two different strings inside one `/ID` array        | ISO 32000-1, 14.4            |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -326,6 +328,7 @@ which are covered under [Known divergences](#known-divergences).
 | `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
 | `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
 | `limits_2b.pdf`        | 8    | 12   | 10   | 10   | 10   | 6   | 10   | 8    |
+| `linearized_1b.pdf`    | 4    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
 | `linkfont_ua2.pdf`     | 6    | 8    | 7    | 8    | 7    | 5   | 4    | 5    |
 | `megafont_2b.pdf`      | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
 | `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
@@ -2486,15 +2489,48 @@ leaves every completeness test silent. `_cff.py` emits a bare CFF, the `Type1C`
 form of `/FontFile3`, the same way `_truetype.py` emits a TrueType: writing
 them keeps the builders' one dependency, pikepdf, the only one.
 
+### `linearized_1b.pdf`
+
+ISO 19005-1, 6.1.3 test 4 is the only rule in the corpus that reads more than
+one trailer: `(isLinearized != true) || lastID == null || (firstPageID ==
+lastID)`. A linearized file states its `/ID` twice, once in the first-page
+trailer at the top and once in the last trailer at the end, and the two shall
+be identical. A checker that keeps one trailer and discards the other cannot
+answer the test at all, which is how litho failed it before this fixture
+existed.
+
+| Trailer    | `/ID`                   |
+| ---------- | ----------------------- |
+| first page | `[<a11c...> <c0ff...>]` |
+| last       | `[<a11c...> <b0bb...>]` |
+
+Element 0 matches and element 1 does not, so only a check comparing the whole
+array answers. Both arrays also hold two different strings, and that is the
+control: ISO 32000-1, 14.4 has element 1 change whenever a file is updated, so
+a pair differing within one trailer is conformant. A check reading the
+requirement as "the two entries of the `/ID` array shall be identical" fires on
+the last trailer, which is the one nothing is wrong with. Test 1 of the same
+clause stays silent, both trailers carrying the key with two non-empty strings,
+so the 6.1.3 verdict is attributable to the comparison alone.
+
+Three pages carry an unembedded Helvetica and paint in DeviceGray, and there is
+neither `/Metadata` nor an output intent, so three further clauses answer from
+elsewhere in the specification.
+
+qpdf lays the file out. Linearization is a whole-file property, not something a
+builder plants object by object. The `/ID` values are patched afterwards
+against the bytes qpdf wrote: they are hex strings of a fixed width, so nothing
+moves and the layout survives.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 65 x 8 = 520
+fixture is expanded across all eight profiles, so the matrix is 66 x 8 = 528
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 518 of the 520 cells. The two
+fixtures exist to protect, and it holds in 526 of the 528 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
