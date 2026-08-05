@@ -119,6 +119,7 @@ one deliberately rather than diffing it against a fresh build.
 | `docmdp_2b.pdf`        | PDF/A-2b     | A certifying signature's references, and a real too small to be  |
 | `charset_1b.pdf`       | PDF/A-1b     | What a subset font's `/CharSet` and `/CIDSet` have to list       |
 | `linearized_1b.pdf`    | PDF/A-1b     | A linearized file whose two trailers disagree on `/ID`           |
+| `jpx_2b.pdf`           | PDF/A-2b     | The JPEG 2000 container boxes a conforming image may carry       |
 
 ### Must-not-fire controls
 
@@ -274,6 +275,8 @@ violation but is exempt, so a firing is a false positive.
 | `charset_1b`                              | `T1Full` and `CIDFull`, subsets whose entry lists every glyph          | ISO 19005-1, 6.3.5           |
 | `charset_1b`                              | `T1Whole` and `CIDWhole`, embedded fonts with no subset prefix         | subset-prefix exemption      |
 | `linearized_1b`                           | Both trailers hold two different strings inside one `/ID` array        | ISO 32000-1, 14.4            |
+| `jpx_2b`                                  | `ImOK`, a JPEG 2000 image conforming on all five tests                 | ISO 19005-2, 6.2.8.3         |
+| `jpx_2b`                                  | `ImWaived`, a forbidden METH under an explicit `/ColorSpace`           | ISO 19005-2, 6.2.8.3         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -326,6 +329,7 @@ which are covered under [Known divergences](#known-divergences).
 | `idfields_ua2.pdf`     | 6    | 7    | 7    | 7    | 7    | 4   | 4    | 6    |
 | `idprefix_2b.pdf`      | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
 | `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
+| `jpx_2b.pdf`           | 2    | 9    | 7    | 7    | 7    | 8   | 5    | 6    |
 | `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
 | `limits_2b.pdf`        | 8    | 12   | 10   | 10   | 10   | 6   | 10   | 8    |
 | `linearized_1b.pdf`    | 4    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
@@ -2522,15 +2526,57 @@ builder plants object by object. The `/ID` values are patched afterwards
 against the bytes qpdf wrote: they are hex strings of a fixed width, so nothing
 moves and the layout survives.
 
+### `jpx_2b.pdf`
+
+ISO 19005-2, 6.2.8.3 states five tests over the JPEG 2000 data of a `JPXDecode`
+image, and every one reads a box of the JP2 container rather than the
+entropy-coded data: the channel count and bit depth from `ihdr` and `bpcc`, the
+colour specification from `colr`. So a fixture plants each defect by naming a
+value, which is what `_jp2.py` writes.
+
+| Image      | Container                         | Answers     |
+| ---------- | --------------------------------- | ----------- |
+| `ImOK`     | 3 channels, one sRGB `colr`       | nothing     |
+| `ImChan`   | 2 channels                        | `6.2.8.3/1` |
+| `ImSpecs`  | two `colr` boxes, both APPROX 1   | `6.2.8.3/2` |
+| `ImMeth`   | one `colr` box, METH 4            | `6.2.8.3/3` |
+| `ImJab`    | one `colr` box, enumerated CIEJab | `6.2.8.3/4` |
+| `ImDepth`  | a `bpcc` box declaring 40 bits    | `6.2.8.3/5` |
+| `ImWaived` | METH 4, and a `/ColorSpace` entry | nothing     |
+
+The five defects are independent, so a checker that reports the first offending
+image and stops reports one test where five are due. All seven images are
+painted.
+
+`ImSpecs` carries two specifications that both set APPROX to 1. Test 2 reads
+"there shall be exactly one colour space specification that has the value 0x01
+in the APPROX field", so two of them fail it, while test 3 still finds an
+effective METH of 1 and stays silent. Two specifications with no APPROX 1 at
+all answer both tests at once and the split disappears, which was measured on
+both engines before the fixture settled on this shape.
+
+`ImWaived` is the exemption planted as a control. The clause hands the colour
+tests to the image dictionary's `/ColorSpace` when it has one, so an image
+whose `colr` box states a forbidden METH conforms as long as the PDF names the
+colour space itself. A check reading the container unconditionally fires on it.
+`ImOK` conforms on all five tests, so a verdict attached to the wrong image
+answers on it too.
+
+The codestreams are embedded rather than written. A JPEG 2000 codestream is
+entropy coded, which no builder writes by hand, and the corpus builders take no
+dependency beyond pikepdf. `_jp2.py` records the OpenJPEG command line that
+produced them and strips the `COM` marker carrying the encoder version, so the
+bytes do not move when the encoder is upgraded.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 66 x 8 = 528
+fixture is expanded across all eight profiles, so the matrix is 67 x 8 = 536
 cells, and litho and veraPDF return the same verdict in all of them: in each
 cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 526 of the 528 cells. The two
+fixtures exist to protect, and it holds in 534 of the 536 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
