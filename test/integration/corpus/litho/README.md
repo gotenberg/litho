@@ -120,6 +120,7 @@ one deliberately rather than diffing it against a fresh build.
 | `charset_1b.pdf`       | PDF/A-1b     | What a subset font's `/CharSet` and `/CIDSet` have to list       |
 | `linearized_1b.pdf`    | PDF/A-1b     | A linearized file whose two trailers disagree on `/ID`           |
 | `jpx_2b.pdf`           | PDF/A-2b     | The JPEG 2000 container boxes a conforming image may carry       |
+| `threed_4e.pdf`        | PDF/A-4e     | The 3D stream subtypes the engineering conformance permits       |
 
 ### Must-not-fire controls
 
@@ -277,6 +278,7 @@ violation but is exempt, so a firing is a false positive.
 | `linearized_1b`                           | Both trailers hold two different strings inside one `/ID` array        | ISO 32000-1, 14.4            |
 | `jpx_2b`                                  | `ImOK`, a JPEG 2000 image conforming on all five tests                 | ISO 19005-2, 6.2.8.3         |
 | `jpx_2b`                                  | `ImWaived`, a forbidden METH under an explicit `/ColorSpace`           | ISO 19005-2, 6.2.8.3         |
+| `threed_4e`                               | A `/U3D` and a `/PRC` 3D stream, both permitted values                 | ISO 19005-4, 6.1.6.1 t3      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -289,74 +291,76 @@ Counts are distinct rule classes (`clause/test`) reported by litho. litho and
 veraPDF agree exactly on the set in every cell except the two marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
-| Fixture                | A-1b | A-2a | A-2b | A-2u | A-3b | A-4 | UA-1 | UA-2 |
-| ---------------------- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- |
-| `a4syntax_4.pdf`       | 15   | 21   | 19   | 19   | 19   | 16  | 13   | 8    |
-| `annotkinds_ua2.pdf`   | 7    | 8    | 8    | 8    | 8    | 5   | 8    | 10   |
-| `annots_1b.pdf`        | 14   | 14   | 12   | 12   | 12   | 10  | 12   | 8    |
-| `annotstruct_ua2.pdf`  | 12   | 12   | 12   | 12   | 14   | 10  | 8    | 13   |
-| `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 3    |
-| `charset_1b.pdf`       | 4    | 7    | 4    | 5    | 4    | 3   | 9    | 7    |
-| `cmaps_2b.pdf`         | 6    | 10   | 7    | 8    | 7    | 8   | 12   | 12   |
-| `complex_1b.pdf`       | 23   | 22   | 19   | 20   | 21   | 19  | 14   | 11   |
-| `complex_2a.pdf`       | 15   | 21   | 17   | 17   | 18   | 17  | 12   | 11   |
-| `complex_2b.pdf`       | 18   | 23   | 20   | 21   | 22   | 19  | 14   | 12   |
-| `complex_2u.pdf`       | 15   | 23   | 18   | 20   | 18   | 16  | 14   | 13   |
-| `complex_3b.pdf`       | 17   | 23   | 20   | 21   | 21   | 21  | 14   | 10   |
-| `complex_4.pdf`        | 18   | 25   | 23   | 23   | 25   | 23  | 14   | 9    |
-| `complex_ua1.pdf`      | 6    | 7    | 6    | 6    | 6    | 5   | 11   | 10   |
-| `complex_ua2.pdf`      | 8    | 16   | 12   | 12   | 12   | 8   | 17\* | 18\* |
-| `contentstream_4.pdf`  | 4    | 8    | 6    | 6    | 6    | 6   | 8    | 7    |
-| `docinfo_1b.pdf`       | 8    | 4    | 1    | 2    | 1    | 6   | 5    | 5    |
-| `docmdp_2b.pdf`        | 4    | 8    | 6    | 6    | 6    | 5   | 10   | 8    |
-| `docsync_1b.pdf`       | 9    | 6    | 4    | 4    | 4    | 6   | 9    | 8    |
-| `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 5   | 2    | 4    |
-| `extschema_2b.pdf`     | 9    | 11   | 8    | 9    | 9    | 6   | 8    | 8    |
-| `extprop_2b.pdf`       | 4    | 6    | 3    | 4    | 4    | 6   | 8    | 7    |
-| `fenote_ua2.pdf`       | 3    | 5    | 4    | 4    | 4    | 3   | 5    | 6    |
-| `filestruct_1b.pdf`    | 13   | 12   | 10   | 10   | 10   | 13  | 10   | 8    |
-| `fontdict_2b.pdf`      | 7    | 10   | 8    | 8    | 8    | 8   | 7    | 7    |
-| `fontkeys_1b.pdf`      | 10   | 13   | 10   | 11   | 10   | 11  | 8    | 8    |
-| `forbidden_mix.pdf`    | 12   | 14   | 12   | 12   | 14   | 14  | 11   | 9    |
-| `formcs_2b.pdf`        | 4    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
-| `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 5    |
-| `formstruct_ua2.pdf`   | 4    | 6    | 6    | 6    | 6    | 5   | 7    | 7    |
-| `glyphs_2b.pdf`        | 4    | 8    | 5    | 6    | 5    | 6   | 10   | 10   |
-| `gstate_2b.pdf`        | 6    | 12   | 10   | 10   | 10   | 10  | 7    | 7    |
-| `gstateform_1b.pdf`    | 6    | 8    | 5    | 6    | 5    | 9   | 8    | 7    |
-| `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 4   | 5    | 5    |
-| `iccbased_4.pdf`       | 3    | 7    | 5    | 5    | 5    | 5   | 8    | 7    |
-| `idfields_ua2.pdf`     | 6    | 7    | 7    | 7    | 7    | 4   | 4    | 6    |
-| `idprefix_2b.pdf`      | 10   | 12   | 9    | 10   | 10   | 10  | 8    | 7    |
-| `imgxmp_4.pdf`         | 8    | 15   | 13   | 13   | 13   | 8   | 7    | 6    |
-| `jpx_2b.pdf`           | 2    | 9    | 7    | 7    | 7    | 8   | 5    | 6    |
-| `limits_1b.pdf`        | 9    | 9    | 6    | 7    | 6    | 4   | 11   | 9    |
-| `limits_2b.pdf`        | 8    | 12   | 10   | 10   | 10   | 6   | 10   | 8    |
-| `linearized_1b.pdf`    | 4    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
-| `linkfont_ua2.pdf`     | 6    | 8    | 7    | 8    | 7    | 5   | 4    | 5    |
-| `megafont_2b.pdf`      | 9    | 13   | 10   | 11   | 10   | 10  | 12   | 11   |
-| `multipage_2b.pdf`     | 10   | 13   | 11   | 11   | 11   | 10  | 10   | 9    |
-| `outputintent_2b.pdf`  | 4    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
-| `patterncs_2b.pdf`     | 3    | 5    | 3    | 3    | 3    | 4   | 10   | 8    |
-| `puatext_ua2.pdf`      | 5    | 6    | 6    | 6    | 6    | 4   | 3    | 4    |
-| `schemaprefix_1b.pdf`  | 14   | 18   | 15   | 16   | 15   | 6   | 8    | 8    |
-| `sigcms_2b.pdf`        | 4    | 9    | 7    | 7    | 7    | 5   | 10   | 8    |
-| `structkinds_ua2.pdf`  | 5    | 7    | 6    | 6    | 6    | 3   | 5    | 7    |
-| `structnest_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 3   | 36   | 30   |
-| `syntax_1b.pdf`        | 9    | 11   | 9    | 9    | 9    | 9   | 12   | 8    |
-| `tableregular_ua2.pdf` | 3    | 4    | 4    | 4    | 4    | 3   | 8    | 7    |
-| `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 4   | 2    | 5    |
-| `tablespan_ua2.pdf`    | 3    | 4    | 4    | 4    | 4    | 3   | 4    | 4    |
-| `trailer_2b.pdf`       | 5    | 7    | 5    | 5    | 5    | 6   | 7    | 7    |
-| `ttcmap_2b.pdf`        | 5    | 9    | 6    | 7    | 6    | 6   | 9    | 8    |
-| `ttencoding_2b.pdf`    | 7    | 10   | 7    | 8    | 7    | 8   | 10   | 10   |
-| `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 4    |
-| `usedcs_2b.pdf`        | 3    | 5    | 3    | 3    | 3    | 4   | 7    | 7    |
-| `xpacket_1b.pdf`       | 5    | 9    | 6    | 7    | 6    | 9   | 8    | 7    |
-| `xref_1b.pdf`          | 5    | 6    | 4    | 4    | 4    | 5   | 7    | 7    |
-| `xmpsyntax_1b.pdf`     | 7    | 9    | 7    | 7    | 7    | 7   | 9    | 8    |
-| `xobjstate_2b.pdf`     | 6    | 11   | 9    | 9    | 9    | 10  | 7    | 7    |
-| `xfatable_ua1.pdf`     | 5    | 6    | 6    | 6    | 6    | 5   | 4    | 7    |
+| Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
+| ---------------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- | ---- | ---- |
+| `a4syntax_4.pdf`       | 17   | 15   | 21   | 19   | 19   | 21   | 19   | 19   | 16  | 17   | 18   | 13   | 8    |
+| `annotkinds_ua2.pdf`   | 7    | 7    | 8    | 8    | 8    | 8    | 8    | 8    | 5   | 5    | 6    | 8    | 10   |
+| `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
+| `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
+| `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
+| `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
+| `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
+| `complex_1b.pdf`       | 26   | 23   | 22   | 19   | 20   | 24   | 21   | 22   | 19  | 18   | 18   | 14   | 11   |
+| `complex_2a.pdf`       | 18   | 15   | 21   | 17   | 17   | 22   | 18   | 18   | 17  | 17   | 18   | 12   | 11   |
+| `complex_2b.pdf`       | 21   | 18   | 23   | 20   | 21   | 25   | 22   | 23   | 19  | 18   | 18   | 14   | 12   |
+| `complex_2u.pdf`       | 18   | 15   | 23   | 18   | 20   | 23   | 18   | 20   | 16  | 16   | 17   | 14   | 13   |
+| `complex_3b.pdf`       | 20   | 17   | 23   | 20   | 21   | 24   | 21   | 22   | 21  | 20   | 20   | 14   | 10   |
+| `complex_4.pdf`        | 20   | 18   | 25   | 23   | 23   | 27   | 25   | 25   | 23  | 23   | 23   | 14   | 9    |
+| `complex_ua1.pdf`      | 7    | 6    | 7    | 6    | 6    | 7    | 6    | 6    | 5   | 5    | 6    | 11   | 10   |
+| `complex_ua2.pdf`      | 11   | 8    | 16   | 12   | 12   | 16   | 12   | 12   | 8   | 8    | 9    | 17\* | 18\* |
+| `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
+| `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
+| `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
+| `docsync_1b.pdf`       | 11   | 9    | 6    | 4    | 4    | 6    | 4    | 4    | 6   | 6    | 7    | 9    | 8    |
+| `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 2    | 4    |
+| `extprop_2b.pdf`       | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 6   | 6    | 7    | 8    | 7    |
+| `extschema_2b.pdf`     | 12   | 9    | 11   | 8    | 9    | 12   | 9    | 10   | 6   | 6    | 7    | 8    | 8    |
+| `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
+| `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
+| `fontdict_2b.pdf`      | 9    | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 8   | 8    | 9    | 7    | 7    |
+| `fontkeys_1b.pdf`      | 13   | 10   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 8    | 8    |
+| `forbidden_mix.pdf`    | 14   | 12   | 14   | 12   | 12   | 16   | 14   | 14   | 14  | 13   | 13   | 11   | 9    |
+| `formcs_2b.pdf`        | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
+| `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
+| `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
+| `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
+| `gstate_2b.pdf`        | 8    | 6    | 12   | 10   | 10   | 12   | 10   | 10   | 10  | 10   | 11   | 7    | 7    |
+| `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
+| `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
+| `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
+| `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
+| `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
+| `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
+| `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
+| `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
+| `limits_2b.pdf`        | 10   | 8    | 12   | 10   | 10   | 12   | 10   | 10   | 6   | 6    | 7    | 10   | 8    |
+| `linearized_1b.pdf`    | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
+| `linkfont_ua2.pdf`     | 7    | 6    | 8    | 7    | 8    | 8    | 7    | 8    | 5   | 5    | 6    | 4    | 5    |
+| `megafont_2b.pdf`      | 12   | 9    | 13   | 10   | 11   | 13   | 10   | 11   | 10  | 10   | 11   | 12   | 11   |
+| `metafilter_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 8    | 7    |
+| `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
+| `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
+| `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
+| `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
+| `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
+| `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
+| `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
+| `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
+| `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
+| `tableregular_ua2.pdf` | 4    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 8    | 7    |
+| `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
+| `tablespan_ua2.pdf`    | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 4    | 4    |
+| `threed_4e.pdf`        | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 11   | 8    |
+| `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
+| `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
+| `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
+| `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
+| `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
+| `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
+| `xmpsyntax_1b.pdf`     | 9    | 7    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 9    | 8    |
+| `xobjstate_2b.pdf`     | 8    | 6    | 11   | 9    | 9    | 11   | 9    | 9    | 10  | 10   | 11   | 7    | 7    |
+| `xpacket_1b.pdf`       | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 9   | 9    | 10   | 8    | 7    |
+| `xref_1b.pdf`          | 7    | 5    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -516,7 +520,7 @@ annotation with `F=4`, an appearance stream and no `/C`. A check that reads
 only page 1 therefore goes quiet rather than firing, so the failure mode is a
 missing rule, which the rule-set comparison catches, rather than a wrong one.
 
-litho reports all three pages' classes and agrees with veraPDF on all eight
+litho reports all three pages' classes and agrees with veraPDF on all thirteen
 profiles, so no page-scoped check short-circuits today. Remediation takes it
 from 11 veraPDF violations to 1, introduces nothing, and preserves all three
 pages.
@@ -2568,21 +2572,46 @@ dependency beyond pikepdf. `_jp2.py` records the OpenJPEG command line that
 produced them and strips the `COM` marker carrying the encoder version, so the
 bytes do not move when the encoder is upgraded.
 
+### `threed_4e.pdf`
+
+PDF/A-4e is the only conformance level that admits a 3D annotation, and
+ISO 19005-4, 6.1.6.1 test 3 is the only rule that reads the stream one points
+at: `Subtype == 'U3D' || Subtype == 'PRC'`.
+
+| Annotation | `/3DD` `/Subtype` | Answers     |
+| ---------- | ----------------- | ----------- |
+| first      | `/U3D`            | nothing     |
+| second     | `/PRC`            | nothing     |
+| third      | `/LithoNot3D`     | `6.1.6.1/3` |
+
+Both permitted values are planted, not just one. The test is a two-way
+disjunction, so a check hardcoding `U3D` alone passes the file unless a `PRC`
+sits beside it. The defective stream is otherwise identical to the two
+conforming ones, so a verdict attached to the wrong stream answers on a control.
+
+Every annotation carries an appearance stream and a `/Contents` string, which
+keeps ISO 19005-4, 6.3.3 silent and leaves the 6.1.6.1 verdict standing alone.
+At every profile other than PDF/A-4e a 3D annotation is a forbidden subtype,
+which is a different clause on a different object, so this is the one fixture
+whose home profile is a conformance level rather than a part.
+
 ## Scope
 
-The runner's `compliance` feature compares verdicts, not rule sets. Every
-fixture is expanded across all eight profiles, so the matrix is 67 x 8 = 536
-cells, and litho and veraPDF return the same verdict in all of them: in each
-cell either both report nothing or both report something.
+The runner's `compliance` feature compares verdicts, not rule sets, and
+`manifest.json` expands every fixture across the eight profiles it lists. The
+hand-measured matrix is wider: all thirteen conformance levels veraPDF
+validates, so 68 x 13 = 884 cells. litho and veraPDF return the same verdict in
+all of them: in each cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 534 of the 536 cells. The two
+fixtures exist to protect, and it holds in 882 of the 884 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
 
 Both figures are measured by hand against a live veraPDF rather than taken from
-the runner:
+the runner. The thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2`
+on the veraPDF side and the matching `PDF/A-*` and `PDF/UA-*` names on litho's:
 
 ```bash
 go build -o /tmp/litho ./cmd/litho

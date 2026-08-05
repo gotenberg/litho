@@ -1,0 +1,90 @@
+%PDF-2.0
+%¿÷¢þ
+1 0 obj
+<< /Pages 2 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Count 1 /Kids [ 3 0 R ] /Type /Pages >>
+endobj
+3 0 obj
+<< /Annots [ 4 0 R 5 0 R 6 0 R ] /Contents 7 0 R /MediaBox [ 0 0 612 792 ] /Parent 2 0 R /Resources << /Font << /F1 8 0 R >> >> /Type /Page >>
+endobj
+4 0 obj
+<< /3DD 9 0 R /AP << /N 10 0 R >> /Contents (3D artwork U3D) /F 4 /Rect [ 50 400 200 450 ] /Subtype /3D /Type /Annot >>
+endobj
+5 0 obj
+<< /3DD 11 0 R /AP << /N 12 0 R >> /Contents (3D artwork PRC) /F 4 /Rect [ 50 470 200 520 ] /Subtype /3D /Type /Annot >>
+endobj
+6 0 obj
+<< /3DD 13 0 R /AP << /N 14 0 R >> /Contents (3D artwork LithoNot3D) /F 4 /Rect [ 50 540 200 590 ] /Subtype /3D /Type /Annot >>
+endobj
+7 0 obj
+<< /Length 49 >>
+stream
+BT /F1 12 Tf 50 720 Td (three dimensional) Tj ET
+
+endstream
+endobj
+8 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+9 0 obj
+<< /Subtype /U3D /Type /3D /Length 23 >>
+stream
+litho corpus 3D artwork
+endstream
+endobj
+10 0 obj
+<< /BBox [ 0 0 150 50 ] /Subtype /Form /Type /XObject /Length 31 >>
+stream
+0.5 0.5 0.5 rg 0 0 150 50 re f
+
+endstream
+endobj
+11 0 obj
+<< /Subtype /PRC /Type /3D /Length 23 >>
+stream
+litho corpus 3D artwork
+endstream
+endobj
+12 0 obj
+<< /BBox [ 0 0 150 50 ] /Subtype /Form /Type /XObject /Length 31 >>
+stream
+0.5 0.5 0.5 rg 0 0 150 50 re f
+
+endstream
+endobj
+13 0 obj
+<< /Subtype /LithoNot3D /Type /3D /Length 23 >>
+stream
+litho corpus 3D artwork
+endstream
+endobj
+14 0 obj
+<< /BBox [ 0 0 150 50 ] /Subtype /Form /Type /XObject /Length 31 >>
+stream
+0.5 0.5 0.5 rg 0 0 150 50 re f
+
+endstream
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000123 00000 n 
+0000000281 00000 n 
+0000000416 00000 n 
+0000000552 00000 n 
+0000000695 00000 n 
+0000000794 00000 n 
+0000000891 00000 n 
+0000000988 00000 n 
+0000001121 00000 n 
+0000001219 00000 n 
+0000001352 00000 n 
+0000001457 00000 n 
+trailer << /Root 1 0 R /Size 15 /ID [<c0165bce957a375bcef6bdf60205177a><c0165bce957a375bcef6bdf60205177a>] >>
+startxref
+1590
+%%EOF
