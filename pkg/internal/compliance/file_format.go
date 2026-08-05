@@ -45,9 +45,21 @@ func streamFormatRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
+// maxHexStringViolationsPerPage bounds how many hex-string findings one page
+// contributes. Not spec-mandated: an anti-DoS guard. veraPDF keys the rule on
+// the CosString and applies no such bound, but a conforming page has no
+// findings at all and a real defective producer emits a handful, so a page
+// reaching this many is crafted rather than merely wrong.
+const maxHexStringViolationsPerPage = 64
+
 // checkContentStreamHexStrings parses page content streams with format
 // checking enabled to detect hex string violations: odd digit count
 // (§6.1.6 t1) and non-hex characters (§6.1.6 t2).
+//
+// Every finding on the page is reported. Stopping at the first one lost the
+// other test entirely when both defects were present: a page whose first bad
+// string has an odd digit count and whose second holds a non-hex character
+// answered t1 alone, where veraPDF answers both.
 func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	oddRule := hexStringRule(profile)
 	if oddRule.Specification == "" {
@@ -68,7 +80,10 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 		}
 
 		_, violations := content.ParseStreamDataFormatChecked(ctx, streamData)
-		for _, v := range violations {
+		for n, v := range violations {
+			if n == maxHexStringViolationsPerPage {
+				break
+			}
 			msg := v.Error()
 			rule := oddRule
 			if bytes.Contains([]byte(msg), []byte("invalid character")) {
@@ -78,7 +93,6 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 				Rule:    rule,
 				Context: fmt.Sprintf("page %d: %s", i+1, msg),
 			})
-			break // one violation per page is sufficient
 		}
 	}
 	return results
