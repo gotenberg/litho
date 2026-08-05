@@ -36,11 +36,20 @@ answer the CIDToGIDMap rule and CID0 is left as its only source. Equally CID0
 paints a real glyph, so it cannot answer the other two. Each rule has exactly
 one source, which is what lets the instance counts prove the controls silent.
 
-The rendering mode matters. Both glyph tests carry `renderingMode == 3 || ...`,
-so a glyph painted in mode 3 is invisible and exempt; everything defective here
-is painted in the default fill mode, and the file also paints the missing glyph
-through a font of its own that is used in mode 3 and nowhere else, which
-is the control for exactly that escape.
+The rendering mode matters, but only to one of the two glyph tests. Measured
+against veraPDF 1.30.2, the missing-glyph test reads
+`renderingMode == 3 || isGlyphPresent == null || isGlyphPresent == true`, so a
+glyph painted in mode 3 is invisible and exempt. The `.notdef` test reads
+`name != ".notdef"` and carries no such escape at all. CID4 paints the missing
+glyph in mode 3 and nowhere else, so it is the control for the missing-glyph
+escape and only that one: the `.notdef` rule condemns it like any other, since
+CID 5 lies past the end of a three-glyph program and so resolves to `.notdef`.
+
+That asymmetry is why the two rules do not have one source each. The missing-
+glyph rule answers once, for CID1. The `.notdef` rule answers three times: CID2
+paints `.notdef` by its number, and CID1 and CID4 both reach it by resolving a
+CID the program does not hold. litho reports only CID2, an under-count recorded
+against the fixture rather than papered over.
 
 See ../README.md for the authoritative expected firing set.
 """
