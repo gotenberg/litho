@@ -145,18 +145,14 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			if subtype == "Widget" {
 				continue
 			}
-			// A Popup inherits content from its parent markup annotation, so a
-			// Popup WITH a /Parent is exempt. A parentless Popup has no source
-			// of content and must itself satisfy the Contents-or-Alt
-			// requirement: ISO 14289-1 §7.18.1 t2 exempts only Widget, hidden,
-			// and out-of-cropbox annotations, and a parentless Popup is none of
-			// those. Under PDF/UA-2 the markup-subtype filter below still exempts
-			// every Popup (Popup is not a markup type).
-			if subtype == "Popup" {
-				if _, hasParent := annot["Parent"]; hasParent {
-					continue
-				}
-			}
+			// A Popup is not exempt, with or without a /Parent. ISO 14289-1
+			// §7.18.1 t2 exempts only Widget, hidden and out-of-cropbox
+			// annotations, and veraPDF follows the clause: measured on
+			// annotstruct_ua2, whose two Popups carry a /Parent, carry no
+			// /Contents and both draw the rule. litho used to treat a parented
+			// Popup as inheriting its parent's content, which the clause does
+			// not say. Under PDF/UA-2 the markup-subtype filter below still
+			// exempts every Popup (Popup is not a markup type).
 
 			// ISO 14289-2 §8.9.2.3 covers markup annotations only, so a
 			// non-markup subtype is out of its scope. A /Contents-less
