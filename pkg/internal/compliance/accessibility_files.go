@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -426,7 +425,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 			if inheritedFieldTU(ctx, doc, annot) != "" {
 				continue
 			}
-			if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, make(map[int]bool), 0) {
+			if enclosingStructElemHasAlt(ctx, doc, treeRoot, annot) {
 				continue
 			}
 			name, _ := document.ResolveString(ctx, doc, annot["T"])
@@ -436,6 +435,46 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 		}
 	}
 	return results
+}
+
+// enclosingStructElemHasAlt reports whether the structure element enclosing
+// this widget carries a non-empty /Alt.
+//
+// The escape belongs to the widget, not to the document. litho used to ask
+// whether ANY Form element anywhere had an /Alt, which exempted every widget in
+// the file as soon as one of them was described: measured on a two-widget page
+// where only the first element carried /Alt, veraPDF reported both widgets and
+// litho reported neither.
+//
+// The element is found through the annotation's /StructParent index into the
+// structure tree's /ParentTree (ISO 32000-1, 14.7.4.4). A widget litho cannot
+// place in the tree is not exempt, which is also what veraPDF does.
+func enclosingStructElemHasAlt(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict) bool {
+	if treeRoot == nil {
+		return false
+	}
+	spObj, ok := annot["StructParent"]
+	if !ok {
+		return false
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return false
+	}
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return false
+	}
+	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	if elemObj == nil {
+		return false
+	}
+	elem, err := document.ResolveDict(ctx, doc, elemObj)
+	if err != nil || elem == nil {
+		return false
+	}
+	alt, _ := document.ResolveString(ctx, doc, elem["Alt"])
+	return len(alt) > 0
 }
 
 // inheritedFieldTU returns the /TU a widget answers with, its own or the
@@ -499,43 +538,6 @@ func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot 
 	}
 	// Check non-intersection.
 	return rx2 <= bx1 || rx1 >= bx2 || ry2 <= by1 || ry1 >= by2
-}
-
-// formStructElementHasAlt walks the structure tree looking for a Form element
-// with a non-empty /Alt entry. This is the alternative to /TU per §7.18.1 t3.
-func formStructElementHasAlt(ctx context.Context, doc *document.Document, node ast.PdfDict, seen map[int]bool, depth int) bool {
-	if depth > maxStructAttrSearchDepth {
-		return false
-	}
-	sType, _ := document.ResolveName(ctx, doc, node["S"])
-	if sType == "Form" {
-		alt, _ := document.ResolveString(ctx, doc, node["Alt"])
-		if len(alt) > 0 {
-			return true
-		}
-	}
-	kObj := node["K"]
-	if kObj == nil {
-		return false
-	}
-	recurse := func(kid ast.PdfObject) bool {
-		if ref, ok := kid.(ast.PdfIndirectRef); ok {
-			if seen[ref.ObjectNum] {
-				return false
-			}
-			seen[ref.ObjectNum] = true
-		}
-		kidDict, _ := document.ResolveDict(ctx, doc, kid)
-		return kidDict != nil && formStructElementHasAlt(ctx, doc, kidDict, seen, depth+1)
-	}
-	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
-		if slices.ContainsFunc(arr, recurse) {
-			return true
-		}
-	} else {
-		return recurse(kObj)
-	}
-	return false
 }
 
 // maxFieldTUSearchDepth bounds the /TU lookup walk over the AcroForm field
