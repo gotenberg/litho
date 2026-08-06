@@ -1565,6 +1565,40 @@ right and veraPDF under-reports, the same way it drops a `/P`-less structure
 element under `8.2.1/2`. `pdfjs/issue1045.pdf`, `bug1011159.pdf` and
 `issue3566.pdf` all carry the construct.
 
+### Instance counts, which the corpus does not pin
+
+Everything above compares rule _sets_. litho and veraPDF also disagree on how
+many times a rule fires, systematically, because veraPDF's object model is
+finer-grained. The counts table records rule classes rather than instances, so
+none of this shows there; the detector is a per-rule instance-count
+differential run beside the set comparison.
+
+Four families account for nearly all of it. Each was read off veraPDF's own
+contexts rather than inferred:
+
+| Rules                 | veraPDF object         | veraPDF counts     | litho counts  |
+| --------------------- | ---------------------- | ------------------ | ------------- |
+| `6.2.3.3`, `6.2.4.3`  | `PDDeviceRGB` etc.     | per operator       | per page      |
+| `6.2.11.7.2`, `6.3.8` | `Glyph`                | per rendered glyph | per font      |
+| `6.8`, `6.9`          | `CosFileSpecification` | per route          | per file spec |
+| `6.1.7`, `6.1.8`      | `CosUnicodeName`       | per occurrence     | per name      |
+
+`annotstruct_ua2.pdf` at PDF/A-3a draws 38 `6.2.4.3/2` violations from veraPDF,
+one per `operators[n]/colorSpace[0]` or `fillCS[0]` across the page and every
+annotation appearance stream, against litho's one. `charset_1b.pdf` at PDF/A-2a
+draws 8 `6.2.11.7.2/1`, one per `usedGlyphs[n]`, against litho's 4, one per
+font. `complex_1b.pdf` at PDF/A-3a draws `6.8/3` three times for one file
+specification, reached as `root/EmbeddedFiles[0]`, as an indirect object and
+through a `/AF` values array. `a4syntax_4.pdf` draws `6.1.8/1` twice for one
+name, once as a Separation colorant and once as a resource key.
+
+A count divergence is not automatically benign. `6.8.3.4/1` looked like one of
+these and was a defect: veraPDF named nine distinct structure elements sharing
+an unmapped `/Annot` type, litho deduplicated by type name, and the rule is
+scoped to the element. It now counts per element. The four families above stay
+because litho's granularity is the one its violation contexts promise, not
+because a count is unimportant.
+
 ## Closed since, not planted
 
 Six constructs were divergences when the fixtures around them were built. Each
