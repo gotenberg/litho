@@ -408,14 +408,13 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
 				continue
 			}
-			// Hidden or invisible annotations are exempt.
+			// Only a HIDDEN annotation is exempt. The test reads
+			// `(F & 2) == 2`, naming that one bit; litho also exempted
+			// invisible and noView, which cost three of four widgets on a
+			// probe veraPDF reported in full.
 			flags, _ := document.ResolveInt(ctx, doc, annot["F"])
-			const (
-				invisBit  = 1 << 0 // bit 0
-				hiddenBit = 1 << 1 // bit 1
-				noViewBit = 1 << 5 // bit 5
-			)
-			if int(flags)&(hiddenBit|invisBit|noViewBit) != 0 {
+			const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
+			if int(flags)&hiddenBit != 0 {
 				continue
 			}
 			// Annotations with Rect outside the page CropBox are exempt.
