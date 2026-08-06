@@ -510,7 +510,15 @@ func tryFastStreamLength(reader *ioat.Reader, dict ast.PdfDict, streamStart int6
 	for len(verifyStr) > 0 && (verifyStr[0] == '\r' || verifyStr[0] == '\n') {
 		verifyStr = verifyStr[1:]
 	}
-	if !strings.HasPrefix(verifyStr, "endstream") {
+	// A damaged end-of-stream keyword still marks the end. The check exists to
+	// catch a WRONG /Length, and a marker sitting at exactly the declared
+	// offset corroborates the length whether or not the keyword survived
+	// intact. pdfjs issue10004.pdf writes every one of its 29 stream ends as a
+	// truncated "endstrea" followed by "endobj": rejecting those discarded 29
+	// correct /Length values, and the fallback scan then found no "endstream"
+	// anywhere and returned the rest of the file as stream data, so each stream
+	// swallowed ~750 KB of unrelated bytes and the file grew 757 KB -> 12.6 MB.
+	if !strings.HasPrefix(verifyStr, "endstr") && !strings.HasPrefix(verifyStr, "endobj") {
 		return 0, false
 	}
 	return dataLen, true
