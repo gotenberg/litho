@@ -436,7 +436,19 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		if isStandardStructType(src, profile) {
 			continue
 		}
-		resolveToStandard(src, mapping, results, profile)
+		if resolveToStandard(src, mapping, results, profile) {
+			continue
+		}
+		// PDF/UA-2 is the one profile with no element walk for the
+		// non-standard rule: checkUnmappedStructTypes is not called for it,
+		// because its namespace-aware walk owns every element that declares a
+		// namespace. That walk skips namespace-less types, which resolve
+		// through the legacy /RoleMap, so they are answered here.
+		if IsPDFUA(profile) && PDFUAPart(profile) == 2 &&
+			classifyRoleChain(src, mapping, profile) == roleChainUnmapped {
+			*results = append(*results, failf(roleMapNonStandardRule(profile),
+				"non-standard type %s is not mapped to a standard type", src)...)
+		}
 	}
 }
 
