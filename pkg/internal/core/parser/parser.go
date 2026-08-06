@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -234,6 +235,19 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 		}
 		i, err := strconv.ParseInt(t0.Value, 10, 64)
 		if err != nil {
+			// A magnitude past the 64-bit range is still a number. ISO 32000-1,
+			// 7.3.3 caps integers at the implementation limit and permits a
+			// value beyond it to be read as a real, which is what every
+			// mainstream reader does. Failing here instead cost the enclosing
+			// dictionary every one of its keys, and silently: a catalog holding
+			// such a value came back empty, taking its /Pages with it.
+			// Only a plain decimal that overflows: a bare exponent ("1e2") has
+			// no ISO 32000-1, 7.3.3 syntax at all and stays a parse error.
+			if isDecimalDigits(t0.Value) {
+				if f, ferr := strconv.ParseFloat(t0.Value, 64); ferr == nil && !math.IsInf(f, 0) {
+					return ast.PdfReal(f), nil
+				}
+			}
 			return nil, err
 		}
 		return ast.PdfInt(i), nil
@@ -1181,4 +1195,25 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 		decoded = dec
 	}
 	return ast.PdfString(decoded), nil
+}
+
+// isDecimalDigits reports whether s is an optionally signed run of decimal
+// digits, the shape of an integer literal that can only fail to parse by
+// overflowing.
+func isDecimalDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] == '+' || s[0] == '-' {
+		s = s[1:]
+	}
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
