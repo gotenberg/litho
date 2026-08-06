@@ -133,7 +133,7 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 	// fails the embedding rule (§6.2.11.4.1); flagging a missing CIDToGIDMap too
 	// is a false positive.
 	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
-	if fd == nil || !isFontEmbedded(ctx, doc, fd, fontFileKeys(cidSubtype)) {
+	if fd == nil || !isFontEmbedded(ctx, doc, fd, fontFileKeys(cidSubtype), PDFAPart(profile)) {
 		return nil
 	}
 

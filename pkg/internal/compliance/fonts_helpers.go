@@ -375,7 +375,7 @@ func fontFileKeys(subtype string) []ast.PdfName {
 	}
 }
 
-func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict, validKeys []ast.PdfName) bool {
+func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict, validKeys []ast.PdfName, part int) bool {
 	if fd == nil {
 		return false
 	}
@@ -387,7 +387,18 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 					"key", key, "error", err)
 				continue
 			}
-			if _, isStream := resolved.(ast.PdfStream); isStream {
+			if stream, isStream := resolved.(ast.PdfStream); isStream {
+				// A /FontFile3 says which program it holds. One naming a subtype
+				// the part does not define, or naming none at all, states no
+				// glyph format, so it embeds nothing a consumer can read:
+				// veraPDF reports the font as not embedded. /FontFile and
+				// /FontFile2 have one format each and carry no such key.
+				if key == "FontFile3" {
+					subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+					if !isValidFontFileSubtype(part, string(subtype)) {
+						continue
+					}
+				}
 				return true
 			}
 			// Non-null, non-stream: treat as present but invalid (still "embedded"
@@ -473,7 +484,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
-	if !isFontEmbedded(ctx, doc, fd, fontFileKeys(fontSubtype(ctx, doc, fontDict))) {
+	if !isFontEmbedded(ctx, doc, fd, fontFileKeys(fontSubtype(ctx, doc, fontDict)), PDFAPart(profile)) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
