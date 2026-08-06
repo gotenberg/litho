@@ -373,33 +373,86 @@ func hasValidMediaClipAlt(ctx context.Context, doc *document.Document, clipDict 
 	return false
 }
 
-// checkFormFieldTU validates that form fields have a non-empty /TU key.
-// Per PDF/UA-1 §7.18.1 test 3: "A form field shall have a TU key present
-// or all its Widget annotations shall have alternative descriptions."
-// This check validates /TU presence and non-emptiness. The alternative
-// (Widget Alt in structure tree) is not checked due to complexity.
+// checkFormFieldTU validates ISO 14289-1, 7.18.1 test 3: a widget annotation
+// shall carry a /TU on its field, or an /Alt on the structure element that
+// encloses it.
+//
+// The walk starts at the page /Annots, not at /AcroForm /Fields. The rule's
+// object is veraPDF's PDWidgetAnnot, a widget shown on a page, and a widget
+// that no field references is still shown: driving the check from the field
+// tree missed one, and the repair sharing this trigger then skipped it too.
+//
+// /TU is a field attribute a kid widget inherits, so the lookup climbs the
+// /Parent chain (ISO 32000-1, 12.7.3.1).
 func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
 
-	acroForm, err := document.ResolveDict(ctx, doc, catalog["AcroForm"])
-	if err != nil || acroForm == nil {
-		return nil
-	}
-
-	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
-	if err != nil {
-		doc.Logger.Debug("compliance.accessibility: cannot resolve form fields array", "error", err)
-		return nil
-	}
+	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 
 	var results []Violation
-	seen := make(map[int]bool)
-	for _, fieldObj := range fields {
-		results = append(results, checkFieldTURecursive(ctx, doc, fieldObj, 0, seen)...)
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return results
+		}
+		annots, err := document.ResolveArray(ctx, doc, page["Annots"])
+		if err != nil {
+			doc.Logger.Debug("compliance.accessibility: cannot resolve page annots", "error", err)
+			continue
+		}
+		for _, annotObj := range annots {
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
+				continue
+			}
+			// Hidden or invisible annotations are exempt.
+			flags, _ := document.ResolveInt(ctx, doc, annot["F"])
+			const (
+				invisBit  = 1 << 0 // bit 0
+				hiddenBit = 1 << 1 // bit 1
+				noViewBit = 1 << 5 // bit 5
+			)
+			if int(flags)&(hiddenBit|invisBit|noViewBit) != 0 {
+				continue
+			}
+			// Annotations with Rect outside the page CropBox are exempt.
+			if annotRectOutsideCropBox(ctx, doc, annot) {
+				continue
+			}
+			if inheritedFieldTU(ctx, doc, annot) != "" {
+				continue
+			}
+			if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, make(map[int]bool), 0) {
+				continue
+			}
+			name, _ := document.ResolveString(ctx, doc, annot["T"])
+			results = append(results, failf(Rule_14289_1_7_18_1_t03,
+				"form field %q: missing or empty /TU key and no Alt on enclosing structure element",
+				string(name))...)
+		}
 	}
 	return results
+}
+
+// inheritedFieldTU returns the /TU a widget answers with, its own or the
+// nearest one on its /Parent chain, or "" when no ancestor states one.
+func inheritedFieldTU(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
+	node := annot
+	for range maxFieldTUSearchDepth {
+		if tu, _ := document.ResolveString(ctx, doc, node["TU"]); len(tu) > 0 {
+			return string(tu)
+		}
+		parent, err := document.ResolveDict(ctx, doc, node["Parent"])
+		if err != nil || parent == nil {
+			return ""
+		}
+		node = parent
+	}
+	return ""
 }
 
 // annotRectOutsideCropBox checks if an annotation's /Rect is entirely outside
@@ -490,71 +543,3 @@ func formStructElementHasAlt(ctx context.Context, doc *document.Document, node a
 // [maxFieldTreeDepth] (the general field-tree cap) because a /TU appears on
 // or near the terminal field, so a deep crafted tree need not be descended.
 const maxFieldTUSearchDepth = 10
-
-// checkFieldTURecursive checks a form field (and its children) for /TU. seen
-// visits each field object once, so a shared or cyclic /Kids tree cannot force
-// exponential work.
-func checkFieldTURecursive(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, depth int, seen map[int]bool) []Violation {
-	if depth > maxFieldTUSearchDepth {
-		return nil
-	}
-	if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
-		if seen[ref.ObjectNum] {
-			return nil
-		}
-		seen[ref.ObjectNum] = true
-	}
-	field, err := document.ResolveDict(ctx, doc, fieldObj)
-	if err != nil || field == nil {
-		return nil
-	}
-
-	// Terminal fields have /FT or Widget /Subtype.
-	_, hasFT := field["FT"]
-	subtype, _ := document.ResolveName(ctx, doc, field["Subtype"])
-	isTerminal := hasFT || subtype == "Widget"
-
-	if isTerminal {
-		// Hidden or invisible annotations are exempt.
-		flags, _ := document.ResolveInt(ctx, doc, field["F"])
-		const (
-			invisBit  = 1 << 0 // bit 0
-			hiddenBit = 1 << 1 // bit 1
-			noViewBit = 1 << 5 // bit 5
-		)
-		if int(flags)&(hiddenBit|invisBit|noViewBit) != 0 {
-			return nil
-		}
-		// Annotations with Rect outside the page CropBox are exempt.
-		if annotRectOutsideCropBox(ctx, doc, field) {
-			return nil
-		}
-
-		// Check /TU key: must be present and non-empty.
-		tuStr, _ := document.ResolveString(ctx, doc, field["TU"])
-		if len(tuStr) > 0 {
-			return nil
-		}
-		// TU missing or empty. Check if widget has Alt in structure tree.
-		catalog, _ := document.ResolveCatalog(ctx, doc)
-		treeRoot, _ := document.ResolveDict(ctx, doc, catalog.Dict["StructTreeRoot"])
-		if treeRoot != nil && formStructElementHasAlt(ctx, doc, treeRoot, make(map[int]bool), 0) {
-			return nil
-		}
-		fieldName, _ := document.ResolveString(ctx, doc, field["T"])
-		return failf(Rule_14289_1_7_18_1_t03,
-			"form field %q: missing or empty /TU key and no Alt on enclosing structure element", string(fieldName))
-	}
-
-	// Non-terminal: recurse into /Kids.
-	kids, err := document.ResolveArray(ctx, doc, field["Kids"])
-	if err != nil {
-		doc.Logger.Debug("compliance.accessibility: cannot resolve field kids array", "error", err)
-		return nil
-	}
-	var results []Violation
-	for _, kid := range kids {
-		results = append(results, checkFieldTURecursive(ctx, doc, kid, depth+1, seen)...)
-	}
-	return results
-}
