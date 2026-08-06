@@ -510,6 +510,9 @@ func TestResolveToStandard(t *testing.T) {
 		}
 	})
 
+	// The non-standard rule is scoped to the structure element, so this
+	// function only answers the question: checkUnmappedStructTypes reports it,
+	// once per element rather than once per chain.
 	t.Run("unmapped non-standard", func(t *testing.T) {
 		t.Parallel()
 		mapping := map[ast.PdfName]ast.PdfName{
@@ -520,8 +523,8 @@ func TestResolveToStandard(t *testing.T) {
 		if ok {
 			t.Error("expected false for unmapped non-standard type")
 		}
-		if len(results) == 0 {
-			t.Error("expected violation for non-standard type not resolving to standard")
+		if len(results) != 0 {
+			t.Errorf("expected no violations from the chain walk, got %d", len(results))
 		}
 	})
 

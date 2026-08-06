@@ -490,9 +490,18 @@ func collectUsedStructTypes(ctx context.Context, doc *document.Document, structT
 	return used
 }
 
-// resolveToStandard follows the role map chain from src and returns true if it
-// terminates at a standard type. Reports circular mappings and unmapped types.
-func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, results *[]Violation, profile string) bool {
+// roleChainOutcome says where a role map chain ends.
+type roleChainOutcome int
+
+const (
+	roleChainStandard roleChainOutcome = iota // terminates at a standard type
+	roleChainUnmapped                         // terminates at a non-standard type
+	roleChainCircular                         // revisits a type it already passed
+	roleChainDepth                            // longer than [maxStructTreeDepth]
+)
+
+// classifyRoleChain follows the role map chain from src and says where it ends.
+func classifyRoleChain(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, profile string) roleChainOutcome {
 	visited := map[ast.PdfName]bool{src: true}
 	current := src
 
@@ -501,29 +510,42 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 		if !ok {
 			// current is not in the mapping; check if it is a standard type.
 			if isStandardStructType(current, profile) {
-				return true
+				return roleChainStandard
 			}
-			*results = append(*results, failf(roleMapNonStandardRule(profile),
-				"non-standard type %s is not mapped to a standard type", src)...)
-			return false
+			return roleChainUnmapped
 		}
 
 		if isStandardStructType(target, profile) {
-			return true
+			return roleChainStandard
 		}
 
 		if visited[target] {
-			*results = append(*results, failf(roleMapCircularRule(profile),
-				"circular mapping for %s", src)...)
-			return false
+			return roleChainCircular
 		}
 		visited[target] = true
 		current = target
 	}
 
-	// Depth limit exceeded. Treat as circular.
-	*results = append(*results, failf(roleMapCircularRule(profile),
-		"role map chain for %s exceeds depth limit", src)...)
+	return roleChainDepth
+}
+
+// resolveToStandard follows the role map chain from src and returns true if it
+// terminates at a standard type. It reports a circular chain, which every
+// profile scopes to the map entry. It does NOT report a chain that ends at a
+// non-standard type: that rule is scoped to the structure element, so
+// [checkUnmappedStructTypes] owns it and reports once per element.
+func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, results *[]Violation, profile string) bool {
+	switch classifyRoleChain(src, mapping, profile) {
+	case roleChainStandard:
+		return true
+	case roleChainCircular:
+		*results = append(*results, failf(roleMapCircularRule(profile),
+			"circular mapping for %s", src)...)
+	case roleChainDepth:
+		*results = append(*results, failf(roleMapCircularRule(profile),
+			"role map chain for %s exceeds depth limit", src)...)
+	case roleChainUnmapped:
+	}
 	return false
 }
 
@@ -1513,9 +1535,14 @@ func isMathMLType(typeName ast.PdfName) bool {
 	return typeName == "math" || typeName == "Math"
 }
 
-// checkUnmappedStructTypes walks the structure tree and flags non-standard
-// types that are not in the /RoleMap. This catches types used in the document
-// but never declared in the role mapping.
+// checkUnmappedStructTypes walks the structure tree and flags every element
+// whose type reaches no standard type, whether the /RoleMap omits it or maps it
+// to another non-standard type.
+//
+// The rule is scoped to the element, not to the type name: ISO 14289-1 7.1 t5,
+// ISO 14289-2 8.2.4 t1 and ISO 19005-1/2/3 6.8.3.4/6.7.3.4 t1 all carry
+// veraPDF's SENonStandard as their object. Nine elements sharing one unmapped
+// type are nine violations, and deduplicating by name reported one.
 func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
 	roleMap := LoadRoleMap(ctx, doc, structTreeRoot)
 	rule := roleMapNonStandardRule(profile)
@@ -1523,20 +1550,16 @@ func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, struc
 		return
 	}
 
-	reported := make(map[ast.PdfName]bool)
 	walkStructureElements(ctx, doc, structTreeRoot, func(elem ast.PdfDict, _ string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		if typeName == "" || reported[typeName] {
+		if typeName == "" || isStandardStructType(typeName, profile) {
 			return
 		}
-		if isStandardStructType(typeName, profile) {
+		// A circular chain is the circular rule's business, and it is scoped to
+		// the map entry, so an element on one answers there instead.
+		if classifyRoleChain(typeName, roleMap, profile) != roleChainUnmapped {
 			return
 		}
-		// Types in the RoleMap are mapped to standard types.
-		if _, inMap := roleMap[typeName]; inMap {
-			return
-		}
-		reported[typeName] = true
 		*results = append(*results, failf(rule,
 			"non-standard structure type %s is not mapped to a standard type", typeName)...)
 	})
