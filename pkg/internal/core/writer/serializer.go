@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -100,6 +102,12 @@ func formatReal(f float64) string {
 	// exponent, which PDF reals forbid) so small values survive.
 	if f != 0 && (s == "0" || s == "-0") {
 		s = strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	// Trimming the decimal point turns the literal into an integer one. A
+	// magnitude the 64-bit range cannot hold then reads back as an
+	// out-of-range integer rather than a real, so keep the point on those.
+	if !strings.ContainsRune(s, '.') && (f >= math.MaxInt64 || f <= math.MinInt64) {
+		s += ".0"
 	}
 	return s
 }
