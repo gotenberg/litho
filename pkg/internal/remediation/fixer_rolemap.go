@@ -98,12 +98,15 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		cur := targets[src]
 		for steps := 0; steps < len(targets); steps++ {
 			if cur == src {
-				if namespaced {
-					delete(keep, src)
-				} else {
-					keep[src] = ast.PdfName("P")
-					targets[src] = "P"
-				}
+				// Remap rather than delete, in a namespaced document too.
+				// Deleting the entry that closes the cycle leaves every other
+				// entry aimed at it pointing at an unmapped name, which trades
+				// the circular-mapping violation for an
+				// is-not-mapped-to-a-standard-type one (ISO 14289-2, 8.2.4 t1).
+				// Measured on complex_ua1 repaired at PDF/UA-2, where breaking
+				// /Bar -> /Foo left /MyType -> /Foo -> /Bar dangling.
+				keep[src] = ast.PdfName("P")
+				targets[src] = "P"
 				cyclesBroken++
 				break
 			}

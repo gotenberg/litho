@@ -71,8 +71,10 @@ func anyFixContains(fixes []string, sub string) bool {
 func TestFixRoleMap_BreaksMultiHopCycle_KeepsNamespacedStandard(t *testing.T) {
 	// Namespaced (PDF 2.0 / PDF/UA-2) document: a 2-cycle A<->B, a valid
 	// custom->standard mapping, and a standard-NAMED mapping (Title->P). The
-	// cycle is broken; both the custom and the standard-named entries are kept
-	// because a standard name may belong to a custom namespace here.
+	// cycle is broken by remapping, not by deleting: a deleted entry leaves
+	// every other entry aimed at it pointing at an unmapped name. Both the
+	// custom and the standard-named entries are kept because a standard name
+	// may belong to a custom namespace here.
 	data := roleMapPDF("<< /A /B /B /A /Custom /P /Title /P >>", true)
 	doc, alloc := newTestDoc(t, data)
 
@@ -82,10 +84,11 @@ func TestFixRoleMap_BreaksMultiHopCycle_KeepsNamespacedStandard(t *testing.T) {
 	}
 	rm := resolvedRoleMap(t, alloc)
 
-	if _, a := rm["A"]; a {
-		if _, b := rm["B"]; b {
-			t.Errorf("circular mapping A<->B was not broken: %v", rm)
-		}
+	if rm["A"] == ast.PdfName("B") && rm["B"] == ast.PdfName("A") {
+		t.Errorf("circular mapping A<->B was not broken: %v", rm)
+	}
+	if rm["A"] != ast.PdfName("P") {
+		t.Errorf("the entry closing the cycle should be remapped to a standard type: %v", rm)
 	}
 	if rm["Custom"] != ast.PdfName("P") {
 		t.Errorf("custom->standard mapping should be kept: %v", rm)
