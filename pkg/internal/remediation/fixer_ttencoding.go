@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -69,7 +70,7 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		// ISO 19005-4, 6.2.10.6 t3) forbid it an /Encoding entry outright.
 		// Normalising one onto it would introduce the very violation this
 		// package exists to remove.
-		if isSymbolicTrueType(ctx, doc, fontDict) {
+		if keepsBuiltInEncoding(ctx, doc, fontDict) {
 			continue
 		}
 
@@ -126,10 +127,21 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // Adobe standard Latin set.
 const symbolicFontFlag = 1 << 2
 
-// isSymbolicTrueType reports whether a font dictionary's descriptor marks it
-// symbolic. A font with no readable descriptor is treated as non-symbolic,
-// matching the encoding rules that apply when the flag cannot be established.
-func isSymbolicTrueType(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+// keepsBuiltInEncoding reports whether a TrueType font resolves character codes
+// through an encoding of its own, so writing a standard /Encoding onto it would
+// change what its text says rather than only how it validates.
+func keepsBuiltInEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	// Symbol and ZapfDingbats define their own encodings (ISO 32000-1,
+	// 9.6.2.2 and Annex D.5/D.6) and a PDF may reference either without a
+	// descriptor at all. Code 0x61 is alpha in Symbol and 0xB7 is bullet;
+	// under WinAnsi the same codes read as "a" and middledot, so a chemistry
+	// paper's "α-keto-glutarate" silently became "a-keto-glutarate".
+	if base, _ := document.ResolveName(ctx, doc, fontDict["BaseFont"]); hasBuiltInEncoding(string(base)) {
+		return true
+	}
+	// A font with no readable descriptor cannot be established as symbolic
+	// and keeps the non-symbolic treatment, as
+	// TestFixTrueTypeEncoding_NoDescriptorIsTreatedNonSymbolic records.
 	descriptor, err := document.ResolveDict(ctx, doc, fontDict["FontDescriptor"])
 	if err != nil || descriptor == nil {
 		return false
@@ -139,6 +151,19 @@ func isSymbolicTrueType(ctx context.Context, doc *document.Document, fontDict as
 		return false
 	}
 	return flags&symbolicFontFlag != 0
+}
+
+// hasBuiltInEncoding reports whether a /BaseFont names one of the standard
+// fonts that carry their own encoding, ignoring any subset prefix
+// ("ABCDEF+Symbol").
+func hasBuiltInEncoding(baseFont string) bool {
+	if len(baseFont) > 7 && baseFont[6] == '+' {
+		baseFont = baseFont[7:]
+	}
+	if i := strings.IndexByte(baseFont, ','); i >= 0 {
+		baseFont = baseFont[:i]
+	}
+	return baseFont == "Symbol" || baseFont == "ZapfDingbats"
 }
 
 // patchEncodingDict sets /BaseEncoding to WinAnsiEncoding when it is
