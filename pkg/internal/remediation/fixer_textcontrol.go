@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -52,7 +53,7 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if err != nil || contentsObj == nil {
 			continue
 		}
-		removed, modified := stripControlBytesFromOps(ops)
+		removed, modified := stripControlBytesFromOps(ops, multiByteFontNames(ctx, doc, page))
 		if !modified {
 			continue
 		}
@@ -75,12 +76,35 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // Operators whose entire operand becomes empty are cleared so the
 // serialiser drops them. Returns the count of removed bytes plus a
 // flag indicating whether any op changed.
-func stripControlBytesFromOps(ops []content.Operation) (int, bool) {
+func stripControlBytesFromOps(ops []content.Operation, multiByte map[string]bool) (int, bool) {
 	removed := 0
 	modified := false
+	var currentFont string
 	for i := range ops {
 		op := ops[i].Operator
+		if op == "Tf" && len(ops[i].Operands) > 0 {
+			if name, ok := ops[i].Operands[0].(ast.PdfName); ok {
+				currentFont = string(name)
+			}
+		}
 		if op != "Tj" && op != "TJ" && op != "'" && op != "\"" {
+			continue
+		}
+		// A composite font addresses glyphs with multi-byte codes
+		// (ISO 32000-1, 9.7.6), so a byte below 0x20 is usually the high
+		// half of an ordinary code, not a glyph reference: under
+		// Identity-H every CID under U+2000 carries a 0x00 high byte.
+		// Dropping those bytes deletes half of each code and slides the
+		// rest of the string, which turned "A different method" into
+		// "㼼8E8AG@8" and cost issue2856 a third of its text.
+		//
+		// TODO: a composite font could still be repaired by dropping whole
+		// codes rather than bytes, which needs the /Encoding CMap's
+		// codespace ranges to know each code's width (ISO 32000-1, 9.7.6.2);
+		// Identity-H is two bytes but a predefined CMap may mix widths.
+		// Skipping leaves ~56 .notdef references unfixed across the veraPDF
+		// corpus, which is the safe side of the trade.
+		if multiByte[currentFont] {
 			continue
 		}
 		for j, operand := range ops[i].Operands {
@@ -160,4 +184,33 @@ func isEmptyTJArray(arr ast.PdfArray) bool {
 		}
 	}
 	return true
+}
+
+// multiByteFontNames returns the page's font resource names whose font uses
+// multi-byte character codes, i.e. the composite (Type 0) fonts of
+// ISO 32000-1, 9.7. Byte-level edits to a string shown with one of these split
+// its codes in half, so the caller leaves those strings alone.
+func multiByteFontNames(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
+	if page == nil || page.Resources == nil {
+		return nil
+	}
+	fonts, err := document.ResolveDict(ctx, doc, page.Resources["Font"])
+	if err != nil || fonts == nil {
+		doc.Logger.Debug("resolving page fonts for control-byte strip", slog.Any("err", err))
+		return nil
+	}
+	names := make(map[string]bool, len(fonts))
+	for name, entry := range fonts {
+		fd, err := document.ResolveDict(ctx, doc, entry)
+		if err != nil || fd == nil {
+			// An unresolvable font could be composite; treat it as such
+			// so a byte-level edit is never applied blind.
+			names[string(name)] = true
+			continue
+		}
+		if subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"]); subtype == "Type0" {
+			names[string(name)] = true
+		}
+	}
+	return names
 }
