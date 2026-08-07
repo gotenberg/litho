@@ -205,7 +205,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	// for the validator to keep flagging instead.
 	charToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 	if charToGID != nil && needsToUnicode(ctx, doc, fontDict) {
-		gidToUnicode := typography.ExtractGIDToUnicode(ctx, fontData)
+		gidToUnicode := typography.ExtractGIDToUnicodeAuthoritative(ctx, fontData)
 		if len(gidToUnicode) > 0 {
 			mapping := make(map[uint16]rune)
 			for charCode, gid := range charToGID {
@@ -313,7 +313,7 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 
 	// Generate /ToUnicode if missing or invalid.
 	if needsToUnicode(ctx, doc, fontDict) {
-		gidToUnicode := typography.ExtractGIDToUnicode(ctx, fontData)
+		gidToUnicode := typography.ExtractGIDToUnicodeAuthoritative(ctx, fontData)
 		if len(gidToUnicode) > 0 {
 			// For Identity-H/Identity-V: charcode = CID = GID.
 			mapping := make(map[uint16]rune)
@@ -607,6 +607,25 @@ func utf16HexHasForbidden(hexStr string) bool {
 // Area ranges (PUA mappings trigger clause 6.2.11.7.3 violations).
 func isValidUnicodeMapping(r rune) bool {
 	if r <= 0 || r == 0xFEFF || r == 0xFFFE {
+		return false
+	}
+	// A /ToUnicode entry states what a glyph MEANS as text (ISO 32000-1,
+	// 9.10.3), and a control character is not text. Accepting them let a
+	// font whose GID table is an identity map produce <01> -> U+0001 for
+	// every code, and since extraction prefers /ToUnicode over the font's
+	// own encoding, remediation replaced readable text with control bytes.
+	// An empty mapping writes no /ToUnicode at all, which leaves the
+	// original, working extraction path in place.
+	if r <= 0x1F || (r >= 0x7F && r <= 0x9F) {
+		return false
+	}
+	// Surrogate halves are not characters and cannot be encoded in the
+	// UTF-16BE values a bfchar destination carries.
+	if r >= 0xD800 && r <= 0xDFFF {
+		return false
+	}
+	// Noncharacters: U+FDD0-U+FDEF and the last two of every plane.
+	if (r >= 0xFDD0 && r <= 0xFDEF) || r&0xFFFE == 0xFFFE {
 		return false
 	}
 	// BMP PUA: U+E000–U+F8FF.

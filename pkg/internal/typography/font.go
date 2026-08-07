@@ -471,46 +471,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			font.SuppressExtraction = true
 		} else if isIdentityEncoding(ctx, doc, fontDict) {
 			font.CIDIdentityFallback = true
-			// Detect CID offset from the /W array. Many non-embedded fonts
-			// use GIDs where the first printable character (space, U+0020)
-			// starts at GID 3 (offset 29). If /W starts at CID 3, assume
-			// CID + 29 = Unicode. Skipped when the CIDFont has an explicit
-			// /CIDToGIDMap stream: the stream already remaps CIDs to
-			// subset GIDs, so the CID values carry Unicode semantics
-			// directly and adding +29 would shift the text (e.g. "6XPPD"
-			// becomes "Summa").
-			if !hasCIDToGIDMapStream(ctx, doc, fontDict) {
-				font.CIDOffset = detectCIDOffset(font.CIDWidths)
-				// Non-embedded fonts (e.g. /Impact referenced by name,
-				// never shipped with the PDF) follow the host font's
-				// standard TrueType GID table where space is GID 3.
-				// When no /FontFile2 or /FontFile3 is present the /W
-				// array often exposes unusual values on CIDs 0-2 that
-				// defeat the width-based detection above; apply the +29
-				// offset unconditionally so CID 26 → '7', CID 22 → '3',
-				// etc.
-				if font.CIDOffset == 0 && !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
-					font.CIDOffset = 29
-				}
-				// Overlay a partial GID→Unicode table for the handful of
-				// Windows standard fonts (Arial, Helvetica) that PDFs
-				// reference by name without embedding. The CID + 29
-				// heuristic covers ASCII; extended-Latin positions (e.g.
-				// GID 207 = Ó in Arial, GID 179-182 = smart quotes) do
-				// not follow a linear offset and need an explicit lookup.
-				// [stdfonts.CMap] provides the curated subset.
-				if !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
-					if bf, ok := fontDict["BaseFont"]; ok {
-						name, _ := document.ResolveName(ctx, doc, bf)
-						if m := stdfonts.CMap(string(name)); m != nil {
-							if font.GIDToUnicode == nil {
-								font.GIDToUnicode = make(map[uint16]rune, len(m))
-							}
-							maps.Copy(font.GIDToUnicode, m)
-						}
-					}
-				}
-			}
+			applyCIDIdentityHeuristics(ctx, doc, fontDict, font)
 		}
 	}
 
@@ -1494,6 +1455,49 @@ func extractEmbeddedCmap(ctx context.Context, doc *document.Document, fontDict a
 	font.GIDToUnicode = gidMap
 }
 
+// ExtractGIDToUnicodeAuthoritative returns a glyph ID to Unicode mapping only
+// when the font states one that is genuinely Unicode.
+//
+// [ExtractGIDToUnicode] will fall back to a TrueType (1,0) Macintosh subtable
+// and read its byte as a code point. That is a reasonable last resort for
+// DISPLAYING text, but it is not a fact about the font: a symbolic subset
+// numbers its glyphs from 1, so inverting that subtable claims glyph 1 means
+// U+0001. Writing such a claim into a /ToUnicode CMap is worse than writing
+// nothing, because extraction prefers /ToUnicode over the font's own encoding
+// and readable text becomes control bytes and stray punctuation.
+//
+// Callers that PERSIST a mapping use this; callers that merely read text use
+// [ExtractGIDToUnicode]. CFF glyph names resolve through the Adobe Glyph List
+// and are authoritative, so only the TrueType path is gated.
+func ExtractGIDToUnicodeAuthoritative(ctx context.Context, fontData []byte) map[uint16]rune {
+	switch detectFontFormat(fontData) {
+	case fontFormatTrueType, fontFormatUnknown:
+		if !hasUnicodeCmapSubtable(fontData) {
+			return nil
+		}
+	case fontFormatOTTO, fontFormatBareCFF:
+	}
+	return ExtractGIDToUnicode(ctx, fontData)
+}
+
+// hasUnicodeCmapSubtable reports whether a TrueType font declares a cmap
+// subtable whose character codes are Unicode: platform 0 (Unicode), or
+// platform 3 with encoding 1 (BMP) or 10 (full repertoire). Platform 3
+// encoding 0 is symbolic and platform 1 is Macintosh; neither states Unicode
+// (OpenType spec, 'cmap' platform IDs).
+func hasUnicodeCmapSubtable(fontData []byte) bool {
+	subtables, err := truetype.CmapSubtables(fontData)
+	if err != nil {
+		return false
+	}
+	for _, s := range subtables {
+		if s.PlatformID == 0 || (s.PlatformID == 3 && (s.EncodingID == 1 || s.EncodingID == 10)) {
+			return true
+		}
+	}
+	return false
+}
+
 // ExtractGIDToUnicode dispatches font data to the appropriate parser
 // (TrueType or CFF) based on the font signature and returns a
 // glyph ID to Unicode rune mapping.
@@ -1823,6 +1827,65 @@ func hasCJKFontName(s string) bool {
 		}
 	}
 	return false
+}
+
+// applyCIDIdentityHeuristics fills in what the identity CID fallback needs to
+// read text: the CID-to-Unicode offset, and a partial GID table for the
+// standard faces a PDF may reference without embedding.
+//
+// TODO: [applyCIDToGIDIdentityFallback] turns [Font.CIDIdentityFallback] on for
+// an explicit /CIDToGIDMap /Identity without calling this, so that path reads a
+// CID as a code point with no offset. An absent /CIDToGIDMap already means
+// Identity (ISO 32000-1, 9.7.4.2), so writing the key changes extracted text:
+// "Dotless Forms" becomes "'RWOHVV )RUPV" (ThuluthFeatures.pdf), and a PDF/A
+// fixer writes that key. Calling this from there fixes the shift but moves two
+// pdfjs text goldens (issue11242_reduced, issue15719), whose expectations were
+// captured against the short-circuit, so the offset heuristics need settling
+// first: the +29 guess for a non-embedded font overrides /W evidence that the
+// font already states (Tahoma declares CIDs 1-3).
+func applyCIDIdentityHeuristics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	// Skipped when the CIDFont has an explicit /CIDToGIDMap stream: the
+	// stream already remaps CIDs to subset GIDs, so the CID values carry
+	// Unicode semantics directly and adding +29 would shift the text
+	// (e.g. "6XPPD" becomes "Summa").
+	if hasCIDToGIDMapStream(ctx, doc, fontDict) {
+		return
+	}
+	// Many non-embedded fonts use GIDs where the first printable character
+	// (space, U+0020) starts at GID 3 (offset 29). If /W starts at CID 3,
+	// assume CID + 29 = Unicode.
+	font.CIDOffset = detectCIDOffset(font.CIDWidths)
+	// Non-embedded fonts (e.g. /Impact referenced by name, never shipped
+	// with the PDF) follow the host font's standard TrueType GID table
+	// where space is GID 3. When no /FontFile2 or /FontFile3 is present
+	// the /W array often exposes unusual values on CIDs 0-2 that defeat
+	// the width-based detection above; apply the +29 offset
+	// unconditionally so CID 26 → '7', CID 22 → '3', etc.
+	if font.CIDOffset == 0 && !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
+		font.CIDOffset = 29
+	}
+	// Overlay a partial GID→Unicode table for the handful of Windows
+	// standard fonts (Arial, Helvetica) that PDFs reference by name without
+	// embedding. The CID + 29 heuristic covers ASCII; extended-Latin
+	// positions (e.g. GID 207 = Ó in Arial, GID 179-182 = smart quotes) do
+	// not follow a linear offset and need an explicit lookup.
+	// [stdfonts.CMap] provides the curated subset.
+	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
+		return
+	}
+	bf, ok := fontDict["BaseFont"]
+	if !ok {
+		return
+	}
+	name, _ := document.ResolveName(ctx, doc, bf)
+	m := stdfonts.CMap(string(name))
+	if m == nil {
+		return
+	}
+	if font.GIDToUnicode == nil {
+		font.GIDToUnicode = make(map[uint16]rune, len(m))
+	}
+	maps.Copy(font.GIDToUnicode, m)
 }
 
 // detectCIDOffset infers the CID-to-Unicode offset from the /W (widths) map.
