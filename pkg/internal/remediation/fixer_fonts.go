@@ -311,11 +311,17 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 		}
 	}
 
-	// Generate /ToUnicode if missing or invalid.
-	if needsToUnicode(ctx, doc, fontDict) {
+	// Generate /ToUnicode if missing or invalid. The mapping below keys
+	// destinations by GID and emits them as character codes, which is only
+	// true when the code IS the GID: the encoding must be Identity-H/V
+	// (code = CID, ISO 32000-1, 9.7.5.2) and the CIDFont must not carry a
+	// /CIDToGIDMap stream (CID = GID, 9.7.4.2). A stream states a mapping
+	// that is deliberately not the identity, so assuming otherwise emits a
+	// destination belonging to a different glyph: ArialMT came back as
+	// "qe^kk" instead of "THANN".
+	if needsToUnicode(ctx, doc, fontDict) && identityCIDRoute(ctx, doc, fontDict, cidFont) {
 		gidToUnicode := typography.ExtractGIDToUnicodeAuthoritative(ctx, fontData)
 		if len(gidToUnicode) > 0 {
-			// For Identity-H/Identity-V: charcode = CID = GID.
 			mapping := make(map[uint16]rune)
 			for gid, r := range gidToUnicode {
 				if isValidUnicodeMapping(r) {
@@ -708,4 +714,28 @@ func generateToUnicodeCMap(mapping map[uint16]rune, codeBytes int) []byte {
 	buf.WriteString("CMapName currentdict /CMap defineresource pop\n")
 	buf.WriteString("end end\n")
 	return []byte(buf.String())
+}
+
+// identityCIDRoute reports whether a Type 0 font's character codes reach glyphs
+// by the identity route, so a GID-keyed Unicode table can be emitted verbatim
+// as a /ToUnicode CMap.
+//
+// Two links must both be the identity: the /Encoding CMap taking a code to a
+// CID (Identity-H or Identity-V, ISO 32000-1, 9.7.5.2), and /CIDToGIDMap taking
+// a CID to a GID (absent or /Identity, 9.7.4.2). A predefined CMap or a
+// /CIDToGIDMap stream breaks the chain, and there is no trustworthy mapping to
+// write.
+func identityCIDRoute(ctx context.Context, doc *document.Document, fontDict, cidFont ast.PdfDict) bool {
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	if encName != "Identity-H" && encName != "Identity-V" {
+		return false
+	}
+	mapObj, ok := cidFont["CIDToGIDMap"]
+	if !ok {
+		return true // Absent means Identity.
+	}
+	if name, err := document.ResolveName(ctx, doc, mapObj); err == nil && name == "Identity" {
+		return true
+	}
+	return false
 }
