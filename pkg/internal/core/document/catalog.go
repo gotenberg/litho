@@ -471,22 +471,36 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 		}
 
+		// A damaged branch costs that branch, not the document. A /Kids chain
+		// that loops, or a kid that will not resolve, says nothing about its
+		// siblings, so prune it and keep walking: a tree whose first kid is a
+		// sound page and whose second loops still yields that page. Aborting the
+		// whole walk instead discards every page already collected. Cancellation
+		// is not a damaged branch and still stops the traversal.
 		for _, kidObj := range kidsArr {
 			var kidRef ast.PdfIndirectRef
 			if r, ok := kidObj.(ast.PdfIndirectRef); ok {
 				kidRef = r
 			}
 			kidDict, err := resolveKidDict(ctx, doc, kidObj)
-			if err != nil {
-				return fmt.Errorf("failed to resolve kid: %w", err)
-			}
-			if kidDict == nil {
-				return fmt.Errorf("kid is not a dictionary")
+			if err != nil || kidDict == nil {
+				doc.Logger.Debug("pruning unresolvable page tree kid",
+					slog.Int("object", kidRef.ObjectNum),
+					slog.Any("err", err),
+				)
+				continue
 			}
 
 			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, currentRotate, pages, visited, done, depth+1)
 			if err != nil {
-				return fmt.Errorf("traversing page tree kid: %w", err)
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return fmt.Errorf("traversing page tree kid: %w", err)
+				}
+				doc.Logger.Debug("pruning damaged page tree branch",
+					slog.Int("object", kidRef.ObjectNum),
+					slog.Any("err", err),
+				)
+				continue
 			}
 		}
 	case "Page":
