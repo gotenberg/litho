@@ -476,10 +476,24 @@ func enclosingStructElemHasAlt(ctx context.Context, doc *document.Document, tree
 	return len(alt) > 0
 }
 
-// inheritedFieldTU returns the /TU a widget answers with, its own or the
-// nearest one on its /Parent chain, or "" when no ancestor states one.
+// inheritedFieldTU returns the /TU the widget's FIELD answers with, or "" when
+// no field on the /Parent chain states one.
+//
+// /TU is a field key (ISO 32000-1, Table 220), not an annotation key. A widget
+// merged with its field carries the field's keys directly and answers with its
+// own /TU; a kid widget is a pure annotation, so a /TU written on it states
+// nothing about the field and is skipped in favour of the /Parent chain
+// (ISO 32000-1, 12.7.3.1). Honouring a kid's own /TU passed a radio group whose
+// field had no /TU at all, which is what 7.18.1 t3 exists to catch.
 func inheritedFieldTU(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
 	node := annot
+	if !isFieldDict(node) {
+		parent, err := document.ResolveDict(ctx, doc, node["Parent"])
+		if err != nil || parent == nil {
+			return ""
+		}
+		node = parent
+	}
 	for range maxFieldTUSearchDepth {
 		if tu, _ := document.ResolveString(ctx, doc, node["TU"]); len(tu) > 0 {
 			return string(tu)
@@ -491,6 +505,16 @@ func inheritedFieldTU(ctx context.Context, doc *document.Document, annot ast.Pdf
 		node = parent
 	}
 	return ""
+}
+
+// isFieldDict reports whether a dictionary is (or is merged with) a form field.
+// A field is named by /T and typed by /FT, either of which may be inherited, so
+// a dictionary carrying either is a field rather than a bare widget annotation
+// (ISO 32000-1, 12.7.3.1).
+func isFieldDict(d ast.PdfDict) bool {
+	_, hasT := d["T"]
+	_, hasFT := d["FT"]
+	return hasT || hasFT
 }
 
 // annotRectOutsideCropBox checks if an annotation's /Rect is entirely outside
