@@ -193,6 +193,10 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 // trailer dictionary. It populates indexMap with the parsed entries and returns
 // the trailer dictionary, the byte offset of the previous xref section, and
 // any error encountered.
+// freeListHeadGeneration is the generation number ISO 32000-1, 7.5.4 gives the
+// head of the free list, which is always object 0.
+const freeListHeadGeneration = 65535
+
 func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, error) {
 	tok, err := lex.NextToken()
 	if err != nil {
@@ -273,6 +277,18 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 
 			if !isFree && !isNormal {
 				return nil, 0, fmt.Errorf("%w: invalid entry type: %s", ErrMalformedXRef, tokType.Value)
+			}
+
+			// ISO 32000-1, 7.5.4: the free-list head, offset 0 with
+			// generation 65535, is object 0 and only object 0. A subsection
+			// that declares it as object 1 has labelled every one of its
+			// entries one too high, which silently maps each object onto its
+			// predecessor's bytes and marks the real object 1 free. Producers
+			// do emit this (pdfjs issue7229.pdf, where it cost page 1 its only
+			// image), and each entry then lands exactly on the object header
+			// one lower, so the intended start is 0.
+			if i == 0 && startObj == 1 && offset == 0 && gen == freeListHeadGeneration && isFree {
+				startObj = 0
 			}
 
 			if _, exists := indexMap[startObj+i]; !exists {
