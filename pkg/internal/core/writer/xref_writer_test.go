@@ -38,10 +38,10 @@ func TestWriteXRefTable_Basic(t *testing.T) {
 	if !strings.Contains(out, "0 3\n") {
 		t.Error("missing subsection header '0 3'")
 	}
-	if !strings.Contains(out, "0000000000 65535 f \r\n") {
+	if !strings.Contains(out, "0000000000 65535 f\r\n") {
 		t.Error("missing free entry for object 0")
 	}
-	if !strings.Contains(out, "0000000009 00000 n \r\n") {
+	if !strings.Contains(out, "0000000009 00000 n\r\n") {
 		t.Error("missing entry for object 1")
 	}
 	if !strings.Contains(out, "trailer\n") {

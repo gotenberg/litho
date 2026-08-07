@@ -65,11 +65,15 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 			if err := ctx.Err(); err != nil {
 				return 0, total, fmt.Errorf("writing xref entry for object %d: %w", entry.ObjNum, err)
 			}
+			// Per ISO 32000-1, 7.5.4, an entry is exactly 20 bytes including its
+			// two-byte end-of-line. With CRLF the type keyword is followed by the
+			// EOL directly; the "n <CR><LF>" spelling is 21 bytes and desynchronises
+			// strict readers from the second entry onward.
 			var line string
 			if entry.Free {
-				line = fmt.Sprintf("%010d %05d f \r\n", entry.Offset, entry.Generation)
+				line = fmt.Sprintf("%010d %05d f\r\n", entry.Offset, entry.Generation)
 			} else {
-				line = fmt.Sprintf("%010d %05d n \r\n", entry.Offset, entry.Generation)
+				line = fmt.Sprintf("%010d %05d n\r\n", entry.Offset, entry.Generation)
 			}
 			n, err := io.WriteString(w, line)
 			total += int64(n)
