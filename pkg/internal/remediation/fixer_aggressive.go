@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -334,12 +335,16 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 		}
 		buf.WriteByte(']')
 	case ast.PdfDict:
+		// Sorted: this dictionary is written straight into a content stream,
+		// so ranging the map would put the same operands in a different order
+		// on every run. An inline /Artifact came out as "/Attached /Type
+		// /Subtype" one run and "/Type /Subtype /Attached" the next.
 		buf.WriteString("<<")
-		for k, val := range v {
+		for _, k := range slices.Sorted(maps.Keys(v)) {
 			buf.WriteString(" /")
 			buf.WriteString(string(k))
 			buf.WriteByte(' ')
-			writeOperand(buf, val)
+			writeOperand(buf, v[k])
 		}
 		buf.WriteString(">>")
 	default:

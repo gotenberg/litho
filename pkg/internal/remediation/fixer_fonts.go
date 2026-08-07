@@ -411,9 +411,20 @@ func fixCharSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfD
 		return false
 	}
 
+	// [typography.ExtractGlyphNames] is keyed by glyph ID, and ranging a map
+	// emits the names in a different order on every run. /CharSet is written
+	// into the output, so that order IS the output bytes: the same input
+	// produced "/A/B" and "/B/A" on consecutive remediations, breaking the
+	// reproducible-build contract. Glyph ID order is the font's own.
+	gids := make([]uint16, 0, len(glyphNames))
+	for gid := range glyphNames {
+		gids = append(gids, gid)
+	}
+	slices.Sort(gids)
+
 	names := make([]string, 0, len(glyphNames))
-	for _, name := range glyphNames {
-		if name != "" && name != ".notdef" {
+	for _, gid := range gids {
+		if name := glyphNames[gid]; name != "" && name != ".notdef" {
 			names = append(names, "/"+name)
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -217,12 +218,15 @@ func refreshExtensionSchemaForFacturX(xmp []byte) ([]byte, []string, error) {
 		return buf, fixes, nil
 	}
 
-	for prefix, uri := range map[string]string{
+	// Sorted: the declarations land in the packet, so map order would make the
+	// same input produce different output bytes.
+	extensionNS := map[string]string{
 		"pdfaExtension": pdfaExtensionNS,
 		"pdfaSchema":    pdfaSchemaNS,
 		"pdfaProperty":  pdfaPropertyNS,
-	} {
-		out, err := ensureNamespaceDecl(buf, prefix, uri)
+	}
+	for _, prefix := range slices.Sorted(maps.Keys(extensionNS)) {
+		out, err := ensureNamespaceDecl(buf, prefix, extensionNS[prefix])
 		if err != nil {
 			return nil, nil, fmt.Errorf("declaring %s namespace: %w", prefix, err)
 		}

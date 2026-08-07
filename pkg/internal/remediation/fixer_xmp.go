@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -833,8 +834,11 @@ func applyExtensionSchemas(buf []byte, part int) ([]byte, []string) {
 					}
 				}
 			}
-			for prefix, uri := range decls {
-				if out, err := ensureNamespaceDecl(buf, prefix, uri); err == nil {
+			// Each declaration is written into the packet, so ranging the
+			// map would emit them in a different order on every run and the
+			// same input would produce different output bytes.
+			for _, prefix := range slices.Sorted(maps.Keys(decls)) {
+				if out, err := ensureNamespaceDecl(buf, prefix, decls[prefix]); err == nil {
 					buf = out
 				}
 			}
