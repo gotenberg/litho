@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -50,6 +51,12 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	var pageEntries []annotPageEntry
 	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
+	// A degenerate /MediaBox has to be replaced by a real one: unlike every
+	// other box it has no default, so it cannot simply be dropped. Prefer a
+	// size the document itself already uses, which is far likelier to contain
+	// the page's content than the 3-unit minimum.
+	fallbackMedia := widestUsableMediaBox(pageEntries)
+
 	count := 0
 	for _, pe := range pageEntries {
 		if ctx.Err() != nil {
@@ -61,6 +68,23 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		for _, key := range []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox"} {
 			arr, ok := newPage[key].(ast.PdfArray)
 			if !ok {
+				continue
+			}
+			// A degenerate box encloses nothing, and growing it to the 3-unit
+			// minimum at its lower-left corner leaves the page's content
+			// outside the page: pdfjs boundingBox_invalid.pdf lost the text of
+			// two pages that way, which litho's own regression gate caught,
+			// leaving the file unremediable. Every box except /MediaBox
+			// defaults to another box when absent (ISO 32000-1, Table 30), so
+			// dropping it is both lossless and what the producer meant.
+			if isDegenerateBox(arr) {
+				if key != "MediaBox" {
+					delete(newPage, key)
+					modified = true
+					continue
+				}
+				newPage[key] = fallbackMedia
+				modified = true
 				continue
 			}
 			if clamped, changed := clampBoxArray(arr, opts.PreserveContent); changed {
@@ -78,6 +102,53 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		return nil, nil
 	}
 	return []string{fmt.Sprintf("normalised page boundaries on %d page(s)", count)}, nil
+}
+
+// defaultMediaBox is US Letter, the size assumed when a degenerate /MediaBox
+// has to be replaced and the document offers no usable one of its own.
+//
+//nolint:gochecknoglobals // constant rectangle.
+var defaultMediaBox = ast.PdfArray{
+	ast.PdfReal(0), ast.PdfReal(0), ast.PdfReal(612), ast.PdfReal(792),
+}
+
+// widestUsableMediaBox builds a replacement /MediaBox from the largest width
+// and the largest height any non-degenerate page box in the document declares,
+// falling back to [defaultMediaBox] when there is none.
+//
+// The two extents are taken independently on purpose. Picking whole box with
+// the largest AREA is not enough: boundingBox_invalid.pdf has an 800x600 page
+// and a 600x800 one, identical in area, and choosing the first still cropped
+// away text drawn at y=700.
+func widestUsableMediaBox(entries []annotPageEntry) ast.PdfArray {
+	maxW, maxH := 0.0, 0.0
+	for _, pe := range entries {
+		arr, ok := pe.dict["MediaBox"].(ast.PdfArray)
+		if !ok || len(arr) != 4 || isDegenerateBox(arr) {
+			continue
+		}
+		maxW = math.Max(maxW, math.Abs(document.Float(arr[2])-document.Float(arr[0])))
+		maxH = math.Max(maxH, math.Abs(document.Float(arr[3])-document.Float(arr[1])))
+	}
+	if maxW <= 0 || maxH <= 0 {
+		return defaultMediaBox
+	}
+	return ast.PdfArray{
+		ast.PdfReal(0), ast.PdfReal(0), ast.PdfReal(maxW), ast.PdfReal(maxH),
+	}
+}
+
+// isDegenerateBox reports whether a rectangle encloses no area at all, so that
+// nothing drawn on the page can fall inside it.
+func isDegenerateBox(arr ast.PdfArray) bool {
+	if len(arr) != 4 {
+		return false
+	}
+	llx := document.Float(arr[0])
+	lly := document.Float(arr[1])
+	urx := document.Float(arr[2])
+	ury := document.Float(arr[3])
+	return urx-llx == 0 || ury-lly == 0
 }
 
 // clampBoxArray enforces dimension limits on a PDF rectangle
