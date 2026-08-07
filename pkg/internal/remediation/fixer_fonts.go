@@ -213,6 +213,14 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 					mapping[charCode] = r
 				}
 			}
+			// What a code MEANS in a simple font is stated by its
+			// /Encoding, through glyph names (ISO 32000-1, 9.6.6); the
+			// font program's cmap only says which glyph gets drawn. The
+			// two disagree whenever the two encodings do: under
+			// /MacRomanEncoding code 0xD5 is quoteright, and taking the
+			// program's answer wrote U+00D5, turning every ’ in a
+			// 470 KB document into Õ at exactly the same length.
+			overlaySimpleFontEncoding(ctx, doc, fontDict, mapping)
 			// Simple fonts address glyphs with one-byte codes.
 			if cmapData := generateToUnicodeCMap(mapping, 1); cmapData != nil {
 				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
@@ -738,4 +746,24 @@ func identityCIDRoute(ctx context.Context, doc *document.Document, fontDict, cid
 		return true
 	}
 	return false
+}
+
+// overlaySimpleFontEncoding replaces destinations in a pending /ToUnicode
+// mapping with the ones the font dictionary's /Encoding states.
+//
+// [typography.ResolveFont] already resolves a base encoding and its
+// /Differences into code-to-rune form, so the encoding tables are not
+// reproduced here. A symbolic font resolves to no encoding at all, and its
+// codes keep whatever the font program answered.
+func overlaySimpleFontEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, mapping map[uint16]rune) {
+	font, err := typography.ResolveFont(ctx, doc, fontDict)
+	if err != nil || font == nil {
+		doc.Logger.Debug("resolving font for /ToUnicode encoding overlay", slog.Any("err", err))
+		return
+	}
+	for code, r := range font.Encoding {
+		if isValidUnicodeMapping(r) {
+			mapping[uint16(code)] = r
+		}
+	}
 }
