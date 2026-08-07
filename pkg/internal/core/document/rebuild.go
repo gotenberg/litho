@@ -2,6 +2,7 @@ package document
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -113,13 +114,22 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 // later incremental update, supersedes the stream copy) and tolerates
 // unparseable or encrypted streams: recovery is best-effort.
 func (d *Document) expandObjectStreamsForRebuild(ctx context.Context, entries map[int]xref.XRefEntry) {
+	// A definition later in the file supersedes an earlier one, which is the
+	// rule the raw scan above already follows for uncompressed headers. Object
+	// streams have to follow it too: ordering them by object number instead
+	// let an OLD revision's stream win, and issue14269.pdf came back with the
+	// first revision's /Annots array, one signature widget short.
+	srcOffset := make(map[int]int64, len(entries))
 	stmCandidates := make([]int, 0, len(entries))
 	for objNum, e := range entries {
 		if e.Type == xref.XRefTypeNormal {
 			stmCandidates = append(stmCandidates, objNum)
+			srcOffset[objNum] = e.Offset
 		}
 	}
-	slices.Sort(stmCandidates)
+	slices.SortFunc(stmCandidates, func(a, b int) int {
+		return cmp.Compare(entries[a].Offset, entries[b].Offset)
+	})
 
 	for _, objStmNum := range stmCandidates {
 		if ctx.Err() != nil {
@@ -140,11 +150,13 @@ func (d *Document) expandObjectStreamsForRebuild(ctx context.Context, entries ma
 		if err != nil || data == nil {
 			continue
 		}
+		stmOffset := entries[objStmNum].Offset
 		for idx, contained := range data.objNums {
-			if contained <= 0 {
+			if contained <= 0 || contained == objStmNum {
 				continue
 			}
-			if _, exists := entries[contained]; exists {
+			// Keep whichever definition sits later in the file.
+			if prev, exists := srcOffset[contained]; exists && prev >= stmOffset {
 				continue
 			}
 			entries[contained] = xref.XRefEntry{
@@ -152,6 +164,7 @@ func (d *Document) expandObjectStreamsForRebuild(ctx context.Context, entries ma
 				ObjStmNum:   objStmNum,
 				ObjStmIndex: idx,
 			}
+			srcOffset[contained] = stmOffset
 		}
 	}
 }
