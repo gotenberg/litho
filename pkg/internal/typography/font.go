@@ -1619,9 +1619,18 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	}
 
 	// /CIDToGIDMap /Identity: CID = GID, treat as direct Unicode.
+	//
+	// Only where a CID is Unicode-like. Under an Adobe CJK collection a CID
+	// indexes that collection (ISO 32000-1, 9.7.3), so reading it as a code
+	// point yields mojibake: Adobe-Japan1 CID 843 is あ, not U+034B. Those
+	// fonts already resolve through the registry's CID to Unicode table, and
+	// an absent /CIDToGIDMap means Identity anyway, so writing the key
+	// explicitly must not change the text a document yields.
 	mapName, _ := document.ResolveName(ctx, doc, mapObj)
 	if mapName == "Identity" {
-		font.CIDIdentityFallback = true
+		if !isCJKOrdering(ctx, doc, fontDict) {
+			font.CIDIdentityFallback = true
+		}
 		return
 	}
 
