@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -314,7 +315,7 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 
 	// Fix CIDSet if incomplete.
 	if _, ok := fdDict["CIDSet"]; ok {
-		if fixed := fixCIDSet(ctx, alloc, fdDict, fdRef, fontData); fixed {
+		if fixed := fixCIDSet(ctx, doc, alloc, fdDict, fdRef, fontData); fixed {
 			fixes = append(fixes, fmt.Sprintf("regenerated /CIDSet for font %s", baseName))
 		}
 	}
@@ -432,16 +433,24 @@ func fixCharSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfD
 		return false
 	}
 
+	charSet := strings.Join(names, "")
+	// A repair that rewrites a value already equal to itself is not a repair:
+	// remediation reported a fix, wrote a fresh revision, and remediating the
+	// result grew the file again on every pass.
+	if existing, ok := fdDict["CharSet"].(ast.PdfString); ok && string(existing) == charSet {
+		return false
+	}
+
 	newFD := make(ast.PdfDict, len(fdDict))
 	maps.Copy(newFD, fdDict)
-	newFD["CharSet"] = ast.PdfString(strings.Join(names, ""))
+	newFD["CharSet"] = ast.PdfString(charSet)
 	if fdRef.ObjectNum > 0 {
 		alloc.AllocAt(fdRef.ObjectNum, newFD)
 	}
 	return true
 }
 
-func fixCIDSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
+func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
 	if err := ctx.Err(); err != nil {
 		return false
 	}
@@ -464,6 +473,17 @@ func fixCIDSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfDi
 		bitIdx := 7 - (int(cid) % 8)
 		if byteIdx < len(cidSet) {
 			cidSet[byteIdx] |= 1 << uint(bitIdx)
+		}
+	}
+
+	// Rewriting a /CIDSet already equal to the computed one is not a repair:
+	// it reports a fix and appends a revision, so remediating the result grew
+	// the file again on every pass.
+	if existing, ok := fdDict["CIDSet"]; ok {
+		if stream, err := document.ResolveStream(ctx, doc, existing); err == nil && stream.Dict != nil {
+			if data, derr := doc.DecodeStream(ctx, stream); derr == nil && bytes.Equal(data, cidSet) {
+				return false
+			}
 		}
 	}
 

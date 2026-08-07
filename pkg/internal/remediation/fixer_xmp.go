@@ -158,7 +158,14 @@ func fixComponentMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if err != nil || len(xmp) == 0 {
 			continue
 		}
-		out, streamFixes := applyExtensionSchemas(xmp, part)
+		// ISO 19005-2, 6.6.2.1 t2 and t3 apply to every XMPPackage, not only
+		// the catalog's, so a page or image packet keeping bytes= or encoding=
+		// leaves litho's own output failing litho's own check: remediation then
+		// never converged, appending a fresh revision on every pass.
+		out, streamFixes := stripForbiddenXPacketAttrs(xmp)
+		schemaOut, schemaFixes := applyExtensionSchemas(out, part)
+		out = schemaOut
+		streamFixes = append(streamFixes, schemaFixes...)
 		if len(streamFixes) == 0 {
 			continue
 		}
@@ -403,7 +410,10 @@ func setStructuredXMPProperty(buf []byte, nsURI, prefix, localName, value, eleme
 	switch loc.Form {
 	case xmpPropertyAsElement:
 		if out, err := replacePropertyValue(buf, nsURI, localName, value); err == nil {
-			return out, true
+			// Rewriting a value already equal to itself is not a change:
+			// reporting one made remediation write a fresh revision, so
+			// remediating its own output grew the file on every pass.
+			return out, !bytes.Equal(out, buf)
 		}
 		return buf, false
 	case xmpPropertyAsAttribute:
@@ -452,12 +462,11 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Strip the forbidden bytes="..." attribute from the <?xpacket?> header.
-	// Per PDF/A-2+ clause 6.6.2.1, the bytes attribute must not be present.
-	if idx := strings.Index(string(buf), "bytes="); idx != -1 {
-		buf = stripXPacketBytesAttr(buf)
-		fixes = append(fixes, "removed bytes attribute from xpacket header")
-	}
+	// Strip the attributes ISO 19005-2, 6.6.2.1 t2 and t3 forbid on the
+	// <?xpacket?> header.
+	var hdrFixes []string
+	buf, hdrFixes = stripForbiddenXPacketAttrs(buf)
+	fixes = append(fixes, hdrFixes...)
 
 	// PDF/A-4 (plain): remove pdfaid:conformance if present (forbidden).
 	// Uses the byte-range splicer so the removal works regardless of
@@ -502,13 +511,15 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 			}
 		}
 		if findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
-			if out, err := insertChildElement(buf, fmt.Sprintf("<pdfaid:part>%s</pdfaid:part>", partStr)); err == nil {
+			if out, injected := injectPropertyOnce(buf, "pdfaid:part", fmt.Sprintf("<pdfaid:part>%s</pdfaid:part>", partStr)); injected {
 				buf = out
 				fixes = append(fixes, "injected pdfaid:part into XMP")
 			}
 		} else if out, err := replacePropertyValue(buf, pdfaidNS, "part", partStr); err == nil {
+			if !bytes.Equal(out, buf) {
+				fixes = append(fixes, fmt.Sprintf("set pdfaid:part to %d", part))
+			}
 			buf = out
-			fixes = append(fixes, fmt.Sprintf("set pdfaid:part to %d", part))
 		}
 		// For conformance levels other than plain PDF/A-4 (where
 		// conformance is forbidden), also inject or correct the level.
@@ -527,8 +538,10 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 					fixes = append(fixes, "injected pdfaid:conformance into XMP")
 				}
 			} else if out, err := replacePropertyValue(buf, pdfaidNS, "conformance", conformance); err == nil {
+				if !bytes.Equal(out, buf) {
+					fixes = append(fixes, fmt.Sprintf("set pdfaid:conformance to %s", conformance))
+				}
 				buf = out
-				fixes = append(fixes, fmt.Sprintf("set pdfaid:conformance to %s", conformance))
 			}
 		}
 	}
@@ -549,8 +562,10 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 		if iso := pdfDateToXMP(raw); iso != "" {
 			if out, err := replacePropertyValue(buf, xmpNS, dateProp, iso); err == nil {
+				if !bytes.Equal(out, buf) {
+					fixes = append(fixes, fmt.Sprintf("normalized xmp:%s to ISO 8601", dateProp))
+				}
 				buf = out
-				fixes = append(fixes, fmt.Sprintf("normalized xmp:%s to ISO 8601", dateProp))
 			}
 		}
 	}
@@ -574,7 +589,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		if out, err := ensureNamespaceDecl(buf, "pdfuaid", pdfuaidNS); err == nil {
 			buf = out
 		}
-		if out, err := insertChildElement(buf, fmt.Sprintf("<pdfuaid:part>%d</pdfuaid:part>", uaPart)); err == nil {
+		if out, injected := injectPropertyOnce(buf, "pdfuaid:part", fmt.Sprintf("<pdfuaid:part>%d</pdfuaid:part>", uaPart)); injected {
 			buf = out
 			fixes = append(fixes, "injected pdfuaid:part into XMP")
 		}
@@ -587,7 +602,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 			if out, err := ensureNamespaceDecl(buf, "pdfuaid", pdfuaidNS); err == nil {
 				buf = out
 			}
-			if out, err := insertChildElement(buf, fmt.Sprintf("<pdfuaid:rev>%s</pdfuaid:rev>", compliance.PDFUA2ExpectedRev)); err == nil {
+			if out, injected := injectPropertyOnce(buf, "pdfuaid:rev", fmt.Sprintf("<pdfuaid:rev>%s</pdfuaid:rev>", compliance.PDFUA2ExpectedRev)); injected {
 				buf = out
 				fixes = append(fixes, "injected pdfuaid:rev=2024 into XMP")
 			}
@@ -668,8 +683,10 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		escaped := xmlEscape(info.Producer)
 		if findXMPProperty(buf, pdfNS, "Producer").Form != xmpPropertyNotFound {
 			if out, err := replacePropertyValue(buf, pdfNS, "Producer", escaped); err == nil {
+				if !bytes.Equal(out, buf) {
+					fixes = append(fixes, "synced pdf:Producer with Info /Producer")
+				}
 				buf = out
-				fixes = append(fixes, "synced pdf:Producer with Info /Producer")
 			}
 		} else {
 			if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
@@ -688,8 +705,10 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		escaped := xmlEscape(info.Creator)
 		if findXMPProperty(buf, xmpNS, "CreatorTool").Form != xmpPropertyNotFound {
 			if out, err := replacePropertyValue(buf, xmpNS, "CreatorTool", escaped); err == nil {
+				if !bytes.Equal(out, buf) {
+					fixes = append(fixes, "synced xmp:CreatorTool with Info /Creator")
+				}
 				buf = out
-				fixes = append(fixes, "synced xmp:CreatorTool with Info /Creator")
 			}
 		} else {
 			if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
@@ -709,8 +728,10 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		if xmpDate != "" {
 			if findXMPProperty(buf, xmpNS, "CreateDate").Form != xmpPropertyNotFound {
 				if out, err := replacePropertyValue(buf, xmpNS, "CreateDate", xmpDate); err == nil {
+					if !bytes.Equal(out, buf) {
+						fixes = append(fixes, "synced xmp:CreateDate with Info /CreationDate")
+					}
 					buf = out
-					fixes = append(fixes, "synced xmp:CreateDate with Info /CreationDate")
 				}
 			} else {
 				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
@@ -731,8 +752,10 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		if xmpDate != "" {
 			if findXMPProperty(buf, xmpNS, "ModifyDate").Form != xmpPropertyNotFound {
 				if out, err := replacePropertyValue(buf, xmpNS, "ModifyDate", xmpDate); err == nil {
+					if !bytes.Equal(out, buf) {
+						fixes = append(fixes, "synced xmp:ModifyDate with Info /ModDate")
+					}
 					buf = out
-					fixes = append(fixes, "synced xmp:ModifyDate with Info /ModDate")
 				}
 			} else {
 				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
@@ -754,8 +777,10 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		injection := fmt.Sprintf(`<dc:description>%s</dc:description>`, value)
 		if findXMPProperty(buf, dcNS, "description").Form != xmpPropertyNotFound {
 			if out, err := replacePropertyValue(buf, dcNS, "description", value); err == nil {
+				if !bytes.Equal(out, buf) {
+					fixes = append(fixes, "synced dc:description with Info /Subject")
+				}
 				buf = out
-				fixes = append(fixes, "synced dc:description with Info /Subject")
 			}
 		} else {
 			if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
@@ -1365,16 +1390,54 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 	return sb.String()
 }
 
-// stripXPacketBytesAttr removes bytes="..." from the <?xpacket ...?> header.
+// injectPropertyOnce inserts element into the packet unless an element with the
+// same qualified name is already there.
+//
+// [findXMPProperty] resolves a property through the rdf:Description that binds
+// its namespace, and on packets where it cannot (a schema description mentioning
+// the same name, several Descriptions with different bindings) it reports the
+// property missing even after one was injected. Every fixpoint iteration then
+// injected another: xfa_bug1722030_1.pdf came out with three <pdfaid:part>
+// elements and gained three more per remediation. ISO 16684-1 forbids duplicate
+// properties on one XMP node, so a literal match is reason enough to stop.
+func injectPropertyOnce(buf []byte, qname, element string) ([]byte, bool) {
+	if bytes.Contains(buf, []byte("<"+qname+">")) || bytes.Contains(buf, []byte("<"+qname+" ")) {
+		return buf, false
+	}
+	out, err := insertChildElement(buf, element)
+	if err != nil {
+		return buf, false
+	}
+	return out, true
+}
+
+// stripXPacketAttr removes attr="..." from the <?xpacket ...?> header.
 // Handles both single and double quoted values.
-func stripXPacketBytesAttr(data []byte) []byte {
+//
+// The edit is confined to the header: an XMP packet also carries an XML
+// declaration, and <?xml version="1.0" encoding="UTF-8"?> contains the very
+// attribute name ISO 19005-2, 6.6.2.1 t3 forbids on the xpacket header.
+// Editing the first match anywhere in the packet would corrupt that
+// declaration instead.
+func stripXPacketAttr(data []byte, attr string) []byte {
 	s := string(data)
-	idx := strings.Index(s, "bytes=")
+	hdrStart := strings.Index(s, "<?xpacket")
+	if hdrStart == -1 {
+		return data
+	}
+	hdrEnd := strings.Index(s[hdrStart:], "?>")
+	if hdrEnd == -1 {
+		return data
+	}
+	hdrEnd += hdrStart
+
+	idx := strings.Index(s[hdrStart:hdrEnd], attr+"=")
 	if idx == -1 {
 		return data
 	}
-	// Find the end of the attribute: bytes="NNN" or bytes='NNN'.
-	rest := s[idx+len("bytes="):]
+	idx += hdrStart
+
+	rest := s[idx+len(attr)+1:]
 	if len(rest) == 0 {
 		return data
 	}
@@ -1386,13 +1449,28 @@ func stripXPacketBytesAttr(data []byte) []byte {
 	if endIdx == -1 {
 		return data
 	}
-	// Remove bytes="NNN" including any leading whitespace.
+	// Remove attr="value" including any leading whitespace.
 	start := idx
 	for start > 0 && s[start-1] == ' ' {
 		start--
 	}
-	end := idx + len("bytes=") + 1 + endIdx + 1
+	end := idx + len(attr) + 1 + 1 + endIdx + 1
 	return []byte(s[:start] + s[end:])
+}
+
+// stripForbiddenXPacketAttrs removes the xpacket header attributes ISO 19005-2,
+// 6.6.2.1 t2 and t3 forbid on EVERY XMP package, not only the catalog's.
+// Returns the packet and the fix notes for whatever it removed.
+func stripForbiddenXPacketAttrs(buf []byte) ([]byte, []string) {
+	var fixes []string
+	for _, attr := range []string{"bytes", "encoding"} {
+		out := stripXPacketAttr(buf, attr)
+		if !bytes.Equal(out, buf) {
+			buf = out
+			fixes = append(fixes, fmt.Sprintf("removed %s attribute from xpacket header", attr))
+		}
+	}
+	return buf, fixes
 }
 
 func xmlEscape(s string) string {

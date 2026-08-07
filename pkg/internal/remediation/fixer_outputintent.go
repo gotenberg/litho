@@ -320,9 +320,18 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	default:
 		return fixes, nil
 	}
-	iccStream := ast.NewStream(ast.PdfDict{"N": ast.PdfInt(nComponents)}, iccData)
-	iccRef := alloc.Alloc(iccStream)
-	csArr := ast.PdfArray{ast.PdfName("ICCBased"), iccRef}
+	// Allocate the ICC profile only when a resource dictionary actually takes
+	// it. Allocating up front left a 2.5 KB orphan stream in the output
+	// whenever every page already carried the default, so remediating an
+	// already-remediated file grew it by that much on every pass while
+	// reporting no fixes at all.
+	var iccRef ast.PdfIndirectRef
+	csArr := func() ast.PdfArray {
+		if iccRef.ObjectNum == 0 {
+			iccRef = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(nComponents)}, iccData))
+		}
+		return ast.PdfArray{ast.PdfName("ICCBased"), iccRef}
+	}
 	if n, err := injectDefaultColorSpace(ctx, alloc, doc, catalogDict, defaultColor, csArr); err == nil && n > 0 {
 		fixes = append(fixes, fmt.Sprintf("injected /%s into %d page(s)", defaultColor, n))
 	}
@@ -335,7 +344,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 // missing. Patterns and Form XObjects have their own /Resources that PDF/A
 // §6.2.3.3 treats as independent scopes, so a page-only fix leaves
 // "used in pattern/form" violations behind.
-func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, key ast.PdfName, csArr ast.PdfArray) (int, error) {
+func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, key ast.PdfName, csArr func() ast.PdfArray) (int, error) {
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
 		return 0, nil
@@ -361,7 +370,7 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 			}
 		}
 		if !ok {
-			newRes := ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr}}
+			newRes := ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr()}}
 			newPage := make(ast.PdfDict, len(pe.dict)+1)
 			maps.Copy(newPage, pe.dict)
 			newPage["Resources"] = newRes
@@ -396,7 +405,7 @@ type patchResult struct {
 // `key` inside its ColorSpace dict and recurses into every Form XObject
 // and Pattern referenced by XObject/Pattern entries. Returns the value
 // to assign back to the parent (unchanged when nothing needed patching).
-func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfObject, key ast.PdfName, csArr ast.PdfArray, visited map[int]bool) patchResult {
+func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfObject, key ast.PdfName, csArr func() ast.PdfArray, visited map[int]bool) patchResult {
 	var resDict ast.PdfDict
 	var resRef ast.PdfIndirectRef
 	if ref, ok := resources.(ast.PdfIndirectRef); ok {
@@ -430,7 +439,7 @@ func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 		}
 		newCS := make(ast.PdfDict, len(base)+1)
 		maps.Copy(newCS, base)
-		newCS[key] = csArr
+		newCS[key] = csArr()
 		newRes["ColorSpace"] = newCS
 		changed = true
 	}
@@ -458,7 +467,7 @@ func patchResourceColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 // a page-level DefaultCS never covers their operators (ISO 32000-2
 // §8.6.5.7), so the Default must live on the font's own /Resources to
 // take effect inside the glyph descriptions.
-func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, key ast.PdfName, csArr ast.PdfArray, visited map[int]bool) bool {
+func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, key ast.PdfName, csArr func() ast.PdfArray, visited map[int]bool) bool {
 	fontObj, ok := newRes["Font"]
 	if !ok {
 		return false
@@ -490,7 +499,7 @@ func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, d
 		if !hasRes {
 			newFont := make(ast.PdfDict, len(fd)+1)
 			maps.Copy(newFont, fd)
-			newFont["Resources"] = ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr}}
+			newFont["Resources"] = ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr()}}
 			alloc.AllocAt(ref.ObjectNum, newFont)
 			changed = true
 			continue
@@ -510,7 +519,7 @@ func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, d
 
 // recurseColorSpacePatch walks a named resource sub-dict (XObject or
 // Pattern) and updates each entry that carries its own /Resources.
-func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, name ast.PdfName, key ast.PdfName, csArr ast.PdfArray, visited map[int]bool) bool {
+func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, name ast.PdfName, key ast.PdfName, csArr func() ast.PdfArray, visited map[int]bool) bool {
 	subObj, ok := newRes[name]
 	if !ok {
 		return false
