@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
 // matchTextControl matches ISO 19005-2 §6.2.11.8 and ISO 19005-4
@@ -44,6 +45,10 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		return nil, fmt.Errorf("resolving pages: %w", err)
 	}
 
+	// Pages share font objects, and describing a font parses its program.
+	// Resolve each font object once per document.
+	fontCache := make(map[int]textFontInfo)
+
 	total := 0
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
@@ -53,7 +58,7 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if err != nil || contentsObj == nil {
 			continue
 		}
-		removed, modified := stripControlBytesFromOps(ops, multiByteFontNames(ctx, doc, page))
+		removed, modified := stripControlBytesFromOps(ops, pageTextFonts(ctx, doc, page, fontCache))
 		if !modified {
 			continue
 		}
@@ -76,7 +81,7 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // Operators whose entire operand becomes empty are cleared so the
 // serialiser drops them. Returns the count of removed bytes plus a
 // flag indicating whether any op changed.
-func stripControlBytesFromOps(ops []content.Operation, multiByte map[string]bool) (int, bool) {
+func stripControlBytesFromOps(ops []content.Operation, fonts map[string]textFontInfo) (int, bool) {
 	removed := 0
 	modified := false
 	var currentFont string
@@ -104,13 +109,14 @@ func stripControlBytesFromOps(ops []content.Operation, multiByte map[string]bool
 		// Identity-H is two bytes but a predefined CMap may mix widths.
 		// Skipping leaves ~56 .notdef references unfixed across the veraPDF
 		// corpus, which is the safe side of the trade.
-		if multiByte[currentFont] {
+		info := fonts[currentFont]
+		if info.composite {
 			continue
 		}
 		for j, operand := range ops[i].Operands {
 			switch v := operand.(type) {
 			case ast.PdfString:
-				cleaned, n := stripControlString(v)
+				cleaned, n := stripControlString(v, info.defined)
 				if n == 0 {
 					continue
 				}
@@ -121,7 +127,7 @@ func stripControlBytesFromOps(ops []content.Operation, multiByte map[string]bool
 					ops[i].Operator = ""
 				}
 			case ast.PdfArray:
-				cleanedArr, n := stripControlTJArray(v)
+				cleanedArr, n := stripControlTJArray(v, info.defined)
 				if n == 0 {
 					continue
 				}
@@ -139,12 +145,12 @@ func stripControlBytesFromOps(ops []content.Operation, multiByte map[string]bool
 
 // stripControlString returns a copy of s with ASCII control bytes
 // removed. The returned count reports how many bytes were stripped.
-func stripControlString(s ast.PdfString) (ast.PdfString, int) {
+func stripControlString(s ast.PdfString, defined map[byte]bool) (ast.PdfString, int) {
 	src := []byte(s)
 	dst := make([]byte, 0, len(src))
 	removed := 0
 	for _, b := range src {
-		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' {
+		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' && !defined[b] {
 			removed++
 			continue
 		}
@@ -157,12 +163,12 @@ func stripControlString(s ast.PdfString) (ast.PdfString, int) {
 }
 
 // stripControlTJArray cleans every PdfString inside a TJ operand array.
-func stripControlTJArray(arr ast.PdfArray) (ast.PdfArray, int) {
+func stripControlTJArray(arr ast.PdfArray, defined map[byte]bool) (ast.PdfArray, int) {
 	out := make(ast.PdfArray, 0, len(arr))
 	removed := 0
 	for _, elem := range arr {
 		if s, ok := elem.(ast.PdfString); ok {
-			cleaned, n := stripControlString(s)
+			cleaned, n := stripControlString(s, defined)
 			removed += n
 			if len(cleaned) == 0 {
 				continue
@@ -186,11 +192,19 @@ func isEmptyTJArray(arr ast.PdfArray) bool {
 	return true
 }
 
-// multiByteFontNames returns the page's font resource names whose font uses
-// multi-byte character codes, i.e. the composite (Type 0) fonts of
-// ISO 32000-1, 9.7. Byte-level edits to a string shown with one of these split
-// its codes in half, so the caller leaves those strings alone.
-func multiByteFontNames(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
+// textFontInfo records what a page's font says about the codes drawn with it.
+type textFontInfo struct {
+	// composite marks a font addressing glyphs with multi-byte codes, whose
+	// strings must not be edited a byte at a time.
+	composite bool
+	// defined holds the single-byte codes the font's /Encoding gives a glyph
+	// for, which are therefore not .notdef references.
+	defined map[byte]bool
+}
+
+// pageTextFonts describes every font in a page's resources, reusing entries
+// already described for another page through cache, keyed by object number.
+func pageTextFonts(ctx context.Context, doc *document.Document, page *document.Page, cache map[int]textFontInfo) map[string]textFontInfo {
 	if page == nil || page.Resources == nil {
 		return nil
 	}
@@ -199,18 +213,50 @@ func multiByteFontNames(ctx context.Context, doc *document.Document, page *docum
 		doc.Logger.Debug("resolving page fonts for control-byte strip", slog.Any("err", err))
 		return nil
 	}
-	names := make(map[string]bool, len(fonts))
+	infos := make(map[string]textFontInfo, len(fonts))
 	for name, entry := range fonts {
+		var objNum int
+		if ref, ok := entry.(ast.PdfIndirectRef); ok {
+			objNum = ref.ObjectNum
+			if cached, ok := cache[objNum]; ok {
+				infos[string(name)] = cached
+				continue
+			}
+		}
 		fd, err := document.ResolveDict(ctx, doc, entry)
 		if err != nil || fd == nil {
 			// An unresolvable font could be composite; treat it as such
 			// so a byte-level edit is never applied blind.
-			names[string(name)] = true
+			infos[string(name)] = textFontInfo{composite: true}
+			if objNum > 0 {
+				cache[objNum] = textFontInfo{composite: true}
+			}
 			continue
 		}
 		if subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"]); subtype == "Type0" {
-			names[string(name)] = true
+			infos[string(name)] = textFontInfo{composite: true}
+			if objNum > 0 {
+				cache[objNum] = textFontInfo{composite: true}
+			}
+			continue
+		}
+		info := textFontInfo{}
+		if font, err := typography.ResolveFont(ctx, doc, fd); err == nil && font != nil {
+			for code := range font.Encoding {
+				if code < 0x20 {
+					if info.defined == nil {
+						info.defined = make(map[byte]bool)
+					}
+					info.defined[code] = true
+				}
+			}
+		} else {
+			doc.Logger.Debug("resolving font encoding for control-byte strip", slog.Any("err", err))
+		}
+		infos[string(name)] = info
+		if objNum > 0 {
+			cache[objNum] = info
 		}
 	}
-	return names
+	return infos
 }
