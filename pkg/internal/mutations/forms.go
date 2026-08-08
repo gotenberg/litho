@@ -229,8 +229,10 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		apRef := alloc.Alloc(apStream)
 		xobjName := ast.PdfName(fmt.Sprintf("FlatAP%d", apRef.ObjectNum))
 
+		// string(): PdfName.String already adds the slash, and "//Name Do"
+		// names no XObject, so the flattened appearance never drew.
 		stampOps = append(stampOps, fmt.Sprintf("\nq 1 0 0 1 %s %s cm /%s Do Q",
-			FormatFloat(x1), FormatFloat(y1), xobjName))
+			FormatFloat(x1), FormatFloat(y1), string(xobjName)))
 		xobjectAdditions = append(xobjectAdditions, stampResource{
 			category: "XObject", name: xobjName, ref: apRef,
 		})

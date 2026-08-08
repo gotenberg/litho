@@ -86,7 +86,9 @@ func StampPDF(
 	ops.WriteString("q ")
 	ops.WriteString(extGStateInvocation(extGSName))
 	ops.WriteString(buildTransformMatrix(opts.X, opts.Y, scale, scale, opts.Rotation))
-	fmt.Fprintf(&ops, "/%s Do Q", formResName)
+	// string(): PdfName.String already adds the slash, and "//Name Do" names
+	// no XObject at all, so the stamp never drew.
+	fmt.Fprintf(&ops, "/%s Do Q", string(formResName))
 
 	resources := []stampResource{
 		{category: "XObject", name: formResName, ref: formRef},
