@@ -328,6 +328,11 @@ func insertAttributeAtDescription(xmp []byte, prefix, uri, attrSuffix string) ([
 		}
 		offset = tagEnd + 1
 	}
+	// No description binds the prefix, so the attribute goes on the first one
+	// together with its binding. Writing the attribute alone leaves the prefix
+	// unbound, which stops the packet being well-formed XML: a component packet
+	// declaring only prism gained pdfaid:conformance="B" and started failing
+	// ISO 19005-2, 6.6.2.1 t4 (issue15833.pdf).
 	idx := bytes.Index(xmp, []byte("<rdf:Description"))
 	if idx < 0 {
 		return append([]byte(nil), xmp...), errXMPPropertyNotFound
@@ -338,7 +343,8 @@ func insertAttributeAtDescription(xmp []byte, prefix, uri, attrSuffix string) ([
 		return append([]byte(nil), xmp...), errXMPPropertyNotFound
 	}
 	tagEnd += tagStart
-	return insertAttrBeforeTagEnd(xmp, tagEnd, attrSuffix), nil
+	bound := fmt.Sprintf(`xmlns:%s="%s" %s`, prefix, uri, attrSuffix)
+	return insertAttrBeforeTagEnd(xmp, tagEnd, bound), nil
 }
 
 // insertAttrBeforeTagEnd writes attrSuffix just before the end of a

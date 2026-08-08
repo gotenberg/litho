@@ -533,9 +533,15 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 				if out, err := ensureNamespaceDecl(buf, "pdfaid", pdfaidNS); err == nil {
 					buf = out
 				}
-				if out, err := insertAttributeAtDescription(buf, "pdfaid", pdfaidNS, fmt.Sprintf(`pdfaid:conformance="%s"`, conformance)); err == nil {
-					buf = out
-					fixes = append(fixes, "injected pdfaid:conformance into XMP")
+				// Guarded like the element form: findXMPProperty cannot always
+				// see an attribute it just wrote, and a second injection makes
+				// the packet invalid XML with a duplicate attribute rather than
+				// merely redundant (issue15833.pdf).
+				if !bytes.Contains(buf, []byte("pdfaid:conformance=")) {
+					if out, err := insertAttributeAtDescription(buf, "pdfaid", pdfaidNS, fmt.Sprintf(`pdfaid:conformance="%s"`, conformance)); err == nil {
+						buf = out
+						fixes = append(fixes, "injected pdfaid:conformance into XMP")
+					}
 				}
 			} else if out, err := replacePropertyValue(buf, pdfaidNS, "conformance", conformance); err == nil {
 				if !bytes.Equal(out, buf) {
