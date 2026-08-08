@@ -71,7 +71,7 @@ func applyStampToPages(
 		maps.Copy(newDict, baseDict)
 		newDict["Resources"] = newResources
 
-		newDict["Contents"] = appendPageContents(baseDict, stampRef)
+		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, stampRef)
 
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
@@ -85,7 +85,7 @@ func applyStampToPages(
 // wrapping the array as one element would nest it, and a conforming reader
 // treats the nested array as a non-stream entry and drops all the content it
 // holds.
-func appendPageContents(baseDict ast.PdfDict, stampRef ast.PdfIndirectRef) ast.PdfObject {
+func appendPageContents(ctx context.Context, doc *document.Document, baseDict ast.PdfDict, stampRef ast.PdfIndirectRef) ast.PdfObject {
 	existing, ok := baseDict["Contents"]
 	if !ok {
 		return stampRef
@@ -95,6 +95,19 @@ func appendPageContents(baseDict ast.PdfDict, stampRef ast.PdfIndirectRef) ast.P
 		out = append(out, arr...)
 		out = append(out, stampRef)
 		return out
+	}
+	// The array may be reached through a reference, which a type assertion on
+	// the raw value misses: pdfjs issue12963.pdf holds /Contents as a reference
+	// to a two-stream array, and wrapping that reference produced
+	// [[streamA streamB] stamp]. A conforming reader drops the nested array, so
+	// the page lost every one of its 1241 characters.
+	if ref, isRef := existing.(ast.PdfIndirectRef); isRef {
+		if arr, err := document.ResolveArray(ctx, doc, ref); err == nil && arr != nil {
+			out := make(ast.PdfArray, 0, len(arr)+1)
+			out = append(out, arr...)
+			out = append(out, stampRef)
+			return out
+		}
 	}
 	return ast.PdfArray{existing, stampRef}
 }

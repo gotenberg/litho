@@ -260,7 +260,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		}
 		stampStream := ast.NewStream(ast.PdfDict{}, []byte(content.String()))
 		stampRef := alloc.Alloc(stampStream)
-		newDict["Contents"] = appendPageContents(baseDict, stampRef)
+		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, stampRef)
 	}
 
 	// Update /Annots: keep non-widget annotations, drop the rest.
