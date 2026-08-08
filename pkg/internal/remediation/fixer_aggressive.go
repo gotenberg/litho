@@ -304,7 +304,10 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 	case ast.PdfInt:
 		fmt.Fprintf(buf, "%d", int64(v))
 	case ast.PdfReal:
-		fmt.Fprintf(buf, "%g", float64(v))
+		// %g emits exponential form for small magnitudes ("1e-05"), which
+		// ISO 32000-1, 7.3.3 forbids in a PDF real. An aggressive content
+		// rewrite of issue11678.pdf turned 5 violations into 64 that way.
+		buf.WriteString(writer.FormatReal(float64(v)))
 	case ast.PdfName:
 		buf.WriteByte('/')
 		buf.WriteString(string(v))

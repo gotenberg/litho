@@ -112,6 +112,15 @@ func formatReal(f float64) string {
 	return s
 }
 
+// FormatReal renders a PDF real in the decimal form ISO 32000-1, 7.3.3
+// requires: one or more digits with an optional sign and period, never an
+// exponent. Content-stream writers outside this package need the same
+// rendering, and Go's %g emits exponential form for small magnitudes, which a
+// conforming reader rejects.
+func FormatReal(f float64) string {
+	return formatReal(f)
+}
+
 // serializeName writes a PDF name with proper #XX hex-escaping for bytes
 // outside printable ASCII or PDF delimiter characters.
 func serializeName(w io.Writer, name ast.PdfName) (int64, error) {

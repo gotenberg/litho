@@ -39,11 +39,28 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	// arrays into new §6.3.6 violations whenever litho's font-program
 	// width extraction rounded or interpreted a metric differently from
 	// the value the original producer already wrote conformantly.
+	// A regenerated /CIDSet or /CharSet is subject to the same hazard as
+	// /Widths: litho's enumeration of the font program's glyphs need not match
+	// the CHECK's, so rewriting one uninvited replaces a conforming set with a
+	// non-conforming one. bug911034.pdf went from 0 to 1 violations of
+	// ISO 19005-2, 6.2.11.4.2 that way ("CID 1 in font program not in
+	// /CIDSet"). Regenerate only where the disagreement is actually reported.
 	hasWidthViolation := false
+	hasCIDSetViolation := false
+	hasCharSetViolation := false
 	for _, v := range violations {
 		if clausePrefix(v, "6.2.10.5", "6.2.11.5", "6.3.6") {
 			hasWidthViolation = true
-			break
+		}
+		// Kept apart: a reported /CharSet defect says nothing about /CIDSet,
+		// and regenerating the other one uninvited is what replaced a
+		// conforming set with a non-conforming one. ISO 14289-1, 7.21.4.2
+		// covers both, so it enables both.
+		if clausePrefix(v, "6.2.11.4.2", "7.21.4.2") {
+			hasCIDSetViolation = true
+		}
+		if clausePrefix(v, "6.3.5", "7.21.4.2") {
+			hasCharSetViolation = true
 		}
 	}
 	catalog, err := document.ResolveCatalog(ctx, doc)
@@ -97,11 +114,11 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			subtype, _ := fd["Subtype"].(ast.PdfName)
 			switch string(subtype) {
 			case "Type0":
-				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation); len(f) > 0 {
+				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCIDSetViolation); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			case "Type1", "TrueType", "MMType1":
-				if f := fixSimpleFont(ctx, doc, alloc, fd, fontRef, hasWidthViolation); len(f) > 0 {
+				if f := fixSimpleFont(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCharSetViolation); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			}
@@ -114,7 +131,7 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return fixes, nil
 }
 
-func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths bool) []string {
+func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths, regenCharSet bool) []string {
 	fdObj, ok := fontDict["FontDescriptor"]
 	if !ok {
 		return nil
@@ -193,7 +210,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	}
 
 	// Fix CharSet if incomplete.
-	if _, ok := fdDict["CharSet"]; ok {
+	if _, ok := fdDict["CharSet"]; ok && regenCharSet {
 		if fixed := fixCharSet(ctx, alloc, fdDict, fdRef, fontData); fixed {
 			fixes = append(fixes, fmt.Sprintf("regenerated /CharSet for font %s", baseName))
 		}
@@ -249,7 +266,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	return fixes
 }
 
-func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths bool) []string {
+func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths, regenCIDSet bool) []string {
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
 		return nil
@@ -314,7 +331,7 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	}
 
 	// Fix CIDSet if incomplete.
-	if _, ok := fdDict["CIDSet"]; ok {
+	if _, ok := fdDict["CIDSet"]; ok && regenCIDSet {
 		if fixed := fixCIDSet(ctx, doc, alloc, fdDict, fdRef, fontData); fixed {
 			fixes = append(fixes, fmt.Sprintf("regenerated /CIDSet for font %s", baseName))
 		}
@@ -454,7 +471,21 @@ func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	if err := ctx.Err(); err != nil {
 		return false
 	}
+	// Match what the CHECK requires, or the regenerated set is rejected the
+	// moment it is written. For a TrueType program under an Identity
+	// /CIDToGIDMap the rule is every GID in 1..numGlyphs-1
+	// (ISO 19005-2, 6.2.11.4.2 t2), not merely the CIDs with outlines:
+	// compliance.checkCIDSetCompletenessTrueType walks that whole range.
+	// Writing only the outlined CIDs left "CID 1 in font program not in
+	// /CIDSet" on bug911034.pdf as soon as the /CIDToGIDMap fixer supplied
+	// the Identity key that activates the rule.
 	validCIDs := typography.ExtractValidCIDs(fontData)
+	if numGlyphs := typography.ExtractNumGlyphs(fontData); numGlyphs > 0 {
+		validCIDs = make(map[uint16]bool, numGlyphs)
+		for gid := 1; gid < numGlyphs; gid++ {
+			validCIDs[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
+		}
+	}
 	if len(validCIDs) == 0 {
 		return false
 	}
