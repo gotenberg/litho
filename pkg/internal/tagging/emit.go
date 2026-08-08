@@ -1,6 +1,7 @@
 package tagging
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -196,7 +197,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		leaves := e.perPage[pi]
 		sort.Slice(leaves, func(i, j int) bool { return leaves[i].span.start < leaves[j].span.start })
 
-		spans, elemRefs := pageSpans(data, leaves)
+		spans, elemRefs := pageSpans(data, leaves, textBearingXObjects(ctx, e.doc, e.pages[pi]))
 		if len(spans) == 0 {
 			continue // no paintable content to mark
 		}
@@ -234,14 +235,26 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 // plus an /Artifact span over each non-blank gap before, between, and after
 // them, so no painting operator is left outside marked content. elemRefs maps
 // MCID to its structure element for the page's ParentTree entry.
-func pageSpans(data []byte, leaves []leafEntry) ([]markSpan, ast.PdfArray) {
+func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([]markSpan, ast.PdfArray) {
 	elemRefs := make(ast.PdfArray, len(leaves))
 	var spans []markSpan
 	cursor := 0
 	addArtifact := func(start, end int) {
-		if start < end && !isBlank(data[start:end]) {
-			spans = append(spans, markSpan{start: start, end: end, artifact: true})
+		if start >= end || isBlank(data[start:end]) {
+			return
 		}
+		// An /Artifact is content with no meaning for a reader
+		// (ISO 32000-1, 14.8.2.2), so marking one over a Form XObject that
+		// paints TEXT hides that text from assistive technology entirely.
+		// pdfjs TAMReview.pdf keeps most of its words inside such XObjects,
+		// and tagging it dropped the document from 11914 extractable
+		// characters to 2266. Leaving the region unmarked keeps an honest
+		// ISO 14289-1, 7.1 residual instead of asserting the words are
+		// decoration.
+		if paintsTextXObject(data[start:end], textXObjects) {
+			return
+		}
+		spans = append(spans, markSpan{start: start, end: end, artifact: true})
 	}
 	for _, leaf := range leaves {
 		s := leaf.span
@@ -254,6 +267,61 @@ func pageSpans(data []byte, leaves []leafEntry) ([]markSpan, ast.PdfArray) {
 	}
 	addArtifact(cursor, len(data))
 	return spans, elemRefs
+}
+
+// textBearingXObjects returns the page's Form XObject resource names whose
+// content paints text. Their invocations must not be swept into an /Artifact.
+func textBearingXObjects(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
+	if page == nil || page.Resources == nil {
+		return nil
+	}
+	xobjs, err := document.ResolveDict(ctx, doc, page.Resources["XObject"])
+	if err != nil || xobjs == nil {
+		return nil
+	}
+	names := make(map[string]bool)
+	for name, entry := range xobjs {
+		stream, err := document.ResolveStream(ctx, doc, entry)
+		if err != nil || stream.Dict == nil {
+			continue
+		}
+		if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
+			continue
+		}
+		body, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			continue
+		}
+		if showsText(body) {
+			names[string(name)] = true
+		}
+	}
+	return names
+}
+
+// showsText reports whether a content stream carries a text-showing operator
+// (ISO 32000-1, Table 109).
+func showsText(data []byte) bool {
+	for _, op := range [][]byte{[]byte("Tj"), []byte("TJ"), []byte("'"), []byte("\"")} {
+		if bytes.Contains(data, op) {
+			return true
+		}
+	}
+	return false
+}
+
+// paintsTextXObject reports whether a content region invokes one of the named
+// text-bearing Form XObjects with Do.
+func paintsTextXObject(region []byte, textXObjects map[string]bool) bool {
+	if len(textXObjects) == 0 {
+		return false
+	}
+	for name := range textXObjects {
+		if bytes.Contains(region, append([]byte("/"), name...)) && bytes.Contains(region, []byte("Do")) {
+			return true
+		}
+	}
+	return false
 }
 
 // isBlank reports whether b is empty or only PDF whitespace (ISO 32000-1
