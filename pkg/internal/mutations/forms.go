@@ -100,7 +100,8 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 			// Found it: update /V.
 			newDict := make(ast.PdfDict, len(fieldDict)+1)
 			maps.Copy(newDict, fieldDict)
-			newDict["V"] = ast.PdfString(value)
+			// A text field's /V is a text string (ISO 32000-1, Table 228).
+			newDict["V"] = document.EncodePdfString(value)
 			if fieldRef.ObjectNum > 0 {
 				alloc.AllocAt(fieldRef.ObjectNum, newDict)
 			}

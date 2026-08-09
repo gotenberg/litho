@@ -133,7 +133,8 @@ func buildOutlineItems(alloc *writer.ObjAllocator, bookmarks []models.Bookmark, 
 	// Second pass: build dicts with links.
 	for i, bm := range bookmarks {
 		d := ast.PdfDict{
-			"Title":  ast.PdfString(bm.Title),
+			// An outline item's /Title is a text string (ISO 32000-1, 12.3.3).
+			"Title":  document.EncodePdfString(bm.Title),
 			"Parent": parent,
 		}
 

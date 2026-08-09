@@ -122,9 +122,11 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 	// Create the Filespec dictionary.
 	filespecDict := ast.PdfDict{
 		"Type": ast.PdfName("Filespec"),
-		"F":    ast.PdfString(name),
-		"UF":   ast.PdfString(name),
-		"EF":   ast.PdfDict{"F": fileStreamRef},
+		"F":    fileSpecName(name),
+		// /UF is a text string; /F stays a byte-oriented file specification
+		// (ISO 32000-1, 7.11.2), which is why only one of the pair is encoded.
+		"UF": document.EncodePdfString(name),
+		"EF": ast.PdfDict{"F": fileStreamRef},
 	}
 	if opts.AFRelationship != "" {
 		filespecDict["AFRelationship"] = ast.PdfName(opts.AFRelationship)
@@ -316,4 +318,15 @@ func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
 	return nil
+}
+
+// fileSpecName renders a file specification's /F entry. Unlike /UF it is not a
+// text string, so it may not take the UTF-16BE form (ISO 32000-1, 7.11.2): a
+// name PDFDocEncoding cannot spell keeps its existing bytes and the Unicode
+// spelling travels in /UF, which every reader since PDF 1.7 prefers.
+func fileSpecName(name string) ast.PdfString {
+	if encoded, ok := document.EncodePdfDocString(name); ok {
+		return encoded
+	}
+	return ast.PdfString(name)
 }

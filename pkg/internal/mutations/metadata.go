@@ -59,7 +59,9 @@ func SetMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 func setInfoField(d ast.PdfDict, key, value string) {
 	if value != "" {
-		d[ast.PdfName(key)] = ast.PdfString(value)
+		// /Info values are text strings (ISO 32000-1, 14.3.3), so they carry a
+		// PDFDocEncoding or UTF-16BE payload, never raw UTF-8.
+		d[ast.PdfName(key)] = document.EncodePdfString(value)
 	}
 }
 
