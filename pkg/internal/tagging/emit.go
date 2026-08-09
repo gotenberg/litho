@@ -269,6 +269,14 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 	return spans, elemRefs
 }
 
+// maxTextScanDepth bounds how far formPaintsText follows nested Form XObjects.
+// This is an anti-DoS guard, not a spec limit: a crafted file can chain forms
+// far deeper than any real one. It matches maxFormXObjectDepth in
+// pkg/internal/typography/extract.go, which bounds the same nesting during
+// extraction, so a form deep enough to escape this scan carries no text the
+// extractor would reach either.
+const maxTextScanDepth = 10
+
 // textBearingXObjects returns the page's Form XObject resource names whose
 // content paints text. Their invocations must not be swept into an /Artifact.
 func textBearingXObjects(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
@@ -281,22 +289,63 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 	}
 	names := make(map[string]bool)
 	for name, entry := range xobjs {
-		stream, err := document.ResolveStream(ctx, doc, entry)
-		if err != nil || stream.Dict == nil {
-			continue
-		}
-		if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
-			continue
-		}
-		body, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			continue
-		}
-		if showsText(body) {
+		if formPaintsText(ctx, doc, entry, make(map[int]bool), 0) {
 			names[string(name)] = true
 		}
 	}
 	return names
+}
+
+// formPaintsText reports whether a Form XObject shows text itself or reaches
+// text through the forms it invokes.
+//
+// A form that only paints other forms carries no text-showing operator of its
+// own: pdfjs issue15629 draws its field values through /X0, which does nothing
+// but invoke three /Annot_* forms. Judging /X0 by its own bytes marked it
+// decoration and lost the name the form was filled in with. The answer errs
+// toward "paints text": a form wrongly kept out of an /Artifact leaves an
+// honest ISO 14289-1, 7.1 residual, while one wrongly swept in hides real words
+// from assistive technology.
+func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfObject, visited map[int]bool, depth int) bool {
+	if depth > maxTextScanDepth {
+		return false
+	}
+	if ref, ok := entry.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return false
+		}
+		visited[ref.ObjectNum] = true
+		defer delete(visited, ref.ObjectNum)
+	}
+	stream, err := document.ResolveStream(ctx, doc, entry)
+	if err != nil || stream.Dict == nil {
+		return false
+	}
+	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
+		return false
+	}
+	body, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("decoding form xobject for text scan", slog.Any("err", err))
+		return false
+	}
+	if showsText(body) {
+		return true
+	}
+	nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if err != nil || nested == nil {
+		return false
+	}
+	inner, err := document.ResolveDict(ctx, doc, nested["XObject"])
+	if err != nil || inner == nil {
+		return false
+	}
+	for _, child := range inner {
+		if formPaintsText(ctx, doc, child, visited, depth+1) {
+			return true
+		}
+	}
+	return false
 }
 
 // showsText reports whether a content stream carries a text-showing operator
