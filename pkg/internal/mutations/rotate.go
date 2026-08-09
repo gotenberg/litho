@@ -45,8 +45,13 @@ func RotatePages(ctx context.Context, alloc *writer.ObjAllocator, pages []*docum
 		maps.Copy(newDict, p.Dict)
 		newDict["Rotate"] = ast.PdfInt(rotation)
 
-		// Write the modified page at its existing object number.
-		alloc.AllocAt(p.Ref.ObjectNum, newDict)
+		// Write the modified page at its existing object number. A page
+		// inlined in a /Kids array has none, and there is nothing to replace in
+		// an incremental update; say so rather than report a rotation that
+		// never reached the file.
+		if !alloc.AllocAt(p.Ref.ObjectNum, newDict) {
+			return fmt.Errorf("rotating page %d: %w", pageNum, ErrPageNotAddressable)
+		}
 	}
 	return nil
 }

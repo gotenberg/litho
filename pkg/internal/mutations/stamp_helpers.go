@@ -75,7 +75,15 @@ func applyStampToPages(
 
 		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, brackets, stampRef)
 
-		alloc.AllocAt(page.Ref.ObjectNum, newDict)
+		// A page inlined in a /Kids array has no object number to replace. Skip
+		// it rather than abort the whole stamp over one unaddressable page, but
+		// say so: the alternative was writing it back at object 0, which every
+		// reader ignores (see [writer.ObjAllocator.AllocAt]).
+		if !alloc.AllocAt(page.Ref.ObjectNum, newDict) {
+			doc.Logger.Debug("skipping stamp on a page with no indirect reference",
+				slog.Int("page", pageNum),
+			)
+		}
 	}
 	return nil
 }

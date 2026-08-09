@@ -31,12 +31,25 @@ func (a *ObjAllocator) Alloc(obj ast.PdfObject) ast.PdfIndirectRef {
 }
 
 // AllocAt registers an object at a specific number. Use this to replace
-// an existing object in an incremental update.
-func (a *ObjAllocator) AllocAt(objNum int, obj ast.PdfObject) {
+// an existing object in an incremental update. Reports whether the number was
+// usable: object 0 and negative numbers are refused.
+//
+// Per ISO 32000-1, 7.5.4, entry zero of a cross-reference table is always the
+// head of the free list and carries generation 65535, so no object may live
+// there. A page inlined in a /Kids array has no indirect reference and resolves
+// with object number 0 (pdfjs issue9540), and writing it back at that number
+// emitted a "0 0 obj" body plus an in-use entry for object 0. Every reader
+// ignores it, so the mutation vanished silently and the file's xref became
+// invalid; the caller learns here instead.
+func (a *ObjAllocator) AllocAt(objNum int, obj ast.PdfObject) bool {
+	if objNum <= 0 {
+		return false
+	}
 	a.pending[objNum] = obj
 	if objNum >= a.nextObjNum {
 		a.nextObjNum = objNum + 1
 	}
+	return true
 }
 
 // Pending returns all registered objects as a map from object number to object.

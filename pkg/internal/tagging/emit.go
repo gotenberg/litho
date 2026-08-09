@@ -226,7 +226,15 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 				e.maxParentKey = pi
 			}
 		}
-		e.alloc.AllocAt(page.Ref.ObjectNum, newPage)
+		// A page inlined in a /Kids array has no object number to replace, so
+		// its marks cannot be written back. Tag the rest of the document rather
+		// than fail it; writing at object 0 produced a body every reader
+		// ignores (see [writer.ObjAllocator.AllocAt]).
+		if !e.alloc.AllocAt(page.Ref.ObjectNum, newPage) {
+			e.doc.Logger.Debug("skipping tag marks on a page with no indirect reference",
+				slog.Int("page", pi+1),
+			)
+		}
 	}
 	return nums, nil
 }

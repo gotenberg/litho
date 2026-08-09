@@ -2,6 +2,7 @@ package mutations
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -227,5 +228,25 @@ func TestRotatePages_NormalisesAngle(t *testing.T) {
 		if got := dict["Rotate"]; got != c.want {
 			t.Errorf("angle %d: /Rotate = %v, want %v", c.angle, got, c.want)
 		}
+	}
+}
+
+// TestRotatePages_InlinePageIsReported pins that a page with no indirect
+// reference produces an error rather than a rotation that never lands.
+//
+// Such a page is inlined in its /Kids array (ISO 32000-1, 7.7.3.2) and has no
+// object number for an incremental update to replace. Writing it back at object
+// 0 emitted a body every reader ignores, so litho reported success over a file
+// whose /Rotate was nowhere: pdfjs issue9540.
+func TestRotatePages_InlinePageIsReported(t *testing.T) {
+	alloc := writer.NewObjAllocator(10)
+	pages := []*document.Page{{Dict: ast.PdfDict{"Type": ast.PdfName("Page")}}}
+
+	err := RotatePages(context.Background(), alloc, pages, 90, nil)
+	if !errors.Is(err, ErrPageNotAddressable) {
+		t.Fatalf("RotatePages on an inline page = %v, want ErrPageNotAddressable", err)
+	}
+	if _, present := alloc.Pending()[0]; present {
+		t.Error("the page was registered at object 0")
 	}
 }
