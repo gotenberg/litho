@@ -49,6 +49,8 @@ func applyStampToPages(
 	stampStream := ast.NewStream(ast.PdfDict{}, []byte(contentOps))
 	stampRef := alloc.Alloc(stampStream)
 
+	brackets := newContentBrackets(alloc)
+
 	for _, pageNum := range pageNums {
 		if pageNum < 1 || pageNum > len(pages) {
 			doc.Logger.Debug("skipping out-of-range stamp page",
@@ -71,30 +73,63 @@ func applyStampToPages(
 		maps.Copy(newDict, baseDict)
 		newDict["Resources"] = newResources
 
-		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, stampRef)
+		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, brackets, stampRef)
 
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
 	return nil
 }
 
-// appendPageContents returns the /Contents value for a page after appending a
-// new content stream. A page's /Contents is a single stream or a flat array of
-// streams (ISO 32000-1 §7.8.2). When the page already holds an array, from
-// multiple original streams or a prior stamp, the new stream is appended to it;
-// wrapping the array as one element would nest it, and a conforming reader
-// treats the nested array as a non-stream entry and drops all the content it
-// holds.
-func appendPageContents(ctx context.Context, doc *document.Document, baseDict ast.PdfDict, stampRef ast.PdfIndirectRef) ast.PdfObject {
+// newContentBrackets returns a function yielding the pair of streams that wrap
+// a page's existing content in q/Q, allocating them on first use.
+//
+// A page's operators run to the end of the stream, so any graphics state the
+// page leaves unbalanced is still in force when a stamp is appended (ISO
+// 32000-1, 8.4.4). Bracketing the original content restores the default state
+// first, which is what a stamp's absolute coordinates assume: pdfjs bug946506
+// opens with a bare "16 0 0 16 0 0 cm" and no q, so an unbracketed 36pt stamp
+// was drawn at 576pt and ran off the page.
+//
+// The pair is allocated at most once per call and shared by every page: the
+// streams are immutable and carry no page-specific state. Allocating lazily
+// keeps them out of a document whose pages all lack /Contents, where nothing
+// would reference them and the writer does not prune unreachable objects.
+func newContentBrackets(alloc *writer.ObjAllocator) func() (ast.PdfIndirectRef, ast.PdfIndirectRef) {
+	var saveRef, restoreRef ast.PdfIndirectRef
+	var allocated bool
+	return func() (ast.PdfIndirectRef, ast.PdfIndirectRef) {
+		if !allocated {
+			saveRef = alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte("q\n")))
+			restoreRef = alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte("\nQ\n")))
+			allocated = true
+		}
+		return saveRef, restoreRef
+	}
+}
+
+// appendPageContents returns the /Contents value for a page after bracketing
+// the existing content in q/Q and appending a new content stream. A page's
+// /Contents is a single stream or a flat array of streams (ISO 32000-1 §7.8.2),
+// and the array's elements are concatenated into one stream, so the brackets
+// may be separate elements. When the page already holds an array, from multiple
+// original streams or a prior stamp, the new stream is appended to it; wrapping
+// the array as one element would nest it, and a conforming reader treats the
+// nested array as a non-stream entry and drops all the content it holds.
+func appendPageContents(ctx context.Context, doc *document.Document, baseDict ast.PdfDict, brackets func() (ast.PdfIndirectRef, ast.PdfIndirectRef), stampRef ast.PdfIndirectRef) ast.PdfObject {
 	existing, ok := baseDict["Contents"]
 	if !ok {
 		return stampRef
 	}
-	if arr, isArr := existing.(ast.PdfArray); isArr {
-		out := make(ast.PdfArray, 0, len(arr)+1)
-		out = append(out, arr...)
-		out = append(out, stampRef)
+	bracket := func(elems ...ast.PdfObject) ast.PdfArray {
+		saveRef, restoreRef := brackets()
+		out := make(ast.PdfArray, 0, len(elems)+3)
+		out = append(out, saveRef)
+		out = append(out, elems...)
+		out = append(out, restoreRef, stampRef)
 		return out
+	}
+	if arr, isArr := existing.(ast.PdfArray); isArr {
+		return bracket(arr...)
 	}
 	// The array may be reached through a reference, which a type assertion on
 	// the raw value misses: pdfjs issue12963.pdf holds /Contents as a reference
@@ -103,13 +138,10 @@ func appendPageContents(ctx context.Context, doc *document.Document, baseDict as
 	// the page lost every one of its 1241 characters.
 	if ref, isRef := existing.(ast.PdfIndirectRef); isRef {
 		if arr, err := document.ResolveArray(ctx, doc, ref); err == nil && arr != nil {
-			out := make(ast.PdfArray, 0, len(arr)+1)
-			out = append(out, arr...)
-			out = append(out, stampRef)
-			return out
+			return bracket(arr...)
 		}
 	}
-	return ast.PdfArray{existing, stampRef}
+	return bracket(existing)
 }
 
 // latestPageDict returns the most recent version of a page's dict, preferring

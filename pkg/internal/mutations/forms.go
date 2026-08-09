@@ -260,7 +260,10 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		}
 		stampStream := ast.NewStream(ast.PdfDict{}, []byte(content.String()))
 		stampRef := alloc.Alloc(stampStream)
-		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, stampRef)
+		// A flattened appearance is placed with the widget's absolute /Rect
+		// coordinates, so it must start from the default graphics state rather
+		// than whatever the page left in force (ISO 32000-1, 8.4.4).
+		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, newContentBrackets(alloc), stampRef)
 	}
 
 	// Update /Annots: keep non-widget annotations, drop the rest.
