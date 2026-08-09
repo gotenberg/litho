@@ -512,8 +512,9 @@ func (w *Writer) ClearMetadata() {
 }
 
 // RotatePages sets the /Rotate value for the given 1-based page numbers.
-// Rotation must be a multiple of 90 (0, 90, 180, 270). The mutation is
-// queued and applied when [Writer.WriteTo] is called.
+// If no pages are specified, every page is rotated. Rotation must be a
+// multiple of 90 (0, 90, 180, 270). The mutation is queued and applied when
+// [Writer.WriteTo] is called.
 func (w *Writer) RotatePages(rotation int, pages ...int) error {
 	if rotation%90 != 0 {
 		return fmt.Errorf("%w: got %d", ErrInvalidRotation, rotation)

@@ -137,3 +137,95 @@ func TestLatestPageDict_PrefersAllocator(t *testing.T) {
 		t.Error("did not expect original-only field in pending dict")
 	}
 }
+
+// TestRotatePages_EmptyPageListRotatesEveryPage pins the "default: all"
+// contract the rotate command advertises for its -pages flag.
+//
+// The CLI leaves its page list empty when -pages is absent, so an empty list
+// meaning "no pages" made rotating a whole document a silent no-op: litho
+// reported success over a byte-identical file. StampText has always expanded an
+// empty list this way; rotate was the outlier.
+func TestRotatePages_EmptyPageListRotatesEveryPage(t *testing.T) {
+	alloc := writer.NewObjAllocator(10)
+	pages := newTestPages(3, 4, 5)
+
+	if err := RotatePages(context.Background(), alloc, pages, 90, nil); err != nil {
+		t.Fatalf("RotatePages: %v", err)
+	}
+
+	pending := alloc.Pending()
+	if len(pending) != len(pages) {
+		t.Fatalf("rotated %d page(s), want all %d", len(pending), len(pages))
+	}
+	for _, objNum := range []int{3, 4, 5} {
+		dict, ok := pending[objNum].(ast.PdfDict)
+		if !ok {
+			t.Errorf("page %d was not rotated", objNum)
+			continue
+		}
+		if got, want := dict["Rotate"], ast.PdfInt(90); got != want {
+			t.Errorf("page %d /Rotate = %v, want %v", objNum, got, want)
+		}
+	}
+}
+
+// TestRotatePages_ZeroClearsRotation pins that 0 is a real rotation, not a
+// no-op: it resets a page a previous run turned.
+func TestRotatePages_ZeroClearsRotation(t *testing.T) {
+	alloc := writer.NewObjAllocator(10)
+	pages := newTestPages(3)
+	pages[0].Dict["Rotate"] = ast.PdfInt(90)
+
+	if err := RotatePages(context.Background(), alloc, pages, 0, nil); err != nil {
+		t.Fatalf("RotatePages: %v", err)
+	}
+	dict, ok := alloc.Pending()[3].(ast.PdfDict)
+	if !ok {
+		t.Fatal("page 3 was not written")
+	}
+	if got, want := dict["Rotate"], ast.PdfInt(0); got != want {
+		t.Errorf("/Rotate = %v, want %v", got, want)
+	}
+}
+
+// TestRotatePages_NormalisesAngle pins that /Rotate is written as one of the
+// four values it is documented to take.
+//
+// ISO 32000-1, Table 30 only asks for a multiple of 90, so 720 and -90 are
+// legal and veraPDF accepts them, but emitting them contradicts what
+// RotatePages promises and leaves every reader to fold a full turn or a
+// negative angle on litho's behalf. Unreachable until an empty page list
+// started rotating anything.
+func TestRotatePages_NormalisesAngle(t *testing.T) {
+	cases := []struct {
+		angle int
+		want  ast.PdfInt
+	}{
+		{0, 0},
+		{90, 90},
+		{180, 180},
+		{270, 270},
+		{360, 0},
+		{450, 90},
+		{720, 0},
+		{-90, 270},
+		{-180, 180},
+		{-270, 90},
+		{-360, 0},
+	}
+	for _, c := range cases {
+		alloc := writer.NewObjAllocator(10)
+		pages := newTestPages(3)
+		if err := RotatePages(context.Background(), alloc, pages, c.angle, nil); err != nil {
+			t.Fatalf("RotatePages(%d): %v", c.angle, err)
+		}
+		dict, ok := alloc.Pending()[3].(ast.PdfDict)
+		if !ok {
+			t.Errorf("angle %d: page was not written", c.angle)
+			continue
+		}
+		if got := dict["Rotate"]; got != c.want {
+			t.Errorf("angle %d: /Rotate = %v, want %v", c.angle, got, c.want)
+		}
+	}
+}

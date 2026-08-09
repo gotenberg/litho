@@ -21,7 +21,18 @@ func runRotate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return exitError
 	}
 
-	if fs.NArg() < 1 || *output == "" || *angle == 0 {
+	// -angle 0 is a real request: it clears /Rotate on an already-rotated
+	// document, and 0 is one of the four values RotatePages accepts. Testing
+	// the value cannot tell that apart from an absent flag, so ask the flag set
+	// which flags were actually seen.
+	angleSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "angle" {
+			angleSet = true
+		}
+	})
+
+	if fs.NArg() < 1 || *output == "" || !angleSet {
 		fmt.Fprintln(stderr, "Usage: litho rotate <file> --angle ANGLE [--pages RANGE] -o out.pdf")
 		return exitError
 	}
