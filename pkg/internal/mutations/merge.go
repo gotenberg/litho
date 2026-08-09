@@ -30,6 +30,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	var firstInfoRef ast.PdfIndirectRef
 	var hasInfo bool
 	cumulativeOffsets := make([]int, len(sources))
+	formSources := make([]acroFormSource, 0, len(sources))
 
 	for srcIdx, src := range sources {
 		cumulativeOffsets[srcIdx] = len(allPageRefs)
@@ -43,6 +44,9 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		}
 
 		copier := writer.NewCopier(src.Doc, alloc)
+		if srcCatalog, err := document.ResolveDict(ctx, src.Doc, src.Doc.Index.Trailer["Root"]); err == nil && srcCatalog != nil {
+			formSources = append(formSources, acroFormSource{Doc: src.Doc, Catalog: srcCatalog, Copier: copier})
+		}
 
 		for pageNum, page := range src.Pages {
 			if err := ctx.Err(); err != nil {
@@ -109,6 +113,10 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		firstCopier := writer.NewCopier(sources[0].Doc, alloc)
 		copyCatalogEntries(ctx, sources[0].Doc, firstCopier, catalogDict)
 	}
+
+	// Re-attach the interactive form, naming every field that kept a widget
+	// across all the sources.
+	rebuildAcroForm(ctx, alloc, allPageRefs, formSources, catalogDict)
 
 	// Handle bookmarks for the merged output.
 	if bookmarkCfg.Handling != BookmarkNone {

@@ -78,6 +78,13 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	// Copy catalog-level entries that should survive split.
 	copyCatalogEntries(ctx, doc, copier, catalogDict)
 
+	// Re-attach the interactive form to whichever fields kept a widget.
+	if catalogDict2, err := document.ResolveDict(ctx, doc, doc.Index.Trailer["Root"]); err == nil && catalogDict2 != nil {
+		rebuildAcroForm(ctx, alloc, pageRefs, []acroFormSource{
+			{Doc: doc, Catalog: catalogDict2, Copier: copier},
+		}, catalogDict)
+	}
+
 	// Handle bookmarks for the output.
 	if bookmarkCfg.Handling != BookmarkNone {
 		newBookmarks, err := resolveSplitBookmarks(ctx, doc, allPages, pages, bookmarkCfg)
