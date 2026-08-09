@@ -15,11 +15,13 @@ import (
 //
 //   - A page inlined directly in a /Kids array has no indirect reference; its
 //     dict is copied and allocated a new object instead.
-//   - A page inherits Resources, MediaBox, and Rotate from ancestor /Pages
-//     nodes (ISO 32000-1 §7.7.3.4). The output builds a flat single-level page
-//     tree with no ancestor to inherit from, so these resolved attributes are
-//     materialised onto the copied page. Without the Resources materialisation
-//     an inheriting page loses its fonts and its text becomes unextractable.
+//   - A page inherits Resources, MediaBox, CropBox, and Rotate from ancestor
+//     /Pages nodes (ISO 32000-1 §7.7.3.4). The output builds a flat single-level
+//     page tree with no ancestor to inherit from, so these resolved attributes
+//     are materialised onto the copied page. Without the Resources
+//     materialisation an inheriting page loses its fonts and its text becomes
+//     unextractable; without the CropBox one it is displayed at its /MediaBox
+//     size instead of the region it was cropped to.
 func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer.ObjAllocator, page *document.Page) (ast.PdfIndirectRef, error) {
 	var ref ast.PdfIndirectRef
 	if page.Ref.ObjectNum != 0 {
@@ -63,6 +65,11 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 			return ast.PdfIndirectRef{}, err
 		}
 	}
+	if croppedTighter(page) {
+		if err := materialize("CropBox", page.CropBox); err != nil {
+			return ast.PdfIndirectRef{}, err
+		}
+	}
 	if page.Rotate != 0 {
 		if _, has := pageDict["Rotate"]; !has {
 			pageDict["Rotate"] = ast.PdfInt(page.Rotate)
@@ -72,9 +79,36 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 	return ref, nil
 }
 
+// croppedTighter reports whether a page's visible region differs from its
+// /MediaBox, which is the only case where a copied page needs its own
+// /CropBox.
+//
+// [document.Page.CropBox] is the EFFECTIVE region and already falls back to the
+// /MediaBox (ISO 32000-1, 14.11.2), so materialising it unconditionally would
+// write a redundant entry onto every copied page.
+func croppedTighter(page *document.Page) bool {
+	if page.CropBox == nil {
+		return false
+	}
+	return !sameBox(page.CropBox, page.MediaBox)
+}
+
+// sameBox reports whether two rectangles denote the same region.
+func sameBox(a, b ast.PdfArray) bool {
+	if len(a) != 4 || len(b) != 4 {
+		return false
+	}
+	for i := range a {
+		if document.Float(a[i]) != document.Float(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // materializeInheritedAttrs writes the attributes a page inherits from ancestor
-// /Pages nodes (Resources, MediaBox, Rotate; ISO 32000-1 §7.7.3.4) directly
-// onto dict when dict lacks them, using the resolved values from page.
+// /Pages nodes (Resources, MediaBox, CropBox, Rotate; ISO 32000-1 §7.7.3.4)
+// directly onto dict when dict lacks them, using the resolved values from page.
 //
 // Callers that flatten the page tree in the source document's own object
 // numbering (delete, insert) use this instead of copyPageForOutput: they reuse
@@ -91,6 +125,11 @@ func materializeInheritedAttrs(dict ast.PdfDict, page *document.Page) {
 	if page.MediaBox != nil {
 		if _, has := dict["MediaBox"]; !has {
 			dict["MediaBox"] = page.MediaBox
+		}
+	}
+	if croppedTighter(page) {
+		if _, has := dict["CropBox"]; !has {
+			dict["CropBox"] = page.CropBox
 		}
 	}
 	if page.Rotate != 0 {
