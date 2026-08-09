@@ -652,6 +652,18 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 // write in [Document.augmentXrefFromRawScan] cannot race the read. The
 // critical section is a single map lookup and never calls back into
 // resolution, so it cannot deadlock against the augmentation write lock.
+//
+// The table is keyed by object number alone, so a reference resolves to
+// whatever generation the cross-reference table currently holds. ISO 32000-1,
+// 7.3.10 identifies an object by number AND generation, and 7.3.10 also says a
+// reference to a non-existent object is the null object, so a strict reader
+// would resolve "5 1 R" to null when the table lists object 5 at generation 0.
+// Deliberate leniency: generations above zero appear almost exclusively in
+// files that reuse object numbers across incremental updates, where answering
+// null loses a page the document plainly intends (pdfjs issue7496 reaches its
+// only /Annots this way). Matching on the number recovers the object the table
+// points at; qpdf instead keeps the older generation, so the two disagree on
+// such files.
 func (d *Document) xrefEntry(objNum int) (xref.XRefEntry, bool) {
 	d.mu.RLock()
 	entry, ok := d.Index.Entries[objNum]
