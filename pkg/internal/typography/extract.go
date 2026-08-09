@@ -504,7 +504,12 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	if objNum != 0 {
 		visited[objNum] = true
 	}
+	// A form's marked-content spans belong to the form's own stream
+	// (ISO 32000-1, 14.6). Close any it leaves open before returning to the
+	// parent, or an unbalanced /Artifact would suppress the rest of the page.
+	mcSpans := machine.SnapshotMarkedContent()
 	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances)
+	machine.RestoreMarkedContent(mcSpans)
 	if objNum != 0 {
 		delete(visited, objNum)
 	}

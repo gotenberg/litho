@@ -151,6 +151,7 @@ func handleRestoreState(_ context.Context, m *Machine, _ *State, _ content.Opera
 	if len(m.Stack) > 1 {
 		m.Stack = m.Stack[:len(m.Stack)-1]
 	}
+	syncSkipExtraction(m, m.Current())
 }
 
 func handleConcatMatrix(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -629,16 +630,53 @@ func handleEMC(_ context.Context, m *Machine, state *State, _ content.Operation)
 	if len(m.MarkedContent) > 0 {
 		m.MarkedContent = m.MarkedContent[:len(m.MarkedContent)-1]
 	}
-	// Re-evaluate flags based on the remaining marked-content stack.
-	state.SkipExtraction = false
+	syncSkipExtraction(m, state)
+}
+
+// SnapshotMarkedContent copies the open marked-content spans. Pair it with
+// [Machine.RestoreMarkedContent] around a nested content stream.
+func (m *Machine) SnapshotMarkedContent() []MarkedContentState {
+	return append([]MarkedContentState(nil), m.MarkedContent...)
+}
+
+// RestoreMarkedContent puts the marked-content stack back as snapshot recorded
+// it, and re-derives the extraction flag.
+//
+// Per ISO 32000-1, 14.6, marked-content operators shall be balanced within a
+// single content stream, so a form XObject's spans end with the form. Both
+// malformations matter, which is why this restores the whole stack rather than
+// truncating to its former depth: a form that opens an /Artifact and never
+// closes it would otherwise swallow every later text run on the page, and a
+// form carrying a stray EMC would close a span the page still has open and leak
+// decoration into the text. The surrounding q/Q used to hide the first case by
+// restoring the flag along with the graphics state; deriving the flag from this
+// stack makes closing the leak here the only thing that keeps it honest.
+func (m *Machine) RestoreMarkedContent(snapshot []MarkedContentState) {
+	m.MarkedContent = append(m.MarkedContent[:0:0], snapshot...)
+	syncSkipExtraction(m, m.Current())
+}
+
+// syncSkipExtraction recomputes the current state's extraction flag from the
+// marked-content stack, the only thing that determines it.
+//
+// Per ISO 32000-1, 14.6, marked-content nesting is independent of the q/Q
+// graphics-state stack: a BMC may open in one frame and its EMC close in
+// another. Because the flag rides along in [State], a frame saved inside an
+// /Artifact span carries a skip that no longer describes the content once EMC
+// has closed the span, and a frame saved outside one cancels a span still
+// open. Deriving the flag afresh at every stack movement keeps the two
+// nestings from contaminating each other.
+func syncSkipExtraction(m *Machine, state *State) {
+	skip := false
 	for _, mc := range m.MarkedContent {
 		if mc.IsHiddenOC && !m.IgnoreOCVisibility {
-			state.SkipExtraction = true
+			skip = true
 		}
 		if mc.IsArtifact && m.StripArtifacts {
-			state.SkipExtraction = true
+			skip = true
 		}
 	}
+	state.SkipExtraction = skip
 }
 
 func handleDesignatedMCPoint(_ context.Context, _ *Machine, _ *State, _ content.Operation) {
