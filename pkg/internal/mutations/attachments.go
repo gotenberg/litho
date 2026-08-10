@@ -3,6 +3,7 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"sort"
 
@@ -61,9 +62,17 @@ func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 		}
 	}
 	for i := 0; i+1 < len(arr); i += 2 {
-		if s, ok := arr[i].(ast.PdfString); ok {
-			*out = append(*out, EFEntry{Name: string(s), Ref: arr[i+1]})
+		// A name-tree key may be an indirect reference like any other object.
+		// Asserting the type directly skipped those entries, and since the
+		// collected set is what gets rewritten, attaching a new file DELETED
+		// every attachment whose key was indirect: pdfjs issue18444.pdf lost
+		// quitecommands.xml the moment anything else was attached.
+		s, err := document.ResolveString(ctx, doc, arr[i])
+		if err != nil {
+			doc.Logger.Debug("resolving embedded file name", slog.Any("err", err))
+			continue
 		}
+		*out = append(*out, EFEntry{Name: string(s), Ref: arr[i+1]})
 	}
 }
 
