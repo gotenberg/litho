@@ -80,9 +80,9 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 
 	// Re-attach the interactive form to whichever fields kept a widget.
 	if catalogDict2, err := document.ResolveDict(ctx, doc, doc.Index.Trailer["Root"]); err == nil && catalogDict2 != nil {
-		rebuildAcroForm(ctx, alloc, pageRefs, []acroFormSource{
-			{Doc: doc, Catalog: catalogDict2, Copier: copier},
-		}, catalogDict)
+		srcs := []acroFormSource{{Doc: doc, Catalog: catalogDict2, Copier: copier}}
+		rebuildAcroForm(ctx, alloc, pageRefs, srcs, catalogDict)
+		rebuildEmbeddedFiles(ctx, alloc, srcs, catalogDict)
 	}
 
 	// Handle bookmarks for the output.
@@ -114,6 +114,18 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	// Build trailer.
 	trailer := ast.PdfDict{
 		"Root": catalogRef,
+	}
+
+	// Carry the trailer /ID. ISO 19005-1, 6.1.3 requires it outright, so a
+	// split of a conformant file that dropped it stopped being conformant;
+	// copying rather than generating also keeps the output deterministic
+	// (ISO 32000-1, 14.4 treats the first element as the document's identity).
+	if idArr, ok := doc.Index.Trailer["ID"].(ast.PdfArray); ok {
+		if copiedID, err := copier.CopyObject(ctx, idArr); err == nil {
+			trailer["ID"] = copiedID
+		} else {
+			doc.Logger.Debug("copying trailer /ID for split failed", slog.Any("err", err))
+		}
 	}
 
 	// Copy /Info if present.
@@ -157,8 +169,24 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 		return
 	}
 
+	// Page-INDEPENDENT catalog entries only. Each of these describes the
+	// document rather than a particular page, so carrying it into a subset or a
+	// concatenation cannot leave it pointing at a page that is no longer there.
+	//
+	// Dropping them broke conformance outright: a PDF/A-1a file that veraPDF
+	// passed with zero failures came out of a split failing 6.7.2 (the document
+	// XMP that PDF/A requires) and 6.1.3, because /Metadata and /OutputIntents
+	// went with it.
+	//
+	// /StructTreeRoot and /PageLabels are deliberately NOT here. Both are keyed
+	// to pages: a structure tree names the pages its elements live on and a page
+	// label tree is indexed by page number, so copying either wholesale would
+	// describe pages the output does not have. Carrying them needs the same kind
+	// of remapping resolveSplitBookmarks does for the outline, which is a
+	// larger change than this list. The 6.8.3.3 failure that leaves is honest.
 	keepKeys := []ast.PdfName{
 		"ViewerPreferences", "PageLayout", "PageMode", "Lang", "MarkInfo",
+		"Metadata", "OutputIntents", "OCProperties", "Extensions", "Version",
 	}
 	for _, key := range keepKeys {
 		if val, ok := catalogDict[key]; ok {

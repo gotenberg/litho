@@ -117,6 +117,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	// Re-attach the interactive form, naming every field that kept a widget
 	// across all the sources.
 	rebuildAcroForm(ctx, alloc, allPageRefs, formSources, catalogDict)
+	rebuildEmbeddedFiles(ctx, alloc, formSources, catalogDict)
 
 	// Handle bookmarks for the merged output.
 	if bookmarkCfg.Handling != BookmarkNone {
@@ -143,6 +144,19 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	}
 	if hasInfo {
 		trailer["Info"] = firstInfoRef
+	}
+
+	// Carry the first source's trailer /ID, which ISO 19005-1, 6.1.3 requires
+	// and a merge of conformant files used to drop.
+	if len(sources) > 0 {
+		if idArr, ok := sources[0].Doc.Index.Trailer["ID"].(ast.PdfArray); ok {
+			idCopier := writer.NewCopier(sources[0].Doc, alloc)
+			if copiedID, err := idCopier.CopyObject(ctx, idArr); err == nil {
+				trailer["ID"] = copiedID
+			} else {
+				sources[0].Doc.Logger.Debug("copying trailer /ID for merge failed", slog.Any("err", err))
+			}
+		}
 	}
 
 	if version == "" {
