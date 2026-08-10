@@ -370,6 +370,10 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		doc.expandObjectStreamsForRebuild(ctx, doc.Index.Entries)
 	}
 
+	// Runs once the index is final, whichever path filled it, because all of
+	// them take object numbers straight from the file.
+	doc.pruneUnrepresentableEntries()
+
 	doc.Logger.Debug("xref parsed",
 		slog.Int("entries", len(doc.Index.Entries)),
 		slog.Bool("rebuilt", doc.Rebuilt),

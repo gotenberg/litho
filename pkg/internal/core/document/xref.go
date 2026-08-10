@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"slices"
 	"sort"
@@ -151,6 +152,105 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// pruneUnrepresentableEntries drops cross-reference entries whose object number
+// the file is too small to have defined.
+//
+// Object numbers reach the index from three untrusted places, none of which
+// bounds them: a classic subsection header, an xref stream's /Index, and the
+// raw-byte rebuild scan. pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf carries the
+// header "00000004294967296 3" in a 627-byte file. The bogus entries are inert
+// on read, so the file opens everywhere, but every write derives its next object
+// number from the highest one in the index: litho appended "4294967299 0 obj"
+// with a matching /Size, an object number past 2^32 that qpdf refuses outright,
+// turning a file both poppler and pikepdf accept into one pikepdf rejects.
+//
+// See [Document.objectNumberFits] for the bound and why the file size supplies
+// it. Compliance reads benefit too: an entry no file could hold was inflating
+// the object count checked against the ISO 32000-1, Annex C limits.
+func (d *Document) pruneUnrepresentableEntries() {
+	for objNum := range d.Index.Entries {
+		if d.objectNumberFits(objNum) {
+			continue
+		}
+		delete(d.Index.Entries, objNum)
+		d.Logger.Debug("dropping xref entry whose object number the file cannot define",
+			slog.Int("object_number", objNum),
+			slog.Int64("file_size", d.size),
+		)
+	}
+}
+
+// objectNumberFits reports whether the file is large enough to have defined an
+// object with this number.
+//
+// An in-use object needs either its own "N G obj ... endobj" bytes or its own
+// entry inside an object stream, so a file of S bytes cannot define an object
+// numbered above S. That leaves real documents orders of magnitude clear of the
+// line while catching a number no file could have produced. A size of zero means
+// the caller never supplied one, so nothing can be judged.
+func (d *Document) objectNumberFits(objNum int) bool {
+	if objNum < 0 {
+		return false
+	}
+	if d.size <= 0 {
+		return true
+	}
+	return int64(objNum) <= d.size
+}
+
+// HighestObjectNumber returns the highest object number the file uses. A writer
+// appending an incremental update allocates above it, so no new object can
+// shadow one already in the bytes.
+//
+// The cross-reference index alone does not answer this, and the gap is ordinary
+// rather than exotic: an xref stream need not list itself, so the object holding
+// it is often absent from the very index it defines. veraPDF 6-1-4-t03-fail-a
+// defines objects 1-22 and indexes 1-21, and litho appended its own object 22
+// straight over the file's /Type /XRef stream; pdfjs bug1019475_1.pdf lost
+// object 586 the same way. A mislabelled subsection header opens the same gap
+// wider: GHOSTSCRIPT-698804-1-fuzzed.pdf indexes only 0 and 1 while defining 1
+// through 6, leaving objects 2-4 looking free.
+//
+// The trailer /Size is one greater than the highest object number used (ISO
+// 32000-1, Table 15), which covers exactly the objects the index missed. It is
+// file-derived and so untrusted, and is bounded by the file size on the same
+// reasoning as [Document.pruneUnrepresentableEntries]. Taking the larger of the
+// two is never worse than the index alone: a /Size that understates the file,
+// which broken producers do emit, simply loses to the index.
+func (d *Document) HighestObjectNumber() int {
+	highest := 0
+	for objNum := range d.Index.Entries {
+		// Bounded here as well as in the prune, because resolution registers
+		// objects it recovers by scanning long after the index was built.
+		if objNum > highest && d.objectNumberFits(objNum) {
+			highest = objNum
+		}
+	}
+	if size, ok := d.trailerObjectCount(); ok && size-1 > highest {
+		highest = size - 1
+	}
+	return highest
+}
+
+// trailerObjectCount returns the trailer /Size when it is a plausible object
+// count for a file this size.
+func (d *Document) trailerObjectCount() (int, bool) {
+	sizeObj, ok := d.Index.Trailer["Size"]
+	if !ok {
+		return 0, false
+	}
+	size, ok := sizeObj.(ast.PdfInt)
+	if !ok || size <= 0 {
+		return 0, false
+	}
+	if d.size > 0 && int64(size) > d.size {
+		return 0, false
+	}
+	// Bounded above by d.size, an int64 file size, so the conversion cannot
+	// overflow an int on any platform litho builds for.
+	return int(size), true
 }
 
 // mergeTrailerKeys copies /Root and /Info from an older trailer into the

@@ -36,14 +36,7 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // call Signer.Sign to get the PKCS#7 blob, then patch the placeholder
 // with the actual signature bytes.
 func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, mutations []MutationFunc, xrefStream bool) error {
-	// Find max object number for the allocator.
-	maxObjNum := 0
-	for objNum := range doc.Index.Entries {
-		if objNum > maxObjNum {
-			maxObjNum = objNum
-		}
-	}
-	alloc := writer.NewObjAllocator(maxObjNum)
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
 
 	// Apply non-signature mutations first.
 	for _, m := range mutations {

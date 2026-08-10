@@ -1206,13 +1206,7 @@ func (w *Writer) remediate(
 	run func(context.Context, *writer.ObjAllocator, *document.Document) (*remediation.Report, error),
 ) (*RemediationReport, error) {
 	doc := w.reader.doc
-	maxObjNum := 0
-	for objNum := range doc.Index.Entries {
-		if objNum > maxObjNum {
-			maxObjNum = objNum
-		}
-	}
-	alloc := writer.NewObjAllocator(maxObjNum)
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
 
 	baseline, baseErr := probeIntegrity(ctx, w.reader)
 	if baseErr != nil {
@@ -1468,13 +1462,7 @@ func (w *Writer) remediationRound(
 	}
 	defer r2.Close()
 
-	maxObjNum := 0
-	for objNum := range r2.doc.Index.Entries {
-		if objNum > maxObjNum {
-			maxObjNum = objNum
-		}
-	}
-	alloc := writer.NewObjAllocator(maxObjNum)
+	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber())
 	rep, err := run(ctx, alloc, r2.doc)
 	if err != nil || rep == nil || len(rep.Fixed) == 0 {
 		return "", nil, nil, false
@@ -1739,13 +1727,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		// had renumbered into that slot).
 		overrides := w.rewriteOverrides
 		if len(w.mutations) > 0 {
-			maxObjNum := 0
-			for objNum := range w.reader.doc.Index.Entries {
-				if objNum > maxObjNum {
-					maxObjNum = objNum
-				}
-			}
-			mutAlloc := writer.NewObjAllocator(maxObjNum)
+			mutAlloc := writer.NewObjAllocator(w.reader.doc.HighestObjectNumber())
 			for i, m := range w.mutations {
 				if err := m.apply(ctx, mutAlloc, w.reader.doc); err != nil {
 					return fmt.Errorf("applying mutation %d: %w", i, err)
@@ -1773,15 +1755,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 
 	doc := w.reader.doc
 
-	// Find max object number for the allocator.
-	maxObjNum := 0
-	for objNum := range doc.Index.Entries {
-		if objNum > maxObjNum {
-			maxObjNum = objNum
-		}
-	}
-
-	alloc := writer.NewObjAllocator(maxObjNum)
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
 
 	// Apply all batched mutations.
 	for i, m := range w.mutations {
