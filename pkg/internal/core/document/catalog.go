@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -505,10 +506,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		}
 	case "Page":
 		// CropBox defaults to MediaBox per PDF spec §14.11.2
-		effectiveCropBox := currentCropBox
-		if effectiveCropBox == nil {
-			effectiveCropBox = currentMediaBox
-		}
+		effectiveCropBox := clampToMediaBox(currentCropBox, currentMediaBox)
 
 		// BleedBox, TrimBox, ArtBox are non-inheritable; default to CropBox.
 		bleedBox := resolveBoxArray(ctx, doc, node, "BleedBox", effectiveCropBox)
@@ -539,6 +537,47 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	}
 
 	return nil
+}
+
+// clampToMediaBox returns the region a viewer actually shows: the crop box
+// intersected with the media box, or the media box when there is no crop box.
+//
+// ISO 32000-1, 14.11.2 requires the crop box to lie within the media box, so a
+// producer that writes one larger than the page describes a region that does not
+// exist. Taking it verbatim overstated the page: govdocs thread_200_200062
+// declares a 612x792 media box and a 614x794 crop box, and litho answered
+// 614x794 where poppler answers 612x792. The size feeds stamp placement and
+// clipping, so the overstatement is not only cosmetic.
+func clampToMediaBox(crop, media ast.PdfArray) ast.PdfArray {
+	if len(crop) != 4 {
+		return media
+	}
+	if len(media) != 4 {
+		return crop
+	}
+	cx0, cy0, cx1, cy1 := boxCorners(crop)
+	mx0, my0, mx1, my1 := boxCorners(media)
+
+	x0, y0 := math.Max(cx0, mx0), math.Max(cy0, my0)
+	x1, y1 := math.Min(cx1, mx1), math.Min(cy1, my1)
+	// A crop box that misses the media box entirely describes nothing; the
+	// media box is the honest answer rather than an empty page.
+	if x1 <= x0 || y1 <= y0 {
+		return media
+	}
+	if x0 == cx0 && y0 == cy0 && x1 == cx1 && y1 == cy1 {
+		return crop
+	}
+	return ast.PdfArray{ast.PdfReal(x0), ast.PdfReal(y0), ast.PdfReal(x1), ast.PdfReal(y1)}
+}
+
+// boxCorners returns a rectangle's lower-left and upper-right corners, ordering
+// each pair so a box written with its corners swapped still reads correctly
+// (ISO 32000-1, 7.9.5).
+func boxCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
+	a, b := Float(box[0]), Float(box[2])
+	c, d := Float(box[1]), Float(box[3])
+	return math.Min(a, b), math.Min(c, d), math.Max(a, b), math.Max(c, d)
 }
 
 // mergeResourceDicts merges a node's /Resources with inherited resources.
