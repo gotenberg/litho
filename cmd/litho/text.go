@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 type textPageResult struct {
@@ -24,6 +26,14 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
 	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last)")
+	// Text a viewer does not paint is still text. Rendering mode 3 (ISO 32000-1,
+	// Table 106) is how a scanned page carries its OCR layer, so a searchable
+	// scan reads as empty without -invisible: pdfjs JBIG2Globals.pdf extracts
+	// 0 words by default and 1459 with it.
+	invisible := fs.Bool("invisible", false, "Include invisible text (rendering mode 3), such as an OCR layer")
+	clipped := fs.Bool("clipped", false, "Include text outside the visible CropBox")
+	artifacts := fs.Bool("artifacts", false, "Include text marked as an /Artifact (headers, footers, watermarks)")
+	hidden := fs.Bool("hidden", false, "Include all of the above")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
@@ -66,7 +76,7 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 		res := textResult{File: path}
 		for _, p := range pageNums {
-			text, err := r.ExtractText(ctx, p)
+			text, err := r.ExtractText(ctx, p, textOptions(*hidden, *invisible, *clipped, *artifacts)...)
 			if err != nil {
 				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
 				text = ""
@@ -97,4 +107,24 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return exitOK
+}
+
+// textOptions turns the extraction flags into reader options. The reader
+// already knows how to include each kind of unpainted text; the text command
+// simply had no way to ask, so an OCR layer was unreachable from the CLI.
+func textOptions(hidden, invisible, clipped, artifacts bool) []pdf.ExtractTextOption {
+	var opts []pdf.ExtractTextOption
+	if hidden {
+		opts = append(opts, pdf.WithHiddenText())
+	}
+	if invisible {
+		opts = append(opts, pdf.WithInvisibleText())
+	}
+	if clipped {
+		opts = append(opts, pdf.WithClippedText())
+	}
+	if artifacts {
+		opts = append(opts, pdf.WithArtifacts())
+	}
+	return opts
 }
