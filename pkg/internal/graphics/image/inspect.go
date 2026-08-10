@@ -2,7 +2,9 @@ package image
 
 import (
 	"context"
+	"sort"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -26,7 +28,19 @@ func ExtractImages(ctx context.Context, doc *document.Document, page *document.P
 
 	var images []models.ImageMeta
 
-	for name, obj := range xobjDict {
+	// Sort the resource names before walking them. Ranging the dict directly
+	// takes Go's randomised map order, so `litho images` answered with a
+	// different ordering on every run and any caller diffing two runs saw
+	// changes that were not there.
+	names := make([]string, 0, len(xobjDict))
+	for name := range xobjDict {
+		names = append(names, string(name))
+	}
+	sort.Strings(names)
+
+	for _, nameStr := range names {
+		name := ast.PdfName(nameStr)
+		obj := xobjDict[name]
 		stream, err := document.ResolveStream(ctx, doc, obj)
 		if err != nil {
 			continue
