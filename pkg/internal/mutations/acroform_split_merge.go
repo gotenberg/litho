@@ -60,7 +60,9 @@ func rebuildAcroForm(
 		if err != nil || srcForm == nil {
 			continue
 		}
-		for _, key := range []ast.PdfName{"DR", "DA", "Q", "NeedAppearances", "SigFlags"} {
+		// /SigFlags is deliberately absent: it advertises signatures the output
+		// cannot carry (see dropsSignature).
+		for _, key := range []ast.PdfName{"DR", "DA", "Q", "NeedAppearances"} {
 			if _, taken := acroForm[key]; taken {
 				continue
 			}
@@ -120,6 +122,9 @@ func collectRootFields(alloc *writer.ObjAllocator, pageRefs []ast.PdfObject) ast
 			}
 			rootRef, ok := rootFieldOf(alloc, annotRef)
 			if !ok || seen[rootRef.ObjectNum] {
+				continue
+			}
+			if dropsSignature(alloc, rootRef) {
 				continue
 			}
 			seen[rootRef.ObjectNum] = true
@@ -190,4 +195,22 @@ func pendingArray(alloc *writer.ObjAllocator, obj ast.PdfObject) (ast.PdfArray, 
 		return arr, ok
 	}
 	return nil, false
+}
+
+// dropsSignature reports whether a root field is a signature, which split and
+// merge must leave behind.
+//
+// A signature's digest is computed over the entire file and its /ByteRange
+// names the byte offsets it covers (ISO 32000-1, 12.8.1). Both operations
+// rewrite every byte, so a carried signature can never verify again, and
+// keeping it leaves a document that ADVERTISES a signature it cannot honour:
+// veraPDF reports ISO 19005-2, 6.4.3 against the output. Dropping the field is
+// the honest answer, and it is why /SigFlags is not carried either.
+func dropsSignature(alloc *writer.ObjAllocator, ref ast.PdfIndirectRef) bool {
+	dict, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	ft, _ := dict["FT"].(ast.PdfName)
+	return ft == "Sig"
 }

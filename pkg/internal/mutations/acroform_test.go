@@ -162,3 +162,33 @@ func TestSplitMerge_KeepAcroForm(t *testing.T) {
 		t.Errorf("merge: /Fields=%d hasDA=%v, want 2 and true", n, hasDA)
 	}
 }
+
+// TestCollectRootFields_DropsSignatureFields pins that a signature field is
+// left behind.
+//
+// A signature's digest covers the entire file and its /ByteRange names the
+// offsets it spans (ISO 32000-1, 12.8.1). Split and merge rewrite every byte,
+// so a carried signature can never verify: veraPDF reported ISO 19005-2, 6.4.3
+// against a split of docmdp_2b.pdf, a document that then advertised a signature
+// it could not honour.
+func TestCollectRootFields_DropsSignatureFields(t *testing.T) {
+	alloc := writer.NewObjAllocator(1)
+
+	sig := alloc.Alloc(ast.PdfDict{"FT": ast.PdfName("Sig"), "T": ast.PdfString("Signature1")})
+	sigWidget := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "Parent": sig})
+	text := alloc.Alloc(ast.PdfDict{"FT": ast.PdfName("Tx"), "T": ast.PdfString("name")})
+	textWidget := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "Parent": text})
+
+	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, sigWidget, textWidget)})
+	if len(got) != 1 {
+		t.Fatalf("/Fields = %v, want only the text field", got)
+	}
+	if got[0] != ast.PdfObject(text) {
+		t.Errorf("kept %v, want the text field %v", got[0], text)
+	}
+	for _, f := range got {
+		if f == ast.PdfObject(sig) {
+			t.Error("a signature field was carried into a rewritten file")
+		}
+	}
+}
