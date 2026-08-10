@@ -754,6 +754,16 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 		if err != nil {
 			// Tolerate malformed array elements (e.g., operators inside
 			// TJ arrays): skip the bad token and continue parsing.
+			//
+			// ParseObject consumes a token before dispatching on it, so a bare
+			// keyword is already past by the time it reports one. Consuming
+			// again would swallow the element AFTER the bad token: pdfjs
+			// bug1953099 writes a lone "-" between two strings in a TJ array,
+			// and the (e) that followed it vanished, so the word "extensively"
+			// came out a letter short.
+			if errors.Is(err, errUnexpectedKeyword) {
+				continue
+			}
 			if _, consumeErr := p.Consume(); consumeErr != nil {
 				break
 			}
