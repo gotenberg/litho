@@ -209,7 +209,7 @@ func TestSerialize_Stream(t *testing.T) {
 
 func TestSerializeIndirect(t *testing.T) {
 	var buf bytes.Buffer
-	_, err := SerializeIndirect(context.Background(), &buf, 5, ast.PdfInt(42))
+	_, err := SerializeIndirect(context.Background(), &buf, 5, 0, ast.PdfInt(42))
 	if err != nil {
 		t.Fatal(err)
 	}

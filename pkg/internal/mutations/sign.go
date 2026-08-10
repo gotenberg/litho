@@ -157,6 +157,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		Allocator:       alloc,
 		Trailer:         trailer,
 		UseXRefStream:   useXRefStream,
+		Generation:      doc.ObjectGeneration,
 	}); err != nil {
 		return fmt.Errorf("writing incremental for signing: %w", err)
 	}

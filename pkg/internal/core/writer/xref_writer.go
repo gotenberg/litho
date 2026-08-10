@@ -195,7 +195,7 @@ func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, tra
 	dict["Filter"] = ast.PdfName("FlateDecode")
 
 	stream := ast.NewStream(dict, compressed)
-	return SerializeIndirect(ctx, w, xrefObjNum, stream)
+	return SerializeIndirect(ctx, w, xrefObjNum, 0, stream)
 }
 
 // bytesNeeded returns the minimum number of bytes to represent val in

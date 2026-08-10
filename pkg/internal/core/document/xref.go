@@ -234,6 +234,28 @@ func (d *Document) HighestObjectNumber() int {
 	return highest
 }
 
+// ObjectGeneration returns the generation number the file gives an in-use
+// object, or 0 when it defines no such object.
+//
+// A replacement written by an incremental update must carry it: an indirect
+// reference names an object by number AND generation (ISO 32000-1, 7.3.10), so
+// rewriting "3 1 obj" as "3 0 obj" leaves every "3 1 R" in the file pointing at
+// an object that no longer answers. litho could not see this in its own output
+// because its index is keyed by object number alone, which is deliberate
+// leniency on read; pdfjs bug1393476.pdf came out of "litho rotate" reporting
+// the new angle to litho and none at all to poppler or pikepdf.
+//
+// A free entry reports 0. Its generation is the one to use if the number is
+// ever reused (ISO 32000-1, 7.5.4), not the identity of a live object, and
+// nothing references a free object.
+func (d *Document) ObjectGeneration(objNum int) int {
+	entry, ok := d.Index.Entries[objNum]
+	if !ok || entry.Free {
+		return 0
+	}
+	return entry.Generation
+}
+
 // trailerObjectCount returns the trailer /Size when it is a plausible object
 // count for a file this size.
 func (d *Document) trailerObjectCount() (int, bool) {

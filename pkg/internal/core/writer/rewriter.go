@@ -67,7 +67,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 			Offset: offset,
 		})
 
-		written, err := SerializeIndirect(ctx, dst, objNum, pending[objNum])
+		written, err := SerializeIndirect(ctx, dst, objNum, 0, pending[objNum])
 		if err != nil {
 			return fmt.Errorf("serializing object %d: %w", objNum, err)
 		}

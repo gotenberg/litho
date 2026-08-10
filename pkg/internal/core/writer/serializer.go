@@ -57,12 +57,17 @@ func Serialize(ctx context.Context, w io.Writer, obj ast.PdfObject) (int64, erro
 	}
 }
 
-// SerializeIndirect writes "N 0 obj\n<object>\nendobj\n" and returns the
+// SerializeIndirect writes "N G obj\n<object>\nendobj\n" and returns the
 // number of bytes written.
-func SerializeIndirect(ctx context.Context, w io.Writer, objNum int, obj ast.PdfObject) (int64, error) {
+//
+// An indirect reference identifies its object by object number AND generation
+// number (ISO 32000-1, 7.3.10), so a replacement written in an incremental
+// update keeps the generation the file's references already name. Objects
+// created fresh, and every object in a full rewrite, take generation 0.
+func SerializeIndirect(ctx context.Context, w io.Writer, objNum, genNum int, obj ast.PdfObject) (int64, error) {
 	var total int64
 
-	header := fmt.Sprintf("%d 0 obj\n", objNum)
+	header := fmt.Sprintf("%d %d obj\n", objNum, genNum)
 	n, err := io.WriteString(w, header)
 	total += int64(n)
 	if err != nil {

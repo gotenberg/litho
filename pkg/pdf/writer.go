@@ -1816,6 +1816,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		Allocator:       alloc,
 		Trailer:         trailer,
 		UseXRefStream:   useXRefStream,
+		Generation:      doc.ObjectGeneration,
 	})
 }
 

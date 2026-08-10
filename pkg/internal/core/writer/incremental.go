@@ -27,6 +27,12 @@ type IncrementalConfig struct {
 	Trailer ast.PdfDict
 	// UseXRefStream forces xref stream format instead of a traditional table.
 	UseXRefStream bool
+	// Generation reports the generation number the source file gives an
+	// object, so replacing it keeps the identity its references already name
+	// (ISO 32000-1, 7.3.10). Report 0 for an object the source does not define
+	// in use, which is what a newly allocated one gets. A nil func writes every
+	// object at generation 0.
+	Generation func(objNum int) int
 }
 
 // WriteIncremental appends an incremental update to dst. It copies the
@@ -66,12 +72,18 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 			return fmt.Errorf("incremental update canceled: %w", err)
 		}
 
+		genNum := 0
+		if cfg.Generation != nil {
+			genNum = cfg.Generation(objNum)
+		}
+
 		records = append(records, XRefRecord{
-			ObjNum: objNum,
-			Offset: offset,
+			ObjNum:     objNum,
+			Offset:     offset,
+			Generation: genNum,
 		})
 
-		written, err := SerializeIndirect(ctx, dst, objNum, pending[objNum])
+		written, err := SerializeIndirect(ctx, dst, objNum, genNum, pending[objNum])
 		if err != nil {
 			return fmt.Errorf("serializing object %d: %w", objNum, err)
 		}
