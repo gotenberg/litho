@@ -103,7 +103,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	if err := w.WriteTo(ctx, dst); err != nil {
-		closeDst() //nolint:errcheck
+		closeDst() //nolint:errcheck // already returning an error; a close failure would mask its cause
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError
 	}
