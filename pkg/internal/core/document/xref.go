@@ -18,6 +18,16 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
+// maxEndobjScanBytes bounds the window read while looking for an object's
+// "endobj" keyword. It is an anti-DoS guard, not spec-mandated: the scan starts
+// at an offset taken from the cross-reference table, so a crafted entry could
+// otherwise point near the start of a huge file and have litho allocate and
+// search all of it for every object. 16 KB is far larger than any real
+// indirect object's header and payload preamble, and the window shrinks
+// further whenever the next object's offset is nearer, so a conforming file
+// never reaches the cap.
+const maxEndobjScanBytes = 16384
+
 // FindStartXRef scans the last 1024 bytes of the PDF for the startxref
 // pointer and returns the byte offset it references.
 func FindStartXRef(r io.ReaderAt, size int64) (int64, error) {
@@ -473,13 +483,13 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	// binary search over cached ascending offsets keeps this O(log N) per
 	// object; scanning every entry here would be O(N^2) across a full pass on
 	// a file with many objects.
-	scanLimit := int64(16384)
+	scanLimit := int64(maxEndobjScanBytes)
 	if next := d.nextNormalObjectOffset(offset); next < math.MaxInt64 && next-offset < scanLimit {
 		scanLimit = next - offset
 	}
 	buf := make([]byte, scanLimit)
 	n, _ := d.r.ReadAt(buf, offset)
-	if n < 10 { //nolint:mnd
+	if n < len("endobj")+4 { //nolint:mnd // too short to hold "endobj" plus its EOL marker
 		return nil
 	}
 	data := buf[:n]
