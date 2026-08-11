@@ -262,7 +262,7 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 		case "[":
 			return p.parseArray(ctx)
 		default:
-			return nil, fmt.Errorf("unexpected delimiter: %s", t0.Value)
+			return nil, fmt.Errorf("unexpected delimiter %q: %w", t0.Value, errUnexpectedDelimiter)
 		}
 	}
 
@@ -360,7 +360,15 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			// `MS`) has already been consumed. Skip it and keep the dict rather
 			// than discarding the whole object; qpdf and veraPDF recover the
 			// same way. Other errors (EOF, lexer failures) are not recoverable.
-			if errors.Is(err, errUnexpectedKeyword) {
+			// A stray delimiter lands here the same way: an array closed
+			// twice leaves a bare `]` among the keys, and a dictionary
+			// closed with a single `>` leaves that. Both are already
+			// consumed, and dropping the dictionary over one costs every
+			// key it holds. pdfjs poppler-742-0-fuzzed.pdf ends its
+			// /AcroForm with `/Q 0 > >>` and lost the whole interactive
+			// form; poppler-937-0-fuzzed.pdf lost its page tree to a
+			// `/Kids 3 0 R]`.
+			if errors.Is(err, errUnexpectedKeyword) || errors.Is(err, errUnexpectedDelimiter) {
 				continue
 			}
 			return nil, err

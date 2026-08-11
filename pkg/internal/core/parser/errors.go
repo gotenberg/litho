@@ -8,3 +8,10 @@ import "errors"
 // Dictionary parsing recovers by skipping the stray token rather than
 // discarding the whole object, matching the leniency of qpdf and veraPDF.
 var errUnexpectedKeyword = errors.New("unexpected keyword")
+
+// errUnexpectedDelimiter marks a stray delimiter token found where an object was
+// expected. Damaged files carry them: an array closed twice leaves a bare `]`
+// among a dictionary's keys, and a dictionary closed with a single `>` leaves
+// that. Dictionary parsing skips it exactly as it skips a stray keyword, rather
+// than discarding every key the dictionary holds.
+var errUnexpectedDelimiter = errors.New("unexpected delimiter")
