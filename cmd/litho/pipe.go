@@ -71,7 +71,10 @@ func runPipe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitError
 	}
 
-	result, err := pipeline.WriteTo(ctx, dst)
+	// The per-stage report is diagnostic only and this command prints nothing
+	// but the output file, so discard it in the assignment rather than binding
+	// a name with no use.
+	_, err = pipeline.WriteTo(ctx, dst)
 	if closeErr := closeDst(); closeErr != nil {
 		fmt.Fprintf(stderr, "pipe: closing output: %v\n", closeErr)
 		return exitError
@@ -81,7 +84,6 @@ func runPipe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitError
 	}
 
-	_ = result
 	return exitOK
 }
 
