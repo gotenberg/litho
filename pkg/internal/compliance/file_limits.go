@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 
@@ -86,11 +87,15 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	}
 
 	// Walk all objects checking names, strings, integers, reals, arrays, dicts.
-	for objNum, entry := range doc.Index.Entries {
+	// In object-number order: the walk appends violations, and Go randomises map
+	// iteration, so an unsorted walk reported the same findings in a different
+	// order on consecutive runs of the same binary.
+	objNums := slices.Sorted(maps.Keys(doc.Index.Entries))
+	for _, objNum := range objNums {
 		if ctx.Err() != nil {
 			return results
 		}
-		if entry.Free {
+		if doc.Index.Entries[objNum].Free {
 			continue
 		}
 
@@ -318,9 +323,12 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 				Context: fmt.Sprintf("object %d: dict capacity %d exceeds %d", objNum, len(v), maxDictCap1),
 			})
 		}
-		for key, val := range v {
+		// Key order, because the recursion emits violations: a dictionary is a
+		// Go map, so an unsorted walk reported the same two out-of-range reals
+		// in a different order on consecutive runs.
+		for _, key := range slices.Sorted(maps.Keys(v)) {
 			results = append(results, checkObjectNumericLimits(key, objNum, part, profile)...)
-			results = append(results, checkObjectNumericLimits(val, objNum, part, profile)...)
+			results = append(results, checkObjectNumericLimits(v[key], objNum, part, profile)...)
 		}
 
 	case ast.PdfStream:

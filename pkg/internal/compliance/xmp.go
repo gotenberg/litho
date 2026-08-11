@@ -3078,7 +3078,13 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 	observed := xmpExtractPropertyValues(data)
 	_, extensionNS := xmpExtractNamespaces(data)
 
-	for ns, props := range observed {
+	// Sorted, because both maps are iterated to EMIT violations and Go
+	// randomises map order: the same binary on the same file otherwise reported
+	// identical findings in a different order, which reads as a diff to
+	// anything comparing two reports.
+	for _, ns := range slices.Sorted(maps.Keys(observed)) {
+		props := observed[ns]
+
 		// Skip structural namespaces.
 		if ns == xmpRDFNamespace || ns == "adobe:ns:meta/" || ns == "http://www.w3.org/XML/1998/namespace" {
 			continue
@@ -3100,7 +3106,9 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Vi
 			continue
 		}
 
-		for prop, pv := range props {
+		for _, prop := range slices.Sorted(maps.Keys(props)) {
+			pv := props[prop]
+
 			// veraPDF instantiates one object per observed property and asks it
 			// `isValueTypeCorrect`, so however many ways a property fails its
 			// predefined type, the rule answers for it once.

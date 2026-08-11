@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -201,6 +202,12 @@ type fileSpecEntry struct {
 
 // collectFileSpecs scans all objects to find file specification dictionaries
 // that contain an /EF key (indicating embedded files).
+//
+// The scan walks the cross-reference map, whose iteration order Go randomises,
+// so the result is sorted by object number before returning. Callers emit one
+// violation per entry, and an unsorted slice let two embedded files swap places
+// between runs of the same binary on the same file: identical findings in a
+// different order, which reads as a diff to anything comparing reports.
 func collectFileSpecs(ctx context.Context, doc *document.Document) []fileSpecEntry {
 	var specs []fileSpecEntry
 
@@ -229,6 +236,8 @@ func collectFileSpecs(ctx context.Context, doc *document.Document) []fileSpecEnt
 
 		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
 	}
+
+	slices.SortFunc(specs, func(a, b fileSpecEntry) int { return a.objNum - b.objNum })
 
 	return specs
 }
