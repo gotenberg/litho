@@ -43,7 +43,7 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	}
 
 	// Find and update the field.
-	found, err := findAndSetField(ctx, doc, alloc, fieldsArr, "", name, value)
+	found, err := findAndSetField(ctx, doc, alloc, fieldsArr, "", "", name, value)
 	if err != nil {
 		return err
 	}
@@ -63,8 +63,10 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	return nil
 }
 
-// findAndSetField recursively traverses the field tree to find and update a field.
-func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, targetName, value string) (bool, error) {
+// findAndSetField recursively traverses the field tree to find and update a
+// field. parentFT carries the field type down the tree, which a kid inherits
+// when it does not state its own (ISO 32000-1, 12.7.3.1).
+func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string) (bool, error) {
 	for _, fieldObj := range fields {
 		var fieldRef ast.PdfIndirectRef
 		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
@@ -87,6 +89,13 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 				partialName = document.DecodePdfString(tStr)
 			}
 		}
+		fieldFT := parentFT
+		if ftObj, ok := fieldDict["FT"]; ok {
+			if ft, err := document.ResolveName(ctx, doc, ftObj); err == nil && ft != "" {
+				fieldFT = string(ft)
+			}
+		}
+
 		fullName := parentName
 		if partialName != "" {
 			if fullName != "" {
@@ -100,11 +109,11 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 			// Found it: update /V.
 			newDict := make(ast.PdfDict, len(fieldDict)+1)
 			maps.Copy(newDict, fieldDict)
-			// A text field's /V is a text string (ISO 32000-1, Table 228).
-			newDict["V"] = document.EncodePdfString(value)
+			setFieldValue(newDict, fieldFT, value)
 			if fieldRef.ObjectNum > 0 {
 				alloc.AllocAt(fieldRef.ObjectNum, newDict)
 			}
+			setKidAppearanceStates(ctx, doc, alloc, newDict, fieldFT, value)
 			return true, nil
 		}
 
@@ -112,7 +121,7 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 		if kidsObj, ok := fieldDict["Kids"]; ok {
 			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil && kidsArr != nil {
-				found, err := findAndSetField(ctx, doc, alloc, kidsArr, fullName, targetName, value)
+				found, err := findAndSetField(ctx, doc, alloc, kidsArr, fullName, fieldFT, targetName, value)
 				if err != nil {
 					return false, err
 				}
@@ -123,6 +132,66 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 		}
 	}
 	return false, nil
+}
+
+// setFieldValue writes /V in the representation the field's type requires.
+//
+// A button field's value is a NAME: the on-state chosen from its appearance
+// subdictionary, or /Off (ISO 32000-1, 12.7.4.2.3). Only a text or choice
+// field takes a text string (Table 228). Writing a string for every type, which
+// this used to do, produced a checkbox whose /V was `(LITHOPROBE)` instead of
+// `/LITHOPROBE`, and litho's own form reader then listed NO fields at all: one
+// bad assignment hid the whole form. pdfjs checkbox-bad-appearance.pdf shows it
+// on entirely well-formed input.
+//
+// The caller supplies the state name; an unknown one leaves the button off in
+// every viewer, which is the spec's own answer to a value that names no
+// appearance.
+func setFieldValue(dict ast.PdfDict, fieldFT, value string) {
+	if fieldFT == "Btn" {
+		dict["V"] = ast.PdfName(value)
+		return
+	}
+	dict["V"] = document.EncodePdfString(value)
+}
+
+// setKidAppearanceStates points every widget of a button field at the appearance
+// matching the new value.
+//
+// /AS selects which appearance in /AP is drawn (ISO 32000-1, 12.5.5). Leaving it
+// on the previous state renders the OLD state, so a checkbox set to /Off still
+// shows a tick until a viewer regenerates appearances. /V alone is not enough.
+func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fieldDict ast.PdfDict, fieldFT, value string) {
+	if fieldFT != "Btn" {
+		return
+	}
+
+	kidsArr, err := document.ResolveArray(ctx, doc, fieldDict["Kids"])
+	if err != nil || kidsArr == nil {
+		// A field merged with its widget carries /AP itself (12.5.6.19).
+		if _, hasAP := fieldDict["AP"]; hasAP {
+			fieldDict["AS"] = ast.PdfName(value)
+		}
+		return
+	}
+
+	for _, kidObj := range kidsArr {
+		kidRef, ok := kidObj.(ast.PdfIndirectRef)
+		if !ok {
+			continue
+		}
+		kidDict, err := document.ResolveDict(ctx, doc, kidObj)
+		if err != nil || kidDict == nil {
+			continue
+		}
+		if _, hasAP := kidDict["AP"]; !hasAP {
+			continue
+		}
+		newKid := make(ast.PdfDict, len(kidDict)+1)
+		maps.Copy(newKid, kidDict)
+		newKid["AS"] = ast.PdfName(value)
+		alloc.AllocAt(kidRef.ObjectNum, newKid)
+	}
 }
 
 // FlattenForm bakes form field appearances into page content and removes
