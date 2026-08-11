@@ -439,37 +439,35 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			return fmt.Errorf("pages node missing /Kids")
 		}
 
-		kidsArr, err := ResolveArray(ctx, doc, kidsObj)
+		// Resolve once, then branch on what came back. Routing this through
+		// ResolveArray first put the tolerance below out of reach: that
+		// helper reports a non-array as an error, so a producer writing
+		// /Kids as a single reference, the very case the tolerance names,
+		// returned early and lost the entire page tree. A file whose only
+		// fault was "/Kids 3 0 R" read as zero pages in litho and one in
+		// poppler.
+		resolved, err := ResolveObject(ctx, doc, kidsObj)
 		if err != nil {
-			return fmt.Errorf("failed to resolve /Kids array: %w", err)
+			return fmt.Errorf("resolving /Kids: %w", err)
 		}
-		// ResolveArray returns a nil slice for valid-but-empty arrays
-		// (`[]` in PDF syntax) and also for non-array types that failed
-		// a type assertion. Disambiguate via the source object: when
-		// kidsObj was genuinely an array, an empty slice means "no
-		// kids" and the loop below is a no-op. When kidsObj was a
-		// single indirect ref, treat it as a one-element array to
-		// tolerate non-conforming producers.
-		if kidsArr == nil {
-			resolved, resolvedErr := ResolveObject(ctx, doc, kidsObj)
-			if resolvedErr != nil {
-				return fmt.Errorf("/Kids: %w", resolvedErr)
-			}
-			switch v := resolved.(type) {
-			case ast.PdfArray:
-				// Empty or nil-slice array: zero kids, nothing to do.
-			case ast.PdfDict:
-				// Direct dict (no intermediate ref): treat as single
-				// child with an empty parent ref.
-				_ = v
-				kidsArr = ast.PdfArray{kidsObj}
-			default:
-				if ref, ok := kidsObj.(ast.PdfIndirectRef); ok {
-					kidsArr = ast.PdfArray{ref}
-					break
-				}
+
+		var kidsArr ast.PdfArray
+		switch v := resolved.(type) {
+		case ast.PdfArray:
+			// An empty array means zero kids and the loop below is a no-op.
+			kidsArr = v
+		case ast.PdfDict:
+			// ISO 32000-1, 7.7.3.2 makes /Kids an array, so a lone node
+			// written without one is non-conforming, but it is still that
+			// node's child. Keep kidsObj rather than the resolved
+			// dictionary: when it is a reference it carries the identity
+			// the walk needs to reach the kid and set its parent.
+			kidsArr = ast.PdfArray{kidsObj}
+		default:
+			if !isNullOrNil(resolved) {
 				return fmt.Errorf("/Kids is not an array (got %T)", resolved)
 			}
+			// Null resolves to no kids, which a damaged branch may well be.
 		}
 
 		// A damaged branch costs that branch, not the document. A /Kids chain
