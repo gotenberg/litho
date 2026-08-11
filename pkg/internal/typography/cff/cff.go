@@ -265,7 +265,7 @@ func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 		}
 		if r, ok := encodings.GlyphToRuneFull(name); ok {
 			if _, exists := result[uint16(gid)]; !exists { //nolint:gosec // GID fits uint16
-				result[uint16(gid)] = r //nolint:gosec
+				result[uint16(gid)] = r //nolint:gosec // gid < numGlyphs, itself a CFF INDEX Card16 count
 			}
 		}
 	}
@@ -325,7 +325,7 @@ func GlyphNames(ctx context.Context, data []byte) (map[uint16]string, error) {
 		}
 		name := strings.get(sid)
 		if name != "" {
-			result[uint16(gid)] = name //nolint:gosec
+			result[uint16(gid)] = name //nolint:gosec // gid < numGlyphs, itself a CFF INDEX Card16 count
 		}
 	}
 	return result, nil
@@ -373,7 +373,7 @@ func ValidCIDs(data []byte) (map[uint16]bool, error) {
 
 	result := make(map[uint16]bool, len(cids))
 	for _, cid := range cids {
-		result[uint16(cid)] = true //nolint:gosec
+		result[uint16(cid)] = true //nolint:gosec // charset CIDs are read as uint16 (Card16)
 	}
 	return result, nil
 }
@@ -1275,7 +1275,7 @@ func (s *widthScanner) scan(cs []byte, depth int) {
 				s.done = true
 				return
 			}
-			s.push(int32(binary.BigEndian.Uint32(cs[i+1:i+5])) >> 16) //nolint:gosec
+			s.push(int32(binary.BigEndian.Uint32(cs[i+1:i+5])) >> 16) //nolint:gosec // reinterprets the 16.16 fixed operand's bits, no range change
 			i += 5
 		default:
 			op := int(b)

@@ -827,7 +827,7 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 						}
 					}
 					parsed, _ := strconv.ParseInt(octal, 8, 32)
-					buf.WriteByte(byte(parsed & 0xFF)) //nolint:gosec
+					buf.WriteByte(byte(parsed & 0xFF)) //nolint:gosec // masked to 8 bits on the line itself
 				} else {
 					buf.WriteByte(val[i])
 				}

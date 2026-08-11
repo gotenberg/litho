@@ -1307,7 +1307,7 @@ func ExtractType1EncodingNames(fontData []byte) map[byte]string {
 		}
 		glyphName := string(match[2])
 		if glyphName != ".notdef" {
-			result[byte(code)] = glyphName //nolint:gosec
+			result[byte(code)] = glyphName //nolint:gosec // the guard above rejects code outside 0-255
 		}
 	}
 
@@ -1726,7 +1726,7 @@ func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict a
 		if !ok || uni == 0 {
 			continue
 		}
-		key := string([]byte{byte(cid >> 8), byte(cid)}) //nolint:gosec
+		key := string([]byte{byte(cid >> 8), byte(cid)}) //nolint:gosec // splits a uint16 CID into its two bytes; truncation is the intent
 		mapping[key] = string(uni)
 	}
 

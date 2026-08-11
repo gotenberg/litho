@@ -299,7 +299,7 @@ func encodeTTF(tables map[string][]byte) []byte {
 
 	// SFNT header.
 	binary.BigEndian.PutUint32(buf[0:4], 0x00010000)        // version for TrueType
-	binary.BigEndian.PutUint16(buf[4:6], uint16(numTables)) //nolint:gosec
+	binary.BigEndian.PutUint16(buf[4:6], uint16(numTables)) //nolint:gosec // one entry per distinct source tag, counted by a uint16 directory field
 	searchRange, entrySelector, rangeShift := sfntSearchParams(numTables)
 	binary.BigEndian.PutUint16(buf[6:8], searchRange)
 	binary.BigEndian.PutUint16(buf[8:10], entrySelector)

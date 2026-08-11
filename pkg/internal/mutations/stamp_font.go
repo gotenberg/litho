@@ -61,9 +61,9 @@ func parseTTF(data []byte) (*embeddedTTF, error) {
 	}
 	unitsPerEm := binary.BigEndian.Uint16(headData[18:20])
 	xMin := int16(binary.BigEndian.Uint16(headData[36:38])) //nolint:gosec // signed 16-bit FUnit by spec
-	yMin := int16(binary.BigEndian.Uint16(headData[38:40])) //nolint:gosec
-	xMax := int16(binary.BigEndian.Uint16(headData[40:42])) //nolint:gosec
-	yMax := int16(binary.BigEndian.Uint16(headData[42:44])) //nolint:gosec
+	yMin := int16(binary.BigEndian.Uint16(headData[38:40])) //nolint:gosec // head yMin is signed by spec; reinterprets the same 16 bits
+	xMax := int16(binary.BigEndian.Uint16(headData[40:42])) //nolint:gosec // head xMax is signed by spec; reinterprets the same 16 bits
+	yMax := int16(binary.BigEndian.Uint16(headData[42:44])) //nolint:gosec // head yMax is signed by spec; reinterprets the same 16 bits
 
 	hheaData, err := truetype.TableData(data, records, "hhea")
 	if err != nil {
@@ -73,7 +73,7 @@ func parseTTF(data []byte) (*embeddedTTF, error) {
 		return nil, fmt.Errorf("hhea table too short")
 	}
 	ascent := int16(binary.BigEndian.Uint16(hheaData[4:6]))  //nolint:gosec // signed 16-bit FUnit by spec
-	descent := int16(binary.BigEndian.Uint16(hheaData[6:8])) //nolint:gosec
+	descent := int16(binary.BigEndian.Uint16(hheaData[6:8])) //nolint:gosec // hhea descender is signed by spec; reinterprets the same 16 bits
 
 	// post table: italic angle (Fixed 16.16) at offset 4.
 	var italicAngle float64

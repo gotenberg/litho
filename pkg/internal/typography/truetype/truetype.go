@@ -157,7 +157,7 @@ func EmptyGIDs(ctx context.Context, data []byte) (map[uint16]bool, error) {
 			off0 := binary.BigEndian.Uint16(locaData[gid*2:])
 			off1 := binary.BigEndian.Uint16(locaData[gid*2+2:])
 			if off0 == off1 {
-				result[uint16(gid)] = true //nolint:gosec
+				result[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, read from maxp as a uint16
 			}
 		}
 	case 1: // Long format: offsets are uint32.
@@ -168,7 +168,7 @@ func EmptyGIDs(ctx context.Context, data []byte) (map[uint16]bool, error) {
 			off0 := binary.BigEndian.Uint32(locaData[gid*4:])
 			off1 := binary.BigEndian.Uint32(locaData[gid*4+4:])
 			if off0 == off1 {
-				result[uint16(gid)] = true //nolint:gosec
+				result[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, read from maxp as a uint16
 			}
 		}
 	}
