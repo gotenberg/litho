@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -66,6 +67,8 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		}
 		newCatalogRef = alloc.Alloc(copied)
 	}
+
+	ensurePageTree(alloc, newCatalogRef)
 
 	// Build trailer.
 	trailer := ast.PdfDict{
@@ -143,4 +146,50 @@ func catalogRefResolves(ctx context.Context, doc *document.Document, ref ast.Pdf
 	}
 	pages, err := document.ResolveDict(ctx, doc, dict["Pages"])
 	return err == nil && pages != nil
+}
+
+// ensurePageTree gives the output catalog an empty page tree when the copied
+// one has no usable /Pages.
+//
+// ISO 32000-1, 7.7.3.1 makes /Pages the page tree root DICTIONARY, so a catalog
+// pointing at a null object is not a document: pikepdf refuses the file with
+// "unable to find page tree". A damaged source produces exactly that, and
+// faithfully so, because ISO 32000-1, 7.3.9 makes a reference to a missing
+// object equivalent to null. pdfjs poppler-937-0-fuzzed.pdf, whose /Kids array
+// opens with a NUL byte instead of "[", rewrote 1666 bytes into 344 whose whole
+// body was "1 0 obj null" under a catalog naming it.
+//
+// An empty tree rather than a refusal, because the reader already reports the
+// document as zero pages: the rewrite then says the same thing in a form every
+// reader can open, instead of one none can. [catalogRefResolves] applies the
+// same reasoning to a /Root that resolves to null.
+func ensurePageTree(alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef) {
+	catalog, ok := alloc.Pending()[catalogRef.ObjectNum].(ast.PdfDict)
+	if !ok || pageTreeResolves(alloc, catalog["Pages"]) {
+		return
+	}
+
+	updated := make(ast.PdfDict, len(catalog)+1)
+	maps.Copy(updated, catalog)
+	updated["Pages"] = alloc.Alloc(ast.PdfDict{
+		"Type":  ast.PdfName("Pages"),
+		"Kids":  ast.PdfArray{},
+		"Count": ast.PdfInt(0),
+	})
+	// The catalog holds a positive object number, the one case AllocAt
+	// refuses, so the replacement always lands.
+	alloc.AllocAt(catalogRef.ObjectNum, updated)
+}
+
+// pageTreeResolves reports whether obj names a dictionary the output will
+// actually contain.
+func pageTreeResolves(alloc *writer.ObjAllocator, obj ast.PdfObject) bool {
+	switch v := obj.(type) {
+	case ast.PdfDict:
+		return true
+	case ast.PdfIndirectRef:
+		_, ok := alloc.Pending()[v.ObjectNum].(ast.PdfDict)
+		return ok
+	}
+	return false
 }
