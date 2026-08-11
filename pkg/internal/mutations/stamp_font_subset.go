@@ -359,20 +359,47 @@ func findTableOffset(data []byte, tag string) int {
 	return -1
 }
 
+// maxSearchableTables is the largest table count whose SFNT search hints stay
+// representable: the header stores searchRange as a uint16 and it is
+// numTables rounded down to a power of two, times 16, so 4095*16 = 65520 is
+// the last value that fits. Not a spec limit and not an anti-DoS cap: it is
+// the arithmetic ceiling of the three uint16 header fields. Real fonts carry
+// on the order of ten tables, so no genuine font approaches it.
+const maxSearchableTables = 4095
+
 // sfntSearchParams computes the searchRange, entrySelector, and
 // rangeShift fields of the SFNT header from the table count. These are
 // a legacy optimization for binary-searching the table directory; most
 // parsers ignore the values, but producing them correctly keeps
 // validators happy.
 func sfntSearchParams(numTables int) (searchRange, entrySelector, rangeShift uint16) {
+	if numTables < 0 {
+		return 0, 0, 0
+	}
+	// All three fields are uint16, so searchRange = pow*16 stops being
+	// representable past maxSearchableTables. The table count comes from the
+	// source font's directory, which is untrusted: its own count is a uint16
+	// and each entry costs 16 bytes, so a crafted font reaches 4096 tables
+	// with a 64 KB directory. Left unguarded the multiply wrapped, and 5000
+	// tables produced searchRange 0 with rangeShift 14464 instead of a
+	// monotonically growing hint. Clamp instead of wrapping: the fields are a
+	// binary-search hint that readers may ignore, so the honest answer for a
+	// font too large to describe is the largest describable one.
+	if numTables > maxSearchableTables {
+		numTables = maxSearchableTables
+	}
+
 	pow := 1
 	shift := 0
 	for pow*2 <= numTables {
 		pow *= 2
 		shift++
 	}
-	searchRange = uint16(pow * 16)                  //nolint:gosec
-	entrySelector = uint16(shift)                   //nolint:gosec
-	rangeShift = uint16(numTables*16) - searchRange //nolint:gosec
+
+	// pow <= numTables <= maxSearchableTables, so pow*16 and numTables*16 both
+	// fit in uint16; shift is at most log2(maxSearchableTables).
+	searchRange = uint16(pow * 16)                  //nolint:gosec // pow <= maxSearchableTables, so pow*16 <= 65520
+	entrySelector = uint16(shift)                   //nolint:gosec // shift <= log2(maxSearchableTables) = 12
+	rangeShift = uint16(numTables*16) - searchRange //nolint:gosec // numTables <= maxSearchableTables, so the product <= 65520
 	return
 }
