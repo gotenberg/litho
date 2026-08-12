@@ -176,10 +176,12 @@ func fixAFInFileAttachmentAnnots(ctx context.Context, doc *document.Document, al
 			if subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"]); subtype != "FileAttachment" {
 				continue
 			}
-			if _, ok := annotDict["FS"].(ast.PdfIndirectRef); !ok {
-				continue
+			switch fsObj := annotDict["FS"].(type) {
+			case ast.PdfIndirectRef:
+				count += fixFileSpecAFRelationship(ctx, doc, alloc, fsObj)
+			case ast.PdfDict:
+				count += fixDirectFileSpecInAnnot(alloc, annotObj, annotDict, fsObj)
 			}
-			count += fixFileSpecAFRelationship(ctx, doc, alloc, annotDict["FS"])
 		}
 	}
 	return count
@@ -256,8 +258,41 @@ func fixFileSpecAFRelationship(ctx context.Context, doc *document.Document, allo
 	maps.Copy(newFS, fsDict)
 	newFS["AFRelationship"] = ast.PdfName("Unspecified")
 
-	if ref.ObjectNum > 0 {
-		alloc.AllocAt(ref.ObjectNum, newFS)
+	// A direct file specification has no object number to write to. Reporting a
+	// repair that was discarded makes remediation claim progress it never made,
+	// and the same defect is still there on the next run.
+	if ref.ObjectNum <= 0 {
+		return 0
 	}
+	alloc.AllocAt(ref.ObjectNum, newFS)
+	return 1
+}
+
+// fixDirectFileSpecInAnnot adds /AFRelationship to a file specification written
+// as a direct dictionary in an annotation's /FS.
+//
+// ISO 32000-1, 7.11.3 does not require a file specification to be an indirect
+// object, and an inline one has no object number the writer can address. The
+// repair goes through the annotation holding it, the nearest object that has
+// one. An annotation that is itself direct is left alone: nothing on the path
+// can be written, so nothing is reported either.
+func fixDirectFileSpecInAnnot(alloc *writer.ObjAllocator, annotObj ast.PdfObject, annotDict, fsDict ast.PdfDict) int {
+	if _, ok := fsDict["AFRelationship"]; ok {
+		return 0
+	}
+	ref, isRef := annotObj.(ast.PdfIndirectRef)
+	if !isRef || ref.ObjectNum <= 0 {
+		return 0
+	}
+
+	newFS := make(ast.PdfDict, len(fsDict)+1)
+	maps.Copy(newFS, fsDict)
+	newFS["AFRelationship"] = ast.PdfName("Unspecified")
+
+	newAnnot := make(ast.PdfDict, len(annotDict))
+	maps.Copy(newAnnot, annotDict)
+	newAnnot["FS"] = newFS
+
+	alloc.AllocAt(ref.ObjectNum, newAnnot)
 	return 1
 }
