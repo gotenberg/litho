@@ -169,9 +169,21 @@ func fixAFInFileAttachmentAnnots(ctx context.Context, doc *document.Document, al
 			continue
 		}
 		for _, annotObj := range annots {
-			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annotDict == nil {
-				continue
+			// Alloc-aware read: an earlier fixer may already have rewritten
+			// this annotation (filespec-fuf runs first and patches a direct
+			// /FS through it). Reading the stale on-disk dictionary here made
+			// the AllocAt below discard that pending fix, and only the
+			// fixpoint loop's second round put it back.
+			var annotDict ast.PdfDict
+			if ref, isRef := annotObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+				annotDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+			}
+			if annotDict == nil {
+				resolved, err := document.ResolveDict(ctx, doc, annotObj)
+				if err != nil || resolved == nil {
+					continue
+				}
+				annotDict = resolved
 			}
 			if subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"]); subtype != "FileAttachment" {
 				continue
