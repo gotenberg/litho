@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -86,7 +87,7 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 	}
 
-	fileSpecs := collectFileSpecs(ctx, doc)
+	fileSpecs := collectFileSpecs(ctx, doc, catalog)
 	var embeddedSpecs []fileSpecEntry
 	for _, fs := range fileSpecs {
 		if fs.hasEF {
@@ -173,7 +174,7 @@ func checkEmbeddedSubtypeMIME(ctx context.Context, doc *document.Document, fs fi
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 		if !mimeTypePattern.MatchString(string(subtype)) {
 			results = append(results, failf(Rule_19005_3_6_8_t01,
-				"object %d: embedded file /Subtype %q is not a valid MIME type", fs.objNum, subtype)...)
+				"%s: embedded file /Subtype %q is not a valid MIME type", fs.label(), subtype)...)
 		}
 	}
 	return results
@@ -194,10 +195,25 @@ func resolveNamesDict(ctx context.Context, doc *document.Document, catalog ast.P
 }
 
 // fileSpecEntry holds a resolved file specification dict and its object number.
+//
+// ISO 32000-1, 7.11.3 does not require a file specification to be an indirect
+// object. One written inline carries no object number of its own, so objNum is
+// zero and container names the indirect object holding it.
 type fileSpecEntry struct {
-	dict   ast.PdfDict
-	objNum int
-	hasEF  bool
+	dict      ast.PdfDict
+	objNum    int
+	hasEF     bool
+	container int
+	path      string
+}
+
+// label identifies a filespec in a violation message. A direct dictionary is
+// named by its container, the only object number a reader can cite.
+func (fs fileSpecEntry) label() string {
+	if fs.objNum != 0 {
+		return fmt.Sprintf("object %d", fs.objNum)
+	}
+	return fmt.Sprintf("object %d %s", fs.container, fs.path)
 }
 
 // collectFileSpecs scans all objects to find file specification dictionaries
@@ -208,7 +224,14 @@ type fileSpecEntry struct {
 // violation per entry, and an unsorted slice let two embedded files swap places
 // between runs of the same binary on the same file: identical findings in a
 // different order, which reads as a diff to anything comparing reports.
-func collectFileSpecs(ctx context.Context, doc *document.Document) []fileSpecEntry {
+//
+// The cross-reference map holds only indirect objects, so the scan alone cannot
+// see a filespec written inline. Annotations carrying a direct /FS are gathered
+// separately: pdfjs issue14203.pdf attaches example.tex through one, and every
+// clause 6.8 check skipped it. A direct filespec inside an /AF array or an
+// EmbeddedFiles name tree stays out of scope, unobserved across 5144 corpus
+// files.
+func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
 	var specs []fileSpecEntry
 
 	for objNum, entry := range doc.Index.Entries {
@@ -237,7 +260,72 @@ func collectFileSpecs(ctx context.Context, doc *document.Document) []fileSpecEnt
 		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
 	}
 
-	slices.SortFunc(specs, func(a, b fileSpecEntry) int { return a.objNum - b.objNum })
+	specs = append(specs, collectDirectAnnotFileSpecs(ctx, doc, catalog)...)
+
+	slices.SortFunc(specs, func(a, b fileSpecEntry) int {
+		if a.objNum != b.objNum {
+			return a.objNum - b.objNum
+		}
+		if a.container != b.container {
+			return a.container - b.container
+		}
+		return strings.Compare(a.path, b.path)
+	})
+
+	return specs
+}
+
+// collectDirectAnnotFileSpecs gathers file specifications written as a direct
+// dictionary in an annotation's /FS.
+//
+// Only an annotation that is itself an indirect object is considered: a direct
+// filespec inside a direct annotation has no object number anywhere on its path
+// to cite in a violation, and no corpus file carries that pairing. Each
+// annotation is visited once, so an annotation shared by two pages does not
+// report its filespec twice.
+func collectDirectAnnotFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
+	var specs []fileSpecEntry
+	seen := make(map[int]bool)
+
+	for _, page := range collectPages(ctx, doc, catalog) {
+		if ctx.Err() != nil {
+			return specs
+		}
+
+		annots, err := document.ResolveArray(ctx, doc, page["Annots"])
+		if err != nil || annots == nil {
+			continue
+		}
+
+		for _, annotObj := range annots {
+			ref, isRef := annotObj.(ast.PdfIndirectRef)
+			if !isRef || seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+
+			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annotDict == nil {
+				continue
+			}
+
+			fsDict, direct := annotDict["FS"].(ast.PdfDict)
+			if !direct {
+				continue
+			}
+			if typeName, _ := document.ResolveName(ctx, doc, fsDict["Type"]); typeName != "Filespec" {
+				continue
+			}
+
+			_, hasEF := fsDict["EF"]
+			specs = append(specs, fileSpecEntry{
+				dict:      fsDict,
+				hasEF:     hasEF,
+				container: ref.ObjectNum,
+				path:      "/FS",
+			})
+		}
+	}
 
 	return specs
 }
@@ -252,7 +340,7 @@ func checkFileSpecFUF(_ context.Context, _ *document.Document, fs fileSpecEntry,
 	}
 
 	rule := fileSpecFUFRule(part)
-	return failf(rule, "object %d: file specification missing F=%v UF=%v", fs.objNum, hasF, hasUF)
+	return failf(rule, "%s: file specification missing F=%v UF=%v", fs.label(), hasF, hasUF)
 }
 
 // checkAFRelationship validates that a file specification dict has a valid
@@ -266,7 +354,7 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, fs fileSpe
 	afObj, hasAF := fs.dict["AFRelationship"]
 	if !hasAF {
 		rule := afRelationshipRule(part)
-		return failf(rule, "object %d: file specification missing AFRelationship key", fs.objNum)
+		return failf(rule, "%s: file specification missing AFRelationship key", fs.label())
 	}
 
 	// Validate the value of /AFRelationship.
@@ -275,12 +363,12 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, fs fileSpe
 		doc.Logger.Debug("compliance.embedded: /AFRelationship is not a valid name",
 			"object", fs.objNum, "error", err)
 		rule := afRelationshipRule(part)
-		return failf(rule, "object %d: AFRelationship is not a valid name", fs.objNum)
+		return failf(rule, "%s: AFRelationship is not a valid name", fs.label())
 	}
 
 	if !validAFRelationships[afName] {
 		rule := afRelationshipRule(part)
-		return failf(rule, "object %d: AFRelationship value %q is not valid", fs.objNum, afName)
+		return failf(rule, "%s: AFRelationship value %q is not valid", fs.label(), afName)
 	}
 
 	return nil
@@ -405,16 +493,17 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	var results []Violation
 	for _, fs := range associatedSpecs {
-		associated := afRefs[fs.objNum]
+		associated := fs.objNum != 0 && afRefs[fs.objNum]
 		// An external (non-embedded) filespec may be associated through an
-		// annotation /FS reference; an embedded one (/EF) must be in /AF.
-		if !fs.hasEF && fsAnnotRefs[fs.objNum] {
+		// annotation /FS reference; an embedded one (/EF) must be in /AF. A
+		// direct /FS is that same annotation reference, written inline.
+		if !fs.hasEF && (fs.objNum == 0 || fsAnnotRefs[fs.objNum]) {
 			associated = true
 		}
 		if !associated {
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: fmt.Sprintf("object %d: file specification not referenced in any /AF array", fs.objNum),
+				Context: fmt.Sprintf("%s: file specification not referenced in any /AF array", fs.label()),
 			})
 		}
 	}

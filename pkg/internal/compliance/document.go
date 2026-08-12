@@ -532,9 +532,9 @@ func presStepsRule(part int) Rule {
 // intermediate /Kids node of the EmbeddedFiles name tree is not missed (a direct
 // /Names read would skip it). This overlaps the PDF/A-3 §6.8 t1 check
 // [checkEmbeddedSubtypeMIME]; consolidating the two is left to a reviewed change.
-func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, _ ast.PdfDict) []Violation {
+func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	var results []Violation
-	for _, fs := range collectFileSpecs(ctx, doc) {
+	for _, fs := range collectFileSpecs(ctx, doc, catalog) {
 		if !fs.hasEF {
 			continue
 		}

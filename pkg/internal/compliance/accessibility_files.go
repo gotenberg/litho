@@ -31,26 +31,20 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 	// Scan ALL file specification dicts with /EF key (embedded files) for
 	// non-empty /F and /UF. This covers file specs referenced from the
 	// EmbeddedFiles name tree, FileAttachment annotations, and other sources.
-	for objNum, entry := range doc.Index.Entries {
+	//
+	// [collectFileSpecs] supplies them, so a file specification written as a
+	// direct dictionary in an annotation /FS is covered too: a bare sweep of
+	// the cross-reference map sees only indirect objects and silently skipped
+	// it. It also returns the specs in object-number order, where the map
+	// iteration this replaced let two embedded files swap places between runs.
+	for _, fs := range collectFileSpecs(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return results
 		}
-		if entry.Free {
-			continue
-		}
-
-		dict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || dict == nil {
-			continue
-		}
-
-		typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-		if typeName != "Filespec" {
-			continue
-		}
-		if _, hasEF := dict["EF"]; !hasEF {
+		if !fs.hasEF {
 			continue // Only check embedded file specs.
 		}
+		dict := fs.dict
 
 		// PDF/UA-1 §7.11: /F and /UF must both be present and non-empty.
 		if profile == "PDF/UA-1" {
@@ -60,7 +54,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 			if len(fStr) == 0 || len(ufStr) == 0 {
 				results = append(results, Violation{
 					Rule:    rule,
-					Context: fmt.Sprintf("object %d: file spec F=%v UF=%v", objNum, len(fStr) > 0, len(ufStr) > 0),
+					Context: fmt.Sprintf("%s: file spec F=%v UF=%v", fs.label(), len(fStr) > 0, len(ufStr) > 0),
 				})
 			}
 		}
@@ -70,11 +64,13 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		// The clause requires the key to be present; it does not constrain
 		// its contents, so an empty /Desc () satisfies the requirement and
 		// only an absent /Desc is a violation.
-		if profile == "PDF/UA-2" && inEFTree[objNum] {
+		// A direct filespec has no object number, so it cannot be a name-tree
+		// value and inEFTree rightly leaves it out of the /Desc requirement.
+		if profile == "PDF/UA-2" && fs.objNum != 0 && inEFTree[fs.objNum] {
 			if _, hasDesc := dict["Desc"]; !hasDesc {
 				results = append(results, Violation{
 					Rule:    Rule_14289_2_8_14_1_t01,
-					Context: fmt.Sprintf("object %d: embedded file spec missing /Desc", objNum),
+					Context: fmt.Sprintf("%s: embedded file spec missing /Desc", fs.label()),
 				})
 			}
 		}

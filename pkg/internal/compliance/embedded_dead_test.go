@@ -23,7 +23,7 @@ func TestMimeTypePattern(t *testing.T) {
 func TestEmbeddedSubtypeMIME(t *testing.T) {
 	ctx := context.Background()
 	mk := func(subtype string) []Violation {
-		doc, _ := objsDocPDF(t,
+		doc, cat := objsDocPDF(t,
 			"<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(f.txt) 4 0 R] >> >> >>",
 			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
@@ -31,7 +31,7 @@ func TestEmbeddedSubtypeMIME(t *testing.T) {
 			"<< /Type /EmbeddedFile /Subtype /"+subtype+" /Length 3 >>\nstream\nabc\nendstream",
 		)
 		var out []Violation
-		for _, fs := range collectFileSpecs(ctx, doc) {
+		for _, fs := range collectFileSpecs(ctx, doc, cat) {
 			out = append(out, checkEmbeddedSubtypeMIME(ctx, doc, fs)...)
 		}
 		return out
@@ -132,7 +132,7 @@ func TestEmbeddedSubtypeMIMEDoubleEscape(t *testing.T) {
 			"<< /Type /EmbeddedFile /Subtype /"+subtype+" /Length 3 >>\nstream\nabc\nendstream",
 		)
 		var part3 []Violation
-		for _, fs := range collectFileSpecs(ctx, doc) {
+		for _, fs := range collectFileSpecs(ctx, doc, cat) {
 			part3 = append(part3, checkEmbeddedSubtypeMIME(ctx, doc, fs)...)
 		}
 		return part3, checkEmbeddedFileMIME(ctx, doc, cat)
