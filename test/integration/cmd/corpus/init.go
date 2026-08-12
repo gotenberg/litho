@@ -133,22 +133,85 @@ func buildScanClaimsBinary() (string, error) {
 }
 
 // provisioned reports whether the testdata root already carries a
-// provisioned corpus. Every declared golden directory must exist and
-// be non-empty; a partial run (e.g. download succeeded but VeraPDF
-// crashed) returns false so the entrypoint resumes the missing stages
-// instead of skipping straight to scoring. Empty manifests are not
-// considered provisioned.
+// provisioned corpus. The PDF tree must hold at least one PDF and every
+// declared golden directory must exist; a partial run (e.g. download
+// succeeded but VeraPDF crashed) returns false so the entrypoint resumes
+// the missing stages instead of skipping straight to scoring. Empty
+// manifests are not considered provisioned.
+//
+// One golden is legitimately empty. run-verapdf.sh buckets PDFs by the
+// profile each one claims in XMP, so an auto-mode corpus whose scan found
+// no claim at all (claims.csv present, zero rows) gets no VeraPDF report
+// and no cell in the baseline. govdocs and pdf20 are both in that state.
+// Demanding a non-empty compliance directory marked them unprovisioned
+// forever, and every `make corpus-*` shelled out to a multi-minute
+// emulated `docker build` that never needed to run.
 func provisioned(testdataRoot string, m *Manifest) bool {
 	if len(m.Goldens) == 0 {
 		return false
 	}
-	for _, rel := range m.Goldens {
-		entries, err := os.ReadDir(filepath.Join(testdataRoot, rel))
+
+	pdfRoot := testdataRoot
+	if m.PDFRoot != "" {
+		pdfRoot = filepath.Join(testdataRoot, m.PDFRoot)
+	}
+	if !hasPDF(pdfRoot) {
+		return false
+	}
+
+	claimless := m.EffectiveProfileMode() == ProfileModeAuto && claimsScannedEmpty(testdataRoot)
+
+	for feature, rel := range m.Goldens {
+		dir := filepath.Join(testdataRoot, rel)
+		if claimless && veraPDFGolden(feature) {
+			info, err := os.Stat(dir)
+			if err != nil || !info.IsDir() {
+				return false
+			}
+			continue
+		}
+		entries, err := os.ReadDir(dir)
 		if err != nil || len(entries) == 0 {
 			return false
 		}
 	}
 	return true
+}
+
+// veraPDFGolden reports whether a feature's golden comes from the
+// entrypoint's single VeraPDF stage. Mirrors the guard in
+// test/integration/corpus/entrypoint.sh; keep the two in sync.
+func veraPDFGolden(feature string) bool {
+	switch feature {
+	case "compliance", "remediation", "remediation-aggressive":
+		return true
+	default:
+		return false
+	}
+}
+
+// hasPDF reports whether dir holds at least one PDF at its top level.
+// Every corpus lays its PDFs out flat, matching the download stage's own
+// `find -maxdepth 1` count.
+func hasPDF(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".pdf") {
+			return true
+		}
+	}
+	return false
+}
+
+// claimsScannedEmpty reports whether an auto-mode claim scan already ran
+// and found nothing: claims.csv exists and holds zero rows. A missing
+// claims.csv means the scan never ran, which is not provisioned.
+func claimsScannedEmpty(testdataRoot string) bool {
+	info, err := os.Stat(filepath.Join(testdataRoot, "claims.csv"))
+	return err == nil && !info.IsDir() && info.Size() == 0
 }
 
 // hasDockerfile reports whether dir contains a Dockerfile.
