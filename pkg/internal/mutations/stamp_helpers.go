@@ -26,6 +26,47 @@ type stampResource struct {
 	ref ast.PdfIndirectRef
 }
 
+// stampOriginShift reports how far a page's visible area starts from the PDF
+// coordinate origin, and whether that shift is worth applying.
+//
+// A stamp's X and Y are documented as "points from the page's bottom-left
+// corner", but the content stream draws in PDF user space, where (0, 0) is the
+// coordinate origin rather than the corner. Those coincide only when the box
+// starts at (0, 0). They often do not: 4% of the corpus files measured carry a
+// non-zero origin, including govdocs thread_000_000018.pdf at (-306, -396),
+// where an unshifted stamp landed in the middle of the page and ran off the
+// right edge, losing its last character to the crop.
+//
+// The CropBox is the right box because it is the area a viewer shows (ISO
+// 32000-1, 14.11.2), and [document.Page] already resolves it with the
+// MediaBox fallback the spec requires.
+func stampOriginShift(page *document.Page) (dx, dy float64, ok bool) {
+	box := page.CropBox
+	if len(box) < 2 {
+		box = page.MediaBox
+	}
+	if len(box) < 2 {
+		return 0, 0, false
+	}
+	x0, xOK := numeric(box[0])
+	y0, yOK := numeric(box[1])
+	if !xOK || !yOK || (x0 == 0 && y0 == 0) {
+		return 0, 0, false
+	}
+	return x0, y0, true
+}
+
+// numeric reads a PDF number as a float, reporting whether it was one.
+func numeric(obj ast.PdfObject) (float64, bool) {
+	switch v := obj.(type) {
+	case ast.PdfInt:
+		return float64(v), true
+	case ast.PdfReal:
+		return float64(v), true
+	}
+	return 0, false
+}
+
 // applyStampToPages appends a content stream of operations to each selected
 // page, and merges the given named resources into each page's /Resources
 // dictionary. All updates for a page are applied in a single AllocAt call so
@@ -48,6 +89,10 @@ func applyStampToPages(
 	}
 	stampStream := ast.NewStream(ast.PdfDict{}, []byte(contentOps))
 	stampRef := alloc.Alloc(stampStream)
+
+	// Pages whose box starts at the origin share one stamp stream. A page whose
+	// box starts elsewhere needs its own, translated copy: see stampOriginShift.
+	shifted := make(map[string]ast.PdfIndirectRef)
 
 	brackets := newContentBrackets(alloc)
 
@@ -73,7 +118,19 @@ func applyStampToPages(
 		maps.Copy(newDict, baseDict)
 		newDict["Resources"] = newResources
 
-		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, brackets, stampRef)
+		pageStampRef := stampRef
+		if dx, dy, ok := stampOriginShift(page); ok {
+			key := FormatFloat(dx) + " " + FormatFloat(dy)
+			ref, built := shifted[key]
+			if !built {
+				ref = alloc.Alloc(ast.NewStream(ast.PdfDict{},
+					[]byte("q 1 0 0 1 "+key+" cm "+contentOps+" Q")))
+				shifted[key] = ref
+			}
+			pageStampRef = ref
+		}
+
+		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, brackets, pageStampRef)
 
 		// A page inlined in a /Kids array has no object number to replace. Skip
 		// it rather than abort the whole stamp over one unaddressable page, but
