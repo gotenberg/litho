@@ -54,6 +54,16 @@ func fixXFA(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 
 	if acroFormRef.ObjectNum > 0 {
 		alloc.AllocAt(acroFormRef.ObjectNum, newAcroForm)
+	} else {
+		// ISO 32000-1, 12.7.2 does not require the interactive form dictionary
+		// to be an indirect object, and 11 of the 20 corpus files carrying one
+		// write it inline. Dropping the rewrite here reported a repair that was
+		// never made: /XFA survived, the violation persisted, and the fixpoint
+		// loop re-reported the same repair on every one of its rounds.
+		newCatalog := make(ast.PdfDict, len(catalogDict))
+		maps.Copy(newCatalog, catalogDict)
+		newCatalog["AcroForm"] = newAcroForm
+		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	}
 
 	return []string{"removed /XFA from AcroForm"}, nil

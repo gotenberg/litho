@@ -2,7 +2,6 @@ package remediation
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -13,31 +12,14 @@ import (
 // /AFRelationship. Object 4 is the annotation, the object both fixers must
 // rewrite.
 func annotDirectFSPDF() []byte {
-	objs := []string{
+	return buildSimplePDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
 		"<< /Type /Annot /Subtype /FileAttachment /Rect [0 0 20 20] " +
 			"/FS << /Type /Filespec /F (a.tex) /EF << /F 5 0 R >> >> >>",
 		"<< /Type /EmbeddedFile /Subtype /text#2Fplain /Length 5 >>\nstream\nlitho\nendstream",
-	}
-
-	var buf []byte
-	buf = append(buf, "%PDF-1.7\n"...)
-	offsets := make([]int, len(objs)+1)
-	for i, body := range objs {
-		offsets[i+1] = len(buf)
-		buf = append(buf, fmt.Sprintf("%d 0 obj\n%s\nendobj\n", i+1, body)...)
-	}
-	start := len(buf)
-	buf = append(buf, fmt.Sprintf("xref\n0 %d\n", len(objs)+1)...)
-	buf = append(buf, "0000000000 65535 f \n"...)
-	for i := 1; i <= len(objs); i++ {
-		buf = append(buf, fmt.Sprintf("%010d 00000 n \n", offsets[i])...)
-	}
-	buf = append(buf, fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
-		len(objs)+1, start)...)
-	return buf
+	})
 }
 
 // TestFileSpecFixersComposeOnTheSameAnnotation pins that the /F+/UF fixer and
