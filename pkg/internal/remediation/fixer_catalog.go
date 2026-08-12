@@ -200,8 +200,11 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	// Fix /D (default config).
 	if dObj, ok := newOCP["D"]; ok {
-		fixed := ensureOCGConfigName(ctx, alloc, doc, dObj, "D")
+		replacement, fixed := ensureOCGConfigName(ctx, alloc, doc, dObj, "D")
 		if fixed {
+			if replacement != nil {
+				newOCP["D"] = replacement
+			}
 			fixes = append(fixes, "added /Name to OCG default config /D")
 			modified = true
 		}
@@ -213,12 +216,22 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		if err != nil || arr == nil {
 			return fixes
 		}
+		newConfigs := make(ast.PdfArray, len(arr))
+		copy(newConfigs, arr)
+		configsChanged := false
 		for i, entry := range arr {
-			fixed := ensureOCGConfigName(ctx, alloc, doc, entry, fmt.Sprintf("Configs[%d]", i))
+			replacement, fixed := ensureOCGConfigName(ctx, alloc, doc, entry, fmt.Sprintf("Configs[%d]", i))
 			if fixed {
+				if replacement != nil {
+					newConfigs[i] = replacement
+					configsChanged = true
+				}
 				fixes = append(fixes, fmt.Sprintf("added /Name to OCG config Configs[%d]", i))
 				modified = true
 			}
+		}
+		if configsChanged {
+			newOCP["Configs"] = newConfigs
 		}
 	}
 
@@ -239,7 +252,21 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 // ensureOCGConfigName adds /Name to an OCG config dict if missing.
 // Returns true if a modification was made.
-func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, label string) bool {
+// ensureOCGConfigName gives an optional-content configuration dictionary the
+// /Name its profile requires, reporting the replacement the caller must install
+// and whether anything changed.
+//
+// The replacement is returned rather than only written because a configuration
+// may be a DIRECT dictionary inside /OCProperties, which no object number
+// addresses. Writing only through the allocator dropped that case on the floor
+// while still reporting the fix, so the catalog was rewritten with the /Name
+// still missing and the next run found the same defect: remediating
+// complex_1b.pdf repeatedly grew it by 1125 bytes a pass, forever, and never
+// added the /Name.
+//
+// A nil replacement with a true result means the change went through the
+// allocator and the caller has nothing to install.
+func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, label string) (ast.PdfDict, bool) {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 
 	var d ast.PdfDict
@@ -249,13 +276,13 @@ func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if d == nil {
 		resolved, err := document.ResolveDict(ctx, doc, obj)
 		if err != nil || resolved == nil {
-			return false
+			return nil, false
 		}
 		d = resolved
 	}
 
 	if _, ok := d["Name"]; ok {
-		return false
+		return nil, false
 	}
 
 	newD := make(ast.PdfDict, len(d)+1)
@@ -264,9 +291,10 @@ func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 
 	if isRef {
 		alloc.AllocAt(ref.ObjectNum, newD)
+		return nil, true
 	}
 
-	return true
+	return newD, true
 }
 
 // fixAlternatePresentations removes /AlternatePresentations from catalog /Names.
