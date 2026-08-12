@@ -13,6 +13,26 @@ import (
 // well above the per-file happy-path cost.
 const perFileTimeout = 20 * time.Second
 
+// prepareFixtureTimeout caps one fixture's remediation inside a feature's
+// prepare stage. It is an anti-hang guard, not a performance target: the
+// scoring path bounds fixtures with [perFileTimeout], but the prepare
+// goroutines ran unbounded, so a single non-returning remediate wedged the
+// whole matrix run behind wg.Wait() with no ceiling and no diagnostic. A
+// whole corpus averages well under a second per fixture, so this leaves two
+// orders of magnitude of headroom for the slowest real document.
+const prepareFixtureTimeout = 3 * time.Minute
+
+// veraPDFBatchTimeout caps one batched VeraPDF invocation over a staging
+// directory. Anti-hang guard: a wedged JVM or an unclosed stdout pipe would
+// otherwise block forever, since the prepare context has no deadline. The
+// largest bucket validates in a couple of minutes.
+const veraPDFBatchTimeout = 30 * time.Minute
+
+// veraPDFSingleTimeout caps the one-file VeraPDF retry used when the batch
+// report drops a job. Anti-hang guard: JVM startup alone is about half a
+// second, so a minute is far above any real single-file validation.
+const veraPDFSingleTimeout = time.Minute
+
 // normalizePDFDate canonicalises a PDF date string for comparison.
 // Accepts both the raw "D:YYYYMMDDHHmmSS+HH'MM'" form and ISO 8601;
 // returns the input unchanged when parsing fails.

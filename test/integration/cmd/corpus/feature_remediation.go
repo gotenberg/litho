@@ -85,6 +85,12 @@ func (f *remediationFeature) Prepare(ctx context.Context, fixtures []Fixture) er
 
 	byProfile := make(map[string][]Fixture)
 	for _, fx := range fixtures {
+		// The manifest skips infinite loops and decompression bombs. The
+		// scoring path honours that list (run.go), but the prepare stage did
+		// not, so a fixture marked unsafe was still remediated here.
+		if fx.SkipReason != "" {
+			continue
+		}
 		head, _, ok := strings.Cut(fx.ID, "/")
 		if !ok || !isProfileDir(head) {
 			continue
@@ -169,16 +175,27 @@ func (f *remediationFeature) preparePerProfile(ctx context.Context, profile stri
 			res := stagingResult{fixtureID: fx.ID}
 			res.litho.Profile = profile
 			res.litho.Aggressive = f.aggressive
+			// Record the result even if remediation panics: a lost worker
+			// would otherwise leave a zero-valued entry that reads as a
+			// clean run, and one panic must not lose the whole corpus.
+			defer func() {
+				if r := recover(); r != nil {
+					res.litho.Error = fmt.Sprintf("panic: %v", r)
+				}
+				results[i] = res
+			}()
+
+			fctx, cancel := context.WithTimeout(ctx, prepareFixtureTimeout)
+			defer cancel()
 			f.mu.RLock()
 			golden := f.complianceGoldens[fx.ID]
 			f.mu.RUnlock()
 			if golden != nil {
 				res.litho.VeraPre = len(golden.FailedRules)
 			}
-			if err := remediateOnce(ctx, fx.PDFPath, validate, remediate, stagingDir, &res.litho, &res.stagingPath); err != nil {
+			if err := remediateOnce(fctx, fx.PDFPath, validate, remediate, stagingDir, &res.litho, &res.stagingPath); err != nil {
 				res.litho.Error = err.Error()
 			}
-			results[i] = res
 		}()
 	}
 	wg.Wait()
@@ -447,6 +464,8 @@ type veraVerdict struct {
 // map keyed by basename (without extension) with the failed-rule count
 // and identifiers per file.
 func batchValidate(ctx context.Context, dir, flavour string) (map[string]veraVerdict, error) {
+	ctx, cancel := context.WithTimeout(ctx, veraPDFBatchTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "verapdf", //nolint:gosec // flavour from a static map, dir is a tempdir
 		"-r", "-f", flavour, "--format", "json",
 		"--maxfailuresdisplayed", "-1", dir)
@@ -495,6 +514,8 @@ func jobVerdict(vr verapdfValidationResult) veraVerdict {
 // job, and falling back to "no improvement" inflates the disagreement
 // metric with phantom residuals.
 func singleValidate(ctx context.Context, path, flavour string) (veraVerdict, error) {
+	ctx, cancel := context.WithTimeout(ctx, veraPDFSingleTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "verapdf", //nolint:gosec // flavour from a static map, path from our staging dir
 		"-f", flavour, "--format", "json", "--maxfailuresdisplayed", "-1", path)
 	var stdout bytes.Buffer
