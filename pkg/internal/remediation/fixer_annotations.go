@@ -297,8 +297,20 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			}
 		}
 
-		if changed && annotRef.ObjectNum > 0 {
-			alloc.AllocAt(annotRef.ObjectNum, newAnnot)
+		if changed {
+			if annotRef.ObjectNum > 0 {
+				alloc.AllocAt(annotRef.ObjectNum, newAnnot)
+			} else {
+				// ISO 32000-1, 12.5.2 does not require an annotation to be an
+				// indirect object. One written inline has no object number to
+				// address, so the repair was reported and thrown away: a widget
+				// kept its forbidden /A and /AA while litho printed "removed
+				// /AA from widget annotation" on every fixpoint round. Replace
+				// it in the array and let the caller write whichever object
+				// owns that array.
+				annots[i] = newAnnot
+				removed = true
+			}
 		}
 	}
 
