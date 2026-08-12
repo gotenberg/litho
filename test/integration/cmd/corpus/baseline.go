@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"maps"
@@ -89,6 +90,7 @@ func runBaseline(args []string) int {
 	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
 	output := fs.String("output", defaultBaselinePath(), "Baseline file path to write")
+	merge := fs.Bool("merge", false, "Overlay this run's cells onto the existing baseline instead of replacing the whole file")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
@@ -110,6 +112,18 @@ func runBaseline(args []string) int {
 	}
 
 	bl := baselineFromScoreboard(board)
+	if *merge {
+		prev, err := loadBaseline(*output)
+		switch {
+		case err == nil:
+			bl = mergeBaseline(prev, bl)
+		case errors.Is(err, os.ErrNotExist):
+			// First capture: there is nothing to preserve.
+		default:
+			fmt.Fprintf(os.Stderr, "load %s for merge: %v\n", *output, err)
+			return 1
+		}
+	}
 	data, err := json.MarshalIndent(bl, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "encode baseline: %v\n", err)
@@ -211,6 +225,39 @@ func baselineFromScoreboard(board *Scoreboard) *Baseline {
 		}
 	}
 	return bl
+}
+
+// mergeBaseline overlays the freshly measured corpora in fresh onto prev,
+// replacing whole (corpus, feature) cells and preserving every cell the run
+// did not measure.
+//
+// A run scoped with -corpus or -feature sees only the cells it asked for, and
+// [runBaseline] writes the whole file, so capturing one corpus would silently
+// drop the other six. Merging keeps a scoped refresh safe, which is what makes
+// locking in an improvement cheap enough to do after every landed fix.
+//
+// Replacement is per feature, not per metric: a feature that stops emitting a
+// metric must not keep gating on the stale value.
+func mergeBaseline(prev, fresh *Baseline) *Baseline {
+	out := &Baseline{
+		Version:    fresh.Version,
+		CapturedAt: fresh.CapturedAt,
+		Corpora:    make(map[string]baselineCorpus, len(prev.Corpora)+len(fresh.Corpora)),
+	}
+	for name, corpus := range prev.Corpora {
+		features := make(map[string]baselineFeature, len(corpus.Features))
+		maps.Copy(features, corpus.Features)
+		out.Corpora[name] = baselineCorpus{Features: features}
+	}
+	for name, corpus := range fresh.Corpora {
+		merged, ok := out.Corpora[name]
+		if !ok {
+			merged = baselineCorpus{Features: make(map[string]baselineFeature, len(corpus.Features))}
+			out.Corpora[name] = merged
+		}
+		maps.Copy(merged.Features, corpus.Features)
+	}
+	return out
 }
 
 func loadBaseline(path string) (*Baseline, error) {
