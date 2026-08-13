@@ -39,25 +39,35 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 	// precedence when both exist, per the PDF spec's fallback semantics).
 	xfaData, _ := extractXFAData(ctx, doc, acroFormDict)
 
+	xfaOnly := func() ([]models.FormField, error) {
+		if len(xfaData) == 0 {
+			return nil, nil
+		}
+		var results []models.FormField
+		for k, v := range xfaData {
+			results = append(results, models.FormField{Name: k, Value: v})
+		}
+		return results, nil
+	}
+
 	fieldsObj, ok := acroFormDict["Fields"]
 	if !ok {
 		// No AcroForm fields. Return XFA data if present.
-		if len(xfaData) > 0 {
-			var results []models.FormField
-			for k, v := range xfaData {
-				results = append(results, models.FormField{Name: k, Value: v})
-			}
-			return results, nil
-		}
-		return nil, nil
+		return xfaOnly()
 	}
 
 	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve Fields: %w", err)
 	}
-	if fieldsArr == nil {
-		return nil, fmt.Errorf("fields is not an array")
+	if len(fieldsArr) == 0 {
+		// Per ISO 32000-1, Table 218, /Fields may legitimately be empty: an
+		// interactive form carrying only /DA, /DR or /NeedAppearances declares
+		// no root fields. An empty array resolves to a nil slice, and
+		// [document.ResolveArray] already reports a genuine type mismatch as an
+		// error, so this is "no root fields" rather than a malformed entry.
+		// Rejecting it made `litho forms` fail outright on a conformant file.
+		return xfaOnly()
 	}
 
 	// Start with XFA data as the base, then overlay AcroForm fields.
