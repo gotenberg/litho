@@ -203,10 +203,11 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 		newFont := make(ast.PdfDict, len(fontDict))
 		maps.Copy(newFont, fontDict)
 		newFont["Widths"] = newWidths
-		if fontRef.ObjectNum > 0 {
-			alloc.AllocAt(fontRef.ObjectNum, newFont)
+		// A direct font dictionary has no object number, so nothing can be
+		// written and the repair must not be reported.
+		if alloc.AllocAt(fontRef.ObjectNum, newFont) {
+			fixes = append(fixes, fmt.Sprintf("corrected /Widths for font %s", baseName))
 		}
-		fixes = append(fixes, fmt.Sprintf("corrected /Widths for font %s", baseName))
 	}
 
 	// Fix CharSet if incomplete.
@@ -239,25 +240,24 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 			// program's answer wrote U+00D5, turning every ’ in a
 			// 470 KB document into Õ at exactly the same length.
 			overlaySimpleFontEncoding(ctx, doc, fontDict, mapping)
-			// Simple fonts address glyphs with one-byte codes.
-			if cmapData := generateToUnicodeCMap(mapping, 1); cmapData != nil {
+			// Simple fonts address glyphs with one-byte codes. A direct font
+			// dictionary has no object number, so the CMap could not be
+			// attached: allocating it would emit an unreferenced stream and
+			// report a repair absent from the output.
+			if cmapData := generateToUnicodeCMap(mapping, 1); cmapData != nil && fontRef.ObjectNum > 0 {
 				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
 				cmapRef := alloc.Alloc(cmapStream)
 				// Use the latest version of fontDict if already modified.
 				targetFont := fontDict
-				if fontRef.ObjectNum > 0 {
-					if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
-						if d, ok := allocated.(ast.PdfDict); ok {
-							targetFont = d
-						}
+				if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
+					if d, ok := allocated.(ast.PdfDict); ok {
+						targetFont = d
 					}
 				}
 				newFont := make(ast.PdfDict, len(targetFont)+1)
 				maps.Copy(newFont, targetFont)
 				newFont["ToUnicode"] = cmapRef
-				if fontRef.ObjectNum > 0 {
-					alloc.AllocAt(fontRef.ObjectNum, newFont)
-				}
+				alloc.AllocAt(fontRef.ObjectNum, newFont)
 				fixes = append(fixes, fmt.Sprintf("generated /ToUnicode CMap for font %s", baseName))
 			}
 		}
@@ -318,13 +318,7 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 		wArr, err := document.ResolveArray(ctx, doc, wObj)
 		if err == nil && wArr != nil {
 			newW, corrected := correctCIDWidths(ctx, doc, wArr, binaryWidths, upm)
-			if corrected {
-				newCID := make(ast.PdfDict, len(cidFont))
-				maps.Copy(newCID, cidFont)
-				newCID["W"] = newW
-				if cidRef.ObjectNum > 0 {
-					alloc.AllocAt(cidRef.ObjectNum, newCID)
-				}
+			if corrected && persistCIDWidths(alloc, fontDict, fontRef, cidFont, cidRef, descArr, newW) {
 				fixes = append(fixes, fmt.Sprintf("corrected /W widths for CIDFont %s", baseName))
 			}
 		}
@@ -354,30 +348,62 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 					mapping[gid] = r
 				}
 			}
-			if cmapData := generateToUnicodeCMap(mapping, 2); cmapData != nil {
+			// See the simple-font path: without an object number to write the
+			// font dictionary at, the CMap has nothing to attach to.
+			if cmapData := generateToUnicodeCMap(mapping, 2); cmapData != nil && fontRef.ObjectNum > 0 {
 				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
 				cmapRef := alloc.Alloc(cmapStream)
 				// Use the latest version of fontDict if already modified.
 				targetFont := fontDict
-				if fontRef.ObjectNum > 0 {
-					if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
-						if d, ok := allocated.(ast.PdfDict); ok {
-							targetFont = d
-						}
+				if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
+					if d, ok := allocated.(ast.PdfDict); ok {
+						targetFont = d
 					}
 				}
 				newFont := make(ast.PdfDict, len(targetFont)+1)
 				maps.Copy(newFont, targetFont)
 				newFont["ToUnicode"] = cmapRef
-				if fontRef.ObjectNum > 0 {
-					alloc.AllocAt(fontRef.ObjectNum, newFont)
-				}
+				alloc.AllocAt(fontRef.ObjectNum, newFont)
 				fixes = append(fixes, fmt.Sprintf("generated /ToUnicode CMap for font %s", baseName))
 			}
 		}
 	}
 
 	return fixes
+}
+
+// persistCIDWidths writes the corrected /W array at the innermost enclosing
+// object that exists in the file, and reports whether anything was written.
+//
+// Per ISO 32000-1, Table 121 /DescendantFonts shall hold a reference to the
+// CIDFont dictionary, but producers inline that dictionary, and a direct
+// dictionary has no object number to write at. Writing only when the CIDFont
+// itself was indirect meant the corrected widths were computed, dropped, and
+// still reported as repaired: remediating issue18298.pdf corrected the same
+// three CIDFonts on every pass while the width mismatch stayed in the output.
+//
+// The corrected array is stored directly inside the copied CIDFont rather than
+// at the /W reference, so a /W array shared by several fonts is not rewritten
+// on behalf of one of them.
+func persistCIDWidths(alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, cidFont ast.PdfDict, cidRef ast.PdfIndirectRef, descArr ast.PdfArray, newW ast.PdfArray) bool {
+	newCID := make(ast.PdfDict, len(cidFont))
+	maps.Copy(newCID, cidFont)
+	newCID["W"] = newW
+	if alloc.AllocAt(cidRef.ObjectNum, newCID) {
+		return true
+	}
+
+	newArr := make(ast.PdfArray, len(descArr))
+	copy(newArr, descArr)
+	newArr[0] = newCID
+	if dfRef, ok := fontDict["DescendantFonts"].(ast.PdfIndirectRef); ok && alloc.AllocAt(dfRef.ObjectNum, newArr) {
+		return true
+	}
+
+	newFont := make(ast.PdfDict, len(fontDict))
+	maps.Copy(newFont, fontDict)
+	newFont["DescendantFonts"] = newArr
+	return alloc.AllocAt(fontRef.ObjectNum, newFont)
 }
 
 func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfArray, binaryWidths map[uint16]uint16, upm uint16) (ast.PdfArray, bool) {
@@ -461,10 +487,9 @@ func fixCharSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfD
 	newFD := make(ast.PdfDict, len(fdDict))
 	maps.Copy(newFD, fdDict)
 	newFD["CharSet"] = ast.PdfString(charSet)
-	if fdRef.ObjectNum > 0 {
-		alloc.AllocAt(fdRef.ObjectNum, newFD)
-	}
-	return true
+	// A direct font descriptor has no object number, so nothing can be written
+	// and the caller must not report a repair absent from the output.
+	return alloc.AllocAt(fdRef.ObjectNum, newFD)
 }
 
 func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
@@ -518,16 +543,20 @@ func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		}
 	}
 
+	// A direct font descriptor has no object number, so the updated descriptor
+	// cannot be written. Allocating the set first would emit a stream nothing
+	// references and report a repair absent from the output.
+	if fdRef.ObjectNum <= 0 {
+		return false
+	}
+
 	newStream := ast.NewStream(ast.PdfDict{}, cidSet)
 	cidSetRef := alloc.Alloc(newStream)
 
 	newFD := make(ast.PdfDict, len(fdDict))
 	maps.Copy(newFD, fdDict)
 	newFD["CIDSet"] = cidSetRef
-	if fdRef.ObjectNum > 0 {
-		alloc.AllocAt(fdRef.ObjectNum, newFD)
-	}
-	return true
+	return alloc.AllocAt(fdRef.ObjectNum, newFD)
 }
 
 func extractFontProgram(ctx context.Context, doc *document.Document, fdDict ast.PdfDict) []byte {
