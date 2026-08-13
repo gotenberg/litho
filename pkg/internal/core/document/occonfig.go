@@ -21,11 +21,17 @@ func (d *Document) initOCConfig(ctx context.Context) {
 		Off: make(map[int]bool),
 	}
 
-	rootObj, ok := d.Index.Trailer["Root"]
+	// Resolved through [Document.CatalogRef], which honours the trailer /Root
+	// when it resolves to a catalog and recovers by scanning when it does not.
+	// Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so a file
+	// pointing it elsewhere is malformed. Reading the raw /Root left On, Off and
+	// BaseState empty on such a file, so every optional-content group fell back
+	// to visible and hidden layers leaked into extraction.
+	rootRef, ok := d.CatalogRef(ctx)
 	if !ok {
 		return
 	}
-	catalog, err := ResolveDict(ctx, d, rootObj)
+	catalog, err := ResolveDict(ctx, d, rootRef)
 	if err != nil {
 		d.Logger.Debug("resolving catalog for OC config", slog.Any("err", err))
 	}
