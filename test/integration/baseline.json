@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-08-12T18:59:10Z",
+  "captured_at": "2026-08-13T12:44:15Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -196,8 +196,8 @@
     "pdfjs": {
       "features": {
         "metadata": {
-          "matched": 1182,
-          "mismatched": 8,
+          "matched": 1183,
+          "mismatched": 7,
           "skipped": 1
         },
         "text": {
