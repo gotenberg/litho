@@ -149,14 +149,11 @@ func parseXMP(data []byte) map[string]string {
 // If the current catalog lacks a /Metadata entry (common after incremental
 // updates), it searches for a Metadata stream in the xref object pool.
 func resolveXMPMetadata(ctx context.Context, doc *document.Document) map[string]string {
-	rootObj, ok := doc.Index.Trailer["Root"]
-	if !ok {
+	resolved, err := document.ResolveCatalog(ctx, doc)
+	if err != nil || resolved == nil || resolved.Dict == nil {
 		return nil
 	}
-	catalog, err := document.ResolveDict(ctx, doc, rootObj)
-	if err != nil || catalog == nil {
-		return nil
-	}
+	catalog := resolved.Dict
 
 	if metaRef, ok := catalog["Metadata"]; ok {
 		if result := resolveXMPStream(ctx, doc, metaRef); result != nil {
@@ -237,12 +234,19 @@ func resolveXMPStream(ctx context.Context, doc *document.Document, ref ast.PdfOb
 // Returns nil if no XMP metadata stream is present. The stream data is not
 // read until the caller invokes the returned function.
 func XMPOpen(ctx context.Context, doc *document.Document) (func(context.Context) (io.ReadCloser, error), error) {
-	rootObj, ok := doc.Index.Trailer["Root"]
-	if !ok {
+	// Resolved through [document.ResolveCatalog], which honours the trailer
+	// /Root when it resolves to a catalog and recovers by scanning when it does
+	// not. Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so a file
+	// pointing it elsewhere is malformed. Reading the raw /Root made
+	// [Reader.XMPMetadata] report no XMP on a document whose catalog carries a
+	// valid /Metadata stream, while resolveXMPMetadata found that same packet
+	// through its object-pool fallback.
+	resolved, err := document.ResolveCatalog(ctx, doc)
+	if err != nil || resolved == nil {
 		return nil, nil
 	}
-	catalog, err := document.ResolveDict(ctx, doc, rootObj)
-	if err != nil || catalog == nil {
+	catalog := resolved.Dict
+	if catalog == nil {
 		return nil, nil
 	}
 

@@ -23,24 +23,17 @@ type Thread struct {
 
 // ResolveThreads extracts article threads from the document.
 func ResolveThreads(ctx context.Context, doc *document.Document) ([]Thread, error) {
-	rootObj, ok := doc.Index.Trailer["Root"]
-	if !ok {
-		return nil, fmt.Errorf("trailer missing /Root")
-	}
-
-	rootRef, ok := rootObj.(ast.PdfIndirectRef)
-	if !ok {
-		return nil, fmt.Errorf("trailer /Root is not an indirect reference")
-	}
-	rootRes, err := doc.Resolve(ctx, rootRef)
+	// Resolved through [document.ResolveCatalog] so a damaged /Root that names a
+	// non-catalog (ISO 32000-1 §7.5.5 Table 15 requires it to be the catalog)
+	// still finds the article threads, matching the reader's recovery.
+	resolved, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolving catalog for threads: %w", err)
 	}
-
-	catalog, ok := rootRes.(ast.PdfDict)
-	if !ok {
+	if resolved == nil || resolved.Dict == nil {
 		return nil, fmt.Errorf("catalog is not a dictionary")
 	}
+	catalog := resolved.Dict
 
 	threadsObj, ok := catalog["Threads"]
 	if !ok {
