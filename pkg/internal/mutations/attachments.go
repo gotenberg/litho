@@ -143,7 +143,7 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 	filespecRef := alloc.Alloc(filespecDict)
 
 	// Update the catalog's /Names/EmbeddedFiles name tree.
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}
@@ -237,7 +237,7 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 // RemoveAttachment removes a file from the document's /Names/EmbeddedFiles
 // name tree by its filename.
 func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string) error {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}

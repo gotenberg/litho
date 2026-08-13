@@ -76,7 +76,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	sigFieldRef := alloc.Alloc(sigFieldDict)
 
 	// Update or create AcroForm with the signature field.
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}

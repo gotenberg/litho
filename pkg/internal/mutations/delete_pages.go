@@ -47,7 +47,7 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // rebuildPageTree replaces the document's page tree with a flat /Pages node
 // containing only the pages at the given 0-based indices (in order).
 func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, allPages []*document.Page, keptIndices []int) error {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root indirect reference")
 	}

@@ -14,7 +14,7 @@ import (
 
 // SetFormField finds a form field by name and updates its /V value.
 func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name, value string) error {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}
@@ -197,7 +197,7 @@ func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *
 // FlattenForm bakes form field appearances into page content and removes
 // the AcroForm dictionary from the catalog.
 func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}

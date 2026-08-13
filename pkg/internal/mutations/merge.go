@@ -44,7 +44,8 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		}
 
 		copier := writer.NewCopier(src.Doc, alloc)
-		if srcCatalog, err := document.ResolveDict(ctx, src.Doc, src.Doc.Index.Trailer["Root"]); err == nil && srcCatalog != nil {
+		srcCatalogRef, srcHasCatalog := CatalogRef(ctx, src.Doc)
+		if srcCatalog, err := document.ResolveDict(ctx, src.Doc, srcCatalogRef); srcHasCatalog && err == nil && srcCatalog != nil {
 			formSources = append(formSources, acroFormSource{Doc: src.Doc, Catalog: srcCatalog, Copier: copier})
 		}
 

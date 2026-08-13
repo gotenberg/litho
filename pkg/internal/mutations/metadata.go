@@ -77,11 +77,7 @@ func ClearMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 
 	// Remove /Metadata from catalog.
-	rootObj, ok := doc.Index.Trailer["Root"]
-	if !ok {
-		return nil
-	}
-	catalogRef, ok := rootObj.(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return nil
 	}

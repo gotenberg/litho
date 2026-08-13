@@ -48,7 +48,7 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	// (pdfjs issue18986/issue9418). In that case copy the recovered catalog
 	// dict the reader synthesises, so the rewrite reproduces what the reader
 	// reads, the same way it recovers a trailer that lost /Root entirely.
-	catalogRef, hasRef := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, hasRef := CatalogRef(ctx, doc)
 	var newCatalogRef ast.PdfIndirectRef
 	if hasRef && catalogRefResolves(ctx, doc, catalogRef) {
 		copied, err := copier.CopyRef(ctx, catalogRef)

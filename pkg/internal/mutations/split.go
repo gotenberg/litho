@@ -79,7 +79,8 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	copyCatalogEntries(ctx, doc, copier, catalogDict)
 
 	// Re-attach the interactive form to whichever fields kept a widget.
-	if catalogDict2, err := document.ResolveDict(ctx, doc, doc.Index.Trailer["Root"]); err == nil && catalogDict2 != nil {
+	srcCatalogRef, hasSrcCatalog := CatalogRef(ctx, doc)
+	if catalogDict2, err := document.ResolveDict(ctx, doc, srcCatalogRef); hasSrcCatalog && err == nil && catalogDict2 != nil {
 		srcs := []acroFormSource{{Doc: doc, Catalog: catalogDict2, Copier: copier}}
 		rebuildAcroForm(ctx, alloc, pageRefs, srcs, catalogDict)
 		rebuildEmbeddedFiles(ctx, alloc, srcs, catalogDict)
@@ -157,7 +158,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 // copyCatalogEntries copies select catalog-level entries that should survive
 // a split operation (ViewerPreferences, PageLayout, PageMode, Lang, MarkInfo).
 func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *writer.Copier, dst ast.PdfDict) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return
 	}

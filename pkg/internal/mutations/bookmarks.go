@@ -61,7 +61,7 @@ func WriteOutline(
 	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 
 	// Update the catalog to reference the new /Outlines.
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root indirect reference")
 	}

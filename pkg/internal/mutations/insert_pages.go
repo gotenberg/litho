@@ -63,7 +63,7 @@ func InsertPages(
 	}
 
 	// Resolve the catalog and pages tree.
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root indirect reference")
 	}
