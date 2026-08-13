@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
-	"fmt"
 	"io"
 	"log/slog"
 	"maps"
@@ -335,7 +334,7 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 	}
 
 	if len(metadata) == 0 {
-		return nil, fmt.Errorf("no metadata found (neither /Info dictionary nor XMP stream)")
+		return nil, ErrNoMetadata
 	}
 
 	return metadata, nil

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	"github.com/gotenberg/litho/pkg/internal/semantics"
 )
 
 // Exported errors for granular error handling by consumers.
@@ -158,6 +159,12 @@ var (
 	// XPath 2.0 function the engine does not implement, e.g.
 	// "tokenize", "for $x in ... return", "string-to-codepoints").
 	ErrSchematronRuleSkipped = compliance.ErrSchematronRuleSkipped
+
+	// ErrNoMetadata is returned by [Reader.Metadata] when the document
+	// carries neither an /Info dictionary nor an XMP packet. Absence is
+	// not a failure for most callers: match it with [errors.Is] to tell
+	// "no metadata" from a genuine extraction error.
+	ErrNoMetadata = semantics.ErrNoMetadata
 )
 
 // Pipeline sentinel errors surface structural problems with a [Pipeline]

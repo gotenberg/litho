@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"sort"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 func runMetadata(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -43,7 +46,7 @@ func runMetadata(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		}
 
 		meta, err := r.Metadata(ctx)
-		if err != nil {
+		if err != nil && !errors.Is(err, pdf.ErrNoMetadata) {
 			closer()
 			fmt.Fprintf(stderr, "%s: %v\n", path, err)
 			return exitError
@@ -63,6 +66,10 @@ func runMetadata(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		for _, res := range results {
 			if len(results) > 1 {
 				fmt.Fprintf(stdout, "--- %s ---\n", res.File)
+			}
+			if len(res.Metadata) == 0 {
+				fmt.Fprintln(stdout, "(no metadata)")
+				continue
 			}
 			keys := make([]string, 0, len(res.Metadata))
 			for k := range res.Metadata {
