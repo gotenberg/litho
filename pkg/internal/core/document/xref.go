@@ -266,6 +266,19 @@ func (d *Document) ObjectGeneration(objNum int) int {
 	return entry.Generation
 }
 
+// DefinesObject reports whether the cross-reference table lists objNum as a
+// live object, whatever resolving it later yields.
+//
+// It separates an object the file never defines, which ISO 32000-1, 7.3.9 makes
+// equivalent to null, from one the file does define but litho failed to load.
+// The rewrite needs that distinction: the first has nothing to lose, the second
+// loses whatever the object held. Free entries report false, since nothing
+// references a free object.
+func (d *Document) DefinesObject(objNum int) bool {
+	entry, ok := d.xrefEntry(objNum)
+	return ok && !entry.Free
+}
+
 // trailerObjectCount returns the trailer /Size when it is a plausible object
 // count for a file this size.
 func (d *Document) trailerObjectCount() (int, bool) {

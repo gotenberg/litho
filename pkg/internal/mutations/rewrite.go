@@ -68,7 +68,9 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		newCatalogRef = alloc.Alloc(copied)
 	}
 
-	ensurePageTree(alloc, newCatalogRef)
+	if err := ensurePageTree(alloc, newCatalogRef, pageTreeWasLost(ctx, doc)); err != nil {
+		return err
+	}
 
 	// Build trailer.
 	trailer := ast.PdfDict{
@@ -163,10 +165,21 @@ func catalogRefResolves(ctx context.Context, doc *document.Document, ref ast.Pdf
 // document as zero pages: the rewrite then says the same thing in a form every
 // reader can open, instead of one none can. [catalogRefResolves] applies the
 // same reasoning to a /Root that resolves to null.
-func ensurePageTree(alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef) {
+//
+// That reasoning holds only while there are no pages to lose. When pageTreeLost
+// says the file does define the page tree and litho merely failed to load it,
+// an empty tree would answer a question the source never asked, so report
+// [ErrPageTreeNotReproduced] instead. See [pageTreeWasLost].
+func ensurePageTree(alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef, pageTreeLost bool) error {
 	catalog, ok := alloc.Pending()[catalogRef.ObjectNum].(ast.PdfDict)
 	if !ok || pageTreeResolves(alloc, catalog["Pages"]) {
-		return
+		return nil
+	}
+
+	// A source that named a page tree has pages to lose. Substituting an empty
+	// one would hand back a valid but emptied document and report success.
+	if pageTreeLost {
+		return ErrPageTreeNotReproduced
 	}
 
 	updated := make(ast.PdfDict, len(catalog)+1)
@@ -179,6 +192,31 @@ func ensurePageTree(alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef) {
 	// The catalog holds a positive object number, the one case AllocAt
 	// refuses, so the replacement always lands.
 	alloc.AllocAt(catalogRef.ObjectNum, updated)
+	return nil
+}
+
+// pageTreeWasLost reports whether the source catalog names a page tree the file
+// actually defines, so failing to reproduce it discards real pages.
+//
+// A catalog naming an object the file never defines is the dangling case the
+// empty page tree exists for: ISO 32000-1, 7.3.9 makes that reference null, the
+// document has no pages to begin with, and pikepdf rejects it outright. An
+// object the cross-reference table does list is different. litho merely failed
+// to load it, as on an encrypted pdfjs file whose page tree sits in an object
+// stream that would not decode, and substituting an empty tree there hands back
+// a document stripped of every page.
+func pageTreeWasLost(ctx context.Context, doc *document.Document) bool {
+	resolved, err := document.ResolveCatalog(ctx, doc)
+	if err != nil || resolved == nil || resolved.Dict == nil {
+		return false
+	}
+	ref, ok := resolved.Dict["Pages"].(ast.PdfIndirectRef)
+	if !ok {
+		// A direct page tree travels with the catalog, so it cannot go
+		// missing on its own.
+		return false
+	}
+	return doc.DefinesObject(ref.ObjectNum)
 }
 
 // pageTreeResolves reports whether obj names a dictionary the output will
