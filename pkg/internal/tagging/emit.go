@@ -399,9 +399,9 @@ func isBlank(b []byte) bool {
 // earlier pipeline stage (a remediation fixer's catalog patch, an /Metadata
 // addition) is preserved rather than overwritten.
 func (e *emitter) wireCatalog(ctx context.Context, stRef ast.PdfIndirectRef) error {
-	catalogRef, ok := e.doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForTagging(ctx, e.doc)
 	if !ok {
-		return fmt.Errorf("tagging: trailer /Root is not an indirect reference")
+		return fmt.Errorf("tagging: no catalog to wire the structure tree into")
 	}
 	catalogDict, err := e.dictAllocFirst(ctx, catalogRef)
 	if err != nil {

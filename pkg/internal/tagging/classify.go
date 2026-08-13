@@ -101,10 +101,37 @@ func containsMarkedContentOp(data []byte) bool {
 	return false
 }
 
+// catalogRefForTagging returns the object the reader, the validator and the
+// writer all treat as the catalog: [document.Document.CatalogRef], which honours
+// the trailer /Root when it resolves to a catalog and recovers by scanning when
+// it does not.
+//
+// Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so a file whose
+// damaged incremental update points it elsewhere is malformed. Reading the raw
+// /Root regardless made tagging address a non-catalog: on pdfjs issue9418.pdf,
+// whose final trailer names the /Info dictionary, [alreadyTagged] inspected
+// /Info, found no structure and reported an untagged document, and wireCatalog
+// wrote /StructTreeRoot and /MarkInfo into /Info while the real catalog kept
+// neither. The false "untagged" verdict is the more dangerous half: on a file
+// whose real catalog is tagged, it lets AutoTag overwrite the existing tree,
+// which is precisely what alreadyTagged exists to prevent.
+//
+// The raw trailer ref remains the fallback: when recovery finds no catalog at
+// all, a reference the file at least names beats no reference.
+func catalogRefForTagging(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef, bool) {
+	if ref, ok := doc.CatalogRef(ctx); ok {
+		return ref, true
+	}
+	if ref, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef); ok {
+		return ref, true
+	}
+	return ast.PdfIndirectRef{}, false
+}
+
 // alreadyTagged reports whether the document already declares a tagged
 // structure, in which case AutoTag must not overwrite it.
 func alreadyTagged(ctx context.Context, doc *document.Document) (bool, error) {
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	catalogRef, ok := catalogRefForTagging(ctx, doc)
 	if !ok {
 		return false, nil
 	}
