@@ -59,18 +59,33 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	return []string{"removed /NeedAppearances from AcroForm"}, nil
 }
 
-// catalogRefForFixer returns the catalog's indirect reference. It prefers the
-// trailer /Root and falls back to [document.Document.CatalogRef] recovery so a
-// file whose active trailer lost /Root (a damaged incremental update) still
-// remediates, matching the reader's and the full-rewrite writer's catalog
-// resolution. Present /Root is returned as-is, leaving the healthy path
-// untouched; recovery scans the object table only when /Root is absent. ok is
-// false only when no catalog object exists to reference at all.
+// catalogRefForFixer returns the catalog's indirect reference, defined as the
+// object the reader, the validator and the full-rewrite writer all treat as the
+// catalog: [document.Document.CatalogRef]. That honours the trailer /Root when
+// it resolves to a catalog and recovers by scanning the object table when it
+// does not.
+//
+// Taking the trailer /Root at face value instead is wrong twice over when a
+// damaged incremental update points it at a non-catalog. Per ISO 32000-1 §7.5.5
+// Table 15 /Root shall be the catalog, so such a file is malformed, and the
+// reader already recovers from it. Fixers wrote their repairs into whatever
+// object /Root named, so pdfjs issue9418.pdf (whose final trailer points /Root
+// at the /Info dictionary) had /MarkInfo, /Lang, /Metadata, /StructTreeRoot and
+// /ViewerPreferences merged into its document information dictionary while the
+// real catalog kept none of them. Remediation reported those repairs as applied
+// and then listed the very same violations as residual, never converging.
+//
+// The raw trailer ref remains the fallback: when recovery finds no catalog at
+// all, a reference the file at least names beats no reference. ok is false only
+// when neither yields one.
 func catalogRefForFixer(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef, bool) {
+	if ref, ok := doc.CatalogRef(ctx); ok {
+		return ref, true
+	}
 	if ref, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef); ok {
 		return ref, true
 	}
-	return doc.CatalogRef(ctx)
+	return ast.PdfIndirectRef{}, false
 }
 
 // resolveFromAllocOrDoc checks the allocator for a pending version, falling
