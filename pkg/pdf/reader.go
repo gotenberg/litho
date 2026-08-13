@@ -1082,14 +1082,11 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) (_ []models.Tab
 // both /XFA and real widget fields keep returning true, since the
 // widget fields are genuinely interactive under a standard reader.
 func (r *Reader) HasAcroForm(ctx context.Context) bool {
-	rootObj, ok := r.doc.Index.Trailer["Root"]
-	if !ok {
+	resolved, err := document.ResolveCatalog(ctx, r.doc)
+	if err != nil || resolved == nil || resolved.Dict == nil {
 		return false
 	}
-	catalog, err := document.ResolveDict(ctx, r.doc, rootObj)
-	if err != nil || catalog == nil {
-		return false
-	}
+	catalog := resolved.Dict
 	if nrObj, ok := catalog["NeedsRendering"]; ok {
 		if nr, err := document.ResolveBool(ctx, r.doc, nrObj); err == nil && nr {
 			return false

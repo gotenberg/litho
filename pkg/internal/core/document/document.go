@@ -457,17 +457,19 @@ func (d *Document) Authenticate(password string) error {
 // initCatalogVersion checks the catalog /Version key and overrides the header
 // version if present. Per PDF spec §7.2.2, the catalog version takes precedence.
 func (d *Document) initCatalogVersion(ctx context.Context) {
-	rootObj, ok := d.Index.Trailer["Root"]
-	if !ok {
-		return
-	}
-	catalog, err := ResolveDict(ctx, d, rootObj)
+	// Resolved through [Document.CatalogRef]: per ISO 32000-1 §7.5.5 Table 15
+	// /Root shall be the catalog, and reading it raw made a file whose damaged
+	// incremental update points elsewhere keep its header version, so a catalog
+	// declaring /Version /2.0 was reported as 1.4.
+	resolved, err := ResolveCatalog(ctx, d)
 	if err != nil {
 		d.Logger.Debug("resolving catalog for version check", slog.Any("err", err))
-	}
-	if catalog == nil {
 		return
 	}
+	if resolved == nil || resolved.Dict == nil {
+		return
+	}
+	catalog := resolved.Dict
 	vObj, ok := catalog["Version"]
 	if !ok {
 		return

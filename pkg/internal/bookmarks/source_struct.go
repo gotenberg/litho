@@ -37,7 +37,13 @@ func GenerateFromStructTree(
 ) ([]models.Bookmark, error) {
 	opts.applyDefaults()
 
-	catalogRef, ok := doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	// Recovered ref first (ISO 32000-1 §7.5.5 Table 15: /Root shall be the
+	// catalog), falling back to the raw trailer ref when no catalog object is
+	// found at all, so a file this used to read is never read less well.
+	catalogRef, ok := doc.CatalogRef(ctx)
+	if !ok {
+		catalogRef, ok = doc.Index.Trailer["Root"].(ast.PdfIndirectRef)
+	}
 	if !ok {
 		return nil, nil
 	}

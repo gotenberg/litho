@@ -640,14 +640,11 @@ func parseAnyDate(s string) (time.Time, bool) {
 
 // resolveCatalogLang reads the /Lang entry from the document catalog.
 func resolveCatalogLang(ctx context.Context, doc *document.Document) string {
-	rootObj, ok := doc.Index.Trailer["Root"]
-	if !ok {
+	resolved, err := document.ResolveCatalog(ctx, doc)
+	if err != nil || resolved == nil || resolved.Dict == nil {
 		return ""
 	}
-	catalog, err := document.ResolveDict(ctx, doc, rootObj)
-	if err != nil || catalog == nil {
-		return ""
-	}
+	catalog := resolved.Dict
 	langObj, ok := catalog["Lang"]
 	if !ok {
 		return ""

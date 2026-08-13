@@ -27,17 +27,15 @@ func (d *Document) initOCConfig(ctx context.Context) {
 	// pointing it elsewhere is malformed. Reading the raw /Root left On, Off and
 	// BaseState empty on such a file, so every optional-content group fell back
 	// to visible and hidden layers leaked into extraction.
-	rootRef, ok := d.CatalogRef(ctx)
-	if !ok {
-		return
-	}
-	catalog, err := ResolveDict(ctx, d, rootRef)
+	resolved, err := ResolveCatalog(ctx, d)
 	if err != nil {
 		d.Logger.Debug("resolving catalog for OC config", slog.Any("err", err))
-	}
-	if catalog == nil {
 		return
 	}
+	if resolved == nil || resolved.Dict == nil {
+		return
+	}
+	catalog := resolved.Dict
 
 	ocpObj, ok := catalog["OCProperties"]
 	if !ok {

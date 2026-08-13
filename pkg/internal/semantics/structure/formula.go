@@ -11,18 +11,15 @@ import (
 // ExtractFormulas walks the structure tree and extracts MathML from /Formula
 // elements that carry an /AF (Associated Files) array with a MathML stream.
 func ExtractFormulas(ctx context.Context, doc *document.Document) ([]models.FormulaElement, error) {
-	catalogObj, ok := doc.Index.Trailer["Root"]
-	if !ok {
+	// [document.ResolveCatalog] honours the trailer /Root, recovers by scanning
+	// when it names a non-catalog (ISO 32000-1 §7.5.5 Table 15 requires it to be
+	// the catalog), and still accepts a catalog written directly in the trailer,
+	// which a reference-based lookup cannot represent.
+	resolved, err := document.ResolveCatalog(ctx, doc)
+	if err != nil || resolved == nil || resolved.Dict == nil {
 		return nil, nil
 	}
-	catRes, err := resolve(ctx, doc, catalogObj)
-	if err != nil {
-		return nil, nil
-	}
-	catalog, ok := catRes.(ast.PdfDict)
-	if !ok {
-		return nil, nil
-	}
+	catalog := resolved.Dict
 
 	strObj, ok := catalog["StructTreeRoot"]
 	if !ok {
