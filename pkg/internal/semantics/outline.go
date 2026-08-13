@@ -22,9 +22,19 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 		return nil, nil // Document has no outline
 	}
 
-	outlinesDict, err := document.ResolveDictRequired(ctx, doc, outlinesObj, "outlines")
+	outlinesDict, err := document.ResolveDict(ctx, doc, outlinesObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve outlines: %w", err)
+	}
+	if outlinesDict == nil {
+		// Per ISO 32000-1, 7.3.9, a reference to an undefined object is a
+		// reference to null, and per 7.3.7 an entry whose value is null is
+		// equivalent to the entry being absent. pdfjs colors.pdf points
+		// /Outlines at a free object; treating that as a broken outline made
+		// `litho bookmarks` fail on a file poppler and pikepdf both read as
+		// simply having no outline. A non-dictionary /Outlines still errors
+		// above, since [document.ResolveDict] reports the type mismatch.
+		return nil, nil
 	}
 
 	firstObj, ok := outlinesDict["First"]
