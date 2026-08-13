@@ -127,7 +127,9 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 			continue
 		}
 
-		for _, annotObj := range annots {
+		var inlineFixed map[int]ast.PdfDict
+
+		for i, annotObj := range annots {
 			ref, isRef := annotObj.(ast.PdfIndirectRef)
 			var annotDict ast.PdfDict
 			if isRef {
@@ -139,6 +141,17 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 				continue
 			}
 			if _, hasAP := annotDict["AP"]; hasAP {
+				continue
+			}
+
+			// ISO 32000-1, 12.5.2 does not require an annotation to be an
+			// indirect object. An inline one has no object number to address,
+			// so writing only through the allocator dropped the appearance
+			// while still counting it, and the stream allocated just above was
+			// left orphaned in the output on every fixpoint round. Install it
+			// through the /Annots array instead, and only allocate once the
+			// page can actually take it.
+			if !isRef && page.Ref.ObjectNum <= 0 {
 				continue
 			}
 
@@ -155,9 +168,17 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 
 			if isRef {
 				alloc.AllocAt(ref.ObjectNum, newAnnot)
+				count++
+				continue
 			}
-			count++
+
+			if inlineFixed == nil {
+				inlineFixed = make(map[int]ast.PdfDict, 1)
+			}
+			inlineFixed[i] = newAnnot
 		}
+
+		count += installInlineAppearances(alloc, page, pageDict, annotsObj, annots, inlineFixed)
 	}
 
 	if count == 0 {
@@ -481,4 +502,43 @@ func init() {
 	var _ interface {
 		DecodeStream(context.Context, ast.PdfStream) ([]byte, error)
 	} = (*document.Document)(nil)
+}
+
+// installInlineAppearances writes annotations repaired in place, returning how
+// many landed. An inline annotation is reachable only through its page's
+// /Annots array, so the array is rebuilt and written to whichever object owns
+// it: the array itself when indirect, the page otherwise.
+func installInlineAppearances(
+	alloc *writer.ObjAllocator,
+	page *document.Page,
+	pageDict ast.PdfDict,
+	annotsObj ast.PdfObject,
+	annots ast.PdfArray,
+	fixed map[int]ast.PdfDict,
+) int {
+	if len(fixed) == 0 {
+		return 0
+	}
+
+	newArr := make(ast.PdfArray, len(annots))
+	copy(newArr, annots)
+	for i, dict := range fixed {
+		if i < len(newArr) {
+			newArr[i] = dict
+		}
+	}
+
+	if annotsRef, isRef := annotsObj.(ast.PdfIndirectRef); isRef && annotsRef.ObjectNum > 0 {
+		alloc.AllocAt(annotsRef.ObjectNum, newArr)
+		return len(fixed)
+	}
+
+	if page.Ref.ObjectNum <= 0 {
+		return 0
+	}
+	newPage := make(ast.PdfDict, len(pageDict))
+	maps.Copy(newPage, pageDict)
+	newPage["Annots"] = newArr
+	alloc.AllocAt(page.Ref.ObjectNum, newPage)
+	return len(fixed)
 }
