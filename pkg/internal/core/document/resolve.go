@@ -80,19 +80,6 @@ func ResolveDict(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.Pdf
 	return dict, nil
 }
 
-// ResolveDictRequired resolves obj and returns it as a [ast.PdfDict], returning an
-// error if the resolved object is not a dictionary.
-func ResolveDictRequired(ctx context.Context, doc *Document, obj ast.PdfObject, context string) (ast.PdfDict, error) {
-	dict, err := ResolveDict(ctx, doc, obj)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", context, err)
-	}
-	if dict == nil {
-		return nil, fmt.Errorf("%s: expected dictionary, got null or nil", context)
-	}
-	return dict, nil
-}
-
 // ResolveArray resolves obj and returns it as a [ast.PdfArray]. Returns (nil, error)
 // when the resolved object is a non-null type other than [ast.PdfArray].
 func ResolveArray(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
