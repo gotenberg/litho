@@ -75,9 +75,9 @@ func WriteOutline(
 		}
 	}
 	if catalogDict == nil {
-		d, err := document.ResolveDict(ctx, doc, catalogRef)
+		d, err := CatalogDict(ctx, doc, catalogRef)
 		if err != nil {
-			return fmt.Errorf("resolving catalog: %w", err)
+			return err
 		}
 		catalogDict = d
 	}

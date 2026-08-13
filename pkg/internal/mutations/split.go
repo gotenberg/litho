@@ -162,7 +162,7 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	if !ok {
 		return
 	}
-	catalogDict, err := document.ResolveDict(ctx, doc, catalogRef)
+	catalogDict, err := CatalogDict(ctx, doc, catalogRef)
 	if err != nil {
 		doc.Logger.Debug("resolving catalog for entry copy failed",
 			slog.Any("err", err),

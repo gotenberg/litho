@@ -12,6 +12,14 @@ import "errors"
 // leaving the caller believing the edit landed.
 var ErrPageNotAddressable = errors.New("page has no indirect reference")
 
+// ErrCatalogUnreadable reports a catalog that neither the trailer reference nor
+// the reader's recovery could produce entries for.
+//
+// A catalog with no entries is not a catalog: ISO 32000-1, 7.7.2 requires
+// /Type and /Pages. Editing one in place would write those zero entries back
+// over the real catalog, so the mutation reports this instead.
+var ErrCatalogUnreadable = errors.New("document catalog could not be read")
+
 // ErrPageTreeNotReproduced reports a full rewrite whose source catalog named a
 // page tree the output could not reproduce.
 //

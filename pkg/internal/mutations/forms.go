@@ -18,9 +18,9 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}
-	catalogDict, err := document.ResolveDict(ctx, doc, catalogRef)
+	catalogDict, err := CatalogDict(ctx, doc, catalogRef)
 	if err != nil {
-		return fmt.Errorf("resolving catalog: %w", err)
+		return err
 	}
 	acroFormObj, ok := catalogDict["AcroForm"]
 	if !ok {
@@ -201,9 +201,9 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}
-	catalogDict, err := document.ResolveDict(ctx, doc, catalogRef)
+	catalogDict, err := CatalogDict(ctx, doc, catalogRef)
 	if err != nil {
-		return fmt.Errorf("resolving catalog: %w", err)
+		return err
 	}
 
 	// Remove /AcroForm from the catalog.

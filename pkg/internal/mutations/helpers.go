@@ -37,6 +37,36 @@ func CatalogRef(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef
 	return ast.PdfIndirectRef{}, false
 }
 
+// CatalogDict returns the catalog dictionary a mutation should edit, given the
+// reference [CatalogRef] chose.
+//
+// Recovering the reference is not enough when the cross-reference table
+// misdirects it. On pdfjs issue18986.pdf the catalog's entry addresses the
+// offset of an unrelated empty dictionary, so resolving the reference yields
+// "<<>>" with no error. `litho set-bookmarks` copied those zero entries, wrote
+// "<< /Outlines 9 0 R >>" over the catalog, and reported success: the output
+// lost /Type, /Pages and every other key, leaving a document with no page tree
+// that pikepdf rejects and litho's own `bookmarks` reads as empty.
+//
+// The catalog the reader recovers is the fallback, so the update keeps the
+// entries the document actually has. An empty result is treated as a failure
+// rather than an empty catalog: a catalog with no entries is not a catalog
+// (ISO 32000-1, 7.7.2 requires /Type and /Pages), and writing one back destroys
+// the document.
+func CatalogDict(ctx context.Context, doc *document.Document, ref ast.PdfIndirectRef) (ast.PdfDict, error) {
+	dict, err := document.ResolveDict(ctx, doc, ref)
+	if err == nil && len(dict) > 0 {
+		return dict, nil
+	}
+	if resolved, rerr := document.ResolveCatalog(ctx, doc); rerr == nil && resolved != nil && len(resolved.Dict) > 0 {
+		return resolved.Dict, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolving catalog: %w", err)
+	}
+	return nil, ErrCatalogUnreadable
+}
+
 // ResolveFromAllocOrDoc checks the allocator for a pending version of the
 // object, falling back to the document. Returns nil if not found.
 func ResolveFromAllocOrDoc(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef) ast.PdfDict {
