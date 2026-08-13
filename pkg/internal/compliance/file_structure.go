@@ -593,31 +593,25 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	// Check file specification dictionaries for /EF key.
-	for _, objNum := range sortedEntryNums(doc) {
-		entry := doc.Index.Entries[objNum]
+	//
+	// Discovery goes through [collectFileSpecs] rather than a cross-reference
+	// sweep. The xref map holds only indirect objects, and ISO 32000-1 §7.11.3
+	// does not require a file specification to be one, so a sweep never sees a
+	// filespec written inline. That let a producer evade the clause outright:
+	// PDF/A-1 forbids embedded files, yet moving the same /EF-carrying filespec
+	// from an indirect object into an annotation's /FS turned a violation into
+	// a silent pass. Parts 2, 3 and 4 already discover both forms this way.
+	for _, fs := range collectFileSpecs(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return results
 		}
-		if entry.Free {
+		if !fs.hasEF {
 			continue
 		}
-
-		dict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || dict == nil {
-			continue
-		}
-
-		typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-		if typeName != "Filespec" {
-			continue
-		}
-
-		if _, hasEF := dict["EF"]; hasEF {
-			results = append(results, Violation{
-				Rule:    embeddedFilesEFRule(profile),
-				Context: fmt.Sprintf("object %d: file specification contains EF key", objNum),
-			})
-		}
+		results = append(results, Violation{
+			Rule:    embeddedFilesEFRule(profile),
+			Context: fmt.Sprintf("%s: file specification contains EF key", fs.label()),
+		})
 	}
 
 	return results
