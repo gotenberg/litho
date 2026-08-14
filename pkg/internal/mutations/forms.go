@@ -281,17 +281,25 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			continue
 		}
 
+		// A widget litho cannot bake into the page keeps its annotation. There is
+		// nothing to draw in its place, so dropping it deletes whatever it showed:
+		// pdfjs annotation-tx.pdf holds a text field with a value and no /AP at
+		// all, which viewers render by generating an appearance from /V and /DA
+		// (ISO 32000-1, 12.7.3.3), and flattening removed the widget and with it
+		// every character on the page.
 		apStream, ok := resolveWidgetAppearance(ctx, doc, annotDict)
 		if !ok {
+			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
 		}
 
 		rectArr, err := document.ResolveArray(ctx, doc, annotDict["Rect"])
 		if err != nil || len(rectArr) < 4 {
-			doc.Logger.Debug("widget /Rect invalid, skipping",
+			doc.Logger.Debug("widget /Rect invalid, keeping the annotation",
 				slog.Int("len", len(rectArr)),
 				slog.Any("err", err),
 			)
+			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
 		}
 		x1 := document.Float(rectArr[0])
