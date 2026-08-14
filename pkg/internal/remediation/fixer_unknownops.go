@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -38,37 +39,47 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		return nil, fmt.Errorf("resolving pages: %w", err)
 	}
 
-	var total int
+	var total, repaired int
 	visited := make(map[int]bool)
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		n, err := stripUnknownFromStream(ctx, alloc, doc, page, pageNum+1)
+		n, r, err := stripUnknownFromStream(ctx, alloc, doc, page, pageNum+1)
 		if err != nil {
 			return nil, err
 		}
 		total += n
+		repaired += r
 		total += stripUnknownInResources(ctx, alloc, doc, page.Resources, visited)
 	}
 
-	if total == 0 {
-		return nil, nil
+	var fixes []string
+	if total > 0 {
+		fixes = append(fixes, fmt.Sprintf("removed %d unknown content-stream operator(s)", total))
 	}
-	return []string{fmt.Sprintf("removed %d unknown content-stream operator(s)", total)}, nil
+	// Reported separately: a repair rewrites the stream without removing an
+	// operator, so folding it into the removal count would say an operator went
+	// that did not, and saying nothing would rewrite page content silently.
+	if repaired > 0 {
+		fixes = append(fixes, fmt.Sprintf("repaired %d malformed number(s) in content streams", repaired))
+	}
+	return fixes, nil
 }
 
 // stripUnknownFromStream parses a page's live content (alloc-first, so an
-// earlier fixer's rewrite is seen), strips operators outside [validOperators],
-// and writes the result back through [replaceContentStream]. Returns the number
-// of operators removed.
-func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageNum int) (int, error) {
+// earlier fixer's rewrite is seen), repairs malformed numbers, strips operators
+// outside [validOperators], and writes the result back through
+// [replaceContentStream]. Returns the number of operators removed and the number
+// of malformed numbers folded back into their operator.
+func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageNum int) (int, int, error) {
 	ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
 	if err != nil || contentsObj == nil {
-		return 0, nil
+		return 0, 0, nil
 	}
+	ops, repairs := repairMalformedNumbers(ops)
 	removed := 0
-	modified := false
+	modified := repairs > 0
 	for i, op := range ops {
 		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
 			continue
@@ -80,14 +91,14 @@ func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc
 		}
 	}
 	if !modified {
-		return 0, nil
+		return 0, 0, nil
 	}
 	filtered := filterOps(ops)
 	newData := serializeOps(filtered)
 	if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum); err != nil {
-		return removed, fmt.Errorf("replacing content stream on page %d: %w", pageNum, err)
+		return removed, repairs, fmt.Errorf("replacing content stream on page %d: %w", pageNum, err)
 	}
-	return removed, nil
+	return removed, repairs, nil
 }
 
 // stripUnknownInResources recurses into a page's /Resources/XObject
@@ -168,4 +179,105 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		}
 	}
 	return total
+}
+
+// repairMalformedNumbers folds tokens the content parser surfaced as operators,
+// but which are really numeric literals that lost their digits, back into the
+// operand list of the operator that follows. Returns how many were folded.
+//
+// ISO 32000-1, 7.3.3 writes a real as an optional sign, digits and an optional
+// decimal point, so "-." is not a number and the parser cannot treat it as one.
+// It becomes an operator, which splits the operand run around it, and stripping
+// it as an undefined operator (ISO 19005-2, 6.2.2) takes that op's operands with
+// it. On pdfjs issue15604.pdf the text matrix
+//
+//	-. -.002 .002 -. 59.64 760.026 Tm
+//
+// came out as "59.64 760.026 Tm": Tm needs six operands (Table 108) and had two,
+// so no text matrix was ever set and every one of the page's 1027 characters
+// stopped extracting. The premise that stripping an undefined operator is
+// content-preserving holds only for a real operator; a mangled operand is not
+// dead bytes, it is part of the next operator's arguments.
+//
+// The salvaged value is the token's longest valid numeric prefix, or zero when
+// it has none: "-." is negative zero, which is the value a tolerant reader
+// already shows, and keeping the operand count right matters more than the
+// digit no producer wrote.
+func repairMalformedNumbers(ops []content.Operation) ([]content.Operation, int) {
+	var pending []ast.PdfObject
+	out := make([]content.Operation, 0, len(ops))
+	repaired := 0
+
+	for _, op := range ops {
+		if malformedNumber(op.Operator) {
+			pending = append(pending, op.Operands...)
+			pending = append(pending, ast.PdfReal(numericPrefix(op.Operator)))
+			repaired++
+			continue
+		}
+		if len(pending) > 0 {
+			merged := make([]ast.PdfObject, 0, len(pending)+len(op.Operands))
+			merged = append(merged, pending...)
+			merged = append(merged, op.Operands...)
+			op.Operands = merged
+			pending = nil
+		}
+		out = append(out, op)
+	}
+	// A trailing run with no operator to attach to invokes nothing, so it is
+	// dropped rather than emitted as bare operands.
+	return out, repaired
+}
+
+// malformedNumber reports whether tok is built only from the characters a
+// numeric literal uses, which means the parser surfaced it as an operator only
+// because it is not a well-formed number (ISO 32000-1, 7.3.3). A token made of
+// digits alone would have parsed as a number and never reached here.
+func malformedNumber(tok string) bool {
+	if tok == "" {
+		return false
+	}
+	for _, r := range tok {
+		if (r < '0' || r > '9') && r != '+' && r != '-' && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+// numericPrefix returns the value of the longest leading run of tok that parses
+// as a PDF number, or zero when there is none.
+func numericPrefix(tok string) float64 {
+	end, seenDigit, seenDot := 0, false, false
+	for i, r := range tok {
+		switch {
+		case r == '+' || r == '-':
+			if i != 0 {
+				return prefixValue(tok, end, seenDigit)
+			}
+		case r == '.':
+			if seenDot {
+				return prefixValue(tok, end, seenDigit)
+			}
+			seenDot = true
+		case r >= '0' && r <= '9':
+			seenDigit = true
+		default:
+			return prefixValue(tok, end, seenDigit)
+		}
+		end = i + 1
+	}
+	return prefixValue(tok, end, seenDigit)
+}
+
+// prefixValue parses tok[:end], treating a run with no digit as zero.
+func prefixValue(tok string, end int, seenDigit bool) float64 {
+	if !seenDigit {
+		return 0
+	}
+	v, err := strconv.ParseFloat(tok[:end], 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
