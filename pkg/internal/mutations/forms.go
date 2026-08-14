@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -295,8 +296,10 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		}
 		x1 := document.Float(rectArr[0])
 		y1 := document.Float(rectArr[1])
+		x2 := document.Float(rectArr[2])
+		y2 := document.Float(rectArr[3])
 
-		apRef := alloc.Alloc(apStream)
+		apRef := alloc.Alloc(asFormXObject(apStream, x2-x1, y2-y1))
 		xobjName := ast.PdfName(fmt.Sprintf("FlatAP%d", apRef.ObjectNum))
 
 		// string(): PdfName.String already adds the slash, and "//Name Do"
@@ -402,4 +405,46 @@ func resolveWidgetAppearance(ctx context.Context, doc *document.Document, annotD
 		return ast.PdfStream{}, false
 	}
 	return apStream, true
+}
+
+// asFormXObject returns the appearance stream with the entries a form XObject
+// needs once it is invoked from page content, sized to the widget's rectangle
+// when it declares no box of its own.
+//
+// An appearance stream is a form XObject by virtue of where it sits (ISO
+// 32000-1, 12.5.5), so a producer can omit /Subtype and readers still draw it
+// through the annotation. Flattening moves it into the page's /XObject
+// resources, where Do resolves it by dictionary instead, and Table 95 makes
+// /Subtype /Form and /BBox required there. Copying the stream unchanged left
+// pdfjs checkbox-bad-appearance.pdf with a "/FlatAP20 Do" that every reader
+// skipped, so the tick of a checked box vanished from a flattened page that
+// still reported success.
+//
+// The box is only synthesised when absent: a stream that declares one is placed
+// by it, and overriding that would move the appearance. Width and height come
+// from /Rect, matching the translation the caller emits, and negative extents
+// are normalised because a rectangle's corners may be given in either order
+// (7.9.5).
+func asFormXObject(stream ast.PdfStream, width, height float64) ast.PdfStream {
+	_, hasSubtype := stream.Dict["Subtype"]
+	_, hasBBox := stream.Dict["BBox"]
+	if hasSubtype && hasBBox {
+		return stream
+	}
+
+	dict := make(ast.PdfDict, len(stream.Dict)+3)
+	maps.Copy(dict, stream.Dict)
+	dict["Type"] = ast.PdfName("XObject")
+	if !hasSubtype {
+		dict["Subtype"] = ast.PdfName("Form")
+	}
+	if !hasBBox {
+		dict["BBox"] = ast.PdfArray{
+			ast.PdfInt(0), ast.PdfInt(0),
+			ast.PdfReal(math.Abs(width)), ast.PdfReal(math.Abs(height)),
+		}
+	}
+	// Through the original loader, so the bytes stay raw and lazy: the copied
+	// dictionary still names the /Filter they are encoded with.
+	return ast.NewLazyStream(dict, stream.Bytes)
 }
