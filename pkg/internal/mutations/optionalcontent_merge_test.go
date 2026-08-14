@@ -46,8 +46,12 @@ func optionalContentPDF() []byte {
 	return buf.Bytes()
 }
 
-// ocgIdentity reports, for the first page of data, which of its /Properties
-// groups the configuration switches off and which are missing from /OCGs.
+// ocgIdentity reports, across every page of data, how many /Properties groups
+// the configuration switches off and how many are missing from /OCGs.
+//
+// Every page, not just the first: an earlier version of this test looked only
+// at page one and passed while every later source's groups were still orphaned,
+// because page one comes from the source whose catalog entry was carried.
 func ocgIdentity(t *testing.T, data []byte) (off []ast.PdfName, absent []ast.PdfName) {
 	t.Helper()
 
@@ -66,15 +70,6 @@ func ocgIdentity(t *testing.T, data []byte) (off []ast.PdfName, absent []ast.Pdf
 	}
 	if len(pages) == 0 {
 		t.Fatal("no pages")
-	}
-
-	resources, err := document.ResolveDict(ctx, doc, pages[0].Dict["Resources"])
-	if err != nil {
-		t.Fatalf("resolving /Resources: %v", err)
-	}
-	properties, err := document.ResolveDict(ctx, doc, resources["Properties"])
-	if err != nil {
-		t.Fatalf("resolving /Properties: %v", err)
 	}
 
 	ocp, err := document.ResolveDict(ctx, doc, catalog.Dict["OCProperties"])
@@ -101,16 +96,26 @@ func ocgIdentity(t *testing.T, data []byte) (off []ast.PdfName, absent []ast.Pdf
 	}
 	offSet, allSet := nums(def["OFF"]), nums(ocp["OCGs"])
 
-	for name, val := range properties {
-		ref, ok := val.(ast.PdfIndirectRef)
-		if !ok {
-			continue
+	for _, page := range pages {
+		resources, rerr := document.ResolveDict(ctx, doc, page.Dict["Resources"])
+		if rerr != nil {
+			t.Fatalf("resolving /Resources: %v", rerr)
 		}
-		if offSet[ref.ObjectNum] {
-			off = append(off, name)
+		properties, perr := document.ResolveDict(ctx, doc, resources["Properties"])
+		if perr != nil {
+			t.Fatalf("resolving /Properties: %v", perr)
 		}
-		if !allSet[ref.ObjectNum] {
-			absent = append(absent, name)
+		for name, val := range properties {
+			ref, ok := val.(ast.PdfIndirectRef)
+			if !ok {
+				continue
+			}
+			if offSet[ref.ObjectNum] {
+				off = append(off, name)
+			}
+			if !allSet[ref.ObjectNum] {
+				absent = append(absent, name)
+			}
 		}
 	}
 	return off, absent
@@ -165,9 +170,11 @@ func TestMergeKeepsOptionalContentGroupIdentity(t *testing.T) {
 
 	off, absent := ocgIdentity(t, merged.Bytes())
 	if len(absent) != 0 {
-		t.Errorf("merged page names %v, which /OCProperties /OCGs does not list", absent)
+		t.Errorf("merged pages name %v, which /OCProperties /OCGs does not list", absent)
 	}
-	if len(off) != 1 {
-		t.Errorf("merged page has %v switched off, want the one the source hid", off)
+	// One hidden group per source: carrying only the first source's
+	// /OCProperties left every later source's layers switched on.
+	if len(off) != len(docs) {
+		t.Errorf("merged pages have %v switched off, want one per source (%d)", off, len(docs))
 	}
 }
