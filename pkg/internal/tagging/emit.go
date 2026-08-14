@@ -296,8 +296,12 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 		return nil
 	}
 	names := make(map[string]bool)
+	// One memo for the whole page: sibling resources routinely invoke the same
+	// forms, and re-deciding a shared subtree per name is the same waste the
+	// memo exists to stop inside a single scan.
+	answers := make(map[int]bool)
 	for name, entry := range xobjs {
-		if formPaintsText(ctx, doc, entry, make(map[int]bool), 0) {
+		if paints, _ := formPaintsText(ctx, doc, entry, make(map[int]bool), answers, 0); paints {
 			names[string(name)] = true
 		}
 	}
@@ -314,46 +318,80 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 // toward "paints text": a form wrongly kept out of an /Artifact leaves an
 // honest ISO 14289-1, 7.1 residual, while one wrongly swept in hides real words
 // from assistive technology.
-func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfObject, visited map[int]bool, depth int) bool {
+//
+// visited holds the forms on the current path and breaks the cycles ISO 32000-1,
+// 8.10.1 forbids but files still contain. answers memoises the decision per
+// object so a form reached by several paths is decoded once: forms nest as a
+// DAG, not a tree, and re-deciding each subtree per path costs time exponential
+// in the nesting depth. pdfjs issue6961.pdf reaches ten levels, and `litho
+// remediate -profile PDF/UA-1` on it ran for over 50 minutes at 142% CPU,
+// re-inflating the same streams, until the depth cap finally exhausted the
+// search. It never returned within any run of the corpus harness.
+//
+// complete reports whether the answer was reached without the depth cap cutting
+// the search short. Only a complete answer is memoised: a false produced by
+// running out of depth says nothing about the same form reached higher up,
+// where the remaining budget would let the search continue.
+func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfObject, visited map[int]bool, answers map[int]bool, depth int) (paints, complete bool) {
 	if depth > maxTextScanDepth {
-		return false
+		return false, false
 	}
+	objNum := 0
 	if ref, ok := entry.(ast.PdfIndirectRef); ok {
-		if visited[ref.ObjectNum] {
-			return false
+		objNum = ref.ObjectNum
+		if known, ok := answers[objNum]; ok {
+			return known, true
 		}
-		visited[ref.ObjectNum] = true
-		defer delete(visited, ref.ObjectNum)
+		if visited[objNum] {
+			// A cycle contributes no text of its own, and the path that
+			// opened it still owns the answer, so this is not memoised.
+			return false, true
+		}
+		visited[objNum] = true
+		defer delete(visited, objNum)
 	}
+	memoise := func(paints, complete bool) (bool, bool) {
+		if objNum > 0 && complete {
+			answers[objNum] = paints
+		}
+		return paints, complete
+	}
+
 	stream, err := document.ResolveStream(ctx, doc, entry)
 	if err != nil || stream.Dict == nil {
-		return false
+		return memoise(false, true)
 	}
 	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
-		return false
+		return memoise(false, true)
 	}
 	body, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		doc.Logger.Debug("decoding form xobject for text scan", slog.Any("err", err))
-		return false
+		return memoise(false, true)
 	}
 	if showsText(body) {
-		return true
+		return memoise(true, true)
 	}
 	nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 	if err != nil || nested == nil {
-		return false
+		return memoise(false, true)
 	}
 	inner, err := document.ResolveDict(ctx, doc, nested["XObject"])
 	if err != nil || inner == nil {
-		return false
+		return memoise(false, true)
 	}
+
+	childrenComplete := true
 	for _, child := range inner {
-		if formPaintsText(ctx, doc, child, visited, depth+1) {
-			return true
+		paints, complete := formPaintsText(ctx, doc, child, visited, answers, depth+1)
+		if paints {
+			return memoise(true, true)
+		}
+		if !complete {
+			childrenComplete = false
 		}
 	}
-	return false
+	return memoise(false, childrenComplete)
 }
 
 // showsText reports whether a content stream carries a text-showing operator
