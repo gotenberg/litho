@@ -408,6 +408,22 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		doc.Crypto = handler
 		doc.Authenticated = handler.Authenticated
 
+		// Anything parsed before this point was parsed without the decryption
+		// function, so its strings and streams are still ciphertext. Recovery
+		// does exactly that: a raw-scan rebuild resolves every object it found
+		// looking for object streams, which runs above and caches all of them.
+		// On pdfjs issue5909_original.pdf, whose final startxref points into a
+		// superseded revision, that left all 43 objects cached as ciphertext,
+		// so `litho metadata` reported the encrypted bytes as the /Author and
+		// `litho text` found nothing in a document poppler reads. A full
+		// rewrite then dropped /Encrypt while copying those bytes verbatim,
+		// turning a readable file into an unreadable one and reporting success.
+		//
+		// [Document.Authenticate] already clears the caches for this reason,
+		// but a document that opens on the empty user password authenticates
+		// inside [crypto.NewHandler] and never calls it.
+		doc.resetParsedObjectCaches()
+
 		doc.Logger.Debug("encryption detected",
 			slog.Int("V", handler.V),
 			slog.Int("key_length", handler.Length),
@@ -441,17 +457,24 @@ func (d *Document) Authenticate(password string) error {
 		return fmt.Errorf("invalid password or unsupported encryption: %w", err)
 	}
 	d.Authenticated = true
-	// Clear object cache in case we cached encrypted items
-	// (though we shouldn't have been able to read them). The
-	// format-violation record is keyed to those same parses, so it goes
-	// with them: whatever is re-parsed re-records.
+	d.resetParsedObjectCaches()
+	return nil
+}
+
+// resetParsedObjectCaches drops everything parsed so far so the next resolution
+// re-reads it through the decryption function now in force.
+//
+// Objects cached before the crypto handler existed hold ciphertext, and nothing
+// downstream can tell the difference: a resolve is a cache hit and the encrypted
+// bytes are returned as the object's value. The format-violation record is keyed
+// to those same parses, so it goes with them; whatever is re-parsed re-records.
+func (d *Document) resetParsedObjectCaches() {
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.objectCache = make(map[int]ast.PdfObject)
 	d.objStmCache = nil
 	d.objStmCacheBytes = 0
 	d.formatViolations = nil
-	d.mu.Unlock()
-	return nil
 }
 
 // initCatalogVersion checks the catalog /Version key and overrides the header
