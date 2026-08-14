@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-08-13T12:44:15Z",
+  "captured_at": "2026-08-14T10:37:35Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -110,12 +110,12 @@
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 21,
-            "litho_fixed": 3070,
-            "litho_post": 1441,
+            "litho_fixed": 3115,
+            "litho_post": 1396,
             "litho_pre": 4511,
             "parse_failed": 0,
-            "verapdf_fixed": 3069,
-            "verapdf_post": 1441,
+            "verapdf_fixed": 3114,
+            "verapdf_post": 1396,
             "verapdf_pre": 4510
           }
         },
@@ -126,12 +126,12 @@
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 21,
-            "litho_fixed": 3156,
-            "litho_post": 1355,
+            "litho_fixed": 3201,
+            "litho_post": 1310,
             "litho_pre": 4511,
             "parse_failed": 0,
-            "verapdf_fixed": 3155,
-            "verapdf_post": 1355,
+            "verapdf_fixed": 3200,
+            "verapdf_post": 1310,
             "verapdf_pre": 4510
           }
         }
@@ -196,17 +196,17 @@
     "pdfjs": {
       "features": {
         "metadata": {
-          "matched": 1183,
-          "mismatched": 7,
+          "matched": 1185,
+          "mismatched": 5,
           "skipped": 1
         },
         "text": {
-          "matched": 1023,
-          "mismatched": 167,
+          "matched": 1024,
+          "mismatched": 166,
           "skipped": 1,
           "metrics": {
-            "chars_match": 1106,
-            "words_match": 1023
+            "chars_match": 1108,
+            "words_match": 1024
           }
         }
       }
