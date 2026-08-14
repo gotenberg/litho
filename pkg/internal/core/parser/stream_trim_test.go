@@ -43,8 +43,11 @@ func TestParseStream_EncryptedStreamNotTrimmed(t *testing.T) {
 		}
 	})
 
-	t.Run("plain: trailing EOL trimmed", func(t *testing.T) {
+	t.Run("plain: exact /Length keeps its last byte", func(t *testing.T) {
 		t.Parallel()
+		// Same bytes as the encrypted case: the separator before "endstream"
+		// survives, so /Length 6 stopped at the last data byte and that byte is
+		// data even though it is a newline.
 		p := newParser(src)
 		obj, err := p.ParseObject(context.Background())
 		if err != nil {
@@ -58,10 +61,67 @@ func TestParseStream_EncryptedStreamNotTrimmed(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bytes: %v", err)
 		}
-		if len(b) != 5 {
-			t.Errorf("plain stream length = %d, want 5 (trailing newline trimmed)", len(b))
+		if len(b) != 6 {
+			t.Errorf("plain stream length = %d, want 6 (a counted newline is data)", len(b))
 		}
 	})
+
+	t.Run("plain: folded EOL trimmed", func(t *testing.T) {
+		t.Parallel()
+		// No separator: "endstream" follows the counted bytes directly, so the
+		// producer folded the marker into /Length. That is the case the trim
+		// exists for, and it still runs.
+		p := newParser("<< /Length 6 >>\nstream\nHello\nendstream")
+		obj, err := p.ParseObject(context.Background())
+		if err != nil {
+			t.Fatalf("ParseObject: %v", err)
+		}
+		s, ok := obj.(ast.PdfStream)
+		if !ok {
+			t.Fatalf("got %T, want ast.PdfStream", obj)
+		}
+		b, err := s.Bytes(context.Background())
+		if err != nil {
+			t.Fatalf("Bytes: %v", err)
+		}
+		if len(b) != 5 {
+			t.Errorf("plain stream length = %d, want 5 (folded newline trimmed)", len(b))
+		}
+	})
+}
+
+// TestParseStream_CountedNewlineTerminatesComment pins the reason a counted
+// trailing newline matters: it can be the only thing ending a comment.
+//
+// pdfjs annotation-as.pdf splits a page's content into a /Contents array whose
+// first part is the single comment "% CANON_PFINF_TYPE2_TEXTON\n", declared as
+// /Length 27 with the separator written after it. Trimming the counted newline
+// left the comment unterminated, and a comment runs to the end of the line
+// (ISO 32000-1, 7.2.4), so on concatenation it swallowed the "q" that opened the
+// next part. The unbalanced q/Q pair moved the rest of the page out of view and
+// `litho split` produced a page whose text no reader could find.
+func TestParseStream_CountedNewlineTerminatesComment(t *testing.T) {
+	t.Parallel()
+
+	const comment = "% CANON_PFINF_TYPE2_TEXTON\n"
+	src := "<< /Length 27 >>\nstream\n" + comment + "\nendstream"
+
+	p := newParser(src)
+	obj, err := p.ParseObject(context.Background())
+	if err != nil {
+		t.Fatalf("ParseObject: %v", err)
+	}
+	s, ok := obj.(ast.PdfStream)
+	if !ok {
+		t.Fatalf("got %T, want ast.PdfStream", obj)
+	}
+	b, err := s.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("Bytes: %v", err)
+	}
+	if string(b) != comment {
+		t.Errorf("stream = %q, want %q (the comment must keep its terminator)", b, comment)
+	}
 }
 
 // TestParseStream_XRefStreamNotTrimmed pins that a cross-reference stream's

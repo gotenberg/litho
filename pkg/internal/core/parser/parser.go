@@ -429,11 +429,39 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 	//     the data (§7.3.8.1). A real trailing 0x0A/0x0D field byte trimmed here
 	//     shortens the table, fails the parse, and forces a raw-scan rebuild that
 	//     cannot recover compressed objects (the whole page tree can be lost).
+	//   - Any stream whose /Length already stops at the last data byte, which a
+	//     surviving separator proves (see [separatorPrecedesEndstream]).
 	trimLen := dataLen
-	if (p.decryptFn == nil || streamUsesIdentityCryptFilter(dict)) && !isXRefStream(dict) {
+	exactLength := usedLength && separatorPrecedesEndstream(reader.ReaderAt(), streamStart+dataLen)
+	if (p.decryptFn == nil || streamUsesIdentityCryptFilter(dict)) && !isXRefStream(dict) && !exactLength {
 		trimLen = trimStreamTail(reader.ReaderAt(), streamStart, dataLen)
 	}
 	return p.newLazyStream(dict, reader.ReaderAt(), streamStart, trimLen), nil
+}
+
+// separatorPrecedesEndstream reports whether an end-of-line marker sits at off,
+// the position just past a stream body delimited by a usable /Length.
+//
+// ISO 32000-1, 7.3.8.1 places an optional EOL marker between the stream data and
+// "endstream" and states it shall not be included in the stream length. A
+// surviving marker therefore proves /Length stopped at the last data byte, so
+// that byte is data even when it is itself a CR or LF and nothing may be trimmed.
+// pdfjs annotation-as.pdf declares /Length 27 for the content stream part
+// "% CANON_PFINF_TYPE2_TEXTON\n" and writes the separator after it; trimming the
+// counted newline left the comment unterminated, and since a comment runs to the
+// end of the line (7.2.4) it swallowed the "q" that opened the next part of the
+// same /Contents array. The unbalanced q/Q pair moved the rest of the page out of
+// view, so `litho split` produced a page whose text no reader could find.
+//
+// Absence proves nothing: a producer that folded the marker into /Length is
+// indistinguishable from one whose data simply ends in a newline, so the trim
+// still runs there.
+func separatorPrecedesEndstream(src io.ReaderAt, off int64) bool {
+	var b [1]byte
+	if _, err := src.ReadAt(b[:], off); err != nil {
+		return false
+	}
+	return b[0] == '\n' || b[0] == '\r'
 }
 
 // isXRefStream reports whether dict is a cross-reference stream (/Type /XRef).
