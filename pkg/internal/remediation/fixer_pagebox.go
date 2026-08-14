@@ -55,7 +55,7 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	// other box it has no default, so it cannot simply be dropped. Prefer a
 	// size the document itself already uses, which is far likelier to contain
 	// the page's content than the 3-unit minimum.
-	fallbackMedia := widestUsableMediaBox(pageEntries)
+	fallbackMedia := widestUsableMediaBox(ctx, doc, pageEntries)
 
 	count := 0
 	for _, pe := range pageEntries {
@@ -120,11 +120,16 @@ var defaultMediaBox = ast.PdfArray{
 // the largest AREA is not enough: boundingBox_invalid.pdf has an 800x600 page
 // and a 600x800 one, identical in area, and choosing the first still cropped
 // away text drawn at y=700.
-func widestUsableMediaBox(entries []annotPageEntry) ast.PdfArray {
+// The box is resolved rather than type-asserted: any object may be written as
+// an indirect reference (ISO 32000-1, 7.3.10), and a page that writes its
+// /MediaBox that way was skipped here. The fallback then came from the default
+// instead of the sibling page, which is exactly the cropping this function
+// exists to avoid: a page beside an indirect 800x600 box was given 612x792.
+func widestUsableMediaBox(ctx context.Context, doc *document.Document, entries []annotPageEntry) ast.PdfArray {
 	maxW, maxH := 0.0, 0.0
 	for _, pe := range entries {
-		arr, ok := pe.dict["MediaBox"].(ast.PdfArray)
-		if !ok || len(arr) != 4 || isDegenerateBox(arr) {
+		arr, err := document.ResolveArray(ctx, doc, pe.dict["MediaBox"])
+		if err != nil || len(arr) != 4 || isDegenerateBox(arr) {
 			continue
 		}
 		maxW = math.Max(maxW, math.Abs(document.Float(arr[2])-document.Float(arr[0])))

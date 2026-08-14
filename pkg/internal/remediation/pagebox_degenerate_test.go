@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -39,7 +40,7 @@ func TestDegenerateBoxRepairKeepsContent(t *testing.T) {
 		{dict: ast.PdfDict{"MediaBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(600), ast.PdfInt(800)}}},
 		{dict: ast.PdfDict{"MediaBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)}}},
 	}
-	got := widestUsableMediaBox(entries)
+	got := widestUsableMediaBox(context.Background(), nil, entries)
 	want := ast.PdfArray{ast.PdfReal(0), ast.PdfReal(0), ast.PdfReal(800), ast.PdfReal(800)}
 	if len(got) != 4 {
 		t.Fatalf("widestUsableMediaBox returned %v", got)
@@ -51,7 +52,7 @@ func TestDegenerateBoxRepairKeepsContent(t *testing.T) {
 	}
 
 	// With nothing usable in the document, fall back to a real page size.
-	if fb := widestUsableMediaBox(nil); len(fb) != 4 || fb[3] != ast.PdfReal(792) {
+	if fb := widestUsableMediaBox(context.Background(), nil, nil); len(fb) != 4 || fb[3] != ast.PdfReal(792) {
 		t.Errorf("fallback = %v, want US Letter", fb)
 	}
 }
