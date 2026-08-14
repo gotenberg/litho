@@ -90,7 +90,7 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				continue
 			}
 
-			if needsAppearance(annotDict) {
+			if needsAppearance(ctx, doc, annotDict) {
 				bbox := normalizeBBox(rect)
 				apRef := allocateBlankForm(alloc, bbox)
 
@@ -137,13 +137,21 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // alone, even if the /N payload itself is malformed: inspecting the /N
 // target would require resolving and validating a stream, and overwriting
 // a user-supplied appearance risks losing intent.
-func needsAppearance(annotDict ast.PdfDict) bool {
-	apObj, hasAP := annotDict["AP"]
-	if !hasAP {
+//
+// The /AP entry is resolved rather than type-asserted: any object may be given
+// as an indirect reference (ISO 32000-1, 7.3.10), and asserting the dictionary
+// directly made every such annotation look as if it had no appearance at all.
+// The fixer then replaced a real appearance with a blank form. On pdfjs
+// bug1778692.pdf 36 of 63 widgets write /AP indirectly, and remediation blanked
+// them: the appearance streams that drew text fell from 11 to 2 and 147
+// characters of filled-in form values disappeared from a document veraPDF then
+// called conformant.
+func needsAppearance(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	if _, hasAP := annotDict["AP"]; !hasAP {
 		return true
 	}
-	apDict, ok := apObj.(ast.PdfDict)
-	if !ok {
+	apDict, err := document.ResolveDict(ctx, doc, annotDict["AP"])
+	if err != nil || apDict == nil {
 		return true
 	}
 	_, hasN := apDict["N"]
@@ -192,8 +200,11 @@ func normalizeBBox(rect ast.PdfArray) ast.PdfArray {
 // /Off → /N-stream (§6.3.3 test 3). Returns (nil, false) when no change
 // is needed.
 func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (ast.PdfDict, bool) {
-	apDict, ok := annotDict["AP"].(ast.PdfDict)
-	if !ok {
+	// Resolved, not type-asserted: an indirect /AP (ISO 32000-1, 7.3.10) used to
+	// skip this normalisation entirely, so /D and /R survived where 6.3.3 test 2
+	// allows only /N.
+	apDict, err := document.ResolveDict(ctx, doc, annotDict["AP"])
+	if err != nil || apDict == nil {
 		return nil, false
 	}
 	newAP := make(ast.PdfDict, len(apDict))
