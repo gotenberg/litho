@@ -401,7 +401,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		}
 
 		doc.IsEncrypted = true
-		handler, err := crypto.NewHandler(encDict, doc.Index.Trailer)
+		handler, err := crypto.NewHandler(doc.resolveEncryptEntries(ctx, encDict), doc.Index.Trailer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize crypto handler: %w", err)
 		}
@@ -589,4 +589,57 @@ func (d *Document) ReadFileBytes(ctx context.Context, offset int64, length int64
 		return nil, err
 	}
 	return buf, nil
+}
+
+// resolveEncryptEntries returns the encryption dictionary with its indirect
+// entries replaced by the objects they name, including the crypt filter
+// dictionaries nested inside /CF.
+//
+// [crypto.NewHandler] is given a dictionary and no way to resolve anything, so
+// every entry it reads must already be a value. ISO 32000-1, 7.3.10 lets any
+// object be written indirectly, and an AES document that writes /CF that way
+// left the handler unable to see a crypt filter at all: it fell back to the V2
+// default and decrypted the whole file with RC4 (Table 25). Authentication still
+// succeeded, because /O and /U do not depend on the cipher, so litho reported an
+// authenticated document and returned every string and stream as garbage.
+//
+// Resolving here is safe for the same reason the caller resolves /Encrypt
+// itself: the values in an encryption dictionary are never encrypted (7.6.2),
+// and doc.Crypto is not yet set, so no decryption is applied to them.
+func (d *Document) resolveEncryptEntries(ctx context.Context, encDict ast.PdfDict) ast.PdfDict {
+	resolved := make(ast.PdfDict, len(encDict))
+	for key, value := range encDict {
+		resolved[key] = d.resolveEncryptValue(ctx, value)
+	}
+
+	// /CF holds one dictionary per crypt filter name (Table 25), and each of
+	// those may itself be indirect.
+	filters, ok := resolved["CF"].(ast.PdfDict)
+	if !ok {
+		return resolved
+	}
+	newFilters := make(ast.PdfDict, len(filters))
+	for name, filter := range filters {
+		newFilters[name] = d.resolveEncryptValue(ctx, filter)
+	}
+	resolved["CF"] = newFilters
+	return resolved
+}
+
+// resolveEncryptValue resolves one encryption-dictionary entry, leaving it
+// untouched when it is already a value or cannot be read.
+func (d *Document) resolveEncryptValue(ctx context.Context, value ast.PdfObject) ast.PdfObject {
+	ref, ok := value.(ast.PdfIndirectRef)
+	if !ok {
+		return value
+	}
+	obj, err := d.Resolve(ctx, ref)
+	if err != nil {
+		d.Logger.Debug("resolving an encryption dictionary entry failed",
+			slog.Int("object", ref.ObjectNum),
+			slog.Any("err", err),
+		)
+		return value
+	}
+	return obj
 }
