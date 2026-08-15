@@ -190,3 +190,82 @@ func TestAnnotAppearanceStillFixesAnEmptyFreeText(t *testing.T) {
 		t.Error("an annotation with no text draws nothing, so it should still receive an appearance")
 	}
 }
+
+// lineAnnotPDF builds a page with one line annotation carrying /Contents and no
+// appearance. captioned controls /Cap, which is what decides whether that text
+// is drawn (ISO 32000-1, Table 175).
+func lineAnnotPDF(captioned bool) []byte {
+	cap := "false"
+	if captioned {
+		cap = "true"
+	}
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Line /L [10 10 200 10] /Contents ( Please note ) " +
+			"/Cap " + cap + " /CP /Inline /Rect [10 0 200 30] /F 4 >>",
+	}
+
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	start := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, start)
+	return b.Bytes()
+}
+
+func lineAnnotGainedAP(t *testing.T, captioned bool) bool {
+	t.Helper()
+	ctx := context.Background()
+	data := lineAnnotPDF(captioned)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixAnnotAppearance: %v", err)
+	}
+	queued, ok := alloc.Pending()[4].(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	_, gained := queued["AP"]
+	return gained
+}
+
+// TestAnnotAppearanceLeavesACaptionedLineAlone pins that a line annotation whose
+// caption is enabled keeps being drawn from /Contents.
+//
+// /Cap true replicates /Contents as a caption in the line's appearance (ISO
+// 32000-1, 12.5.6.7). Supplying a blank form to satisfy ISO 19005-2, 6.3.3
+// replaced it with nothing: pdfjs issue14203.pdf page 11 lost the caption
+// "Please note".
+func TestAnnotAppearanceLeavesACaptionedLineAlone(t *testing.T) {
+	t.Parallel()
+
+	if lineAnnotGainedAP(t, true) {
+		t.Error("a captioned line annotation was given a blank appearance, dropping its caption")
+	}
+}
+
+// TestAnnotAppearanceStillFixesAnUncaptionedLine pins the other side: without
+// /Cap the /Contents is only an alternate description, nothing is drawn from it,
+// and the annotation still needs the appearance 6.3.3 requires.
+func TestAnnotAppearanceStillFixesAnUncaptionedLine(t *testing.T) {
+	t.Parallel()
+
+	if !lineAnnotGainedAP(t, false) {
+		t.Error("an uncaptioned line draws no text, so it should still receive an appearance")
+	}
+}

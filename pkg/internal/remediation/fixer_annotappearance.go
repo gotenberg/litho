@@ -284,6 +284,15 @@ func rendersOwnValue(ctx context.Context, doc *document.Document, annotDict ast.
 	if subtype == "FreeText" {
 		return hasRenderableValue(ctx, doc, annotDict["Contents"])
 	}
+	// A line annotation replicates /Contents as a caption on the line when /Cap
+	// is true (ISO 32000-1, 12.5.6.7, Table 175). Without it, /Contents is only
+	// an alternate description and nothing is drawn from it.
+	if subtype == "Line" {
+		if !annotationCaptionEnabled(ctx, doc, annotDict) {
+			return false
+		}
+		return hasRenderableValue(ctx, doc, annotDict["Contents"])
+	}
 	if subtype != "Widget" {
 		return false
 	}
@@ -342,4 +351,15 @@ func hasRenderableValue(ctx context.Context, doc *document.Document, value ast.P
 	default:
 		return false
 	}
+}
+
+// annotationCaptionEnabled reports whether a line annotation asks for its
+// /Contents to be drawn as a caption (ISO 32000-1, Table 175 /Cap).
+func annotationCaptionEnabled(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	resolved, err := document.ResolveObject(ctx, doc, annotDict["Cap"])
+	if err != nil {
+		return false
+	}
+	enabled, ok := resolved.(ast.PdfBool)
+	return ok && bool(enabled)
 }
