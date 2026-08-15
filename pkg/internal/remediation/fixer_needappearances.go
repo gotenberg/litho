@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -41,6 +42,13 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			return nil, nil
 		}
 		acroForm = resolved
+	}
+
+	// Removing the flag hands authority to the stored appearances. When a field
+	// has a value that only the viewer's own generation puts on the page, that
+	// discards it, so the violation stays as a residual the caller can see.
+	if needAppearancesShowsAValue(ctx, doc) {
+		return nil, nil
 	}
 
 	newAcroForm := make(ast.PdfDict, len(acroForm))
@@ -229,4 +237,152 @@ func resolveFromAllocOrDoc(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		return nil
 	}
 	return d
+}
+
+// maxAppearanceNestDepth bounds how far the search for a text-showing operator
+// follows nested form XObjects inside an appearance. This is an anti-DoS guard,
+// not a spec limit: a crafted appearance can nest indefinitely, while a real one
+// nests a level or two (the /FRM wrapper Acrobat writes around signature art).
+const maxAppearanceNestDepth = 3
+
+// needAppearancesShowsAValue reports whether any field on the page is showing
+// its value only because /NeedAppearances asks the viewer to build the
+// appearance.
+//
+// ISO 32000-1, 12.7.3.3 lets a producer store a placeholder appearance and set
+// the flag, leaving the viewer to draw /V. Removing the flag to satisfy ISO
+// 19005-2, 6.9 then makes that placeholder authoritative: pdfjs issue12233.pdf
+// keeps 12-to-45 byte appearances that paint no glyphs at all, and remediation
+// silently dropped the field values "Man", "150" and "Red" from the page.
+//
+// Only a field whose stored appearance shows no text counts. One that already
+// draws its value loses nothing when the viewer stops regenerating.
+func needAppearancesShowsAValue(ctx context.Context, doc *document.Document) bool {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		return false
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		return false
+	}
+
+	for _, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return false
+		}
+		annots, err := document.ResolveArray(ctx, doc, page.Dict["Annots"])
+		if err != nil {
+			continue
+		}
+		for _, annotObj := range annots {
+			annot, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if !rendersOwnValue(ctx, doc, annot, subtype) {
+				continue
+			}
+			if !appearanceShowsText(ctx, doc, annot["AP"], 0) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// appearanceShowsText reports whether an /AP entry paints any text, following
+// the form XObjects it invokes.
+func appearanceShowsText(ctx context.Context, doc *document.Document, obj ast.PdfObject, depth int) bool {
+	if depth > maxAppearanceNestDepth || obj == nil {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+
+	switch v := resolved.(type) {
+	case ast.PdfStream:
+		data, err := doc.DecodeStream(ctx, v)
+		if err != nil {
+			return false
+		}
+		if showsTextOperator(data) {
+			return true
+		}
+		nested, err := document.ResolveDict(ctx, doc, v.Dict["Resources"])
+		if err != nil || nested == nil {
+			return false
+		}
+		inner, err := document.ResolveDict(ctx, doc, nested["XObject"])
+		if err != nil || inner == nil {
+			return false
+		}
+		// Only the XObjects this stream actually invokes. A /Resources
+		// dictionary routinely lists more than its stream uses, and following
+		// all of them found text in an unrelated image: the placeholder
+		// appearance "/Tx BMC EMC" in pdfjs issue12233.pdf carries an /Im4 the
+		// page uses elsewhere, so the field looked as though it drew its value.
+		for name, child := range inner {
+			if !invokesXObject(data, name) {
+				continue
+			}
+			if appearanceShowsText(ctx, doc, child, depth+1) {
+				return true
+			}
+		}
+	case ast.PdfDict:
+		// /AP itself, or an /N holding one appearance per state.
+		for _, entry := range v {
+			if appearanceShowsText(ctx, doc, entry, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// showsTextOperator reports whether a content stream carries a text-showing
+// operator (ISO 32000-1, Table 109).
+func showsTextOperator(data []byte) bool {
+	for _, op := range [][]byte{[]byte("Tj"), []byte("TJ"), {'\''}, {'"'}} {
+		if bytes.Contains(data, op) {
+			return true
+		}
+	}
+	return false
+}
+
+// invokesXObject reports whether a content stream names an XObject and invokes
+// it with Do (ISO 32000-1, 8.8).
+func invokesXObject(data []byte, name ast.PdfName) bool {
+	needle := append([]byte{'/'}, []byte(name)...)
+	for i := 0; ; {
+		j := bytes.Index(data[i:], needle)
+		if j < 0 {
+			return false
+		}
+		rest := data[i+j+len(needle):]
+		// The name ends here only if a delimiter follows, so /Im4 does not
+		// match /Im41.
+		if len(rest) > 0 && !isPdfDelimiter(rest[0]) {
+			i += j + len(needle)
+			continue
+		}
+		if bytes.HasPrefix(bytes.TrimLeft(rest, " \t\r\n"), []byte("Do")) {
+			return true
+		}
+		i += j + len(needle)
+	}
+}
+
+// isPdfDelimiter reports whether c ends a name token (ISO 32000-1, 7.2.2).
+func isPdfDelimiter(c byte) bool {
+	switch c {
+	case ' ', '\t', '\r', '\n', '\f', 0, '/', '[', ']', '<', '>', '(', ')', '{', '}', '%':
+		return true
+	}
+	return false
 }
