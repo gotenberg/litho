@@ -103,3 +103,90 @@ func TestAnnotAppearanceStillFixesAnEmptyField(t *testing.T) {
 		t.Error("an empty field draws nothing, so it should still receive the appearance 6.3.3 requires")
 	}
 }
+
+// freeTextPDF builds a page whose only content is a free text annotation with
+// no appearance stream, as pdfjs issue16021.pdf is. When empty is set the
+// annotation carries no text, so a blank appearance costs nothing.
+func freeTextPDF(empty bool) []byte {
+	contents := "(Hello World)"
+	if empty {
+		contents = "()"
+	}
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /FreeText /Contents " + contents +
+			" /DA (/Helv 10 Tf 0 g) /Rect [185 558 241 576] /F 4 >>",
+	}
+
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	start := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, start)
+	return b.Bytes()
+}
+
+// TestAnnotAppearanceLeavesAFreeTextAlone pins that a free text annotation
+// carrying text keeps being drawn from it.
+//
+// A free text annotation displays the text in /Contents through /DA when it
+// stores no appearance (ISO 32000-1, 12.5.6.6), the same machinery a
+// variable-text field uses. Giving it a blank form to satisfy ISO 19005-2,
+// 6.3.3 replaced that with nothing: pdfjs issue16021.pdf, whose whole page is
+// one /FreeText reading "Hello World", came out of remediation empty.
+func TestAnnotAppearanceLeavesAFreeTextAlone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := freeTextPDF(false)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+
+	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixAnnotAppearance: %v", err)
+	}
+	if queued, ok := alloc.Pending()[4].(ast.PdfDict); ok {
+		if _, gained := queued["AP"]; gained {
+			t.Error("a free text annotation carrying text was given a blank appearance, replacing what the viewer draws")
+		}
+	}
+}
+
+// TestAnnotAppearanceStillFixesAnEmptyFreeText pins that an annotation with no
+// text still receives the appearance 6.3.3 requires.
+func TestAnnotAppearanceStillFixesAnEmptyFreeText(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := freeTextPDF(true)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+
+	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixAnnotAppearance: %v", err)
+	}
+	queued, ok := alloc.Pending()[4].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the empty annotation was not rewritten: %T", alloc.Pending()[4])
+	}
+	if _, gained := queued["AP"]; !gained {
+		t.Error("an annotation with no text draws nothing, so it should still receive an appearance")
+	}
+}

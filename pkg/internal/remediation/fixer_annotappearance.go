@@ -270,13 +270,20 @@ func allocateBlankForm(alloc *writer.ObjAllocator, bbox ast.PdfArray) ast.PdfInd
 // form nests a handful at most.
 const maxFieldParentDepth = 32
 
-// rendersOwnValue reports whether a viewer would draw this widget from the
-// field's value rather than from a stored appearance.
+// rendersOwnValue reports whether a viewer would draw this annotation from text
+// it already carries rather than from a stored appearance.
 //
-// Text and choice fields are the variable-text fields of ISO 32000-1, 12.7.3.3:
-// their appearance is generated from /V and /DA when none is stored. Both /FT
-// and /V are inheritable (12.7.3.1), so the answer can live on an ancestor.
+// Two kinds do. Text and choice fields are the variable-text fields of ISO
+// 32000-1, 12.7.3.3: their appearance is generated from /V and /DA when none is
+// stored, and both /FT and /V are inheritable (12.7.3.1), so the answer can live
+// on an ancestor. A free text annotation displays the text in /Contents through
+// the same /DA machinery (12.5.6.6), which is why pdfjs issue16021.pdf, whose
+// whole page is a /FreeText reading "Hello World", came out of remediation
+// blank.
 func rendersOwnValue(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, subtype ast.PdfName) bool {
+	if subtype == "FreeText" {
+		return hasRenderableValue(ctx, doc, annotDict["Contents"])
+	}
 	if subtype != "Widget" {
 		return false
 	}
