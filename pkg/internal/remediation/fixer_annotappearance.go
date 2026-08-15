@@ -91,6 +91,19 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			}
 
 			if needsAppearance(ctx, doc, annotDict) {
+				// A variable-text field with a value has no appearance because
+				// the viewer builds one from /V and /DA (ISO 32000-1, 12.7.3.3).
+				// A blank form satisfies ISO 19005-2, 6.3.3 by replacing that
+				// with nothing: pdfjs annotation-tx.pdf lost the 12 characters
+				// that were the whole page, and bug1847733.pdf lost the field
+				// reading "In order to submit this form, you should open it with
+				// Adobe Acrobat Reader." Drawing the value needs the /DA font out
+				// of /DR and the field's own layout, so until that exists the
+				// violation stays as a residual the caller can see, which is
+				// worth more than a conformant document that lost its content.
+				if rendersOwnValue(ctx, doc, annotDict, subtype) {
+					continue
+				}
 				bbox := normalizeBBox(rect)
 				apRef := allocateBlankForm(alloc, bbox)
 
@@ -249,4 +262,77 @@ func allocateBlankForm(alloc *writer.ObjAllocator, bbox ast.PdfArray) ast.PdfInd
 		"BBox":     bbox,
 	}
 	return alloc.Alloc(ast.NewStream(formDict, nil))
+}
+
+// maxFieldParentDepth bounds the walk up a form field's /Parent chain. This is
+// an anti-DoS guard, not a spec limit: ISO 32000-1, 12.7.3.1 puts no depth on
+// the field tree, but a crafted file can chain parents indefinitely and a real
+// form nests a handful at most.
+const maxFieldParentDepth = 32
+
+// rendersOwnValue reports whether a viewer would draw this widget from the
+// field's value rather than from a stored appearance.
+//
+// Text and choice fields are the variable-text fields of ISO 32000-1, 12.7.3.3:
+// their appearance is generated from /V and /DA when none is stored. Both /FT
+// and /V are inheritable (12.7.3.1), so the answer can live on an ancestor.
+func rendersOwnValue(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, subtype ast.PdfName) bool {
+	if subtype != "Widget" {
+		return false
+	}
+
+	dict := annotDict
+	var fieldType ast.PdfName
+	var value ast.PdfObject
+	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
+		if fieldType == "" {
+			if ft, err := document.ResolveName(ctx, doc, dict["FT"]); err == nil && ft != "" {
+				fieldType = ft
+			}
+		}
+		if value == nil {
+			if v, ok := dict["V"]; ok {
+				value = v
+			}
+		}
+		if fieldType != "" && value != nil {
+			break
+		}
+		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
+		if err != nil || parent == nil {
+			break
+		}
+		dict = parent
+	}
+
+	if fieldType != "Tx" && fieldType != "Ch" {
+		return false
+	}
+	return hasRenderableValue(ctx, doc, value)
+}
+
+// hasRenderableValue reports whether a field value would put glyphs on the page.
+// An absent, null or empty value draws nothing, so a blank appearance loses
+// nothing and the fixer may supply one.
+func hasRenderableValue(ctx context.Context, doc *document.Document, value ast.PdfObject) bool {
+	if value == nil {
+		return false
+	}
+	switch v := value.(type) {
+	case ast.PdfNull:
+		return false
+	case ast.PdfString:
+		return len(document.DecodePdfString(v)) > 0
+	case ast.PdfArray:
+		// A multi-select choice field holds its selection as an array.
+		return len(v) > 0
+	case ast.PdfIndirectRef:
+		resolved, err := doc.Resolve(ctx, v)
+		if err != nil {
+			return false
+		}
+		return hasRenderableValue(ctx, doc, resolved)
+	default:
+		return false
+	}
 }
