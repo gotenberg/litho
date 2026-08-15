@@ -1,6 +1,7 @@
 package mutations
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -207,6 +208,13 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		return err
 	}
 
+	// Read the flag before the form goes: it decides whether the stored
+	// appearances are authoritative (see [flattenPageAnnotations]).
+	regenerated := formNeedsAppearances(ctx, doc, catalogDict)
+	// The default appearance string a kept widget inherits from the form, which
+	// the form's removal would otherwise take with it.
+	inheritedDA := formDefaultAppearance(ctx, doc, catalogDict)
+
 	// Remove /AcroForm from the catalog.
 	newCatalog := make(ast.PdfDict, len(catalogDict))
 	for k, v := range catalogDict {
@@ -229,7 +237,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	for _, page := range pages {
-		flattenPageAnnotations(ctx, doc, alloc, page)
+		flattenPageAnnotations(ctx, doc, alloc, page, regenerated, inheritedDA)
 	}
 
 	return nil
@@ -242,7 +250,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // single draft and written with exactly one [writer.ObjAllocator.AllocAt]
 // call per page, the same invariant [applyStampToPages] follows, so
 // concurrent mutations cannot clobber each other.
-func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page) {
+func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject) {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
 		return
@@ -289,6 +297,22 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		// every character on the page.
 		apStream, ok := resolveWidgetAppearance(ctx, doc, annotDict)
 		if !ok {
+			keepWidget(alloc, annotObj, annotDict, inheritedDA)
+			remainingAnnots = append(remainingAnnots, annotObj)
+			continue
+		}
+
+		// A form that asks the viewer to build its appearances stores
+		// placeholders, and baking one in loses the value it stands for.
+		// pdfjs issue12233.pdf keeps 12-to-45 byte appearances that paint
+		// nothing behind the values "Man", "150" and "Red": flattening wrote
+		// those empty streams into the page and then deleted the widgets, so
+		// the values left the document entirely. Keeping the widget is not
+		// enough on its own, because the placeholder it carries is what a
+		// viewer would draw once /NeedAppearances goes with the form; the
+		// placeholder has to go too.
+		if regenerated && valueOutlivesAppearance(ctx, doc, annotDict, apStream) {
+			keepWidget(alloc, annotObj, annotDict, inheritedDA)
 			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
 		}
@@ -455,4 +479,135 @@ func asFormXObject(stream ast.PdfStream, width, height float64) ast.PdfStream {
 	// Through the original loader, so the bytes stay raw and lazy: the copied
 	// dictionary still names the /Filter they are encoded with.
 	return ast.NewLazyStream(dict, stream.Bytes)
+}
+
+// formNeedsAppearances reports whether the interactive form asks viewers to
+// build field appearances from the field values (ISO 32000-1, 12.7.3.3).
+func formNeedsAppearances(ctx context.Context, doc *document.Document, catalogDict ast.PdfDict) bool {
+	acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"])
+	if err != nil || acroForm == nil {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, acroForm["NeedAppearances"])
+	if err != nil {
+		return false
+	}
+	flag, ok := resolved.(ast.PdfBool)
+	return ok && bool(flag)
+}
+
+// valueOutlivesAppearance reports whether baking this widget's stored appearance
+// would drop text the field still carries.
+//
+// True only when the field holds a value and the appearance paints no glyphs, so
+// a widget whose appearance already draws its value flattens as before.
+func valueOutlivesAppearance(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, apStream ast.PdfStream) bool {
+	if !fieldHoldsText(ctx, doc, annotDict) {
+		return false
+	}
+	data, err := doc.DecodeStream(ctx, apStream)
+	if err != nil {
+		// Unreadable: assume it draws nothing rather than bake an unknown.
+		return true
+	}
+	return !bytes.Contains(data, []byte("Tj")) && !bytes.Contains(data, []byte("TJ"))
+}
+
+// fieldHoldsText reports whether the widget's field is a variable-text field
+// carrying a non-empty value. /FT and /V are inheritable (ISO 32000-1, 12.7.3.1),
+// so both may live on an ancestor.
+func fieldHoldsText(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	dict := annotDict
+	var fieldType ast.PdfName
+	var value ast.PdfObject
+	for depth := 0; depth < maxFieldAncestorDepth && dict != nil; depth++ {
+		if fieldType == "" {
+			if ft, err := document.ResolveName(ctx, doc, dict["FT"]); err == nil && ft != "" {
+				fieldType = ft
+			}
+		}
+		if value == nil {
+			if v, ok := dict["V"]; ok {
+				value = v
+			}
+		}
+		if fieldType != "" && value != nil {
+			break
+		}
+		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
+		if err != nil || parent == nil {
+			break
+		}
+		dict = parent
+	}
+	if fieldType != "Tx" && fieldType != "Ch" {
+		return false
+	}
+	text, ok := value.(ast.PdfString)
+	return ok && len(document.DecodePdfString(text)) > 0
+}
+
+// maxFieldAncestorDepth bounds the walk up a field's /Parent chain. This is an
+// anti-DoS guard, not a spec limit: ISO 32000-1, 12.7.3.1 puts no depth on the
+// field tree, while a crafted file can chain parents indefinitely.
+const maxFieldAncestorDepth = 32
+
+// keepWidget rewrites a widget the flatten is leaving in place so it can still
+// be drawn once the interactive form is gone.
+//
+// Two things go with /AcroForm. A placeholder appearance that paints nothing is
+// what a viewer draws instead of building one from the field value, so it is
+// removed: ISO 32000-1, 12.7.3.3 has the viewer generate an appearance when the
+// widget stores none. And the default-appearance string is inherited from the
+// form (same clause), so it is copied onto the widget, which is otherwise left
+// with no font or colour to draw with. litho corpus sigcms_2b.pdf shows the
+// second: its text field carries a value and no /DA of its own, and deleting the
+// form alone dropped "not a signature" from the page.
+//
+// Only an indirect widget can be rewritten: one inlined in /Annots has no object
+// number to replace.
+//
+// The form's /DR is not carried across, because a resource dictionary has no
+// place on an annotation. A /DA naming one of the standard 14 fonts, which is
+// what these placeholders use, resolves without it.
+func keepWidget(alloc *writer.ObjAllocator, annotObj ast.PdfObject, annotDict ast.PdfDict, inheritedDA ast.PdfObject) {
+	ref, ok := annotObj.(ast.PdfIndirectRef)
+	if !ok {
+		return
+	}
+	_, hasAP := annotDict["AP"]
+	_, hasDA := annotDict["DA"]
+	needsDA := !hasDA && inheritedDA != nil
+	if !hasAP && !needsDA {
+		return
+	}
+
+	updated := make(ast.PdfDict, len(annotDict)+1)
+	for key, value := range annotDict {
+		if key == "AP" {
+			continue
+		}
+		updated[key] = value
+	}
+	if needsDA {
+		updated["DA"] = inheritedDA
+	}
+	alloc.AllocAt(ref.ObjectNum, updated)
+}
+
+// formDefaultAppearance returns the interactive form's /DA string, the default
+// appearance a field inherits when it declares none (ISO 32000-1, 12.7.3.3).
+func formDefaultAppearance(ctx context.Context, doc *document.Document, catalogDict ast.PdfDict) ast.PdfObject {
+	acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"])
+	if err != nil || acroForm == nil {
+		return nil
+	}
+	resolved, err := document.ResolveObject(ctx, doc, acroForm["DA"])
+	if err != nil {
+		return nil
+	}
+	if _, ok := resolved.(ast.PdfString); !ok {
+		return nil
+	}
+	return resolved
 }
