@@ -224,11 +224,22 @@ func (d *Document) objectNumberFits(objNum int) bool {
 // through 6, leaving objects 2-4 looking free.
 //
 // The trailer /Size is one greater than the highest object number used (ISO
-// 32000-1, Table 15), which covers exactly the objects the index missed. It is
-// file-derived and so untrusted, and is bounded by the file size on the same
-// reasoning as [Document.pruneUnrepresentableEntries]. Taking the larger of the
-// two is never worse than the index alone: a /Size that understates the file,
-// which broken producers do emit, simply loses to the index.
+// 32000-1, Table 15), which covers exactly the objects the index missed. Taking
+// the larger of the two is never worse than the index alone: a /Size that
+// understates the file, which broken producers do emit, simply loses to the
+// index.
+//
+// The file-size plausibility check that guards the index is deliberately NOT
+// applied to /Size here. A file cannot DEFINE an object numbered above its byte
+// count, which is why [Document.pruneUnrepresentableEntries] drops such entries,
+// but it can REFERENCE one, and every caller of this method is choosing the next
+// object number to WRITE. On pdfjs issue16091.pdf the catalog names its page
+// tree 156325 while the trailer declares /Size 156342 in a 107 KB file, so the
+// check rejected /Size, the estimate fell back to the index, and the update's own
+// cross-reference stream was allocated at 156325, on top of the page tree the
+// catalog points at. Every reader then refused the output: poppler with
+// "Top-level pages object is wrong type (stream)" and qpdf with "unable to find
+// /Root dictionary", on a file both of them read before the edit.
 func (d *Document) HighestObjectNumber() int {
 	highest := 0
 	for objNum := range d.Index.Entries {
@@ -279,18 +290,27 @@ func (d *Document) DefinesObject(objNum int) bool {
 	return ok && !entry.Free
 }
 
-// trailerObjectCount returns the trailer /Size when it is a plausible object
-// count for a file this size.
+// maxTrailerObjectCount bounds how far a trailer /Size may push the next object
+// number litho allocates. This is an anti-DoS guard, not a spec limit: /Size is
+// file-derived and so untrusted, and a corrupt one must not send object numbers
+// somewhere absurd. 2^23 is orders of magnitude above the object count of any
+// real document (the largest fixture in the corpora holds ~10^5) while still
+// leaving room above any number a file could plausibly reference.
+const maxTrailerObjectCount = 1 << 23
+
+// trailerObjectCount returns the trailer /Size when it is a usable object count.
+//
+// Bounded by [maxTrailerObjectCount] rather than by the file size: the caller
+// picks the next object number to write, and a file may reference an object
+// number larger than its own byte count even though it cannot define one. See
+// [Document.HighestObjectNumber].
 func (d *Document) trailerObjectCount() (int, bool) {
 	sizeObj, ok := d.Index.Trailer["Size"]
 	if !ok {
 		return 0, false
 	}
 	size, ok := sizeObj.(ast.PdfInt)
-	if !ok || size <= 0 {
-		return 0, false
-	}
-	if d.size > 0 && int64(size) > d.size {
+	if !ok || size <= 0 || size > maxTrailerObjectCount {
 		return 0, false
 	}
 	// Bounded above by d.size, an int64 file size, so the conversion cannot
