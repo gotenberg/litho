@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -284,72 +285,9 @@ func needAppearancesShowsAValue(ctx context.Context, doc *document.Document) boo
 			if !rendersOwnValue(ctx, doc, annot, subtype) {
 				continue
 			}
-			if !appearanceShowsText(ctx, doc, annot["AP"], 0) {
+			if !appearanceShowsValue(ctx, doc, annot) {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// appearanceShowsText reports whether an /AP entry paints any text, following
-// the form XObjects it invokes.
-func appearanceShowsText(ctx context.Context, doc *document.Document, obj ast.PdfObject, depth int) bool {
-	if depth > maxAppearanceNestDepth || obj == nil {
-		return false
-	}
-	resolved, err := document.ResolveObject(ctx, doc, obj)
-	if err != nil {
-		return false
-	}
-
-	switch v := resolved.(type) {
-	case ast.PdfStream:
-		data, err := doc.DecodeStream(ctx, v)
-		if err != nil {
-			return false
-		}
-		if showsTextOperator(data) {
-			return true
-		}
-		nested, err := document.ResolveDict(ctx, doc, v.Dict["Resources"])
-		if err != nil || nested == nil {
-			return false
-		}
-		inner, err := document.ResolveDict(ctx, doc, nested["XObject"])
-		if err != nil || inner == nil {
-			return false
-		}
-		// Only the XObjects this stream actually invokes. A /Resources
-		// dictionary routinely lists more than its stream uses, and following
-		// all of them found text in an unrelated image: the placeholder
-		// appearance "/Tx BMC EMC" in pdfjs issue12233.pdf carries an /Im4 the
-		// page uses elsewhere, so the field looked as though it drew its value.
-		for name, child := range inner {
-			if !invokesXObject(data, name) {
-				continue
-			}
-			if appearanceShowsText(ctx, doc, child, depth+1) {
-				return true
-			}
-		}
-	case ast.PdfDict:
-		// /AP itself, or an /N holding one appearance per state.
-		for _, entry := range v {
-			if appearanceShowsText(ctx, doc, entry, depth+1) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// showsTextOperator reports whether a content stream carries a text-showing
-// operator (ISO 32000-1, Table 109).
-func showsTextOperator(data []byte) bool {
-	for _, op := range [][]byte{[]byte("Tj"), []byte("TJ"), {'\''}, {'"'}} {
-		if bytes.Contains(data, op) {
-			return true
 		}
 	}
 	return false
@@ -385,4 +323,158 @@ func isPdfDelimiter(c byte) bool {
 		return true
 	}
 	return false
+}
+
+// passwordFieldFlag is bit 14 of a text field's /Ff, which hides the value
+// behind an echo character (ISO 32000-1, Table 231).
+const passwordFieldFlag = 1 << 13
+
+// appearanceShowsValue reports whether the widget's stored appearance already
+// paints the value the field holds, so removing /NeedAppearances shows the same
+// thing a regenerating viewer would.
+//
+// A stored appearance can be STALE, which is the whole reason a producer sets
+// the flag (ISO 32000-1, 12.7.3.3): pdfjs bug1796741.pdf holds the value
+// "Dlrow SJ.fdp Olleh" behind an appearance painting "Hello PDF.js World", and
+// bug1844583.pdf the reverse. Dropping the flag there makes the document display
+// data the field does not hold.
+//
+// A password field is exempt: Table 231 has it echo a masking character instead
+// of the value, so its appearance is meant to differ.
+func appearanceShowsValue(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
+	if fieldFlags(ctx, doc, annot)&passwordFieldFlag != 0 {
+		return true
+	}
+	value := fieldValueText(ctx, doc, annot)
+	if value == "" {
+		return true
+	}
+	shown := appearanceText(ctx, doc, annot["AP"], 0)
+	return strings.Contains(stripSpaces(shown), stripSpaces(value))
+}
+
+// fieldFlags returns the field's /Ff, following /Parent because the entry is
+// inheritable (ISO 32000-1, 12.7.3.1).
+func fieldFlags(ctx context.Context, doc *document.Document, annot ast.PdfDict) int {
+	dict := annot
+	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
+		if flags, ok := dict["Ff"].(ast.PdfInt); ok {
+			return int(flags)
+		}
+		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
+		if err != nil || parent == nil {
+			return 0
+		}
+		dict = parent
+	}
+	return 0
+}
+
+// fieldValueText returns the field's /V as text, following /Parent.
+func fieldValueText(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
+	dict := annot
+	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
+		if value, ok := dict["V"]; ok {
+			if text, ok := value.(ast.PdfString); ok {
+				return document.DecodePdfString(text)
+			}
+			return ""
+		}
+		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
+		if err != nil || parent == nil {
+			return ""
+		}
+		dict = parent
+	}
+	return ""
+}
+
+// appearanceText concatenates the strings an appearance shows with Tj or TJ.
+func appearanceText(ctx context.Context, doc *document.Document, obj ast.PdfObject, depth int) string {
+	if depth > maxAppearanceNestDepth || obj == nil {
+		return ""
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return ""
+	}
+	switch v := resolved.(type) {
+	case ast.PdfStream:
+		data, err := doc.DecodeStream(ctx, v)
+		if err != nil {
+			return ""
+		}
+		out := shownStrings(data)
+		// Follow only the XObjects this stream invokes: a /Resources dictionary
+		// lists more than its stream uses, so walking all of them reads text
+		// from images the appearance never draws.
+		nested, err := document.ResolveDict(ctx, doc, v.Dict["Resources"])
+		if err != nil || nested == nil {
+			return out
+		}
+		inner, err := document.ResolveDict(ctx, doc, nested["XObject"])
+		if err != nil || inner == nil {
+			return out
+		}
+		for name, child := range inner {
+			if !invokesXObject(data, name) {
+				continue
+			}
+			out += appearanceText(ctx, doc, child, depth+1)
+		}
+		return out
+	case ast.PdfDict:
+		var out strings.Builder
+		for _, entry := range v {
+			out.WriteString(appearanceText(ctx, doc, entry, depth+1))
+		}
+		return out.String()
+	}
+	return ""
+}
+
+// shownStrings pulls the literal string operands out of a content stream. It
+// reads the bytes as written, which matches the value for the simple encodings
+// these placeholder appearances use; a font that reorders or remaps them yields
+// no match, and the caller then keeps the flag, which is the safe direction.
+func shownStrings(data []byte) string {
+	var out strings.Builder
+	for i := 0; i < len(data); i++ {
+		if data[i] != '(' {
+			continue
+		}
+		depth := 1
+		i++
+		for ; i < len(data) && depth > 0; i++ {
+			switch data[i] {
+			case '\\':
+				i++
+				continue
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					continue
+				}
+			}
+			if depth > 0 {
+				out.WriteByte(data[i])
+			}
+		}
+		i--
+	}
+	return out.String()
+}
+
+// stripSpaces removes whitespace so a difference in spacing does not read as a
+// difference in content.
+func stripSpaces(s string) string {
+	var out strings.Builder
+	for _, r := range s {
+		if r != ' ' && r != '\t' && r != '\r' && r != '\n' {
+			out.WriteRune(r)
+		}
+	}
+	return out.String()
 }

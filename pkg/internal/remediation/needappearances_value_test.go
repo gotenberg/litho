@@ -101,3 +101,67 @@ func TestNeedAppearancesRemovedWhenTheAppearanceDrawsTheValue(t *testing.T) {
 		t.Error("the appearance already draws the value, so the flag should have been removed")
 	}
 }
+
+// staleAppearancePDF builds a form whose stored appearance paints text that is
+// not the field's value, the shape of pdfjs bug1796741.pdf. password marks the
+// field as one whose value is deliberately masked.
+func staleAppearancePDF(password bool) []byte {
+	body := "/Tx BMC\nBT /Helv 9 Tf (Hello PDF.js World) Tj ET\nEMC\n"
+	ff := ""
+	if password {
+		ff = " /Ff 8192"
+	}
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /NeedAppearances true >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (t) /V (Dlrow SJ.fdp Olleh)" + ff +
+			" /Rect [10 700 300 720] /AP << /N 5 0 R >> >>",
+		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 290 20] /Length %d >>\nstream\n%sendstream",
+			len(body), body),
+	}
+
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	start := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, start)
+	return b.Bytes()
+}
+
+// TestNeedAppearancesKeptWhenTheAppearanceIsStale pins that a stored appearance
+// painting something other than the field value does not make the flag safe to
+// remove.
+//
+// The flag exists precisely because the stored appearance may be out of date
+// (ISO 32000-1, 12.7.3.3). pdfjs bug1796741.pdf holds "Dlrow SJ.fdp Olleh"
+// behind an appearance painting "Hello PDF.js World", and bug1844583.pdf the
+// reverse: removing the flag made both documents display data the field does not
+// hold.
+func TestNeedAppearancesKeptWhenTheAppearanceIsStale(t *testing.T) {
+	t.Parallel()
+
+	if fixes := runNeedAppearances(t, staleAppearancePDF(false)); len(fixes) != 0 {
+		t.Errorf("reported %v, want no fix: the stored appearance shows text the field does not hold", fixes)
+	}
+}
+
+// TestNeedAppearancesRemovedForAPasswordField pins the exemption. A password
+// field echoes a masking character instead of its value (ISO 32000-1, Table
+// 231), so an appearance that differs from /V is expected there.
+func TestNeedAppearancesRemovedForAPasswordField(t *testing.T) {
+	t.Parallel()
+
+	if fixes := runNeedAppearances(t, staleAppearancePDF(true)); len(fixes) == 0 {
+		t.Error("a password field's appearance is meant to differ from its value, so the flag should still be removed")
+	}
+}
