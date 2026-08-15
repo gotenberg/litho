@@ -130,7 +130,7 @@ func applyStampToPages(
 			pageStampRef = ref
 		}
 
-		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, brackets, pageStampRef)
+		newDict["Contents"] = appendPageContents(ctx, doc, alloc, baseDict, brackets, pageStampRef)
 
 		// A page inlined in a /Kids array has no object number to replace. Skip
 		// it rather than abort the whole stamp over one unaddressable page, but
@@ -180,7 +180,7 @@ func newContentBrackets(alloc *writer.ObjAllocator) func() (ast.PdfIndirectRef, 
 // original streams or a prior stamp, the new stream is appended to it; wrapping
 // the array as one element would nest it, and a conforming reader treats the
 // nested array as a non-stream entry and drops all the content it holds.
-func appendPageContents(ctx context.Context, doc *document.Document, baseDict ast.PdfDict, brackets func() (ast.PdfIndirectRef, ast.PdfIndirectRef), stampRef ast.PdfIndirectRef) ast.PdfObject {
+func appendPageContents(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, baseDict ast.PdfDict, brackets func() (ast.PdfIndirectRef, ast.PdfIndirectRef), stampRef ast.PdfIndirectRef) ast.PdfObject {
 	existing, ok := baseDict["Contents"]
 	if !ok {
 		return stampRef
@@ -189,7 +189,7 @@ func appendPageContents(ctx context.Context, doc *document.Document, baseDict as
 		saveRef, restoreRef := brackets()
 		out := make(ast.PdfArray, 0, len(elems)+3)
 		out = append(out, saveRef)
-		out = append(out, elems...)
+		out = append(out, contentStreamElements(ctx, doc, alloc, elems)...)
 		out = append(out, restoreRef, stampRef)
 		return out
 	}
@@ -334,4 +334,54 @@ func escapePDFString(s string) string {
 	s = strings.ReplaceAll(s, "(", "\\(")
 	s = strings.ReplaceAll(s, ")", "\\)")
 	return s
+}
+
+// contentStreamElements drops the entries of a /Contents array that name no
+// stream, keeping the order of the rest.
+//
+// ISO 32000-1, 7.8.2 makes a page's content the concatenation of the streams the
+// array holds, and 7.3.9 makes a null, or a reference to a missing object,
+// equivalent to the entry being absent. Carrying such an entry into a rewritten
+// array is therefore lossless to drop and harmful to keep: pdfjs issue18973.pdf
+// page 45 begins its /Contents with a null, and appending a flattened appearance
+// after it produced a page poppler rendered as nothing at all. The page had
+// carried 163 characters of signature text through the annotation before the
+// flatten, and 0 after. Dropping the null recovers 542, because the same null was
+// already hiding the page's own body text in the source.
+func contentStreamElements(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, elems []ast.PdfObject) []ast.PdfObject {
+	out := make([]ast.PdfObject, 0, len(elems))
+	for _, elem := range elems {
+		if !namesContentStream(ctx, doc, alloc, elem) {
+			continue
+		}
+		out = append(out, elem)
+	}
+	return out
+}
+
+// namesContentStream reports whether a /Contents array entry resolves to a
+// stream. Anything else contributes no operators.
+//
+// The allocator is consulted before the document: a stream a previous stamp
+// queued exists only there, and resolving it against the document alone reports
+// no such object. Judging it a non-stream on that basis dropped the earlier
+// stamp of a two-stamp run, which the writer's own regression test caught.
+func namesContentStream(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, elem ast.PdfObject) bool {
+	switch v := elem.(type) {
+	case ast.PdfStream:
+		return true
+	case ast.PdfIndirectRef:
+		if pending, queued := alloc.Pending()[v.ObjectNum]; queued {
+			_, isStream := pending.(ast.PdfStream)
+			return isStream
+		}
+		resolved, err := doc.Resolve(ctx, v)
+		if err != nil {
+			return false
+		}
+		_, isStream := resolved.(ast.PdfStream)
+		return isStream
+	default:
+		return false
+	}
 }

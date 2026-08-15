@@ -344,7 +344,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		// A flattened appearance is placed with the widget's absolute /Rect
 		// coordinates, so it must start from the default graphics state rather
 		// than whatever the page left in force (ISO 32000-1, 8.4.4).
-		newDict["Contents"] = appendPageContents(ctx, doc, baseDict, newContentBrackets(alloc), stampRef)
+		newDict["Contents"] = appendPageContents(ctx, doc, alloc, baseDict, newContentBrackets(alloc), stampRef)
 	}
 
 	// Update /Annots: keep non-widget annotations, drop the rest.

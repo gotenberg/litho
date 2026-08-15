@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
 // TestAppendPageContents_FlattensIndirectArray pins that a /Contents array
@@ -48,7 +49,8 @@ func TestAppendPageContents_FlattensIndirectArray(t *testing.T) {
 	restoreRef := ast.PdfIndirectRef{ObjectNum: 8}
 	stampRef := ast.PdfIndirectRef{ObjectNum: 9}
 	brackets := func() (ast.PdfIndirectRef, ast.PdfIndirectRef) { return saveRef, restoreRef }
-	got := appendPageContents(ctx, doc, pages[0].Dict, brackets, stampRef)
+	alloc := writer.NewObjAllocator(20)
+	got := appendPageContents(ctx, doc, alloc, pages[0].Dict, brackets, stampRef)
 
 	arr, ok := got.(ast.PdfArray)
 	if !ok {
@@ -112,7 +114,8 @@ func TestStampText_UnbalancedPageCTMDoesNotScaleStamp(t *testing.T) {
 	restoreRef := ast.PdfIndirectRef{ObjectNum: 8}
 	stampRef := ast.PdfIndirectRef{ObjectNum: 9}
 	brackets := func() (ast.PdfIndirectRef, ast.PdfIndirectRef) { return saveRef, restoreRef }
-	got := appendPageContents(ctx, doc, pages[0].Dict, brackets, stampRef)
+	alloc := writer.NewObjAllocator(20)
+	got := appendPageContents(ctx, doc, alloc, pages[0].Dict, brackets, stampRef)
 
 	arr, ok := got.(ast.PdfArray)
 	if !ok {
@@ -165,7 +168,8 @@ func TestAppendPageContents_NoContentsAllocatesNoBrackets(t *testing.T) {
 		return ast.PdfIndirectRef{ObjectNum: 7}, ast.PdfIndirectRef{ObjectNum: 8}
 	}
 	stampRef := ast.PdfIndirectRef{ObjectNum: 9}
-	got := appendPageContents(ctx, doc, pages[0].Dict, brackets, stampRef)
+	alloc := writer.NewObjAllocator(20)
+	got := appendPageContents(ctx, doc, alloc, pages[0].Dict, brackets, stampRef)
 
 	if asked {
 		t.Error("a page with no /Contents allocated the q/Q pair, leaving orphan streams in the output")
