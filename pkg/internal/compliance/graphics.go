@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // checkGraphicsGroup validates ExtGState, halftones, rendering intent, and
@@ -80,6 +81,9 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Scan annotation appearance ExtGState for halftone/rendering intent.
 		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1)...)
+
+		// Scan annotation appearance streams for undefined operators.
+		results = append(results, checkAnnotationAppearanceOps(ctx, doc, page, part, i+1)...)
 	}
 
 	doc.Logger.Debug("compliance.graphics: checks complete", "violations", len(results))
@@ -220,6 +224,115 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 				results = append(results, checkExtGStateGraphics(ctx, doc, apRes, profile, part, pageNum)...)
 			}
 		}
+	}
+	return results
+}
+
+// checkAnnotationAppearanceOps reports content-stream operators that ISO
+// 32000-1 does not define when they appear inside an annotation appearance
+// stream.
+//
+// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the
+// prohibition in ISO 19005-2, 6.2.2 reaches it. The page-level scan only sees
+// a page's own /Contents and the Form XObjects its resources name, so an
+// operator inside /Annots[]/AP went unreported while veraPDF flagged it.
+//
+// Only the undefined-operator test runs here. The resource-reference tests
+// that accompany it for Form XObjects are deliberately left out: they were not
+// measured against the reference validator for appearance streams, and a rule
+// that fires where veraPDF stays silent costs more than the one it catches.
+func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int) []Violation {
+	rule := undefinedOperatorRule(part)
+	if rule.Specification == "" {
+		return nil
+	}
+	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil || len(annotsArr) == 0 {
+		return nil
+	}
+
+	var results []Violation
+	// An appearance stream shared by several annotations is one stream, so it
+	// answers once per page rather than once per reference.
+	seen := make(map[int]bool)
+	for _, annotObj := range annotsArr {
+		if err := ctx.Err(); err != nil {
+			return results
+		}
+		annot, _ := document.ResolveDict(ctx, doc, annotObj)
+		if annot == nil {
+			continue
+		}
+		apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
+		if apDict == nil {
+			continue
+		}
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			apObj, ok := apDict[key]
+			if !ok {
+				continue
+			}
+			for _, streamObj := range appearanceStreamObjects(ctx, doc, apObj) {
+				if ref, isRef := streamObj.(ast.PdfIndirectRef); isRef {
+					if seen[ref.ObjectNum] {
+						continue
+					}
+					seen[ref.ObjectNum] = true
+				}
+				results = append(results, checkAppearanceStreamOps(ctx, doc, streamObj, rule, pageNum)...)
+			}
+		}
+	}
+	return results
+}
+
+// appearanceStreamObjects returns the appearance streams an /AP entry holds.
+// The entry is a stream, or a subdictionary keyed by appearance state when the
+// annotation has several (ISO 32000-1, 12.5.5), as a checkbox does with /Off
+// and /Yes.
+func appearanceStreamObjects(ctx context.Context, doc *document.Document, apObj ast.PdfObject) []ast.PdfObject {
+	if _, err := document.ResolveStream(ctx, doc, apObj); err == nil {
+		return []ast.PdfObject{apObj}
+	}
+	stateDict, err := document.ResolveDict(ctx, doc, apObj)
+	if err != nil || stateDict == nil {
+		return nil
+	}
+	out := make([]ast.PdfObject, 0, len(stateDict))
+	for _, name := range sortedNames(stateDict) {
+		out = append(out, stateDict[name])
+	}
+	return out
+}
+
+// checkAppearanceStreamOps parses one appearance stream and reports every
+// operator outside [validPDFOperators].
+func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, streamObj ast.PdfObject, rule Rule, pageNum int) []Violation {
+	stream, err := document.ResolveStream(ctx, doc, streamObj)
+	if err != nil {
+		doc.Logger.Debug("compliance.graphics: cannot resolve appearance stream", "error", err)
+		return nil
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance.graphics: cannot parse appearance stream", "error", err)
+		return nil
+	}
+
+	var results []Violation
+	for idx, op := range ops {
+		if idx%100 == 0 && ctx.Err() != nil {
+			return results
+		}
+		if op.Operator == "" || validPDFOperators[op.Operator] {
+			continue
+		}
+		results = append(results, failf(rule,
+			"page %d: undefined operator %q in annotation appearance", pageNum, op.Operator)...)
 	}
 	return results
 }
