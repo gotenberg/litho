@@ -20,12 +20,22 @@ var sRGBICCProfile []byte
 //go:embed cmyk.icc
 var cmykICCProfile []byte
 
-// hasMatchingOutputIntent checks if any existing OutputIntent entry has an
-// ICC profile with the needed color space (CMYK if needsCMYK, RGB otherwise).
+// hasMatchingOutputIntent reports whether an existing PDF/A output intent
+// already covers the needed colour space (CMYK if needsCMYK, RGB otherwise).
+//
+// Only a GTS_PDFA1 intent counts. ISO 32000-2, Table 401 and ISO 19005-4,
+// 6.2.3 keep GTS_PDFA1 as the PDF/A output-intent subtype for every part, so a
+// GTS_PDFX or ISO_PDFE1 intent leaves the device colour spaces uncovered no
+// matter which profile it carries: veraPDF still reports 6.2.4.3 on
+// 6-2-3-t01-fail-a and -fail-c, whose sole intent is GTS_PDFX with an RGB
+// profile.
 func hasMatchingOutputIntent(ctx context.Context, doc *document.Document, arr ast.PdfArray, needsCMYK bool) bool {
 	for _, entry := range arr {
 		oiDict, err := document.ResolveDict(ctx, doc, entry)
 		if err != nil || oiDict == nil {
+			continue
+		}
+		if subtype, _ := document.ResolveName(ctx, doc, oiDict["S"]); subtype != "GTS_PDFA1" {
 			continue
 		}
 		dpObj, ok := oiDict["DestOutputProfile"]
@@ -36,7 +46,12 @@ func hasMatchingOutputIntent(ctx context.Context, doc *document.Document, arr as
 		if err != nil {
 			continue
 		}
-		data, err := stream.Bytes(ctx)
+		// The colour space sits at a fixed offset into the profile (ISO
+		// 15076-1, 7.2), so the stream has to be decoded: reading the raw body
+		// of a FlateDecode profile compares deflate output against "CMYK" and
+		// never matches, and litho installs a second OutputIntent beside the
+		// one already covering the document.
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil || len(data) < 20 {
 			continue
 		}
@@ -140,7 +155,9 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 				}
 			}
 			if stream, err := document.ResolveStream(ctx, doc, updated["DestOutputProfile"]); err == nil {
-				if data, err := stream.Bytes(ctx); err == nil && len(data) < 128 {
+				// Measure the decoded profile: the 128-byte ICC header is a
+				// property of the profile, not of its compressed body.
+				if data, err := doc.DecodeStream(ctx, stream); err == nil && len(data) < 128 {
 					// Replace with a stock sRGB profile when the existing
 					// stream is too short to be a valid ICC header.
 					iccStream := ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile)
@@ -247,7 +264,12 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	if needsCMYK && !hasCMYKOI && !hasRGBOI {
 		addOI = true
 		addCMYK = true
-	} else if needsRGB && !hasRGBOI && !hasCMYKOI {
+	} else if needsRGB && !hasRGBOI {
+		// An existing CMYK intent does not license DeviceRGB: ISO 19005-1,
+		// 6.2.3.3 admits DeviceRGB only when the output intent's destination
+		// profile is an RGB one. Treating any intent as coverage left
+		// 6-2-3-3-t01-fail-b, whose sole intent is a GTS_PDFA1 CMYK profile
+		// over DeviceRGB content, still failing after remediation.
 		addOI = true
 		addCMYK = false
 	}

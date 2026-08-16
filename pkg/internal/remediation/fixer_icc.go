@@ -84,7 +84,12 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			continue
 		}
 
-		data, err := stream.Bytes(ctx)
+		// The header fields below are read at fixed offsets into the profile,
+		// so the profile has to be decoded first: [ast.PdfStream.Bytes] returns
+		// the body before filter decoding, and a FlateDecode profile put
+		// deflate output at every offset. Each field then failed its test and a
+		// valid profile was replaced with litho's own sRGB copy.
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil || len(data) < 128 {
 			// Corrupt or too short. Replace with a valid profile.
 			newOIArr[i] = oiEntry
