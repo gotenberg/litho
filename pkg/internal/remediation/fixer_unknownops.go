@@ -137,7 +137,10 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 			continue
 		}
 
-		data, err := stream.Bytes(ctx)
+		// Decode through the filter pipeline: [ast.PdfStream.Bytes] hands back
+		// the raw body, which for a FlateDecode form is compressed bytes the
+		// content lexer reads as a run of undefined operators.
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			continue
 		}
@@ -162,9 +165,13 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		}
 		filtered := filterOps(ops)
 		newData := serializeOps(filtered)
+		// The replacement body is the decoded content, so the filter chain that
+		// described the original body no longer applies: carrying /Filter or
+		// /DecodeParms across leaves a stream a reader decodes into nothing
+		// (ISO 32000-1, 7.3.8.2). /Length is rewritten from the data.
 		newDict := make(ast.PdfDict, len(stream.Dict)+1)
 		for k, v := range stream.Dict {
-			if k == "Length" {
+			if k == "Length" || k == "Filter" || k == "DecodeParms" {
 				continue
 			}
 			newDict[k] = v
