@@ -155,10 +155,12 @@ func pageToFormXObject(
 	return alloc.Alloc(ast.NewStream(formDict, contents)), nil
 }
 
-// collectPageContents returns the raw bytes of a page's content stream,
-// concatenating multiple streams with a newline separator as the PDF spec
-// allows. Filters are preserved by using the stream's decoded Bytes method
-// and then writing without a /Filter entry, which is always valid.
+// collectPageContents returns the decoded bytes of a page's content stream,
+// concatenating multiple streams with a newline separator as ISO 32000-1, 7.8.2
+// allows. The caller writes the result into a form XObject that declares no
+// /Filter, so the content has to be decoded here: [ast.PdfStream.Bytes] returns
+// the body before filter decoding, and handing a FlateDecode page's compressed
+// bytes to an unfiltered stream made the stamp draw nothing.
 func collectPageContents(ctx context.Context, doc *document.Document, page *document.Page) ([]byte, error) {
 	obj, ok := page.Dict["Contents"]
 	if !ok {
@@ -172,7 +174,7 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 		if err != nil {
 			return nil, err
 		}
-		data, err := stream.Bytes(ctx)
+		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +189,7 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 			if err != nil {
 				return nil, err
 			}
-			data, err := stream.Bytes(ctx)
+			data, err := doc.DecodeStream(ctx, stream)
 			if err != nil {
 				return nil, err
 			}
