@@ -192,22 +192,29 @@ func (d *Document) pruneUnrepresentableEntries() {
 	}
 }
 
-// objectNumberFits reports whether the file is large enough to have defined an
-// object with this number.
+// objectNumberFits reports whether an object number is one a file could
+// plausibly define, bounding it with [maxTrailerObjectCount].
 //
-// An in-use object needs either its own "N G obj ... endobj" bytes or its own
-// entry inside an object stream, so a file of S bytes cannot define an object
-// numbered above S. That leaves real documents orders of magnitude clear of the
-// line while catching a number no file could have produced. A size of zero means
-// the caller never supplied one, so nothing can be judged.
+// The bound is on the number itself, not on the file's length. An object number
+// is a sparse identifier, not an index (ISO 32000-1, 7.3.10): a file may number
+// five objects 8797 to 8801 and still be 8 kB, because the count of objects and
+// the numbers they carry are independent. Bounding by byte length conflated the
+// two and dropped every such object from [Document.HighestObjectNumber]: on
+// pdfjs issue4573.pdf, 8474 bytes numbering objects up to 8801, it answered 380.
+// Rewriting the catalog at 8797 then pushed the allocator to 8798 and the
+// incremental trailer went out as /Size 8798, which puts the page tree at 8798
+// and everything above it past the end of the table. poppler read the file
+// before litho touched it and afterwards reported "Catalog dictionary does not
+// contain a valid Pages entry".
+//
+// A negative number is never valid. The cap stays as an anti-DoS guard so a
+// corrupt xref cannot send allocation somewhere absurd; the entry count remains
+// bounded by the file itself, since every entry costs bytes to list.
 func (d *Document) objectNumberFits(objNum int) bool {
 	if objNum < 0 {
 		return false
 	}
-	if d.size <= 0 {
-		return true
-	}
-	return int64(objNum) <= d.size
+	return objNum <= maxTrailerObjectCount
 }
 
 // HighestObjectNumber returns the highest object number the file uses. A writer
