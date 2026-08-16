@@ -52,6 +52,7 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		total += n
 		repaired += r
 		total += stripUnknownInResources(ctx, alloc, doc, page.Resources, visited)
+		total += stripUnknownInAnnotations(ctx, alloc, doc, page.Dict, visited)
 	}
 
 	var fixes []string
@@ -99,6 +100,116 @@ func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc
 		return removed, repairs, fmt.Errorf("replacing content stream on page %d: %w", pageNum, err)
 	}
 	return removed, repairs, nil
+}
+
+// stripUnknownInAnnotations strips undefined operators from the appearance
+// streams of a page's annotations.
+//
+// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the ISO
+// 19005-2, 6.2.2 prohibition reaches it, but it hangs off /Annots[]/AP rather
+// than the page resources this fixer walked, and veraPDF reports an operator
+// there that litho left in place.
+func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool) int {
+	if pageDict == nil {
+		return 0
+	}
+	annots, err := document.ResolveArray(ctx, doc, pageDict["Annots"])
+	if err != nil || len(annots) == 0 {
+		return 0
+	}
+
+	total := 0
+	for _, annotObj := range annots {
+		if err := ctx.Err(); err != nil {
+			return total
+		}
+		annot, err := document.ResolveDict(ctx, doc, annotObj)
+		if err != nil || annot == nil {
+			continue
+		}
+		apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
+		if err != nil || apDict == nil {
+			continue
+		}
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			apObj, ok := apDict[key]
+			if !ok {
+				continue
+			}
+			for _, entry := range appearanceEntries(ctx, doc, apObj) {
+				total += stripUnknownFromStreamObject(ctx, alloc, doc, entry, visited)
+			}
+		}
+	}
+	return total
+}
+
+// appearanceEntries returns the objects an /AP entry names: the entry itself
+// when it is a stream, or every value of the appearance-state subdictionary a
+// multi-state annotation uses (ISO 32000-1, 12.5.5), as a checkbox does.
+func appearanceEntries(ctx context.Context, doc *document.Document, apObj ast.PdfObject) []ast.PdfObject {
+	if _, err := document.ResolveStream(ctx, doc, apObj); err == nil {
+		return []ast.PdfObject{apObj}
+	}
+	stateDict, err := document.ResolveDict(ctx, doc, apObj)
+	if err != nil || stateDict == nil {
+		return nil
+	}
+	out := make([]ast.PdfObject, 0, len(stateDict))
+	for _, v := range stateDict {
+		out = append(out, v)
+	}
+	return out
+}
+
+// stripUnknownFromStreamObject rewrites one appearance stream without the
+// operators outside [validOperators], returning how many it removed. The
+// replacement body is decoded content, so /Filter and /DecodeParms go with it.
+func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool) int {
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	if !isRef || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
+		return 0
+	}
+	visited[ref.ObjectNum] = true
+
+	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err != nil {
+		return 0
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return 0
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return 0
+	}
+
+	removed := 0
+	for i, op := range ops {
+		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
+			continue
+		}
+		if !validOperators[op.Operator] {
+			ops[i].Operator = ""
+			removed++
+		}
+	}
+	if removed == 0 {
+		return 0
+	}
+
+	newData := serializeOps(filterOps(ops))
+	newDict := make(ast.PdfDict, len(stream.Dict)+1)
+	for k, v := range stream.Dict {
+		if k == "Length" || k == "Filter" || k == "DecodeParms" {
+			continue
+		}
+		newDict[k] = v
+	}
+	newDict["Length"] = ast.PdfInt(len(newData))
+	alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, newData))
+	return removed
 }
 
 // stripUnknownInResources recurses into a page's /Resources/XObject
