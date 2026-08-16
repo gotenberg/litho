@@ -57,7 +57,12 @@ func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if !ok2 {
 		return nil, nil
 	}
-	xmp, err := stream.Bytes(ctx)
+	// Decode before searching: [ast.PdfStream.Bytes] returns the body before
+	// filter decoding, so a /Metadata carrying a filter (ISO 32000-1, 14.3.2
+	// permits one) was searched as compressed bytes, no property was ever
+	// found, and the violation stayed residual. A stream queued by an earlier
+	// fixer declares no filter, so decoding is a passthrough for it.
+	xmp, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(xmp) == 0 {
 		return nil, nil
 	}
@@ -89,8 +94,12 @@ func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		return nil, nil
 	}
 
+	// The packet is written back decoded, so the filter chain that described
+	// the original body no longer applies.
 	newDict := make(ast.PdfDict, len(stream.Dict))
 	maps.Copy(newDict, stream.Dict)
+	delete(newDict, "Filter")
+	delete(newDict, "DecodeParms")
 	newStream := ast.NewStream(newDict, out)
 	if metaRef.ObjectNum > 0 {
 		alloc.AllocAt(metaRef.ObjectNum, newStream)
