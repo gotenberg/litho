@@ -644,13 +644,18 @@ func readInvoiceXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if err != nil {
 		return nil
 	}
-	data, err := stream.Bytes(ctx)
+	// Decode first: [ast.PdfStream.Bytes] hands back the raw body, so a
+	// /Metadata stream carrying a filter (ISO 32000-1, 14.3.2 permits one)
+	// yields compressed bytes in which none of the invoice properties can be
+	// found, and every XMP clause of the variant fires on a conformant file.
+	// Raw remains the fallback for a stream the filter pipeline cannot decode.
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(data) == 0 {
-		decoded, decErr := doc.DecodeStream(ctx, stream)
-		if decErr != nil {
+		raw, rawErr := stream.Bytes(ctx)
+		if rawErr != nil {
 			return nil
 		}
-		data = decoded
+		data = raw
 	}
 	if len(data) == 0 {
 		return nil
