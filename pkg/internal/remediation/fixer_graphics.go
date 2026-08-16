@@ -400,6 +400,13 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			for _, k := range []ast.PdfName{"Level1", "PS", "OPI", "Ref"} {
 				delete(newDict, k)
 			}
+			// The body is replaced by an empty one, so the filter chain that
+			// described the PostScript payload no longer applies: an empty
+			// stream still declaring /Filter is one a reader decodes into an
+			// error rather than the intended no-op (ISO 32000-1, 7.3.8.2).
+			for _, k := range []ast.PdfName{"Filter", "DecodeParms"} {
+				delete(newDict, k)
+			}
 			alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, nil))
 			notes = append(notes, fmt.Sprintf("replaced PostScript XObject %s with empty Form", string(name)))
 			continue
