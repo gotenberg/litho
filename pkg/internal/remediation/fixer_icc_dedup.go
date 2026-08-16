@@ -147,6 +147,15 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 
 	inlineUpdates := make(map[ast.PdfName]ast.PdfObject)
 	for key, entry := range csDict {
+		// A default colour space exists to remap the device space of the same
+		// name to a calibrated one (ISO 32000-1, 8.6.5.6), so rewriting
+		// /DefaultRGB to /DeviceRGB defines it as the very space it redirects.
+		// pdfjs issue20722.pdf lost every character of 77 pages that way, page
+		// 1 of 223 entirely, and it undoes the //Default injection this same
+		// remediation pass performs to cover device colour usage.
+		if isDefaultColourSpaceKey(key) {
+			continue
+		}
 		ref, isRef := entry.(ast.PdfIndirectRef)
 		if isRef {
 			if visited[ref.ObjectNum] {
@@ -268,4 +277,17 @@ func deviceNameForComponents(dict ast.PdfDict) ast.PdfName {
 		return "DeviceCMYK"
 	}
 	return ""
+}
+
+// isDefaultColourSpaceKey reports whether a /ColorSpace resource name is one of
+// the default colour space entries of ISO 32000-1, 8.6.5.6. They redirect a
+// device space rather than name a space content selects with cs or CS, so the
+// device substitution this fixer performs is never valid for them.
+func isDefaultColourSpaceKey(key ast.PdfName) bool {
+	switch key {
+	case "DefaultGray", "DefaultRGB", "DefaultCMYK":
+		return true
+	default:
+		return false
+	}
 }
