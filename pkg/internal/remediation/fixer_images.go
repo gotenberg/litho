@@ -125,7 +125,21 @@ func fixImageXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		}
 
 		if modified {
-			alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, nil))
+			// Carry the original body across. Only the dict changed, and a nil
+			// body serialises as /Length 0, which drops the image's pixels
+			// (the same trap fixResourcesGraphics guards against). The bytes
+			// stay raw so they still match the /Filter kept in newDict.
+			data, err := xobjStream.Bytes(ctx)
+			if err != nil {
+				// The payload is unreadable, so it cannot be carried across.
+				// Leaving the object untouched keeps the image intact and the
+				// violation visible, which beats writing a valid dict over an
+				// empty stream.
+				doc.Logger.Debug("remediation: skipping image dict fix, body read failed",
+					slog.String("name", string(name)), slog.Any("err", err))
+				continue
+			}
+			alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, data))
 		}
 	}
 
