@@ -289,5 +289,10 @@ func readXMPStream(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	if err != nil {
 		return nil, err
 	}
-	return stream.Bytes(ctx)
+	// A stream read out of the document still carries its filter chain, and
+	// [ast.PdfStream.Bytes] returns the raw body: patching a FlateDecode
+	// /Metadata (ISO 32000-1, 14.3.2 permits one) without decoding it first
+	// searches compressed bytes for an XMP packet and finds none. A pending
+	// entry needs no decode, litho queues those unfiltered.
+	return doc.DecodeStream(ctx, stream)
 }
