@@ -947,7 +947,21 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
 		p := parser.NewParser(lex)
 		if d.Crypto != nil {
-			p.WithDecryption(d.Crypto.DecryptFunc(ref.ObjectNum, ref.GenNum))
+			// Key the per-object cipher on the generation the cross-reference
+			// gives the object, not the one the caller put in the reference.
+			// ISO 32000-1, 7.6.2 mixes object number AND generation into the
+			// key, while litho resolves by object number alone (see
+			// [Document.ObjectGeneration]); a caller that builds
+			// ast.PdfIndirectRef{ObjectNum: n} without a generation therefore
+			// still reaches the object but decrypts it with the wrong key, and
+			// the result is cached for everyone after it. pdfjs issue16464.pdf
+			// has eleven generation-1 objects: the compliance cache-warming
+			// pass resolved them at generation 0, and `remediate` wrote four of
+			// page 1's five content streams out as noise, losing the glyphs the
+			// forms they invoke would have drawn.
+			// entry is the in-use normal entry checked above, so its
+			// generation is the object's own, not an object-stream index.
+			p.WithDecryption(d.Crypto.DecryptFunc(ref.ObjectNum, entry.Generation))
 		}
 		if complianceMode {
 			p.WithFormatChecking()
