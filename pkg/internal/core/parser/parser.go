@@ -332,6 +332,10 @@ func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
 // (the top-level parser continues, lenient by design).
 func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 	dict := make(ast.PdfDict)
+	// A /Contents string is parsed undecrypted and settled once the whole
+	// dictionary is known, because /Type may follow it. See
+	// [Parser.settleSignatureContents].
+	deferredContents := false
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("parsing dict: %w", err)
@@ -379,14 +383,87 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			continue
 		}
 
-		valObj, err := p.ParseObject(ctx)
+		valObj, err := p.parseDictValue(ctx, key, &deferredContents)
 		if err != nil {
 			// Value missing: close the dict with what we have.
 			break
 		}
 		dict[key] = valObj
 	}
+	if deferredContents {
+		if err := p.settleSignatureContents(dict); err != nil {
+			return nil, err
+		}
+	}
 	return dict, nil
+}
+
+// parseDictValue reads the value of key. A /Contents whose value is a string
+// literal is read without decryption and deferred to
+// [Parser.settleSignatureContents]; every other value is parsed normally.
+func (p *Parser) parseDictValue(ctx context.Context, key ast.PdfName, deferred *bool) (ast.PdfObject, error) {
+	if key != "Contents" || p.decryptFn == nil {
+		return p.ParseObject(ctx)
+	}
+	t, err := p.Peek(0)
+	if err != nil {
+		return nil, err
+	}
+	if t.Type != lexer.TokenString && t.Type != lexer.TokenHexString {
+		return p.ParseObject(ctx)
+	}
+
+	saved := p.decryptFn
+	p.decryptFn = nil
+	valObj, err := p.ParseObject(ctx)
+	p.decryptFn = saved
+	if err != nil {
+		return nil, err
+	}
+	*deferred = true
+	return valObj, nil
+}
+
+// settleSignatureContents decides whether the deferred /Contents string is
+// ciphertext or the one string in an encrypted file that is stored in the
+// clear.
+//
+// ISO 32000-1, 7.6.2 exempts the signature value from the document's string
+// encryption: the digest covers the file with the signature hole excised, so
+// the bytes in that hole are written as they are. Decrypting them yields noise,
+// and for AES the 16-byte initialisation vector is eaten as well, which is what
+// gave pdfjs xfa_issue14071.pdf a 16288-byte PKCS#7 blob that came back 16272
+// bytes long and no longer opened with a DER SEQUENCE tag.
+func (p *Parser) settleSignatureContents(dict ast.PdfDict) error {
+	s, ok := dict["Contents"].(ast.PdfString)
+	if !ok {
+		return nil
+	}
+	if isSignatureDict(dict) {
+		return nil
+	}
+	dec, err := p.decryptFn([]byte(s))
+	if err != nil {
+		return fmt.Errorf("decrypting /Contents string: %w", err)
+	}
+	dict["Contents"] = ast.PdfString(dec)
+	return nil
+}
+
+// isSignatureDict reports whether dict is a signature or document timestamp
+// dictionary (ISO 32000-1, Table 252).
+//
+// /Type is optional there, so a dictionary pairing a /Contents string with a
+// /ByteRange array counts too. PDFBox reads the same two signals for the same
+// reason.
+func isSignatureDict(dict ast.PdfDict) bool {
+	if name, ok := dict["Type"].(ast.PdfName); ok {
+		if name == "Sig" || name == "DocTimeStamp" {
+			return true
+		}
+	}
+	_, hasRange := dict["ByteRange"].(ast.PdfArray)
+	return hasRange
 }
 
 // parseStreamAfterDict consumes the `stream` keyword, the stream body
