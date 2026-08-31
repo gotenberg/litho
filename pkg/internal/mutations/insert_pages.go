@@ -120,8 +120,9 @@ func InsertPages(
 			return fmt.Errorf("inserting pages canceled: %w", err)
 		}
 		page := targetPages[i]
-		newDict := make(ast.PdfDict, len(page.Dict)+4)
-		maps.Copy(newDict, page.Dict)
+		base := latestPageDict(alloc, page)
+		newDict := make(ast.PdfDict, len(base)+4)
+		maps.Copy(newDict, base)
 		newDict["Parent"] = pagesRef
 		materializeInheritedAttrs(newDict, page)
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
@@ -143,8 +144,9 @@ func InsertPages(
 			return fmt.Errorf("inserting pages canceled: %w", err)
 		}
 		page := targetPages[i]
-		newDict := make(ast.PdfDict, len(page.Dict)+4)
-		maps.Copy(newDict, page.Dict)
+		base := latestPageDict(alloc, page)
+		newDict := make(ast.PdfDict, len(base)+4)
+		maps.Copy(newDict, base)
 		newDict["Parent"] = pagesRef
 		materializeInheritedAttrs(newDict, page)
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)

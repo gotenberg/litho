@@ -40,9 +40,13 @@ func RotatePages(ctx context.Context, alloc *writer.ObjAllocator, pages []*docum
 		}
 		p := pages[pageNum-1]
 
-		// Clone the page dict and set /Rotate.
-		newDict := make(ast.PdfDict, len(p.Dict)+1)
-		maps.Copy(newDict, p.Dict)
+		// Clone the page dict and set /Rotate. Start from whatever the
+		// allocator already holds: inside `pipe` an earlier stage may have
+		// rewritten this page, and copying the source dict would throw its
+		// edits away.
+		base := latestPageDict(alloc, p)
+		newDict := make(ast.PdfDict, len(base)+1)
+		maps.Copy(newDict, base)
 		newDict["Rotate"] = ast.PdfInt(rotation)
 
 		// Write the modified page at its existing object number. A page
