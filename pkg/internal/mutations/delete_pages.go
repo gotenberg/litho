@@ -103,6 +103,20 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 	if len(removed) > 0 {
 		pruneCatalogDestinations(ctx, alloc, doc, catalogRef, catalogDict, removed)
+
+		// A field keeps the widgets that present it on each page, and every
+		// widget names its page in /P, so a widget left behind keeps the page
+		// too. Delete reuses the source object numbers in place, which is
+		// exactly what fieldKidOverrides is keyed by.
+		dropped := droppedPageAnnots(ctx, doc, allPages, removed)
+		for objNum, patched := range fieldKidOverrides(ctx, doc, catalogDict, dropped) {
+			alloc.AllocAt(objNum, patched)
+		}
+
+		pruneStructTree(ctx, alloc, doc, catalogDict, removed)
+		pruneOutlineDestinations(ctx, alloc, doc, catalogDict, removed)
+		pruneArticleBeads(ctx, alloc, doc, catalogDict, removed)
+		pruneWebCaptureSets(ctx, alloc, doc, catalogDict, removed)
 	}
 
 	return nil

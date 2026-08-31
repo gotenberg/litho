@@ -238,3 +238,89 @@ func TestRemovedPageSetKeepsRepeatedPages(t *testing.T) {
 		t.Error("object 4 is dropped and should count as removed")
 	}
 }
+
+// TestDeletePagesDropsWidgetsOfRemovedPages pins that a deleted page's widget
+// leaves the interactive form with it.
+//
+// A widget names its page in /P (ISO 32000-1, 12.5.6.19) and its field lists it
+// in /Kids, so a widget left behind is a live reference that carries the deleted
+// page into the output. Deleting page 1 of govdocs thread_100_100852.pdf kept
+// the page and all 1191 bytes of its content this way, reachable as
+// /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P.
+func TestDeletePagesDropsWidgetsOfRemovedPages(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := widgetAcrossPagesPDF(t)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		t.Fatalf("ResolvePages: %v", err)
+	}
+
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
+		t.Fatalf("DeletePages: %v", err)
+	}
+
+	field, ok := alloc.Pending()[7].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the field was not rewritten: %T", alloc.Pending()[7])
+	}
+	kids, ok := field["Kids"].(ast.PdfArray)
+	if !ok {
+		t.Fatalf("/Kids is %T, want an array", field["Kids"])
+	}
+	if len(kids) != 1 {
+		t.Fatalf("/Kids holds %d widgets, want 1: the widget on the deleted page keeps that page alive", len(kids))
+	}
+	if ref, isRef := kids[0].(ast.PdfIndirectRef); !isRef || ref.ObjectNum != 9 {
+		t.Errorf("the surviving widget is %v, want object 9, the one on the page that stayed", kids[0])
+	}
+	if _, kept := field["T"]; !kept {
+		t.Error("the field itself was dropped; only its dead widget should go")
+	}
+}
+
+// widgetAcrossPagesPDF builds a two-page document with one text field whose
+// widgets sit on both pages.
+func widgetAcrossPagesPDF(t *testing.T) []byte {
+	t.Helper()
+
+	const content = "BT /F1 12 Tf 20 700 Td (page) Tj ET\n"
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R] >> >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R" +
+			" /Resources << /Font << /F1 6 0 R >> >> /Annots [8 0 R] >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R" +
+			" /Resources << /Font << /F1 6 0 R >> >> /Annots [9 0 R] >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /FT /Tx /T (shared) /Kids [8 0 R 9 0 R] >>",
+		"<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R /Rect [10 10 50 50] >>",
+		"<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 4 0 R /Rect [10 10 50 50] >>",
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offs[i])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return buf.Bytes()
+}

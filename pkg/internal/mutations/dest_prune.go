@@ -16,6 +16,12 @@ import (
 // internal/core/document.
 const maxDestTreeDepth = 64
 
+// maxOutlineDepth caps the outline walk in [pruneOutlineItems]. Anti-DoS guard,
+// not spec-mandated: a real outline nests a handful of levels, and a crafted
+// /First or /Next cycle must not hang the writer. The walk also tracks visited
+// items, so this bounds nesting rather than repetition.
+const maxOutlineDepth = 64
+
 // maxDestChainDepth caps how far [destTargetsRemoved] follows a destination
 // through indirect references and /D indirection. Anti-DoS guard, not
 // spec-mandated: ISO 32000-1, 12.3.2.2 allows one level of each, so 8 leaves
@@ -371,6 +377,83 @@ func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages [
 	}
 }
 
+// pruneOutlineDestinations strips the destinations of outline items that name a
+// removed page, walking the whole tree.
+//
+// The item itself stays. Its /Dest and /A are both optional (ISO 32000-1, Table
+// 153), so a bookmark that keeps its title and its place in the tree is valid,
+// while unlinking it would mean repairing /First, /Last, /Next, /Prev and /Count
+// around the hole. The destination has to go regardless: it reaches the deleted
+// page, which is enough to write that page into the output, as govdocs
+// thread_000_000761.pdf did with 2196 bytes of it.
+func pruneOutlineDestinations(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	catalogDict ast.PdfDict,
+	removed map[int]bool,
+) {
+	root, err := document.ResolveDict(ctx, doc, catalogDict["Outlines"])
+	if err != nil || root == nil {
+		return
+	}
+	visited := make(map[int]bool)
+	pruneOutlineItems(ctx, alloc, doc, root["First"], removed, visited, 0)
+}
+
+// pruneOutlineItems walks one sibling chain and recurses into each item's
+// children.
+func pruneOutlineItems(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	itemObj ast.PdfObject,
+	removed map[int]bool,
+	visited map[int]bool,
+	depth int,
+) {
+	if depth > maxOutlineDepth {
+		return
+	}
+	for current := itemObj; current != nil; {
+		ref, isRef := current.(ast.PdfIndirectRef)
+		if !isRef || visited[ref.ObjectNum] {
+			return
+		}
+		visited[ref.ObjectNum] = true
+
+		item, err := document.ResolveDict(ctx, doc, current)
+		if err != nil || item == nil {
+			return
+		}
+		if outlineTargetsRemoved(ctx, doc, item, removed) {
+			newItem := make(ast.PdfDict, len(item))
+			maps.Copy(newItem, item)
+			delete(newItem, "Dest")
+			delete(newItem, "A")
+			alloc.AllocAt(ref.ObjectNum, newItem)
+		}
+		pruneOutlineItems(ctx, alloc, doc, item["First"], removed, visited, depth+1)
+		current = item["Next"]
+	}
+}
+
+// outlineTargetsRemoved reports whether an outline item's destination, given
+// either as /Dest or through a /GoTo action, names a removed page.
+func outlineTargetsRemoved(ctx context.Context, doc *document.Document, item ast.PdfDict, removed map[int]bool) bool {
+	if destTargetsRemoved(ctx, doc, item["Dest"], removed, 0) {
+		return true
+	}
+	action, err := document.ResolveDict(ctx, doc, item["A"])
+	if err != nil || action == nil {
+		return false
+	}
+	if subtype, _ := action["S"].(ast.PdfName); subtype != "GoTo" {
+		return false
+	}
+	return destTargetsRemoved(ctx, doc, action["D"], removed, 0)
+}
+
 // pruneDestsDict filters the catalog's /Dests dictionary, the PDF 1.1 form of
 // the named destination table (ISO 32000-1, 12.3.2.3).
 func pruneDestsDict(ctx context.Context, doc *document.Document, dests ast.PdfDict, removed map[int]bool) (ast.PdfDict, bool) {
@@ -384,13 +467,18 @@ func pruneDestsDict(ctx context.Context, doc *document.Document, dests ast.PdfDi
 	return kept, len(kept) != len(dests)
 }
 
-// pruneDestNameTree filters the /Names/Dests name tree in place, returning the
-// object to store in the parent and whether anything was dropped.
+// nameTreeDropFunc decides whether one name-tree value goes. It may rewrite
+// objects the value reaches, which is how a Web Capture content set keeps its
+// entry while losing the pages it named.
+type nameTreeDropFunc func(value ast.PdfObject) bool
+
+// pruneDestNameTree filters a name tree in place, returning the object to store
+// in the parent and whether anything was dropped.
 //
 // Nodes keep their shape: only the /Names pairs change. A /Limits left wider
 // than the keys that remain still contains every key below it, which is all a
 // lookup needs (ISO 32000-1, 7.9.6).
-func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, removed map[int]bool, depth int) (ast.PdfObject, bool) {
+func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, depth int) (ast.PdfObject, bool) {
 	if depth > maxDestTreeDepth {
 		return nodeObj, false
 	}
@@ -414,7 +502,7 @@ func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
 			newKids := make(ast.PdfArray, len(kids))
 			for i, kid := range kids {
-				newKid, kidChanged := pruneDestNameTree(ctx, alloc, doc, kid, removed, depth+1)
+				newKid, kidChanged := pruneDestNameTree(ctx, alloc, doc, kid, drop, depth+1)
 				newKids[i] = newKid
 				changed = changed || kidChanged
 			}
@@ -428,7 +516,7 @@ func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		if names, err := document.ResolveArray(ctx, doc, namesObj); err == nil {
 			keptPairs := make(ast.PdfArray, 0, len(names))
 			for i := 0; i+1 < len(names); i += 2 {
-				if destTargetsRemoved(ctx, doc, names[i+1], removed, 0) {
+				if drop(names[i+1]) {
 					continue
 				}
 				keptPairs = append(keptPairs, names[i], names[i+1])
@@ -468,6 +556,26 @@ func pruneCatalogDestinations(
 	maps.Copy(newCatalog, catalogDict)
 	changed := false
 
+	// /OpenAction names the view the document opens on (ISO 32000-1, 12.3.2 and
+	// Table 28), as a destination or a /GoTo action. Left pointing at a deleted
+	// page it opens the file on a page that is not there, and the reference keeps
+	// that page in the output: govdocs thread_400_400912.pdf held on to 17204
+	// bytes of the page it had just deleted.
+	if openAction, hasOpen := catalogDict["OpenAction"]; hasOpen {
+		targets := destTargetsRemoved(ctx, doc, openAction, removed, 0)
+		if !targets {
+			if action, err := document.ResolveDict(ctx, doc, openAction); err == nil && action != nil {
+				if subtype, _ := action["S"].(ast.PdfName); subtype == "GoTo" {
+					targets = destTargetsRemoved(ctx, doc, action["D"], removed, 0)
+				}
+			}
+		}
+		if targets {
+			delete(newCatalog, "OpenAction")
+			changed = true
+		}
+	}
+
 	if destsObj, hasDests := catalogDict["Dests"]; hasDests {
 		if dests, err := document.ResolveDict(ctx, doc, destsObj); err == nil && dests != nil {
 			if kept, dropped := pruneDestsDict(ctx, doc, dests, removed); dropped {
@@ -484,7 +592,10 @@ func pruneCatalogDestinations(
 	if namesObj, hasNames := catalogDict["Names"]; hasNames {
 		if names, err := document.ResolveDict(ctx, doc, namesObj); err == nil && names != nil {
 			if destsRoot, hasDestsRoot := names["Dests"]; hasDestsRoot {
-				newRoot, dropped := pruneDestNameTree(ctx, alloc, doc, destsRoot, removed, 0)
+				newRoot, dropped := pruneDestNameTree(ctx, alloc, doc, destsRoot,
+					func(value ast.PdfObject) bool {
+						return destTargetsRemoved(ctx, doc, value, removed, 0)
+					}, 0)
 				if dropped {
 					changed = true
 					if _, rootIsRef := destsRoot.(ast.PdfIndirectRef); !rootIsRef {
