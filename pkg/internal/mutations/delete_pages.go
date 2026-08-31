@@ -79,6 +79,12 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		"Count": ast.PdfInt(len(keptIndices)),
 	})
 
+	// A destination that still names a dropped page is both a broken GoTo and a
+	// live reference to that page, so the writer carries the page and its
+	// content stream into the output: deleting page 1 of govdocs
+	// thread_100_100852.pdf left the page behind with all 1191 bytes of it.
+	removed := removedPageSet(allPages, keptIndices)
+
 	// Update each kept page's /Parent to point to the pages node.
 	for _, idx := range keptIndices {
 		if err := ctx.Err(); err != nil {
@@ -89,7 +95,14 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		maps.Copy(newDict, page.Dict)
 		newDict["Parent"] = pagesRef
 		materializeInheritedAttrs(newDict, page)
+		if len(removed) > 0 {
+			pruneLinkAnnots(ctx, alloc, doc, newDict, removed)
+		}
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
+	}
+
+	if len(removed) > 0 {
+		pruneCatalogDestinations(ctx, alloc, doc, catalogRef, catalogDict, removed)
 	}
 
 	return nil
