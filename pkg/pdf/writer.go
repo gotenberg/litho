@@ -1246,6 +1246,23 @@ func (w *Writer) remediate(
 	// file as fixed (verapdf-corpus 6-1-7-1-t01-fail-a).
 	doc.ClearCaches()
 
+	// Apply whatever an earlier pipeline stage queued before the fixers run,
+	// so they see the document as the caller has staged it. The fixers resolve
+	// through resolveFromAllocOrDoc, so a page already in the allocator is the
+	// one they read and rewrite.
+	//
+	// Without this, remediation built its overrides from the untouched source
+	// and those overrides win at the same object number in writeToInternal, so
+	// `litho pipe f rotate -angle 90 remediate -profile PDF/A-2b` wrote the file
+	// with no rotation at all. The mutations stay queued: they are idempotent,
+	// applying them again at write time reaches the same result, and a
+	// remediation rollback must be able to put the Writer back as it was.
+	for i, m := range w.mutations {
+		if err := m.apply(ctx, alloc, doc); err != nil {
+			return nil, fmt.Errorf("applying staged mutation %d before remediation: %w", i, err)
+		}
+	}
+
 	report, err := run(ctx, alloc, doc)
 	if err != nil {
 		return nil, err
@@ -1728,18 +1745,27 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		overrides := w.rewriteOverrides
 		if len(w.mutations) > 0 {
 			mutAlloc := writer.NewObjAllocator(w.reader.doc.HighestObjectNumber())
+			// Seed with the remediation overrides so a mutation queued after
+			// remediation builds ON its fixes rather than against the untouched
+			// source. The page mutations read through latestPageDict, so the
+			// seeded object is the one they extend.
+			//
+			// This replaces a blanket "remediation wins at the same object
+			// number", which silently dropped whatever the caller asked for:
+			// `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` wrote
+			// the file with no rotation. Mutations queued BEFORE remediation are
+			// already folded into those overrides by Writer.remediate, so
+			// re-applying them here lands on the same result.
+			for objNum, obj := range w.rewriteOverrides {
+				mutAlloc.AllocAt(objNum, obj)
+			}
 			for i, m := range w.mutations {
 				if err := m.apply(ctx, mutAlloc, w.reader.doc); err != nil {
 					return fmt.Errorf("applying mutation %d: %w", i, err)
 				}
 			}
 			if len(mutAlloc.Pending()) > 0 {
-				merged := make(map[int]ast.PdfObject, len(overrides)+len(mutAlloc.Pending()))
-				maps.Copy(merged, mutAlloc.Pending())
-				// Remediation overrides win at the same object number,
-				// matching the incremental path's seeding order.
-				maps.Copy(merged, w.rewriteOverrides)
-				overrides = merged
+				overrides = mutAlloc.Pending()
 			}
 		}
 		return mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
