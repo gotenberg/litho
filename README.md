@@ -5,7 +5,7 @@ A pure-Go PDF Conforming Processor. Read, validate, remediate, and produce PDF d
 litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text and structured content, validates documents against PDF/A, PDF/UA, Factur-X, and ZUGFeRD, repairs non-conformant files, and applies transformations such as rotate, split, merge, stamp, encrypt, and sign. Two rules govern the codebase: every output is a valid PDF that viewers can open, and every public type honors its documented concurrency contract under `-race`.
 
 - Module: `github.com/gotenberg/litho`
-- Go: 1.26.0+
+- Go: 1.27.0+
 - No CGO required. Optional CGO plugins add JPXDecode and JBIG2Decode.
 
 ## Features

@@ -3,6 +3,7 @@ package cmap
 import (
 	"bytes"
 	"context"
+	"slices"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -259,8 +260,7 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 	// preferring longer matches (more specific).
 	lengths := c.codeLengths()
 
-	for i := len(lengths) - 1; i >= 0; i-- {
-		n := lengths[i]
+	for _, n := range slices.Backward(lengths) {
 		if n > len(data) {
 			continue
 		}

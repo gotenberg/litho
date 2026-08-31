@@ -83,8 +83,7 @@ func (v Violation) Error() string {
 // violation, such as a Schematron advisory, maps to a fatal Violation
 // carrying its message so no information is lost.
 func toViolation(e error) Violation {
-	var cv compliance.Violation
-	if errors.As(e, &cv) {
+	if cv, ok := errors.AsType[compliance.Violation](e); ok {
 		sev := SeverityFatal
 		if compliance.SeverityOf(cv) == compliance.SeverityWarning {
 			sev = SeverityWarning

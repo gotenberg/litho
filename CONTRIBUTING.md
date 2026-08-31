@@ -3,7 +3,7 @@
 litho is a pure-Go PDF Conforming Processor. Two rules override everything else: **correctness** (every output must be a valid PDF that viewers can open) and **thread safety** (every public type documents its concurrency contract and honors it under `-race`).
 
 - Module: `github.com/gotenberg/litho`
-- Go: 1.26.0+
+- Go: 1.27.0+
 - Optional: Docker (corpus provisioning), CGO + libopenjp2 (JPXDecode), CGO + libjbig2dec (JBIG2Decode)
 
 ## Quick start

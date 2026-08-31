@@ -272,10 +272,10 @@ func parseOCSPResponse(der []byte) (ocspBasicResponse, error) {
 		sr := singleResponse{
 			SerialNumber: single.CertID.SerialNumber,
 			ThisUpdate:   single.ThisUpdate,
-		}
 
-		// CertStatus is a CHOICE: good [0] IMPLICIT NULL, revoked [1], unknown [2]
-		sr.Status = single.CertStatus.Tag
+			// CertStatus is a CHOICE: good [0] IMPLICIT NULL, revoked [1], unknown [2]
+			Status: single.CertStatus.Tag,
+		}
 
 		// NextUpdate is optional.
 		if len(single.NextUpdate.Bytes) > 0 {

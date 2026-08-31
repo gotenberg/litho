@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -743,15 +744,15 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool
 			// of them covers this text, not only one on the sequence that owns
 			// the /MCID.
 			covered := false
-			for j := len(open) - 1; j >= 0; j-- {
-				if open[j].hasLang {
+			for _, o := range slices.Backward(open) {
+				if o.hasLang {
 					covered = true
 					break
 				}
 			}
-			for j := len(open) - 1; j >= 0; j-- {
-				if open[j].mcid >= 0 {
-					found[open[j].mcid] = found[open[j].mcid] || covered
+			for _, o := range slices.Backward(open) {
+				if o.mcid >= 0 {
+					found[o.mcid] = found[o.mcid] || covered
 					break
 				}
 			}

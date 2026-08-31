@@ -1,6 +1,7 @@
 package cmap
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -86,8 +87,7 @@ func (m *CIDMap) Decode(data []byte) []CIDCode {
 // mixed-width CMap advances a single byte past an unmapped multi-byte code so a
 // following narrower code can re-align. consumed is always >= 1.
 func (m *CIDMap) next(data []byte, lengths []int, hasShort bool) (consumed, cid int, mapped bool) {
-	for i := len(lengths) - 1; i >= 0; i-- {
-		n := lengths[i]
+	for _, n := range slices.Backward(lengths) {
 		if n == 0 || n > len(data) {
 			continue
 		}

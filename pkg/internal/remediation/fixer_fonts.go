@@ -811,7 +811,7 @@ func generateToUnicodeCMap(mapping map[uint16]rune, codeBytes int) []byte {
 
 	buf.WriteString("endcmap\n")
 	buf.WriteString("CMapName currentdict /CMap defineresource pop\n")
-	buf.WriteString("end end\n")
+	buf.WriteString("end end\n") //nolint:dupword // PostScript: one `end` closes the CMap dict, the other the resource category (ISO 32000-1, 9.7.5.4).
 	return []byte(buf.String())
 }
 

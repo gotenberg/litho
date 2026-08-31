@@ -486,7 +486,7 @@ func generateISO32005(profilePath, outPath string) (int, error) {
 	buf.WriteString("\tKind   string\n")
 	buf.WriteString("\tParent string\n")
 	buf.WriteString("\tChild  string\n")
-	buf.WriteString("\tRule   Rule\n")
+	buf.WriteString("\tRule   Rule\n") //nolint:dupword // Emitted Go: the field is named Rule and its type is Rule.
 	buf.WriteString("}\n\n")
 	buf.WriteString("//nolint:gochecknoglobals // generated spec table\n")
 	buf.WriteString("var iso32005Entries = []iso32005Entry{\n")
