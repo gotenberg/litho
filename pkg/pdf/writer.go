@@ -1170,6 +1170,50 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 	return snap, nil
 }
 
+// stagedBaseline samples the document the caller has staged rather than the
+// source it started from.
+//
+// [probeIntegrity] reads the source Reader, so a pipeline that queued a delete
+// or a split before remediation measured a page count remediation never had:
+// `litho pipe f delete -pages 1 remediate -profile PDF/A-2b` reported
+// "remediation broke the PDF beyond the configured regression tolerance: page
+// count changed from 41 to 40" and rolled back a remediation that had done
+// nothing wrong. The extra serialization only happens when something is queued.
+func (w *Writer) stagedBaseline(ctx context.Context) (integritySnap, error) {
+	if len(w.mutations) == 0 {
+		return probeIntegrity(ctx, w.reader)
+	}
+
+	logger := w.reader.doc.Logger
+	f, err := os.CreateTemp("", "litho-staged-*.pdf")
+	if err != nil {
+		return integritySnap{}, fmt.Errorf("creating staged baseline file: %w", err)
+	}
+	path := f.Name()
+	defer removeTempFile(logger, path)
+
+	if writeErr := w.writeToInternal(ctx, f); writeErr != nil {
+		if closeErr := f.Close(); closeErr != nil {
+			logger.Debug("closing staged baseline file failed", slog.Any("err", closeErr))
+		}
+		return integritySnap{}, fmt.Errorf("serializing staged document: %w", writeErr)
+	}
+	if closeErr := f.Close(); closeErr != nil {
+		return integritySnap{}, fmt.Errorf("closing staged baseline file: %w", closeErr)
+	}
+
+	r, err := OpenFile(ctx, path)
+	if err != nil {
+		return integritySnap{}, fmt.Errorf("reopening staged document: %w", err)
+	}
+	defer func() {
+		if closeErr := r.Close(); closeErr != nil {
+			logger.Debug("closing staged baseline reader failed", slog.Any("err", closeErr))
+		}
+	}()
+	return probeIntegrity(ctx, r)
+}
+
 // evaluateRegression returns a non-empty reason describing the first
 // observed regression; an empty string means the post-remediation sample
 // is within tolerance of baseline. Each field guards on a positive
@@ -1208,7 +1252,7 @@ func (w *Writer) remediate(
 	doc := w.reader.doc
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
 
-	baseline, baseErr := probeIntegrity(ctx, w.reader)
+	baseline, baseErr := w.stagedBaseline(ctx)
 	if baseErr != nil {
 		// Treat an unreadable source as a zero baseline: the user asked
 		// litho to fix a broken PDF, so refusing at the door defeats the

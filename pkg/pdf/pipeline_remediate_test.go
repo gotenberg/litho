@@ -157,3 +157,46 @@ func openPageRewriteFixture(t *testing.T) *Reader {
 	}
 	return r
 }
+
+// TestPipelineRemediateAfterDeleteIsNotAFalseRegression pins that remediation
+// judges itself against the document the pipeline staged.
+//
+// The integrity baseline came from the source Reader, so a delete queued before
+// remediation left the gate comparing a page count remediation never had:
+// `litho pipe f delete -pages 1 remediate -profile PDF/A-2b` failed outright
+// with "remediation broke the PDF beyond the configured regression tolerance:
+// page count changed from 41 to 40" and rolled back a remediation that had done
+// nothing wrong.
+func TestPipelineRemediateAfterDeleteIsNotAFalseRegression(t *testing.T) {
+	t.Parallel()
+
+	p := NewPipeline().Open(openThreePage(t)).
+		Apply(func(_ context.Context, w *Writer) error { return w.DeletePages(1) }).
+		Apply(func(ctx context.Context, w *Writer) error {
+			_, err := w.RemediatePDFA(ctx, models.PDFA2b)
+			return err
+		})
+
+	var out bytes.Buffer
+	if _, err := p.WriteTo(context.Background(), &out); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+
+	r, err := Open(context.Background(), bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopening output: %v", err)
+	}
+	defer func() {
+		if closeErr := r.Close(); closeErr != nil {
+			t.Logf("closing reader: %v", closeErr)
+		}
+	}()
+
+	n, err := r.PageCount(context.Background())
+	if err != nil {
+		t.Fatalf("reading page count: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("output has %d pages, want 2: the delete asked for one fewer than the three it started with", n)
+	}
+}
