@@ -2,6 +2,7 @@ package mutations
 
 import (
 	"context"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -77,6 +78,58 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 	}
 
 	return ref, nil
+}
+
+// pageCopyLinks are the page entries that reach OTHER pages of the source
+// document, which [pageCopyOverrides] cuts before a copy.
+//
+// /Parent is the page's /Pages node, whose /Kids names every sibling (ISO
+// 32000-1, 7.7.3.4). /B is the page's article beads, and each bead chains to the
+// next bead of the article through /N, /V and /T (ISO 32000-1, 12.4.3).
+var pageCopyLinks = []ast.PdfName{"Parent", "B"}
+
+// pageCopyOverrides returns each page's dictionary without the entries that
+// reach its neighbours, for registration with [writer.Copier.WithOverrides]
+// before the pages are copied.
+//
+// The copier follows every reference it meets, so one of these links pulls in
+// pages the caller never asked for. Extracting nine pages of govdocs
+// thread_100_100852.pdf wrote all 56 into the output through /Parent: 47 extra
+// pages carrying 510 KB of content that read back as plain text, plus the source
+// page tree, root node /Count 56 and all. thread_100_100184.pdf leaked 84 pages
+// the same way through a single article bead.
+//
+// Nothing usable is lost. Split and merge build their own flat page tree and
+// assign /Parent to every copied page afterwards, and [copyPageForOutput]
+// materialises the four attributes a page would otherwise inherit through it.
+// The beads go for the reason /StructTreeRoot and /PageLabels are not carried
+// either (see copyCatalogEntries): they are keyed to pages the output does not
+// have, and with no /Threads in the new catalog to list them, an article that
+// survived would be unreachable anyway.
+func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
+	overrides := make(map[int]ast.PdfObject, len(pages))
+	for _, page := range pages {
+		if page.Ref.ObjectNum == 0 {
+			continue
+		}
+		linked := false
+		for _, key := range pageCopyLinks {
+			if _, has := page.Dict[key]; has {
+				linked = true
+				break
+			}
+		}
+		if !linked {
+			continue
+		}
+		stripped := make(ast.PdfDict, len(page.Dict))
+		maps.Copy(stripped, page.Dict)
+		for _, key := range pageCopyLinks {
+			delete(stripped, key)
+		}
+		overrides[page.Ref.ObjectNum] = stripped
+	}
+	return overrides
 }
 
 // croppedTighter reports whether a page's visible region differs from its

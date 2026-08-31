@@ -50,6 +50,9 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		}
 
 		copier := writer.NewCopier(src.Doc, alloc)
+		if overrides := pageCopyOverrides(src.Pages); len(overrides) > 0 {
+			copier.WithOverrides(overrides)
+		}
 		copiers[srcIdx] = copier
 		srcCatalogRef, srcHasCatalog := CatalogRef(ctx, src.Doc)
 		if srcCatalog, err := document.ResolveDict(ctx, src.Doc, srcCatalogRef); srcHasCatalog && err == nil && srcCatalog != nil {

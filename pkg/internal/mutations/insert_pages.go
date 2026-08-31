@@ -50,6 +50,17 @@ func InsertPages(
 	// from their own tree, since the flat target tree gives them nothing to
 	// inherit.
 	copier := writer.NewCopier(srcDoc, alloc)
+	overrides := pageCopyOverrides(pagesToInsert)
+	if removed := unselectedPages(srcPages, pagesToInsert); len(removed) > 0 {
+		splitDestOverrides(ctx, srcDoc, pagesToInsert, removed, overrides)
+		if srcCatalog, err := document.ResolveCatalog(ctx, srcDoc); err == nil && srcCatalog != nil {
+			dropped := droppedPageAnnots(ctx, srcDoc, srcPages, removed)
+			maps.Copy(overrides, fieldKidOverrides(ctx, srcDoc, srcCatalog.Dict, dropped))
+		}
+	}
+	if len(overrides) > 0 {
+		copier.WithOverrides(overrides)
+	}
 	copiedRefs := make([]ast.PdfIndirectRef, len(pagesToInsert))
 	for i, page := range pagesToInsert {
 		if err := ctx.Err(); err != nil {

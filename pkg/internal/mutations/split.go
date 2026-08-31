@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -28,6 +29,25 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 
 	alloc := writer.NewObjAllocator(0)
 	copier := writer.NewCopier(doc, alloc)
+
+	keptIndices := make([]int, len(pages))
+	keptPages := make([]*document.Page, len(pages))
+	for i, pageNum := range pages {
+		keptIndices[i] = pageNum - 1
+		keptPages[i] = allPages[pageNum-1]
+	}
+
+	overrides := pageCopyOverrides(keptPages)
+	if removed := removedPageSet(allPages, keptIndices); len(removed) > 0 {
+		splitDestOverrides(ctx, doc, keptPages, removed, overrides)
+		if srcCatalog, err := document.ResolveCatalog(ctx, doc); err == nil && srcCatalog != nil {
+			dropped := droppedPageAnnots(ctx, doc, allPages, removed)
+			maps.Copy(overrides, fieldKidOverrides(ctx, doc, srcCatalog.Dict, dropped))
+		}
+	}
+	if len(overrides) > 0 {
+		copier.WithOverrides(overrides)
+	}
 
 	// Copy each selected page, building new page refs.
 	pageRefs := make([]ast.PdfObject, 0, len(pages))
