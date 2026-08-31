@@ -1827,20 +1827,27 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
 
+	// Seed the remediation overrides FIRST so a queued mutation builds on the
+	// fixes instead of losing to them: the page mutations read through
+	// latestPageDict, so the seeded object is the one they extend. Remediation
+	// uses source-namespace object numbers, which match this allocator, so
+	// AllocAt with the same keys lands correctly.
+	//
+	// Seeding them last let them win at the same object number, which silently
+	// dropped whatever the caller asked for. pdfjs bug1708041.pdf came out of
+	// `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no
+	// rotation on any page. The full-rewrite branch above orders it the same way
+	// for the same reason.
+	for objNum, obj := range w.rewriteOverrides {
+		alloc.AllocAt(objNum, obj)
+	}
+
 	// Apply all batched mutations.
 	for i, m := range w.mutations {
 		if err := m.apply(ctx, alloc, doc); err != nil {
 			return fmt.Errorf("applying mutation %d: %w", i, err)
 		}
 		logger.Debug("mutation applied", slog.Int("index", i))
-	}
-
-	// Seed remediation overrides last so they win if a queued user
-	// mutation wrote to the same object number. Remediation uses
-	// source-namespace object numbers, which match the incremental
-	// path's allocator, so AllocAt with the same keys lands correctly.
-	for objNum, obj := range w.rewriteOverrides {
-		alloc.AllocAt(objNum, obj)
 	}
 
 	// If no mutations produced pending objects AND the trailer was not
