@@ -160,6 +160,20 @@ func resolveDestination(ctx context.Context, doc *document.Document, destObj ast
 		return pageFromDestArray(destArr, pageMap)
 	}
 
+	// A dictionary in /Dest is malformed: ISO 32000-1, Table 153 allows an
+	// array, a name or a byte string there, and an action belongs in /A. Real
+	// producers write the action anyway, wrapping the destination in
+	// << /Type /Action /S /GoTo /D [...] >>, and every other reader follows it.
+	// Four govdocs outlines (thread_300_300865 and friends) reported no page at
+	// all for every one of their bookmarks. /D holds the destination in both the
+	// action form and the plain << /D ... >> form, so one lookup covers each.
+	if destDict, ok := destRes.(ast.PdfDict); ok {
+		if inner, has := destDict["D"]; has {
+			return resolveDestination(ctx, doc, inner, pageMap)
+		}
+		return 0
+	}
+
 	// Named destination: look up in the name tree by raw byte key.
 	// Name tree keys are byte strings (ISO 32000-1 §7.9.6); decoding via
 	// [document.DecodePdfString] would collapse producer-disambiguated
