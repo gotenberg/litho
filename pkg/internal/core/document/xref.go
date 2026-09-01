@@ -539,7 +539,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	// object, not a neighbour; embedded string occurrences earlier in
 	// the body are skipped over.
 	endobjIdx := -1
-	for i := len(data) - 6; i >= 0; i-- { //nolint:mnd
+	for i := len(data) - 6; i >= 0; i-- { //nolint:mnd // 6 = len("endobj"), the keyword matched just below.
 		if string(data[i:i+6]) == "endobj" {
 			endobjIdx = i
 			break
@@ -559,7 +559,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	}
 
 	// Check that endobj is followed by EOL (LF or CR) or EOF.
-	afterIdx := endobjIdx + 6 //nolint:mnd
+	afterIdx := endobjIdx + 6 //nolint:mnd // 6 = len("endobj"): step past the keyword just matched.
 	if afterIdx < len(data) {
 		afterByte := data[afterIdx]
 		if afterByte != '\n' && afterByte != '\r' {

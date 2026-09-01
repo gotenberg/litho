@@ -1186,18 +1186,18 @@ func ReadUnitsPerEm(data []byte) uint16 {
 		if upm := cff.ReadUnitsPerEm(data); upm > 0 {
 			return upm
 		}
-		return 1000 //nolint:mnd
+		return 1000 //nolint:mnd // A CFF with an unreadable FontMatrix falls back to its 1000-upm default (CFF spec, Tech Note #5176, Table 9).
 	}
 	records, err := truetype.ParseTableDirectory(data)
 	if err != nil {
 		return 1000 //nolint:mnd // safe default
 	}
 	headData, err := truetype.TableData(data, records, "head")
-	if err != nil || len(headData) < 20 { //nolint:mnd
-		return 1000 //nolint:mnd
+	if err != nil || len(headData) < 20 { //nolint:mnd // unitsPerEm occupies head bytes 18:20 (OpenType spec, head), so a shorter table cannot hold it.
+		return 1000 //nolint:mnd // The conventional default when head is unusable; 1000 upm matches the CFF default and most Type 1 derived fonts.
 	}
 	// unitsPerEm is at offset 18 in the head table.
-	return binary.BigEndian.Uint16(headData[18:20]) //nolint:mnd
+	return binary.BigEndian.Uint16(headData[18:20]) //nolint:mnd // unitsPerEm is a uint16 at head offset 18 (OpenType spec, head).
 }
 
 // type1EncodingRe matches "dup <code> /<name> put" lines in Type1 font programs.
@@ -1302,7 +1302,7 @@ func ExtractType1EncodingNames(fontData []byte) map[byte]string {
 	result := make(map[byte]string)
 	for _, match := range type1EncodingRe.FindAllSubmatch(encSection, -1) {
 		code, err := strconv.Atoi(string(match[1]))
-		if err != nil || code < 0 || code > 255 { //nolint:mnd
+		if err != nil || code < 0 || code > 255 { //nolint:mnd // A simple font addresses one byte of character codes, 0-255 (ISO 32000-1, 9.6.6.2).
 			continue
 		}
 		glyphName := string(match[2])
@@ -1715,7 +1715,7 @@ func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict a
 	}
 
 	// Build CID→Unicode: CIDToGIDMap[CID] → GID, gidToUni[GID] → Unicode.
-	mapping := make(map[string]string, 4096) //nolint:mnd
+	mapping := make(map[string]string, 4096) //nolint:mnd // Capacity hint sized for a large CMap, not a limit; the map grows freely.
 	numCIDs := len(mapData) / 2
 	for cid := range numCIDs {
 		gid := uint16(mapData[cid*2])<<8 | uint16(mapData[cid*2+1])

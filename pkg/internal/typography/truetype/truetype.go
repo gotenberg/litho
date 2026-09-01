@@ -128,7 +128,7 @@ func EmptyGIDs(ctx context.Context, data []byte) (map[uint16]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(headData) < 54 { //nolint:mnd
+	if len(headData) < 54 { //nolint:mnd // The head table is 54 bytes (OpenType spec, head); indexToLocFormat sits at offset 50.
 		return nil, fmt.Errorf("%w: head table too short", ErrInvalidFont)
 	}
 	indexToLocFormat := int16(binary.BigEndian.Uint16(headData[50:52])) //nolint:gosec // intentional two's-complement conversion
@@ -142,7 +142,7 @@ func EmptyGIDs(ctx context.Context, data []byte) (map[uint16]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(maxpData) < 6 { //nolint:mnd
+	if len(maxpData) < 6 { //nolint:mnd // maxp version 0.5 is 6 bytes (OpenType spec, maxp); numGlyphs sits at offset 4.
 		return nil, fmt.Errorf("%w: maxp table too short", ErrInvalidFont)
 	}
 	numGlyphs := int(binary.BigEndian.Uint16(maxpData[4:6]))

@@ -634,11 +634,11 @@ func ReadUnitsPerEm(data []byte) uint16 {
 	hdrSize := max(int(data[2]), 4)
 	nameEnd, err := skipINDEX(data, hdrSize)
 	if err != nil {
-		return 1000 //nolint:mnd
+		return 1000 //nolint:mnd // The default CFF FontMatrix is 0.001, i.e. 1000 units per em (CFF spec, Tech Note #5176, Table 9).
 	}
 	_, topDictEntries, err := parseINDEX(data, nameEnd)
 	if err != nil || len(topDictEntries) == 0 {
-		return 1000 //nolint:mnd
+		return 1000 //nolint:mnd // Default FontMatrix 0.001 => 1000 upm (CFF spec, Table 9).
 	}
 
 	scale := parseFontMatrixScale(topDictEntries[0])
@@ -657,9 +657,11 @@ func ReadUnitsPerEm(data []byte) uint16 {
 	if scale <= 0 {
 		return 1000 //nolint:mnd // default CFF FontMatrix
 	}
-	upm := uint16(1.0/scale + 0.5) //nolint:gosec,mnd
+	// +0.5 rounds to nearest; scale is positive here, and a FontMatrix small
+	// enough to overflow uint16 is rejected by the upm == 0 check below.
+	upm := uint16(1.0/scale + 0.5) //nolint:gosec,mnd // Bounded: scale > 0 was checked above, and 0 is rejected below.
 	if upm == 0 {
-		return 1000 //nolint:mnd
+		return 1000 //nolint:mnd // Default FontMatrix 0.001 => 1000 upm (CFF spec, Table 9).
 	}
 	return upm
 }
@@ -669,7 +671,7 @@ func ReadUnitsPerEm(data []byte) uint16 {
 // Handles both integer and real (nibble-encoded) number operands.
 func parseFontMatrixScale(dictData []byte) float64 {
 	// We need to track the last few operands as float64 to handle reals.
-	operands := make([]float64, 0, 6) //nolint:mnd
+	operands := make([]float64, 0, 6) //nolint:mnd // A CFF DICT operator takes at most six operands (FontMatrix); a capacity hint, not a limit.
 
 	for i := 0; i < len(dictData); {
 		b := dictData[i]
@@ -685,34 +687,34 @@ func parseFontMatrixScale(dictData []byte) float64 {
 			}
 			operands = operands[:0]
 			i++
-		case b >= 32 && b <= 246: //nolint:mnd
+		case b >= 32 && b <= 246: //nolint:mnd // CFF spec (Tech Note #5176) Table 3: b0 32-246 is a one-byte operand, value b0-139.
 			operands = append(operands, float64(int32(b)-139))
 			i++
-		case b >= 247 && b <= 250: //nolint:mnd
+		case b >= 247 && b <= 250: //nolint:mnd // CFF spec Table 3: b0 247-250 is a two-byte positive operand, (b0-247)*256 + b1 + 108.
 			if i+1 >= len(dictData) {
 				return 0
 			}
 			operands = append(operands, float64((int32(b)-247)*256+int32(dictData[i+1])+108))
 			i += 2
-		case b >= 251 && b <= 254: //nolint:mnd
+		case b >= 251 && b <= 254: //nolint:mnd // CFF spec Table 3: b0 251-254 is a two-byte negative operand, -(b0-251)*256 - b1 - 108.
 			if i+1 >= len(dictData) {
 				return 0
 			}
 			operands = append(operands, float64(-(int32(b)-251)*256-int32(dictData[i+1])-108))
 			i += 2
-		case b == 28: //nolint:mnd
+		case b == 28: //nolint:mnd // CFF spec Table 3: b0 28 introduces a 16-bit two's-complement operand.
 			if i+2 >= len(dictData) {
 				return 0
 			}
 			operands = append(operands, float64(int16(binary.BigEndian.Uint16(dictData[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
 			i += 3
-		case b == 29: //nolint:mnd
+		case b == 29: //nolint:mnd // CFF spec Table 3: b0 29 introduces a 32-bit two's-complement operand.
 			if i+4 >= len(dictData) {
 				return 0
 			}
 			operands = append(operands, float64(int32(binary.BigEndian.Uint32(dictData[i+1:i+5])))) //nolint:gosec // intentional two's-complement conversion
 			i += 5
-		case b == 30: //nolint:mnd
+		case b == 30: //nolint:mnd // CFF spec Table 3: b0 30 introduces a nibble-encoded real number.
 			// Real number: nibble-encoded.
 			val, end := parseRealNumber(dictData, i+1)
 			operands = append(operands, val)
@@ -741,21 +743,21 @@ func parseRealNumber(data []byte, pos int) (float64, int) {
 				goto done
 			}
 			switch {
-			case nibble <= 9: //nolint:mnd
+			case nibble <= 9: //nolint:mnd // CFF spec Table 5: nibbles 0-9 are the decimal digits.
 				buf[n] = '0' + nibble
 				n++
-			case nibble == 0x0A: //nolint:mnd
+			case nibble == 0x0A: //nolint:mnd // CFF spec Table 5: nibble 0xA is the decimal point.
 				buf[n] = '.'
 				n++
-			case nibble == 0x0B: //nolint:mnd
+			case nibble == 0x0B: //nolint:mnd // CFF spec Table 5: nibble 0xB is E.
 				buf[n] = 'E'
 				n++
-			case nibble == 0x0C: //nolint:mnd
+			case nibble == 0x0C: //nolint:mnd // CFF spec Table 5: nibble 0xC is E-minus.
 				buf[n] = 'E'
 				n++
 				buf[n] = '-'
 				n++
-			case nibble == 0x0E: //nolint:mnd
+			case nibble == 0x0E: //nolint:mnd // CFF spec Table 5: nibble 0xE is the minus sign.
 				buf[n] = '-'
 				n++
 			}

@@ -151,7 +151,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		}
 		// Errors from Execute are non-fatal: unknown/unsupported operators
 		// return errors but must not abort extraction of the rest.
-		_ = machine.ExecuteOne(ctx, op) //nolint:errcheck
+		_ = machine.ExecuteOne(ctx, op) //nolint:errcheck // Deliberate: an unsupported operator must not abort extraction of the rest, as the comment above says.
 
 		state := machine.Current()
 
@@ -485,14 +485,14 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// q / cm / recurse / Q. These trivial state operators cannot fail in
 	// practice and the machine doesn't use the return values from
 	// Execute, so the errcheck suppressions are intentional.
-	_ = machine.Execute(ctx, []content.Operation{{Operator: "q"}}) //nolint:errcheck
+	_ = machine.Execute(ctx, []content.Operation{{Operator: "q"}}) //nolint:errcheck // Deliberate: a synthetic q cannot fail meaningfully, and a failure must not abort extraction.
 	if matrixObj, ok := stream.Dict["Matrix"]; ok {
 		matrixArr, err := document.ResolveArray(ctx, doc, matrixObj)
 		if err != nil {
 			return err
 		}
 		if len(matrixArr) == 6 {
-			_ = machine.Execute(ctx, []content.Operation{{ //nolint:errcheck
+			_ = machine.Execute(ctx, []content.Operation{{ //nolint:errcheck // Deliberate: a synthetic state operation must not abort extraction.
 				Operator: "cm",
 				Operands: matrixArr,
 			}})
@@ -517,7 +517,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 		return err
 	}
 
-	_ = machine.Execute(ctx, []content.Operation{{Operator: "Q"}}) //nolint:errcheck
+	_ = machine.Execute(ctx, []content.Operation{{Operator: "Q"}}) //nolint:errcheck // Deliberate: the matching Q restores state; a failure must not abort extraction.
 	return nil
 }
 

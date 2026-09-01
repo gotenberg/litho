@@ -116,7 +116,7 @@ func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) 
 
 	// Attempt to authenticate with a blank password. Error is intentionally
 	// discarded: if blank auth fails, the caller must provide a real password.
-	_ = h.Authenticate("") //nolint:errcheck
+	_ = h.Authenticate("") //nolint:errcheck // Deliberate: a failed blank-password attempt just means the caller must supply one, as the comment above says.
 
 	return h, nil
 }
