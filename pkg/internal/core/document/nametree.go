@@ -60,8 +60,20 @@ const maxNameTreeDepth = 64
 // searchNameTree recursively searches a name tree node for the given key.
 // Name trees use /Kids for intermediate nodes and /Names for leaf nodes,
 // with optional /Limits [min max] arrays for efficient pruning.
+//
+// A miss is retried with the /Limits ignored. ISO 32000-1, 7.9.6 requires keys
+// to be ordered by byte value and every /Limits pair to bound its subtree, and
+// producers get it wrong: pdfjs issue14864.pdf sorts by decoded text, so its
+// root claims a maximum of "section*.4" while the subtree holds UTF-16 keys
+// starting 0xFE. Pruning on that discards the whole tree at the root, and two
+// bookmarks that every other reader resolves came back with no destination at
+// all. The rescan costs a full walk only when the fast path already failed.
 func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
-	return searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0)
+	result, err := searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0, true)
+	if err != nil || result != nil {
+		return result, err
+	}
+	return searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0, false)
 }
 
 // searchNameTreeAt searches a name-tree node for key. seen visits each node
@@ -69,7 +81,7 @@ func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, k
 // malformed, and without the guard a node whose /Kids lists the same child
 // twice (with no pruning /Limits) fans out 2^depth on a key that is absent (a
 // denial of service).
-func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, seen map[int]bool, depth int) (ast.PdfArray, error) {
+func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, seen map[int]bool, depth int, prune bool) (ast.PdfArray, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -92,7 +104,7 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 	}
 
 	// Check /Limits to prune this branch early.
-	if limitsObj, ok := nodeDict["Limits"]; ok {
+	if limitsObj, ok := nodeDict["Limits"]; ok && prune {
 		limitsArr, err := ResolveArray(ctx, doc, limitsObj)
 		if err != nil {
 			return nil, err
@@ -121,7 +133,7 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			result, err := searchNameTreeAt(ctx, doc, kid, key, seen, depth+1)
+			result, err := searchNameTreeAt(ctx, doc, kid, key, seen, depth+1, prune)
 			if err != nil {
 				return nil, err
 			}
