@@ -13,7 +13,7 @@ import (
 
 // runPipe implements `litho pipe <file> <stage> [flags] <stage> [flags] ... -o out.pdf`.
 // Stages reuse the same names and flags as individual mutation commands.
-func runPipe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	if len(args) < 2 {
 		fmt.Fprintln(stderr, "Usage: litho pipe <file> <stage> [stage-flags] ... -o out.pdf")
 		fmt.Fprintln(stderr)

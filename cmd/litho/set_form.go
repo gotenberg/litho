@@ -19,7 +19,7 @@ func (f *fieldFlags) Set(val string) error {
 	return nil
 }
 
-func runSetForm(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runSetForm(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("set-form", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")

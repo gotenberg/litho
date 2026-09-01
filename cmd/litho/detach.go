@@ -9,7 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-func runDetach(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runDetach(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("detach", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")

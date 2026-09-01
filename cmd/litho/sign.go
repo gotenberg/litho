@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-func runSign(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runSign(_ context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sign", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	_ = fs.String("o", "", "Output file")

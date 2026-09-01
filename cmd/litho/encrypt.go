@@ -15,7 +15,7 @@ var encryptAlgorithms = map[string]pdf.EncryptAlgorithm{
 	"aes256":  pdf.EncryptAES256,
 }
 
-func runEncrypt(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("encrypt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")

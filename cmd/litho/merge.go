@@ -9,7 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-func runMerge(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")

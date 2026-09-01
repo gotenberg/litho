@@ -12,7 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-func runStampImage(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runStampImage(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("stamp-image", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")
