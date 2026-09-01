@@ -1681,6 +1681,35 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	return nil
 }
 
+// passThroughChunk bounds how much of a pass-through copy runs between
+// cancellation checks. Not spec-mandated: it trades a negligible number of
+// extra loop iterations for the guarantee that a caller who cancels stops
+// within a megabyte rather than after the whole file.
+const passThroughChunk = 1 << 20
+
+// copySourceCancellable streams the source to dst, honouring ctx.
+//
+// A write with nothing queued used to io.Copy the whole file in one call, which
+// no cancellation could interrupt: every other path through writeToInternal
+// stops on a cancelled context, so a caller could not rely on the contract, and
+// a multi-gigabyte pass-through ran to completion regardless.
+func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, size int64) error {
+	for off := int64(0); off < size; {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		n := int64(passThroughChunk)
+		if remaining := size - off; remaining < n {
+			n = remaining
+		}
+		if _, err := io.Copy(dst, io.NewSectionReader(src, off, n)); err != nil {
+			return err
+		}
+		off += n
+	}
+	return ctx.Err()
+}
+
 // writeToInternal performs the serialization. [Writer.WriteTo] wraps it
 // with the single-use guard and the sign/full-rewrite compatibility
 // check. Remediation calls this directly so its internal probe writes
@@ -1856,9 +1885,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	// the allocator is empty, preserving trailer-only fixes like /ID.
 	if len(alloc.Pending()) == 0 && !w.trailerDirty {
 		logger.Debug("no pending objects, copying source as-is")
-		src := io.NewSectionReader(doc.RawReader(), 0, doc.FileSize())
-		_, err := io.Copy(dst, src)
-		return err
+		return copySourceCancellable(ctx, dst, doc.RawReader(), doc.FileSize())
 	}
 	logger.Debug("incremental update",
 		slog.Int("pending_objects", len(alloc.Pending())),
