@@ -2,8 +2,8 @@ package crypto
 
 import (
 	"bytes"
-	"crypto/md5" //nolint:gosec
-	"crypto/rc4" //nolint:gosec
+	"crypto/md5" //nolint:gosec // ISO 32000-1, 7.6.3.3 defines the standard security handler key in terms of MD5; the test must use the same primitive.
+	"crypto/rc4" //nolint:gosec // ISO 32000-1, 7.6.3 specifies RC4 for /V 1 and /V 2 handlers; the test must use the same cipher.
 	"errors"
 	"testing"
 
@@ -57,26 +57,26 @@ func buildV1EncryptDict(password string) (ast.PdfDict, ast.PdfDict) {
 	}
 
 	// Compute O value: encrypt padded password with MD5 of padded password.
-	md := md5.New() //nolint:gosec
+	md := md5.New() //nolint:gosec // Reproducing Algorithm 3 of ISO 32000-1, 7.6.3.4, which is MD5 by definition.
 	md.Write(padded)
 	ownerKey := md.Sum(nil)
 	oVal := make([]byte, 32)
 	copy(oVal, padded)
-	c, _ := rc4.NewCipher(ownerKey[:5]) //nolint:gosec
+	c, _ := rc4.NewCipher(ownerKey[:5]) //nolint:gosec // Algorithm 3 enciphers the padded owner password with RC4 (ISO 32000-1, 7.6.3.4).
 	c.XORKeyStream(oVal, oVal)
 
 	// Compute encryption key (Algorithm 3.2).
-	mdC := md5.New() //nolint:gosec
+	mdC := md5.New() //nolint:gosec // Reproducing Algorithm 2 of ISO 32000-1, 7.6.3.3, which is MD5 by definition.
 	mdC.Write(padded)
 	mdC.Write(oVal)
-	pBytes := []byte{byte(pVal), byte(pVal >> 8), byte(pVal >> 16), byte(pVal >> 24)} //nolint:gosec
+	pBytes := []byte{byte(pVal), byte(pVal >> 8), byte(pVal >> 16), byte(pVal >> 24)} //nolint:gosec // Algorithm 2 step (c) feeds /P as four little-endian bytes; the truncation is the encoding.
 	mdC.Write(pBytes)
 	mdC.Write(id)
 	key := mdC.Sum(nil)[:5] // Length/8 = 40/8 = 5
 
 	// Compute U value: RC4(paddingString, key).
 	uVal := make([]byte, 32)
-	c2, _ := rc4.NewCipher(key) //nolint:gosec
+	c2, _ := rc4.NewCipher(key) //nolint:gosec // Algorithm 4 enciphers the padding with the file key using RC4 (ISO 32000-1, 7.6.3.4).
 	c2.XORKeyStream(uVal, paddingString)
 
 	encDict := ast.PdfDict{
@@ -242,7 +242,7 @@ func TestObjKey_V4_RC4_NoSalt(t *testing.T) {
 	want = append(want, encKey...)
 	want = append(want, byte(objNum), byte(objNum>>8), byte(objNum>>16))
 	want = append(want, byte(genNum), byte(genNum>>8))
-	wantHash := md5.Sum(want) //nolint:gosec
+	wantHash := md5.Sum(want) //nolint:gosec // Comparing against the MD5 the spec algorithm produces, not using MD5 for security.
 	expected := wantHash[:min(len(encKey)+5, 16)]
 
 	if !bytes.Equal(got, expected) {
@@ -262,7 +262,7 @@ func TestDecryptFunc_RC4(t *testing.T) {
 	// Encrypt some data with the same key, then decrypt.
 	key := h.ObjKey(1, 0)
 	plaintext := []byte("Hello, PDF!")
-	c, _ := rc4.NewCipher(key) //nolint:gosec
+	c, _ := rc4.NewCipher(key) //nolint:gosec // Decrypting a fixture the spec algorithm encrypted with RC4.
 	encrypted := make([]byte, len(plaintext))
 	c.XORKeyStream(encrypted, plaintext)
 

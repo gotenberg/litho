@@ -809,7 +809,7 @@ func TestNewStreamReader_Brotli(t *testing.T) {
 		t.Fatalf("NewStreamReader failed: %v", err)
 	}
 	defer func() {
-		_ = rc.Close() //nolint:errcheck
+		_ = rc.Close() //nolint:errcheck // Test cleanup: a close failure here cannot affect the assertion already made.
 	}()
 
 	decoded, err := io.ReadAll(rc)
