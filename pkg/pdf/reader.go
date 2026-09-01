@@ -1016,8 +1016,8 @@ func (r *Reader) buildBookmarkInput(ctx context.Context) (bookmarks.Input, error
 // evaluating any PDF JavaScript calculation scripts. Use this when all
 // you need is "what did the user type".
 //
-// For field type, flags, options, and geometry, use
-// [Reader.FormFields] instead.
+// Use [Reader.FormFields] to list every field, including the ones nobody
+// filled in.
 func (r *Reader) FormData(ctx context.Context) (_ map[string]string, err error) {
 	defer recoverToError(r.logger(), "Reader.FormData", &err)
 	fields, err := annotation.ExtractFormData(ctx, r.doc)
@@ -1032,13 +1032,15 @@ func (r *Reader) FormData(ctx context.Context) (_ map[string]string, err error) 
 	return data, nil
 }
 
-// FormFields extracts interactive AcroForm fields with full metadata
-// (name, value, type, flags), evaluating any PDF JavaScript
-// calculation scripts. Use [Reader.FormData] when only the flat
-// name-to-value mapping is needed.
+// FormFields lists every named field of the interactive form, in the order the
+// field tree gives them, evaluating any PDF JavaScript calculation scripts. A
+// field nobody filled in is reported with an empty value.
+//
+// Use [Reader.FormData] for the flat name-to-value mapping of the fields that
+// actually carry a value.
 func (r *Reader) FormFields(ctx context.Context) (_ []models.FormField, err error) {
 	defer recoverToError(r.logger(), "Reader.FormFields", &err)
-	return annotation.ExtractFormData(ctx, r.doc)
+	return annotation.ExtractFormFields(ctx, r.doc)
 }
 
 // ExtractTables detects tables on the given 1-based page number by analysing

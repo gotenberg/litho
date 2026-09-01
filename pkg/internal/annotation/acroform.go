@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sort"
 
 	"github.com/dop251/goja"
 
@@ -16,6 +17,24 @@ import (
 // It also executes PDF JavaScript calculation scripts to resolve dynamic fields.
 // It returns a list of FormFields.
 func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.FormField, error) {
+	return extractForm(ctx, doc, false)
+}
+
+// ExtractFormFields lists every named field of the interactive form, including
+// the ones nobody has filled in, in the order the field tree gives them.
+//
+// [ExtractFormData] reports only fields that carry a /V, which is what a caller
+// asking "what did the user type" wants. Listing a form needs the other answer:
+// pdfjs issue14301.pdf has 660 named fields and `litho forms` printed
+// "(no form fields)" for it, because only its 320 checkboxes carry a value. That
+// also left no way to discover the names to hand to set-form.
+func ExtractFormFields(ctx context.Context, doc *document.Document) ([]models.FormField, error) {
+	return extractForm(ctx, doc, true)
+}
+
+// extractForm walks the interactive form once. includeEmpty selects between the
+// two answers above.
+func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool) ([]models.FormField, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("getting catalog for AcroForm: %w", err)
@@ -43,9 +62,14 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 		if len(xfaData) == 0 {
 			return nil, nil
 		}
-		var results []models.FormField
-		for k, v := range xfaData {
-			results = append(results, models.FormField{Name: k, Value: v})
+		names := make([]string, 0, len(xfaData))
+		for k := range xfaData {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		results := make([]models.FormField, 0, len(names))
+		for _, k := range names {
+			results = append(results, models.FormField{Name: k, Value: xfaData[k]})
 		}
 		return results, nil
 	}
@@ -77,7 +101,9 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 	// Track fields that have calculation scripts
 	calcScripts := make(map[string]string)
 
-	err = traverseFields(ctx, doc, fieldsArr, "", "", formDataMap, calcScripts)
+	var order []string
+	seenName := make(map[string]bool)
+	err = traverseFields(ctx, doc, fieldsArr, "", "", formDataMap, calcScripts, &order, seenName)
 	if err != nil {
 		return nil, fmt.Errorf("traversing form fields: %w", err)
 	}
@@ -133,18 +159,49 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 		}
 	}
 
-	var results []models.FormField
-	for k, v := range formDataMap {
-		results = append(results, models.FormField{
-			Name:  k,
-			Value: v,
-		})
+	if !includeEmpty {
+		// Filled-in values only, in document order. Ranging the map emitted a
+		// different order on every run, which the writer's determinism rule
+		// forbids and which made `litho forms` output unstable.
+		var filled []models.FormField
+		for _, name := range order {
+			if v, ok := formDataMap[name]; ok {
+				filled = append(filled, models.FormField{Name: name, Value: v})
+			}
+		}
+		// XFA supplies names the AcroForm tree never lists; keep them, sorted so
+		// the result stays stable.
+		var extra []string
+		for name := range formDataMap {
+			if !seenName[name] {
+				extra = append(extra, name)
+			}
+		}
+		sort.Strings(extra)
+		for _, name := range extra {
+			filled = append(filled, models.FormField{Name: name, Value: formDataMap[name]})
+		}
+		return filled, nil
 	}
 
+	var results []models.FormField
+	for _, name := range order {
+		results = append(results, models.FormField{Name: name, Value: formDataMap[name]})
+	}
+	var extra []string
+	for name := range formDataMap {
+		if !seenName[name] {
+			extra = append(extra, name)
+		}
+	}
+	sort.Strings(extra)
+	for _, name := range extra {
+		results = append(results, models.FormField{Name: name, Value: formDataMap[name]})
+	}
 	return results, nil
 }
 
-func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string) error {
+func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool) error {
 	for _, fieldObj := range fields {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("traversing form fields: %w", err)
@@ -244,12 +301,24 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		}
 
 		// Traverse children (/Kids)
+		hasKids := false
 		if kidsObj, ok := fieldDict["Kids"]; ok {
 			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil && kidsArr != nil {
-				if err := traverseFields(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts); err != nil {
+				hasKids = true
+				if err := traverseFields(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts, order, seen); err != nil {
 					return fmt.Errorf("traversing child fields: %w", err)
 				}
+			}
+		}
+
+		// Record the terminal field itself, whether or not it carries a value.
+		// A field is named by /FT or /T (ISO 32000-1, Table 220); producers also
+		// drop plain annotations into /Fields, and those name no field at all.
+		if !hasKids && fullName != "" && order != nil && !seen[fullName] {
+			if _, isField := fieldDict["FT"]; isField || currentFT != "" || partialName != "" {
+				seen[fullName] = true
+				*order = append(*order, fullName)
 			}
 		}
 	}
