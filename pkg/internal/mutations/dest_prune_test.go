@@ -54,7 +54,7 @@ func destinationsPDF(t *testing.T) []byte {
 
 // deleteFirstPage runs DeletePages over the fixture and returns the allocator
 // holding the rewritten objects.
-func deleteFirstPage(t *testing.T) (*writer.ObjAllocator, *document.Document) {
+func deleteFirstPage(t *testing.T) *writer.ObjAllocator {
 	t.Helper()
 
 	ctx := context.Background()
@@ -79,7 +79,7 @@ func deleteFirstPage(t *testing.T) (*writer.ObjAllocator, *document.Document) {
 	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}
-	return alloc, doc
+	return alloc
 }
 
 // TestDeletePagesPrunesDestinationsToRemovedPages pins that no destination
@@ -94,7 +94,7 @@ func deleteFirstPage(t *testing.T) (*writer.ObjAllocator, *document.Document) {
 func TestDeletePagesPrunesDestinationsToRemovedPages(t *testing.T) {
 	t.Parallel()
 
-	alloc, _ := deleteFirstPage(t)
+	alloc := deleteFirstPage(t)
 	pending := alloc.Pending()
 
 	catalog, ok := pending[1].(ast.PdfDict)
@@ -134,7 +134,7 @@ func TestDeletePagesPrunesDestinationsToRemovedPages(t *testing.T) {
 func TestDeletePagesKeepsLinksToSurvivingPages(t *testing.T) {
 	t.Parallel()
 
-	alloc, _ := deleteFirstPage(t)
+	alloc := deleteFirstPage(t)
 
 	page, ok := alloc.Pending()[4].(ast.PdfDict)
 	if !ok {
@@ -165,7 +165,7 @@ func TestDeletePagesKeepsLinksToSurvivingPages(t *testing.T) {
 func TestDeletePagesKeepsWidgetsAndClearsTheirDestination(t *testing.T) {
 	t.Parallel()
 
-	alloc, _ := deleteFirstPage(t)
+	alloc := deleteFirstPage(t)
 
 	widget, ok := alloc.Pending()[10].(ast.PdfDict)
 	if !ok {

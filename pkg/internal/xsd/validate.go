@@ -186,7 +186,9 @@ func (v *validator) onStart(start xml.StartElement) {
 	v.pushFrame(start, el)
 }
 
-func (v *validator) onEnd(end xml.EndElement) {
+// The element is unused: the validator pops its own stack. The parameter
+// stays to mirror onStart, which the SAX-style dispatch calls the same way.
+func (v *validator) onEnd(_ xml.EndElement) {
 	if len(v.stack) == 0 {
 		return
 	}

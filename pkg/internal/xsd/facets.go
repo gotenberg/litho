@@ -153,7 +153,9 @@ func whitespaceCollapse(v string) string {
 // applyFacet dispatches to the per-kind validator. Unknown facet
 // kinds (or those PR2 chooses not to enforce) return nil so the
 // engine remains forward-compatible with future facet additions.
-func applyFacet(value string, f Facet, base *BuiltinType) *FacetViolation {
+// base is retained for the facet kinds that must validate against the base
+// type (minInclusive and friends); the kinds handled below do not need it.
+func applyFacet(value string, f Facet, _base *BuiltinType) *FacetViolation {
 	switch fc := f.(type) {
 	case Pattern:
 		return validatePattern(value, fc)

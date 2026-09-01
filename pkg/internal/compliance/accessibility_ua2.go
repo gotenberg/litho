@@ -55,7 +55,7 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			// /Contents entry. There is NO Hidden exemption (unlike the UA-1
 			// §7.18.1 alt-text rule): a hidden field widget may still be exposed,
 			// e.g. shown by script, so it must be labelled.
-			if !isFieldWidget(ctx, doc, annot) {
+			if !isFieldWidget(annot) {
 				continue
 			}
 			// structParentType == null / isArtifact: a widget not resolved to an
@@ -85,7 +85,7 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 // field name (/T, the merged terminal-field case), or a field parent (/Parent)
 // is a field widget; a pure decorative widget is not. veraPDF's §8.10.2.3 t1
 // exempts non-field widgets (isFieldWidget == false).
-func isFieldWidget(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
+func isFieldWidget(annot ast.PdfDict) bool {
 	for _, k := range []ast.PdfName{"FT", "Parent", "T"} {
 		if _, ok := annot[k]; ok {
 			return true
