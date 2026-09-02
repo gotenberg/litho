@@ -191,7 +191,7 @@ func TestProbeLinearization_NonLinearized(t *testing.T) {
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n")
 	r := newTestReaderAt(data)
 
-	params := probeLinearization(r, int64(len(data)))
+	params := probeLinearization(r, int64(len(data)), 0)
 	if params != nil {
 		t.Error("expected nil for non-linearized PDF")
 	}
@@ -204,7 +204,7 @@ func TestProbeLinearization_Linearized(t *testing.T) {
 	r := newTestReaderAt(data)
 
 	// Pass the /L value as the file size so the validation accepts it.
-	params := probeLinearization(r, 54321)
+	params := probeLinearization(r, 54321, 0)
 	if params == nil {
 		t.Fatal("expected linearization params, got nil")
 	}

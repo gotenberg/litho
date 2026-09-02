@@ -308,8 +308,11 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		HeaderOffset: int64(pdfIdx),
 	}
 
-	// Probe for linearization before seeking to the end of the file.
-	linParams := probeLinearization(r, size)
+	// Probe for linearization before seeking to the end of the file. The probe
+	// starts at the header, not at byte 0: a file carrying a leading prefix
+	// still declares its linearization dictionary as the first object after
+	// %PDF-, and reading from 0 finds the prefix instead.
+	linParams := probeLinearization(r, size, doc.HeaderOffset)
 	if linParams != nil {
 		doc.Linearization = linParams
 		hintEntries, err := parseHintStream(r, size, linParams)

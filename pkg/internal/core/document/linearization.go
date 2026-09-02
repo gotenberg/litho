@@ -54,13 +54,19 @@ type PageOffsetEntry struct {
 	ContentStreamOffset int64
 }
 
-// probeLinearization reads the first 1024 bytes and looks for a linearization
-// dictionary. If found, it returns the parsed parameters; otherwise nil.
-func probeLinearization(r io.ReaderAt, fileSize int64) *LinearizationParams {
+// probeLinearization looks for a linearization dictionary starting at
+// headerOffset. If found, it returns the parsed parameters; otherwise nil.
+//
+// headerOffset is the position of the %PDF- header, which is not always 0:
+// Acrobat and litho both accept a leading prefix, and pdfjs issue11330.pdf
+// carries 27 bytes of Java serialization before its header. Parsing from 0
+// reads that prefix instead of the dictionary, so a linearized file was
+// reported as not linearized.
+func probeLinearization(r io.ReaderAt, fileSize, headerOffset int64) *LinearizationParams {
 	// The linearization dictionary is the very first indirect object in the
 	// file, right after the %PDF-X.Y header (and an optional binary comment).
 	// We parse it using the standard parser which handles "N G obj ... endobj".
-	lex := lexer.NewLexer(ioat.NewReader(r, fileSize, 0))
+	lex := lexer.NewLexer(ioat.NewReader(r, fileSize, headerOffset))
 	p := parser.NewParser(lex)
 
 	obj, err := p.ParseObject(context.Background())
@@ -122,7 +128,14 @@ func probeLinearization(r io.ReaderAt, fileSize int64) *LinearizationParams {
 	// Validate: /L must match the actual file size. A stale linearization
 	// dict left over from a re-save will have a mismatched /L, indicating
 	// the file is no longer truly linearized.
-	if params.FileLength > 0 && params.FileLength != fileSize {
+	//
+	// The length is measured from the header, not from byte 0. ISO 32000-1,
+	// F.2.2 defines /L as the length of the whole file, and a producer writes
+	// it before anything is prepended: pdfjs issue11330.pdf declares
+	// /L 129725 inside a 129752 byte file whose first 27 bytes are Java
+	// serialization, and comparing against the raw size called a linearized
+	// file stale.
+	if params.FileLength > 0 && params.FileLength != fileSize-headerOffset {
 		return nil
 	}
 
