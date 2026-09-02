@@ -884,6 +884,14 @@ type HeadingScorer interface {
 // HeadingScript values are immutable and safe for concurrent use.
 type HeadingScript string
 
+// US Letter in PDF points, the size readers substitute for a page whose media
+// box is missing or encloses no area. Not spec-mandated: ISO 32000-1, Table 30
+// requires /MediaBox, so a file without a usable one is already invalid.
+const (
+	defaultPageWidth  = 612.0
+	defaultPageHeight = 792.0
+)
+
 // Heading-script constants mirror the engine's detected script set.
 const (
 	HeadingScriptLatin      HeadingScript = "Latin"
@@ -1222,6 +1230,21 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 		box = p.MediaBox
 	}
 	w, h := mediaBoxDimensions(box)
+
+	// A page whose box is absent or encloses no area has no renderable size.
+	// ISO 32000-1, Table 30 makes /MediaBox a required page entry, so the spec
+	// says nothing about what to report when it is missing, and answering 0 by 0
+	// describes a page no viewer would draw. Substitute the size every
+	// mainstream reader uses: pdf.js falls back to its LETTER_SIZE_MEDIABOX and
+	// poppler reports 612 x 792 for pdfjs boundingBox_invalid.pdf, whose first
+	// page declares /MediaBox [0 0 0 0], and for govdocs thread_400_400739.pdf,
+	// which has no /MediaBox anywhere.
+	//
+	// The MediaBox and CropBox fields still report what the file declares. Only
+	// the effective dimensions gain the fallback.
+	if w == 0 || h == 0 {
+		w, h = defaultPageWidth, defaultPageHeight
+	}
 
 	// /UserUnit (PDF 1.6+): scale raw coordinates to standard points.
 	if p.UserUnit > 0 && p.UserUnit != 1.0 {
