@@ -274,7 +274,8 @@ func DecodePdfString(s ast.PdfString) string {
 		return stripLeadingBOM(payload)
 	}
 	// PDFDocEncoding / Windows-1252: bytes 0x80-0x9F have specific Unicode
-	// mappings; bytes 0xA0-0xFF map to the same Unicode code point.
+	// mappings, 0xA0 is the euro sign, and 0xA1-0xFF map to the same Unicode
+	// code point.
 	// All bytes > 0x7F must be converted to proper UTF-8 runes since Go
 	// strings are UTF-8 and raw high bytes are invalid sequences. Also
 	// route around the fast path when an undefined PDFDocEncoding control
@@ -311,7 +312,7 @@ func DecodePdfString(s ast.PdfString) string {
 		}
 		switch {
 		case c > 0x7F:
-			// Bytes 0xA0-0xFF: same Unicode code point as byte value.
+			// Bytes 0xA1-0xFF: same Unicode code point as byte value.
 			buf.WriteRune(rune(c))
 		case pdfDocEncodingUndefined(c):
 			// ISO 32000-1 Table D.2 leaves these bytes undefined.
@@ -412,6 +413,14 @@ var pdfDocEncoding = map[byte]rune{
 	0x9D: 0x0161, // LATIN SMALL LETTER S WITH CARON
 	0x9E: 0x017E, // LATIN SMALL LETTER Z WITH CARON
 	// 0x9F: undefined
+
+	// ISO 32000-1, Table D.2 places EURO SIGN at 0xA0 in PDFDocEncoding, where
+	// Latin-1 has NO-BREAK SPACE. PDFDocEncoding has no no-break space: the
+	// typographic characters already occupy 0x80-0x9E, so the euro went here.
+	// Passing 0xA0 through as U+00A0 turned the euro into a space in pdfjs
+	// bug858128.pdf, whose /Title carries it; pdf.js, poppler and pikepdf all
+	// read it as the euro sign.
+	0xA0: 0x20AC, // EURO SIGN
 }
 
 // maxObjStmCacheBytes bounds the total decoded object-stream bytes retained by
