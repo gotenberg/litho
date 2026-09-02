@@ -234,9 +234,94 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 	return nil
 }
 
-// RemoveAttachment removes a file from the document's /Names/EmbeddedFiles
-// name tree by its filename.
+// RemoveAttachment removes an embedded file by its filename.
+//
+// A file reaches the document from two places. The /Names /EmbeddedFiles name
+// tree holds document-level attachments (ISO 32000-1, 7.11.4), and a
+// FileAttachment annotation carries its own file specification in /FS
+// (12.5.6.15). Removing only the tree entry left the annotation, and its file,
+// in the output while reporting success, so both are removed.
 func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string) error {
+	if err := removeAttachmentAnnots(ctx, alloc, doc, name); err != nil {
+		return err
+	}
+	return removeAttachmentFromNameTree(ctx, alloc, doc, name)
+}
+
+// removeAttachmentAnnots drops every FileAttachment annotation whose file
+// specification names the given file.
+func removeAttachmentAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string) error {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		return nil // No catalog: the name-tree pass reports the real problem.
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		return nil
+	}
+
+	for _, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("removing attachment annotations canceled: %w", err)
+		}
+		pageDict := latestPageDict(alloc, page)
+		annotsObj, ok := pageDict["Annots"]
+		if !ok {
+			continue
+		}
+		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil || annotsArr == nil {
+			continue
+		}
+
+		kept := make(ast.PdfArray, 0, len(annotsArr))
+		for _, annotObj := range annotsArr {
+			if attachmentAnnotNames(ctx, doc, annotObj) == name {
+				continue
+			}
+			kept = append(kept, annotObj)
+		}
+		if len(kept) == len(annotsArr) {
+			continue
+		}
+
+		newPage := make(ast.PdfDict, len(pageDict))
+		maps.Copy(newPage, pageDict)
+		if len(kept) == 0 {
+			delete(newPage, "Annots")
+		} else {
+			newPage["Annots"] = kept
+		}
+		alloc.AllocAt(page.Ref.ObjectNum, newPage)
+	}
+	return nil
+}
+
+// attachmentAnnotNames returns the filename a FileAttachment annotation
+// carries, or "" when the annotation is not one or names no file.
+func attachmentAnnotNames(ctx context.Context, doc *document.Document, annotObj ast.PdfObject) string {
+	annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+	if err != nil || annotDict == nil {
+		return ""
+	}
+	if subtype, err := document.ResolveName(ctx, doc, annotDict["Subtype"]); err != nil || subtype != "FileAttachment" {
+		return ""
+	}
+	fsDict, err := document.ResolveDict(ctx, doc, annotDict["FS"])
+	if err != nil || fsDict == nil {
+		return ""
+	}
+	for _, key := range []ast.PdfName{"UF", "F"} {
+		if s, err := document.ResolveString(ctx, doc, fsDict[key]); err == nil && s != "" {
+			return document.DecodePdfString(s)
+		}
+	}
+	return ""
+}
+
+// removeAttachmentFromNameTree removes a file from the document's
+// /Names/EmbeddedFiles name tree by its filename.
+func removeAttachmentFromNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
