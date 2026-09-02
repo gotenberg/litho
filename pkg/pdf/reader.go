@@ -1114,12 +1114,14 @@ func (r *Reader) IsPortfolio(ctx context.Context) (_ bool, err error) {
 	return semantics.IsPortfolio(ctx, r.doc)
 }
 
-// EmbeddedFiles returns all files from the document's /EmbeddedFiles name
-// tree. Each item includes the original filename, MIME type, and a lazy Open
-// accessor. Callers can recursively pass embedded PDFs back into pdf.Open.
+// EmbeddedFiles returns every file embedded in the document: the /EmbeddedFiles
+// name tree plus the files carried by FileAttachment annotations, which readers
+// list alongside them. Each item includes the original filename, MIME type, and
+// a lazy Open accessor. Callers can recursively pass embedded PDFs back into
+// pdf.Open. A file reached from both places is returned once.
 func (r *Reader) EmbeddedFiles(ctx context.Context) (_ []models.EmbeddedFile, err error) {
 	defer recoverToError(r.logger(), "Reader.EmbeddedFiles", &err)
-	return semantics.ExtractPortfolioItems(ctx, r.doc)
+	return semantics.ExtractEmbeddedFiles(ctx, r.doc)
 }
 
 // ExtractAnnotations extracts annotations from the given 1-based page number.

@@ -49,7 +49,7 @@ func ExtractPortfolioItems(ctx context.Context, doc *document.Document) ([]model
 	}
 
 	var files []models.EmbeddedFile
-	if err := collectEmbeddedFiles(ctx, doc, efObj, &files); err != nil {
+	if err := collectEmbeddedFiles(ctx, doc, efObj, &files, nil); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -57,7 +57,11 @@ func ExtractPortfolioItems(ctx context.Context, doc *document.Document) ([]model
 
 // collectEmbeddedFiles recursively walks an EmbeddedFiles name tree node,
 // extracting each file specification into a models.EmbeddedFile.
-func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, files *[]models.EmbeddedFile) error {
+//
+// When seen is non-nil, the object number of every embedded file stream reached
+// is recorded in it. Entries are never suppressed: a portfolio may list one
+// stream under several names, and each is its own item.
+func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, files *[]models.EmbeddedFile, seen map[int]bool) error {
 	nodeDict, err := document.ResolveDict(ctx, doc, nodeObj)
 	if err != nil {
 		return err
@@ -76,7 +80,7 @@ func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj a
 			return nil
 		}
 		for _, kid := range kidsArr {
-			if err := collectEmbeddedFiles(ctx, doc, kid, files); err != nil {
+			if err := collectEmbeddedFiles(ctx, doc, kid, files, seen); err != nil {
 				return err
 			}
 		}
@@ -97,12 +101,15 @@ func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj a
 	}
 
 	for i := 1; i < len(namesArr); i += 2 {
-		ef, err := extractFileSpec(ctx, doc, namesArr[i])
+		ef, streamNum, err := extractFileSpec(ctx, doc, namesArr[i])
 		if err != nil {
 			return err
 		}
 		if ef != nil {
 			*files = append(*files, *ef)
+			if seen != nil && streamNum > 0 {
+				seen[streamNum] = true
+			}
 		}
 	}
 	return nil
@@ -111,13 +118,17 @@ func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj a
 // extractFileSpec extracts a single EmbeddedFile from a File Specification
 // dictionary. It reads /F or /UF for the filename, /EF -> /F for the stream
 // data, and the stream's /Subtype for the MIME type.
-func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*models.EmbeddedFile, error) {
+//
+// The second result is the object number of the embedded file stream, or 0 when
+// the stream is a direct object. Callers listing files from more than one place
+// in the document use it to report a stream reached twice only once.
+func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*models.EmbeddedFile, int, error) {
 	specDict, err := document.ResolveDict(ctx, doc, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve file specification: %w", err)
+		return nil, 0, fmt.Errorf("failed to resolve file specification: %w", err)
 	}
 	if specDict == nil {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// Determine filename: prefer /UF (Unicode filename), fall back to /F.
@@ -145,14 +156,14 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 	// Get the /EF dictionary containing the actual file stream.
 	efObj, ok := specDict["EF"]
 	if !ok {
-		return nil, nil
+		return nil, 0, nil
 	}
 	efDict, err := document.ResolveDict(ctx, doc, efObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve /EF: %w", err)
+		return nil, 0, fmt.Errorf("failed to resolve /EF: %w", err)
 	}
 	if efDict == nil {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// The stream is stored under /F (or /UF) in the EF dictionary.
@@ -162,15 +173,20 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 	} else if ufObj, ok := efDict["UF"]; ok {
 		streamObj = ufObj
 	} else {
-		return nil, nil
+		return nil, 0, nil
+	}
+
+	streamNum := 0
+	if ref, ok := streamObj.(ast.PdfIndirectRef); ok {
+		streamNum = ref.ObjectNum
 	}
 
 	stream, err := document.ResolveStream(ctx, doc, streamObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve embedded file stream: %w", err)
+		return nil, 0, fmt.Errorf("failed to resolve embedded file stream: %w", err)
 	}
 	if stream.Dict == nil {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// Extract MIME type from stream's /Subtype (e.g., "application/pdf").
@@ -191,5 +207,5 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 		Name:     filename,
 		MIMEType: mimeType,
 		Open:     doc.OpenFunc(stream),
-	}, nil
+	}, streamNum, nil
 }
