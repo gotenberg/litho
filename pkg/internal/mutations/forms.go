@@ -14,7 +14,21 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// maxFieldTreeDepth bounds the walk up a widget's /Parent chain. It is an
+// anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3 describes a shallow
+// field hierarchy, and a crafted file whose /Parent points back at a descendant
+// would otherwise loop.
+const maxFieldTreeDepth = 64
+
 // SetFormField finds a form field by name and updates its /V value.
+//
+// The field is looked for in the interactive form's /Fields array first
+// (ISO 32000-1, 12.7.2) and then among the widget annotations the pages carry
+// (12.5.6.19). A producer may write the widget without registering the field,
+// leaving it reachable only from the page: pdfjs issue12963.pdf has 27 such
+// fields and no /AcroForm at all. Setting one of those registers it, creating
+// the interactive form when the document states none, so a viewer that reads
+// the form finds the value.
 func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name, value string) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
@@ -24,45 +38,233 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if err != nil {
 		return err
 	}
-	acroFormObj, ok := catalogDict["AcroForm"]
-	if !ok {
-		return fmt.Errorf("no AcroForm in catalog")
+
+	var acroFormDict ast.PdfDict
+	acroFormObj, hasAcroForm := catalogDict["AcroForm"]
+	if hasAcroForm {
+		acroFormDict, err = document.ResolveDict(ctx, doc, acroFormObj)
+		if err != nil {
+			return fmt.Errorf("resolving AcroForm: %w", err)
+		}
 	}
 
-	// Resolve AcroForm dict and its ref for modification.
-	acroFormDict, err := document.ResolveDict(ctx, doc, acroFormObj)
-	if err != nil {
-		return fmt.Errorf("resolving AcroForm: %w", err)
+	var fieldsArr ast.PdfArray
+	if acroFormDict != nil {
+		if fieldsObj, ok := acroFormDict["Fields"]; ok {
+			fieldsArr, err = document.ResolveArray(ctx, doc, fieldsObj)
+			if err != nil {
+				return fmt.Errorf("resolving Fields: %w", err)
+			}
+		}
 	}
 
-	fieldsObj, ok := acroFormDict["Fields"]
-	if !ok {
-		return fmt.Errorf("AcroForm has no Fields")
-	}
-	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
-	if err != nil {
-		return fmt.Errorf("resolving Fields: %w", err)
+	found := false
+	if len(fieldsArr) > 0 {
+		found, err = findAndSetField(ctx, doc, alloc, fieldsArr, "", "", name, value)
+		if err != nil {
+			return err
+		}
 	}
 
-	// Find and update the field.
-	found, err := findAndSetField(ctx, doc, alloc, fieldsArr, "", "", name, value)
-	if err != nil {
-		return err
-	}
+	// Not in the form: the field may exist only as a page widget.
+	var registered ast.PdfIndirectRef
 	if !found {
-		return fmt.Errorf("form field %q not found", name)
+		ref, ok, err := setPageWidgetField(ctx, alloc, doc, name, value)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("form field %q not found", name)
+		}
+		registered = ref
 	}
 
-	// Set /NeedAppearances on AcroForm so viewers regenerate appearance.
-	newAcroForm := make(ast.PdfDict, len(acroFormDict)+1)
+	newAcroForm := make(ast.PdfDict, len(acroFormDict)+2)
 	maps.Copy(newAcroForm, acroFormDict)
+	// Set /NeedAppearances on AcroForm so viewers regenerate appearance.
 	newAcroForm["NeedAppearances"] = ast.PdfBool(true)
 
-	if acroFormRef, ok := acroFormObj.(ast.PdfIndirectRef); ok {
-		alloc.AllocAt(acroFormRef.ObjectNum, newAcroForm)
+	if registered.ObjectNum > 0 {
+		// Register the previously unlisted field so the form describes it.
+		newFields := make(ast.PdfArray, 0, len(fieldsArr)+1)
+		newFields = append(newFields, fieldsArr...)
+		newFields = append(newFields, registered)
+		newAcroForm["Fields"] = newFields
+	} else if _, ok := newAcroForm["Fields"]; !ok {
+		newAcroForm["Fields"] = fieldsArr
 	}
 
+	acroFormRef, isRef := acroFormObj.(ast.PdfIndirectRef)
+	if hasAcroForm && isRef {
+		alloc.AllocAt(acroFormRef.ObjectNum, newAcroForm)
+		return nil
+	}
+
+	// The document states no interactive form, or states it inline. Allocate one
+	// and point the catalog at it.
+	newRef := alloc.Alloc(newAcroForm)
+	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
+	maps.Copy(newCatalog, catalogDict)
+	newCatalog["AcroForm"] = newRef
+	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	return nil
+}
+
+// setPageWidgetField finds the field a page widget presents by its fully
+// qualified name and writes the value on it, returning the field's reference so
+// the caller can register it.
+//
+// A widget either is the field, carrying /T and /FT itself, or presents one
+// through /Parent (ISO 32000-1, 12.7.3.1). The name is built from the /T chain,
+// and the value is written on the node that supplies the last component, which
+// is where a field's /V belongs.
+func setPageWidgetField(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	name, value string,
+) (ast.PdfIndirectRef, bool, error) {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		return ast.PdfIndirectRef{}, false, nil
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		return ast.PdfIndirectRef{}, false, nil
+	}
+
+	for _, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return ast.PdfIndirectRef{}, false, fmt.Errorf("setting form field canceled: %w", err)
+		}
+		annotsObj, ok := latestPageDict(alloc, page)["Annots"]
+		if !ok {
+			continue
+		}
+		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			fieldObj, fieldDict, fieldFT, qualified, ok := widgetFieldIdentity(ctx, doc, annotObj)
+			if !ok || qualified != name {
+				continue
+			}
+			ref, isRef := fieldObj.(ast.PdfIndirectRef)
+			if !isRef {
+				// An inline field has no object number to address, so the value
+				// would be dropped rather than written.
+				continue
+			}
+
+			newDict := make(ast.PdfDict, len(fieldDict)+1)
+			maps.Copy(newDict, fieldDict)
+			setFieldValue(newDict, fieldFT, value)
+			alloc.AllocAt(ref.ObjectNum, newDict)
+			setKidAppearanceStates(ctx, doc, alloc, newDict, fieldFT, value)
+
+			// ISO 32000-1, 12.7.2: /Fields lists the document's ROOT fields.
+			// Registering the named node instead would rename a nested field,
+			// since a viewer qualifies names from the root down.
+			// ISO 32000-1, 12.7.2: /Fields lists the document's ROOT fields.
+			// Registering the named node instead would rename a nested field,
+			// since a viewer qualifies names from the root down.
+			rootRef, ok := rootFieldRef(ctx, doc, annotObj)
+			if !ok {
+				rootRef = ref
+			}
+			return rootRef, true, nil
+		}
+	}
+	return ast.PdfIndirectRef{}, false, nil
+}
+
+// rootFieldRef returns the outermost field object a widget belongs to, which is
+// the one an interactive form lists in /Fields.
+func rootFieldRef(ctx context.Context, doc *document.Document, annotObj ast.PdfObject) (ast.PdfIndirectRef, bool) {
+	node, err := document.ResolveDict(ctx, doc, annotObj)
+	if err != nil || node == nil {
+		return ast.PdfIndirectRef{}, false
+	}
+	current := annotObj
+	for range maxFieldTreeDepth {
+		parentObj, ok := node["Parent"]
+		if !ok {
+			break
+		}
+		parentDict, err := document.ResolveDict(ctx, doc, parentObj)
+		if err != nil || parentDict == nil {
+			break
+		}
+		current, node = parentObj, parentDict
+	}
+	ref, ok := current.(ast.PdfIndirectRef)
+	return ref, ok
+}
+
+// widgetFieldIdentity returns the field object a widget presents, its
+// dictionary, its field type, and its fully qualified name.
+func widgetFieldIdentity(ctx context.Context, doc *document.Document, annotObj ast.PdfObject) (ast.PdfObject, ast.PdfDict, string, string, bool) {
+	annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+	if err != nil || annotDict == nil {
+		return nil, nil, "", "", false
+	}
+	if subtype, err := document.ResolveName(ctx, doc, annotDict["Subtype"]); err != nil || subtype != "Widget" {
+		return nil, nil, "", "", false
+	}
+
+	var (
+		names      []string
+		fieldObj   ast.PdfObject
+		fieldDict  ast.PdfDict
+		fieldFT    string
+		node       = annotDict
+		nodeObj    = annotObj
+		haveField  bool
+		haveFTNode bool
+	)
+	for range maxFieldTreeDepth {
+		partial := ""
+		if tObj, ok := node["T"]; ok {
+			if tStr, err := document.ResolveString(ctx, doc, tObj); err == nil && tStr != "" {
+				partial = document.DecodePdfString(tStr)
+			}
+		}
+		if partial != "" {
+			names = append(names, partial)
+			if !haveField {
+				fieldObj, fieldDict, haveField = nodeObj, node, true
+			}
+		}
+		if !haveFTNode {
+			if ftObj, ok := node["FT"]; ok {
+				if ft, err := document.ResolveName(ctx, doc, ftObj); err == nil && ft != "" {
+					fieldFT, haveFTNode = string(ft), true
+				}
+			}
+		}
+
+		parentObj, ok := node["Parent"]
+		if !ok {
+			break
+		}
+		parentDict, err := document.ResolveDict(ctx, doc, parentObj)
+		if err != nil || parentDict == nil {
+			break
+		}
+		node, nodeObj = parentDict, parentObj
+	}
+
+	if !haveField || !haveFTNode {
+		return nil, nil, "", "", false
+	}
+
+	// The chain was walked from the widget upwards, so the names are innermost
+	// first and the qualified name reads the other way.
+	for i, j := 0, len(names)-1; i < j; i, j = i+1, j-1 {
+		names[i], names[j] = names[j], names[i]
+	}
+	return fieldObj, fieldDict, fieldFT, strings.Join(names, "."), true
 }
 
 // findAndSetField recursively traverses the field tree to find and update a
