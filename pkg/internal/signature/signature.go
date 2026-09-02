@@ -10,49 +10,135 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
+// maxFieldTreeDepth bounds the walk over a form field's /Kids. It is an
+// anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3 describes a field
+// hierarchy only a few levels deep, and a crafted file whose /Kids points back
+// at an ancestor would otherwise recurse until the stack is exhausted.
+const maxFieldTreeDepth = 64
+
 // ExtractSignatures locates signature fields, extracts the PKCS#7 payload,
 // and computes the document hash based on the ByteRange.
+//
+// Fields are found in two places. The interactive form's /Fields array holds
+// them for a conforming document (ISO 32000-1, 12.7.2), and the pages hold the
+// widget annotations that present them (12.5.6.19). A producer that signs a
+// document without registering the field in /AcroForm leaves the signature
+// reachable only from the page, so both are walked.
 func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Signature, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
 
-	acroFormObj, ok := catalog.Dict["AcroForm"]
-	if !ok {
-		return nil, nil // No forms/signatures
-	}
-
-	acroFormDict, err := document.ResolveDict(ctx, doc, acroFormObj)
-	if err != nil {
-		return nil, err
-	}
-
-	if acroFormDict == nil {
-		return nil, nil
-	}
-
-	fieldsObj, ok := acroFormDict["Fields"]
-	if !ok {
-		return nil, nil
-	}
-
-	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
-	if err != nil {
-		return nil, err
-	}
-
-	if fieldsArr == nil {
-		return nil, nil
-	}
-
 	var signatures []models.Signature
-	extractSigsRecursive(ctx, doc, fieldsArr, "", &signatures)
+	seen := make(map[int]bool)
+
+	if acroFormObj, ok := catalog.Dict["AcroForm"]; ok {
+		acroFormDict, err := document.ResolveDict(ctx, doc, acroFormObj)
+		if err != nil {
+			return nil, err
+		}
+		if acroFormDict != nil {
+			if fieldsObj, ok := acroFormDict["Fields"]; ok {
+				fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
+				if err != nil {
+					return nil, err
+				}
+				if fieldsArr != nil {
+					markSignatureValues(ctx, doc, fieldsArr, seen, 0)
+					extractSigsRecursive(ctx, doc, fieldsArr, "", &signatures, 0)
+				}
+			}
+		}
+	}
+
+	appendAnnotationSignatures(ctx, doc, catalog, seen, &signatures)
 
 	return signatures, nil
 }
 
-func extractSigsRecursive(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature) {
+// markSignatureValues records the object number of every /V signature
+// dictionary reachable from fields, so the page walk can tell an unregistered
+// signature from one it has already reported.
+func markSignatureValues(ctx context.Context, doc *document.Document, fields ast.PdfArray, seen map[int]bool, depth int) {
+	if depth > maxFieldTreeDepth {
+		return
+	}
+	for _, fieldObj := range fields {
+		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
+		if err != nil || fieldDict == nil {
+			continue
+		}
+		if ref, ok := fieldDict["V"].(ast.PdfIndirectRef); ok {
+			seen[ref.ObjectNum] = true
+		}
+		if kidsObj, ok := fieldDict["Kids"]; ok {
+			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
+			if err == nil && kidsArr != nil {
+				markSignatureValues(ctx, doc, kidsArr, seen, depth+1)
+			}
+		}
+	}
+}
+
+// appendAnnotationSignatures reports the signature fields a page carries that
+// the interactive form does not list. The annotations are handed to the same
+// field walker, so a signature found this way is described exactly as a
+// registered one would be.
+func appendAnnotationSignatures(
+	ctx context.Context,
+	doc *document.Document,
+	catalog *document.Catalog,
+	seen map[int]bool,
+	sigs *[]models.Signature,
+) {
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		doc.Logger.Debug("resolving pages for signature annotations", slog.Any("err", err))
+		return
+	}
+
+	var unregistered ast.PdfArray
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return
+		}
+		annotsObj, ok := page.Dict["Annots"]
+		if !ok {
+			continue
+		}
+		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			doc.Logger.Debug("resolving /Annots for signatures", slog.Any("err", err))
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annotDict == nil {
+				continue
+			}
+			ftName, err := document.ResolveName(ctx, doc, annotDict["FT"])
+			if err != nil || ftName != "Sig" {
+				continue
+			}
+			ref, ok := annotDict["V"].(ast.PdfIndirectRef)
+			if !ok || seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+			unregistered = append(unregistered, annotObj)
+		}
+	}
+
+	if len(unregistered) > 0 {
+		extractSigsRecursive(ctx, doc, unregistered, "", sigs, 0)
+	}
+}
+
+func extractSigsRecursive(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature, depth int) {
+	if depth > maxFieldTreeDepth {
+		return
+	}
 	for _, fieldObj := range fields {
 		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil {
@@ -169,7 +255,7 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 				doc.Logger.Debug("resolving signature field kids", slog.Any("err", err))
 			}
 			if kidsArr != nil {
-				extractSigsRecursive(ctx, doc, kidsArr, fullName, sigs)
+				extractSigsRecursive(ctx, doc, kidsArr, fullName, sigs, depth+1)
 			}
 		}
 	}
