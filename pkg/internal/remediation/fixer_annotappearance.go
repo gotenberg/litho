@@ -86,6 +86,12 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			// Best-effort: an unreadable /Rect yields a nil array, which
 			// isZeroAreaRect treats as zero-area.
 			rect, _ := document.ResolveArray(ctx, doc, annotDict["Rect"])
+			// Measure the coordinates, not the references naming them
+			// (ISO 32000-1, 7.3.9). Left unresolved they read as zero, so a real
+			// rectangle looked zero-area: the annotation was skipped and kept its
+			// missing /AP, and any appearance built for it would have carried a
+			// 1 by 1 /BBox instead of the annotation's own size.
+			rect = document.ResolveRectangle(ctx, doc, rect)
 			if isZeroAreaRect(rect) {
 				continue
 			}
