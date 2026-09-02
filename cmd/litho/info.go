@@ -59,7 +59,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 
 		pageCount, _ := r.PageCount(ctx)
-		hasForms := r.HasAcroForm(ctx)
+		hasForms, _ := r.HasFormFields(ctx)
 		isPortfolio, _ := r.IsPortfolio(ctx)
 
 		res := infoResult{

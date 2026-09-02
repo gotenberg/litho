@@ -1114,6 +1114,22 @@ func (r *Reader) HasAcroForm(ctx context.Context) bool {
 	return err == nil && len(fieldsArr) > 0
 }
 
+// HasFormFields reports whether the document carries any interactive form
+// field, whether the interactive form lists it or only a page presents it.
+//
+// [Reader.HasAcroForm] answers the narrower question its name states, and keeps
+// the XFA handling that goes with it, so it is asked first and its answer is
+// taken as final when it says yes. The page scan only adds the fields no
+// /AcroForm lists: pdfjs issue12963.pdf carries 27 of them and no /AcroForm, so
+// the narrower answer read "no" for a document whose fields litho lists.
+func (r *Reader) HasFormFields(ctx context.Context) (_ bool, err error) {
+	defer recoverToError(r.logger(), "Reader.HasFormFields", &err)
+	if r.HasAcroForm(ctx) {
+		return true, nil
+	}
+	return annotation.HasPageWidgetField(ctx, r.doc), nil
+}
+
 // IsPortfolio reports whether the document is a PDF Portfolio (Collection).
 // Portfolio PDFs are containers whose visible pages are merely a cover sheet;
 // the real payload is a set of embedded files.

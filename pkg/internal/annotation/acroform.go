@@ -32,6 +32,48 @@ func ExtractFormFields(ctx context.Context, doc *document.Document) ([]models.Fo
 	return extractForm(ctx, doc, true)
 }
 
+// HasPageWidgetField reports whether any page carries a widget annotation that
+// presents a form field.
+//
+// The interactive form lists its fields in /AcroForm (ISO 32000-1, 12.7.2) and
+// the pages carry the widgets that present them (12.5.6.19). A producer may
+// write only the widget, so asking the catalog alone answers "no" for a document
+// whose fields `litho forms` lists: pdfjs issue12963.pdf has 27 of them and no
+// /AcroForm at all.
+//
+// The walk stops at the first field found, so a document with a large form costs
+// no more than one.
+func HasPageWidgetField(ctx context.Context, doc *document.Document) bool {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		return false
+	}
+
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		return false
+	}
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return false
+		}
+		annotsObj, ok := page.Dict["Annots"]
+		if !ok {
+			continue
+		}
+		annots, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			continue
+		}
+		for _, annotObj := range annots {
+			if _, ok := widgetFieldRoot(ctx, doc, annotObj); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // maxFieldParentDepth bounds the walk up a widget's /Parent chain. It is an
 // anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3 describes a shallow
 // field hierarchy, and a crafted file whose /Parent points back at a descendant
