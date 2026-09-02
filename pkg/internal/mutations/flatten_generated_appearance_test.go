@@ -209,8 +209,92 @@ func TestEscapePdfString(t *testing.T) {
 		{`back\slash`, `(back\\slash)`},
 		{"two\nlines", "(two lines)"},
 	} {
-		if got := escapePdfString(tc.in); got != tc.want {
+		if got := escapePdfString([]byte(tc.in)); got != tc.want {
 			t.Errorf("escapePdfString(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestFlattenKeepsAValueItCannotEncode pins that a value the generated
+// appearance's font cannot express leaves the widget in place.
+//
+// The generated appearance draws through a WinAnsi-encoded font (ISO 32000-1,
+// Annex D.2), which covers Latin text and nothing else. Writing the value's
+// UTF-8 bytes anyway would reach a viewer decoded one byte per character: pdfjs
+// issue12963.pdf carries the Cyrillic value "СУВОРОВ", which would have been
+// drawn as mojibake. Keeping the widget preserves the value instead.
+func TestFlattenKeepsAValueItCannotEncode(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (СУВОРОВ) /Rect [10 10 130 30] >>")
+	if err := FlattenForm(ctx, alloc, doc); err != nil {
+		t.Fatalf("FlattenForm: %v", err)
+	}
+
+	page, ok := alloc.Pending()[3].(ast.PdfDict)
+	if !ok {
+		return // The page was left alone, which also keeps the widget.
+	}
+	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 1 {
+		t.Errorf("the widget was dropped for a value that cannot be drawn: %v", annots)
+	}
+	res, _ := page["Resources"].(ast.PdfDict)
+	if xobjs, _ := res["XObject"].(ast.PdfDict); len(xobjs) != 0 {
+		t.Errorf("something was drawn for an unencodable value: %v", xobjs)
+	}
+}
+
+// TestFlattenDrawsAccentedLatinCorrectly pins that a value WinAnsi does cover
+// is written in that encoding rather than as raw UTF-8.
+func TestFlattenDrawsAccentedLatinCorrectly(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (Café) /Rect [10 10 130 30] >>")
+	if err := FlattenForm(ctx, alloc, doc); err != nil {
+		t.Fatalf("FlattenForm: %v", err)
+	}
+
+	_, drawn := flattenedPage(t, alloc)
+	if len(drawn) != 1 {
+		t.Fatalf("the flatten drew %d appearances, want 1", len(drawn))
+	}
+	// The accented character is one byte in WinAnsi (0xE9) and two in UTF-8
+	// (0xC3 0xA9). Build both explicitly: an escape written in the source would
+	// be at the mercy of whatever wrote the source.
+	winAnsi := string([]byte{'(', 'C', 'a', 'f', 0xE9, ')'})
+	utf8Bytes := string([]byte{0xC3, 0xA9})
+	if !strings.Contains(drawn[0], winAnsi) {
+		t.Errorf("the value was not written in WinAnsi: %q", drawn[0])
+	}
+	if strings.Contains(drawn[0], utf8Bytes) {
+		t.Errorf("the value reached the stream as raw UTF-8: %q", drawn[0])
+	}
+}
+
+// TestWinAnsiEncode covers the encoder the appearance depends on.
+func TestWinAnsiEncode(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		in   string
+		want []byte
+		ok   bool
+	}{
+		{"plain", []byte("plain"), true},
+		{"Café", []byte{'C', 'a', 'f', 0xE9}, true},
+		{"€uro", []byte{0x80, 'u', 'r', 'o'}, true},
+		{"СУВОРОВ", nil, false},
+		{"日本語", nil, false},
+	} {
+		got, ok := winAnsiEncode(tc.in)
+		if ok != tc.ok {
+			t.Errorf("winAnsiEncode(%q) ok = %v, want %v", tc.in, ok, tc.ok)
+			continue
+		}
+		if ok && string(got) != string(tc.want) {
+			t.Errorf("winAnsiEncode(%q) = % x, want % x", tc.in, got, tc.want)
 		}
 	}
 }

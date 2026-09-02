@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/text/encoding/charmap"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -957,6 +959,17 @@ func textFieldAppearance(
 		colourOps = "0 g"
 	}
 
+	// The generated appearance draws through a WinAnsi-encoded font, so the
+	// value has to be expressible in it. A value that is not, such as the
+	// Cyrillic one pdfjs issue12963.pdf carries, would otherwise reach a viewer
+	// as raw UTF-8 bytes decoded one by one through CP1252, i.e. mojibake.
+	// Declining leaves the widget in place, which is what litho did for every
+	// such field before it could draw any of them.
+	encoded, ok := winAnsiEncode(text)
+	if !ok {
+		return ast.PdfStream{}, false
+	}
+
 	fontRes, resourceName, ok := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
 	if !ok {
 		return ast.PdfStream{}, false
@@ -976,7 +989,7 @@ func textFieldAppearance(
 		formatFloat(size),
 		formatFloat(textInsetX),
 		formatFloat(baseline),
-		escapePdfString(text),
+		escapePdfString(encoded),
 	)
 
 	dict := ast.PdfDict{
@@ -1091,13 +1104,27 @@ func colourOperandCount(op string) int {
 	return 0
 }
 
-// escapePdfString renders s as a PDF literal string, escaping the three
+// winAnsiEncode renders s in the encoding the generated appearance's font
+// declares, and reports whether every character could be expressed.
+//
+// ISO 32000-1, Annex D.2 defines WinAnsiEncoding, which covers Latin text and
+// nothing else. A caller that cannot express its value must not draw it: the
+// bytes would be decoded one per character and shown as mojibake.
+func winAnsiEncode(s string) ([]byte, bool) {
+	out, err := charmap.Windows1252.NewEncoder().Bytes([]byte(s))
+	if err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+// escapePdfString renders b as a PDF literal string, escaping the three
 // characters that would otherwise end it or start an escape (ISO 32000-1,
 // 7.3.4.2).
-func escapePdfString(s string) string {
+func escapePdfString(s []byte) string {
 	var b strings.Builder
 	b.WriteByte('(')
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		switch s[i] {
 		case '\\', '(', ')':
 			b.WriteByte('\\')
