@@ -245,6 +245,9 @@ func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	if err := removeAttachmentAnnots(ctx, alloc, doc, name); err != nil {
 		return err
 	}
+	if err := removeAssociatedFiles(ctx, alloc, doc, name); err != nil {
+		return err
+	}
 	return removeAttachmentFromNameTree(ctx, alloc, doc, name)
 }
 
@@ -307,7 +310,14 @@ func attachmentAnnotNames(ctx context.Context, doc *document.Document, annotObj 
 	if subtype, err := document.ResolveName(ctx, doc, annotDict["Subtype"]); err != nil || subtype != "FileAttachment" {
 		return ""
 	}
-	fsDict, err := document.ResolveDict(ctx, doc, annotDict["FS"])
+	return fileSpecFilename(ctx, doc, annotDict["FS"])
+}
+
+// fileSpecFilename returns the filename a file specification states, preferring
+// the Unicode /UF exactly as the listing does, so `detach` matches what
+// `attachments` printed.
+func fileSpecFilename(ctx context.Context, doc *document.Document, fsObj ast.PdfObject) string {
+	fsDict, err := document.ResolveDict(ctx, doc, fsObj)
 	if err != nil || fsDict == nil {
 		return ""
 	}
@@ -317,6 +327,80 @@ func attachmentAnnotNames(ctx context.Context, doc *document.Document, annotObj 
 		}
 	}
 	return ""
+}
+
+// removeAssociatedFiles drops the /AF entries naming the given file from the
+// catalog and from every page.
+//
+// ISO 32000-2, 14.13 associates a file with the document or a page through /AF,
+// and that array may be the only route to an embedded file. Leaving it behind
+// kept the file in the output while `detach` reported success.
+func removeAssociatedFiles(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string) error {
+	catalogRef, ok := CatalogRef(ctx, doc)
+	if !ok {
+		return nil // The name-tree pass reports a missing catalog.
+	}
+	catalogDict := ResolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict != nil {
+		if newDict, changed := strippedAF(ctx, doc, catalogDict, name); changed {
+			alloc.AllocAt(catalogRef.ObjectNum, newDict)
+		}
+	}
+
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		return nil
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		return nil
+	}
+	for _, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("removing associated files canceled: %w", err)
+		}
+		pageDict := latestPageDict(alloc, page)
+		if newDict, changed := strippedAF(ctx, doc, pageDict, name); changed {
+			alloc.AllocAt(page.Ref.ObjectNum, newDict)
+		}
+	}
+	return nil
+}
+
+// strippedAF returns a copy of dict whose /AF array no longer names the file,
+// and whether anything was dropped. An /AF left with nothing in it is removed
+// rather than written as an empty array.
+func strippedAF(ctx context.Context, doc *document.Document, dict ast.PdfDict, name string) (ast.PdfDict, bool) {
+	afObj, ok := dict["AF"]
+	if !ok {
+		return nil, false
+	}
+	specs, err := document.ResolveArray(ctx, doc, afObj)
+	if err != nil {
+		// ISO 32000-2 allows a single file specification where an array is
+		// expected; treat it as a one-entry array.
+		specs = ast.PdfArray{afObj}
+	}
+
+	kept := make(ast.PdfArray, 0, len(specs))
+	for _, specObj := range specs {
+		if fileSpecFilename(ctx, doc, specObj) == name {
+			continue
+		}
+		kept = append(kept, specObj)
+	}
+	if len(kept) == len(specs) {
+		return nil, false
+	}
+
+	newDict := make(ast.PdfDict, len(dict))
+	maps.Copy(newDict, dict)
+	if len(kept) == 0 {
+		delete(newDict, "AF")
+	} else {
+		newDict["AF"] = kept
+	}
+	return newDict, true
 }
 
 // removeAttachmentFromNameTree removes a file from the document's
