@@ -72,7 +72,10 @@ func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 			doc.Logger.Debug("resolving embedded file name", slog.Any("err", err))
 			continue
 		}
-		*out = append(*out, EFEntry{Name: string(s), Ref: arr[i+1]})
+		// Decode: a key written by another producer may be UTF-16BE, and
+		// carrying its raw bytes through made the name unusable for matching
+		// and put mojibake in front of the caller.
+		*out = append(*out, EFEntry{Name: document.DecodePdfString(s), Ref: arr[i+1]})
 	}
 }
 
@@ -81,10 +84,27 @@ func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 // Flattening is spec-valid: a root node carrying only /Names needs no
 // /Limits or /Kids.
 func embeddedFilesArray(entries []EFEntry) ast.PdfArray {
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
-	arr := make(ast.PdfArray, 0, len(entries)*2)
+	// Encode first, then sort on the bytes that reach the file. ISO 32000-2,
+	// 7.9.6 orders keys by BYTE VALUE, so ordering the Go strings and encoding
+	// afterwards would write a tree whose /Limits do not bound it once a key
+	// stops being ASCII. Casting the Go string straight to a PDF string also
+	// left raw UTF-8 in the file, which no reader can decode: pikepdf showed
+	// an attachment named "Café" as "CafÃ©".
+	encoded := make([]struct {
+		key ast.PdfString
+		ref ast.PdfObject
+	}, 0, len(entries))
 	for _, e := range entries {
-		arr = append(arr, ast.PdfString(e.Name), e.Ref)
+		encoded = append(encoded, struct {
+			key ast.PdfString
+			ref ast.PdfObject
+		}{document.EncodePdfString(e.Name), e.Ref})
+	}
+	sort.SliceStable(encoded, func(i, j int) bool { return encoded[i].key < encoded[j].key })
+
+	arr := make(ast.PdfArray, 0, len(encoded)*2)
+	for _, e := range encoded {
+		arr = append(arr, e.key, e.ref)
 	}
 	return arr
 }
