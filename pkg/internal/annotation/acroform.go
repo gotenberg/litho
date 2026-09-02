@@ -32,6 +32,108 @@ func ExtractFormFields(ctx context.Context, doc *document.Document) ([]models.Fo
 	return extractForm(ctx, doc, true)
 }
 
+// maxFieldParentDepth bounds the walk up a widget's /Parent chain. It is an
+// anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3 describes a shallow
+// field hierarchy, and a crafted file whose /Parent points back at a descendant
+// would otherwise loop.
+const maxFieldParentDepth = 64
+
+// unregisteredWidgetFields returns the form fields a page carries that the
+// interactive form's /Fields array does not list.
+//
+// A widget annotation either is the field (its dictionary carries /FT and /T)
+// or presents one through /Parent (ISO 32000-1, 12.5.6.19). The field the
+// widget belongs to is reported, so a shared parent is returned once.
+func unregisteredWidgetFields(
+	ctx context.Context,
+	doc *document.Document,
+	catalog *document.Catalog,
+	registered ast.PdfArray,
+) ast.PdfArray {
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		doc.Logger.Debug("resolving pages for form widgets", "err", err)
+		return nil
+	}
+
+	known := make(map[int]bool, len(registered))
+	for _, f := range registered {
+		if ref, ok := f.(ast.PdfIndirectRef); ok {
+			known[ref.ObjectNum] = true
+		}
+	}
+
+	var out ast.PdfArray
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return out
+		}
+		annotsObj, ok := page.Dict["Annots"]
+		if !ok {
+			continue
+		}
+		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			doc.Logger.Debug("resolving /Annots for form widgets", "err", err)
+			continue
+		}
+		for _, annotObj := range annotsArr {
+			fieldObj, ok := widgetFieldRoot(ctx, doc, annotObj)
+			if !ok {
+				continue
+			}
+			ref, ok := fieldObj.(ast.PdfIndirectRef)
+			if !ok || known[ref.ObjectNum] {
+				continue
+			}
+			known[ref.ObjectNum] = true
+			out = append(out, fieldObj)
+		}
+	}
+	return out
+}
+
+// widgetFieldRoot returns the outermost field object a widget belongs to, and
+// whether the widget names a form field at all.
+func widgetFieldRoot(ctx context.Context, doc *document.Document, annotObj ast.PdfObject) (ast.PdfObject, bool) {
+	annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+	if err != nil || annotDict == nil {
+		return nil, false
+	}
+	if subtype, err := document.ResolveName(ctx, doc, annotDict["Subtype"]); err != nil || subtype != "Widget" {
+		return nil, false
+	}
+
+	current, currentDict := annotObj, annotDict
+	for range maxFieldParentDepth {
+		parentObj, hasParent := currentDict["Parent"]
+		if !hasParent {
+			break
+		}
+		parentDict, err := document.ResolveDict(ctx, doc, parentObj)
+		if err != nil || parentDict == nil {
+			break
+		}
+		current, currentDict = parentObj, parentDict
+	}
+
+	// A field carries a type, inherited or its own. Without one the widget is
+	// decoration rather than a form field.
+	node, depth := currentDict, 0
+	for node != nil && depth < maxFieldParentDepth {
+		if _, ok := node["FT"]; ok {
+			return current, true
+		}
+		parentDict, err := document.ResolveDict(ctx, doc, node["Parent"])
+		if err != nil {
+			return nil, false
+		}
+		node = parentDict
+		depth++
+	}
+	return nil, false
+}
+
 // extractForm walks the interactive form once. includeEmpty selects between the
 // two answers above.
 func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool) ([]models.FormField, error) {
@@ -40,23 +142,31 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		return nil, fmt.Errorf("getting catalog for AcroForm: %w", err)
 	}
 
-	acroFormObj, ok := catalog.Dict["AcroForm"]
-	if !ok {
-		return nil, nil // No forms in document
-	}
-
-	acroFormDict, err := document.ResolveDict(ctx, doc, acroFormObj)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve AcroForm: %w", err)
-	}
-	if acroFormDict == nil {
-		return nil, fmt.Errorf("AcroForm is not a dictionary")
+	// A document may carry fields the interactive form does not list. ISO
+	// 32000-1, 12.7.2 says /AcroForm holds them, and 12.5.6.19 says the page
+	// holds the widget that presents one; producers write the widget and forget
+	// the registration. pdfjs issue12963.pdf has 241 such fields, and
+	// `litho forms` reported none of them, so the page is walked even when the
+	// catalog states no form at all.
+	acroFormObj, hasAcroForm := catalog.Dict["AcroForm"]
+	var acroFormDict ast.PdfDict
+	if hasAcroForm {
+		acroFormDict, err = document.ResolveDict(ctx, doc, acroFormObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve AcroForm: %w", err)
+		}
+		if acroFormDict == nil {
+			return nil, fmt.Errorf("AcroForm is not a dictionary")
+		}
 	}
 
 	// Check for XFA forms first. If present, extract XFA data as the base
 	// layer, then overlay any AcroForm fields on top (AcroForm values take
 	// precedence when both exist, per the PDF spec's fallback semantics).
-	xfaData, _ := extractXFAData(ctx, doc, acroFormDict)
+	var xfaData map[string]string
+	if acroFormDict != nil {
+		xfaData, _ = extractXFAData(ctx, doc, acroFormDict)
+	}
 
 	xfaOnly := func() ([]models.FormField, error) {
 		if len(xfaData) == 0 {
@@ -74,17 +184,17 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		return results, nil
 	}
 
-	fieldsObj, ok := acroFormDict["Fields"]
-	if !ok {
-		// No AcroForm fields. Return XFA data if present.
-		return xfaOnly()
+	var fieldsArr ast.PdfArray
+	if acroFormDict != nil {
+		if fieldsObj, ok := acroFormDict["Fields"]; ok {
+			fieldsArr, err = document.ResolveArray(ctx, doc, fieldsObj)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve Fields: %w", err)
+			}
+		}
 	}
-
-	fieldsArr, err := document.ResolveArray(ctx, doc, fieldsObj)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve Fields: %w", err)
-	}
-	if len(fieldsArr) == 0 {
+	pageFields := unregisteredWidgetFields(ctx, doc, catalog, fieldsArr)
+	if len(fieldsArr) == 0 && len(pageFields) == 0 {
 		// Per ISO 32000-1, Table 218, /Fields may legitimately be empty: an
 		// interactive form carrying only /DA, /DR or /NeedAppearances declares
 		// no root fields. An empty array resolves to a nil slice, and
@@ -103,9 +213,17 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 
 	var order []string
 	seenName := make(map[string]bool)
-	err = traverseFields(ctx, doc, fieldsArr, "", "", formDataMap, calcScripts, &order, seenName)
-	if err != nil {
-		return nil, fmt.Errorf("traversing form fields: %w", err)
+	if len(fieldsArr) > 0 {
+		err = traverseFields(ctx, doc, fieldsArr, "", "", formDataMap, calcScripts, &order, seenName)
+		if err != nil {
+			return nil, fmt.Errorf("traversing form fields: %w", err)
+		}
+	}
+	if len(pageFields) > 0 {
+		err = traverseFields(ctx, doc, pageFields, "", "", formDataMap, calcScripts, &order, seenName)
+		if err != nil {
+			return nil, fmt.Errorf("traversing page form fields: %w", err)
+		}
 	}
 
 	// If there are calculation scripts, evaluate them using goja
