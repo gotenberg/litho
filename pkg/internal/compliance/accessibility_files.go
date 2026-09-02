@@ -537,7 +537,12 @@ func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot 
 			return false
 		}
 	}
-	// Parse rectangles.
+	// Parse rectangles, measuring the coordinates rather than the references
+	// naming them (ISO 32000-1, 7.3.9). Left unresolved every corner reads as
+	// zero, so a widget sitting on the page was reported as off it and exempted
+	// from ISO 14289-1 7.18.4 test 1.
+	rect = document.ResolveRectangle(ctx, doc, rect)
+	box = document.ResolveRectangle(ctx, doc, box)
 	rx1, ry1 := document.Float(rect[0]), document.Float(rect[1])
 	rx2, ry2 := document.Float(rect[2]), document.Float(rect[3])
 	bx1, by1 := document.Float(box[0]), document.Float(box[1])

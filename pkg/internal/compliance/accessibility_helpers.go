@@ -361,6 +361,12 @@ func resolveRect(ctx context.Context, doc *document.Document, obj ast.PdfObject)
 	if err != nil || len(arr) < 4 {
 		return nil
 	}
+	// Measure the coordinates, not the references naming them (ISO 32000-1,
+	// 7.3.9). Left unresolved every corner reads as zero, and a rectangle at the
+	// origin sits outside any crop box that starts there: annotations sitting
+	// squarely on the page were reported as off it and skipped, taking ISO
+	// 14289-1 7.18.1 tests 1 and 2 with them.
+	arr = document.ResolveRectangle(ctx, doc, arr)
 	r := make([]float64, 4)
 	for i := range 4 {
 		r[i] = document.Float(arr[i])
