@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -38,15 +39,17 @@ func valuedWidgetNoAPPDF() []byte {
 	return b.Bytes()
 }
 
-// TestFlattenFormKeepsAWidgetItCannotBake pins that a widget with no appearance
-// survives the flatten instead of being deleted.
+// TestFlattenFormDrawsAWidgetItCannotBake pins that flattening a widget with no
+// stored appearance keeps what it showed on the page.
 //
 // A viewer draws a variable-text field from /V and /DA when it stores no
-// appearance (ISO 32000-1, 12.7.3.3). litho has nothing to bake into the page
-// for such a widget, and it dropped the annotation anyway: on pdfjs
-// annotation-tx.pdf that removed the only text the page had, and `litho
-// flatten-form` reported success on a document it had just emptied.
-func TestFlattenFormKeepsAWidgetItCannotBake(t *testing.T) {
+// appearance (ISO 32000-1, 12.7.3.3). litho used to drop such an annotation, and
+// on pdfjs annotation-tx.pdf that removed the only text the page had. It then
+// kept the widget instead, which preserved the value but left the form behind so
+// the flatten never finished. litho now builds the appearance from the value and
+// bakes that in, which satisfies the same guarantee: the text this widget showed
+// is still on the page afterwards.
+func TestFlattenFormDrawsAWidgetItCannotBake(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -60,8 +63,9 @@ func TestFlattenFormKeepsAWidgetItCannotBake(t *testing.T) {
 		t.Fatalf("FlattenForm: %v", err)
 	}
 
-	// The page is only rewritten when something changed; either way the widget
-	// must still be reachable from /Annots.
+	// Either outcome preserves the value: the widget still carries it, or the
+	// page now draws it. What must never happen is both going away. A page left
+	// untouched is the first of those, since its /Annots still names the widget.
 	pageDict, ok := alloc.Pending()[3].(ast.PdfDict)
 	if !ok {
 		catalog, cerr := document.ResolveCatalog(ctx, doc)
@@ -79,7 +83,33 @@ func TestFlattenFormKeepsAWidgetItCannotBake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolving /Annots: %v", err)
 	}
-	if len(annots) != 1 {
-		t.Fatalf("page kept %d annotations, want the 1 widget that could not be baked", len(annots))
+	if len(annots) == 1 {
+		return // Kept, as older builds did.
+	}
+
+	res, _ := pageDict["Resources"].(ast.PdfDict)
+	xobjs, _ := res["XObject"].(ast.PdfDict)
+	if len(xobjs) == 0 {
+		t.Fatal("the widget was removed and nothing was drawn: the page lost its only text")
+	}
+
+	drawn := ""
+	for _, obj := range xobjs {
+		ref, isRef := obj.(ast.PdfIndirectRef)
+		if !isRef {
+			continue
+		}
+		stream, isStream := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
+		if !isStream {
+			continue
+		}
+		raw, err := stream.Bytes(ctx)
+		if err != nil {
+			t.Fatalf("reading the baked appearance: %v", err)
+		}
+		drawn += string(raw)
+	}
+	if !strings.Contains(drawn, "(tx annotation) Tj") {
+		t.Errorf("the flattened page does not draw the field value: %q", drawn)
 	}
 }
