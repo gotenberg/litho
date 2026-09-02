@@ -260,6 +260,30 @@ func NopLogger() *slog.Logger {
 // offset adjustment is needed downstream.
 const headerScanLimit = 1024
 
+// headerSearchLimit bounds the search for a "%PDF-" header that sits beyond
+// [headerScanLimit]. It is an anti-DoS guard, not spec-mandated: the search only
+// runs for a file that already proved it ends like a PDF, and 16 MiB covers any
+// plausible prefix while keeping the read bounded for a crafted input.
+const headerSearchLimit = 16 << 20
+
+// headerExistsBeyondScanLimit reports whether the file carries a "%PDF-" header
+// further in than [headerScanLimit], which is the case litho refuses: such a
+// document's body is too far from the start to cache safely, and it is not the
+// same thing as a file that states no header at all.
+func headerExistsBeyondScanLimit(r io.ReaderAt, size int64) bool {
+	limit := min(size, headerSearchLimit)
+	if limit <= headerScanLimit {
+		return false
+	}
+
+	buf := make([]byte, limit)
+	n, err := r.ReadAt(buf, 0)
+	if err != nil && err != io.EOF {
+		return false
+	}
+	return bytes.Contains(buf[:n], []byte("%PDF-"))
+}
+
 // NewDocument creates a new [Document] by parsing the XRef chains.
 // If logger is nil, a no-op logger is used.
 func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger) (*Document, error) {
@@ -276,19 +300,43 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	}
 	headerBuf = headerBuf[:n]
 	pdfIdx := bytes.Index(headerBuf, []byte("%PDF-"))
+
+	// A file with no header at all is still read when it ends like a PDF.
+	// ISO 32000-1, 7.5.2 requires the header, so such a file is invalid, but
+	// every other reader accepts it: pdfjs bug1606566.pdf has a complete xref,
+	// trailer and startxref and simply lacks the "%PDF-" line, and pdf.js,
+	// poppler ("May not be a PDF file (continuing anyway)") and pikepdf all
+	// open it.
+	//
+	// A header merely sitting beyond [headerScanLimit] is a different case and
+	// stays rejected: its body is too far from the start to cache safely, and
+	// treating it as headerless would record a header offset of 0 for a file
+	// that has one.
 	if pdfIdx == -1 {
-		return nil, ErrMissingHeader
+		// The tail probe runs first because it is bounded and cheap. Input that
+		// is not a PDF at all fails here, so it never reaches the scan below.
+		if _, xrefErr := FindStartXRef(r, size); xrefErr != nil {
+			return nil, ErrMissingHeader
+		}
+		if headerExistsBeyondScanLimit(r, size) {
+			return nil, ErrMissingHeader
+		}
 	}
 
-	// Extract version string (e.g., "1.4", "2.0").
+	// Extract version string (e.g., "1.4", "2.0"). A headerless file states no
+	// version, which is what pdf.js reports for it as well.
 	version := ""
-	vStart := pdfIdx + len("%PDF-")
-	if vStart < len(headerBuf) {
-		vEnd := vStart
-		for vEnd < len(headerBuf) && headerBuf[vEnd] != '\n' && headerBuf[vEnd] != '\r' && headerBuf[vEnd] != ' ' && headerBuf[vEnd] != 0x00 {
-			vEnd++
+	headerOffset := int64(0)
+	if pdfIdx >= 0 {
+		headerOffset = int64(pdfIdx)
+		vStart := pdfIdx + len("%PDF-")
+		if vStart < len(headerBuf) {
+			vEnd := vStart
+			for vEnd < len(headerBuf) && headerBuf[vEnd] != '\n' && headerBuf[vEnd] != '\r' && headerBuf[vEnd] != ' ' && headerBuf[vEnd] != 0x00 {
+				vEnd++
+			}
+			version = string(headerBuf[vStart:vEnd])
 		}
-		version = string(headerBuf[vStart:vEnd])
 	}
 
 	if logger == nil {
@@ -305,7 +353,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		maxCacheSize: 50_000, // evict when cache exceeds 50k objects
 		Logger:       logger,
 		Version:      version,
-		HeaderOffset: int64(pdfIdx),
+		HeaderOffset: headerOffset,
 	}
 
 	// Probe for linearization before seeking to the end of the file. The probe
