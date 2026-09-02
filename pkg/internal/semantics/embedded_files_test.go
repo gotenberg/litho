@@ -170,3 +170,86 @@ func TestExtractEmbeddedFilesKeepsNameTreeFiles(t *testing.T) {
 		t.Fatalf("got %d files %+v, want the one name tree entry", len(files), files)
 	}
 }
+
+// afAttachmentPDF builds a document whose only embedded file is associated
+// through the catalog's /AF array, with no name tree and no annotation.
+func afAttachmentPDF() []byte {
+	const payload = "hello associated"
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /AF [4 0 R] >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Type /Filespec /F (data.xml) /UF (data.xml) /AFRelationship /Data /EF << /F 5 0 R >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(payload), payload),
+	})
+}
+
+// TestExtractEmbeddedFilesFindsAssociatedFile pins that a file attached only
+// through /AF is listed.
+//
+// ISO 32000-2, 14.13 associates a file with the document through /AF, and a
+// producer may use it as the only route: pdfjs bug1937438_mml_from_latex.pdf
+// attaches two stylesheets that way with no name tree, and litho's own
+// compliance engine flags them under PDF/A-1 clause 6.1.11 while
+// `litho attachments` reported none.
+func TestExtractEmbeddedFilesFindsAssociatedFile(t *testing.T) {
+	t.Parallel()
+
+	files, err := ExtractEmbeddedFiles(context.Background(), openBytes(t, afAttachmentPDF()))
+	if err != nil {
+		t.Fatalf("ExtractEmbeddedFiles: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("listed %d files, want 1: the /AF entry carries one", len(files))
+	}
+	if files[0].Name != "data.xml" {
+		t.Errorf("name = %q, want %q", files[0].Name, "data.xml")
+	}
+}
+
+// TestAssociatedFileAlsoInTheTreeReportedOnce pins that a file the producer put
+// in both places is not listed twice.
+func TestAssociatedFileAlsoInTheTreeReportedOnce(t *testing.T) {
+	t.Parallel()
+
+	const payload = "hello associated"
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /AF [4 0 R] /Names << /EmbeddedFiles 6 0 R >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Type /Filespec /F (data.xml) /UF (data.xml) /EF << /F 5 0 R >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(payload), payload),
+		"<< /Names [(data.xml) 4 0 R] >>",
+	})
+
+	files, err := ExtractEmbeddedFiles(context.Background(), openBytes(t, data))
+	if err != nil {
+		t.Fatalf("ExtractEmbeddedFiles: %v", err)
+	}
+	if len(files) != 1 {
+		t.Errorf("listed %d files, want 1: /AF names the stream the tree already supplied", len(files))
+	}
+}
+
+// TestPageAssociatedFileFound pins that /AF on a page is walked too, since
+// ISO 32000-2, 14.13 allows associating a file with a part of the document.
+func TestPageAssociatedFileFound(t *testing.T) {
+	t.Parallel()
+
+	const payload = "page associated"
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /AF [4 0 R] >>",
+		"<< /Type /Filespec /F (page.txt) /UF (page.txt) /EF << /F 5 0 R >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(payload), payload),
+	})
+
+	files, err := ExtractEmbeddedFiles(context.Background(), openBytes(t, data))
+	if err != nil {
+		t.Fatalf("ExtractEmbeddedFiles: %v", err)
+	}
+	if len(files) != 1 || files[0].Name != "page.txt" {
+		t.Errorf("got %d files %+v, want the page's associated file", len(files), files)
+	}
+}
