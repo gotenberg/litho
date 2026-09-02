@@ -346,9 +346,9 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 
 // scanRawInfoFields scans the raw PDF bytes for Info-dict field
 // values and populates [metadata] with recoveries for fields the
-// in-memory Info resolution could not supply. /ModDate keeps its
-// previous "newest wins" semantics; the remaining fields are filled
-// only when missing so authoritative values stay intact. The scan
+// in-memory Info resolution could not supply. Every field, /ModDate
+// included, is filled only when missing, so a value the document
+// states stays intact. The scan
 // runs against the entire file so incremental updates whose newest
 // trailer points at a stale or non-dict /Info can still expose
 // earlier revisions' values.
@@ -367,7 +367,21 @@ func scanRawInfoFields(ctx context.Context, doc *document.Document, metadata map
 	}
 	raw := buf[:n]
 
+	// A /ModDate the document itself states wins over anything the raw scan
+	// finds. The scan exists to recover fields when /Info is unusable, not to
+	// second-guess a document that answered the question: pdf.js, poppler and
+	// Acrobat all report the /Info value, and preferring the newest date found
+	// anywhere disagreed with them on 9 corpus fixtures, including two Factur-X
+	// files whose XMP timestamp is written one second after the /Info one.
+	//
+	// When nothing structured supplied a date, the newest of the scanned values
+	// is still the best answer: an incremental update that dropped the field
+	// leaves several older ones behind.
+	statedModDate := metadata["ModDate"] != ""
 	scanRawInfoField(ctx, raw, "ModDate", func(v string) {
+		if statedModDate {
+			return
+		}
 		metadata["ModDate"] = newerDate(metadata["ModDate"], v)
 	})
 	fillIfMissing := func(key string) {
