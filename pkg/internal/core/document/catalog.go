@@ -403,7 +403,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		mbArr, err := ResolveArray(ctx, doc, mbObj)
 		if err == nil {
 			if mbArr != nil {
-				currentMediaBox = mbArr
+				currentMediaBox = resolveRectangle(ctx, doc, mbArr)
 			}
 		}
 	}
@@ -414,14 +414,20 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		cbArr, err := ResolveArray(ctx, doc, cbObj)
 		if err == nil {
 			if cbArr != nil {
-				currentCropBox = cbArr
+				currentCropBox = resolveRectangle(ctx, doc, cbArr)
 			}
 		}
 	}
 
-	// Inherit or override Rotate (inheritable per PDF spec §7.7.3.3)
+	// Inherit or override Rotate (inheritable per PDF spec §7.7.3.3). The entry
+	// may itself be indirect, which ISO 32000-1, 7.3.9 allows anywhere.
 	currentRotate := inheritedRotate
 	if rotObj, ok := node["Rotate"]; ok {
+		if ref, isRef := rotObj.(ast.PdfIndirectRef); isRef {
+			if resolved, err := ResolveObject(ctx, doc, ref); err == nil {
+				rotObj = resolved
+			}
+		}
 		if rotInt, ok := rotObj.(ast.PdfInt); ok {
 			currentRotate = int(rotInt)
 		}
@@ -695,5 +701,49 @@ func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key a
 	if len(arr) < 4 {
 		return fallback
 	}
-	return arr
+	return resolveRectangle(ctx, doc, arr)
+}
+
+// resolveRectangle returns arr with every indirect element replaced by the
+// object it names, so a rectangle survives [Float].
+//
+// ISO 32000-1, 7.3.9 permits an indirect reference wherever a direct object may
+// appear, including inside an array, and producers do write rectangles that
+// way: pdfjs issue7872.pdf declares /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R]. Read
+// verbatim those coordinates are references rather than numbers, so the page
+// measured 0 by 0.
+//
+// The array is copied only when an element needs resolving, so the ordinary
+// rectangle keeps its backing array.
+func resolveRectangle(ctx context.Context, doc *Document, arr ast.PdfArray) ast.PdfArray {
+	indirect := false
+	for _, elem := range arr {
+		if _, ok := elem.(ast.PdfIndirectRef); ok {
+			indirect = true
+			break
+		}
+	}
+	if !indirect {
+		return arr
+	}
+
+	out := make(ast.PdfArray, len(arr))
+	for i, elem := range arr {
+		ref, ok := elem.(ast.PdfIndirectRef)
+		if !ok {
+			out[i] = elem
+			continue
+		}
+		resolved, err := ResolveObject(ctx, doc, ref)
+		if err != nil {
+			doc.Logger.Debug("resolving indirect rectangle coordinate",
+				slog.Int("object", ref.ObjectNum),
+				slog.Any("err", err),
+			)
+			out[i] = elem
+			continue
+		}
+		out[i] = resolved
+	}
+	return out
 }
