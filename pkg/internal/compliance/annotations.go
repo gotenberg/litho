@@ -425,6 +425,13 @@ func isZeroRect(ctx context.Context, doc *document.Document, annot ast.PdfDict) 
 	if err != nil || len(rect) < 4 {
 		return false
 	}
+	// Measure the coordinates, not the references naming them. ISO 32000-1,
+	// 7.3.9 allows an indirect reference wherever a direct object may appear, and
+	// reading those references as numbers yields zero for every corner. That made
+	// a real rectangle look empty, and since an empty rectangle excuses an
+	// annotation from carrying an appearance dictionary, the missing /AP went
+	// unreported.
+	rect = document.ResolveRectangle(ctx, doc, rect)
 	x1 := document.Float(rect[0])
 	y1 := document.Float(rect[1])
 	x2 := document.Float(rect[2])
