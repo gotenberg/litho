@@ -403,7 +403,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		mbArr, err := ResolveArray(ctx, doc, mbObj)
 		if err == nil {
 			if mbArr != nil {
-				currentMediaBox = resolveRectangle(ctx, doc, mbArr)
+				currentMediaBox = ResolveRectangle(ctx, doc, mbArr)
 			}
 		}
 	}
@@ -414,7 +414,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		cbArr, err := ResolveArray(ctx, doc, cbObj)
 		if err == nil {
 			if cbArr != nil {
-				currentCropBox = resolveRectangle(ctx, doc, cbArr)
+				currentCropBox = ResolveRectangle(ctx, doc, cbArr)
 			}
 		}
 	}
@@ -701,10 +701,10 @@ func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key a
 	if len(arr) < 4 {
 		return fallback
 	}
-	return resolveRectangle(ctx, doc, arr)
+	return ResolveRectangle(ctx, doc, arr)
 }
 
-// resolveRectangle returns arr with every indirect element replaced by the
+// ResolveRectangle returns arr with every indirect element replaced by the
 // object it names, so a rectangle survives [Float].
 //
 // ISO 32000-1, 7.3.9 permits an indirect reference wherever a direct object may
@@ -715,7 +715,7 @@ func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key a
 //
 // The array is copied only when an element needs resolving, so the ordinary
 // rectangle keeps its backing array.
-func resolveRectangle(ctx context.Context, doc *Document, arr ast.PdfArray) ast.PdfArray {
+func ResolveRectangle(ctx context.Context, doc *Document, arr ast.PdfArray) ast.PdfArray {
 	indirect := false
 	for _, elem := range arr {
 		if _, ok := elem.(ast.PdfIndirectRef); ok {

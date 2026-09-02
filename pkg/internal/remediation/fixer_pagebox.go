@@ -70,6 +70,14 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			if !ok {
 				continue
 			}
+			// Measure the coordinates, not the references naming them. A page
+			// writing /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R] (ISO 32000-1, 7.3.9,
+			// the shape of pdfjs issue7872.pdf) reads as zero-sized otherwise,
+			// and a valid page then had its box replaced by the fallback, which
+			// crops away everything drawn outside it. The resolved copy drives
+			// the decision only: a box needing no change keeps the form the
+			// producer wrote.
+			arr = document.ResolveRectangle(ctx, doc, arr)
 			// A degenerate box encloses nothing, and growing it to the 3-unit
 			// minimum at its lower-left corner leaves the page's content
 			// outside the page: pdfjs boundingBox_invalid.pdf lost the text of
@@ -129,7 +137,11 @@ func widestUsableMediaBox(ctx context.Context, doc *document.Document, entries [
 	maxW, maxH := 0.0, 0.0
 	for _, pe := range entries {
 		arr, err := document.ResolveArray(ctx, doc, pe.dict["MediaBox"])
-		if err != nil || len(arr) != 4 || isDegenerateBox(arr) {
+		if err != nil || len(arr) != 4 {
+			continue
+		}
+		arr = document.ResolveRectangle(ctx, doc, arr)
+		if isDegenerateBox(arr) {
 			continue
 		}
 		maxW = math.Max(maxW, math.Abs(document.Float(arr[2])-document.Float(arr[0])))
