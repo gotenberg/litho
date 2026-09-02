@@ -114,7 +114,20 @@ func StampText(
 		}
 		fontRef = alloc.Alloc(fontDict)
 		fontResName = ast.PdfName(fmt.Sprintf("StampF%d", fontRef.ObjectNum))
-		encoded = "(" + escapePDFString(opts.Text) + ")"
+
+		// A standard font draws through WinAnsiEncoding, so the text has to be
+		// written in it. Emitting the Go string's UTF-8 bytes instead put two
+		// bytes on the page for every accented character and a viewer decoded
+		// each one separately: stamping "Café" produced "CafÃ©", and a Cyrillic
+		// stamp came out as mojibake end to end. A caller whose text this
+		// encoding cannot express is told to supply a font rather than handed a
+		// corrupted page.
+		winAnsi, encodable := winAnsiEncode(opts.Text)
+		if !encodable {
+			return fmt.Errorf("stamp text cannot be written in the WinAnsi encoding a standard "+
+				"font uses; supply a TTF with -font to stamp %q", opts.Text)
+		}
+		encoded = "(" + escapePDFString(string(winAnsi)) + ")"
 	}
 
 	extGSName, extGSRef := buildExtGState(alloc, opts.Opacity)
