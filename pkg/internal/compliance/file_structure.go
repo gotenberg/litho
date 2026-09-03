@@ -901,7 +901,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 			if width < minPageBound || width > maxPageBound || height < minPageBound || height > maxPageBound {
 				results = append(results, Violation{
 					Rule:    rule,
-					Context: fmt.Sprintf("Pages tree /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", key, width, height, minPageBound, maxPageBound),
+					Context: fmt.Sprintf("Pages tree /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", string(key), width, height, minPageBound, maxPageBound),
 				})
 			}
 		}
@@ -936,7 +936,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 			if width < minPageBound || width > maxPageBound || height < minPageBound || height > maxPageBound {
 				results = append(results, Violation{
 					Rule:    rule,
-					Context: fmt.Sprintf("page %d /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", pageIdx+1, key, width, height, minPageBound, maxPageBound),
+					Context: fmt.Sprintf("page %d /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", pageIdx+1, string(key), width, height, minPageBound, maxPageBound),
 				})
 			}
 		}

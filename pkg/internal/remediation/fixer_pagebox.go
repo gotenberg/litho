@@ -106,10 +106,95 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		alloc.AllocAt(pe.ref.ObjectNum, newPage)
 		count++
 	}
-	if count == 0 {
-		return nil, nil
+	// A box on an interior /Pages node is inherited by every page under it
+	// (ISO 32000-1, 7.7.3.4, Table 30), so it is just as much a page boundary
+	// and 6.1.13 test 11 reports it as one. Walking only the leaves left
+	// 6-1-13-t09-fail-c through -f unremediable, their box sitting on the
+	// "Pages tree" node litho itself names in the violation.
+	nodes := clampPageTreeBoxes(ctx, alloc, doc, pagesObj, opts.PreserveContent, fallbackMedia)
+
+	var fixes []string
+	if count > 0 {
+		fixes = append(fixes, fmt.Sprintf("normalised page boundaries on %d page(s)", count))
 	}
-	return []string{fmt.Sprintf("normalised page boundaries on %d page(s)", count)}, nil
+	if nodes > 0 {
+		fixes = append(fixes, fmt.Sprintf("normalised inherited page boundaries on %d page tree node(s)", nodes))
+	}
+	return fixes, nil
+}
+
+// clampPageTreeBoxes normalises the boxes declared on the interior nodes of the
+// page tree, returning how many nodes it rewrote.
+func clampPageTreeBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, node ast.PdfObject, preserveContent bool, fallbackMedia ast.PdfArray) int {
+	return clampPageTreeNode(ctx, alloc, doc, node, preserveContent, fallbackMedia, make(map[int]bool), 0)
+}
+
+// clampPageTreeNode clamps one node's boxes and recurses into its /Kids. Leaf
+// pages are skipped: the caller already normalised those. The visited set
+// breaks a /Kids cycle and the depth bound caps a pathological tree.
+func clampPageTreeNode(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, node ast.PdfObject, preserveContent bool, fallbackMedia ast.PdfArray, visited map[int]bool, depth int) int {
+	if depth > maxPageTreeDepth || ctx.Err() != nil {
+		return 0
+	}
+	ref, isRef := node.(ast.PdfIndirectRef)
+	if !isRef || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
+		return 0
+	}
+	visited[ref.ObjectNum] = true
+
+	dict := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	if dict == nil {
+		return 0
+	}
+	if typ, _ := document.ResolveName(ctx, doc, dict["Type"]); typ == "Page" {
+		return 0
+	}
+
+	count := 0
+	if newNode, modified := clampBoxesInDict(ctx, doc, dict, preserveContent, fallbackMedia); modified {
+		alloc.AllocAt(ref.ObjectNum, newNode)
+		count++
+	}
+
+	kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
+	if err != nil {
+		return count
+	}
+	for _, kid := range kids {
+		count += clampPageTreeNode(ctx, alloc, doc, kid, preserveContent, fallbackMedia, visited, depth+1)
+	}
+	return count
+}
+
+// clampBoxesInDict returns a copy of dict with every page boundary brought
+// inside the permitted range, and whether anything changed. It is the same
+// normalisation the leaf pass applies, so a box means the same thing wherever
+// it is declared.
+func clampBoxesInDict(ctx context.Context, doc *document.Document, dict ast.PdfDict, preserveContent bool, fallbackMedia ast.PdfArray) (ast.PdfDict, bool) {
+	modified := false
+	out := make(ast.PdfDict, len(dict))
+	maps.Copy(out, dict)
+	for _, key := range []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox"} {
+		arr, ok := out[key].(ast.PdfArray)
+		if !ok {
+			continue
+		}
+		arr = document.ResolveRectangle(ctx, doc, arr)
+		if isDegenerateBox(arr) {
+			if key != "MediaBox" {
+				delete(out, key)
+			} else {
+				out[key] = fallbackMedia
+			}
+			modified = true
+			continue
+		}
+		if clamped, changed := clampBoxArray(arr, preserveContent); changed {
+			out[key] = clamped
+			modified = true
+		}
+	}
+	return out, modified
 }
 
 // defaultMediaBox is US Letter, the size assumed when a degenerate /MediaBox
