@@ -82,8 +82,8 @@ func TestExtractCMapStreamWMode(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := extractCMapStreamWMode([]byte(tc.data)); got != tc.want {
-				t.Errorf("extractCMapStreamWMode(%q) = %d, want %d", tc.data, got, tc.want)
+			if got := ExtractCMapStreamWMode([]byte(tc.data)); got != tc.want {
+				t.Errorf("ExtractCMapStreamWMode(%q) = %d, want %d", tc.data, got, tc.want)
 			}
 		})
 	}

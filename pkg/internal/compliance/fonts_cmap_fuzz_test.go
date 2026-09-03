@@ -7,7 +7,7 @@ func FuzzExtractCMapStreamWMode(f *testing.F) {
 	f.Add([]byte("/WMode 1 def"))
 	f.Add([]byte("/WMode")) // No value follows.
 	f.Fuzz(func(_ *testing.T, data []byte) {
-		_ = extractCMapStreamWMode(data)
+		_ = ExtractCMapStreamWMode(data)
 	})
 }
 

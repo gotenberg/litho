@@ -1,0 +1,188 @@
+package remediation
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
+)
+
+// cidFontPDF builds a Type 0 font whose /Encoding is an embedded CMap stream,
+// so the encoding cannot be relabelled /Identity-H and the CIDSystemInfo has to
+// be brought into agreement instead.
+//
+// Object 5 is the font, 6 the CMap stream, 7 the CIDFont. cidSysInfo and
+// cmapSysInfo are the two dictionaries under test; dictWMode is what the CMap
+// dictionary claims and programWMode what its body declares.
+func cidFontPDF(cidSysInfo, cmapSysInfo string, dictWMode, programWMode int) []byte {
+	program := fmt.Sprintf("%%!PS-Adobe-3.0 Resource-CMap\n/WMode %d def\n/CMapName /Test-H def\n", programWMode)
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]" +
+			" /Resources << /Font << /C0_0 5 0 R >> >> >>",
+		"<< /Type /Nothing >>",
+		"<< /Type /Font /Subtype /Type0 /BaseFont /Test /Encoding 6 0 R /DescendantFonts [7 0 R] >>",
+		fmt.Sprintf("<< /Type /CMap /CMapName /Test-H /WMode %d /CIDSystemInfo %s /Length %d >>\nstream\n%s\nendstream",
+			dictWMode, cmapSysInfo, len(program), program),
+		"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /Test /CIDSystemInfo " + cidSysInfo + " >>",
+	}
+
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	start := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, start)
+	return b.Bytes()
+}
+
+// runCIDFix applies the fixer and returns the allocator.
+func runCIDFix(t *testing.T, data []byte) *writer.ObjAllocator {
+	t.Helper()
+
+	ctx := context.Background()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	if _, err := fixCIDSystemInfo(ctx, alloc, doc, Options{}, nil, "PDF/A-4"); err != nil {
+		t.Fatalf("fixCIDSystemInfo: %v", err)
+	}
+	return alloc
+}
+
+// patchedCIDSystemInfo returns the CIDFont's rewritten /CIDSystemInfo.
+func patchedCIDSystemInfo(t *testing.T, alloc *writer.ObjAllocator) ast.PdfDict {
+	t.Helper()
+
+	cidFont, ok := alloc.Pending()[7].(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	sys, ok := cidFont["CIDSystemInfo"].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("/CIDSystemInfo is %T, want a dict", cidFont["CIDSystemInfo"])
+	}
+	return sys
+}
+
+// TestAlignCIDSystemInfoFixesLetterCase pins that a Registry differing only in
+// letter case is settled in the CMap's favour.
+//
+// ISO 19005-4, 6.2.10.3.1 test 1 wants the values identical, and
+// 6-2-10-3-1-t01-fail-a writes "adobe" against the CMap's "Adobe": a producer
+// typo naming the same character collection. The fixer could only relabel
+// /Encoding to /Identity-H, which a real CMap forbids, so it left the file
+// failing.
+func TestAlignCIDSystemInfoFixesLetterCase(t *testing.T) {
+	t.Parallel()
+
+	alloc := runCIDFix(t, cidFontPDF(
+		"<< /Registry (adobe) /Ordering (Japan1) /Supplement 2 >>",
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >>", 0, 0))
+
+	sys := patchedCIDSystemInfo(t, alloc)
+	if sys == nil {
+		t.Fatal("the CIDFont was not rewritten")
+	}
+	if reg, _ := sys["Registry"].(ast.PdfString); string(reg) != "Adobe" {
+		t.Errorf("/Registry = %q, want %q", reg, "Adobe")
+	}
+}
+
+// TestAlignCIDSystemInfoClampsTheSupplement pins that a /Supplement above the
+// CMap's is lowered to it, which 6.2.10.3.1 test 1 requires.
+func TestAlignCIDSystemInfoClampsTheSupplement(t *testing.T) {
+	t.Parallel()
+
+	alloc := runCIDFix(t, cidFontPDF(
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 3 >>",
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >>", 0, 0))
+
+	sys := patchedCIDSystemInfo(t, alloc)
+	if sys == nil {
+		t.Fatal("the CIDFont was not rewritten")
+	}
+	if sup, _ := sys["Supplement"].(ast.PdfInt); int(sup) != 2 {
+		t.Errorf("/Supplement = %v, want 2", sys["Supplement"])
+	}
+}
+
+// TestAlignCIDSystemInfoLeavesARealMismatch is the control that matters most:
+// a genuinely different character collection must be left alone.
+//
+// 6-2-10-3-1-t01-fail-b declares Ordering "China1" against a Japan1 CMap. The
+// font and the CMap really do disagree, so overwriting the declaration would
+// assert a collection the glyphs do not come from. The violation stays as an
+// honest residual.
+func TestAlignCIDSystemInfoLeavesARealMismatch(t *testing.T) {
+	t.Parallel()
+
+	alloc := runCIDFix(t, cidFontPDF(
+		"<< /Registry (Adobe) /Ordering (China1) /Supplement 2 >>",
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >>", 0, 0))
+
+	if sys := patchedCIDSystemInfo(t, alloc); sys != nil {
+		if ord, _ := sys["Ordering"].(ast.PdfString); string(ord) != "China1" {
+			t.Errorf("/Ordering = %q, want it left as %q", ord, "China1")
+		}
+	}
+}
+
+// TestAlignCMapWModeFollowsTheProgram pins that a CMap dictionary's /WMode is
+// corrected to the value its own program declares.
+//
+// ISO 19005-4, 6.2.10.3.3 test 2 requires the two to be identical, and the
+// program is what a viewer executes. 6-2-10-3-3-t02-fail-a claims 1 over a
+// program that says 0.
+func TestAlignCMapWModeFollowsTheProgram(t *testing.T) {
+	t.Parallel()
+
+	alloc := runCIDFix(t, cidFontPDF(
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >>",
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >>", 1, 0))
+
+	stream, ok := alloc.Pending()[6].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("the CMap stream was not rewritten: %T", alloc.Pending()[6])
+	}
+	if wmode, _ := stream.Dict["WMode"].(ast.PdfInt); int(wmode) != 0 {
+		t.Errorf("/WMode = %v, want 0 to match the program", stream.Dict["WMode"])
+	}
+	// The program must survive the dictionary edit.
+	body, err := stream.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("reading the CMap body: %v", err)
+	}
+	if !bytes.Contains(body, []byte("/CMapName /Test-H def")) {
+		t.Errorf("the CMap program was lost: %q", body)
+	}
+}
+
+// TestAlignCMapWModeLeavesAnAgreeingDictionary is the control: when the two
+// already agree, nothing is rewritten.
+func TestAlignCMapWModeLeavesAnAgreeingDictionary(t *testing.T) {
+	t.Parallel()
+
+	alloc := runCIDFix(t, cidFontPDF(
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >>",
+		"<< /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >>", 1, 1))
+
+	if _, rewritten := alloc.Pending()[6]; rewritten {
+		t.Error("a CMap whose /WMode already matches its program was rewritten")
+	}
+}

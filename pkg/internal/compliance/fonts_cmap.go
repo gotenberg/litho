@@ -340,7 +340,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 	dictWMode, _ := document.ResolveInt(ctx, doc, encStream.Dict["WMode"])
 	data, err := doc.DecodeStream(ctx, encStream)
 	if err == nil && len(data) > 0 {
-		streamWMode := max(extractCMapStreamWMode(data),
+		streamWMode := max(ExtractCMapStreamWMode(data),
 			// default WMode per spec
 			0)
 		if int(dictWMode) != streamWMode {
@@ -502,9 +502,14 @@ func extractCMapName(ctx context.Context, doc *document.Document, stream ast.Pdf
 	return name
 }
 
-// extractCMapStreamWMode parses a CMap program for "/WMode N def" and returns N.
+// ExtractCMapStreamWMode parses a CMap program for "/WMode N def" and returns N,
+// or -1 when the program declares none.
+//
+// Remediation shares this parse so the value it writes into the CMap stream
+// dictionary is the value the detector compares against
+// (ISO 19005-4, 6.2.10.3.3 test 2).
 // Returns -1 if not found.
-func extractCMapStreamWMode(data []byte) int {
+func ExtractCMapStreamWMode(data []byte) int {
 	s := string(data)
 	_, after, ok := strings.Cut(s, "/WMode")
 	if !ok {
