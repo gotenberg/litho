@@ -47,6 +47,12 @@ func StampImage(
 	opts ImageStampOptions,
 	pageNums []int,
 ) error {
+	if err := finiteValues(map[string]float64{
+		"x": opts.X, "y": opts.Y, "width": opts.Width, "height": opts.Height,
+		"opacity": opts.Opacity, "rotation": opts.Rotation,
+	}); err != nil {
+		return err
+	}
 	if len(pageNums) == 0 {
 		pageNums = make([]int, len(pages))
 		for i := range pages {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"math"
+	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -80,6 +82,29 @@ func ResolveFromAllocOrDoc(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		return nil
 	}
 	return d
+}
+
+// finiteValues reports the first option that is not a finite number.
+//
+// A PDF number is an optional sign, digits and an optional decimal point (ISO
+// 32000-1, 7.3.3); there is no spelling for NaN or infinity. Go's flag package
+// parses "NaN" and "Inf" into a float64 perfectly happily, and %f then wrote
+// them into the content stream verbatim: `litho stamp-text -x NaN` produced a
+// page poppler rejects with "Syntax Error: Unknown operator 'NaN'" followed by
+// "Too few (1) args to 'Td'", while litho exited 0. Callers are told instead.
+func finiteValues(named map[string]float64) error {
+	names := make([]string, 0, len(named))
+	for name := range named {
+		names = append(names, name)
+	}
+	// Sorted so the same bad input always names the same option first.
+	sort.Strings(names)
+	for _, name := range names {
+		if v := named[name]; math.IsNaN(v) || math.IsInf(v, 0) {
+			return fmt.Errorf("%s must be a finite number, got %v", name, v)
+		}
+	}
+	return nil
 }
 
 // FormatFloat formats a float with up to 4 decimal places, trimming trailing zeros.

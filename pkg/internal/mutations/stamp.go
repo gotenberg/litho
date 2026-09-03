@@ -52,6 +52,13 @@ func StampText(
 	opts TextStampOptions,
 	pageNums []int,
 ) error {
+	if err := finiteValues(map[string]float64{
+		"x": opts.X, "y": opts.Y, "font size": opts.FontSize,
+		"opacity": opts.Opacity, "rotation": opts.Rotation,
+		"red": opts.Color[0], "green": opts.Color[1], "blue": opts.Color[2],
+	}); err != nil {
+		return err
+	}
 	if len(pageNums) == 0 {
 		pageNums = make([]int, len(pages))
 		for i := range pages {
