@@ -510,10 +510,17 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 				buf = out
 			}
 		}
+		// Whether the packet ends up carrying a part number at all. The
+		// identification schema is the pair: writing a conformance level
+		// without one leaves pdfaid:part empty, which is a 6.6.4 test 2
+		// failure the file did not have before.
+		partPresent := true
 		if findXMPProperty(buf, pdfaidNS, "part").Form == xmpPropertyNotFound {
 			if out, injected := injectPropertyOnce(buf, "pdfaid:part", fmt.Sprintf("<pdfaid:part>%s</pdfaid:part>", partStr)); injected {
 				buf = out
 				fixes = append(fixes, "injected pdfaid:part into XMP")
+			} else {
+				partPresent = false
 			}
 		} else if out, err := replacePropertyValue(buf, pdfaidNS, "part", partStr); err == nil {
 			if !bytes.Equal(out, buf) {
@@ -524,6 +531,16 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		// For conformance levels other than plain PDF/A-4 (where
 		// conformance is forbidden), also inject or correct the level.
 		needConformance := conformance != "" && (part != 4 || conformance == "E" || conformance == "F")
+		// Injecting a conformance level next to a part number that could not
+		// be written builds half an identification schema. issue15833.pdf
+		// binds the rdf prefix to a proxy-rewritten URI, so the element
+		// insertion finds no rdf:Description while the attribute insertion,
+		// which matches on the prefix alone, still succeeds. The file came
+		// out of remediation reporting pdfaid:part= with nothing in it.
+		if needConformance && !partPresent &&
+			findXMPProperty(buf, pdfaidNS, "conformance").Form == xmpPropertyNotFound {
+			needConformance = false
+		}
 		if needConformance {
 			if findXMPProperty(buf, pdfaidNS, "conformance").Form == xmpPropertyNotFound {
 				// Repair any wrong-URI xmlns:pdfaid binding first, then
