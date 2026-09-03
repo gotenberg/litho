@@ -359,7 +359,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		return ast.PdfArray{ast.PdfName("ICCBased"), iccRef}
 	}
 	if n, err := injectDefaultColorSpace(ctx, alloc, doc, catalogDict, defaultColor, csArr); err == nil && n > 0 {
-		fixes = append(fixes, fmt.Sprintf("injected /%s into %d page(s)", defaultColor, n))
+		fixes = append(fixes, fmt.Sprintf("injected /%s into %d page(s)", string(defaultColor), n))
 	}
 
 	return fixes, nil

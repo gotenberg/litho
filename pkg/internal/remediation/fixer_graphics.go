@@ -178,7 +178,7 @@ func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			if _, ok := newGS[key]; ok {
 				delete(newGS, key)
 				modified = true
-				notes = append(notes, fmt.Sprintf("removed /%s from ExtGState %s", key, string(name)))
+				notes = append(notes, fmt.Sprintf("removed /%s from ExtGState %s", string(key), string(name)))
 			}
 		}
 		if htObj, ok := newGS["HT"]; ok {

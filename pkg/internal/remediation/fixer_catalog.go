@@ -158,7 +158,7 @@ func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc
 				newRefs[i] = patched
 				changed = true
 			}
-			fixes = append(fixes, fmt.Sprintf("stripped forbidden digest keys from /%s Reference[%d]", key, i))
+			fixes = append(fixes, fmt.Sprintf("stripped forbidden digest keys from /%s Reference[%d]", string(key), i))
 		}
 		if !changed {
 			continue

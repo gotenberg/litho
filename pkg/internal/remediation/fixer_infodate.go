@@ -62,7 +62,7 @@ func fixInfoDate(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		}
 		newInfo[key] = ast.PdfString(converted)
 		changed = true
-		fixes = append(fixes, fmt.Sprintf("converted /Info /%s to D: format", key))
+		fixes = append(fixes, fmt.Sprintf("converted /Info /%s to D: format", string(key)))
 	}
 	if !changed {
 		return nil, nil

@@ -328,7 +328,7 @@ func removeForbiddenFromAADict(ctx context.Context, doc *document.Document, aaOb
 	var fixes []string
 	for _, k := range forbidden {
 		delete(cleaned, k)
-		fixes = append(fixes, fmt.Sprintf("removed forbidden /AA/%s action from %s", k, location))
+		fixes = append(fixes, fmt.Sprintf("removed forbidden /AA/%s action from %s", string(k), location))
 	}
 	return fixes, cleaned
 }
