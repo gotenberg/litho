@@ -129,17 +129,21 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 		"S":    ast.PdfName(string(node.Role)),
 		"P":    parentRef,
 	}
+	// /Lang, /Alt, /ActualText and /T are text strings (ISO 32000-1, Table 323
+	// and 14.9.3), so they take PDFDocEncoding or UTF-16BE with a byte order
+	// mark. Casting the Go string put raw UTF-8 in the file, which a reader
+	// decodes one byte per character.
 	if node.Lang != "" {
-		dict["Lang"] = ast.PdfString(node.Lang)
+		dict["Lang"] = document.EncodePdfString(node.Lang)
 	}
 	if node.Alt != "" {
-		dict["Alt"] = ast.PdfString(node.Alt)
+		dict["Alt"] = document.EncodePdfString(node.Alt)
 	}
 	if node.ActualText != "" {
-		dict["ActualText"] = ast.PdfString(node.ActualText)
+		dict["ActualText"] = document.EncodePdfString(node.ActualText)
 	}
 	if node.Title != "" {
-		dict["T"] = ast.PdfString(node.Title)
+		dict["T"] = document.EncodePdfString(node.Title)
 	}
 
 	switch {

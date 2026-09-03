@@ -86,7 +86,9 @@ func fixFigureAlt(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	for _, f := range figures {
 		newFig := make(ast.PdfDict, len(f.dict)+1)
 		maps.Copy(newFig, f.dict)
-		newFig["Alt"] = ast.PdfString(altText)
+		// /Alt is a text string (ISO 32000-1, 14.9.3). The caller supplies it
+		// through WithFigureAltText, so it may hold anything.
+		newFig["Alt"] = document.EncodePdfString(altText)
 		alloc.AllocAt(f.ref.ObjectNum, newFig)
 	}
 
