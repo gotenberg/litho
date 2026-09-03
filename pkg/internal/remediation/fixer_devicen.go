@@ -45,13 +45,23 @@ func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	var pageEntries []annotPageEntry
 	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
+	// A colorant this fixer synthesises must agree with the definition the
+	// document already uses for that ink: ISO 19005-2, 6.2.4.4 test 2 requires
+	// every Separation of the same name to share an alternate space and a tint
+	// transform. Inventing a degenerate transform for a name already defined
+	// elsewhere traded test 1 for test 2 on four corpus files.
+	canon := make(map[ast.PdfName]ast.PdfArray)
+	for _, pe := range pageEntries {
+		collectSeparations(ctx, alloc, doc, pe, canon)
+	}
+
 	visited := make(map[int]bool)
 	var total int
 	for _, pe := range pageEntries {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		n := patchPageDeviceN(ctx, alloc, doc, pe, visited)
+		n := patchPageDeviceN(ctx, alloc, doc, pe, canon, visited)
 		total += n
 	}
 	if total == 0 {
@@ -64,7 +74,7 @@ func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // and rewrites any DeviceN/NChannel array that is missing /Colorants.
 // The page dict is re-allocated with updated Resources when the fix has
 // to ripple through inline containers.
-func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, visited map[int]bool) int {
+func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, canon map[ast.PdfName]ast.PdfArray, visited map[int]bool) int {
 	resObj, ok := pe.dict["Resources"]
 	if !ok {
 		return 0
@@ -103,7 +113,7 @@ func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		if !ok || (name != "DeviceN" && name != "NChannel") {
 			continue
 		}
-		newArr, changed := buildPatchedDeviceN(ctx, alloc, doc, arr)
+		newArr, changed := buildPatchedDeviceN(ctx, alloc, doc, arr, canon)
 		if !changed {
 			continue
 		}
@@ -150,7 +160,7 @@ func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 // /Attributes/Colorants sub-dict. Returns (nil, false) when nothing
 // needed to change. The caller decides whether to alloc in place or
 // splice the new array into a parent dict.
-func buildPatchedDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, arr ast.PdfArray) (ast.PdfArray, bool) {
+func buildPatchedDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, arr ast.PdfArray, canon map[ast.PdfName]ast.PdfArray) (ast.PdfArray, bool) {
 	namesArr, err := document.ResolveArray(ctx, doc, arr[1])
 	if err != nil || len(namesArr) == 0 {
 		return nil, false
@@ -200,7 +210,14 @@ func buildPatchedDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if _, exists := newColorants[name]; exists {
 			continue
 		}
-		newColorants[name] = syntheticSeparation(alloc, name, alt, altComponents)
+		// Reuse the document's own definition when it has one, so the
+		// colorant entry cannot disagree with the Separation the content
+		// already paints with.
+		if existing, defined := canon[name]; defined {
+			newColorants[name] = existing
+		} else {
+			newColorants[name] = syntheticSeparation(alloc, name, alt, altComponents)
+		}
 		added = true
 	}
 	if !added {
