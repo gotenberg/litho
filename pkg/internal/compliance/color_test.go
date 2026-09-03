@@ -223,7 +223,7 @@ func TestICCProfilesEqual(t *testing.T) {
 
 	t.Run("different lengths", func(t *testing.T) {
 		t.Parallel()
-		if iccProfilesEqual(make([]byte, 100), make([]byte, 101)) {
+		if ICCProfilesEqual(make([]byte, 100), make([]byte, 101)) {
 			t.Error("expected false for different lengths")
 		}
 	})
@@ -232,7 +232,7 @@ func TestICCProfilesEqual(t *testing.T) {
 		t.Parallel()
 		a := []byte{1, 2, 3}
 		b := []byte{1, 2, 3}
-		if !iccProfilesEqual(a, b) {
+		if !ICCProfilesEqual(a, b) {
 			t.Error("expected true for identical short profiles")
 		}
 	})
@@ -242,7 +242,7 @@ func TestICCProfilesEqual(t *testing.T) {
 		a := make([]byte, 128)
 		b := make([]byte, 128)
 		copy(a, b)
-		if !iccProfilesEqual(a, b) {
+		if !ICCProfilesEqual(a, b) {
 			t.Error("expected true for identical profiles")
 		}
 	})

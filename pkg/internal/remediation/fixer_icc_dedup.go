@@ -1,7 +1,6 @@
 package remediation
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -42,9 +41,6 @@ func fixICCDedup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	oiProfile := firstOutputIntentProfile(ctx, alloc, doc, catalogDict)
-	if oiProfile == nil {
-		return nil, nil
-	}
 
 	pagesObj, ok := catalogDict["Pages"]
 	if !ok {
@@ -59,8 +55,14 @@ func fixICCDedup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		count += dedupICCInResources(ctx, alloc, doc, pe, oiProfile, visited)
-		count += dedupICCInXObjects(ctx, alloc, doc, pe, oiProfile, visited)
+		// The clause names two profiles, and the page's blending space is the
+		// one the OutputIntent cannot stand in for.
+		pageProfiles := profileSet{
+			outputIntent: oiProfile,
+			blending:     blendingProfile(ctx, alloc, doc, pe.dict),
+		}
+		count += dedupICCInResources(ctx, alloc, doc, pe, pageProfiles.all(), visited)
+		count += dedupICCInXObjects(ctx, alloc, doc, pe, pageProfiles, visited)
 	}
 	if count == 0 {
 		return nil, nil
@@ -117,17 +119,96 @@ func firstOutputIntentProfile(ctx context.Context, alloc *writer.ObjAllocator, d
 		}
 		stream = s
 	}
-	data, err := stream.Bytes(ctx)
+	return iccProfileData(ctx, doc, stream)
+}
+
+// matchesAnyProfile reports whether an ICCBased stream carries one of the
+// profiles the clause forbids duplicating. The comparison is the detector's,
+// so a colour space litho reports is one litho replaces.
+func matchesAnyProfile(ctx context.Context, doc *document.Document, stream ast.PdfStream, profiles [][]byte) bool {
+	data := iccProfileData(ctx, doc, stream)
+	if len(data) == 0 {
+		return false
+	}
+	for _, p := range profiles {
+		if compliance.ICCProfilesEqual(data, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// profileSet holds the two profiles ISO 19005-4, 6.2.4.2 test 3 names. Either
+// may be absent.
+type profileSet struct {
+	outputIntent []byte
+	blending     []byte
+}
+
+// all returns the profiles that are available, in the order the clause lists
+// them.
+func (p profileSet) all() [][]byte {
+	out := make([][]byte, 0, 2)
+	for _, profile := range [][]byte{p.outputIntent, p.blending} {
+		if len(profile) > 0 {
+			out = append(out, profile)
+		}
+	}
+	return out
+}
+
+// blendingProfile returns the ICC profile a transparency group blends in, or
+// nil when the dict declares no group or blends in something other than an
+// ICCBased space (ISO 32000-1, 11.6.6).
+//
+// ISO 19005-4, 6.2.4.2 test 3 forbids an ICCBased colour space identical to
+// the OutputIntent profile OR to this one, and the two are routinely
+// different: an sRGB output intent with a CMYK blending space leaves the
+// detector reporting a duplicate the OutputIntent comparison alone cannot see.
+func blendingProfile(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dict ast.PdfDict) []byte {
+	group, err := document.ResolveDict(ctx, doc, dict["Group"])
+	if err != nil || group == nil {
+		return nil
+	}
+	if s, _ := document.ResolveName(ctx, doc, group["S"]); s != "Transparency" {
+		return nil
+	}
+	arr, err := document.ResolveArray(ctx, doc, group["CS"])
+	if err != nil || len(arr) < 2 {
+		return nil
+	}
+	if csType, _ := document.ResolveName(ctx, doc, arr[0]); csType != "ICCBased" {
+		return nil
+	}
+	ref, _ := arr[1].(ast.PdfIndirectRef)
+	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, arr[1])
+	if !ok {
+		return nil
+	}
+	return iccProfileData(ctx, doc, stream)
+}
+
+// iccProfileData returns the profile a stream carries, with its filters
+// applied.
+//
+// [ast.PdfStream.Bytes] stops before filter decoding, so comparing its result
+// compares how a profile happens to be stored rather than what it is: the same
+// CMYK profile written at two zlib levels is the same profile, and the detector
+// says so, but the fixer then found no duplicate to replace and left the
+// document failing ISO 19005-4, 6.2.4.2 test 3 after remediation.
+func iccProfileData(ctx context.Context, doc *document.Document, stream ast.PdfStream) []byte {
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
+		doc.Logger.Debug("decoding ICC profile stream", "error", err)
 		return nil
 	}
 	return data
 }
 
 // dedupICCInResources walks a page's resources and rewrites /CSx =
-// [/ICCBased ref] entries whose stream matches oiProfile. The paired
+// [/ICCBased ref] entries whose stream matches one of profiles. The paired
 // device colour space is chosen by the profile's component count.
-func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, oiProfile []byte, visited map[int]bool) int {
+func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles [][]byte, visited map[int]bool) int {
 	resObj, ok := pe.dict["Resources"]
 	if !ok {
 		return 0
@@ -175,11 +256,7 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if err != nil {
 			continue
 		}
-		iccData, err := iccStream.Bytes(ctx)
-		if err != nil {
-			continue
-		}
-		if !bytes.Equal(iccData, oiProfile) {
+		if !matchesAnyProfile(ctx, doc, iccStream, profiles) {
 			continue
 		}
 		device := deviceNameForComponents(iccStream.Dict)
@@ -224,7 +301,7 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // /Resources/XObject sub-dict and applies dedupICCInResources to its
 // own /Resources. PDF/A §6.2.4.2 test 3 also covers Form XObject
 // ColorSpace entries, not just page-level ones.
-func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, oiProfile []byte, visited map[int]bool) int {
+func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles profileSet, visited map[int]bool) int {
 	resObj, ok := pe.dict["Resources"]
 	if !ok {
 		return 0
@@ -254,8 +331,14 @@ func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if subtype, _ := stream.Dict["Subtype"].(ast.PdfName); subtype != "Form" {
 			continue
 		}
+		// A form declaring its own transparency group blends in that space
+		// instead of the page's, which is how the detector reads it.
+		formProfiles := profiles
+		if own := blendingProfile(ctx, alloc, doc, stream.Dict); own != nil {
+			formProfiles.blending = own
+		}
 		formPE := annotPageEntry{ref: ref, dict: stream.Dict}
-		count += dedupICCInResources(ctx, alloc, doc, formPE, oiProfile, visited)
+		count += dedupICCInResources(ctx, alloc, doc, formPE, formProfiles.all(), visited)
 	}
 	return count
 }

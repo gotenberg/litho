@@ -351,7 +351,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 					iccRef.GenNum == outputIntentRef.GenNum {
 					identical = true
 				}
-				if !identical && iccProfilesEqual(data, outputIntentData) {
+				if !identical && ICCProfilesEqual(data, outputIntentData) {
 					identical = true
 				}
 			}
@@ -368,7 +368,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 					blendStream, err := document.ResolveStream(ctx, doc, blendingCSRef)
 					if err == nil {
 						blendData, err := doc.DecodeStream(ctx, blendStream)
-						if err == nil && iccProfilesEqual(data, blendData) {
+						if err == nil && ICCProfilesEqual(data, blendData) {
 							identical = true
 						}
 					}
@@ -417,7 +417,7 @@ func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj
 			iccRef.ObjectNum == outputIntentRef.ObjectNum && iccRef.GenNum == outputIntentRef.GenNum {
 			identical = true
 		}
-		if !identical && iccProfilesEqual(data, outputIntentData) {
+		if !identical && ICCProfilesEqual(data, outputIntentData) {
 			identical = true
 		}
 	}
@@ -430,7 +430,7 @@ func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj
 			blendStream, blendErr := document.ResolveStream(ctx, doc, blendingCSRef)
 			if blendErr == nil {
 				blendData, blendErr := doc.DecodeStream(ctx, blendStream)
-				if blendErr == nil && iccProfilesEqual(data, blendData) {
+				if blendErr == nil && ICCProfilesEqual(data, blendData) {
 					identical = true
 				}
 			}

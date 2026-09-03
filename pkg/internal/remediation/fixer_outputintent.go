@@ -320,8 +320,12 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 					collectPageRefs(ctx, alloc, doc, pagesObj, &entries, make(map[int]bool), 0)
 				}
 				for _, pe := range entries {
-					dedupICCInResources(ctx, alloc, doc, pe, profile, visited)
-					dedupICCInXObjects(ctx, alloc, doc, pe, profile, visited)
+					profiles := profileSet{
+						outputIntent: profile,
+						blending:     blendingProfile(ctx, alloc, doc, pe.dict),
+					}
+					dedupICCInResources(ctx, alloc, doc, pe, profiles.all(), visited)
+					dedupICCInXObjects(ctx, alloc, doc, pe, profiles, visited)
 				}
 			}
 		}

@@ -150,13 +150,17 @@ func bytesEqual(a, b []byte) bool {
 	return true
 }
 
-// iccProfilesEqual compares two decoded ICC profiles for equivalence.
+// ICCProfilesEqual compares two decoded ICC profiles for equivalence.
 // If either profile has an all-zero Profile ID (bytes 84–99, meaning "not
 // computed"), the computed MD5 is substituted before a raw byte comparison.
 // Per ICC.1, an all-zero Profile ID is a placeholder signalling the ID was
 // never computed, not a distinct value, so two profiles that differ only by a
 // missing versus computed ID are the same profile.
-func iccProfilesEqual(a, b []byte) bool {
+//
+// Both arguments are profile data, not stream bytes. Remediation shares this
+// comparison so a profile the detector calls a duplicate is one the fixer
+// replaces (ISO 19005-4, 6.2.4.2 test 3).
+func ICCProfilesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -177,7 +181,7 @@ func iccProfilesEqual(a, b []byte) bool {
 func normaliseICCProfileID(data []byte) []byte {
 	const profileIDStart = 84
 	const profileIDEnd = 100
-	// iccProfilesEqual guarantees len(data) >= profileIDEnd; guard anyway so
+	// ICCProfilesEqual guarantees len(data) >= profileIDEnd; guard anyway so
 	// the function is panic-safe on arbitrary input (CONTRIBUTING fuzz contract).
 	if len(data) < profileIDEnd {
 		return data
