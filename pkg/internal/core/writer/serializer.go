@@ -85,30 +85,19 @@ func SerializeIndirect(ctx context.Context, w io.Writer, objNum, genNum int, obj
 	return total, err
 }
 
-// formatReal formats a float64 for PDF output, trimming unnecessary trailing
-// zeros while preserving enough precision for PDF coordinates.
+// formatReal formats a float64 for PDF output as the shortest decimal that
+// reads back as the same value.
+//
+// Precision 'f' with -1 is what keeps a copied value intact. A fixed six
+// decimals rounds, so an object litho merely carried across came out holding a
+// different number: a tint transform written .1000000015 was re-emitted as
+// 0.1, and the copy then disagreed with the original the file still contained
+// (ISO 19005-2, 6.2.4.4 test 2 compares the PDF objects, not what they
+// compute). 'f' never emits an exponent, which a PDF real forbids
+// (ISO 32000-1, 7.3.3), and it drops trailing zeros on its own.
 func formatReal(f float64) string {
-	// Use enough precision for PDF coordinates (sub-point accuracy).
-	s := strconv.FormatFloat(f, 'f', 6, 64)
-	// Trim trailing zeros after the decimal point.
-	if idx := len(s) - 1; s[idx] == '0' {
-		for idx > 0 && s[idx] == '0' {
-			idx--
-		}
-		if s[idx] == '.' {
-			idx-- // remove the decimal point too if all zeros
-		}
-		s = s[:idx+1]
-	}
-	// A nonzero magnitude smaller than the 6-decimal grid rounds to "0",
-	// silently dropping the value on round-trip. ISO 32000-1 Annex C
-	// permits reals down to ~1.18e-38, so fall back to the shortest
-	// exponent-free form (strconv 'f' with -1 precision never emits an
-	// exponent, which PDF reals forbid) so small values survive.
-	if f != 0 && (s == "0" || s == "-0") {
-		s = strconv.FormatFloat(f, 'f', -1, 64)
-	}
-	// Trimming the decimal point turns the literal into an integer one. A
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	// The shortest form of a whole number carries no decimal point, and a
 	// magnitude the 64-bit range cannot hold then reads back as an
 	// out-of-range integer rather than a real, so keep the point on those.
 	if !strings.ContainsRune(s, '.') && (f >= math.MaxInt64 || f <= math.MinInt64) {
