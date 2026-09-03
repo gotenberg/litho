@@ -1492,7 +1492,39 @@ func (w *Writer) remediate(
 		fixed = append(fixed, nextFixed...)
 	}
 	w.markPreSerialized(tmpPath)
-	return &RemediationReport{Fixed: fixed, Residual: residual}, nil
+	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual}, nil
+}
+
+// countRepairs counts the fixes that actually repaired something, ignoring the
+// full-rewrite note, which every round re-emits while the formatting violation
+// it claims remains unfixable.
+func countRepairs(fixes []string) int {
+	n := 0
+	for _, fix := range fixes {
+		if fix != remediation.FullRewriteNote {
+			n++
+		}
+	}
+	return n
+}
+
+// dedupeFixes drops repeated fix descriptions, keeping the first of each in
+// order. A fixer that summarises its work in one sentence returns that same
+// sentence in every round it runs.
+func dedupeFixes(fixes []string) []string {
+	if len(fixes) < 2 {
+		return fixes
+	}
+	seen := make(map[string]bool, len(fixes))
+	out := make([]string, 0, len(fixes))
+	for _, fix := range fixes {
+		if seen[fix] {
+			continue
+		}
+		seen[fix] = true
+		out = append(out, fix)
+	}
+	return out
 }
 
 // maxRemediationRounds bounds the fix-to-fixpoint loop, counting the main
@@ -1525,7 +1557,7 @@ func (w *Writer) remediationRound(
 
 	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber())
 	rep, err := run(ctx, alloc, r2.doc)
-	if err != nil || rep == nil || len(rep.Fixed) == 0 {
+	if err != nil || rep == nil || countRepairs(rep.Fixed) == 0 {
 		return "", nil, nil, false
 	}
 

@@ -28,6 +28,17 @@ func matchFileStructure(v compliance.Violation) bool {
 		clause == "6.1.13" // integer out of range (part 2)
 }
 
+// FullRewriteNote is what [fixFileStructure] reports. It repairs nothing
+// itself: it only records that the violations it claimed are handled by the
+// full rewrite the orchestrator performs.
+//
+// Callers driving a fix-to-fixpoint loop must not read it as progress. Every
+// round re-emits it while the underlying formatting violation persists, so a
+// file with an unfixable one ran the loop to its bound, re-serialising itself
+// twice for nothing and reporting "Fixed: 3" with the same sentence listed
+// three times.
+const FullRewriteNote = "full rewrite re-serializes all objects with clean formatting"
+
 // fixFileStructure is a no-op fixer. The actual fix is that the remediation
 // orchestrator detects these violations and the Writer forces a full rewrite,
 // which re-serializes all objects with correct formatting.
@@ -49,5 +60,5 @@ func fixFileStructure(_ context.Context, _ *writer.ObjAllocator, _ *document.Doc
 	if !hasFormatViolation {
 		return nil, nil
 	}
-	return []string{"full rewrite re-serializes all objects with clean formatting"}, nil
+	return []string{FullRewriteNote}, nil
 }
