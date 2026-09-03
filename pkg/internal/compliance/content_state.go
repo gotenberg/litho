@@ -421,10 +421,10 @@ func checkContentStreamResourcesOps(
 				reported[key] = true
 				if inheritedHas(category, name) {
 					if r := inheritedResourceRule(part); r.Specification != "" {
-						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, category)...)
+						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, string(category))...)
 					}
 				} else if resourceRule.Specification != "" {
-					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, string(category))...)
 				}
 			}
 			continue
@@ -435,10 +435,10 @@ func checkContentStreamResourcesOps(
 				reported[key] = true
 				if inheritedHas(category, name) {
 					if r := inheritedResourceRule(part); r.Specification != "" {
-						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, category)...)
+						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, string(category))...)
 					}
 				} else if resourceRule.Specification != "" {
-					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, category)...)
+					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, string(category))...)
 				}
 			}
 		}

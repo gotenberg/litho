@@ -18,7 +18,13 @@ func matchPageResources(v compliance.Violation) bool {
 	if !clausePrefix(v, "6.2.2") {
 		return false
 	}
-	return contextContains(v, "no explicitly associated Resources dictionary") ||
+	// The detector reports the inherited case as "resolves %q only through
+	// inherited Resources/...". Matching only the description's wording left
+	// the fixer idle on exactly the documents it exists to repair: a page with
+	// no /Resources of its own, which then hid every resource from the other
+	// fixers too.
+	return contextContains(v, "only through inherited Resources") ||
+		contextContains(v, "no explicitly associated Resources dictionary") ||
 		contextContains(v, "not in Resources")
 }
 
