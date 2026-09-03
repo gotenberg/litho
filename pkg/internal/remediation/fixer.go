@@ -91,6 +91,7 @@ var registry = []fixer{
 	{name: "list-numbering", safety: safetyStructural, matches: matchListNumbering, apply: fixListNumbering},
 	{name: "viewer-prefs", safety: safetyStructural, matches: matchViewerPrefs, apply: fixViewerPrefs},
 	{name: "catalog-lang", safety: safetyStructural, matches: matchCatalogLang, apply: fixCatalogLang},
+	{name: "marked-content-lang", safety: safetyContent, matches: matchMarkedContentLang, apply: fixMarkedContentLang},
 	{name: "need-appearances", safety: safetyStructural, matches: matchNeedAppearances, apply: fixNeedAppearances},
 	// Resource-level: non-content-altering edits to resource dictionaries.
 	{name: "graphics", safety: safetyResource, matches: matchGraphics, apply: fixGraphics},
@@ -102,6 +103,7 @@ var registry = []fixer{
 	{name: "devicen", safety: safetyResource, matches: matchDeviceNColorants, apply: fixDeviceNColorants},
 	{name: "sep-canon", safety: safetyResource, matches: matchSepCanon, apply: fixSepCanon},
 	{name: "icc-dedup", safety: safetyResource, matches: matchICCDedup, apply: fixICCDedup},
+	{name: "hex-string", safety: safetyContent, matches: matchHexString, apply: fixHexString},
 	{name: "file-structure", safety: safetyStructural, matches: matchFileStructure, apply: fixFileStructure},
 	{name: "catalog-cleanup", safety: safetyStructural, matches: matchCatalogCleanup, apply: fixCatalogCleanup},
 	{name: "annotations", safety: safetyResource, matches: matchAnnotations, apply: fixAnnotations},

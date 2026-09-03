@@ -5,10 +5,31 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
+
+// matchMarkedContentLang claims the same /Lang clauses as the catalog repair.
+// It is a separate fixer because repairing an inline property list rewrites a
+// content stream, which is safetyContent work: the writer must be able to roll
+// it back. Its sibling only edits the catalog and the structure tree and is
+// registered structural.
+func matchMarkedContentLang(v compliance.Violation) bool {
+	return matchCatalogLang(v)
+}
+
+// fixMarkedContentLang strips an unusable /Lang from every marked-content
+// property list, inline in a content stream or named through
+// /Resources /Properties.
+func fixMarkedContentLang(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+	requireDeclared := requiresDeclaredLang(profile)
+	return markedContentLangFixes(
+		repairMarkedContentLangs(ctx, alloc, doc, requireDeclared),
+		repairPropertyListLangs(ctx, alloc, doc, requireDeclared),
+	), nil
+}
 
 // repairMarkedContentLangs strips an unusable /Lang from every marked-content
 // property list on every page, returning how many it removed.

@@ -70,14 +70,6 @@ func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		fixes = append(fixes, fmt.Sprintf("removed invalid /Lang from %d structure element(s)", n))
 	}
 
-	// A /Lang is equally binding on a marked-content property list
-	// (ISO 32000-1, 14.6.2), which lives in the content stream or in
-	// /Resources /Properties rather than in the structure tree.
-	fixes = append(fixes, markedContentLangFixes(
-		repairMarkedContentLangs(ctx, alloc, doc, requireDeclared),
-		repairPropertyListLangs(ctx, alloc, doc, requireDeclared),
-	)...)
-
 	if len(fixes) == 0 {
 		return nil, nil
 	}
