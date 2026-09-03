@@ -776,24 +776,22 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Sync dc:description with Info /Subject.
+	// Sync dc:description with Info /Subject. dc:description is a language
+	// alternative, so it goes through setStructuredXMPProperty like dc:title:
+	// writing the rdf:Alt into a property a producer wrote in attribute form
+	// puts a literal '<' inside an attribute value, which XML 1.0, 2.3
+	// forbids. Seven govdocs files came out of remediation newly failing
+	// ISO 19005-2, 6.6.2.1 tests 4 and 5 that way.
 	if info.Subject != "" {
 		escaped := xmlEscape(info.Subject)
 		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
-		injection := fmt.Sprintf(`<dc:description>%s</dc:description>`, value)
-		if findXMPProperty(buf, dcNS, "description").Form != xmpPropertyNotFound {
-			if out, err := replacePropertyValue(buf, dcNS, "description", value); err == nil {
-				if !bytes.Equal(out, buf) {
-					fixes = append(fixes, "synced dc:description with Info /Subject")
-				}
-				buf = out
-			}
-		} else {
-			if out, err := ensureNamespaceDecl(buf, "dc", dcNS); err == nil {
-				buf = out
-			}
-			if out, err := insertChildElement(buf, injection); err == nil {
-				buf = out
+		element := fmt.Sprintf(`<dc:description>%s</dc:description>`, value)
+		existed := findXMPProperty(buf, dcNS, "description").Form != xmpPropertyNotFound
+		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "description", value, element); changed {
+			buf = out
+			if existed {
+				fixes = append(fixes, "synced dc:description with Info /Subject")
+			} else {
 				fixes = append(fixes, "injected dc:description from Info /Subject")
 			}
 		}
@@ -1484,6 +1482,12 @@ func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	s = strings.ReplaceAll(s, "\"", "&quot;")
+	// Both quote characters are escaped because a value can land in an
+	// attribute, and producers write XMP attributes with either delimiter.
+	// A /Keywords of "victims' rights" spliced into a single-quoted
+	// pdf:Keywords closed the attribute early and cost the packet its
+	// well-formedness (ISO 19005-2, 6.6.2.1 tests 4 and 5).
+	s = strings.ReplaceAll(s, "'", "&apos;")
 	return s
 }
 
