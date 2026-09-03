@@ -116,17 +116,19 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				// Widget/Btn (button) fields require /N to be a state
 				// sub-dict rather than a bare stream (ISO 19005-1
 				// §6.5.3 test 5 / ISO 19005-2 §6.3.3 test 3).
-				// Best-effort: a missing /FT yields an empty name; only
-				// Widget/Btn fields need the state sub-dict below.
-				ft, _ := document.ResolveName(ctx, doc, annotDict["FT"])
 				var nValue ast.PdfObject = apRef
-				if subtype == "Widget" && ft == "Btn" {
-					nValue = ast.PdfDict{"Off": apRef}
+				var state ast.PdfName
+				if subtype == "Widget" && inheritedFieldType(ctx, doc, annotDict) == "Btn" {
+					state = appearanceState(ctx, doc, annotDict)
+					nValue = ast.PdfDict{state: apRef}
 				}
 
-				newAnnot := make(ast.PdfDict, len(annotDict)+1)
+				newAnnot := make(ast.PdfDict, len(annotDict)+2)
 				maps.Copy(newAnnot, annotDict)
 				newAnnot["AP"] = ast.PdfDict{"N": nValue}
+				if state != "" {
+					newAnnot["AS"] = state
+				}
 				alloc.AllocAt(annotRef.ObjectNum, newAnnot)
 				count++
 				continue
@@ -135,10 +137,16 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			// /AP exists. Strip /D and /R (PDF/A §6.3.3 test 2 allows
 			// only /N) and promote /N to a state sub-dict when the annot
 			// is a Widget/Btn (test 3).
-			if patched, changed := normalizeAP(ctx, doc, annotDict); changed {
-				newAnnot := make(ast.PdfDict, len(annotDict)+1)
+			if patched, state, changed := normalizeAP(ctx, doc, annotDict); changed {
+				newAnnot := make(ast.PdfDict, len(annotDict)+2)
 				maps.Copy(newAnnot, annotDict)
 				newAnnot["AP"] = patched
+				// ISO 32000-1, Table 168 requires /AS once /AP holds
+				// subdictionaries: without it a viewer has no way to pick
+				// which of the states to draw.
+				if state != "" {
+					newAnnot["AS"] = state
+				}
 				alloc.AllocAt(annotRef.ObjectNum, newAnnot)
 				count++
 			}
@@ -215,16 +223,17 @@ func normalizeBBox(rect ast.PdfArray) ast.PdfArray {
 
 // normalizeAP strips /D and /R from the annotation's /AP dict (PDF/A
 // §6.3.3 test 2) and, for Widget/Btn annotations whose /N is a stream
-// rather than a state sub-dict, wraps /N into a two-state dict named
-// /Off → /N-stream (§6.3.3 test 3). Returns (nil, false) when no change
-// is needed.
-func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (ast.PdfDict, bool) {
+// rather than a state sub-dict, wraps /N into a state dict (§6.3.3 test 3).
+// Returns (nil, "", false) when no change is needed, otherwise the new /AP
+// and the appearance state the caller must record in /AS, empty when the
+// wrap did not happen.
+func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (ast.PdfDict, ast.PdfName, bool) {
 	// Resolved, not type-asserted: an indirect /AP (ISO 32000-1, 7.3.10) used to
 	// skip this normalisation entirely, so /D and /R survived where 6.3.3 test 2
 	// allows only /N.
 	apDict, err := document.ResolveDict(ctx, doc, annotDict["AP"])
 	if err != nil || apDict == nil {
-		return nil, false
+		return nil, "", false
 	}
 	newAP := make(ast.PdfDict, len(apDict))
 	changed := false
@@ -236,24 +245,58 @@ func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfD
 		changed = true
 	}
 
-	// Best-effort: unreadable /Subtype or /FT yield empty names; only the
-	// Widget/Btn branch below acts on them.
+	// Best-effort: an unreadable /Subtype yields an empty name; only the
+	// Widget/Btn branch below acts on it.
 	subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
-	ft, _ := document.ResolveName(ctx, doc, annotDict["FT"])
-	if subtype == "Widget" && ft == "Btn" {
+	var state ast.PdfName
+	if subtype == "Widget" && inheritedFieldType(ctx, doc, annotDict) == "Btn" {
 		if ref, isRef := newAP["N"].(ast.PdfIndirectRef); isRef {
 			if stream, err := doc.Resolve(ctx, ref); err == nil {
 				if _, isStream := stream.(ast.PdfStream); isStream {
-					newAP["N"] = ast.PdfDict{"Off": ref}
+					state = appearanceState(ctx, doc, annotDict)
+					newAP["N"] = ast.PdfDict{state: ref}
 					changed = true
 				}
 			}
 		}
 	}
 	if !changed {
-		return nil, false
+		return nil, "", false
 	}
-	return newAP, true
+	return newAP, state, true
+}
+
+// inheritedFieldType returns a widget's form field type, following the
+// /Parent chain.
+//
+// /FT is inheritable (ISO 32000-1, 12.7.3.1), and a widget that is a child of
+// its field carries none of its own. Reading it off the annotation alone left
+// every button in govdocs thread_400_400580 with an /AP /N stream where
+// ISO 19005-2, 6.3.3 test 3 requires a subdictionary.
+func inheritedFieldType(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ast.PdfName {
+	dict := annotDict
+	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
+		if ft, err := document.ResolveName(ctx, doc, dict["FT"]); err == nil && ft != "" {
+			return ft
+		}
+		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
+		if err != nil || parent == nil {
+			return ""
+		}
+		dict = parent
+	}
+	return ""
+}
+
+// appearanceState names the sub-dictionary key the wrapped stream takes.
+// A state the annotation already selects is kept so the viewer keeps drawing
+// what it drew before; otherwise the off state is the neutral choice
+// (ISO 32000-1, 12.7.4.2.3).
+func appearanceState(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ast.PdfName {
+	if as, err := document.ResolveName(ctx, doc, annotDict["AS"]); err == nil && as != "" {
+		return as
+	}
+	return "Off"
 }
 
 // allocateBlankForm emits an empty Form XObject stream and returns its
