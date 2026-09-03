@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -29,7 +30,7 @@ func matchCatalogLang(v compliance.Violation) bool {
 // language, ultimately the now-valid catalog /Lang, per ISO 32000-1:2008
 // §14.9.2. Validity is the BCP 47 / RFC 3066 form §14.9.2 requires, checked via
 // [compliance.IsValidLangTag] (reused, not re-derived).
-func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
@@ -53,7 +54,7 @@ func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		newCatalog["Lang"] = ast.PdfString(lang)
 		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 		fixes = append(fixes, fmt.Sprintf("set catalog /Lang to %q", lang))
-	} else if !langTagValid(ctx, doc, langObj) {
+	} else if !langTagValid(ctx, doc, langObj) || (langUnknown(ctx, doc, langObj) && requiresDeclaredLang(profile)) {
 		newCatalog := make(ast.PdfDict, len(catalogDict))
 		maps.Copy(newCatalog, catalogDict)
 		newCatalog["Lang"] = ast.PdfString(lang)
@@ -64,7 +65,7 @@ func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	// Structure tree: strip an invalid /Lang from the StructTreeRoot and any
 	// structure element so it inherits a valid ancestor's language, ultimately
 	// the catalog /Lang set above, rather than carrying a malformed tag.
-	if n := repairStructElemLangs(ctx, alloc, doc, catalogDict); n > 0 {
+	if n := repairStructElemLangs(ctx, alloc, doc, catalogDict, requiresDeclaredLang(profile)); n > 0 {
 		fixes = append(fixes, fmt.Sprintf("removed invalid /Lang from %d structure element(s)", n))
 	}
 
@@ -72,6 +73,28 @@ func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		return nil, nil
 	}
 	return fixes, nil
+}
+
+// requiresDeclaredLang reports whether the profile insists the document name a
+// natural language rather than declare it unknown.
+//
+// ISO 32000-1, 14.9.2 lets the empty text string stand for "the language is
+// unknown", and [compliance.IsValidLangTag] accepts it on that basis. PDF/UA
+// does not: ISO 14289-1, 7.2 and ISO 14289-2, 8.4.4 require the default
+// language to be identified, which is why litho and veraPDF both report an
+// empty catalog /Lang on PDF_UA-1__7.2-t29-fail-n while the fixer, asking the
+// lenient question, replaced nothing.
+func requiresDeclaredLang(profile string) bool {
+	return strings.HasPrefix(profile, "PDF/UA")
+}
+
+// langUnknown reports whether obj resolves to the empty language tag.
+func langUnknown(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
+	s, err := document.ResolveString(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(document.DecodePdfString(s)) == ""
 }
 
 // langTagValid reports whether obj resolves to a valid (or absent) language tag.
@@ -89,7 +112,7 @@ func langTagValid(ctx context.Context, doc *document.Document, obj ast.PdfObject
 // StructTreeRoot and strips every invalid /Lang it finds: on the StructTreeRoot
 // itself, on indirect structure elements, and on inline (direct-dict) structure
 // elements nested in a /K array. It returns the number of /Lang entries removed.
-func repairStructElemLangs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict) int {
+func repairStructElemLangs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, requireDeclared bool) int {
 	stObj, ok := catalogDict["StructTreeRoot"]
 	if !ok {
 		return 0
@@ -104,7 +127,7 @@ func repairStructElemLangs(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	}
 	visited := map[int]bool{stRef.ObjectNum: true}
 	count := 0
-	repairOwner(ctx, alloc, doc, stRef, stDict, visited, &count, 0)
+	repairOwner(ctx, alloc, doc, stRef, stDict, visited, &count, 0, requireDeclared)
 	return count
 }
 
@@ -114,17 +137,17 @@ func repairStructElemLangs(ctx context.Context, alloc *writer.ObjAllocator, doc 
 // persist via their own allocation. The owner is written back only when its own
 // /Lang or one of its inline descendants changed, keeping the output
 // deterministic and untouched objects stable.
-func repairOwner(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ownerRef ast.PdfIndirectRef, ownerDict ast.PdfDict, visited map[int]bool, count *int, depth int) {
+func repairOwner(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ownerRef ast.PdfIndirectRef, ownerDict ast.PdfDict, visited map[int]bool, count *int, depth int, requireDeclared bool) {
 	if depth > maxStructTreeDepth || ctx.Err() != nil {
 		return
 	}
 	newOwner := make(ast.PdfDict, len(ownerDict))
 	maps.Copy(newOwner, ownerDict)
-	changed := removeInvalidLang(ctx, doc, newOwner)
+	changed := removeInvalidLang(ctx, doc, newOwner, requireDeclared)
 	if changed {
 		*count++
 	}
-	if newK, kChanged := repairKids(ctx, alloc, doc, ownerDict["K"], visited, count, depth+1); kChanged {
+	if newK, kChanged := repairKids(ctx, alloc, doc, ownerDict["K"], visited, count, depth+1, requireDeclared); kChanged {
 		newOwner["K"] = newK
 		changed = true
 	}
@@ -139,7 +162,7 @@ func repairOwner(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // unchanged subtree is shared and the output stays deterministic. Indirect
 // children are recursed as separate owners and left as references in /K. visited
 // breaks reference cycles and the depth bound caps a pathological tree.
-func repairKids(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kObj ast.PdfObject, visited map[int]bool, count *int, depth int) (ast.PdfObject, bool) {
+func repairKids(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kObj ast.PdfObject, visited map[int]bool, count *int, depth int, requireDeclared bool) (ast.PdfObject, bool) {
 	if depth > maxStructTreeDepth || ctx.Err() != nil {
 		return kObj, false
 	}
@@ -147,7 +170,7 @@ func repairKids(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	case ast.PdfArray:
 		var newArr ast.PdfArray
 		for i, item := range v {
-			newItem, itemChanged := repairKids(ctx, alloc, doc, item, visited, count, depth)
+			newItem, itemChanged := repairKids(ctx, alloc, doc, item, visited, count, depth, requireDeclared)
 			if itemChanged && newArr == nil {
 				newArr = make(ast.PdfArray, len(v))
 				copy(newArr, v)
@@ -166,17 +189,17 @@ func repairKids(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		}
 		visited[v.ObjectNum] = true
 		if elem := resolveFromAllocOrDoc(ctx, alloc, doc, v); elem != nil {
-			repairOwner(ctx, alloc, doc, v, elem, visited, count, depth+1)
+			repairOwner(ctx, alloc, doc, v, elem, visited, count, depth+1, requireDeclared)
 		}
 		return v, false
 	case ast.PdfDict:
 		newDict := make(ast.PdfDict, len(v))
 		maps.Copy(newDict, v)
-		changed := removeInvalidLang(ctx, doc, newDict)
+		changed := removeInvalidLang(ctx, doc, newDict, requireDeclared)
 		if changed {
 			*count++
 		}
-		if newK, kChanged := repairKids(ctx, alloc, doc, v["K"], visited, count, depth+1); kChanged {
+		if newK, kChanged := repairKids(ctx, alloc, doc, v["K"], visited, count, depth+1, requireDeclared); kChanged {
 			newDict["K"] = newK
 			changed = true
 		}
@@ -193,9 +216,15 @@ func repairKids(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 // returning whether it removed one. A valid or absent /Lang is left intact. The
 // caller owns dict (a fresh copy), so the document's parsed objects are never
 // mutated in place.
-func removeInvalidLang(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+func removeInvalidLang(ctx context.Context, doc *document.Document, dict ast.PdfDict, requireDeclared bool) bool {
 	langObj, ok := dict["Lang"]
-	if !ok || langTagValid(ctx, doc, langObj) {
+	if !ok {
+		return false
+	}
+	// An empty tag means "unknown" (ISO 32000-1, 14.9.2). PDF/UA does not
+	// accept that answer, so under those profiles it is stripped like any
+	// other unusable value and the element inherits a declared ancestor.
+	if langTagValid(ctx, doc, langObj) && (!requireDeclared || !langUnknown(ctx, doc, langObj)) {
 		return false
 	}
 	delete(dict, "Lang")
