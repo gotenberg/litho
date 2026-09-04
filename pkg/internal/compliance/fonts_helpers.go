@@ -234,6 +234,23 @@ func fontReqKeyRule(part, test int) Rule {
 	return Rule{}
 }
 
+// namesAFontProgram reports whether a FontFile3 /Subtype names a glyph format
+// at all, whatever the part permits.
+//
+// This is the embedding question, which is not the permission question.
+// ISO 19005-1, 6.3.2 test 7 forbids OpenType, but an OpenType FontFile3 still
+// holds a program a consumer can read, so veraPDF reports the font as embedded
+// and answers the subtype separately. Asking isValidFontFileSubtype here made
+// litho add a "font not embedded" finding veraPDF never raises, on six cells of
+// the remediation differential.
+func namesAFontProgram(subtype string) bool {
+	switch subtype {
+	case "Type1C", "CIDFontType0C", "OpenType":
+		return true
+	}
+	return false
+}
+
 // isValidFontFileSubtype reports whether an embedded FontFile3 /Subtype is
 // permitted: Type1C and CIDFontType0C for every part, plus OpenType for parts
 // 2+ (ISO 19005-1 §6.3.2 t7 forbids OpenType; §6.2.11.2/§6.2.10.2 t7 allow it).
@@ -395,7 +412,7 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 				// /FontFile2 have one format each and carry no such key.
 				if key == "FontFile3" {
 					subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-					if !isValidFontFileSubtype(part, string(subtype)) {
+					if !namesAFontProgram(string(subtype)) {
 						continue
 					}
 				}
