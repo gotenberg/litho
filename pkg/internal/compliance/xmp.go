@@ -1152,14 +1152,30 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 	return used, extensions
 }
 
+// xmpSchemaRule reports a property whose namespace is neither predefined nor
+// declared by an extension schema.
+//
+// It answers both tests of the clause. veraPDF splits them as
+// "isPredefinedInXMP2005 || isDefinedInMainPackage || isDefinedInCurrentPackage"
+// and "isValueTypeCorrect", and an undeclared property fails the second for the
+// same reason it fails the first: with no schema there is no declared type to
+// hold its value to. Answering only the first left the remediated
+// 6-6-4-t01-fail-a reporting two findings where veraPDF reports three.
 func xmpSchemaRule(part int, ns string) []Violation {
+	const undeclared = "namespace %s not predefined or in extension schema"
 	switch part {
 	case 1:
-		return failf(Rule_19005_1_6_7_9_t02, "namespace %s not predefined or in extension schema", ns)
+		return append(
+			failf(Rule_19005_1_6_7_9_t02, undeclared, ns),
+			failf(Rule_19005_1_6_7_9_t03, undeclared, ns)...)
 	case 2:
-		return failf(Rule_19005_2_6_6_2_3_1_t01, "namespace %s not predefined or in extension schema", ns)
+		return append(
+			failf(Rule_19005_2_6_6_2_3_1_t01, undeclared, ns),
+			failf(Rule_19005_2_6_6_2_3_1_t02, undeclared, ns)...)
 	case 3:
-		return failf(Rule_19005_3_6_6_2_3_1_t01, "namespace %s not predefined or in extension schema", ns)
+		return append(
+			failf(Rule_19005_3_6_6_2_3_1_t01, undeclared, ns),
+			failf(Rule_19005_3_6_6_2_3_1_t02, undeclared, ns)...)
 	case 4:
 		// ISO 19005-4 drops the extension-schema requirements of parts
 		// 1-3 (XMP 2010 packets are self-describing); its §6.6.1 covers
