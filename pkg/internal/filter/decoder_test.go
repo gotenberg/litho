@@ -178,3 +178,48 @@ func TestNewDecoder_NilWhenEmpty(t *testing.T) {
 		t.Error("expected nil Decoder for empty slice")
 	}
 }
+
+// TestNewDecoder_DuplicateNameLastWins pins the resolution [NewDecoder]
+// documents: two plugins claiming the same filter name leave the last one
+// registered in charge.
+//
+// A caller that registers a replacement for a built-in plugin depends on this,
+// and the map insertion order is the only thing enforcing it, so a switch to
+// "first wins" would be silent.
+func TestNewDecoder_DuplicateNameLastWins(t *testing.T) {
+	first := &mockPlugin{name: "JPXDecode", result: []byte("first")}
+	second := &mockPlugin{name: "JPXDecode", result: []byte("second")}
+
+	d := NewDecoder([]plugins.FilterDecoder{first, second})
+	if d == nil {
+		t.Fatal("NewDecoder returned nil for two plugins")
+	}
+	if !d.Handles("JPXDecode") {
+		t.Fatal("the registered filter name is not handled")
+	}
+
+	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}, []byte("raw"))
+	out, err := d.DecodeStream(context.Background(), stream)
+	if err != nil {
+		t.Fatalf("DecodeStream: %v", err)
+	}
+	if string(out) != "second" {
+		t.Errorf("decoded %q, want %q from the last plugin registered", out, "second")
+	}
+	if first.called {
+		t.Error("the first plugin was consulted although a later one claimed the same name")
+	}
+}
+
+// TestDecoder_HandlesIsFalseForAnUnregisteredName is the control for the
+// Handles guard, including the documented nil-Decoder case.
+func TestDecoder_HandlesIsFalseForAnUnregisteredName(t *testing.T) {
+	d := NewDecoder([]plugins.FilterDecoder{&mockPlugin{name: "JPXDecode"}})
+	if d.Handles("JBIG2Decode") {
+		t.Error("an unregistered filter name reported as handled")
+	}
+	var nilDecoder *Decoder
+	if nilDecoder.Handles("JPXDecode") {
+		t.Error("a nil Decoder reported a filter as handled")
+	}
+}
