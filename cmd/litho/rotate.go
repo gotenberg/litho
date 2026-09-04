@@ -14,7 +14,7 @@ func runRotate(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
-	angle := fs.Int("angle", 0, "Rotation angle in degrees (multiple of 90, required)")
+	angle := fs.Int("angle", 0, "Rotation to set, in degrees (multiple of 90, required). Replaces any rotation the page already has")
 	pages := fs.String("pages", "", "Page range (default: all)")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
