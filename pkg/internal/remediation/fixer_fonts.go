@@ -313,15 +313,38 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	var fixes []string
 	baseName := fontBaseName(fontDict)
 
+	// /W and /DW are both repaired onto ONE copy of the CIDFont: persisting
+	// each separately would start from the original dictionary again and the
+	// second write would discard the first.
+	newCID := make(ast.PdfDict, len(cidFont))
+	maps.Copy(newCID, cidFont)
+	var pending []string
+
 	// Fix /W array, only when the validator reported a width mismatch.
 	if wObj, ok := cidFont["W"]; ok && fixWidths {
 		wArr, err := document.ResolveArray(ctx, doc, wObj)
 		if err == nil && wArr != nil {
-			newW, corrected := correctCIDWidths(ctx, doc, wArr, binaryWidths, upm)
-			if corrected && persistCIDWidths(alloc, fontDict, fontRef, cidFont, cidRef, descArr, newW) {
-				fixes = append(fixes, fmt.Sprintf("corrected /W widths for CIDFont %s", baseName))
+			if newW, corrected := correctCIDWidths(ctx, doc, wArr, binaryWidths, upm); corrected {
+				newCID["W"] = newW
+				pending = append(pending, fmt.Sprintf("corrected /W widths for CIDFont %s", baseName))
 			}
 		}
+	}
+
+	// Fix /DW, the width every CID outside /W is drawn with, including the
+	// .notdef the font renders for an unmapped code (ISO 32000-1, 9.7.4.3).
+	// The /W repair above never reaches it, so 6-2-11-4-1-t02-fail-e stayed
+	// reporting ".notdef glyph width mismatch (declared=1000.0, font=545.4)"
+	// on every pass with nothing fixed.
+	if fixWidths {
+		if dw, corrected := correctDefaultCIDWidth(ctx, doc, cidFont, fontData, upm); corrected {
+			newCID["DW"] = dw
+			pending = append(pending, fmt.Sprintf("corrected /DW for CIDFont %s", baseName))
+		}
+	}
+
+	if len(pending) > 0 && persistCIDFont(alloc, fontDict, fontRef, newCID, cidRef, descArr) {
+		fixes = append(fixes, pending...)
 	}
 
 	// Fix CIDSet if incomplete.
@@ -385,10 +408,7 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 // The corrected array is stored directly inside the copied CIDFont rather than
 // at the /W reference, so a /W array shared by several fonts is not rewritten
 // on behalf of one of them.
-func persistCIDWidths(alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, cidFont ast.PdfDict, cidRef ast.PdfIndirectRef, descArr ast.PdfArray, newW ast.PdfArray) bool {
-	newCID := make(ast.PdfDict, len(cidFont))
-	maps.Copy(newCID, cidFont)
-	newCID["W"] = newW
+func persistCIDFont(alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, newCID ast.PdfDict, cidRef ast.PdfIndirectRef, descArr ast.PdfArray) bool {
 	if alloc.AllocAt(cidRef.ObjectNum, newCID) {
 		return true
 	}
@@ -404,6 +424,34 @@ func persistCIDWidths(alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef 
 	maps.Copy(newFont, fontDict)
 	newFont["DescendantFonts"] = newArr
 	return alloc.AllocAt(fontRef.ObjectNum, newFont)
+}
+
+// correctDefaultCIDWidth returns the /DW a CIDFont should declare and whether
+// it differs from the one it has.
+//
+// /DW is the width of every CID with no /W entry, which is exactly the set a
+// viewer draws as .notdef, so it must agree with the program's glyph 0 advance
+// (ISO 19005-2, 6.2.11.5). The GID-keyed extractor is the one the detector uses
+// for this value; the CID-keyed map the /W repair needs does not answer it.
+func correctDefaultCIDWidth(ctx context.Context, doc *document.Document, cidFont ast.PdfDict, fontData []byte, upm uint16) (ast.PdfReal, bool) {
+	gidWidths := typography.ExtractBinaryWidths(ctx, fontData)
+	notdef, ok := gidWidths[0]
+	if !ok {
+		return 0, false
+	}
+	expected := float64(notdef) * 1000.0 / float64(upm)
+
+	// An absent or zero /DW means the 1000 default of Table 117.
+	declared := 1000.0
+	if resolved, err := document.ResolveObject(ctx, doc, cidFont["DW"]); err == nil {
+		if w := document.Float(resolved); w != 0 {
+			declared = w
+		}
+	}
+	if math.Abs(declared-expected) <= 1.0 {
+		return 0, false
+	}
+	return ast.PdfReal(math.Round(expected*100) / 100), true
 }
 
 func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfArray, binaryWidths map[uint16]uint16, upm uint16) (ast.PdfArray, bool) {
