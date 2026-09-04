@@ -157,3 +157,49 @@ func TestFixSimpleFontToUnicodeLeavesAMappedFont(t *testing.T) {
 		t.Errorf("a font that already has a /ToUnicode was given another, fixes=%v", fixes)
 	}
 }
+
+// TestFixSimpleFontToUnicodeSkipsASymbolicFontWithNoEncoding pins that a
+// symbolic font stating no /Encoding is left alone.
+//
+// ISO 32000-1, 9.6.6.1 says such a font is drawn through its built-in encoding
+// and a reader shall not substitute a standard one, so there is no trustworthy
+// source of Unicode. Deriving it from a standard encoding invented meanings:
+// the TeX math fonts of 6-3-8-t01-fail-a are symbolic with no /Encoding, and
+// the generated mapping turned "−∞ ∞" into "−1 1" in extracted text while
+// satisfying the compliance rule.
+func TestFixSimpleFontToUnicodeSkipsASymbolicFontWithNoEncoding(t *testing.T) {
+	t.Parallel()
+
+	data := assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]" +
+			" /Resources << /Font << /F1 4 0 R >> >> >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /CMMI12 /FontDescriptor 5 0 R >>",
+		"<< /Type /FontDescriptor /FontName /CMMI12 /Flags 4 >>",
+	})
+
+	if cmap, _ := generatedToUnicode(t, data, codes('A')); cmap != "" {
+		t.Errorf("a symbolic font with no /Encoding was given an invented mapping:\n%s", cmap)
+	}
+}
+
+// TestFixSimpleFontToUnicodeTrustsAStatedEncoding is the control: an explicit
+// /Encoding is the producer's own statement of what the codes mean, and is
+// trusted even on a symbolic font.
+func TestFixSimpleFontToUnicodeTrustsAStatedEncoding(t *testing.T) {
+	t.Parallel()
+
+	data := assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]" +
+			" /Resources << /Font << /F1 4 0 R >> >> >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /CMMI12 /Encoding /WinAnsiEncoding /FontDescriptor 5 0 R >>",
+		"<< /Type /FontDescriptor /FontName /CMMI12 /Flags 4 >>",
+	})
+
+	if cmap, fixes := generatedToUnicode(t, data, codes('A')); cmap == "" {
+		t.Errorf("a symbolic font that states its /Encoding was skipped, fixes=%v", fixes)
+	}
+}

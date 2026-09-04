@@ -868,6 +868,21 @@ func identityCIDRoute(ctx context.Context, doc *document.Document, fontDict, cid
 // /Differences into code-to-rune form, so the encoding tables are not
 // reproduced here. A symbolic font resolves to no encoding at all, and its
 // codes keep whatever the font program answered.
+// fontIsSymbolic reports whether a font's descriptor sets the symbolic flag,
+// bit 3 of /Flags (ISO 32000-1, Table 123).
+func fontIsSymbolic(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	fdDict, err := document.ResolveDict(ctx, doc, fontDict["FontDescriptor"])
+	if err != nil || fdDict == nil {
+		return false
+	}
+	flags, err := document.ResolveInt(ctx, doc, fdDict["Flags"])
+	if err != nil {
+		return false
+	}
+	const symbolicFlag = 1 << 2
+	return int(flags)&symbolicFlag != 0
+}
+
 // fixSimpleFontToUnicode generates a /ToUnicode CMap for a simple font that
 // lacks a usable one, returning what it repaired.
 //
@@ -884,6 +899,18 @@ func identityCIDRoute(ctx context.Context, doc *document.Document, fontDict, cid
 // the rule, which reports a repair the output does not contain.
 func fixSimpleFontToUnicode(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, shownCodes map[byte]bool) []string {
 	if !needsToUnicode(ctx, doc, fontDict) || fontRef.ObjectNum == 0 || len(shownCodes) == 0 {
+		return nil
+	}
+
+	// A symbolic font that states no /Encoding is drawn through its built-in
+	// encoding, and ISO 32000-1, 9.6.6.1 says a conforming reader shall not
+	// substitute a standard one for it. Deriving Unicode from a standard
+	// encoding there invents meanings: the TeX math fonts of
+	// 6-3-8-t01-fail-a are symbolic with no /Encoding, and the mapping turned
+	// "−∞ ∞" into "−1 1" in extracted text while satisfying the rule. An
+	// explicit /Encoding, even on a symbolic font, is the producer's own
+	// statement and is trusted.
+	if _, stated := fontDict["Encoding"]; !stated && fontIsSymbolic(ctx, doc, fontDict) {
 		return nil
 	}
 
