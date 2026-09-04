@@ -20,6 +20,27 @@ type fontUsageInfo struct {
 	rawStrings []ast.PdfString // raw string operands from text operators (for CID .notdef detection)
 }
 
+// ShownCharCodes returns, per font resource name, the one-byte character codes
+// the content stream's text operators actually show.
+//
+// Remediation shares this with the checks so a generated /ToUnicode is held to
+// the same set of codes the validator holds it to: ISO 19005-2, 6.2.11.7.2 asks
+// for a mapping of the codes a page USES, and a CMap built from a font's
+// /Encoding alone need not cover every one of them.
+func ShownCharCodes(ops []content.Operation) map[string]map[byte]bool {
+	usage := collectFontUsage(ops)
+	if usage == nil {
+		return nil
+	}
+	out := make(map[string]map[byte]bool, len(usage))
+	for name, u := range usage {
+		if len(u.charCodes) > 0 {
+			out[name] = u.charCodes
+		}
+	}
+	return out
+}
+
 // collectFontUsage returns usage information for each font referenced in the
 // page content stream: whether it's used for visible rendering and which
 // character codes are referenced. Returns nil if ops is nil or empty (in which

@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
@@ -91,6 +92,14 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			continue
 		}
 
+		// Which codes this page actually shows, per font resource name. A
+		// generated /ToUnicode is only attached when it covers them, because
+		// that is the set the validator holds it to.
+		var shown map[string]map[byte]bool
+		if ops, perr := content.ParsePageContent(ctx, doc, page.Dict); perr == nil {
+			shown = compliance.ShownCharCodes(ops)
+		}
+
 		// Sorted iteration so CMap object allocation (and the output
 		// bytes) is deterministic across runs.
 		for _, fontName := range sortedDictKeys(fontDict) {
@@ -119,6 +128,15 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 				}
 			case "Type1", "TrueType", "MMType1":
 				if f := fixSimpleFont(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCharSetViolation); len(f) > 0 {
+					fixes = append(fixes, f...)
+				}
+				// A /ToUnicode is built from the font's /Encoding, so it needs
+				// none of the width repair's preconditions: no /Widths array,
+				// no /FontDescriptor, and no program metrics. Running it inside
+				// fixSimpleFont meant one of those early returns cancelled it,
+				// and every Type 1 font kept its missing Unicode mapping
+				// (ISO 19005-2, 6.2.11.7.2).
+				if f := fixSimpleFontToUnicode(ctx, doc, alloc, fd, fontRef, shown[string(fontName)]); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			}
@@ -214,52 +232,6 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	if _, ok := fdDict["CharSet"]; ok && regenCharSet {
 		if fixed := fixCharSet(ctx, alloc, fdDict, fdRef, fontData); fixed {
 			fixes = append(fixes, fmt.Sprintf("regenerated /CharSet for font %s", baseName))
-		}
-	}
-
-	// Generate /ToUnicode if missing or invalid. Without a charcode-to-GID
-	// route there is no trustworthy mapping to emit: guessing
-	// charcode == GID produces destinations that belong to other glyphs
-	// and misses the codes the page actually uses, so the font is left
-	// for the validator to keep flagging instead.
-	charToGID := typography.ExtractCharCodeToGID(ctx, fontData)
-	if charToGID != nil && needsToUnicode(ctx, doc, fontDict) {
-		gidToUnicode := typography.ExtractGIDToUnicodeAuthoritative(ctx, fontData)
-		if len(gidToUnicode) > 0 {
-			mapping := make(map[uint16]rune)
-			for charCode, gid := range charToGID {
-				if r, ok := gidToUnicode[gid]; ok && isValidUnicodeMapping(r) {
-					mapping[charCode] = r
-				}
-			}
-			// What a code MEANS in a simple font is stated by its
-			// /Encoding, through glyph names (ISO 32000-1, 9.6.6); the
-			// font program's cmap only says which glyph gets drawn. The
-			// two disagree whenever the two encodings do: under
-			// /MacRomanEncoding code 0xD5 is quoteright, and taking the
-			// program's answer wrote U+00D5, turning every ’ in a
-			// 470 KB document into Õ at exactly the same length.
-			overlaySimpleFontEncoding(ctx, doc, fontDict, mapping)
-			// Simple fonts address glyphs with one-byte codes. A direct font
-			// dictionary has no object number, so the CMap could not be
-			// attached: allocating it would emit an unreferenced stream and
-			// report a repair absent from the output.
-			if cmapData := generateToUnicodeCMap(mapping, 1); cmapData != nil && fontRef.ObjectNum > 0 {
-				cmapStream := ast.NewStream(ast.PdfDict{}, cmapData)
-				cmapRef := alloc.Alloc(cmapStream)
-				// Use the latest version of fontDict if already modified.
-				targetFont := fontDict
-				if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
-					if d, ok := allocated.(ast.PdfDict); ok {
-						targetFont = d
-					}
-				}
-				newFont := make(ast.PdfDict, len(targetFont)+1)
-				maps.Copy(newFont, targetFont)
-				newFont["ToUnicode"] = cmapRef
-				alloc.AllocAt(fontRef.ObjectNum, newFont)
-				fixes = append(fixes, fmt.Sprintf("generated /ToUnicode CMap for font %s", baseName))
-			}
 		}
 	}
 
@@ -894,6 +866,81 @@ func identityCIDRoute(ctx context.Context, doc *document.Document, fontDict, cid
 // /Differences into code-to-rune form, so the encoding tables are not
 // reproduced here. A symbolic font resolves to no encoding at all, and its
 // codes keep whatever the font program answered.
+// fixSimpleFontToUnicode generates a /ToUnicode CMap for a simple font that
+// lacks a usable one, returning what it repaired.
+//
+// It runs independently of the width and /CharSet repairs because it shares
+// none of their preconditions: the mapping comes from the font's /Encoding,
+// not from a /Widths array, a /FontDescriptor, or the program's metrics. While
+// it lived inside fixSimpleFont, any one of those early returns cancelled it,
+// so every Type 1 font kept its missing Unicode mapping.
+//
+// shownCodes is the set of character codes the page actually shows. The CMap is
+// attached only when it maps all of them: ISO 19005-2, 6.2.11.7.2 asks for the
+// USED codes, and an /Encoding-derived mapping need not reach every one. A
+// partial map satisfies litho's own presence check while veraPDF still reports
+// the rule, which reports a repair the output does not contain.
+func fixSimpleFontToUnicode(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, shownCodes map[byte]bool) []string {
+	if !needsToUnicode(ctx, doc, fontDict) || fontRef.ObjectNum == 0 || len(shownCodes) == 0 {
+		return nil
+	}
+
+	mapping := make(map[uint16]rune)
+
+	// The program route needs a cmap table, which a Type 1 or bare CFF program
+	// does not have. Its absence is not a reason to emit nothing: the
+	// /Encoding alone states what the codes mean.
+	if fdDict, err := document.ResolveDict(ctx, doc, fontDict["FontDescriptor"]); err == nil && fdDict != nil {
+		if fontData := extractFontProgram(ctx, doc, fdDict); fontData != nil {
+			if charToGID := typography.ExtractCharCodeToGID(ctx, fontData); charToGID != nil {
+				gidToUnicode := typography.ExtractGIDToUnicodeAuthoritative(ctx, fontData)
+				for charCode, gid := range charToGID {
+					if r, ok := gidToUnicode[gid]; ok && isValidUnicodeMapping(r) {
+						mapping[charCode] = r
+					}
+				}
+			}
+		}
+	}
+
+	// What a code MEANS in a simple font is stated by its /Encoding, through
+	// glyph names (ISO 32000-1, 9.6.6); the font program's cmap only says which
+	// glyph gets drawn. The two disagree whenever the two encodings do: under
+	// /MacRomanEncoding code 0xD5 is quoteright, and taking the program's
+	// answer wrote U+00D5, turning every ’ in a 470 KB document into Õ at
+	// exactly the same length.
+	overlaySimpleFontEncoding(ctx, doc, fontDict, mapping)
+
+	for code := range shownCodes {
+		if _, ok := mapping[uint16(code)]; !ok {
+			return nil
+		}
+	}
+
+	// Simple fonts address glyphs with one-byte codes.
+	cmapData := generateToUnicodeCMap(mapping, 1)
+	if cmapData == nil {
+		return nil
+	}
+	cmapRef := alloc.Alloc(ast.NewStream(ast.PdfDict{}, cmapData))
+
+	// Build on the latest version of the font dictionary: an earlier repair in
+	// this same pass may already have rewritten it.
+	targetFont := fontDict
+	if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
+		if d, ok := allocated.(ast.PdfDict); ok {
+			targetFont = d
+		}
+	}
+	newFont := make(ast.PdfDict, len(targetFont)+1)
+	maps.Copy(newFont, targetFont)
+	newFont["ToUnicode"] = cmapRef
+	if !alloc.AllocAt(fontRef.ObjectNum, newFont) {
+		return nil
+	}
+	return []string{fmt.Sprintf("generated /ToUnicode CMap for font %s", fontBaseName(fontDict))}
+}
+
 func overlaySimpleFontEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, mapping map[uint16]rune) {
 	font, err := typography.ResolveFont(ctx, doc, fontDict)
 	if err != nil || font == nil {
