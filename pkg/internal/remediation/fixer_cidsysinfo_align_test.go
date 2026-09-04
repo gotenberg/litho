@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -184,5 +185,51 @@ func TestAlignCMapWModeLeavesAnAgreeingDictionary(t *testing.T) {
 
 	if _, rewritten := alloc.Pending()[6]; rewritten {
 		t.Error("a CMap whose /WMode already matches its program was rewritten")
+	}
+}
+
+// TestMatchCIDSystemInfoClaimsThePDFUAClauses pins that the alignment repair is
+// offered to PDF/UA as well.
+//
+// ISO 14289-1, 7.21.3.1 t1 and ISO 14289-2, 8.4.5.3.1 t1 restate the
+// CIDSystemInfo relationship word for word, and 7.21.3.3 t2 / 8.4.5.4 t2 do the
+// same for the CMap /WMode. Claiming only the PDF/A clause numbers left the
+// fixer idle on every PDF/UA document that needed it.
+func TestMatchCIDSystemInfoClaimsThePDFUAClauses(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		clause  string
+		context string
+	}{
+		{"6.2.11.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
+		{"6.2.10.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
+		{"7.21.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
+		{"8.4.5.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
+		{"6.2.11.3.3", "font C0_0 on page 1: CMap dict WMode=1 but stream WMode=0"},
+		{"7.21.3.3", "font C0_0 on page 1: CMap dict WMode=1 but stream WMode=0"},
+		{"8.4.5.4", "font C0_0 on page 1: CMap dict WMode=1 but stream WMode=0"},
+	} {
+		v := compliance.Violation{
+			Rule:    compliance.Rule{Clause: tc.clause, TestNumber: 1},
+			Context: tc.context,
+		}
+		if !matchCIDSystemInfo(v) {
+			t.Errorf("clause %s is not claimed by the CIDSystemInfo fixer", tc.clause)
+		}
+	}
+}
+
+// TestMatchCIDSystemInfoIgnoresAnUnrelatedClause is the control against the
+// fixer claiming work it cannot do.
+func TestMatchCIDSystemInfoIgnoresAnUnrelatedClause(t *testing.T) {
+	t.Parallel()
+
+	v := compliance.Violation{
+		Rule:    compliance.Rule{Clause: "6.2.11.5", TestNumber: 1},
+		Context: "font C0_0 on page 1: .notdef glyph width mismatch",
+	}
+	if matchCIDSystemInfo(v) {
+		t.Error("a width violation was claimed by the CIDSystemInfo fixer")
 	}
 }

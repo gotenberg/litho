@@ -18,11 +18,16 @@ import (
 func matchCIDSystemInfo(v compliance.Violation) bool {
 	// An embedded CMap whose dictionary contradicts its own program is the same
 	// kind of disagreement, settled the same way (ISO 19005-4, 6.2.10.3.3 t2 /
-	// ISO 19005-2, 6.2.11.3.3 t2).
-	if clausePrefix(v, "6.2.10.3.3", "6.2.11.3.3") {
+	// ISO 19005-2, 6.2.11.3.3 t2 / ISO 14289-1, 7.21.3.3 t2 /
+	// ISO 14289-2, 8.4.5.4 t2).
+	if clausePrefix(v, "6.2.10.3.3", "6.2.11.3.3", "7.21.3.3", "8.4.5.4") {
 		return contextContains(v, "WMode")
 	}
-	if !clausePrefix(v, "6.2.10.3.1", "6.2.11.3.1") {
+	// PDF/UA restates the CIDSystemInfo relationship word for word
+	// (ISO 14289-1, 7.21.3.1 t1 / ISO 14289-2, 8.4.5.3.1 t1), and the repair is
+	// the same one. Claiming only the PDF/A clauses left the alignment fixer
+	// idle on every PDF/UA document that needed it.
+	if !clausePrefix(v, "6.2.10.3.1", "6.2.11.3.1", "7.21.3.1", "8.4.5.3.1") {
 		return false
 	}
 	return contextContains(v, "CIDFont") || contextContains(v, "CMap")
