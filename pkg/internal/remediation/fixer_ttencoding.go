@@ -14,9 +14,10 @@ import (
 
 // matchTrueTypeEncoding matches the family of non-symbolic TrueType
 // /Encoding violations: ISO 19005-1 §6.3.7, ISO 19005-2/3 §6.2.11.6,
-// ISO 19005-4 §6.2.10.6.
+// ISO 19005-4 §6.2.10.6, and the PDF/UA restatements of the same
+// requirement, ISO 14289-1 §7.21.6 and ISO 14289-2 §8.4.5.7.
 func matchTrueTypeEncoding(v compliance.Violation) bool {
-	if !clausePrefix(v, "6.2.10.6", "6.2.11.6", "6.3.7") {
+	if !clausePrefix(v, "6.2.10.6", "6.2.11.6", "6.3.7", "7.21.6", "8.4.5.7") {
 		return false
 	}
 	return contextContains(v, "BaseEncoding") ||

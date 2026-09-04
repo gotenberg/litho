@@ -21,10 +21,12 @@ import (
 func matchFontFixes(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.2.10.5", "6.2.11.5", "6.3.6", // glyph width mismatch
+		"7.21.5",                   // the PDF/UA-1 restatement of the width rule
 		"6.2.10.7",                 // ToUnicode maps to U+0000/FEFF/FFFE
 		"6.2.11.7",                 // Unicode mapping required (PDF/A-2)
 		"6.3.8",                    // ToUnicode required (PDF/A-1b)
 		"6.2.10.3.1", "6.2.11.3.1", // CIDSystemInfo mismatch
+		"7.21.3.1", "8.4.5.3.1", // the PDF/UA restatements of it
 		"6.2.11.4.2", // CIDSet incomplete
 		"6.3.5",      // CharSet incomplete
 		"7.21.4.2",   // PDF/UA-1 CharSet/CIDSet incomplete
