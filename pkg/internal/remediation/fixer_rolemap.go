@@ -98,6 +98,21 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		cur := targets[src]
 		for steps := 0; steps < len(targets); steps++ {
 			if cur == src {
+				// A standard type in the cycle is dropped, not redirected.
+				// Remapping a standard type is forbidden outright
+				// (ISO 14289-1, 7.1 t7), and nothing is left dangling: a chain
+				// aimed at this source now ends on the standard name itself,
+				// which is exactly where it should end. The self-mapping
+				// /LI -> /LI of PDF_UA-2__8.2.4-t02-fail-a became /LI -> /P,
+				// which litho reported as a remapped standard type and which
+				// turned every list item into a paragraph, so <L> then held
+				// <P> and <P> held <LBody>.
+				if compliance.IsStandardStructType(src, profile) {
+					delete(keep, src)
+					delete(targets, src)
+					cyclesBroken++
+					break
+				}
 				// Remap rather than delete, in a namespaced document too.
 				// Deleting the entry that closes the cycle leaves every other
 				// entry aimed at it pointing at an unmapped name, which trades
