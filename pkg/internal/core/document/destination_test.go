@@ -80,7 +80,9 @@ func TestResolveDestinationPageForms(t *testing.T) {
 		{"unknown name", ast.PdfString("nosuchdest"), 0},
 		{"empty array", ast.PdfArray{}, 0},
 		{"page that is not in the tree", ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 99}}, 0},
-		{"integer first element", ast.PdfArray{ast.PdfInt(0), ast.PdfName("Fit")}, 0},
+		{"zero-based integer page number", ast.PdfArray{ast.PdfInt(0), ast.PdfName("Fit")}, 1},
+		{"integer past the last page", ast.PdfArray{ast.PdfInt(1), ast.PdfName("Fit")}, 0},
+		{"negative integer", ast.PdfArray{ast.PdfInt(-1), ast.PdfName("Fit")}, 0},
 		{"wrong type", ast.PdfInt(3), 0},
 	} {
 		if got := ResolveDestinationPage(ctx, doc, tc.dest, pageMap); got != tc.want {

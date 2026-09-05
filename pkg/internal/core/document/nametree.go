@@ -273,14 +273,28 @@ func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObje
 
 // pageFromDestArray extracts the 1-based page number from a destination array.
 // Per ISO 32000-1, 12.3.2.2 the first element is an indirect reference to the
-// page object; the integer form is reserved for destinations in a remote
-// document, where it names no page of this one.
+// page object, or a zero-based page number for a destination in a remote
+// document.
+//
+// Deliberate leniency: the integer form is accepted for this document too.
+// It is out of place in a same-document destination, but producers write it
+// anyway (govdocs thread_300_300254.pdf sends a link on page 20 to
+// /Dest [19 /XYZ 87 243 0]), and pdf.js resolves it the same way, with
+// "else if (Number.isInteger(destRef)) { pageNumber = destRef + 1; }" in
+// web/pdf_link_service.js. The index is bounded by the page map so a number
+// naming no page of this document still reports none.
 func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int {
 	if len(arr) == 0 {
 		return 0
 	}
-	if pageRef, ok := arr[0].(ast.PdfIndirectRef); ok {
-		return pageMap[pageRef]
+	switch first := arr[0].(type) {
+	case ast.PdfIndirectRef:
+		return pageMap[first]
+	case ast.PdfInt:
+		if first < 0 || int(first) >= len(pageMap) {
+			return 0
+		}
+		return int(first) + 1
 	}
 	return 0
 }
