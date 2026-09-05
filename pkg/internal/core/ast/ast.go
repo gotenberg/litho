@@ -163,16 +163,22 @@ func NewStream(dict PdfDict, data []byte) PdfStream {
 	return PdfStream{Dict: dict, open: func(context.Context) ([]byte, error) { return data, nil }}
 }
 
-// NewLazyStream creates a [PdfStream] with a lazy loader that reads the raw
-// bytes on first access and caches the result. The loader function is called
-// at most once; subsequent calls to [PdfStream.Bytes] return the cached result.
+// NewLazyStream creates a [PdfStream] that reads its raw bytes through loader
+// on each call to [PdfStream.Bytes].
+//
+// Caching is the loader's responsibility, not this constructor's: PdfStream is
+// a value type with no place to memoise, so a loader that re-reads is called
+// again on every access. The parser's stream loader wraps its read and decrypt
+// in a sync.Once for exactly this reason, and any loader doing real I/O should
+// do the same.
 func NewLazyStream(dict PdfDict, loader func(context.Context) ([]byte, error)) PdfStream {
 	return PdfStream{Dict: dict, open: loader}
 }
 
 // Bytes returns the raw stream bytes (after decryption, before filter
-// decoding). The data is read lazily on first call and cached for subsequent
-// calls if the stream was created with [NewLazyStream].
+// decoding). A stream built by [NewLazyStream] reads through its loader on
+// every call, so whether the work is repeated depends on that loader; one
+// built by [NewStream] already holds its data.
 func (s PdfStream) Bytes(ctx context.Context) ([]byte, error) {
 	if s.open == nil {
 		return nil, nil
