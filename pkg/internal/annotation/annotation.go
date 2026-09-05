@@ -21,7 +21,12 @@ func ExtractAnnotations(ctx context.Context, doc *document.Document, page *docum
 		return nil, fmt.Errorf("failed to resolve /Annots: %w", err)
 	}
 	if annotsArr == nil {
-		return nil, fmt.Errorf("/Annots is not an array")
+		// [document.ResolveArray] reports a nil array only for null, and per
+		// ISO 32000-1, 7.3.7 a dictionary entry whose value is null is
+		// equivalent to the entry being absent. pdfjs issue11287 writes
+		// /Annots null on one page; calling that an error made litho the only
+		// reader that could not list annotations for the document.
+		return nil, nil
 	}
 
 	var annotations []models.Annotation
@@ -97,14 +102,7 @@ func ExtractAnnotations(ctx context.Context, doc *document.Document, page *docum
 								}
 							case "GoTo":
 								if dObj, ok := aDict["D"]; ok {
-									dArr, err := document.ResolveArray(ctx, doc, dObj)
-									if err == nil && dArr != nil && len(dArr) > 0 {
-										if destRef, ok := dArr[0].(ast.PdfIndirectRef); ok {
-											if pageNum, exists := pageMap[destRef]; exists {
-												annot.DestPage = pageNum
-											}
-										}
-									}
+									annot.DestPage = document.ResolveDestinationPage(ctx, doc, dObj, pageMap)
 								}
 							}
 						}
@@ -112,14 +110,7 @@ func ExtractAnnotations(ctx context.Context, doc *document.Document, page *docum
 				}
 			} else if destObj, ok := annotDict["Dest"]; ok {
 				// Sometimes Dest is directly on the Link annotation instead of inside an Action
-				destArr, err := document.ResolveArray(ctx, doc, destObj)
-				if err == nil && destArr != nil && len(destArr) > 0 {
-					if destRef, ok := destArr[0].(ast.PdfIndirectRef); ok {
-						if pageNum, exists := pageMap[destRef]; exists {
-							annot.DestPage = pageNum
-						}
-					}
-				}
+				annot.DestPage = document.ResolveDestinationPage(ctx, doc, destObj, pageMap)
 			}
 		}
 
