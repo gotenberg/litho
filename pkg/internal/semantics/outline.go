@@ -22,7 +22,20 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 		return nil, nil // Document has no outline
 	}
 
-	outlinesDict, err := document.ResolveDict(ctx, doc, outlinesObj)
+	// Resolve the reference before type-checking it. An object litho cannot read
+	// is indistinguishable from one the file never defined, and per ISO 32000-1,
+	// 7.3.9 a reference to an undefined object is a reference to null. pdfjs
+	// issue2618 declares object 19 in its xref table at an offset that lands on
+	// the `xref` keyword, and no `19 0 obj` exists anywhere in the file; erroring
+	// made `litho bookmarks` the only command that could not read a document
+	// poppler and pikepdf both report as simply having no outline.
+	outlinesRes, err := document.ResolveObject(ctx, doc, outlinesObj)
+	if err != nil {
+		doc.Logger.Debug("resolving outlines", slog.Any("err", err))
+		return nil, nil
+	}
+
+	outlinesDict, err := document.ResolveDict(ctx, doc, outlinesRes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve outlines: %w", err)
 	}
@@ -101,7 +114,7 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 
 		// Resolve Dest. May be a direct array or a named destination string/name.
 		if destObj, ok := dict["Dest"]; ok {
-			b.PageNumber = resolveDestination(ctx, doc, destObj, pageMap)
+			b.PageNumber = document.ResolveDestinationPage(ctx, doc, destObj, pageMap)
 		} else if aObj, ok := dict["A"]; ok {
 			// Some bookmarks use an Action (/A) instead of an explicit /Dest.
 			aDict, err := document.ResolveDict(ctx, doc, aObj)
@@ -116,7 +129,7 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 					}
 					if sName == "GoTo" {
 						if dObj, ok := aDict["D"]; ok {
-							b.PageNumber = resolveDestination(ctx, doc, dObj, pageMap)
+							b.PageNumber = document.ResolveDestinationPage(ctx, doc, dObj, pageMap)
 						}
 					}
 				}
@@ -143,68 +156,4 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 	}
 
 	return bookmarks, nil
-}
-
-// resolveDestination resolves a destination object to a 1-based page number.
-// The destination may be a direct PdfArray, a PdfString (named destination),
-// or a PdfName (named destination). Named destinations are looked up via the
-// catalog's /Names -> /Dests tree or the legacy /Dests dictionary.
-func resolveDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) int {
-	destRes, err := document.ResolveObject(ctx, doc, destObj)
-	if err != nil {
-		doc.Logger.Debug("resolving destination object", slog.Any("err", err))
-	}
-
-	// Try as a direct destination array first.
-	if destArr, ok := destRes.(ast.PdfArray); ok {
-		return pageFromDestArray(destArr, pageMap)
-	}
-
-	// A dictionary in /Dest is malformed: ISO 32000-1, Table 153 allows an
-	// array, a name or a byte string there, and an action belongs in /A. Real
-	// producers write the action anyway, wrapping the destination in
-	// << /Type /Action /S /GoTo /D [...] >>, and every other reader follows it.
-	// Four govdocs outlines (thread_300_300865 and friends) reported no page at
-	// all for every one of their bookmarks. /D holds the destination in both the
-	// action form and the plain << /D ... >> form, so one lookup covers each.
-	if destDict, ok := destRes.(ast.PdfDict); ok {
-		if inner, has := destDict["D"]; has {
-			return resolveDestination(ctx, doc, inner, pageMap)
-		}
-		return 0
-	}
-
-	// Named destination: look up in the name tree by raw byte key.
-	// Name tree keys are byte strings (ISO 32000-1 §7.9.6); decoding via
-	// [document.DecodePdfString] would collapse producer-disambiguated
-	// destinations like "kid1" and "kid1\x01" onto the same key and the
-	// wrong page would surface.
-	var name string
-	switch v := destRes.(type) {
-	case ast.PdfString:
-		name = string(v)
-	case ast.PdfName:
-		name = string(v)
-	default:
-		return 0
-	}
-
-	destArr, err := document.ResolveNamedDest(ctx, doc, name)
-	if err != nil || destArr == nil {
-		return 0
-	}
-	return pageFromDestArray(destArr, pageMap)
-}
-
-// pageFromDestArray extracts the 1-based page number from a destination array.
-func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int {
-	if len(arr) == 0 {
-		return 0
-	}
-	if pageRef, ok := arr[0].(ast.PdfIndirectRef); ok {
-		if pageNum, exists := pageMap[pageRef]; exists {
-			return pageNum
-		}
-	}
-	return 0
 }
