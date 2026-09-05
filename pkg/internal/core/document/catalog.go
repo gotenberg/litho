@@ -39,10 +39,31 @@ type Page struct {
 // BuildPageMap constructs a reverse-lookup map from each page's [ast.PdfIndirectRef]
 // to its 1-based page number, enabling clean destination resolution without
 // mutating any struct fields.
+//
+// A page whose reference carries a generation above zero is also recorded under
+// generation zero. [Document.Resolve] matches on the object number alone (see
+// [Document.xrefEntry] for why), so a reference litho happily resolves to a page
+// has to find that page here too. govdocs thread_400_400594.pdf holds page 12 as
+// "40 2 R" and sends eight outline entries to "40 0 R": the reference resolved,
+// the lookup missed, and every one of those bookmarks reported no page while
+// remediating the same file produced a working outline.
+//
+// A document that genuinely reuses an object number for two pages would collide
+// here, and the first page wins. The page tree lists each page once
+// (ISO 32000-1, 7.7.3.2), so that shape is already malformed.
 func BuildPageMap(pages []*Page) map[ast.PdfIndirectRef]int {
 	m := make(map[ast.PdfIndirectRef]int, len(pages))
 	for i, p := range pages {
 		m[p.Ref] = i + 1
+	}
+	for i, p := range pages {
+		if p.Ref.GenNum == 0 {
+			continue
+		}
+		alias := ast.PdfIndirectRef{ObjectNum: p.Ref.ObjectNum}
+		if _, taken := m[alias]; !taken {
+			m[alias] = i + 1
+		}
 	}
 	return m
 }

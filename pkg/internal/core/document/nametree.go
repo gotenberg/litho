@@ -289,7 +289,15 @@ func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int
 	}
 	switch first := arr[0].(type) {
 	case ast.PdfIndirectRef:
-		return pageMap[first]
+		if page, ok := pageMap[first]; ok {
+			return page
+		}
+		// The generation is not part of what [Document.Resolve] matches on, so a
+		// destination naming a generation the page tree does not use still
+		// resolves to that page. [BuildPageMap] records the zero-generation
+		// alias; this covers the other direction, a destination carrying a
+		// generation the page does not.
+		return pageMap[ast.PdfIndirectRef{ObjectNum: first.ObjectNum}]
 	case ast.PdfInt:
 		if first < 0 || int(first) >= len(pageMap) {
 			return 0

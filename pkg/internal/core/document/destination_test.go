@@ -119,6 +119,82 @@ func TestResolveDestinationPageSelfReference(t *testing.T) {
 	}
 }
 
+// buildGenerationPDF assembles a document whose only page is written at
+// generation gen, so a destination naming generation 0 does not match the page
+// reference exactly.
+func buildGenerationPDF(gen int) []byte {
+	objs := []struct {
+		gen  int
+		body string
+	}{
+		{0, "<< /Type /Catalog /Pages 2 0 R >>"},
+		{0, fmt.Sprintf("<< /Type /Pages /Kids [3 %d R] /Count 1 >>", gen)},
+		{gen, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"},
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs))
+	for i, o := range objs {
+		offs[i] = buf.Len()
+		fmt.Fprintf(&buf, "%d %d obj\n%s\nendobj\n", i+1, o.gen, o.body)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i, o := range objs {
+		fmt.Fprintf(&buf, "%010d %05d n \r\n", offs[i], o.gen)
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return buf.Bytes()
+}
+
+// TestResolveDestinationPageIgnoresTheGeneration pins that a destination
+// resolves to the page it names even when the generation differs.
+//
+// [Document.Resolve] matches an indirect reference on its object number alone,
+// which is deliberate, so a reference litho resolves to a page has to find that
+// page in the page map too. Keying the map on the exact reference broke that:
+// govdocs thread_400_400594.pdf holds page 12 as "40 2 R" and sends eight
+// outline entries to "40 0 R", and every one of them reported no page, while
+// remediating the same file emitted a working outline from the same input.
+func TestResolveDestinationPageIgnoresTheGeneration(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name    string
+		pageGen int
+		destGen int
+	}{
+		{"page at generation 2, destination at 0", 2, 0},
+		{"page at generation 0, destination at 2", 0, 2},
+		{"both at generation 0", 0, 0},
+		{"both at generation 3", 3, 3},
+	} {
+		data := buildGenerationPDF(tc.pageGen)
+		doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+		if err != nil {
+			t.Fatalf("%s: NewDocument: %v", tc.name, err)
+		}
+		catalog, err := ResolveCatalog(ctx, doc)
+		if err != nil {
+			t.Fatalf("%s: ResolveCatalog: %v", tc.name, err)
+		}
+		pages, err := ResolvePages(ctx, doc, catalog)
+		if err != nil || len(pages) != 1 {
+			t.Fatalf("%s: ResolvePages: %v (%d pages)", tc.name, err, len(pages))
+		}
+
+		dest := ast.PdfArray{
+			ast.PdfIndirectRef{ObjectNum: 3, GenNum: tc.destGen},
+			ast.PdfName("Fit"),
+		}
+		if got := ResolveDestinationPage(ctx, doc, dest, BuildPageMap(pages)); got != 1 {
+			t.Errorf("%s: got page %d, want 1", tc.name, got)
+		}
+	}
+}
+
 // TestResolveDestinationPageHonoursCancellation pins that the walk stops when
 // the caller's context is done, per the package's checkpoint convention.
 func TestResolveDestinationPageHonoursCancellation(t *testing.T) {
