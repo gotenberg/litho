@@ -40,6 +40,68 @@ func resolveName(ctx context.Context, doc *document.Document, dict ast.PdfDict, 
 // resolveColorSpace extracts the /ColorSpace from an image XObject dictionary
 // and maps it to a usable base color space name. PDF color spaces can be a
 // simple /Name or a complex array (e.g. [/ICCBased stream], [/Indexed base ...]).
+// iccBasedSpace returns the device space an [/ICCBased stream] array stands for.
+//
+// Per ISO 32000-1, 8.6.5.5, Table 66, the stream's /N gives the number of
+// components and shall be 1, 3 or 4, matching DeviceGray, DeviceRGB and
+// DeviceCMYK; /Alternate names the space to substitute when the profile cannot
+// be used. Answering DeviceRGB for every ICCBased space mislabelled the CMYK
+// images in pdfjs issue11052.pdf, and the answer is not cosmetic: the decoder
+// switches on it, so a four-component image was read three bytes to the pixel.
+//
+// An array that states neither keeps the old DeviceRGB answer, which is the
+// most common profile and what a caller can do least harm with.
+func iccBasedSpace(ctx context.Context, doc *document.Document, cs ast.PdfArray) string {
+	if len(cs) < 2 {
+		return "DeviceRGB"
+	}
+	streamObj, err := document.ResolveObject(ctx, doc, cs[1])
+	if err != nil {
+		doc.Logger.Debug("resolving ICCBased profile stream", slog.Any("err", err))
+		return "DeviceRGB"
+	}
+
+	var profile ast.PdfDict
+	switch v := streamObj.(type) {
+	case ast.PdfStream:
+		profile = v.Dict
+	case ast.PdfDict:
+		profile = v
+	default:
+		return "DeviceRGB"
+	}
+
+	if nObj, ok := profile["N"]; ok {
+		n, err := document.ResolveObject(ctx, doc, nObj)
+		if err != nil {
+			doc.Logger.Debug("resolving ICCBased /N", slog.Any("err", err))
+		} else if num, isNum := document.Number(n); isNum {
+			switch int(num) {
+			case 1:
+				return "DeviceGray"
+			case 3:
+				return "DeviceRGB"
+			case 4:
+				return "DeviceCMYK"
+			}
+		}
+	}
+
+	if altObj, ok := profile["Alternate"]; ok {
+		alt, err := document.ResolveObject(ctx, doc, altObj)
+		if err != nil {
+			doc.Logger.Debug("resolving ICCBased /Alternate", slog.Any("err", err))
+		} else if name, isName := alt.(ast.PdfName); isName {
+			switch name {
+			case "DeviceGray", "DeviceRGB", "DeviceCMYK":
+				return string(name)
+			}
+		}
+	}
+
+	return "DeviceRGB"
+}
+
 func resolveColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
 	csObj, ok := dict["ColorSpace"]
 	if !ok {
@@ -70,7 +132,9 @@ func resolveColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 		}
 
 		switch family {
-		case "ICCBased", "CalRGB":
+		case "ICCBased":
+			return iccBasedSpace(ctx, doc, cs)
+		case "CalRGB":
 			return "DeviceRGB"
 		case "CalGray":
 			return "DeviceGray"
@@ -90,7 +154,9 @@ func resolveColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 						}
 						if bf, ok := baseFamily.(ast.PdfName); ok {
 							switch bf {
-							case "ICCBased", "CalRGB":
+							case "ICCBased":
+								return iccBasedSpace(ctx, doc, baseArr)
+							case "CalRGB":
 								return "DeviceRGB"
 							case "CalGray":
 								return "DeviceGray"
