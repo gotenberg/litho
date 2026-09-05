@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -110,8 +111,8 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 			return nil, err
 		}
 		if len(limitsArr) >= 2 {
-			minStr := nameTreeKey(limitsArr[0])
-			maxStr := nameTreeKey(limitsArr[1])
+			minStr := nameTreeKey(ctx, doc, limitsArr[0])
+			maxStr := nameTreeKey(ctx, doc, limitsArr[1])
 			if minStr != "" && maxStr != "" {
 				if key < minStr || key > maxStr {
 					return nil, nil
@@ -158,7 +159,7 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 	}
 
 	for i := 0; i+1 < len(namesArr); i += 2 {
-		entryName := nameTreeKey(namesArr[i])
+		entryName := nameTreeKey(ctx, doc, namesArr[i])
 		if entryName == key {
 			return resolveDestValue(ctx, doc, namesArr[i+1])
 		}
@@ -194,14 +195,116 @@ func resolveDestValue(ctx context.Context, doc *Document, obj ast.PdfObject) (as
 	return nil, nil
 }
 
+// maxDestIndirectionDepth caps how many times [ResolveDestinationPage] follows
+// a /D entry into another destination dictionary. Anti-DoS guard, not
+// spec-mandated: a real destination reaches its array in one hop, and the
+// action form (<< /S /GoTo /D ... >>) adds at most one more. A dictionary whose
+// /D points back at itself made the walk recurse until the goroutine stack
+// overflowed, which Go cannot recover from, so a 700-byte file killed the
+// process through the public Bookmarks and Annotations calls.
+const maxDestIndirectionDepth = 8
+
+// ResolveDestinationPage resolves a destination to a 1-based page number,
+// returning 0 when no page can be determined.
+//
+// Per ISO 32000-1, 12.3.2, dest may be an explicit destination array, a name or
+// a byte string naming an entry in the /Names /Dests tree or the legacy /Dests
+// dictionary, or a dictionary holding the destination under /D. Outline items
+// and link annotations share all of these forms, so both go through here.
+//
+// pageMap maps page object references to 1-based page numbers; build it with
+// [BuildPageMap].
+func ResolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObject, pageMap map[ast.PdfIndirectRef]int) int {
+	return resolveDestinationPage(ctx, doc, dest, pageMap, 0)
+}
+
+func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObject, pageMap map[ast.PdfIndirectRef]int, depth int) int {
+	if depth > maxDestIndirectionDepth {
+		return 0
+	}
+	if err := ctx.Err(); err != nil {
+		return 0
+	}
+
+	resolved, err := ResolveObject(ctx, doc, dest)
+	if err != nil {
+		doc.Logger.Debug("resolving destination object", slog.Any("err", err))
+		return 0
+	}
+
+	switch v := resolved.(type) {
+	case ast.PdfArray:
+		return pageFromDestArray(v, pageMap)
+	case ast.PdfDict:
+		// A dictionary in /Dest is malformed: ISO 32000-1, Table 153 allows an
+		// array, a name or a byte string there, and an action belongs in /A.
+		// Real producers write the action anyway, wrapping the destination in
+		// << /Type /Action /S /GoTo /D [...] >>, and every other reader follows
+		// it. Four govdocs outlines (thread_300_300865 and friends) reported no
+		// page at all for every one of their bookmarks. /D holds the destination
+		// in both the action form and the plain << /D ... >> form, so one lookup
+		// covers each.
+		if inner, ok := v["D"]; ok {
+			return resolveDestinationPage(ctx, doc, inner, pageMap, depth+1)
+		}
+		return 0
+	}
+
+	// Named destination: look up in the name tree by raw byte key. Name tree
+	// keys are byte strings (ISO 32000-1, 7.9.6); decoding via
+	// [DecodePdfString] would collapse producer-disambiguated destinations like
+	// "kid1" and "kid1\x01" onto the same key and the wrong page would surface.
+	var name string
+	switch v := resolved.(type) {
+	case ast.PdfString:
+		name = string(v)
+	case ast.PdfName:
+		name = string(v)
+	default:
+		return 0
+	}
+
+	destArr, err := ResolveNamedDest(ctx, doc, name)
+	if err != nil || destArr == nil {
+		return 0
+	}
+	return pageFromDestArray(destArr, pageMap)
+}
+
+// pageFromDestArray extracts the 1-based page number from a destination array.
+// Per ISO 32000-1, 12.3.2.2 the first element is an indirect reference to the
+// page object; the integer form is reserved for destinations in a remote
+// document, where it names no page of this one.
+func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int {
+	if len(arr) == 0 {
+		return 0
+	}
+	if pageRef, ok := arr[0].(ast.PdfIndirectRef); ok {
+		return pageMap[pageRef]
+	}
+	return 0
+}
+
 // nameTreeKey extracts the raw byte-string key from a name tree entry.
 // Per ISO 32000-1 §7.9.6, name tree keys are compared as byte strings,
 // not as decoded text: lookup is byte-exact. Routing keys through
 // [DecodePdfString] would collapse producer-disambiguated entries
 // (e.g. "kid1" vs "kid1\x01") onto the same key and the lookup would
 // hit the wrong destination.
-func nameTreeKey(obj ast.PdfObject) string {
-	switch v := obj.(type) {
+//
+// The key is resolved first because ISO 32000-1, 7.3.10 lets any object be
+// written as an indirect reference, and producers do: pdfjs issue6204.pdf
+// writes its /Names array as [18 0 R 11 0 R 19 0 R 13 0 R], with the keys in
+// objects 18 and 19. Type-switching on the unresolved value yielded the empty
+// string for every entry, so no key ever matched and the file's links all
+// reported no destination.
+func nameTreeKey(ctx context.Context, doc *Document, obj ast.PdfObject) string {
+	resolved, err := ResolveObject(ctx, doc, obj)
+	if err != nil {
+		doc.Logger.Debug("resolving name tree key", slog.Any("err", err))
+		return ""
+	}
+	switch v := resolved.(type) {
 	case ast.PdfString:
 		return string(v)
 	case ast.PdfName:
