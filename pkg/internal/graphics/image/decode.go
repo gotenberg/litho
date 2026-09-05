@@ -110,6 +110,144 @@ func buildDecodeLUTs(dec []float64, components int) [][256]byte {
 	return luts
 }
 
+// maxPaletteEntries bounds the colour table of an indexed image. ISO 32000-1,
+// 8.6.6.3 caps /hival at 255, so a conforming palette never holds more; the
+// bound is here because the value is read from the file.
+const maxPaletteEntries = 256
+
+// palette holds a resolved indexed colour space: the device space its entries
+// are written in, and the lookup table itself.
+type palette struct {
+	base   string
+	comps  int
+	lookup []byte
+}
+
+// resolveIndexedPalette reports the palette of an [/Indexed base hival lookup]
+// colour space, and whether the image has one at all.
+//
+// Per ISO 32000-1, 8.6.6.3 an indexed image stores one sample per pixel, and
+// that sample is an index into the table rather than a colour. Reading it as
+// though it were a colour in the base space is what [resolveColorSpace] implies
+// on its own, and the decoder then wanted three or four bytes per pixel for
+// data that holds one: every indexed image failed with "decoded data too short"
+// (pdfjs 160F-2019.pdf and S2.pdf among them), so no palette image could be
+// decoded at all.
+func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast.PdfDict) (palette, bool) {
+	csObj, ok := dict["ColorSpace"]
+	if !ok {
+		return palette{}, false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving indexed color space", slog.Any("err", err))
+		return palette{}, false
+	}
+	arr, ok := resolved.(ast.PdfArray)
+	if !ok || len(arr) < 4 {
+		return palette{}, false
+	}
+	family, err := document.ResolveObject(ctx, doc, arr[0])
+	if err != nil {
+		return palette{}, false
+	}
+	if name, ok := family.(ast.PdfName); !ok || name != "Indexed" {
+		return palette{}, false
+	}
+
+	base := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": arr[1]})
+	comps := imageComponents(base)
+	if comps == 0 {
+		return palette{}, false
+	}
+
+	hival, isNum := document.Number(mustResolve(ctx, doc, arr[2]))
+	if !isNum || hival < 0 || int(hival) >= maxPaletteEntries {
+		return palette{}, false
+	}
+
+	lookupObj, err := document.ResolveObject(ctx, doc, arr[3])
+	if err != nil {
+		doc.Logger.Debug("resolving indexed lookup table", slog.Any("err", err))
+		return palette{}, false
+	}
+	var lookup []byte
+	switch v := lookupObj.(type) {
+	case ast.PdfString:
+		lookup = []byte(v)
+	case ast.PdfStream:
+		lookup, err = doc.DecodeStream(ctx, v)
+		if err != nil {
+			doc.Logger.Debug("decoding indexed lookup stream", slog.Any("err", err))
+			return palette{}, false
+		}
+	default:
+		return palette{}, false
+	}
+
+	// A short table is not fatal: an index past its end reads as black, which
+	// is what a viewer shows for an out-of-range index.
+	want := (int(hival) + 1) * comps
+	if len(lookup) > want {
+		lookup = lookup[:want]
+	}
+	return palette{base: base, comps: comps, lookup: lookup}, true
+}
+
+// mustResolve resolves obj, returning it unchanged when resolution fails. The
+// callers below treat a non-numeric result as "not an indexed space" anyway.
+func mustResolve(ctx context.Context, doc *document.Document, obj ast.PdfObject) ast.PdfObject {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return obj
+	}
+	return resolved
+}
+
+// entry returns the base-space components of palette index i, padded with zero
+// (black) when the table is shorter than the index demands.
+func (p palette) entry(i byte) [4]byte {
+	var out [4]byte
+	off := int(i) * p.comps
+	for c := range p.comps {
+		if off+c < len(p.lookup) {
+			out[c] = p.lookup[off+c]
+		}
+	}
+	return out
+}
+
+// decodeIndexed builds the image of an indexed colour space, mapping each
+// one-byte sample through the palette into the base space.
+func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, error) {
+	if len(data) < width*height {
+		return nil, fmt.Errorf("decoded data too short for indexed image: got %d, want %d", len(data), width*height)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	idx := 0
+	for y := range height {
+		for x := range width {
+			e := pal.entry(data[idx])
+			idx++
+			switch pal.base {
+			case "DeviceGray":
+				img.Set(x, y, color.RGBA{R: e[0], G: e[0], B: e[0], A: 255})
+			case "DeviceCMYK":
+				c, m, yy, k := float64(e[0])/255, float64(e[1])/255, float64(e[2])/255, float64(e[3])/255
+				img.Set(x, y, color.RGBA{
+					R: uint8((1 - c) * (1 - k) * 255),
+					G: uint8((1 - m) * (1 - k) * 255),
+					B: uint8((1 - yy) * (1 - k) * 255),
+					A: 255,
+				})
+			default:
+				img.Set(x, y, color.RGBA{R: e[0], G: e[1], B: e[2], A: 255})
+			}
+		}
+	}
+	return img, nil
+}
+
 // DecodeImage decodes a named Image XObject from a page into a Go image.Image.
 // The name parameter is the resource key (e.g., "Im0") under the page's
 // /Resources /XObject dictionary.
@@ -217,6 +355,15 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 
 	if bitsPerComp != 8 {
 		return nil, fmt.Errorf("unsupported BitsPerComponent %d for image decode", bitsPerComp)
+	}
+
+	// An indexed image stores one index per pixel rather than a colour, so it
+	// is mapped through its palette before anything else looks at the bytes.
+	// Its /Decode array remaps the index range, not colour components
+	// (ISO 32000-1, 8.9.5.2), and the default [0 2^n-1] is the identity, which
+	// is what every indexed image in the corpora states.
+	if pal, ok := resolveIndexedPalette(ctx, doc, stream.Dict); ok {
+		return decodeIndexed(decodedData, width, height, pal)
 	}
 
 	// Apply the /Decode array (ISO 32000-1 §8.9.5.2) via per-component
