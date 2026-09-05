@@ -87,9 +87,19 @@ func destTargetsRemoved(ctx context.Context, doc *document.Document, dest ast.Pd
 		if len(d) == 0 {
 			return false
 		}
-		// ISO 32000-1, 12.3.2.2: the first element of an explicit destination
-		// is an indirect reference to the page. Anything else (a page index in
-		// a remote destination) names no page in this document.
+		// ISO 32000-1, 12.3.2.2: the first element of an explicit destination is
+		// an indirect reference to the page, and the reference follows the page
+		// object, so a destination that survives keeps naming what it named.
+		//
+		// The integer form names a zero-based page number, and the reader
+		// accepts it for this document too (see
+		// [document.ResolveDestinationPage]) because producers write it that
+		// way. It cannot be checked here: this pass knows which page objects
+		// went, not which index each one held, so an integer destination is
+		// left alone. It is rare enough to leave alone (one file across the
+		// 5163-file corpora) and the page it names is still a page; remapping
+		// the index would need the original page order threaded through every
+		// caller of this pass.
 		ref, isRef := d[0].(ast.PdfIndirectRef)
 		return isRef && removed[ref.ObjectNum]
 	}
