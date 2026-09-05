@@ -3,8 +3,11 @@ package annotation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"sort"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/dop251/goja"
 
@@ -361,6 +364,52 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 	return results, nil
 }
 
+// choiceValueSeparator joins the selections of a multi-select list box into the
+// single string [models.FormField] carries. Not a spec value: ISO 32000-1,
+// 12.7.4.4 stores them as an array and says nothing about presenting them.
+const choiceValueSeparator = ", "
+
+// nameValue renders a field value written as a name.
+//
+// A name is a byte sequence (ISO 32000-1, 7.3.5), so an appearance state like
+// /Off or /Yes passes through unchanged. Producers do write text there, though,
+// and pdfjs issue19753.pdf gives a checkbox a UTF-16BE name: returning the raw
+// bytes put a string that is not valid UTF-8 into [models.FormField], which the
+// JSON encoder then rendered as replacement characters. Decoding is limited to
+// the bytes that are already unusable as they stand, so every ASCII appearance
+// state keeps comparing equal to the /AP key that names it.
+func nameValue(v ast.PdfName) string {
+	if utf8.ValidString(string(v)) {
+		return string(v)
+	}
+	return document.DecodePdfString(ast.PdfString(v))
+}
+
+// joinChoiceValue renders an array /V as text.
+//
+// Per ISO 32000-1, 12.7.4.4, Table 230, a choice field's value is a text string,
+// or an array of them when the field allows multiple selection. Only the scalar
+// forms were read, so every multi-select list box reported an empty value:
+// pdfjs annotation-choice-widget.pdf holds ["Ipsum" "Amet" "Consectetur" "Elit"]
+// in one and `litho forms` printed nothing for it.
+func joinChoiceValue(ctx context.Context, doc *document.Document, arr ast.PdfArray) string {
+	parts := make([]string, 0, len(arr))
+	for _, item := range arr {
+		res, err := document.ResolveObject(ctx, doc, item)
+		if err != nil {
+			doc.Logger.Debug("resolving choice field selection", slog.Any("err", err))
+			continue
+		}
+		switch v := res.(type) {
+		case ast.PdfString:
+			parts = append(parts, document.DecodePdfString(v))
+		case ast.PdfName:
+			parts = append(parts, string(v))
+		}
+	}
+	return strings.Join(parts, choiceValueSeparator)
+}
+
 func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool) error {
 	for _, fieldObj := range fields {
 		if err := ctx.Err(); err != nil {
@@ -413,7 +462,7 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 				case "Btn":
 					// Button or Checkbox
 					if val, ok := vRes.(ast.PdfName); ok {
-						formData[fullName] = string(val)
+						formData[fullName] = nameValue(val)
 					}
 				default:
 					// Fallback for other types or missing FT
@@ -421,7 +470,9 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 					case ast.PdfString:
 						formData[fullName] = document.DecodePdfString(val)
 					case ast.PdfName:
-						formData[fullName] = string(val)
+						formData[fullName] = nameValue(val)
+					case ast.PdfArray:
+						formData[fullName] = joinChoiceValue(ctx, doc, val)
 					}
 				}
 			}
