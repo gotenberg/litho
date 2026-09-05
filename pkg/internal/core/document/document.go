@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -329,14 +330,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	headerOffset := int64(0)
 	if pdfIdx >= 0 {
 		headerOffset = int64(pdfIdx)
-		vStart := pdfIdx + len("%PDF-")
-		if vStart < len(headerBuf) {
-			vEnd := vStart
-			for vEnd < len(headerBuf) && headerBuf[vEnd] != '\n' && headerBuf[vEnd] != '\r' && headerBuf[vEnd] != ' ' && headerBuf[vEnd] != 0x00 {
-				vEnd++
-			}
-			version = string(headerBuf[vStart:vEnd])
-		}
+		version = headerVersion(headerBuf[pdfIdx+len("%PDF-"):])
 	}
 
 	if logger == nil {
@@ -528,8 +522,49 @@ func (d *Document) resetParsedObjectCaches() {
 	d.formatViolations = nil
 }
 
+// headerVersion reads the version number that follows "%PDF-" in buf.
+//
+// Per ISO 32000-1, 7.5.2 the header is "%PDF-1.N", so the version is digits, a
+// period, then digits, and the line may carry anything after that: the header
+// is a comment and the rest of the line is not part of the number. Reading to
+// the end of the line reported pdfjs issue15033.pdf, whose header is
+// "%PDF-1.3%", as version "1.3%", which is not a version and compares against
+// nothing. Poppler reads 1.3 there and litho now agrees.
+//
+// A header with no complete number ("%PDF-1." in pdfjs issue9105_other.pdf)
+// yields the empty string, the same answer a headerless file gives.
+func headerVersion(buf []byte) string {
+	i := 0
+	for i < len(buf) && buf[i] >= '0' && buf[i] <= '9' {
+		i++
+	}
+	if i == 0 || i >= len(buf) || buf[i] != '.' {
+		return ""
+	}
+	j := i + 1
+	for j < len(buf) && buf[j] >= '0' && buf[j] <= '9' {
+		j++
+	}
+	if j == i+1 {
+		return ""
+	}
+	return string(buf[:j])
+}
+
 // initCatalogVersion checks the catalog /Version key and overrides the header
-// version if present. Per PDF spec §7.2.2, the catalog version takes precedence.
+// version with it.
+//
+// Per ISO 32000-1, 7.5.2 the catalog /Version, if present, shall be used
+// instead of the version in the file header, whichever is later: Table 28 only
+// describes when a producer writes the entry. pdf.js reads it the same way,
+// with "return this.catalog.version || this.#version" in core/document.js, and
+// so does the metadata golden for pdfjs PDFJS-9279-reduced.pdf, whose header
+// says 1.7 and whose catalog says /1.4: the expected version is 1.4.
+//
+// A /Version that is not a version number is ignored rather than reported.
+// pdf.js validates it against the same shape and warns, and a caller comparing
+// the reported version against a profile requirement cannot do anything with a
+// name like /Nonsense.
 func (d *Document) initCatalogVersion(ctx context.Context) {
 	// Resolved through [Document.CatalogRef]: per ISO 32000-1 §7.5.5 Table 15
 	// /Root shall be the catalog, and reading it raw made a file whose damaged
@@ -548,9 +583,33 @@ func (d *Document) initCatalogVersion(ctx context.Context) {
 	if !ok {
 		return
 	}
-	if vName, ok := vObj.(ast.PdfName); ok {
-		d.Version = string(vName)
+	vName, ok := vObj.(ast.PdfName)
+	if !ok {
+		return
 	}
+	if !isPDFVersion(string(vName)) {
+		d.Logger.Debug("catalog /Version is not a version number", slog.String("value", string(vName)))
+		return
+	}
+	d.Version = string(vName)
+}
+
+// isPDFVersion reports whether v has the "major.minor" shape ISO 32000-1, 7.5.2
+// gives the header version and Table 28 gives the catalog entry: digits, a
+// period, digits, and nothing else.
+func isPDFVersion(v string) bool {
+	major, minor, found := strings.Cut(v, ".")
+	if !found || major == "" || minor == "" {
+		return false
+	}
+	for _, part := range []string{major, minor} {
+		for _, c := range part {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // IsLinearized reports whether the document has a linearization dictionary.
