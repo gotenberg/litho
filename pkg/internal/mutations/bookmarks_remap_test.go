@@ -123,6 +123,42 @@ func TestOffsetPages(t *testing.T) {
 	}
 }
 
+// TestOffsetPagesKeepsDestinationlessBookmarks pins that a bookmark naming no
+// page keeps naming none after the shift.
+//
+// Page number zero is what [models.Bookmark] carries when the destination is
+// null, points outside the file, or does not resolve. Adding the offset to it
+// produced a page in the PRECEDING document: merging govdocs
+// thread_400_400931.pdf with thread_400_400934.pdf sent the latter's
+// "cr2002073.pdf" bookmark, whose /Dest is [null 0 0 1], to page 5, which
+// belongs to the other file entirely.
+func TestOffsetPagesKeepsDestinationlessBookmarks(t *testing.T) {
+	bookmarks := []models.Bookmark{
+		{Title: "no destination", PageNumber: 0, Children: []models.Bookmark{
+			{Title: "child with a page", PageNumber: 3},
+			{Title: "child without one", PageNumber: 0},
+		}},
+		{Title: "has a page", PageNumber: 2},
+	}
+
+	got := OffsetPages(bookmarks, 5)
+	if got[0].PageNumber != 0 {
+		t.Errorf("a bookmark with no destination moved to page %d", got[0].PageNumber)
+	}
+	if got[0].Children[0].PageNumber != 8 {
+		t.Errorf("child with a page: got %d, want 8", got[0].Children[0].PageNumber)
+	}
+	if got[0].Children[1].PageNumber != 0 {
+		t.Errorf("child with no destination moved to page %d", got[0].Children[1].PageNumber)
+	}
+	if got[1].PageNumber != 7 {
+		t.Errorf("bookmark with a page: got %d, want 7", got[1].PageNumber)
+	}
+	if got[0].Title != "no destination" {
+		t.Errorf("title changed to %q", got[0].Title)
+	}
+}
+
 func TestWrapInRoot(t *testing.T) {
 	children := []models.Bookmark{
 		{Title: "Section A", PageNumber: 1},
