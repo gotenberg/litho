@@ -390,11 +390,19 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		defer delete(visited, nodeRef.ObjectNum)
 	}
 
-	// Merge Resources: the node's resources are merged with inherited ones.
-	// Sub-dicts (/Font, /XObject, /ExtGState, etc.) are merged so that
-	// entries from the current node take precedence, but missing entries
-	// fall back to the parent. This handles PDFs where a page defines
-	// and handles PDFs where a page defines partial resources.
+	// Merge Resources with the inherited ones: sub-dicts (/Font, /XObject,
+	// /ExtGState and the rest) are merged so an entry the node states wins and
+	// one it omits falls back to the ancestor.
+	//
+	// Deliberate leniency. ISO 32000-1, 7.7.3.4 makes /Resources inheritable,
+	// which means a node that states one replaces the ancestor's entirely, and
+	// that is what qpdf implements: it pushes an ancestor's /Resources onto a
+	// page only when the page states none. The merge instead keeps a page whose
+	// own dictionary is partial working, at the cost of listing a resource the
+	// page cannot legally name. govdocs thread_200_200147.pdf is the shape that
+	// separates the two: its page tree root states /XObject <</Im11 ...>> while
+	// most of its pages state a /Resources holding only /Font and /ColorSpace,
+	// so litho reports Im11 on every page and qpdf on only the first.
 	currentResources := mergeResourceDicts(ctx, doc, inheritedResources, node)
 
 	// Inherit or override MediaBox
