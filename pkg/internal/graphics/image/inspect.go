@@ -383,6 +383,37 @@ func resourcesOfStream(ctx context.Context, doc *document.Document, obj ast.PdfO
 	return collectImages(ctx, doc, nested, seen, depth+1)
 }
 
+// usesJPXDecode reports whether the image stream is JPEG 2000 encoded.
+//
+// /Filter is a name or an array of them (ISO 32000-1, 7.3.8.2, Table 5), and
+// JPXDecode is always the last of a chain, so any position counts.
+func usesJPXDecode(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	filterObj, ok := dict["Filter"]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, filterObj)
+	if err != nil {
+		doc.Logger.Debug("resolving image filter", slog.Any("err", err))
+		return false
+	}
+	switch v := resolved.(type) {
+	case ast.PdfName:
+		return v == "JPXDecode"
+	case ast.PdfArray:
+		for _, entry := range v {
+			name, err := document.ResolveObject(ctx, doc, entry)
+			if err != nil {
+				continue
+			}
+			if n, isName := name.(ast.PdfName); isName && n == "JPXDecode" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // imageMeta reads the metadata an Image XObject states.
 func imageMeta(ctx context.Context, doc *document.Document, name string, stream ast.PdfStream) (models.ImageMeta, bool) {
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
@@ -394,6 +425,14 @@ func imageMeta(ctx context.Context, doc *document.Document, name string, stream 
 		return models.ImageMeta{}, false
 	}
 	bitsPerComp, _ := resolveInt(ctx, doc, stream.Dict, "BitsPerComponent")
+	if usesJPXDecode(ctx, doc, stream.Dict) {
+		// Per ISO 32000-1, Table 89 the entry is optional for a JPXDecode
+		// image and shall be ignored if present: the depth comes from the
+		// JPEG 2000 codestream. pdfjs issue12213.pdf states 4 for an image
+		// poppler reads as 8, and reporting the stated value gave a caller a
+		// number the spec says means nothing.
+		bitsPerComp = 0
+	}
 	if bitsPerComp == 0 {
 		bitsPerComp = 8
 	}
