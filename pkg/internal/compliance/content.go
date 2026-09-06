@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -204,7 +205,11 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		return nil, fmt.Errorf("unexpected /Contents type: %T", resolved)
 	}
 
-	var allData []byte
+	var (
+		allData []byte
+		decoded int
+		lastErr error
+	)
 	for _, s := range streams {
 		// A stream whose /Filter chain contains an undecodable filter (e.g. a
 		// misspelled "Flatedecode") stays filter-encoded after DecodeStream.
@@ -217,10 +222,28 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		}
 		data, err := doc.DecodeStream(ctx, s)
 		if err != nil {
-			return nil, fmt.Errorf("decoding content stream: %w", err)
+			// ISO 32000-1, 7.7.3.3 lets a page split its content across an
+			// array of streams, and one truncated part says nothing about the
+			// rest. Losing the whole page for it threw away every operator the
+			// other parts hold: pdfjs issue17190_1.pdf carries 77 parts, one of
+			// them unreadable, and litho reported none of the colour and font
+			// defects veraPDF raises from the other 76. Viewers render what
+			// they can, and [content.ParsePageContent] already skips the part
+			// and keeps going.
+			doc.Logger.Debug("compliance: content stream part failed to decode; skipping",
+				slog.Any("err", err))
+			lastErr = err
+			continue
 		}
+		decoded++
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
+	}
+
+	// Nothing decoded at all is a page whose content litho cannot read, which
+	// the caller answers conservatively.
+	if decoded == 0 && lastErr != nil {
+		return nil, fmt.Errorf("decoding content stream: %w", lastErr)
 	}
 
 	return allData, nil
