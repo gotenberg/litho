@@ -2,6 +2,7 @@ package image
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -96,7 +97,7 @@ func ExtractImages(ctx context.Context, doc *document.Document, page *document.P
 const maxXObjectDepth = 16
 
 // ExtractImagesRecursive returns the images a page shows, including those drawn
-// through a form XObject.
+// through a form XObject or an annotation's appearance.
 //
 // ISO 32000-1, 8.10.1 lets a page draw its content through a form XObject, and
 // producers put images there routinely. [ExtractImages] reports only the page's
@@ -104,12 +105,145 @@ const maxXObjectDepth = 16
 // page's images saw none of the nested ones: across the pdfjs and govdocs
 // corpora that under-reported 583 pages.
 //
+// An annotation's normal appearance is a form XObject the page draws too
+// (ISO 32000-1, 12.5.5), and its resources are its own rather than the page's.
+// pdfjs firefox_logo.pdf shows a 512x543 image that way and nothing else, so
+// the page listed no images at all while poppler drew one.
+//
 // A form invoked from several places is walked once, so its images are reported
 // once. An image named twice in one resource dictionary stays two entries: the
 // listing is keyed by resource name, and both names are real placements.
 func ExtractImagesRecursive(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
 	seen := make(map[int]bool)
-	return collectImages(ctx, doc, page.Resources, seen, 0)
+	images := collectImages(ctx, doc, page.Resources, seen, 0)
+	return append(images, collectAnnotationImages(ctx, doc, page, seen)...)
+}
+
+// collectAnnotationImages reports the images an annotation draws through its
+// normal appearance stream.
+//
+// Only /N is walked: /D is the down appearance, shown while the pointer is
+// held, and /R the rollover, so neither is what the page shows at rest
+// (ISO 32000-1, 12.5.5, Table 168). An annotation the viewer does not draw is
+// skipped, which is what the Hidden and NoView flags of Table 165 mean.
+func collectAnnotationImages(ctx context.Context, doc *document.Document, page *document.Page, seen map[int]bool) []models.ImageMeta {
+	annotsObj, ok := page.Dict["Annots"]
+	if !ok {
+		return nil
+	}
+	annots, err := document.ResolveArray(ctx, doc, annotsObj)
+	if err != nil || annots == nil {
+		return nil
+	}
+
+	var images []models.ImageMeta
+	for _, annotObj := range annots {
+		if ctx.Err() != nil {
+			return images
+		}
+		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+		if err != nil || annotDict == nil {
+			continue
+		}
+		if annotationIsInvisible(ctx, doc, annotDict) {
+			continue
+		}
+		stream, ref, ok := normalAppearance(ctx, doc, annotDict)
+		if !ok {
+			continue
+		}
+		// One appearance form shared by several annotations holds the same
+		// images each time, the rule a form invoked from several places in the
+		// page content already follows.
+		if ref.ObjectNum != 0 {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+		}
+		resources, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if err != nil || resources == nil {
+			continue
+		}
+		images = append(images, collectImages(ctx, doc, resources, seen, 1)...)
+	}
+	return images
+}
+
+// Annotation flags that keep a viewer from drawing the annotation at all
+// (ISO 32000-1, Table 165): bit 2 is Hidden and bit 6 is NoView.
+const (
+	annotFlagHidden = 1 << 1
+	annotFlagNoView = 1 << 5
+)
+
+// annotationIsInvisible reports whether the annotation's /F flags keep it off
+// the page.
+func annotationIsInvisible(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	fObj, ok := annotDict["F"]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, fObj)
+	if err != nil {
+		doc.Logger.Debug("resolving annotation flags", slog.Any("err", err))
+		return false
+	}
+	flags, isNum := document.Number(resolved)
+	if !isNum {
+		return false
+	}
+	return int(flags)&(annotFlagHidden|annotFlagNoView) != 0
+}
+
+// normalAppearance returns the stream an annotation's /AP /N names, and the
+// reference it was reached through so a shared appearance is walked once. The
+// appearance state in /AS selects the stream when /N holds a dictionary.
+func normalAppearance(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (ast.PdfStream, ast.PdfIndirectRef, bool) {
+	var none ast.PdfIndirectRef
+	apDict, err := document.ResolveDict(ctx, doc, annotDict["AP"])
+	if err != nil || apDict == nil {
+		return ast.PdfStream{}, none, false
+	}
+	nObj, ok := apDict["N"]
+	if !ok {
+		return ast.PdfStream{}, none, false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, nObj)
+	if err != nil {
+		doc.Logger.Debug("resolving annotation appearance", slog.Any("err", err))
+		return ast.PdfStream{}, none, false
+	}
+	switch v := resolved.(type) {
+	case ast.PdfStream:
+		ref, _ := nObj.(ast.PdfIndirectRef)
+		return v, ref, true
+	case ast.PdfDict:
+		state, ok := annotDict["AS"].(ast.PdfName)
+		if !ok {
+			// Without /AS the state is ambiguous, unless there is only one.
+			if len(v) != 1 {
+				return ast.PdfStream{}, none, false
+			}
+			for name := range v {
+				state = name
+			}
+		}
+		stateObj, ok := v[state]
+		if !ok {
+			return ast.PdfStream{}, none, false
+		}
+		stateRes, err := document.ResolveObject(ctx, doc, stateObj)
+		if err != nil {
+			doc.Logger.Debug("resolving annotation appearance state", slog.Any("err", err))
+			return ast.PdfStream{}, none, false
+		}
+		if s, ok := stateRes.(ast.PdfStream); ok {
+			ref, _ := stateObj.(ast.PdfIndirectRef)
+			return s, ref, true
+		}
+	}
+	return ast.PdfStream{}, none, false
 }
 
 // collectImages walks a resource dictionary, reporting its Image XObjects and
