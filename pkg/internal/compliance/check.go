@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -50,7 +51,11 @@ func (p *pageCtx) parsedOps(ctx context.Context) []content.Operation {
 		if len(p.content) > 0 {
 			ops, err := content.ParseStreamData(ctx, p.content)
 			p.ops = ops // Parse failure yields nil ops; checks run on whatever is available.
-			p.parseFailed = err != nil
+			if err != nil {
+				// Assigning the comparison would clear the flag a failed decode
+				// already set on a page whose bytes never reached the parser.
+				p.parseFailed = true
+			}
 		}
 	})
 	return p.ops
@@ -143,11 +148,25 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 		if res == nil {
 			res = inheritedRes
 		}
-		contentBytes, _ := resolvePageContentBytes(ctx, doc, page)
+		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, page)
 		vctx.pages[i] = pageCtx{
 			dict:      page,
 			resources: res,
 			content:   contentBytes,
+			// A page whose /Contents is present but will not decode has content
+			// litho cannot read, which is the case the per-font and per-colour
+			// skips call "present but unparseable" and answer conservatively.
+			// Discarding the error left it looking like a page with no content
+			// at all, so every font declared on it was skipped as unused:
+			// pdfjs issue17190_1.pdf holds one unembedded TrueType font behind a
+			// truncated Flate stream, and litho reported none of the embedding
+			// violation veraPDF raises.
+			//
+			// An undecodable FILTER is excluded. veraPDF does not parse that
+			// stream either, so checking every declared font against it would
+			// report defects veraPDF never raises; the filter itself is already
+			// reported by its own rule.
+			parseFailed: contentErr != nil && !errors.Is(contentErr, errUndecodableContent),
 		}
 	}
 
