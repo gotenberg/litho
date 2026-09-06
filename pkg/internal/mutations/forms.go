@@ -494,6 +494,22 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			continue
 		}
 
+		// A widget the viewer does not display must not be painted into the
+		// page. Per ISO 32000-1, Table 165 the Hidden flag (bit 2) means the
+		// annotation is neither displayed nor printed, and NoView (bit 6) means
+		// it is not displayed but still printed. Baking either one in makes it
+		// visible for good, which for a hidden field puts a value on the page
+		// that nobody could see before: flattening pdfjs
+		// annotation_hidden_noview.pdf drew both its hidden and its no-view text
+		// field, and poppler renders neither in the original.
+		//
+		// The annotation is kept rather than dropped. Hidden shows nothing
+		// either way, but NoView still prints, and dropping it would lose that.
+		if annotationHiddenOrNoView(ctx, doc, annotDict) {
+			remainingAnnots = append(remainingAnnots, annotObj)
+			continue
+		}
+
 		// A widget litho cannot bake into the page keeps its annotation. There is
 		// nothing to draw in its place, so dropping it deletes whatever it showed:
 		// pdfjs annotation-tx.pdf holds a text field with a value and no /AP at
@@ -593,6 +609,32 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 	}
 
 	alloc.AllocAt(page.Ref.ObjectNum, newDict)
+}
+
+// Annotation flags that keep a viewer from showing the annotation on screen
+// (ISO 32000-1, Table 165): bit 2 is Hidden and bit 6 is NoView.
+const (
+	annotFlagHidden = 1 << 1
+	annotFlagNoView = 1 << 5
+)
+
+// annotationHiddenOrNoView reports whether the annotation's /F flags keep it
+// off the displayed page.
+func annotationHiddenOrNoView(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	fObj, ok := annotDict["F"]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, fObj)
+	if err != nil {
+		doc.Logger.Debug("resolving annotation flags during flatten", slog.Any("err", err))
+		return false
+	}
+	flags, isNum := document.Number(resolved)
+	if !isNum {
+		return false
+	}
+	return int(flags)&(annotFlagHidden|annotFlagNoView) != 0
 }
 
 // resolveWidgetAppearance extracts the /N appearance stream from a
