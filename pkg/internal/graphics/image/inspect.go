@@ -247,18 +247,21 @@ func normalAppearance(ctx context.Context, doc *document.Document, annotDict ast
 }
 
 // collectImages walks a resource dictionary, reporting its Image XObjects and
-// descending into its form XObjects.
+// descending into its form XObjects, tiling patterns and soft-mask groups.
 func collectImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int) []models.ImageMeta {
 	if depth > maxXObjectDepth || ctx.Err() != nil {
 		return nil
 	}
+
+	images := collectNestedResourceImages(ctx, doc, resources, seen, depth)
+
 	xobjObj, ok := resources["XObject"]
 	if !ok {
-		return nil
+		return images
 	}
 	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
 	if err != nil || xobjDict == nil {
-		return nil
+		return images
 	}
 
 	// Sorted, so the listing does not depend on Go's map order.
@@ -268,7 +271,6 @@ func collectImages(ctx context.Context, doc *document.Document, resources ast.Pd
 	}
 	sort.Strings(names)
 
-	var images []models.ImageMeta
 	for _, nameStr := range names {
 		obj := xobjDict[ast.PdfName(nameStr)]
 		stream, err := document.ResolveStream(ctx, doc, obj)
@@ -304,6 +306,81 @@ func collectImages(ctx context.Context, doc *document.Document, resources ast.Pd
 		}
 	}
 	return images
+}
+
+// collectNestedResourceImages reports the images reachable from a resource
+// dictionary other than through its /XObject entry.
+//
+// A tiling pattern is a content stream with its own resources (ISO 32000-1,
+// 8.7.3.1), and a soft mask names a transparency group XObject in /G that is
+// painted to derive the mask (11.6.5.2, Table 144). Both put images on the page
+// without ever appearing in the page's /XObject dictionary: pdfjs
+// issue18956.pdf shows a 728x90 image through an /ExtGState soft mask and
+// nothing else, and issue16395.pdf paints its images through a pattern, so both
+// listed no images at all while poppler drew them.
+func collectNestedResourceImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int) []models.ImageMeta {
+	var images []models.ImageMeta
+	for _, key := range []ast.PdfName{"Pattern", "ExtGState"} {
+		entryObj, ok := resources[key]
+		if !ok {
+			continue
+		}
+		entries, err := document.ResolveDict(ctx, doc, entryObj)
+		if err != nil || entries == nil {
+			continue
+		}
+		names := make([]string, 0, len(entries))
+		for name := range entries {
+			names = append(names, string(name))
+		}
+		sort.Strings(names)
+
+		for _, nameStr := range names {
+			if ctx.Err() != nil {
+				return images
+			}
+			obj := entries[ast.PdfName(nameStr)]
+			if key == "Pattern" {
+				images = append(images, resourcesOfStream(ctx, doc, obj, seen, depth)...)
+				continue
+			}
+			state, err := document.ResolveDict(ctx, doc, obj)
+			if err != nil || state == nil {
+				continue
+			}
+			smask, err := document.ResolveDict(ctx, doc, state["SMask"])
+			if err != nil || smask == nil {
+				// /SMask is /None on most graphics states, which resolves to no
+				// dictionary and means no mask at all.
+				continue
+			}
+			images = append(images, resourcesOfStream(ctx, doc, smask["G"], seen, depth)...)
+		}
+	}
+	return images
+}
+
+// resourcesOfStream walks the /Resources of the stream obj names, once per
+// stream object.
+func resourcesOfStream(ctx context.Context, doc *document.Document, obj ast.PdfObject, seen map[int]bool, depth int) []models.ImageMeta {
+	if obj == nil {
+		return nil
+	}
+	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+		if seen[ref.ObjectNum] {
+			return nil
+		}
+		seen[ref.ObjectNum] = true
+	}
+	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err != nil || stream.Dict == nil {
+		return nil
+	}
+	nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if err != nil || nested == nil {
+		return nil
+	}
+	return collectImages(ctx, doc, nested, seen, depth+1)
 }
 
 // imageMeta reads the metadata an Image XObject states.
