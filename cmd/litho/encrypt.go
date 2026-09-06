@@ -61,7 +61,7 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	}
 
 	if err := w.WriteTo(ctx, dst); err != nil {
-		closeDst() //nolint:errcheck // already returning an error; a close failure would mask its cause
+		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError
 	}

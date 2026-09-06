@@ -91,6 +91,26 @@ func createOutput(path string) (io.Writer, func() error, error) {
 	return f, f.Close, nil
 }
 
+// abandonOutput closes a failed write and removes what it left behind.
+//
+// createOutput truncates the destination the moment it opens it, so a write
+// that fails partway leaves a short or empty file exactly where the caller
+// asked for the result, over the top of whatever was there before. A user who
+// checks the exit code is safe, but the file on disk is not a PDF and looks
+// like one: `litho flatten-form -o out.pdf` on pdfjs issue19484_1.pdf, whose
+// object stream will not inflate, left a zero-byte out.pdf behind.
+//
+// Writing to stdout removes nothing, since there is no file to withdraw.
+func abandonOutput(path string, closeDst func() error) {
+	if closeDst != nil {
+		closeDst() //nolint:errcheck // already returning an error; a close failure would mask its cause
+	}
+	if path == "" || path == "-" {
+		return
+	}
+	os.Remove(path) //nolint:errcheck // best-effort withdrawal of a file that is already unusable
+}
+
 // runSimpleMutation handles commands that open a PDF, apply a single
 // mutation via mutate, and write the result. The usage string is shown
 // when required args are missing.
@@ -126,7 +146,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	}
 
 	if err := w.WriteTo(ctx, dst); err != nil {
-		closeDst() //nolint:errcheck // best-effort cleanup on write failure
+		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError
 	}
