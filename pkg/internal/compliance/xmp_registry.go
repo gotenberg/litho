@@ -560,7 +560,11 @@ func validateXMPValue(propType xmpPropType, value string) bool {
 	case xmpPropURI:
 		return isValidXMPURI(value)
 	case xmpPropText:
-		return strings.TrimSpace(value) != ""
+		// Per ISO 16684-1, Text is any sequence of Unicode characters, so every
+		// value matches the type: a blank one is a conforming Text value, not a
+		// type mismatch. Acrobat Distiller 6.0.1 emits pdf:Keywords=' ' (govdocs
+		// thread_300_300483.pdf) and veraPDF passes it.
+		return true
 	case xmpPropAlt, xmpPropSeq, xmpPropBag, xmpPropStruct, xmpPropAny:
 		return true // Containers and structs validated separately.
 	}
