@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -475,6 +476,12 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
 		return nil
 	}
+	// A Type3 font's glyph programs are its /CharProcs, not a font file, so
+	// [simpleFontGlyphMetrics] has nothing to read and presence is decided
+	// against the procedure dictionary instead.
+	if isType3Font(ctx, doc, fontDict) {
+		return checkType3GlyphPresence(ctx, doc, fontDict, fontName, pageNum, rule, usage)
+	}
 	_, _, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
 	if !ok || charCodeToGID == nil {
 		return nil
@@ -483,6 +490,48 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 		gid, mapped := charCodeToGID[uint16(code)]
 		if mapped && gid == 0 {
 			return failf(rule, "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
+		}
+	}
+	return nil
+}
+
+// checkType3GlyphPresence validates that every character code a Type3 font
+// shows names a glyph procedure the font defines. Per ISO 32000-1 §9.6.5 a
+// Type3 glyph is looked up by mapping the code through /Encoding to a name and
+// that name through /CharProcs to a procedure; a code the encoding leaves
+// undefined, or one naming an absent procedure, paints nothing, which is the
+// same "no glyph in the program" condition the presence rule states. veraPDF
+// reports it under ISO 19005-2 §6.2.11.4.1 t2: pdfjs Type3WordSpacing.pdf
+// shows a space its font defines no procedure for.
+//
+// A font whose /CharProcs or /Encoding will not resolve is left unchecked,
+// since presence is then unanswerable rather than failed.
+func checkType3GlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+	charProcs, err := document.ResolveDict(ctx, doc, fontDict["CharProcs"])
+	if err != nil || len(charProcs) == 0 {
+		return nil
+	}
+	encoding := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	if len(encoding) == 0 {
+		return nil
+	}
+
+	// Sorted so a font missing several glyphs always names the same one.
+	codes := make([]byte, 0, len(usage.charCodes))
+	for code := range usage.charCodes {
+		codes = append(codes, code)
+	}
+	slices.Sort(codes)
+
+	for _, code := range codes {
+		glyphName := encoding[code]
+		if glyphName == "" {
+			return failf(rule, "font %s on page %d: charCode %d is not defined by the Type3 /Encoding",
+				fontName, pageNum, code)
+		}
+		if _, ok := charProcs[ast.PdfName(glyphName)]; !ok {
+			return failf(rule, "font %s on page %d: glyph %s for charCode %d has no /CharProcs entry",
+				fontName, pageNum, glyphName, code)
 		}
 	}
 	return nil
