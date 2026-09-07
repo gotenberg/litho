@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -416,6 +417,9 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 						continue
 					}
 				}
+				if !streamHoldsFontProgram(ctx, doc, key, stream) {
+					continue
+				}
 				return true
 			}
 			// Non-null, non-stream: treat as present but invalid (still "embedded"
@@ -426,6 +430,66 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 				}
 			}
 		}
+	}
+	return false
+}
+
+// streamHoldsFontProgram reports whether a font file stream actually carries a
+// font program of the kind its key declares. Per ISO 32000-1, Table 126,
+// /FontFile holds a Type 1 program, /FontFile2 a TrueType program, and
+// /FontFile3 the program its /Subtype names, so a stream that decodes to
+// nothing, or to a different container entirely, embeds no glyphs a consumer
+// can read and leaves the font unembedded. veraPDF reports each of these under
+// ISO 19005-2 §6.2.11.4.1 t1.
+//
+// Only container-level mistakes are judged, never the program's internal
+// consistency: a truncated but well-formed program still embeds glyphs, and
+// deciding otherwise would turn every parser difference into a false positive.
+func streamHoldsFontProgram(ctx context.Context, doc *document.Document, key ast.PdfName, stream ast.PdfStream) bool {
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		// A program whose bytes will not decode says nothing about which
+		// container it holds, and veraPDF still counts the font as embedded:
+		// pdfjs poppler-395-0-fuzzed.pdf carries a /FontFile2 with corrupt
+		// ASCIIHex data that it passes. Leave it embedded rather than guess.
+		doc.Logger.Debug("compliance: fonts: font program will not decode",
+			"key", key, "error", err)
+		return true
+	}
+	if len(data) == 0 {
+		// pdfjs bug866395.pdf carries an empty /FontFile3.
+		return false
+	}
+
+	switch key {
+	case "FontFile":
+		// A Type 1 program is the clear, encrypted and fixed portions measured
+		// by /Length1, /Length2 and /Length3 (ISO 32000-1 §9.9.1). The PFB
+		// container wraps those in 6-byte segment headers starting 0x80 0x01,
+		// which is a different file format: pdfjs bug860632.pdf and
+		// issue14462_reduced.pdf embed one.
+		return !bytes.HasPrefix(data, []byte{0x80, 0x01})
+	case "FontFile2":
+		// A TrueType program is an sfnt. "ttcf" is a TrueType Collection, which
+		// holds several fonts and names none of them, so it is not the single
+		// program Table 126 asks for: pdfjs issue13193.pdf and
+		// issue9262_reduced.pdf embed one.
+		return isSfntFontProgram(data)
+	}
+	return true
+}
+
+// isSfntFontProgram reports whether data begins with an sfnt version this
+// specification defines for a single font: 0x00010000 for TrueType outlines,
+// "true" for the Apple variant, or "OTTO" for CFF outlines (ISO 32000-1 §9.9,
+// OpenType 1.8 §Table Directory). A "ttcf" collection is deliberately excluded.
+func isSfntFontProgram(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	switch string(data[:4]) {
+	case "\x00\x01\x00\x00", "true", "OTTO":
+		return true
 	}
 	return false
 }
