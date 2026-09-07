@@ -217,6 +217,7 @@ func (d *Document) LockValidationRun() func() {
 // DecodeStream decodes a [ast.PdfStream] through the document's filter pipeline.
 // Context is checked between decompression chunks to allow cancellation.
 func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
+	stream = d.resolveStreamFilterKeys(ctx, stream)
 	if d.Filters != nil {
 		return d.Filters.DecodeStream(ctx, stream)
 	}
@@ -232,10 +233,88 @@ func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]by
 
 // NewStreamReader returns a lazy [io.ReadCloser] using the document's filter decoder.
 func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
+	stream = d.resolveStreamFilterKeys(ctx, stream)
 	if d.Filters != nil {
 		return d.Filters.NewStreamReader(ctx, stream)
 	}
 	return filter.NewStreamReader(ctx, stream)
+}
+
+// resolveStreamFilterKeys returns stream with its /Filter and /DecodeParms
+// entries resolved to direct objects, copying the dictionary only when a
+// reference is actually found.
+//
+// Per ISO 32000-1, 7.3.10, any value may be written as an indirect reference
+// unless a table says otherwise, and Table 5 places no such restriction on
+// either key. The filter pipeline sees only the dictionary and cannot resolve
+// anything, so a stream whose /Filter is a reference decoded to nothing:
+// pdfjs bug1727053.pdf writes /Filter 3 0 R for its embedded font program,
+// which left the whole 751 KB TrueType program unreadable.
+func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfStream) ast.PdfStream {
+	if stream.Dict == nil {
+		return stream
+	}
+	var resolvedDict ast.PdfDict
+	for _, key := range []ast.PdfName{"Filter", "DecodeParms"} {
+		value, ok := stream.Dict[key]
+		if !ok {
+			continue
+		}
+		direct, changed := d.resolveFilterValue(ctx, value)
+		if !changed {
+			continue
+		}
+		if resolvedDict == nil {
+			resolvedDict = make(ast.PdfDict, len(stream.Dict))
+			maps.Copy(resolvedDict, stream.Dict)
+		}
+		resolvedDict[key] = direct
+	}
+	if resolvedDict == nil {
+		return stream
+	}
+	stream.Dict = resolvedDict
+	return stream
+}
+
+// resolveFilterValue resolves an indirect /Filter or /DecodeParms value, and
+// any indirect element of an array reached that way. Reports whether anything
+// changed so the caller can leave the stream untouched in the common case. A
+// reference that will not resolve is left alone for the pipeline to reject.
+func (d *Document) resolveFilterValue(ctx context.Context, obj ast.PdfObject) (ast.PdfObject, bool) {
+	changed := false
+	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+		direct, err := d.Resolve(ctx, ref)
+		if err != nil {
+			d.Logger.Debug("cannot resolve indirect stream filter entry", "error", err)
+			return obj, false
+		}
+		obj, changed = direct, true
+	}
+	arr, isArray := obj.(ast.PdfArray)
+	if !isArray {
+		return obj, changed
+	}
+	// An array may name its filters through references of its own.
+	var out ast.PdfArray
+	for i, item := range arr {
+		ref, isRef := item.(ast.PdfIndirectRef)
+		if !isRef {
+			continue
+		}
+		direct, err := d.Resolve(ctx, ref)
+		if err != nil {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(arr)
+		}
+		out[i] = direct
+	}
+	if out == nil {
+		return obj, changed
+	}
+	return out, true
 }
 
 // OpenFunc returns a lazy Open closure for a PDF stream. The returned
