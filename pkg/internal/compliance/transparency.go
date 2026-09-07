@@ -980,11 +980,27 @@ func type3CharProcTransparent(ctx context.Context, doc *document.Document, charP
 			if err != nil {
 				continue
 			}
-			if st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); st != "Form" {
-				continue
-			}
-			if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
-				if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
+			switch st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); st {
+			case "Image":
+				// A glyph procedure that paints a soft-masked image makes the
+				// page transparent exactly as the page content would (ISO
+				// 32000-1 §11.6.5): pdfjs issue10717.pdf keeps its /SMask
+				// images in the Type3 font's own /Resources, where only this
+				// walk reaches them.
+				if _, ok := stream.Dict["SMask"]; ok {
+					return true
+				}
+				if document.Float(stream.Dict["SMaskInData"]) > 0 {
+					return true
+				}
+			case "Form":
+				if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
+					if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
+						return true
+					}
+				}
+				formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+				if resourcesUseTransparency(ctx, doc, formRes, 0, map[string]bool{}) {
 					return true
 				}
 			}
@@ -1057,6 +1073,18 @@ func pageHasBlendingCS(ctx context.Context, doc *document.Document, page ast.Pdf
 		return false
 	}
 
-	_, hasCS := group["CS"]
-	return hasCS
+	csObj, hasCS := group["CS"]
+	if !hasCS {
+		return false
+	}
+	// Per ISO 32000-1 §7.3.9 an indirect reference to a non-existent object is
+	// the null object, and per §7.3.7 a dictionary entry whose value is null is
+	// equivalent to the entry being absent. pdfjs issue11045.pdf points its
+	// group /CS at a free object, so the page has no blending colour space and
+	// still owes ISO 19005-2 §6.2.10 t2 an answer.
+	cs, err := document.ResolveObject(ctx, doc, csObj)
+	if err != nil {
+		return false
+	}
+	return !isNullObject(cs)
 }
