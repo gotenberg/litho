@@ -508,6 +508,42 @@ func differencesGlyphNames(ctx context.Context, doc *document.Document, encDict 
 // code above octal 40 maps to the bullet character instead.
 const winAnsiBulletFloor = 0o40
 
+// annexDGlyphNames holds the codes whose ISO 32000-1, Annex D.2 glyph name is
+// not the Adobe Glyph List name for the Unicode value the same table assigns
+// the code. Annex D defines the predefined encodings by glyph name, so
+// recovering a name by round-tripping the code's rune through
+// [encodings.RuneToGlyph] is only a shortcut: it agrees for every other code
+// but yields a synthetic uniXXXX name here, which no font charset carries.
+// WinAnsiEncoding encodes SPACE at 240 and HYPHEN at 255 on top of their usual
+// codes, and MacRomanEncoding names its mathematical and symbol slots. The
+// values match veraPDF's own table (org.verapdf.pd.font.truetype
+// .TrueTypePredefined) glyph for glyph.
+var annexDGlyphNames = map[string]map[byte]string{
+	"WinAnsiEncoding": {
+		0o240: "space",
+		0o255: "hyphen",
+	},
+	"MacRomanEncoding": {
+		0o255: "notequal",
+		0o260: "infinity",
+		0o262: "lessequal",
+		0o263: "greaterequal",
+		0o266: "partialdiff",
+		0o267: "summation",
+		0o270: "product",
+		0o271: "pi",
+		0o272: "integral",
+		0o275: "Omega",
+		0o303: "radical",
+		0o305: "approxequal",
+		0o306: "Delta",
+		0o312: "space",
+		0o327: "lozenge",
+		0o333: "currency",
+		0o360: "apple",
+	},
+}
+
 // predefinedEncodingNames returns a charCode → glyphName mapping for a
 // named PDF encoding.
 func predefinedEncodingNames(name string) map[byte]string {
@@ -528,6 +564,7 @@ func predefinedEncodingNames(name string) map[byte]string {
 			result[code] = glyphName
 		}
 	}
+	maps.Copy(result, annexDGlyphNames[name])
 	// Per ISO 32000-1, Annex D.2, all unused WinAnsiEncoding codes greater than
 	// octal 40 map to the bullet character. Reading those codes as undefined
 	// reported a .notdef reference where the encoding in fact selects a glyph.
