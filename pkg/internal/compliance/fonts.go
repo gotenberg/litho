@@ -194,6 +194,11 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// same font rules there; litho matches by walking invoked forms.
 		xobjVisited := make(map[int]bool)
 		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
+
+		// A Type3 glyph procedure is another content stream that may select
+		// fonts of its own, and the page walk above stops at the Type3 font
+		// itself. veraPDF applies the font rules inside those procedures too.
+		results = append(results, checkType3CharProcFonts(ctx, doc, p.parsedOps(ctx), p.resources, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
 	}
 
 	doc.Logger.Debug("compliance: fonts: font checks complete",
@@ -372,6 +377,106 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, pageNum, profile, checkedObjs, visited, depth+1)...)
 	}
 	return results
+}
+
+// checkType3CharProcFonts checks fonts used for rendering inside the glyph
+// procedures of a Type3 font that a content stream selects. A Type3 glyph
+// procedure is a content stream in its own right (ISO 32000-1 §9.6.5) and may
+// select fonts from the Type3 font's own /Resources, including another Type3
+// font. veraPDF descends through those procedures and applies the same font
+// rules to what they select, so a non-embedded font reached only that way
+// (ISO 19005-2 §6.2.11.4.1) is otherwise never checked: pdfjs
+// ContentStreamCycleType3insideType3.pdf reaches an unembedded Helvetica
+// through two nested Type3 fonts.
+//
+// Only the procedures for character codes the stream actually shows are
+// walked, so a glyph that is never painted brings no font into scope.
+// Recursion is bounded by [maxFormXObjectDepth]; visited holds the object
+// numbers already descended into, which breaks the resource cycle the fixture
+// name warns about. Object numbers are unique document-wide, so sharing one
+// visited set with the Form XObject walk cannot confuse a font for a form.
+func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+		return nil
+	}
+	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
+	if len(fontDict) == 0 {
+		return nil
+	}
+	usage := collectFontUsage(ops)
+
+	var results []Violation
+	for _, fontName := range sortedNames(fontDict) {
+		fontUsage := usage[string(fontName)]
+		// A Type3 font shown only in rendering mode 3 paints nothing, so its
+		// glyph procedures select nothing for rendering.
+		if fontUsage == nil || !fontUsage.visible || len(fontUsage.charCodes) == 0 {
+			continue
+		}
+		fontRef := fontDict[fontName]
+		if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				continue
+			}
+			visited[ref.ObjectNum] = true
+		}
+		font, err := document.ResolveDict(ctx, doc, fontRef)
+		if err != nil || font == nil {
+			continue
+		}
+		if subtype, _ := document.ResolveName(ctx, doc, font["Subtype"]); subtype != "Type3" {
+			continue
+		}
+		// Per ISO 32000-1, Table 112, /Resources is optional: a procedure may
+		// instead rely on the resources in effect where the font is used. litho
+		// has no such font to attribute a violation to, so leave it unchecked
+		// rather than risk a false positive.
+		t3Res, _ := document.ResolveDict(ctx, doc, font["Resources"])
+		if t3Res == nil {
+			continue
+		}
+		charProcs, _ := document.ResolveDict(ctx, doc, font["CharProcs"])
+		if len(charProcs) == 0 {
+			continue
+		}
+		encoding := resolveSimpleFontEncoding(ctx, doc, font)
+		for _, glyphName := range shownGlyphNames(encoding, fontUsage.charCodes) {
+			stream, err := document.ResolveStream(ctx, doc, charProcs[ast.PdfName(glyphName)])
+			if err != nil {
+				continue
+			}
+			data, err := doc.DecodeStream(ctx, stream)
+			if err != nil {
+				doc.Logger.Debug("compliance: fonts: cannot decode Type3 CharProc",
+					"page", pageNum, "glyph", glyphName, "error", err)
+				continue
+			}
+			procOps, err := content.ParseStreamData(ctx, data)
+			if err != nil {
+				doc.Logger.Debug("compliance: fonts: cannot parse Type3 CharProc",
+					"page", pageNum, "glyph", glyphName, "error", err)
+				continue
+			}
+			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, pageNum, profile, checkedObjs)...)
+			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, pageNum, profile, checkedObjs, visited, depth+1)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, pageNum, profile, checkedObjs, visited, depth+1)...)
+		}
+	}
+	return results
+}
+
+// shownGlyphNames returns, sorted, the glyph names a Type3 font's encoding
+// gives the character codes a content stream shows. A code the encoding leaves
+// unmapped names no procedure and is skipped.
+func shownGlyphNames(encoding map[byte]string, charCodes map[byte]bool) []string {
+	names := make([]string, 0, len(charCodes))
+	for code := range charCodes {
+		if name := encoding[code]; name != "" {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
 }
 
 // checkResourceFonts runs the full single-font check suite over the fonts a
