@@ -416,9 +416,18 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 		// Encoding dict with /Differences.
 		if encDict, err := document.ResolveDict(ctx, doc, encObj); err == nil && encDict != nil {
 			result := make(map[byte]string)
-			// Start from BaseEncoding if present.
+			// Start from BaseEncoding if present. Absent, /Differences describes
+			// differences from an implicit base encoding, which for an embedded
+			// program is that program's built-in encoding (ISO 32000-1, Table
+			// 114, BaseEncoding). A subset CFF names only a handful of codes in
+			// /Differences and leaves the rest to its own encoding: govdocs
+			// thread_000_000364.pdf maps codes 9, 10, 13, 127 and 128 there and
+			// every printing code in the CFF, so dropping the base leaves the
+			// shown codes unresolved and the width check silent.
 			if baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"]); err == nil && baseName != "" {
 				maps.Copy(result, predefinedEncodingNames(string(baseName)))
+			} else {
+				maps.Copy(result, builtinProgramEncoding(ctx, doc, fontDict))
 			}
 			maps.Copy(result, differencesGlyphNames(ctx, doc, encDict))
 			if len(result) > 0 {
@@ -427,31 +436,39 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 		}
 	}
 
-	// Priority 2: Type 1 font program built-in encoding (/FontFile).
+	return builtinProgramEncoding(ctx, doc, fontDict)
+}
+
+// builtinProgramEncoding returns the charCode → glyphName mapping an embedded
+// Type 1 (/FontFile) or CFF (/FontFile3) program carries in its own encoding.
+// Returns nil when the descriptor holds no such program or it cannot be read.
+func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
-	if fd != nil {
-		if fontFileObj, ok := fd["FontFile"]; ok {
-			stream, err := document.ResolveStream(ctx, doc, fontFileObj)
+	if fd == nil {
+		return nil
+	}
+	if fontFileObj, ok := fd["FontFile"]; ok {
+		stream, err := document.ResolveStream(ctx, doc, fontFileObj)
+		if err == nil {
+			data, err := doc.DecodeStream(ctx, stream)
 			if err == nil {
-				data, err := doc.DecodeStream(ctx, stream)
-				if err == nil {
-					return typography.ExtractType1EncodingNames(data)
+				if enc := typography.ExtractType1EncodingNames(data); len(enc) > 0 {
+					return enc
 				}
 			}
 		}
+	}
 
-		// Priority 3: CFF (Type1C /FontFile3) font program built-in encoding.
-		// A subset CFF with no PDF /Encoding still carries its own code→glyph
-		// mapping; without it the code cannot be resolved and callers fall back
-		// to an identity GID that reads the wrong glyph's metrics.
-		if fontFile3Obj, ok := fd["FontFile3"]; ok {
-			stream, err := document.ResolveStream(ctx, doc, fontFile3Obj)
+	// A subset CFF with no PDF /Encoding still carries its own code→glyph
+	// mapping; without it the code cannot be resolved and callers fall back
+	// to an identity GID that reads the wrong glyph's metrics.
+	if fontFile3Obj, ok := fd["FontFile3"]; ok {
+		stream, err := document.ResolveStream(ctx, doc, fontFile3Obj)
+		if err == nil {
+			data, err := doc.DecodeStream(ctx, stream)
 			if err == nil {
-				data, err := doc.DecodeStream(ctx, stream)
-				if err == nil {
-					if enc := typography.ExtractCFFEncodingNames(data); len(enc) > 0 {
-						return enc
-					}
+				if enc := typography.ExtractCFFEncodingNames(data); len(enc) > 0 {
+					return enc
 				}
 			}
 		}
