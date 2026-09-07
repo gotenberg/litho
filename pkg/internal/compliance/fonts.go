@@ -1365,8 +1365,11 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// resolves to .notdef and to no glyph in the embedded program. The
 		// glyph-presence half needs an embedded program to be missing from;
 		// see [type0HasEmbeddedProgram].
+		// renderingMode == 3 exempts the glyph-presence half, which asks only
+		// about glyphs referenced for rendering; the .notdef rule carries no
+		// such exemption.
 		results := failf(rule, "font %s on page %d: text renders .notdef (odd-length code tail or CID beyond 65535)", fontName, pageNum)
-		if pr := glyphPresenceRule(profile); pr.Specification != "" && type0HasEmbeddedProgram(ctx, doc, fontDict) {
+		if pr := glyphPresenceRule(profile); pr.Specification != "" && usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
 			results = append(results, failf(pr,
 				"font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)...)
 		}
@@ -1417,9 +1420,14 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 				// A used CID absent from the CFF charset has no glyph in
 				// the program, so both the .notdef rule and the
 				// glyph-presence rule apply: the code renders .notdef and
-				// no glyph is present for it.
+				// no glyph is present for it. Glyph presence asks only about
+				// glyphs referenced for rendering, so renderingMode == 3
+				// exempts it, as in the CIDFontType2 branch below; the
+				// .notdef rule keeps firing. veraPDF reports 6.2.11.8 and not
+				// 6.2.11.4.1 on govdocs thread_200_200565.pdf, whose 411 show
+				// operators are all mode 3.
 				results := failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
-				if pr := glyphPresenceRule(profile); pr.Specification != "" {
+				if pr := glyphPresenceRule(profile); pr.Specification != "" && usage.visible {
 					results = append(results, failf(pr,
 						"font %s on page %d: CID %d not present in embedded font program", fontName, pageNum, cid)...)
 				}
