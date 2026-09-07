@@ -654,9 +654,15 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 						return true
 					}
 				}
-				// Transparency in the appearance's own resources.
+				// Transparency in the appearance's own resources. This walks the
+				// same tree as the page pass: an appearance routinely paints a
+				// soft-masked image or a transparency-group form rather than
+				// setting an ExtGState, and veraPDF counts those toward the
+				// page's containsTransparency (pdfjs annotation-as.pdf carries
+				// image /SMask entries, stamps.pdf a /Group /S /Transparency,
+				// and both fail ISO 19005-2 §6.2.10 t2 there).
 				if apRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && apRes != nil {
-					if resourcesHaveTransparency(ctx, doc, apRes) {
+					if resourcesUseTransparency(ctx, doc, apRes, 0, map[string]bool{}) {
 						return true
 					}
 				}
@@ -685,44 +691,6 @@ func appearanceStreams(ctx context.Context, doc *document.Document, apObj ast.Pd
 		}
 	}
 	return streams
-}
-
-// resourcesHaveTransparency checks if a resources dict contains ExtGState
-// entries with transparency settings (non-Normal BM, SMask, CA/ca < 1.0).
-func resourcesHaveTransparency(ctx context.Context, doc *document.Document, resources ast.PdfDict) bool {
-	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
-	if err != nil || gsDict == nil {
-		return false
-	}
-	for _, gsObj := range gsDict {
-		gs, err := document.ResolveDict(ctx, doc, gsObj)
-		if err != nil || gs == nil {
-			continue
-		}
-		if bmObj, hasBM := gs["BM"]; hasBM {
-			bm := resolveBlendMode(ctx, doc, bmObj)
-			if bm != "" && bm != "Normal" && bm != "Compatible" {
-				return true
-			}
-		}
-		if smaskObj, hasSMask := gs["SMask"]; hasSMask {
-			smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
-			if smaskName != "None" {
-				return true
-			}
-		}
-		if caObj, hasCA := gs["CA"]; hasCA {
-			if !floatEquals1(document.Float(caObj)) {
-				return true
-			}
-		}
-		if caObj, hasCa := gs["ca"]; hasCa {
-			if !floatEquals1(document.Float(caObj)) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // documentOutputIntentInfo returns whether the document has an OutputIntent
