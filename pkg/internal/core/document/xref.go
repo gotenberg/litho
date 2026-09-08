@@ -396,6 +396,20 @@ func (d *Document) ValidateObjectHeaderFormat(offset int64, objNum int) []error 
 // The findings are returned rather than recorded on the document so the
 // caller records them once for the object, whatever the parse that follows
 // them does.
+// isPDFWhiteSpace reports whether c is one of the six white-space characters
+// ISO 32000-1, Table 1 defines. The object header rule (ISO 19005-2 6.1.9 t1,
+// ISO 19005-4 6.1.8 t1) asks for "a single white-space character" between the
+// object number, the generation number and the obj keyword, not for a space:
+// pdfjs colors.pdf writes every header as "3\n0\nobj", which veraPDF accepts
+// and litho reported twice per object.
+func isPDFWhiteSpace(c byte) bool {
+	switch c {
+	case 0x00, '\t', '\n', '\f', '\r', ' ':
+		return true
+	}
+	return false
+}
+
 func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error {
 	// Read enough bytes to cover the header: "NNNNNNNNN GGGGG obj\n" ≈ 25 bytes.
 	var buf [40]byte
@@ -418,20 +432,19 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error 
 		return nil // Can't parse, skip.
 	}
 
-	// Separator between object number and generation: must be single SP (0x20).
-	if data[pos] != ' ' {
+	// Separator between object number and generation: one white-space character.
+	if !isPDFWhiteSpace(data[pos]) {
 		return append(violations,
-			fmt.Errorf("compliance: obj header %d: object number not followed by single space (0x%02X)", objNum, data[pos]))
+			fmt.Errorf("compliance: obj header %d: object number not followed by a white-space character (0x%02X)", objNum, data[pos]))
 	}
-	// Check for multiple spaces.
-	spCount := 0
-	for pos < len(data) && data[pos] == ' ' {
-		spCount++
+	wsCount := 0
+	for pos < len(data) && isPDFWhiteSpace(data[pos]) {
+		wsCount++
 		pos++
 	}
-	if spCount > 1 {
+	if wsCount > 1 {
 		violations = append(violations,
-			fmt.Errorf("compliance: obj header %d: %d spaces between object number and generation (must be 1)", objNum, spCount))
+			fmt.Errorf("compliance: obj header %d: %d white-space characters between object number and generation (must be 1)", objNum, wsCount))
 	}
 
 	// Generation number: digits.
@@ -443,19 +456,19 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error 
 		return violations
 	}
 
-	// Separator between generation and "obj": must be single SP (0x20).
-	if data[pos] != ' ' {
+	// Separator between generation and "obj": one white-space character.
+	if !isPDFWhiteSpace(data[pos]) {
 		return append(violations,
-			fmt.Errorf("compliance: obj header %d: generation not followed by single space (0x%02X)", objNum, data[pos]))
+			fmt.Errorf("compliance: obj header %d: generation not followed by a white-space character (0x%02X)", objNum, data[pos]))
 	}
-	spCount = 0
-	for pos < len(data) && data[pos] == ' ' {
-		spCount++
+	wsCount = 0
+	for pos < len(data) && isPDFWhiteSpace(data[pos]) {
+		wsCount++
 		pos++
 	}
-	if spCount > 1 {
+	if wsCount > 1 {
 		violations = append(violations,
-			fmt.Errorf("compliance: obj header %d: %d spaces between generation and obj keyword (must be 1)", objNum, spCount))
+			fmt.Errorf("compliance: obj header %d: %d white-space characters between generation and obj keyword (must be 1)", objNum, wsCount))
 	}
 
 	// "obj" keyword.
