@@ -439,6 +439,54 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 	return builtinProgramEncoding(ctx, doc, fontDict)
 }
 
+// fontDifferencesNames returns only the charCode → glyphName overrides the
+// font's /Encoding dictionary states in /Differences. Per ISO 32000-1, 9.6.6.1
+// those override whatever base encoding is in force, so a caller that must know
+// which name the file itself chose for a code reads them apart from the merged
+// encoding [resolveSimpleFontEncoding] returns.
+func fontDifferencesNames(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return nil
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return nil
+	}
+	return differencesGlyphNames(ctx, doc, encDict)
+}
+
+// builtinEncodingNames returns a Type 1 program's own charCode → glyphName
+// mapping. [typography.ExtractType1BuiltinEncoding] reports a program that
+// references a predefined encoding ("/Encoding StandardEncoding def") by
+// repeating that encoding's name across every code, so expand the reference to
+// the table's glyph names instead of reading the name as a glyph. Returns nil
+// for a reference to an encoding litho holds no table for, leaving the codes
+// unresolved rather than guessed.
+func builtinEncodingNames(fontData []byte) map[byte]string {
+	builtin := typography.ExtractType1BuiltinEncoding(fontData)
+	switch builtin[0] {
+	case "":
+	case "StandardEncoding":
+		return encodingGlyphNames(builtin[0], encodings.StandardEncoding)
+	case "MacRomanEncoding", "WinAnsiEncoding", "MacExpertEncoding":
+		return predefinedEncodingNames(builtin[0])
+	default:
+		// Every code carrying the same name is the reference form; litho holds
+		// no table for the rest (ISOLatin1Encoding, SymbolEncoding).
+		if builtin[0] == builtin[len(builtin)-1] {
+			return nil
+		}
+	}
+	result := make(map[byte]string, len(builtin))
+	for code, name := range builtin {
+		if name != "" {
+			result[byte(code)] = name //nolint:gosec // the array is indexed by one byte of character code, 0-255
+		}
+	}
+	return result
+}
+
 // builtinProgramEncoding returns the charCode → glyphName mapping an embedded
 // Type 1 (/FontFile) or CFF (/FontFile3) program carries in its own encoding.
 // Returns nil when the descriptor holds no such program or it cannot be read.
@@ -547,17 +595,20 @@ var annexDGlyphNames = map[string]map[byte]string{
 // predefinedEncodingNames returns a charCode → glyphName mapping for a
 // named PDF encoding.
 func predefinedEncodingNames(name string) map[byte]string {
-	var table map[byte]rune
 	switch name {
 	case "WinAnsiEncoding":
-		table = encodings.WinAnsiEncoding
+		return encodingGlyphNames(name, encodings.WinAnsiEncoding)
 	case "MacRomanEncoding":
-		table = encodings.MacRomanEncoding
+		return encodingGlyphNames(name, encodings.MacRomanEncoding)
 	case "MacExpertEncoding":
-		table = encodings.MacExpertEncoding
-	default:
-		return nil
+		return encodingGlyphNames(name, encodings.MacExpertEncoding)
 	}
+	return nil
+}
+
+// encodingGlyphNames converts one of Annex D's encoding tables from the runes
+// litho stores it as into the glyph names the encoding actually assigns.
+func encodingGlyphNames(name string, table map[byte]rune) map[byte]string {
 	result := make(map[byte]string, len(table))
 	for code, r := range table {
 		if glyphName := encodings.RuneToGlyph(r); glyphName != "" {

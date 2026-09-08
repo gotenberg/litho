@@ -484,12 +484,86 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 	}
 	_, _, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
 	if !ok || charCodeToGID == nil {
-		return nil
+		// A classic Type 1 (/FontFile) program names its glyphs in the eexec
+		// /CharStrings dictionary rather than a GID-keyed table, so there is no
+		// GID to read (mirrors [checkType1FontWidths]). Decide presence by name.
+		return checkType1GlyphPresence(ctx, doc, fontDict, fontName, pageNum, rule, usage)
 	}
 	for code := range usage.charCodes {
 		gid, mapped := charCodeToGID[uint16(code)]
 		if mapped && gid == 0 {
 			return failf(rule, "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
+		}
+	}
+	return nil
+}
+
+// checkType1GlyphPresence decides glyph presence for a Type 1 font whose
+// program carries no GID-keyed glyph table. Per ISO 32000-1 §9.6.6.2 a simple
+// font resolves a code to a glyph name through its encoding, and §9.9.1 places
+// the glyph programs of a Type 1 font in the /CharStrings dictionary keyed by
+// that name, so a name the dictionary does not hold paints no glyph. veraPDF
+// reports it under ISO 19005-2 §6.2.11.4.1 t2: govdocs thread_300_300516.pdf
+// shows code 202, which its /Differences names "blank", against a program whose
+// 229 charstrings define no such glyph.
+//
+// A program whose charstrings will not parse leaves presence unanswerable and
+// goes unchecked, as does a code neither the PDF encoding nor the program's
+// built-in encoding names.
+func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+	if subtype := fontSubtype(ctx, doc, fontDict); subtype != "Type1" && subtype != "MMType1" {
+		return nil
+	}
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return nil
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil
+	}
+	defined := make(map[string]bool)
+	for _, name := range typography.ExtractGlyphNames(ctx, fontData) {
+		defined[name] = true
+	}
+	if len(defined) == 0 {
+		return nil
+	}
+
+	builtin := builtinEncodingNames(fontData)
+	differences := fontDifferencesNames(ctx, doc, fontDict)
+	pdfEnc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	for _, code := range sortedByteKeys(usage.charCodes) {
+		name := pdfEnc[code]
+		// Outside /Differences the program's own name for the code is the better
+		// answer when the base encoding names a glyph the program does not carry:
+		// a subset commonly keeps synthetic G-names in its built-in encoding
+		// (mirrors [checkType1FontWidths]). A name /Differences states is the
+		// file's own choice for that code (ISO 32000-1, 9.6.6.1) and stands.
+		if _, override := differences[code]; !override && !defined[name] && builtin[code] != "" {
+			name = builtin[code]
+		}
+		if name == "" {
+			// A code no encoding in force names has nothing to look up in
+			// /CharStrings, so it selects no glyph at all. Answering that needs
+			// the program's own charset, which this check reads (the .notdef
+			// rule, which does not, leaves the embedded case alone). Both
+			// encodings unreadable leaves the question open instead: pdfjs
+			// bug1354114.pdf shows WinAnsi code 10, issue6721_reduced.pdf
+			// StandardEncoding code 224 and issue6901.pdf a code its Type 1
+			// vector skips, all of which veraPDF reports.
+			if len(pdfEnc) == 0 && len(builtin) == 0 {
+				continue
+			}
+			return failf(rule, "font %s on page %d: charCode %d is named by no encoding, so it selects no glyph",
+				fontName, pageNum, code)
+		}
+		if name == ".notdef" {
+			continue
+		}
+		if !defined[name] {
+			return failf(rule, "font %s on page %d: glyph %s for charCode %d not present in embedded font program",
+				fontName, pageNum, name, code)
 		}
 	}
 	return nil
