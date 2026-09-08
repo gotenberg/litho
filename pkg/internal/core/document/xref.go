@@ -534,6 +534,17 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	}
 	data := buf[:n]
 
+	// The cap above is the next offset the cross-reference table lists, which
+	// an incremental update can leave far past this object: a superseded
+	// definition keeps its bytes in the file but loses its xref entry, so the
+	// window runs on through it. Stop at the next object header instead, so the
+	// backward scan below cannot reach a dead object's "endobj" and report it
+	// against this one. pdfjs issue15096.pdf supersedes object 264, whose
+	// abandoned copy ends "endobj " and was reported as object 263's.
+	if hdr := nextObjectHeader(data); hdr > 0 {
+		data = data[:hdr]
+	}
+
 	// Scan backward for "endobj". Since `data` stops at the start of
 	// the next object the last endobj in the buffer belongs to this
 	// object, not a neighbour; embedded string occurrences earlier in
@@ -569,6 +580,77 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	}
 
 	return violations
+}
+
+// nextObjectHeader returns the offset of the first indirect-object header
+// ("N G obj" on its own line) that starts after the one at the beginning of
+// data, or -1 when data holds only one object.
+//
+// Per ISO 32000-1, 7.3.10 the header is two non-negative integers and the obj
+// keyword, and 7.5.5 puts an EOL marker before the object number, which is what
+// makes the pattern specific enough to look for in bytes that may include
+// stream data. Only a header preceded by "endobj" and an EOL is accepted, so a
+// digit sequence inside a stream cannot end the window early.
+func nextObjectHeader(data []byte) int {
+	const keyword = "endobj"
+	for i := 0; ; {
+		next := bytes.Index(data[i:], []byte(keyword))
+		if next < 0 {
+			return -1
+		}
+		pos := i + next + len(keyword)
+		i = pos
+		// Step over the end-of-line (and any spaces a lax producer wrote)
+		// separating this object from the next.
+		j := pos
+		for j < len(data) && (data[j] == '\r' || data[j] == '\n' || data[j] == ' ' || data[j] == '\t') {
+			j++
+		}
+		if j == pos || j >= len(data) {
+			continue // No separator, so nothing can start here.
+		}
+		if isObjectHeaderAt(data[j:]) {
+			return j
+		}
+	}
+}
+
+// isObjectHeaderAt reports whether data begins with "N G obj".
+func isObjectHeaderAt(data []byte) bool {
+	digits := func(p int) int {
+		start := p
+		for p < len(data) && data[p] >= '0' && data[p] <= '9' {
+			p++
+		}
+		if p == start {
+			return -1
+		}
+		return p
+	}
+	spaces := func(p int) int {
+		start := p
+		for p < len(data) && (data[p] == ' ' || data[p] == '\r' || data[p] == '\n' || data[p] == '\t') {
+			p++
+		}
+		if p == start {
+			return -1
+		}
+		return p
+	}
+	p := digits(0)
+	if p < 0 {
+		return false
+	}
+	if p = spaces(p); p < 0 {
+		return false
+	}
+	if p = digits(p); p < 0 {
+		return false
+	}
+	if p = spaces(p); p < 0 {
+		return false
+	}
+	return bytes.HasPrefix(data[p:], []byte("obj"))
 }
 
 // ValidateXRefTableFormat performs raw-byte validation of a traditional xref
