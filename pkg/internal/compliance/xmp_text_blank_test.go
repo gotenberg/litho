@@ -25,7 +25,7 @@ func TestXMPTextType_BlankValueAccepted(t *testing.T) {
 
 	for _, part := range []int{1, 2, 3} {
 		var got []Violation
-		xmpCheckPropertyTypes(data, part, ast.PdfStream{}, &got)
+		xmpCheckPropertyTypes(data, part, ast.PdfStream{}, nil, &got)
 		if len(got) != 0 {
 			t.Errorf(`pdf:Keywords=" " under PDF/A-%d: got %v, want no violation`, part, got)
 		}
@@ -42,7 +42,7 @@ func TestXMPTextType_BlankContainerItemAccepted(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, &got)
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("blank dc:creator item: got %v, want no violation", got)
 	}
@@ -57,7 +57,7 @@ func TestXMPTextType_WrongTypeStillFlagged(t *testing.T) {
       pdfaid:part="notanumber"></rdf:Description>`)
 
 	var got []Violation
-	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, &got)
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, nil, &got)
 	if len(got) == 0 {
 		t.Error(`pdfaid:part="notanumber" is not an Integer, want a violation`)
 	}

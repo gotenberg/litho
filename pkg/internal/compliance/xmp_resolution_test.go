@@ -85,7 +85,7 @@ func TestXMPPropertyTypes_KnownNamespacesWithoutMembers(t *testing.T) {
 		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
 
 	var got []Violation
-	xmpCheckPropertyTypes(xmp, 2, ast.PdfStream{}, &got)
+	xmpCheckPropertyTypes(xmp, 2, ast.PdfStream{}, nil, &got)
 	count := 0
 	for _, v := range got {
 		if v.Rule == Rule_19005_2_6_6_2_3_1_t02 {

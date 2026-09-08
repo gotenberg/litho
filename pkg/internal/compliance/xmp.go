@@ -183,12 +183,21 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Catalog /Metadata required (§6.7.2 / §6.6.1).
 	xmpData, metaStream := xmpLoadMetadata(ctx, doc, catalog, part, &results)
 
+	// An extension schema the main packet declares legitimises a property in any
+	// packet, which is the isDefinedInMainPackage disjunct veraPDF's rule
+	// carries, so the other packets are audited against the union of their own
+	// declarations and the catalog's.
+	var mainExtensionNS map[string]bool
+	if len(xmpData) > 0 {
+		_, mainExtensionNS = xmpExtractNamespaces(xmpData)
+	}
+
 	// The packet tests govern "all content of all XMP packets located in any
 	// metadata stream present in the PDF" (ISO 19005-4 §6.7.2.1 t2..t5, ISO
 	// 19005-2/3 §6.6.2.1 t2..t5), so they run over every other metadata
 	// stream too. Independent of the catalog packet: a file whose catalog
 	// packet is absent still has to carry well-formed page packets.
-	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part)...)
+	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part, mainExtensionNS)...)
 
 	// §6.7.3 compares the document information dictionary against XMP, and a
 	// document carrying no metadata stream at all is one of the ways the two can
@@ -255,7 +264,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	// Property-level predefined-schema audit (§6.7.9 / §6.6.2.3.1).
 	if packetParses {
-		xmpCheckPredefinedProperties(ctx, xmpData, part, &results)
+		xmpCheckPredefinedProperties(ctx, xmpData, part, nil, &results)
 	}
 
 	if ctx.Err() != nil {
@@ -301,7 +310,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	// XMP property types (§6.7.2 / §6.6.2.3.1).
-	xmpCheckPropertyTypes(xmpData, part, metaStream, &results)
+	xmpCheckPropertyTypes(xmpData, part, metaStream, nil, &results)
 
 	if ctx.Err() != nil {
 		return results
@@ -403,7 +412,7 @@ const maxXMPContainerDepth = 32
 // a page packet carrying bytes= reports nothing while the same attribute in the
 // catalog packet reports §6.7.5 t1. Part 1 therefore returns early: widening it
 // would raise violations no PDF/A-1 validator raises.
-func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
+func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, mainExtensionNS map[string]bool) []Violation {
 	if part == 1 {
 		return nil
 	}
@@ -423,11 +432,25 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 			continue
 		}
 
-		// t2, t3, t4 and t5 are the only rules a single packet can add.
 		packet := make([]Violation, 0, 4)
 		data = xmpNormalizeForChecks(data, part, &packet)
-		packet = append(packet, xmpPacketSerializationValidity(data, part)...)
+		serialization := xmpPacketSerializationValidity(data, part)
+		packet = append(packet, serialization...)
 		xmpCheckPacketHeader(data, part, &packet)
+
+		// The property-level audits apply to every packet, not only the
+		// catalog's: ISO 19005-2 §6.6.2.3.1 constrains the properties of "all
+		// metadata streams present in the PDF". pdfcpu adobeImplOfPDFSpec.pdf
+		// and adobe_errata.pdf each hang a 23 KB packet off a marked-content
+		// property list carrying photoshop:History, which is not in the XMP 2005
+		// Photoshop schema, and veraPDF reports it under t1 and t2 while litho
+		// looked only at the catalog packet. A packet that does not parse has
+		// nothing to audit, so those run only when the serialization check is
+		// silent.
+		if len(serialization) == 0 {
+			xmpCheckPredefinedProperties(ctx, data, part, mainExtensionNS, &packet)
+			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, mainExtensionNS, &packet)
+		}
 
 		for _, v := range packet {
 			results = append(results, xmpPacketViolation(v, objNum))
@@ -1296,7 +1319,7 @@ func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 // the property-name half for namespaces with a predefined catalog.
 // Presence only: value-type correspondence stays with
 // [xmpCheckPropertyTypes].
-func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, results *[]Violation) {
+func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, extraExtensionNS map[string]bool, results *[]Violation) {
 	catalog := xmpPredefinedPropertyCatalog(part)
 	if catalog == nil {
 		// ISO 19005-4 drops the extension-schema requirements of parts
@@ -1304,6 +1327,7 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, re
 		return
 	}
 	_, extensionNS := xmpExtractNamespaces(data)
+	maps.Copy(extensionNS, extraExtensionNS)
 	prefixes := xmpExtractPrefixMap(ctx, data)
 
 	for _, p := range xmpExtractTopLevelProperties(data) {
@@ -3100,9 +3124,10 @@ var xmpContainerElementType = map[string]map[string]xmpPropType{
 // simple property value formats, container item value formats, Alt container
 // lang attributes, and struct property structure. It flags unknown property
 // names in known (predefined) schemas.
-func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, results *[]Violation) {
+func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensionNS map[string]bool, results *[]Violation) {
 	observed := xmpExtractPropertyValues(data)
 	_, extensionNS := xmpExtractNamespaces(data)
+	maps.Copy(extensionNS, extraExtensionNS)
 
 	// Sorted, because both maps are iterated to EMIT violations and Go
 	// randomises map order: the same binary on the same file otherwise reported
@@ -3485,6 +3510,20 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					// Default to simple until a container child appears.
 					pv := getOrCreate(currentNS, currentLocal)
 					pv.containerType = xmpContSimple
+					// rdf:parseType="Resource" is the RDF/XML shorthand that makes
+					// the element's own content a struct (RDF/XML Syntax
+					// Specification, 2.3.3), which the XMP Specification uses for
+					// ResourceRef values. It says so whether or not any field
+					// follows, so an empty struct written that way is structured:
+					// govdocs thread_100_100847.pdf carries
+					// <xapMM:DerivedFrom rdf:parseType="Resource"></...> and litho
+					// read its whitespace as a plain text value.
+					for _, attr := range t.Attr {
+						if attr.Name.Space == xmpRDFNamespace && attr.Name.Local == "parseType" && attr.Value == "Resource" {
+							pv.isStructured = true
+							break
+						}
+					}
 					record(currentNS, currentLocal, pv)
 				}
 				if depth == 2 && currentNS != "" {

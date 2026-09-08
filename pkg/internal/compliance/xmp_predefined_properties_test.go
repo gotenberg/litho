@@ -24,21 +24,21 @@ func TestXMPPredefinedProperties_MakerNoteFlagged(t *testing.T) {
 	data := exifDescription(`<exif:MakerNote>opaque</exif:MakerNote>`)
 
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t01) {
 		t.Errorf("exif:MakerNote under PDF/A-2: got %v, want §6.6.2.3.1 t1", got)
 	}
 
 	// Part 3 mirrors part 2 with its own rule id.
 	var got3 []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 3, &got3)
+	xmpCheckPredefinedProperties(context.Background(), data, 3, nil, &got3)
 	if !hasRule(got3, Rule_19005_3_6_6_2_3_1_t01) {
 		t.Errorf("exif:MakerNote under PDF/A-3: got %v, want §6.6.2.3.1 t1", got3)
 	}
 
 	// XMP 2004 (PDF/A-1) predefines exif:MakerNote: no violation.
 	var got1 []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 1, &got1)
+	xmpCheckPredefinedProperties(context.Background(), data, 1, nil, &got1)
 	if len(got1) != 0 {
 		t.Errorf("exif:MakerNote under PDF/A-1 is predefined in XMP 2004, got %v", got1)
 	}
@@ -50,7 +50,7 @@ func TestXMPPredefinedProperties_PredefinedNotFlagged(t *testing.T) {
 	data := exifDescription(`<exif:DateTimeOriginal>2024-01-01</exif:DateTimeOriginal>`)
 
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("exif:DateTimeOriginal is predefined, got %v", got)
 	}
@@ -63,7 +63,7 @@ func TestXMPPredefinedProperties_Part4NeverFlags(t *testing.T) {
 	data := exifDescription(`<exif:MakerNote>opaque</exif:MakerNote>`)
 
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 4, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 4, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("part 4 carries no predefined-schema rule, got %v", got)
 	}
@@ -95,7 +95,7 @@ func TestXMPPredefinedProperties_ExtensionSchemaExtendsPredefined(t *testing.T) 
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, &got)
 	if hasRule(got, Rule_19005_2_6_6_2_3_1_t01) {
 		t.Errorf("extension-declared exif:MakerNote must not be flagged, got %v", got)
 	}
@@ -117,7 +117,7 @@ func TestXMPPredefinedProperties_NestedFieldsInvisible(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("structure fields must stay invisible to the property audit, got %v", got)
 	}
@@ -137,7 +137,7 @@ func TestXMPPredefinedProperties_PdfaidRev(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t01) {
 		t.Errorf("pdfaid:rev under PDF/A-2: got %v, want §6.6.2.3.1 t1", got)
 	}
@@ -146,15 +146,15 @@ func TestXMPPredefinedProperties_PdfaidRev(t *testing.T) {
 	}
 
 	var gotTypes []Violation
-	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, &gotTypes)
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, nil, &gotTypes)
 	if !hasRule(gotTypes, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("pdfaid:rev under PDF/A-2: got %v, want §6.6.2.3.1 t2", gotTypes)
 	}
 
 	// Part 4 predefines rev: both checks stay silent.
 	var got4 []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 4, &got4)
-	xmpCheckPropertyTypes(data, 4, ast.PdfStream{}, &got4)
+	xmpCheckPredefinedProperties(context.Background(), data, 4, nil, &got4)
+	xmpCheckPropertyTypes(data, 4, ast.PdfStream{}, nil, &got4)
 	if len(got4) != 0 {
 		t.Errorf("pdfaid:rev is predefined for PDF/A-4, got %v", got4)
 	}
@@ -173,13 +173,13 @@ func TestXMPPropertyTypes_SupplementalCategoriesBag(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, &got)
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("simple SupplementalCategories under PDF/A-2: got %v, want §6.6.2.3.1 t2", got)
 	}
 
 	var got1 []Violation
-	xmpCheckPropertyTypes(data, 1, ast.PdfStream{}, &got1)
+	xmpCheckPropertyTypes(data, 1, ast.PdfStream{}, nil, &got1)
 	if hasRule(got1, Rule_19005_1_6_7_9_t03) {
 		t.Errorf("2004 XMP types SupplementalCategories as Text, got %v", got1)
 	}
@@ -194,7 +194,7 @@ func TestXMPPredefinedProperties_AttributeForm(t *testing.T) {
       pdf:Producer="litho" pdf:Trapped="False"/>`)
 
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 2, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, &got)
 	// The XMP 2005 catalog predefines pdf:Producer but not pdf:Trapped.
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t01) {
 		t.Errorf("attribute-form pdf:Trapped: got %v, want §6.6.2.3.1 t1", got)

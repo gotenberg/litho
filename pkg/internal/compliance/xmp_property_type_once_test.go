@@ -31,7 +31,7 @@ func TestXMPPropertyTypeStatedOncePerProperty(t *testing.T) {
 
 	for _, part := range []int{1, 2} {
 		var results []Violation
-		xmpCheckPropertyTypes(packet, part, ast.PdfStream{}, &results)
+		xmpCheckPropertyTypes(packet, part, ast.PdfStream{}, nil, &results)
 		got := slices.DeleteFunc(results, func(v Violation) bool {
 			return !strings.Contains(v.Context, "purl.org/dc/elements/1.1/:title")
 		})
