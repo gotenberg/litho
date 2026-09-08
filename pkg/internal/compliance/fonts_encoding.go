@@ -98,7 +98,19 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	// 14289-1 §7.21.7 and ISO 14289-2 §8.4.5.8) demands a Unicode value for
 	// every used character code, so a standard /BaseFont name does not excuse an
 	// unmappable override.
-	if isStandard14Font(ctx, doc, fontDict) {
+	// ZapfDingbats is the one standard 14 font this does not hold for. Its
+	// built-in encoding names its glyphs a1 to a191, which are in neither the
+	// Adobe Glyph List nor the Symbol set, and ISO 32000-1, 9.10.2 admits "the
+	// Adobe standard Latin character set or the set of named characters in the
+	// Symbol font" and no third set: a ZapfDingbats glyph therefore has no
+	// Unicode value without a /ToUnicode CMap. litho already treats the pair as
+	// special elsewhere (the stamp writer and the TrueType-encoding fixer both
+	// exempt "Symbol and ZapfDingbats" from a standard encoding), and Symbol has
+	// its own exemptions at the call site, so only ZapfDingbats needs excluding
+	// here. pdfjs js-buttons.pdf shows code 0x34 through an unembedded
+	// ZapfDingbats with no /ToUnicode inside a widget appearance, which veraPDF
+	// reports under ISO 14289-1 §7.21.7 t1.
+	if isStandard14Font(ctx, doc, fontDict) && !isZapfDingbatsByName(ctx, doc, fontDict) {
 		return usedDifferencesGlyphNamesResolvable(ctx, doc, fontDict, usage)
 	}
 
@@ -150,6 +162,17 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	}
 
 	return false
+}
+
+// isZapfDingbatsByName reports whether the font is ZapfDingbats, allowing the
+// "ABCDEF+" subset prefix ISO 32000-1, 9.6.4 defines.
+func isZapfDingbatsByName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	base, _ := document.ResolveName(ctx, doc, fontDict["BaseFont"])
+	name := string(base)
+	if _, suffix, ok := strings.Cut(name, "+"); ok {
+		name = suffix
+	}
+	return name == "ZapfDingbats"
 }
 
 // allDifferencesGlyphNamesAGLResolvable checks whether every glyph name in the
