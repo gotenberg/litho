@@ -77,6 +77,14 @@ type Document struct {
 	// data was damaged or missing.
 	Rebuilt bool
 
+	// TrailerSynthesized is true when no trailer dictionary could be recovered
+	// from the file and [Index].Trailer holds one litho made up instead. Its
+	// entries are litho's own, derived from whatever the raw scan found, so a
+	// caller that reports on what the file contains must not read them: a
+	// 219-byte damaged file yields /Size 2147483648 from a bogus object number
+	// the scan picked up, which is a value the file does not contain.
+	TrailerSynthesized bool
+
 	// HeaderOffset is the physical byte position of the %PDF- header,
 	// non-zero when junk precedes it. Readers disagree on the offset
 	// base for such files: litho resolves xref offsets from the physical

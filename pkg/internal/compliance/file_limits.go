@@ -105,7 +105,19 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 			continue
 		}
 
-		results = append(results, checkObjectNumericLimits(obj, objNum, part, profile)...)
+		results = append(results, checkObjectNumericLimits(obj, fmt.Sprintf("object %d", objNum), part, profile)...)
+	}
+
+	// The trailer dictionary is not an indirect object, so the walk above never
+	// reaches it, yet ISO 19005-2 §6.1.13 constrains every number "a conforming
+	// file shall not contain" wherever it is written. pdfjs issue5599.pdf writes
+	// /ID 77777777777777777 there, which veraPDF reports against its
+	// root/trailer[0] and litho did not look at. A trailer litho made up because
+	// the file has none holds litho's numbers, not the file's, so it is left
+	// alone: pdfjs bug1980958.pdf is 219 damaged bytes whose synthesized /Size
+	// is 2147483648, a value that appears nowhere in it.
+	if !doc.TrailerSynthesized {
+		results = append(results, checkObjectNumericLimits(doc.Index.Trailer, "trailer", part, profile)...)
 	}
 
 	// Additionally, scan actual content streams for string/integer limits.
@@ -140,7 +152,9 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 		if ctx.Err() != nil {
 			return results
 		}
-		// Page content streams.
+		// Page content streams. The page's resources are what a Do inside them
+		// names its Form XObjects through.
+		pageRes, _ := document.ResolveDict(ctx, doc, page["Resources"])
 		contentsObj := page["Contents"]
 		if contentsObj == nil {
 			continue
@@ -165,15 +179,25 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 			if sErr != nil {
 				continue
 			}
-			results = append(results, scanStreamOperandLimits(ctx, doc, stream, objNum, maxStr, profile)...)
+			results = append(results, scanStreamOperandLimits(ctx, doc, stream, objNum, maxStr, profile, pageRes, visited, 0)...)
 		}
 	}
 	return results
 }
 
 // scanStreamOperandLimits decodes a content stream and checks string/integer
-// operands for limit violations.
-func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string) []Violation {
+// operands for limit violations, then descends into the Form XObjects the
+// stream invokes.
+//
+// ISO 19005-2 §6.1.13 constrains every number a conforming file contains, and a
+// form's content stream is as much part of the file as the page's. veraPDF
+// reaches them (its context path runs page/contentStream/operators[N]/xObject),
+// and litho stopped at the page: pdfjs issue6342.pdf hides twelve out-of-range
+// reals in the form its page invokes at operator 11.
+func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string, res ast.PdfDict, visited map[int]bool, depth int) []Violation {
+	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+		return nil
+	}
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil || len(data) == 0 {
 		return nil
@@ -224,6 +248,46 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 			}
 		}
 	}
+	return append(results, scanInvokedFormLimits(ctx, doc, ops, res, maxStr, profile, visited, depth)...)
+}
+
+// scanInvokedFormLimits scans the content streams of the Form XObjects a Do
+// operator names in res. visited guards a resource cycle and against scanning
+// one form twice, and depth caps the chain at [maxFormXObjectDepth].
+func scanInvokedFormLimits(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, maxStr int, profile string, visited map[int]bool, depth int) []Violation {
+	xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
+	if err != nil || len(xobjDict) == 0 {
+		return nil
+	}
+	var results []Violation
+	for _, op := range ops {
+		if op.Operator != "Do" || len(op.Operands) < 1 {
+			continue
+		}
+		name, ok := op.Operands[0].(ast.PdfName)
+		if !ok {
+			continue
+		}
+		ref, isRef := xobjDict[name].(ast.PdfIndirectRef)
+		if !isRef || visited[ref.ObjectNum] {
+			continue
+		}
+		form, err := document.ResolveStream(ctx, doc, xobjDict[name])
+		if err != nil || form.Dict == nil {
+			continue
+		}
+		if subtype, _ := document.ResolveName(ctx, doc, form.Dict["Subtype"]); subtype != "Form" {
+			continue
+		}
+		visited[ref.ObjectNum] = true
+		// A form without its own /Resources inherits the ones in force where it
+		// is invoked (ISO 32000-1, 8.10.1).
+		formRes := res
+		if own, err := document.ResolveDict(ctx, doc, form.Dict["Resources"]); err == nil && len(own) > 0 {
+			formRes = own
+		}
+		results = append(results, scanStreamOperandLimits(ctx, doc, form, ref.ObjectNum, maxStr, profile, formRes, visited, depth+1)...)
+	}
 	return results
 }
 
@@ -263,8 +327,10 @@ func checkRealLimits(fval float64, part int, profile, where string) []Violation 
 }
 
 // checkObjectNumericLimits checks a single resolved object for numeric limit
-// violations. It handles nested dicts and arrays recursively.
-func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile string) []Violation {
+// violations. It handles nested dicts and arrays recursively. where names the
+// carrier for the violation context, since not every carrier is an indirect
+// object: the trailer dictionary has no object number of its own.
+func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile string) []Violation {
 	var results []Violation
 
 	switch v := obj.(type) {
@@ -273,12 +339,12 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		if val > maxIntegerValue || val < minIntegerValue {
 			results = append(results, Violation{
 				Rule:    integerRangeRule(profile),
-				Context: fmt.Sprintf("object %d: integer %d out of range", objNum, val),
+				Context: fmt.Sprintf("%s: integer %d out of range", where, val),
 			})
 		}
 
 	case ast.PdfReal:
-		results = append(results, checkRealLimits(float64(v), part, profile, fmt.Sprintf("object %d", objNum))...)
+		results = append(results, checkRealLimits(float64(v), part, profile, where)...)
 
 	case ast.PdfString:
 		maxStr := maxStringBytes1
@@ -288,7 +354,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		if len(v) > maxStr {
 			results = append(results, Violation{
 				Rule:    stringLengthRule(profile),
-				Context: fmt.Sprintf("object %d: string length %d exceeds %d", objNum, len(v), maxStr),
+				Context: fmt.Sprintf("%s: string length %d exceeds %d", where, len(v), maxStr),
 			})
 		}
 
@@ -299,7 +365,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		if decodedLen > maxNameBytes {
 			results = append(results, Violation{
 				Rule:    nameLengthRule(profile),
-				Context: fmt.Sprintf("object %d: name length %d exceeds %d", objNum, decodedLen, maxNameBytes),
+				Context: fmt.Sprintf("%s: name length %d exceeds %d", where, decodedLen, maxNameBytes),
 			})
 		}
 
@@ -308,11 +374,11 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		if part == 1 && len(v) > maxArrayCap1 {
 			results = append(results, Violation{
 				Rule:    Rule_19005_1_6_1_12_t05,
-				Context: fmt.Sprintf("object %d: array capacity %d exceeds %d", objNum, len(v), maxArrayCap1),
+				Context: fmt.Sprintf("%s: array capacity %d exceeds %d", where, len(v), maxArrayCap1),
 			})
 		}
 		for _, elem := range v {
-			results = append(results, checkObjectNumericLimits(elem, objNum, part, profile)...)
+			results = append(results, checkObjectNumericLimits(elem, where, part, profile)...)
 		}
 
 	case ast.PdfDict:
@@ -320,21 +386,21 @@ func checkObjectNumericLimits(obj ast.PdfObject, objNum int, part int, profile s
 		if part == 1 && len(v) > maxDictCap1 {
 			results = append(results, Violation{
 				Rule:    Rule_19005_1_6_1_12_t06,
-				Context: fmt.Sprintf("object %d: dict capacity %d exceeds %d", objNum, len(v), maxDictCap1),
+				Context: fmt.Sprintf("%s: dict capacity %d exceeds %d", where, len(v), maxDictCap1),
 			})
 		}
 		// Key order, because the recursion emits violations: a dictionary is a
 		// Go map, so an unsorted walk reported the same two out-of-range reals
 		// in a different order on consecutive runs.
 		for _, key := range slices.Sorted(maps.Keys(v)) {
-			results = append(results, checkObjectNumericLimits(key, objNum, part, profile)...)
-			results = append(results, checkObjectNumericLimits(v[key], objNum, part, profile)...)
+			results = append(results, checkObjectNumericLimits(key, where, part, profile)...)
+			results = append(results, checkObjectNumericLimits(v[key], where, part, profile)...)
 		}
 
 	case ast.PdfStream:
 		// Check the stream dictionary.
 		if v.Dict != nil {
-			results = append(results, checkObjectNumericLimits(v.Dict, objNum, part, profile)...)
+			results = append(results, checkObjectNumericLimits(v.Dict, where, part, profile)...)
 		}
 	}
 

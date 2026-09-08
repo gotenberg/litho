@@ -100,6 +100,7 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 		// dictionary tagged /Type /Catalog, which does not require a
 		// pre-computed /Root.
 		trailer = synthesizeTrailer(entries)
+		d.TrailerSynthesized = true
 	}
 
 	d.Index.Entries = entries
