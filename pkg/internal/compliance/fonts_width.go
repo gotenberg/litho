@@ -84,7 +84,13 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 	// through glyph names. When that cmap is absent the codes are unresolvable,
 	// so an empty (non-nil) map makes the width and presence checks skip them
 	// rather than misreport against an empty encoding or an identity GID.
-	if charCodeToGID == nil && isSymbolicFont(ctx, doc, fd) && fontDict["Encoding"] == nil {
+	//
+	// The cmap route is an sfnt one. A symbolic Type 1 or CFF font has no cmap
+	// to be missing: its codes resolve through the program's own encoding
+	// (ISO 32000-1 §9.6.6.2), which the glyph-name path below reads, so
+	// short-circuiting it here left every TeX Computer Modern subset in govdocs
+	// thread_300_300492.pdf with no mapping and no width check at all.
+	if charCodeToGID == nil && isSfntFontProgram(fontData) && isSymbolicFont(ctx, doc, fd) && fontDict["Encoding"] == nil {
 		sym := typography.ExtractSymbolCharCodeToGID(ctx, fontData)
 		if sym == nil {
 			sym = map[uint16]uint16{}
