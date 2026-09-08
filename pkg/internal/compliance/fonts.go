@@ -1400,7 +1400,7 @@ func defaultCIDWidth(ctx context.Context, doc *document.Document, cidFontDict as
 // directly shown CID 0. Usage-scoped: fires only when .notdef is actually shown,
 // so it cannot flag a conforming file (a strict subset of the per-used-glyph
 // comparison veraPDF performs).
-func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict, cidFontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	if usage == nil || len(usage.rawStrings) == 0 {
 		return nil
 	}

@@ -70,7 +70,7 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 	rule := Rule_19005_1_6_3_6_t01
 
 	// Binary widths: GID 0 (.notdef)=500, GID 32 (space)=488, GID 65 ('A')=600.
-	binaryWidths := map[uint16]uint16{
+	binaryWidths := map[uint16]float64{
 		0:  500,
 		32: 488,
 		65: 600,
@@ -162,7 +162,7 @@ func TestCheckSimpleFontWidths_UnresolvedMappingSkipped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	rule := Rule_19005_1_6_3_6_t01
-	binaryWidths := map[uint16]uint16{0: 500, 32: 488}
+	binaryWidths := map[uint16]float64{0: 500, 32: 488}
 	fontDict := ast.PdfDict{"FirstChar": ast.PdfInt(32), "Widths": ast.PdfArray{ast.PdfReal(226.0)}}
 	usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
 	results := checkSimpleFontWidths(ctx, nopDoc(), fontDict, binaryWidths, 1000, "TestFont", 1, rule, nil, usage)
@@ -176,7 +176,7 @@ func TestCheckCIDFontWidths_SkipsNotdef(t *testing.T) {
 	ctx := context.Background()
 	rule := Rule_19005_1_6_3_6_t01
 
-	binaryWidths := map[uint16]uint16{
+	binaryWidths := map[uint16]float64{
 		0:  500,
 		1:  600,
 		10: 700,

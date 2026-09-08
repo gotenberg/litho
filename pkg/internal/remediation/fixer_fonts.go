@@ -413,7 +413,7 @@ func correctDefaultCIDWidth(ctx context.Context, doc *document.Document, cidFont
 	if !ok {
 		return 0, false
 	}
-	expected := float64(notdef) * 1000.0 / float64(upm)
+	expected := notdef * 1000.0 / float64(upm)
 
 	// An absent or zero /DW means the 1000 default of Table 117.
 	declared := 1000.0
@@ -428,7 +428,7 @@ func correctDefaultCIDWidth(ctx context.Context, doc *document.Document, cidFont
 	return ast.PdfReal(math.Round(expected*100) / 100), true
 }
 
-func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfArray, binaryWidths map[uint16]uint16, upm uint16) (ast.PdfArray, bool) {
+func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfArray, binaryWidths map[uint16]float64, upm uint16) (ast.PdfArray, bool) {
 	modified := false
 	newW := make(ast.PdfArray, 0, len(wArr))
 
@@ -448,7 +448,7 @@ func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfA
 				pdfWidth := document.Float(wObj)
 				cid := uint16(startCID + j) //nolint:gosec // CID range bounded
 				if bw, ok := binaryWidths[cid]; ok {
-					expected := float64(bw) * 1000.0 / float64(upm)
+					expected := bw * 1000.0 / float64(upm)
 					if math.Abs(pdfWidth-expected) > 1.0 {
 						corrected[j] = ast.PdfReal(math.Round(expected*100) / 100)
 						modified = true

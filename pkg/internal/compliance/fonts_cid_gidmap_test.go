@@ -17,7 +17,7 @@ func TestCheckCIDFontWidths_HonorsCIDToGIDMap(t *testing.T) {
 	ctx := testCtx()
 	rule := Rule_14289_1_7_21_5_t01
 
-	binaryWidths := map[uint16]uint16{
+	binaryWidths := map[uint16]float64{
 		0:  1000, // .notdef
 		2:  700,  // the glyph CID 15 actually maps to
 		15: 600,  // a different glyph at the raw-CID slot

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -916,7 +917,17 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 		return
 	}
 
-	font.HmtxWidths = widths
+	// Text extraction positions a glyph by its whole-unit advance, as it has
+	// always done; the fractional part [ExtractBinaryWidths] now preserves
+	// matters only to the width-consistency check, which reads the program
+	// directly.
+	font.HmtxWidths = make(map[uint16]uint16, len(widths))
+	for gid, w := range widths {
+		if w < 0 || w > math.MaxUint16 {
+			continue
+		}
+		font.HmtxWidths[gid] = uint16(math.Round(w))
+	}
 
 	// Read unitsPerEm for correct width scaling.
 	// CFF fonts use 1000 units per em by default. For OTTO fonts (CFF inside
@@ -981,7 +992,7 @@ func extractCFFFromOTTO(fontData []byte) ([]byte, error) {
 
 // ExtractBinaryWidths dispatches to TrueType or CFF width extraction based
 // on the font data signature.
-func ExtractBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16 {
+func ExtractBinaryWidths(ctx context.Context, fontData []byte) map[uint16]float64 {
 	switch detectFontFormat(fontData) {
 	case fontFormatTrueType:
 		w, _ := truetype.GlyphWidths(ctx, fontData)
@@ -1011,7 +1022,7 @@ func ExtractBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16
 // charstrings on subsets; TrueType CIDFonts (CIDFontType2) keep the
 // GID-keyed map under the Identity CIDToGIDMap assumption the callers
 // already make.
-func ExtractCIDBinaryWidths(ctx context.Context, fontData []byte) map[uint16]uint16 {
+func ExtractCIDBinaryWidths(ctx context.Context, fontData []byte) map[uint16]float64 {
 	switch detectFontFormat(fontData) {
 	case fontFormatOTTO:
 		cffData, err := extractCFFFromOTTO(fontData)

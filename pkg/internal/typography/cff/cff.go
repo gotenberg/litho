@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
@@ -835,7 +834,7 @@ done:
 // It parses each CharString to find the optional width operand, then applies
 // the nominalWidthX/defaultWidthX from the Private DICT.
 // Returns a GID → width map in 1/1000 units (like TrueType).
-func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
+func GlyphWidths(ctx context.Context, data []byte) (map[uint16]float64, error) {
 	if len(data) < 4 || data[0] != 1 {
 		return nil, fmt.Errorf("%w: not a CFF font", ErrInvalidCFF)
 	}
@@ -863,7 +862,7 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	}
 
 	// Parse Private DICT for nominalWidthX, defaultWidthX, and local subrs.
-	var nominalWidth, defaultWidth int32
+	var nominalWidth, defaultWidth float64
 	var localSubrs [][]byte
 	if info.privateDictOffset > 0 && info.privateDictSize > 0 {
 		pdStart := int(info.privateDictOffset)
@@ -896,7 +895,7 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	// writes values veraPDF rejects.
 	fdWidths := parseFDWidths(data, info, len(csEntries))
 
-	result := make(map[uint16]uint16, len(csEntries))
+	result := make(map[uint16]float64, len(csEntries))
 	for gid, cs := range csEntries {
 		if gid%500 == 0 && gid > 0 {
 			if err := ctx.Err(); err != nil {
@@ -910,7 +909,7 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 			local = fdWidths.subrsFor(gid)
 		}
 		w := extractCharstringWidth(cs, local, globalSubrs)
-		var width int32
+		var width float64
 		if w != nil {
 			width = nomW + *w
 		} else {
@@ -919,7 +918,7 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 		if width < 0 {
 			width = 0
 		}
-		result[uint16(gid)] = uint16(width) //nolint:gosec // width is non-negative
+		result[uint16(gid)] = width
 	}
 
 	return result, nil
@@ -932,7 +931,7 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 // subset fonts renumber GIDs densely while keeping sparse CIDs, and the
 // identity assumption reads the wrong charstrings. Non-CID fonts return the
 // GID-keyed widths unchanged (GID == code index there).
-func CIDWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
+func CIDWidths(ctx context.Context, data []byte) (map[uint16]float64, error) {
 	byGID, err := GlyphWidths(ctx, data)
 	if err != nil {
 		return nil, err
@@ -968,7 +967,7 @@ func CIDWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 		gids = append(gids, gid)
 	}
 	slices.Sort(gids)
-	byCID := make(map[uint16]uint16, len(byGID))
+	byCID := make(map[uint16]float64, len(byGID))
 	for _, gid := range gids {
 		if int(gid) >= len(gidToCID) {
 			continue
@@ -989,14 +988,14 @@ func CIDWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 // supplied the widths.
 type fdWidthTable struct {
 	fdForGID   []byte
-	nominal    []int32
-	defaults   []int32
+	nominal    []float64
+	defaults   []float64
 	localSubrs [][][]byte // per-FD local subroutine INDEX
 }
 
 // widthsFor returns the nominal/default width pair for a GID, falling back
 // to FD 0 when FDSelect lacks the glyph.
-func (t *fdWidthTable) widthsFor(gid int) (int32, int32) {
+func (t *fdWidthTable) widthsFor(gid int) (float64, float64) {
 	fd := 0
 	if gid >= 0 && gid < len(t.fdForGID) {
 		fd = int(t.fdForGID[gid])
@@ -1037,8 +1036,8 @@ func parseFDWidths(data []byte, info topDictInfo, numGlyphs int) *fdWidthTable {
 	}
 
 	t := &fdWidthTable{
-		nominal:    make([]int32, len(fdEntries)),
-		defaults:   make([]int32, len(fdEntries)),
+		nominal:    make([]float64, len(fdEntries)),
+		defaults:   make([]float64, len(fdEntries)),
 		localSubrs: make([][][]byte, len(fdEntries)),
 	}
 	for i, fdDict := range fdEntries {
@@ -1101,8 +1100,8 @@ func parseFDSelect(data []byte, offset, numGlyphs int) []byte {
 // parsePrivateDict extracts nominalWidthX (op 21), defaultWidthX (op 20), and
 // the local Subrs offset (op 19, relative to the Private DICT start) from a CFF
 // Private DICT.
-func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX, subrsOffset int32) {
-	operands := make([]int32, 0, 4)
+func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX float64, subrsOffset int32) {
+	operands := make([]float64, 0, 4)
 	for i := 0; i < len(data); {
 		b := data[i]
 		switch {
@@ -1115,7 +1114,7 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX, subrsOffset in
 			switch op {
 			case 19: // Subrs (local subroutine INDEX, offset from Private DICT)
 				if len(operands) > 0 {
-					subrsOffset = operands[len(operands)-1]
+					subrsOffset = int32(operands[len(operands)-1])
 				}
 			case 20: // defaultWidthX
 				if len(operands) > 0 {
@@ -1129,38 +1128,38 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX, subrsOffset in
 			operands = operands[:0]
 			i++
 		case b >= 32 && b <= 246:
-			operands = append(operands, int32(b)-139)
+			operands = append(operands, float64(b)-139)
 			i++
 		case b >= 247 && b <= 250:
 			if i+1 >= len(data) {
 				return
 			}
-			operands = append(operands, (int32(b)-247)*256+int32(data[i+1])+108)
+			operands = append(operands, (float64(b)-247)*256+float64(data[i+1])+108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(data) {
 				return
 			}
-			operands = append(operands, -(int32(b)-251)*256-int32(data[i+1])-108)
+			operands = append(operands, -(float64(b)-251)*256-float64(data[i+1])-108)
 			i += 2
 		case b == 28:
 			if i+2 >= len(data) {
 				return
 			}
-			operands = append(operands, int32(int16(binary.BigEndian.Uint16(data[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
+			operands = append(operands, float64(int16(binary.BigEndian.Uint16(data[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
 			i += 3
 		case b == 29:
 			if i+4 >= len(data) {
 				return
 			}
-			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5]))) //nolint:gosec // intentional two's-complement conversion
+			operands = append(operands, float64(int32(binary.BigEndian.Uint32(data[i+1:i+5])))) //nolint:gosec // intentional two's-complement conversion
 			i += 5
 		case b == 30:
-			// Real number (nibble-encoded): round to the nearest integer. A
-			// fractional nominalWidthX/defaultWidthX (op 30) would otherwise be
-			// skipped, leaving the width 0 and offsetting every glyph advance.
+			// Real number (nibble-encoded). A Computer Modern subset writes
+			// nominalWidthX as 384.778, and rounding it shifts every advance the
+			// charstrings derive from it by three quarters of a unit.
 			val, end := parseRealNumber(data, i+1)
-			operands = append(operands, int32(math.Round(val)))
+			operands = append(operands, val)
 			i = end
 		default:
 			i++
@@ -1168,6 +1167,11 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX, subrsOffset in
 	}
 	return
 }
+
+// fixed1616Scale converts a Type 2 charstring's 32-bit fixed operand (CFF
+// spec, Type 2 Charstring Format, 3.2) into the real number it encodes: the
+// operand is 16.16, so its low 16 bits carry the fraction.
+const fixed1616Scale = 65536.0
 
 // maxSubrNesting bounds Type 2 subroutine recursion while recovering a glyph
 // width. The CFF spec caps subroutine nesting at 10; deeper is malformed or
@@ -1197,14 +1201,14 @@ func subrBias(n int) int32 {
 type widthScanner struct {
 	local, global [][]byte
 	lbias, gbias  int32
-	stack         []int32
-	width         *int32
+	stack         []float64
+	width         *float64
 	done          bool
 }
 
 // push appends an operand, stopping the scan if the operand stack exceeds the
 // Type 2 ceiling (adversarial input pushing operands without a clearing op).
-func (s *widthScanner) push(v int32) {
+func (s *widthScanner) push(v float64) {
 	if len(s.stack) >= maxCharstringStack {
 		s.done = true
 		return
@@ -1229,7 +1233,7 @@ func (s *widthScanner) callSubr(subrs [][]byte, bias int32, depth int) {
 		s.done = true
 		return
 	}
-	idx := s.stack[len(s.stack)-1] + bias
+	idx := int32(s.stack[len(s.stack)-1]) + bias
 	s.stack = s.stack[:len(s.stack)-1]
 	if idx < 0 || int(idx) >= len(subrs) || subrs[idx] == nil {
 		s.done = true
@@ -1252,32 +1256,34 @@ func (s *widthScanner) scan(cs []byte, depth int) {
 				s.done = true
 				return
 			}
-			s.push(int32(int16(binary.BigEndian.Uint16(cs[i+1 : i+3])))) //nolint:gosec // intentional two's-complement conversion
+			s.push(float64(int16(binary.BigEndian.Uint16(cs[i+1 : i+3])))) //nolint:gosec // intentional two's-complement conversion
 			i += 3
 		case b >= 32 && b <= 246:
-			s.push(int32(b) - 139)
+			s.push(float64(b) - 139)
 			i++
 		case b >= 247 && b <= 250:
 			if i+1 >= len(cs) {
 				s.done = true
 				return
 			}
-			s.push((int32(b)-247)*256 + int32(cs[i+1]) + 108)
+			s.push((float64(b)-247)*256 + float64(cs[i+1]) + 108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(cs) {
 				s.done = true
 				return
 			}
-			s.push(-(int32(b)-251)*256 - int32(cs[i+1]) - 108)
+			s.push(-(float64(b)-251)*256 - float64(cs[i+1]) - 108)
 			i += 2
 		case b == 255:
-			// 32-bit fixed point (16.16); the integer part suffices for a width.
+			// 32-bit fixed point (16.16). The fraction belongs to the advance:
+			// a Computer Modern subset writes 707.167 there, and truncating it
+			// reads 707, hiding a mismatch against a /Widths entry of 706.
 			if i+4 >= len(cs) {
 				s.done = true
 				return
 			}
-			s.push(int32(binary.BigEndian.Uint32(cs[i+1:i+5])) >> 16) //nolint:gosec // reinterprets the 16.16 fixed operand's bits, no range change
+			s.push(float64(int32(binary.BigEndian.Uint32(cs[i+1:i+5]))) / fixed1616Scale) //nolint:gosec // reinterprets the 16.16 fixed operand's bits, no range change
 			i += 5
 		default:
 			op := int(b)
@@ -1321,13 +1327,13 @@ func (s *widthScanner) scan(cs []byte, depth int) {
 // width operand (the first "extra" operand before the first stack-clearing
 // operator), expanding any subroutines it calls first. Returns nil if no
 // explicit width is present (the glyph then uses defaultWidthX).
-func extractCharstringWidth(cs []byte, localSubrs, globalSubrs [][]byte) *int32 {
+func extractCharstringWidth(cs []byte, localSubrs, globalSubrs [][]byte) *float64 {
 	s := &widthScanner{
 		local:  localSubrs,
 		global: globalSubrs,
 		lbias:  subrBias(len(localSubrs)),
 		gbias:  subrBias(len(globalSubrs)),
-		stack:  make([]int32, 0, 48), //nolint:mnd // typical charstring stack depth
+		stack:  make([]float64, 0, 48), //nolint:mnd // typical charstring stack depth
 	}
 	s.scan(cs, 0)
 	return s.width

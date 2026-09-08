@@ -69,7 +69,7 @@ func TableData(data []byte, records []TableRecord, tag string) ([]byte, error) {
 // GlyphWidths extracts advance widths from the hmtx (Horizontal Metrics)
 // table using the numberOfHMetrics field from the hhea (Horizontal Header)
 // table. Returns a GID → advance width map in font design units.
-func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
+func GlyphWidths(ctx context.Context, data []byte) (map[uint16]float64, error) {
 	records, err := ParseTableDirectory(data)
 	if err != nil {
 		return nil, err
@@ -94,10 +94,12 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 		return nil, fmt.Errorf("%w: hmtx table too short", ErrInvalidFont)
 	}
 
-	result := make(map[uint16]uint16, numberOfHMetrics)
-	var lastAdvance uint16
+	// float64 because callers share the type with CFF charstring advances,
+	// which are real numbers; an hmtx advance is always a whole number.
+	result := make(map[uint16]float64, numberOfHMetrics)
+	var lastAdvance float64
 	for i := range numberOfHMetrics {
-		advance := binary.BigEndian.Uint16(hmtxData[i*4 : i*4+2])
+		advance := float64(binary.BigEndian.Uint16(hmtxData[i*4 : i*4+2]))
 		result[uint16(i)] = advance //nolint:gosec // GID fits in uint16 for TrueType
 		lastAdvance = advance
 	}

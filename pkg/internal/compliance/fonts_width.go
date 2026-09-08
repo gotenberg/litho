@@ -55,7 +55,7 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 // Returns ok=false when the font program is absent or unparseable. Shared by the
 // width-consistency check and the [ExpectedSimpleFontWidths] repair helper so the
 // two always agree on the authoritative widths.
-func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (map[uint16]uint16, uint16, map[uint16]uint16, bool) {
+func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (map[uint16]float64, uint16, map[uint16]uint16, bool) {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
 		return nil, 0, nil, false
@@ -274,7 +274,7 @@ func widthValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) 
 	return document.Float(resolved), true
 }
 
-func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
+func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
 	// Width consistency is a property of a glyph the document actually
 	// paints: the rule compares the program advance against the declared
 	// width only when both are resolvable and the glyph is rendered
@@ -368,7 +368,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		if !ok {
 			continue
 		}
-		expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 		if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
 			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f, font=%.1f)",
 				fontName, pageNum, charCode, pdfWidth, expectedWidth)
@@ -388,7 +388,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 // Only a code that resolves to a glyph with a known program advance is judged.
 // Code 0 is left to [checkSimpleFontCode0Width], which resolves it through the
 // .notdef fallback the other codes do not get.
-func checkSimpleFontUncoveredWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar, widthCount int, usage *fontUsageInfo) []Violation {
+func checkSimpleFontUncoveredWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar, widthCount int, usage *fontUsageInfo) []Violation {
 	if charCodeToGID == nil {
 		return nil
 	}
@@ -415,7 +415,7 @@ func checkSimpleFontUncoveredWidths(ctx context.Context, doc *document.Document,
 		if !ok {
 			continue
 		}
-		expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 		if math.Abs(missingWidth-expectedWidth) > widthTolerance {
 			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f from /MissingWidth, font=%.1f)",
 				fontName, pageNum, code, missingWidth, expectedWidth)
@@ -432,7 +432,7 @@ func checkSimpleFontUncoveredWidths(ctx context.Context, doc *document.Document,
 // compares the program advance against the declared width. The declared width is
 // /Widths[0-FirstChar] when code 0 is covered by the array, otherwise
 // /MissingWidth (default 0, ISO 32000-1 Table 111).
-func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar int, widths []ast.PdfObject) []Violation {
+func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar int, widths []ast.PdfObject) []Violation {
 	// Symbolic fonts (FontDescriptor /Flags bit 3) map code 0 through the
 	// embedded program's built-in encoding, which litho does not reconstruct
 	// for CFF; the GID-0 fallback below would then read the wrong glyph and
@@ -470,7 +470,7 @@ func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, font
 		return nil
 	}
 
-	expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+	expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 	if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
 		return failf(rule, "font %s on page %d: char 0 width mismatch (PDF=%.1f, font=%.1f)",
 			fontName, pageNum, pdfWidth, expectedWidth)
@@ -804,7 +804,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 // legitimately carry a different advance (a subset placeholder, a zero-advance
 // combining glyph) without affecting any drawn text. usedCIDs nil means usage
 // could not be collected, so every declared CID is checked as a fail-safe.
-func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
+func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
 	wObj, ok := cidFontDict["W"]
 	if !ok {
 		return nil
@@ -887,7 +887,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if !ok {
 					continue
 				}
-				expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+				expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 				if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
 					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
 						fontName, pageNum, cid, pdfWidth, expectedWidth)
@@ -933,7 +933,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if !ok {
 					continue
 				}
-				expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+				expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 				if math.Abs(pdfWidth-expectedWidth) > widthTolerance {
 					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
 						fontName, pageNum, cid, pdfWidth, expectedWidth)
@@ -1070,7 +1070,7 @@ func ExpectedSimpleFontWidths(ctx context.Context, doc *document.Document, fontD
 		if !ok {
 			continue
 		}
-		out[int(code)] = float64(bw) * 1000.0 / float64(unitsPerEm)
+		out[int(code)] = bw * 1000.0 / float64(unitsPerEm)
 	}
 	return out, true
 }

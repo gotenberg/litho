@@ -27,7 +27,7 @@ func TestCIDWidths_DuplicateCIDDeterministic(t *testing.T) {
 			t.Fatalf("CIDWidths: %v", err)
 		}
 		if w[39] != 444 {
-			t.Fatalf("run %d: CID 39 width = %d, want 444 (lowest-GID canonical glyph)", i, w[39])
+			t.Fatalf("run %d: CID 39 width = %g, want 444 (lowest-GID canonical glyph)", i, w[39])
 		}
 	}
 }

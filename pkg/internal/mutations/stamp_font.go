@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -83,9 +84,20 @@ func parseTTF(data []byte) (*embeddedTTF, error) {
 	}
 
 	ctx := context.Background()
-	widths, err := truetype.GlyphWidths(ctx, data)
+	programWidths, err := truetype.GlyphWidths(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("reading glyph widths: %w", err)
+	}
+	// An hmtx advance is a whole number; [truetype.GlyphWidths] shares its
+	// return type with CFF charstring advances, which are real. Keep the
+	// stamped /W array integral so the writer emits the same bytes it always
+	// has.
+	widths := make(map[uint16]uint16, len(programWidths))
+	for gid, w := range programWidths {
+		if w < 0 || w > math.MaxUint16 {
+			continue
+		}
+		widths[gid] = uint16(math.Round(w))
 	}
 	gidToUnicode, err := truetype.GlyphToUnicode(ctx, data)
 	if err != nil {

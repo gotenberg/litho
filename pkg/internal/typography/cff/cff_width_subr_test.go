@@ -2,6 +2,7 @@ package cff
 
 import (
 	"context"
+	"math"
 	"os"
 	"testing"
 )
@@ -24,7 +25,7 @@ func TestGlyphWidths_SubrBeforeStem(t *testing.T) {
 		t.Fatalf("GlyphWidths: %v", err)
 	}
 	if got := widths[36]; got != 667 {
-		t.Errorf("GID 36 ('C') width = %d, want 667 (nominalWidthX 584 + delta 83); a subr-clearing scanner returns defaultWidthX 222", got)
+		t.Errorf("GID 36 ('C') width = %g, want 667 (nominalWidthX 584 + delta 83); a subr-clearing scanner returns defaultWidthX 222", got)
 	}
 }
 
@@ -47,7 +48,7 @@ func TestExtractCharstringWidth_CallSubrBeforeStem(t *testing.T) {
 		t.Fatal("expected a width, got nil (subr expansion dropped the leading operand)")
 	}
 	if *w != 83 {
-		t.Errorf("width = %d, want 83", *w)
+		t.Errorf("width = %g, want 83", *w)
 	}
 }
 
@@ -102,6 +103,28 @@ func TestExtractCharstringWidth_HintmaskWidth(t *testing.T) {
 	cs2 := append(encodeCFFInt(50), encodeCFFInt(60)...)
 	cs2 = append(cs2, 19, 0xFF)
 	if w := extractCharstringWidth(cs2, nil, nil); w != nil {
-		t.Errorf("width = %d, want nil (even operand count carries no width)", *w)
+		t.Errorf("width = %g, want nil (even operand count carries no width)", *w)
+	}
+}
+
+// TestExtractCharstringWidth_FixedOperand pins that a 32-bit fixed (16.16)
+// width operand keeps its fraction. ISO 19005-2 §6.2.11.5 is judged within one
+// unit, so truncating the operand moves a real 1.167-unit mismatch onto the
+// tolerance boundary and hides it: pdfjs issue3566.pdf draws a glyph 457.171
+// wide against a declared 456.
+func TestExtractCharstringWidth_FixedOperand(t *testing.T) {
+	// 457.171 as 16.16: the integer part in the high half, the fraction in the
+	// low half. Followed by hstem with an odd operand count, so it is the width.
+	const want = 457.171
+	fixed := int32(math.Round(want * 65536))
+	cs := []byte{255, byte(fixed >> 24), byte(fixed >> 16), byte(fixed >> 8), byte(fixed)}
+	cs = append(cs, 1) // hstem
+
+	w := extractCharstringWidth(cs, nil, nil)
+	if w == nil {
+		t.Fatal("expected a width, got nil")
+	}
+	if math.Abs(*w-want) > 1.0/65536.0 {
+		t.Errorf("width = %g, want %g", *w, want)
 	}
 }

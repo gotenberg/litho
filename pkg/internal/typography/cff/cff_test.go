@@ -211,23 +211,27 @@ func TestParsePrivateDict(t *testing.T) {
 
 	nominal, defaultW, _ := parsePrivateDict(dict)
 	if defaultW != 500 {
-		t.Errorf("defaultWidthX: got %d, want 500", defaultW)
+		t.Errorf("defaultWidthX: got %g, want 500", defaultW)
 	}
 	if nominal != 250 {
-		t.Errorf("nominalWidthX: got %d, want 250", nominal)
+		t.Errorf("nominalWidthX: got %g, want 250", nominal)
 	}
 }
 
 func TestParsePrivateDict_Empty(t *testing.T) {
 	nominal, defaultW, _ := parsePrivateDict(nil)
 	if nominal != 0 || defaultW != 0 {
-		t.Errorf("expected zero values, got nominal=%d default=%d", nominal, defaultW)
+		t.Errorf("expected zero values, got nominal=%g default=%g", nominal, defaultW)
 	}
 }
 
-// TestParsePrivateDict_RealNumberWidth guards against dropping a fractional
-// nominalWidthX/defaultWidthX (CFF real-number operator 30). Skipping the
-// operand leaves the width 0 and offsets every glyph advance by the true value.
+// TestParsePrivateDict_RealNumberWidth pins that a fractional
+// nominalWidthX/defaultWidthX (CFF real-number operator 30) is kept as written.
+// Dropping the operand leaves the width 0 and offsets every glyph advance by
+// the true value; rounding it offsets each advance by up to half a unit, which
+// is enough to move a comparison against a declared /Widths entry across the
+// one-unit tolerance ISO 19005-2 §6.2.11.5 is judged with. A Computer Modern
+// subset in govdocs thread_200_200836.pdf declares nominalWidthX 384.778.
 func TestParsePrivateDict_RealNumberWidth(t *testing.T) {
 	// nominalWidthX = 392.49 encoded as op 30: nibbles 3 9 2 . 4 9 END.
 	dict := []byte{0x1e, 0x39, 0x2a, 0x49, 0xff}
@@ -237,11 +241,11 @@ func TestParsePrivateDict_RealNumberWidth(t *testing.T) {
 	dict = append(dict, 20) // defaultWidthX
 
 	nominal, defaultW, _ := parsePrivateDict(dict)
-	if nominal != 392 {
-		t.Errorf("nominalWidthX = %d, want 392 (round 392.49)", nominal)
+	if math.Abs(nominal-392.49) > 1e-6 {
+		t.Errorf("nominalWidthX = %g, want 392.49", nominal)
 	}
-	if defaultW != 514 {
-		t.Errorf("defaultWidthX = %d, want 514 (round 513.88)", defaultW)
+	if math.Abs(defaultW-513.88) > 1e-6 {
+		t.Errorf("defaultWidthX = %g, want 513.88", defaultW)
 	}
 }
 
@@ -505,14 +509,14 @@ func TestExtractCharstringWidth_Endchar(t *testing.T) {
 		t.Fatal("expected width, got nil")
 	}
 	if *w != 100 {
-		t.Errorf("width: got %d, want 100", *w)
+		t.Errorf("width: got %g, want 100", *w)
 	}
 }
 
 func TestExtractCharstringWidth_NoWidthEndchar(t *testing.T) {
 	cs := []byte{14}
 	if w := extractCharstringWidth(cs, nil, nil); w != nil {
-		t.Errorf("expected nil, got %d", *w)
+		t.Errorf("expected nil, got %g", *w)
 	}
 }
 
@@ -526,7 +530,7 @@ func TestExtractCharstringWidth_EndcharSeacNoWidth(t *testing.T) {
 	cs = append(cs, encodeCFFInt(194)...)
 	cs = append(cs, 14)
 	if w := extractCharstringWidth(cs, nil, nil); w != nil {
-		t.Errorf("seac endchar (4 operands) carries no width; got %d", *w)
+		t.Errorf("seac endchar (4 operands) carries no width; got %g", *w)
 	}
 }
 
@@ -542,7 +546,7 @@ func TestExtractCharstringWidth_EndcharSeacWithWidth(t *testing.T) {
 		t.Fatal("expected width, got nil")
 	}
 	if *w != 250 {
-		t.Errorf("width: got %d, want 250", *w)
+		t.Errorf("width: got %g, want 250", *w)
 	}
 }
 
@@ -555,7 +559,7 @@ func TestExtractCharstringWidth_HMoveto(t *testing.T) {
 		t.Fatal("expected width, got nil")
 	}
 	if *w != 200 {
-		t.Errorf("width: got %d, want 200", *w)
+		t.Errorf("width: got %g, want 200", *w)
 	}
 }
 
@@ -570,7 +574,7 @@ func TestExtractCharstringWidth_HStem_OddOperands(t *testing.T) {
 		t.Fatal("expected width, got nil")
 	}
 	if *w != 300 {
-		t.Errorf("width: got %d, want 300", *w)
+		t.Errorf("width: got %g, want 300", *w)
 	}
 }
 
@@ -581,7 +585,7 @@ func TestExtractCharstringWidth_NegativeWidth(t *testing.T) {
 		t.Fatal("expected width, got nil")
 	}
 	if *w != -50 {
-		t.Errorf("width: got %d, want -50", *w)
+		t.Errorf("width: got %g, want -50", *w)
 	}
 }
 
@@ -800,6 +804,6 @@ func TestExtractCharstringWidth_RejectsStackOverflow(t *testing.T) {
 		cs[i] = 100 // any operand byte in [32, 246]
 	}
 	if got := extractCharstringWidth(cs, nil, nil); got != nil {
-		t.Errorf("extractCharstringWidth on adversarial stack overflow returned %d, want nil", *got)
+		t.Errorf("extractCharstringWidth on adversarial stack overflow returned %g, want nil", *got)
 	}
 }
