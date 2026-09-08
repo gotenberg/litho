@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
@@ -845,7 +846,18 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 		// PDF/A-1 states no such requirement, so the rule is empty there.
 		if cmapRule := trueTypeNonSymbolicCmapRule(profile); cmapRule.Specification != "" {
 			if fontData := extractFontProgramData(ctx, doc, fd); len(fontData) > 0 {
-				if subs, err := truetype.CmapSubtables(fontData); err == nil && nonSymbolicCmapViolation(profile, subs) {
+				subs, err := truetype.CmapSubtables(fontData)
+				switch {
+				case errors.Is(err, truetype.ErrTableNotFound):
+					// The rule asks the program to carry "at least" a (3,1) or
+					// a (1,0) subtable, so a program with no cmap table at all
+					// fails it outright. Reading only the parsed-subtable set
+					// let that case pass silently, since the missing table is
+					// an error rather than an empty set: pdfjs
+					// TrueType_without_cmap.pdf embeds exactly such a font and
+					// veraPDF reports it.
+					results = append(results, failf(cmapRule, "font %s on page %d: non-symbolic TrueType program carries no cmap table", fontName, pageNum)...)
+				case err == nil && nonSymbolicCmapViolation(profile, subs):
 					results = append(results, failf(cmapRule, "font %s on page %d: non-symbolic TrueType cmap subtable set is not permitted (%d subtables)", fontName, pageNum, len(subs))...)
 				}
 			}
