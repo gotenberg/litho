@@ -589,12 +589,14 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 	if err != nil || len(ocgsArr) == 0 {
 		return nil
 	}
-	allOCGs := make(map[int]bool, len(ocgsArr))
+	allOCGs := make([]int, 0, len(ocgsArr))
 	for _, ocg := range ocgsArr {
 		if ref, ok := ocg.(ast.PdfIndirectRef); ok {
-			allOCGs[ref.ObjectNum] = true
+			allOCGs = append(allOCGs, ref.ObjectNum)
 		}
 	}
+	slices.Sort(allOCGs)
+	allOCGs = slices.Compact(allOCGs)
 
 	// Check default config (/D) for /Order key.
 	dObj, ok := ocProps["D"]
@@ -614,8 +616,9 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 	orderOCGs := make(map[int]bool)
 	collectOrderOCGRefs(ctx, doc, orderObj, orderOCGs, 0)
 
-	// Check that all OCGs are referenced.
-	for objNum := range allOCGs {
+	// Check that all OCGs are referenced. Sorted so a file omitting several
+	// always names the same one.
+	for _, objNum := range allOCGs {
 		if !orderOCGs[objNum] {
 			return failf(ocgOrderCompletePDFARule(part),
 				"OCG object %d not referenced in Order array", objNum)
@@ -634,17 +637,23 @@ func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.Pd
 	if depth > maxOCGOrderDepth {
 		return
 	}
-	// Direct indirect ref = OCG.
+	// An array first, resolving it: /Order is an array and its nested groupings
+	// are arrays, and ISO 32000-1, 7.3.10 lets any of them be written
+	// indirectly. Reading the reference as an OCG instead recorded the array's
+	// own object number and never descended, so every OCG the file does list
+	// looked absent: pdfjs cmykjpeg.pdf, issue11144_reduced.pdf and
+	// transparent.pdf all write /Order as "N 0 R", and litho reported an
+	// ISO 19005-2 §6.9 t3 violation on each that veraPDF does not.
+	if arr, err := document.ResolveArray(ctx, doc, obj); err == nil {
+		for _, item := range arr {
+			collectOrderOCGRefs(ctx, doc, item, result, depth+1)
+		}
+		return
+	}
+	// Anything else that is a reference is an OCG. A title string, which
+	// ISO 32000-1, 8.11.4.5 allows as the first element of a nested grouping,
+	// is neither and is ignored.
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
 		result[ref.ObjectNum] = true
-		return
-	}
-	// Array: recurse into each element.
-	arr, err := document.ResolveArray(ctx, doc, obj)
-	if err != nil {
-		return
-	}
-	for _, item := range arr {
-		collectOrderOCGRefs(ctx, doc, item, result, depth+1)
 	}
 }
