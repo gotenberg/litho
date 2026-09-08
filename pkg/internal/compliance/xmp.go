@@ -696,10 +696,19 @@ func xmpWellFormed(data []byte) bool {
 	dec.CharsetReader = xmpPassThroughCharset
 	dec.Strict = true
 	declared := map[string]bool{xmlBuiltinNamespace: true}
+	rooted := false
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
-			return true
+			// XML 1.0, 2.1 makes the root element part of the document
+			// production, so bytes carrying no element at all are not a
+			// well-formed document however cleanly they tokenise. Go's
+			// encoding/xml reads any element-free input as one run of character
+			// data and reports no error, so binary that is not XML in any sense
+			// passed: pdfjs bug1826783.pdf carries 1536 bytes of ciphertext as
+			// its /Metadata, which veraPDF rejects under ISO 19005-2 §6.6.2.1
+			// t4 and litho called well-formed.
+			return rooted
 		}
 		if err != nil {
 			return false
@@ -708,6 +717,7 @@ func xmpWellFormed(data []byte) bool {
 		if !ok {
 			continue
 		}
+		rooted = true
 		if hasDuplicateAttr(start) {
 			return false
 		}
