@@ -375,6 +375,52 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		}
 	}
 
+	return checkSimpleFontUncoveredWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, int(firstChar), len(widths), usage)
+}
+
+// checkSimpleFontUncoveredWidths applies the glyph-width rule to the shown codes
+// the /Widths array does not cover. Their declared width is the descriptor's
+// /MissingWidth (ISO 32000-1, Table 111, default 0), so the comparison is the
+// same one the array codes get: govdocs thread_100_100945.pdf shows a space at
+// code 32, below its /FirstChar of 48, against a 222-unit program glyph, which
+// veraPDF reports under ISO 19005-2 §6.2.11.5 and litho never looked at.
+//
+// Only a code that resolves to a glyph with a known program advance is judged.
+// Code 0 is left to [checkSimpleFontCode0Width], which resolves it through the
+// .notdef fallback the other codes do not get.
+func checkSimpleFontUncoveredWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]uint16, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar, widthCount int, usage *fontUsageInfo) []Violation {
+	if charCodeToGID == nil {
+		return nil
+	}
+	missingWidth := simpleFontMissingWidth(ctx, doc, fontDict)
+	if missingWidth < math.MinInt32 || missingWidth > math.MaxInt32 {
+		return nil
+	}
+	for _, code := range sortedByteKeys(usage.charCodes) {
+		if code == 0 {
+			continue
+		}
+		if idx := int(code) - firstChar; idx >= 0 && idx < widthCount {
+			continue
+		}
+		// GID 0 is what [simpleFontGlyphMetrics] records for a code whose name
+		// the program's charset does not hold, so comparing /MissingWidth
+		// against the .notdef advance would test a glyph the font never
+		// selects. Glyph presence is the rule for that; leave it there.
+		gid, mapped := charCodeToGID[uint16(code)]
+		if !mapped || gid == 0 {
+			continue
+		}
+		bw, ok := binaryWidths[gid]
+		if !ok {
+			continue
+		}
+		expectedWidth := float64(bw) * 1000.0 / float64(unitsPerEm)
+		if math.Abs(missingWidth-expectedWidth) > widthTolerance {
+			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f from /MissingWidth, font=%.1f)",
+				fontName, pageNum, code, missingWidth, expectedWidth)
+		}
+	}
 	return nil
 }
 

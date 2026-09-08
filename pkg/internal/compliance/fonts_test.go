@@ -76,9 +76,20 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 		65: 600,
 	}
 	var unitsPerEm uint16 = 1000
+	// /Widths spans codes 32 to 65. Index 0 declares the space at a
+	// deliberately wrong 226, and index 33 declares 'A' at its true 600 so the
+	// subtests that show 'A' exercise usage gating alone: a shown code the
+	// array did not cover would take /MissingWidth (ISO 32000-1, Table 111)
+	// and mismatch on that instead.
+	widths := make(ast.PdfArray, 34)
+	for i := range widths {
+		widths[i] = ast.PdfReal(0)
+	}
+	widths[0] = ast.PdfReal(226.0)
+	widths[33] = ast.PdfReal(600)
 	fontDict := ast.PdfDict{
 		"FirstChar": ast.PdfInt(32),
-		"Widths":    ast.PdfArray{ast.PdfReal(226.0)},
+		"Widths":    widths,
 	}
 	// Explicit code→GID mapping. The check no longer assumes identity for a
 	// nil map (an unresolved cmap must not misread a proportional font), so the
