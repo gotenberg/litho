@@ -95,8 +95,8 @@ func collectReferencedCSNames(ctx context.Context, doc *document.Document, resou
 	// Shadings whose /ColorSpace is a bare name reference.
 	if shDict, _ := document.ResolveDict(ctx, doc, resources["Shading"]); shDict != nil {
 		for _, sh := range shDict {
-			sd, err := document.ResolveDict(ctx, doc, sh)
-			if err != nil || sd == nil {
+			sd := resolveShadingDict(ctx, doc, sh)
+			if sd == nil {
 				continue
 			}
 			if n, err := document.ResolveName(ctx, doc, sd["ColorSpace"]); err == nil && n != "" {
@@ -131,6 +131,19 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		if err != nil {
 			doc.Logger.Debug("compliance.color: cannot resolve XObject stream", "name", name, "error", err)
 			continue
+		}
+
+		// An image mask carries no colour space of its own: ISO 32000-1, 8.9.6.2
+		// paints its unmasked areas with the current fill colour, so drawing one
+		// selects a colour space exactly as "f" does. When no cs/rg/g/k set the
+		// fill space before the Do, that colour is the initial DeviceGray of
+		// 8.6.8. pdfjs issue7308.pdf draws a JBIG2 image mask on a page that
+		// sets no colour at all, which veraPDF reports under ISO 19005-2
+		// §6.2.4.3 t4 and litho counted as no colour use whatever.
+		if mask, err := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); err == nil && mask {
+			if !inheritedCSFor(inherited, string(name)).fill {
+				usage.gray = true
+			}
 		}
 
 		// Check the XObject's own /ColorSpace entry.
@@ -926,6 +939,22 @@ func mark3DStreamCS(ctx context.Context, doc *document.Document, stream ast.PdfS
 	}
 }
 
+// resolveShadingDict returns a shading's dictionary whichever form it takes.
+// Per ISO 32000-1, 8.7.4.5, a shading of type 1 to 3 is a dictionary while a
+// mesh shading of type 4 to 7 is a stream carrying the same entries in its
+// stream dictionary. Resolving only the dictionary form dropped every mesh:
+// pdfjs issue17848.pdf paints a type 4 shading whose /ColorSpace is DeviceRGB,
+// and litho counted no device colour space for the page at all.
+func resolveShadingDict(ctx context.Context, doc *document.Document, obj ast.PdfObject) ast.PdfDict {
+	if d, err := document.ResolveDict(ctx, doc, obj); err == nil && d != nil {
+		return d
+	}
+	if stream, err := document.ResolveStream(ctx, doc, obj); err == nil && stream.Dict != nil {
+		return stream.Dict
+	}
+	return nil
+}
+
 // scanShadingColorSpaces checks Shading resources for device colour space usage.
 // Shading dictionaries contain a /ColorSpace entry that may reference a device CS.
 func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, used *usedResources) {
@@ -945,9 +974,9 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 			continue
 		}
 
-		sd, err := document.ResolveDict(ctx, doc, shadingObj)
-		if err != nil || sd == nil {
-			doc.Logger.Debug("compliance.color: cannot resolve Shading dict", "name", name, "error", err)
+		sd := resolveShadingDict(ctx, doc, shadingObj)
+		if sd == nil {
+			doc.Logger.Debug("compliance.color: cannot resolve Shading dict", "name", name)
 			continue
 		}
 
