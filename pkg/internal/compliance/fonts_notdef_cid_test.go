@@ -50,7 +50,7 @@ func TestCheckType0NotdefGlyph_CIDFontType2(t *testing.T) {
 			t.Fatalf("resolve Type0 dict: %v", err)
 		}
 		usage := &fontUsageInfo{visible: true, rawStrings: []ast.PdfString{ast.PdfString(raw)}}
-		return checkType0NotdefGlyph(ctx, doc, type0, "F1", 1, "PDF/A-2b", usage)
+		return checkType0NotdefGlyph(ctx, doc, type0, "F1", 1, "PDF/A-2b", usage, withMalformedCodes)
 	}
 
 	// CID 1 → GID 1 = "uni0000": an in-range, empty, zero-width but real glyph.

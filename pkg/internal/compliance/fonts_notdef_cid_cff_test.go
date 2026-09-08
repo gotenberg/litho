@@ -116,7 +116,7 @@ func TestCheckType0NotdefGlyph_CIDFontType0RenderModeScope(t *testing.T) {
 			visible:    visible,
 			rawStrings: []ast.PdfString{ast.PdfString([]byte{byte(cid >> 8), byte(cid)})},
 		}
-		return checkType0NotdefGlyph(ctx, doc, type0, "F1", 1, "PDF/A-2b", usage)
+		return checkType0NotdefGlyph(ctx, doc, type0, "F1", 1, "PDF/A-2b", usage, withMalformedCodes)
 	}
 
 	// A CID the charset holds answers both rules, visible or not.

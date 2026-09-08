@@ -304,7 +304,20 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 			results = append(results, checkFontDictRules(ctx, doc, font, fontKey, pageNum, profile, embedVisible, usage)...)
 		}
 		if fontSubtype(ctx, doc, font) == "Type0" {
-			if !dictRulesDone {
+			if dictRulesDone {
+				// The dictionary was reported on an earlier page, but this page's
+				// glyphs are still unjudged. See [checkType0UsageRules]. Content
+				// litho could not parse names no glyphs it can judge: the
+				// conservative "check every declared font" fallback exists for the
+				// dictionary rules, and pdfjs issue11678.pdf, whose page 2 stream
+				// declares /Length 4218 over no data, otherwise reports a .notdef
+				// against recovered bytes veraPDF never reads.
+				if descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"]); err == nil && len(descArr) > 0 && !parseFailed {
+					if cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cidFontDict != nil {
+						results = append(results, checkType0UsageRules(ctx, doc, font, cidFontDict, fontKey, pageNum, profile, usage, withoutMalformedCodes)...)
+					}
+				}
+			} else {
 				results = append(results, checkType0Font(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
 			}
 		} else {
@@ -1065,10 +1078,6 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// ToUnicode for composite fonts.
 	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
-	// Per-glyph ToUnicode coverage: a present map must cover every code
-	// rendered through the font (§6.2.11.7.2 t2 / UA 7.21.7 / 8.4.5.8).
-	results = append(results, checkType0PerGlyphToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
-
 	// CMap embedding and WMode.
 	results = append(results, checkCMapEmbedding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
@@ -1077,7 +1086,28 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 
 	// .notdef glyph.
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, nil)...)
-	results = append(results, checkType0NotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
+
+	return append(results, checkType0UsageRules(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile, usage, withMalformedCodes)...)
+}
+
+// checkType0UsageRules applies the composite-font rules that judge the glyphs
+// one page shows, as opposed to those that judge the font dictionary. A font
+// object's dictionary is reported once, but every page that selects the font
+// shows its own codes, so these run again for each: govdocs
+// thread_100_100870.pdf selects one Times-Roman Identity-H font on fourteen
+// pages, and only page 20 shows CID 0 and a CID its CFF charset does not hold.
+// veraPDF, which builds a glyph per show operator, reports both under
+// ISO 19005-2 §6.2.11.8 and §6.2.11.4.1 t2; litho judged the font on page 9 and
+// never looked again. Simple fonts already work this way through
+// [checkFontUsageRules].
+func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo, malformed judgeMalformedCodes) []Violation {
+	results := make([]Violation, 0, 4)
+
+	// Per-glyph ToUnicode coverage: a present map must cover every code
+	// rendered through the font (§6.2.11.7.2 t2 / UA 7.21.7 / 8.4.5.8).
+	results = append(results, checkType0PerGlyphToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
+
+	results = append(results, checkType0NotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage, malformed)...)
 	results = append(results, checkType0GlyphPresence(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// Glyph width consistency for CIDFont. Widths are CID-keyed: CID-keyed
@@ -1441,7 +1471,24 @@ func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict
 	return nil
 }
 
-func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+// judgeMalformedCodes selects whether [checkType0NotdefGlyph] may conclude
+// ".notdef is rendered" from a code string that does not decode, as opposed to
+// from a CID the font program lacks. The two differ in what they trust: the
+// second reads the program, while the first reads bytes that a damaged content
+// stream can invent. zlib resynchronises on damaged input, so a page whose
+// stream decompresses only partway yields operators and strings the document
+// never held: pdfjs issue11678.pdf inflates one into a hex string with an odd
+// digit count, which under Identity-H looks exactly like a rendered .notdef.
+// litho judges that once per font object, where it has always been judged, and
+// does not re-run it for every page that selects the font.
+type judgeMalformedCodes bool
+
+const (
+	withMalformedCodes    judgeMalformedCodes = true
+	withoutMalformedCodes judgeMalformedCodes = false
+)
+
+func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo, malformed judgeMalformedCodes) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {
 		return nil
@@ -1463,7 +1510,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// it unchecked rather than risk a false positive.
 		return nil
 	}
-	if notdef {
+	if notdef && bool(malformed) {
 		// A decode-level .notdef (odd-length tail or a CID beyond 65535)
 		// also means no real glyph backs the rendered code, so both the
 		// .notdef rule and the glyph-presence rule apply: the rendered code
