@@ -52,7 +52,7 @@ func normaliseEexec(data []byte) []byte {
 	if i >= len(data) {
 		return nil
 	}
-	if !isHexDigit(data[i]) {
+	if !isHexEncoded(data[i:]) {
 		return data[i:]
 	}
 	// ASCII-hex. Two hex digits per output byte.
@@ -78,6 +78,32 @@ func normaliseEexec(data []byte) []byte {
 		haveNib = false
 	}
 	return buf.Bytes()
+}
+
+// isHexEncoded reports whether an eexec payload is written in ASCII-hex rather
+// than raw binary. The Type 1 Font Format specification (Adobe Systems, 1993),
+// 7.2, settles the two apart on the first four bytes: the encrypted binary
+// begins with a random salt, so a payload whose first four bytes are all
+// hexadecimal digits is hex and any other is binary. Reading one byte is not
+// enough, because a binary salt byte is a hexadecimal digit better than one
+// time in twelve: govdocs thread_300_300035.pdf starts its binary section with
+// 0x32 ('2'), which made litho hex-decode the cipher text into noise and read
+// no glyph at all from the program.
+func isHexEncoded(data []byte) bool {
+	const probe = 4
+	seen := 0
+	for _, c := range data {
+		if isEexecWhitespace(c) {
+			continue
+		}
+		if !isHexDigit(c) {
+			return false
+		}
+		if seen++; seen == probe {
+			return true
+		}
+	}
+	return false
 }
 
 func isEexecWhitespace(c byte) bool {
