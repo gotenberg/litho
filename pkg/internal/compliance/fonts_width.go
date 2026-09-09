@@ -811,18 +811,18 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 // combining glyph) without affecting any drawn text. usedCIDs nil means usage
 // could not be collected, so every declared CID is checked as a fail-safe.
 func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
-	wObj, ok := cidFontDict["W"]
-	if !ok {
-		return nil
-	}
+	// covered records the CIDs /W states a width for. Everything else falls to
+	// /DW, which is checked once the array has been walked.
+	covered := make(map[uint16]bool)
 
-	wArr, err := document.ResolveArray(ctx, doc, wObj)
-	if err != nil {
-		doc.Logger.Debug("compliance: fonts: resolving CID width array", "font", fontName, "error", err)
-		return nil
-	}
-	if wArr == nil {
-		return nil
+	var wArr ast.PdfArray
+	if wObj, ok := cidFontDict["W"]; ok {
+		var err error
+		wArr, err = document.ResolveArray(ctx, doc, wObj)
+		if err != nil {
+			doc.Logger.Debug("compliance: fonts: resolving CID width array", "font", fontName, "error", err)
+			return nil
+		}
 	}
 
 	// A CIDFontType2 maps CID→GID through /CIDToGIDMap; the embedded program's
@@ -871,7 +871,8 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if usedCIDs != nil && (cid < 0 || cid > 0xFFFF || !usedCIDs[uint16(cid)]) {
 					continue
 				}
-				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
+				covered[uint16(cid)] = true //nolint:gosec // G115: guarded by the 16-bit range check above.
+				gid := uint16(cid)          //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
 				if cidToGID != nil {
 					gid = cidToGID(gid)
 				}
@@ -926,7 +927,8 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if usedCIDs != nil && (cid < 0 || cid > 0xFFFF || !usedCIDs[uint16(cid)]) {
 					continue
 				}
-				gid := uint16(cid) //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
+				covered[uint16(cid)] = true //nolint:gosec // G115: guarded by the 16-bit range check above.
+				gid := uint16(cid)          //nolint:gosec // G115: cid is a CIDFont CID within the 16-bit CID space.
 				if cidToGID != nil {
 					gid = cidToGID(gid)
 				}
@@ -950,7 +952,77 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 		}
 	}
 
+	return checkCIDDefaultWidths(ctx, doc, cidFontDict, binaryWidths, unitsPerEm,
+		fontName, pageNum, rule, usedCIDs, covered, cidToGID)
+}
+
+// checkCIDDefaultWidths compares the embedded program's advance against /DW for
+// every rendered CID the /W array states no width for.
+//
+// ISO 32000-2, 9.7.4.3 makes /DW the width of every CID /W does not cover, and
+// its own default 1000. A CIDFont may therefore carry no /W at all and still
+// declare a width for every glyph it shows, so skipping the font when /W is
+// absent leaves the widths unchecked. pdfjs issue6612.pdf embeds a
+// CIDFontType2 with /DW 595 and no /W whose glyphs advance 1229 at 2048 units
+// per em, which is 600.098: veraPDF reports the mismatch on every shown glyph
+// and fontTools confirms the program advance, so litho's silence was a miss.
+func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs, covered map[uint16]bool, cidToGID func(uint16) uint16) []Violation {
+	// Only the rendered CIDs are in scope, and with no recorded usage there is
+	// no set to walk: the rule is raised per shown glyph.
+	if len(usedCIDs) == 0 {
+		return nil
+	}
+
+	dw := defaultCIDWidth(ctx, doc, cidFontDict)
+	if dw == 0 {
+		return nil
+	}
+
+	for _, cid := range sortedCIDs(usedCIDs) {
+		if ctx.Err() != nil {
+			return nil
+		}
+		// CID 0 renders .notdef, whose width [checkType0NotdefWidth] owns.
+		if cid == 0 || covered[cid] {
+			continue
+		}
+		gid := cid
+		if cidToGID != nil {
+			gid = cidToGID(gid)
+		}
+		if gid == 0 {
+			continue
+		}
+		bw, ok := binaryWidths[gid]
+		if !ok || bw == 0 {
+			// A zero advance is missing information, not a zero-wide glyph: the
+			// CID may map past the program's glyph count, or reach a blank the
+			// program never gave metrics for. veraPDF reports none of these, and
+			// the /W path above already skips a zero declared width for the same
+			// reason. Whether the glyph exists at all is the coverage rule's
+			// concern. pdfjs JBIG2Globals.pdf maps CID 40 into a two-glyph
+			// program, complex_ttf_font.pdf CID 988 into a 143-glyph one, and
+			// issue7426.pdf reaches a glyph whose hmtx advance is 0.
+			continue
+		}
+		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
+		if math.Abs(dw-expectedWidth) > widthTolerance {
+			return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
+				fontName, pageNum, cid, dw, expectedWidth)
+		}
+	}
 	return nil
+}
+
+// sortedCIDs returns the keys of set in ascending order, so the violation a
+// font raises does not depend on map iteration order.
+func sortedCIDs(set map[uint16]bool) []uint16 {
+	out := make([]uint16, 0, len(set))
+	for cid := range set {
+		out = append(out, cid)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // extractFontProgramData gets the raw font program bytes from FontDescriptor.
