@@ -102,7 +102,9 @@ func TestResourcesUseTransparency(t *testing.T) {
 		)
 		page := collectPages(ctx, doc, cat)[0]
 		res := resolveResources(ctx, doc, page)
-		return resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{})
+		// nil drawn: this exercises the resource survey itself, which is what a
+		// caller with no readable content stream falls back to.
+		return resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{}, nil)
 	}
 
 	t.Run("soft-mask image nested in a form is detected", func(t *testing.T) {

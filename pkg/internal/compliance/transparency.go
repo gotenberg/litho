@@ -490,7 +490,8 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// its transparency only inside a Form XObject still requires a blending
 		// colour space (ISO 19005-2 §6.2.10 t2).
 		if !pageUsesTransparency {
-			pageUsesTransparency = resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{})
+			pageUsesTransparency = resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{},
+				pageDrawnResources(ctx, doc, page))
 		}
 
 		// Check tiling patterns for transparency triggers.
@@ -531,20 +532,124 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 	return results
 }
 
+// drawnResources records the resource names a content stream invokes: the
+// XObjects it paints with Do and the graphics states it sets with gs.
+//
+// A resource dictionary lists what a page MAY reach, not what it draws.
+// ISO 19005-2, 6.2.10 and ISO 19005-4, 6.2.9 ask whether the page "contains
+// transparency", which veraPDF answers from the content stream: its
+// PDPage.containsTransparency is raised while walking operators, so a soft
+// masked image nothing paints leaves it false. Two fixtures identical but for a
+// single Do settle it, and pdfjs issue12963.pdf shows the shape in the wild,
+// declaring eleven soft masked images while drawing only FXX15, which has no
+// /SMask; issue14847.pdf declares two and draws nothing at all. veraPDF reports
+// neither, at 2b or at 4.
+type drawnResources struct {
+	xobjects   map[string]bool
+	extGStates map[string]bool
+}
+
+// collectDrawnResources reads the XObject and ExtGState names ops invokes.
+func collectDrawnResources(ops []content.Operation) *drawnResources {
+	drawn := &drawnResources{
+		xobjects:   make(map[string]bool),
+		extGStates: make(map[string]bool),
+	}
+	for _, op := range ops {
+		var target map[string]bool
+		switch op.Operator {
+		case "Do":
+			target = drawn.xobjects
+		case "gs":
+			target = drawn.extGStates
+		default:
+			continue
+		}
+		if len(op.Operands) == 0 {
+			continue
+		}
+		if name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName); ok {
+			target[string(name)] = true
+		}
+	}
+	return drawn
+}
+
+// drawsXObject reports whether the content stream painted the named XObject
+// with Do. A nil receiver admits every name, which is what callers holding no
+// parsed content stream need.
+func (d *drawnResources) drawsXObject(name string) bool {
+	if d == nil {
+		return true
+	}
+	return d.xobjects[name]
+}
+
+// setsExtGState reports whether the content stream selected the named graphics
+// state with gs. A nil receiver admits every name.
+func (d *drawnResources) setsExtGState(name string) bool {
+	if d == nil {
+		return true
+	}
+	return d.extGStates[name]
+}
+
+// pageDrawnResources reads the resource names a page's own content stream
+// invokes. Returns nil when the content cannot be read, which leaves the
+// transparency survey unscoped rather than silently emptying it: a page whose
+// content litho cannot parse must not be reported as transparency-free.
+func pageDrawnResources(ctx context.Context, doc *document.Document, page ast.PdfDict) *drawnResources {
+	data, err := resolvePageContentBytes(ctx, doc, page)
+	if err != nil {
+		return nil
+	}
+	// No content, or empty content, paints nothing: the drawn set is empty
+	// rather than unknown, so a resource the page never reaches stays out of
+	// scope. Only a stream litho cannot read falls back to surveying them all.
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return nil
+	}
+	return collectDrawnResources(ops)
+}
+
+// formDrawnResources parses a Form XObject's own content stream so recursion
+// into it judges what the form paints rather than what it declares. Returns nil
+// when the stream cannot be read, which keeps the survey of that form's
+// resources unscoped rather than silently emptying it.
+func formDrawnResources(ctx context.Context, doc *document.Document, stream ast.PdfStream) *drawnResources {
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return nil
+	}
+	return collectDrawnResources(ops)
+}
+
 // resourcesUseTransparency reports whether a resource dictionary reaches any
-// transparency: an ExtGState with a non-isolating blend mode, a soft mask, or a
-// non-opaque constant alpha; an Image XObject with a /SMask; or a Form XObject
-// with a transparency /Group. It recurses into Form XObject resources, bounded
-// by maxFormXObjectDepth and a visited set of form-dict identities, so nested
-// transparency is detected while cyclic references cannot loop. This mirrors
-// veraPDF walking the full resource tree for §6.2.10.
-func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool) bool {
+// transparency the content stream actually draws: an ExtGState with a
+// non-isolating blend mode, a soft mask, or a non-opaque constant alpha; an
+// Image XObject with a /SMask; or a Form XObject with a transparency /Group. It
+// recurses into Form XObject resources, bounded by maxFormXObjectDepth and a
+// visited set of form-dict identities, so nested transparency is detected while
+// cyclic references cannot loop.
+//
+// drawn narrows the scan to the names the content stream invokes; see
+// [drawnResources]. A nil drawn admits every name, for callers that hold no
+// content stream to consult.
+func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool, drawn *drawnResources) bool {
 	if res == nil || depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return false
 	}
 
 	if gsDict, err := document.ResolveDict(ctx, doc, res["ExtGState"]); err == nil && gsDict != nil {
 		for _, name := range sortedNames(gsDict) {
+			if !drawn.setsExtGState(string(name)) {
+				continue
+			}
 			gs, err := document.ResolveDict(ctx, doc, gsDict[name])
 			if err != nil || gs == nil {
 				continue
@@ -577,6 +682,9 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 		if ctx.Err() != nil {
 			return false
 		}
+		if !drawn.drawsXObject(string(name)) {
+			continue
+		}
 		stream, err := document.ResolveStream(ctx, doc, xobjDict[name])
 		if err != nil {
 			continue
@@ -606,7 +714,13 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 			}
 			visited[addr] = true
 			formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-			if resourcesUseTransparency(ctx, doc, formRes, depth+1, visited) {
+			// A drawn form paints its own content, so recurse under the names
+			// that form invokes rather than the page's.
+			formDrawn := drawn
+			if drawn != nil {
+				formDrawn = formDrawnResources(ctx, doc, stream)
+			}
+			if resourcesUseTransparency(ctx, doc, formRes, depth+1, visited, formDrawn) {
 				return true
 			}
 		}
@@ -662,7 +776,8 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 				// image /SMask entries, stamps.pdf a /Group /S /Transparency,
 				// and both fail ISO 19005-2 §6.2.10 t2 there).
 				if apRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && apRes != nil {
-					if resourcesUseTransparency(ctx, doc, apRes, 0, map[string]bool{}) {
+					if resourcesUseTransparency(ctx, doc, apRes, 0, map[string]bool{},
+						formDrawnResources(ctx, doc, stream)) {
 						return true
 					}
 				}
@@ -1000,7 +1115,8 @@ func type3CharProcTransparent(ctx context.Context, doc *document.Document, charP
 					}
 				}
 				formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-				if resourcesUseTransparency(ctx, doc, formRes, 0, map[string]bool{}) {
+				if resourcesUseTransparency(ctx, doc, formRes, 0, map[string]bool{},
+					formDrawnResources(ctx, doc, stream)) {
 					return true
 				}
 			}
