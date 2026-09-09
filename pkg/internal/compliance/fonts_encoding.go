@@ -302,6 +302,84 @@ func renderedNotdefDifferencesCode(ctx context.Context, doc *document.Document, 
 	return 0, false
 }
 
+// predefinedEncodingTable returns the complete charCode to glyphName table a
+// font's /Encoding names, or nil when the font's encoding is not fully given by
+// a predefined table.
+//
+// Only a predefined encoding states a glyph name for every code it covers, so
+// only there does the absence of a name mean the code names no glyph. An
+// embedded program's built-in encoding is sparse by nature, naming just the
+// subset's own codes, and reading a gap there as "no glyph" would condemn every
+// subset font.
+func predefinedEncodingTable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return nil
+	}
+	if name, err := document.ResolveName(ctx, doc, encObj); err == nil && name != "" {
+		return predefinedEncodingNames(string(name))
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return nil
+	}
+	base, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
+	if err != nil || base == "" {
+		return nil
+	}
+	table := predefinedEncodingNames(string(base))
+	if len(table) == 0 {
+		return nil
+	}
+	maps.Copy(table, differencesGlyphNames(ctx, doc, encDict))
+	return table
+}
+
+// renderedUnencodedCode returns a character code the content stream shows that
+// the font's predefined encoding leaves without a glyph name.
+//
+// A code the encoding does not name selects no glyph, so it stands for no
+// character and carries no Unicode value, which ISO 19005-4, 6.2.10.7 (with
+// ISO 19005-2, 6.2.11.7.2 and ISO 14289-1, 7.21.7) forbids for a shown glyph.
+// This is the unnamed twin of an explicit /Differences .notdef. pdfjs
+// issue18059.pdf sets /Helvetica with /WinAnsiEncoding and then shows
+// <0044004500460047...>, whose every other byte is code 0: a simple font takes
+// one byte per code, WinAnsiEncoding names nothing below 32, and veraPDF
+// reports the glyph at code 0.
+func renderedUnencodedCode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (byte, bool) {
+	if usage == nil || len(usage.charCodes) == 0 {
+		return 0, false
+	}
+	if fontSubtype(ctx, doc, fontDict) == "Type0" {
+		return 0, false // A composite font's codes are not single bytes.
+	}
+	table := predefinedEncodingTable(ctx, doc, fontDict)
+	if len(table) == 0 {
+		return 0, false
+	}
+	for _, code := range sortedByteKeys(usage.charCodes) {
+		// Only the control range is judged. Every predefined encoding of
+		// ISO 32000-2, Annex D begins at 32, so a code below it names no glyph
+		// in any of them and the conclusion holds whatever table litho carries.
+		// Above 32 a gap may be litho's rather than the encoding's: its
+		// MacExpertEncoding table omits the space at code 32 that Annex D
+		// defines, and reading that gap as "no glyph" reported veraPDF's own
+		// 6-3-8-t01-pass-b.pdf, a file built to conform.
+		if code >= firstEncodedCode {
+			continue
+		}
+		if table[code] == "" {
+			return code, true
+		}
+	}
+	return 0, false
+}
+
+// firstEncodedCode is the lowest character code any predefined encoding of
+// ISO 32000-2, Annex D names. Codes below it are the control range, which none
+// of those encodings gives a glyph.
+const firstEncodedCode = 32
+
 // notdefUnicodeViolation reports a rendered /.notdef override as a forbidden
 // Unicode value. ISO 32000-1 §9.6.6.1 gives .notdef the meaning "no glyph", so
 // the code behind it stands for no character and the Unicode value it maps to is
@@ -311,15 +389,19 @@ func renderedNotdefDifferencesCode(ctx context.Context, doc *document.Document, 
 // §9.10.2 makes the CMap the primary text-extraction mapping: mapping carries
 // the CMap's entries and is nil when the font declares no /ToUnicode at all.
 func notdefUnicodeViolation(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo, mapping map[string]string) []Violation {
-	code, ok := renderedNotdefDifferencesCode(ctx, doc, fontDict, usage)
-	if !ok {
-		return nil
+	if code, ok := renderedNotdefDifferencesCode(ctx, doc, fontDict, usage); ok {
+		if _, mapped := mapping[string([]byte{code})]; !mapped {
+			return failf(rule, "font %s on page %d: rendered code %d maps to .notdef via /Differences (renders U+0000)",
+				fontName, pageNum, code)
+		}
 	}
-	if _, mapped := mapping[string([]byte{code})]; mapped {
-		return nil
+	if code, ok := renderedUnencodedCode(ctx, doc, fontDict, usage); ok {
+		if _, mapped := mapping[string([]byte{code})]; !mapped {
+			return failf(rule, "font %s on page %d: rendered code %d names no glyph in the font's encoding (renders U+0000)",
+				fontName, pageNum, code)
+		}
 	}
-	return failf(rule, "font %s on page %d: rendered code %d maps to .notdef via /Differences (renders U+0000)",
-		fontName, pageNum, code)
+	return nil
 }
 
 // symbolEncodingNames lists all glyph names from the Symbol font encoding
