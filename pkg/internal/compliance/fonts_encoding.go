@@ -84,11 +84,12 @@ func hasIdentityCMap(ctx context.Context, doc *document.Document, fontDict ast.P
 	return false
 }
 
-// allGlyphNamesAGLResolvable returns true if all glyph names used by a Type 1
-// font are resolvable via the Adobe Glyph List. It checks multiple sources:
-// Standard 14 fonts (whose built-in encoding is AGL-based), /Encoding
-// /Differences array glyph names, and /FontDescriptor /CharSet (lists glyph
-// names in Type 1 subsets).
+// allGlyphNamesAGLResolvable returns true if the glyph names a Type 1 font
+// reaches carry Unicode values, through the glyph lists ISO 32000-1, 9.10.2
+// admits. With the shown character codes on hand it judges those codes, through
+// [everyUsedGlyphNameHasUnicode]. Without them it surveys the names the font
+// mentions: a standard 14 font's built-in encoding, the /Encoding /Differences
+// array, and /FontDescriptor /CharSet, which lists a Type 1 subset's glyphs.
 func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	// A standard 14 font carries a well-known built-in encoding whose glyph
 	// names are all AGL-resolvable, so its base encoding needs no embedded
@@ -114,7 +115,21 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 		return usedDifferencesGlyphNamesResolvable(ctx, doc, fontDict, usage)
 	}
 
-	// Check /Encoding /Differences if present.
+	// With the shown codes on hand, judge those and nothing else. The name
+	// surveys below answer a different question, "does every name this font
+	// mentions resolve", and a font may mention none of the names behind the
+	// codes it shows: /Differences naming a handful of codes says nothing about
+	// the rest, which fall to an implicit base encoding, and a /CharSet lists an
+	// embedded subset's glyphs rather than the encoding that reaches them. Both
+	// surveys answered "resolvable" for fonts whose shown codes had no name at
+	// all. veraPDF reports exactly those codes: govdocs thread_300_300031.pdf
+	// shows ZapfDingbats code 110, which its /Differences does not name.
+	if usage != nil && len(usage.charCodes) > 0 {
+		return everyUsedGlyphNameHasUnicode(ctx, doc, fontDict, usage)
+	}
+
+	// With no recorded usage, fall back to surveying the names the font
+	// mentions. Check /Encoding /Differences if present.
 	if encObj, ok := fontDict["Encoding"]; ok {
 		encDict, err := document.ResolveDict(ctx, doc, encObj)
 		if err == nil && encDict != nil {
@@ -129,7 +144,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 						if string(name) == ".notdef" {
 							continue
 						}
-						if _, resolved := encodings.GlyphToRuneFull(string(name)); !resolved {
+						if !glyphNameHasUnicode(string(name)) {
 							return false
 						}
 					}
@@ -152,7 +167,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 					if name == "" || name == ".notdef" {
 						continue
 					}
-					if _, resolved := encodings.GlyphToRuneFull(name); !resolved {
+					if !glyphNameHasUnicode(name) {
 						return false
 					}
 				}
@@ -212,15 +227,24 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 }
 
 // glyphNameHasUnicode reports whether a glyph name yields a Unicode value on
-// its own, with no /ToUnicode CMap: through the Adobe Glyph List (including the
-// uniXXXX and subset spellings [encodings.GlyphToRuneFull] accepts) or through
-// the Symbol font character set (PDF Reference Appendix D, Table D.5), whose
-// names are standard Adobe glyph names.
+// its own, with no /ToUnicode CMap: through the Symbol font character set (PDF
+// Reference Appendix D, Table D.5), whose names are standard Adobe glyph names,
+// or through the Adobe Glyph List, including the uniXXXX and subset spellings
+// [encodings.GlyphToRuneFull] accepts.
+//
+// The names in [nonAGLGlyphNames] are excluded. [encodings.GlyphToRuneFull]
+// serves text extraction too and maps names no published glyph list defines, so
+// it answers a broader question than ISO 32000-1, 9.10.2 asks here.
 func glyphNameHasUnicode(name string) bool {
-	if _, ok := encodings.GlyphToRuneFull(name); ok {
+	if _, ok := encodings.SymbolGlyphsUnicode[name]; ok {
 		return true
 	}
-	_, ok := encodings.SymbolGlyphsUnicode[name]
+	// The typography tables reach past the AGL to serve text extraction; a
+	// conformance exemption may not. See [nonAGLGlyphNames].
+	if nonAGLGlyphNames[name] {
+		return false
+	}
+	_, ok := encodings.GlyphToRuneFull(name)
 	return ok
 }
 
@@ -402,6 +426,47 @@ func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, 
 	return count > 0
 }
 
+// everyUsedGlyphNameHasUnicode reports whether every character code the content
+// stream shows resolves, through the font's encoding, to a glyph name carrying
+// a Unicode value.
+//
+// ISO 14289-1, 7.21.7 (with ISO 19005-2, 6.2.11.7.2) scopes the requirement to
+// the codes a page uses, which is also veraPDF's model: it raises the rule per
+// Glyph object, and a Glyph exists only for a code something renders. A glyph
+// merely present in an embedded subset is out of scope, so a Type 1 subset
+// whose /CharSet lists a name with no Unicode value is still conforming when
+// nothing shows that name's code. pdfjs bug1260585.pdf embeds CMSY10 whose
+// /CharSet names negationslash, in neither the Adobe standard Latin set nor the
+// Symbol font ISO 32000-1, 9.10.2 admits; the program's own encoding puts it at
+// code 0x36, which the page never shows, and veraPDF reports nothing.
+//
+// Unlike [usedGlyphNamesResolvable] this demands the encoding actually name
+// every used code. A code the encoding leaves out has no glyph name to judge,
+// and skipping it would exempt a font on the strength of the codes litho
+// happened to read rather than on the codes the page shows.
+func everyUsedGlyphNameHasUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
+	if usage == nil || len(usage.charCodes) == 0 {
+		return false
+	}
+	encoding := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	if len(encoding) == 0 {
+		return false
+	}
+	for code := range usage.charCodes {
+		glyphName, ok := encoding[code]
+		if !ok || glyphName == "" {
+			return false
+		}
+		if glyphName == ".notdef" {
+			continue
+		}
+		if !glyphNameHasUnicode(glyphName) {
+			return false
+		}
+	}
+	return true
+}
+
 // usedGlyphNamesResolvable returns true if all glyph names referenced by the
 // used character codes in a Type 1 font are resolvable to Unicode: either
 // via the AGL or the Symbol encoding set.
@@ -525,6 +590,18 @@ func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDic
 			data, err := doc.DecodeStream(ctx, stream)
 			if err == nil {
 				if enc := typography.ExtractType1EncodingNames(data); len(enc) > 0 {
+					return enc
+				}
+				// A program that names a predefined encoding rather than
+				// building one ("/Encoding StandardEncoding def") carries no
+				// per-code array for [typography.ExtractType1EncodingNames]
+				// to read, so its codes would stay unnamed.
+				// [builtinEncodingNames] expands the reference. govdocs
+				// thread_000_000341.pdf embeds AvantGarde-Book that way and
+				// binds 110 codes through /Differences, leaving the other
+				// 146, the space and the digits among them, to the
+				// reference.
+				if enc := builtinEncodingNames(data); len(enc) > 0 {
 					return enc
 				}
 			}
