@@ -167,6 +167,33 @@ func isNumber(s string) bool {
 	return true
 }
 
+// isDigitlessNumber reports whether s is a numeric object that carries a sign
+// or a decimal point but no digit at all, such as "-", "+" or "-.".
+//
+// ISO 32000-2, 7.3.3 gives no meaning to such a token. Adobe Reader reads it as
+// the number 0 rather than as a keyword, and pdf.js follows, naming this very
+// case: its Lexer.getNumber returns 0 for a sign run that whitespace or a
+// delimiter ends, "consistent with Adobe Reader (fixes issue9252.pdf,
+// issue15604.pdf, bug1753983.pdf, bug1953099.pdf)". Reading it as a keyword
+// instead turns it into a content stream operator, and pdfjs bug1753983.pdf
+// then draws a "-" operator litho reports as undefined under ISO 19005-4,
+// 6.2.2; veraPDF reports nothing. It also mis-binds the operands around it,
+// since an operator ends the operand list a number would have joined.
+//
+// Kept to a token of signs and dots alone. pdf.js throws on "-f", where a
+// regular character follows the sign, and that stays a keyword here.
+func isDigitlessNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] != '+' && s[i] != '-' && s[i] != '.' {
+			return false
+		}
+	}
+	return true
+}
+
 func (l *Lexer) readRegular() (Token, error) {
 	var buf strings.Builder
 	for {
@@ -187,6 +214,9 @@ func (l *Lexer) readRegular() (Token, error) {
 	val := buf.String()
 	if isNumber(val) {
 		return Token{Type: TokenNumber, Value: val}, nil
+	}
+	if isDigitlessNumber(val) {
+		return Token{Type: TokenNumber, Value: "0"}, nil
 	}
 	return Token{Type: TokenKeyword, Value: val}, nil
 }

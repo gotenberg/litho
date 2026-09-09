@@ -128,11 +128,10 @@ func TestNumericPrefixSalvagesValue(t *testing.T) {
 	}
 }
 
-// malformedNumberPDF builds a one-page document whose text matrix carries the
-// digit-less literal "-." in two of its six operand positions, as pdfjs
-// issue15604.pdf does.
-func malformedNumberPDF() []byte {
-	content := "BT\n/F0 9.96 Tf\n-. -.002 .002 -. 59.64 760.026 Tm\n(hello) Tj\nET\n"
+// malformedNumberPDF builds a one-page document whose text matrix carries tok
+// in two of its six operand positions, as pdfjs issue15604.pdf does with "-.".
+func malformedNumberPDF(tok string) []byte {
+	content := "BT\n/F0 9.96 Tf\n" + tok + " -.002 .002 " + tok + " 59.64 760.026 Tm\n(hello) Tj\nET\n"
 
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -162,14 +161,20 @@ func malformedNumberPDF() []byte {
 // TestFixUnknownOpsRepairsRatherThanStrips pins the wiring: the fixer must run
 // the repair before deciding what is an undefined operator, and must say so.
 //
-// Without it, stripping "-." as an undefined operator (ISO 19005-2, 6.2.2) takes
-// the operands sitting in front of it, so Tm loses four of its six arguments and
-// the page's text stops being placed at all.
+// Without it, stripping a malformed number as an operator undefined by
+// ISO 19005-2, 6.2.2 takes the operands sitting in front of it, so Tm loses four
+// of its six arguments and the page's text stops being placed at all.
+//
+// The token here carries digits ("0.0.0", two decimal points, which ISO 32000-2,
+// 7.3.3 does not define). The digit-less spellings "-." and "-" no longer reach
+// this fixer: the lexer resolves them to 0 the way Adobe Reader and pdf.js do,
+// so they arrive as operands and never look like an operator. See
+// [lexer.isDigitlessNumber] and TestFixUnknownOps_DigitlessNumberNeedsNoRepair.
 func TestFixUnknownOpsRepairsRatherThanStrips(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	data := malformedNumberPDF()
+	data := malformedNumberPDF("0.0.0")
 	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
@@ -198,5 +203,45 @@ func TestFixUnknownOpsRepairsRatherThanStrips(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "0 -0.002 0.002 0 59.64 760.026 Tm") {
 		t.Errorf("Tm did not keep its six operands, so the text matrix is never set:\n%s", body)
+	}
+}
+
+// TestFixUnknownOps_DigitlessNumberNeedsNoRepair pins that the digit-less
+// spellings never reach the repair, because the lexer already reads them as the
+// number they stand for.
+//
+// pdfjs issue15604.pdf writes "-." in two of its Tm operand positions. litho
+// used to surface that as an operator, strip it under ISO 19005-2, 6.2.2 and
+// take the neighbouring operands with it, which the repair then had to undo.
+// The lexer resolves it to 0 the way Adobe Reader and pdf.js do, so Tm arrives
+// whole and there is nothing to rewrite.
+func TestFixUnknownOps_DigitlessNumberNeedsNoRepair(t *testing.T) {
+	t.Parallel()
+
+	for _, tok := range []string{"-.", "-", "+", "."} {
+		t.Run("the literal "+tok, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := malformedNumberPDF(tok)
+			doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+			if err != nil {
+				t.Fatalf("NewDocument: %v", err)
+			}
+			alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+
+			fixes, err := fixUnknownOps(ctx, alloc, doc, Options{}, nil, "")
+			if err != nil {
+				t.Fatalf("fixUnknownOps: %v", err)
+			}
+			if slices.ContainsFunc(fixes, func(f string) bool {
+				return strings.Contains(f, "malformed number")
+			}) {
+				t.Errorf("the lexer already resolved %q, so nothing needed repair: %v", tok, fixes)
+			}
+			if _, rewritten := alloc.Pending()[4]; rewritten {
+				t.Errorf("the content stream was rewritten though %q parses cleanly", tok)
+			}
+		})
 	}
 }
