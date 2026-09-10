@@ -598,7 +598,21 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 			if baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"]); err == nil && baseName != "" {
 				maps.Copy(result, predefinedEncodingNames(string(baseName)))
 			} else {
-				maps.Copy(result, builtinProgramEncoding(ctx, doc, fontDict))
+				builtin := builtinProgramEncoding(ctx, doc, fontDict)
+				if len(builtin) == 0 && !isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) {
+					// ISO 32000-1, 9.6.6.4 and Table 114: a non-symbolic font
+					// whose program offers no built-in encoding takes
+					// StandardEncoding as the implicit base. litho reads a
+					// built-in encoding out of /FontFile and /FontFile3 only, so
+					// a TrueType /FontFile2 lands here and every code the
+					// /Differences array leaves alone stayed unnamed, which the
+					// .notdef rule then read as a reference to glyph 0. pdfjs
+					// bug1727053.pdf shows code 80 through an embedded
+					// Arial,Bold whose three cmap subtables all map U+0050 to
+					// the glyph P; veraPDF reports nothing.
+					builtin = predefinedEncodingNames("StandardEncoding")
+				}
+				maps.Copy(result, builtin)
 			}
 			maps.Copy(result, differencesGlyphNames(ctx, doc, encDict))
 			if len(result) > 0 {
@@ -785,6 +799,12 @@ func predefinedEncodingNames(name string) map[byte]string {
 		return encodingGlyphNames(name, encodings.MacRomanEncoding)
 	case "MacExpertEncoding":
 		return encodingGlyphNames(name, encodings.MacExpertEncoding)
+	case "StandardEncoding":
+		// ISO 32000-2, Table 112 lists only the three above as /Encoding names,
+		// but producers write StandardEncoding too, and Table 114 makes it the
+		// implicit base for a non-symbolic font with no built-in encoding, so
+		// the table has to be reachable by name.
+		return encodingGlyphNames(name, encodings.StandardEncoding)
 	}
 	return nil
 }

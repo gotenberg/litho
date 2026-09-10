@@ -31,8 +31,8 @@ func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 
 	// pdf shows code 97, which /Differences does not name, through an embedded
 	// non-symbolic Type 1 font carrying the given program.
-	pdf := func(prog string) []byte {
-		const stream = "BT /F1 12 Tf 10 50 Td (a) Tj ET"
+	pdf := func(prog string, shownHex string) []byte {
+		stream := fmt.Sprintf("BT /F1 12 Tf 10 50 Td <%s> Tj ET", shownHex)
 		return cyclePDF(
 			"<< /Type /Catalog /Pages 2 0 R >>",
 			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -50,17 +50,37 @@ func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 		)
 	}
 
+	// noEncoding is a program that names no encoding at all.
+	const noEncoding = "%!PS-AdobeFont-1.0: Probe 001.001\n/FontName /Probe def\ncurrentdict end\ncurrentfile eexec\n"
+
+	// 61 is 'a', which StandardEncoding names; 18 is a control code no
+	// predefined encoding of Annex D names.
+	const namedCode, unnamedCode = "61", "18"
+
 	t.Run("a named predefined encoding reaches the shown code", func(t *testing.T) {
 		t.Parallel()
-		if firesUnicodeRule(t, pdf(program("StandardEncoding"))) {
+		if firesUnicodeRule(t, pdf(program("StandardEncoding"), namedCode)) {
 			t.Error("StandardEncoding names code 97 'a', which the AGL maps")
 		}
 	})
 
-	t.Run("a program naming no encoding leaves the code unreachable", func(t *testing.T) {
+	// ISO 32000-1, 9.6.6.4 and Table 114 give a non-symbolic font whose program
+	// offers no built-in encoding StandardEncoding as its implicit base, so the
+	// code is reachable even though the program itself named nothing.
+	t.Run("a program naming no encoding falls back to StandardEncoding", func(t *testing.T) {
 		t.Parallel()
-		if !firesUnicodeRule(t, pdf("%!PS-AdobeFont-1.0: Probe 001.001\n/FontName /Probe def\ncurrentdict end\ncurrentfile eexec\n")) {
-			t.Error("nothing names code 97, so its glyph has no Unicode value")
+		if firesUnicodeRule(t, pdf(noEncoding, namedCode)) {
+			t.Error("Table 114 makes StandardEncoding the implicit base, which names code 97")
+		}
+	})
+
+	// The fallback reaches only what StandardEncoding names. A control code is
+	// outside every Annex D encoding, so it stays without a glyph and so
+	// without a Unicode value.
+	t.Run("a code no encoding names stays unreachable", func(t *testing.T) {
+		t.Parallel()
+		if !firesUnicodeRule(t, pdf(noEncoding, unnamedCode)) {
+			t.Error("StandardEncoding names nothing at code 24, so the glyph has no Unicode value")
 		}
 	})
 }
