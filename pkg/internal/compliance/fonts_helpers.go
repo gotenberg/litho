@@ -265,13 +265,36 @@ func isValidFontFileSubtype(part int, subtype string) bool {
 	return false
 }
 
+// embedsFontProgram reports whether the font's descriptor carries a font
+// program, whichever container names it.
+//
+// A standard 14 font is a shorthand for metrics a reader already holds, and
+// ISO 32000-1, 9.6.2.2 makes /FirstChar, /LastChar, /Widths and /FontDescriptor
+// all present or all absent for exactly that reason. Embedding a program leaves
+// the shorthand behind: the font now carries its own glyphs, so it owes its own
+// metrics, and veraPDF's isStandard is false for it. pdfjs
+// issue11150_reduced.pdf names /Symbol and embeds a /FontFile while declaring
+// none of the three, and veraPDF reports all of t4, t5 and t6.
+func embedsFontProgram(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return false
+	}
+	for _, key := range []ast.PdfName{"FontFile", "FontFile2", "FontFile3"} {
+		if _, ok := fd[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // checkSimpleFontRequiredKeys validates the PDF/A required-key rules that apply
 // to simple fonts only (PDSimpleFont): /FirstChar (t4), /LastChar (t5), and
 // /Widths sized LastChar - FirstChar + 1 (t6). The standard 14 fonts are exempt,
 // matching the isStandard escape in each rule. Callers must invoke it only for
 // simple (non-Type0) fonts.
 func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, part int) []Violation {
-	if part == 0 || isStandard14Type1Font(ctx, doc, fontDict) {
+	if part == 0 || (isStandard14Type1Font(ctx, doc, fontDict) && !embedsFontProgram(ctx, doc, fontDict)) {
 		return nil
 	}
 
