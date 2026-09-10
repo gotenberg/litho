@@ -3,7 +3,6 @@ package compliance
 import (
 	"bytes"
 	"context"
-	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -1502,7 +1501,7 @@ func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict
 	}
 
 	expected := float64(bw) * 1000.0 / float64(unitsPerEm)
-	if math.Abs(declared-expected) > widthTolerance {
+	if widthsInconsistent(declared, expected) {
 		return failf(rule, "font %s on page %d: .notdef glyph width mismatch (declared=%.1f, font=%.1f)",
 			fontName, pageNum, declared, expected)
 	}
