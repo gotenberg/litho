@@ -77,6 +77,82 @@ var predefinedCMapPrefixes = []string{
 	"UniJIS2004-UTF16", "UniJIS-UTF8",
 }
 
+// table116CMapNames is the complete set of predefined CMap names of
+// ISO 32000-2, Table 116.
+//
+// ISO 14289-2, 8.4.5.4 exempts exactly these from the embedding requirement,
+// and ISO 19005 parts 2 to 4 word their counterparts the same way. litho
+// carried a prefix list that reached the Unicode CMaps and Identity but none of
+// the legacy CJK families, so a font encoded with GB-EUC-H, 90ms-RKSJ-H or the
+// bare H was reported as neither predefined nor embedded. pdfjs
+// issue18466.pdf (UniGB-UTF16-H) and mixedfonts.pdf (UniJIS-UTF16-H) are the
+// cases the corpus carries.
+//
+//nolint:gochecknoglobals // static lookup table mirroring Table 116.
+var table116CMapNames = map[string]bool{
+	"83pv-RKSJ-H":      true,
+	"90ms-RKSJ-H":      true,
+	"90ms-RKSJ-V":      true,
+	"90msp-RKSJ-H":     true,
+	"90msp-RKSJ-V":     true,
+	"90pv-RKSJ-H":      true,
+	"Add-RKSJ-H":       true,
+	"Add-RKSJ-V":       true,
+	"B5pc-H":           true,
+	"B5pc-V":           true,
+	"CNS-EUC-H":        true,
+	"CNS-EUC-V":        true,
+	"ETen-B5-H":        true,
+	"ETen-B5-V":        true,
+	"ETenms-B5-H":      true,
+	"ETenms-B5-V":      true,
+	"EUC-H":            true,
+	"EUC-V":            true,
+	"Ext-RKSJ-H":       true,
+	"Ext-RKSJ-V":       true,
+	"GB-EUC-H":         true,
+	"GB-EUC-V":         true,
+	"GBK-EUC-H":        true,
+	"GBK-EUC-V":        true,
+	"GBK2K-H":          true,
+	"GBK2K-V":          true,
+	"GBKp-EUC-H":       true,
+	"GBKp-EUC-V":       true,
+	"GBpc-EUC-H":       true,
+	"GBpc-EUC-V":       true,
+	"H":                true,
+	"HKscs-B5-H":       true,
+	"HKscs-B5-V":       true,
+	"Identity-H":       true,
+	"Identity-V":       true,
+	"KSC-EUC-H":        true,
+	"KSC-EUC-V":        true,
+	"KSCms-UHC-H":      true,
+	"KSCms-UHC-HW-H":   true,
+	"KSCms-UHC-HW-V":   true,
+	"KSCms-UHC-V":      true,
+	"KSCpc-EUC-H":      true,
+	"UniCNS-UCS2-H":    true,
+	"UniCNS-UCS2-V":    true,
+	"UniCNS-UTF16-H":   true,
+	"UniCNS-UTF16-V":   true,
+	"UniGB-UCS2-H":     true,
+	"UniGB-UCS2-V":     true,
+	"UniGB-UTF16-H":    true,
+	"UniGB-UTF16-V":    true,
+	"UniJIS-UCS2-H":    true,
+	"UniJIS-UCS2-HW-H": true,
+	"UniJIS-UCS2-HW-V": true,
+	"UniJIS-UCS2-V":    true,
+	"UniJIS-UTF16-H":   true,
+	"UniJIS-UTF16-V":   true,
+	"UniKS-UCS2-H":     true,
+	"UniKS-UCS2-V":     true,
+	"UniKS-UTF16-H":    true,
+	"UniKS-UTF16-V":    true,
+	"V":                true,
+}
+
 // isCIDSystemInfoShapedCMapName reports whether name has the form
 // "Adobe-<Registry>-<Supplement>" (e.g. "Adobe-Korea1-2"): a CIDSystemInfo
 // identifier, never a valid predefined CMap name from ISO 32000-1 Table 118.
@@ -103,6 +179,9 @@ func isPredefinedCMap(name string) bool {
 		if len(parts) == 3 && parts[0] == "Adobe" {
 			return false
 		}
+	}
+	if table116CMapNames[name] {
+		return true
 	}
 	for _, prefix := range predefinedCMapPrefixes {
 		if strings.HasPrefix(name, prefix) {
@@ -288,7 +367,8 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 	// CMap name that is not embedded fails t1.
 	if streamErr != nil && string(encName) != "" {
 		predefined := isPredefinedCMap(string(encName))
-		if profile == "PDF/UA-2" || PDFAPart(profile) == 1 {
+		if PDFAPart(profile) == 1 {
+			// ISO 19005-1, 6.3.3.3 admits only the Identity CMaps.
 			predefined = encName == "Identity-H" || encName == "Identity-V"
 		}
 		if !predefined {
