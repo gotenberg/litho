@@ -325,7 +325,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		}
 
 		// PUA ActualText check (needs page and catalog context).
-		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog)...)
+		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog, usage)...)
 	}
 	return results
 }
@@ -743,6 +743,28 @@ func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict a
 	return results
 }
 
+// identityShownCodes returns the character codes a Type 0 font's text operators
+// show, when the font's /Encoding is Identity-H or Identity-V and litho can
+// decode them. Reports false when it cannot, so the caller keeps its
+// conservative answer rather than reading "no codes" as "nothing shown".
+//
+// Identity maps each two-byte code to the CID of the same value, so the codes a
+// /ToUnicode CMap is keyed by are exactly the CIDs [collectType0CIDs] decodes.
+func identityShownCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (map[uint16]bool, bool) {
+	if usage == nil || len(usage.rawStrings) == 0 {
+		return nil, false
+	}
+	encName, err := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	if err != nil || (encName != "Identity-H" && encName != "Identity-V") {
+		return nil, false
+	}
+	cids, _, ok := collectType0CIDs(string(encName), nil, usage)
+	if !ok || cids == nil {
+		return nil, false
+	}
+	return cids, true
+}
+
 // checkPUAWithoutActualText flags a font whose ToUnicode maps a rendered
 // character to the Unicode Private Use Area when no /ActualText covers that
 // character (ISO 19005-2/3 §6.2.11.7.3, ISO 14289-2 §8.4.3, mirroring veraPDF's
@@ -752,7 +774,7 @@ func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict a
 // does not mask an uncovered PUA character. For a composite (Type 0) font, whose
 // multi-byte code decoding needs the font CMap, it stays conservative and
 // exempts the font when any marked-content /ActualText is present.
-func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict) []Violation {
+func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict, usage *fontUsageInfo) []Violation {
 	rule := puaActualTextRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -787,7 +809,23 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 		}
 		return failf(rule, "font %s on page %d: ToUnicode maps to PUA without ActualText", fontName, pageNum)
 	}
-	if fontSubtype(ctx, doc, fontDict) == "Type0" || len(puaCodes) == 0 {
+	if fontSubtype(ctx, doc, fontDict) == "Type0" {
+		// ISO 14289-2, 8.4.3 asks whether real content maps to a PUA value, and
+		// veraPDF raises it per Glyph, so a PUA entry for a code the page never
+		// shows is out of scope. Under Identity-H/V the character code is the
+		// CID, so the shown codes are decodable here; any other encoding needs
+		// a CMap this check does not carry, and stays conservative.
+		if shown, ok := identityShownCodes(ctx, doc, fontDict, usage); ok {
+			for code := range puaCodes {
+				if code <= 0xFFFF && shown[uint16(code)] { //nolint:gosec // guarded by the bound above.
+					return conservative()
+				}
+			}
+			return nil
+		}
+		return conservative()
+	}
+	if len(puaCodes) == 0 {
 		return conservative()
 	}
 	ops, perr := content.ParseStreamData(ctx, contentData)
