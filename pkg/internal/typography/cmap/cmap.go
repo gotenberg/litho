@@ -3,6 +3,7 @@ package cmap
 import (
 	"bytes"
 	"context"
+	"maps"
 	"slices"
 	"unicode/utf16"
 
@@ -11,6 +12,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 )
+
+// maxRangeEntries caps how many codes one bfrange expands to. It is an
+// anti-DoS guard, not spec-mandated: a two-byte range spans at most 65536
+// codes, so no real ToUnicode CMap reaches it, while a crafted four-byte range
+// would otherwise expand to billions of entries.
+const maxRangeEntries = 1 << 16
 
 // CodeSpaceRange defines a valid range of character codes with a specific byte length.
 // For example, <00><FF> defines 1-byte codes, <0000><FFFF> defines 2-byte codes.
@@ -21,9 +28,60 @@ type CodeSpaceRange struct {
 
 // CMap is a parsed ToUnicode character map that translates character codes
 // (as raw byte sequences) to their corresponding Unicode strings.
+//
+// Mapping expands every bfrange in full, including one that crosses a
+// first-byte boundary, because a viewer extracting text reads it that way.
+// [CMap.StrictMapping] is the conforming view a validator judges against.
+// A CMap is read-only once [Parse] returns and safe for concurrent reads.
 type CMap struct {
 	Mapping         map[string]string
 	CodeSpaceRanges []CodeSpaceRange
+
+	// strict is nil until a non-conforming bfrange appears, and from then on
+	// holds only the mappings a conforming reader keeps.
+	strict map[string]string
+}
+
+// StrictMapping returns the mapping without the codes that only a
+// non-conforming bfrange supplies. Adobe Technical Note #5411, 1.4.1 rules
+// that a bfrange's source codes shall not cross a first-byte boundary: a line
+// such as <10FE> <1101> "will result in an invalid ToUnicode mapping file".
+// veraPDF (CMapParser.getBfrangeEndFromBytes) keeps the start code's leading
+// bytes and the end code's last byte, so <01ED> <0206> covers no code at all.
+// Compliance checks that ask whether a glyph has a Unicode value use this
+// view; text extraction keeps [CMap.Mapping].
+func (c *CMap) StrictMapping() map[string]string {
+	if c.strict != nil {
+		return c.strict
+	}
+	return c.Mapping
+}
+
+// set records one mapping. A code only a non-conforming bfrange reaches stays
+// out of the strict view, so an earlier conforming entry for it survives there.
+func (c *CMap) set(code, uni string, conforming bool) {
+	c.Mapping[code] = uni
+	if c.strict != nil && conforming {
+		c.strict[code] = uni
+	}
+}
+
+// beginNonConforming snapshots the mapping built so far as the strict view
+// the first time a non-conforming bfrange appears.
+func (c *CMap) beginNonConforming() {
+	if c.strict == nil {
+		c.strict = maps.Clone(c.Mapping)
+	}
+}
+
+// conformingRangeEnd returns the last source code a bfrange covers once held
+// to one first-byte block (Adobe Technical Note #5411, 1.4.1): the start
+// code's leading bytes followed by the end code's last byte. start and end
+// have the same non-zero length.
+func conformingRangeEnd(start, end []byte) []byte {
+	out := bytes.Clone(start)
+	out[len(out)-1] = end[len(end)-1]
+	return out
 }
 
 func decodeUTF16BE(data []byte) string {
@@ -128,7 +186,7 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 				srcStr, ok1 := srcObj.(ast.PdfString)
 				dstStr, ok2 := dstObj.(ast.PdfString)
 				if ok1 && ok2 {
-					c.Mapping[string(srcStr)] = decodeUTF16BE([]byte(dstStr))
+					c.set(string(srcStr), decodeUTF16BE([]byte(dstStr)), true)
 				}
 			}
 
@@ -174,22 +232,23 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 							if bytes.Compare(startBytes, endBytes) > 0 {
 								continue
 							}
+							strictEnd := conformingRangeEnd(startBytes, endBytes)
+							if !bytes.Equal(strictEnd, endBytes) {
+								c.beginNonConforming()
+							}
 							current := make([]byte, len(startBytes))
 							copy(current, startBytes)
 
 							currDst := make([]byte, len(dstBytes))
 							copy(currDst, dstBytes)
 
-							// Limit iterations to prevent infinite loops from
-							// malformed CMap ranges (e.g., wrap-around).
-							const maxRangeEntries = 1 << 16
 							for n := 0; n < maxRangeEntries && bytes.Compare(current, endBytes) <= 0; n++ {
 								if n%1000 == 0 && n > 0 {
 									if err := ctx.Err(); err != nil {
 										return nil, err
 									}
 								}
-								c.Mapping[string(current)] = decodeUTF16BE(currDst)
+								c.set(string(current), decodeUTF16BE(currDst), bytes.Compare(current, strictEnd) <= 0)
 								prev := make([]byte, len(current))
 								copy(prev, current)
 								incrementBytes(current)
@@ -212,10 +271,15 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 							current := make([]byte, len(startBytes))
 							copy(current, startBytes)
 
+							strictEnd := conformingRangeEnd(startBytes, endBytes)
+							if !bytes.Equal(strictEnd, endBytes) {
+								c.beginNonConforming()
+							}
+
 							arrIdx := 0
 							for bytes.Compare(current, endBytes) <= 0 && arrIdx < len(dstArr) {
 								if dStr, ok4 := dstArr[arrIdx].(ast.PdfString); ok4 {
-									c.Mapping[string(current)] = decodeUTF16BE([]byte(dStr))
+									c.set(string(current), decodeUTF16BE([]byte(dStr)), bytes.Compare(current, strictEnd) <= 0)
 								}
 								incrementBytes(current)
 								arrIdx++

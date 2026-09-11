@@ -1100,6 +1100,10 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 	if err != nil || tu == nil || len(tu.Mapping) == 0 {
 		return nil
 	}
+	// A code only a bfrange crossing a first-byte boundary reaches has no
+	// Unicode value a conforming reader derives (Adobe Technical Note #5411,
+	// 1.4.1, see [cmap.CMap.StrictMapping]), so it counts as unmapped here.
+	strict := tu.StrictMapping()
 
 	// The per-glyph ToUnicode rule applies only to a code that resolves to a
 	// real renderable glyph. CID 0 is .notdef (covered by the notdef rule),
@@ -1127,6 +1131,9 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 			consumed, _, ok := tu.Map(b[off:])
 			if consumed <= 0 {
 				consumed = 1
+			}
+			if ok {
+				_, ok = strict[string(b[off:off+consumed])]
 			}
 			if !ok {
 				// The exemption is CFF-specific. For a CIDFontType0 descendant

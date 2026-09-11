@@ -121,6 +121,80 @@ endbfrange
 	}
 }
 
+func TestParse_BfRangeCrossingFirstByte(t *testing.T) {
+	// Adobe Technical Note #5411, 1.4.1 rules a bfrange whose source codes
+	// cross a first-byte boundary invalid. Mapping still expands it for text
+	// extraction; StrictMapping keeps the start code's leading bytes and the
+	// end code's last byte, as veraPDF does.
+	const codespace = "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+	tests := []struct {
+		name      string
+		body      string
+		mapped    map[string]string
+		strict    map[string]string
+		notStrict []string
+	}{
+		{
+			name:      "end last byte below start covers no conforming code",
+			body:      "1 beginbfrange\n<01ED> <0206> <0061>\nendbfrange\n",
+			mapped:    map[string]string{"\x01\xED": "a", "\x01\xFF": "s", "\x02\x00": "t", "\x02\x06": "z"},
+			notStrict: []string{"\x01\xED", "\x01\xFF", "\x02\x00", "\x02\x06"},
+		},
+		{
+			name:      "conforming part stops at the end code's last byte",
+			body:      "1 beginbfrange\n<0105> <0207> <0041>\nendbfrange\n",
+			mapped:    map[string]string{"\x01\x05": "A", "\x01\x08": "D", "\x02\x07": "Ń"},
+			strict:    map[string]string{"\x01\x05": "A", "\x01\x07": "C"},
+			notStrict: []string{"\x01\x08", "\x02\x07"},
+		},
+		{
+			name:      "array destination is clamped the same way",
+			body:      "1 beginbfrange\n<01FE> <02FF> [<0030> <0031> <0032>]\nendbfrange\n",
+			mapped:    map[string]string{"\x01\xFE": "0", "\x01\xFF": "1", "\x02\x00": "2"},
+			strict:    map[string]string{"\x01\xFE": "0", "\x01\xFF": "1"},
+			notStrict: []string{"\x02\x00"},
+		},
+		{
+			name:   "conforming range is kept whole",
+			body:   "1 beginbfrange\n<10FE> <10FF> <4E00>\nendbfrange\n",
+			mapped: map[string]string{"\x10\xFE": "一", "\x10\xFF": "丁"},
+			strict: map[string]string{"\x10\xFE": "一", "\x10\xFF": "丁"},
+		},
+		{
+			name: "conforming entries before and after survive in the strict view",
+			body: "1 beginbfchar\n<0110> <0058>\nendbfchar\n" +
+				"1 beginbfrange\n<0105> <0207> <0041>\nendbfrange\n" +
+				"1 beginbfchar\n<0200> <0059>\nendbfchar\n",
+			mapped: map[string]string{"\x01\x10": "L", "\x02\x00": "Y"},
+			strict: map[string]string{"\x01\x10": "X", "\x02\x00": "Y", "\x01\x05": "A"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm, err := Parse(context.Background(), []byte(codespace+tt.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for code, want := range tt.mapped {
+				if got := cm.Mapping[code]; got != want {
+					t.Errorf("Mapping[%X] = %q, want %q", code, got, want)
+				}
+			}
+			strict := cm.StrictMapping()
+			for code, want := range tt.strict {
+				if got, ok := strict[code]; !ok || got != want {
+					t.Errorf("StrictMapping()[%X] = %q (present %v), want %q", code, got, ok, want)
+				}
+			}
+			for _, code := range tt.notStrict {
+				if got, ok := strict[code]; ok {
+					t.Errorf("StrictMapping()[%X] = %q, want absent", code, got)
+				}
+			}
+		})
+	}
+}
+
 func TestParse_Empty(t *testing.T) {
 	cm, err := Parse(context.Background(), []byte{})
 	if err != nil {
