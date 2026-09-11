@@ -84,6 +84,18 @@ func hasIdentityCMap(ctx context.Context, doc *document.Document, fontDict ast.P
 	return false
 }
 
+// fontEncodingIsDict reports whether the font's /Encoding is a dictionary, the
+// form that states glyph names through /Differences rather than implying them
+// from a predefined table.
+func fontEncodingIsDict(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return false
+	}
+	dict, err := document.ResolveDict(ctx, doc, encObj)
+	return err == nil && dict != nil
+}
+
 // allGlyphNamesAGLResolvable returns true if the glyph names a Type 1 font
 // reaches carry Unicode values, through the glyph lists ISO 32000-1, 9.10.2
 // admits. With the shown character codes on hand it judges those codes, through
@@ -896,12 +908,29 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		}
 	}
 
-	// Exemption (b2): Type 1 fonts whose character names are all resolvable
+	// Exemption (b2): a simple font whose character names are all resolvable
 	// via the Adobe Glyph List. Per §6.3.8, if every glyph name in the
 	// font's encoding (including /Differences) maps to a Unicode value
 	// through the AGL, ToUnicode is not required.
+	//
+	// ISO 19005-1, 6.3.8 words its exemption for Type 1 fonts, but ISO 14289-1,
+	// 7.21.7 and ISO 14289-2, 8.4.5.8 ask only that each shown glyph carry a
+	// Unicode value, which ISO 32000-1, 9.10.2 derives from the glyph name
+	// whatever the font's subtype. veraPDF computes that value per Glyph and so
+	// passes a TrueType whose names resolve: pdfjs bug1727053.pdf shows an
+	// unembedded Arial,Bold with no /ToUnicode and veraPDF reports neither
+	// 7.21.7 nor 8.4.5.8.
+	//
+	// A TrueType earns it only through an /Encoding dictionary, which states its
+	// glyph names outright. ISO 32000-1, 9.6.6.4 resolves a TrueType code
+	// through the font's own cmap, so a name a predefined table merely implies
+	// yields Unicode only when the program actually carries that glyph, which
+	// this check does not establish. veraPDF, which reads the cmap, still
+	// reports 16 govdocs files whose TrueType names /WinAnsiEncoding or
+	// /MacRomanEncoding and shows codes the program leaves unmapped.
 	subtype := fontSubtype(ctx, doc, fontDict)
-	if subtype == "Type1" || subtype == "MMType1" {
+	if subtype == "Type1" || subtype == "MMType1" ||
+		(subtype == "TrueType" && IsPDFUA(profile) && fontEncodingIsDict(ctx, doc, fontDict)) {
 		if allGlyphNamesAGLResolvable(ctx, doc, fontDict, usage) {
 			return nil
 		}
