@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"context"
+	"maps"
 	"testing"
 )
 
@@ -34,5 +35,36 @@ func FuzzParseCID(f *testing.F) {
 			return
 		}
 		_, _ = ParseCID(context.Background(), data)
+	})
+}
+
+// FuzzConformBfRanges feeds arbitrary bytes to the bfrange rewriter and
+// asserts crash-freedom and its contract: a reported rewrite maps what the
+// input maps and leaves no range a strict reader drops.
+func FuzzConformBfRanges(f *testing.F) {
+	f.Add([]byte("1 beginbfrange <01ED> <0206> <0061> endbfrange\n"))
+	f.Add([]byte("1 beginbfrange <01FE> <0201> [<0041> <0042> <0043> <0044>] endbfrange\n"))
+	f.Add([]byte("1 beginbfrange <01ED> <02"))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
+		ctx := context.Background()
+		out, changed, err := ConformBfRanges(ctx, data)
+		if err != nil || !changed {
+			return
+		}
+		want, err := Parse(ctx, data)
+		if err != nil {
+			t.Fatalf("input parsed inside ConformBfRanges but not here: %v", err)
+		}
+		got, err := Parse(ctx, out)
+		if err != nil {
+			t.Fatalf("rewrite does not parse: %v", err)
+		}
+		if !maps.Equal(got.Mapping, want.Mapping) || !maps.Equal(got.StrictMapping(), got.Mapping) {
+			t.Fatalf("rewrite broke its contract:\n%s", out)
+		}
 	})
 }

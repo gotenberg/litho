@@ -100,6 +100,9 @@ var registry = []fixer{
 	{name: "name-utf8", safety: safetyResource, matches: matchNameUTF8, apply: fixNameUTF8},
 	{name: "cid-gidmap", safety: safetyResource, matches: matchCIDToGIDMap, apply: fixCIDToGIDMap},
 	{name: "font-keys", safety: safetyResource, matches: matchFontKeys, apply: fixFontKeys},
+	// A /ToUnicode rewrite changes what text a glyph carries, never what
+	// renders, and maps every code exactly as before.
+	{name: "tounicode-ranges", safety: safetyResource, matches: matchToUnicodeRanges, apply: fixToUnicodeRangeIssues},
 	{name: "devicen", safety: safetyResource, matches: matchDeviceNColorants, apply: fixDeviceNColorants},
 	{name: "sep-canon", safety: safetyResource, matches: matchSepCanon, apply: fixSepCanon},
 	{name: "icc-dedup", safety: safetyResource, matches: matchICCDedup, apply: fixICCDedup},
