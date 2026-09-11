@@ -575,10 +575,14 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 		if !ok || glyphName == ".notdef" || glyphName == "" {
 			continue // unmapped or .notdef, skip
 		}
-		if _, resolved := encodings.GlyphToRuneFull(glyphName); resolved {
-			continue
-		}
-		if symbolEncodingNames[glyphName] {
+		// [glyphNameHasUnicode] rather than encodings.GlyphToRuneFull: the
+		// typography tables serve text extraction and map names no published
+		// glyph list defines, which ISO 32000-1, 9.10.2 does not admit here.
+		// pdfjs issue14438.pdf shows code 13 of a symbolic CMSY7 whose
+		// /Differences name it circlecopyrt, a TeX spelling of the copyright
+		// sign that GlyphToRuneFull resolves and the Adobe Glyph List does not
+		// carry; veraPDF reports the glyph. See [nonAGLGlyphNames].
+		if glyphNameHasUnicode(glyphName) || symbolEncodingNames[glyphName] {
 			continue
 		}
 		return false
