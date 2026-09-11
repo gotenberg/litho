@@ -54,7 +54,7 @@ func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		newCatalog["Lang"] = ast.PdfString(lang)
 		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 		fixes = append(fixes, fmt.Sprintf("set catalog /Lang to %q", lang))
-	} else if !langTagValid(ctx, doc, langObj) || (langUnknown(ctx, doc, langObj) && requiresDeclaredLang(profile)) {
+	} else if !langTagValid(ctx, doc, langObj, requiresDeclaredLang(profile)) || (langUnknown(ctx, doc, langObj) && requiresDeclaredLang(profile)) {
 		newCatalog := make(ast.PdfDict, len(catalogDict))
 		maps.Copy(newCatalog, catalogDict)
 		newCatalog["Lang"] = ast.PdfString(lang)
@@ -100,11 +100,16 @@ func langUnknown(ctx context.Context, doc *document.Document, obj ast.PdfObject)
 
 // langTagValid reports whether obj resolves to a valid (or absent) language tag.
 // An unresolvable value is treated as valid so the fixer never alters what it
-// cannot read. DecodePdfString handles UTF-16/hex string forms.
-func langTagValid(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
+// cannot read. DecodePdfString handles UTF-16/hex string forms. Under PDF/UA
+// (ua) a non-empty value is judged as written, exactly as the validator judges
+// it ([compliance.IsValidUALangTag]); an empty one is left to langUnknown.
+func langTagValid(ctx context.Context, doc *document.Document, obj ast.PdfObject, ua bool) bool {
 	s, err := document.ResolveString(ctx, doc, obj)
 	if err != nil {
 		return true
+	}
+	if ua && strings.TrimSpace(document.DecodePdfString(s)) != "" {
+		return compliance.IsValidUALangTag(s)
 	}
 	return compliance.IsValidLangTag(document.DecodePdfString(s))
 }
@@ -225,7 +230,7 @@ func removeInvalidLang(ctx context.Context, doc *document.Document, dict ast.Pdf
 	// An empty tag means "unknown" (ISO 32000-1, 14.9.2). PDF/UA does not
 	// accept that answer, so under those profiles it is stripped like any
 	// other unusable value and the element inherits a declared ancestor.
-	if langTagValid(ctx, doc, langObj) && (!requireDeclared || !langUnknown(ctx, doc, langObj)) {
+	if langTagValid(ctx, doc, langObj, requireDeclared) && (!requireDeclared || !langUnknown(ctx, doc, langObj)) {
 		return false
 	}
 	delete(dict, "Lang")

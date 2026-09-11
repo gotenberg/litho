@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -224,6 +225,22 @@ func ResolveFontDescriptor(ctx context.Context, doc *Document, fontDict ast.PdfD
 	}
 
 	return nil
+}
+
+// ContainsUndefinedPDFDocBytes reports whether s, read as PDFDocEncoding (it
+// carries no UTF-16 or UTF-8 byte order mark), holds a byte ISO 32000-1, Table
+// D.2 leaves undefined. [DecodePdfString] drops such bytes, which suits text
+// shown to a person but hides them from a caller judging the string as
+// written.
+func ContainsUndefinedPDFDocBytes(s ast.PdfString) bool {
+	b := []byte(s)
+	if len(b) >= 2 && (b[0] == utf16BEBom0 && b[1] == utf16BEBom1 || b[0] == utf16BEBom1 && b[1] == utf16BEBom0) {
+		return false
+	}
+	if len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		return false
+	}
+	return slices.ContainsFunc(b, pdfDocEncodingUndefined)
 }
 
 // UTF-16BE byte order mark bytes.

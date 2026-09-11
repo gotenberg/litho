@@ -117,7 +117,7 @@ func repairPageMarkedContentLangs(ctx context.Context, alloc *writer.ObjAllocato
 // markedLangUnusable reports whether a marked-content /Lang value cannot serve
 // as the language identifier ISO 32000-1, 14.9.2 requires.
 func markedLangUnusable(ctx context.Context, doc *document.Document, obj ast.PdfObject, requireDeclared bool) bool {
-	if !langTagValid(ctx, doc, obj) {
+	if !langTagValid(ctx, doc, obj, requireDeclared) {
 		return true
 	}
 	return requireDeclared && langUnknown(ctx, doc, obj)

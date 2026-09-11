@@ -58,12 +58,13 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 	rule := langValidRule(profile)
 
 	var results []Violation
-	forEachMarkedContentLang(ctx, doc, catalog, func(pageIdx int, tag string) bool {
+	forEachMarkedContentLang(ctx, doc, catalog, func(pageIdx int, lang ast.PdfString) bool {
 		// A /Lang present on a marked-content sequence must be a valid
 		// Language-Tag; for PDF/UA an empty value is invalid (UA-1 §7.2 t29
 		// / UA-2 §8.4.4 t2), unlike PDF/A where an empty text string is
 		// permitted. This pass runs only under PDF/UA (guarded above).
-		if tag == "" || !IsValidLangTag(tag) {
+		tag := strings.TrimSpace(document.DecodePdfString(lang))
+		if tag == "" || !IsValidUALangTag(lang) {
 			results = append(results, failf(rule,
 				"page %d: marked-content /Lang %q is not a valid language tag", pageIdx+1, tag)...)
 		}
@@ -73,12 +74,12 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 }
 
 // forEachMarkedContentLang invokes fn for every /Lang entry on a BDC or DP
-// marked-content operator across all page content streams. tag is the resolved,
-// trimmed Language-Tag ("" when the entry is present but empty). fn returns true
-// to stop the scan early. The dict-based catalog and structure-tree checks never
+// marked-content operator across all page content streams. lang is the entry as
+// written (empty when it does not resolve to a string). fn returns true to stop
+// the scan early. The dict-based catalog and structure-tree checks never
 // reach content-operator language tags, so this content-stream pass is the only
 // place they are observed.
-func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, tag string) bool) {
+func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, lang ast.PdfString) bool) {
 	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page ast.PdfDict, ops []content.Operation) bool {
 		props := markedContentProps{doc: doc, page: page}
 		for _, op := range ops {
@@ -97,7 +98,7 @@ func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catal
 			// the caller as the empty tag it decodes to, which fails the
 			// Language-Tag grammar just as the malformed value does.
 			lang, _ := document.ResolveString(ctx, doc, langObj)
-			if fn(pageIdx, strings.TrimSpace(document.DecodePdfString(lang))) {
+			if fn(pageIdx, lang) {
 				return true
 			}
 		}
@@ -426,7 +427,7 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		return results
 	}
 
-	if !IsValidLangTag(catalogLang) {
+	if !langEntryValid(ctx, doc, catalog) {
 		return failf(validRule, "lang=%s", catalogLang)
 	}
 
@@ -446,6 +447,21 @@ func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.P
 		return ""
 	}
 	return strings.TrimSpace(document.DecodePdfString(langStr))
+}
+
+// langEntryValid reports whether dict's /Lang passes the PDF/UA Language-Tag
+// test as written ([IsValidUALangTag]). An absent or unreadable entry passes:
+// the callers judge presence and emptiness themselves.
+func langEntryValid(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	obj, ok := dict["Lang"]
+	if !ok {
+		return true
+	}
+	s, err := document.ResolveString(ctx, doc, obj)
+	if err != nil {
+		return true
+	}
+	return IsValidUALangTag(s)
 }
 
 // langPresentButEmpty reports whether dict carries a /Lang key that resolves to
@@ -604,7 +620,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 
 	// Structure tree root /Lang provides fallback for all elements.
 	rootLang := resolveNonEmptyLang(ctx, doc, treeRoot)
-	if rootLang != "" && !IsValidLangTag(rootLang) {
+	if rootLang != "" && !langEntryValid(ctx, doc, treeRoot) {
 		return failf(validRule, "lang=%s, StructTreeRoot", rootLang)
 	}
 
@@ -628,7 +644,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 				return
 			}
 			elemLang := resolveNonEmptyLang(ctx, doc, elem)
-			if elemLang != "" && !IsValidLangTag(elemLang) {
+			if elemLang != "" && !langEntryValid(ctx, doc, elem) {
 				// Validate format of this element's own /Lang. A malformed tag is
 				// still a present one, so it determines the language for veraPDF
 				// (Lang != null) and only the format rule fires.
@@ -1132,7 +1148,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("empty /Lang, %s", path)})
 			return
 		}
-		if !IsValidLangTag(trimmed) {
+		if !IsValidUALangTag(langStr) {
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
 		}
 	})
@@ -1153,6 +1169,17 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 func IsValidLangTag(tag string) bool {
 	trimmed := strings.TrimSpace(tag)
 	return trimmed == "" || langTagAlphaNum.MatchString(trimmed)
+}
+
+// IsValidUALangTag reports whether a /Lang text string passes the PDF/UA
+// Language-Tag test (ISO 14289-1, 7.2 t29; ISO 14289-2, 8.4.4 t2) as veraPDF
+// runs it: the grammar of [IsValidLangTag] against the value as written, with
+// nothing trimmed and no byte dropped. "EN-US\x00" (pdfjs issue12706.pdf) and
+// "EN-US " fail it and veraPDF reports both, while [IsValidLangTag], which
+// trims and decodes for display, lets them through. An empty value fails too,
+// so a caller that treats it apart checks it first.
+func IsValidUALangTag(s ast.PdfString) bool {
+	return !document.ContainsUndefinedPDFDocBytes(s) && langTagAlphaNum.MatchString(document.DecodePdfString(s))
 }
 
 // isValidLangTagPDFA1 applies the PDF/A-1 grammar of ISO 19005-1 §6.8.4 t1,
