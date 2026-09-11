@@ -76,19 +76,38 @@ func checkGlyphWidths(ctx context.Context, doc *document.Document, fontDict ast.
 // width-consistency check and the [ExpectedSimpleFontWidths] repair helper so the
 // two always agree on the authoritative widths.
 func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (map[uint16]float64, uint16, map[uint16]uint16, bool) {
+	g, ok := resolveSimpleFontGlyphs(ctx, doc, fontDict)
+	return g.widths, g.unitsPerEm, g.codeToGID, ok
+}
+
+// simpleFontGlyphs is what [resolveSimpleFontGlyphs] learns about a simple
+// font's embedded program.
+type simpleFontGlyphs struct {
+	widths     map[uint16]float64
+	unitsPerEm uint16
+	codeToGID  map[uint16]uint16
+	// symbolCmap is set when the codes resolve through a (3,0) or (1,0) cmap
+	// subtable the program carries, so a code absent from codeToGID has no
+	// glyph at all rather than an unknown one.
+	symbolCmap bool
+}
+
+// resolveSimpleFontGlyphs does the work of [simpleFontGlyphMetrics] and also
+// reports whether a symbol cmap subtable decided the codes.
+func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (simpleFontGlyphs, bool) {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
-		return nil, 0, nil, false
+		return simpleFontGlyphs{}, false
 	}
 
 	fontData := extractFontProgramData(ctx, doc, fd)
 	if fontData == nil {
-		return nil, 0, nil, false
+		return simpleFontGlyphs{}, false
 	}
 
 	binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
 	if binaryWidths == nil {
-		return nil, 0, nil, false
+		return simpleFontGlyphs{}, false
 	}
 
 	unitsPerEm := typography.ReadUnitsPerEm(fontData)
@@ -112,10 +131,11 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 	// thread_300_300492.pdf with no mapping and no width check at all.
 	if charCodeToGID == nil && isSfntFontProgram(fontData) && isSymbolicFont(ctx, doc, fd) && fontDict["Encoding"] == nil {
 		sym := typography.ExtractSymbolCharCodeToGID(ctx, fontData)
+		decided := sym != nil
 		if sym == nil {
 			sym = map[uint16]uint16{}
 		}
-		return binaryWidths, unitsPerEm, sym, true
+		return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: sym, symbolCmap: decided}, true
 	}
 
 	// For fonts without a cmap (Type1/CFF), build charCode→GID via glyph names:
@@ -192,7 +212,7 @@ func simpleFontGlyphMetrics(ctx context.Context, doc *document.Document, fontDic
 		}
 	}
 
-	return binaryWidths, unitsPerEm, charCodeToGID, true
+	return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: charCodeToGID}, true
 }
 
 // buildNameToGID inverts a GID→glyphName table into a glyphName→GID lookup,
@@ -554,15 +574,24 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 	if isType3Font(ctx, doc, fontDict) {
 		return checkType3GlyphPresence(ctx, doc, fontDict, fontName, pageNum, rule, usage)
 	}
-	_, _, charCodeToGID, ok := simpleFontGlyphMetrics(ctx, doc, fontDict)
-	if !ok || charCodeToGID == nil {
+	glyphs, ok := resolveSimpleFontGlyphs(ctx, doc, fontDict)
+	if !ok || glyphs.codeToGID == nil {
 		// A classic Type 1 (/FontFile) program names its glyphs in the eexec
 		// /CharStrings dictionary rather than a GID-keyed table, so there is no
 		// GID to read (mirrors [checkType1FontWidths]). Decide presence by name.
 		return checkType1GlyphPresence(ctx, doc, fontDict, fontName, pageNum, rule, usage)
 	}
 	for code := range usage.charCodes {
-		gid, mapped := charCodeToGID[uint16(code)]
+		gid, mapped := glyphs.codeToGID[uint16(code)]
+		// A symbolic TrueType font draws a code through its symbol cmap
+		// subtable (ISO 32000-1, 9.6.6.4), so a code that subtable does not hold
+		// selects no glyph: it is resolved, not unknown. veraPDF
+		// (TrueTypeFontProgram.containsCode) reports it absent, as for pdfjs
+		// issue8234.pdf, whose code 32 meets a (3,0) subtable holding only
+		// 0xF021 to 0xF027.
+		if !mapped && glyphs.symbolCmap {
+			gid, mapped = 0, true
+		}
 		if mapped && gid == 0 {
 			return failf(rule, "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
 		}

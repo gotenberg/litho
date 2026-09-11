@@ -9,9 +9,9 @@ import (
 // SymbolCharCodeToGID returns a character-code → glyph-ID map for a symbolic
 // TrueType font. Per ISO 32000-1 §9.6.6.4, a symbolic TrueType font (one with
 // no PDF /Encoding) resolves single-byte character codes through the font's own
-// cmap: the (3,0) Microsoft Symbol subtable, whose codes usually live in the
-// 0xF000–0xF0FF Private Use range (so both 0xF000+code and the bare code are
-// tried), or failing that the (1,0) Macintosh subtable. Returns nil when the
+// cmap: the (3,0) Microsoft Symbol subtable, whose codes live in one of the
+// ranges [symbolCodeRanges] lists, or failing that the (1,0) Macintosh
+// subtable. Returns nil when the
 // font carries neither subtable, so the caller can decline to resolve rather
 // than guess.
 func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, error) {
@@ -65,17 +65,23 @@ func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, e
 	}
 
 	out := make(map[uint16]uint16, 256) //nolint:mnd // single-byte code space
-	for code := range 256 {
-		if gid, ok := codeToGID[uint32(0xF000+code)]; ok && gid != 0 { //nolint:gosec // code in [0,255], 0xF000+code fits uint32
-			out[uint16(code)] = gid //nolint:gosec // code < 256
-			continue
-		}
-		if gid, ok := codeToGID[uint32(code)]; ok && gid != 0 {
-			out[uint16(code)] = gid //nolint:gosec // code < 256
+	for code := range uint32(256) {
+		for _, high := range symbolCodeRanges {
+			if gid, ok := codeToGID[high+code]; ok && gid != 0 {
+				out[uint16(code)] = gid //nolint:gosec // code < 256
+				break
+			}
 		}
 	}
 	return out, nil
 }
+
+// symbolCodeRanges are the high bytes a symbolic font's single-byte codes are
+// looked up under, in the order tried. ISO 32000-1, 9.6.6.4 places the codes
+// of a (3,0) subtable in one of four ranges, 0x0000, 0xF000, 0xF100 or 0xF200,
+// and prefixes each byte with the range's high byte. The 0xF000 range and the
+// bare code come first, so a code either of them holds keeps its glyph.
+var symbolCodeRanges = [...]uint32{0xF000, 0x0000, 0xF100, 0xF200}
 
 // cmapSubtableCodeToGID decodes a single cmap subtable into a character-code →
 // glyph-ID map. Unlike [parseCmap], which inverts the mapping to GID → rune and

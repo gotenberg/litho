@@ -110,6 +110,20 @@ func TestSymbolCharCodeToGID(t *testing.T) {
 	}
 }
 
+// TestSymbolCharCodeToGID_F100Range pins that a (3,0) subtable placing its
+// codes in the 0xF100 range resolves them. ISO 32000-1, 9.6.6.4 allows the
+// 0x0000, 0xF000, 0xF100 and 0xF200 ranges, and only the first two were tried.
+func TestSymbolCharCodeToGID_F100Range(t *testing.T) {
+	font := minimalSymbolFont(format4Segment(0xF141, 60))
+	got, err := SymbolCharCodeToGID(context.Background(), font)
+	if err != nil {
+		t.Fatalf("SymbolCharCodeToGID: %v", err)
+	}
+	if got[0x41] != 60 {
+		t.Errorf("code 0x41 via 0xF141: got %d, want 60", got[0x41])
+	}
+}
+
 func TestSymbolCharCodeToGID_NoSymbolSubtable(t *testing.T) {
 	// A font with no (3,0)/(1,0) subtable yields a nil map so callers defer.
 	cmap := make([]byte, 4+8)
