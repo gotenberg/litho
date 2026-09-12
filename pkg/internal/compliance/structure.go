@@ -575,6 +575,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 		profile:        profile,
 		results:        results,
 		roleMap:        buildRoleMapIndex(ctx, doc, structTreeRoot),
+		classMap:       structClassMap(ctx, doc, structTreeRoot),
 		iso32005Parent: "StructTreeRoot",
 		seen:           make(map[int]bool),
 	}
@@ -640,6 +641,10 @@ type walkState struct {
 	// resolve custom structure types to standard ones where a check's
 	// semantics (ISO/TS 32005 Table 5) are defined over standard types.
 	roleMap map[ast.PdfName]ast.PdfName
+
+	// classMap is the StructTreeRoot /ClassMap, which resolves the attribute
+	// classes a structure element names through /C (ISO 32000-1, 14.7.5.2).
+	classMap ast.PdfDict
 
 	// iso32005Parent is the effective Table 5 key of the parent of the
 	// elements currently being walked, already resolved through the role
@@ -819,15 +824,22 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	}
 
 	// PDF/UA-2 §8.2.5.25: L with Lbl children must have ListNumbering attribute.
-	if typeName == "L" && state.profile == "PDF/UA-2" {
+	// veraPDF scopes the rule to its SEL object, which it builds for an element
+	// whose standard type is L, so the role map decides which elements are lists.
+	if state.profile == "PDF/UA-2" && iso32005Key(ctx, state, elem, typeName) == "L" {
 		validateListNumbering(ctx, state, elem)
 	}
 
 	// PDF/UA-2 §8.2.5.25 t2: real content within an LI shall be enclosed in Lbl
-	// or LBody, never a direct content item of the LI.
-	if typeName == "LI" && state.profile == "PDF/UA-2" && liHasDirectContentItem(ctx, state.doc, elem) {
-		*state.results = append(*state.results,
-			failf(Rule_14289_2_8_2_5_25_t02, "LI element directly contains a content item")...)
+	// or LBody, never a direct content item of the LI. veraPDF scopes the rule
+	// to its SELI object, built for an element whose standard type is LI, and
+	// its hasContentItems looks through Div, Part, and NonStruct kids, as
+	// [iso32005Kids] does.
+	if state.profile == "PDF/UA-2" && iso32005Key(ctx, state, elem, typeName) == "LI" {
+		if _, hasContent := iso32005Kids(ctx, state, elem); hasContent {
+			*state.results = append(*state.results,
+				failf(Rule_14289_2_8_2_5_25_t02, "LI element directly contains a content item")...)
+		}
 	}
 
 	// PDF/UA-2 §8.2.5.14 t4: a FENote NoteType attribute, when present, shall be
@@ -1261,48 +1273,145 @@ func checkHeadingHierarchy(state *walkState) {
 	}
 }
 
-// validateListNumbering checks PDF/UA-2 §8.2.5.25: if any LI child of L has
-// a Lbl descendant, the L element must have a ListNumbering attribute not "None".
+// validateListNumbering checks PDF/UA-2 §8.2.5.25 t1: if an LI of the L has a
+// Lbl child, the L element must have a ListNumbering attribute other than None.
 func validateListNumbering(ctx context.Context, state *walkState, lElem ast.PdfDict) {
-	// Determine whether any child LI has a Lbl child.
-	kObj, ok := lElem["K"]
-	if !ok {
-		return
-	}
-	arr, err := document.ResolveArray(ctx, state.doc, kObj)
-	if err != nil {
+	if !listContainsLabels(ctx, state, lElem, 0) {
 		return
 	}
 
-	hasLbl := false
-	for _, item := range arr {
-		d, err := document.ResolveDict(ctx, state.doc, item)
-		if err != nil || d == nil {
-			continue
-		}
-		childType, _ := document.ResolveName(ctx, state.doc, d["S"])
-		if childType != "LI" {
-			continue
-		}
-		if liHasLblChild(ctx, state.doc, d) {
-			hasLbl = true
-			break
-		}
-	}
-
-	if !hasLbl {
-		return
-	}
-
-	// Check for ListNumbering attribute on the L element.
-	listNum := resolveAttributeValue(ctx, state.doc, lElem, "ListNumbering")
-	if listNum == "" || listNum == "None" {
+	if listNum := listNumbering(ctx, state, lElem); listNum == "None" {
 		*state.results = append(*state.results, failf(Rule_14289_2_8_2_5_25_t01,
 			"L element with Lbl children has ListNumbering=%q", listNum)...)
 	}
 }
 
-// liHasLblChild checks if an LI element has a direct Lbl child.
+// listNumbering returns the ListNumbering attribute that applies to a list
+// element, or None, the value ISO 32000-1, 14.8.5.5 gives an absent entry.
+//
+// The attribute belongs to the List owner and is inheritable (14.8.5.5), so it
+// is read from the element's /A first, then from the attribute classes its /C
+// names, which /A overrides (14.7.5.2), then from each ancestor in turn.
+// veraPDF resolves it the same way (AttributeHelper.getListNumbering). pdfjs
+// bug1937438_mml_from_latex.pdf states it only through a class its role-mapped
+// lists name.
+func listNumbering(ctx context.Context, state *walkState, elem ast.PdfDict) string {
+	cur := elem
+	for range maxStructTreeDepth {
+		if v := ownedAttributeName(ctx, state.doc, cur["A"], "List", "ListNumbering"); v != "" {
+			return v
+		}
+		if v := classAttributeName(ctx, state, cur["C"], "List", "ListNumbering"); v != "" {
+			return v
+		}
+		parent, err := document.ResolveDict(ctx, state.doc, cur["P"])
+		if err != nil || parent == nil {
+			break
+		}
+		cur = parent
+	}
+	return "None"
+}
+
+// ownedAttributeName returns the name value of key in the first attribute
+// object whose /O names owner and that gives key a name. obj is a single
+// attribute object or an array of them, possibly interleaved with revision
+// numbers (ISO 32000-1, 14.7.5.1).
+func ownedAttributeName(ctx context.Context, doc *document.Document, obj ast.PdfObject, owner, key ast.PdfName) string {
+	if obj == nil {
+		return ""
+	}
+	items, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil {
+		items = ast.PdfArray{obj}
+	}
+	for _, item := range items {
+		d, derr := document.ResolveDict(ctx, doc, item)
+		if derr != nil || d == nil {
+			continue
+		}
+		if o, _ := document.ResolveName(ctx, doc, d["O"]); o != owner {
+			continue
+		}
+		if v, verr := document.ResolveName(ctx, doc, d[key]); verr == nil && v != "" {
+			return string(v)
+		}
+	}
+	return ""
+}
+
+// classAttributeName resolves key through the attribute classes a structure
+// element's /C names, a single class name or an array of them, against the
+// StructTreeRoot /ClassMap (ISO 32000-1, 14.7.5.2).
+func classAttributeName(ctx context.Context, state *walkState, cObj ast.PdfObject, owner, key ast.PdfName) string {
+	if cObj == nil || state.classMap == nil {
+		return ""
+	}
+	names, err := document.ResolveArray(ctx, state.doc, cObj)
+	if err != nil {
+		names = ast.PdfArray{cObj}
+	}
+	for _, item := range names {
+		class, nerr := document.ResolveName(ctx, state.doc, item)
+		if nerr != nil || class == "" {
+			continue
+		}
+		if v := ownedAttributeName(ctx, state.doc, state.classMap[class], owner, key); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// structClassMap resolves the StructTreeRoot /ClassMap, or nil when the tree
+// declares none.
+func structClassMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) ast.PdfDict {
+	classMap, err := document.ResolveDict(ctx, doc, structTreeRoot["ClassMap"])
+	if err != nil {
+		return nil
+	}
+	return classMap
+}
+
+// listContainsLabels reports whether an LI among a list's kids has a Lbl among
+// its own kids. Both levels are read by standard type, as [iso32005Kids] reads
+// them: the /RoleMap applies first (ISO 32000-2:2020, 14.8.6), and a Div, Part,
+// or NonStruct kid contributes its own kids in its place. veraPDF decides
+// containsLabels the same way (GFSEL.getcontainsLabels). govdocs
+// thread_300_300035.pdf labels its items with LI_Label, which its role map
+// maps to Lbl.
+func listContainsLabels(ctx context.Context, state *walkState, elem ast.PdfDict, depth int) bool {
+	kObj, ok := elem["K"]
+	if !ok {
+		return false
+	}
+	items, err := document.ResolveArray(ctx, state.doc, kObj)
+	if err != nil {
+		items = ast.PdfArray{kObj}
+	}
+	for _, item := range items {
+		d, derr := document.ResolveDict(ctx, state.doc, item)
+		if derr != nil || d == nil {
+			continue
+		}
+		s, serr := document.ResolveName(ctx, state.doc, d["S"])
+		if serr != nil || s == "" {
+			continue
+		}
+		switch key := iso32005Key(ctx, state, d, s); {
+		case key == "LI":
+			if kidKeys, _ := iso32005Kids(ctx, state, d); slices.Contains(kidKeys, "Lbl") {
+				return true
+			}
+		case iso32005PassThroughTypes[key] && depth < maxISO32005PassThroughDepth:
+			if listContainsLabels(ctx, state, d, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // structParentPresenceRule selects the structure-element /P presence rule by UA
 // profile: ISO 14289-1 §7.1 t12 and ISO 14289-2 §8.2.1 t2.
 func structParentPresenceRule(profile string) Rule {
@@ -1312,34 +1421,7 @@ func structParentPresenceRule(profile string) Rule {
 	return Rule_14289_1_7_1_t12
 }
 
-// liHasDirectContentItem reports whether an LI structure element directly
-// contains a content item (a bare MCID integer, or an /MCR or /OBJR dict) rather
-// than enclosing all real content in Lbl or LBody children.
-func liHasDirectContentItem(ctx context.Context, doc *document.Document, liElem ast.PdfDict) bool {
-	kObj, ok := liElem["K"]
-	if !ok {
-		return false
-	}
-
-	isContentItem := func(item ast.PdfObject) bool {
-		if _, ok := item.(ast.PdfInt); ok {
-			return true
-		}
-		d, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || d == nil {
-			return false
-		}
-		t, _ := document.ResolveName(ctx, doc, d["Type"])
-		return t == "MCR" || t == "OBJR"
-	}
-
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		return isContentItem(kObj)
-	}
-	return slices.ContainsFunc(arr, isContentItem)
-}
-
+// liHasLblChild checks if an LI element has a direct Lbl child.
 func liHasLblChild(ctx context.Context, doc *document.Document, liElem ast.PdfDict) bool {
 	kObj, ok := liElem["K"]
 	if !ok {
