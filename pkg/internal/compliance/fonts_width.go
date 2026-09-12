@@ -118,24 +118,35 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
 	charCodeToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 
-	// A symbolic TrueType font carries no PDF /Encoding; its single-byte codes
-	// resolve through the embedded (3,0)/(1,0) cmap (ISO 32000-1 §9.6.6.4), not
-	// through glyph names. When that cmap is absent the codes are unresolvable,
-	// so an empty (non-nil) map makes the width and presence checks skip them
-	// rather than misreport against an empty encoding or an identity GID.
+	// A symbolic TrueType font resolves its single-byte codes through the
+	// embedded (3,0)/(1,0) cmap, not through glyph names: ISO 32000-1, 9.6.6.4
+	// takes that route "when the font has no Encoding entry, or the font
+	// descriptor's Symbolic flag is set (in which case the Encoding entry is
+	// ignored)". So a symbolic font that carries an /Encoding is read the same
+	// way whenever its program has a symbol subtable. pdfjs issue2618.pdf's /R641
+	// names code 5 "space"; following that name through the program's Unicode
+	// cmap drew a 930-unit glyph, while the (3,0) subtable draws the 352-unit one
+	// /Widths declares, which is the route veraPDF's
+	// TrueTypeFontProgram.getWidth takes too.
+	//
+	// With no symbol subtable, a font that has neither an /Encoding nor a
+	// Unicode cmap leaves its codes unresolvable, so an empty (non-nil) map makes
+	// the width and presence checks skip them rather than misreport against an
+	// empty encoding or an identity GID. One that has either keeps the glyph-name
+	// route below.
 	//
 	// The cmap route is an sfnt one. A symbolic Type 1 or CFF font has no cmap
 	// to be missing: its codes resolve through the program's own encoding
 	// (ISO 32000-1 §9.6.6.2), which the glyph-name path below reads, so
 	// short-circuiting it here left every TeX Computer Modern subset in govdocs
 	// thread_300_300492.pdf with no mapping and no width check at all.
-	if charCodeToGID == nil && isSfntFontProgram(fontData) && isSymbolicFont(ctx, doc, fd) && fontDict["Encoding"] == nil {
-		sym := typography.ExtractSymbolCharCodeToGID(ctx, fontData)
-		decided := sym != nil
-		if sym == nil {
-			sym = map[uint16]uint16{}
+	if isSfntFontProgram(fontData) && isSymbolicFont(ctx, doc, fd) {
+		if sym := typography.ExtractSymbolCharCodeToGID(ctx, fontData); sym != nil {
+			return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: sym, symbolCmap: true}, true
 		}
-		return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: sym, symbolCmap: decided}, true
+		if charCodeToGID == nil && fontDict["Encoding"] == nil {
+			return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: map[uint16]uint16{}}, true
+		}
 	}
 
 	// For fonts without a cmap (Type1/CFF), build charCode→GID via glyph names:
