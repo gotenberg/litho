@@ -612,7 +612,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		// operator is the only source of a language, so the scan reads it per
 		// item rather than taking the document-wide answer the tree walk below
 		// has to settle for.
-		if documentShowsUndeterminedText(ctx, doc, catalog) {
+		if documentShowsUndeterminedText(ctx, doc, catalog, false) {
 			return fail(langRule, "catalog")
 		}
 		return nil
@@ -680,6 +680,18 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 				results = append(results, Violation{Rule: langRule, Context: path})
 			}
 		})
+
+	// Text that no structure element owns has no element /Lang to inherit, so
+	// with no catalog /Lang only a marked-content /Lang around it determines its
+	// language, and the walk above never sees it. veraPDF resolves every
+	// SETextItem that way, artifact text included: pdfjs issue16176.pdf shows a
+	// Tj outside every marked-content sequence and bug1755507.pdf three inside a
+	// /Part with no /MCID, and veraPDF reports both under §7.2 t34. Text in an
+	// MCID-bearing sequence belongs to its owning element, which the walk above
+	// already judges, so the scan treats that sequence as covered.
+	if documentShowsUndeterminedText(ctx, doc, catalog, true) {
+		results = append(results, fail(langRule, "text outside the structure tree")...)
+	}
 
 	return results
 }
@@ -790,7 +802,10 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool
 // A page whose content litho cannot decode or parse counts as painting such
 // text. litho cannot prove that page shows none, and exempting it would drop a
 // violation veraPDF reports on the very files whose streams are damaged.
-func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+//
+// mcidCovers treats a marked-content sequence carrying an /MCID as covered, for
+// callers that judge MCID-owned text through the structure tree instead.
+func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, mcidCovers bool) bool {
 	for _, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return false
@@ -813,7 +828,7 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 		// own resolves its nested names against the invoking page's, so the same
 		// XObject can reach different content from two pages.
 		res := resolveInheritedResources(ctx, doc, page)
-		if opsShowUndeterminedText(ctx, doc, ops, props, res, false, make(map[int]bool), 0) {
+		if opsShowUndeterminedText(ctx, doc, ops, props, res, false, mcidCovers, make(map[int]bool), 0) {
 			return true
 		}
 	}
@@ -825,7 +840,7 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 // scope's answer into a nested stream, seen skips an XObject already scanned,
 // and depth caps the invocation chain at [maxFormXObjectDepth], so a cyclic or
 // deeply nested chain cannot loop.
-func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []content.Operation, props *markedContentProps, res ast.PdfDict, covered bool, seen map[int]bool, depth int) bool {
+func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []content.Operation, props *markedContentProps, res ast.PdfDict, covered, mcidCovers bool, seen map[int]bool, depth int) bool {
 	if depth > maxFormXObjectDepth {
 		return false
 	}
@@ -839,7 +854,8 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 		cur := stack[len(stack)-1]
 		switch op.Operator {
 		case "BMC", "BDC":
-			stack = append(stack, cur || markedContentLangPresent(ctx, props, op))
+			stack = append(stack, cur || markedContentLangPresent(ctx, props, op) ||
+				(mcidCovers && markedContentHasMCID(ctx, props, op)))
 		case "EMC":
 			if len(stack) > 1 {
 				stack = stack[:len(stack)-1]
@@ -851,7 +867,7 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 		case "Do":
 			// The XObject paints inside the sequence the Do sits in (ISO 32000-1
 			// §14.6), so that sequence's /Lang covers its text too.
-			if formShowsUndeterminedText(ctx, doc, op, res, cur, seen, depth) {
+			if formShowsUndeterminedText(ctx, doc, op, res, cur, mcidCovers, seen, depth) {
 				return true
 			}
 		}
@@ -864,6 +880,17 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 // takes the language as determined from the first enclosing sequence holding the
 // key even when the tag is empty or malformed, and judges that value under UA-1
 // §7.2 t29 instead (see [checkMarkedContentLang]).
+// markedContentHasMCID reports whether a BDC operator's property list carries an
+// /MCID, tying its content to a structure element.
+func markedContentHasMCID(ctx context.Context, props *markedContentProps, op content.Operation) bool {
+	pd := props.dict(ctx, op)
+	if pd == nil {
+		return false
+	}
+	_, ok := pd["MCID"]
+	return ok
+}
+
 func markedContentLangPresent(ctx context.Context, props *markedContentProps, op content.Operation) bool {
 	pd := props.dict(ctx, op)
 	if pd == nil {
@@ -877,7 +904,7 @@ func markedContentLangPresent(ctx context.Context, props *markedContentProps, op
 // invokes paints text no /Lang covers. A Do naming an absent or non-Form XObject
 // paints no text: per ISO 32000-1 §8.10.1 an unresolvable name makes the
 // operator a no-op.
-func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered bool, seen map[int]bool, depth int) bool {
+func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered, mcidCovers bool, seen map[int]bool, depth int) bool {
 	if res == nil || len(op.Operands) < 1 {
 		return false
 	}
@@ -924,7 +951,7 @@ func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op c
 	if err != nil || subRes == nil {
 		subRes = res
 	}
-	return opsShowUndeterminedText(ctx, doc, ops, &markedContentProps{doc: doc, page: stream.Dict}, subRes, covered, seen, depth+1)
+	return opsShowUndeterminedText(ctx, doc, ops, &markedContentProps{doc: doc, page: stream.Dict}, subRes, covered, mcidCovers, seen, depth+1)
 }
 
 // markedContentID returns the /MCID an inline BDC property list carries, or -1
