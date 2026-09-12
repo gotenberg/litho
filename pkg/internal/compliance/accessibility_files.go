@@ -269,8 +269,19 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 			if subtype != "Link" {
 				continue
 			}
+			// veraPDF's test exempts a hidden Link and one whose rectangle lies
+			// off the crop box of the page holding it: (F & 2) == 2 ||
+			// isOutsideCropBox == true. pdfjs issue3694_reduced.pdf has only an
+			// off-page Link without /Contents, and veraPDF passes it.
+			flags, _ := document.ResolveInt(ctx, doc, annot["F"])
+			const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
+			if int(flags)&hiddenBit != 0 || annotRectOutsidePageCropBox(ctx, doc, annot, page) {
+				continue
+			}
+			// /Contents is a text string, judged by the text it decodes to: a byte
+			// order mark alone decodes to nothing (ISO 32000-1, 7.9.2.2).
 			contents, _ := document.ResolveString(ctx, doc, annot["Contents"])
-			if len(contents) == 0 {
+			if document.DecodePdfString(contents) == "" {
 				results = append(results, failf(Rule_14289_1_7_18_5_t02,
 					"Link annotation without non-empty /Contents")...)
 				return results
@@ -521,20 +532,27 @@ func isFieldDict(d ast.PdfDict) bool {
 }
 
 // annotRectOutsideCropBox checks if an annotation's /Rect is entirely outside
-// the page's /CropBox (or /MediaBox if no CropBox). Returns true if the
-// annotation is not visible on the page.
+// the crop box of the page its /P entry names. Returns true if the annotation
+// is not visible on the page.
 func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
-	rect, err := document.ResolveArray(ctx, doc, annot["Rect"])
-	if err != nil || len(rect) < 4 {
-		return false
-	}
-	// Resolve the page to get CropBox/MediaBox.
 	pageObj := annot["P"]
 	if pageObj == nil {
 		return false
 	}
 	page, err := document.ResolveDict(ctx, doc, pageObj)
 	if err != nil || page == nil {
+		return false
+	}
+	return annotRectOutsidePageCropBox(ctx, doc, annot, page)
+}
+
+// annotRectOutsidePageCropBox reports whether an annotation's /Rect lies
+// entirely outside page's /CropBox (or /MediaBox if no CropBox). A rectangle
+// that only touches the box's edge counts as outside, as in veraPDF's
+// isOutsideCropBox.
+func annotRectOutsidePageCropBox(ctx context.Context, doc *document.Document, annot, page ast.PdfDict) bool {
+	rect, err := document.ResolveArray(ctx, doc, annot["Rect"])
+	if err != nil || len(rect) < 4 {
 		return false
 	}
 	box, err := document.ResolveArray(ctx, doc, page["CropBox"])
