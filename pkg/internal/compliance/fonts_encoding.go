@@ -238,6 +238,47 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 	return true
 }
 
+// shownType3GlyphNamesResolvable reports whether every code a page shows through
+// a Type 3 font takes a Unicode value from the glyph name its /Encoding gives.
+//
+// ISO 14289-1, 7.21.7 and ISO 19005-2, 6.2.11.7.2 judge each glyph shown, so a
+// name /Differences assigns to a code nothing shows is out of scope: pdfjs
+// issue5896.pdf leaves empty names at two unshown codes and veraPDF passes its
+// letters. Per ISO 32000-1, 9.6.5 the /Differences array of a Type 3 font gives
+// its complete encoding, so a shown code the array leaves out, or names with an
+// empty name, has no glyph name and no Unicode value. A /BaseEncoding, which the
+// clause does not provide for, still supplies a missing name, as it does for
+// veraPDF. A shown .notdef is left to the Unicode-value and .notdef checks,
+// since the glyph lists map it to U+0000.
+func shownType3GlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return true
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return true
+	}
+	names := differencesGlyphNames(ctx, doc, encDict)
+	var base map[byte]string
+	if baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"]); err == nil && baseName != "" {
+		base = predefinedEncodingNames(string(baseName))
+	}
+	for code := range usage.charCodes {
+		name, ok := names[code]
+		if !ok {
+			name = base[code]
+		}
+		if name == ".notdef" {
+			continue
+		}
+		if name == "" || !glyphNameHasUnicode(name) {
+			return false
+		}
+	}
+	return true
+}
+
 // glyphNameHasUnicode reports whether a glyph name yields a Unicode value on
 // its own, with no /ToUnicode CMap: through the Symbol font character set (PDF
 // Reference Appendix D, Table D.5), whose names are standard Adobe glyph names,
@@ -883,8 +924,14 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		// CMap entry specifically (its only exemptions are predefined encodings,
 		// standard-Latin Type 1, and Adobe-CID Type 0, none of which a Type 3 font
 		// meets), so an AGL-resolvable /Differences set does not substitute there.
-		if PDFAPart(profile) != 1 && allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict) {
-			return nil
+		if PDFAPart(profile) != 1 {
+			if usage != nil && len(usage.charCodes) > 0 {
+				if shownType3GlyphNamesResolvable(ctx, doc, fontDict, usage) {
+					return nil
+				}
+			} else if allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict) {
+				return nil
+			}
 		}
 		// Fall through to the ToUnicode presence check below.
 		if !hasToUnicode(fontDict) {
