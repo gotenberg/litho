@@ -755,6 +755,27 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 	}
 }
 
+// validateCaptionKidPositions checks ISO 14289-2 §8.2.5.27 t1: a Caption shall
+// be the first or last child of the structure element that contains it.
+//
+// The requirement is about the standard type a kid stands for, so each kid is
+// resolved as [iso32005Kids] resolves it: the /RoleMap applies first (ISO
+// 32000-2:2020, 14.8.6), and a Div, Part, or NonStruct kid contributes its own
+// kids in its place. veraPDF evaluates the rule over the same list
+// (GFPDStructTreeNode.getkidsStandardTypes). govdocs thread_100_100184.pdf maps
+// Caption to P, so its mid-Sect Caption elements are paragraphs.
+func validateCaptionKidPositions(ctx context.Context, state *walkState, elem ast.PdfDict) {
+	kidKeys, _ := iso32005Kids(ctx, state, elem)
+	for i := 1; i < len(kidKeys)-1; i++ {
+		if kidKeys[i] == "Caption" {
+			*state.results = append(*state.results,
+				failf(Rule_14289_2_8_2_5_27_t01,
+					"Caption at position %d (not first or last) of %d kids", i+1, len(kidKeys))...)
+			return
+		}
+	}
+}
+
 // walkElement validates a single structure element and recurses into children.
 func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parentType ast.PdfName, depth int, lastHeadingLevel int) {
 	if ctx.Err() != nil {
@@ -784,6 +805,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// "StructTreeRoot" and NonStruct wrappers are transparent.
 	if state.profile == "PDF/UA-2" {
 		validateISO32005(ctx, state, elem, typeName, state.iso32005Parent)
+		validateCaptionKidPositions(ctx, state, elem)
 	}
 
 	// Tag-containment rules (§7.2 parent/child tables) are PDF/UA-1 only.
@@ -1009,19 +1031,14 @@ func validateCaptionPosition(ctx context.Context, state *walkState, elem ast.Pdf
 		return
 	}
 
-	notFirstOrLast := childIdx != 0 && childIdx != totalChildren-1
-
-	// PDF/UA-2 §8.2.5.27 t1: a Caption shall be the first or last child of any
-	// structure element. The UA-1 rules below are first-only for L/TOC, which
-	// would false-reject a conformant last-position Caption under PDF/UA-2.
+	// PDF/UA-2 §8.2.5.27 is judged on the parent by [validateCaptionKidPositions],
+	// over the kids' standard types. The UA-1 rules below are first-only for
+	// L/TOC, which would false-reject a conformant last-position Caption there.
 	if state.profile == "PDF/UA-2" {
-		if notFirstOrLast {
-			*state.results = append(*state.results,
-				failf(Rule_14289_2_8_2_5_27_t01,
-					"Caption at position %d (not first or last) in %s", childIdx+1, parentType)...)
-		}
 		return
 	}
+
+	notFirstOrLast := childIdx != 0 && childIdx != totalChildren-1
 
 	switch parentType {
 	case "Table":

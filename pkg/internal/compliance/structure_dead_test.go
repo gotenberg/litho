@@ -103,20 +103,10 @@ func TestCaptionPositionProfileSemantics(t *testing.T) {
 		return r
 	}
 
-	// PDF/UA-2 allows a Caption as first OR last child (§8.2.5.27). A Caption
-	// as the last child of an L must NOT be rejected (the pre-existing FP).
+	// PDF/UA-2 judges §8.2.5.27 on the parent (TestCaptionKidPositions), so the
+	// per-child UA-1 rules must not fire for a last-position Caption in an L.
 	if r := run("PDF/UA-2", "L", 1, 2); len(r) != 0 {
 		t.Errorf("UA-2 Caption last in L wrongly flagged: %v", r)
-	}
-	// A middle Caption under PDF/UA-2 fails §8.2.5.27 t1, for any parent.
-	if r := run("PDF/UA-2", "L", 1, 3); !hasRule(r, Rule_14289_2_8_2_5_27_t01) {
-		t.Errorf("UA-2 middle Caption in L: got %v, want §8.2.5.27 t1", r)
-	}
-	if r := run("PDF/UA-2", "Table", 1, 3); !hasRule(r, Rule_14289_2_8_2_5_27_t01) {
-		t.Errorf("UA-2 middle Caption in Table: got %v, want §8.2.5.27 t1", r)
-	}
-	if r := run("PDF/UA-2", "Table", 0, 3); len(r) != 0 {
-		t.Errorf("UA-2 first Caption wrongly flagged: %v", r)
 	}
 
 	// PDF/UA-1 keeps first-only semantics for L (§7.2 t40).
