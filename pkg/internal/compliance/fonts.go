@@ -1289,22 +1289,18 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 				if len(enc) > 0 && usage.charCodes[0] && enc[0] == "" {
 					return failf(rule, "font %s on page %d: charCode 0 maps to .notdef", fontName, pageNum)
 				}
-				glyphNames := typography.ExtractGlyphNames(ctx, fontData)
-				if glyphNames != nil {
-					// Build glyphName→GID reverse map.
-					nameToGID := make(map[string]uint16, len(glyphNames))
-					for gid, gn := range glyphNames {
-						if _, ok := nameToGID[gn]; !ok {
-							nameToGID[gn] = gid
-						}
-					}
+				if glyphNames := typography.ExtractGlyphNames(ctx, fontData); glyphNames != nil {
+					// veraPDF names a simple font's glyph from its /Encoding
+					// (GFGlyph: the encoding's name for the code, the program only
+					// when the encoding gives none) and tests name != ".notdef"
+					// (ISO 19005-2, 6.2.11.8). A code the encoding names is judged
+					// by that name alone, even when the program stores the glyph at
+					// GID 0: pdfjs issue13107_reduced.pdf embeds a DejaVuSans subset
+					// with no .notdef glyph whose post table names GID 0 "space".
 					for code := range usage.charCodes {
 						glyphName := enc[code]
 						if glyphName == "" || glyphName == ".notdef" {
 							return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
-						}
-						if gid, ok := nameToGID[glyphName]; ok && gid == 0 {
-							return failf(rule, "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
 						}
 					}
 				} else {
