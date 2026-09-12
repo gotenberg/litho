@@ -58,8 +58,24 @@ func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, e
 	if int(chosenOffset) >= len(cmapData) {
 		return nil, fmt.Errorf("%w: cmap subtable offset out of bounds", ErrInvalidFont)
 	}
+	sub := cmapData[chosenOffset:]
 
-	codeToGID, err := cmapSubtableCodeToGID(ctx, cmapData[chosenOffset:])
+	// A subtable whose declared length runs past the end of the cmap table is
+	// malformed (the OpenType cmap length field is the subtable's byte size),
+	// and its segments cannot be trusted to list every code the font maps. A
+	// caller would read a code missing from such a partial map as a missing
+	// glyph: govdocs thread_400_400573.pdf's SymbolMT subset declares a 48-byte
+	// (3,0) subtable where 42 bytes remain, it holds only 0xF021 and 0xF022, and
+	// veraPDF reports no glyph-level finding for that font at all.
+	if len(sub) >= 4 { //nolint:mnd // format and length fields
+		if format := binary.BigEndian.Uint16(sub[0:2]); format == 4 || format == 6 {
+			if declared := int(binary.BigEndian.Uint16(sub[2:4])); declared > len(sub) {
+				return nil, fmt.Errorf("%w: cmap subtable declares %d bytes, %d remain", ErrInvalidFont, declared, len(sub))
+			}
+		}
+	}
+
+	codeToGID, err := cmapSubtableCodeToGID(ctx, sub)
 	if err != nil {
 		return nil, err
 	}
