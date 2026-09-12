@@ -468,8 +468,11 @@ func enclosingStructElemHasAlt(ctx context.Context, doc *document.Document, tree
 	if err != nil || elem == nil {
 		return false
 	}
+	// /Alt is a text string, judged by the text it decodes to: a byte order mark
+	// alone decodes to nothing (ISO 32000-1, 7.9.2.2), and veraPDF compares the
+	// decoded value with the empty string.
 	alt, _ := document.ResolveString(ctx, doc, elem["Alt"])
-	return len(alt) > 0
+	return document.DecodePdfString(alt) != ""
 }
 
 // inheritedFieldTU returns the /TU the widget's FIELD answers with, or "" when
@@ -491,8 +494,12 @@ func inheritedFieldTU(ctx context.Context, doc *document.Document, annot ast.Pdf
 		node = parent
 	}
 	for range maxFieldTUSearchDepth {
-		if tu, _ := document.ResolveString(ctx, doc, node["TU"]); len(tu) > 0 {
-			return string(tu)
+		// /TU is a text string, judged by the text it decodes to: pdfjs
+		// bug1847733.pdf writes <FEFF>, a byte order mark alone, which decodes
+		// to nothing (ISO 32000-1, 7.9.2.2) and which veraPDF reads as empty.
+		tu, _ := document.ResolveString(ctx, doc, node["TU"])
+		if text := document.DecodePdfString(tu); text != "" {
+			return text
 		}
 		parent, err := document.ResolveDict(ctx, doc, node["Parent"])
 		if err != nil || parent == nil {
