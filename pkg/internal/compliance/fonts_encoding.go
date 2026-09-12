@@ -256,6 +256,17 @@ func glyphNameHasUnicode(name string) bool {
 	if nonAGLGlyphNames[name] {
 		return false
 	}
+	// A name on the list wins even if it happens to look synthetic. Otherwise
+	// the code-point spellings producers invent are refused: govdocs
+	// thread_300_300084.pdf shows codes its embedded Type 1 program names G4F and
+	// G56, which litho read as U+004F and U+0056, and veraPDF reports those glyphs
+	// as having no Unicode value.
+	if _, ok := encodings.GlyphToRuneSimple(name); ok {
+		return true
+	}
+	if encodings.IsSyntheticGlyphName(name) {
+		return false
+	}
 	_, ok := encodings.GlyphToRuneFull(name)
 	return ok
 }
