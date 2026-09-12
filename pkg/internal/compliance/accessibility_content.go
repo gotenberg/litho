@@ -152,6 +152,13 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		inTaggedMCID := func() bool {
 			return slices.Contains(markerStack, markerTaggedMCID)
 		}
+		// An /MCID tags content only through the structure element that owns it:
+		// veraPDF (GFSEGroupedContent.isTaggedContent) walks that element's parent
+		// chain and calls the content tagged only on reaching the StructTreeRoot.
+		// With no structure tree there is no owner, so MCID-marked content is
+		// untagged. pdfjs bug1019475_1.pdf wraps its text in /H1 <</MCID 0>> BDC
+		// under a catalog with no StructTreeRoot, and veraPDF reports it.
+		structTree, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 		// untaggedScope reports whether painting at the current marker depth is
 		// real content that is neither an Artifact nor tagged. Per ISO 14289-1
 		// §7.1 / -2 §8.2.2 (veraPDF SESimpleContentItem isTaggedContent), content
@@ -160,7 +167,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		// its content, so painting inside one with no MCID-bearing ancestor and
 		// no Artifact ancestor is untagged real content.
 		untaggedScope := func() bool {
-			return !inTaggedMCID() && !inArtifact()
+			return (structTree == nil || !inTaggedMCID()) && !inArtifact()
 		}
 		// flagTaggedInArtifact reports §7.1 t2 when real content is painted while
 		// marked BOTH as tagged (an enclosing MCID) AND as an Artifact. veraPDF
