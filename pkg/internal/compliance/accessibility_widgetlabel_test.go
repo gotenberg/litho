@@ -44,10 +44,11 @@ func TestCheckWidgetLabel(t *testing.T) {
 		t.Errorf("field widget with /Contents: want none, got %v", withContents)
 	}
 
-	// A field widget whose enclosing element carries a Lbl is conformant.
+	// A field widget whose enclosing element carries a Lbl with content is
+	// conformant.
 	withLbl := build("[7 0 R 9 0 R]",
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 0 >>",
-		"<< /Type /StructElem /S /Lbl >>")
+		"<< /Type /StructElem /S /Lbl /K 0 >>")
 	if hasRule(withLbl, Rule_14289_2_8_10_2_3_t01) {
 		t.Errorf("field widget with Lbl: want none, got %v", withLbl)
 	}

@@ -1421,35 +1421,6 @@ func structParentPresenceRule(profile string) Rule {
 	return Rule_14289_1_7_1_t12
 }
 
-// liHasLblChild checks if an LI element has a direct Lbl child.
-func liHasLblChild(ctx context.Context, doc *document.Document, liElem ast.PdfDict) bool {
-	kObj, ok := liElem["K"]
-	if !ok {
-		return false
-	}
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		// Single child.
-		d, err := document.ResolveDict(ctx, doc, kObj)
-		if err != nil || d == nil {
-			return false
-		}
-		t, _ := document.ResolveName(ctx, doc, d["S"])
-		return t == "Lbl"
-	}
-	for _, item := range arr {
-		d, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || d == nil {
-			continue
-		}
-		t, _ := document.ResolveName(ctx, doc, d["S"])
-		if t == "Lbl" {
-			return true
-		}
-	}
-	return false
-}
-
 // resolveAttributeValue looks for a named attribute in the element's /A dict
 // or /A array of attribute dicts, returning the string value or "".
 func resolveAttributeValue(ctx context.Context, doc *document.Document, elem ast.PdfDict, attrName ast.PdfName) string {

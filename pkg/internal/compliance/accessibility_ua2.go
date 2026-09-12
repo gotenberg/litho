@@ -18,11 +18,15 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 	var results []Violation
 
 	// §8.10.1 t02: walk structure tree for Form elements with >1 widget OBJR.
+	// veraPDF scopes the rule to its SEForm object, built for an element whose
+	// standard type is Form, and types a widget's Lbl kid for §8.10.2.3 the same
+	// way, so both lookups resolve types through the tree's role map.
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	typeState := &walkState{doc: doc, roleMap: buildRoleMapIndex(ctx, doc, treeRoot)}
 	if err == nil && treeRoot != nil {
 		walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 			typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-			if typeName != "Form" {
+			if iso32005Key(ctx, typeState, elem, typeName) != "Form" {
 				return
 			}
 			// Count OBJR children pointing to widget annotations.
@@ -64,8 +68,8 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			if structElem == nil {
 				continue
 			}
-			// containsLbl: an enclosing Lbl structure element supplies the label.
-			if liHasLblChild(ctx, doc, structElem) {
+			// containsLbl: a Lbl kid of the enclosing element supplies the label.
+			if hasLabelKid(ctx, typeState, structElem) {
 				continue
 			}
 			// /Contents supplies description and context for the widget.
@@ -78,6 +82,69 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 	}
 
 	return results
+}
+
+// hasLabelKid reports whether a structure element has a kid whose standard type
+// is Lbl and that has content of its own, which is how veraPDF decides
+// containsLbl for ISO 14289-2 §8.10.2.3 t1 (GFPDWidgetAnnot.getcontainsLbl).
+// The kid is typed through the /RoleMap first, as [iso32005Key] types it, so a
+// custom label mapped to Lbl labels the widget and a Lbl mapped away does not;
+// an empty Lbl labels nothing.
+func hasLabelKid(ctx context.Context, state *walkState, elem ast.PdfDict) bool {
+	kObj, ok := elem["K"]
+	if !ok {
+		return false
+	}
+	items, err := document.ResolveArray(ctx, state.doc, kObj)
+	if err != nil {
+		items = ast.PdfArray{kObj}
+	}
+	for _, item := range items {
+		kid, kerr := document.ResolveDict(ctx, state.doc, item)
+		if kerr != nil || kid == nil {
+			continue
+		}
+		s, serr := document.ResolveName(ctx, state.doc, kid["S"])
+		if serr != nil || s == "" {
+			continue
+		}
+		if iso32005Key(ctx, state, kid, s) == "Lbl" && structElemHasKids(ctx, state.doc, kid) {
+			return true
+		}
+	}
+	return false
+}
+
+// structElemHasKids reports whether a structure element's /K holds at least one
+// kid: a marked-content identifier, a marked-content or object reference, or a
+// structure element (ISO 32000-1, 14.7.2, Table 323).
+func structElemHasKids(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
+	kObj, ok := elem["K"]
+	if !ok {
+		return false
+	}
+	items, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		items = ast.PdfArray{kObj}
+	}
+	for _, item := range items {
+		resolved, rerr := document.ResolveObject(ctx, doc, item)
+		if rerr != nil || resolved == nil {
+			continue
+		}
+		switch v := resolved.(type) {
+		case ast.PdfInt:
+			return true
+		case ast.PdfDict:
+			if _, hasS := v["S"]; hasS {
+				return true
+			}
+			if t, _ := document.ResolveName(ctx, doc, v["Type"]); t == "MCR" || t == "OBJR" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // isFieldWidget reports whether a Widget annotation participates in an
