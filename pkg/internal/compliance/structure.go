@@ -953,7 +953,10 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// compute them here. Save and restore so nested tables don't leak state.
 	prevTableUsesHeaderIDs := state.tableUsesHeaderIDs
 	prevTableIrregular := state.tableIrregular
-	if typeName == "Table" {
+	// veraPDF builds its SETable object for an element whose standard type is
+	// Table (GFSEFactory.createTypedStructElem), so the role map decides.
+	isTable := iso32005Key(ctx, state, elem, typeName) == "Table"
+	if isTable {
 		state.tableUsesHeaderIDs = tableHasHeaderIDs(ctx, state.doc, elem)
 		state.tableIrregular = !validateTableColumnConsistency(ctx, state, elem)
 		// ISO 14289-1 §7.2 t15 is a per-cell rule, but a cell only intersects
@@ -980,7 +983,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		state.iso32005Parent = prevISOParent
 	}
 
-	if typeName == "Table" {
+	if isTable {
 		// Section counts (§7.2 t11-t14, t39) are PDF/UA-1 only. PDF/UA-2
 		// constrains tables through the regularity rules §8.2.5.26, not through
 		// THead/TFoot/Caption counts.

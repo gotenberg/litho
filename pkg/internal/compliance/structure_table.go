@@ -76,7 +76,7 @@ func tableSectionChildRule(parentType ast.PdfName) Rule {
 // header model meaningless. This function returns false when it fires a
 // regularity violation so the caller skips header determination.
 func validateTableColumnConsistency(ctx context.Context, state *walkState, tableElem ast.PdfDict) bool {
-	rows := collectTableRows(ctx, state.doc, tableElem)
+	rows := collectTableRows(ctx, state, tableElem)
 	if len(rows) < 2 {
 		return true
 	}
@@ -90,7 +90,7 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 	// t42 for the same table, which is measured rather than assumed, so the
 	// whole branch is scoped to PDF/UA-2.
 	if state.profile == "PDF/UA-2" {
-		if row, ok := rowSpanCrossingSection(ctx, state.doc, tableElem, rows); ok {
+		if row, ok := rowSpanCrossingSection(ctx, state, tableElem, rows); ok {
 			*state.results = append(*state.results,
 				failf(Rule_14289_2_8_2_5_26_t02,
 					"Table row %d has a RowSpan reaching past the end of its section", row+1)...)
@@ -101,7 +101,7 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 	// Build effective column count per row using a proper grid model.
 	// RowSpan causes a cell to occupy column positions in subsequent rows.
 	// Columns "occupied" by RowSpan carry-over affect effective counts.
-	effectiveCols := computeEffectiveColumns(ctx, state.doc, rows)
+	effectiveCols := computeEffectiveColumns(ctx, state, rows)
 	if len(effectiveCols) < 2 || effectiveCols[0] == 0 {
 		return true
 	}
@@ -145,8 +145,8 @@ func validateTableColumnConsistency(ctx context.Context, state *walkState, table
 // reaches past the last row of the THead, TBody or TFoot it belongs to. Rows
 // placed directly under the Table belong to no section and are exempt, since
 // there is no grouping for the span to escape.
-func rowSpanCrossingSection(ctx context.Context, doc *document.Document, tableElem ast.PdfDict, rows []ast.PdfDict) (int, bool) {
-	ends := tableSectionRowEnds(ctx, doc, tableElem)
+func rowSpanCrossingSection(ctx context.Context, state *walkState, tableElem ast.PdfDict, rows []ast.PdfDict) (int, bool) {
+	ends := tableSectionRowEnds(ctx, state, tableElem)
 	if len(ends) == 0 {
 		return 0, false
 	}
@@ -158,8 +158,8 @@ func rowSpanCrossingSection(ctx context.Context, doc *document.Document, tableEl
 		if !sectioned {
 			continue
 		}
-		for _, cell := range resolveRowCells(ctx, doc, row) {
-			if rs := cellRowSpan(ctx, doc, cell); rs > 1 && ri+rs-1 > end {
+		for _, cell := range resolveRowCells(ctx, state, row) {
+			if rs := cellRowSpan(ctx, state.doc, cell); rs > 1 && ri+rs-1 > end {
 				return ri, true
 			}
 		}
@@ -171,42 +171,24 @@ func rowSpanCrossingSection(ctx context.Context, doc *document.Document, tableEl
 // TFoot to the last row index of that section. Rows directly under the Table
 // are absent from the map. The row order matches [collectTableRows], which
 // walks the same children in the same order.
-func tableSectionRowEnds(ctx context.Context, doc *document.Document, tableElem ast.PdfDict) map[int]int {
+func tableSectionRowEnds(ctx context.Context, state *walkState, tableElem ast.PdfDict) map[int]int {
 	ends := make(map[int]int)
 	index := 0
-
-	children, err := document.ResolveArray(ctx, doc, tableElem["K"])
-	if err != nil {
-		child, derr := document.ResolveDict(ctx, doc, tableElem["K"])
-		if derr != nil || child == nil {
-			return ends
-		}
-		children = ast.PdfArray{child}
-	}
-
-	for _, item := range children {
-		child, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || child == nil {
-			continue
-		}
-		typeName, _ := document.ResolveName(ctx, doc, child["S"])
-		if typeName == "TR" {
+	for _, kid := range tableKids(ctx, state, tableElem) {
+		switch kid.key {
+		case "TR":
 			index++
-			continue
+		case "THead", "TBody", "TFoot":
+			n := len(sectionRows(ctx, state, kid.elem))
+			if n == 0 {
+				continue
+			}
+			last := index + n - 1
+			for i := index; i <= last; i++ {
+				ends[i] = last
+			}
+			index = last + 1
 		}
-		if typeName != "THead" && typeName != "TBody" && typeName != "TFoot" {
-			continue
-		}
-		var sectionRows []ast.PdfDict
-		collectRowsFrom(ctx, doc, child, &sectionRows)
-		if len(sectionRows) == 0 {
-			continue
-		}
-		last := index + len(sectionRows) - 1
-		for i := index; i <= last; i++ {
-			ends[i] = last
-		}
-		index = last + 1
 	}
 	return ends
 }
@@ -214,7 +196,7 @@ func tableSectionRowEnds(ctx context.Context, doc *document.Document, tableElem 
 // computeEffectiveColumns builds the effective column count for each row,
 // accounting for both ColSpan and RowSpan. Uses a grid model where
 // carry[col] tracks how many additional rows a column position is occupied.
-func computeEffectiveColumns(ctx context.Context, doc *document.Document, rows []ast.PdfDict) []int {
+func computeEffectiveColumns(ctx context.Context, state *walkState, rows []ast.PdfDict) []int {
 	result := make([]int, len(rows))
 	// carry[col] = remaining rows this column is occupied by a previous RowSpan.
 	carry := make(map[int]int)
@@ -223,7 +205,7 @@ func computeEffectiveColumns(ctx context.Context, doc *document.Document, rows [
 		colPos := 0 // Current column position in the grid.
 
 		// Get cells for this row.
-		cells := resolveRowCells(ctx, doc, row)
+		cells := resolveRowCells(ctx, state, row)
 
 		for _, cell := range cells {
 			// Skip columns occupied by RowSpan from previous rows.
@@ -231,8 +213,8 @@ func computeEffectiveColumns(ctx context.Context, doc *document.Document, rows [
 				colPos++
 			}
 
-			cs := cellColSpan(ctx, doc, cell)
-			rs := cellRowSpan(ctx, doc, cell)
+			cs := cellColSpan(ctx, state.doc, cell)
+			rs := cellRowSpan(ctx, state.doc, cell)
 
 			// This cell occupies colPos..colPos+cs-1. Set carry to rs
 			// (not rs-1) because the end-of-row decrement will subtract 1.
@@ -263,90 +245,91 @@ func computeEffectiveColumns(ctx context.Context, doc *document.Document, rows [
 	return result
 }
 
-// resolveRowCells extracts TD/TH cell dicts from a TR element.
-func resolveRowCells(ctx context.Context, doc *document.Document, tr ast.PdfDict) []ast.PdfDict {
-	kObj := tr["K"]
-	if kObj == nil {
+// tableKid is a structure element kid together with its standard type.
+type tableKid struct {
+	elem ast.PdfDict
+	key  string
+}
+
+// tableKids returns an element's structure element kids with the standard
+// types a table is read by. veraPDF reads rows and cells this way
+// (GFSETable.getTR): the /RoleMap applies first (ISO 32000-2:2020, 14.8.6), as
+// [iso32005Key] applies it, and a Div, Part, or NonStruct kid contributes its
+// own kids in its place, as getStructuralSignificanceChildren does. govdocs
+// thread_100_100945.pdf holds its rows in TableHead and TableBody elements its
+// role map maps to THead and TBody.
+func tableKids(ctx context.Context, state *walkState, elem ast.PdfDict) []tableKid {
+	return tableKidsAt(ctx, state, elem, 0)
+}
+
+// tableKidsAt is [tableKids] carrying the pass-through nesting depth.
+func tableKidsAt(ctx context.Context, state *walkState, elem ast.PdfDict, depth int) []tableKid {
+	kObj, ok := elem["K"]
+	if !ok {
 		return nil
 	}
-	arr, err := document.ResolveArray(ctx, doc, kObj)
+	items, err := document.ResolveArray(ctx, state.doc, kObj)
 	if err != nil {
-		d, _ := document.ResolveDict(ctx, doc, kObj)
-		if d != nil {
-			return []ast.PdfDict{d}
-		}
-		return nil
+		items = ast.PdfArray{kObj}
 	}
-	var cells []ast.PdfDict
-	for _, item := range arr {
-		d, _ := document.ResolveDict(ctx, doc, item)
-		if d == nil {
+	var kids []tableKid
+	for _, item := range items {
+		d, derr := document.ResolveDict(ctx, state.doc, item)
+		if derr != nil || d == nil {
 			continue
 		}
-		typeName, _ := document.ResolveName(ctx, doc, d["S"])
-		if typeName == "TD" || typeName == "TH" {
-			cells = append(cells, d)
+		s, serr := document.ResolveName(ctx, state.doc, d["S"])
+		if serr != nil || s == "" {
+			continue
+		}
+		key := iso32005Key(ctx, state, d, s)
+		if iso32005PassThroughTypes[key] {
+			if depth < maxISO32005PassThroughDepth {
+				kids = append(kids, tableKidsAt(ctx, state, d, depth+1)...)
+			}
+			continue
+		}
+		kids = append(kids, tableKid{elem: d, key: key})
+	}
+	return kids
+}
+
+// resolveRowCells extracts the TD and TH cells of a TR element.
+func resolveRowCells(ctx context.Context, state *walkState, tr ast.PdfDict) []ast.PdfDict {
+	var cells []ast.PdfDict
+	for _, kid := range tableKids(ctx, state, tr) {
+		if kid.key == "TD" || kid.key == "TH" {
+			cells = append(cells, kid.elem)
 		}
 	}
 	return cells
 }
 
-// collectTableRows extracts all TR elements from a Table, including those
-// nested inside THead, TBody, and TFoot sections.
-func collectTableRows(ctx context.Context, doc *document.Document, tableElem ast.PdfDict) []ast.PdfDict {
+// collectTableRows extracts the TR elements of a Table: those directly under
+// it and those one level down in a THead, TBody, or TFoot, which is where
+// veraPDF looks for them.
+func collectTableRows(ctx context.Context, state *walkState, tableElem ast.PdfDict) []ast.PdfDict {
 	var rows []ast.PdfDict
-	kObj := tableElem["K"]
-	if kObj == nil {
-		return nil
-	}
-
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		// Single child.
-		dict, err := document.ResolveDict(ctx, doc, kObj)
-		if err == nil && dict != nil {
-			collectRowsFrom(ctx, doc, dict, &rows)
+	for _, kid := range tableKids(ctx, state, tableElem) {
+		switch kid.key {
+		case "TR":
+			rows = append(rows, kid.elem)
+		case "THead", "TBody", "TFoot":
+			rows = append(rows, sectionRows(ctx, state, kid.elem)...)
 		}
-		return rows
-	}
-
-	for _, item := range arr {
-		dict, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || dict == nil {
-			continue
-		}
-		collectRowsFrom(ctx, doc, dict, &rows)
 	}
 	return rows
 }
 
-func collectRowsFrom(ctx context.Context, doc *document.Document, elem ast.PdfDict, rows *[]ast.PdfDict) {
-	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-	if typeName == "TR" {
-		*rows = append(*rows, elem)
-		return
-	}
-	// THead, TBody, TFoot contain TR children.
-	if typeName == "THead" || typeName == "TBody" || typeName == "TFoot" {
-		kObj := elem["K"]
-		if kObj == nil {
-			return
-		}
-		arr, err := document.ResolveArray(ctx, doc, kObj)
-		if err != nil {
-			dict, _ := document.ResolveDict(ctx, doc, kObj)
-			if dict != nil {
-				collectRowsFrom(ctx, doc, dict, rows)
-			}
-			return
-		}
-		for _, item := range arr {
-			dict, _ := document.ResolveDict(ctx, doc, item)
-			if dict != nil {
-				collectRowsFrom(ctx, doc, dict, rows)
-			}
+// sectionRows returns the TR elements of a THead, TBody, or TFoot.
+func sectionRows(ctx context.Context, state *walkState, section ast.PdfDict) []ast.PdfDict {
+	var rows []ast.PdfDict
+	for _, kid := range tableKids(ctx, state, section) {
+		if kid.key == "TR" {
+			rows = append(rows, kid.elem)
 		}
 	}
+	return rows
 }
 
 // cellColSpan returns the ColSpan value for a TD/TH cell (default 1).
@@ -534,14 +517,14 @@ type tableGridSpan struct {
 // skipped. This mirrors the height veraPDF derives for ISO 14289-1 §7.2 t15,
 // and the rule is a verdict on cell placement, so the grid it is evaluated
 // against has to be the same one.
-func tableGridRowCount(ctx context.Context, doc *document.Document, rows []ast.PdfDict) (int, bool) {
+func tableGridRowCount(ctx context.Context, state *walkState, rows []ast.PdfDict) (int, bool) {
 	count := 0
 	for i := 0; i < len(rows); i++ {
 		if ctx.Err() != nil {
 			return 0, false
 		}
-		for _, cell := range resolveRowCells(ctx, doc, rows[i]) {
-			rowSpan := cellRowSpan(ctx, doc, cell)
+		for _, cell := range resolveRowCells(ctx, state, rows[i]) {
+			rowSpan := cellRowSpan(ctx, state.doc, cell)
 			if rowSpan > maxTableGridSlots || count > maxTableGridSlots-rowSpan {
 				return 0, false
 			}
@@ -558,10 +541,10 @@ func tableGridRowCount(ctx context.Context, doc *document.Document, rows []ast.P
 // tableGridColumnCount returns the grid width, the sum of the /ColSpan values
 // of the first row's cells, and reports false when that sum exceeds
 // [maxTableGridSlots].
-func tableGridColumnCount(ctx context.Context, doc *document.Document, row ast.PdfDict) (int, bool) {
+func tableGridColumnCount(ctx context.Context, state *walkState, row ast.PdfDict) (int, bool) {
 	count := 0
-	for _, cell := range resolveRowCells(ctx, doc, row) {
-		colSpan := cellColSpan(ctx, doc, cell)
+	for _, cell := range resolveRowCells(ctx, state, row) {
+		colSpan := cellColSpan(ctx, state.doc, cell)
 		if colSpan > maxTableGridSlots || count > maxTableGridSlots-colSpan {
 			return 0, false
 		}
@@ -586,12 +569,12 @@ func tableGridColumnCount(ctx context.Context, doc *document.Document, row ast.P
 // table-level rules report (§7.2 t41 for a /RowSpan past the last row, t42/t43
 // for a row whose columns do not add up), and a grid that is already
 // inconsistent says nothing about intersection.
-func tableCellIntersection(ctx context.Context, doc *document.Document, rows []ast.PdfDict) (placed, occupant tableGridSpan, found bool) {
-	numRows, ok := tableGridRowCount(ctx, doc, rows)
+func tableCellIntersection(ctx context.Context, state *walkState, rows []ast.PdfDict) (placed, occupant tableGridSpan, found bool) {
+	numRows, ok := tableGridRowCount(ctx, state, rows)
 	if !ok || numRows == 0 {
 		return placed, occupant, false
 	}
-	numCols, ok := tableGridColumnCount(ctx, doc, rows[0])
+	numCols, ok := tableGridColumnCount(ctx, state, rows[0])
 	if !ok || numCols == 0 || numRows > maxTableGridSlots/numCols {
 		return placed, occupant, false
 	}
@@ -602,10 +585,10 @@ func tableCellIntersection(ctx context.Context, doc *document.Document, rows []a
 			return placed, occupant, false
 		}
 		col, hasCell := 0, false
-		for _, cell := range resolveRowCells(ctx, doc, rows[row]) {
+		for _, cell := range resolveRowCells(ctx, state, rows[row]) {
 			hasCell = true
-			colSpan := cellColSpan(ctx, doc, cell)
-			rowSpan := cellRowSpan(ctx, doc, cell)
+			colSpan := cellColSpan(ctx, state.doc, cell)
+			rowSpan := cellRowSpan(ctx, state.doc, cell)
 			for col < numCols {
 				if _, taken := grid[[2]int{row, col}]; !taken {
 					break
@@ -644,8 +627,8 @@ func tableCellIntersection(ctx context.Context, doc *document.Document, rows []a
 // not the table, so an intersection is two findings: the cell being placed and
 // the cell it lands on.
 func validateTableCellIntersection(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
-	rows := collectTableRows(ctx, state.doc, tableElem)
-	placed, occupant, found := tableCellIntersection(ctx, state.doc, rows)
+	rows := collectTableRows(ctx, state, tableElem)
+	placed, occupant, found := tableCellIntersection(ctx, state, rows)
 	if !found {
 		return
 	}
@@ -673,20 +656,20 @@ type tableGridCell struct {
 }
 
 // buildTableGrid places every TD/TH cell of the given rows on the grid.
-func buildTableGrid(ctx context.Context, doc *document.Document, rows []ast.PdfDict) []tableGridCell {
+func buildTableGrid(ctx context.Context, state *walkState, rows []ast.PdfDict) []tableGridCell {
 	var cells []tableGridCell
 	carry := make(map[int]int)
 	for ri, row := range rows {
 		colPos := 0
-		for _, cell := range resolveRowCells(ctx, doc, row) {
+		for _, cell := range resolveRowCells(ctx, state, row) {
 			for carry[colPos] > 0 {
 				colPos++
 			}
-			cs := cellColSpan(ctx, doc, cell)
-			rs := cellRowSpan(ctx, doc, cell)
-			typeName, _ := document.ResolveName(ctx, doc, cell["S"])
+			cs := cellColSpan(ctx, state.doc, cell)
+			rs := cellRowSpan(ctx, state.doc, cell)
+			typeName, _ := document.ResolveName(ctx, state.doc, cell["S"])
 			cells = append(cells, tableGridCell{
-				elem: cell, isTH: typeName == "TH",
+				elem: cell, isTH: iso32005Key(ctx, state, cell, typeName) == "TH",
 				row: ri, col: colPos, colSpan: cs, rowSpan: rs,
 			})
 			if rs > 1 {
@@ -783,11 +766,11 @@ func overlaps(aStart, aSpan, bStart, bSpan int) bool {
 // /Headers are the only two header-association mechanisms ISO 32000-2 Table
 // 384 defines: a header row that omits /Scope establishes no association.
 func validateTableHeaderDetermination(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
-	rows := collectTableRows(ctx, state.doc, tableElem)
+	rows := collectTableRows(ctx, state, tableElem)
 	if len(rows) == 0 {
 		return
 	}
-	cells := buildTableGrid(ctx, state.doc, rows)
+	cells := buildTableGrid(ctx, state, rows)
 
 	thIDs := make(map[string]bool)
 	hasTH := false
@@ -955,7 +938,7 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 // (7.2 t41, 8.2.5.26 t2). That split follows veraPDF's cell placement rather
 // than anything the clauses say, so it is recorded as measured behaviour.
 func reportRowSpanOverrun(ctx context.Context, state *walkState, rows []ast.PdfDict) bool {
-	col, row, ok := firstRowSpanOverrun(ctx, state.doc, rows)
+	col, row, ok := firstRowSpanOverrun(ctx, state, rows)
 	if !ok {
 		return false
 	}
@@ -982,19 +965,19 @@ func reportRowSpanOverrun(ctx context.Context, state *walkState, rows []ast.PdfD
 // The placement mirrors [computeEffectiveColumns]: a cell takes the first
 // column no carried span already holds, so the column reported is the one the
 // cell actually occupies rather than its index among its row's cells.
-func firstRowSpanOverrun(ctx context.Context, doc *document.Document, rows []ast.PdfDict) (col, row int, ok bool) {
+func firstRowSpanOverrun(ctx context.Context, state *walkState, rows []ast.PdfDict) (col, row int, ok bool) {
 	carry := make(map[int]int)
 	for ri, rowDict := range rows {
 		if ctx.Err() != nil {
 			return 0, 0, false
 		}
 		colPos := 0
-		for _, cell := range resolveRowCells(ctx, doc, rowDict) {
+		for _, cell := range resolveRowCells(ctx, state, rowDict) {
 			for carry[colPos] > 0 {
 				colPos++
 			}
-			cs := cellColSpan(ctx, doc, cell)
-			rs := cellRowSpan(ctx, doc, cell)
+			cs := cellColSpan(ctx, state.doc, cell)
+			rs := cellRowSpan(ctx, state.doc, cell)
 			if ri+rs > len(rows) {
 				return colPos, ri, true
 			}

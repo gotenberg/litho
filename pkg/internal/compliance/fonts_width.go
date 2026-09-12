@@ -90,6 +90,10 @@ type simpleFontGlyphs struct {
 	// subtable the program carries, so a code absent from codeToGID has no
 	// glyph at all rather than an unknown one.
 	symbolCmap bool
+	// encodingNames holds the glyph names a non-symbolic TrueType font's
+	// predefined encoding gives its codes, so a code it leaves unnamed is known
+	// to select no glyph. It is nil whenever the names are not fully known.
+	encodingNames map[byte]string
 }
 
 // resolveSimpleFontGlyphs does the work of [simpleFontGlyphMetrics] and also
@@ -117,6 +121,7 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
 	charCodeToGID := typography.ExtractCharCodeToGID(ctx, fontData)
+	var encNames map[byte]string
 
 	// A symbolic TrueType font resolves its single-byte codes through the
 	// embedded (3,0)/(1,0) cmap, not through glyph names: ISO 32000-1, 9.6.6.4
@@ -220,10 +225,37 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 					charCodeToGID[uint16(code)] = gid
 				}
 			}
+			// The same clause makes the name the only route to a glyph, so a code
+			// the encoding leaves unnamed selects none. That holds only where the
+			// names are wholly known: a predefined encoding, named or under
+			// /BaseEncoding. A /Differences-only dictionary rests on an implicit
+			// base litho derives (Table 114) and veraPDF does not, so it stays out.
+			if fd["FontFile2"] != nil && !isSymbolicFont(ctx, doc, fd) && encodingFullyPredefined(ctx, doc, fontDict) {
+				encNames = enc
+			}
 		}
 	}
 
-	return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: charCodeToGID}, true
+	return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: charCodeToGID, encodingNames: encNames}, true
+}
+
+// encodingFullyPredefined reports whether a simple font's /Encoding names its
+// codes entirely from a predefined encoding (ISO 32000-1, Annex D): a named
+// encoding, or an encoding dictionary whose /BaseEncoding names one.
+func encodingFullyPredefined(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return false
+	}
+	if name, err := document.ResolveName(ctx, doc, encObj); err == nil && name != "" {
+		return predefinedEncodingNames(string(name)) != nil
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return false
+	}
+	base, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
+	return err == nil && predefinedEncodingNames(string(base)) != nil
 }
 
 // buildNameToGID inverts a GID→glyphName table into a glyphName→GID lookup,
@@ -593,6 +625,12 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 		return checkType1GlyphPresence(ctx, doc, fontDict, fontName, pageNum, rule, usage)
 	}
 	for code := range usage.charCodes {
+		// Code 0 references .notdef, which the .notdef rule judges; veraPDF
+		// counts its glyph as present (GFGlyph.initForNotType3), so the veraPDF
+		// suite's .notdef fixtures fail that rule alone.
+		if code == 0 {
+			continue
+		}
 		gid, mapped := glyphs.codeToGID[uint16(code)]
 		// A symbolic TrueType font draws a code through its symbol cmap
 		// subtable (ISO 32000-1, 9.6.6.4), so a code that subtable does not hold
@@ -602,6 +640,15 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 		// 0xF021 to 0xF027.
 		if !mapped && glyphs.symbolCmap {
 			gid, mapped = 0, true
+		}
+		// A non-symbolic TrueType font reaches a glyph only through the name its
+		// encoding gives the code, so a code left unnamed, or named .notdef,
+		// selects none. veraPDF reports it absent, as for govdocs
+		// thread_300_300708.pdf's WinAnsiEncoding code 31.
+		if !mapped && glyphs.encodingNames != nil {
+			if name := glyphs.encodingNames[code]; name == "" || name == ".notdef" {
+				gid, mapped = 0, true
+			}
 		}
 		if mapped && gid == 0 {
 			return failf(rule, "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
