@@ -201,8 +201,18 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		}
 	}
 
-	// Check catalog /OpenAction (t01).
-	if oaObj, ok := catalog["OpenAction"]; ok {
+	// Check catalog /OpenAction (t01). A value that resolves to null is no
+	// entry at all: ISO 32000-1, 7.3.7 treats a null dictionary value as an
+	// absent entry, and 7.3.10 makes a reference to an undefined object a
+	// reference to null. pdfjs issue16839.pdf writes /OpenAction 0 0 R, the
+	// free-list head, and veraPDF builds no destination from it.
+	oaObj, hasOpenAction := catalog["OpenAction"]
+	if hasOpenAction {
+		if resolved, err := document.ResolveObject(ctx, doc, oaObj); err == nil && isNullObject(resolved) {
+			hasOpenAction = false
+		}
+	}
+	if hasOpenAction {
 		if !isStructureDestination(ctx, doc, oaObj) {
 			// Could be an action dict. Check if GoTo.
 			oaDict, _ := document.ResolveDict(ctx, doc, oaObj)
