@@ -219,12 +219,37 @@ func checkSpanMarkedContentLang(ctx context.Context, doc *document.Document, cat
 }
 
 // spanLangViolations scans one page's operations for /Span marked-content
-// sequences whose natural language cannot be determined.
+// sequences whose natural language cannot be determined, following the Form
+// XObjects the page draws.
 func spanLangViolations(ctx context.Context, doc *document.Document, parentTree, page ast.PdfDict, pageIdx int, ops []content.Operation) []Violation {
-	props := markedContentProps{doc: doc, page: page}
+	scan := spanLangScan{doc: doc, parentTree: parentTree, pageIdx: pageIdx, seen: make(map[int]bool)}
+	return scan.ops(ctx, ops, page, resolveResources(ctx, doc, page), false, 0)
+}
+
+// spanLangScan carries what one page's /Span scan shares across the Form
+// XObjects it follows: the structure tree's ParentTree, the page number the
+// findings name, and the XObjects already scanned, so a cyclic or repeated
+// invocation chain is walked once.
+type spanLangScan struct {
+	doc        *document.Document
+	parentTree ast.PdfDict
+	pageIdx    int
+	seen       map[int]bool
+}
+
+// ops scans one content stream. owner is the dictionary the stream belongs to (the
+// page, or a Form XObject's stream dictionary), which names its property lists
+// and its /StructParents; res resolves the XObjects it draws. covered reports
+// whether the sequence enclosing the stream already supplies a language, and
+// depth caps the invocation chain at [maxFormXObjectDepth].
+func (s *spanLangScan) ops(ctx context.Context, ops []content.Operation, owner, res ast.PdfDict, covered bool, depth int) []Violation {
+	if depth > maxFormXObjectDepth {
+		return nil
+	}
+	props := markedContentProps{doc: s.doc, page: owner}
 	owners := structElemLang{
-		doc:     doc,
-		entries: pageParentTreeEntries(ctx, doc, parentTree, page),
+		doc:     s.doc,
+		entries: pageParentTreeEntries(ctx, s.doc, s.parentTree, owner),
 		cache:   make(map[int]bool),
 	}
 
@@ -247,12 +272,12 @@ func spanLangViolations(ctx context.Context, doc *document.Document, parentTree,
 			open = append(open, false)
 		case "BDC":
 			pd := props.dict(ctx, op)
-			supplies := pd != nil && (hasStringKeyPresent(ctx, doc, pd, "Lang") || owners.hasLang(ctx, pd))
+			supplies := pd != nil && (hasStringKeyPresent(ctx, s.doc, pd, "Lang") || owners.hasLang(ctx, pd))
 			open = append(open, supplies)
 			if supplies {
 				inScope++
-			} else if inScope == 0 {
-				results = append(results, spanPropLangViolations(ctx, doc, op, pd, pageIdx)...)
+			} else if inScope == 0 && !covered {
+				results = append(results, spanPropLangViolations(ctx, s.doc, op, pd, s.pageIdx)...)
 			}
 		case "EMC":
 			if n := len(open); n > 0 {
@@ -261,9 +286,62 @@ func spanLangViolations(ctx context.Context, doc *document.Document, parentTree,
 				}
 				open = open[:n-1]
 			}
+		case "Do":
+			// veraPDF builds the marked content of a Form XObject a page draws
+			// as it does the page's own, so pdfjs issue19971.pdf's form reports
+			// each /Span with /ActualText. The form paints inside the sequence the
+			// Do sits in (ISO 32000-1 §14.6), whose language covers it.
+			results = append(results, s.form(ctx, op, res, covered || inScope > 0, depth)...)
 		}
 	}
 	return results
+}
+
+// form scans the Form XObject a Do operator draws. A Do naming an absent or
+// non-Form XObject, or one that cannot be read, shows no marked content (ISO
+// 32000-1 §8.10.1).
+func (s *spanLangScan) form(ctx context.Context, op content.Operation, res ast.PdfDict, covered bool, depth int) []Violation {
+	if res == nil || len(op.Operands) < 1 {
+		return nil
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		return nil
+	}
+	xobjects, err := document.ResolveDict(ctx, s.doc, res["XObject"])
+	if err != nil || xobjects == nil {
+		return nil
+	}
+	if ref, isRef := xobjects[name].(ast.PdfIndirectRef); isRef {
+		if s.seen[ref.ObjectNum] {
+			return nil
+		}
+		s.seen[ref.ObjectNum] = true
+	}
+	stream, err := document.ResolveStream(ctx, s.doc, xobjects[name])
+	if err != nil || stream.Dict == nil {
+		return nil
+	}
+	if subtype, _ := document.ResolveName(ctx, s.doc, stream.Dict["Subtype"]); subtype != "Form" {
+		return nil
+	}
+	data, err := s.doc.DecodeStream(ctx, stream)
+	if err != nil {
+		s.doc.Logger.Debug("compliance.accessibility: cannot decode Form XObject stream", "error", err)
+		return nil
+	}
+	formOps, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		s.doc.Logger.Debug("compliance.accessibility: cannot parse Form XObject content stream", "error", err)
+		return nil
+	}
+	// A Form XObject without its own /Resources inherits the invoking stream's
+	// (ISO 32000-1 §8.10.2), so nested names still resolve.
+	subRes, err := document.ResolveDict(ctx, s.doc, stream.Dict["Resources"])
+	if err != nil || subRes == nil {
+		subRes = res
+	}
+	return s.ops(ctx, formOps, stream.Dict, subRes, covered, depth+1)
 }
 
 // spanPropLangViolations reports §7.2 t30/t31/t32 for a marked-content sequence

@@ -1217,7 +1217,8 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 }
 
 // checkType0ToUnicode validates the ToUnicode requirement for composite fonts (rule 2).
-func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
+// usage carries the codes the page shows through the font, or nil when unknown.
+func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -1240,7 +1241,36 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
+	// ISO 14289-1 §7.21.7 and ISO 19005-2 §6.2.11.7.2 ask for a ToUnicode CMap
+	// that maps the codes a glyph shows, and ISO 32000-1 §9.10.3 makes the entry
+	// a CMap stream. A stream that does not parse as one maps no code, so every
+	// glyph the font shows goes without a Unicode value: pdfjs issue8061.pdf ships
+	// 345 bytes of binary data there, and veraPDF reports each glyph. A font no
+	// glyph uses is not judged, since both rules are scoped to shown glyphs.
+	if usage != nil && len(usage.charCodes) > 0 && toUnicodeMapsNothing(ctx, doc, type0Dict["ToUnicode"]) {
+		return failf(rule, "font %s on page %d: /ToUnicode is not a CMap mapping any code", fontName, pageNum)
+	}
+
 	return nil
+}
+
+// toUnicodeMapsNothing reports whether a /ToUnicode entry is a stream that does
+// not read as a CMap mapping any code. An entry that is not a stream, such as the
+// name /Identity-H some producers write, and a stream litho cannot read at all
+// are left to other rules.
+func toUnicodeMapsNothing(ctx context.Context, doc *document.Document, tuObj ast.PdfObject) bool {
+	stream, err := document.ResolveStream(ctx, doc, tuObj)
+	if err != nil || stream.Dict == nil {
+		return false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		if data, err = stream.Bytes(ctx); err != nil {
+			return false
+		}
+	}
+	parsed, err := cmap.Parse(ctx, data)
+	return err != nil || parsed == nil || len(parsed.Mapping) == 0
 }
 
 // checkToUnicodeCMapValues validates that a readable /ToUnicode CMap does not

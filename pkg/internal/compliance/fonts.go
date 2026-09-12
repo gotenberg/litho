@@ -1113,7 +1113,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	results = append(results, checkCIDSystemInfo(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
 	// ToUnicode for composite fonts.
-	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
+	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile, usage)...)
 
 	// CMap embedding and WMode.
 	results = append(results, checkCMapEmbedding(ctx, doc, fontDict, fontName, pageNum, profile)...)
