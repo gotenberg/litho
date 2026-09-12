@@ -585,8 +585,14 @@ func checkAnnotFormLang(ctx context.Context, doc *document.Document, catalog ast
 			if err != nil || annot == nil {
 				continue
 			}
-			contents, _ := document.ResolveString(ctx, doc, annot["Contents"])
-			if len(contents) == 0 {
+			// veraPDF's test is Contents == null || ..., and its getStringKey
+			// returns null only for an absent or non-string entry, so an empty
+			// /Contents still needs a determinable language.
+			contentsObj, ok := annot["Contents"]
+			if !ok {
+				continue
+			}
+			if _, err := document.ResolveString(ctx, doc, contentsObj); err != nil {
 				continue
 			}
 			if !objLangDeterminable(ctx, doc, treeRoot, annot) {
@@ -648,7 +654,7 @@ func structElementLang(ctx context.Context, doc *document.Document, treeRoot, ob
 }
 
 // checkFieldTULang walks the form-field tree, reporting §7.2 t25 for a field
-// whose /TU entry carries text but whose language is undeterminable. seen and
+// whose /TU entry is present but whose language is undeterminable. seen and
 // depth bound a shared or cyclic /Kids tree.
 func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, fields ast.PdfArray, seen map[int]bool, depth int, results *[]Violation) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
@@ -665,8 +671,11 @@ func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.
 		if err != nil || field == nil {
 			continue
 		}
-		if tu, _ := document.ResolveString(ctx, doc, field["TU"]); len(tu) > 0 {
-			if !objLangDeterminable(ctx, doc, treeRoot, field) {
+		// veraPDF's test is TU == null || ..., and its getStringKey returns null
+		// only for an absent or non-string entry, so an empty /TU still needs a
+		// determinable language.
+		if tuObj, ok := field["TU"]; ok {
+			if _, err := document.ResolveString(ctx, doc, tuObj); err == nil && !objLangDeterminable(ctx, doc, treeRoot, field) {
 				*results = append(*results, fail(Rule_14289_1_7_2_t25, "form field /TU")...)
 			}
 		}

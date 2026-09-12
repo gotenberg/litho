@@ -192,14 +192,17 @@ func widgetStructElem(ctx context.Context, doc *document.Document, treeRoot, ann
 	return elem
 }
 
-// widgetHasContents reports whether a widget carries a non-empty /Contents entry.
+// widgetHasContents reports whether a widget carries a /Contents text string,
+// empty or not. veraPDF's ISO 14289-2 §8.10.2.3 t1 test reads Contents != null,
+// and its getStringKey returns null only for an absent or non-string entry, so
+// an empty /Contents counts.
 func widgetHasContents(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
 	contentsObj, ok := annot["Contents"]
 	if !ok {
 		return false
 	}
-	s, err := document.ResolveString(ctx, doc, contentsObj)
-	return err == nil && len(s) > 0
+	_, err := document.ResolveString(ctx, doc, contentsObj)
+	return err == nil
 }
 
 // countOBJRWidgets counts OBJR children of a structure element that point to
