@@ -27,7 +27,7 @@ func TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve form: %v", err)
 		}
-		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, inheritedCSDefault(), 4)
+		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, inheritedCSDefault(), 4, nil)
 	}
 
 	if !scan(t, "/Group << /S /Transparency /CS /DeviceRGB >>").rgb {

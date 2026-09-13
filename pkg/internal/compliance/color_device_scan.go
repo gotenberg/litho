@@ -170,7 +170,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// For Form XObjects, recurse into content stream and nested resources.
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 		if subtype == "Form" {
-			formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, inheritedCSFor(inherited, string(name)), part)
+			formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, inheritedCSFor(inherited, string(name)), part, resources)
 			usage.rgb = usage.rgb || formUsage.rgb
 			usage.cmyk = usage.cmyk || formUsage.cmyk
 			usage.gray = usage.gray || formUsage.gray
@@ -188,7 +188,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 // entryCS is the colour-space state the scope inherits (ISO 32000-1 §8.10.2):
 // the state observed at the invoking Do, or [inheritedCSDefault] when this scope
 // is a tiling pattern or an appearance stream that no Do invokes.
-func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool, entryCS inheritedCS, part int) deviceCSUsage {
+func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool, entryCS inheritedCS, part int, parentRes ast.PdfDict) deviceCSUsage {
 	var usage deviceCSUsage
 
 	if depth >= maxFormXObjectDepth {
@@ -243,8 +243,20 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	}
 
 	// Check nested resources within the Form XObject.
+	//
+	// ISO 32000-1, 8.10.1 makes /Resources optional: a form XObject that omits
+	// it draws on the resource dictionary of the content stream that invoked
+	// it, so the names its stream references still resolve. Returning early
+	// here left every nested XObject, shading and pattern of such a form
+	// unscanned. pdfjs issue1055r.pdf draws a form with no /Resources whose
+	// stream invokes a second form by a name only the page declares, and that
+	// one fills with an "rg" operator; veraPDF reports ISO 19005-2 §6.2.4.3 t2
+	// at .../xObject[0]/contentStream[0]/operators[3]/fillCS[0].
 	formRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 	if err != nil || formRes == nil {
+		formRes = parentRes
+	}
+	if formRes == nil {
 		return usage
 	}
 
@@ -836,6 +848,14 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 		return usage
 	}
 
+	// An appearance stream that omits /Resources falls back to the page's, the
+	// same inheritance ISO 32000-1, 8.10.1 states for any form XObject.
+	pageRes, err := document.ResolveDict(ctx, doc, page["Resources"])
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot resolve page resources", "error", err)
+		pageRes = nil
+	}
+
 	visited := make(map[string]bool)
 	for _, annotObj := range annotsArr {
 		if ctx.Err() != nil {
@@ -866,7 +886,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 			// Appearance can be a stream (single) or dict of streams.
 			stream, err := document.ResolveStream(ctx, doc, apObj)
 			if err == nil {
-				formUsage := scanFormXObjectCS(ctx, doc, stream, 0, visited, inheritedCSDefault(), part)
+				formUsage := scanFormXObjectCS(ctx, doc, stream, 0, visited, inheritedCSDefault(), part, pageRes)
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
@@ -886,7 +906,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 					doc.Logger.Debug("compliance.color: cannot resolve sub-XObject stream", "error", err)
 					continue
 				}
-				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited, inheritedCSDefault(), part)
+				formUsage := scanFormXObjectCS(ctx, doc, subStream, 0, visited, inheritedCSDefault(), part, pageRes)
 				usage.rgb = usage.rgb || formUsage.rgb
 				usage.cmyk = usage.cmyk || formUsage.cmyk
 				usage.gray = usage.gray || formUsage.gray
@@ -1051,7 +1071,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		}
 
 		// Scan the tiling pattern's content stream as a Form XObject.
-		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, inheritedCSDefault(), part)
+		formUsage := scanFormXObjectCS(ctx, doc, stream, depth, visited, inheritedCSDefault(), part, resources)
 		usage.rgb = usage.rgb || formUsage.rgb
 		usage.cmyk = usage.cmyk || formUsage.cmyk
 		usage.gray = usage.gray || formUsage.gray
