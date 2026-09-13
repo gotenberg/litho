@@ -137,17 +137,32 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 		}
 	})
 
-	t.Run("missing Widths passes", func(t *testing.T) {
+	// A font with no /Widths still declares a width for every code it shows:
+	// ISO 32000-1, 9.6.2.1 and Table 111 give an uncovered code the
+	// descriptor's /MissingWidth, default 0. The rule is not vacuous there, it
+	// compares the program advance against that default, which is what veraPDF
+	// does (pdfjs issue11150_reduced.pdf, ISO 19005-2 §6.2.11.5 t1). The
+	// missing-key rules report the absent array itself and say nothing about
+	// the widths it would have held.
+	t.Run("missing Widths compares against MissingWidth", func(t *testing.T) {
 		t.Parallel()
-		// ISO 19005-1 §6.3.6 compares the width in the font dictionary
-		// against the embedded program. With no /Widths there is no
-		// dictionary width to compare, so consistency holds vacuously and
-		// the width rule passes; a missing /Widths is caught by the
-		// font-dictionary key requirements instead.
 		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
 		results := checkSimpleFontWidths(ctx, nopDoc(), ast.PdfDict{"FirstChar": ast.PdfInt(32)}, binaryWidths, unitsPerEm, "TestFont", 1, rule, identMap, usage)
+		if len(results) == 0 {
+			t.Error("expected a violation: no /Widths and no /MissingWidth declares 0 against a 488-unit glyph")
+		}
+	})
+
+	t.Run("missing Widths matching MissingWidth passes", func(t *testing.T) {
+		t.Parallel()
+		fd := ast.PdfDict{
+			"FirstChar":      ast.PdfInt(32),
+			"FontDescriptor": ast.PdfDict{"MissingWidth": ast.PdfReal(488)},
+		}
+		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
+		results := checkSimpleFontWidths(ctx, nopDoc(), fd, binaryWidths, unitsPerEm, "TestFont", 1, rule, identMap, usage)
 		if len(results) != 0 {
-			t.Errorf("expected no violations for missing /Widths, got %d: %v", len(results), results)
+			t.Errorf("/MissingWidth 488 matches the glyph advance, got %d: %v", len(results), results)
 		}
 	})
 }

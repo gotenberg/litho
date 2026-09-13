@@ -366,17 +366,27 @@ func widthValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) 
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
 	// Width consistency is a property of a glyph the document actually
 	// paints: the rule compares the program advance against the declared
-	// width only when both are resolvable and the glyph is rendered
-	// visibly (rendering mode != 3). A missing /Widths or /FirstChar makes
-	// the declared width unresolvable, so it falls to the font-dict key
-	// rules rather than this one, and a font used only invisibly is exempt.
+	// width only when both are resolvable and the glyph is rendered visibly
+	// (rendering mode != 3). A font used only invisibly is exempt. An
+	// unresolvable /FirstChar leaves the array unindexable and keeps the
+	// conservative answer below; that case was not measured against veraPDF.
 	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
 		return nil
 	}
 
+	// A font stating no /Widths still declares a width for every code it
+	// shows: ISO 32000-1, 9.6.2.1 and Table 111 give a code the array does not
+	// cover the descriptor's /MissingWidth, default 0. With no array at all
+	// every shown code is uncovered, so they all take that same comparison.
+	// pdfjs issue11150_reduced.pdf embeds a Symbol program whose code 113
+	// advances 521 units and declares neither /Widths nor /MissingWidth, so
+	// its declared width is 0 and veraPDF reports the glyph under ISO 19005-2
+	// §6.2.11.5 t1. The missing-key rules (§6.2.11.2 t4 to t6) report the
+	// absent array itself and say nothing about the widths it would have held.
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
-		return nil
+		return checkSimpleFontUncoveredWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm,
+			fontName, pageNum, rule, charCodeToGID, 0, 0, usage)
 	}
 
 	widths, err := document.ResolveArray(ctx, doc, widthsObj)
