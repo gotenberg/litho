@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -429,7 +430,23 @@ func checkContentStreamResourcesOps(
 			}
 			continue
 		}
-		if _, exists := subDict[name]; !exists {
+		entry, exists := subDict[name]
+		// ISO 32000-1, 7.3.7: an entry whose value is null is the same as an
+		// absent one, so the name is undefined. The stream's own dictionary
+		// holds the key, so veraPDF reports it as undefined (t3) even when the
+		// Pages tree defines the name, never as inherited (t2): pdfjs
+		// issue16432.pdf's form XObjects name /F0 83 0 R, and object 83 is null.
+		if exists && resourceEntryNull(ctx, doc, entry) {
+			key := string(category) + ":" + string(name)
+			if !reported[key] {
+				reported[key] = true
+				if resourceRule.Specification != "" {
+					results = append(results, failf(resourceRule, "page %d: %s operator references %q, which Resources/%s maps to null", pageNum, op.Operator, name, string(category))...)
+				}
+			}
+			continue
+		}
+		if !exists {
 			key := string(category) + ":" + string(name)
 			if !reported[key] {
 				reported[key] = true
@@ -445,6 +462,19 @@ func checkContentStreamResourcesOps(
 	}
 
 	return results
+}
+
+// resourceEntryNull reports whether a resource dictionary entry's value is
+// null: written as null, a reference to a null or free object, or a reference
+// to an object the file does not define, which ISO 32000-1, 7.3.10 treats as a
+// reference to null. Any other resolution failure is not a null value, so it
+// leaves the entry defined rather than risk a false report.
+func resourceEntryNull(ctx context.Context, doc *document.Document, entry ast.PdfObject) bool {
+	obj, err := document.ResolveObject(ctx, doc, entry)
+	if err != nil {
+		return errors.Is(err, document.ErrObjectNotFound)
+	}
+	return isNullObject(obj)
 }
 
 // checkInlineImageIntent checks parsed BI operations for inline image
