@@ -676,7 +676,14 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 				maps.Copy(result, predefinedEncodingNames(string(baseName)))
 			} else {
 				builtin := builtinProgramEncoding(ctx, doc, fontDict)
-				if len(builtin) == 0 && !isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) {
+				// ZapfDingbats is symbolic whether or not a font descriptor says
+				// so, so Table 114 gives it its built-in encoding, never
+				// StandardEncoding. Those built-in names (a1 to a191) carry no
+				// Unicode value, so a code its /Differences leave alone stays
+				// unnamed: govdocs thread_300_300031.pdf shows code 110 that way,
+				// and veraPDF reports it under ISO 14289-1 §7.21.7 t1.
+				if len(builtin) == 0 && !isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) &&
+					!isZapfDingbatsByName(ctx, doc, fontDict) {
 					// ISO 32000-1, 9.6.6.4 and Table 114: a non-symbolic font
 					// whose program offers no built-in encoding takes
 					// StandardEncoding as the implicit base. litho reads a
