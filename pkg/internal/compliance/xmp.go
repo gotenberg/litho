@@ -2626,53 +2626,63 @@ func xmpExtFieldSeqRule(part int) []Violation {
 
 // xmpExtSchemaRule returns the rule for a missing field in a schema definition.
 // Mapping: schema->t03, namespaceURI->t04, prefix->t05, property->t06.
-func xmpExtSchemaRule(part int, field string) []Violation {
-	ctx := fmt.Sprintf("extension schema missing required field '%s'", field)
-	switch part {
-	case 1:
-		switch field {
-		case "schema":
-			return fail(Rule_19005_1_6_7_8_t03, ctx)
-		case "namespaceURI":
-			return fail(Rule_19005_1_6_7_8_t04, ctx)
-		case "prefix":
-			return fail(Rule_19005_1_6_7_8_t05, ctx)
-		case "property":
-			return fail(Rule_19005_1_6_7_8_t06, ctx)
-		}
-	case 2:
-		switch field {
-		case "schema":
-			return fail(Rule_19005_2_6_6_2_3_3_t02, ctx)
-		case "namespaceURI":
-			return fail(Rule_19005_2_6_6_2_3_3_t03, ctx)
-		case "prefix":
-			return fail(Rule_19005_2_6_6_2_3_3_t04, ctx)
-		case "property":
-			return fail(Rule_19005_2_6_6_2_3_3_t05, ctx)
-		}
-	case 3:
-		switch field {
-		case "schema":
-			return fail(Rule_19005_3_6_6_2_3_3_t02, ctx)
-		case "namespaceURI":
-			return fail(Rule_19005_3_6_6_2_3_3_t03, ctx)
-		case "prefix":
-			return fail(Rule_19005_3_6_6_2_3_3_t04, ctx)
-		case "property":
-			return fail(Rule_19005_3_6_6_2_3_3_t05, ctx)
-		}
-	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts
-		// 1-3 (XMP 2010 packets are self-describing); its §6.6.1 covers
-		// actions, not metadata.
+// xmpExtLevelRules maps each extension-schema level's field name to the rule
+// that reports it, indexed by PDF/A part minus one (parts 1, 2 and 3). Keeping
+// the mapping in a table rather than nested switches means a field listed in
+// [xmpExtensionLevels] cannot silently lack a rule: pdfaSchema:valueType and
+// pdfaType:field both did, so litho reported four violations where veraPDF
+// reported five on a packet misprefixing every field.
+//
+//nolint:gochecknoglobals // static spec table
+var (
+	xmpExtSchemaFieldRules = map[string][3]Rule{
+		"schema":       {Rule_19005_1_6_7_8_t03, Rule_19005_2_6_6_2_3_3_t02, Rule_19005_3_6_6_2_3_3_t02},
+		"namespaceURI": {Rule_19005_1_6_7_8_t04, Rule_19005_2_6_6_2_3_3_t03, Rule_19005_3_6_6_2_3_3_t03},
+		"prefix":       {Rule_19005_1_6_7_8_t05, Rule_19005_2_6_6_2_3_3_t04, Rule_19005_3_6_6_2_3_3_t04},
+		"property":     {Rule_19005_1_6_7_8_t06, Rule_19005_2_6_6_2_3_3_t05, Rule_19005_3_6_6_2_3_3_t05},
+		"valueType":    {Rule_19005_1_6_7_8_t07, Rule_19005_2_6_6_2_3_3_t06, Rule_19005_3_6_6_2_3_3_t06},
+	}
+
+	xmpExtPropertyFieldRules = map[string][3]Rule{
+		"name":        {Rule_19005_1_6_7_8_t08, Rule_19005_2_6_6_2_3_3_t07, Rule_19005_3_6_6_2_3_3_t07},
+		"valueType":   {Rule_19005_1_6_7_8_t09, Rule_19005_2_6_6_2_3_3_t08, Rule_19005_3_6_6_2_3_3_t08},
+		"category":    {Rule_19005_1_6_7_8_t10, Rule_19005_2_6_6_2_3_3_t09, Rule_19005_3_6_6_2_3_3_t09},
+		"description": {Rule_19005_1_6_7_8_t11, Rule_19005_2_6_6_2_3_3_t10, Rule_19005_3_6_6_2_3_3_t10},
+	}
+
+	xmpExtValueTypeFieldRules = map[string][3]Rule{
+		"type":         {Rule_19005_1_6_7_8_t12, Rule_19005_2_6_6_2_3_3_t11, Rule_19005_3_6_6_2_3_3_t11},
+		"namespaceURI": {Rule_19005_1_6_7_8_t13, Rule_19005_2_6_6_2_3_3_t12, Rule_19005_3_6_6_2_3_3_t12},
+		"prefix":       {Rule_19005_1_6_7_8_t14, Rule_19005_2_6_6_2_3_3_t13, Rule_19005_3_6_6_2_3_3_t13},
+		"description":  {Rule_19005_1_6_7_8_t15, Rule_19005_2_6_6_2_3_3_t14, Rule_19005_3_6_6_2_3_3_t14},
+		"field":        {Rule_19005_1_6_7_8_t16, Rule_19005_2_6_6_2_3_3_t15, Rule_19005_3_6_6_2_3_3_t15},
+	}
+
+	xmpExtFieldFieldRules = map[string][3]Rule{
+		"name":        {Rule_19005_1_6_7_8_t17, Rule_19005_2_6_6_2_3_3_t16, Rule_19005_3_6_6_2_3_3_t16},
+		"valueType":   {Rule_19005_1_6_7_8_t18, Rule_19005_2_6_6_2_3_3_t17, Rule_19005_3_6_6_2_3_3_t17},
+		"description": {Rule_19005_1_6_7_8_t19, Rule_19005_2_6_6_2_3_3_t18, Rule_19005_3_6_6_2_3_3_t18},
+	}
+)
+
+// xmpExtLevelRule looks a level's field up in table and reports it with ctx.
+// ISO 19005-4 drops the extension-schema requirements of parts 1-3 (XMP 2010
+// packets are self-describing), so any other part yields nothing.
+func xmpExtLevelRule(table map[string][3]Rule, part int, field, ctx string) []Violation {
+	rules, ok := table[field]
+	if !ok || part < 1 || part > 3 {
 		return nil
 	}
-	return nil
+	return fail(rules[part-1], ctx)
+}
+
+// xmpExtSchemaRule returns the rule for a missing field in a schema definition.
+func xmpExtSchemaRule(part int, field string) []Violation {
+	return xmpExtLevelRule(xmpExtSchemaFieldRules, part, field,
+		fmt.Sprintf("extension schema missing required field '%s'", field))
 }
 
 // xmpExtPropertyRule returns the rule for a missing field in a property definition.
-// Mapping: name->t08, valueType->t09, category->t10, description->t11.
 func xmpExtPropertyRule(part int, field string) []Violation {
 	return xmpExtPropertyRuleCtx(part, field, fmt.Sprintf("extension property missing required field '%s'", field))
 }
@@ -2688,132 +2698,22 @@ func xmpExtPropertyCategoryRule(part int, value string) []Violation {
 // xmpExtPropertyRuleCtx maps a property field to its per-part rule, reporting it
 // with the caller's context.
 func xmpExtPropertyRuleCtx(part int, field, ctx string) []Violation {
-	switch part {
-	case 1:
-		switch field {
-		case "name":
-			return fail(Rule_19005_1_6_7_8_t08, ctx)
-		case "valueType":
-			return fail(Rule_19005_1_6_7_8_t09, ctx)
-		case "category":
-			return fail(Rule_19005_1_6_7_8_t10, ctx)
-		case "description":
-			return fail(Rule_19005_1_6_7_8_t11, ctx)
-		}
-	case 2:
-		switch field {
-		case "name":
-			return fail(Rule_19005_2_6_6_2_3_3_t07, ctx)
-		case "valueType":
-			return fail(Rule_19005_2_6_6_2_3_3_t08, ctx)
-		case "category":
-			return fail(Rule_19005_2_6_6_2_3_3_t09, ctx)
-		case "description":
-			return fail(Rule_19005_2_6_6_2_3_3_t10, ctx)
-		}
-	case 3:
-		switch field {
-		case "name":
-			return fail(Rule_19005_3_6_6_2_3_3_t07, ctx)
-		case "valueType":
-			return fail(Rule_19005_3_6_6_2_3_3_t08, ctx)
-		case "category":
-			return fail(Rule_19005_3_6_6_2_3_3_t09, ctx)
-		case "description":
-			return fail(Rule_19005_3_6_6_2_3_3_t10, ctx)
-		}
-	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts 1-3.
-		return nil
-	}
-	return nil
+	return xmpExtLevelRule(xmpExtPropertyFieldRules, part, field, ctx)
 }
 
-// xmpExtValueTypeRule returns the rule for a missing field in a valueType definition.
-// Mapping: type->t12, namespaceURI->t13, prefix->t14, description->t15.
-// A missing description IS flagged: the extension schema grammar requires
-// a description on every valueType definition, so its absence is a missing
-// required field, not an empty optional one.
+// xmpExtValueTypeRule returns the rule for a missing field in a valueType
+// definition. A missing description IS flagged: the extension schema grammar
+// requires a description on every valueType definition, so its absence is a
+// missing required field, not an empty optional one.
 func xmpExtValueTypeRule(part int, field string) []Violation {
-	ctx := fmt.Sprintf("extension valueType missing required field '%s'", field)
-	switch part {
-	case 1:
-		switch field {
-		case "type":
-			return fail(Rule_19005_1_6_7_8_t12, ctx)
-		case "namespaceURI":
-			return fail(Rule_19005_1_6_7_8_t13, ctx)
-		case "prefix":
-			return fail(Rule_19005_1_6_7_8_t14, ctx)
-		case "description":
-			return fail(Rule_19005_1_6_7_8_t15, ctx)
-		}
-	case 2:
-		switch field {
-		case "type":
-			return fail(Rule_19005_2_6_6_2_3_3_t11, ctx)
-		case "namespaceURI":
-			return fail(Rule_19005_2_6_6_2_3_3_t12, ctx)
-		case "prefix":
-			return fail(Rule_19005_2_6_6_2_3_3_t13, ctx)
-		case "description":
-			return fail(Rule_19005_2_6_6_2_3_3_t14, ctx)
-		}
-	case 3:
-		switch field {
-		case "type":
-			return fail(Rule_19005_3_6_6_2_3_3_t11, ctx)
-		case "namespaceURI":
-			return fail(Rule_19005_3_6_6_2_3_3_t12, ctx)
-		case "prefix":
-			return fail(Rule_19005_3_6_6_2_3_3_t13, ctx)
-		case "description":
-			return fail(Rule_19005_3_6_6_2_3_3_t14, ctx)
-		}
-	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts 1-3.
-		return nil
-	}
-	return nil
+	return xmpExtLevelRule(xmpExtValueTypeFieldRules, part, field,
+		fmt.Sprintf("extension valueType missing required field '%s'", field))
 }
 
 // xmpExtFieldRule returns the rule for a missing field in a field definition.
-// Mapping: name->t17, valueType->t18, description->t19.
 func xmpExtFieldRule(part int, field string) []Violation {
-	ctx := fmt.Sprintf("extension field missing required field '%s'", field)
-	switch part {
-	case 1:
-		switch field {
-		case "name":
-			return fail(Rule_19005_1_6_7_8_t17, ctx)
-		case "valueType":
-			return fail(Rule_19005_1_6_7_8_t18, ctx)
-		case "description":
-			return fail(Rule_19005_1_6_7_8_t19, ctx)
-		}
-	case 2:
-		switch field {
-		case "name":
-			return fail(Rule_19005_2_6_6_2_3_3_t16, ctx)
-		case "valueType":
-			return fail(Rule_19005_2_6_6_2_3_3_t17, ctx)
-		case "description":
-			return fail(Rule_19005_2_6_6_2_3_3_t18, ctx)
-		}
-	case 3:
-		switch field {
-		case "name":
-			return fail(Rule_19005_3_6_6_2_3_3_t16, ctx)
-		case "valueType":
-			return fail(Rule_19005_3_6_6_2_3_3_t17, ctx)
-		case "description":
-			return fail(Rule_19005_3_6_6_2_3_3_t18, ctx)
-		}
-	case 4:
-		// ISO 19005-4 drops the extension-schema requirements of parts 1-3.
-		return nil
-	}
-	return nil
+	return xmpExtLevelRule(xmpExtFieldFieldRules, part, field,
+		fmt.Sprintf("extension field missing required field '%s'", field))
 }
 
 // xmpPredefinedValueTypes lists XMP value type names that do not require a
