@@ -439,7 +439,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 			if annotRectOutsideCropBox(ctx, doc, annot) {
 				continue
 			}
-			if inheritedFieldTU(ctx, doc, annot) != "" {
+			if fieldTU(ctx, doc, annot) != "" {
 				continue
 			}
 			if enclosingStructElemHasAlt(ctx, doc, treeRoot, annot) {
@@ -497,16 +497,20 @@ func enclosingStructElemHasAlt(ctx context.Context, doc *document.Document, tree
 	return document.DecodePdfString(alt) != ""
 }
 
-// inheritedFieldTU returns the /TU the widget's FIELD answers with, or "" when
-// no field on the /Parent chain states one.
+// fieldTU returns the /TU the widget's FIELD answers with, or "" when that
+// field states none.
 //
 // /TU is a field key (ISO 32000-1, Table 220), not an annotation key. A widget
 // merged with its field carries the field's keys directly and answers with its
 // own /TU; a kid widget is a pure annotation, so a /TU written on it states
-// nothing about the field and is skipped in favour of the /Parent chain
+// nothing about the field and its immediate /Parent is read instead
 // (ISO 32000-1, 12.7.3.1). Honouring a kid's own /TU passed a radio group whose
-// field had no /TU at all, which is what 7.18.1 t3 exists to catch.
-func inheritedFieldTU(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
+// field had no /TU at all, which is what 7.18.1 t3 exists to catch. /TU is not
+// an inheritable field entry (12.7.3.1 names FT, Ff, V and DV), so a /TU further
+// up the field tree belongs to another field and is not read: veraPDF's
+// GFPDWidgetAnnot.getTU reads the same two places and nothing above them,
+// measured on a widget whose only /TU sits on its grandparent.
+func fieldTU(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
 	node := annot
 	if !isFieldDict(node) {
 		parent, err := document.ResolveDict(ctx, doc, node["Parent"])
@@ -515,31 +519,22 @@ func inheritedFieldTU(ctx context.Context, doc *document.Document, annot ast.Pdf
 		}
 		node = parent
 	}
-	for range maxFieldTUSearchDepth {
-		// /TU is a text string, judged by the text it decodes to: pdfjs
-		// bug1847733.pdf writes <FEFF>, a byte order mark alone, which decodes
-		// to nothing (ISO 32000-1, 7.9.2.2) and which veraPDF reads as empty.
-		tu, _ := document.ResolveString(ctx, doc, node["TU"])
-		if text := document.DecodePdfString(tu); text != "" {
-			return text
-		}
-		parent, err := document.ResolveDict(ctx, doc, node["Parent"])
-		if err != nil || parent == nil {
-			return ""
-		}
-		node = parent
-	}
-	return ""
+	// /TU is a text string, judged by the text it decodes to: pdfjs
+	// bug1847733.pdf writes <FEFF>, a byte order mark alone, which decodes to
+	// nothing (ISO 32000-1, 7.9.2.2) and which veraPDF reads as empty. An absent
+	// or non-string /TU states nothing, so its resolution error is not needed.
+	tu, _ := document.ResolveString(ctx, doc, node["TU"])
+	return document.DecodePdfString(tu)
 }
 
-// isFieldDict reports whether a dictionary is (or is merged with) a form field.
-// A field is named by /T and typed by /FT, either of which may be inherited, so
-// a dictionary carrying either is a field rather than a bare widget annotation
-// (ISO 32000-1, 12.7.3.1).
+// isFieldDict reports whether a dictionary is (or is merged with) a form field:
+// it carries the partial field name /T (ISO 32000-1, Table 220). /FT is
+// inheritable (12.7.3.1), so a kid widget may carry it without being a field;
+// veraPDF's PDFormField.isField keys on /T alone, measured on a widget with /FT
+// and no /T whose own /TU does not count.
 func isFieldDict(d ast.PdfDict) bool {
 	_, hasT := d["T"]
-	_, hasFT := d["FT"]
-	return hasT || hasFT
+	return hasT
 }
 
 // annotRectOutsideCropBox checks if an annotation's /Rect is entirely outside
@@ -599,9 +594,3 @@ func annotRectOutsidePageCropBox(ctx context.Context, doc *document.Document, an
 	// Check non-intersection.
 	return rx2 <= bx1 || rx1 >= bx2 || ry2 <= by1 || ry1 >= by2
 }
-
-// maxFieldTUSearchDepth bounds the /TU lookup walk over the AcroForm field
-// tree. Anti-DoS guard, not spec-mandated: deliberately tighter than
-// [maxFieldTreeDepth] (the general field-tree cap) because a /TU appears on
-// or near the terminal field, so a deep crafted tree need not be descended.
-const maxFieldTUSearchDepth = 10
