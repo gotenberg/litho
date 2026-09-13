@@ -1833,58 +1833,109 @@ func dcTitleLangAltMalformed(data []byte) bool {
 	return malformed
 }
 
-// xmpHasSpecificLang reports whether the XMP packet qualifies any property with
-// a specific natural language: an xml:lang attribute whose value is neither
-// empty nor "x-default". ISO 14289-1 §7.2 t33 requires the document metadata's
-// natural language to be determinable; when the catalog carries no /Lang, a
-// specific xml:lang in the metadata supplies it, while a packet using only
-// "x-default" (verapdf-corpus 7.2-t33-fail-a) does not.
-func xmpHasSpecificLang(data []byte) bool {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	decoder.CharsetReader = xmpPassThroughCharset
-	decoder.Strict = false
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			break
-		}
-		se, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		for _, a := range se.Attr {
-			if a.Name.Local == "lang" && a.Value != "" && a.Value != "x-default" {
-				return true
-			}
-		}
-	}
-	return false
-}
+// xmpLangAltOnlyXDefault reports whether a top-level property of the packet is
+// a language alternative holding a single item qualified xml:lang="x-default".
+//
+// ISO 14289-1, 7.2 t33 is judged on veraPDF's XMPLangAlt: a top-level property
+// (VeraPDFMeta.getProperties) whose items all carry an xml:lang qualifier
+// (VeraPDFXMPNode.isLanguageAlternative). It fails when xDefault holds, which
+// AXLXMPLangAlt.getxDefault sets for exactly one item qualified "x-default", so
+// an alternative naming its language beside x-default passes and another
+// property's specific tag does not rescue it. The array form does not matter: a
+// Bag qualifies as readily as an Alt. Structure fields are not top-level
+// properties and are not judged.
+//
+// XMPCore frames the packet by the first rdf:RDF element in the RDF namespace
+// (XMPMetaParser.findRootNode), so a packet binding the rdf prefix to another
+// URI holds no property at all: pdfjs issue15833.pdf carries packets rewritten
+// by a library proxy, and veraPDF reports none of them. Measured against veraPDF
+// on a fixture of each shape.
+//
+// The packet is read through [xmpRepairForParse], as [xmpWellFormed] reads it:
+// govdocs thread_300_300842.pdf writes &#x5; inside its x-default item, which
+// XMPCore repairs and veraPDF reports, while the raw decoder stopped there.
+func xmpLangAltOnlyXDefault(data []byte) bool {
+	const (
+		frameOutside = iota
+		frameRDF
+		frameDescription
+		frameProperty
+		frameArray
+		frameOther
+	)
 
-// xmpHasXDefaultLangAlt reports whether the packet contains a language
-// alternative qualified with xml:lang="x-default". ISO 14289-1 §7.2 t33
-// constrains such an alternative (veraPDF's XMPLangAlt), so a packet holding
-// none presents nothing whose language could be undeterminable.
-func xmpHasXDefaultLangAlt(data []byte) bool {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder := xml.NewDecoder(bytes.NewReader(xmpRepairForParse(data)))
 	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
+
+	var (
+		stack     []int
+		items     int
+		firstLang string
+	)
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			break
+			return false
 		}
-		se, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		for _, a := range se.Attr {
-			if a.Name.Local == "lang" && a.Value == "x-default" {
-				return true
+		switch t := tok.(type) {
+		case xml.StartElement:
+			parent := frameOutside
+			if len(stack) > 0 {
+				parent = stack[len(stack)-1]
+			}
+			rdf := t.Name.Space == xmpRDFNamespace
+			frame := frameOther
+			switch parent {
+			case frameOutside:
+				frame = frameOutside
+				if rdf && t.Name.Local == "RDF" {
+					frame = frameRDF
+				}
+			case frameRDF:
+				if rdf && t.Name.Local == "Description" {
+					frame = frameDescription
+				}
+			case frameDescription:
+				if !rdf {
+					frame = frameProperty
+					items, firstLang = 0, ""
+				}
+			case frameProperty:
+				if rdf && (t.Name.Local == "Alt" || t.Name.Local == "Bag" || t.Name.Local == "Seq") {
+					frame = frameArray
+				}
+			case frameArray:
+				if rdf && t.Name.Local == "li" {
+					items++
+					if items == 1 {
+						for _, a := range t.Attr {
+							if a.Name.Space == "http://www.w3.org/XML/1998/namespace" && a.Name.Local == "lang" {
+								firstLang = a.Value
+								break
+							}
+						}
+					}
+				}
+			}
+			stack = append(stack, frame)
+		case xml.EndElement:
+			if len(stack) == 0 {
+				continue
+			}
+			frame := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			switch frame {
+			case frameProperty:
+				if items == 1 && firstLang == "x-default" {
+					return true
+				}
+			case frameRDF:
+				// XMPCore reads the first rdf:RDF only.
+				return false
 			}
 		}
 	}
-	return false
 }
 
 // xmpExtractPrefixMap scans raw XMP bytes for xmlns:prefix="uri" declarations

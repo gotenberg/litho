@@ -353,24 +353,53 @@ func xdefaultXMP(langs ...string) string {
 		alt + `</rdf:RDF></x:xmpmeta>`
 }
 
-// TestXMPHasXDefaultLangAlt pins the subject of ISO 14289-1 §7.2 t33. veraPDF
-// scopes the rule to a language alternative (XMPLangAlt), so a packet holding
-// none presents nothing whose language could be undeterminable. Reporting on a
-// bare packet flagged every metadata stream without a dc:title.
-func TestXMPHasXDefaultLangAlt(t *testing.T) {
+// TestXMPLangAltOnlyXDefault pins the subject of ISO 14289-1 §7.2 t33. veraPDF
+// scopes the rule to a language alternative (XMPLangAlt): a top-level property
+// whose items all carry xml:lang, failing when its single item is qualified
+// x-default. A packet holding none presents nothing whose language could be
+// undeterminable. Every case was measured against veraPDF.
+func TestXMPLangAltOnlyXDefault(t *testing.T) {
 	t.Parallel()
 
-	if !xmpHasXDefaultLangAlt([]byte(xdefaultXMP("x-default"))) {
-		t.Error("alternative qualified x-default: want detected")
+	packet := func(rdfNS, props string) string {
+		return `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="` + rdfNS + `">` +
+			`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ex="http://example.com/ns/">` +
+			props + `</rdf:Description></rdf:RDF></x:xmpmeta>`
 	}
-	if !xmpHasXDefaultLangAlt([]byte(xdefaultXMP("x-default", "en-US"))) {
-		t.Error("alternative carrying x-default beside a specific tag: want detected")
+	const rdfNS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+	title := `<dc:title><rdf:Alt><rdf:li xml:lang="x-default">T</rdf:li></rdf:Alt></dc:title>`
+
+	tests := []struct {
+		name string
+		xmp  string
+		want bool
+	}{
+		{"alternative qualified x-default", xdefaultXMP("x-default"), true},
+		{"x-default beside a specific tag", xdefaultXMP("x-default", "en-US"), false},
+		{"no alternative", xdefaultXMP(), false},
+		{"alternative qualified en-US", xdefaultXMP("en-US"), false},
+		{"another property's specific tag does not rescue it", packet(rdfNS, title+
+			`<dc:description><rdf:Alt><rdf:li xml:lang="en-US">D</rdf:li></rdf:Alt></dc:description>`), true},
+		{"a Bag with one x-default item", packet(rdfNS,
+			`<dc:subject><rdf:Bag><rdf:li xml:lang="x-default">S</rdf:li></rdf:Bag></dc:subject>`), true},
+		{"two x-default items", packet(rdfNS,
+			`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">A</rdf:li><rdf:li xml:lang="x-default">B</rdf:li></rdf:Alt></dc:title>`), false},
+		{"an item without xml:lang", packet(rdfNS,
+			`<dc:subject><rdf:Bag><rdf:li xml:lang="x-default">A</rdf:li><rdf:li>B</rdf:li></rdf:Bag></dc:subject>`), false},
+		{"x-default on a simple property", packet(rdfNS, `<dc:format xml:lang="x-default">application/pdf</dc:format>`), false},
+		{"x-default inside a structure field", packet(rdfNS,
+			`<ex:Outer rdf:parseType="Resource"><ex:Inner><rdf:Alt><rdf:li xml:lang="x-default">I</rdf:li></rdf:Alt></ex:Inner></ex:Outer>`), false},
+		{"rdf prefix bound to another URI", packet("http://example.com/rdf#", title), false},
+		{"a control character inside the item", packet(rdfNS,
+			`<dc:description><rdf:Alt><rdf:li xml:lang="x-default">&#x5;4.1.1</rdf:li></rdf:Alt></dc:description>`), true},
 	}
-	if xmpHasXDefaultLangAlt([]byte(xdefaultXMP())) {
-		t.Error("packet with no alternative: want none, the rule has no subject")
-	}
-	if xmpHasXDefaultLangAlt([]byte(xdefaultXMP("en-US"))) {
-		t.Error("alternative qualified only en-US: want none, xDefault is false")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := xmpLangAltOnlyXDefault([]byte(tt.xmp)); got != tt.want {
+				t.Errorf("xmpLangAltOnlyXDefault = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

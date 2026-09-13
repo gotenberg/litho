@@ -484,9 +484,9 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		results = append(results, checkAnnotFormLang(ctx, doc, catalog)...)
 
 		// §7.2 t33: the document metadata's natural language must be
-		// determinable. With no catalog /Lang, it is determined by a specific
-		// xml:lang in the XMP packet; a packet present but qualified only with
-		// "x-default" leaves it undetermined.
+		// determinable. With no catalog /Lang, each language alternative in the
+		// metadata must name its language: one whose single item is qualified
+		// only "x-default" leaves it undetermined.
 		//
 		// The rule's subject is a language alternative (veraPDF's XMPLangAlt,
 		// test xDefault == false || gContainsCatalogLang == true), so a packet
@@ -498,8 +498,7 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 		// XML 1.0 §2.1 gives it no infoset, so veraPDF builds no XMPLangAlt
 		// from it. Reading one out of a malformed packet condemned a document
 		// on a qualifier only litho's lenient scan could see.
-		if xmpData, ok := readCatalogXMP(ctx, doc, catalog); ok && xmpWellFormed(xmpData) &&
-			xmpHasXDefaultLangAlt(xmpData) && !xmpHasSpecificLang(xmpData) {
+		if documentMetadataLangUndetermined(ctx, doc, catalog) {
 			results = append(results, fail(Rule_14289_1_7_2_t33, "document metadata")...)
 		}
 		return results
@@ -511,6 +510,38 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 
 	// Catalog provides global /Lang. Validate /Lang format in structure elements.
 	return validateStructureLangs(ctx, doc, catalog, validRule)
+}
+
+// documentMetadataLangUndetermined reports whether any metadata stream the
+// document carries leaves its natural language undetermined for ISO 14289-1,
+// 7.2 t33. The caller has established that the catalog carries no /Lang.
+//
+// ISO 32000-1, 14.3.2 lets any component carry a /Metadata stream, and veraPDF
+// judges each one, not the catalog's alone: it models the /Metadata of every
+// dictionary in the cross-reference table whose /Type is not /Catalog
+// (GFCosDict.getMetadata over GFCosDocument's indirectObjects), which
+// [xmpCollectMetadataStreams] and [xmpPacketBytes] already mirror. pdfjs
+// bug867484.pdf gives a structure element a packet whose dc:title and
+// dc:description carry only x-default; veraPDF reports it, and litho, which
+// read the catalog's packet only, did not.
+func documentMetadataLangUndetermined(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	if data, ok := readCatalogXMP(ctx, doc, catalog); ok && xmpLangUndetermined(data) {
+		return true
+	}
+	for _, objNum := range xmpCollectMetadataStreams(ctx, doc, catalog) {
+		if data := xmpPacketBytes(ctx, doc, objNum); data != nil && xmpLangUndetermined(data) {
+			return true
+		}
+	}
+	return false
+}
+
+// xmpLangUndetermined reports whether a metadata packet holds a language
+// alternative qualified only by x-default ([xmpLangAltOnlyXDefault]). A packet
+// that is not well-formed XML presents no alternative at all (XML 1.0, 2.1), so
+// it leaves no language undetermined.
+func xmpLangUndetermined(data []byte) bool {
+	return xmpWellFormed(data) && xmpLangAltOnlyXDefault(data)
 }
 
 // resolveNonEmptyLang resolves a /Lang entry from a dict and returns the trimmed
