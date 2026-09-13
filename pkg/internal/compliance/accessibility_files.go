@@ -27,8 +27,8 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 	rule := Rule_14289_1_7_11_t01
 	var results []Violation
 
-	// Scan ALL file specification dicts with /EF key (embedded files) for
-	// non-empty /F and /UF. This covers file specs referenced from the
+	// Scan ALL file specification dicts: the embedded ones for non-empty /F
+	// and /UF, the EmbeddedFiles-tree ones for /Desc. This covers file specs referenced from the
 	// EmbeddedFiles name tree, FileAttachment annotations, and other sources.
 	//
 	// [collectFileSpecs] supplies them, so a file specification written as a
@@ -40,16 +40,15 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		if ctx.Err() != nil {
 			return results
 		}
-		if !fs.hasEF {
-			continue // Only check embedded file specs.
-		}
 		dict := fs.dict
 
 		// PDF/UA-1 §7.11: /F and /UF must both be present and non-empty, judged
 		// as veraPDF reads them (GFCosFileSpecification, getStringKey): decoded,
 		// so a name holding only a byte order mark is empty. Measured against
-		// veraPDF.
-		if profile == "PDF/UA-1" {
+		// veraPDF. Only a specification that embeds a file is judged: veraPDF's
+		// containsEF is a knownKey on /EF, so an /EF written as null embeds
+		// nothing (ISO 32000-1, 7.3.7), measured ([nonNullKeyPresent]).
+		if profile == "PDF/UA-1" && nonNullKeyPresent(ctx, doc, dict, "EF") {
 			hasF := hasNonEmptyStringKey(ctx, doc, dict, "F")
 			hasUF := hasNonEmptyStringKey(ctx, doc, dict, "UF")
 			if !hasF || !hasUF {
@@ -67,6 +66,9 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		// only an absent /Desc is a violation. A /Desc written as null is
 		// absent (ISO 32000-1, 7.3.7), as veraPDF's knownKey reads it,
 		// measured ([nonNullKeyPresent]).
+		// The rule is not gated on /EF: veraPDF tests containsDesc ||
+		// presentInEmbeddedFiles == false, measured on a specification in the
+		// name tree that has no /EF at all.
 		// A direct filespec has no object number, so it cannot be a name-tree
 		// value and inEFTree rightly leaves it out of the /Desc requirement.
 		if profile == "PDF/UA-2" && fs.objNum != 0 && inEFTree[fs.objNum] {
