@@ -90,45 +90,6 @@ func TestStructuralChildTypeRuleIDs(t *testing.T) {
 	}
 }
 
-func TestCaptionPositionProfileSemantics(t *testing.T) {
-	doc, _ := objsDocPDF(t,
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
-	)
-	caption := ast.PdfDict{"S": ast.PdfName("Caption")}
-	run := func(profile string, parent ast.PdfName, idx, total int) []Violation {
-		var r []Violation
-		validateCaptionPosition(context.Background(), &walkState{results: &r, profile: profile, doc: doc}, caption, parent, idx, total)
-		return r
-	}
-
-	// PDF/UA-2 judges §8.2.5.27 on the parent (TestCaptionKidPositions), so the
-	// per-child UA-1 rules must not fire for a last-position Caption in an L.
-	if r := run("PDF/UA-2", "L", 1, 2); len(r) != 0 {
-		t.Errorf("UA-2 Caption last in L wrongly flagged: %v", r)
-	}
-
-	// PDF/UA-1 keeps first-only semantics for L (§7.2 t40).
-	if r := run("PDF/UA-1", "L", 1, 2); !hasRule(r, Rule_14289_1_7_2_t40) {
-		t.Errorf("UA-1 Caption last in L: got %v, want §7.2 t40 (first-only)", r)
-	}
-	if r := run("PDF/UA-1", "L", 0, 2); len(r) != 0 {
-		t.Errorf("UA-1 Caption first in L wrongly flagged: %v", r)
-	}
-
-	// PDF/UA-1 Table Caption position is §7.2 t16 (not the THead-count t11).
-	if r := run("PDF/UA-1", "Table", 1, 3); !hasRule(r, Rule_14289_1_7_2_t16) {
-		t.Errorf("UA-1 middle Caption in Table: got %v, want §7.2 t16", r)
-	}
-	// ISO 14289-1 §7.2 constrains Caption position only for L and Table; it
-	// states no Caption-position requirement for Figure or Form, so litho must
-	// not flag one (previously a latent false positive).
-	if r := run("PDF/UA-1", "Figure", 1, 3); len(r) != 0 {
-		t.Errorf("UA-1 middle Caption in Figure wrongly flagged: %v", r)
-	}
-}
-
 func TestLIDirectContentItem(t *testing.T) {
 	doc, _ := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R >>",

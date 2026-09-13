@@ -718,20 +718,6 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		return
 	}
 
-	// Count only structural children (elements with /S key) for caption
-	// position validation. Non-structural items (MCR integers, OBJR dicts)
-	// must not affect the index.
-	totalStructChildren := 0
-	for _, item := range arr {
-		d, err := document.ResolveDict(ctx, state.doc, item)
-		if err == nil && d != nil {
-			if _, hasS := d["S"]; hasS {
-				totalStructChildren++
-			}
-		}
-	}
-
-	structIdx := 0
 	hCount := 0 // Count of H (generic heading) children for §7.4.4 t1.
 	for _, item := range arr {
 		if ctx.Err() != nil {
@@ -764,8 +750,6 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 			}
 
 			walkElement(ctx, state, dict, parentType, depth, lastHeadingLevel)
-			validateCaptionPosition(ctx, state, dict, parentType, structIdx, totalStructChildren)
-			structIdx++
 		}
 	}
 }
@@ -821,6 +805,9 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	if state.profile == "PDF/UA-2" {
 		validateISO32005(ctx, state, elem, typeName, state.iso32005Parent)
 		validateCaptionKidPositions(ctx, state, elem)
+	}
+	if state.profile == "PDF/UA-1" {
+		validateUA1CaptionKidPositions(ctx, state, elem, typeName)
 	}
 
 	// Tag-containment rules (§7.2 parent/child tables) are PDF/UA-1 only.
@@ -1116,47 +1103,35 @@ func ua1KidJudged(t ast.PdfName) bool {
 	return t != "" && !iso32005PassThroughTypes[string(t)]
 }
 
-// validateCaptionPosition checks that Caption is the first child of Table,
-// Figure, or Form.
-func validateCaptionPosition(ctx context.Context, state *walkState, elem ast.PdfDict, parentType ast.PdfName, childIdx int, totalChildren int) {
-	typeName, _ := document.ResolveName(ctx, state.doc, elem["S"])
-	if typeName != "Caption" {
-		return
-	}
-
-	// PDF/UA-2 §8.2.5.27 is judged on the parent by [validateCaptionKidPositions],
-	// over the kids' standard types. The UA-1 rules below are first-only for
-	// L/TOC, which would false-reject a conformant last-position Caption there.
-	if state.profile == "PDF/UA-2" {
-		return
-	}
-
-	notFirstOrLast := childIdx != 0 && childIdx != totalChildren-1
-
-	switch parentType {
+// validateUA1CaptionKidPositions checks where ISO 14289-1, 7.2 lets a Caption
+// sit among the kids of a Table (first or last, t16), a TOC (first, t28), or an
+// L (first, t40); 7.2 states no Caption position for any other parent. veraPDF
+// tests each on the parent, the SETable, SETOC, or SEL it builds from the
+// standard type, over kidsStandardTypes: the kids resolved as [iso32005Kids]
+// resolves them, where the role map decides each type and a Div, Part, or
+// NonStruct kid contributes its own kids. So a name mapped to Caption counts, a
+// Caption mapped to P does not, and a parent fails once however many Captions
+// are misplaced. Measured against veraPDF on mapped, wrapped, and repeated
+// variants of each.
+func validateUA1CaptionKidPositions(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName) {
+	var rule Rule
+	lastAllowed := false
+	switch iso32005Key(ctx, state, elem, typeName) {
 	case "Table":
-		// PDF/UA-1 §7.2 t16: Table allows Caption as first or last child.
-		// PDF/UA-1 §7.2 defines a Caption-position constraint only for Table, L,
-		// and TOC, so Figure and Form parents are intentionally not checked here
-		// to avoid a false reject.
-		if notFirstOrLast {
-			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t16,
-					"Caption at position %d (not first or last) in Table", childIdx+1)...)
-		}
-	case "L":
-		// PDF/UA-1 §7.2 t40: L allows Caption only as first child.
-		if childIdx != 0 {
-			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t40,
-					"Caption at position %d (not first) in L", childIdx+1)...)
-		}
+		rule, lastAllowed = Rule_14289_1_7_2_t16, true
 	case "TOC":
-		// PDF/UA-1 §7.2 t28: TOC allows Caption only as first child.
-		if childIdx != 0 {
+		rule = Rule_14289_1_7_2_t28
+	case "L":
+		rule = Rule_14289_1_7_2_t40
+	default:
+		return
+	}
+	kidKeys, _ := iso32005Kids(ctx, state, elem)
+	for i := 1; i < len(kidKeys); i++ {
+		if kidKeys[i] == "Caption" && (!lastAllowed || i < len(kidKeys)-1) {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t28,
-					"Caption at position %d (not first) in TOC", childIdx+1)...)
+				failf(rule, "Caption at position %d of the %d kids of %s", i+1, len(kidKeys), typeName)...)
+			return
 		}
 	}
 }
