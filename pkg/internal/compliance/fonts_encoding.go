@@ -976,12 +976,18 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// mapping at all, which veraPDF reports per glyph. Codes left to the font's
 	// built-in encoding are skipped by [usedGlyphNamesResolvable] (litho cannot
 	// parse them), so this stays free of false positives; usage-less checks stay
-	// exempt for the same reason.
+	// exempt for the same reason. A /ToUnicode CMap vouches only for the codes it
+	// maps, see [shownCodeOutsideToUnicode].
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if isSymbolicFont(ctx, doc, fd) {
 		if _, hasEncoding := fontDict["Encoding"]; hasEncoding {
-			if hasToUnicode(fontDict) || usage == nil || usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
+			if usage == nil || usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
 				return nil
+			}
+			if hasToUnicode(fontDict) {
+				if _, _, leftOut := shownCodeOutsideToUnicode(ctx, doc, fontDict, usage); !leftOut {
+					return nil
+				}
 			}
 		}
 	}
@@ -1042,8 +1048,91 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	if !hasToUnicode(fontDict) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
+	if code, name, leftOut := shownCodeOutsideToUnicode(ctx, doc, fontDict, usage); leftOut {
+		return failf(rule, "font %s on page %d: code %d is outside /ToUnicode and its glyph name %s has no Unicode value",
+			fontName, pageNum, code, name)
+	}
 
 	return nil
+}
+
+// shownCodeOutsideToUnicode reports a code a Type 1 font shows that its
+// /ToUnicode CMap leaves out and its encoding names with a glyph name carrying
+// no Unicode value.
+//
+// ISO 14289-1, 7.21.7 and ISO 19005-2, 6.2.11.7.2 ask that every shown code
+// map to Unicode. A /ToUnicode CMap vouches only for the codes it maps: ISO
+// 32000-1, 9.10.2 derives the value of any other code from its glyph name, and
+// veraPDF's PDSimpleFont.toUnicode falls back the same way. govdocs
+// thread_300_300068.pdf shows code 2 of an MTSY font whose /Differences name it
+// circlecopyrt, a TeX spelling no glyph list carries, while its /ToUnicode maps
+// codes 1 and 3 only; veraPDF reports the glyph.
+//
+// A code left unnamed or named .notdef is skipped, because veraPDF then reads
+// the program's own glyph name, which this check does not establish. A CMap
+// that cannot be read is skipped too, leaving the font to the presence rule.
+func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (byte, string, bool) {
+	if usage == nil || len(usage.charCodes) == 0 {
+		return 0, "", false
+	}
+	if st := fontSubtype(ctx, doc, fontDict); st != "Type1" && st != "MMType1" {
+		return 0, "", false
+	}
+	tuObj, ok := fontDict["ToUnicode"]
+	if !ok {
+		return 0, "", false
+	}
+	stream, err := document.ResolveStream(ctx, doc, tuObj)
+	if err != nil || stream.Dict == nil {
+		doc.Logger.Debug("compliance: fonts: ToUnicode is not a stream", "error", err)
+		return 0, "", false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: failed to decode ToUnicode CMap", "error", err)
+		return 0, "", false
+	}
+	parsed, err := cmap.Parse(ctx, data)
+	if err != nil || parsed == nil || len(parsed.Mapping) == 0 {
+		doc.Logger.Debug("compliance: fonts: failed to parse ToUnicode CMap", "error", err)
+		return 0, "", false
+	}
+
+	// veraPDF looks a simple font's code up in the CMap by its integer value, so
+	// a producer that declares a two-byte codespace still maps code 2 with
+	// <0002>. Read every source code the same way.
+	mapped := make(map[int]bool, len(parsed.Mapping))
+	for src := range parsed.Mapping {
+		if len(src) > 2 {
+			continue
+		}
+		v := 0
+		for i := range len(src) {
+			v = v<<8 | int(src[i])
+		}
+		mapped[v] = true
+	}
+
+	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	codes := make([]byte, 0, len(usage.charCodes))
+	for c := range usage.charCodes {
+		codes = append(codes, c)
+	}
+	slices.Sort(codes)
+	for _, c := range codes {
+		if mapped[int(c)] {
+			continue
+		}
+		name := enc[c]
+		if name == "" || name == ".notdef" {
+			continue
+		}
+		if glyphNameHasUnicode(name) || symbolEncodingNames[name] {
+			continue
+		}
+		return c, name, true
+	}
+	return 0, "", false
 }
 
 // symbolicCmapViolation reports whether a symbolic TrueType font's cmap
