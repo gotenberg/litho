@@ -223,8 +223,11 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 						allUntaggedIsTaggedDo = false
 					}
 				}
+			// BI is an inline image (ISO 32000-1, 8.9.7), which paints an image
+			// exactly as a Do naming an image XObject does; veraPDF builds a
+			// content item for it like any other.
 			case "f", "F", "f*", "S", "s", "B", "B*", "b", "b*",
-				"Tj", "TJ", "'", "\"", "sh":
+				"Tj", "TJ", "'", "\"", "sh", "BI":
 				flagTaggedInArtifact()
 				if untaggedScope() {
 					hasUntaggedPainting = true
