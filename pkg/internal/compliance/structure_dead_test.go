@@ -166,9 +166,12 @@ func TestFENoteNoteType(t *testing.T) {
 	mk := func(noteType string) []Violation {
 		var results []Violation
 		state := &walkState{results: &results, profile: "PDF/UA-2", doc: doc}
-		elem := ast.PdfDict{"S": ast.PdfName("FENote"), "P": ast.PdfName("x")}
+		// FENote is a standard type of the PDF 2.0 namespace only, and veraPDF
+		// reads NoteType from FENote-owned attributes alone.
+		elem := ast.PdfDict{"S": ast.PdfName("FENote"), "P": ast.PdfName("x"),
+			"NS": ast.PdfDict{"NS": ast.PdfString("http://iso.org/pdf2/ssn")}}
 		if noteType != "" {
-			elem["A"] = ast.PdfDict{"NoteType": ast.PdfName(noteType)}
+			elem["A"] = ast.PdfDict{"O": ast.PdfName("FENote"), "NoteType": ast.PdfName(noteType)}
 		}
 		walkElement(ctx, state, elem, "", 0, 0)
 		return results

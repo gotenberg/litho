@@ -862,10 +862,11 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	}
 
 	// PDF/UA-2 §8.2.5.14 t4: a FENote NoteType attribute, when present, shall be
-	// Footnote, Endnote, or None.
-	if typeName == "FENote" && state.profile == "PDF/UA-2" {
-		if nt := resolveAttributeValue(ctx, state.doc, elem, "NoteType"); nt != "" &&
-			nt != "Footnote" && nt != "Endnote" && nt != "None" {
+	// Footnote, Endnote, or None. The requirement binds the structure type the
+	// element stands for through the role map, as veraPDF's SEFENote does, and
+	// reads NoteType as [feNoteType] does.
+	if state.profile == "PDF/UA-2" && iso32005Key(ctx, state, elem, typeName) == "FENote" {
+		if nt := feNoteType(ctx, state, elem); nt != "Footnote" && nt != "Endnote" && nt != "None" {
 			*state.results = append(*state.results,
 				failf(Rule_14289_2_8_2_5_14_t04, "FENote NoteType %q is not Footnote/Endnote/None", nt)...)
 		}
@@ -900,10 +901,13 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// PDF/UA-2 §8.2.5.8 t1: a TOCI element shall contain a /Ref entry
-	// (the reference to the structure element it points at).
-	if state.profile == "PDF/UA-2" && typeName == "TOCI" {
-		if _, hasRef := elem["Ref"]; !hasRef {
+	// PDF/UA-2 §8.2.5.8 t1: a TOCI element shall identify its target with a /Ref
+	// entry, on the TOCI itself or on one of its child structure elements. The
+	// requirement binds the structure type the element stands for through the
+	// role map, as veraPDF's SETOCI does, and accepts a /Ref anywhere below it,
+	// as its containsRef does. Measured against veraPDF.
+	if state.profile == "PDF/UA-2" && iso32005Key(ctx, state, elem, typeName) == "TOCI" {
+		if !structElemContainsRef(ctx, state.doc, elem, 0, make(map[int]bool)) {
 			*state.results = append(*state.results,
 				failf(Rule_14289_2_8_2_5_8_t01, "TOCI element has no /Ref entry")...)
 		}
@@ -1436,6 +1440,63 @@ func classAttributeName(ctx context.Context, state *walkState, cObj ast.PdfObjec
 	return ""
 }
 
+// feNoteType returns the NoteType attribute that applies to an FENote element,
+// or None when it states none. veraPDF reads it only from attribute objects the
+// FENote owner holds, in the element's /A and then in the classes its /C names,
+// without inheritance (AttributeHelper.getNoteType), so a NoteType stated under
+// another owner does not count for ISO 14289-2, 8.2.5.14 t4.
+func feNoteType(ctx context.Context, state *walkState, elem ast.PdfDict) string {
+	if v := ownedAttributeName(ctx, state.doc, elem["A"], "FENote", "NoteType"); v != "" {
+		return v
+	}
+	if v := classAttributeName(ctx, state, elem["C"], "FENote", "NoteType"); v != "" {
+		return v
+	}
+	return "None"
+}
+
+// structElemContainsRef reports whether elem, or a structure element below it,
+// carries a /Ref entry. veraPDF's SETOCI.containsRef descends through every
+// structure-element kid, so a /Ref on a child identifies a TOCI's target as well
+// as one on the TOCI itself. A kid whose /Type names something other than
+// StructElem (an MCR or OBJR) is no structure element, as isStructElem reads it.
+// Recursion is bounded by [maxStructTreeWalkDepth]; visited guards cycles.
+func structElemContainsRef(ctx context.Context, doc *document.Document, elem ast.PdfDict, depth int, visited map[int]bool) bool {
+	if _, ok := elem["Ref"]; ok {
+		return true
+	}
+	if depth >= maxStructTreeWalkDepth || ctx.Err() != nil {
+		return false
+	}
+	kObj, ok := elem["K"]
+	if !ok {
+		return false
+	}
+	kids, err := document.ResolveArray(ctx, doc, kObj)
+	if err != nil {
+		kids = ast.PdfArray{kObj}
+	}
+	for _, kid := range kids {
+		if ref, isRef := kid.(ast.PdfIndirectRef); isRef {
+			if visited[ref.ObjectNum] {
+				continue
+			}
+			visited[ref.ObjectNum] = true
+		}
+		d, derr := document.ResolveDict(ctx, doc, kid)
+		if derr != nil || d == nil {
+			continue
+		}
+		if t, _ := document.ResolveName(ctx, doc, d["Type"]); t != "" && t != "StructElem" {
+			continue
+		}
+		if structElemContainsRef(ctx, doc, d, depth+1, visited) {
+			return true
+		}
+	}
+	return false
+}
+
 // structClassMap resolves the StructTreeRoot /ClassMap, or nil when the tree
 // declares none.
 func structClassMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) ast.PdfDict {
@@ -1492,33 +1553,6 @@ func structParentPresenceRule(profile string) Rule {
 		return Rule_14289_2_8_2_1_t02
 	}
 	return Rule_14289_1_7_1_t12
-}
-
-// resolveAttributeValue looks for a named attribute in the element's /A dict
-// or /A array of attribute dicts, returning the string value or "".
-func resolveAttributeValue(ctx context.Context, doc *document.Document, elem ast.PdfDict, attrName ast.PdfName) string {
-	aObj, ok := elem["A"]
-	if !ok {
-		return ""
-	}
-	// /A can be a single dict or an array of dicts.
-	if d, err := document.ResolveDict(ctx, doc, aObj); err == nil && d != nil {
-		if v, _ := document.ResolveName(ctx, doc, d[attrName]); v != "" {
-			return string(v)
-		}
-	}
-	if arr, err := document.ResolveArray(ctx, doc, aObj); err == nil {
-		for _, item := range arr {
-			d, err := document.ResolveDict(ctx, doc, item)
-			if err != nil || d == nil {
-				continue
-			}
-			if v, _ := document.ResolveName(ctx, doc, d[attrName]); v != "" {
-				return string(v)
-			}
-		}
-	}
-	return ""
 }
 
 // checkActualTextPUA validates that /ActualText and /Alt entries do not contain
