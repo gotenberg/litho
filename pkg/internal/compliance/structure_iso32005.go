@@ -153,14 +153,23 @@ func iso32005Resolve(ctx context.Context, state *walkState, ref iso32005Ref) str
 // in the namespace that defines it, rather than its Table 5 key. ok is false
 // when the type stands for no standard type.
 func iso32005ResolveRef(ctx context.Context, state *walkState, ref iso32005Ref) (iso32005Ref, bool) {
+	return resolveStandardRef(ctx, state, ref, func(r iso32005Ref) bool { return iso32005StandardKey(r) != "" })
+}
+
+// resolveStandardRef walks the role map from ref as [iso32005Resolve] does,
+// stopping at the first type isStandard accepts. The Table 5 lookups accept
+// only the types of the two PDF namespaces, while [standsForMathML] also
+// accepts the MathML namespace, whose every type is standard
+// (ISO 32000-2:2020, 14.8.6).
+func resolveStandardRef(ctx context.Context, state *walkState, ref iso32005Ref, isStandard func(iso32005Ref) bool) (iso32005Ref, bool) {
 	visited := map[string]bool{ref.visitKey(): true}
 
 	next, ok := iso32005Equivalent(ctx, state, ref)
 	if !ok || visited[next.visitKey()] {
-		return ref, iso32005StandardKey(ref) != ""
+		return ref, isStandard(ref)
 	}
 	for range maxRoleMapHops {
-		if iso32005StandardKey(next) != "" {
+		if isStandard(next) {
 			return next, true
 		}
 		visited[next.visitKey()] = true

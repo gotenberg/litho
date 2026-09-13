@@ -85,29 +85,6 @@ func TestHeadingLevel(t *testing.T) {
 	}
 }
 
-func TestIsMathMLType(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		tag  ast.PdfName
-		want bool
-	}{
-		{"math", true},
-		{"Math", true},
-		{"MATH", false},
-		{"mi", false},
-		{"P", false},
-		{"", false},
-	}
-	for _, tc := range tests {
-		t.Run(string(tc.tag), func(t *testing.T) {
-			t.Parallel()
-			if got := isMathMLType(tc.tag); got != tc.want {
-				t.Errorf("isMathMLType(%q) = %v, want %v", tc.tag, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestIsStandardStructType(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -872,10 +872,19 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// PDF/UA-2 §8.2.5.29: math structure type must only appear inside Formula.
-	if state.profile == "PDF/UA-2" && isMathMLType(typeName) && parentType != "Formula" {
+	// PDF/UA-2 §8.2.5.29 t1: the math structure type shall occur only as a child
+	// of a Formula structure element. The validation profile's test binds every
+	// element that stands for a MathML type through the role map (veraPDF builds
+	// its SEMathMLStructElem from the standard type), so a /S of math outside
+	// the MathML namespace is no math element. It relaxes "child" to any
+	// ancestor that stands for Formula or for a MathML type
+	// (hasParentFormulaOrMathML), so the kids of math pass and so does a math
+	// wrapped inside its Formula; litho follows the test, measured against
+	// veraPDF on the veraPDF 8.2.5.29 fixtures and on crafted variants.
+	if state.profile == "PDF/UA-2" && standsForMathML(ctx, state, elem, typeName) &&
+		!hasFormulaOrMathMLAncestor(ctx, state, elem) {
 		*state.results = append(*state.results,
-			failf(Rule_14289_2_8_2_5_29_t01, "math type nested within %s instead of Formula", parentType)...)
+			failf(Rule_14289_2_8_2_5_29_t01, "MathML element %s has no Formula ancestor", typeName)...)
 	}
 
 	// TOC/TOCI containment (§7.2 t26/t27) is PDF/UA-1 only. PDF/UA-2 imposes
@@ -1715,13 +1724,56 @@ func hexByte(c byte) byte {
 	}
 }
 
-// isMathMLType checks if a structure element type name belongs to the MathML namespace.
-// In PDF 2.0 structure trees, MathML elements use types like "math", "mi", "mo", etc.
-func isMathMLType(typeName ast.PdfName) bool {
-	// The top-level MathML element is "math" (case-sensitive per MathML spec).
-	// Other MathML elements (mi, mo, mn, etc.) would also need this check,
-	// but the test specifically checks the top-level "math" type.
-	return typeName == "math" || typeName == "Math"
+// standsForMathML reports whether a structure element stands, through the role
+// map, for a type of the MathML namespace (ISO 32000-2:2020, 14.8.6). The role
+// map applies first, as for any type, and the chain stops at the first standard
+// type, a MathML one included.
+func standsForMathML(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName) bool {
+	std, ok := resolveStandardRef(ctx, state, iso32005RefOf(ctx, state, elem, typeName), anyStandardRef)
+	return ok && std.uri == mathMLNamespaceURI
+}
+
+// anyStandardRef reports whether ref names a standard type of any standard
+// structure namespace, the MathML one included (ISO 32000-2:2020, 14.8.6).
+func anyStandardRef(ref iso32005Ref) bool {
+	return isStandardStructTypeInNS(ref.name, ref.uri)
+}
+
+// hasFormulaOrMathMLAncestor reports whether a structure element above elem,
+// reached by climbing /P, stands for Formula or for a MathML type, which is
+// how the PDF/UA-2 validation profile tests ISO 14289-2, 8.2.5.29 t1. A /P
+// that loops back or does not resolve ends the climb.
+func hasFormulaOrMathMLAncestor(ctx context.Context, state *walkState, elem ast.PdfDict) bool {
+	cur, ok := elem["P"]
+	if !ok {
+		return false
+	}
+	visited := make(map[int]bool)
+	for range maxStructTreeWalkDepth {
+		if ctx.Err() != nil {
+			return false
+		}
+		if ref, isRef := cur.(ast.PdfIndirectRef); isRef {
+			if visited[ref.ObjectNum] {
+				return false
+			}
+			visited[ref.ObjectNum] = true
+		}
+		d, err := document.ResolveDict(ctx, state.doc, cur)
+		if err != nil || d == nil {
+			return false
+		}
+		if s, serr := document.ResolveName(ctx, state.doc, d["S"]); serr == nil && s != "" {
+			std, sok := resolveStandardRef(ctx, state, iso32005RefOf(ctx, state, d, s), anyStandardRef)
+			if sok && (std.name == "Formula" || std.uri == mathMLNamespaceURI) {
+				return true
+			}
+		}
+		if cur, ok = d["P"]; !ok {
+			return false
+		}
+	}
+	return false
 }
 
 // checkUnmappedStructTypes walks the structure tree and flags every element
