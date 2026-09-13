@@ -96,6 +96,9 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 			continue
 		}
 
+		checkOutputIntentProfileComponents(ctx, doc, destProfileObj, part,
+			fmt.Sprintf("OutputIntent[%d]", i), results)
+
 		hdr, ok := checkICCOutputProfileHeader(ctx, doc, destProfileObj, part, fmt.Sprintf("OutputIntent[%d]", i), results)
 		if !ok {
 			continue
@@ -135,6 +138,71 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 	}
 
 	return iccColorSpace, hasValidICC
+}
+
+// iccColorSpaceComponents maps an ICC data colour space signature to the number
+// of components /N must state for it, per ISO 19005-1 §6.2.3.2 t2, whose test
+// reads (N == 1 && GRAY) || (N == 3 && (RGB or Lab)) || (N == 4 && CMYK).
+// Signatures are exactly four bytes, so "RGB " and "Lab " carry a trailing
+// space.
+//
+//nolint:gochecknoglobals // static spec table.
+var iccColorSpaceComponents = map[string]int{
+	"GRAY": 1,
+	"RGB ": 3, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes.
+	"Lab ": 3, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes.
+	"CMYK": 4,
+}
+
+// checkOutputIntentProfileComponents validates that an OutputIntent's
+// /DestOutputProfile states an /N matching the component count of the colour
+// space its ICC profile declares (ISO 19005-1 §6.2.3.2 t2). Only part 1 states
+// the requirement, the same scope [iccBasedNRule] records for an ICCBased
+// colour space; veraPDF hangs the rule on its ICCProfile object, which covers
+// an OutputIntent's destination profile as well.
+//
+// A profile litho cannot read answers the test no better than a mismatched one:
+// veraPDF reports the same rule for both, and measured over 1984
+// /DestOutputProfile streams in the corpora only seven answer it at all, five
+// by a genuine mismatch and two by being undecodable.
+func checkOutputIntentProfileComponents(ctx context.Context, doc *document.Document, destProfileObj ast.PdfObject, part int, label string, results *[]Violation) {
+	rule := iccBasedNRule(part)
+	if rule.Specification == "" {
+		return
+	}
+
+	stream, err := document.ResolveStream(ctx, doc, destProfileObj)
+	if err != nil {
+		// checkICCOutputProfileHeader reports the unresolvable stream.
+		doc.Logger.Debug("compliance.color: cannot resolve output profile stream", "label", label, "error", err)
+		return
+	}
+
+	nVal, err := document.ResolveInt(ctx, doc, stream.Dict["N"])
+	if err != nil {
+		*results = append(*results, failf(rule, "%s: /DestOutputProfile has no /N entry", label)...)
+		return
+	}
+
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		*results = append(*results, failf(rule,
+			"%s: /DestOutputProfile states /N %d but its ICC profile will not decode", label, nVal)...)
+		return
+	}
+
+	hdr, ok := parseICCHeader(data)
+	if !ok {
+		*results = append(*results, failf(rule,
+			"%s: /DestOutputProfile states /N %d but its ICC profile header is too short", label, nVal)...)
+		return
+	}
+
+	want, known := iccColorSpaceComponents[hdr.colorSpace]
+	if !known || int(nVal) != want {
+		*results = append(*results, failf(rule,
+			"%s: /DestOutputProfile states /N %d for ICC colour space %q", label, nVal, hdr.colorSpace)...)
+	}
 }
 
 // checkICCOutputProfileHeader validates the ICC profile stream referenced by an
