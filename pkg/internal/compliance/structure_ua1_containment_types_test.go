@@ -26,26 +26,42 @@ func TestUA1Containment_ByStandardType(t *testing.T) {
 		rule    Rule
 		fires   bool
 	}{
-		{"role-mapped list item kids", "/RoleMap << /LI_Label /Lbl /LI_Title /LBody >>",
-			"[<< /S /L /K [<< /S /LI /K [<< /S /LI_Label >> << /S /LI_Title >>] >>] >>]", Rule_14289_1_7_2_t20, false},
-		{"a Span in a list item", "",
-			"[<< /S /L /K [<< /S /LI /K [<< /S /Span >>] >>] >>]", Rule_14289_1_7_2_t20, true},
-		{"list item kids wrapped in a Div", "",
-			"[<< /S /L /K [<< /S /LI /K [<< /S /Div /K [<< /S /Lbl >> << /S /LBody >>] >>] >>] >>]", Rule_14289_1_7_2_t20, false},
-		{"a list item wrapped in a Div", "",
-			"[<< /S /L /K [<< /S /Div /K [<< /S /LI /K [<< /S /Lbl >>] >>] >>] >>]", Rule_14289_1_7_2_t17, false},
-		{"two role-mapped table heads", "/RoleMap << /MyHead /THead >>",
-			"[<< /S /Table /K [<< /S /MyHead >> << /S /MyHead >> << /S /TBody >>] >>]", Rule_14289_1_7_2_t11, true},
-		{"a role-mapped cell in a row", "/RoleMap << /MyCell /TD >>",
-			"[<< /S /Table /K [<< /S /TR /K [<< /S /MyCell >>] >>] >>]", Rule_14289_1_7_2_t10, false},
+		{
+			"role-mapped list item kids", "/RoleMap << /LI_Label /Lbl /LI_Title /LBody >>",
+			"[<< /S /L /K [<< /S /LI /K [<< /S /LI_Label >> << /S /LI_Title >>] >>] >>]", Rule_14289_1_7_2_t20, false,
+		},
+		{
+			"a Span in a list item", "",
+			"[<< /S /L /K [<< /S /LI /K [<< /S /Span >>] >>] >>]", Rule_14289_1_7_2_t20, true,
+		},
+		{
+			"list item kids wrapped in a Div", "",
+			"[<< /S /L /K [<< /S /LI /K [<< /S /Div /K [<< /S /Lbl >> << /S /LBody >>] >>] >>] >>]", Rule_14289_1_7_2_t20, false,
+		},
+		{
+			"a list item wrapped in a Div", "",
+			"[<< /S /L /K [<< /S /Div /K [<< /S /LI /K [<< /S /Lbl >>] >>] >>] >>]", Rule_14289_1_7_2_t17, false,
+		},
+		{
+			"two role-mapped table heads", "/RoleMap << /MyHead /THead >>",
+			"[<< /S /Table /K [<< /S /MyHead >> << /S /MyHead >> << /S /TBody >>] >>]", Rule_14289_1_7_2_t11, true,
+		},
+		{
+			"a role-mapped cell in a row", "/RoleMap << /MyCell /TD >>",
+			"[<< /S /Table /K [<< /S /TR /K [<< /S /MyCell >>] >>] >>]", Rule_14289_1_7_2_t10, false,
+		},
 		// veraPDF gives a child of the structure tree root no parent type, and
 		// stops its climb through pass-through parents at the root, where it
 		// reports the last one's type: on one-element fixtures it fails §7.2 t17
 		// for a list item at the root and for one under a Part at the root.
-		{"a list item at the root", "",
-			"[<< /S /LI /K [<< /S /Lbl >>] >>]", Rule_14289_1_7_2_t17, true},
-		{"a list item under a Part at the root", "",
-			"[<< /S /Part /K [<< /S /LI /K [<< /S /Lbl >>] >>] >>]", Rule_14289_1_7_2_t17, true},
+		{
+			"a list item at the root", "",
+			"[<< /S /LI /K [<< /S /Lbl >>] >>]", Rule_14289_1_7_2_t17, true,
+		},
+		{
+			"a list item under a Part at the root", "",
+			"[<< /S /Part /K [<< /S /LI /K [<< /S /Lbl >>] >>] >>]", Rule_14289_1_7_2_t17, true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

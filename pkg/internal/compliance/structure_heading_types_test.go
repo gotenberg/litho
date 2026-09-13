@@ -23,12 +23,18 @@ func TestHeadingNesting_ByStandardType(t *testing.T) {
 		k       string
 		fires   bool
 	}{
-		{"a role-mapped H2 opening the document", "/RoleMap << /Heading#202 /H2 >>",
-			"[<< /S /Heading#202 >>]", true},
-		{"role-mapped headings in order", "/RoleMap << /Heading#201 /H1 /Heading#202 /H2 >>",
-			"[<< /S /Heading#201 >> << /S /Heading#202 >>]", false},
-		{"an H3 opening the document", "",
-			"[<< /S /H3 >>]", true},
+		{
+			"a role-mapped H2 opening the document", "/RoleMap << /Heading#202 /H2 >>",
+			"[<< /S /Heading#202 >>]", true,
+		},
+		{
+			"role-mapped headings in order", "/RoleMap << /Heading#201 /H1 /Heading#202 /H2 >>",
+			"[<< /S /Heading#201 >> << /S /Heading#202 >>]", false,
+		},
+		{
+			"an H3 opening the document", "",
+			"[<< /S /H3 >>]", true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
