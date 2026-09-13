@@ -256,19 +256,16 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 	switch {
 	case !hasID:
 		results = fail(trailerIDRule(profile), "missing ID in trailer")
-	default:
-		// Validate the ID array: must have 2 non-empty string elements.
-		if arr, ok := idObj.(ast.PdfArray); ok {
-			switch {
-			case len(arr) == 0:
-				results = fail(trailerIDRule(profile), "empty ID array in trailer")
-			case len(arr) >= 2:
-				id0, _ := arr[0].(ast.PdfString)
-				id1, _ := arr[1].(ast.PdfString)
-				if len(id0) == 0 || len(id1) == 0 {
-					results = fail(trailerIDRule(profile), "ID array contains empty string element")
-				}
-			}
+	case PDFAPart(profile) != 1:
+		// ISO 19005-1 §6.1.3 t1 asks only that the trailer carry an /ID
+		// ("lastID != null"), so a part-1 file satisfies it whatever the entry
+		// holds. ISO 19005-2/3 §6.1.3 t1 and ISO 19005-4 §6.1.3 t1 add
+		// "lastID.length() > 0", which veraPDF measures over the entry as a
+		// whole: measured on a five-cell matrix, [<AB><>] passes because its
+		// first string carries content, while [<><>] and [] fail because the
+		// entry carries none.
+		if arr, ok := idObj.(ast.PdfArray); ok && fileIDContentLength(arr) == 0 {
+			results = fail(trailerIDRule(profile), "ID array carries no content")
 		}
 	}
 
@@ -278,6 +275,19 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 	}
 
 	return results
+}
+
+// fileIDContentLength returns the total number of bytes the string elements of
+// a file-identifier array carry. Non-string elements contribute nothing, which
+// is what veraPDF's lastID reports for them.
+func fileIDContentLength(arr ast.PdfArray) int {
+	n := 0
+	for _, el := range arr {
+		if str, ok := el.(ast.PdfString); ok {
+			n += len(str)
+		}
+	}
+	return n
 }
 
 // checkLinearizedID validates ISO 19005-1, 6.1.3 test 4: when a linearized file
