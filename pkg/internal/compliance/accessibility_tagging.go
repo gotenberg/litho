@@ -139,6 +139,87 @@ func parentTreeMCIDs(ctx context.Context, doc *document.Document, treeRoot, page
 	return covered
 }
 
+// parentTreeMCIDReach maps each MCID the page's ParentTree entry names to
+// whether the structure element it names reaches the structure tree root, in
+// the sense of [structElemReachesRoot]. An MCID the entry does not name is
+// absent from the map.
+func parentTreeMCIDReach(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict) map[int]bool {
+	reach := make(map[int]bool)
+	spObj, ok := page["StructParents"]
+	if !ok {
+		return reach
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return reach
+	}
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return reach
+	}
+	for mcid, elem := range numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool)) {
+		if !isNullObject(elem) {
+			reach[mcid] = structElemReachesRoot(ctx, doc, elem)
+		}
+	}
+	return reach
+}
+
+// structElemReachesRoot reports whether climbing /P from elem reaches a
+// dictionary whose /Type is /StructTreeRoot. It mirrors veraPDF's
+// GFSEGroupedContent.isTaggedContent: the root is recognised by its /Type, a
+// missing or non-dictionary /P ends the climb, and an object met twice is a
+// loop that ends it too. The climb is bounded by [maxStructTreeWalkDepth].
+func structElemReachesRoot(ctx context.Context, doc *document.Document, elem ast.PdfObject) bool {
+	visited := make(map[int]bool)
+	cur := elem
+	for range maxStructTreeWalkDepth {
+		if ctx.Err() != nil {
+			return false
+		}
+		if ref, ok := cur.(ast.PdfIndirectRef); ok {
+			if visited[ref.ObjectNum] {
+				return false
+			}
+			visited[ref.ObjectNum] = true
+		}
+		d, err := document.ResolveDict(ctx, doc, cur)
+		if err != nil || d == nil {
+			return false
+		}
+		if typ, _ := document.ResolveName(ctx, doc, d["Type"]); typ == "StructTreeRoot" {
+			return true
+		}
+		next, ok := d["P"]
+		if !ok {
+			return false
+		}
+		cur = next
+	}
+	return false
+}
+
+// inlineBDCMCID returns the /MCID of a BDC's inline property dictionary, or -1
+// when the operator carries none there.
+func inlineBDCMCID(ctx context.Context, doc *document.Document, op content.Operation) int {
+	if op.Operator != "BDC" || len(op.Operands) < 2 {
+		return -1
+	}
+	props, ok := op.Operands[1].(ast.PdfDict)
+	if !ok {
+		return -1
+	}
+	mcidObj, ok := props["MCID"]
+	if !ok {
+		return -1
+	}
+	mcid, err := document.ResolveInt(ctx, doc, mcidObj)
+	if err != nil {
+		return -1
+	}
+	return int(mcid)
+}
+
 // numberTreeLookup resolves a key in a number tree (Nums leaves, Kids
 // recursion) to its array value. Depth is capped by [maxEFNameTreeDepth],
 // the shared anti-DoS guard for tree walks.

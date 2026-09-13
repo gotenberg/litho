@@ -159,15 +159,41 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		// untagged. pdfjs bug1019475_1.pdf wraps its text in /H1 <</MCID 0>> BDC
 		// under a catalog with no StructTreeRoot, and veraPDF reports it.
 		structTree, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+		// An /MCID the ParentTree maps tags its content only when the structure
+		// element it names reaches the structure tree root through /P. veraPDF
+		// climbs the /P chain of the innermost MCID's owner and calls the content
+		// tagged only on reaching a /Type /StructTreeRoot node, so an owner with no
+		// /P, a non-dictionary /P or a /P loop leaves its content untagged; ISO
+		// 32000-1, 14.7.2, Table 355 makes /P required. Measured against veraPDF on
+		// each of those shapes. An MCID the ParentTree does not map is
+		// [checkOrphanMCIDs]'s business, and stays tagged here.
+		var mcidReach map[int]bool
+		if structTree != nil {
+			mcidReach = parentTreeMCIDReach(ctx, doc, structTree, page)
+		}
+		// mcidStack runs parallel to markerStack and holds each marker's MCID, or
+		// -1 for a marker that carries none.
+		var mcidStack []int
+		innermostMCIDTagged := func() bool {
+			for i := len(markerStack) - 1; i >= 0; i-- {
+				if markerStack[i] != markerTaggedMCID {
+					continue
+				}
+				reach, mapped := mcidReach[mcidStack[i]]
+				return !mapped || reach
+			}
+			return false
+		}
 		// untaggedScope reports whether painting at the current marker depth is
 		// real content that is neither an Artifact nor tagged. Per ISO 14289-1
 		// §7.1 / -2 §8.2.2 (veraPDF SESimpleContentItem isTaggedContent), content
-		// is tagged only when an enclosing BDC carries an /MCID: a marked-content
-		// sequence with a structure tag but no /MCID (or a bare BMC) does not tag
-		// its content, so painting inside one with no MCID-bearing ancestor and
-		// no Artifact ancestor is untagged real content.
+		// is tagged only when an enclosing BDC carries an /MCID whose owner
+		// reaches the root: a marked-content sequence with a structure tag but no
+		// /MCID (or a bare BMC) does not tag its content, so painting inside one
+		// with no such MCID-bearing ancestor and no Artifact ancestor is untagged
+		// real content.
 		untaggedScope := func() bool {
-			return (structTree == nil || !inTaggedMCID()) && !inArtifact()
+			return (structTree == nil || !innermostMCIDTagged()) && !inArtifact()
 		}
 		// flagTaggedInArtifact reports §7.1 t2 when real content is painted while
 		// marked BOTH as tagged (an enclosing MCID) AND as an Artifact. veraPDF
@@ -207,9 +233,11 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 					}
 				}
 				markerStack = append(markerStack, kind)
+				mcidStack = append(mcidStack, inlineBDCMCID(ctx, doc, op))
 			case "EMC":
 				if len(markerStack) > 0 {
 					markerStack = markerStack[:len(markerStack)-1]
+					mcidStack = mcidStack[:len(mcidStack)-1]
 				}
 			case "Do":
 				flagTaggedInArtifact()
