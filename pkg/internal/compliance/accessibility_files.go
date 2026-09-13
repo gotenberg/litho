@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -366,28 +365,35 @@ func resolveMediaClipDict(ctx context.Context, doc *document.Document, actionDic
 	return nil
 }
 
-// hasValidMediaClipAlt checks if the media clip dict has a valid /Alt entry.
-// Per ISO 32000-1 Table 274, /Alt is an array of pairs [lang, text, ...].
-// A missing key, empty array, or array with only empty strings is invalid.
+// hasValidMediaClipAlt reports whether a media clip data dictionary's /Alt
+// passes ISO 14289-1, 7.18.6.2 t2 as veraPDF tests it (GFPDMediaClip
+// hasCorrectAlt). ISO 32000-1, Table 274 defines /Alt as an array of pairs of
+// text strings, a language identifier then its text, so /Alt shall be an array
+// of even length whose every element is a string, and every text shall be
+// non-empty once decoded, untrimmed. A plain string or an odd-length array is
+// no such array; an empty array states no pair and passes, as veraPDF passes it.
+// Measured against veraPDF on each shape.
 func hasValidMediaClipAlt(ctx context.Context, doc *document.Document, clipDict ast.PdfDict) bool {
 	altObj, hasAlt := clipDict["Alt"]
 	if !hasAlt {
 		return false
 	}
-	altArr, err := document.ResolveArray(ctx, doc, altObj)
-	if err != nil {
-		// Not an array. Check as string.
-		s, err := document.ResolveString(ctx, doc, altObj)
-		return err == nil && strings.TrimSpace(string(s)) != ""
+	resolved, err := document.ResolveObject(ctx, doc, altObj)
+	altArr, isArr := resolved.(ast.PdfArray)
+	if err != nil || !isArr || len(altArr)%2 != 0 {
+		return false
 	}
-	// Must have at least one lang+text pair with non-empty text.
-	for i := 1; i < len(altArr); i += 2 {
-		s, err := document.ResolveString(ctx, doc, altArr[i])
-		if err == nil && strings.TrimSpace(string(s)) != "" {
-			return true
+	for i, item := range altArr {
+		obj, err := document.ResolveObject(ctx, doc, item)
+		s, isStr := obj.(ast.PdfString)
+		if err != nil || !isStr {
+			return false
+		}
+		if i%2 == 1 && document.DecodePdfString(s) == "" {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // checkFormFieldTU validates ISO 14289-1, 7.18.1 test 3: a widget annotation
