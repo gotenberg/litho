@@ -394,7 +394,9 @@ func TestValidateTableChildren(t *testing.T) {
 		{"THead in Table", "THead", "Table", false},
 		{"Caption in Table", "Caption", "Table", false},
 		{"P in Table", "P", "Table", true},
-		{"Div in Table", "Div", "Table", true},
+		// A Div is looked through: veraPDF's kidsStandardTypes lists its kids in
+		// its place, and a Table holding a Div that wraps a TR passes §7.2 t3.
+		{"Div in Table", "Div", "Table", false},
 		{"TR in THead", "TR", "THead", false},
 		{"Caption in TBody", "Caption", "TBody", false},
 		{"P in THead", "P", "THead", true},

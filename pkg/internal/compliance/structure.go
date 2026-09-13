@@ -577,6 +577,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 		roleMap:        buildRoleMapIndex(ctx, doc, structTreeRoot),
 		classMap:       structClassMap(ctx, doc, structTreeRoot),
 		iso32005Parent: "StructTreeRoot",
+		ua1Parent:      ua1RootParent,
 		seen:           make(map[int]bool),
 	}
 
@@ -658,6 +659,15 @@ type walkState struct {
 	// to no standard type, which leaves the child outside every Table 5
 	// parent-child row.
 	iso32005Parent string
+
+	// ua1Parent is veraPDF's parentStandardType for the elements currently
+	// being walked, which the PDF/UA-1 containment rules test. It reads through
+	// the role map and past Div, Part, and NonStruct as iso32005Parent does, but
+	// differs at the top of the tree: a child of the structure tree root has no
+	// parent element ([ua1RootParent]), and the kids of a pass-through element
+	// directly under the root see that element's own type, which is where
+	// veraPDF's climb stops. It is empty when the parent has no standard type.
+	ua1Parent string
 
 	// seen records every structure element visited so the walk processes each
 	// once. The structure tree is a strict tree (ISO 32000-1 §14.7.2); without
@@ -817,10 +827,19 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// PDF/UA-2 defines no general containment tables; it constrains structure
 	// only through table regularity (§8.2.5.26, validateTableColumnConsistency)
 	// and list semantics (§8.2.5.25, checked below).
+	//
+	// veraPDF judges every one of them by standard type: the element's own (its
+	// SETR, SELI and the rest are built from it), its parent's (parentStandardType,
+	// which looks through Div, Part, and NonStruct), and its kids'
+	// (kidsStandardTypes). govdocs thread_000_000150.pdf maps LI_Label to Lbl and
+	// LI_Title to LBody; comparing the names as written reported its list items'
+	// kids as foreign to LI.
 	if state.profile == "PDF/UA-1" {
-		validateTableContainment(state, typeName, parentType)
-		validateTableChildren(state, typeName, parentType)
-		validateListContainment(ctx, state, elem, typeName, parentType)
+		selfType := ast.PdfName(iso32005Key(ctx, state, elem, typeName))
+		parent := ua1ParentType(state.ua1Parent)
+		validateTableContainment(state, selfType, parent)
+		validateTableChildren(state, selfType, parent)
+		validateListContainment(ctx, state, elem, selfType, parent)
 	}
 
 	// PDF/UA-2 §8.2.5.25: L with Lbl children must have ListNumbering attribute.
@@ -862,16 +881,22 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// no TOC/TOCI containment; its only TOCI requirement is §8.2.5.8 t1 (a /Ref
 	// entry), checked below.
 	if state.profile == "PDF/UA-1" {
+		// Both rules read standard types, as the containment checks above do.
+		selfType := ast.PdfName(iso32005Key(ctx, state, elem, typeName))
+		parent := ua1ParentType(state.ua1Parent)
+
 		// TOCI must be inside TOC.
-		if typeName == "TOCI" && parentType != "TOC" && parentType != "" {
+		if selfType == "TOCI" && parent != "TOC" && parent != "" {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t26, "TOCI inside %s instead of TOC", parentType)...)
+				failf(Rule_14289_1_7_2_t26, "TOCI inside %s instead of TOC", parent)...)
 		}
 
-		// TOC may contain only TOC, TOCI, and Caption.
-		if parentType == "TOC" && typeName != "TOC" && typeName != "TOCI" && typeName != "Caption" {
+		// TOC may contain only TOC, TOCI, and Caption. A kid with no standard
+		// type, or a Div, Part, or NonStruct kid, is not one of veraPDF's
+		// kidsStandardTypes entries.
+		if parent == "TOC" && ua1KidJudged(selfType) && selfType != "TOC" && selfType != "TOCI" && selfType != "Caption" {
 			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t27, "TOC contains %s instead of TOC/TOCI/Caption", typeName)...)
+				failf(Rule_14289_1_7_2_t27, "TOC contains %s instead of TOC/TOCI/Caption", selfType)...)
 		}
 	}
 
@@ -975,12 +1000,18 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// element type, except through a pass-through wrapper, which is
 	// transparent: its kids keep the current effective parent.
 	if kObj, ok := elem["K"]; ok {
-		prevISOParent := state.iso32005Parent
-		if selfKey := iso32005Key(ctx, state, elem, typeName); !iso32005PassThroughTypes[selfKey] {
+		prevISOParent, prevUA1Parent := state.iso32005Parent, state.ua1Parent
+		selfKey := iso32005Key(ctx, state, elem, typeName)
+		if !iso32005PassThroughTypes[selfKey] {
 			state.iso32005Parent = selfKey
+			state.ua1Parent = selfKey
+		} else if state.ua1Parent == ua1RootParent {
+			// veraPDF's climb through pass-through parents stops at the root
+			// and reports the type of the last one it passed.
+			state.ua1Parent = selfKey
 		}
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
-		state.iso32005Parent = prevISOParent
+		state.iso32005Parent, state.ua1Parent = prevISOParent, prevUA1Parent
 	}
 
 	if isTable {
@@ -1009,7 +1040,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 // validateListContainment checks PDF/UA list structure rules.
 func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict, typeName ast.PdfName, parentType ast.PdfName) {
 	// L must contain only LI (and optionally Caption).
-	if parentType == "L" && typeName != "LI" && typeName != "Caption" && typeName != "L" {
+	if parentType == "L" && ua1KidJudged(typeName) && typeName != "LI" && typeName != "Caption" && typeName != "L" {
 		*state.results = append(*state.results,
 			failf(Rule_14289_1_7_2_t19, "L contains %s instead of L/LI/Caption", typeName)...)
 	}
@@ -1027,7 +1058,7 @@ func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict,
 	}
 
 	// LI must contain Lbl and/or LBody.
-	if parentType == "LI" {
+	if parentType == "LI" && ua1KidJudged(typeName) {
 		switch typeName {
 		case "Lbl", "LBody":
 			// OK
@@ -1036,6 +1067,32 @@ func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict,
 				failf(Rule_14289_1_7_2_t20, "LI contains %s instead of Lbl/LBody", typeName)...)
 		}
 	}
+}
+
+// ua1RootParent marks the children of the structure tree root, which have no
+// parent element. A PDF name cannot hold a NUL byte (ISO 32000-1, 7.3.5), so no
+// structure type can collide with it.
+const ua1RootParent = "\x00root"
+
+// ua1ParentType maps the walk's [walkState.ua1Parent] to the parent type the
+// PDF/UA-1 containment checks compare against. veraPDF's parentStandardType is
+// null both for a child of the structure tree root and for an element whose
+// parent has no standard type, and null matches none of the parents the rules
+// allow: on one-element fixtures veraPDF fails §7.2 t17 for a list item at the
+// root. Both are named by a placeholder no rule allows.
+func ua1ParentType(parentKey string) ast.PdfName {
+	if parentKey == "" || parentKey == ua1RootParent {
+		return "(none)"
+	}
+	return ast.PdfName(parentKey)
+}
+
+// ua1KidJudged reports whether a kid of the given standard type is an entry of
+// veraPDF's kidsStandardTypes. A kid with no standard type drops out, and a Div,
+// Part, or NonStruct kid contributes its own kids in its place, which the walk
+// judges against the same parent.
+func ua1KidJudged(t ast.PdfName) bool {
+	return t != "" && !iso32005PassThroughTypes[string(t)]
 }
 
 // validateCaptionPosition checks that Caption is the first child of Table,

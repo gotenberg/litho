@@ -412,6 +412,12 @@ func tableColumnRule(profile string, wider bool) Rule {
 // validateTableChildren checks Table children containment. Split from
 // validateTableContainment for readability.
 func validateTableChildren(state *walkState, typeName ast.PdfName, parentType ast.PdfName) {
+	// A kid with no standard type drops out of veraPDF's kidsStandardTypes, and a
+	// Div, Part, or NonStruct kid contributes its own kids in its place, which
+	// the walk judges against the same parent.
+	if typeName == "" || iso32005PassThroughTypes[string(typeName)] {
+		return
+	}
 	// Table children: Table may contain only TR, THead, TBody, TFoot, Caption.
 	// THead/TBody/TFoot must contain only TR.
 	// TR must contain only TH and TD.
@@ -444,22 +450,12 @@ func validateTableChildren(state *walkState, typeName ast.PdfName, parentType as
 // validateTableSectionCounts checks that a Table has at most 1 THead, 1 TFoot,
 // and that TFoot/THead require TBody (§7.2 t11-t14).
 func validateTableSectionCounts(ctx context.Context, state *walkState, tableElem ast.PdfDict) {
-	kObj, ok := tableElem["K"]
-	if !ok {
-		return
-	}
-	arr, err := document.ResolveArray(ctx, state.doc, kObj)
-	if err != nil {
-		return
-	}
+	// veraPDF counts the sections over kidsStandardTypes: through the /RoleMap,
+	// and through Div, Part, and NonStruct kids, as [iso32005Kids] reads them.
+	kidKeys, _ := iso32005Kids(ctx, state, tableElem)
 
 	var theadCount, tfootCount, tbodyCount, captionCount int
-	for _, item := range arr {
-		d, err := document.ResolveDict(ctx, state.doc, item)
-		if err != nil || d == nil {
-			continue
-		}
-		childType, _ := document.ResolveName(ctx, state.doc, d["S"])
+	for _, childType := range kidKeys {
 		switch childType {
 		case "THead":
 			theadCount++
