@@ -3323,26 +3323,37 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 // the field names it defines. Sourced from the Adobe XMP Specification Part 2
 // (Additional Properties), the structured types referenced by the predefined
 // PDF/A schemas. A struct field whose namespace is one of these but whose local
-// name is absent here is not a member of the type. Field sets are deliberately
-// comprehensive: an omitted-but-valid field would be a false positive, while a
-// listed-but-invalid one only costs a missed detection.
+// name is absent here is not a member of the type.
+//
+// ResourceRef and ResourceEvent hold the members the 2005 XMP Specification
+// defines, the edition ISO 19005-2 normatively references and the one litho
+// already judges property names against (§6.6.2.3.1 t1 reports a property "not
+// predefined in XMP 2005"). Adobe added members later, and a file using one
+// states a value the referenced type does not define: pdfjs issue15220.pdf
+// writes stRef:originalDocumentID inside xmpMM:DerivedFrom and stEvt:changed
+// inside xmpMM:History, and veraPDF reports both under §6.6.2.3.1 t2. Every
+// name here was confirmed against veraPDF one field per fixture; every later
+// addition it rejects is absent.
+//
+// The remaining types keep comprehensive field sets: no corpus file exercises
+// them and none was checked against the oracle, so an omitted-but-valid field
+// would be a false positive where a listed-but-invalid one only costs a
+// missed detection.
 //
 //nolint:gochecknoglobals // static lookup table mirroring the XMP Specification.
 var xmpStructTypeFields = map[string]map[string]bool{
-	// ResourceEvent (stEvt).
+	// ResourceEvent (stEvt), XMP 2005. "changed" is a later addition.
 	"http://ns.adobe.com/xap/1.0/sType/ResourceEvent#": {
-		"action": true, "changed": true, "instanceID": true,
+		"action": true, "instanceID": true,
 		"parameters": true, "softwareAgent": true, "when": true,
 	},
-	// ResourceRef (stRef).
+	// ResourceRef (stRef), XMP 2005. originalDocumentID, filePath, fromPart,
+	// toPart, lastModifyDate, maskMarkers, partMapping, alternatePaths and the
+	// three placed* members are later additions.
 	"http://ns.adobe.com/xap/1.0/sType/ResourceRef#": {
-		"alternatePaths": true, "documentID": true, "filePath": true,
-		"fromPart": true, "instanceID": true, "lastModifyDate": true,
-		"manager": true, "managerVariant": true, "manageTo": true,
-		"manageUI": true, "maskMarkers": true, "originalDocumentID": true,
-		"partMapping": true, "renditionClass": true, "renditionParams": true,
-		"toPart": true, "versionID": true, "placedXResolution": true,
-		"placedYResolution": true, "placedResolutionUnit": true,
+		"documentID": true, "instanceID": true, "manager": true,
+		"managerVariant": true, "manageTo": true, "manageUI": true,
+		"renditionClass": true, "renditionParams": true, "versionID": true,
 	},
 	// Version (stVer).
 	"http://ns.adobe.com/xap/1.0/sType/Version#": {
