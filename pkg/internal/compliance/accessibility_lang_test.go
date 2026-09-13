@@ -336,6 +336,46 @@ func TestCheckOutlineLang_CatalogLangCoversOutline(t *testing.T) {
 	}
 }
 
+// TestCheckOutlineLang_EveryReachableItem pins that §7.2 t2 judges every
+// dictionary reached through /First and /Next, titled or not. veraPDF models
+// each one as a PDOutline (OutlinesHelper asks only isDictionaryBased), and pdfjs
+// issue10880.pdf points /Outlines /First at a page object, which veraPDF
+// reports. Every case was measured against veraPDF.
+func TestCheckOutlineLang_EveryReachableItem(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		outlines string
+		items    []string
+		want     int
+	}{
+		{"an item without /Title", "<< /Type /Outlines /First 5 0 R /Count 1 >>",
+			[]string{"<< /Parent 4 0 R >>"}, 1},
+		{"a page in the item's place", "<< /Type /Outlines /First 3 0 R /Count 1 >>",
+			nil, 1},
+		{"an untitled item before a titled one", "<< /Type /Outlines /First 5 0 R /Last 6 0 R /Count 2 >>",
+			[]string{"<< /Parent 4 0 R /Next 6 0 R >>", "<< /Title (Chapter 2) /Parent 4 0 R /Prev 5 0 R >>"}, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			objs := append([]string{
+				"<< /Type /Catalog /Pages 2 0 R /Outlines 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				tt.outlines,
+			}, tt.items...)
+			doc, cat := tableDoc(t, 1, objs...)
+			got := checkOutlineLang(ctx, doc, cat, "PDF/UA-1")
+			if n := countRuleLang(got, Rule_14289_1_7_2_t02); n != tt.want {
+				t.Errorf("want %d §7.2 t2, got %d (%v)", tt.want, n, got)
+			}
+		})
+	}
+}
+
 // xdefaultXMP builds a catalog XMP packet whose dc:title alternative carries
 // the given xml:lang qualifiers. Passing none omits the alternative entirely.
 func xdefaultXMP(langs ...string) string {

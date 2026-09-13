@@ -1245,12 +1245,27 @@ func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemOb
 			visited[ref.ObjectNum] = true
 		}
 
-		item, err := document.ResolveDict(ctx, doc, itemObj)
-		if err != nil || item == nil {
+		// Every dictionary-based object reached through /First and /Next is an
+		// item, whatever keys it carries. ISO 32000-1, Table 153 requires /Title,
+		// but veraPDF models an item without one (OutlinesHelper walks
+		// PDOutlineDictionary.getOutlineItem, which asks only isDictionaryBased),
+		// and a non-dictionary value ends the chain. pdfjs issue10880.pdf points
+		// /Outlines /First at a page object: veraPDF reports it and litho, which
+		// stopped at the missing /Title, did not. Measured against veraPDF on an
+		// untitled item, on a page in that place, and on an untitled item followed
+		// by a titled one.
+		resolved, err := document.ResolveObject(ctx, doc, itemObj)
+		if err != nil {
 			return
 		}
-
-		if _, hasTitle := item["Title"]; !hasTitle {
+		var item ast.PdfDict
+		switch v := resolved.(type) {
+		case ast.PdfDict:
+			item = v
+		case ast.PdfStream:
+			item = v.Dict
+		}
+		if item == nil {
 			return
 		}
 
