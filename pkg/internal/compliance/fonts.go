@@ -172,6 +172,10 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// visibility is answered for the whole document rather than one page.
 	visibleAnywhere := collectVisibleFontObjects(ctx, doc, vctx)
 
+	// Form XObject glyphs reach the PUA check through the structure tree root,
+	// which keys their marked content as the page's does.
+	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+
 	for pageIdx := range vctx.pages {
 		p := &vctx.pages[pageIdx]
 		if ctx.Err() != nil {
@@ -192,12 +196,12 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// walk. veraPDF descends into the form's content stream and applies the
 		// same font rules there; litho matches by walking invoked forms.
 		xobjVisited := make(map[int]bool)
-		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
 
 		// A Type3 glyph procedure is another content stream that may select
 		// fonts of its own, and the page walk above stops at the Type3 font
 		// itself. veraPDF applies the font rules inside those procedures too.
-		results = append(results, checkType3CharProcFonts(ctx, doc, p.parsedOps(ctx), p.resources, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
+		results = append(results, checkType3CharProcFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
 	}
 
 	doc.Logger.Debug("compliance: fonts: font checks complete",
@@ -324,7 +328,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		}
 
 		// PUA ActualText check (needs page and catalog context).
-		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog, usage)...)
+		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog)...)
 	}
 	return results
 }
@@ -338,7 +342,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 // Recursion into nested forms is bounded by [maxFormXObjectDepth]; visited
 // guards resource cycles; checkedObjs deduplicates against fonts already checked
 // on the page and across forms.
-func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return nil
 	}
@@ -386,7 +390,8 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 			continue
 		}
 		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, pageNum, profile, checkedObjs)...)
-		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, pageNum, profile, checkedObjs, visited, depth+1)...)
+		results = append(results, checkFormPUA(ctx, doc, xobjRes, subOps, data, stream.Dict, treeRoot, pageNum, profile)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
 	}
 	return results
 }
@@ -407,7 +412,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 // numbers already descended into, which breaks the resource cycle the fixture
 // name warns about. Object numbers are unique document-wide, so sharing one
 // visited set with the Form XObject walk cannot confuse a font for a form.
-func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return nil
 	}
@@ -470,8 +475,8 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 				continue
 			}
 			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, pageNum, profile, checkedObjs)...)
-			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, pageNum, profile, checkedObjs, visited, depth+1)...)
-			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, pageNum, profile, checkedObjs, visited, depth+1)...)
+			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
 		}
 	}
 	return results
@@ -742,38 +747,58 @@ func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict a
 	return results
 }
 
-// identityShownCodes returns the character codes a Type 0 font's text operators
-// show, when the font's /Encoding is Identity-H or Identity-V and litho can
-// decode them. Reports false when it cannot, so the caller keeps its
-// conservative answer rather than reading "no codes" as "nothing shown".
-//
-// Identity maps each two-byte code to the CID of the same value, so the codes a
-// /ToUnicode CMap is keyed by are exactly the CIDs [collectType0CIDs] decodes.
-func identityShownCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (map[uint16]bool, bool) {
-	if usage == nil || len(usage.rawStrings) == 0 {
-		return nil, false
+// checkPUAWithoutActualText flags a font whose ToUnicode maps a character the
+// page content shows to the Unicode Private Use Area when no /ActualText covers
+// that character (ISO 19005-2/3 §6.2.11.7.3, ISO 14289-2 §8.4.3, mirroring
+// veraPDF's per-glyph actualTextPresent). See [checkStreamPUAWithoutActualText].
+func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict) []Violation {
+	if puaActualTextRule(profile).Specification == "" {
+		return nil
 	}
-	encName, err := document.ResolveName(ctx, doc, fontDict["Encoding"])
-	if err != nil || (encName != "Identity-H" && encName != "Identity-V") {
-		return nil, false
-	}
-	cids, _, ok := collectType0CIDs(string(encName), nil, usage)
-	if !ok || cids == nil {
-		return nil, false
-	}
-	return cids, true
+	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	contentData, _ := resolvePageContentBytes(ctx, doc, page)
+	return checkStreamPUAWithoutActualText(ctx, doc, fontDict, fontName, pageNum, profile, treeRoot,
+		contentData, page, resolveResources(ctx, doc, page))
 }
 
-// checkPUAWithoutActualText flags a font whose ToUnicode maps a rendered
-// character to the Unicode Private Use Area when no /ActualText covers that
-// character (ISO 19005-2/3 §6.2.11.7.3, ISO 14289-2 §8.4.3, mirroring veraPDF's
-// per-glyph actualTextPresent). For a simple (one-byte) font it walks the page
-// content stream and fires only for a PUA code whose enclosing marked-content
-// sequence carries no /ActualText, so an /ActualText covering a different span
-// does not mask an uncovered PUA character. For a composite (Type 0) font, whose
-// multi-byte code decoding needs the font CMap, it stays conservative and
-// exempts the font when any marked-content /ActualText is present.
-func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict, usage *fontUsageInfo) []Violation {
+// checkFormPUA runs the PUA check over the fonts a Form XObject's own content
+// selects. It does not consult checkedObjs: a font already judged where the
+// page shows it can still show an uncovered PUA glyph inside the form.
+func checkFormPUA(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, data []byte, form, treeRoot ast.PdfDict, pageNum int, profile string) []Violation {
+	if puaActualTextRule(profile).Specification == "" {
+		return nil
+	}
+	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
+	usage := collectFontUsage(ops)
+	var results []Violation
+	for _, fontName := range sortedNames(fontDict) {
+		if usage[string(fontName)] == nil {
+			continue
+		}
+		font, err := document.ResolveDict(ctx, doc, fontDict[fontName])
+		if err != nil || font == nil {
+			continue
+		}
+		results = append(results, checkStreamPUAWithoutActualText(ctx, doc, font, string(fontName), pageNum, profile,
+			treeRoot, data, form, res)...)
+	}
+	return results
+}
+
+// checkStreamPUAWithoutActualText is the PUA check for the glyphs one content
+// stream shows: a page's, or a Form XObject's, since veraPDF builds a Glyph in
+// each and a form's glyphs are covered only by marked content inside the form.
+// holder is the page or form dictionary whose /StructParents keys the stream's
+// MCIDs in the structure parent tree; res supplies its /Properties.
+//
+// It walks the stream and fires only for a shown PUA code whose enclosing
+// marked-content sequence, or whose MCID's structure element, carries no
+// /ActualText, so an /ActualText covering a different span does not mask an
+// uncovered PUA character. A composite font is walked the same way under
+// Identity-H or Identity-V, where each two-byte code is the CID the /ToUnicode
+// CMap is keyed by; any other encoding needs a CMap this check does not carry,
+// so it stays conservative and any /ActualText exempts the font.
+func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, treeRoot ast.PdfDict, contentData []byte, holder, res ast.PdfDict) []Violation {
 	rule := puaActualTextRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -793,14 +818,9 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 		return nil
 	}
 
-	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	contentData, _ := resolvePageContentBytes(ctx, doc, page)
 	hasContentActualText := len(contentData) > 0 && bytes.Contains(contentData, []byte("/ActualText"))
 
-	// Composite fonts (and any font whose PUA codes litho cannot enumerate) use
-	// multi-byte codes that need the font CMap to decode, so litho stays
-	// conservative: any /ActualText anywhere (structure tree or content stream)
-	// exempts the font. Over-exemption is an under-report, never a false positive.
+	// Over-exemption is an under-report, never a false positive.
 	puaCodes := puaSourceCodes(string(data))
 	conservative := func() []Violation {
 		if (treeRoot != nil && structTreeHasActualText(ctx, doc, treeRoot, 0)) || hasContentActualText {
@@ -808,21 +828,11 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 		}
 		return failf(rule, "font %s on page %d: ToUnicode maps to PUA without ActualText", fontName, pageNum)
 	}
+	splitCodes := singleByteCodes
 	if fontSubtype(ctx, doc, fontDict) == "Type0" {
-		// ISO 14289-2, 8.4.3 asks whether real content maps to a PUA value, and
-		// veraPDF raises it per Glyph, so a PUA entry for a code the page never
-		// shows is out of scope. Under Identity-H/V the character code is the
-		// CID, so the shown codes are decodable here; any other encoding needs
-		// a CMap this check does not carry, and stays conservative.
-		if shown, ok := identityShownCodes(ctx, doc, fontDict, usage); ok {
-			for code := range puaCodes {
-				if code <= 0xFFFF && shown[uint16(code)] { //nolint:gosec // guarded by the bound above.
-					return conservative()
-				}
-			}
-			return nil
+		if splitCodes = type0CodeSplitter(ctx, doc, fontDict); splitCodes == nil {
+			return conservative()
 		}
-		return conservative()
 	}
 	if len(puaCodes) == 0 {
 		return conservative()
@@ -834,14 +844,14 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 
 	// A PUA character is covered when an enclosing marked-content sequence carries
 	// /ActualText, or when the structure element of its /MCID (or an ancestor)
-	// does. mcidCovered maps each MCID on the page to the latter.
-	mcidCovered := mcidActualTextCoverage(ctx, doc, treeRoot, page)
+	// does. mcidCovered maps each MCID of the stream to the latter.
+	mcidCovered := mcidActualTextCoverage(ctx, doc, treeRoot, holder)
 
-	var props ast.PdfDict // page /Properties, resolved lazily for named BDC lists
+	var props ast.PdfDict // the stream's /Properties, resolved lazily for named BDC lists
 	propsResolved := false
 	resolveProps := func() ast.PdfDict {
 		if !propsResolved {
-			if res := resolveResources(ctx, doc, page); res != nil {
+			if res != nil {
 				props, _ = document.ResolveDict(ctx, doc, res["Properties"])
 			}
 			propsResolved = true
@@ -894,7 +904,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 			if currentFont != fontName || sliceAnyTrue(actualTextStack) || mcidCovered[currentMCID] {
 				continue
 			}
-			if showPaintsPUACode(op, puaCodes) {
+			if showPaintsPUACode(op, puaCodes, splitCodes) {
 				return failf(rule, "font %s on page %d: rendered character mapped to PUA has no ActualText", fontName, pageNum)
 			}
 		}
@@ -1002,12 +1012,13 @@ func bdcHasActualText(ctx context.Context, doc *document.Document, op content.Op
 	return ok
 }
 
-// showPaintsPUACode reports whether a text-showing operator paints any one-byte
-// code present in puaCodes.
-func showPaintsPUACode(op content.Operation, puaCodes map[uint32]bool) bool {
+// showPaintsPUACode reports whether a text-showing operator paints any code
+// present in puaCodes, splitting its strings into character codes with
+// splitCodes.
+func showPaintsPUACode(op content.Operation, puaCodes map[uint32]bool, splitCodes func([]byte) []uint32) bool {
 	check := func(s ast.PdfString) bool {
-		for _, b := range []byte(s) {
-			if puaCodes[uint32(b)] {
+		for _, code := range splitCodes([]byte(s)) {
+			if puaCodes[code] {
 				return true
 			}
 		}
@@ -1028,6 +1039,53 @@ func showPaintsPUACode(op content.Operation, puaCodes map[uint32]bool) bool {
 		}
 	}
 	return false
+}
+
+// singleByteCodes reads a simple font's string one byte per character code.
+func singleByteCodes(data []byte) []uint32 {
+	codes := make([]uint32, len(data))
+	for i, b := range data {
+		codes[i] = uint32(b)
+	}
+	return codes
+}
+
+// type0CodeSplitter returns how a composite font's /Encoding splits a shown
+// string into character codes (ISO 32000-1, 9.7.6.2): two bytes per code under
+// Identity-H or Identity-V, and the codespace ranges of an embedded or
+// predefined CMap otherwise. It returns nil when the encoding cannot be read.
+func type0CodeSplitter(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) func([]byte) []uint32 {
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	switch encName {
+	case "Identity-H", "Identity-V":
+		return func(data []byte) []uint32 {
+			codes := make([]uint32, 0, len(data)/2)
+			for i := 0; i+1 < len(data); i += 2 {
+				codes = append(codes, uint32(data[i])<<8|uint32(data[i+1]))
+			}
+			return codes
+		}
+	case "":
+		stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"])
+		if err != nil {
+			doc.Logger.Debug("compliance: fonts: cannot resolve Type0 encoding CMap", "error", err)
+			return nil
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			doc.Logger.Debug("compliance: fonts: cannot decode Type0 encoding CMap", "error", err)
+			return nil
+		}
+		if m := cmap.ParseEmbeddedCIDMap(ctx, data); m != nil {
+			return m.Codes
+		}
+		return nil
+	default:
+		if m := cmap.LoadPredefinedCIDMap(string(encName)); m != nil {
+			return m.Codes
+		}
+		return nil
+	}
 }
 
 func sliceAnyTrue(b []bool) bool {

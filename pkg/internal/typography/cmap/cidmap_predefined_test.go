@@ -2,6 +2,28 @@ package cmap
 
 import "testing"
 
+// TestCIDMap_Codes splits a mixed-width string the way Decode does: in
+// 90ms-RKSJ-H, 0x41 is a one-byte code and 0x81 0x40 a two-byte one.
+func TestCIDMap_Codes(t *testing.T) {
+	m := LoadPredefinedCIDMap("90ms-RKSJ-H")
+	if m == nil {
+		t.Fatal("expected a CID map for 90ms-RKSJ-H")
+	}
+	got := m.Codes([]byte{0x41, 0x81, 0x40})
+	want := []uint32{0x41, 0x8140}
+	if len(got) != len(want) {
+		t.Fatalf("Codes = %#x, want %#x", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Codes[%d] = %#x, want %#x", i, got[i], want[i])
+		}
+	}
+	if decoded := m.Decode([]byte{0x41, 0x81, 0x40}); len(decoded) != len(got) {
+		t.Errorf("Codes split %d codes, Decode %d", len(got), len(decoded))
+	}
+}
+
 func TestLoadPredefinedCIDMap_Unknown(t *testing.T) {
 	if m := LoadPredefinedCIDMap("Not-A-CMap"); m != nil {
 		t.Errorf("unknown encoding name must return nil, got %+v", m)

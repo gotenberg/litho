@@ -81,6 +81,26 @@ func (m *CIDMap) Decode(data []byte) []CIDCode {
 	return out
 }
 
+// Codes splits data into character codes exactly as [CIDMap.Decode] does and
+// returns each code's big-endian value, which is what a /ToUnicode CMap is keyed
+// by (ISO 32000-1, 9.10.3).
+func (m *CIDMap) Codes(data []byte) []uint32 {
+	lengths := m.cs.codeLengths()
+	hasShort := slices.Contains(lengths, 1)
+
+	var out []uint32
+	for off := 0; off < len(data); {
+		consumed, _, _ := m.next(data[off:], lengths, hasShort)
+		var code uint32
+		for _, b := range data[off : off+consumed] {
+			code = code<<8 | uint32(b)
+		}
+		out = append(out, code)
+		off += consumed
+	}
+	return out
+}
+
 // next decodes one character code from the front of data, mirroring the
 // codespace handling in [CMap.mapWithCodeSpaces]: it prefers the longest
 // codespace width that fits, falls back to a shorter mapped prefix, and for a

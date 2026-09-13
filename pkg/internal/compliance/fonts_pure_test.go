@@ -192,6 +192,10 @@ func TestPuaSourceCodes(t *testing.T) {
 		{"bfrange whole range PUA", "1 beginbfrange\n<01> <03> <E000>\nendbfrange", []uint32{0x01, 0x02, 0x03}},
 		{"bfrange partial PUA at boundary", "1 beginbfrange\n<01> <03> <F8FE>\nendbfrange", []uint32{0x01, 0x02}},
 		{"bfrange non-PUA", "1 beginbfrange\n<01> <03> <0041>\nendbfrange", nil},
+		// ISO 32000-1, 9.10.3: an array destination names each code's value in
+		// turn, so only the codes whose own entry is a PUA value count.
+		{"bfrange array destination", "1 beginbfrange\n<01> <03> [<E000> <0041> <E002>]\nendbfrange", []uint32{0x01, 0x03}},
+		{"bfrange array then plain range", "2 beginbfrange\n<01> <02> [<0041> <E001>]\n<05> <05> <E005>\nendbfrange", []uint32{0x02, 0x05}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

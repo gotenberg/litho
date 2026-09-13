@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -1650,10 +1651,12 @@ func isInvalidUnicodeDst(token string) bool {
 // token on the line is tested (the earlier parts[1]-only scan missed packed
 // fixtures where the PUA destination is not the second field).
 // puaSourceCodes parses a ToUnicode CMap and returns the set of source character
-// codes whose Unicode destination lies in a Private Use Area. bfchar entries map
-// a single code; bfrange entries map a contiguous code range to incrementing
-// destinations, so each code's own destination is tested. Array-form bfrange
-// destinations are skipped (conservative).
+// codes whose Unicode destination holds a Private Use Area code point, which is
+// veraPDF's per-glyph unicodePUA (PUAHelper.containPUA over the glyph's whole
+// Unicode string). bfchar entries map a single code; a bfrange maps a
+// contiguous code range either to incrementing destinations or, per ISO
+// 32000-1, 9.10.3, to an array naming each code's destination in turn, so each
+// code's own destination is tested.
 func puaSourceCodes(cmapData string) map[uint32]bool {
 	out := make(map[uint32]bool)
 	upper := strings.ToUpper(cmapData)
@@ -1675,27 +1678,12 @@ func collectPUASources(s, begin, end string, out map[uint32]bool, isRange bool) 
 			region = s[:j]
 			s = s[j+len(end):]
 		}
-		tokens := hexTokens(region)
+		tokens := cmapEntryTokens(region)
 		if isRange {
-			for k := 0; k+2 < len(tokens) || k+2 == len(tokens); k += 3 {
-				if k+2 >= len(tokens) {
-					break
-				}
-				lo, okLo := hexVal(tokens[k])
-				hi, okHi := hexVal(tokens[k+1])
-				dst, okDst := hexVal(tokens[k+2])
-				if !okLo || !okHi || !okDst || hi < lo || hi-lo > 0xFFFF {
-					continue
-				}
-				for c := lo; c <= hi; c++ {
-					if isPUAScalar(dst + (c - lo)) {
-						out[c] = true
-					}
-				}
-			}
+			collectPUARanges(tokens, out)
 		} else {
 			for k := 0; k+1 < len(tokens); k += 2 {
-				if isPUAHex(tokens[k+1]) {
+				if hexHoldsPUA(tokens[k+1]) {
 					if src, ok := hexVal(tokens[k]); ok {
 						out[src] = true
 					}
@@ -1706,6 +1694,85 @@ func collectPUASources(s, begin, end string, out map[uint32]bool, isRange bool) 
 			return
 		}
 	}
+}
+
+// collectPUARanges reads bfrange entries, "<lo> <hi> <dst>" or
+// "<lo> <hi> [<dst0> <dst1> ...]", from tokens produced by [cmapEntryTokens].
+func collectPUARanges(tokens []string, out map[uint32]bool) {
+	for k := 0; k+2 < len(tokens); {
+		lo, okLo := hexVal(tokens[k])
+		hi, okHi := hexVal(tokens[k+1])
+		if !okLo || !okHi || hi < lo || hi-lo > 0xFFFF {
+			k++
+			continue
+		}
+		if tokens[k+2] == "[" {
+			k += 3
+			for c := lo; k < len(tokens) && tokens[k] != "]"; c++ {
+				if c <= hi && hexHoldsPUA(tokens[k]) {
+					out[c] = true
+				}
+				k++
+			}
+			k++ // past "]"
+			continue
+		}
+		if dst, ok := hexVal(tokens[k+2]); ok {
+			for c := lo; c <= hi; c++ {
+				if isPUAScalar(dst + (c - lo)) {
+					out[c] = true
+				}
+			}
+		}
+		k += 3
+	}
+}
+
+// cmapEntryTokens returns the angle-bracketed hex tokens in s together with the
+// "[" and "]" that delimit a bfrange array destination, in order.
+func cmapEntryTokens(s string) []string {
+	var out []string
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '[', ']':
+			out = append(out, s[i:i+1])
+		case '<':
+			j := strings.IndexByte(s[i:], '>')
+			if j < 0 {
+				return out
+			}
+			out = append(out, s[i:i+j+1])
+			i += j
+		}
+	}
+	return out
+}
+
+// hexHoldsPUA reports whether a hex destination token, read as UTF-16BE, holds
+// any Private Use Area code point, surrogate pairs decoded first.
+func hexHoldsPUA(token string) bool {
+	t := strings.TrimSpace(token)
+	if len(t) < 3 || t[0] != '<' || t[len(t)-1] != '>' {
+		return false
+	}
+	hex := t[1 : len(t)-1]
+	if len(hex)%4 != 0 {
+		return isPUAHex(token)
+	}
+	units := make([]uint16, 0, len(hex)/4)
+	for i := 0; i+4 <= len(hex); i += 4 {
+		v, ok := hexVal("<" + hex[i:i+4] + ">")
+		if !ok {
+			return false
+		}
+		units = append(units, uint16(v)) //nolint:gosec // four hex digits fit in 16 bits.
+	}
+	for _, r := range utf16.Decode(units) {
+		if isPUAScalar(uint32(r)) { //nolint:gosec // a decoded rune is non-negative.
+			return true
+		}
+	}
+	return false
 }
 
 // hexVal parses an angle-bracketed hex token like "<0041>" into its integer
