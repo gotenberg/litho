@@ -254,8 +254,11 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 
 		// ISO 19005-3 §6.8 t3/t4 apply to every /Type /Filespec dict,
 		// embedded or not, so a plain filespec without /EF can still fail
-		// those rules. Callers gate the embedded-only checks on hasEF.
-		_, hasEF := dict["EF"]
+		// those rules. Callers gate the embedded-only checks on hasEF, which,
+		// as veraPDF's containsEF (a knownKey on /EF) reads it, is false for an
+		// /EF written as null (ISO 32000-1, 7.3.7): measured on PDF/A-1b, 2b,
+		// 3b, 4 and 4f, where a null /EF fired 6.1.11 t1, 6.8 t2 or 6.9 t2.
+		hasEF := nonNullKeyPresent(ctx, doc, dict, "EF")
 
 		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
 	}
@@ -317,7 +320,7 @@ func collectDirectAnnotFileSpecs(ctx context.Context, doc *document.Document, ca
 				continue
 			}
 
-			_, hasEF := fsDict["EF"]
+			hasEF := nonNullKeyPresent(ctx, doc, fsDict, "EF")
 			specs = append(specs, fileSpecEntry{
 				dict:      fsDict,
 				hasEF:     hasEF,
