@@ -845,7 +845,12 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 	// A PUA character is covered when an enclosing marked-content sequence carries
 	// /ActualText, or when the structure element of its /MCID (or an ancestor)
 	// does. mcidCovered maps each MCID of the stream to the latter.
-	mcidCovered := mcidActualTextCoverage(ctx, doc, treeRoot, holder)
+	//
+	// ISO 14289-2, 8.4.3 accepts an /Alt wherever it accepts an /ActualText
+	// (veraPDF altPresent reads the same places); ISO 19005-2/3, 6.2.11.7.3 asks
+	// for /ActualText alone.
+	altCovers := IsPDFUA(profile)
+	mcidCovered := mcidActualTextCoverage(ctx, doc, treeRoot, holder, altCovers)
 
 	var props ast.PdfDict // the stream's /Properties, resolved lazily for named BDC lists
 	propsResolved := false
@@ -859,7 +864,7 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 		return props
 	}
 
-	var actualTextStack []bool // per open BDC/BMC: does it carry /ActualText?
+	var actualTextStack []bool // per open BDC/BMC: does it carry /ActualText (or, under PDF/UA-2, /Alt)?
 	var mcidStack []int        // per open BDC/BMC: the effective /MCID (-1 if none)
 	var fontStack []string     // per open q: the text font Q restores
 	currentFont := ""
@@ -876,7 +881,8 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 				fontStack = fontStack[:n-1]
 			}
 		case "BDC", "BMC":
-			actualTextStack = append(actualTextStack, bdcHasActualText(ctx, doc, op, resolveProps))
+			actualTextStack = append(actualTextStack, bdcHasActualText(ctx, doc, op, resolveProps) ||
+				(altCovers && bdcHasStringKey(ctx, doc, op, resolveProps, "Alt")))
 			mcid := bdcMCID(ctx, doc, op, resolveProps)
 			if mcid < 0 {
 				mcid = currentMCID // inherit the enclosing MCID
@@ -915,7 +921,10 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 // mcidActualTextCoverage maps each marked-content identifier on a page to whether
 // the structure element it belongs to (resolved through the page /StructParents
 // entry in the ParentTree) or one of its ancestors carries an /ActualText entry.
-func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict) map[int]bool {
+// With withAlt, an element that itself carries an /Alt text string covers its
+// identifiers too: veraPDF's altPresent reads the element the MCID names and not
+// its ancestors (MarkedContentHelper.containsStringKey).
+func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict, withAlt bool) map[int]bool {
 	out := make(map[int]bool)
 	if treeRoot == nil {
 		return out
@@ -941,7 +950,7 @@ func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoo
 		if derr != nil || elem == nil {
 			continue
 		}
-		if elemOrAncestorHasActualText(ctx, doc, elem, 0) {
+		if elemOrAncestorHasActualText(ctx, doc, elem, 0) || (withAlt && dictHasString(ctx, doc, elem, "Alt")) {
 			out[mcid] = true
 		}
 	}
@@ -964,21 +973,29 @@ func elemOrAncestorHasActualText(ctx context.Context, doc *document.Document, el
 	return elemOrAncestorHasActualText(ctx, doc, parent, depth+1)
 }
 
+// bdcProps returns a BDC operator's property list, written inline or named
+// through the stream's /Properties, or nil for a BMC or a list that does not
+// resolve.
+func bdcProps(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) ast.PdfDict {
+	if op.Operator != "BDC" || len(op.Operands) < 2 {
+		return nil
+	}
+	switch v := op.Operands[1].(type) {
+	case ast.PdfDict:
+		return v
+	case ast.PdfName:
+		if p := props(); p != nil {
+			pd, _ := document.ResolveDict(ctx, doc, p[v])
+			return pd
+		}
+	}
+	return nil
+}
+
 // bdcMCID returns the /MCID value of a BDC operator's property list (inline or
 // named via the page /Properties), or -1 when absent.
 func bdcMCID(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) int {
-	if op.Operator != "BDC" || len(op.Operands) < 2 {
-		return -1
-	}
-	var pd ast.PdfDict
-	switch v := op.Operands[1].(type) {
-	case ast.PdfDict:
-		pd = v
-	case ast.PdfName:
-		if p := props(); p != nil {
-			pd, _ = document.ResolveDict(ctx, doc, p[v])
-		}
-	}
+	pd := bdcProps(ctx, doc, op, props)
 	if pd == nil {
 		return -1
 	}
@@ -993,23 +1010,25 @@ func bdcMCID(ctx context.Context, doc *document.Document, op content.Operation, 
 // dictionary or a name resolved through the page /Properties) carries an
 // /ActualText entry.
 func bdcHasActualText(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) bool {
-	if op.Operator != "BDC" || len(op.Operands) < 2 {
-		return false
-	}
-	var pd ast.PdfDict
-	switch v := op.Operands[1].(type) {
-	case ast.PdfDict:
-		pd = v
-	case ast.PdfName:
-		if p := props(); p != nil {
-			pd, _ = document.ResolveDict(ctx, doc, p[v])
-		}
-	}
-	if pd == nil {
-		return false
-	}
-	_, ok := pd["ActualText"]
+	_, ok := bdcProps(ctx, doc, op, props)["ActualText"]
 	return ok
+}
+
+// bdcHasStringKey reports whether a BDC operator's property list carries key
+// with a text-string value, the shape veraPDF's getInheritedStringAttribute
+// accepts.
+func bdcHasStringKey(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict, key ast.PdfName) bool {
+	return dictHasString(ctx, doc, bdcProps(ctx, doc, op, props), key)
+}
+
+// dictHasString reports whether d carries key with a string value.
+func dictHasString(ctx context.Context, doc *document.Document, d ast.PdfDict, key ast.PdfName) bool {
+	obj, ok := d[key]
+	if !ok {
+		return false
+	}
+	_, err := document.ResolveString(ctx, doc, obj)
+	return err == nil
 }
 
 // showPaintsPUACode reports whether a text-showing operator paints any code
