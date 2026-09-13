@@ -804,24 +804,38 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 		return nil
 	}
 
-	tuObj, ok := fontDict["ToUnicode"]
-	if !ok {
-		return nil
+	// A glyph's Unicode value comes from the /ToUnicode CMap when the CMap maps
+	// its code, and otherwise, for a simple font, from its encoding's glyph name
+	// (ISO 32000-1, 9.10.2; veraPDF PDSimpleFont.toUnicode), so a PUA value can
+	// come from either.
+	var tuData []byte
+	if tuObj, ok := fontDict["ToUnicode"]; ok {
+		stream, err := document.ResolveStream(ctx, doc, tuObj)
+		if err != nil {
+			doc.Logger.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
+		} else if data, derr := doc.DecodeStream(ctx, stream); derr != nil {
+			doc.Logger.Debug("compliance: cannot decode ToUnicode stream", "error", derr)
+		} else {
+			tuData = data
+		}
 	}
-	stream, err := document.ResolveStream(ctx, doc, tuObj)
-	if err != nil {
-		doc.Logger.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
-		return nil
+	tuHasPUA := tuData != nil && containsPUAMapping(string(tuData))
+	puaCodes := make(map[uint32]bool)
+	if tuHasPUA {
+		puaCodes = puaSourceCodes(string(tuData))
 	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil || !containsPUAMapping(string(data)) {
+	if fontSubtype(ctx, doc, fontDict) != "Type0" {
+		for code := range glyphNamePUACodes(ctx, doc, fontDict, tuData) {
+			puaCodes[code] = true
+		}
+	}
+	if !tuHasPUA && len(puaCodes) == 0 {
 		return nil
 	}
 
 	hasContentActualText := len(contentData) > 0 && bytes.Contains(contentData, []byte("/ActualText"))
 
 	// Over-exemption is an under-report, never a false positive.
-	puaCodes := puaSourceCodes(string(data))
 	conservative := func() []Violation {
 		if (treeRoot != nil && structTreeHasActualText(ctx, doc, treeRoot, 0)) || hasContentActualText {
 			return nil
@@ -1058,6 +1072,30 @@ func showPaintsPUACode(op content.Operation, puaCodes map[uint32]bool, splitCode
 		}
 	}
 	return false
+}
+
+// glyphNamePUACodes returns the codes a simple font's encoding names with a
+// glyph the Adobe Glyph List puts in a Private Use Area ([aglPUAGlyphNames]),
+// leaving out any code its /ToUnicode CMap maps, whose value takes precedence
+// (veraPDF PDSimpleFont.toUnicode). A /ToUnicode that cannot be parsed leaves no
+// code to judge by name, so the font keeps the CMap route alone rather than
+// risk reporting a glyph the CMap in fact covers.
+func glyphNamePUACodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, tuData []byte) map[uint32]bool {
+	var mapped map[int]bool
+	if tuData != nil {
+		parsed, err := cmap.Parse(ctx, tuData)
+		if err != nil || parsed == nil {
+			return nil
+		}
+		mapped = cmapSourceCodeValues(parsed)
+	}
+	out := make(map[uint32]bool)
+	for code, name := range resolveSimpleFontEncoding(ctx, doc, fontDict) {
+		if aglPUAGlyphNames[name] && !mapped[int(code)] {
+			out[uint32(code)] = true
+		}
+	}
+	return out
 }
 
 // singleByteCodes reads a simple font's string one byte per character code.

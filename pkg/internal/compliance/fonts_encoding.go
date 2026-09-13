@@ -1130,20 +1130,7 @@ func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, font
 		return 0, "", false
 	}
 
-	// veraPDF looks a simple font's code up in the CMap by its integer value, so
-	// a producer that declares a two-byte codespace still maps code 2 with
-	// <0002>. Read every source code the same way.
-	mapped := make(map[int]bool, len(parsed.Mapping))
-	for src := range parsed.Mapping {
-		if len(src) > 2 {
-			continue
-		}
-		v := 0
-		for i := range len(src) {
-			v = v<<8 | int(src[i])
-		}
-		mapped[v] = true
-	}
+	mapped := cmapSourceCodeValues(parsed)
 
 	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 	codes := make([]byte, 0, len(usage.charCodes))
@@ -1165,6 +1152,25 @@ func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, font
 		return c, name, true
 	}
 	return 0, "", false
+}
+
+// cmapSourceCodeValues returns the integer value of every source code a parsed
+// /ToUnicode CMap maps. veraPDF looks a simple font's code up in the CMap by its
+// integer value, so a producer that declares a two-byte codespace still maps
+// code 2 with <0002>; a source longer than two bytes names no simple-font code.
+func cmapSourceCodeValues(parsed *cmap.CMap) map[int]bool {
+	mapped := make(map[int]bool, len(parsed.Mapping))
+	for src := range parsed.Mapping {
+		if len(src) > 2 {
+			continue
+		}
+		v := 0
+		for i := range len(src) {
+			v = v<<8 | int(src[i])
+		}
+		mapped[v] = true
+	}
+	return mapped
 }
 
 // symbolicCmapViolation reports whether a symbolic TrueType font's cmap
