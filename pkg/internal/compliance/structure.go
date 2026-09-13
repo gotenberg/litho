@@ -909,8 +909,12 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// Track heading levels and generic/specific heading usage.
-	if typeName == "H" {
+	// Track heading levels and generic/specific heading usage, by standard type:
+	// veraPDF builds its SEHn and SEH objects from the standard type, so govdocs
+	// thread_000_000838.pdf's "Heading 2", which its role map maps to H2, is a
+	// level-2 heading for ISO 14289-1 §7.4.2.
+	headingType := iso32005StandardName(ctx, state, elem, typeName)
+	if headingType == "H" {
 		state.hasGenericH = true
 		if !state.firstHeadingSeen {
 			state.firstHeadingSeen = true
@@ -922,7 +926,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 				fail(Rule_14289_2_8_2_5_12_t01, "document uses H structure type")...)
 		}
 	}
-	if hl := headingLevel(typeName); hl > 0 {
+	if hl := headingLevel(headingType); hl > 0 {
 		state.headingLevels = append(state.headingLevels, hl)
 		state.hasSpecificH = true
 		if !state.firstHeadingSeen {

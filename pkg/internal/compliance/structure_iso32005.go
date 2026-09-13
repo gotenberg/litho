@@ -142,24 +142,46 @@ func iso32005RefOf(ctx context.Context, state *walkState, elem ast.PdfDict, type
 // §8.2.4 t4 reports the forbidden remapping separately, so Table 5 must not
 // also judge the element as if the mapping were absent.
 func iso32005Resolve(ctx context.Context, state *walkState, ref iso32005Ref) string {
+	std, ok := iso32005ResolveRef(ctx, state, ref)
+	if !ok {
+		return ""
+	}
+	return iso32005StandardKey(std)
+}
+
+// iso32005ResolveRef is [iso32005Resolve] returning the standard type itself,
+// in the namespace that defines it, rather than its Table 5 key. ok is false
+// when the type stands for no standard type.
+func iso32005ResolveRef(ctx context.Context, state *walkState, ref iso32005Ref) (iso32005Ref, bool) {
 	visited := map[string]bool{ref.visitKey(): true}
 
 	next, ok := iso32005Equivalent(ctx, state, ref)
 	if !ok || visited[next.visitKey()] {
-		return iso32005StandardKey(ref)
+		return ref, iso32005StandardKey(ref) != ""
 	}
 	for range maxRoleMapHops {
-		if key := iso32005StandardKey(next); key != "" {
-			return key
+		if iso32005StandardKey(next) != "" {
+			return next, true
 		}
 		visited[next.visitKey()] = true
 		after, aok := iso32005Equivalent(ctx, state, next)
 		if !aok || visited[after.visitKey()] {
-			return ""
+			return iso32005Ref{}, false
 		}
 		next = after
 	}
-	return ""
+	return iso32005Ref{}, false
+}
+
+// iso32005StandardName returns the standard structure type an element stands
+// for, resolved as [iso32005Key] resolves it but with numbered headings kept
+// apart (H2 stays H2), or "" when it stands for none.
+func iso32005StandardName(ctx context.Context, state *walkState, elem ast.PdfDict, typeName ast.PdfName) ast.PdfName {
+	std, ok := iso32005ResolveRef(ctx, state, iso32005RefOf(ctx, state, elem, typeName))
+	if !ok {
+		return ""
+	}
+	return std.name
 }
 
 // visitKey identifies a type within its namespace for cycle detection.
