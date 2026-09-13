@@ -197,26 +197,29 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		return nil
 	}
 
-	// Part 1: catalog /AA is entirely forbidden (§6.6.2).
-	if part == 1 {
-		return fail(Rule_19005_1_6_6_2_t03, "catalog")
-	}
+	var results []Violation
 
-	// Parts 2/3: catalog /AA is also forbidden (§6.5.2 t01).
-	if part == 2 {
-		return fail(Rule_19005_2_6_5_2_t01, "catalog")
-	}
-	if part == 3 {
-		return fail(Rule_19005_3_6_5_2_t01, "catalog")
+	// The catalog /AA dictionary is forbidden outright: ISO 19005-1 §6.6.2 t3
+	// and ISO 19005-2/3 §6.5.2 t1. Record that, but do not stop here, exactly as
+	// [checkPageActions] does for a page /AA: the action-type restrictions apply
+	// to every action in the file, so a forbidden dictionary's actions are still
+	// judged for a disallowed /S. veraPDF reports both on the veraPDF test
+	// suite's 6-5-2-t01-fail-b.pdf, whose catalog /AA/WS holds a JavaScript
+	// action: §6.6.1 t1 for the action and §6.6.2 t3 for the dictionary.
+	switch part {
+	case 1:
+		results = append(results, fail(Rule_19005_1_6_6_2_t03, "catalog")...)
+	case 2:
+		results = append(results, fail(Rule_19005_2_6_5_2_t01, "catalog")...)
+	case 3:
+		results = append(results, fail(Rule_19005_3_6_5_2_t01, "catalog")...)
 	}
 
 	aaDict, err := document.ResolveDict(ctx, doc, aaObj)
 	if err != nil || aaDict == nil {
 		doc.Logger.Debug("compliance.actions: catalog /AA is not a dict", "error", err)
-		return nil
+		return results
 	}
-
-	var results []Violation
 
 	// Part 4: check AA key restrictions (§6.6.3).
 	if part == 4 {
