@@ -942,8 +942,17 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		validateTHScope(ctx, state, elem)
 	}
 
+	// The Formula and Note requirements bind the structure type an element stands
+	// for, not the name it is written with: veraPDF judges its SEFormula and
+	// SENote objects, which it builds from the standard type the /RoleMap maps
+	// to (ISO 32000-1, 14.7.3). govdocs thread_400_400934.pdf writes its notes as
+	// /Footnote, mapped to /Note, without /ID, and veraPDF reports ISO 14289-1,
+	// 7.9 t1 while litho, reading /S, did not. Measured against veraPDF with a
+	// mapped and an unmapped name for each.
+	standardType := iso32005Key(ctx, state, elem, typeName)
+
 	// §7.7 t1: Formula elements must have non-empty /Alt, or /ActualText (presence suffices).
-	if typeName == "Formula" && state.profile == "PDF/UA-1" {
+	if standardType == "Formula" && state.profile == "PDF/UA-1" {
 		hasAlt := hasNonEmptyStringKey(ctx, state.doc, elem, "Alt")
 		hasAT := hasStringKeyPresent(ctx, state.doc, elem, "ActualText")
 		if !hasAlt && !hasAT {
@@ -953,7 +962,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	}
 
 	// §7.9 t1/t2: Note elements must have /ID, and IDs must be unique.
-	if typeName == "Note" && state.profile == "PDF/UA-1" {
+	if standardType == "Note" && state.profile == "PDF/UA-1" {
 		idStr, _ := document.ResolveString(ctx, state.doc, elem["ID"])
 		if len(idStr) == 0 {
 			*state.results = append(*state.results,
