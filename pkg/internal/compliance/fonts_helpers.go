@@ -498,8 +498,39 @@ func streamHoldsFontProgram(ctx context.Context, doc *document.Document, key ast
 		// program Table 126 asks for: pdfjs issue13193.pdf and
 		// issue9262_reduced.pdf embed one.
 		return isSfntFontProgram(data)
+	case "FontFile3":
+		// Every format /FontFile3 may name is one of two containers: a bare CFF
+		// for "Type1C" and "CIDFontType0C", an sfnt for "OpenType"
+		// (ISO 32000-1, Table 126). Bytes that are neither carry no font
+		// container at all, so they embed nothing.
+		//
+		// Which of the two the /Subtype names is deliberately not enforced.
+		// pdfjs issue4668.pdf declares /Type1C over a TrueType sfnt and veraPDF
+		// reports it embedded, because its verdict is whether its own parser
+		// succeeded (GFPDFont.getcontainsFontFile returns getFontProgram() !=
+		// null && fontProgramParsed), not which container the subtype named.
+		// Rejecting the mismatch would fail that file and every other producer
+		// that mislabels a program consumers still read.
+		return isCFFFontProgram(data) || isSfntFontProgram(data)
 	}
 	return true
+}
+
+// isCFFFontProgram reports whether data opens with a readable bare CFF header:
+// the fixed major, minor, hdrSize and offSize record of CFF 1.0 §6, where
+// hdrSize counts the header itself and so spans at least those four bytes, and
+// offSize is an offset width of 1 to 4. Bytes that fail this hold no INDEX a
+// consumer could reach, which is the container-level mistake this judges.
+//
+// The major version is deliberately not read: CFF2 raises it to 2, and veraPDF
+// reports a program carrying that version as embedded.
+func isCFFFontProgram(data []byte) bool {
+	const cffHeaderSize = 4
+	if len(data) < cffHeaderSize {
+		return false
+	}
+	hdrSize, offSize := int(data[2]), int(data[3])
+	return hdrSize >= cffHeaderSize && len(data) >= hdrSize && offSize >= 1 && offSize <= 4
 }
 
 // isSfntFontProgram reports whether data begins with an sfnt version this
