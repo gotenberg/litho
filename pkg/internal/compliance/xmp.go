@@ -1554,8 +1554,18 @@ func xmpCheckPDFAIdentification(ctx context.Context, data []byte, profile string
 	// cover a looser validation profile (e.g. a "Level A" file is also
 	// a valid "Level B" file). [ConformanceSatisfies] encodes that
 	// hierarchy.
-	if part < 4 && level != 0 && !ConformanceSatisfies(confValue, level) {
-		*results = append(*results, xmpPDFAConformanceRule(part, confValue)...)
+	//
+	// Level U arrives with ISO 19005-2. ISO 19005-1 §6.7.11 t3 names only "A"
+	// and "B", so a file validated as PDF/A-1 that claims "U" satisfies no level
+	// of that part, even though U does cover B from part 2 onwards.
+	if part < 4 && level != 0 {
+		satisfied := ConformanceSatisfies(confValue, level)
+		if part == 1 && confValue != "A" && confValue != "B" {
+			satisfied = false
+		}
+		if !satisfied {
+			*results = append(*results, xmpPDFAConformanceRule(part, confValue)...)
+		}
 	}
 
 	// Part 4 conformance validation depends on the sub-profile.
