@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -678,9 +679,8 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 			continue
 		}
 
-		declaredLen, err := document.ResolveInt(ctx, doc, lengthObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.file_structure: cannot resolve stream length", "error", err)
+		declaredLen, judged := declaredStreamLength(ctx, doc, lengthObj)
+		if !judged {
 			continue
 		}
 
@@ -748,6 +748,38 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 	}
 
 	return results
+}
+
+// declaredStreamLength reads a stream's /Length the way ISO 19005-2, 6.1.7.1 t1
+// judges it, and reports whether the stream can be judged at all.
+//
+// ISO 32000-1, Table 5 makes /Length an integer, and 7.3.10 treats a reference
+// to an undefined object as a reference to the null object. veraPDF reads any
+// /Length that is not a number as null, which matches no real extent: measured
+// on a name, a string, a boolean, an array, a dictionary, a stream, null, a free
+// entry and an undefined object. pdfjs issue19510.pdf gives its XRef stream
+// /Length 9 0 R, and object 9 is the page's content stream; veraPDF reports it,
+// and litho, which skipped any /Length it could not read as an integer, did not.
+// Such a /Length reads as 0 here, as a null one already did. A real stays
+// unjudged, as before: veraPDF passes one equal to the extent, and how it reads
+// a fractional one was not measured.
+func declaredStreamLength(ctx context.Context, doc *document.Document, lengthObj ast.PdfObject) (ast.PdfInt, bool) {
+	resolved, err := document.ResolveObject(ctx, doc, lengthObj)
+	if err != nil {
+		if errors.Is(err, document.ErrObjectNotFound) {
+			return 0, true
+		}
+		doc.Logger.Debug("compliance.file_structure: cannot resolve stream length", "error", err)
+		return 0, false
+	}
+	switch v := resolved.(type) {
+	case ast.PdfInt:
+		return v, true
+	case ast.PdfReal:
+		return 0, false
+	default:
+		return 0, true
+	}
 }
 
 // findStreamDataStart locates the byte offset within buf where stream data
