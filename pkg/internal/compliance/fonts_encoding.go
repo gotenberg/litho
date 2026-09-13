@@ -96,6 +96,37 @@ func fontEncodingIsDict(ctx context.Context, doc *document.Document, fontDict as
 	return err == nil && dict != nil
 }
 
+// standard14BuiltinEncodingApplies reports whether a /BaseFont naming one of
+// the standard 14 still stands in for a font program litho can read an encoding
+// from.
+//
+// ISO 32000-1, 9.6.2.2 makes /FirstChar, /LastChar, /Widths and /FontDescriptor
+// all present or all absent: the standard 14 names are a shorthand for metrics a
+// consumer already holds, and a dictionary stating its own /FontDescriptor has
+// left the shorthand behind. veraPDF reads it the same way, loading the standard
+// metrics only when the font dictionary carries no non-empty /FontDescriptor,
+// and otherwise leaving every code the /Differences array skips unnamed.
+func standard14BuiltinEncodingApplies(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	if !isStandard14Font(ctx, doc, fontDict) {
+		return false
+	}
+	return len(document.ResolveFontDescriptor(ctx, doc, fontDict)) == 0
+}
+
+// fontNamesUnencodedCodes reports whether a simple font can name a character
+// code its /Encoding leaves alone.
+//
+// ISO 32000-1, Table 114 makes the implicit base of a /Differences array the
+// font program's built-in encoding, so a font embedding no program and earning
+// no standard 14 substitute supplies no name at all, and 9.10.2 then gives the
+// code no Unicode value. govdocs thread_000_000885.pdf shows Palatino-Roman
+// with a /FontDescriptor, no program and a /Differences-only /Encoding, and
+// veraPDF reports ISO 14289-1 §7.21.7 t1 on every glyph it draws.
+func fontNamesUnencodedCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	return embedsFontProgram(ctx, doc, fontDict) ||
+		standard14BuiltinEncodingApplies(ctx, doc, fontDict)
+}
+
 // allGlyphNamesAGLResolvable returns true if the glyph names a Type 1 font
 // reaches carry Unicode values, through the glyph lists ISO 32000-1, 9.10.2
 // admits. With the shown character codes on hand it judges those codes, through
@@ -132,7 +163,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	// Symbol still names its glyphs through its program, which the per-code
 	// check below reads.
 	symbolWithoutEncoding := isSymbolFontByName(ctx, doc, fontDict) && fontDict["Encoding"] == nil
-	if isStandard14Font(ctx, doc, fontDict) && !isZapfDingbatsByName(ctx, doc, fontDict) && !symbolWithoutEncoding {
+	if standard14BuiltinEncodingApplies(ctx, doc, fontDict) && !isZapfDingbatsByName(ctx, doc, fontDict) && !symbolWithoutEncoding {
 		return usedDifferencesGlyphNamesResolvable(ctx, doc, fontDict, usage)
 	}
 
@@ -683,7 +714,7 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 				// unnamed: govdocs thread_300_300031.pdf shows code 110 that way,
 				// and veraPDF reports it under ISO 14289-1 §7.21.7 t1.
 				if len(builtin) == 0 && !isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) &&
-					!isZapfDingbatsByName(ctx, doc, fontDict) {
+					!isZapfDingbatsByName(ctx, doc, fontDict) && fontNamesUnencodedCodes(ctx, doc, fontDict) {
 					// ISO 32000-1, 9.6.6.4 and Table 114: a non-symbolic font
 					// whose program offers no built-in encoding takes
 					// StandardEncoding as the implicit base. litho reads a
