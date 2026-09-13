@@ -158,17 +158,29 @@ func hasStringKeyPresent(ctx context.Context, doc *document.Document, dict ast.P
 	return err == nil
 }
 
-// hasNonEmptyStringKey checks if a dict has a non-empty string value for the given key.
-func hasNonEmptyStringKey(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+// decodedStringKey returns the decoded text string a dict holds under key, and
+// false when the key is absent or holds no string.
+func decodedStringKey(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string, bool) {
 	obj, ok := dict[key]
 	if !ok {
-		return false
+		return "", false
 	}
 	str, err := document.ResolveString(ctx, doc, obj)
 	if err != nil {
-		return false
+		return "", false
 	}
-	return strings.TrimSpace(string(str)) != ""
+	return document.DecodePdfString(str), true
+}
+
+// hasNonEmptyStringKey reports whether a dict holds a non-empty text string
+// under key. The string is judged decoded and untrimmed, as the veraPDF
+// profiles compare the decoded value with the empty string: a string of spaces
+// is not empty, and one holding only a byte order mark is (ISO 32000-1,
+// 7.9.2.2). Measured against veraPDF on Figure /Alt and on annotation
+// /Contents and /Alt.
+func hasNonEmptyStringKey(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	s, ok := decodedStringKey(ctx, doc, dict, key)
+	return ok && s != ""
 }
 
 // readCatalogXMP reads and decodes the /Metadata stream from the catalog.

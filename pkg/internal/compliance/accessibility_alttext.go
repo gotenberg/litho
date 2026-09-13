@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -99,9 +98,14 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 	rule := annotAltRule(profile)
 
-	// Build a map from annotation object number to whether the enclosing
-	// structure element has a non-empty /Alt entry.
-	structAltMap := buildAnnotStructAltMap(ctx, doc, catalog)
+	// veraPDF reads an annotation's Alt from the structure element its
+	// /StructParent names in the structure parent tree (GFPDAnnot.getAlt), not
+	// from an element whose OBJR references it. Measured with an /Alt reached
+	// one way and not the other.
+	treeRoot, trErr := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if trErr != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", trErr)
+	}
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
@@ -125,12 +129,6 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 		for annotIdx, annotObj := range annots {
 			if ctx.Err() != nil {
 				return results
-			}
-
-			// Grab the object number before resolving, for structure tree lookup.
-			annotObjNum := 0
-			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
-				annotObjNum = ref.ObjectNum
 			}
 
 			annot, err := document.ResolveDict(ctx, doc, annotObj)
@@ -172,16 +170,12 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 				continue
 			}
 
-			// Check /Contents key: must be present and non-empty.
-			if contentsObj, hasContents := annot["Contents"]; hasContents {
-				contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
-				if err == nil && strings.TrimSpace(string(contentsStr)) != "" {
-					continue
-				}
+			// ISO 14289-1 §7.18.1 t2: a non-empty /Contents, or a non-empty /Alt
+			// on the enclosing structure element ([hasNonEmptyStringKey]).
+			if hasNonEmptyStringKey(ctx, doc, annot, "Contents") {
+				continue
 			}
-
-			// Annotation lacks /Contents. Check the enclosing structure element for /Alt.
-			if annotObjNum > 0 && structAltMap[annotObjNum] {
+			if parent := annotStructParent(ctx, doc, treeRoot, annot); parent != nil && hasNonEmptyStringKey(ctx, doc, parent, "Alt") {
 				continue
 			}
 
@@ -194,14 +188,18 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 }
 
 // checkAnnotContentsAltMatch validates PDF/UA-2 §8.9.4.2 t1: when an annotation
-// has a /Contents entry and its directly enclosing structure element has an /Alt
-// entry, the two decoded values shall be identical.
+// has a /Contents entry and its enclosing structure element has an /Alt entry,
+// the two decoded values shall be identical. The enclosing element is the one
+// the annotation's /StructParent names ([annotStructParent]), as veraPDF's
+// GFPDAnnot.getAlt reads it; an OBJR that references the annotation does not
+// make an element its enclosing one. Measured with an /Alt reached one way and
+// not the other.
 func checkAnnotContentsAltMatch(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
-	altValues := buildAnnotStructAltValueMap(ctx, doc, catalog)
-	if len(altValues) == 0 {
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil || treeRoot == nil {
 		return nil
 	}
 
@@ -212,124 +210,25 @@ func checkAnnotContentsAltMatch(ctx context.Context, doc *document.Document, cat
 		}
 		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
 		for annotIdx, annotObj := range annots {
-			objNum := 0
-			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
-				objNum = ref.ObjectNum
-			}
-			alt, hasAlt := altValues[objNum]
-			if !hasAlt {
-				continue
-			}
 			annot, err := document.ResolveDict(ctx, doc, annotObj)
 			if err != nil || annot == nil {
 				continue
 			}
-			contentsObj, hasContents := annot["Contents"]
-			if !hasContents {
+			contents, ok := decodedStringKey(ctx, doc, annot, "Contents")
+			if !ok {
 				continue
 			}
-			contentsStr, err := document.ResolveString(ctx, doc, contentsObj)
-			if err != nil {
+			parent := annotStructParent(ctx, doc, treeRoot, annot)
+			if parent == nil {
 				continue
 			}
-			if document.DecodePdfString(contentsStr) != alt {
+			if alt, ok := decodedStringKey(ctx, doc, parent, "Alt"); ok && alt != contents {
 				results = append(results, failf(Rule_14289_2_8_9_4_2_t01,
 					"page %d, annot %d: /Contents differs from enclosing structure element /Alt", pageIdx, annotIdx)...)
 			}
 		}
 	}
 	return results
-}
-
-// buildAnnotStructAltValueMap maps an annotation object number to the decoded
-// /Alt value of its directly enclosing structure element. Mirror of
-// [buildAnnotStructAltMap] that captures the value for the §8.9.4.2 comparison.
-func buildAnnotStructAltValueMap(ctx context.Context, doc *document.Document, catalog ast.PdfDict) map[int]string {
-	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if err != nil || treeRoot == nil {
-		return nil
-	}
-	result := make(map[int]string)
-	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
-		altObj, ok := elem["Alt"]
-		if !ok {
-			return
-		}
-		altStr, err := document.ResolveString(ctx, doc, altObj)
-		if err != nil {
-			return
-		}
-		kObj, ok := elem["K"]
-		if !ok {
-			return
-		}
-		objNums := make(map[int]bool)
-		collectOBJRAnnotObjNums(ctx, doc, kObj, objNums)
-		alt := document.DecodePdfString(altStr)
-		for n := range objNums {
-			result[n] = alt
-		}
-	})
-	return result
-}
-
-// buildAnnotStructAltMap walks the structure tree and returns a set of annotation
-// object numbers whose enclosing structure element has a non-empty /Alt entry.
-// PDF structure elements reference annotations via OBJR (object reference) dicts
-// in their /K children: { /Type /OBJR /Obj <indirect ref to annotation> }.
-func buildAnnotStructAltMap(ctx context.Context, doc *document.Document, catalog ast.PdfDict) map[int]bool {
-	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if err != nil || treeRoot == nil {
-		return nil
-	}
-
-	result := make(map[int]bool)
-	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
-		// Only process elements with non-empty /Alt.
-		if !hasNonEmptyStringKey(ctx, doc, elem, "Alt") {
-			return
-		}
-
-		// Scan /K children for OBJR dicts pointing to annotations.
-		kObj, ok := elem["K"]
-		if !ok {
-			return
-		}
-		collectOBJRAnnotObjNums(ctx, doc, kObj, result)
-	})
-
-	return result
-}
-
-// collectOBJRAnnotObjNums finds OBJR dicts in the /K children of a structure element
-// and records the object numbers of their /Obj references.
-func collectOBJRAnnotObjNums(ctx context.Context, doc *document.Document, kObj ast.PdfObject, dest map[int]bool) {
-	// /K can be a single item or an array.
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		// Try as a single dict.
-		checkOBJR(ctx, doc, kObj, dest)
-		return
-	}
-	for _, item := range arr {
-		checkOBJR(ctx, doc, item, dest)
-	}
-}
-
-// checkOBJR checks if obj is an OBJR dict and records the /Obj object number.
-func checkOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject, dest map[int]bool) {
-	dict, err := document.ResolveDict(ctx, doc, obj)
-	if err != nil || dict == nil {
-		return
-	}
-	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-	if typeName != "OBJR" {
-		return
-	}
-	// /Obj is an indirect reference to the annotation.
-	if ref, ok := dict["Obj"].(ast.PdfIndirectRef); ok {
-		dest[ref.ObjectNum] = true
-	}
 }
 
 // checkWidgetAA validates that Widget annotations do not have /AA (additional actions)
