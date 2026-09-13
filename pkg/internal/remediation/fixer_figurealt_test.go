@@ -149,9 +149,10 @@ func TestFixFigureAlt_RoleMapped(t *testing.T) {
 	}
 }
 
-func TestFixFigureAlt_UA2CaptionChildSatisfies(t *testing.T) {
-	// Under PDF/UA-2 a Caption child satisfies §8.2.5.28.2, so the Figure needs
-	// no /Alt even in aggressive mode.
+func TestFixFigureAlt_UA2CaptionChildDoesNotSatisfy(t *testing.T) {
+	// ISO 14289-2 §8.2.5.28.2 lists /Alt and /ActualText alone, so a Caption
+	// child does not stand in for them: veraPDF reports such a Figure, and the
+	// fixer repairs exactly what the validator flags.
 	pdf := figurePDF(
 		"<< /Type /StructTreeRoot /K 5 0 R >>",
 		"<< /Type /StructElem /S /Figure /P 4 0 R /K 6 0 R >>",
@@ -163,8 +164,27 @@ func TestFixFigureAlt_UA2CaptionChildSatisfies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixFigureAlt: %v", err)
 	}
+	if len(descs) != 1 {
+		t.Fatalf("a UA-2 figure whose only alternative is a Caption child needs a fix: descs=%v", descs)
+	}
+}
+
+func TestFixFigureAlt_RemappedFigureIsNoFigure(t *testing.T) {
+	// The role map applies first: a standard Figure the /RoleMap remaps to Span
+	// stands for Span, which veraPDF does not judge as a Figure, so the fixer
+	// leaves it alone.
+	pdf := figurePDF(
+		"<< /Type /StructTreeRoot /K 5 0 R /RoleMap << /Figure /Span >> >>",
+		"<< /Type /StructElem /S /Figure /P 4 0 R >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	descs, err := fixFigureAlt(context.Background(), alloc, doc, Options{PreserveContent: false}, nil, "PDF/UA-1")
+	if err != nil {
+		t.Fatalf("fixFigureAlt: %v", err)
+	}
 	if len(descs) != 0 || len(alloc.Pending()) != 0 {
-		t.Errorf("a UA-2 figure with a Caption child needs no fix: descs=%v pending=%d", descs, len(alloc.Pending()))
+		t.Errorf("a Figure remapped to Span needs no fix: descs=%v pending=%d", descs, len(alloc.Pending()))
 	}
 }
 

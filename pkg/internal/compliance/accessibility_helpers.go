@@ -158,37 +158,6 @@ func hasStringKeyPresent(ctx context.Context, doc *document.Document, dict ast.P
 	return err == nil
 }
 
-// figureHasCaptionChild checks if a Figure structure element has a child
-// element with /S /Caption. Used for PDF/UA-2 §8.2.5.28.2.
-func figureHasCaptionChild(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
-	kObj, ok := elem["K"]
-	if !ok {
-		return false
-	}
-	// /K can be a single dict or an array.
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		// Try as single element.
-		child, err := document.ResolveDict(ctx, doc, kObj)
-		if err != nil || child == nil {
-			return false
-		}
-		childType, _ := document.ResolveName(ctx, doc, child["S"])
-		return childType == "Caption"
-	}
-	for _, item := range arr {
-		child, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || child == nil {
-			continue
-		}
-		childType, _ := document.ResolveName(ctx, doc, child["S"])
-		if childType == "Caption" {
-			return true
-		}
-	}
-	return false
-}
-
 // hasNonEmptyStringKey checks if a dict has a non-empty string value for the given key.
 func hasNonEmptyStringKey(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
 	obj, ok := dict[key]

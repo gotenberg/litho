@@ -29,15 +29,18 @@ func checkFigureAltText(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
-// FigureNeedsAltText reports whether elem is a Figure structure element, directly
-// or through the role map, that lacks the alternate text PDF/UA requires. A
-// remediation fixer calls it so it repairs exactly the figures this validator
-// flags, with no drift. roleMap comes from [LoadRoleMap]; profile selects the
-// PDF/UA-1 §7.3 or PDF/UA-2 §8.2.5.28.2 requirement.
+// FigureNeedsAltText reports whether elem is a Figure structure element that
+// lacks the alternate text PDF/UA requires. An element is a Figure when its type
+// stands for Figure: the role map applies first, as veraPDF builds its SEFigure
+// from the standard type, so a standard Figure the /RoleMap remaps is no Figure,
+// and a namespaced type resolves through its namespace's /RoleMapNS
+// (ISO 32000-2:2020, 14.8.6). A remediation fixer calls it so it repairs exactly
+// the figures this validator flags, with no drift. roleMap comes from
+// [LoadRoleMap]; profile selects the PDF/UA-1 §7.3 or PDF/UA-2 §8.2.5.28.2
+// requirement.
 func FigureNeedsAltText(ctx context.Context, doc *document.Document, elem ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName, profile string) bool {
 	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-	// Resolve through RoleMap to catch non-standard types mapped to Figure.
-	if resolveStandardType(typeName, roleMap, profile) != "Figure" {
+	if iso32005Key(ctx, &walkState{doc: doc, roleMap: roleMap}, elem, typeName) != "Figure" {
 		return false
 	}
 	return !figureSatisfiesAltText(ctx, doc, elem, profile)
@@ -45,16 +48,17 @@ func FigureNeedsAltText(ctx context.Context, doc *document.Document, elem ast.Pd
 
 // figureSatisfiesAltText reports whether a Figure already carries the alternate
 // text its profile requires. PDF/UA-1 §7.3 needs a non-empty /Alt or a present
-// /ActualText; PDF/UA-2 §8.2.5.28.2 accepts a present /Alt, a present
-// /ActualText, or a Caption child (presence alone suffices, even when empty).
+// /ActualText; PDF/UA-2 §8.2.5.28.2 a present /Alt or /ActualText (presence
+// alone suffices, even when empty). The UA-2 clause lists those two properties
+// alone, so a Caption kid does not stand in for them: veraPDF reports a Figure
+// whose only alternative is a Caption.
 func figureSatisfiesAltText(ctx context.Context, doc *document.Document, elem ast.PdfDict, profile string) bool {
 	if profile == "PDF/UA-1" {
 		return hasNonEmptyStringKey(ctx, doc, elem, "Alt") ||
 			hasStringKeyPresent(ctx, doc, elem, "ActualText")
 	}
 	return hasStringKeyPresent(ctx, doc, elem, "Alt") ||
-		hasStringKeyPresent(ctx, doc, elem, "ActualText") ||
-		figureHasCaptionChild(ctx, doc, elem)
+		hasStringKeyPresent(ctx, doc, elem, "ActualText")
 }
 
 func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Violation {

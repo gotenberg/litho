@@ -146,9 +146,13 @@ func checkPDFUA1FormRole(ctx context.Context, doc *document.Document, catalog as
 		return nil
 	}
 	var results []Violation
+	// veraPDF builds SEForm from the standard type the role map resolves to
+	// (GFSEFactory.createTypedStructElem), so a name mapped to Form is a Form and
+	// a Form the role map remaps is not. Measured against veraPDF with both.
+	typeState := &walkState{doc: doc, roleMap: buildRoleMapIndex(ctx, doc, treeRoot)}
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		if typeName != "Form" {
+		if iso32005Key(ctx, typeState, elem, typeName) != "Form" {
 			return
 		}
 		if formHasPrintFieldRole(ctx, doc, elem) || formHasOneInteractiveChild(ctx, doc, elem) {
@@ -425,29 +429,4 @@ func LoadRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast
 		}
 	}
 	return mapping
-}
-
-// resolveStandardType follows the role map chain to find the standard type.
-// Returns the original name if already standard or if no mapping exists.
-func resolveStandardType(name ast.PdfName, roleMap map[ast.PdfName]ast.PdfName, profile string) ast.PdfName {
-	if isStandardStructType(name, profile) {
-		return name
-	}
-	visited := map[ast.PdfName]bool{name: true}
-	current := name
-	for range 50 {
-		target, ok := roleMap[current]
-		if !ok {
-			return current
-		}
-		if isStandardStructType(target, profile) {
-			return target
-		}
-		if visited[target] {
-			return current // circular
-		}
-		visited[target] = true
-		current = target
-	}
-	return current
 }
