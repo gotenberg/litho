@@ -2534,7 +2534,19 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				}
 				// pdfaSchema:property and pdfaSchema:valueType are optional.
 				// A schema may declare only properties, only valueTypes, or both.
-				*results = append(*results, xmpExtUndefinedValueTypes(part, entryRefs, entryDeclared)...)
+				//
+				// An entry that states no namespaceURI reaches nothing, so the
+				// custom types it declares resolve for nobody, its own properties
+				// included. Measured on the veraPDF test suite's
+				// 6-6-2-3-3-t01-fail-a.pdf, whose entry declares CustomValueType
+				// and a property using it but omits pdfaSchema:namespaceURI:
+				// veraPDF reports §6.7.8 t9 there, restoring the URI clears it,
+				// and naming a predefined type instead clears it too.
+				declared := entryDeclared
+				if !currentSchema.hasNamespaceURI {
+					declared = nil
+				}
+				*results = append(*results, xmpExtUndefinedValueTypes(part, entryRefs, declared)...)
 				entryRefs = nil
 				entryDeclared = map[string]bool{}
 				currentSchema = schemaInfo{}
