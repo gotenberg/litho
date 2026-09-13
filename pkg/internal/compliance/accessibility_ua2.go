@@ -171,6 +171,21 @@ func isFieldWidget(annot ast.PdfDict) bool {
 // /StructParent has none. It returns nil when the annotation is not linked into
 // the structure tree (veraPDF structParentType == null).
 func annotStructParent(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict) ast.PdfDict {
+	elemObj := annotStructParentObj(ctx, doc, treeRoot, annot)
+	if elemObj == nil {
+		return nil
+	}
+	elem, err := document.ResolveDict(ctx, doc, elemObj)
+	if err != nil {
+		return nil
+	}
+	return elem
+}
+
+// annotStructParentObj returns the structure parent tree entry an annotation's
+// /StructParent names, unresolved, so a caller can tell an indirect element from
+// a direct one. It returns nil when there is none.
+func annotStructParentObj(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict) ast.PdfObject {
 	if treeRoot == nil {
 		return nil
 	}
@@ -186,15 +201,40 @@ func annotStructParent(ctx context.Context, doc *document.Document, treeRoot, an
 	if err != nil || ptDict == nil {
 		return nil
 	}
-	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
-	if elemObj == nil {
-		return nil
+	return numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+}
+
+// linkTargetConflict judges ISO 14289-2, 8.2.5.20 t2 for one Link annotation:
+// Link annotations that target different locations shall be in separate
+// structure elements. It records the structure destination the annotation
+// targets ([linkAnnotDest]) under the element its /StructParent names, and
+// reports whether an earlier Link annotation under that element targeted a
+// different one. This is veraPDF's PDLinkAnnot differentTargetAnnotObjectKey,
+// computed in page and /Annots order across the document, so every annotation
+// after the first disagreeing one is reported, whatever the element's type. An
+// annotation without a structure destination, or whose parent tree entry is not
+// an indirect dictionary, is neither judged nor recorded. seen maps a parent's
+// object number to the destinations recorded under it.
+func linkTargetConflict(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict, seen map[int]map[string]bool) bool {
+	ref, ok := annotStructParentObj(ctx, doc, treeRoot, annot).(ast.PdfIndirectRef)
+	if !ok {
+		return false
 	}
-	elem, err := document.ResolveDict(ctx, doc, elemObj)
-	if err != nil {
-		return nil
+	if parent, err := document.ResolveDict(ctx, doc, ref); err != nil || parent == nil {
+		return false
 	}
-	return elem
+	dest := linkAnnotDest(ctx, doc, annot)
+	if dest == "" {
+		return false
+	}
+	dests := seen[ref.ObjectNum]
+	if dests == nil {
+		dests = make(map[string]bool)
+		seen[ref.ObjectNum] = dests
+	}
+	conflict := len(dests) > 1 || (len(dests) == 1 && !dests[dest])
+	dests[dest] = true
+	return conflict
 }
 
 // widgetHasContents reports whether a widget carries a /Contents text string,

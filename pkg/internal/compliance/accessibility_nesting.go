@@ -280,12 +280,18 @@ func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.P
 //   - §8.2.5.20 t1: a Link annotation shall be enclosed by a Link or Reference
 //     element.
 //
-// Each rule is gated on veraPDF's structParentType, structParentStandardType and
-// isArtifact, all read from the element the annotation's /StructParent names in
-// the structure parent tree ([annotStructParent]). Clause 8.9 exempts artifacts
-// from the structure requirements, so an annotation with no such element, or
-// whose element or one of its ancestors is an Artifact, is out of scope. An OBJR
-// that references the annotation does not bring it into scope.
+// Each of these rules is gated on veraPDF's structParentType,
+// structParentStandardType and isArtifact, all read from the element the
+// annotation's /StructParent names in the structure parent tree
+// ([annotStructParent]). Clause 8.9 exempts artifacts from the structure
+// requirements, so an annotation with no such element, or whose element or one
+// of its ancestors is an Artifact, is out of scope. An OBJR that references the
+// annotation does not bring it into scope.
+//
+// It also judges §8.2.5.20 t2 (Link annotations that target different
+// locations shall be in separate structure elements), which the validation
+// profile tests on every Link annotation without those gates
+// ([linkTargetConflict]).
 func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if PDFUAPart(profile) != 2 {
 		return nil
@@ -297,6 +303,7 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 	r := newNSRoleResolver(ctx, doc, treeRoot)
 
 	var results []Violation
+	linkTargets := make(map[int]map[string]bool)
 	for _, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return results
@@ -306,6 +313,11 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 			annot, _ := document.ResolveDict(ctx, doc, annotObj)
 			if annot == nil {
 				continue
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if subtype == "Link" && linkTargetConflict(ctx, doc, treeRoot, annot, linkTargets) {
+				results = append(results, fail(Rule_14289_2_8_2_5_20_t02,
+					"Link annotation shares its structure element with a Link annotation targeting a different structure destination")...)
 			}
 			parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot)
 			if parent == nil || underArtifact {
@@ -319,8 +331,6 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 			if encl == "" {
 				encl = string(parentType)
 			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-
 			if markupAnnotationSubtypes[subtype] {
 				if stdType != "Annot" {
 					results = append(results, failf(Rule_14289_2_8_9_2_3_t01,

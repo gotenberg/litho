@@ -188,6 +188,16 @@ func TestLinkAnnotStructDest(t *testing.T) {
 			want: "",
 		},
 		{
+			name: "the action governs when /Dest also appears",
+			expr: "/Dest [3 0 R /Fit] /A << /S /GoTo /D [5 0 R /Fit] >>",
+			want: structTarget,
+		},
+		{
+			name: "a non-GoTo action hides /Dest",
+			expr: "/A << /S /URI /URI (https://example.test/) >> /Dest [5 0 R /Fit]",
+			want: "",
+		},
+		{
 			name: "URI action has no destination",
 			expr: "/A << /S /URI /URI (https://example.test/) >>",
 			want: "",

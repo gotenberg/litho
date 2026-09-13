@@ -993,11 +993,6 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// §8.2.5.20 t2: Link annotations in same Link/Reference element must target same destination.
-	if (typeName == "Link" || typeName == "Reference") && state.profile == "PDF/UA-2" {
-		validateLinkDestConsistency(ctx, state, elem)
-	}
-
 	// When entering a Table, determine if it uses the Headers+IDs model and
 	// whether it is column-regular. Both flags drive the header checks on its
 	// descendant TH/TD cells (validated during the child recursion below), so
@@ -1166,60 +1161,6 @@ func validateCaptionPosition(ctx context.Context, state *walkState, elem ast.Pdf
 	}
 }
 
-// validateLinkDestConsistency checks that all Link annotations within a
-// Link/Reference structure element target the same destination.
-// PDF/UA-2 §8.2.5.20 t2.
-func validateLinkDestConsistency(ctx context.Context, state *walkState, elem ast.PdfDict) {
-	kObj := elem["K"]
-	if kObj == nil {
-		return
-	}
-
-	arr, _ := document.ResolveArray(ctx, state.doc, kObj)
-	if len(arr) == 0 {
-		arr = ast.PdfArray{kObj}
-	}
-
-	var firstDest string
-	found := false
-
-	for _, kid := range arr {
-		d, _ := document.ResolveDict(ctx, state.doc, kid)
-		if d == nil {
-			continue
-		}
-		typeName, _ := document.ResolveName(ctx, state.doc, d["Type"])
-		if typeName != "OBJR" {
-			continue
-		}
-		annot, _ := document.ResolveDict(ctx, state.doc, d["Obj"])
-		if annot == nil {
-			continue
-		}
-		subtype, _ := document.ResolveName(ctx, state.doc, annot["Subtype"])
-		if subtype != "Link" {
-			continue
-		}
-
-		dest := linkAnnotDest(ctx, state.doc, annot)
-		if dest == "" {
-			continue
-		}
-
-		if !found {
-			firstDest = dest
-			found = true
-			continue
-		}
-		if dest != firstDest {
-			*state.results = append(*state.results,
-				failf(Rule_14289_2_8_2_5_20_t02,
-					"Link/Reference element contains annotations targeting different destinations")...)
-			return
-		}
-	}
-}
-
 // linkAnnotDest returns the identity of the structure destination a Link
 // annotation targets, or "" when it targets none.
 //
@@ -1231,10 +1172,14 @@ func validateLinkDestConsistency(ctx context.Context, state *walkState, elem ast
 // target's identity decides the answer; the view parameters that follow it in
 // the destination array do not, so two links onto the same element with
 // different zoom agree.
+//
+// ISO 32000-2:2020, Table 176 forbids /Dest beside /A, so when both appear the
+// action governs, as veraPDF's GFPDLinkAnnot.getStructureDestinationObject
+// reads it: an /A that is no GoTo action targets nothing.
 func linkAnnotDest(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
 	dest := annot["Dest"]
-	if dest == nil {
-		aDict, _ := document.ResolveDict(ctx, doc, annot["A"])
+	if aObj, hasA := annot["A"]; hasA {
+		aDict, _ := document.ResolveDict(ctx, doc, aObj)
 		if aDict == nil {
 			return ""
 		}
