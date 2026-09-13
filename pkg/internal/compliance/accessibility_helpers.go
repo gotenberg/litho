@@ -159,17 +159,64 @@ func hasStringKeyPresent(ctx context.Context, doc *document.Document, dict ast.P
 }
 
 // decodedStringKey returns the decoded text string a dict holds under key, and
-// false when the key is absent or holds no string.
+// false when the key is absent or holds no string. A null value holds no string:
+// ISO 32000-1, 7.3.7 makes an entry whose value is null the same as an absent
+// one, and veraPDF's getStringKey answers null for it, measured on a /Contents
+// written as null. It resolves the value itself rather than through
+// ResolveString, which reads null as an empty string.
 func decodedStringKey(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string, bool) {
 	obj, ok := dict[key]
 	if !ok {
 		return "", false
 	}
-	str, err := document.ResolveString(ctx, doc, obj)
-	if err != nil {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	str, isStr := resolved.(ast.PdfString)
+	if err != nil || !isStr {
 		return "", false
 	}
 	return document.DecodePdfString(str), true
+}
+
+// stringKeyPresent reports whether a dict holds a string under key, empty or
+// not, as veraPDF's "X != null" tests on a getStringKey value read it: an
+// absent, null, or non-string value is absent.
+func stringKeyPresent(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	_, ok := decodedStringKey(ctx, doc, dict, key)
+	return ok
+}
+
+// nameKeyPresent reports whether a dict holds a name under key, as veraPDF's
+// getNameKeyStringValue reads it: an absent, null, or non-name value is absent.
+func nameKeyPresent(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	obj, ok := dict[key]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	_, isName := resolved.(ast.PdfName)
+	return err == nil && isName
+}
+
+// actualTextPresent reports whether a structure element carries an
+// /ActualText, as veraPDF reads it (PDStructElem.getActualText, then
+// COSObject.getString): a string or a name counts, empty or not, while an
+// absent, null, or numeric value does not. Measured against veraPDF on a Figure
+// with each.
+func actualTextPresent(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
+	obj, ok := elem["ActualText"]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+	switch resolved.(type) {
+	case ast.PdfString, ast.PdfName:
+		return true
+	default:
+		return false
+	}
 }
 
 // hasNonEmptyStringKey reports whether a dict holds a non-empty text string

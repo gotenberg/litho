@@ -202,8 +202,11 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 				}
 			case "Screen":
 				// §8.9.2.4.12 t1: Screen annotations shall include a /Contents
-				// entry.
-				if _, hasContents := annot["Contents"]; !hasContents {
+				// entry. Like the other per-subtype description rules below,
+				// veraPDF tests "Contents != null" on getStringKey, so a /Contents
+				// that is null or not a string is absent ([stringKeyPresent]),
+				// measured on Ink and Stamp annotations.
+				if !stringKeyPresent(ctx, doc, annot, "Contents") {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_12_t01,
 						"Screen annotation lacks a /Contents entry")...)
 				}
@@ -219,26 +222,27 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 			case "Stamp":
 				// §8.9.2.4.7 t1: a rubber stamp annotation shall have a /Name or a
 				// /Contents entry describing the stamp's intent.
-				_, hasName := annot["Name"]
-				if _, hasContents := annot["Contents"]; !hasName && !hasContents {
+				// veraPDF reads /Name with getNameKeyStringValue, so only a name
+				// counts ([nameKeyPresent]): a string /Name does not.
+				if !nameKeyPresent(ctx, doc, annot, "Name") && !stringKeyPresent(ctx, doc, annot, "Contents") {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_7_t01,
 						"Stamp annotation lacks both /Name and /Contents")...)
 				}
 			case "Ink":
 				// §8.9.2.4.8 t1: Ink annotations shall include a /Contents entry.
-				if _, hasContents := annot["Contents"]; !hasContents {
+				if !stringKeyPresent(ctx, doc, annot, "Contents") {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_8_t01,
 						"Ink annotation lacks a /Contents entry")...)
 				}
 			case "3D":
 				// §8.9.2.4.19 t1: 3D annotations shall include a /Contents entry.
-				if _, hasContents := annot["Contents"]; !hasContents {
+				if !stringKeyPresent(ctx, doc, annot, "Contents") {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_19_t01,
 						"3D annotation lacks a /Contents entry")...)
 				}
 			case "RichMedia":
 				// §8.9.2.4.19 t2: RichMedia annotations shall include a /Contents entry.
-				if _, hasContents := annot["Contents"]; !hasContents {
+				if !stringKeyPresent(ctx, doc, annot, "Contents") {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_19_t02,
 						"RichMedia annotation lacks a /Contents entry")...)
 				}

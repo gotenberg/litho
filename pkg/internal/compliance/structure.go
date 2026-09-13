@@ -942,7 +942,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// §7.7 t1: Formula elements must have non-empty /Alt, or /ActualText (presence suffices).
 	if standardType == "Formula" && state.profile == "PDF/UA-1" {
 		hasAlt := hasNonEmptyStringKey(ctx, state.doc, elem, "Alt")
-		hasAT := hasStringKeyPresent(ctx, state.doc, elem, "ActualText")
+		hasAT := actualTextPresent(ctx, state.doc, elem)
 		if !hasAlt && !hasAT {
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_7_t01, "Formula element without /Alt or /ActualText")...)

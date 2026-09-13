@@ -51,13 +51,17 @@ func FigureNeedsAltText(ctx context.Context, doc *document.Document, elem ast.Pd
 // alone suffices, even when empty). The UA-2 clause lists those two properties
 // alone, so a Caption kid does not stand in for them: veraPDF reports a Figure
 // whose only alternative is a Caption.
+//
+// Presence is read as veraPDF reads it: /Alt counts only as a string
+// ([stringKeyPresent]) and /ActualText as a string or a name
+// ([actualTextPresent]); a null value is absent (ISO 32000-1, 7.3.7).
 func figureSatisfiesAltText(ctx context.Context, doc *document.Document, elem ast.PdfDict, profile string) bool {
 	if profile == "PDF/UA-1" {
 		return hasNonEmptyStringKey(ctx, doc, elem, "Alt") ||
-			hasStringKeyPresent(ctx, doc, elem, "ActualText")
+			actualTextPresent(ctx, doc, elem)
 	}
-	return hasStringKeyPresent(ctx, doc, elem, "Alt") ||
-		hasStringKeyPresent(ctx, doc, elem, "ActualText")
+	return stringKeyPresent(ctx, doc, elem, "Alt") ||
+		actualTextPresent(ctx, doc, elem)
 }
 
 func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDict, _ string) []Violation {
