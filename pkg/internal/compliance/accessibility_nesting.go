@@ -18,13 +18,16 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 		return nil
 	}
 
-	// Build map: annotation objNum -> enclosing structure element standard type.
-	structParentMap := buildAnnotStructTypeMap(ctx, doc, catalog, profile)
-
-	// treeRoot + roleMap drive the /StructParent -> ParentTree reverse-link
-	// fallback (see the nestType derivation below).
-	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	roleMap := LoadRoleMap(ctx, doc, treeRoot)
+	// The rules judge an annotation by the structure element enclosing it, which
+	// ISO 32000-1, 14.7.4.4 records in the structure parent tree under the
+	// annotation's /StructParent key. veraPDF's GFPDAnnot.getParentDictionary
+	// reads that entry and nothing else, so an annotation that an OBJR references
+	// but that carries no /StructParent has no enclosing element at all.
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", err)
+	}
+	typeState := &walkState{doc: doc, roleMap: buildRoleMapIndex(ctx, doc, treeRoot)}
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
@@ -50,11 +53,6 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 				return results
 			}
 
-			annotObjNum := 0
-			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
-				annotObjNum = ref.ObjectNum
-			}
-
 			annot, err := document.ResolveDict(ctx, doc, annotObj)
 			if err != nil || annot == nil {
 				continue
@@ -74,22 +72,7 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 			// rule. litho used to exempt a parented Popup as auxiliary to its
 			// markup annotation, which the clause does not say.
 
-			stdType := structParentMap[annotObjNum] // "" if not in structure tree
-
-			// ISO 14289-1 §7.18.x nesting depends on the annotation's enclosing
-			// structure element. PDF exposes that link two ways: the forward /K
-			// OBJR chain litho walks, and the annotation's /StructParent index
-			// into the ParentTree (the reverse link). The two can disagree when an
-			// annotation is reachable only through /StructParent, so when the OBJR
-			// walk finds nothing, fall back to the reverse link to still count it
-			// as nested. Applied only to the rules that fire on a *missing* nesting
-			// type (Widget/Link/other); §7.18.8 fires on the presence of any
-			// structure parent, so it keeps the OBJR-derived stdType to avoid a
-			// new firing direction.
-			nestType := stdType
-			if nestType == "" {
-				nestType = annotStructParentType(ctx, doc, treeRoot, annot, roleMap, profile)
-			}
+			parentType, nestType := annotStructParentTypes(ctx, typeState, treeRoot, annot)
 
 			switch subtype {
 			case "TrapNet":
@@ -104,8 +87,9 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 				}
 
 			case "PrinterMark":
-				// §7.18.8: PrinterMark must NOT be in logical structure.
-				if stdType != "" {
+				// §7.18.8: PrinterMark must NOT be in logical structure. veraPDF
+				// tests structParentType, the enclosing element's /S as written.
+				if parentType != "" {
 					results = append(results, fail(Rule_14289_1_7_18_8_t01,
 						"PrinterMark annotation is included in logical structure")...)
 				}
@@ -224,38 +208,24 @@ func formHasOneInteractiveChild(ctx context.Context, doc *document.Document, ele
 	return isWidgetOBJR(ctx, doc, kObj)
 }
 
-// annotStructParentType resolves an annotation's enclosing structure element
-// standard type via its /StructParent index into the ParentTree. The ParentTree
-// entry for an annotation is a single structure element reference (unlike a
-// page's per-MCID array), so it resolves to one element whose /S, role-mapped to
-// a standard type, is returned.
-// Returns "" when no /StructParent, ParentTree entry, or element type resolves.
-func annotStructParentType(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName, profile string) string {
-	spObj, ok := annot["StructParent"]
-	if !ok {
-		return ""
+// annotStructParentTypes returns the /S of the structure element enclosing an
+// annotation and the standard type that element stands for, both "" when the
+// annotation has no enclosing element.
+//
+// The element is the one [annotStructParent] finds. Its standard type is
+// resolved as veraPDF's PDStructElem.getStructureElementStandardType resolves
+// it for ISO 32000-1: the role map applies before the standard-name test, so a
+// standard type the role map remaps no longer stands for itself.
+func annotStructParentTypes(ctx context.Context, state *walkState, treeRoot, annot ast.PdfDict) (ast.PdfName, string) {
+	elem := annotStructParent(ctx, state.doc, treeRoot, annot)
+	if elem == nil {
+		return "", ""
 	}
-	key, err := document.ResolveInt(ctx, doc, spObj)
-	if err != nil {
-		return ""
-	}
-	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
-	if err != nil || ptDict == nil {
-		return ""
-	}
-	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
-	if elemObj == nil {
-		return ""
-	}
-	elem, err := document.ResolveDict(ctx, doc, elemObj)
-	if err != nil || elem == nil {
-		return ""
-	}
-	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
+	typeName, _ := document.ResolveName(ctx, state.doc, elem["S"])
 	if typeName == "" {
-		return ""
+		return "", ""
 	}
-	return string(resolveStandardType(typeName, roleMap, profile))
+	return typeName, string(iso32005StandardName(ctx, state, elem, typeName))
 }
 
 // numberTreeLookupObj resolves a key in a number tree to its raw value object.
@@ -303,9 +273,9 @@ func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.P
 
 // buildAnnotStructTypeMapNS walks the structure tree and returns a map from
 // annotation object number to the PDF 2.0 namespace-resolved standard type of
-// the enclosing structure element. It is the PDF/UA-2 counterpart of
-// [buildAnnotStructTypeMap], resolving element types through [nsRoleResolver] so
-// a custom type role-mapped to a standard type is recognised.
+// the enclosing structure element, resolving element types through
+// [nsRoleResolver] so a custom type role-mapped to a standard type is
+// recognised.
 func buildAnnotStructTypeMapNS(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, r *nsRoleResolver) map[int]string {
 	result := make(map[int]string)
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
@@ -410,37 +380,6 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 		}
 	}
 	return results
-}
-
-// buildAnnotStructTypeMap walks the structure tree and returns a map from
-// annotation object number to the standard type name of the enclosing structure
-// element. Annotations not referenced by any structure element are absent.
-func buildAnnotStructTypeMap(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) map[int]string {
-	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if err != nil || treeRoot == nil {
-		return nil
-	}
-
-	// Load role map for resolving non-standard types to standard types.
-	roleMap := LoadRoleMap(ctx, doc, treeRoot)
-
-	result := make(map[int]string)
-	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
-		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		if typeName == "" {
-			return
-		}
-
-		stdType := resolveStandardType(typeName, roleMap, profile)
-
-		kObj, ok := elem["K"]
-		if !ok {
-			return
-		}
-		collectOBJRWithType(ctx, doc, kObj, string(stdType), result)
-	})
-
-	return result
 }
 
 // LoadRoleMap loads the /RoleMap dictionary from the structure tree root. It is

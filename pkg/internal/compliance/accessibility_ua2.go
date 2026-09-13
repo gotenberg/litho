@@ -64,7 +64,7 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			}
 			// structParentType == null / isArtifact: a widget not resolved to an
 			// enclosing structure element through its /StructParent is out of scope.
-			structElem := widgetStructElem(ctx, doc, treeRoot, annot)
+			structElem := annotStructParent(ctx, doc, treeRoot, annot)
 			if structElem == nil {
 				continue
 			}
@@ -161,11 +161,14 @@ func isFieldWidget(annot ast.PdfDict) bool {
 	return false
 }
 
-// widgetStructElem resolves the structure element that encloses a widget through
-// its /StructParent index into the ParentTree (a widget's entry is a single
-// element reference). It returns nil when the widget is not linked into the
-// structure tree (veraPDF structParentType == null / isArtifact).
-func widgetStructElem(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict) ast.PdfDict {
+// annotStructParent resolves the structure element that encloses an annotation
+// through its /StructParent index into the structure parent tree (ISO 32000-1,
+// 14.7.4.4), where an annotation's entry is a single element reference unlike a
+// page's per-MCID array. veraPDF's GFPDAnnot.getParentDictionary reads the
+// parent this way and no other, so an annotation an OBJR references without a
+// /StructParent has none. It returns nil when the annotation is not linked into
+// the structure tree (veraPDF structParentType == null).
+func annotStructParent(ctx context.Context, doc *document.Document, treeRoot, annot ast.PdfDict) ast.PdfDict {
 	if treeRoot == nil {
 		return nil
 	}
