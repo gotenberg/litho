@@ -235,9 +235,11 @@ func TestLinkExemptFromAP(t *testing.T) {
 func TestApExtraKeys(t *testing.T) {
 	t.Parallel()
 
+	stream := ast.PdfIndirectRef{ObjectNum: 5}
+
 	t.Run("only N key", func(t *testing.T) {
 		t.Parallel()
-		ap := ast.PdfDict{"N": ast.PdfNull{}}
+		ap := ast.PdfDict{"N": stream}
 		got := apExtraKeys(ap)
 		if got != "" {
 			t.Errorf("expected empty string for only /N, got %q", got)
@@ -247,12 +249,25 @@ func TestApExtraKeys(t *testing.T) {
 	t.Run("N plus extras", func(t *testing.T) {
 		t.Parallel()
 		ap := ast.PdfDict{
-			"N": ast.PdfNull{},
-			"R": ast.PdfNull{},
+			"N": stream,
+			"R": stream,
 		}
 		got := apExtraKeys(ap)
 		if got == "" {
 			t.Error("expected non-empty string for extra keys")
+		}
+	})
+
+	// ISO 32000-1, 7.3.7 treats an entry whose value is null as absent, so an
+	// extra entry written as null is no extra entry.
+	t.Run("an extra entry written as null", func(t *testing.T) {
+		t.Parallel()
+		ap := ast.PdfDict{
+			"N": stream,
+			"R": ast.PdfNull{},
+		}
+		if got := apExtraKeys(ap); got != "" {
+			t.Errorf("expected empty string for a null-valued extra, got %q", got)
 		}
 	})
 

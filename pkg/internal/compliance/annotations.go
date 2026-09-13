@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -344,8 +345,32 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 		ft = resolveFieldType(ctx, doc, annot)
 	}
 
-	apObj, hasAP := annot["AP"]
-	if !hasAP {
+	// An /AP that resolves to no dictionary names no appearance at all, so the
+	// annotation is judged as carrying none. veraPDF reads it that way: /AP
+	// null, /AP naming an undefined object (ISO 32000-1, 7.3.10 treats that as
+	// the null object) and /AP 5 each fail its "AP != null" test, measured on a
+	// fixture of each. Any other resolution failure stays unjudged, and so does
+	// a stream, whose reading was not measured.
+	var (
+		ap      ast.PdfDict
+		apFound bool
+	)
+	if apObj, hasAP := annot["AP"]; hasAP {
+		resolved, err := document.ResolveObject(ctx, doc, apObj)
+		switch v := resolved.(type) {
+		case ast.PdfDict:
+			ap, apFound = v, true
+		case ast.PdfStream:
+			doc.Logger.Debug("compliance: annotations: /AP is a stream", "loc", loc)
+			return nil
+		default:
+			if err != nil && !errors.Is(err, document.ErrObjectNotFound) {
+				doc.Logger.Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
+				return nil
+			}
+		}
+	}
+	if !apFound {
 		// PDF/A-1 never requires an appearance dictionary: ISO 19005-1 §6.5.3
 		// only constrains the contents of an /AP that is present (its tests hold
 		// when /AP is null), so a missing /AP is conformant. Absence is only a
@@ -372,12 +397,6 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 		return failf(rule, "%s: annotation missing appearance dictionary (/AP)", loc)
 	}
 
-	ap, err := document.ResolveDict(ctx, doc, apObj)
-	if err != nil || ap == nil {
-		doc.Logger.Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
-		return nil
-	}
-
 	var results []Violation
 
 	// An /AP that is present but not exactly the single /N appearance is a
@@ -385,15 +404,22 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	// /AP dictionary exists at all), while t2 is "AP == null || AP == 'N'", which
 	// fails when /AP carries entries other than a lone /N, including the case of
 	// /AP present with no /N at all (qpdf need-appearances-more2 annot 10).
+	//
+	// An entry written as the null object does not count: ISO 32000-1, 7.3.7
+	// treats it as absent, and veraPDF drops it, so /AP << /N null >> has no /N
+	// and an extra /D null is no extra entry. An entry whose value is a
+	// reference counts even when it names an undefined object: veraPDF keeps it
+	// and judges the null it resolves to.
 	nObj, hasN := ap["N"]
-	if !hasN {
+	if !hasN || isNullLiteral(nObj) {
 		rule := apOnlyNRule(part)
 		results = append(results, failf(rule, "%s: appearance dictionary missing /N entry", loc)...)
 		return results
 	}
+	entries := apEntryCount(ap)
 
 	// Test 2: Appearance dict must contain only /N key (parts 1 test 4, parts 2+/4 test 2).
-	if len(ap) > 1 {
+	if entries > 1 {
 		extras := apExtraKeys(ap)
 		rule := apOnlyNRule(part)
 		results = append(results, failf(rule, "%s: appearance dictionary contains extra entries: %s", loc, extras)...)
@@ -403,9 +429,29 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	// type. Both apply only when the appearance dict contains just /N: a dict
 	// carrying extra keys is already reported by test 2, and BOTH veraPDF tests
 	// open with an "AP != N" escape that passes such a dict.
-	results = append(results, checkNValueType(ctx, doc, nObj, isWidget, ft, part, loc, len(ap) == 1)...)
+	results = append(results, checkNValueType(ctx, doc, nObj, isWidget, ft, part, loc, entries == 1)...)
 
 	return results
+}
+
+// isNullLiteral reports whether obj is written as the null object itself
+// rather than as a reference, which is how ISO 32000-1, 7.3.7 marks an entry
+// as absent.
+func isNullLiteral(obj ast.PdfObject) bool {
+	_, ok := obj.(ast.PdfNull)
+	return ok
+}
+
+// apEntryCount counts the appearance dictionary's entries, leaving out those
+// written as the null object (ISO 32000-1, 7.3.7).
+func apEntryCount(ap ast.PdfDict) int {
+	n := 0
+	for _, v := range ap {
+		if !isNullLiteral(v) {
+			n++
+		}
+	}
+	return n
 }
 
 // linkExemptFromAP returns true if Link annotations are exempt from requiring
@@ -479,7 +525,15 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 // not, since test 2 already flags the extra keys.
 func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string, apOnlyN bool) []Violation {
 	resolved, err := document.ResolveObject(ctx, doc, nObj)
-	if err != nil {
+	switch {
+	case errors.Is(err, document.ErrObjectNotFound):
+		// ISO 32000-1, 7.3.10 treats a reference to an undefined object as a
+		// reference to the null object, which is neither an appearance stream
+		// nor a subdictionary. veraPDF judges it so: pdfjs pypdf2332.pdf points
+		// /N at an object past its /Size, and veraPDF reports ISO 19005-4, 6.3.3
+		// t4 on each such annotation.
+		resolved = ast.PdfNull{}
+	case err != nil:
 		doc.Logger.Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
 		return nil
 	}
@@ -598,8 +652,8 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 // dictionary other than /N.
 func apExtraKeys(ap ast.PdfDict) string {
 	var extras []string
-	for k := range ap {
-		if k != "N" {
+	for k, v := range ap {
+		if k != "N" && !isNullLiteral(v) {
 			extras = append(extras, string(k))
 		}
 	}
