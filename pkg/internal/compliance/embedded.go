@@ -312,24 +312,57 @@ func collectDirectAnnotFileSpecs(ctx context.Context, doc *document.Document, ca
 				continue
 			}
 
-			fsDict, direct := annotDict["FS"].(ast.PdfDict)
-			if !direct {
-				continue
-			}
-			if typeName, _ := document.ResolveName(ctx, doc, fsDict["Type"]); typeName != "Filespec" {
-				continue
-			}
-
-			hasEF := nonNullKeyPresent(ctx, doc, fsDict, "EF")
-			specs = append(specs, fileSpecEntry{
-				dict:      fsDict,
-				hasEF:     hasEF,
-				container: ref.ObjectNum,
-				path:      "/FS",
-			})
+			specs = append(specs, directFileSpecsIn(ctx, doc, annotDict, ref.ObjectNum, "", 0)...)
 		}
 	}
 
+	return specs
+}
+
+// maxAnnotFileSpecDepth bounds the descent into an annotation's direct value
+// tree while looking for file specifications. Indirect objects are visited by
+// the outer sweep, so this recursion only walks the direct values of a single
+// annotation and cannot cycle. This is an anti-DoS guard, not spec-mandated: a
+// real annotation nests a handful of levels, the deepest observed being a
+// Rendition action reaching its media clip's filespec at /A/R/C/D, so 16 leaves
+// genuine documents untouched while capping a crafted one.
+const maxAnnotFileSpecDepth = 16
+
+// directFileSpecsIn returns every /Type /Filespec dictionary written directly
+// inside obj, at any depth. An annotation reaches a filespec by more routes
+// than its own /FS: a Screen annotation's Rendition action holds its media
+// clip's data at /A/R/C/D (ISO 32000-1 §13.2.3), and PDF/A-1 §6.1.11 t1 forbids
+// the /EF key on a file specification wherever it sits. Five veraPDF test-suite
+// files embed a video exactly that way and veraPDF reports every one; litho saw
+// only /FS and passed them.
+//
+// Indirect values are skipped: the caller's sweep over the cross-reference table
+// already visits those, and following them here would report the same
+// dictionary twice.
+func directFileSpecsIn(ctx context.Context, doc *document.Document, obj ast.PdfObject, container int, path string, depth int) []fileSpecEntry {
+	if depth > maxAnnotFileSpecDepth || ctx.Err() != nil {
+		return nil
+	}
+
+	var specs []fileSpecEntry
+	switch v := obj.(type) {
+	case ast.PdfDict:
+		if typeName, _ := document.ResolveName(ctx, doc, v["Type"]); typeName == "Filespec" && path != "" {
+			specs = append(specs, fileSpecEntry{
+				dict:      v,
+				hasEF:     nonNullKeyPresent(ctx, doc, v, "EF"),
+				container: container,
+				path:      path,
+			})
+		}
+		for _, key := range sortedNames(v) {
+			specs = append(specs, directFileSpecsIn(ctx, doc, v[key], container, path+"/"+string(key), depth+1)...)
+		}
+	case ast.PdfArray:
+		for i, item := range v {
+			specs = append(specs, directFileSpecsIn(ctx, doc, item, container, fmt.Sprintf("%s[%d]", path, i), depth+1)...)
+		}
+	}
 	return specs
 }
 
