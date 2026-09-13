@@ -59,9 +59,13 @@ func formatViolationDoc(data []byte, offsets []int64) *Document {
 // function of how many times some check happened to ask for the object.
 func TestRecordFormatViolations_UnparseableObjectRecordedOnce(t *testing.T) {
 	t.Parallel()
-	// "20184endobj": the body runs into the keyword with no EOL between them,
-	// the shape pdfjs issue1045 carries on its object 56.
-	data, offsets := formatViolationPDF(t, "<< /Type /Catalog >>\n", "20184")
+	// The body runs into the keyword with no EOL between them, the shape pdfjs
+	// issue1045 carries on its object 56, and "@@@endobj" lexes as one keyword
+	// the parser rejects. A bare number in that shape ("20184endobj") no longer
+	// serves here: [lexer.splitNumberEndobj] now reads it as the number the
+	// producer meant, which is what makes the /Length of a stream written that
+	// way resolvable.
+	data, offsets := formatViolationPDF(t, "<< /Type /Catalog >>\n", "@@@")
 	doc := formatViolationDoc(data, offsets)
 	doc.SetComplianceMode(true)
 

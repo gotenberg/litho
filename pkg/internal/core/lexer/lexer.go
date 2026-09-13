@@ -218,7 +218,44 @@ func (l *Lexer) readRegular() (Token, error) {
 	if isDigitlessNumber(val) {
 		return Token{Type: TokenNumber, Value: "0"}, nil
 	}
+	if num, ok := splitNumberEndobj(val); ok {
+		// Rewind so the next token is the endobj keyword itself, leaving the
+		// reader where a conforming file would have put it. Seeking back inside
+		// the token just read cannot fail on a buffered reader.
+		if _, err := l.reader.Seek(-int64(len(endobjKeyword)), io.SeekCurrent); err == nil {
+			return Token{Type: TokenNumber, Value: num}, nil
+		}
+	}
 	return Token{Type: TokenKeyword, Value: val}, nil
+}
+
+// endobjKeyword is the keyword [splitNumberEndobj] splits off a number.
+const endobjKeyword = "endobj"
+
+// splitNumberEndobj reports a number token written hard against the endobj
+// keyword, as in "7559endobj", and returns the number alone.
+//
+// ISO 32000-1, 7.2.2 ends a token at a delimiter or white-space character, and
+// "e" is neither, so "7559endobj" lexes as one keyword and the object holding
+// it resolves to nothing. Producers do emit it: pdfjs issue3566.pdf writes
+// object 120 as "120 0 obj\n7559endobj", and that object is the /Length of the
+// Type1C font program in object 14, so the whole stream became unreadable and
+// the checks keyed on its extent went silent. litho still reports the missing
+// separator (ISO 19005-2, 6.1.9 t1 judges the raw bytes), so accepting the
+// number here loses no finding; veraPDF reads the same file the same way.
+//
+// Only the endobj keyword is split. A number run together with any other
+// keyword is left alone, because nothing in the corpora shows one and a wider
+// rule would start guessing at token boundaries.
+func splitNumberEndobj(val string) (string, bool) {
+	num, ok := strings.CutSuffix(val, endobjKeyword)
+	if !ok || num == "" {
+		return "", false
+	}
+	if !isNumber(num) {
+		return "", false
+	}
+	return num, true
 }
 
 // NextToken reads and returns the next PDF token from the input stream.
