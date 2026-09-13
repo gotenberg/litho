@@ -223,17 +223,25 @@ func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.
 }
 
 // xmpContainerTypedProperties are the §6.7.3 XMP analogues whose XMP type is an
-// RDF container rather than a simple value: dc:title and dc:description are
-// language alternatives (rdf:Alt) and dc:creator is an ordered array (rdf:Seq).
-// veraPDF resolves them through that container, so a value written as an
-// attribute or as a plain element does not satisfy the lookup and the Info entry
-// has nothing to match. Measured: an attribute-form or simple-element dc:title
-// reports 6.7.3 t2 on veraPDF even when its text equals /Title, while an rdf:Alt
-// passes whether or not its entry carries xml:lang="x-default".
-var xmpContainerTypedProperties = map[string]bool{
-	"dc:title":       true,
-	"dc:creator":     true,
-	"dc:description": true,
+// RDF container rather than a simple value, mapped to the containers that carry
+// them. dc:title and dc:description are language alternatives, so only an
+// rdf:Alt answers the lookup. dc:creator is an ordered array of names: veraPDF
+// reaches it through either ordered container, accepting the rdf:Alt that the
+// XMP Specification does not prescribe for it and rejecting only the unordered
+// rdf:Bag. litho follows that leniency rather than demanding the rdf:Seq of
+// XMP Specification Part 1 §8.4, because a stricter reading reports a mismatch
+// on files veraPDF passes.
+//
+// A value written as an attribute or as a plain element carries no container at
+// all and so answers no lookup either. Measured on a nine-cell matrix built from
+// pdfjs issue4706, holding the text equal to the Info entry throughout: a
+// dc:title or dc:description in an rdf:Seq or rdf:Bag reports 6.7.3 t2 or t4,
+// and a dc:creator in an rdf:Bag reports t3, while every rdf:Alt passes whether
+// or not its entry carries xml:lang="x-default".
+var xmpContainerTypedProperties = map[string]map[string]bool{
+	"dc:title":       {"Alt": true},
+	"dc:creator":     {"Alt": true, "Seq": true},
+	"dc:description": {"Alt": true},
 }
 
 // xmpSyncResult holds the parsed XMP values and container entry counts.
@@ -257,8 +265,10 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	result := make(map[string]string)
 	entryCounts := make(map[string]int)
 	present := make(map[string]bool)
-	// Properties whose value came from an rdf:Alt, rdf:Seq or rdf:Bag.
-	fromContainer := make(map[string]bool)
+	// containerKind records which RDF container carried each property's value,
+	// so a container-typed property can be held to the ones that answer its
+	// lookup (see xmpContainerTypedProperties).
+	containerKind := make(map[string]string)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = false
 
@@ -360,10 +370,10 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 					switch t.Name.Local {
 					case "Alt":
 						inAlt = true
-						fromContainer[makeKey(propNS, propLocal)] = true
+						containerKind[makeKey(propNS, propLocal)] = t.Name.Local
 					case "Seq", "Bag":
 						inSeqOrBag = true
-						fromContainer[makeKey(propNS, propLocal)] = true
+						containerKind[makeKey(propNS, propLocal)] = t.Name.Local
 					}
 				}
 				if (inAlt || inSeqOrBag) && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
@@ -467,11 +477,11 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 		}
 	}
 
-	// A container-typed property written as an attribute or a plain element
-	// carries no container, so it does not answer the lookup veraPDF performs.
-	// Drop it entirely rather than leaving a value that would compare equal.
-	for key := range xmpContainerTypedProperties {
-		if !fromContainer[key] {
+	// A container-typed property carried by no container, or by one that does
+	// not answer its lookup, leaves the Info entry nothing to match. Drop it
+	// entirely rather than leaving a value that would compare equal.
+	for key, carriers := range xmpContainerTypedProperties {
+		if !carriers[containerKind[key]] {
 			delete(result, key)
 			delete(present, key)
 		}
