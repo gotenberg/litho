@@ -895,7 +895,7 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 				fontStack = fontStack[:n-1]
 			}
 		case "BDC", "BMC":
-			actualTextStack = append(actualTextStack, bdcHasActualText(ctx, doc, op, resolveProps) ||
+			actualTextStack = append(actualTextStack, bdcHasStringKey(ctx, doc, op, resolveProps, "ActualText") ||
 				(altCovers && bdcHasStringKey(ctx, doc, op, resolveProps, "Alt")))
 			mcid := bdcMCID(ctx, doc, op, resolveProps)
 			if mcid < 0 {
@@ -1003,14 +1003,6 @@ func bdcMCID(ctx context.Context, doc *document.Document, op content.Operation, 
 		return -1
 	}
 	return int(mcid)
-}
-
-// bdcHasActualText reports whether a BDC/BMC operator's property list (inline
-// dictionary or a name resolved through the page /Properties) carries an
-// /ActualText entry.
-func bdcHasActualText(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) bool {
-	_, ok := bdcProps(ctx, doc, op, props)["ActualText"]
-	return ok
 }
 
 // bdcHasStringKey reports whether a BDC operator's property list carries key
