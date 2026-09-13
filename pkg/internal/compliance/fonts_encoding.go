@@ -118,12 +118,21 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	// Symbol font" and no third set: a ZapfDingbats glyph therefore has no
 	// Unicode value without a /ToUnicode CMap. litho already treats the pair as
 	// special elsewhere (the stamp writer and the TrueType-encoding fixer both
-	// exempt "Symbol and ZapfDingbats" from a standard encoding), and Symbol has
-	// its own exemptions at the call site, so only ZapfDingbats needs excluding
-	// here. pdfjs js-buttons.pdf shows code 0x34 through an unembedded
-	// ZapfDingbats with no /ToUnicode inside a widget appearance, which veraPDF
-	// reports under ISO 14289-1 §7.21.7 t1.
-	if isStandard14Font(ctx, doc, fontDict) && !isZapfDingbatsByName(ctx, doc, fontDict) {
+	// exempt "Symbol and ZapfDingbats" from a standard encoding). pdfjs
+	// js-buttons.pdf shows code 0x34 through an unembedded ZapfDingbats with no
+	// /ToUnicode inside a widget appearance, which veraPDF reports under ISO
+	// 14289-1 §7.21.7 t1.
+	//
+	// Symbol with no /Encoding is excluded too. Its built-in encoding is not a
+	// Latin one, and 9.10.2 admits Symbol names only through a /Differences
+	// array, so an unembedded Symbol with no /Encoding names nothing its glyphs
+	// could draw Unicode from. On one-font fixtures veraPDF reports every glyph
+	// of such a font under ISO 14289-1 §7.21.7, ISO 19005-2 §6.2.11.7.2 and ISO
+	// 19005-1 §6.3.8, and passes Helvetica in the same shape. An embedded
+	// Symbol still names its glyphs through its program, which the per-code
+	// check below reads.
+	symbolWithoutEncoding := isSymbolFontByName(ctx, doc, fontDict) && fontDict["Encoding"] == nil
+	if isStandard14Font(ctx, doc, fontDict) && !isZapfDingbatsByName(ctx, doc, fontDict) && !symbolWithoutEncoding {
 		return usedDifferencesGlyphNamesResolvable(ctx, doc, fontDict, usage)
 	}
 

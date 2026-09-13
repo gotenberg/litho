@@ -89,10 +89,20 @@ func TestToUnicode_ZapfDingbatsNeedsToUnicode(t *testing.T) {
 		}
 	})
 
-	t.Run("Symbol still does not", func(t *testing.T) {
+	// ISO 32000-1 9.10.2 admits the Symbol font's named characters only through
+	// a /Differences array, so a Symbol with no /Encoding names nothing its
+	// glyphs could draw Unicode from; veraPDF reports it on a one-font fixture.
+	t.Run("Symbol with no Encoding fires", func(t *testing.T) {
 		t.Parallel()
-		if fires(t, "Symbol", "") {
-			t.Error("ISO 32000-1 9.10.2 admits the Symbol font's named characters")
+		if !fires(t, "Symbol", "") {
+			t.Error("an unembedded Symbol with no /Encoding gives its glyphs no Unicode value")
+		}
+	})
+
+	t.Run("Symbol naming its glyphs through Differences does not", func(t *testing.T) {
+		t.Parallel()
+		if fires(t, "Symbol", "/Encoding << /Differences [52 /four] >> ") {
+			t.Error("ISO 32000-1 9.10.2 admits Symbol names in a /Differences array")
 		}
 	})
 }
